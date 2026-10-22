@@ -1,3 +1,10 @@
+/**
+ * The catalogue of situations the ducts engine handles: one entry per case, with the code the
+ * engine and the inbox share, the finding kinds that signal it in a `route:ducts.analysis` read,
+ * and a recorded example. Projected by the `/ducts` tutorial (cards with drawings), by Pea's
+ * generated duct skill, and by the `route:ducts.guide` read, which joins `kinds` to a document's
+ * findings to list the cases present. Register: plain third person; see `ducts-guide.ts`.
+ */
 export type CaseGroup = "A" | "B" | "C" | "D" | "E" | "F" | "G" | "H";
 export type CaseStatus = "handled" | "owed" | "open" | "fixed";
 export interface CaseExample {
@@ -15,6 +22,11 @@ export interface DuctCase {
   /** The code the engine and the inbox use, e.g. "joined-by-proximity · near-miss"; null when none. */ code:
     | string
     | null;
+  /**
+   * Finding kinds from `route:ducts.analysis` (`DuctFinding.kind`, optionally `kind:grade`) whose
+   * presence means this case occurs in the document; empty for cases a read cannot signal.
+   */
+  kinds: readonly string[];
   /** Element ids and counts from the example project, prose; null when none. */ ids: string | null;
   /** Route examples on the example project; empty when the case is not a model case. */ examples: CaseExample[];
   idea: string | null;
@@ -44,6 +56,7 @@ export const DUCT_CASES: readonly DuctCase[] = [
     why: "Asking about every sub-inch join teaches the engineer to click through prompts. Many of these ends are 0.00 in apart (touching but never connected in Revit), and the Heal row connects them.",
     status: "handled",
     code: "joined-by-proximity · near-miss · row join",
+    kinds: ["joined-by-proximity:near-miss"],
     ids: "SA 7: 12028215 / 12028280 (0.00 in); SA 7: 11715877 / 12430156 (0.02 in)",
     examples: [
       {
@@ -69,6 +82,7 @@ export const DUCT_CASES: readonly DuctCase[] = [
     why: "The route bridges more and repairs less. The grille clearly belongs on that riser; 2 in is a drafting miss, not a design question.",
     status: "handled",
     code: "joined-by-proximity · stretched · row join",
+    kinds: ["joined-by-proximity:stretched"],
     ids: "SA 19 section: 13675158 (takeoff) > 8750451 (riser) > 9405610 (cap); join proximity:8747668:1|8750451:0",
     examples: [
       {
@@ -93,6 +107,7 @@ export const DUCT_CASES: readonly DuctCase[] = [
     why: "Geometry that contradicts itself is not for the route to guess.",
     status: "handled",
     code: "joined-by-proximity / tap-by-proximity · anomalous",
+    kinds: ["joined-by-proximity:anomalous", "tap-by-proximity:anomalous"],
     ids: "SA 61: custom slot grilles 10922066 and 10922068 inside 72x3 plenum ducts 8911461 / 9173326, connectors facing away; SA 19: takeoff 14117336 connector 2.75 in inside 6 in duct 14454913",
     examples: [
       {
@@ -121,6 +136,7 @@ export const DUCT_CASES: readonly DuctCase[] = [
     why: "A branch landing on a side face is how a tap is drawn.",
     status: "handled",
     code: "tap-by-proximity",
+    kinds: ["tap-by-proximity:stretched"],
     ids: "SA 44: end of 9098869 on side of 9822717",
     examples: [
       {
@@ -141,6 +157,7 @@ export const DUCT_CASES: readonly DuctCase[] = [
     why: "Dropping the damper would under-price the run without a notice.",
     status: "handled",
     code: "inline-by-inference",
+    kinds: ["inline-by-inference"],
     ids: "damper 13568060 inside duct 11275610, SA 47",
     examples: [
       {
@@ -161,6 +178,7 @@ export const DUCT_CASES: readonly DuctCase[] = [
     why: "Joining a supply end to a return end would merge two separate air streams, which is the error with the largest consequence.",
     status: "handled",
     code: "near-miss-across-classifications",
+    kinds: ["near-miss-across-classifications"],
     ids: 'RA 37: duct 14517389 end 0.01 in from grille 14548688 (Return vs Supply, grille has no system); EX 41: duct 11964957 0.10 in from grille 11964946 (Exhaust vs Supply). Look for "not joined" in Diagnostics, no join drawn.',
     examples: [
       {
@@ -186,6 +204,7 @@ export const DUCT_CASES: readonly DuctCase[] = [
     why: "Ends that already reach each other through Revit's connections belong to the same run. Joining them would add a path nobody drew and turn a tree into a loop, so each end is capped instead.",
     status: "fixed",
     code: "heal: join → cap · ducts.apply-heal",
+    kinds: [],
     ids: "SA 22: 12402645 / 12403005 via bend 14567949; RA 6: 9322716 / 9629711",
     examples: [
       {
@@ -210,6 +229,7 @@ export const DUCT_CASES: readonly DuctCase[] = [
     why: "A loop drawn in Revit was put there on purpose.",
     status: "handled",
     code: "loop",
+    kinds: ["loop"],
     ids: "SA 22: takeoff 13654092",
     examples: [
       {
@@ -230,6 +250,7 @@ export const DUCT_CASES: readonly DuctCase[] = [
     why: "The inferred join created the cycle. A loop nobody drew must not be priced as if it were real.",
     status: "handled",
     code: "loop-by-inference",
+    kinds: ["loop-by-inference"],
     ids: "SA 61: duct 12394930 open top end (connector 0) and pants fitting 12394949 open inlet (connector 5), 0.44 in apart, near-miss join; the duct already reaches the pants through elbow 12394931. SA 19: the anomalous tap of takeoff 14117336 into duct 14454913 (case 3) also closes a loop.",
     examples: [
       {
@@ -254,6 +275,7 @@ export const DUCT_CASES: readonly DuctCase[] = [
     why: "Phase-foreign elements are not part of the system being priced.",
     status: "handled",
     code: "out-of-phase",
+    kinds: ["out-of-phase"],
     ids: "Working phase New Construction (the phase 331 views show; with no working phase nothing is out of phase). Duct 11621952 (SA 76, created Future) is dropped and warned: it sits inside kept duct 12089962 (SA 30). FC-23's duplicate 8732550 (Future) is dropped too but gets no warning: it touches only Future fitting 13757778; the kept FC-23 is 13760867 (SA 20). Look for the out-of-phase row on SA 30.",
     examples: [
       {
@@ -279,6 +301,7 @@ export const DUCT_CASES: readonly DuctCase[] = [
     why: "The face rule handles duct ends; equipment ports are invisible to it.",
     status: "owed",
     code: null,
+    kinds: [],
     ids: "RA 1: FR-1 6404589; SA 29: FC-5 6404587",
     examples: [
       {
@@ -303,6 +326,7 @@ export const DUCT_CASES: readonly DuctCase[] = [
     why: "The network is one physical thing, however many system names touch it.",
     status: "handled",
     code: null,
+    kinds: [],
     ids: "RA 1, plenum 6530455; takeoff 14642501 (SA 71)",
     examples: [
       {
@@ -328,6 +352,7 @@ export const DUCT_CASES: readonly DuctCase[] = [
     why: "Pressure is per network; one name over three networks hides that.",
     status: "handled",
     code: null,
+    kinds: [],
     ids: "SA 19: grille 8747668",
     examples: [
       {
@@ -349,6 +374,7 @@ export const DUCT_CASES: readonly DuctCase[] = [
     why: "Geometry cannot tell a reversed unit from a correct one. On the test model each unit's four directions are self-consistent (one in and one out per air stream), so a reversal is not visible in the data at all.",
     status: "open",
     code: "none (connector direction)",
+    kinds: [],
     ids: "RV-1 6078870 (EX 55, FA 14, EX 3, FA 6); RV-24 12702323 (EX 83, FA 14, EX 81, FA 13)",
     examples: [
       {
@@ -374,6 +400,7 @@ export const DUCT_CASES: readonly DuctCase[] = [
     why: "The network gives the direction of the air. A contraction and an expansion lose very differently, so reading it off the family would be wrong half the time.",
     status: "handled",
     code: "trx-round / trx-rect / trx-inlet · note",
+    kinds: [],
     ids: "FA 28: round transition 13692119, both connectors Out; SA 44: round transition 9495162 (16 in to 14 in), both bidirectional",
     examples: [
       {
@@ -399,6 +426,7 @@ export const DUCT_CASES: readonly DuctCase[] = [
     why: "Every cfm in the branch makes the turn, so the branch coefficient at full flow ratio is the real loss, whatever the fitting is called.",
     status: "handled",
     code: "tap-std · Cb · row tap-branch",
+    kinds: [],
     ids: "SA 44: 6 in round 7301996 > takeoff 12170960 > 10x8 riser 6566221 (cap 9089991 below, grille 6040596 above); also SA 19 takeoff 13675158 (case 2)",
     examples: [
       {
@@ -424,6 +452,7 @@ export const DUCT_CASES: readonly DuctCase[] = [
     why: "This overcounts: about 11 times the real length in the example (0.0017 in charged against roughly 0.0002 in). The error is small per duct but affects most last runs to a grille (in another riser, 2.04 ft is charged and 1.64 ft is travelled).",
     status: "owed",
     code: "none (friction row)",
+    kinds: [],
     ids: "RA 4: takeoff 11432250 > riser 6977935 > elbow 6977937; SA 19: 13675158 > 8750451",
     examples: [
       {
@@ -448,6 +477,7 @@ export const DUCT_CASES: readonly DuctCase[] = [
     why: "An open end leaks the run; the type's cap is the right part.",
     status: "handled",
     code: "heal · cap · open-end · ducts.apply-heal",
+    kinds: ["open-end"],
     ids: "SA 22 heal caps: cap:10399604:1 and cap:12402645:0 (the stub from case 7). 177 caps on the snapshot. Look for the Heal row listing the cap with the duct type's own cap.",
     examples: [
       {
@@ -472,6 +502,7 @@ export const DUCT_CASES: readonly DuctCase[] = [
     why: "They are the same joint; Revit never made the connection.",
     status: "handled",
     code: "heal · join · connect",
+    kinds: [],
     ids: 'Heal "connect" (gap 0.000 in): RA 77 duct 11224788 end 1 to fitting 12354071 end 0; SA 7 duct 12028215 to fitting 12028280 (case 1). Only 3 connects on the snapshot.',
     examples: [
       {
@@ -496,6 +527,7 @@ export const DUCT_CASES: readonly DuctCase[] = [
     why: "Small straight gaps have a standard repair.",
     status: "handled",
     code: "heal · join · union / extend",
+    kinds: [],
     ids: "no example in the example project: healPlan proposes no union or extend item on this snapshot (only cap 177 and connect 3).",
     examples: [],
     idea: null,
@@ -511,6 +543,7 @@ export const DUCT_CASES: readonly DuctCase[] = [
     why: 'Revit reports "connected" even for ends 13.7 in apart, so Revit\'s flag is not proof.',
     status: "handled",
     code: "open-end · fix in Revit",
+    kinds: ["open-end"],
     ids: '"Fix in Revit" rows from healPlan: SA 44 fitting 9098869 "lands on a duct\'s side or inside it: a takeoff"; RA 25 fitting 6751903 (18.6x14.2) vs duct 6751644 (23.9x15.4) "differ in size: a transition". Look for the reason text on the row.',
     examples: [
       {
@@ -535,6 +568,7 @@ export const DUCT_CASES: readonly DuctCase[] = [
     why: "Pe does not guess which firm parameter is the design flow.",
     status: "handled",
     code: "terminal-flow · airflow",
+    kinds: [],
     ids: 'SA 19 grille 8728214, 234 cfm in "Actual Supply Air Flow"',
     examples: [
       {
@@ -555,6 +589,7 @@ export const DUCT_CASES: readonly DuctCase[] = [
     why: "A zero looks like a real answer.",
     status: "handled",
     code: "no-terminal-flow / no-flow",
+    kinds: ["no-terminal-flow", "no-flow"],
     ids: 'Default airflow slot "Actual Supply Air Flow": SA 2 grille 7285045 (Price LBP15A) has no design flow (no-terminal-flow + no-flow); also EX 15 grille 6699617. The result depends on the slot: picking another slot can change it.',
     examples: [
       {
@@ -579,6 +614,7 @@ export const DUCT_CASES: readonly DuctCase[] = [
     why: "The count should reflect the bridged network.",
     status: "owed",
     code: "airflow",
+    kinds: [],
     ids: 'SA 19 has three networks: 5 grilles (FC-17 + DH-21), 2 grilles (FC-35 + DH-30) and grille 8747668 alone; the picker\'s "5 of 7" is the un-bridged count. Open the airflow picker on SA 19.',
     examples: [
       {
@@ -599,6 +635,7 @@ export const DUCT_CASES: readonly DuctCase[] = [
     why: "The grilles are the demand.",
     status: "handled",
     code: "equipmentFlows · derived",
+    kinds: [],
     ids: "SA 24: FC-30 is 13216051, derived 601 cfm from 9 grilles (DH-16 8013983 states none). Look at FC-30's flow, marked derived.",
     examples: [
       {
@@ -619,6 +656,7 @@ export const DUCT_CASES: readonly DuctCase[] = [
     why: "Unit design airflow is not an input, except for a side-stream unit (case 28).",
     status: "handled",
     code: "unit-airflow · equipmentFlows",
+    kinds: [],
     ids: "SA 19: FC-17 9668311 has no PE_M_Fan_AirFlowDesign; stage a unit flow and preview the write to see the refusal and its reason.",
     examples: [
       {
@@ -639,6 +677,7 @@ export const DUCT_CASES: readonly DuctCase[] = [
     why: "It is the only flow Pe cannot derive.",
     status: "open",
     code: "unit-flow · equipmentFlows",
+    kinds: [],
     ids: "SA 24: DH-16 is 8013983 (Aprilaire dehumidifier, SA 24 / RA 24); no stated or derived flow. Look for its unit flow Set row.",
     examples: [
       {
@@ -660,6 +699,7 @@ export const DUCT_CASES: readonly DuctCase[] = [
     why: "The order is deterministic and explainable.",
     status: "handled",
     code: "role",
+    kinds: [],
     ids: "SA 24: FC-30 13216051 is a fan by default (no base equipment, no airflow); DH-16 8013983 sits beside it. The fan row shows the reason for each role.",
     examples: [
       {
@@ -684,6 +724,7 @@ export const DUCT_CASES: readonly DuctCase[] = [
     why: "This prevents assigning a unit that is not on the network.",
     status: "handled",
     code: "fan · ducts.apply-assign-fan",
+    kinds: [],
     ids: "SA 24 with FC-30 (13216051) selected: the assign-fan offer.",
     examples: [
       {
@@ -704,6 +745,7 @@ export const DUCT_CASES: readonly DuctCase[] = [
     why: "Passive devices move no air.",
     status: "handled",
     code: "role · passive",
+    kinds: [],
     ids: 'FR-1 filter chassis 6369851 (RA 52 / RA 4) proposed passive "air passes straight through (all ports Return Air)" beside FC-15 6037907 on RA 52; also FR-1 6404589 on RA 1 beside DH-7 / RV-26 / DH-31. Silencer DS-1 6080717 (FA 11) is also proposed passive, but FA 11 has no working fan.',
     examples: [
       {
@@ -728,6 +770,7 @@ export const DUCT_CASES: readonly DuctCase[] = [
     why: "No other mover exists to override the guess.",
     status: "owed",
     code: "role · fan",
+    kinds: [],
     ids: "RA 1: FR-1 6404589. On this snapshot the engine no longer keeps it a fan: it is proposed passive, because the same network (g6293931) has working fans DH-7, RV-26, DH-31. Check the role shown.",
     examples: [
       {
@@ -748,6 +791,7 @@ export const DUCT_CASES: readonly DuctCase[] = [
     why: "There is nothing to price against.",
     status: "handled",
     code: "no-fan",
+    kinds: ["no-fan"],
     ids: "SA 7 network g8780927 has no equipment: no-fan finding naming grille 8780927 (a terminal, not a duct; 3 elements). 89 no-fan networks on the snapshot.",
     examples: [
       {
@@ -769,6 +813,7 @@ export const DUCT_CASES: readonly DuctCase[] = [
     why: "Pressure is per fan stretch.",
     status: "handled",
     code: "multi-fan",
+    kinds: ["multi-fan"],
     ids: "SA 24 network g9007633: FC-30 13216051 (ESP 0.382 in, owns the trunk) and DH-16 8013983 (0.352 in, its run goes through the junction). Header should show FC-30.",
     examples: [
       {
@@ -793,6 +838,7 @@ export const DUCT_CASES: readonly DuctCase[] = [
     why: "Air physically continues through it.",
     status: "handled",
     code: "role · passive",
+    kinds: [],
     ids: "FR-1 6369851 passes air between RA 52 and RA 4; MUAS-2 10016301 (FA 10 / FA 7) is proposed passive the same way. Look for one network on both sides.",
     examples: [
       {
@@ -817,6 +863,7 @@ export const DUCT_CASES: readonly DuctCase[] = [
     why: "Behaviour that is not proven is not claimed.",
     status: "owed",
     code: "ducts.apply-assign-fan",
+    kinds: [],
     ids: "no link: not a model case",
     examples: [],
     idea: null,
@@ -832,6 +879,7 @@ export const DUCT_CASES: readonly DuctCase[] = [
     why: "A missing drop must not block a run.",
     status: "handled",
     code: "terminalDrops",
+    kinds: [],
     ids: "SA 19: any grille, e.g. 8728214. No catalog is loaded, so its drop is zero and it sits in Diagnostics, never Fix.",
     examples: [
       {
@@ -852,6 +900,7 @@ export const DUCT_CASES: readonly DuctCase[] = [
     why: "Missing data is a note, not a failure.",
     status: "handled",
     code: "catalog-missing-table / catalog-out-of-range",
+    kinds: ["catalog-missing-table", "catalog-out-of-range"],
     ids: "no example in the example project: no catalog is loaded (EMPTY_CATALOGS), so price() yields 0 catalog-missing-table / catalog-out-of-range findings.",
     examples: [],
     idea: null,
@@ -867,6 +916,7 @@ export const DUCT_CASES: readonly DuctCase[] = [
     why: "A zero from Revit means a coefficient was never set, not a measured loss.",
     status: "handled",
     code: "revitDp",
+    kinds: [],
     ids: "SA 24: any priced fitting in the tree shows the coefficient Pe computed; Revit System Inspector shows 0 for the same fitting.",
     examples: [
       {
@@ -887,6 +937,7 @@ export const DUCT_CASES: readonly DuctCase[] = [
     why: "The loss for this elbow shape is not yet modelled.",
     status: "owed",
     code: null,
+    kinds: [],
     ids: '"Rectangular Elbow - Radius": 288 on the example project (0.75 W: 130, 1 W: 158). SA 44 elbow 9492482 (0.75 W); SA 27 elbow 10798073 (1 W).',
     examples: [
       {
@@ -911,6 +962,7 @@ export const DUCT_CASES: readonly DuctCase[] = [
     why: "It is not yet proven which dimension Revit means.",
     status: "owed",
     code: "elbow-mitered",
+    kinds: [],
     ids: '"Rectangular Elbow - Mitered" (356): RA 46 elbow 6522833 (18x16); vaned "Mitered - Double Thickness Vanes" (190): SA 7 elbow 7243176. Check which dimension is read as height.',
     examples: [
       {
@@ -935,6 +987,7 @@ export const DUCT_CASES: readonly DuctCase[] = [
     why: "One input, one place.",
     status: "handled",
     code: "designFriction",
+    kinds: [],
     ids: "no link: friction rate lives in settings, not on a model element.",
     examples: [],
     idea: null,
@@ -950,6 +1003,7 @@ export const DUCT_CASES: readonly DuctCase[] = [
     why: "Roughness drives friction.",
     status: "handled",
     code: "default-flex-roughness",
+    kinds: ["default-flex-roughness"],
     ids: '45 flex ducts ("Flex - Round"): SA 26 flex 6749363. Look for the default-flex-roughness note.',
     examples: [
       {
@@ -970,6 +1024,7 @@ export const DUCT_CASES: readonly DuctCase[] = [
     why: "Equipment internals are real pressure.",
     status: "open",
     code: "no-component-drop",
+    kinds: ["no-component-drop"],
     ids: "no link: not a model case",
     examples: [],
     idea: null,
@@ -985,6 +1040,7 @@ export const DUCT_CASES: readonly DuctCase[] = [
     why: "Parameter names are firm-specific.",
     status: "owed",
     code: "no-fan-static · esp",
+    kinds: ["no-fan-static"],
     ids: 'SA 19: FC-17 9668311 "states no external static" (no-fan-static), as does DH-21 9668310.',
     examples: [
       {
@@ -1006,6 +1062,7 @@ export const DUCT_CASES: readonly DuctCase[] = [
     why: "Feet at each duct's own friction rate do not rank like pressure; for example a 664 ft branch can lose less than the 592 ft critical run.",
     status: "open",
     code: "eqFt · tel",
+    kinds: [],
     ids: "SA 24: the 664 ft (663.6) run ends at grille 12673217 and prices 0.357 in; the critical run is 592 ft (591.8) to grille 9007665 at 0.382 in. Select the branch grille and compare.",
     examples: [
       {
@@ -1031,6 +1088,7 @@ export const DUCT_CASES: readonly DuctCase[] = [
     why: "The model carries the engineer's decision.",
     status: "handled",
     code: "_PE_DuctLosses · verdict",
+    kinds: [],
     ids: "SA 19 (the Write proof's system): use its Rulings rows (e.g. mark a unit passive, ignore an open end).",
     examples: [
       {
@@ -1051,6 +1109,7 @@ export const DUCT_CASES: readonly DuctCase[] = [
     why: "Reversal goes through the same review as writing.",
     status: "handled",
     code: "verdict · take back",
+    kinds: [],
     ids: "SA 19: take back a ruling stored there; it shows as a staged delete in the review.",
     examples: [
       {
@@ -1071,6 +1130,7 @@ export const DUCT_CASES: readonly DuctCase[] = [
     why: "The engineer approves what actually changes.",
     status: "handled",
     code: "ducts.preview-losses",
+    kinds: [],
     ids: "SA 19: press Write and read the review, every change old to new.",
     examples: [
       {
@@ -1092,6 +1152,7 @@ export const DUCT_CASES: readonly DuctCase[] = [
     why: "Rulings must not wait on a clean calculation.",
     status: "fixed",
     code: "ducts.apply-losses",
+    kinds: [],
     ids: "SA 19: Write with its Fix rows still open; rulings, slots and flows write, only the ESP waits.",
     examples: [
       {
@@ -1113,6 +1174,7 @@ export const DUCT_CASES: readonly DuctCase[] = [
     why: "The engineer thinks in systems.",
     status: "handled",
     code: null,
+    kinds: [],
     ids: "SA 19: shows all three of its networks (FC-17 + DH-21, FC-35 + DH-30, grille 8747668 alone).",
     examples: [
       {
@@ -1133,6 +1195,7 @@ export const DUCT_CASES: readonly DuctCase[] = [
     why: "The run is not yet attributed to the right system.",
     status: "owed",
     code: null,
+    kinds: [],
     ids: "Candidate (not a header check): RA 30's critical run to grille 13830457 in network g6889856 crosses elements named RA 29, RA 31, FA 3, FA 4, FA 1 before RA 30. Check whether the run appears in RA 30's header.",
     examples: [
       {
@@ -1153,6 +1216,7 @@ export const DUCT_CASES: readonly DuctCase[] = [
     why: "The firm's own tag is the recognisable name.",
     status: "handled",
     code: "PE_G___TagInstance",
+    kinds: [],
     ids: "SA 19: FC-17 9668311 labelled from PE_G___TagInstance; MUAS-1 is 14577391 on FA 44.",
     examples: [
       {
@@ -1177,6 +1241,7 @@ export const DUCT_CASES: readonly DuctCase[] = [
     why: "The page cannot guess which document.",
     status: "open",
     code: null,
+    kinds: [],
     ids: "no link: not a model case",
     examples: [],
     idea: null,
@@ -1192,6 +1257,7 @@ export const DUCT_CASES: readonly DuctCase[] = [
     why: "Duplicate requests all reach Revit.",
     status: "fixed",
     code: "ducts.snapshot",
+    kinds: [],
     ids: "no link: not a model case",
     examples: [],
     idea: null,
@@ -1207,6 +1273,7 @@ export const DUCT_CASES: readonly DuctCase[] = [
     why: "The first draw is slow.",
     status: "owed",
     code: null,
+    kinds: [],
     ids: "no link: not a model case",
     examples: [],
     idea: null,
@@ -1222,6 +1289,7 @@ export const DUCT_CASES: readonly DuctCase[] = [
     why: "A proposal nobody can see.",
     status: "owed",
     code: "proposal",
+    kinds: [],
     ids: "no link: not a model case",
     examples: [],
     idea: null,
@@ -1237,6 +1305,7 @@ export const DUCT_CASES: readonly DuctCase[] = [
     why: "The cause is unknown.",
     status: "open",
     code: null,
+    kinds: [],
     ids: "no link: not a model case",
     examples: [],
     idea: null,
@@ -1252,6 +1321,7 @@ export const DUCT_CASES: readonly DuctCase[] = [
     why: "Not proven by a live session.",
     status: "owed",
     code: null,
+    kinds: [],
     ids: "no link: not a model case",
     examples: [],
     idea: null,

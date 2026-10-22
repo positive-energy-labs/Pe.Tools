@@ -1,6 +1,6 @@
 export * from "./activity.ts";
 export * from "./route-state.ts";
-export * from "./route-view.ts";
+export * from "./route-address.ts";
 export * from "./route-doc.ts";
 export * from "./reading.ts";
 export * from "./machine.ts";
@@ -50,3 +50,4 @@ export * from "./plugin-runtime.ts";
 
 export * from "./thread-export.ts";
 export * from "./ducts-analysis.ts";
+export * from "./ducts-guide.ts";

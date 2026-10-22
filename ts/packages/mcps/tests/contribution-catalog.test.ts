@@ -89,13 +89,14 @@ test("renamed package content keeps all four canonical kinds with no native avai
 });
 
 test("public MCP and CLI rank one canonical snapshot with the shared ranker", async () => {
+  // "tour" keeps the pod's page inside the top 8 beside the product's own ducts rows.
   fakeRuntimeHost("http://127.0.0.1:9");
   vi.stubEnv("PE_CONTEXT", "");
   vi.stubGlobal("fetch", async () => Response.json(catalog()));
-  const expected = findCapabilities(catalog().capabilities, { query: "duct loss", limit: 8 }).map(
+  const expected = findCapabilities(catalog().capabilities, { query: "duct loss tour", limit: 8 }).map(
     (r) => r.key,
   );
-  const found = (await peFind.execute({ query: "duct loss", limit: 8 }, undefined)) as {
+  const found = (await peFind.execute({ query: "duct loss tour", limit: 8 }, undefined)) as {
     matches: { key: string }[];
   };
   expect(found.matches.map((r) => r.key)).toEqual(expected);
@@ -110,7 +111,7 @@ test("public MCP and CLI rank one canonical snapshot with the shared ranker", as
   const output = vi.spyOn(console, "log").mockImplementation(() => {});
   vi.spyOn(console, "error").mockImplementation(() => {});
   await cli(
-    ["duct", "loss", "--json"],
+    ["duct", "loss", "tour", "--json"],
     new PeaCliCommands({ hostBaseUrl: "http://127.0.0.1:9" }).findCommand(),
   );
   expect(JSON.parse(output.mock.calls[0]![0]).map((r: { key: string }) => r.key)).toEqual(expected);

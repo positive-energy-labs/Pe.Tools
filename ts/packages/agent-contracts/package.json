@@ -27,6 +27,10 @@
     "./product-map": {
       "types": "./src/product-map.ts",
       "import": "./src/product-map.ts"
+    },
+    "./ducts-guide": {
+      "types": "./src/ducts-guide.ts",
+      "import": "./src/ducts-guide.ts"
     }
   },
   "publishConfig": {

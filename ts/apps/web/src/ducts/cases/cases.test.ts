@@ -2,7 +2,7 @@ import { createElement } from "react";
 import { renderToStaticMarkup } from "react-dom/server";
 import { describe, expect, it } from "vite-plus/test";
 
-import { DUCT_CASES } from "./data";
+import { DUCT_CASES } from "@pe/agent-contracts/ducts-guide";
 import { CaseDrawing, CaseLegend, SCENE_KEYS } from "./draw";
 
 describe("duct tutorial cases", () => {
