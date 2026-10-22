@@ -1,7 +1,6 @@
 import { useEffect, useState } from "react";
 import { routeAddress, type PageTargetReading } from "@pe/agent-contracts";
 import { useRouteSearch } from "#/route/activity";
-import { Button } from "@pe/kit/lang/button";
 import { openEventSource } from "#/readings";
 import { peClient } from "#/host/pe-client";
 import { readPageTarget } from "./client";
@@ -12,25 +11,17 @@ export function PageBindingChip({ slug }: { slug: string }) {
   const { carry } = routeAddress("bind").read(useRouteSearch());
   const [reading, setReading] = useState<PageTargetReading | null>(null);
   const [refusal, setRefusal] = useState<string | null>(null);
-  const [version, setVersion] = useState(0);
   useEffect(() => {
     let retired = false;
     let generation = 0;
-    let expiry: ReturnType<typeof setTimeout> | undefined;
     const fresh = async () => {
       const attempt = ++generation;
-      clearTimeout(expiry);
       setReading(null);
       try {
         const next = await readPageTarget(slug);
         if (retired || attempt !== generation) return;
         setReading(next);
         setRefusal(null);
-        if (next.write?.kind === "rw")
-          expiry = setTimeout(
-            () => void fresh(),
-            Math.max(0, Date.parse(next.write.expiresAt) - Date.parse(next.hostNow)) + 500,
-          );
       } catch (error) {
         if (!retired && attempt === generation)
           setRefusal(error instanceof Error ? error.message : String(error));
@@ -47,46 +38,24 @@ export function PageBindingChip({ slug }: { slug: string }) {
     events.addEventListener("binding", () => void fresh());
     events.onerror = () => {
       generation++;
-      clearTimeout(expiry);
       setReading(null);
     };
     void fresh();
     return () => {
       retired = true;
-      clearTimeout(expiry);
       events.close();
     };
-  }, [slug, version]);
+  }, [slug]);
   const write = reading?.write;
-  const revoke = async () => {
-    if (reading?.write?.kind !== "rw") return;
-    const thread = reading.write.thread;
-    setReading(null);
-    try {
-      const response = await peClient.response("scope.revoke", { params: { id: thread } });
-      if (!response.ok) {
-        const body = await response.json().catch(() => null);
-        setRefusal(body?.error?.message ?? "rw revoke was refused");
-        return;
-      }
-      setVersion((prior) => prior + 1);
-    } catch {
-      setRefusal("revoke outcome unknown; reopen the binding to read its current grant");
-    }
-  };
+  // The document's name is the visible consent (ADR 0021): a thread slot that writes names it.
   return (
     <div className="flex min-w-0 items-center gap-2" aria-label="Page binding">
-      {write?.kind === "rw" ? (
-        <Button
-          label="Revoke Page rw"
-          reason="Running steps finish; no new step begins."
-          onClick={() => void revoke()}
-          data-tone="done"
-        >
-          <span className="face-mono">
-            rw · {Math.ceil((Date.parse(write.expiresAt) - Date.parse(reading!.hostNow)) / 60_000)}m
+      {write?.kind === "thread" ? (
+        <TooltipHint content="A person added this document to the bound thread; this Page may write it.">
+          <span className="face-mono" data-tone="done">
+            {reading?.document?.title || "thread document"}
           </span>
-        </Button>
+        </TooltipHint>
       ) : (
         <TooltipHint
           content={write?.kind === "read" ? write.refusal.reason : (refusal ?? undefined)}

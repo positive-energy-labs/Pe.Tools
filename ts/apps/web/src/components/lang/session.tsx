@@ -53,27 +53,24 @@ const persistenceOf = (document: SessionDocument) =>
       ? "cloud"
       : "local";
 
-type GrantedDocument = MachineAttachmentDocument & {
-  access: Extract<MachineAccess, { kind: "rw" }>;
+type TargetedDocument = MachineAttachmentDocument & {
+  access: Extract<MachineAccess, { kind: "target" }>;
 };
 
 /**
- * The documents a thread may write here, from the host's `access` projection and nothing else:
- * no head is read in the browser. Keyed by the product socket's own document (its bridge title),
- * since an SDK document id is a different namespace and is never guessed from a title.
+ * The documents a human added to a thread here, from the host's `access` projection and nothing
+ * else: no head is read in the browser. Keyed by the product socket's own document (its bridge
+ * title), since an SDK document id is a different namespace and is never guessed from a title.
  */
-const grantsOf = (session: MachineSession): GrantedDocument[] =>
+const targetsOf = (session: MachineSession): TargetedDocument[] =>
   (session.attachment?.documents ?? []).filter(
-    (document): document is GrantedDocument => document.access.kind === "rw",
+    (document): document is TargetedDocument => document.access.kind === "target",
   );
 
-const rwSays = (access: Exclude<MachineAccess, { kind: "read" }>) =>
+const accessSays = (access: Exclude<MachineAccess, { kind: "read" }>) =>
   access.kind === "pea"
     ? "Pea's own Revit: Pea may write this document"
-    : `thread "${access.label}" may write this document until ${until(access.until)}`;
-
-const until = (iso: string) =>
-  new Date(iso).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" });
+    : `you added this document to thread "${access.label}"`;
 
 /** The `Connectors` anchor of one held document. */
 export const docKey = (document: SessionDocument) => `doc:${document.openId ?? document.path}`;
@@ -115,7 +112,7 @@ interface SessionViewProps {
 export function SessionRow({ session, facts, anchor, verbs, strip }: SessionViewProps) {
   const documents = session.documents;
   const active = documents?.find((document) => document.isActive) ?? documents?.[0];
-  const words = [...shapeWords(session), ...grantsOf(session).map((g) => `rw · ${g.title}`)];
+  const words = [...shapeWords(session), ...targetsOf(session).map((g) => g.title)];
   return (
     <div className="flex flex-col" data-key={anchor} aria-label={titleOf(facts)}>
       <Row
@@ -162,7 +159,7 @@ export function HeldRow({
   onClick,
 }: {
   document: SessionDocument;
-  /** What the host says may write it; only `rw` is drawn. */
+  /** Whose the host says it is; `pea` and `target` are drawn. */
   access?: MachineAccess;
   /** The row a cable was pressed on (not Revit's active document, which is its own mark). */
   active?: boolean;
@@ -181,8 +178,8 @@ export function HeldRow({
         meta={
           access && access.kind !== "read" ? (
             <>
-              <TooltipHint content={rwSays(access)}>
-                <span data-tone="done">rw</span>
+              <TooltipHint content={accessSays(access)}>
+                <span data-tone="done">{access.kind === "pea" ? "Pea's" : "in a thread"}</span>
               </TooltipHint>
               {persistenceOf(document)}
             </>
@@ -267,14 +264,13 @@ export function SessionCard({
             ),
           )
         )}
-        {grantsOf(session).map((granted) => (
+        {targetsOf(session).map((targeted) => (
           <Row
-            key={`rw:${granted.session}/${granted.openId}`}
+            key={`target:${targeted.session}/${targeted.openId}`}
             lines={2}
-            label={<span data-tone="done">rw · {granted.title}</span>}
-            meta={`until ${until(granted.access.until)}`}
-            sub={granted.access.label}
-            title={rwSays(granted.access)}
+            label={targeted.title}
+            sub={targeted.access.label}
+            title={accessSays(targeted.access)}
           />
         ))}
         {children}

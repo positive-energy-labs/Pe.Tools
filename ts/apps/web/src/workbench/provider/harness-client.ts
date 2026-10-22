@@ -13,6 +13,7 @@ import type {
   ReadingFrame,
   ReadingRequest,
   UpdateThreadRequest,
+  PutTarget,
 } from "@pe/agent-contracts";
 import { followThread } from "@pe/agent-contracts/chat-state";
 import type { z } from "zod";
@@ -54,18 +55,7 @@ export function harnessClient(origin: string) {
           onFault(new Error("Thread list is not current; reconnecting."));
       });
     },
-    target: (
-      id: string,
-      head: Pick<HarnessThreadSummary["head"], "defaultTarget" | "revision" | "displayLabel">,
-    ) =>
-      client.call("scope.set", {
-        params: { id },
-        body: {
-          defaultTarget: head.defaultTarget,
-          expectedRevision: head.revision,
-          displayLabel: head.displayLabel,
-        },
-      }),
+    target: (id: string, body: PutTarget) => client.call("scope.set", { params: { id }, body }),
     remove: (id: string) => client.call("thread.remove", { params: { id } }),
     prompt: (id: string, body: PromptRequest) =>
       client.call("thread.prompt", { params: { id }, body: { id: crypto.randomUUID(), ...body } }),

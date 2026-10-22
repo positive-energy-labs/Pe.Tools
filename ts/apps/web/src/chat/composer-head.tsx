@@ -1,10 +1,15 @@
 /** Chat's whole Situation, drawn in the composer: Work and live asks at the top of the box, the
- *  next turn's provider, traits and document target as marks in the lane beside Send. The target binds
- *  through the thread head (`PUT /scope/:thread`); a `?target` pin seeds a document-less thread once. */
+ *  next turn's provider, traits and document targets as marks in the lane beside Send. A thread
+ *  targets a set of documents (ADR 0021): a pick toggles one in the set (`PUT /scope/:thread`), and
+ *  a `?target` pin seeds a document-less thread once. The targeted names are the visible consent. */
 import { useEffect, useRef, type SVGProps } from "react";
 import {
   resolveCallTarget,
   machineInventory,
+  headRequests,
+  machineAttachments,
+  targetKey,
+  type DocumentRequest,
   type TargetResolution,
   type Machine,
   type Reading,
@@ -42,7 +47,7 @@ import { targetClosure, targetLabel } from "./thread-navigation";
 import { ProposalHead } from "./proposal-head";
 import { ComposerOpenMode } from "./composer-open";
 import { ComposerPending } from "./composer-pending";
-import { GrantChip, HeadLadder } from "./head-chips";
+import { HeadLadder } from "./head-chips";
 import { emptyPrompt, type ChatDraft } from "#/workbench/prompt";
 import { usePublishSituationSignal } from "#/navigation/route-controls";
 import { TooltipHint } from "@pe/kit/lang/tooltip";
@@ -84,6 +89,7 @@ const complaint = (resolution: TargetResolution): string | null =>
         ? resolution.message
         : {
             missing: "no document chosen",
+            "several-targets": "this thread targets several documents",
             "session-gone": "the Revit holding it ended — choose again",
             "document-closed": "it is no longer open — choose again",
             "wrong-document-kind": "that document is the wrong kind for this call",
@@ -104,6 +110,12 @@ const pinnedRef = (inventory: ReturnType<typeof machineInventory>, target?: stri
   return refs.length === 1 ? refs[0]! : null;
 };
 
+/** Whose an open document is, as Machine projects it; null when unread. */
+const accessIn = (machine: Machine | null | undefined, ref: { session: string; openId: string }) =>
+  (machine ? machineAttachments(machine) : [])
+    .find((attachment) => attachment.session === ref.session)
+    ?.documents?.find((doc) => doc.openId === ref.openId)?.access.kind ?? null;
+
 /** The bound document's Address, which keys document-owned Work. */
 const documentAddress = (
   inventory: ReturnType<typeof machineInventory>,
@@ -115,20 +127,25 @@ const documentAddress = (
     : null;
 };
 
-/** The thread's head, or the draft's own target before the first send creates a thread. */
+/**
+ * The thread's head, or the draft's own target before the first send creates a thread. A draft
+ * holds one document; more are added once the thread exists.
+ */
 function useThreadHead(handle: ChatHandle) {
   const { currentThreadId, draftTarget, setDraftTarget } = useWorkbench();
   const scope = useThreadScope(currentThreadId, !handle.demo, handle.readings.head);
-  return currentThreadId || handle.demo
-    ? scope
-    : {
-        ...scope,
-        defaultTarget: draftTarget,
-        set: async (target: Parameters<typeof scope.set>[0]) => {
-          setDraftTarget(target);
-          return true;
-        },
-      };
+  if (currentThreadId || handle.demo) return scope;
+  const set = async (targets: Parameters<typeof scope.set>[0]) => {
+    setDraftTarget(targets.at(-1)?.request ?? null);
+    return true;
+  };
+  return {
+    ...scope,
+    targets: draftTarget ? [{ request: draftTarget, admission: null }] : [],
+    set,
+    toggle: async (target: DocumentRequest) =>
+      set(draftTarget && targetKey(draftTarget) === targetKey(target) ? [] : [{ request: target }]),
+  };
 }
 
 /** What both the composer head and the thread head's cluster read: the thread's target and its
@@ -136,23 +153,49 @@ function useThreadHead(handle: ChatHandle) {
 export function useChatSituation(handle: ChatHandle) {
   const { currentThreadId, threads, chat, missingThread } = useWorkbench();
   const head = useThreadHead(handle);
-  const inventory = machineInventory(previousOf(handle.readings.machine as Reading<Machine>));
-  const resolution = resolveCallTarget({ needs: "document" }, head.defaultTarget, inventory);
+  const machine = previousOf(handle.readings.machine as Reading<Machine>);
+  const inventory = machineInventory(machine);
+  const requests = headRequests(head);
+  const resolution = resolveCallTarget({ needs: "document" }, requests, inventory);
   const bound =
     resolution.kind === "resolved" && resolution.target.kind === "document"
       ? resolution.target.ref
       : null;
+  // Every exact open document the thread targets, checked in the multi-select.
+  const targets = requests.flatMap((request) => {
+    const one = resolveCallTarget({ needs: "document" }, [request], inventory);
+    return one.kind === "resolved" && one.target.kind === "document" ? [one.target.ref] : [];
+  });
   const ladder = useDocumentLadder(handle, undefined, {
     bound,
+    targets,
     bind: (ref) => {
       const label = documentAddress(inventory, ref)?.split(/[\\/]/).at(-1);
-      void head.set({ kind: "open", ref }, label);
+      void head.toggle({ kind: "open", ref }, label);
     },
   });
-  const health = head.defaultTarget ? complaint(resolution) : null;
-  // The inventory is the authority; the saved target is a request, shown as missing when gone.
-  const closed = targetClosure(head.defaultTarget, inventory);
+  // A thread with several targets is healthy: a call names one. Only a closed one complains.
+  const health =
+    requests.length && !(resolution.kind === "choose" && resolution.reason === "several-targets")
+      ? complaint(resolution)
+      : null;
+  // The inventory is the authority; a saved target is a request, shown as missing when gone.
+  const closed = requests.some((request) => targetClosure(request, inventory));
   const closedWord = closed ? `${targetLabel({ head })} · closed` : null;
+  // Pea may write every targeted document: the access switch is Full, or each is Pea's own or one
+  // a human added (ADR 0021). The tone says so; nothing else draws write authority.
+  const writes =
+    targets.length > 0 &&
+    (machine?.access?.guarded === false ||
+      targets.every((ref) => {
+        const held = head.targets.find(
+          (target) =>
+            target.request.kind === "open" &&
+            target.request.ref.session === ref.session &&
+            target.request.ref.openId === ref.openId,
+        );
+        return held?.admission != null || accessIn(machine, ref) === "pea";
+      }));
   // A thread the host does not know names nothing: the transcript says "no such thread".
   const threadLabel = missingThread
     ? ""
@@ -160,10 +203,8 @@ export function useChatSituation(handle: ChatHandle) {
       threads.find((item) => item.id === currentThreadId)?.title ||
       currentThreadId;
   return {
-    head: {
-      ...head,
-      grantView: bound && handle.readings.machine.state === "ready" ? head.grantView : null,
-    },
+    head,
+    writes,
     inventory,
     bound,
     ladder,
@@ -236,11 +277,8 @@ export function ChatSituationHead({
             : []),
           [
             "target",
-            head.defaultTarget
-              ? (situation.ladder.docWord ??
-                (head.defaultTarget.kind === "named"
-                  ? head.defaultTarget.address
-                  : head.defaultTarget.ref.session))
+            head.targets.length
+              ? (situation.ladder.docWord ?? targetLabel({ head }))
               : "none · Chat runs; Revit operations need a document",
           ],
           ["state", status.text],
@@ -277,7 +315,7 @@ export function ChatCluster({
               ["thread", threadLabel],
               [
                 "target",
-                head.defaultTarget
+                head.targets.length
                   ? `r${head.revision}${head.stale ? " · stale" : ""}`
                   : "none · Chat runs; Revit operations need a document",
               ],
@@ -308,16 +346,16 @@ export function ComposerPickers({
   const pinned = useRef<string | null>(null);
   const pinRef = pinnedRef(inventory, urlTarget);
   useEffect(() => {
-    if (!pinRef || head.stale || !head.hydrated || head.defaultTarget) return;
+    if (!pinRef || head.stale || !head.hydrated || head.targets.length) return;
     if (pinned.current === currentThreadId) return;
     pinned.current = currentThreadId;
-    void head.set({ kind: "open", ref: pinRef });
+    void head.set([{ request: { kind: "open", ref: pinRef } }]);
   }, [
     pinRef?.session,
     pinRef?.openId,
     head.stale,
     head.hydrated,
-    head.defaultTarget,
+    head.targets.length,
     currentThreadId,
   ]);
   const targetDisabled = isRunning || head.stale;
@@ -328,27 +366,27 @@ export function ComposerPickers({
     index === 0
       ? {
           ...level,
-          placeholder: !head.defaultTarget
-            ? "choose a Revit document (optional)"
+          placeholder: !head.targets.length
+            ? "choose Revit documents (optional)"
             : index === unbound && closedWord
               ? closedWord
               : level.placeholder,
           extra: (
             <>
               {level.extra}
-              {head.defaultTarget ? (
+              {head.targets.length ? (
                 <div className="hairline-t mt-1 px-2 pt-1">
                   <Button
                     kind="framed"
                     icon={X}
-                    label="Clear target"
-                    reason="Run this chat without a Revit target"
-                    refusal={targetDisabled ? "Run this chat without a Revit target" : null}
+                    label="Clear targets"
+                    reason="Run this chat without Revit documents"
+                    refusal={targetDisabled ? "Run this chat without Revit documents" : null}
                     onClick={() => {
-                      void head.set(null);
+                      void head.set([]);
                     }}
                   >
-                    Clear target
+                    Clear targets
                   </Button>
                 </div>
               ) : null}
@@ -367,14 +405,16 @@ export function ComposerPickers({
           <Ladder
             face="icon"
             header={header}
-            mark={<RevitMark data-tone={situation.bound ? "done" : undefined} />}
+            mark={<RevitMark data-tone={situation.writes ? "done" : undefined} />}
             levels={levels}
             caution={Boolean(health)}
             disabled={targetDisabled}
             title={
-              ladder.sessionWord
-                ? `${ladder.sessionWord} › ${ladder.docWord ?? "no document"}; pick to change`
-                : "choose a session and a document; Chat runs without one, Revit operations do not"
+              head.targets.length > 1
+                ? `${targetLabel({ head })}; pick to add or remove`
+                : ladder.sessionWord
+                  ? `${ladder.sessionWord} › ${ladder.docWord ?? "no document"}; pick to add or remove`
+                  : "choose a session and documents; Chat runs without one, Revit operations do not"
             }
           />
         )}
@@ -383,19 +423,10 @@ export function ComposerPickers({
   );
 }
 
-/** The grant and Pea's plan beside the pickers. Send owns run state. */
-export function ComposerState({ situation: { head, ladder } }: { situation: ChatSituation }) {
+/** Pea's plan beside the pickers. Send owns run state. */
+export function ComposerState(_: { situation: ChatSituation }) {
   const { chat } = useWorkbench();
-  return (
-    <>
-      <GrantChip
-        grant={head.grantView}
-        document={ladder.docWord ?? undefined}
-        onRevoke={() => void head.revoke()}
-      />
-      <PlanChip tasks={selectPlan(chat)} />
-    </>
-  );
+  return <PlanChip tasks={selectPlan(chat)} />;
 }
 
 export type ComposerStatus = { text: string; caution: boolean; detail?: string };

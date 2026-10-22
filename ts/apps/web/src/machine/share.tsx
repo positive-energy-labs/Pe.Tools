@@ -107,12 +107,12 @@ export function ShareSettings({
           label="Allow remote machine administration"
           checked={share.allowRemoteAdministration}
           refusal={unavailable}
-          says="local switch; paired remote browsers may administer this host and grant document rw when on"
+          says="local switch; paired remote browsers may administer this host and add its documents to threads when on"
           onCheckedChange={(allowed) => change(switchRemoteAdministration(allowed))}
         />
         <span className="text-ink-2">
-          Remote rw consent requires remote administration. Shared Pages and captures grant no host
-          control.
+          A remote browser adds documents to threads only with remote administration on. Shared
+          Pages and captures grant no host control.
         </span>
       </div>
       <ShareStatus machine={machine} />

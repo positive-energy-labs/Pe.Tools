@@ -30,8 +30,8 @@ const LINKS: Connection[] = [
     tone: "commit",
     strong: true,
     band: 0.6,
-    label: <span data-tone="commit">rw · 36 min</span>,
-    title: "a cable with the rw grant counting down",
+    label: <span data-tone="commit">Hospital-MEP.rvt</span>,
+    title: "a cable to a document a thread targets",
   },
   {
     key: "pea",

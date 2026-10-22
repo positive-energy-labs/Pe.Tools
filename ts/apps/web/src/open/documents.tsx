@@ -143,11 +143,9 @@ export function documentColumns(layout: "row" | "stack"): Column<DocRow>[] {
                   {row.openIn.document.isModified ? (
                     <span className="font-semibold">unsaved</span>
                   ) : null}
-                  {["pea", "rw"].includes(
-                    accessOf(row.openIn.session, row.openIn.document)?.kind ?? "",
-                  ) ? (
-                    <TooltipHint content="the host lets a caller write this document">
-                      <span data-tone="done">rw</span>
+                  {accessOf(row.openIn.session, row.openIn.document)?.kind === "target" ? (
+                    <TooltipHint content="you added this document to a thread">
+                      <span data-tone="done">in a thread</span>
                     </TooltipHint>
                   ) : null}
                 </span>

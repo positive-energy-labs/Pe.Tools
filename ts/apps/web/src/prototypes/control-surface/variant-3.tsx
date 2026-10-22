@@ -47,8 +47,9 @@ const mk = (
   lifecycle: { ...emptyThreadLifecycle(), readSeq: base.activity.lastSeq },
   head: {
     ...base.head,
-    displayLabel: title,
-    defaultTarget: target ? { kind: "open", ref: target } : null,
+    targets: target
+      ? [{ request: { kind: "open", ref: target }, label: title, admission: null }]
+      : [],
   },
 });
 const B = BAY_THREADS[0]!;
@@ -117,14 +118,12 @@ export default function Variant() {
   const sessions = machine?.revit.sessions ?? [];
   const years = machine?.revit.years ?? [];
   const bound = useMemo(() => new Set(sessions.map(sessionKey)), [sessions]);
-  const under = (s: MachineSession) =>
-    THREADS.filter(
-      (t) =>
-        t.head.defaultTarget?.kind === "open" && t.head.defaultTarget.ref.session === sessionKey(s),
-    );
-  const orphans = THREADS.filter(
-    (t) => !(t.head.defaultTarget?.kind === "open" && bound.has(t.head.defaultTarget.ref.session)),
-  );
+  const sessionOf = (t: HarnessThreadSummary) => {
+    const request = t.head.targets[0]?.request;
+    return request?.kind === "open" ? request.ref.session : null;
+  };
+  const under = (s: MachineSession) => THREADS.filter((t) => sessionOf(t) === sessionKey(s));
+  const orphans = THREADS.filter((t) => !bound.has(sessionOf(t) ?? ""));
   const update = machine ? updateSaid(machine) : { text: "unread" };
   const share = machine ? shareState(machine) : { text: "unread" };
 

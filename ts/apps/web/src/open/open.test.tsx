@@ -370,9 +370,11 @@ const accessed = (access: MachineAccess) =>
   );
 
 test("thread heads alone draw no rw: the bay is not told by the heads it lists", () => {
-  // BAY_THREADS point their heads at the person's Hospital-MEP, and no access says it may write.
+  // BAY_THREADS target the person's Hospital-MEP, and no access says it may write.
   render(<Bay />);
-  expect(BAY_THREADS.some((thread) => thread.head.defaultTarget?.kind === "open")).toBe(true);
+  expect(
+    BAY_THREADS.some((thread) => thread.head.targets.some((t) => t.request.kind === "open")),
+  ).toBe(true);
   expect(screen.queryByText(/^rw(?: |$)/)).toBeNull();
   expect(screen.queryByRole("button", { name: "take back rw" })).toBeNull();
   expect(document.querySelector('[title^="Pea holds rw"]')).toBeNull();

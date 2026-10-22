@@ -9,7 +9,7 @@ import {
   type HarnessThreadSummary,
   type PageChoice,
   type PageTargetReading,
-  threadHeadReadingSchema,
+  targetsLabel,
 } from "@pe/agent-contracts";
 
 import { Button } from "@pe/kit/lang/button";
@@ -31,8 +31,7 @@ export interface Pinnable {
 }
 
 /** What a write would do, in the chip's own words. */
-const writeMark = (write: PageTargetReading["write"]) =>
-  !write ? "—" : write.kind === "rw" ? "rw" : write.kind;
+const writeMark = (write: PageTargetReading["write"]) => (!write ? "—" : write.kind);
 
 const subjectOf = (reading: PageTargetReading) =>
   reading.resolution.kind === "resolved"
@@ -102,8 +101,8 @@ export function BindPicker({
       </Section>
       <Section label="Follow a thread">
         <p className="m-0 t-small text-ink-2">
-          The Page targets whatever the thread points at, and writes only while that thread holds
-          rw.
+          The Page targets the thread's one document, and writes only documents a person added to
+          that thread.
         </p>
         {threads === null ? (
           <EmptyState story="scope" exit="reading threads">
@@ -118,16 +117,22 @@ export function BindPicker({
             <Row
               key={thread.id}
               label={thread.title || thread.id}
-              aside={thread.head.displayLabel ?? "no target"}
+              aside={targetsLabel(thread.head.targets) ?? "no target"}
               meta={
                 <span className="face-mono">
-                  {threadHeadReadingSchema.safeParse(thread.head).data?.grantView?.state === "rw" &&
-                  documents?.some(
-                    (doc) =>
-                      doc.ref.session === thread.head.grant?.lifetime.session &&
-                      doc.ref.openId === thread.head.grant.lifetime.openId,
+                  {/* Writes only documents a person added to the thread and that are open now. */}
+                  {thread.head.targets.some(
+                    (target) =>
+                      target.admission !== null &&
+                      target.request.kind === "open" &&
+                      documents?.some(
+                        (doc) =>
+                          target.request.kind === "open" &&
+                          doc.ref.session === target.request.ref.session &&
+                          doc.ref.openId === target.request.ref.openId,
+                      ),
                   )
-                    ? "rw"
+                    ? "thread"
                     : "read"}
                 </span>
               }

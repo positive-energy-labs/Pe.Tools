@@ -2,6 +2,7 @@ import {
   emptyThreadLifecycle,
   resolveCallTarget,
   targetKey,
+  targetsLabel,
   address,
   type DocumentRequest,
   type HarnessThreadBody,
@@ -40,13 +41,13 @@ export function relativeThreadAge(at: string, now = Date.now()): string {
         ? `${Math.floor(minutes / 60)}h`
         : `${Math.floor(minutes / 1440)}d`;
 }
-const navigationTargetKey = (target: HarnessThreadSummary["head"]["defaultTarget"]) =>
+const navigationTargetKey = (head: ThreadHead) =>
   JSON.stringify(
-    target === null
-      ? null
-      : target.kind === "open"
+    head.targets.map(({ request: target }) =>
+      target.kind === "open"
         ? ["open", target.ref.session, target.ref.openId]
         : ["named", target.session, target.address],
+    ),
   );
 /** Which half of a saved target the live inventory lacks: the whole session, or just the document. */
 export type ClosedTarget = "session" | "document";
@@ -59,8 +60,9 @@ export function targetClosure(
   target: DocumentRequest | null,
   inventory: TargetInventory,
 ): ClosedTarget | undefined {
-  const resolution = resolveCallTarget({ needs: "document" }, target, inventory);
-  if (!target || resolution.kind !== "choose") return undefined;
+  if (!target) return undefined;
+  const resolution = resolveCallTarget({ needs: "document" }, [target], inventory);
+  if (resolution.kind !== "choose") return undefined;
   return resolution.reason === "session-gone"
     ? "session"
     : resolution.reason === "document-closed"
@@ -68,42 +70,42 @@ export function targetClosure(
       : undefined;
 }
 /**
- * A thread read against the live inventory: whether its target is closed, and a row label that
- * says so in words (the exact target stays one hover away). A live document shows its open title.
+ * A thread read against the live inventory: whether any of its targets is closed, and labels that
+ * say so in words (the exact target stays one hover away). A live document shows its open title.
  */
 export function readThreadTarget<T extends HarnessThreadSummary>(
   thread: T,
   inventory: TargetInventory,
 ): T & TargetRead {
-  const target = thread.head.defaultTarget;
-  if (!target || inventory.kind !== "ready") return thread;
-  const targetClosed = targetClosure(target, inventory);
-  const resolution = resolveCallTarget({ needs: "document" }, target, inventory);
-  const ref =
-    resolution.kind === "resolved" && resolution.target.kind === "document"
-      ? resolution.target.ref
-      : null;
-  const sessionDocuments = ref ? inventory.sessions[ref.session] : undefined;
-  const live =
-    sessionDocuments?.kind === "ready"
-      ? sessionDocuments.values.find((document) => document.openId === ref!.openId)
+  if (!thread.head.targets.length || inventory.kind !== "ready") return thread;
+  let targetClosed: ClosedTarget | undefined;
+  const targets = thread.head.targets.map((target) => {
+    const closure = targetClosure(target.request, inventory);
+    targetClosed ??= closure;
+    const resolution = resolveCallTarget({ needs: "document" }, [target.request], inventory);
+    const ref =
+      resolution.kind === "resolved" && resolution.target.kind === "document"
+        ? resolution.target.ref
+        : null;
+    const sessionDocuments = ref ? inventory.sessions[ref.session] : undefined;
+    const live =
+      sessionDocuments?.kind === "ready"
+        ? sessionDocuments.values.find((document) => document.openId === ref!.openId)
+        : undefined;
+    const closed = closure
+      ? [target.label, closure === "session" ? "Closed session" : "Closed document"]
+          .filter(Boolean)
+          .join(" · ")
       : undefined;
-  const closed = targetClosed
-    ? [thread.head.displayLabel, targetClosed === "session" ? "Closed session" : "Closed document"]
-        .filter(Boolean)
-        .join(" · ")
-    : undefined;
-  const label = live?.address?.split(/[\\/]/).at(-1) ?? closed;
-  return {
-    ...thread,
-    targetClosed,
-    head: label ? { ...thread.head, displayLabel: label } : thread.head,
-  };
+    const label = live?.address?.split(/[\\/]/).at(-1) ?? closed;
+    return label ? { ...target, label } : target;
+  });
+  return { ...thread, targetClosed, head: { ...thread.head, targets } };
 }
 /** The one Target-filter option every closed target collapses into. */
 const CLOSED_TARGETS = "closed";
 export const targetFacet = (thread: HarnessThreadSummary & TargetRead) =>
-  thread.targetClosed ? CLOSED_TARGETS : navigationTargetKey(thread.head.defaultTarget);
+  thread.targetClosed ? CLOSED_TARGETS : navigationTargetKey(thread.head);
 /** Live targets one by one; closed ones are never listed, only the single "Closed" option. */
 export function targetFacets(threads: (HarnessThreadSummary & TargetRead)[]) {
   const live = new Map<string, string>();
@@ -144,10 +146,14 @@ export const shelfOf = (thread: HarnessThreadSummary, now = Date.now()): ThreadS
           ? "pinned"
           : "active";
 
+/** The thread's targets in one line: the one document's name, or a count when several. */
 export function targetLabel(thread: { head: ThreadHead }): string {
-  const target = thread.head.defaultTarget;
-  if (!target) return "Untargeted";
-  if (thread.head.displayLabel) return thread.head.displayLabel;
+  const { targets } = thread.head;
+  if (targets.length > 1) return targetsLabel(targets)!;
+  const only = targets[0];
+  if (!only) return "Untargeted";
+  if (only.label) return only.label;
+  const target = only.request;
   if (target.kind === "named") return target.address.split(/[\\/]/).at(-1) || target.address;
   return `Document in ${target.ref.session}`;
 }
@@ -161,7 +167,7 @@ export const threadSearchText = (
     thread.providerName,
     thread.modelId,
     targetLabel(thread),
-    targetKey(thread.head.defaultTarget),
+    ...thread.head.targets.map((target) => targetKey(target.request)),
     thread.id,
   ]
     .filter(Boolean)
@@ -341,7 +347,7 @@ export function threadActions<T extends HarnessThreadSummary & TargetRead>(
     verb(
       "new-target",
       "New thread on this target",
-      where((thread) => thread.head.defaultTarget !== null && !thread.targetClosed),
+      where((thread) => soleRequest(thread.head) !== null && !thread.targetClosed),
       closedWhy,
     ),
   ];
@@ -361,13 +367,7 @@ export function demoThreads(body: HarnessThreadBody): HarnessThreadSummary[] {
   const at = (minutes: number) => new Date(Date.now() - minutes * 60_000).toISOString();
   const base = {
     ...body,
-    head: {
-      ...emptyThreadHead,
-      hostNow: at(0),
-      grantView: null,
-      defaultTarget: target,
-      revision: 3,
-    },
+    head: { targets: [{ request: target, admission: null }], revision: 3 },
     lifecycle: emptyThreadLifecycle(),
     activity: { state: "idle" as const, pending: 0, lastSeq: 2, message: null },
     lastSeq: 2,
@@ -398,7 +398,7 @@ export function demoThreads(body: HarnessThreadBody): HarnessThreadSummary[] {
       id: "fixture-local",
       title: "Draft the BIM handoff notes",
       updatedAt: at(12),
-      head: { ...emptyThreadHead, hostNow: at(0), grantView: null },
+      head: emptyThreadHead,
       lifecycle: { ...base.lifecycle, readSeq: 2 },
     },
     {
@@ -407,10 +407,12 @@ export function demoThreads(body: HarnessThreadBody): HarnessThreadSummary[] {
       title: "Check AHU type parameters",
       updatedAt: at(30),
       head: {
-        ...emptyThreadHead,
-        hostNow: at(0),
-        grantView: null,
-        defaultTarget: { ...target, address: address("C:/Families/Air Handling Unit.rfa") },
+        targets: [
+          {
+            request: { ...target, address: address("C:/Families/Air Handling Unit.rfa") },
+            admission: null,
+          },
+        ],
         revision: 1,
       },
       activity: {
@@ -450,13 +452,14 @@ export function demoThreads(body: HarnessThreadBody): HarnessThreadSummary[] {
       title: "Resize the ductwork on Level 1",
       updatedAt: at(75),
       head: {
-        ...emptyThreadHead,
-        hostNow: at(0),
-        grantView: null,
-        defaultTarget: { ...target, session: "pe.app-25" },
+        targets: [{ request: { ...target, session: "pe.app-25" }, admission: null }],
         revision: 2,
       },
       lifecycle: { ...base.lifecycle, readSeq: 2 },
     },
   ];
 }
+
+/** The thread's one document request; null when it targets none or several (ADR 0021). */
+export const soleRequest = (head: ThreadHead): DocumentRequest | null =>
+  head.targets.length === 1 ? head.targets[0]!.request : null;

@@ -83,17 +83,17 @@ export function DeviceSettings({
       ),
     },
     {
-      key: "rw",
-      label: "rw",
+      key: "writes",
+      label: "Writes",
       cell: (session) => (
-        <span data-tone={session.rw && !endedDevice(session) ? "commit" : undefined}>
+        <span data-tone={session.writes && !endedDevice(session) ? "commit" : undefined}>
           {endedDevice(session) ??
             (session.audience === "browser"
               ? allowRemoteAdministration
-                ? "Can grant rw"
+                ? "Can add documents"
                 : "Consent off"
-              : session.rw
-                ? "rw active"
+              : session.writes
+                ? "Thread documents"
                 : "Read only")}
         </span>
       ),
@@ -276,7 +276,7 @@ function DeviceName({
             </Button>
           </div>
           <p className="text-ink-2">
-            Uses the thread's current grant. Clear to return to read-only.
+            Writes the documents a person added to the thread. Clear to return to read-only.
           </p>
         </details>
       )}

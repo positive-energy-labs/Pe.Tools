@@ -51,20 +51,23 @@ export const ChatPlanIntent = createContext<{
 
 /**
  * session › document, read from Machine: titles and pe-revit ids, not GUIDs.
- * A pick moves the thread head (the one target store) and drops a `?target` pin, so the route
- * shows what the thread shows. A route with no thread still binds through `?target`; Chat's
- * composer hands in its own `binding`.
+ * A route pick adds the document to the thread's targets (the one target store, ADR 0021) and
+ * pins `?target` to it when the thread then targets several, so the route shows one document. A
+ * route with no thread still binds through `?target`. Chat's composer hands in its own `binding`:
+ * a multi-select where a pick toggles the document in the thread's targets.
  */
 export function useDocumentLadder(
   handle: RouteHandle<any, any, any, any>,
   onTarget?: () => void,
   binding?: {
     bound: { session: string; openId: string } | null;
+    /** Every exact open document the thread targets; the rung checks each. */
+    targets: readonly { session: string; openId: string }[];
     bind: (ref: { session: string; openId: string }) => void;
   },
 ) {
   const hosted = useContext(ChatHosted);
-  const [pin, choose] = useChooseTarget();
+  const [, choose] = useChooseTarget();
   const shared = useMachine();
   // A route's frozen seed supplies the same Machine contract as the shared host owner.
   const inventory = (handle.readings.machine as Reading<Machine> | undefined) ?? shared.reading;
@@ -103,11 +106,19 @@ export function useDocumentLadder(
     chooseSession(null);
     const ref = { session: sessionId, openId };
     if (binding) binding.bind(ref);
-    else if (head)
-      void head.set({ kind: "open", ref }).then((moved) => {
-        if (moved && pin) choose(null);
+    else if (head) {
+      const request = { kind: "open", ref } as const;
+      const held = head.targets.some(
+        (target) =>
+          target.request.kind === "open" &&
+          target.request.ref.session === ref.session &&
+          target.request.ref.openId === ref.openId,
+      );
+      const next = held ? head.targets : [...head.targets, { request }];
+      void head.set(next).then((moved) => {
+        if (moved) choose(next.length > 1 ? JSON.stringify(request) : null);
       });
-    else choose(JSON.stringify({ kind: "open", ref }));
+    } else choose(JSON.stringify({ kind: "open", ref }));
   };
   // Exactly one session holding exactly one document, and nothing bound: bind it as if picked, once.
   // Several candidates keep asking. A lost binding is replaced only by the same title reopened (a
@@ -119,7 +130,7 @@ export function useDocumentLadder(
   const sameReopened =
     !lost || (lost.title != null ? onlyDoc?.title === lost.title : lost.reason === "session-gone");
   const only =
-    !binding && !hosted && !bound && sameReopened && onlySession && onlyDoc
+    !binding && !hosted && !bound && !head?.targets.length && sameReopened && onlySession && onlyDoc
       ? { session: onlySession.session, openId: onlyDoc.openId }
       : null;
   const autoBound = useRef<string | null>(null);
@@ -133,7 +144,7 @@ export function useDocumentLadder(
     setAuto(true);
     onTarget?.();
     if (head)
-      void head.set({ kind: "open", ref: only }).then((ok) => {
+      void head.set([{ request: { kind: "open", ref: only } }]).then((ok) => {
         if (!ok) autoBound.current = null;
       });
     else choose(JSON.stringify({ kind: "open", ref: only }));
@@ -147,7 +158,10 @@ export function useDocumentLadder(
   const notLoaded = "Pe.Tools is not loaded in this Revit. Finish the install, then restart Revit.";
   return {
     sessionWord,
-    docWord: doc?.title ?? lost?.title ?? null,
+    docWord:
+      binding && binding.targets.length > 1
+        ? `${binding.targets.length} documents`
+        : (doc?.title ?? lost?.title ?? null),
     /** The bound document closed: the document word wears the caution tone. */
     lost: lost != null,
     /** The head's refusal of the last pick (stale head, or a Pea turn holding it). */
@@ -216,6 +230,15 @@ export function useDocumentLadder(
                 : "nothing open here"
               : "choose a session first",
             picked: (id: string) => id === bound?.openId,
+            ...(binding
+              ? {
+                  multi: true,
+                  checked: (id: string) =>
+                    binding.targets.some(
+                      (target) => target.session === sessionId && target.openId === id,
+                    ),
+                }
+              : {}),
             pick,
           },
         ],

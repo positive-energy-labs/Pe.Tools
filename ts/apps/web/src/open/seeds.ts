@@ -11,7 +11,6 @@ import {
   type MachineSession,
   type Reading,
   type Seed,
-  emptyThreadHead,
 } from "@pe/agent-contracts";
 import type {
   DocumentInfo,
@@ -711,19 +710,15 @@ const thread = (
   lastSeq: activity.lastSeq,
   cursor: 0,
   head: {
-    ...emptyThreadHead,
-    hostNow: "1970-01-01T00:00:00.000Z",
-    grantView: null,
-    defaultTarget: { kind: "open", ref },
+    targets: [{ request: { kind: "open", ref }, label: title, admission: null }],
     revision: 3,
-    displayLabel: title,
   },
   lifecycle: emptyThreadLifecycle(),
   tabs: [],
   activity,
 });
 
-/** The thread list the bay reads in a fixture: one grant on the person's document, two Pea jobs. */
+/** The thread list the bay reads in a fixture: one thread on the person's document, two Pea jobs. */
 export const BAY_THREADS: HarnessThreadSummary[] = [
   thread(
     "t-retag",

@@ -19,6 +19,7 @@ import { previousOf, useReading } from "#/readings";
 import { useSurfaceHost } from "#/navigation/surface-host";
 import { useWorkbench } from "./provider";
 import { routeThreadIssue } from "./store";
+import { soleRequest } from "#/chat/thread-navigation";
 
 const focusKey = (thread: string) => `pe.tab.${thread}`;
 const readFocus = (thread: string) => {
@@ -78,14 +79,14 @@ export function useRouteTabs() {
   const head = previousOf(headReading);
   const carry = routeAddress(route ?? "pea").read(location.search).carry;
   const pinned = (() => {
-    if (!carry.target) return head?.defaultTarget ?? null;
+    if (!carry.target) return head ? soleRequest(head) : null;
     try {
       return documentRequestSchema.safeParse(JSON.parse(carry.target)).data ?? null;
     } catch {
       return null;
     }
   })();
-  const link = route ? place(route, location.search, head?.defaultTarget ?? null) : null;
+  const link = route ? place(route, location.search, head ? soleRequest(head) : null) : null;
   const [snapshot, setSnapshot] = useState<Snapshot>({ thread: "", tabs: [], ready: false });
   const [failure, setFailure] = useState<string | null>(null);
   const [retry, setRetry] = useState(0);
@@ -416,7 +417,7 @@ export function useRouteTabs() {
                 op: "put",
                 id,
                 route,
-                link: place(route, location.search, head?.defaultTarget ?? null),
+                link: place(route, location.search, head ? soleRequest(head) : null),
               },
               current,
               true,

@@ -9,7 +9,12 @@ test("delayed mutations cannot rewind an independently streamed target, lifecycl
     lastSeq: 4,
     head: {
       ...original.head,
-      defaultTarget: { kind: "open" as const, ref: { session: "exact", openId: "new" } },
+      targets: [
+        {
+          request: { kind: "open" as const, ref: { session: "exact", openId: "new" } },
+          admission: null,
+        },
+      ],
       revision: 2,
     },
     lifecycle: { ...original.lifecycle, revision: 3, explicitUnread: true, readSeq: 3 },

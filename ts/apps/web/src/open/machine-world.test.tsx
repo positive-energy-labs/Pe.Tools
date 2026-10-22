@@ -124,19 +124,13 @@ test("F8: web rows and pe_find preserve the same Machine identities, access and 
       setAutomatic: async () => seed.observation.update,
       announce: () => {},
     },
-    grants: {
+    targets: {
       subscribe: () => () => {},
-      grants: () =>
+      targets: () =>
         ["exact-bridge", "foreign-bridge"].map((session) => ({
           thread: "thread-1",
           title: "Review ducts",
-          grant: {
-            lifetime: { session, openId: "exact-open" },
-            grantedAt: "2026-10-12T00:00:00.000Z",
-            grantedVia: "local",
-            revoked: null,
-            expiresAt: "2026-10-14T00:00:00.000Z",
-          },
+          lifetime: { session, openId: "exact-open" },
         })),
     },
   };

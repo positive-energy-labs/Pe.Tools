@@ -1,5 +1,6 @@
 // @vitest-environment jsdom
 import {
+  address,
   emptyThreadHead,
   type HarnessThreadSummary,
   type PageTargetReading,
@@ -33,13 +34,21 @@ const reading: PageTargetReading = {
       reason: "Refused at /pages/pdrop--tour/act: this Page has no target.",
     },
   },
-  hostNow: "2026-10-12T12:00:00.000Z",
 };
 const thread = (id: string, title: string): HarnessThreadSummary =>
   ({
     id,
     title,
-    head: { ...emptyThreadHead, displayLabel: "Project A MEP" },
+    head: {
+      ...emptyThreadHead,
+      targets: [
+        {
+          request: { kind: "named", session: "S", address: address(MODEL) },
+          label: "Project A MEP",
+          admission: null,
+        },
+      ],
+    },
   }) as HarnessThreadSummary;
 
 test("the picker shows what the host resolved and binds a thread, a pin, or nothing", () => {

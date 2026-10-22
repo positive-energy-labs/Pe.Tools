@@ -309,19 +309,25 @@ export const CHAT_SEED_THREADS = [
 const DEMO_ADDRESS = address("C:\\Review\\Operations Demo.rvt");
 
 const HEAD = {
-  defaultTarget: {
-    kind: "named",
-    session: "pe.app-26",
-    address: DEMO_ADDRESS,
-  },
+  targets: [
+    {
+      request: { kind: "named", session: "pe.app-26", address: DEMO_ADDRESS },
+      admission: null,
+    },
+  ],
   revision: 3,
 };
 
 /** The same document, bound under a session the inventory no longer holds: a closed target. */
 const CLOSED_HEAD = {
-  defaultTarget: { kind: "named", session: "pe.app-25", address: DEMO_ADDRESS },
+  targets: [
+    {
+      request: { kind: "named", session: "pe.app-25", address: DEMO_ADDRESS },
+      label: "Operations Demo.rvt",
+      admission: null,
+    },
+  ],
   revision: 4,
-  displayLabel: "Operations Demo.rvt",
 };
 
 const machineSeed = MACHINE_SEEDS["controlled-hot"];
@@ -570,11 +576,25 @@ export const CHAT_SEEDS = {
     page: {},
   },
   granted: {
-    title: "a human pointed the thread at a document; the host reads rw for 42 more minutes",
+    title: "a human added a second document to the thread; it targets two",
     work: CHAT_SEED_STATE,
     readings: {
       ...READINGS,
-      head: { ...HEAD, hostNow: at(0).toISOString(), grantView: { state: "rw", minutes: 42 } },
+      head: {
+        targets: [
+          ...HEAD.targets,
+          {
+            request: {
+              kind: "named",
+              session: "pe.app-26",
+              address: address("C:\\Review\\Level 2.rvt"),
+            },
+            label: "Level 2.rvt",
+            admission: null,
+          },
+        ],
+        revision: 4,
+      },
     },
     page: {},
   },

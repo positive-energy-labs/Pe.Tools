@@ -225,7 +225,13 @@ export function WorkbenchProvider({ children }: { children: ReactNode }) {
         Error("The draft target is not current; read it again before sending."),
       );
     const head = draftHead.state === "ready" ? draftHead.observation : null;
-    let initialTarget = from && chosenTarget === undefined ? head!.defaultTarget : draftTarget;
+    // A minted draft thread keeps its own targets; otherwise the draft's one document seeds it.
+    let initialTargets: { request: DocumentRequest; label?: string }[] =
+      from && chosenTarget === undefined
+        ? head!.targets.map(({ request, label }) => ({ request, ...(label ? { label } : {}) }))
+        : draftTarget
+          ? [{ request: draftTarget }]
+          : [];
     const current = () =>
       router.state.location.href === source.href &&
       navigationEpoch.current === epoch &&
@@ -234,19 +240,25 @@ export function WorkbenchProvider({ children }: { children: ReactNode }) {
           liveHead.current.observation.revision === head!.revision));
     const promise = (async () => {
       if (source.search.target) {
-        initialTarget = documentRequestSchema.parse(JSON.parse(source.search.target));
+        initialTargets = [
+          { request: documentRequestSchema.parse(JSON.parse(source.search.target)) },
+        ];
       }
       const created = await client.create(drafted.id);
       try {
         if (!current()) throw Error("The Place changed during creation.");
-        if (initialTarget) {
-          const displayLabel = threads.find(
-            (thread) => targetKey(thread.head.defaultTarget) === targetKey(initialTarget),
-          )?.head.displayLabel;
+        if (initialTargets.length) {
+          // A label another thread already holds for the same document names it here too.
+          const labelOf = (request: DocumentRequest) =>
+            threads
+              .flatMap((thread) => thread.head.targets)
+              .find((held) => targetKey(held.request) === targetKey(request))?.label;
           const outcome = await client.target(created.id, {
-            defaultTarget: initialTarget,
-            revision: created.head.revision,
-            displayLabel,
+            targets: initialTargets.map(({ request, label }) => {
+              const known = label ?? labelOf(request);
+              return { request, ...(known ? { label: known } : {}) };
+            }),
+            expectedRevision: created.head.revision,
           });
           if (!outcome.ok) throw Error("The new thread target changed.");
         }

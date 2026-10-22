@@ -417,27 +417,31 @@ export interface PeaJob {
   readonly openId: string | null;
 }
 
-/** Thread activity in Pea's sessions; this conveys no write grant. */
+/** Thread activity in Pea's sessions, one row per targeted document; this conveys no write authority. */
 export function jobsOf(
   threads: readonly HarnessThreadSummary[] | null,
   sessions: readonly MachineSession[],
 ): PeaJob[] {
-  return (threads ?? []).flatMap((thread) => {
-    const ref = thread.head.defaultTarget?.kind === "open" ? thread.head.defaultTarget.ref : null;
-    if (!ref) return [];
-    const session = sessions.find(
-      (each) => each.whose === "pea" && each.attachment?.session === ref.session,
-    );
-    return session
-      ? [
-          {
-            thread,
-            session,
-            openId: session.documents?.some((doc) => doc.openId === ref.openId) ? ref.openId : null,
-          },
-        ]
-      : [];
-  });
+  return (threads ?? []).flatMap((thread) =>
+    thread.head.targets.flatMap(({ request }) => {
+      const ref = request.kind === "open" ? request.ref : null;
+      if (!ref) return [];
+      const session = sessions.find(
+        (each) => each.whose === "pea" && each.attachment?.session === ref.session,
+      );
+      return session
+        ? [
+            {
+              thread,
+              session,
+              openId: session.documents?.some((doc) => doc.openId === ref.openId)
+                ? ref.openId
+                : null,
+            },
+          ]
+        : [];
+    }),
+  );
 }
 
 /**

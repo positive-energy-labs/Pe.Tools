@@ -11,7 +11,10 @@ import { Switch } from "#/components/lang/switch";
 import { Switcher } from "#/components/lang/switcher";
 import { repairWord, type ProvidersState } from "#/workbench/provider/providers";
 
-/** Agent approvals choose the harness mode for new sessions. HTTP and MCP access are separate. */
+/**
+ * The one access switch (ADR 0021): it chooses the harness mode for new sessions and governs
+ * Pea's writes to the open Revit documents. HTTP and MCP access are separate.
+ */
 export function AccessSwitch({ providers }: { providers: ProvidersState }) {
   const guarded = providers.access?.guarded;
   return (
@@ -26,8 +29,8 @@ export function AccessSwitch({ providers }: { providers: ProvidersState }) {
         {guarded === undefined
           ? "reading…"
           : guarded
-            ? "harness approval mode for new sessions"
-            : "harness full access for new sessions"}
+            ? "Guarded: shell and file tools ask first (new sessions); Pea writes only its own documents and the ones you add to a thread"
+            : "Full: shell and file tools run without asking (new sessions); Pea may write any open Revit document"}
       </span>
     </label>
   );

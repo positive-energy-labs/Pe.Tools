@@ -67,6 +67,7 @@ import {
   threadSearchText,
   THREAD_STATES,
   oneThreadRefusal,
+  soleRequest,
   threadActions,
   type ThreadActivity,
   type ThreadFilter,
@@ -245,7 +246,7 @@ function ThreadActionsMenu({
           setForm("rename");
         },
       },
-      ...(thread.head.defaultTarget
+      ...(soleRequest(thread.head)
         ? [
             {
               id: "new-target",
@@ -254,7 +255,7 @@ function ThreadActionsMenu({
               icon: SquarePen,
               group: " ",
               refusal: oneThreadRefusal("New thread", count) ?? verbOf("new-target").refusal,
-              run: () => verbs.onNewTarget(thread.head.defaultTarget),
+              run: () => verbs.onNewTarget(soleRequest(thread.head)),
             },
           ]
         : []),
@@ -341,13 +342,13 @@ function ThreadActionsMenu({
             reading: true,
             run: () => copy(thread.id, "thread id"),
           },
-          ...(thread.head.defaultTarget
+          ...(soleRequest(thread.head)
             ? [
                 {
                   id: "copy:target",
                   label: "Exact target",
                   sub: targetLabel(thread),
-                  run: () => copy(JSON.stringify(thread.head.defaultTarget), "target"),
+                  run: () => copy(JSON.stringify(soleRequest(thread.head)), "target"),
                 },
               ]
             : []),
@@ -572,8 +573,8 @@ const ThreadActions = memo(ThreadActionsMenu, (before, after) => {
 });
 
 function CompactThreadTarget({ thread }: { thread: RosterThread }) {
-  return thread.head.defaultTarget ? (
-    <TooltipHint content={exactTarget(thread.head.defaultTarget)}>
+  return thread.head.targets.length ? (
+    <TooltipHint content={exactTargets(thread.head)}>
       <span className="pe-thread-target">{targetLabel(thread)}</span>
     </TooltipHint>
   ) : null;
@@ -845,8 +846,8 @@ export function ThreadsSidebar({
                   target={
                     compactRows ? (
                       <CompactThreadTarget thread={thread} />
-                    ) : thread.head.defaultTarget ? (
-                      <TooltipHint content={exactTarget(thread.head.defaultTarget)}>
+                    ) : thread.head.targets.length ? (
+                      <TooltipHint content={exactTargets(thread.head)}>
                         <span>{targetLabel(thread)}</span>
                       </TooltipHint>
                     ) : undefined
@@ -1073,3 +1074,7 @@ export function ThreadDialog({
 function exactTarget(target: DocumentRequest): string {
   return target.kind === "named" ? target.address : `${target.ref.session} · ${target.ref.openId}`;
 }
+
+/** Every exact target of a thread, one per line, for the hover. */
+const exactTargets = (head: RosterThread["head"]) =>
+  head.targets.map((target) => exactTarget(target.request)).join("\n");

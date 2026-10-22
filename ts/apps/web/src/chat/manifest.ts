@@ -7,6 +7,8 @@ import { z } from "zod";
 import {
   attachmentRefusal,
   threadHeadSchema,
+  headRequests,
+  emptyThreadHead,
   machineInventory,
   type Machine,
   type Reading,
@@ -82,17 +84,15 @@ export const chatManifest = (
           if (!deps.send) return "Chat is not ready";
           if (!deps.ready) return "Thread state is loading";
           if (deps.sendRefusal) return deps.sendRefusal;
-          const target = deps.thread
-            ? (threadHeadSchema.safeParse(previousOf(ctx.readings.head)).data?.defaultTarget ??
-              null)
-            : (deps.draftTarget ?? null);
-          if (
-            targetClosure(
-              target,
-              machineInventory(previousOf(ctx.readings.machine as Reading<Machine>)),
-            )
-          )
-            return CLOSED_SEND;
+          const targets = deps.thread
+            ? headRequests(
+                threadHeadSchema.safeParse(previousOf(ctx.readings.head)).data ?? emptyThreadHead,
+              )
+            : deps.draftTarget
+              ? [deps.draftTarget]
+              : [];
+          const inventory = machineInventory(previousOf(ctx.readings.machine as Reading<Machine>));
+          if (targets.some((target) => targetClosure(target, inventory))) return CLOSED_SEND;
           const prompt = input as PromptRequest | undefined;
           if (!prompt) return null;
           return (

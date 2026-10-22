@@ -7,6 +7,8 @@ import {
   resolveCallTarget,
   sameAddress,
   threadHeadSchema,
+  headRequests,
+  emptyThreadHead,
   type Address,
   type DocumentRequest,
   type ExecutionTarget,
@@ -121,10 +123,12 @@ export function useRouteTarget(
     headResult !== null,
     headResult ?? { state: "absent" },
   );
-  const defaultDocument = useMemo(
+  const headTargets = useMemo(
     () =>
-      threadHeadSchema.safeParse(headResult ? previousOf(headResult) : undefined).data
-        ?.defaultTarget ?? null,
+      headRequests(
+        threadHeadSchema.safeParse(headResult ? previousOf(headResult) : undefined).data ??
+          emptyThreadHead,
+      ),
     [headResult],
   );
   const resolution: TargetResolution = useMemo(() => {
@@ -146,7 +150,7 @@ export function useRouteTarget(
         kind: "failed",
         message: "?target is invalid JSON; choose an exact document again.",
       };
-    let request: DocumentRequest | null = defaultDocument;
+    let request: DocumentRequest | null = null;
     if (chosen && inventory.kind === "ready") {
       if (chosen.kind === "request") {
         request = chosen.request;
@@ -173,7 +177,8 @@ export function useRouteTarget(
         request = { kind: "named", session: holders[0]![0], address: chosen.address };
       }
     }
-    const session = request?.kind === "open" ? request.ref.session : request?.session;
+    const sessionOf = request ?? (headTargets.length === 1 ? headTargets[0]! : null);
+    const session = sessionOf?.kind === "open" ? sessionOf.ref.session : sessionOf?.session;
     const needs =
       manifest.needs === "session"
         ? ({ needs: "session", target: session ?? "" } as const)
@@ -186,8 +191,8 @@ export function useRouteTarget(
                   : ("document" as const),
           } as const);
     if (needs.needs === "session" && !needs.target) return { kind: "choose", reason: "missing" };
-    return resolveCallTarget(needs as never, request, inventory);
-  }, [seed, manifest.needs, inventoryResult, defaultDocument, target]);
+    return resolveCallTarget(needs as never, request ? [request] : headTargets, inventory);
+  }, [seed, manifest.needs, inventoryResult, headTargets, target]);
 
   // A bound exact document that left the inventory: named, with the title it last had, and the
   // same title reopened in its session offered. Titles seen are remembered for exactly this.
@@ -200,7 +205,7 @@ export function useRouteTarget(
       return null;
     const chosen = parseTarget(target);
     const pinned = chosen?.kind === "request";
-    const request = pinned ? chosen.request : defaultDocument;
+    const request = pinned ? chosen.request : headTargets.length === 1 ? headTargets[0]! : null;
     if (request?.kind !== "open") return null;
     const { ref } = request;
     const title = seenTitles.current.get(`${ref.session}/${ref.openId}`) ?? null;
@@ -226,7 +231,7 @@ export function useRouteTarget(
         ? { openId: reopened[0].slice(ref.session.length + 1), title: reopened[1] }
         : null,
     };
-  }, [seed, resolution, target, defaultDocument, open]);
+  }, [seed, resolution, target, headTargets, open]);
   const bindingLostRef = useRef(bindingLost);
   bindingLostRef.current = bindingLost;
 
