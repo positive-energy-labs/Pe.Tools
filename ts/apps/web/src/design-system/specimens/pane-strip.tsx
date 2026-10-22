@@ -124,6 +124,70 @@ function PaneStripAnatomy() {
   );
 }
 
+/** The same strip at 400 px and full width: narrow, layers and floaters fold into popovers and the
+ * mode labels shorten; the title stays. The corner floater gives way to the legend. */
+function PaneStripWidths() {
+  const [mode, setMode] = useState("plane");
+  const [layers, setLayers] = useState<readonly string[]>(["grid", "rooms"]);
+  const [open, setOpen] = useState(true);
+  const strip = (id: string) => (
+    <Pane
+      id={id}
+      title="supply air, level 2"
+      flush
+      scroll="clip"
+      modes={{ value: mode, label: "viewport", options: unbound(MODES), onChange: setMode }}
+      layers={{
+        value: layers,
+        options: unbound(LAYERS),
+        onToggle: (key) =>
+          setLayers((on) => (on.includes(key) ? on.filter((k) => k !== key) : [...on, key])),
+      }}
+      floaters={[
+        {
+          key: "corner",
+          label: "corner",
+          says: "A stand-in corner surface; it moves off the legend when the pane is narrow.",
+          place: "br",
+          size: { width: 160, height: 72 },
+          open,
+          onOpenChange: setOpen,
+          render: () => "corner",
+        },
+        {
+          key: "globe",
+          label: "globe",
+          place: "tr",
+          open: false,
+          onOpenChange: () => {},
+          render: () => null,
+        },
+      ]}
+    >
+      <div className="relative size-full">
+        <span
+          data-slot="pane-legend"
+          className="absolute bottom-2 left-2 whitespace-nowrap t-small text-ink-2"
+        >
+          stand-in legend, wide enough to meet the corner at 400 px
+        </span>
+      </div>
+    </Pane>
+  );
+  return (
+    <SpecimenFrame name="Pane strip, narrow and wide" importPath="#/components/lang/pane-strip">
+      <div className="flex flex-col gap-4">
+        <div className="h-48 w-[400px]" data-strip-width="narrow">
+          {strip("pane-strip-narrow")}
+        </div>
+        <div className="h-48 w-full" data-strip-width="wide">
+          {strip("pane-strip-wide")}
+        </div>
+      </div>
+    </SpecimenFrame>
+  );
+}
+
 export function PaneStripSpecimen() {
   const [mode, setMode] = useState("plane");
   const [plane, setPlane] = useState<PlaneViewport>({ kind: "plane", scale: 1, tx: 0, ty: 0 });
@@ -211,6 +275,7 @@ export function PaneStripSpecimen() {
           </Pane>
         </div>
       </SpecimenFrame>
+      <PaneStripWidths />
       <PaneStripAnatomy />
     </>
   );

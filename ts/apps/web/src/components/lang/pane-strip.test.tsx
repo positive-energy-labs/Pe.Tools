@@ -124,3 +124,46 @@ test("a hidden pane registers nothing", () => {
     readRegistrations().filter((reg) => readKeyMeta(reg.options.meta)?.scope === "canvas"),
   ).toEqual([]);
 });
+
+test("an overflowing trail folds layers and floaters into popovers, shortens modes, keeps chords", () => {
+  // jsdom lays nothing out: the trail reports more content than room at every fold.
+  const scroll = vi.spyOn(HTMLElement.prototype, "scrollWidth", "get").mockReturnValue(500);
+  const client = vi.spyOn(HTMLElement.prototype, "clientWidth", "get").mockReturnValue(400);
+  render(
+    <Pane
+      id="canvas"
+      title="canvas"
+      modes={modes()}
+      floaters={[
+        {
+          key: "map",
+          label: "minimap",
+          chord: "M",
+          place: "br",
+          open: true,
+          onOpenChange: vi.fn(),
+          render: () => null,
+        },
+      ]}
+      layers={{
+        value: ["grid"],
+        onToggle: vi.fn(),
+        options: [{ key: "grid", label: "grid", chord: "G" }],
+      }}
+    >
+      body
+    </Pane>,
+  );
+  scroll.mockRestore();
+  client.mockRestore();
+  expect(screen.getByRole("button", { name: "layers 1/1" })).toBeTruthy();
+  expect(screen.getByRole("button", { name: "floaters 1/1" })).toBeTruthy();
+  expect(screen.queryByRole("group", { name: "layers" })).toBeNull();
+  expect(screen.getByRole("button", { name: "plan" }).textContent).toBe("pplan");
+  expect(screen.getByRole("heading", { name: "canvas" })).toBeTruthy();
+  expect(
+    bound("canvas")
+      .map((k) => k.hotkey)
+      .sort(),
+  ).toEqual(["1", "2", "G", "M"]);
+});
