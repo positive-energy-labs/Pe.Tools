@@ -15,6 +15,7 @@
 import { z } from "zod";
 import {
   ductsRouteState,
+  routePageSchema,
   transitionPatches,
   type DuctAssumption,
   type DuctsRouteDocument,
@@ -76,29 +77,11 @@ export interface DuctsFanRun {
   response: DuctsAssignFan.Res.Response;
 }
 
-const ductsPageSchema = z.object({
-  /** The subject: a Revit system name (`SA 19`; `no system` for the groups none claims), read across
-   * every group it is in (`system-scope.ts`); empty = the whole document. */
-  system: z.string().default(""),
-  /** A level id as a string; empty = every level. */
-  level: z.string().default(""),
-  /** The layer keys the picture draws, as `ducts.snapshot` names them, comma separated; empty = none. */
-  layers: z.string().default(""),
-  /** The selected element id as a string; empty = none. */
-  selected: z.string().default(""),
-  /** The selected issue id (it may name no element: no-root, multi-root); empty = none. Page, never URL. */
-  issue: z.string().default(""),
-  /**
-   * The Diagnostics kind picked in its key (`diagnosticKind`): it narrows the Diagnostics rows and
-   * the picture's finding annotations; empty = none, and the picture annotates Fix rows only. Page, never URL.
-   */
-  diagnostic: z.string().default(""),
-  /** The picture's encoding, a key of `ENCODINGS` (`encoding.tsx`). */
-  encoding: z.string().default("health"),
-  /** The camera the model picture looks through: the isometric globe, or `plan` (a preset on it). */
-  camera: z.enum(["iso", "plan"]).default("iso"),
-  /** What the picture pane draws: the `model` in space, or the `schematic` one-line. */
-  picture: z.enum(["model", "schematic"]).default("model"),
+/**
+ * The contract's fields (`routeAddresses.ducts`: subject, picture, viewport on the URL; `issue` and
+ * `diagnostic` Pea's only) and the Page-only rest. `viewport` is a typed `Viewport`.
+ */
+const ductsPageSchema = routePageSchema("ducts").extend({
   /** Bumped by `refresh` and `apply`; the snapshot read keys on it. */
   epoch: z.number().default(0),
   /** The last preview; `apply` is armed while it matches the Work revision and epoch. Page, never URL. */
@@ -109,16 +92,6 @@ const ductsPageSchema = z.object({
   fan: z.custom<DuctsFanRun>().nullable().default(null),
 });
 export type DuctsPage = z.infer<typeof ductsPageSchema>;
-/** The Page keys the address carries; every one has a default, so a bare `/ducts` is a page. */
-export const DUCTS_URL = [
-  "system",
-  "level",
-  "selected",
-  "encoding",
-  "layers",
-  "camera",
-  "picture",
-] as const;
 export type DuctsReading = "ducts" | "tables" | "catalogs";
 type DuctsCtx = Ctx<DuctsRouteDocument, DuctsReading, DuctsPage>;
 
@@ -535,7 +508,7 @@ export const manifest = defineRoute<
   // target, subject, slots and epoch; the tables on the session.
   readings: { ducts: () => null, tables: () => null, catalogs: () => null },
   page: ductsPageSchema,
-  url: DUCTS_URL,
+  address: "ducts",
   actions: {
     refresh: {
       label: "refresh",

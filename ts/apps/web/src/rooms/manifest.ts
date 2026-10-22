@@ -11,6 +11,7 @@ import {
   transitionPatches,
   type Mark,
   type RoomsRouteDocument,
+  routePageSchema,
 } from "@pe/agent-contracts";
 
 import { defineRoute, semanticActionInput, type Ctx } from "#/route/manifest";
@@ -26,10 +27,8 @@ const ROOMS_STAGES = [
   { key: "history", word: "History" },
 ] as const;
 
-const roomsPageSchema = z.object({
-  stage: z.enum(["partition", "review", "history"]).default("partition"),
-  /** The plan view partition runs on; its level is the level. Empty = none chosen. */
-  view: z.string().default(""),
+/** The contract's fields (`routeAddresses.rooms`: stage, view, layers, focus) and the Page-only rest. */
+const roomsPageSchema = routePageSchema("rooms").extend({
   /** Region guids the plan and the table hold selected. */
   selected: z.array(z.string()).default([]),
   /** Bumped by every verb that lands; the snapshot read keys on it. */
@@ -81,8 +80,8 @@ export const manifest = defineRoute<
   ],
   readings: { receipts: { kind: "receipts", target: { session: "", openId: "" } } } as never,
   page: roomsPageSchema,
-  // The stage and the plan view are the address, so a link lands on the same plan.
-  url: ["stage", "view"],
+  // The stage, the plan view, its layers and focus are the address, so a link lands on the same plan.
+  address: "rooms",
   stages: ROOMS_STAGES,
   actions: {
     partition: {

@@ -2,7 +2,7 @@
 import type { Reading, RouteStatePatch, TargetResolution, WorkKey } from "@pe/agent-contracts";
 import type { useThreadScope } from "#/chat/scope";
 import type { ActionFacts } from "./facts";
-import type { RouteManifest } from "./manifest";
+import type { PageMove, RouteManifest } from "./manifest";
 import type { Refusal } from "./refusal";
 import type { LogEntry, RouteNote } from "./route-owner";
 import type { BindingLost, TargetProvenance } from "./route-target";
@@ -83,7 +83,8 @@ export interface RouteHandle<W, R extends string, P, A extends string> {
    * new openId in that session, offered first and never taken for the person (F-X-1).
    */
   readonly bindingLost: BindingLost | null;
-  readonly page: readonly [P, (next: Partial<P>) => void];
+  /** The Page and its setter; `{ history: "replace" }` marks a gesture's move (`PageMove`). */
+  readonly page: readonly [P, (next: Partial<P>, move?: PageMove<P>) => void];
   readonly actions: Readonly<Record<A, ActionHandle>>;
   readonly busy: { readonly key: A; readonly seconds: number } | null;
   readonly stop: () => void; // stop waiting on the busy action (its flag's stop)

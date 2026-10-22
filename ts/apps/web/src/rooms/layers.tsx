@@ -1,6 +1,6 @@
 /**
  * The solver's layer 1 on the rooms plan (`rooms.trace`): rails, openings, the network and the
- * faces, each a layer the URL names (`?layers=rails,openings`). Drawn in the plan's world px, over
+ * faces, each a layer the URL names (`?layers=rails,openings`, read by `layersOf` in agent-contracts). Drawn in the plan's world px, over
  * Revit's picture, never instead of it.
  */
 import type { RoomsTrace } from "@pe/host-contracts/generated";
@@ -24,16 +24,6 @@ export const LAYER_SAYS: Record<Layer, string> = {
   network: "the network segments the faces were cut from, by kind",
   faces: "layer 1's faces before judgment, per zone",
 };
-
-/** The URL's `layers` (`rails,faces`): the known names it holds, in legend order. */
-export const layersOf = (search: string): Layer[] => {
-  const named = search.split(",").map((name) => name.trim());
-  return LAYERS.filter((layer) => named.includes(layer));
-};
-
-/** `layers` with one layer flipped, as the URL writes it; none on is absent. */
-export const toggleLayer = (on: readonly Layer[], layer: Layer): string =>
-  LAYERS.filter((item) => (item === layer) !== on.includes(item)).join(",");
 
 /** The one host error that means "nothing partitioned here yet"; every other error is an error. */
 export const NO_TRACE = /traced (no|a) zone on/;

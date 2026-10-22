@@ -12,10 +12,12 @@ import {
   familyReads,
   actionBasesSchema,
   settingsRouteState,
-  routeViews,
+  agentKeys,
+  routeAddressFields,
+  routeAddresses,
   routeViewRoutes,
+  type RouteAddress,
   type RouteViewRoute,
-  type RouteViewSpec,
 } from "@pe/agent-contracts";
 /** One discovery projection and ranker: native availability is contextual; installed content
  * comes from one admitted snapshot, independent of the native catalog. Session/document readings
@@ -203,10 +205,12 @@ function opRow(op: OpsCatalogEntry): Capability {
   };
 }
 
-/** A route that opts into `routeViews` gets one read and one set, both over the person's open page. */
+/** A route with an address (`routeAddresses`) gets one read and one set, both over the person's open page. */
 function routeViewRows(route: RouteViewRoute): Capability[] {
-  const spec: RouteViewSpec = routeViews[route];
-  const keys = Object.keys(spec.set.shape);
+  const spec = routeAddresses[route];
+  const { policy, words } = spec.agent as NonNullable<RouteAddress["agent"]>;
+  const keys = agentKeys(route);
+  const sets = Object.keys(routeAddressFields(route).shape);
   const lower = spec.title.toLowerCase();
   return [
     {
@@ -214,7 +218,12 @@ function routeViewRows(route: RouteViewRoute): Capability[] {
       kind: "route-command",
       title: `${spec.title} visible view`,
       description: `Read the ${spec.title} page the person has open in this thread: its settable keys (${keys.join(", ")}) with their current values, the identity of what is shown, and derived facts (${route === "families" ? "stage, rule help, the exact visible reading id and counts" : "the system names with their classification, units and how many duct networks each spans, and the levels"}). Returns instance and revision for ${`route:${route}.set-view`}. If two panes are open, pass an instance from the ambiguity result. No Revit read.`,
-      finds: [lower, "visible", "page", ...(route === "families" ? ["archive", "rules"] : [...DUCTS_FINDS, "system", "level"])],
+      finds: [
+        lower,
+        "visible",
+        "page",
+        ...(route === "families" ? ["archive", "rules"] : [...DUCTS_FINDS, "system", "level"]),
+      ],
       needs: "nothing",
       mutates: false,
       principal: capabilityPrincipals(false),
@@ -226,8 +235,14 @@ function routeViewRows(route: RouteViewRoute): Capability[] {
       key: `route:${route}.set-view`,
       kind: "route-command",
       title: `Set ${spec.title} visible view`,
-      description: `${spec.policy} Read route:${route}.view first, then pass its instance and revision with a nonempty subset of ${keys.join(", ")}${spec.words ? ` or ${Object.keys(spec.words.shape).join(", ")}` : ""}. The browser acknowledges the render before this returns.`,
-      finds: [lower, "filter", "visible", "page", ...(route === "ducts" ? [...DUCTS_FINDS, "system", "level"] : ["rules"])],
+      description: `${policy} Read route:${route}.view first, then pass its instance and revision with a nonempty subset of ${sets.join(", ")}${words ? ` or ${Object.keys(words.shape).join(", ")}` : ""}. The browser acknowledges the render before this returns.`,
+      finds: [
+        lower,
+        "filter",
+        "visible",
+        "page",
+        ...(route === "ducts" ? [...DUCTS_FINDS, "system", "level"] : ["rules"]),
+      ],
       needs: "nothing",
       mutates: true,
       principal: capabilityPrincipals(true),
@@ -235,8 +250,8 @@ function routeViewRows(route: RouteViewRoute): Capability[] {
         z.object({
           instance: z.uuid(),
           revision: z.number().int().nonnegative(),
-          ...spec.set.partial().shape,
-          ...spec.words?.partial().shape,
+          ...routeAddressFields(route).partial().shape,
+          ...words?.partial().shape,
         }),
       ) as Record<string, unknown>,
       source: "browser Page",

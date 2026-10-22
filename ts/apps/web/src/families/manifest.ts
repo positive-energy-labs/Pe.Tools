@@ -8,6 +8,7 @@ import { z } from "zod";
 import {
   familiesRouteState,
   ffPlanEntrySchema,
+  routePageSchema,
   workKey,
   type ActionReceipt,
   type AppliedFilter,
@@ -64,7 +65,7 @@ export interface FamiliesPage {
   carryOver: boolean;
 }
 
-const familiesPageSchema = z.object({
+const familiesPageSchema = routePageSchema("families").extend({
   // A newly bound document drafts its placed families (ruling 44): the cheaper, relevant read.
   draft: z
     .object({
@@ -95,7 +96,8 @@ const familiesPageSchema = z.object({
     })
     .nullable()
     .default(null),
-  query: z.string().default(DEFAULT_FAMILIES_QUERY),
+  // ponytail: a second default over the contract's `""`; `route/url.ts` keeps it the bare address until the clauses move into the contract field.
+  query: z.string().max(4096).default(DEFAULT_FAMILIES_QUERY),
   carryOver: z.boolean().default(false),
 });
 
@@ -377,6 +379,7 @@ export const manifest = entityRoute<
         : null,
   } as never,
   page: familiesPageSchema as never,
+  address: "families",
   actions: {
     read: {
       label: "read families",

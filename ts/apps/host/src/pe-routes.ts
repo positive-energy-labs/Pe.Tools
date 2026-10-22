@@ -29,7 +29,7 @@ import {
   routeViewAckSchema,
   routeViewSetSchema,
   routeViewSchema,
-  routeViews,
+  routeViewRoutes,
   readingKey,
   recentRows,
   START_FRESH,
@@ -167,7 +167,10 @@ const message = (error: unknown) => (error instanceof Error ? error.message : St
 export function createPeRoutes(options: PeRoutesOptions) {
   const work = new RouteWorkspace({ registrations: options.registrations, store: options.store });
   const analysis = options.ductsAnalysis
-    ? createDuctsAnalysis({ ...options.ductsAnalysis, readWork: (key) => work.readRaw(key, "ducts") })
+    ? createDuctsAnalysis({
+        ...options.ductsAnalysis,
+        readWork: (key) => work.readRaw(key, "ducts"),
+      })
     : null;
   const views = new RouteViewStore();
   const resources = observeResources(work, options.heads, options.observeHostResource);
@@ -437,8 +440,12 @@ export function createPeRoutes(options: PeRoutesOptions) {
       });
     }
 
-    // One channel for every route that opts into `routeViews`; the route is a path segment.
-    if (parts[0] === "route-view" && parts[1] && parts[1] in routeViews) {
+    // One channel for every route that leases a view (`routeViewRoutes`); the route is a path segment.
+    if (
+      parts[0] === "route-view" &&
+      parts[1] &&
+      (routeViewRoutes as readonly string[]).includes(parts[1])
+    ) {
       const route = parts[1];
       const instance = parts[2];
       if (method === "PUT" && !instance) {

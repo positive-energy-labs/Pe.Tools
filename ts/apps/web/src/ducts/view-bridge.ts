@@ -2,10 +2,12 @@ import { useMemo } from "react";
 import { systemsOf } from "@pe/ducts-domain/system-scope";
 import type { DuctSnapshot } from "@pe/ducts-domain/types";
 import { useRouteViewBridge } from "#/route/view-bridge";
+import type { PageMove } from "#/route/manifest";
+import type { DuctsPage } from "./manifest";
 
 /**
- * What the Ducts page tells Pea it shows: the subject keys it may set (`routeViews.ducts`), and the
- * system names and levels the page can take, so a person's word resolves to a system the page
+ * What the Ducts page tells Pea it shows: its address (`routeAddresses.ducts`), and the system
+ * names and levels the page can take, so a person's word resolves to a system the page
  * knows. The subject is a Revit system; group ids never reach Pea.
  */
 export function useDuctsViewBridge({
@@ -18,8 +20,8 @@ export function useDuctsViewBridge({
 }: {
   thread?: string;
   surface: "chat" | "route";
-  page: { system: string; level: string; selected: string };
-  setPage: (patch: { system?: string; level?: string; selected?: string; issue?: string }) => void;
+  page: DuctsPage;
+  setPage: (patch: Partial<DuctsPage>, move?: PageMove<DuctsPage>) => void;
   snapshot: DuctSnapshot | null;
   document: unknown;
 }) {
@@ -40,14 +42,19 @@ export function useDuctsViewBridge({
     thread,
     surface,
     visible: true,
-    page: { system: page.system, level: page.level, selected: page.selected },
-    // Choosing a system by hand clears the selection and issue; Pea's patch does the same.
+    page,
+    // Choosing a system by hand clears the selection and issue; Pea's patch does the same, as one step.
     apply: (patch) =>
-      setPage({
-        ...patch,
-        ...("system" in patch && !("selected" in patch) ? { selected: "" } : {}),
-        ...("system" in patch || "selected" in patch ? { issue: "" } : {}),
-      }),
+      setPage(
+        {
+          ...(patch as Partial<DuctsPage>),
+          ...("system" in patch && !("selected" in patch) ? { selected: "" } : {}),
+          ...(("system" in patch || "selected" in patch) && !("issue" in patch)
+            ? { issue: "" }
+            : {}),
+        },
+        { history: "push" },
+      ),
     context: { document },
     facts,
   });

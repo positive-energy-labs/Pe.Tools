@@ -32,6 +32,7 @@ import type { CellWire } from "#/components/work/band";
 import type { TableState } from "@pe/kit/table/model";
 import { useHostCall, previousOf, useReading } from "#/readings";
 import { useRoute, type EntityPage } from "#/route";
+import type { PageMove } from "#/route/manifest";
 import { usePodList } from "#/route/pods";
 import {
   archivedFamiliesObservation,
@@ -134,7 +135,7 @@ function applyDataOf(statuses: unknown, receipts: unknown) {
 /* ── The hook ──────────────────────────────────────────────────────────────── */
 
 export function useFamiliesStore(
-  options: { target?: string; thread?: string; query?: string; url?: boolean } = {},
+  options: { target?: string; thread?: string; url?: boolean } = {},
 ) {
   const demo = useMemo(() => frozenDemo() !== null, []);
   const [pods, refreshPods] = usePodList(!demo);
@@ -143,23 +144,19 @@ export function useFamiliesStore(
     thread: options.thread,
     provided: { pods },
     url: options.url ?? false,
-    page: (options.query === undefined ? {} : { query: options.query }) as never,
   });
   const [memory, setMemory] = useState<FamiliesPageMemory>(EMPTY_MEMORY);
   // The draft and the selection are Page: the verbs read them off `ctx.page`.
   const page = handle.page[0] as FamiliesPage & EntityPage;
-  const setPage = handle.page[1] as (next: Partial<FamiliesPage & EntityPage>) => void;
+  const setPage = handle.page[1] as (
+    next: Partial<FamiliesPage & EntityPage>,
+    move?: PageMove<FamiliesPage & EntityPage>,
+  ) => void;
   const tableRef = useRef(memory.table);
   tableRef.current = memory.table;
   const queryRef = useRef(page.query);
   queryRef.current = page.query;
   const table = useMemo(() => ({ ...memory.table, query: page.query }), [memory.table, page.query]);
-  useEffect(() => {
-    if (options.query !== undefined && options.query !== page.query)
-      setPage({ query: options.query });
-    // URL changes seed the Page; local rule edits own subsequent renders until the URL changes.
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [options.query]);
   const draft = page.draft;
   const draftTouched = useRef(false);
   const [archiveId, setArchiveId] = useState<string | null>(null);
@@ -397,7 +394,9 @@ export function useFamiliesStore(
       },
       setTable: (value: Setter<TableState>) => {
         const updated = next(value, { ...tableRef.current, query: queryRef.current });
-        if (updated.query !== queryRef.current) setPage({ query: updated.query });
+        // Typing in the rule line is a gesture: it rewrites this history entry, never adds one.
+        if (updated.query !== queryRef.current)
+          setPage({ query: updated.query }, { history: "replace" });
         setMemory((current) => ({ ...current, table: updated }));
       },
       setPicker: (value: Setter<PickerState>) =>

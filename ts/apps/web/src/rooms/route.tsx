@@ -11,6 +11,7 @@ import {
   type Reading,
   type RoomsNote,
   type RoomsRouteDocument,
+  layersOf,
 } from "@pe/agent-contracts";
 import type { RoomsSnapshot } from "@pe/host-contracts/generated";
 
@@ -35,7 +36,7 @@ import { cardLine, cardMoves, FeedbackCard, RoomsInbox } from "./inbox";
 import { manifest, type RoomsPage } from "./manifest";
 import { RoomsSketch, type Drop } from "./sketch";
 import { snapPlan } from "./snap";
-import { layersOf, NO_TRACE, type Layer, type TraceRead } from "./layers";
+import { LAYERS, NO_TRACE, type Layer, type TraceRead } from "./layers";
 import { focusOf, RoomsPlan } from "./plan";
 import { roomRows, RoomsTable } from "./table";
 
@@ -96,20 +97,8 @@ function useRoomsTrace(
 /** Revit's exporter clamps an image's long side to 8000 px; ask for all of it so zoom stays sharp. */
 const PLAN_PX = 8000;
 
-export function RoomsRoute({
-  focus,
-  layers,
-  setLayers,
-  url = true,
-}: {
-  /** The URL's `focus`: region labels, comma separated. */
-  focus: string;
-  /** The URL's `layers`: solver layers, comma separated. */
-  layers: string;
-  setLayers: (next: string) => void;
-  /** False in a chat pane, which does not own the URL. */
-  url?: boolean;
-}) {
+/** `url` is false in a chat pane, which does not own the URL; `focus` is a Page key either way. */
+export function RoomsRoute({ url = true }: { url?: boolean } = {}) {
   const [chosen] = useChooseTarget();
   const thread = useRouteThread();
   const handle = useRoute(manifest, { target: chosen, thread, url });
@@ -229,11 +218,11 @@ export function RoomsRoute({
           empty={empty}
           page={page}
           setPage={setPage}
-          focus={focus}
+          focus={page.focus}
           plan={plan}
           trace={trace}
-          layers={layersOf(layers)}
-          setLayers={setLayers}
+          layers={layersOf(LAYERS, page.layers)}
+          setLayers={(next) => setPage({ layers: next })}
           hovered={hovered}
           setHovered={setHovered}
           doc={handle.work.doc}

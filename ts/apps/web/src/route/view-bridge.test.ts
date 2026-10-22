@@ -1,19 +1,30 @@
 import { describe, expect, it } from "vite-plus/test";
-import { routeViews } from "@pe/agent-contracts";
+import { agentKeys, agentPage, routeViewPatchSchema, urlKeys } from "@pe/agent-contracts";
 import { manifest as ducts } from "#/ducts/manifest";
 import { manifest as families } from "#/families/manifest";
+import { urlPage } from "./url";
 
-/** Pea may only set Page keys the route really has; a ducts key is also an address key. */
-describe("routeViews opt-ins match their route manifests", () => {
-  it("names real page fields, and ducts' as url keys", () => {
+/** A route's contract fields are its Page's: the URL carries its url keys, Pea's lease its agent keys. */
+describe("route addresses match their manifests", () => {
+  it("every url and agent key is a page field; the url keys are the manifest's", () => {
     for (const [route, manifest] of [
       ["families", families],
       ["ducts", ducts],
     ] as const) {
-      const shape = (manifest.page as unknown as { parse: (v: unknown) => object }).parse({});
-      for (const key of Object.keys(routeViews[route].set.shape)) expect(shape).toHaveProperty(key);
+      expect(manifest.address).toBe(route);
+      const page = (manifest.page as unknown as { parse: (v: unknown) => object }).parse({});
+      for (const key of [...urlKeys(route), ...agentKeys(route)]) expect(page).toHaveProperty(key);
+      expect(urlPage(manifest as never)!.keys).toEqual(urlKeys(route));
+      expect(Object.keys(agentPage(route, page as never))).toEqual(agentKeys(route));
     }
-    for (const key of Object.keys(routeViews.ducts.set.shape))
-      expect(ducts.url).toContain(key as never);
+  });
+
+  it("a patch carries no defaults and refuses a bad mode, viewport or a read-only key", () => {
+    const patch = routeViewPatchSchema("ducts");
+    expect(patch.parse({ camera: "plan" })).toEqual({ camera: "plan" });
+    expect(patch.safeParse({ camera: "side" }).success).toBe(false);
+    expect(patch.safeParse({ viewport: "orbit:1,2" }).success).toBe(false);
+    expect(patch.safeParse({ diagnostic: "x" }).success).toBe(false);
+    expect(patch.safeParse({}).success).toBe(false);
   });
 });

@@ -1,12 +1,17 @@
 /**
- * The one browser half of Pea's route-view channel (`routeViews` in agent-contracts). A route that
- * opts in mounts this hook with the Page keys it lets Pea set, what it shows, and how to apply a
- * patch through its own Page. The hook leases the visible view to the host, takes Pea's patch from
+ * The one browser half of Pea's route-view channel (`routeAddresses` in agent-contracts). A route
+ * with an address mounts this hook with its Page, what it shows, and how to apply a patch through
+ * its own Page; the keys Pea may set are the address's. The hook leases the visible view to the host, takes Pea's patch from
  * the event stream, and acknowledges only after the patched Page has rendered. No Page field enters
  * authored Work.
  */
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import type { RouteView, RouteViewRoute } from "@pe/agent-contracts";
+import {
+  agentPage,
+  readAgentPatch,
+  type RouteView,
+  type RouteViewRoute,
+} from "@pe/agent-contracts";
 import { peClient } from "#/host/pe-client";
 import { useHostEvents } from "#/readings";
 
@@ -35,10 +40,10 @@ export function useRouteViewBridge({
   surface: "chat" | "route";
   /** False while the route shows nothing Pea could address (no thread, hidden, or a stage with no view). */
   visible: boolean;
-  /** The current values of the settable keys, exactly `routeViews[route].set`'s keys. */
-  page: Record<string, string>;
-  /** Applies Pea's patch through the route's Page; the URL follows from the route's own sync. */
-  apply: (patch: Record<string, string>) => void;
+  /** The route's Page; the lease carries its agent keys, as their codecs write them (`agentPage`). */
+  page: object;
+  /** Applies Pea's patch, typed (`readAgentPatch`), through the route's Page as one pushed move. */
+  apply: (patch: Record<string, unknown>) => void;
   /** Identity of what is shown; an ack fails if it moves while a command is pending. */
   context: Record<string, unknown>;
   /** What the shown Page derives; the ack echoes it. */
@@ -58,9 +63,10 @@ export function useRouteViewBridge({
     document.addEventListener("visibilitychange", changed);
     return () => document.removeEventListener("visibilitychange", changed);
   }, []);
+  const addressed = agentPage(route, page as never);
   const raw: RouteView | null =
     thread && visible && pageVisible
-      ? { route, thread, instance: instance.current, surface, page, context, facts }
+      ? { route, thread, instance: instance.current, surface, page: addressed, context, facts }
       : null;
   const viewKey = JSON.stringify(raw);
   const view = useMemo(() => JSON.parse(viewKey) as RouteView | null, [viewKey]);
@@ -113,29 +119,28 @@ export function useRouteViewBridge({
     },
     [Boolean(view)],
   );
-  const onEvent = useCallback(
-    (event: Intent) => {
-      const value = current.current;
-      if (
-        event.type !== "route-view-intent" ||
-        !value ||
-        event.route !== value.route ||
-        document.visibilityState === "hidden" ||
-        event.thread !== value.thread ||
-        event.instance !== value.instance ||
-        event.revision !== revision.current ||
-        JSON.stringify(published.current) !== JSON.stringify(value)
-      )
-        return;
-      setIntent(event);
-      applyRef.current(event.patch);
-    },
-    [],
-  );
+  const onEvent = useCallback((event: Intent) => {
+    const value = current.current;
+    if (
+      event.type !== "route-view-intent" ||
+      !value ||
+      event.route !== value.route ||
+      document.visibilityState === "hidden" ||
+      event.thread !== value.thread ||
+      event.instance !== value.instance ||
+      event.revision !== revision.current ||
+      JSON.stringify(published.current) !== JSON.stringify(value)
+    )
+      return;
+    setIntent(event);
+    applyRef.current(readAgentPatch(value.route, event.patch));
+  }, []);
   useHostEvents(Boolean(view), onEvent);
   useEffect(() => {
     if (!intent || !view) return;
-    if (Object.entries(intent.patch).some(([key, value]) => view.page[key] !== value)) return;
+    // The rendered page holds the patch once each key writes back as its codec writes the decoded value.
+    const wanted = agentPage(route, readAgentPatch(route, intent.patch) as never);
+    if (Object.keys(intent.patch).some((key) => view.page[key] !== wanted[key])) return;
     let canceled = false;
     void publish(view)
       .then(async () => {

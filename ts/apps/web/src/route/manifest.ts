@@ -21,6 +21,8 @@ import {
   type HostActionKey,
   type Reading,
   type ReadingRequest,
+  type History,
+  type RouteKey,
   type RouteStatePatch,
   type RouteStateSpec,
   type Seed,
@@ -68,9 +70,19 @@ export interface Ctx<W, R extends string, P> {
   /** The command lane on the Work document, one of the Work spec's own commands. */
   readonly command: (name: string, input?: unknown) => Promise<Refusal | null>;
   /** Publishes action progress only while its original Target, Work, and user Page remain current. */
-  readonly setPage: (next: Partial<P>, guard?: readonly (keyof P)[]) => void;
+  readonly setPage: (next: Partial<P>, options?: PageMove<P> | readonly (keyof P)[]) => void;
   /** One page-log line from inside the verb: what its result says beside its outcome. */
   readonly note: (label: string, says: string, refused?: boolean, link?: InspectableRef) => void;
+}
+
+/**
+ * How a page move lands in history: a named move (frame, preset, a Pea patch) pushes one entry; a
+ * continuous gesture (wheel, drag, orbit, typing) replaces it. `guard` drops the move when one of
+ * those fields changed since the action began (a bare array is the guard alone).
+ */
+export interface PageMove<P> {
+  readonly history?: History;
+  readonly guard?: readonly (keyof P)[];
 }
 
 import { DEFAULT_WAIT_S, HOST_READ_WAIT_S, NATIVE_APPLY_WAIT_S, NATIVE_READ_WAIT_S } from "./waits";
@@ -126,7 +138,13 @@ export interface RouteManifest<W, R extends string, P, A extends string> {
   inspectables?: Readonly<Record<string, Inspectable>>;
   readings?: Readonly<Record<R, ReadingSpec<P>>>;
   page?: z.ZodType<P>;
-  /** The Page keys the address carries (`route/url.ts`): what the Situation targets, so Back steps through places. Each needs a default. */
+  /**
+   * The route's address in agent-contracts `routeAddresses`: its fields say which Page keys the URL
+   * carries, how each moves history, and what Pea reads and sets. The page schema extends
+   * `routePageSchema(address)`.
+   */
+  address?: RouteKey;
+  /** A route outside the contract: the Page keys the address carries (`route/url.ts`): what the Situation targets, so Back steps through places. Each needs a default. */
   url?: readonly (keyof P & string)[];
   /** The stages a route works in; `word` is the first word of the Situation ("Auditing rooms"). */
   stages?: readonly { key: string; word: string }[];
@@ -372,6 +390,7 @@ export function entityRoute<W, const R extends string, P extends object, const A
     | "inspectables"
     | "readings"
     | "page"
+    | "address"
     | "url"
     | "actions"
     | "runs"
@@ -521,8 +540,10 @@ export function entityRoute<W, const R extends string, P extends object, const A
     page: (audit.page ? z.intersection(audit.page, entityPage) : entityPage) as z.ZodType<
       P & EntityPage
     >,
-    // Stage, pod and path live in the URL so `/pods` can deep-link a spec and Back steps through them.
-    url: [...(audit.url ?? []), "stage", "pod", "path"] as never,
+    address: audit.address,
+    // Stage, pod and path live in the URL so `/pods` can deep-link a spec and Back steps through them;
+    // a route with an address carries them as its contract's entity fields.
+    url: audit.address ? undefined : ([...(audit.url ?? []), "stage", "pod", "path"] as never),
     actions: {
       ...audit.actions,
       ...(read && def.read !== "explicit" ? { read: { ...read, visible: false } } : {}),

@@ -25,7 +25,8 @@ import {
   targetInventory,
 } from "#/readings";
 import { situationCells } from "./cells";
-import { DEFAULT_WAIT_S, type RouteManifest } from "./manifest";
+import type { History } from "@pe/agent-contracts";
+import { DEFAULT_WAIT_S, type PageMove, type RouteManifest } from "./manifest";
 import { urlPage, useInitialUrlPage, useUrlPage } from "./url";
 import { actionFacts, staticNeed } from "./facts";
 import { callHostRpc, type HostCallOptions } from "#/host/client";
@@ -77,7 +78,13 @@ export function useRoute<W, R extends string, P, A extends string>(
     const initial = { ...seed?.page, ...options.page, ...urlInitial };
     return manifest.page ? manifest.page.parse(initial) : (initial as P);
   });
-  useUrlPage(url, page, setPageState);
+  const override = useRef<History | null>(null);
+  /** Records how a move asked to land in history (`PageMove`); a push wins over a replace in one commit. */
+  const moved = (history: History | undefined) => {
+    override.current =
+      history === "push" || override.current === "push" ? "push" : (history ?? override.current);
+  };
+  useUrlPage(url, page, setPageState, override);
   const [outcome, setOutcome] = useState<RouteOutcome<A> | null>(null);
   // Busy and failure live in the OWNER, which is what `runAction` writes and what refuses a second
   // action. Holding a second copy in render state is how the button and the chord drifted apart:
@@ -274,10 +281,11 @@ export function useRoute<W, R extends string, P, A extends string>(
   }, [writer, owner, seed]);
   // Stable: it is `page[1]`, `ctx.setPage`, and a dep of consumer memos (families/store.ts).
   const pageEpoch = useRef(0);
-  const setPage = useCallback((next: Partial<P>) => {
+  const setPage = useCallback((next: Partial<P>, move?: PageMove<P>) => {
     pageEpoch.current += 1;
+    moved(move?.history);
     setPageState((current) => ({ ...current, ...next }));
-  }, []);
+  }, []); // eslint-disable-line react-hooks/exhaustive-deps -- `moved` writes a ref
   const scopeKey = JSON.stringify([boundKey, key]);
   const actionScope = useMemo(() => ({}), [scopeKey]);
   const currentActionScope = useRef(actionScope);
@@ -363,8 +371,10 @@ export function useRoute<W, R extends string, P, A extends string>(
         if (refusal) throw new ActionRefusal(refusal);
         return null;
       },
-      setPage: (next: Partial<P>, guard?: readonly (keyof P)[]) => {
+      setPage: (next: Partial<P>, options?: PageMove<P> | readonly (keyof P)[]) => {
         if (currentActionScope.current !== actionScope) return;
+        const move = (Array.isArray(options) ? { guard: options } : (options ?? {})) as PageMove<P>;
+        const guard = move.guard;
         setPageState((current) => {
           const currentPage = current as Record<keyof P, unknown>;
           const actionPage = page as Record<keyof P, unknown>;
@@ -374,6 +384,7 @@ export function useRoute<W, R extends string, P, A extends string>(
               : pageEpoch.current !== actionPageEpoch
           )
             return current;
+          moved(move.history);
           return { ...current, ...next };
         });
       },

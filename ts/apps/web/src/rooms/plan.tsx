@@ -23,15 +23,8 @@ import { token } from "@pe/kit/lib/token";
 import { PlanImageLayer, type TakeoffPlanImage } from "#/takeoff/level-plan";
 import { pathD } from "#/takeoff/model";
 import { PLAN_REFUSAL, type PlanRefusal } from "#/takeoff/plan-image";
-import {
-  LAYER_SAYS,
-  LAYERS,
-  toggleLayer,
-  TraceFaces,
-  TraceLayers,
-  type Layer,
-  type TraceRead,
-} from "./layers";
+import { toggleLayer } from "@pe/agent-contracts";
+import { LAYER_SAYS, LAYERS, TraceFaces, TraceLayers, type Layer, type TraceRead } from "./layers";
 import { CALLOUT_FONT_PX, holdsPin, PIN_R, placeCallouts, type CalloutItem } from "./callouts";
 import type { PlanGeo } from "./sketch";
 
@@ -401,7 +394,7 @@ export function RoomsPlan({
             pressed={on}
             refusal={trace.data ? null : (trace.none ?? "reading the trace")}
             reason={LAYER_SAYS[layer]}
-            onClick={() => setLayers(toggleLayer(layers, layer))}
+            onClick={() => setLayers(toggleLayer(LAYERS, layers.join(","), layer))}
           >
             {layer}
           </Button>

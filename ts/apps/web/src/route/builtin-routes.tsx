@@ -63,8 +63,7 @@ function HostedDucts() {
 }
 
 function HostedRooms() {
-  const [layers, setLayers] = useState("");
-  return <RoomsRoute focus="" layers={layers} setLayers={setLayers} url={false} />;
+  return <RoomsRoute url={false} />;
 }
 
 function HostedPods({ thread }: { thread: string }) {

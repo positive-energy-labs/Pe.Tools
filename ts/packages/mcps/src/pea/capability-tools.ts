@@ -15,9 +15,10 @@ import {
   semanticActions,
   familyReads,
   familiesRouteState,
-  routeViews,
+  routeAddresses,
+  routeViewRoutes,
+  type RouteAddress,
   type RouteViewRoute,
-  type RouteViewSpec,
   familyCatalogRequest,
   workKeySchema,
   type FamilyReadKey,
@@ -754,8 +755,8 @@ async function dispatch(
         };
       }
       const view = /^route:([a-z-]+)\.(view|set-view)$/.exec(row.key);
-      if (view && view[1] && view[1] in routeViews) {
-        // One channel for every route in `routeViews`: read the leased view, or patch its Page keys.
+      if (view && view[1] && routeViewRoutes.includes(view[1] as RouteViewRoute)) {
+        // One channel for every route that leases a view (`routeViewRoutes`): read the leased view, or patch its Page keys.
         const route = view[1] as RouteViewRoute;
         if (!viewThread) throw Error("This MCP server has no thread (no harness context).");
         const client = createPeClient(base(), fetch);
@@ -771,7 +772,7 @@ async function dispatch(
         if (view[2] === "view") response = await read(payload.instance);
         else {
           const { instance, revision, ...rest } = payload;
-          const spec: RouteViewSpec = routeViews[route];
+          const spec = routeAddresses[route].agent as NonNullable<RouteAddress["agent"]>;
           let patch = rest as Record<string, string>;
           let refused: string | null = null;
           if (spec.resolve) {

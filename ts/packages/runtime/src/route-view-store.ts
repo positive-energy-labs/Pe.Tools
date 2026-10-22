@@ -14,7 +14,7 @@ const MAX_AGE_MS = 15_000;
 const same = (a: unknown, b: unknown) => JSON.stringify(a) === JSON.stringify(b);
 
 /**
- * Mounted Page state of every route that opts into `routeViews`, never Work. A command succeeds
+ * Mounted Page state of every route that leases a view (`routeViewRoutes`), never Work. A command succeeds
  * only after the view acknowledges its render.
  */
 export class RouteViewStore {

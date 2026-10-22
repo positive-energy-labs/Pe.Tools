@@ -1,7 +1,20 @@
-import { describe, expect, test } from "vite-plus/test";
+// @vitest-environment jsdom
+import { act, cleanup, render } from "@testing-library/react";
+import {
+  createMemoryHistory,
+  createRootRoute,
+  createRouter,
+  RouterProvider,
+} from "@tanstack/react-router";
+import { createElement } from "react";
+import { afterEach, describe, expect, test, vi } from "vite-plus/test";
 import { z } from "zod";
-import { defineRoute } from "./manifest";
+import { routePageSchema } from "@pe/agent-contracts";
+import { peReadings } from "#/readings";
+import { defineRoute, type RouteManifest } from "./manifest";
+import type { RouteHandle } from "./handle";
 import { urlPage } from "./url";
+import { useRoute } from "./use-route";
 
 const manifest = defineRoute({
   key: "t",
@@ -43,5 +56,82 @@ describe("urlPage", () => {
       urlPage(defineRoute({ key: "u", name: "U", page: z.object({ q: z.string() }), url: ["q"] })),
     ).toThrow(/needs a default/);
     expect(urlPage(defineRoute({ key: "v", name: "V" }))).toBeNull();
+  });
+});
+
+afterEach(() => {
+  cleanup();
+  vi.restoreAllMocks();
+});
+
+/** Mounts `useRoute(manifest)` under a memory router; `move` sets the Page and lets the address follow. */
+async function mount<P>(manifest: RouteManifest<unknown, string, P, string>) {
+  vi.spyOn(peReadings, "subscribe").mockImplementation(() => () => {});
+  let handle: RouteHandle<unknown, string, P, string> | null = null;
+  const history = createMemoryHistory({ initialEntries: ["/"] });
+  const router = createRouter({
+    routeTree: createRootRoute({
+      component: () => {
+        handle = useRoute(manifest as never) as never;
+        return null;
+      },
+    }),
+    history,
+  });
+  await router.load();
+  render(createElement(RouterProvider, { router } as never));
+  const settle = () => act(() => new Promise((resolve) => setTimeout(resolve, 10)));
+  await settle();
+  const move = async (next: Partial<P>, history?: "push" | "replace") => {
+    act(() => handle!.page[1](next, history ? { history } : undefined));
+    await settle();
+  };
+  return { history, router, move };
+}
+
+describe("useUrlPage history", () => {
+  test("a gesture replaces its entry; a named move pushes one", async () => {
+    const view = defineRoute({
+      key: "h",
+      name: "H",
+      page: z.object({ viewport: z.string().default("plane:1,0,0") }),
+      url: ["viewport"],
+    });
+    const { history, router, move } = await mount<{ viewport: string }>(view);
+    const before = history.length;
+    await move({ viewport: "plane:1.1,0,0" }, "replace");
+    await move({ viewport: "plane:1.2,0,0" }, "replace");
+    expect(history.length).toBe(before);
+    expect(router.state.location.search).toMatchObject({ viewport: "plane:1.2,0,0" });
+    await move({ viewport: "plane:2,0,0" });
+    expect(history.length).toBe(before + 1);
+    expect(router.state.location.search).toMatchObject({ viewport: "plane:2,0,0" });
+  });
+
+  test("a contract route moves history by each field's class unless the move overrides it", async () => {
+    const rooms = defineRoute({
+      key: "rooms",
+      name: "Rooms",
+      address: "rooms",
+      page: routePageSchema("rooms").extend({ epoch: z.number().default(0) }),
+    });
+    type Page = { stage: string; focus: string; epoch: number };
+    const { history, router, move } = await mount<Page>(rooms as never);
+    const before = history.length;
+    await move({ focus: "R1" }); // focus is a tweak: replace
+    await move({ focus: "R1,R2" });
+    expect(history.length).toBe(before);
+    await move({ epoch: 1 }); // Page-only: no entry
+    expect(history.length).toBe(before);
+    await move({ stage: "review" }); // stage is a step: push
+    expect(history.length).toBe(before + 1);
+    await move({ focus: "R3" }, "push"); // a named move overrides the tweak
+    expect(history.length).toBe(before + 2);
+    await move({ stage: "history" }, "replace"); // a gesture overrides the step
+    expect(history.length).toBe(before + 2);
+    expect(router.state.location.search).toMatchObject({ stage: "history", focus: "R3" });
+    await move({ stage: "partition", focus: "" }); // defaults leave the address bare
+    expect(router.state.location.search).not.toHaveProperty("stage");
+    expect(router.state.location.search).not.toHaveProperty("focus");
   });
 });

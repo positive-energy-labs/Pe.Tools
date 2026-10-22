@@ -10,16 +10,7 @@ import { roomEditKey, roomsRouteState, stagedRoomWrites } from "@pe/agent-contra
 import { holdsPin, PIN_R, placeCallouts, type CalloutItem } from "./callouts";
 import fixture from "./fixtures/trace.json";
 import zoneFile from "./fixtures/zone-8bcfb891.json";
-import {
-  LAYERS,
-  layersOf,
-  NO_TRACE,
-  railsOf,
-  toggleLayer,
-  TraceFaces,
-  TraceLayers,
-  type TraceData,
-} from "./layers";
+import { LAYERS, NO_TRACE, railsOf, TraceFaces, TraceLayers, type TraceData } from "./layers";
 import { manifest } from "./manifest";
 import {
   fitView,
@@ -247,6 +238,8 @@ test("the manifest parses an empty page", () => {
     view: "",
     selected: [],
     epoch: 0,
+    layers: "",
+    focus: "",
   });
   expect(manifest.stages!.map((stage) => stage.key)).toEqual(["partition", "review", "history"]);
 });
@@ -302,13 +295,6 @@ test("rails deduplicate by (A, B), and a reversed rail is its own", () => {
     zones: [zone!, { ...zone!, trace: { ...zone!.trace, rails: [reversed] } }],
   };
   expect(railsOf(twice)).toHaveLength(7);
-});
-
-test("layers read from and write to the URL in legend order", () => {
-  expect(layersOf("faces,rails,bogus")).toEqual(["rails", "faces"]);
-  expect(layersOf("")).toEqual([]);
-  expect(toggleLayer(["faces"], "rails")).toBe("rails,faces");
-  expect(toggleLayer(["rails"], "rails")).toBe("");
 });
 
 test("the host's no-run errors are the empty state; others are errors", () => {
