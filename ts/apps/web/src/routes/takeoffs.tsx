@@ -23,6 +23,6 @@ export const Route = createFileRoute("/takeoffs")({
 });
 
 function TakeoffsFileRoute() {
-  const { target, work, level, zone, room } = Route.useSearch();
-  return <TakeoffsRoute target={target} work={work} level={level} zone={zone} room={room} />;
+  const { target, work } = Route.useSearch();
+  return <TakeoffsRoute target={target} work={work} />;
 }

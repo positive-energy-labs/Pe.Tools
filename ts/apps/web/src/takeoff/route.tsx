@@ -1,83 +1,44 @@
 /**
  * The Takeoffs route mount. Target resolution, the owner, the readings and the actions are all
- * `useRoute(manifest)`; this file chooses live versus saved and binds standalone room navigation
- * to the URL. The workbench owner omits that binding and gets controller-mount navigation.
+ * `useRoute(manifest)`; this file chooses live versus saved. The standalone owner syncs Page to
+ * the URL; an embedded owner holds the same Page without that binding.
  */
-import { useEffect, useMemo, useState } from "react";
-import { useNavigate } from "@tanstack/react-router";
+import { useEffect, useState } from "react";
 import type { TakeoffCapture } from "@pe/agent-contracts";
 
 import { SavedTakeoffsRoute } from "#/takeoff/saved-review";
-import { useTakeoffsController, type TakeoffNavigation } from "#/takeoff/controller";
+import { useTakeoffsController } from "#/takeoff/controller";
 import { TakeoffsPage } from "#/takeoff/route-workspace";
 
-export function TakeoffsRoute({
-  target = "",
-  work,
-  level = "",
-  zone,
-  room,
-}: {
-  target?: string;
-  work?: string;
-  level?: string;
-  zone?: string;
-  room?: string;
-}) {
+export function TakeoffsRoute({ target = "", work }: { target?: string; work?: string }) {
   // `?work=<capture>` names a saved capture; otherwise the route binds the live target.
   if (work) return <SavedTakeoffsRoute capture={work} />;
-  return <LiveTakeoffsRoute target={target} level={level} zone={zone} room={room} />;
+  return <LiveTakeoffsRoute target={target} />;
 }
 
-export function LiveTakeoffsRoute({
-  target = "",
-  level = "",
-  zone,
-  room,
-}: {
-  target?: string;
-  level?: string;
-  zone?: string;
-  room?: string;
-}) {
+export function LiveTakeoffsRoute({ target = "" }: { target?: string }) {
   // Render mechanics only: wait for the client URL before mounting its route owner.
   const [mounted, setMounted] = useState(false);
-  const navigate = useNavigate({ from: "/takeoffs" });
-  const navigation = useMemo(
-    () => ({
-      value: { level, zone: zone ?? null, room: room ?? null },
-      set: (patch: Partial<TakeoffNavigation>) =>
-        void navigate({
-          search: (previous) => ({
-            ...previous,
-            ...(patch.level === undefined ? {} : { level: patch.level || undefined }),
-            ...(patch.zone === undefined ? {} : { zone: patch.zone ?? undefined }),
-            ...(patch.room === undefined ? {} : { room: patch.room ?? undefined }),
-          }),
-        }),
-    }),
-    [level, navigate, room, zone],
-  );
   useEffect(() => setMounted(true), []);
-  return mounted ? <TakeoffsControllerOwner target={target} navigation={navigation} /> : null;
+  return mounted ? <TakeoffsControllerOwner target={target} url /> : null;
 }
 
 export function TakeoffsControllerOwner({
   target = "",
   thread,
   savedCapture,
-  navigation,
+  url,
 }: {
   target?: string;
   thread?: string;
   savedCapture?: TakeoffCapture;
-  navigation?: Parameters<typeof useTakeoffsController>[0]["navigation"];
+  url?: boolean;
 }) {
   const store = useTakeoffsController({
     target,
     ...(thread ? { thread } : {}),
     ...(savedCapture ? { savedCapture } : {}),
-    ...(navigation ? { navigation } : {}),
+    ...(url ? { url } : {}),
   });
   return <TakeoffsPage store={store} />;
 }

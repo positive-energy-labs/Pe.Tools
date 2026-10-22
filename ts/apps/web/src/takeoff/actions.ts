@@ -5,6 +5,7 @@
 import { z } from "zod";
 import {
   address,
+  routePageSchema,
   documentRefSchema,
   workKeySchema,
   workKey,
@@ -54,33 +55,16 @@ const syncReviewSchema = z.object({
  * short-lived review state and every scope transition invalidates them. Standalone room navigation
  * lives in its URL, embedded navigation in its controller, and authored decisions in Work.
  */
-export interface TakeoffPage {
-  work?: string;
-  level?: string;
-  zone?: string;
-  room?: string;
-  demo?: string;
-  views: readonly string[];
-  zones: readonly string[];
-  r10: string;
-  stage: "adopt" | "audit" | "sync";
-  panel: "sync" | null;
-  syncReview: z.infer<typeof syncReviewSchema> | null;
-}
-
-export const takeoffPageSchema = z.object({
+export const takeoffPageSchema = routePageSchema("takeoffs").extend({
   work: z.string().optional(),
-  level: z.string().optional(),
-  zone: z.string().optional(),
-  room: z.string().optional(),
-  demo: z.string().optional(),
   views: z.array(z.string()).readonly().default([]),
   zones: z.array(z.string()).readonly().default([]),
   r10: z.string().default(""),
   stage: z.enum(["adopt", "audit", "sync"]).default("adopt"),
   panel: z.enum(["sync"]).nullable().default(null),
   syncReview: syncReviewSchema.nullable().default(null),
-}) satisfies z.ZodType<TakeoffPage, any, any>;
+});
+export type TakeoffPage = z.infer<typeof takeoffPageSchema>;
 
 export type TakeoffReadingKey = "snapshot" | "rhvacVersion" | "inventory" | "receipts";
 

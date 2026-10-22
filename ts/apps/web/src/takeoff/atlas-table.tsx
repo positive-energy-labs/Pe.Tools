@@ -106,6 +106,7 @@ export function AtlasTable() {
                 columns={columns}
                 rowKey={rowKey}
                 label="rooms in scope"
+                revitIds={(row) => (row.room.elementId == null ? [] : [row.room.elementId])}
                 state={tableState}
                 onStateChange={setTableState}
                 activeKey={cursor}

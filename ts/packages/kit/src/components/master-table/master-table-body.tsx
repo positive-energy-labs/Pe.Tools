@@ -36,6 +36,7 @@ type Gutter<Row> = (row: Row) => {
 
 interface MasterRowProps<Row extends RowData> {
   row: Row;
+  revitIds?: readonly number[];
   /** The row's key, as `data-key`: a `Connectors` anchor and a test handle. */
   rowKey: string;
   active: boolean;
@@ -56,6 +57,7 @@ interface MasterRowProps<Row extends RowData> {
 function MasterRowView<Row extends RowData>({
   row,
   rowKey,
+  revitIds,
   active,
   selected,
   refusal,
@@ -72,6 +74,7 @@ function MasterRowView<Row extends RowData>({
       as="tr"
       ref={active ? activeRowRef : undefined}
       data-key={rowKey}
+      revitIds={revitIds}
       active={active}
       selected={selected}
       refusal={refusal}
@@ -95,6 +98,7 @@ const MasterRow = memo(
   (previous, next) =>
     previous.row === next.row &&
     previous.rowKey === next.rowKey &&
+    previous.revitIds?.join(",") === next.revitIds?.join(",") &&
     previous.active === next.active &&
     previous.selected === next.selected &&
     previous.refusal === next.refusal &&
@@ -114,6 +118,7 @@ export function MasterTableBody<Row extends RowData>({
   columnByKey,
   activeKey,
   rowClassName,
+  revitIds,
   onRowClick,
   selectedKeys,
   refusalOf,
@@ -128,6 +133,7 @@ export function MasterTableBody<Row extends RowData>({
   columnByKey: ReadonlyMap<string, ResolvedColumn<Row>>;
   activeKey?: string | null;
   rowClassName?: (row: Row) => string | undefined;
+  revitIds?: (row: Row) => readonly number[];
   onRowClick?: (row: Row) => void;
   selectedKeys?: ReadonlySet<string>;
   refusalOf?: (key: string) => string | null | undefined;
@@ -304,6 +310,7 @@ export function MasterTableBody<Row extends RowData>({
         ];
         return (
           <MasterRow
+            revitIds={revitIds?.(tableRow.original)}
             key={key}
             row={tableRow.original}
             rowKey={key}

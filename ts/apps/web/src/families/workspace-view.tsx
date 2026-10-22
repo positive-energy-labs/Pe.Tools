@@ -1,5 +1,4 @@
 import { plural } from "#/components/work/band";
-import { Pane } from "#/components/lang/pane";
 import { useNavigate } from "@tanstack/react-router";
 import { useEffect, useState } from "react";
 import { Surface } from "#/components/lang/surface";
@@ -116,19 +115,17 @@ function FamiliesArchivedView({ url }: { url?: boolean }) {
       }
     >
       <div className="flex size-full min-h-0 min-w-0 flex-col">
-        <Pane scroll="clip" flush>
-          {lastReading ? (
-            <FamiliesMatrix />
-          ) : (
-            <p className="px-4 py-3 t-small text-ink-2">
-              {error
-                ? "Table unavailable. Retry or choose another past read above."
-                : loading
-                  ? ""
-                  : "Choose a past read above. Reads saved in Audit appear here."}
-            </p>
-          )}
-        </Pane>
+        {lastReading ? (
+          <FamiliesMatrix />
+        ) : (
+          <p className="px-4 py-3 t-small text-ink-2">
+            {error
+              ? "Table unavailable. Retry or choose another past read above."
+              : loading
+                ? ""
+                : "Choose a past read above. Reads saved in Audit appear here."}
+          </p>
+        )}
       </div>
     </Surface>
   );
@@ -339,9 +336,7 @@ function FamiliesActiveView({ url }: { url?: boolean }) {
       ]}
     >
       <div className="flex size-full min-h-0 min-w-0 flex-col">
-        <Pane scroll="clip" flush>
-          <FamiliesMatrix />
-        </Pane>
+        <FamiliesMatrix />
       </div>
     </EntityRouteView>
   );

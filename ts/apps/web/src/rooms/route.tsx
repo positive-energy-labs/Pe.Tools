@@ -11,7 +11,6 @@ import {
   type Reading,
   type RoomsNote,
   type RoomsRouteDocument,
-  layersOf,
 } from "@pe/agent-contracts";
 import type { RoomsSnapshot } from "@pe/host-contracts/generated";
 
@@ -36,8 +35,12 @@ import { cardLine, cardMoves, FeedbackCard, RoomsInbox } from "./inbox";
 import { manifest, type RoomsPage } from "./manifest";
 import { RoomsSketch, type Drop } from "./sketch";
 import { snapPlan } from "./snap";
-import { LAYERS, NO_TRACE, type Layer, type TraceRead } from "./layers";
+import { NO_TRACE, type TraceRead } from "./layers";
 import { focusOf, RoomsPlan } from "./plan";
+import { NativeObservationScope, type NativeObservation } from "#/revit/observation";
+import { railsOf } from "./layers";
+import { frozenDemo } from "#/host/demo-client";
+import { DEMO_VIEW, DEMO_ROOMS, DEMO_PLAN, DEMO_TRACE } from "./demo";
 import { roomRows, RoomsTable } from "./table";
 
 type Empty = { says: string; exit: string };
@@ -99,6 +102,7 @@ const PLAN_PX = 8000;
 
 /** `url` is false in a chat pane, which does not own the URL; `focus` is a Page key either way. */
 export function RoomsRoute({ url = true }: { url?: boolean } = {}) {
+  const demo = frozenDemo() === "plan";
   const [chosen] = useChooseTarget();
   const thread = useRouteThread();
   const handle = useRoute(manifest, { target: chosen, thread, url });
@@ -108,9 +112,25 @@ export function RoomsRoute({ url = true }: { url?: boolean } = {}) {
     handle.resolution.kind === "resolved" && handle.resolution.target.kind === "document"
       ? handle.resolution.target.ref
       : null;
-  const { snapshot, error, pending } = useRoomsSnapshot(doc, page.epoch);
+  const reading = useRoomsSnapshot(demo ? null : doc, page.epoch);
+  const { snapshot, error, pending } = demo
+    ? { snapshot: DEMO_ROOMS, error: null, pending: false }
+    : reading;
+  useEffect(() => {
+    if (demo && !page.view) setPage({ view: DEMO_VIEW }, { history: "replace" });
+  }, [demo, page.view, setPage]);
   const plan = usePlanImage(handle.resolution, page.view || undefined, PLAN_PX);
   const trace = useRoomsTrace(doc, page.view, page.epoch);
+  const nativeObservation = useMemo<NativeObservation>(
+    () => ({
+      scope: { document: demo || !snapshot ? null : doc, source: demo ? "fixture" : "native" },
+      references: [
+        ...(snapshot?.regions ?? []).map((region) => ({ elementId: region.elementId })),
+        ...(trace.data ? railsOf(trace.data).map((rail) => ({ elementId: rail.elementId })) : []),
+      ],
+    }),
+    [demo, doc, snapshot, trace.data],
+  );
   const [hovered, setHovered] = useState<string | null>(null);
 
   const levels = snapshot?.levels ?? [];
@@ -144,7 +164,7 @@ export function RoomsRoute({ url = true }: { url?: boolean } = {}) {
             picked: (id) => id === level?.name,
             pick: (id) => {
               const views = levels.find((item) => item.name === id)?.views ?? [];
-              setPage({ view: views[0] ?? "", selected: [] });
+              setPage({ view: views[0] ?? "", selected: [], viewport: null });
             },
           },
         ]}
@@ -161,7 +181,7 @@ export function RoomsRoute({ url = true }: { url?: boolean } = {}) {
             options: level ? level.views.map((view) => ({ id: view, label: view })) : null,
             note: level ? "this level has no plan views" : "choose a level first",
             picked: (id) => id === page.view,
-            pick: (id) => setPage({ view: id, selected: [] }),
+            pick: (id) => setPage({ view: id, selected: [], viewport: null }),
           },
         ]}
         disabled={handle.busy !== null}
@@ -170,67 +190,74 @@ export function RoomsRoute({ url = true }: { url?: boolean } = {}) {
     </>
   );
 
-  const empty: Empty | null = !doc
-    ? { says: "no document bound", exit: "choose a document in the sentence" }
-    : error
-      ? { says: `rooms.snapshot failed: ${error}`, exit: "refresh once the host answers" }
-      : !snapshot
-        ? { says: "reading rooms…", exit: "wait for the snapshot" }
-        : !page.view
-          ? { says: "no plan view chosen", exit: "choose a level and a view in the sentence" }
-          : null;
+  const empty: Empty | null = demo
+    ? null
+    : !doc
+      ? { says: "no document bound", exit: "choose a document in the sentence" }
+      : error
+        ? { says: `rooms.snapshot failed: ${error}`, exit: "refresh once the host answers" }
+        : !snapshot
+          ? { says: "reading rooms…", exit: "wait for the snapshot" }
+          : !page.view
+            ? { says: "no plan view chosen", exit: "choose a level and a view in the sentence" }
+            : null;
 
   return (
-    <Surface
-      head={
-        <RouteShell
-          manifest={manifest}
-          handle={handle}
-          situation={
-            <Situation
-              handle={handle}
-              target={{ session: ladder.sessionWord, document: ladder.docWord }}
-              commit="apply"
-              sentence={sentence}
-              ledger={[
-                [
-                  "read",
-                  error
-                    ? "failed"
-                    : snapshot
-                      ? `epoch ${page.epoch}`
-                      : pending
-                        ? "reading"
-                        : "none",
-                ],
-                ["view", page.view || "none"],
-              ]}
-            />
-          }
-        />
-      }
-    >
-      {page.stage === "history" ? (
-        <RoomsHistory receipts={handle.readings.receipts} />
-      ) : (
-        <RoomsBody
-          snapshot={snapshot}
-          empty={empty}
-          page={page}
-          setPage={setPage}
-          focus={page.focus}
-          plan={plan}
-          trace={trace}
-          layers={layersOf(LAYERS, page.layers)}
-          setLayers={(next) => setPage({ layers: next })}
-          hovered={hovered}
-          setHovered={setHovered}
-          doc={handle.work.doc}
-          wire={{ segment: "edits", revision: handle.work.revision, write: handle.work.write }}
-          applyMark={handle.actions.applyMark}
-        />
-      )}
-    </Surface>
+    <NativeObservationScope value={nativeObservation}>
+      <Surface
+        head={
+          <RouteShell
+            manifest={manifest}
+            handle={handle}
+            situation={
+              <Situation
+                handle={handle}
+                target={{ session: ladder.sessionWord, document: ladder.docWord }}
+                commit="apply"
+                sentence={sentence}
+                ledger={[
+                  [
+                    "read",
+                    error
+                      ? "failed"
+                      : snapshot
+                        ? `epoch ${page.epoch}`
+                        : pending
+                          ? "reading"
+                          : "none",
+                  ],
+                  ["view", page.view || "none"],
+                ]}
+              />
+            }
+          />
+        }
+      >
+        {demo && (
+          <p className="px-2 py-1 t-small">
+            Fixture review: synthetic rooms and plan, saved solver trace. No Revit capture.
+          </p>
+        )}
+        {page.stage === "history" ? (
+          <RoomsHistory receipts={handle.readings.receipts} />
+        ) : (
+          <RoomsBody
+            snapshot={snapshot}
+            empty={empty}
+            page={page}
+            setPage={setPage}
+            focus={page.focus}
+            plan={demo ? { ...plan, image: { plan: DEMO_PLAN }, error: null } : plan}
+            trace={demo ? { data: DEMO_TRACE, none: null } : trace}
+            hovered={hovered}
+            setHovered={setHovered}
+            doc={handle.work.doc}
+            wire={{ segment: "edits", revision: handle.work.revision, write: handle.work.write }}
+            applyMark={handle.actions.applyMark}
+          />
+        )}
+      </Surface>
+    </NativeObservationScope>
   );
 }
 
@@ -242,8 +269,6 @@ function RoomsBody({
   focus,
   plan,
   trace,
-  layers,
-  setLayers,
   hovered,
   setHovered,
   doc,
@@ -253,12 +278,10 @@ function RoomsBody({
   snapshot: RoomsSnapshot.Res.Response | null;
   empty: Empty | null;
   page: RoomsPage;
-  setPage: (next: Partial<RoomsPage>) => void;
+  setPage: (next: Partial<RoomsPage>, move?: { history: "push" | "replace" }) => void;
   focus: string;
   plan: ReturnType<typeof usePlanImage>;
   trace: TraceRead;
-  layers: Layer[];
-  setLayers: (next: string) => void;
   hovered: string | null;
   setHovered: (guid: string | null) => void;
   doc: RoomsRouteDocument | null;
@@ -283,6 +306,10 @@ function RoomsBody({
   const zoomTo = useMemo(() => focused.rows.map((row) => row.region.guid), [focused]);
   const applied = useRef("");
   useEffect(() => {
+    if (!focus) {
+      applied.current = "";
+      return;
+    }
     if (!focused.rows.length || applied.current === focus) return;
     applied.current = focus;
     setPage({ view: focused.rows[0]!.region.view, selected: zoomTo });
@@ -375,54 +402,52 @@ function RoomsBody({
       grow
       resize={{ target: "end", defaultSize: 760, minSize: 420, persist: "pe.rooms.tableWidth" }}
       start={
-        <Pane title="plan" meta={page.view || undefined} scroll="clip" flush>
-          <RoomsPlan
-            rows={onView}
-            plan={image}
-            planRefusal={refusal}
-            planError={plan.error}
-            empty={empty}
-            selected={selected}
-            hovered={hovered}
-            zoomTo={zoomTo}
-            focusMissing={snapshot ? focused.missing : []}
-            onSelect={(guid, add) => {
-              // A click on a room with cards pins its first; a click on ground unpins.
-              if (!add)
-                setPinned(guid ? (cards.find((c) => c.guids.includes(guid))?.id ?? null) : null);
-              setPage({
-                selected: !guid
-                  ? []
-                  : !add
-                    ? [guid]
-                    : selected.has(guid)
-                      ? page.selected.filter((item) => item !== guid)
-                      : [...page.selected, guid],
-              });
-            }}
-            onHover={setHovered}
-            trace={trace}
-            layers={layers}
-            setLayers={setLayers}
-            overlay={
-              review
-                ? (geo) => (
-                    <RoomsSketch
-                      geo={geo}
-                      cards={cards}
-                      regions={regions}
-                      hovered={hovered}
-                      pinned={pinned}
-                      setPinned={setPinned}
-                      card={card}
-                      onDrop={onDrop}
-                      onNote={onNote}
-                    />
-                  )
-                : undefined
-            }
-          />
-        </Pane>
+        <RoomsPlan
+          rows={onView}
+          plan={image}
+          planRefusal={refusal}
+          planError={plan.error}
+          empty={empty}
+          selected={selected}
+          hovered={hovered}
+          zoomTo={zoomTo}
+          focusMissing={snapshot ? focused.missing : []}
+          onSelect={(guid, add) => {
+            // A click on a room with cards pins its first; a click on ground unpins.
+            if (!add)
+              setPinned(guid ? (cards.find((c) => c.guids.includes(guid))?.id ?? null) : null);
+            setPage({
+              selected: !guid
+                ? []
+                : !add
+                  ? [guid]
+                  : selected.has(guid)
+                    ? page.selected.filter((item) => item !== guid)
+                    : [...page.selected, guid],
+            });
+          }}
+          onHover={setHovered}
+          trace={trace}
+          page={page}
+          setPage={setPage}
+          overlay={
+            review
+              ? (geo) => (
+                  <RoomsSketch
+                    geo={geo}
+                    cards={cards}
+                    regions={regions}
+                    hovered={hovered}
+                    pinned={pinned}
+                    setPinned={setPinned}
+                    card={card}
+                    onDrop={onDrop}
+                    onNote={onNote}
+                  />
+                )
+              : undefined
+          }
+        />
       }
       end={
         review ? (
