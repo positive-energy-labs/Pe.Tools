@@ -23,7 +23,7 @@ const mark = (phase: string, detail: Record<string, unknown> = {}) => {
 /** Up to three extruded even-odd polygons whose intersection is kept, packed two points per vec4.
  * Frames (u, v): 0 = (x, y), 1 = (-x, z), 2 = (y, z), batch-local (relative to `origin`). */
 export type ClipVolume = { data: Float32Array; counts: number[]; keepInside: boolean[] };
-export const CLIP_POINTS = 64;
+const CLIP_POINTS = 64;
 
 const clipping = `
 varying vec3 vClipPosition;

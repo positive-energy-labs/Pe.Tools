@@ -5,7 +5,7 @@ import type { SceneRenderer } from "./renderer";
 import type { Pick } from "./types";
 
 /** A press that travels further than this is a gesture, not a click (the spike's threshold). */
-export const CLICK_PX = 5;
+const CLICK_PX = 5;
 export const isClick = (down: { x: number; y: number }, up: { clientX: number; clientY: number }) =>
   Math.hypot(up.clientX - down.x, up.clientY - down.y) <= CLICK_PX;
 
