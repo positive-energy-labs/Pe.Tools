@@ -1,14 +1,3 @@
-import { TooltipHint } from "@pe/kit/lang/tooltip";
-/**
- * THROWAWAY (protoui round 3, E2): the inbox in loop order on the kit `Inbox`: Fix, Set, Check,
- * Write, then the collapsed Diagnostics. The rows are `inbox-rows.ts`' (pure, tested); this draws
- * them. A row reads its title and status at rest and takes its verbs on hover; pressing it opens
- * the prose and the worded verbs under it. Inputs are never edited here: a Set row's verb selects
- * the element and focuses the cell on its tree row. The selected element leads to its findings:
- * every row that names it opens, wears selected and scrolls into view, Diagnostics included. The
- * Diagnostics head carries its key, one chip per row kind with its count; a picked chip narrows
- * the Diagnostics rows (and the picture's annotations, `annotatedFindings`) to that kind.
- */
 import { useMemo, useState, type ReactNode } from "react";
 import {
   Ban,
@@ -41,7 +30,7 @@ import { observedElements, useNativeObservation } from "#/revit/observation";
 
 import { airflowPatches } from "../../airflow";
 import { rulingPatches, verdictPatches } from "../../assumptions";
-import { ClaimElement, claimParts, VERDICTS, type Verdict } from "../../claims";
+import { VERDICTS, type Verdict } from "../../claims";
 import {
   diagnosticKind,
   diagnosticsKey,
@@ -51,28 +40,18 @@ import {
   type InboxGroup,
   type InboxItem,
   type RowVerb,
-  type WriteRow,
 } from "../../inbox-rows";
 import type { Claim } from "../../legs";
-import type { ReviewLine } from "../../write-review";
+import { inboxWriteRows, type WriteVerbs } from "./inbox-write";
+import { InboxClaim, claimLine } from "./inbox-claim";
 
-export type InboxWork = {
+type InboxWork = {
   doc: DuctsRouteDocument | null;
   revision: number | null;
   write: (patch: RouteStatePatch[]) => Promise<unknown>;
   /** The model's store: its rulings are the base a verdict or role press stages against. */
   store: DuctSnapshot["store"];
 };
-
-/** The Write group's verbs: the route's own preview and apply, as the handle refuses or arms them. */
-export interface WriteVerbs {
-  preview: ActionHandle;
-  apply: ActionHandle;
-  busy: boolean;
-  row: WriteRow;
-  /** Every change a fresh preview plans, one line each; empty with no fresh preview. */
-  review: readonly ReviewLine[];
-}
 
 /** A fan verb's handles: the route's fan preview and apply, run with the verb's unit and system. */
 export interface FanVerbs {
@@ -105,7 +84,7 @@ export function FanButton({
 }
 
 /** A Heal row's verbs: the route's heal preview and heal, run with the row's group. */
-export interface HealVerbs {
+interface HealVerbs {
   preview: ActionHandle;
   apply: ActionHandle;
   busy: boolean;
@@ -296,40 +275,10 @@ export function Inbox({
   const verbsOf = (item: InboxItem, worded: boolean) =>
     item.verbs.flatMap((verb, i) => [verbButton(verb, i, worded)].flat());
 
-  const claimProse = (claim: Claim) => (
-    <p>
-      {claimParts(claim.text, nameOf).map((p, j) =>
-        typeof p === "string" ? (
-          <span key={j}>{p}</span>
-        ) : p.dot ? (
-          <TooltipHint key={j} content={p.name}>
-            <span className="text-ink-2">·</span>
-          </TooltipHint>
-        ) : (
-          <ClaimElement
-            key={j}
-            part={p}
-            onHover={(id) => light(id == null ? null : [id])}
-            onPick={onSelect}
-            onShown={setNativeResult}
-          />
-        ),
-      )}
-    </p>
-  );
-
-  /** A claim as one plain line: ids resolved to names, a name the prose already holds left out. */
-  const claimLine = (claim: Claim) =>
-    claimParts(claim.text, nameOf)
-      .map((p) => (typeof p === "string" ? p : p.dot ? "" : p.name))
-      .join("")
-      .replace(/\s+/g, " ")
-      .replace(/ ([,.;:?])/g, "$1");
-
   const spec = (item: InboxItem): InboxRowSpec => {
     const target = observedElements(observation, item.ids);
     const claim = item.verbs.find((v) => v.kind === "claim");
-    const title = claim?.kind === "claim" ? claimLine(claim.claim) : item.title;
+    const title = claim?.kind === "claim" ? claimLine(claim.claim, nameOf) : item.title;
     return {
       key: item.key,
       "data-kind": item.kind,
@@ -345,7 +294,13 @@ export function Inbox({
       detail: (
         <>
           {claim?.kind === "claim" ? (
-            claimProse(claim.claim)
+            <InboxClaim
+              claim={claim.claim}
+              nameOf={nameOf}
+              light={light}
+              onSelect={onSelect}
+              onShown={setNativeResult}
+            />
           ) : item.note ? (
             <p>{item.note}</p>
           ) : (
@@ -359,69 +314,7 @@ export function Inbox({
     };
   };
 
-  const writeSpec: InboxRowSpec = {
-    key: "write",
-    "data-kind": "write",
-    title: write.row.title,
-    status: (
-      <span className="inline-flex items-center gap-1" data-inbox-write="">
-        <span>{write.row.status}</span>
-        {/* The handle's own words, so the button reads as the Situation's does. */}
-        <Button
-          kind="framed"
-          label={write.preview.label}
-          reason="Ask Revit what the staged cells would write"
-          refusal={write.preview.refusal}
-          busy={write.busy}
-          onClick={() => void write.preview.run()}
-        >
-          {write.preview.label}
-        </Button>
-        <Button
-          kind="commit"
-          label={write.apply.label}
-          reason="Write the staged cells to Revit"
-          refusal={write.apply.refusal}
-          busy={write.busy}
-          onClick={() => void write.apply.run()}
-        >
-          {write.apply.label}
-        </Button>
-      </span>
-    ),
-    detail:
-      write.apply.refusal || write.row.held ? (
-        <>
-          {write.apply.refusal ? <p data-inbox-write-says="">{write.apply.refusal}</p> : null}
-          {write.row.held ? <p data-inbox-write-held="">{write.row.held}</p> : null}
-        </>
-      ) : undefined,
-  };
-
-  // Every change the fresh preview plans, one row each: element · what, old -> new; a refusal says why.
-  const reviewSpecs: InboxRowSpec[] = write.review.map((line) => ({
-    key: line.key,
-    "data-kind": "write-review",
-    title: `${line.element} · ${line.what}`,
-    titleText: `${line.element} · ${line.what}`,
-    status: (
-      <span
-        data-tone={line.outcome === "refused" ? "alarm" : undefined}
-        data-outcome={line.outcome}
-      >
-        {line.outcome === "refused"
-          ? `refused: ${line.reason ?? "no reason given"}`
-          : `${line.from} → ${line.to}`}
-      </span>
-    ),
-    detail: (
-      <p>
-        {line.outcome === "refused"
-          ? `refused: ${line.reason ?? "no reason given"}`
-          : `${line.from} → ${line.to}`}
-      </p>
-    ),
-  }));
+  const { writeSpec, reviewSpecs } = inboxWriteRows(write);
 
   const legend = diagnosticsKey(groups.diagnostics).map(({ kind, count }) => (
     <Button
