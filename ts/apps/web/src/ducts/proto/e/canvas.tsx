@@ -306,7 +306,10 @@ function Canvas({
           </span>
         </div>
 
-        <div className="absolute bottom-2 left-2 flex flex-col items-start gap-1">
+        <div
+          data-slot="pane-legend"
+          className="absolute bottom-2 left-2 flex flex-col items-start gap-1"
+        >
           <ScaleLegend
             encoding={scale.encoding}
             counts={scale.counts}

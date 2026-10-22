@@ -48,6 +48,11 @@
   text-box: trim-end text alphabetic;
   padding-bottom: 0.3rem;
 }
+/* A last-resort floor: the strip folds while the title is cut short (pane-strip.tsx), and this
+   keeps a sliver of title when even the folded strip cannot fit. */
+[data-slot="pane-header"]:not([data-title-align="center"]) [data-slot="rail-lead"] {
+  min-width: min(calc(var(--control-h) * 2), 50%);
+}
 [data-slot="pane-header"][data-title-align="center"] [data-slot="rail-lead"] {
   align-items: center;
   padding-bottom: 0;
