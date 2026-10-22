@@ -18,7 +18,8 @@ import { PaneSplit } from "#/components/lang/pane-resize";
 
 import { airflowOptions } from "../../airflow";
 import { elementNamer } from "../../claims";
-import { revitScope, SelectionBoxButton } from "#/revit/element-menu";
+import { SelectionBoxButton } from "#/revit/element-menu";
+import { observedElements, useNativeObservation } from "#/revit/observation";
 import {
   annotatedFindings,
   fanVerbs,
@@ -66,6 +67,7 @@ export function EScreen({ props }: { props: ProtoProps }) {
 }
 
 function EScreenBody({ props }: { props: ProtoProps }) {
+  const observation = useNativeObservation();
   const { snapshot, priced, page, setPage } = props;
   const doc = props.work.doc;
   const work = useMemo<LossesWork>(
@@ -364,13 +366,13 @@ function EScreenBody({ props }: { props: ProtoProps }) {
 
   // The selected element, wherever it was picked from, offers Revit in plain sight.
   const shown =
-    selected != null && props.doc ? (
+    selected != null ? (
       <div
         className="border-line t-small flex items-center gap-1 border-t px-2 py-1"
         data-e-selected={selected}
       >
         <span className="min-w-0 flex-1 truncate">{nameOf(selected)}</span>
-        <SelectionBoxButton ids={[selected]} doc={props.doc} />
+        <SelectionBoxButton target={observedElements(observation, [selected])} />
       </div>
     ) : null;
 
@@ -598,7 +600,6 @@ function EScreenBody({ props }: { props: ProtoProps }) {
           <Inbox
             groups={inbox}
             work={inboxWork}
-            doc={props.doc}
             nameOf={nameOf}
             onVerdict={props.onVerdict}
             light={light}
@@ -629,7 +630,7 @@ function EScreenBody({ props }: { props: ProtoProps }) {
   );
 
   return (
-    <div data-proto="E2" className="flex size-full min-h-0" {...revitScope(props.doc)}>
+    <div data-proto="E2" className="flex size-full min-h-0">
       <PaneSplit
         axis="horizontal"
         resize={{

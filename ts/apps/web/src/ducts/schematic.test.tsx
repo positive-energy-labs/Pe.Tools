@@ -9,7 +9,6 @@ import { afterEach, expect, it, vi } from "vite-plus/test";
 
 import type { DuctSnapshot } from "@pe/ducts-domain/types";
 import { encodingOf } from "./encoding";
-import { cameraOf, pictureOf } from "./picture";
 import { indexOf } from "./scene";
 import { Schematic } from "./schematic";
 
@@ -160,7 +159,6 @@ const snapshot = {
   },
 } as DuctSnapshot;
 
-
 const props = (patch: Partial<Parameters<typeof Schematic>[0]> = {}) => ({
   index: indexOf(snapshot),
   group: "g1",
@@ -210,12 +208,4 @@ it("selection, hover and hover-lighting read the same in either slot", () => {
 it("asks for a group when none is chosen", () => {
   const view = render(<Schematic {...props({ group: "" })} />);
   expect(view.container.textContent).toContain("choose a system");
-});
-
-it("the picture keys default to the model from the isometric when the page has none", () => {
-  expect(pictureOf({})).toBe("model");
-  expect(cameraOf({})).toBe("iso");
-  expect(pictureOf({ picture: "schematic" })).toBe("schematic");
-  expect(cameraOf({ camera: "plan" })).toBe("plan");
-  expect(pictureOf({ picture: "nonsense" })).toBe("model");
 });

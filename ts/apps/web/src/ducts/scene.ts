@@ -1,12 +1,9 @@
 /**
  * The /ducts scene: the snapshot indexed once per read, and the subject's elements with every fact
- * the encodings read. Both spatial views scope through `sceneOf`; only the level filter and the
- * context they hand it differ.
+ * the encodings read. The model picture's meshes are Revit's (`scene/`); this is what its
+ * annotations, its centrelines layer and the schematic draw.
  */
-import type { ReactNode } from "react";
-
-import type { DuctDrawing, NodeFacts, Scene } from "./drawing";
-import type { DuctNode, Issue, Segment, SegmentFacts } from "./encoding";
+import type { DuctNode, EncodingFacts, Issue, Segment, SegmentFacts } from "./encoding";
 import type { Claim, Leg, Place, SubjectCut } from "./legs";
 import type { LossResult } from "@pe/ducts-domain/losses";
 import type { Priced } from "@pe/ducts-domain/pricing";
@@ -14,6 +11,20 @@ import { snapshotById } from "@pe/ducts-domain/readiness";
 import type { DuctSnapshot } from "@pe/ducts-domain/types";
 
 type Level = DuctSnapshot["levels"][number];
+
+export interface NodeFacts extends EncodingFacts {
+  node: DuctNode;
+  issues: readonly Issue[];
+}
+
+export interface Scene {
+  segments: readonly SegmentFacts[];
+  nodes: readonly NodeFacts[];
+  /** Issues with a point; each is one marker. */
+  issues: readonly Issue[];
+  /** The subject scene's cut and claims (`subjectScene`); absent for a group scene. */
+  subject?: SubjectDrawn;
+}
 
 /** The snapshot indexed once per read: every view and every scope reads these maps. */
 export interface DuctIndex {
@@ -84,37 +95,6 @@ export function indexOf(snapshot: DuctSnapshot, priced: Priced | null = null): D
   return { snapshot, levels, flows, issuesOf, segmentsOf, nodesOf, levelAt, levelOf, loss };
 }
 
-export interface ContextLevel {
-  levelId: number | null;
-  polylines: readonly Pick<Segment, "polyline">[];
-}
-
-/**
- * The faint rest of the document, per level: every segment outside `groups` of 2 ft or more that
- * `keep` allows, cut to at most eight points (evenly along it, 0.01 ft). With no group chosen and
- * no `keep`, all of it.
- */
-export function contextOf(
-  index: DuctIndex,
-  groups: readonly string[],
-  keep: (segment: Segment) => boolean = () => true,
-): ContextLevel[] {
-  const byLevel = new Map<number | null, Pick<Segment, "polyline">[]>();
-  const drawn = new Set(groups);
-  for (const segment of index.snapshot.segments) {
-    if (drawn.has(segment.groupId ?? "") || segment.lengthFt < 2 || !keep(segment)) continue;
-    const last = segment.polyline.length - 1;
-    const count = Math.min(segment.polyline.length, 8);
-    const polyline = Array.from({ length: count }, (_, i) =>
-      segment.polyline[count < 2 ? 0 : Math.floor((i * last) / (count - 1))]!.map(
-        (v) => Math.round(v * 100) / 100,
-      ),
-    );
-    push(byLevel, segment.levelId ?? null, { polyline });
-  }
-  return [...byLevel].map(([levelId, polylines]) => ({ levelId, polylines }));
-}
-
 const pointOf = (index: DuctIndex, id: number) =>
   index.loss.has(id) ? { drop: index.loss.get(id)! } : undefined;
 
@@ -153,10 +133,7 @@ export function sceneOf(
       issue.point &&
       keepLevel(index.levelOf(issue)),
   );
-  const context = contextOf(index, groups)
-    .filter((level) => keepLevel(level.levelId))
-    .map((level) => level.polylines);
-  return { segments, nodes, issues, context };
+  return { segments, nodes, issues };
 }
 
 /** The subject scene's authored layers, resolved against the facts, as the drawing reads them. */
@@ -181,19 +158,9 @@ export interface SubjectDrawn {
   levelAt: ReadonlyMap<number, number | null>;
 }
 
-/** Faint context stays this far (ft) around the subject's bounding box. */
-export const CONTEXT_PAD_FT = 20;
-
-const within = (box: readonly [number[], number[]], point: readonly number[]) =>
-  point[0]! >= box[0][0]! &&
-  point[0]! <= box[1][0]! &&
-  point[1]! >= box[0][1]! &&
-  point[1]! <= box[1][1]!;
-
 /**
  * The subject scene: the ordered ids' elements from `snapshotById`, no group, with the cut and
- * claims the drawing pins. Context is never the whole document (a 9 MB draw on Project A): only
- * segments on the levels the subject touches, within its bounding box padded `CONTEXT_PAD_FT`.
+ * claims the picture pins.
  */
 export function subjectScene(
   index: DuctIndex,
@@ -202,7 +169,6 @@ export function subjectScene(
   claims: readonly Claim[] = [],
 ): Scene {
   const { nodes: nodeById, segments: segmentById } = snapshotById(index.snapshot);
-  const own = new Set(ids);
   const legOf = new Map<number, Leg>();
   for (const leg of cut.legs) for (const id of leg.ids) legOf.set(id, leg);
   const placeOf = new Map<number, Place>();
@@ -228,33 +194,11 @@ export function subjectScene(
     const line = segmentById.get(id)?.polyline;
     return line ? (line[Math.floor((line.length - 1) / 2)] ?? null) : null;
   };
-  const points = [
-    ...segments.flatMap((f) => f.segment.polyline),
-    ...nodes.map((f) => f.node.point),
-  ];
   const levelAt = new Map<number, number | null>([
     ...segments.map((f) => [f.segment.id, f.segment.levelId ?? null] as const),
     ...nodes.map((f) => [f.node.id, f.node.levelId ?? null] as const),
   ]);
   const levels = new Set(levelAt.values());
-  const lo = [Infinity, Infinity];
-  const hi = [-Infinity, -Infinity];
-  for (const p of points)
-    for (let i = 0; i < 2; i++) {
-      lo[i] = Math.min(lo[i]!, p[i]!);
-      hi[i] = Math.max(hi[i]!, p[i]!);
-    }
-  const box = [lo.map((v) => v - CONTEXT_PAD_FT), hi.map((v) => v + CONTEXT_PAD_FT)] as const;
-  const context = points.length
-    ? contextOf(
-        index,
-        [],
-        (segment) =>
-          !own.has(segment.id) &&
-          levels.has(segment.levelId ?? null) &&
-          segment.polyline.some((p) => within(box, p)),
-      ).map((level) => level.polylines)
-    : [];
   const span = <T extends { after: number; before: number }>(item: T) => {
     const from = segmentById.get(item.after)?.polyline.at(-1) ?? nodeById.get(item.after)?.point;
     const to = segmentById.get(item.before)?.polyline[0] ?? nodeById.get(item.before)?.point;
@@ -282,7 +226,6 @@ export function subjectScene(
     segments,
     nodes,
     issues: [],
-    context,
     subject: {
       cut,
       claims,
@@ -296,16 +239,4 @@ export function subjectScene(
       levelAt,
     },
   };
-}
-
-/** What a view hands the drawing and the band. */
-export interface SpatialView {
-  label: string;
-  project: (point: readonly number[]) => readonly [number, number];
-  scene: Scene;
-  fitKey: string;
-  onDrag?: (dx: number, dy: number, shift: boolean) => boolean;
-  underlay?: Parameters<typeof DuctDrawing>[0]["underlay"];
-  /** The view's own words and controls, first in the band. */
-  band: ReactNode;
 }

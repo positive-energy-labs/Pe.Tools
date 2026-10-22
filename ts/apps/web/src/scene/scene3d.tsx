@@ -1,18 +1,26 @@
 /**
  * The one 3D renderer in the web app. The route owns the viewport (a Page key of kind `orbit`) and
  * hands it in; the canvas never keeps camera state across renders. Orbit and zoom report as
- * "gesture" (the route replaces history), fit and presets as "move" (the route pushes).
+ * "gesture" (the route replaces history); the caller's named moves push.
  *
  * The canvas names the Revit element under the pointer in `data-revit-ids`, so the app-root
- * element menu answers right-click and BX here like on any row. Double-click stays free.
+ * element menu answers right-click and BX here like on any row. Double-click stays free. Named
+ * moves (fit, looks) belong to the caller's pane strip and the orbit minimap, not this canvas.
+ * `onProject` hands DOM drawn over the canvas the camera of each frame that moved.
  */
 import { useEffect, useRef, useState, type ReactNode } from "react";
-import { Button } from "@pe/kit/lang/button";
 import { revitTarget } from "@pe/kit/lang/row";
-import { fit, presets, samePose, type OrbitViewport, type Preset } from "./orbit";
+import { revitScope, type ElementTarget } from "#/revit/element-target";
+import {
+  observedElements,
+  useNativeObservation,
+  type NativeObservation,
+} from "#/revit/observation";
+import { samePose, type OrbitViewport } from "./orbit";
 import { isClick, pickAt } from "./picking";
+import type { Project, Size } from "./projection";
 import { createRenderer, type ClipVolume, type SceneRenderer } from "./renderer";
-import type { Layer3D, Pick, SceneMeshes } from "./types";
+import type { Layer3D, Pick, SceneInstance, SceneMeshes } from "./types";
 
 export type Scene3DProps = {
   meshes: SceneMeshes | null;
@@ -20,6 +28,8 @@ export type Scene3DProps = {
   viewport: OrbitViewport;
   onViewport: (next: OrbitViewport, how: "gesture" | "move") => void;
   selected?: ReadonlySet<string>;
+  /** Tinted, weaker than selected: what a hovered row elsewhere on the page stands for. */
+  lit?: ReadonlySet<string>;
   hidden?: ReadonlySet<string>;
   isolated?: ReadonlySet<string> | null;
   layers?: readonly Layer3D[];
@@ -29,21 +39,52 @@ export type Scene3DProps = {
   clip?: (hit: Pick) => boolean;
   /** The shader side of the caller's cuts, packed relative to the bounds centre. */
   clipVolume?: ClipVolume | null;
+  /** After each rendered frame whose camera or size moved: world feet to canvas px. */
+  onProject?: (project: Project, size: Size) => void;
   className?: string;
+  children?: ReactNode;
 };
 
-const PRESETS: { key: Preset; label: string }[] = [
-  { key: "top", label: "Top" },
-  { key: "north", label: "North" },
-  { key: "east", label: "East" },
-];
-/** The element menu's attribute, spelled by the one function that owns it. */
-const ATTR = Object.keys(revitTarget([0]))[0]!;
+/**
+ * What the element menu acts on for one drawn element: the displayed observation's captured member,
+ * held to the mesh's own UniqueId. A linked element, or one the displayed read never captured,
+ * still declares itself so the menu refuses it in words; with no observation the canvas is inert.
+ */
+function sceneTarget(
+  observation: NativeObservation,
+  instance: SceneInstance,
+): ElementTarget | null {
+  if (!observation.scope) return null;
+  if (instance.revitId === null)
+    return {
+      scope: observation.scope,
+      ids: [],
+      refs: [
+        {
+          elementId: null,
+          uniqueId: instance.uniqueId,
+          documentKey: instance.documentKey,
+          linkInstanceIds: instance.linkInstanceId === null ? [] : [instance.linkInstanceId],
+        },
+      ],
+    };
+  const target = observedElements(observation, [instance.revitId]);
+  return {
+    ...target,
+    refs: [...(target.refs ?? []), { elementId: instance.revitId, uniqueId: instance.uniqueId }],
+  };
+}
+
+/** The element menu's attributes, spelled by the one function that owns them. */
+const ATTRS = Object.keys(revitTarget([0], [{ elementId: 0 }])) as (keyof ReturnType<
+  typeof revitTarget
+>)[];
 
 export function Scene3D(props: Scene3DProps): ReactNode {
   const host = useRef<HTMLDivElement>(null);
-  const latest = useRef(props);
-  latest.current = props;
+  const observation = useNativeObservation();
+  const latest = useRef({ ...props, observation });
+  latest.current = { ...props, observation };
   const core = useRef<SceneRenderer | null>(null);
   /** The last pose this canvas published; its decoded echo is not re-applied. */
   const published = useRef<OrbitViewport | null>(null);
@@ -62,6 +103,7 @@ export function Scene3D(props: Scene3DProps): ReactNode {
       return;
     }
     core.current = r;
+    r.setOnFrame((project, size) => latest.current.onProject?.(project, size));
     const { canvas, controls } = r;
     const publish = () => {
       const v = r.viewport();
@@ -84,11 +126,18 @@ export function Scene3D(props: Scene3DProps): ReactNode {
     controls.addEventListener("change", change);
     controls.addEventListener("end", end);
 
-    // The element under the pointer, named where the element menu looks (absent when none).
+    // The element under the pointer, declared where the element menu looks (absent when none).
     const aim = (at: PointerEvent | MouseEvent) => {
-      const id = pickAt(r, at, latest.current.clip)?.instance.revitId;
-      if (id == null) canvas.removeAttribute(ATTR);
-      else canvas.setAttribute(ATTR, String(id));
+      const instance = pickAt(r, at, latest.current.clip)?.instance;
+      const target = instance ? sceneTarget(latest.current.observation, instance) : null;
+      const attributes: Partial<Record<(typeof ATTRS)[number], string>> = target
+        ? revitTarget(target.ids, target.refs)
+        : {};
+      for (const name of ATTRS) {
+        const value = attributes[name];
+        if (value === undefined) canvas.removeAttribute(name);
+        else canvas.setAttribute(name, value);
+      }
     };
     let hover = 0;
     let over: PointerEvent | null = null;
@@ -100,7 +149,7 @@ export function Scene3D(props: Scene3DProps): ReactNode {
     };
     const pointerLeave = () => {
       over = null;
-      canvas.removeAttribute(ATTR);
+      for (const name of ATTRS) canvas.removeAttribute(name);
     };
     const pointerDown = (event: PointerEvent) => {
       down = { x: event.clientX, y: event.clientY, button: event.button };
@@ -114,7 +163,7 @@ export function Scene3D(props: Scene3DProps): ReactNode {
     const contextMenu = (event: MouseEvent) => {
       if (down?.button !== 2 || !isClick(down, event)) return event.preventDefault();
       aim(event);
-      if (!canvas.hasAttribute(ATTR)) event.preventDefault();
+      if (!ATTRS.some((name) => canvas.hasAttribute(name))) event.preventDefault();
     };
     canvas.addEventListener("pointermove", pointerMove);
     canvas.addEventListener("pointerleave", pointerLeave);
@@ -146,8 +195,8 @@ export function Scene3D(props: Scene3DProps): ReactNode {
     r.setViewport(props.viewport);
   }, [props.viewport, meshes]);
   useEffect(() => {
-    core.current?.paint(props.selected, props.hidden, props.isolated);
-  }, [props.selected, props.hidden, props.isolated, meshes]);
+    core.current?.paint(props.selected, props.hidden, props.isolated, props.lit);
+  }, [props.selected, props.hidden, props.isolated, props.lit, meshes]);
   useEffect(() => {
     core.current?.setLayers(props.layers);
   }, [props.layers, meshes]);
@@ -155,35 +204,14 @@ export function Scene3D(props: Scene3DProps): ReactNode {
     core.current?.setClip(props.clipVolume);
   }, [props.clipVolume, meshes]);
 
-  const move = (v: OrbitViewport) => {
-    core.current?.setViewport(v);
-    published.current = v;
-    props.onViewport(v, "move");
-  };
   return (
-    <div ref={host} className={`relative min-h-0 overflow-hidden ${props.className ?? ""}`}>
+    <div
+      ref={host}
+      className={`relative min-h-0 overflow-hidden ${props.className ?? ""}`}
+      {...revitScope(observation.scope)}
+    >
       {failure ? <p className="t-small text-ink-2 p-2">{failure}</p> : null}
-      {meshes && !failure ? (
-        <div className="absolute right-1 top-1 flex gap-1" data-surface="page">
-          <Button
-            kind="quiet"
-            label="Fit the whole scene, keeping the direction"
-            onClick={() => move(fit(meshes.bounds, props.viewport))}
-          >
-            Fit
-          </Button>
-          {PRESETS.map(({ key, label }) => (
-            <Button
-              key={key}
-              kind="quiet"
-              label={`${label} view`}
-              onClick={() => move(presets[key](meshes.bounds))}
-            >
-              {label}
-            </Button>
-          ))}
-        </div>
-      ) : null}
+      {props.children}
     </div>
   );
 }

@@ -3,10 +3,10 @@
  * yaw: degrees about world z of the camera's bearing from the pivot, 0 = from +X (east), 90 = from
  * +Y (north). elev: degrees above the horizon, 90 = plan. zoom: 1 = the scene bounds fill the view.
  */
-import type { Bounds } from "./types";
+import type { Bounds, SceneInstance, SceneMeshes } from "./types";
 
-import type { OrbitViewport } from "@pe/agent-contracts";
-export type { OrbitViewport };
+import { orbitLooks, type OrbitLook, type OrbitViewport } from "@pe/agent-contracts";
+export type { OrbitLook, OrbitViewport };
 
 type Vec3 = [number, number, number];
 type XYZ = { x: number; y: number; z: number };
@@ -65,21 +65,82 @@ export function fromControls(
   };
 }
 
-/** The whole scene in view, keeping the direction it is seen from (default: the spike's iso). */
-export function fit(
-  bounds: Bounds,
-  from: Pick<OrbitViewport, "yaw" | "elev"> = { yaw: -45, elev: Math.atan(Math.SQRT1_2) / RAD },
+/** A named look over the pose the picture shows: pivot and zoom kept, a look without a yaw keeps it. */
+export const applyLook = (look: OrbitLook, pose: OrbitViewport): OrbitViewport => {
+  const turn: { yaw?: number; elev: number } = orbitLooks[look];
+  return { ...pose, yaw: turn.yaw ?? pose.yaw, elev: turn.elev };
+};
+
+/** The direction a fit looks from when nothing else says: the iso from the south-east. */
+const FIT_FROM = { yaw: -45, elev: orbitLooks.iso.elev };
+
+/**
+ * `target` filling the view, seen from `from`. Zoom is measured against `scene`, the bounds the
+ * camera is built on (`toCamera`), so a frame of a few elements inside a larger capture is close.
+ */
+export function frame(
+  scene: Bounds,
+  target: Bounds = scene,
+  from: Pick<OrbitViewport, "yaw" | "elev"> = FIT_FROM,
 ): OrbitViewport {
-  return { kind: "orbit", yaw: from.yaw, elev: from.elev, zoom: 1, pivot: center(bounds) };
+  return {
+    kind: "orbit",
+    yaw: from.yaw,
+    elev: from.elev,
+    zoom: fitDistance(scene) / fitDistance(target),
+    pivot: center(target),
+  };
 }
 
-/** The spike's three axes, fitted. Top reads north up; north looks south; east looks west. */
-export const presets = {
-  top: (bounds: Bounds) => fit(bounds, { yaw: -90, elev: 90 }),
-  north: (bounds: Bounds) => fit(bounds, { yaw: 90, elev: 0 }),
-  east: (bounds: Bounds) => fit(bounds, { yaw: 0, elev: 0 }),
-} satisfies Record<string, (bounds: Bounds) => OrbitViewport>;
-export type Preset = keyof typeof presets;
+/** The box around world points; null for none. */
+export function boundsOfPoints(points: Iterable<readonly number[]>): Bounds | null {
+  const b = {
+    minX: Infinity,
+    minY: Infinity,
+    minZ: Infinity,
+    maxX: -Infinity,
+    maxY: -Infinity,
+    maxZ: -Infinity,
+  };
+  for (const [x = 0, y = 0, z = 0] of points) {
+    b.minX = Math.min(b.minX, x);
+    b.minY = Math.min(b.minY, y);
+    b.minZ = Math.min(b.minZ, z);
+    b.maxX = Math.max(b.maxX, x);
+    b.maxY = Math.max(b.maxY, y);
+    b.maxZ = Math.max(b.maxZ, z);
+  }
+  return Number.isFinite(b.minX) ? b : null;
+}
+
+/** The box around the instances `keep` admits, from their vertices; null for none. */
+export function boundsOfInstances(
+  meshes: SceneMeshes,
+  keep: (instance: SceneInstance) => boolean,
+): Bounds | null {
+  const b = {
+    minX: Infinity,
+    minY: Infinity,
+    minZ: Infinity,
+    maxX: -Infinity,
+    maxY: -Infinity,
+    maxZ: -Infinity,
+  };
+  const p = meshes.positions;
+  for (const instance of meshes.instances) {
+    if (!keep(instance)) continue;
+    const end = (instance.firstVertex + instance.vertexCount) * 3;
+    for (let i = instance.firstVertex * 3; i < end; i += 3) {
+      b.minX = Math.min(b.minX, p[i]!);
+      b.minY = Math.min(b.minY, p[i + 1]!);
+      b.minZ = Math.min(b.minZ, p[i + 2]!);
+      b.maxX = Math.max(b.maxX, p[i]!);
+      b.maxY = Math.max(b.maxY, p[i + 1]!);
+      b.maxZ = Math.max(b.maxZ, p[i + 2]!);
+    }
+  }
+  return Number.isFinite(b.minX) ? b : null;
+}
 
 /** Same pose within what a page key keeps; a decoded echo of our own publish is not a move. */
 export function samePose(a: OrbitViewport, b: OrbitViewport, bounds: Bounds) {
