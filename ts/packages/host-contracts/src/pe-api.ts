@@ -127,46 +127,48 @@ function route<const P extends string, B extends z.ZodType, O extends z.ZodType>
   };
 }
 
-export function definePeApi<
-  S extends Record<
-    | "accessSchema"
-    | "addProviderRequestSchema"
-    | "providerSchema"
-    | "createThreadRequestSchema"
-    | "updateThreadRequestSchema"
-    | "threadTabRequestSchema"
-    | "harnessThreadSummarySchema"
-    | "harnessThreadBodySchema"
-    | "harnessEventSchema"
-    | "threadExportSchema"
-    | "pluginStatusSchema"
-    | "promptRequestSchema"
-    | "turnStateSchema"
-    | "queueRequestSchema"
-    | "hostLogPageSchema"
-    | "permissionResponseSchema"
-    | "questionResponseSchema"
-    | "forkThreadRequestSchema"
-    | "traitRequestSchema"
-    | "threadHeadReadingSchema"
-    | "putTargetSchema"
-    | "putTargetResultSchema"
-    | "capabilityCatalogSchema"
-    | "navigationSnapshotSchema"
-    | "routeStatePatchSchema"
-    | "ductsAnalysisRequestSchema"
-    | "ductsAnalysisResponseSchema"
-    | "routeViewSchema"
-    | "routeViewSetSchema"
-    | "routeViewAckSchema"
-    | "pageChoiceSchema"
-    | "diagnosticBodySchema"
-    | "actionAdmissionSchema"
-    | "actionReceiptSchema"
-    | "actionControlInputSchema",
-    z.ZodType
-  >,
->(schemas: S) {
+/** The schemas a route table names; each domain owner supplies its own. */
+export type PeApiSchemas = Record<
+  | "accessSchema"
+  | "addProviderRequestSchema"
+  | "providerSchema"
+  | "createThreadRequestSchema"
+  | "updateThreadRequestSchema"
+  | "threadTabRequestSchema"
+  | "harnessThreadSummarySchema"
+  | "harnessThreadBodySchema"
+  | "harnessEventSchema"
+  | "threadExportSchema"
+  | "pluginStatusSchema"
+  | "promptRequestSchema"
+  | "turnStateSchema"
+  | "queueRequestSchema"
+  | "hostLogPageSchema"
+  | "permissionResponseSchema"
+  | "questionResponseSchema"
+  | "forkThreadRequestSchema"
+  | "traitRequestSchema"
+  | "threadHeadReadingSchema"
+  | "putTargetSchema"
+  | "putTargetResultSchema"
+  | "capabilityCatalogSchema"
+  | "navigationSnapshotSchema"
+  | "routeStatePatchSchema"
+  | "ductsAnalysisRequestSchema"
+  | "ductsAnalysisResponseSchema"
+  | "routeViewSchema"
+  | "routeViewSetSchema"
+  | "routeViewAckSchema"
+  | "pageChoiceSchema"
+  | "diagnosticBodySchema"
+  | "actionAdmissionSchema"
+  | "actionReceiptSchema"
+  | "actionControlInputSchema",
+  z.ZodType
+>;
+
+/** The one route table: every declared door, built from the domain schemas. */
+export function peRouteTable<S extends PeApiSchemas>(schemas: S) {
   const accessSchema = schemas.accessSchema as S["accessSchema"];
   const pluginStatusSchema = schemas.pluginStatusSchema as S["pluginStatusSchema"];
   const addProviderRequestSchema =
@@ -944,22 +946,77 @@ export function definePeApi<
       "human-or-pea",
     ),
   } as const;
+  return peRoutes;
+}
+/** The route table `definePeApi` serves, for a schema set. */
+export type PeRouteTable<S extends PeApiSchemas> = ReturnType<typeof peRouteTable<S>>;
+/** What any table entry carries for typing a call. */
+type PeRouteLike = { path: string; body: z.ZodType; output: z.ZodType };
+type ParamNames<P extends string> = P extends `${string}:${infer N}/${infer Tail}`
+  ? N | ParamNames<Tail>
+  : P extends `${string}:${infer N}`
+    ? N
+    : never;
+export type PeRouteInput<T extends Record<string, PeRouteLike>, K extends keyof T> = ([
+  ParamNames<T[K]["path"]>,
+] extends [never]
+  ? { params?: never }
+  : { params: Record<ParamNames<T[K]["path"]>, string> }) &
+  (undefined extends z.input<T[K]["body"]>
+    ? { body?: z.input<T[K]["body"]> }
+    : { body: z.input<T[K]["body"]> }) & {
+    query?: Record<string, string | number | boolean | undefined>;
+  };
+export type PeRouteOutput<T extends Record<string, PeRouteLike>, K extends keyof T> = z.output<
+  T[K]["output"]
+>;
+export interface PeClient<T extends Record<string, PeRouteLike>> {
+  call<K extends keyof T & string>(
+    id: K,
+    input: PeRouteInput<T, K>,
+    init?: RequestInit,
+  ): Promise<PeRouteOutput<T, K>>;
+  /** An untyped caller (a Page script, an agent): the id and raw input are checked at runtime. */
+  invoke(id: string, raw: unknown): Promise<unknown>;
+  response<K extends keyof T & string>(
+    id: K,
+    input: PeRouteInput<T, K>,
+    init?: RequestInit,
+  ): Promise<Response>;
+  url<K extends keyof T & string>(id: K, input: PeRouteInput<T, K>): string;
+}
+/**
+ * The served API over one route table. Named, so a declaration names it instead of inlining the
+ * whole table into every export.
+ */
+export interface PeApi<T extends Record<string, PeRouteLike>> {
+  peRoutes: T;
+  isPeRouteId(id: string): id is keyof T & string;
+  peRouteUrl<K extends keyof T & string>(
+    id: K,
+    input: Omit<PeRouteInput<T, K>, "body">,
+    base?: string,
+  ): string;
+  matchPeRoute(
+    method: string,
+    path: string,
+  ): { id: keyof T & string; route: T[keyof T]; params: Record<string, string> } | undefined;
+  servePeRoute(
+    request: Request,
+    handle: (request: Request) => Promise<Response>,
+  ): Promise<Response>;
+  createPeClient(
+    base?: string,
+    transport?: (url: string, init?: RequestInit) => Promise<Response>,
+  ): PeClient<T>;
+  peClientScript(): string;
+}
 
+export function definePeApi<S extends PeApiSchemas>(schemas: S): PeApi<PeRouteTable<S>> {
+  const peRoutes = peRouteTable(schemas);
   type PeRouteId = keyof typeof peRoutes;
-  type ParamNames<P extends string> = P extends `${string}:${infer N}/${infer Tail}`
-    ? N | ParamNames<Tail>
-    : P extends `${string}:${infer N}`
-      ? N
-      : never;
-  type PeInput<K extends PeRouteId> = ([ParamNames<(typeof peRoutes)[K]["path"]>] extends [never]
-    ? { params?: never }
-    : { params: Record<ParamNames<(typeof peRoutes)[K]["path"]>, string> }) &
-    (undefined extends z.input<(typeof peRoutes)[K]["body"]>
-      ? { body?: z.input<(typeof peRoutes)[K]["body"]> }
-      : { body: z.input<(typeof peRoutes)[K]["body"]> }) & {
-      query?: Record<string, string | number | boolean | undefined>;
-    };
-  type PeOutput<K extends PeRouteId> = z.output<(typeof peRoutes)[K]["output"]>;
+  type PeInput<K extends PeRouteId> = PeRouteInput<typeof peRoutes, K>;
+  type PeOutput<K extends PeRouteId> = PeRouteOutput<typeof peRoutes, K>;
   const isPeRouteId = (id: string): id is PeRouteId => Object.hasOwn(peRoutes, id);
 
   function peRouteUrl<K extends PeRouteId>(
