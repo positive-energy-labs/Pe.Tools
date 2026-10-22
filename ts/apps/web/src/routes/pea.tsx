@@ -1,4 +1,9 @@
-import { createFileRoute, retainSearchParams, stripSearchParams, type SearchSchemaInput } from "@tanstack/react-router";
+import {
+  createFileRoute,
+  retainSearchParams,
+  stripSearchParams,
+  type SearchSchemaInput,
+} from "@tanstack/react-router";
 import { readLink } from "@pe/agent-contracts";
 import { routeSearch } from "#/route/route-owner";
 import { ChatShell } from "#/chat/chat-shell";
