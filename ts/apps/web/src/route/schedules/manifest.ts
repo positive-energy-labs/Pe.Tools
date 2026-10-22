@@ -8,7 +8,6 @@ import {
   scheduleReads,
   splitScheduleCellKey,
   type ActionStatus,
-  type RoutePage,
   type ScheduleGridDocument,
   type WorkKey,
 } from "@pe/agent-contracts";
@@ -36,20 +35,17 @@ export type ScheduleGridAction = "read";
  * `workspaceId`, the grid's table view and its located `cell`) and the Page-only identity a
  * schedule read discovers, which no link reopens.
  */
-export type ScheduleGridPage = RoutePage<"schedules"> & {
-  /** The saved capture drawn; a read or the Work's basis sets it. */
-  captureId: string;
-  /** Cells the last push refused as stale while its readback failed: no C to draw, read again. */
-  unread: number;
-  /** The last push's refused cells, by key, in the host's words; each draws on its cell. */
-  refused: Record<string, string>;
-};
-
 const scheduleGridPage = routeAddress("schedules").schema.extend({
+  /** The saved capture drawn; a read or the Work's basis sets it. */
   captureId: z.string().default(""),
+  /** Cells the last push refused as stale while its readback failed: no C to draw, read again. */
   unread: z.number().default(0),
+  /** The last push's refused cells, by key, in the host's words; each draws on its cell. */
   refused: z.record(z.string(), z.string()).default({}),
 });
+// The schema's own output, not `RoutePage<"schedules">`: that type makes an optional field's key
+// required (`lines: … | undefined`), which the zod object it extends does not (`lines?:`).
+export type ScheduleGridPage = z.output<typeof scheduleGridPage>;
 
 type Ctx = RouteCtx<ScheduleGridDocument, ScheduleGridReading, ScheduleGridPage>;
 

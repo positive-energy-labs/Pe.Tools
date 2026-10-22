@@ -1,10 +1,15 @@
 import { useState } from "react";
-import type { RouteStatePatch, ScheduleGridDocument } from "@pe/agent-contracts";
+import {
+  showCellValue,
+  type RouteStatePatch,
+  type ScheduleGridDocument,
+} from "@pe/agent-contracts";
 
 import { Button } from "@pe/kit/lang/button";
+import { cellFromTrichotomy } from "@pe/kit/lang/cell";
 import { Section } from "#/components/lang/section";
 import { reviewAddresses } from "#/components/work/band";
-import { ScheduleProposals } from "#/route/schedules/review";
+import { WorkLines, type WorkTab } from "#/components/work/lines";
 import { StaleResolve } from "#/route/schedules/stale-resolve";
 
 /** Ask A on the band: the real `StaleResolve` over three stale LOAD cells. */
@@ -44,6 +49,7 @@ const STALE_DOC: ScheduleGridDocument = {
 function StaleSpecimen({ say }: { say: (text: string) => void }) {
   const [doc, setDoc] = useState(STALE_DOC);
   const [revision, setRevision] = useState(1);
+  const [tab, setTab] = useState<WorkTab | "all">();
   const write = async (patches: RouteStatePatch[]) => {
     setDoc((current) => {
       const keys = patches.map((p) => String(p.path[1]));
@@ -65,23 +71,31 @@ function StaleSpecimen({ say }: { say: (text: string) => void }) {
   };
   return (
     <div className="flex flex-col gap-2">
-      <ScheduleProposals
-        pending={reviewAddresses(doc.cells)}
-        stale={doc.basis?.stale ?? []}
-        staleBar={
-          <StaleResolve
-            doc={doc}
-            write={write}
-            revision={revision}
-            push={async () => say("SIMULATED · push of the re-staged cells")}
-            unread={0}
-            readAgain={async () => {}}
-          />
-        }
+      {/* The apply verb's stale question, then the Work lines over the same cells. */}
+      <StaleResolve
+        doc={doc}
+        write={write}
+        revision={revision}
+        push={async () => say("SIMULATED · push of the re-staged cells")}
+        unread={0}
+        readAgain={async () => {}}
+      />
+      <WorkLines
+        cells={reviewAddresses(doc.cells).map(([key, cell]) => {
+          const value = showCellValue((cell.staged ?? cell.proposal)?.value);
+          return {
+            key,
+            column: "LOAD",
+            row: `r${key.split("::")[0]} (Revit now ${STALE_NOW[key] ?? "?"})`,
+            value,
+            look: cellFromTrichotomy(cell, { value }, showCellValue),
+            locate: () => say(`locate ${key}`),
+          };
+        })}
+        store={doc.cells}
         wire={{ segment: "cells", write, revision }}
-        columnHeader={() => "LOAD"}
-        currentText={(key) => STALE_NOW[key] ?? null}
-        locate={() => {}}
+        tab={tab}
+        onTab={setTab}
       />
       <span>
         <Button

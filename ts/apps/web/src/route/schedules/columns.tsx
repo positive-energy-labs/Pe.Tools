@@ -2,7 +2,6 @@ import { useMemo } from "react";
 import {
   scheduleCellKey,
   showCellValue,
-  splitScheduleCellKey,
   transitionPatches,
   type MeasuredValue,
 } from "@pe/agent-contracts";
@@ -48,18 +47,6 @@ export const scheduleLock = (binding: Binding | undefined): string | null =>
         ? `blocked: ${binding.blocker}`
         : "read-only — this parameter cannot be written from a schedule";
 
-/** What the reading says Revit holds at a cell key: its binding's display value, else the row's. */
-export const cellText = (snapshot: Snapshot | null | undefined, key: string) => {
-  const { rowNumber, columnNumber } = splitScheduleCellKey(key);
-  const row = snapshot?.rows.find((candidate) => candidate.rowNumber === rowNumber);
-  const columnIndex =
-    snapshot?.columns.findIndex((column) => column.columnNumber === columnNumber) ?? -1;
-  return (
-    row?.bindings.find((binding) => binding.columnNumber === columnNumber)?.displayValue ??
-    (columnIndex >= 0 ? (row?.values[columnIndex] ?? null) : null)
-  );
-};
-
 /** A stale key's note (`basis.stale`), in the grid and the pending strip alike. */
 export const STALE_NOTE = "stale: Revit changed under your staged value · accept to stage it again";
 
@@ -85,7 +72,7 @@ export const staleAnswer = (key: string, cell: GridCell, kind: "accept" | "deny"
  * A schedule cell's own verbs. A stale key is answered by accept (the contract's `stage`, again)
  * or deny (`unstage`); the wire's write drops the key from `basis.stale` in the same write.
  */
-export function scheduleTransitions(
+function scheduleTransitions(
   wire: CellWire,
   key: string,
   cell: GridCell,
@@ -120,7 +107,7 @@ export interface ScheduleCellWrites {
  * draws it, and the review list draws the SAME cell, so a staged value is refined where it is
  * reviewed.
  */
-export function scheduleCellState(
+function scheduleCellState(
   { cells, wire, stale, refused, stageEdit, parseMeasured }: ScheduleCellWrites,
   row: ScheduleRow,
   columnNumber: number,

@@ -12,7 +12,8 @@ import { familyCellEntries } from "#/families/staged";
 import type { SalvagedExclusion } from "#/families/store";
 import { filterWords } from "#/families/scope-band";
 import { useFamiliesWorkspace } from "#/families/workspace-context";
-import { ParamCell } from "#/families/matrix-columns";
+import { cellFromTrichotomy } from "@pe/kit/lang/cell";
+import { WorkLines, type WorkCell } from "#/components/work/lines";
 import { ARTIFACT } from "#/families/manifest";
 import { Inspect } from "#/route/inspect";
 import { cn } from "@pe/kit/lib/utils";
@@ -123,113 +124,84 @@ export function FamiliesReceipts() {
 }
 
 /**
- * THE PROPOSALS LIST — under the Work sentence, every pending cell on the table, one `ReviewRow` each: the matrix cell's
- * own verbs (exactly `availableTransitions`, over the families wire), findable without scrolling
- * a large matrix. Its counts and aggregates are the Situation's Work sentence. Plan reads staged cells.
+ * THE FAMILIES WORK SLOT — the native patch as one row, then every pending cell as `WorkLines`, one
+ * line per parameter aggregated across families (`PE_G___Model → FXMQ20 ×12 · … · pea · 15 cells ✓
+ * ✕`, MAP ruling 60). Its tab is the route's `lines` field. Plan reads staged cells.
  */
 export function FamiliesProposalsBand() {
-  const { cells, rows, params, wire, plan, store, live, parse } = useFamiliesWorkspace();
+  const { cells, wire, plan, store } = useFamiliesWorkspace();
   const patch = store.handle.work.doc?.patch ?? ({} as FamiliesPatchCell);
   const patchSource = (patch.staged ?? patch.proposal)?.value;
   // A plan row with no resolved id (no `hashKey`) is a name the host refused, in its own words.
-  const orphans = new Map(
-    (plan?.entries ?? []).flatMap((entry) =>
-      entry.hashKey === undefined && entry.flag ? [[entry.id, entry.flag] as const] : [],
-    ),
+  const orphans = (plan?.entries ?? []).flatMap((entry) =>
+    entry.hashKey === undefined && entry.flag ? [[entry.id, entry.flag] as const] : [],
   );
-  const entries = familyCellEntries(cells).filter(
-    (entry) => entry.cell.proposal != null || entry.cell.staged != null,
+  // ponytail: no chip locates its parameter × type cell yet; the pivot grid has no focus door.
+  const pending: WorkCell[] = familyCellEntries(cells).flatMap(
+    ({ key, cell, parameter, familyName, typeName }) => {
+      if (cell.proposal == null && cell.staged == null) return [];
+      const value = showFamilyCell((cell.staged ?? cell.proposal)?.value ?? { value: "" });
+      return [
+        {
+          key,
+          column: parameter,
+          row: `${familyName} · ${typeName}`,
+          value,
+          look: cellFromTrichotomy(cell, { value }, showFamilyCell),
+        },
+      ];
+    },
   );
-  const current = (entry: (typeof entries)[number]) => {
-    const key = params.find((param) => param.name === entry.parameter)?.key;
-    const row = rows.find(
-      (r) => r.familyName === entry.familyName && r.typeName === entry.typeName,
-    );
-    return key && row ? (row.values[key] ?? "") : null;
-  };
-  if (!entries.length && !patchSource) return null;
+  if (!pending.length && !patchSource) return null;
+  const patchRow = patchSource ? (
+    <div aria-label="Native family patch">
+      <ReviewRow
+        wire={{ ...store.wire, segment: null }}
+        address="patch"
+        label={<span className="face-mono text-ink-2">native FF patch</span>}
+        cell={patch}
+        facts={{ value: <ValueDiff from={null} to={patchSource.path} /> }}
+        show={(value) =>
+          `${(value as PodDraftSource).path} · different patch bytes; inspect proposed source below`
+        }
+      />
+      {(["proposal", "staged"] as const).map((rung) =>
+        patch[rung] ? (
+          <details key={rung} className="t-small">
+            <summary>
+              Review exact {rung} patch · {patch[rung]!.value.path}
+            </summary>
+            <pre className="whitespace-pre-wrap break-words face-mono">
+              {patch[rung]!.value.content}
+            </pre>
+          </details>
+        ) : null,
+      )}
+      {patch.staged != null && pending.some(({ look }) => look.stage === "staged") ? (
+        <OutcomeLine
+          kind="refused"
+          label="choose one staged edit lane"
+          says="Unstage the native patch or the per-type cells before planning."
+        />
+      ) : null}
+    </div>
+  ) : null;
   return (
     // In the head's Work slot: that block is fixed and scrolls itself, so the grid never moves (F-R4-1).
-    <section aria-label="proposals" className="flex flex-col">
-      {patchSource ? (
-        <div aria-label="Native family patch">
-          <ReviewRow
-            wire={{ ...store.wire, segment: null }}
-            address="patch"
-            label={<span className="face-mono text-ink-2">native FF patch</span>}
-            cell={patch}
-            facts={{ value: <ValueDiff from={null} to={patchSource.path} /> }}
-            show={(value) =>
-              `${(value as PodDraftSource).path} · different patch bytes; inspect proposed source below`
-            }
-          />
-          {(["proposal", "staged"] as const).map((rung) =>
-            patch[rung] ? (
-              <details key={rung} className="t-small">
-                <summary>
-                  Review exact {rung} patch · {patch[rung]!.value.path}
-                </summary>
-                <pre className="whitespace-pre-wrap break-words face-mono">
-                  {patch[rung]!.value.content}
-                </pre>
-              </details>
-            ) : null,
-          )}
-          {patch.staged != null && entries.some(({ cell }) => cell.staged != null) ? (
-            <OutcomeLine
-              kind="refused"
-              label="choose one staged edit lane"
-              says="Unstage the native patch or the per-type cells before planning."
-            />
-          ) : null}
-        </div>
-      ) : null}
-      {entries.map((entry) => (
-        <div key={entry.key}>
-          <ReviewRow
-            wire={wire}
-            address={entry.key}
-            label={
-              <span className="face-mono text-ink-2" data-proposal-row={entry.key}>
-                {entry.familyName} · {entry.typeName} · {entry.parameter}
-              </span>
-            }
-            cell={entry.cell}
-            facts={{
-              value: (
-                <ValueDiff
-                  from={current(entry)}
-                  to={showFamilyCell(
-                    (entry.cell.staged ?? entry.cell.proposal)?.value ?? { value: "" },
-                  )}
-                />
-              ),
-            }}
-            show={showFamilyCell}
-            editor={(() => {
-              // The matrix's own cell, editable: refine a staged value where it is reviewed.
-              const row = rows.find(
-                (r) => r.familyName === entry.familyName && r.typeName === entry.typeName,
-              );
-              const col = params.find((param) => param.name === entry.parameter);
-              return row && col ? (
-                <ParamCell
-                  row={row}
-                  col={col}
-                  live={live}
-                  propose={store.actions.propose}
-                  parse={parse}
-                />
-              ) : undefined;
-            })()}
-          />
-          {/* Orphaned: the plan could not resolve this family by name. Clearing stays free. */}
-          {orphans.has(entry.familyName) ? (
-            <OutcomeLine kind="refused" label="orphaned" says={orphans.get(entry.familyName)} />
-          ) : null}
-        </div>
+    <>
+      <WorkLines
+        cells={pending}
+        store={cells}
+        wire={wire}
+        tab={store.page.lines}
+        onTab={(lines) => store.setPage({ lines })}
+        above={patchRow}
+      />
+      {/* Orphaned: the plan could not resolve these families by name. Clearing stays free. */}
+      {orphans.map(([family, flag]) => (
+        <OutcomeLine key={family} kind="refused" label={`orphaned ${family}`} says={flag} />
       ))}
-    </section>
+    </>
   );
 }
 

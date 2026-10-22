@@ -21,8 +21,10 @@ describe("route addresses match their manifests", () => {
     for (const [route, manifest] of ROUTES) {
       expect(manifest.address).toBe(route);
       const page = (manifest.page as unknown as { parse: (v: unknown) => object }).parse({});
-      const { keys, agent } = routeAddress(route);
-      for (const key of [...keys, ...agent.keys]) expect(page).toHaveProperty(key);
+      const { keys, agent, defaults } = routeAddress(route);
+      // An optional field (absent = its default) parses to no key at all.
+      for (const key of [...keys, ...agent.keys])
+        expect(key in page || (defaults as Record<string, unknown>)[key] === undefined).toBe(true);
       expect(urlPage(manifest as never)!.keys).toEqual(keys);
       expect(Object.keys(agent.write(page))).toEqual(agent.keys);
     }

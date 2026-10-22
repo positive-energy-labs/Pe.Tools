@@ -19,6 +19,15 @@ export const entityFields = {
   pane: field(z.enum(["spec", "output"]).default("spec"), { agent: "set" }),
 };
 
+/**
+ * The Work slot's tab on a route that draws its Work as lines (MAP ruling 60): Pea's proposals,
+ * your staged values, or all; absent = Pea's while it has any.
+ */
+export const workLinesField = field(z.enum(["pea", "yours", "all"]).optional(), {
+  url: "replace",
+  agent: "set",
+});
+
 /** Comma-separated names, each with its raw text (escapes kept) and its name (escapes read). */
 const split = (text: string): { raw: string; name: string }[] => {
   if (text === "") return [];

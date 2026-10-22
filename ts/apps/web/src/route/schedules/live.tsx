@@ -12,7 +12,7 @@ import {
 } from "@pe/agent-contracts";
 import { changedInRevit, previousOf, useHostStatusSlice } from "#/readings";
 import { refuse, useRoute } from "#/route";
-import { useRouteLease } from "#/route/view-bridge";
+import { scheduleView, useScheduleLease } from "./lease";
 import { manifestChords } from "#/route/keys";
 import { KeysNode, useScopeKeys } from "@pe/kit/keys";
 import { EntityRouteView } from "#/route/entity";
@@ -23,7 +23,7 @@ import { scheduleSpec, schedulesManifest } from "./manifest";
 import { StaleResolve } from "./stale-resolve";
 import { ScheduleGridWorkspace, scheduleCellWire, type ScheduleGridState } from "./workspace";
 import { SCHEDULE_STAGES, scheduleRung } from "./stage";
-import { ScheduleReview } from "./review";
+import { ScheduleWorkLines } from "./work-lines";
 import {
   advanceScheduleHistory,
   sameScheduleDoc,
@@ -258,16 +258,7 @@ export function LiveScheduleGridWorkspace({
     }
   };
   const state: ScheduleGridState = {
-    // The grid's view and its located cell are contract fields: a link reopens them, Pea sets them.
-    table: { sorts: page.sort, query: page.query, hiddenColumns: page.hidden },
-    // Typing, a header sort and a column toggle are gestures: each rewrites this history entry.
-    setTable: (next) =>
-      setPage(
-        { query: next.query, sort: next.sorts, hidden: next.hiddenColumns ?? [] },
-        { history: "replace" },
-      ),
-    cell: page.cell,
-    locate: (cell) => setPage({ cell }),
+    ...scheduleView(handle.page),
     slice: work.doc,
     revision: work.revision,
     hydrated: work.current || work.revision !== null,
@@ -293,29 +284,7 @@ export function LiveScheduleGridWorkspace({
       : undefined,
   };
 
-  const cellStates = Object.values(work.doc?.cells ?? {});
-  useRouteLease(handle, {
-    url,
-    visible,
-    context: {
-      stage: page.stage,
-      workspaceId: page.workspaceId,
-      captureId: shown?.id ?? null,
-      document: shown?.target ?? null,
-    },
-    facts: {
-      schedule: shown?.snapshot.scheduleName ?? null,
-      columns:
-        shown?.snapshot.columns.map((column) => ({
-          key: `c${column.columnNumber}`,
-          header: column.headerText,
-        })) ?? [],
-      rows: shown?.snapshot.rows.length ?? 0,
-      staged: cellStates.filter((cell) => cell.staged).length,
-      proposals: cellStates.filter((cell) => cell.proposal != null).length,
-      freshness,
-    },
-  });
+  useScheduleLease(handle, { url, visible, shown, freshness });
 
   const resolve = (
     <StaleResolve
@@ -330,9 +299,18 @@ export function LiveScheduleGridWorkspace({
   // Stale resolve is apply's question (ruling 39): it stands on apply's flag while it has one.
   const staleStaged = (work.doc?.basis?.stale ?? []).some((s) => work.doc?.cells[s.key]?.staged);
   const auditRef = useRef<HTMLDivElement | null>(null);
+  // The Work slot: one line per column (ruling 60); its tab is the route's `lines` field.
+  const lines = (
+    <ScheduleWorkLines state={state} tab={page.lines} onTab={(next) => setPage({ lines: next })} />
+  );
   const audit = (
     <div ref={auditRef} className="flex size-full min-h-0 min-w-0 flex-col">
-      {framed ? null : <ScheduleReview state={state} staleBar={resolve} />}
+      {framed ? null : (
+        <>
+          {resolve}
+          {lines}
+        </>
+      )}
       {render ? (
         render(state)
       ) : (
@@ -355,7 +333,7 @@ export function LiveScheduleGridWorkspace({
         work={(_, sentence) => (
           <>
             {sentence}
-            <ScheduleReview state={state} />
+            {lines}
           </>
         )}
         stages={SCHEDULE_STAGES}
