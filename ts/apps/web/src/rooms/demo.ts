@@ -1,10 +1,10 @@
 import type { RoomsSnapshot } from "@pe/host-contracts/generated";
 import type { TakeoffPlanImage } from "#/takeoff/level-plan";
-import fixture from "./fixtures/trace.json";
-import type { TraceData } from "./layers";
+import type { TraceRead } from "./layers";
 
 export const DEMO_VIEW = "Fixture level plan";
-export const DEMO_TRACE = fixture as TraceData;
+/** The demo has no solver trace: a trace is a Revit reading, never a fixture (the saved JSON was purged). */
+export const DEMO_TRACE: TraceRead = { data: null, none: "no trace in the fixture review" };
 const rectangles = [
   ["zone", 0, 0, 40, 24],
   ["room", 0, 0, 20, 12],

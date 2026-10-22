@@ -235,7 +235,7 @@ export function RoomsRoute({ url = true }: { url?: boolean } = {}) {
       >
         {demo && (
           <p className="px-2 py-1 t-small">
-            Fixture review: synthetic rooms and plan, saved solver trace. No Revit capture.
+            Fixture review: synthetic rooms and plan, no solver trace. No Revit capture.
           </p>
         )}
         {page.stage === "history" ? (
@@ -248,7 +248,7 @@ export function RoomsRoute({ url = true }: { url?: boolean } = {}) {
             setPage={setPage}
             focus={page.focus}
             plan={demo ? { ...plan, image: { plan: DEMO_PLAN }, error: null } : plan}
-            trace={demo ? { data: DEMO_TRACE, none: null } : trace}
+            trace={demo ? DEMO_TRACE : trace}
             hovered={hovered}
             setHovered={setHovered}
             doc={handle.work.doc}
