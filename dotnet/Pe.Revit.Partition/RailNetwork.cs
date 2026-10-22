@@ -60,7 +60,7 @@ public static partial class Rails {
     private const double ParallelDeg = 3.0, DoorBandFt = 0.5;
 
     // FOOTGUN: reach from a gap's axis, past its wall thickness, to a door leaf that spans the gap. IFC panels sit off
-    // the wall plane: Duryee Level 1 door 1310394 lies 1.24 ft from its 0.58 ft wall's axis, 0.95 ft clear of the face.
+    // the wall plane: Project D Level 1 door 1310394 lies 1.24 ft from its 0.58 ft wall's axis, 0.95 ft clear of the face.
     private const double LeafFt = 1.0;
 
     // FOOTGUN: fraction of a gap that header wall ink must cover to call it headed.

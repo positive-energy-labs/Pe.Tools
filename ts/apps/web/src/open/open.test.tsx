@@ -187,7 +187,7 @@ describe("launch plan", () => {
       "pe-revit doc open C:\\Projects\\Clinic\\Clinic-Fitout.rvt --id <minted> --upgrade --links allow",
     ]);
     const pea = launchPlan(
-      { ...EMPTY_DRAFT, doc: row("Chadds-Ford-Coord.rvt"), target: "new", owner: "pea" },
+      { ...EMPTY_DRAFT, doc: row("Project-A-Coord.rvt"), target: "new", owner: "pea" },
       world,
       rows,
     );

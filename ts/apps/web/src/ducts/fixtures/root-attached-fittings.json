@@ -1,5 +1,5 @@
 {
-  "provenance": "Regression excerpts from retained Chadds snapshot cb808a82d7c48f25a487fb80de72185c8c557c2e757e29f863b7adba1d6e669c. Root equipment and fitting connector geometry are retained; tests synthesize only the downstream terminal and group. This is not a complete Chadds solve.",
+  "provenance": "Regression excerpts from retained Project A snapshot cb808a82d7c48f25a487fb80de72185c8c557c2e757e29f863b7adba1d6e669c. Root equipment and fitting connector geometry are retained; tests synthesize only the downstream terminal and group. This is not a complete Project A solve.",
   "cases": [
     {
       "fitting": {

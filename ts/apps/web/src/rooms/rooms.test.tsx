@@ -220,8 +220,8 @@ test("callouts: a 10 by 10 ft room at 4 px/ft and scale 1.5 holds its own pin", 
   expect([pin!.pin, pin!.leader]).toEqual([[250, 390], false]);
 });
 
-test("fit: Duryee L1's crop on a 500 by 780 pane lets a 60 sf room hold its pin; zoomed out it leaves", () => {
-  // w16 vi-duryee registration: 72.96 by 84.72 ft. The world is PLAN_PX_PER_FT exactly, so the
+test("fit: Project D L1's crop on a 500 by 780 pane lets a 60 sf room hold its pin; zoomed out it leaves", () => {
+  // w16 vi-project-d registration: 72.96 by 84.72 ft. The world is PLAN_PX_PER_FT exactly, so the
   // fitted box is the crop in feet times that density.
   const crop = {
     w: 39.94513006599976 + 33.01686225247103,

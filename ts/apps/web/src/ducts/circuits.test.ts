@@ -81,7 +81,7 @@ function fixture() {
   return {
     coordinateEncoding: "native-double",
     document: {
-      title: "Purpose fixture, NOT Chadds",
+      title: "Purpose fixture, NOT Project A",
       readAt: "2026-10-15T00:00:00Z",
       elapsedMs: 0,
     },

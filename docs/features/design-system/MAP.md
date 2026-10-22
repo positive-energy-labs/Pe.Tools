@@ -191,7 +191,7 @@ Legacy nouns under review: band, readout, read status, rules.
 43. Press 1 of apply on `/families` plans one `families.plan` hop per staged family; accepted for
    now ("if the difference is big fix", it is seconds and one summed receipt). Owed: one plan call
    over every staged draft, so one press is one journal row.
-44. "The picker needs to grow a callback to sort to bottom certain items ... if I'm in Chadds and 50
+44. "The picker needs to grow a callback to sort to bottom certain items ... if I'm in Project A and 50
    mech fans r loaded but only 10 placed, the picker should reflect this. It'll make more
    performant reads the default path, and this irrelevance retaking is a good ux practice." A
    picker rung ranks by relevance: a route supplies a sink rule and the Ladder keeps the route's
@@ -248,7 +248,7 @@ Legacy nouns under review: band, readout, read status, rules.
    captures from the host, as `/families` lists its archived readings. An empty Archived stage is
    a bug.
 58. "I like history better." The third stage is History, not Archived: "History of schedule in
-   Chadds". The stage key `archived` becomes `history` in the kernel, the URL and every stage
+   Project A". The stage key `archived` becomes `history` in the kernel, the URL and every stage
    declaration. "Readings" was rejected: it breaks the stage sentence, and a Reading is any Revit
    observation, the live one included.
 59. Work slot protoui round 1 (A tabs+ledger rows, B one at a time, C grouped by column, D the

@@ -1169,7 +1169,7 @@ internal sealed class RevitDataRequestService {
         }
     }
 
-    [Op("revit.context.show-elements", Does = "Show elements to the person at the window: select them and zoom to their extents in the given view, or by default in a view that can show them (the active model view when it displays them, else the {3D} view or a plan on their level; a sheet or schedule is never zoomed). Answers which ids it showed, which were missing, and the view. Changes the selection and the zoom only, never the model. Needs the active windowed document; a headless document refuses.", Title = "Show Elements (Point At)", Finds = ["show", "select", "selection", "zoom", "focus", "point-at", "highlight", "find", "navigate", "elements", "view"], Tier = OpTier.Default, Example = "{ \"elementIds\": [12345, 67890] }")]
+    [Op("revit.context.show-elements", Does = "Show elements to the person at the window: select them, box the default {3D} view (else the user's {3D - username}, else a made 'Pe 3D') around them with a generous margin, open it and zoom to fit. With viewId it selects and zooms in that view instead and edits nothing; with selectOnly it only selects. Answers which ids it showed, which were missing, and the view. The section box is its only edit: one undoable transaction on that view, never a model element. Needs the active windowed document; a headless document refuses.", Title = "Show Elements (Point At)", Finds = ["show", "select", "selection", "zoom", "focus", "point-at", "section-box", "3d", "highlight", "find", "navigate", "elements", "view"], Tier = OpTier.Default, Example = "{ \"elementIds\": [12345, 67890] }")]
     private static RevitShowElementsData ShowElementsCore(RevitShowElementsRequest request, RevitDocument activeDocument) {
         var document = activeDocument.Value;
         var requested = (request.ElementIds ?? []).Distinct().ToList();
@@ -1198,25 +1198,28 @@ internal sealed class RevitDataRequestService {
         string note;
         View target;
         try {
-            if (view != null) {
+            if (request.SelectOnly) {
+                ui.Selection.SetElementIds(ids);
+                target = ui.ActiveView;
+                note = $"Selected {shown.Count}; '{target.Name}' left as it was.";
+            } else if (view != null) {
                 var box = ui.SelectAndZoom(ids, view);
                 target = ui.ActiveView;
                 note = box is null
                     ? $"Selected {shown.Count}; none has a bounding box, so '{target.Name}' did not zoom."
                     : $"Selected {shown.Count} and zoomed '{target.Name}' to them.";
             } else {
-                var shownIn = ui.ShowInBestView(ids);
-                target = shownIn.View;
-                note = $"Selected {shown.Count} and zoomed '{target.Name}' to them";
-                if (shownIn.SwitchedFrom != null) note += $" (switched from '{shownIn.SwitchedFrom}', which cannot show them)";
-                if (shownIn.Created) note += "; the document had no 3D view, so 'Pe 3D' was made";
-                if (!shownIn.ShowsAll) note += "; the view hides some of them (filter, section box, or visibility)";
+                var boxed = ui.BoxInThreeD(ids);
+                target = boxed.View;
+                note = $"Selected {shown.Count} and boxed '{target.Name}' around them";
+                if (boxed.Created) note += "; the document had no {3D} view, so 'Pe 3D' was made";
+                if (!boxed.ShowsAll) note += "; the view still hides some of them (filter, phase, or visibility)";
                 note += ".";
             }
-        } catch (Autodesk.Revit.Exceptions.InvalidOperationException ex) {
+        } catch (Autodesk.Revit.Exceptions.ApplicationException ex) {
             throw BridgeOperationExceptions.Conflict("Revit could not show the elements.",
                 [BridgeOperationExceptions.Issue("$", "ShowElementsRefused", ex.Message,
-                    "Close any modal dialog or edit mode in Revit and retry.")]);
+                    "Close any modal dialog or edit mode in Revit and retry; in a workshared model another user may own the {3D} view.")]);
         }
 
         if (missing.Count != 0) note += $" {missing.Count} id(s) not found.";

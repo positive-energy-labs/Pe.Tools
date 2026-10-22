@@ -137,12 +137,14 @@ public record ElementContextQueryData(
     List<RevitDataIssue> Issues
 );
 
-/// <summary>Request for revit.context.show-elements: select elements and zoom a view to them, for the person at the window.</summary>
-/// <param name="ElementIds">Element ids to select and zoom to, from any handle-returning op.</param>
-/// <param name="ViewId">Graphical view to activate and zoom; omit for the active view.</param>
+/// <summary>Request for revit.context.show-elements: select elements and show them, for the person at the window.</summary>
+/// <param name="ElementIds">Element ids to select, from any handle-returning op.</param>
+/// <param name="ViewId">Graphical view to activate and zoom instead of boxing the {3D} view; edits nothing.</param>
+/// <param name="SelectOnly">Select and nothing else: the view, its zoom and its section box stay as they are.</param>
 public record RevitShowElementsRequest(
     List<long> ElementIds,
-    long? ViewId = null
+    long? ViewId = null,
+    bool SelectOnly = false
 );
 
 /// <summary>What revit.context.show-elements selected, what it could not find, and the view it zoomed.</summary>

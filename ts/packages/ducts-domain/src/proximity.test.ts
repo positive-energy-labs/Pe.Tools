@@ -308,7 +308,7 @@ it("two ducts landing on one side face both tap it", () => {
 });
 
 it("a duct stopping 1.6 in short of an end cap's face taps the capped duct at its end", () => {
-  // Chadds 14122436 → cap 14107111 on plenum 14106988: the plenum ends at y 0, the cap face sits
+  // Project A 14122436 → cap 14107111 on plenum 14106988: the plenum ends at y 0, the cap face sits
   // CAP_THICKNESS_IN outboard of it, and the duct stops 1.6 in short of that face.
   const main = rect(1, [0, 10, 0], [0, 0, 0], 30, 30, "g1");
   const end = -(CAP_THICKNESS_IN + 1.6) * IN;
@@ -373,7 +373,7 @@ const grille = (id: number, at: number[]): Node => ({
   uniqueId: null,
 });
 
-it("a duct rising into a grille's mouth 2 in off its centre joins the grille (Chadds SA 19)", () => {
+it("a duct rising into a grille's mouth 2 in off its centre joins the grille (Project A SA 19)", () => {
   // 8750451's open end sits in grille 8747668's connector plane, 2.0 in off its centre in x.
   const riser = rect(2, [0, 0, 12], [0, 0, 10], 16, 8, "g2");
   const before = snap([riser], [grille(9, [2 * IN, 0, 12])]);
@@ -443,7 +443,7 @@ it("open ends of different classifications 0.4 in apart warn and stay open; a co
 });
 
 it("a supply branch landing on a return duct's side warns instead of tapping it", () => {
-  // Chadds 6894422:1 on 7243161: a supply end on a return main is a near miss, not a tap.
+  // Project A 6894422:1 on 7243161: a supply end on a return main is a near miss, not a tap.
   const out = inferJoints(snap([returnAir(plenum()), onSide(2, 3, 0, 0.5)]));
   expect(out.taps).toEqual([]);
   expect(out.findings.map((f) => [f.id, f.kind])).toEqual([
@@ -459,7 +459,7 @@ it("a supply branch landing on a return duct's side warns instead of tapping it"
 });
 
 it("an end deep inside a duct's body, pointing across it, taps it at its nearest point", () => {
-  // Chadds 7266368:1 sits 3.3 in inside 14342882 (a real join, kaitpw checked in Revit); this
+  // Project A 7266368:1 sits 3.3 in inside 14342882 (a real join, kaitpw checked in Revit); this
   // one sits on the plenum's centerline, 15 in past its face.
   const deep = duct(2, [4, 0, 0], [4, 5, 0], "g2");
   const { taps, findings } = tolerate(snap([plenum(), deep]));
@@ -497,7 +497,7 @@ it("every inference is a finding a person clears; a near miss assumes nothing", 
   ]);
 });
 
-/** An 81x3.5 linear grille (Chadds 10922066): its one connector sits at its insertion point. */
+/** An 81x3.5 linear grille (Project A 10922066): its one connector sits at its insertion point. */
 const linear = (id: number, at: number[], facing?: number[]): Node => {
   const g = grille(id, at);
   const port = { ...g.connectors[0]!, size: "81x3.5", widthIn: 81, heightIn: 3.5 };
@@ -549,7 +549,7 @@ it("a captured width axis rolls a rectangular duct's faces; without one a vertic
   expect(tapsOf(riser())).toEqual([]);
 });
 
-/** A two-port 6 in round damper centred at `at` along x, its ports 0.06 in apart and both open (Chadds 13568060). */
+/** A two-port 6 in round damper centred at `at` along x, its ports 0.06 in apart and both open (Project A 13568060). */
 const damper = (id: number, at: number[], facing = false): Node => {
   const half = 0.03 * IN;
   const port = (index: number, dx: number) => ({
@@ -732,7 +732,7 @@ it("a part's port deeper than THROUGH_IN in a duct's body is placed through it: 
   expect(findings[0]!.note).toBe(
     "Rectangular Takeoff Standard fitting 9 (SA 70)'s connector sits 1.50 in inside 30x30 duct 1 (SA 1), 3.00 ft along it, not at its end; tapped there. Fix: move the part to the duct's end or face, or replace the family.",
   );
-  // A duct end 15 in inside a body is a real join kind (Chadds 7266368 on 14342882): stretched.
+  // A duct end 15 in inside a body is a real join kind (Project A 7266368 on 14342882): stretched.
   expect(gradeOf([plenum(), duct(2, [4, 0, 0], [4, 5, 0], "g2")])).toEqual([
     ["tap-by-proximity", "stretched"],
   ]);
@@ -742,7 +742,7 @@ it("a part's port deeper than THROUGH_IN in a duct's body is placed through it: 
   ]);
 });
 
-/** Chadds 8911461: a vertical 72x3 plenum, its top capped, its open bottom facing down. */
+/** Project A 8911461: a vertical 72x3 plenum, its top capped, its open bottom facing down. */
 const slotPlenum = () => {
   const s = rect(1, [0, 0, 0], [0, 0, 1.349], 72, 3, "g1");
   s.connectors = s.connectors.map((c) => ({
@@ -758,7 +758,7 @@ const slot = (z: number, facing = [0, 0, -1]) => {
   return g;
 };
 
-it("a terminal facing the wrong way in a duct's open end joins it anyway, always anomalous (Chadds 10922066)", () => {
+it("a terminal facing the wrong way in a duct's open end joins it anyway, always anomalous (Project A 10922066)", () => {
   const plenum = slotPlenum();
   const ends = [cap(8, plenum, 2)];
   const { joints, findings } = inferJoints(snap([plenum], [...ends, slot(4.75 * IN)]));

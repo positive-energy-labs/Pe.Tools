@@ -94,7 +94,7 @@ public sealed class NativeProposalTests {
 
     [Test]
     public void The_rails_verb_adopts_every_architect_room_at_the_recorded_blob_area() {
-        // Riverbend (project-c): TakeoffAtlas.Partition adopts architect Rooms. `answer` is the blob solver's recorded
+        // Project C (project-c): TakeoffAtlas.Partition adopts architect Rooms. `answer` is the blob solver's recorded
         // answer; heights are faked, adoption is geometry. An architect room comes back at its own area, as a locked one.
         var directory = PrivateFixtures.Dir("project-c/partition/live");
         JToken Load(string name) {

@@ -37,7 +37,7 @@ TRUTH = {
     "project-a-main-09-doors": "project-a/truth/Main Level.json",
     "project-c-live": "project-c/truth/Level 2.json",
     "project-c-level2": "project-c/truth/Level 2.json",
-    "duryee-level1": "duryee/truth/Level 1.json",
+    "project-d-level1": "project-d/truth/Level 1.json",
 }
 COLUMNS = [
     ("straight", "{:.3f}"), ("vert/100ft", "{:.1f}"), ("ortho", "{:.3f}"), ("ink_p50", "{:.2f}"),

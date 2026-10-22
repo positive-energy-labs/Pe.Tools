@@ -313,7 +313,17 @@ function HelpBody({
           this route draws no panes to explain
         </div>
       )}
-      {docs ? <div className="shrink-0 overflow-y-auto px-8 pt-3 pb-8 t-prose">{docs}</div> : null}
+      {docs ? (
+        <div
+          className="shrink-0 overflow-y-auto px-8 pt-3 pb-8 t-prose"
+          // A link in the prose is a "take me there": the page it lands on is the answer, so the help closes.
+          onClick={(e) => {
+            if ((e.target as HTMLElement).closest("a")) close();
+          }}
+        >
+          {docs}
+        </div>
+      ) : null}
       {utilities ? (
         <div className="hairline-t flex shrink-0 items-center gap-3 px-8 py-3">
           <Button

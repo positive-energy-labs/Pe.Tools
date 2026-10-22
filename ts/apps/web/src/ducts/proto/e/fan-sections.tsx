@@ -51,6 +51,7 @@ export function FanSections({
             aside={k === 0 ? "largest fan" : "fan"}
             sub={sub}
             onMouseEnter={() => light(f.owned)}
+            revitIds={f.owned}
             onClick={() => select(f.critical)}
             data-key={`fan:${f.unit}`}
           />

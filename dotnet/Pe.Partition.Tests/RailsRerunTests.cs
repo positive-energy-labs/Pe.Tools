@@ -7,16 +7,16 @@ using Pe.Revit.Space;
 namespace Pe.Partition.Tests;
 
 /// <summary>
-///     The rerun contract on Duryee Level 1's hand-drawn zones: run 1 on the bare zone; lock run 1's accepted rooms as a
+///     The rerun contract on Project D Level 1's hand-drawn zones: run 1 on the bare zone; lock run 1's accepted rooms as a
 ///     person would by materialising them; run 2 returns each locked room whole and every other room as run 1 drew it.
 /// </summary>
 public sealed class RailsRerunTests {
-    private static string DuryeeInput => Path.Combine(PrivateFixtures.Dir("duryee/partition"), "duryee-level-input.json");
-    private static string DuryeeZones => Path.Combine(PrivateFixtures.Dir("duryee/partition"), "duryee-locked.json");
+    private static string ProjectDInput => Path.Combine(PrivateFixtures.Dir("project-d/partition"), "project-d-level-input.json");
+    private static string ProjectDZones => Path.Combine(PrivateFixtures.Dir("project-d/partition"), "project-d-locked.json");
     private static readonly Handle Stub = new("stub", 0, "", null, "Detail Items", PrimKind.Solid, null, null);
 
     private static IEnumerable<TestCaseData> Zones() {
-        foreach (var id in new[] { 6692266L, 6693266L, 6693828L, 6694146L }) yield return new TestCaseData(id).SetName($"duryee-{id}");
+        foreach (var id in new[] { 6692266L, 6693266L, 6693828L, 6694146L }) yield return new TestCaseData(id).SetName($"project-d-{id}");
     }
 
     private static PartitionAnswer Solve1(PartitionInput input) =>
@@ -24,8 +24,8 @@ public sealed class RailsRerunTests {
             new ProbeHit(Stub, 0.0, input.LevelZ), new ProbeHit(Stub, 9.0, input.LevelZ + 9.0), 200.0, 0.0));
 
     private static PartitionInput Load(long id) {
-        var level = JsonConvert.DeserializeObject<PartitionInput>(File.ReadAllText(DuryeeInput))!;
-        var zone = JArray.Parse(File.ReadAllText(DuryeeZones)).Single(z => (long)z["ElementId"]! == id);
+        var level = JsonConvert.DeserializeObject<PartitionInput>(File.ReadAllText(ProjectDInput))!;
+        var zone = JArray.Parse(File.ReadAllText(ProjectDZones)).Single(z => (long)z["ElementId"]! == id);
         return level with { ZoneLoops = [zone["Outer"]!.SelectMany(p => new[] { (double)p[0]!, (double)p[1]! }).ToArray()], Proposals = [] };
     }
 
@@ -86,7 +86,7 @@ public sealed class RailsRerunTests {
             .Select(p => (p.A, p.B, Union: NetTopologySuite.Operation.OverlayNG.OverlayNGRobust.Union(
                 Solve.GeometryOf([p.A.Loop, .. p.A.Holes]).Union(Solve.GeometryOf([p.B.Loop, .. p.B.Holes])))))
             .FirstOrDefault(p => p.Union is NetTopologySuite.Geometries.Polygon);
-        Assume.That(pair.Union, Is.Not.Null, $"duryee-{id} has no two accepted rooms that touch");
+        Assume.That(pair.Union, Is.Not.Null, $"project-d-{id} has no two accepted rooms that touch");
         var union = (NetTopologySuite.Geometries.Polygon)pair.Union;
         double[] Flat(NetTopologySuite.Geometries.LineString ring) =>
             ring.Coordinates.Take(ring.NumPoints - 1).SelectMany(c => new[] { c.X, c.Y }).ToArray();

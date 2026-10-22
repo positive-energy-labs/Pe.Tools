@@ -2,7 +2,7 @@
  * The product map: every link from rooms to basis of design, what each needs, where its data is
  * stored and how ready it is. One source for the `/map` route, each route's help page, and later
  * Pea. Status is set by hand today; a route's own findings can set it later without changing this
- * shape. Ledger: `docs/features/pressure-drop/LEDGER.md` (2026-10-16).
+ * shape. Ledger: `docs/features/ducts/LEDGER.md` (2026-10-16).
  */
 
 /** works: runs without a person today; gaps: runs with assumptions or manual steps; none: no data yet. */
@@ -48,12 +48,12 @@ const PRESSURE_DROP_PARTS: MapPart[] = [
   {
     id: "fan",
     label: "Fan",
-    status: "gaps",
-    adds: "Where every path starts",
+    status: "works",
+    adds: "Where every path starts; its worst path is the ESP it must supply",
     automatic:
-      "Partly. When one unit on a network has a load system, Pe treats the others as inline.",
-    data: "Pe's inference",
-    effort: "Medium. Needs a role per unit (decision 5).",
+      "Yes. A unit is a fan when it is the system's base equipment or carries a unit airflow; a through-flow device beside a working fan is passive. You can rule either way.",
+    data: "Revit base equipment (Select Equipment), the unit airflow parameter, or your ruling in the Project Information store",
+    effort: "Easy. Assign the fan in Revit once, or rule it on the page.",
   },
   {
     id: "inline",
@@ -78,7 +78,8 @@ const PRESSURE_DROP_PARTS: MapPart[] = [
     label: "Fittings",
     status: "works",
     adds: "Elbows, transitions, takeoffs: C times velocity pressure. C comes from an ASHRAE table.",
-    automatic: "Mostly. Pe has rules for the families on Chadds except rectangular radius elbows.",
+    automatic:
+      "Mostly. Pe has rules for the firm's families except rectangular radius elbows; you can change the table under a rule.",
     data: "Tables ship with Revit. Rules are in Pe's code. Apply stores Pe's C per path on each fitting.",
     effort: "Medium. A firm rulebook, set up once.",
   },
@@ -104,49 +105,48 @@ const PRESSURE_DROP_PARTS: MapPart[] = [
   {
     id: "grille",
     label: "Grille",
-    status: "none",
-    adds: "Manufacturer static pressure at its airflow and size. Often the largest single term.",
-    automatic: "No. The firm's grille families have no performance data.",
-    data: "Revit has a slot for it: the terminal connector's pressure drop, bound to a family parameter. The numbers are only in manufacturer PDFs.",
-    effort:
-      "Hard. Per manufacturer, model and core. Price's LBP tables cover slot widths 1.5 to 6 in: 268 of the 351 LBP grilles on Chadds fit, 83 are 8 to 18 in wide.",
+    status: "gaps",
+    adds: "Manufacturer static pressure at its airflow and size. Priceable, never required.",
+    automatic:
+      "No. A grille with a drop in its slot is priced; one without counts as zero, sits in Diagnostics, and never blocks. Manufacturer tables are out of scope until terminals are final.",
+    data: "The terminal's drop parameter (slot), when a person enters it. The numbers are only in manufacturer PDFs.",
+    effort: "Deferred by the firm: terminals are finalized last, and installed grilles rarely match the spec.",
   },
   {
     id: "room",
     label: "Room",
-    status: "gaps",
+    status: "none",
     adds: "Its load sets the airflow of the grilles that serve it",
-    automatic:
-      "Partly. Units list the rooms they serve in PE_M___ServesRoom. Grilles are not linked to rooms or loads.",
+    automatic: "No. The firm does not use rooms or spaces today; the seam is typed and empty.",
     data: "Revit rooms and spaces; RHVAC",
-    effort: "Medium. Depends on the rooms and zoning work.",
+    effort: "Medium. Depends on the rooms and zoning work, and on the firm adopting rooms.",
   },
   {
     id: "flow",
     label: "Design airflow",
-    status: "gaps",
+    status: "works",
     adds: "Sets the velocity at each grille, so every other term",
     automatic:
-      "Partly. Each unit's airflow comes from the RHVAC Load Preview and is split over its grilles by neck size. Any grille can be overridden.",
-    data: "The pasted Load Preview, on this computer until apply. Grilles in Revit carry no design flow.",
-    effort: "Medium. Every unit needs its tag in Revit and in the load file.",
+      "Yes, once you point at it. You choose which parameter holds each grille's design airflow (the firm slot, the family's own Flow, or another shared parameter), and the page shows every grille's value and its source.",
+    data: "An instance parameter on the grille, chosen per project; the choice persists in the Project Information store",
+    effort: "Easy. One choice per project; a grille with no value is a Set row.",
   },
   {
     id: "connectivity",
     label: "Connectivity",
-    status: "gaps",
+    status: "works",
     adds: "The path must connect from fan to grille",
     automatic:
-      "Partly. Pe joins gaps under an inch and near-miss taps and lists them. Real open ends need a person.",
-    data: "Revit model",
-    effort: "Medium. Modeling care.",
+      "Mostly. Pe bridges gaps under 2 in and near-miss taps and lists them; it caps dangling ends and connects touching ends in Revit after your approval. Anything else is a fix-in-Revit row.",
+    data: "Revit model; heals are real fittings and connections",
+    effort: "Medium. One Heal row per network, then the hard cases by hand.",
   },
   {
     id: "esp",
     label: "Fan's available static",
     status: "none",
     adds: "What the required static is checked against",
-    automatic: "No. The firm's fan static parameter reads 0 on Chadds.",
+    automatic: "No. Apply writes the required ESP to the unit's parameter; the available static comes from equipment selection.",
     data: "Equipment family, from the submittal",
     effort: "Hard. Comes with equipment selection.",
   },
@@ -181,7 +181,7 @@ export const PRODUCT_MAP: MapLink[] = [
     status: "gaps",
     route: null,
     after: "zoning",
-    note: "From the RHVAC Load Preview, pasted into the ducts route per system and unit tag.",
+    note: "Load calculation per room and system (RHVAC today); not yet linked to grilles.",
     parts: [],
     path: [],
     relations: [],
@@ -192,7 +192,7 @@ export const PRODUCT_MAP: MapLink[] = [
     status: "gaps",
     route: "/ducts",
     after: "loads",
-    note: "Each unit's airflow split over its grilles by neck size, overridable per grille.",
+    note: "Each grille's design airflow read from the parameter you point at; a fan's flow is the sum of its grilles.",
     parts: [],
     path: [],
     relations: [],
@@ -203,7 +203,7 @@ export const PRODUCT_MAP: MapLink[] = [
     status: "gaps",
     route: "/ducts",
     after: "flows",
-    note: "Revit duct connectivity, with sub-inch gaps and near-miss taps joined and listed.",
+    note: "Revit duct connectivity, with small gaps and near-miss taps bridged and listed, and dangling ends capped in Revit on approval.",
     parts: [],
     path: [],
     relations: [],
@@ -214,7 +214,7 @@ export const PRODUCT_MAP: MapLink[] = [
     status: "works",
     route: "/ducts",
     after: "network",
-    note: "Prices each grille's path from the fan. On Chadds SA 19 every part prices except the grille drop.",
+    note: "Prices each grille's path from the fan and each fan's ESP; terminals are priceable, never required.",
     parts: PRESSURE_DROP_PARTS,
     path: ["fan", "inline", "duct", "fittings", "flex", "dampers", "grille", "room"],
     relations: [

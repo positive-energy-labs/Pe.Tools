@@ -145,7 +145,7 @@ const verdictKey = (work: DuctsRouteDocument | null) =>
 
 /**
  * A group several units feed, where exactly one carries a Load Preview system, is that unit's
- * tree; the others sit in series on it (Chadds SA 19: an inline dehumidifier on FC-17's supply,
+ * tree; the others sit in series on it (Project A SA 19: an inline dehumidifier on FC-17's supply,
  * kaitpw 2026-10-16 "a dehu does not count"). Their air stays out of the calculation.
  */
 export function series(snapshot: DuctSnapshot, tags: Set<string>) {
@@ -329,7 +329,7 @@ export function survey(
 
 /**
  * A unit's design flow as one system reads it: a stated flow as is; a derived one is the sum of the
- * grilles it serves in `groups` alone, the flow those groups are priced at (SA 19, Chadds: DH-21
+ * grilles it serves in `groups` alone, the flow those groups are priced at (SA 19, Project A: DH-21
  * serves no SA 19 grille, so it reads no flow there, never RA 38's 768 cfm). With no `groups`, the
  * whole document's reading. A fan serving none of them states none: the unit flow Set row's.
  */

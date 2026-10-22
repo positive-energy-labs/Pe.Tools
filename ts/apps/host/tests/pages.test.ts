@@ -666,7 +666,7 @@ ${source}`),
   });
 
   describe("page doors: identity is the path, the target is the binding", () => {
-    const MODEL = "C:\\Jobs\\Chadds\\Chadds MEP.rvt";
+    const MODEL = "C:\\Jobs\\ProjectA\\Project A MEP.rvt";
     const docA: DocumentRef = { session: "S1", openId: "A" };
     const session = (
       id: string,
@@ -675,7 +675,7 @@ ${source}`),
     ): LiveSession => ({
       session: id,
       documents: [
-        { openId, title: "Chadds MEP", address, isFamilyDocument: false, isActive: true },
+        { openId, title: "Project A MEP", address, isFamilyDocument: false, isActive: true },
       ],
     });
     let heads: Record<string, ThreadHead> = {};
@@ -841,7 +841,7 @@ ${source}`),
       expect(reading).toMatchObject({
         page: "page:@pages/todo",
         binding: { kind: "thread", thread: "t1" },
-        document: { session: "S1", openId: "A", title: "Chadds MEP" },
+        document: { session: "S1", openId: "A", title: "Project A MEP" },
         write: { kind: "rw", thread: "t1" },
       });
     });
@@ -1064,7 +1064,7 @@ ${source}`),
         kind: "resolved",
         target: { kind: "document", ref: { session: "s1", openId: "d1" } },
       },
-      document: { session: "s1", openId: "d1", title: "Chadds MEP" },
+      document: { session: "s1", openId: "d1", title: "Project A MEP" },
       write: { kind: "rw", thread: "t1-abcdef-123", expiresAt: "2026-10-12T13:00:00.000Z" },
       hostNow: "2026-10-12T12:00:00.000Z",
     };
@@ -1235,7 +1235,7 @@ ${source}`),
       expect(await (await page()).pe.target!()).toEqual({
         session: "s1",
         openId: "d1",
-        title: "Chadds MEP",
+        title: "Project A MEP",
       });
       // The old selector form names nothing now, so it refuses instead of being ignored.
       await expect((await page()).pe.target!({ session: "s1", doc: "d2" })).rejects.toThrow(

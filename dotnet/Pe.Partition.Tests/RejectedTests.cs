@@ -7,7 +7,7 @@ using Pe.Revit.Space;
 namespace Pe.Partition.Tests;
 
 /// <summary>
-///     A standing "not a room" (rooms ledger 2026-09-25) on Duryee Level 1's first zone: a rejected polygon equal to an
+///     A standing "not a room" (rooms ledger 2026-09-25) on Project D Level 1's first zone: a rejected polygon equal to an
 ///     accepted room's loop holds that face as rejected and nothing else; scaled about its centroid to 70 percent of
 ///     the area (IoU 0.7) it still applies, to 30 percent (IoU 0.3) it does not.
 /// </summary>
@@ -16,9 +16,9 @@ public sealed class RejectedTests {
 
     [Test]
     public void Rejected_polygon_holds_its_face_by_overlap() {
-        var dir = PrivateFixtures.Dir("duryee/partition");
-        var level = JsonConvert.DeserializeObject<PartitionInput>(File.ReadAllText(Path.Combine(dir, "duryee-level-input.json")))!;
-        var outer = JArray.Parse(File.ReadAllText(Path.Combine(dir, "duryee-locked.json"))).First(r => (double)r["Sqft"]! > 200)["Outer"]!;
+        var dir = PrivateFixtures.Dir("project-d/partition");
+        var level = JsonConvert.DeserializeObject<PartitionInput>(File.ReadAllText(Path.Combine(dir, "project-d-level-input.json")))!;
+        var outer = JArray.Parse(File.ReadAllText(Path.Combine(dir, "project-d-locked.json"))).First(r => (double)r["Sqft"]! > 200)["Outer"]!;
         var input = level with {
             ZoneLoops = [outer.SelectMany(p => new[] { (double)p[0]!, (double)p[1]! }).ToArray()],
             Proposals = [],

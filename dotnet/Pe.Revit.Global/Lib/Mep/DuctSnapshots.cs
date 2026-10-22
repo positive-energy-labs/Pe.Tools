@@ -295,7 +295,7 @@ public static class DuctSnapshots {
                 flowParameter = fanFrom;
                 facts.Add(Fact("fanFlow", fanCfm, "cfm", DuctProvenance.DesignerStated));
                 // The equipment tag: joins a load-tool system ("System 1 Golf Sim FC-4") to this unit.
-                // The firm's tag lives in the shared instance parameter PE_G___TagInstance (Chadds: FC-17 on a unit whose Mark
+                // The firm's tag lives in the shared instance parameter PE_G___TagInstance (Project A: FC-17 on a unit whose Mark
                 // and Type Mark are both blank); Mark, then Type Mark, are the fallbacks for other libraries.
                 var mark = e.LookupParameter("PE_G___TagInstance") is { HasValue: true, StorageType: StorageType.String } tag ? tag.AsString() : null;
                 if (string.IsNullOrEmpty(mark)) mark = Text(e, BuiltInParameter.ALL_MODEL_MARK);
@@ -507,9 +507,9 @@ public static class DuctSnapshots {
         ex is Autodesk.Revit.Exceptions.ApplicationException or InvalidOperationException
         || ex.GetType().Namespace?.StartsWith("Autodesk.Revit", StringComparison.Ordinal) == true;
 
-    // Chadds at full precision is 13.8 MiB of a 16 MiB bridge frame (BridgeTransportSession.MaxFrameBytes); 1e-4 ft is
+    // Project A at full precision is 13.8 MiB of a 16 MiB bridge frame (BridgeTransportSession.MaxFrameBytes); 1e-4 ft is
     // 0.001 in, far under every proximity tolerance, and equal inputs round equal so joints stay coincident.
-    // ponytail: rounding buys ~1.3 MiB; a model much larger than Chadds needs the snapshot paged or the frame raised.
+    // ponytail: rounding buys ~1.3 MiB; a model much larger than Project A needs the snapshot paged or the frame raised.
     private static double[] P(XYZ p) => [R(p.X, 4), R(p.Y, 4), R(p.Z, 4)];
     private static double[] V(XYZ v) => [R(v.X, 3), R(v.Y, 3), R(v.Z, 3)];
     private static double R(double v, int digits = 3) => Math.Round(v, digits);

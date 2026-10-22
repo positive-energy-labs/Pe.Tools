@@ -661,7 +661,7 @@ describe("healing replaces the capped and connect verdicts", () => {
 });
 
 describe("a unit's flow in the open system", () => {
-  // DH-21 (SA 19, Chadds) reads 768 cfm from another system's grilles and serves none of g1's.
+  // DH-21 (SA 19, Project A) reads 768 cfm from another system's grilles and serves none of g1's.
   const surveyed = {
     equipmentFlows: new Map([[1, { cfm: 768, source: "derived" as const, grilles: 2 }]]),
     fanFlows: new Map([["g1", new Map([[1, { cfm: null, source: null }]])]]),

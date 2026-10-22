@@ -16,7 +16,7 @@ namespace Pe.Partition.Tests;
 ///     <c>eval/partition/render.py</c> (one PNG per fixture). Explicit: it is a bench, not a gate.
 ///     <para>
 ///         Probes replay a session recording (<see cref="RecordedProbes" />) when the fixture has one, else
-///         they are stubbed (floor at the level, ceiling 9 ft over it). Duryee is the five hand-drawn zones
+///         they are stubbed (floor at the level, ceiling 9 ft over it). Project D is the five hand-drawn zones
 ///         of Mechanical Zoning Plan - Level 1, solved one at a time and concatenated.
 ///     </para>
 /// </summary>
@@ -30,9 +30,9 @@ public sealed class Bench {
         }
     }
 
-    // Duryee Level 1: the doors capture (the input the w11 session solved) and the five hand-drawn zones.
-    private static string DuryeeInput => Path.Combine(PrivateFixtures.Dir("duryee/partition"), "duryee-level-input.json");
-    private static string DuryeeZones => Path.Combine(PrivateFixtures.Dir("duryee/partition"), "duryee-locked.json");
+    // Project D Level 1: the doors capture (the input the w11 session solved) and the five hand-drawn zones.
+    private static string ProjectDInput => Path.Combine(PrivateFixtures.Dir("project-d/partition"), "project-d-level-input.json");
+    private static string ProjectDZones => Path.Combine(PrivateFixtures.Dir("project-d/partition"), "project-d-locked.json");
 
     // PE_FRAMING_RAILS=0 turns Knobs.FramingRails off for every fixture; the run directory says which.
     private static bool FramingOn => Environment.GetEnvironmentVariable("PE_FRAMING_RAILS") != "0";
@@ -48,7 +48,7 @@ public sealed class Bench {
             var answers = new List<PartitionAnswer>();
             foreach (var captured in inputs) {
                 // The bench measures the solver's own shape. Architect proposals are adopted, not solved, so they
-                // are stripped; the Duryee session ran with none (zone-0d5e3ccb-inputs.json) and this matches it.
+                // are stripped; the Project D session ran with none (zone-0d5e3ccb-inputs.json) and this matches it.
                 var input = captured with { Proposals = [], Knobs = captured.Knobs with { FramingRails = FramingOn } };
                 answers.Add(Solve.RunRails(input, probes.For(input)));
             }
@@ -76,12 +76,12 @@ public sealed class Bench {
     private static IEnumerable<(string Name, PartitionInput[] Inputs, string? ProbeDir)> Fixtures() {
         yield return ("project-a-live", [Gz("project-a/partition/live")], "project-a/partition/live");
         yield return ("project-a-main-09", [Main09()], null);
-        // Main Level#09 recaptured 2026-09-25 from the Chadds (Recovery) file with Enclosure.Default (Doors included).
+        // Main Level#09 recaptured 2026-09-25 from the Project A (Recovery) file with Enclosure.Default (Doors included).
         // That file links the March IFC and 03.12 DWG, not the 07.28 set main-09 came from: a different model state.
         yield return ("project-a-main-09-doors", [Gz("project-a/partition/main-09-doors")], "project-a/partition/main-09-doors");
         yield return ("project-c-live", [Gz("project-c/partition/live")], "project-c/partition/live");
         yield return ("project-c-level2", [Gz("project-c/partition/level2")], null);
-        yield return ("duryee-level1", Duryee(), "duryee/partition");
+        yield return ("project-d-level1", ProjectD(), "project-d/partition");
     }
 
     private static PartitionInput Gz(string fixture) {
@@ -100,10 +100,10 @@ public sealed class Bench {
             Knobs.Default, [knee.Stamp.Resolved], "historical synthetic fixture", []);
     }
 
-    private static PartitionInput[] Duryee() {
-        var level = JsonConvert.DeserializeObject<PartitionInput>(File.ReadAllText(DuryeeInput))!;
+    private static PartitionInput[] ProjectD() {
+        var level = JsonConvert.DeserializeObject<PartitionInput>(File.ReadAllText(ProjectDInput))!;
         // The five hand fills (the 100 sf Pantry is a room, not a zone). Solved as zones: a person's zone edge is a wall.
-        return JArray.Parse(File.ReadAllText(DuryeeZones))
+        return JArray.Parse(File.ReadAllText(ProjectDZones))
             .Where(r => (double)r["Sqft"]! > 200)
             .Select(r => level with { ZoneLoops = [r["Outer"]!.SelectMany(p => new[] { (double)p[0]!, (double)p[1]! }).ToArray()] })
             .ToArray();

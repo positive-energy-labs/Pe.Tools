@@ -5,6 +5,7 @@
  * would read as zero loss.
  */
 import type { Provisional } from "@pe/ducts-domain/losses";
+import { revitTarget } from "@pe/kit/lang/row";
 import { tokenRef } from "@pe/kit/lib/token";
 
 import type { Split, SplitPart } from "../b/model";
@@ -111,6 +112,7 @@ function SplitFill({ split, scale, light, back }: { split: Split; scale: number;
             key={`${key}?`}
             className="absolute -inset-y-px w-1.5 border border-dashed"
             data-e-split={`${key}-unpriced`}
+            {...revitTarget(part.ids)}
             title={`${word}: ${part.unpriced} with no drop, so this part is unknown (not zero)`}
             style={{ left: `min(${at * 100}%, calc(100% - 6px))`, borderColor: tokenRef(ink) }}
             onMouseEnter={light ? () => light(part.ids) : undefined}
@@ -123,6 +125,7 @@ function SplitFill({ split, scale, light, back }: { split: Split; scale: number;
             key={key}
             className="absolute inset-y-0"
             data-e-split={key}
+            {...revitTarget(part.ids)}
             title={`${word} ${fmt(part.dp, LOSS_PLACES)} in-wg (${Math.round((part.dp / scale) * 100)}% of the fan)`}
             style={{ left: `${left * 100}%`, width: `${Math.min(1 - left, part.dp / scale) * 100}%`, backgroundColor: tokenRef(ink) }}
             onMouseEnter={light ? () => light(part.ids) : undefined}
@@ -151,6 +154,7 @@ export function SplitStrip({ split, scale, light }: { split: Split | null; scale
             key={key}
             className="inline-flex items-center gap-1"
             title={says}
+            {...revitTarget(split[key].ids)}
             onMouseEnter={() => light(split[key].ids)}
             onMouseLeave={() => light(null)}
           >

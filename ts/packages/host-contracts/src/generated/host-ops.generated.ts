@@ -3903,21 +3903,25 @@ export namespace RevitContextLens {
   }
 }
 
-/** Show elements to the person at the window: select them and zoom to their extents in the given view, or by default in a view that can show them (the active model view when it displays them, else the {3D} view or a plan on their level; a sheet or schedule is never zoomed). Answers which ids it showed, which were missing, and the view. Changes the selection and the zoom only, never the model. Needs the active windowed document; a headless document refuses. */
+/** Show elements to the person at the window: select them, box the default {3D} view (else the user's {3D - username}, else a made 'Pe 3D') around them with a generous margin, open it and zoom to fit. With viewId it selects and zooms in that view instead and edits nothing; with selectOnly it only selects. Answers which ids it showed, which were missing, and the view. The section box is its only edit: one undoable transaction on that view, never a model element. Needs the active windowed document; a headless document refuses. */
 export namespace RevitContextShowElements {
   export namespace Req {
     /**
-     * Request for revit.context.show-elements: select elements and zoom a view to them, for the person at the window.
+     * Request for revit.context.show-elements: select elements and show them, for the person at the window.
      */
     export interface Request {
       /**
-       * Element ids to select and zoom to, from any handle-returning op.
+       * Element ids to select, from any handle-returning op.
        */
       elementIds: number[];
       /**
-       * Graphical view to activate and zoom; omit for the active view.
+       * Graphical view to activate and zoom instead of boxing the {3D} view; edits nothing.
        */
       viewId?: number | null;
+      /**
+       * Select and nothing else: the view, its zoom and its section box stay as they are.
+       */
+      selectOnly?: boolean;
     }
   }
   export namespace Res {

@@ -626,7 +626,7 @@ it.each(rootAttached.cases)(
   },
 );
 
-// The manual angle below is an explicit test input, not an observation added to retained Chadds.
+// The manual angle below is an explicit test input, not an observation added to retained Project A.
 it("orients a transition by the tree walk only when its connectors state no In/Out pair, and never assumes an angle", () => {
   const missingAngle = structuredClone(snapshot);
   const trx = missingAngle.nodes.find((n) => n.id === 5)!;
@@ -705,7 +705,7 @@ it("a path stepping across an inferred joint still prices and names the inferenc
 
 it("a damper inline by inference prices in its host's path and names the inference it rests on", () => {
   const whole = synthetic as unknown as DuctSnapshot;
-  // Damper 40 lies inside duct 11, 5 ft along it, both ends open (Chadds 13568060 in 11275610).
+  // Damper 40 lies inside duct 11, 5 ft along it, both ends open (Project A 13568060 in 11275610).
   const port = (index: number, dy: number) => ({
     ...whole.segments.find((s) => s.id === 11)!.connectors[0]!,
     index,

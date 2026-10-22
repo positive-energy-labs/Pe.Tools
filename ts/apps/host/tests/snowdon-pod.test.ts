@@ -13,6 +13,7 @@ import { exportPod, importPod, readZip } from "../src/pod-transfer.ts";
 import { createHash } from "node:crypto";
 import { runInNewContext } from "node:vm";
 import { listPods } from "../src/settings.ts";
+import { bannedNames } from "./banned-names.ts";
 
 const root = join(import.meta.dirname, "..", "..", "..", "..", "examples", "pods", "snowdon-ducts");
 
@@ -71,9 +72,8 @@ test("the manifest id is the identity and every entrypoint names an existing dec
 
 test("content carries no seed fingerprints, fixed model ids, recorded dates or client names", async () => {
   const banned = [
-    /chadds/i,
+    ...(bannedNames() ? [bannedNames()!] : []),
     /kaitpw/i,
-    /yoram/i,
     /ducts-ground/i,
     /pdrop/i,
     /broan|suntherm|aprilaire|wine guardian/i,

@@ -24,6 +24,7 @@ import { RemoteDeviceGate } from "#/machine/devices";
 import { PodRoutesProvider } from "#/route/pod-routes";
 
 import { TooltipProvider } from "@pe/kit/lang/tooltip";
+import { ElementMenu } from "#/revit/element-menu";
 
 import appCss from "../styles.css?url";
 
@@ -90,6 +91,7 @@ export function RootComponent() {
                 </div>
               </div>
             </div>
+            <ElementMenu />
           </SettingsProvider>
         </RouteControlsProvider>
       </NavigationProvider>

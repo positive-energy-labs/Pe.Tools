@@ -21,7 +21,7 @@ stored on the fitting instance by server GUID (`dotnet/Pe.Revit.Global/Lib/Mep/D
 writes the Specific Coefficient schema's one `Coefficient` field by GUID
 `5a598293-1504-46cc-a9c0-de55c82848b9`). Schedules list parameters, so nothing in Revit can
 tabulate, filter, or mass-edit this value. It is per instance with no type default. The only
-place a person meets it is the Properties palette, one fitting at a time. On Chadds that is
+place a person meets it is the Properties palette, one fitting at a time. On Project A that is
 hundreds of fittings per supply system across 67 supply systems.
 Stamp: PROVEN[storage shape in `DuctApplier.cs`; LEDGER Decided 2026-10-04 "nobody fixes it"].
 
@@ -44,7 +44,7 @@ result into the slot Revit does honor.
 Stamp: PROVEN[session `walkthru`, R2025 detached copy; LEDGER Decided 2026-10-04].
 
 Correction, 2026-10-05: the route is not dead; it is empty. A fitting on this method stores no table until a
-person presses OK in ASHRAE Table Settings, and an empty fitting computes 0. Chadds round elbow 9447852 (7 in,
+person presses OK in ASHRAE Table Settings, and an empty fitting computes 0. Project A round elbow 9447852 (7 in,
 r/D 1.0): as found no entity and coefficient 0. After OK with the dialog's highlighted CD3-11 it stored
 `CoefficientFromTable.ASHRAETableName` (schema `762a2314-1d1c-4087-a58f-bab902f57be5`) and Revit charged
 0.0733, CD3-11's grid at 7 in to four digits. CD3-11 is a flat-back elbow, though; the shape is CD3-2, fourth in the
@@ -54,7 +54,7 @@ without passing through Not Defined changed the stored name and not the charge. 
 geometry (the r/D 1.5 tables CD3-1 and CD3-9 were absent). So reasons 1 and 2 stand (no reader, no bulk editor,
 zero by default), and the elbow 6648777 case (no applicable table) still stands, but Pe could write the table
 name and let Revit do the lookup instead of freezing a coefficient.
-Stamp: PROVEN[session, controlled `ducts-ground`, R2025 detached Chadds copy, kaitpw's OK by hand then API
+Stamp: PROVEN[session, controlled `ducts-ground`, R2025 detached Project A copy, kaitpw's OK by hand then API
 writes `.artifacts/runs/ducts-ground/table-write2.csx`, reads `table-id.csx`, 2026-10-05 morning, nothing saved].
 UNPROVEN[two-axis tap tables, recalculation after a flow or size change, a forced name on a fitting with no
 applicable table].
@@ -69,7 +69,7 @@ in every parameter and stored entity, took the same forced write differently. 67
 charged CD3-2 at 0.30 exactly; 6751193, never confirmed, charged 0 for CD3-2 and for CD3-11. A census of charged
 and zero fittings falsified flow direction (connector 1 or 2 in) as the cause. Re-setting the same loss method in
 one transaction does not recalculate; the hop through Not Defined does.
-Stamp: PROVEN[session, controlled `ducts-ground`, R2025 detached Chadds copy, `.artifacts/runs/ducts-ground/`
+Stamp: PROVEN[session, controlled `ducts-ground`, R2025 detached Project A copy, `.artifacts/runs/ducts-ground/`
 `tables-census.csx`, `legs.csx`, `table-exp*.csx`, `diff.csx`, `dir-census.csx`, 2026-10-05 morning, nothing saved].
 UNPROVEN[what the dialog sets that the API cannot see; owed test: kaitpw presses OK on 6751193].
 Then an inapplicable name written by API onto a working elbow (CD3-1, r/D 1.5 only, on the r/D 1.0 elbow 9447852;
@@ -97,10 +97,10 @@ measures Theta and r from connector locations, not parameters. For 6751193 that 
 connector-measured Theta is not exactly 90. Then PROVEN on a fresh copy: 6751193 bends 90.00128966 degrees (connectors
 and its Angle parameter agree; the palette rounds to 90.00), its twin exactly 90. A decoy probe (write CR3-1 through
 the hop; replaced means offered) on 36 sampled elbows sets Revit's tolerance between 1.25e-7 and 3.1e-7 degrees. Of
-1235 round elbows near 90 degrees on Chadds, 87 are 6e-6 degrees or more off and can never hold a table: about 7%,
+1235 round elbows near 90 degrees on Project A, 87 are 6e-6 degrees or more off and can never hold a table: about 7%,
 from ducts drawn a hair off square in a plan rotated 10.68 degrees to the project axes. Corrected the same day (control panel `Pages/pdrop-tour`, `offaxis.csx`, 1235 elbows): plan rotation is not the cause; a duct a hair off its direction is. On-axis elbows refuse at 5.5%, 45-degree ducts at 4.5%, almost-on-axis at 45%; 10.68 degrees describes only the ducts at 6751193. The same probe showed the
 Not Defined hop alone stores the first offered table on a bare fitting: the hop is Revit's auto-assign.
-Stamp: PROVEN[session, controlled `ducts-ground`, R2025 detached Chadds copy reopened 2026-10-05 12:11, `theta.csx`,
+Stamp: PROVEN[session, controlled `ducts-ground`, R2025 detached Project A copy reopened 2026-10-05 12:11, `theta.csx`,
 `probe-census.csx`]. An attempt to square the ducts by script snapped one to the world axes, broke two joints, and the
 copy was discarded and reopened; the by-hand squaring test is owed.
 Consequence for Pe: the matcher is a readable file, so a lint can say exactly which tables Revit will offer each
@@ -134,24 +134,24 @@ owed (LEDGER Owed).
 
 Revit's critical path needs one whole connected network from air mover to every terminal.
 Revit shows disconnects one warning at a time and names systems by `MEPSystem`, which is not the
-connected graph: on Chadds 45 connected groups carry more than one system name and 31 mix
+connected graph: on Project A 45 connected groups carry more than one system name and 31 mix
 supply, return and exhaust. There is no Revit view that lists every open end, loop, missing root
 or multi-root across the document with a verb to resolve it. Pe reads the connector graph and
 lists them.
-Stamp: PROVEN[deterministic, Chadds snapshot census, LEDGER Decided 2026-09-26 from `ducts`].
+Stamp: PROVEN[deterministic, Project A snapshot census, LEDGER Decided 2026-09-26 from `ducts`].
 
 ### 6b. Base equipment: a UI fix, necessary and not sufficient
 
 Adjacent to reason 6 and weaker than reasons 1 through 5. A system computes a critical path only
 from its one base equipment. The Properties field (System Equipment) is read-only; Modify | Duct
-Systems > Select Equipment sets it in seconds. On Chadds no system has one (the census's 0 of
+Systems > Select Equipment sets it in seconds. On Project A no system has one (the census's 0 of
 722), but this alone is not a reason to avoid Revit. Nor does it unlock the calculation: with
 SA 19's base set, the system stayed not well connected, static pressure read 0, there was no
 critical path, and a main duct feeding a 109 cfm tap still read 0 cfm and Bidirectional at both
 ends. Connectivity (reason 6) still gates it. The unit side half-mirrors reason 5: every unit
 supply connector reads 0 pressure drop like the grilles, and Preset flow at 0 cfm, whose effect on
 Revit's calculation is unproven (LEDGER Owed).
-Stamp: PROVEN[session `tour3`, controlled, R2025 detached Chadds copy, SDK beta.171,
+Stamp: PROVEN[session `tour3`, controlled, R2025 detached Project A copy, SDK beta.171,
 2026-10-04T22:50Z].
 
 What "well connected" is not. After kaitpw closed every open end of SA 19 (2) by hand (the Tight
@@ -175,7 +175,7 @@ The commonest break behind reason 6 is not carelessness. A round branch dropping
 a plenum or a main needs a takeoff, and the shipped Round Takeoff has a fixed 4 in length. When
 the elbow sits 4.02 in off the plenum face Revit raises "There was not enough room to place the
 required fittings" and places nothing, so the drafter draws the duct into the box and moves on.
-Every view shows it joined; the connector graph does not. Chadds census: 465 open ends, 69 with
+Every view shows it joined; the connector graph does not. Project A census: 465 open ends, 69 with
 the tip inside another element's solid, 187 touching one, 80 within 6 in; 336 of 465 (72%) sit in
 or against something. Only 129 look like honest open ends. The inside cases are overwhelmingly
 round stubs driven into rectangular mains, plenums and elbows.
@@ -186,7 +186,7 @@ junction rules, and the joint needs the tap's length plus about 0.1 in of duct. 
 these drops, connects the real joint; overwriting the shipped Round Takeoff instead broke taps
 across the model. It is not a cure: of 5 census joints tried, 2 connect without it, 1 is still
 0.03 in short, 2 have no room for any tap.
-Stamp: PROVEN[session, controlled `fitroom`, R2025 detached Chadds copy, API
+Stamp: PROVEN[session, controlled `fitroom`, R2025 detached Project A copy, API
 `NewTakeoffFitting`, 2026-10-04 20:02 to 20:13 local; census is agent testimony from ReadOnly
 scripts on `tour3`, `.artifacts/pdrop/revit/fitting-room/`]. The UI half is also PROVEN[session,
 controlled `tour3`, windowed, kaitpw by hand 2026-10-04 about 23:40 local]: with the family loaded
@@ -237,7 +237,7 @@ system never receives its ducts (they join at commit), so this proof needs `Writ
 The committed delete and both family reloads raised Revit dialogs that kaitpw dismissed by hand
 in the windowed session; `EditFamily` across 45 families raised more. Budget dialogs before any
 family write on a windowed session.
-Stamp: PROVEN[session, controlled `ducts-ground`, R2025 detached Chadds copy of 2026-08-11,
+Stamp: PROVEN[session, controlled `ducts-ground`, R2025 detached Project A copy of 2026-08-11,
 windowed, SDK beta.172, 2026-10-04 late, nothing saved; scripts and outputs in
 `.artifacts/runs/ducts-ground/` (`probe2.csx` census, `write-base.csx`, `reload-erv.csx`,
 `reload-exh.csx`, `read-base.csx`, `lint.csx`)]. UNPROVEN[whether SA 26 computes once its open
@@ -281,12 +281,12 @@ host log, so the page is the record of progress; this doc keeps only settled rea
 classification in the snapshot, the coefficient write, the grille catalog, the hand-calc reader, the engine rule).
 One new reading from its census: after the exhaust-grille reload on the scratch copy, closed systems reading well
 connected rose from 1 of 116 to 8 of 116, so one family fix repaired seven systems' flags unseen.
-Stamp: PROVEN[session, controlled `ducts-ground`, R2025 detached Chadds copy, the page's census and lint checks
+Stamp: PROVEN[session, controlled `ducts-ground`, R2025 detached Project A copy, the page's census and lint checks
 2026-10-05 about 01:00 local, nothing saved].
 
 ## Flagged for the supervisors (temporary; do not revisit until they answer)
 
-- One system name across several units. Chadds SA 19 holds two air handlers and a dehumidifier.
+- One system name across several units. Project A SA 19 holds two air handlers and a dehumidifier.
   By connector graph two of them are joined and reach 8 of its 11 grilles, the third reaches 2
   and nothing else, and 1 grille is reached by neither. Reason 6 found the mirror case (one
   connected group carrying several names). Ask whether one system per area was intentional, for

@@ -6,7 +6,7 @@ namespace Pe.Shared.Tests.RevitData;
 
 /// <summary>
 ///     ducts.family-patch over the four shipped CD3 grids: the dense PeElbowC recipe the 2026-10-08 lookup spike
-///     stamped (3132 rows, PROVEN charged to the digit on Chadds), and the no-flow-leg lint for junctions.
+///     stamped (3132 rows, PROVEN charged to the digit on Project A), and the no-flow-leg lint for junctions.
 /// </summary>
 [TestFixture]
 public sealed class DuctFamilyTablesTests {

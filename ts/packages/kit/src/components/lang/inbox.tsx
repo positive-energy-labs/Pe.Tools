@@ -33,6 +33,8 @@ export interface InboxRowSpec {
   "data-kind"?: string;
   /** The caller's selection names it: it opens and wears selected, and its group unfolds. */
   lit?: boolean;
+  /** The Revit elements the row stands for (Row `revitIds`). */
+  revitIds?: readonly number[];
 }
 
 export interface InboxGroupSpec {
@@ -154,6 +156,7 @@ export function Inbox<K extends string>({
                         meta={row.status}
                         actions={row.verbs}
                         onMouseEnter={row.onMouseEnter}
+                        revitIds={row.revitIds}
                         onClick={pick}
                       />
                       {active && row.detail != null ? (

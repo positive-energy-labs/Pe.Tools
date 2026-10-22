@@ -1,0 +1,189 @@
+/**
+ * The element menu: anything on any page that stands for Revit elements (a kit Row's `revitIds`,
+ * or `revitTarget(ids)` spread on any element) answers right-click with Revit's own two verbs,
+ * Selection Box and Select, and answers BX (Revit's Selection Box shortcut) under the pointer or
+ * focus. One delegate at the root serves every surface; a surface only declares its ids.
+ * Double-click stays free. The document is the nearest `revitScope(doc)` above, else the host's
+ * active one.
+ */
+import { useEffect, useRef, useState } from "react";
+import { ListPopup } from "@pe/kit/lang/list-popup";
+import { KeyHint } from "@pe/kit/lang/key-hint";
+import { Button } from "@pe/kit/lang/button";
+import { FactChip } from "@pe/kit/lang/chip";
+import { revitTarget } from "@pe/kit/lang/row";
+import { callHostRpc } from "#/host/client";
+
+type Scope = { session: string; openId: string };
+
+/** Spread on a route's root so the menu acts on that route's document, not the host's active one. */
+export const revitScope = (doc: Scope | null | undefined) => ({
+  "data-revit-scope": doc ? `${doc.session} ${doc.openId}` : undefined,
+});
+
+type Target = { ids: number[]; scope: Scope | null };
+
+const targetOf = (el: Element | null): Target | null => {
+  const host = el?.closest<HTMLElement>("[data-revit-ids]");
+  const ids = host?.dataset.revitIds?.split(",").map(Number).filter(Number.isFinite) ?? [];
+  if (!ids.length) return null;
+  const [session, openId] = host!.closest<HTMLElement>("[data-revit-scope]")?.dataset.revitScope?.split(" ") ?? [];
+  return { ids, scope: session && openId ? { session, openId } : null };
+};
+
+/** Box: select and section-box the {3D} view, then zoom to fit. Select: select only. */
+export const showInRevit = (target: Target, selectOnly: boolean) =>
+  callHostRpc(
+    "revit.context.show-elements",
+    { elementIds: target.ids, selectOnly },
+    target.scope ? { bridgeSessionId: target.scope.session, openDocumentId: target.scope.openId } : undefined,
+  ).then(
+    (answer) => answer.note,
+    (error: unknown) => (error instanceof Error ? error.message : String(error)),
+  );
+
+const VERBS = [
+  { key: "box", label: "Selection Box", keys: "BX", selectOnly: false },
+  { key: "select", label: "Select", keys: null, selectOnly: true },
+] as const;
+
+const typing = (el: Element | null) =>
+  !!el?.closest("input, textarea, select, [contenteditable=''], [contenteditable='true']");
+
+export function ElementMenu() {
+  const [menu, setMenu] = useState<(Target & { x: number; y: number }) | null>(null);
+  const [said, setSaid] = useState<{ text: string; x: number; y: number } | null>(null);
+  const caret = useRef<HTMLSpanElement>(null);
+  // The answer stands by the pointer: what Revit did, or why it refused.
+  const run = (target: Target, selectOnly: boolean, x: number, y: number) => {
+    setSaid({ text: selectOnly ? "selecting…" : "boxing…", x, y });
+    void showInRevit(target, selectOnly).then((text) => setSaid({ text, x, y }));
+  };
+
+  useEffect(() => {
+    let pointer: Element | null = null;
+    let at = { x: 0, y: 0 };
+    let armed = 0;
+    const onMenu = (event: MouseEvent) => {
+      // A surface with its own menu (a thread row) already took the press.
+      if (event.defaultPrevented) return;
+      const target = targetOf(event.target as Element);
+      if (!target) return;
+      event.preventDefault();
+      setMenu({ ...target, x: event.clientX, y: event.clientY });
+    };
+    const onOver = (event: PointerEvent) => {
+      pointer = event.target as Element;
+      at = { x: event.clientX, y: event.clientY };
+    };
+    const onKey = (event: KeyboardEvent) => {
+      // A right-click leaves focus on the page, so the popup's own Escape never hears it.
+      if (event.key === "Escape") return setMenu(null);
+      if (event.ctrlKey || event.metaKey || event.altKey || typing(document.activeElement)) return;
+      const key = event.key.toLowerCase();
+      if (key === "b") {
+        armed = event.timeStamp;
+        return;
+      }
+      // Revit reads a two-letter shortcut typed within a beat; so does this.
+      if (key !== "x" || event.timeStamp - armed > 1500) return;
+      armed = 0;
+      const target = targetOf(pointer) ?? targetOf(document.activeElement);
+      if (!target) return;
+      event.preventDefault();
+      run(target, false, at.x, at.y);
+    };
+    document.addEventListener("contextmenu", onMenu);
+    document.addEventListener("pointerover", onOver, { passive: true });
+    document.addEventListener("keydown", onKey);
+    return () => {
+      document.removeEventListener("contextmenu", onMenu);
+      document.removeEventListener("pointerover", onOver);
+      document.removeEventListener("keydown", onKey);
+    };
+    // run only calls a state setter, which is stable.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
+  useEffect(() => {
+    if (!said || said.text.endsWith("…")) return;
+    const id = setTimeout(() => setSaid(null), 4000);
+    return () => clearTimeout(id);
+  }, [said]);
+
+  return (
+    <>
+      <span
+        ref={caret}
+        aria-hidden
+        className="pointer-events-none fixed size-px"
+        style={{ left: menu?.x ?? 0, top: menu?.y ?? 0 }}
+      />
+      {menu ? (
+        <ListPopup<(typeof VERBS)[number]>
+          // The positioner tracks its anchor's scroll and size, not a moved caret: each open mounts anew.
+          key={`${menu.x},${menu.y}`}
+          anchor="caret"
+          purpose="menu"
+          caret={caret.current}
+          open
+          onOpenChange={(next) => {
+            if (!next) setMenu(null);
+          }}
+          aria-label={`${menu.ids.length} Revit element(s)`}
+          items={VERBS}
+          keyOf={(verb) => verb.key}
+          labelOf={(verb) => verb.label}
+          filter="none"
+          select="single"
+          empty="no verbs"
+          row={(verb) => ({
+            label: verb.label,
+            title:
+              verb.key === "box"
+                ? `select ${menu.ids.length}, box the {3D} view around them and zoom to fit; no model element changes`
+                : `select ${menu.ids.length} in Revit; the view stays as it is`,
+            meta: verb.keys ? <KeyHint>{verb.keys}</KeyHint> : undefined,
+          })}
+          onPick={(verb) => {
+            setMenu(null);
+            run(menu, verb.selectOnly, menu.x, menu.y);
+          }}
+        />
+      ) : null}
+      {said ? (
+        <span
+          role="status"
+          data-element-menu-said=""
+          className="t-small border-line bg-surface fixed z-50 max-w-80 rounded-sm border px-1.5 py-0.5 text-ink-2 shadow-sm"
+          style={{ left: said.x + 12, top: said.y + 12 }}
+        >
+          {said.text}
+        </span>
+      ) : null}
+    </>
+  );
+}
+
+/**
+ * The one visible door, for a surface whose selection must offer Revit in plain sight (the
+ * selection strip): Selection Box, its answer beside it, and the BX it teaches.
+ */
+export function SelectionBoxButton({ ids, doc }: { ids: readonly number[]; doc: Scope | null }) {
+  const [said, setSaid] = useState<string | null>(null);
+  return (
+    <span className="inline-flex min-w-0 items-center gap-1" {...revitTarget(ids)}>
+      <Button
+        kind="framed"
+        label="Selection Box: box the {3D} view around it in Revit (right-click or BX anywhere)"
+        onClick={() => {
+          setSaid("boxing…");
+          void showInRevit({ ids: [...ids], scope: doc }, false).then(setSaid);
+        }}
+      >
+        Selection Box <KeyHint>BX</KeyHint>
+      </Button>
+      {said ? <FactChip title="what revit.context.show-elements answered">{said}</FactChip> : null}
+    </span>
+  );
+}

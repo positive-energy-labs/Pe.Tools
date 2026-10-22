@@ -35,7 +35,6 @@ import { rulingPatches, verdictPatches } from "../../assumptions";
 import {
   ClaimElement,
   claimParts,
-  ShowInRevit,
   showElements,
   VERDICTS,
   type Verdict,
@@ -330,6 +329,7 @@ export function Inbox({
       status: <span data-tone={item.tone}>{item.status}</span>,
       verbs: verbsOf(item, false),
       onMouseEnter: () => light(item.ids),
+      revitIds: item.ids,
       lit: selected != null && item.ids.includes(selected),
       onClick: () => onSelect(item.ids[0] ?? null),
       detail: (
@@ -343,9 +343,6 @@ export function Inbox({
           )}
           <div className="flex flex-wrap items-center gap-1" data-inbox-verbs="">
             {verbsOf(item, true)}
-            {item.ids.length && doc && !item.verbs.some((v) => v.kind === "select") ? (
-              <ShowInRevit doc={doc} elementIds={item.ids} what="it" />
-            ) : null}
           </div>
         </>
       ),

@@ -1,6 +1,6 @@
 /**
  * The claims of the subject scene as a list under the drawing, and the one crossing into Revit a
- * place or a leg offers: `revit.context.show-elements` selects and zooms, and mutates nothing.
+ * place or a leg offers: `revit.context.show-elements` selects and section-boxes the {3D} view; no model element changes.
  * A verdict is the person's answer on one claim; `verdictPatches` stages it into the claim's Work
  * cell, the same path the assumptions editor uses. An element id in a claim's text reads as that
  * element's name (`claimParts`): hovering it lights the element in the drawing, clicking it selects
@@ -16,6 +16,7 @@ import {
 import { FactChip } from "@pe/kit/lang/chip";
 import { Button } from "@pe/kit/lang/button";
 import { TooltipHint } from "@pe/kit/lang/tooltip";
+import { revitTarget } from "@pe/kit/lang/row";
 import { callHostRpc } from "#/host/client";
 import { tokenRef } from "@pe/kit/lib/token";
 import { snapshotById } from "@pe/ducts-domain/readiness";
@@ -165,6 +166,7 @@ export function ClaimElement({
       <button
         type="button"
         data-claim-element={part.id}
+        {...revitTarget([part.id])}
         aria-label={`${part.name} ${part.id}`}
         className="cursor-pointer underline decoration-dotted underline-offset-2"
         onMouseEnter={() => onHover(part.id)}
@@ -320,40 +322,6 @@ export function ClaimsList({
         </li>
       ) : null}
     </ol>
-  );
-}
-
-/**
- * Select and zoom to the element ids in Revit. Only mounted with a connected document: the verb
- * is impossible without one, so it is hidden rather than greyed.
- */
-export function ShowInRevit({
-  doc,
-  elementIds,
-  what,
-}: {
-  doc: RevitDoc;
-  elementIds: readonly number[];
-  what: string;
-}) {
-  const [word, setWord] = useState<string | null>(null);
-  return (
-    <span className="flex items-center gap-1">
-      <Button
-        type="button"
-        kind="framed"
-        label={`select ${what} in Revit`}
-        reason={`revit.context.show-elements: select ${elementIds.length} element(s) and zoom the active view to them; changes nothing in the model`}
-        data-show-in-revit={what}
-        onClick={() => {
-          setWord("selecting…");
-          void showElements(doc, elementIds).then(setWord);
-        }}
-      >
-        select {what} in Revit
-      </Button>
-      {word ? <FactChip title="what revit.context.show-elements answered">{word}</FactChip> : null}
-    </span>
   );
 }
 

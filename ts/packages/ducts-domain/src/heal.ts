@@ -3,7 +3,7 @@
  * model instead of living as Pe metadata. `healPlan` sorts every open end of a snapshot into what
  * `ducts.heal` repairs automatically with a person's approval, and what a person fixes in Revit:
  * - cap: a duct or duct-fitting end with no open end of its air classification within
- *   `HEAL_DANGLING_IN` (a dangling end; the spike counted about 84 on Chadds).
+ *   `HEAL_DANGLING_IN` (a dangling end; the spike counted about 84 on Project A).
  * - join: two open ends nearest each other, one shape and size, one classification, one system:
  *   coincident (`connect`), or a gap up to `HEAL_JOIN_GAP_IN` on one axis, bridged by a union
  *   between two straight ducts or by extending the one straight duct (`union`, `extend`).

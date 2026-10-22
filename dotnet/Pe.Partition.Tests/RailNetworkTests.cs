@@ -179,7 +179,7 @@ public sealed class RailNetworkTests {
 
     // ---------------------------------------------------------------- Solve.RunRails on synthetic wall pieces
 
-    /// <summary>A wall as its two long faces and end caps; vertical faces project to degenerate rings, as Duryee's IFC pieces do.</summary>
+    /// <summary>A wall as its two long faces and end caps; vertical faces project to degenerate rings, as Project D's IFC pieces do.</summary>
     private static double[][] Slab(double x0, double y0, double x1, double y1) => [
         [x0, y0, x1, y0, x1, y0, x0, y0], [x0, y1, x1, y1, x1, y1, x0, y1],
         [x0, y0, x0, y1, x0, y1, x0, y0], [x1, y0, x1, y1, x1, y1, x1, y0]];

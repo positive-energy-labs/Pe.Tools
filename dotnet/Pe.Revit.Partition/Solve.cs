@@ -91,7 +91,7 @@ public static class Solve {
         // A rail room clipped by a locked room leaves scraps where the person's edge runs beside a rail. A clipped
         // piece thinner than a face goes to the locked room it borders longest, as Rails.Faces absorbs thin faces;
         // Rooms.cs never redraws a locked room, so the scrap is accounted and never drawn. An architect Room keeps
-        // its own area: Riverbend's 92 sf corridor 111-E swallowed 70 sf of neighbouring scraps when it took them.
+        // its own area: Project C's 92 sf corridor 111-E swallowed 70 sf of neighbouring scraps when it took them.
         var free = new List<Polygon>();
         foreach (var f in faces.Rooms) {
             var parts = Free([f]);

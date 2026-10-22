@@ -242,7 +242,7 @@ type Artifact = {
   hydraulicLaws: HydraulicLaw[];
   outputs: StoredOutputs;
 };
-// ponytail: Chadds full graph crossed 64 MB (61.8 MB on 10-19); whole-graph artifacts need slimming, not a bigger cap.
+// ponytail: Project A full graph crossed 64 MB (61.8 MB on 10-19); whole-graph artifacts need slimming, not a bigger cap.
 const MAX_BYTES = 256 * 1024 * 1024;
 const space = (node: DuctSnapshot["nodes"][number]) =>
   node.facts.find((f) => f.key === "space")?.text ?? null;

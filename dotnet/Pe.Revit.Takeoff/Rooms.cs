@@ -70,7 +70,7 @@ public static class RoomsRerun
         if (existing.Concat(existingHeld).Any(r => lockedIds.Contains(r.ElementId)))
             throw new InvalidOperationException("a locked region is also a rerun candidate");
         // zoneSqft is null when a person declared the zone: the declaration wins and it never becomes a room.
-        // The sole face may be held (Duryee's garage is held zone-edge-only): the zone is the room either way.
+        // The sole face may be held (Project D's garage is held zone-edge-only): the zone is the room either way.
         if (locked.Count == 0 && SoleFace(accepted, held) is { } only && only.RawSqft >= SoleFaceShare * zoneSqft)
             return new RoomsPlan([], [], [.. existing, .. existingHeld], [], [], only);
         var rebind = ZoneMaterializer.Rebind(accepted.Where(r => !IsLocked(r.Partition)).ToList(), existing);
@@ -161,7 +161,7 @@ public static class Rooms
     // FOOTGUN: contract constant, the wall evidence window around a region's bbox.
     private const double WallWindowFt = 1.0;
 
-    // FOOTGUN: measured on Duryee `Mechanical Zoning Plan - Level 1` (Astra r0 capture, 22551 knee pieces). Summed
+    // FOOTGUN: measured on Project D `Mechanical Zoning Plan - Level 1` (Astra r0 capture, 22551 knee pieces). Summed
     // knee length inside the region inset by 1 / 2 ft: the five hand fills 807/661, 213/95, 1004/750, 94/30, 17/15;
     // the Pantry (x -36..-26, y 250..260) 97/0, because its hand edge overshoots the IFC wall layers at x -27.2..-27.9
     // by 0.5 to 1.5 ft. A 1 ft inset calls the Pantry a zone; 2 ft separates all six.

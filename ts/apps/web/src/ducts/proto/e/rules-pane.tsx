@@ -160,6 +160,7 @@ export function RulesTree({
                 </span>
               ),
               onMouseEnter: () => light(idsUnder(n.ruleKey)),
+              revitIds: idsUnder(n.ruleKey),
             };
           }
           if (n.kind === "table")
@@ -167,6 +168,7 @@ export function RulesTree({
               label: <Chips ruleKey={n.ruleKey} priced={priced} work={work} />,
               title: `the ASHRAE table every ${ruleByKey(n.ruleKey)?.family ?? ""} instance is looked up under`,
               onMouseEnter: () => light(idsUnder(n.ruleKey)),
+              revitIds: idsUnder(n.ruleKey),
             };
           return {
             label: (
@@ -185,6 +187,7 @@ export function RulesTree({
               />
             ),
             onMouseEnter: () => light([n.id]),
+            revitIds: [n.id],
           };
         }}
       />

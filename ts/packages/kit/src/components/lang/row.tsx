@@ -46,7 +46,14 @@ export interface RowState {
   failed?: boolean;
   /** Present, the row refuses picks and is greyed; the reason is its tooltip, not drawn text. */
   refusal?: string | null;
+  /** The Revit elements the row stands for: right-click or BX shows them in Revit (the app's element menu). */
+  revitIds?: readonly number[];
 }
+
+/** The attribute the app's element menu reads: put it on any element that stands for Revit elements. */
+export const revitTarget = (ids: readonly number[] | null | undefined) => ({
+  "data-revit-ids": ids?.length ? ids.join(",") : undefined,
+});
 
 type RowProps = RowState & {
   id?: string;
@@ -111,6 +118,7 @@ const rowStateProps = (state: RowState) => ({
   "aria-disabled": state.refusal ? true : undefined,
   "aria-selected": state.selected === undefined ? undefined : state.selected,
   "aria-checked": state.checked,
+  ...revitTarget(state.revitIds),
 });
 
 export function Row(props: RowProps) {
@@ -122,12 +130,13 @@ export function Row(props: RowProps) {
     pending,
     failed,
     refusal,
+    revitIds,
     id,
     role,
     onClick,
     onMouseMove,
   } = props;
-  const states = rowStateProps({ cursor, selected, checked, active, pending, failed, refusal });
+  const states = rowStateProps({ cursor, selected, checked, active, pending, failed, refusal, revitIds });
   const shared = {
     id,
     role,

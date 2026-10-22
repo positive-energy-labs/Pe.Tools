@@ -26,6 +26,7 @@ import {
 import { denseRegion, Schematic, schematicHeight } from "./inset";
 import { orbitOf } from "./proto/orbit/camera"; // proto: orbit
 import { useOrbitDrawing } from "./proto/orbit/lens"; // proto: orbit
+import { revitTarget } from "@pe/kit/lang/row";
 import type { Claim } from "./legs";
 import type { SubjectDrawn } from "./scene";
 
@@ -410,6 +411,7 @@ export function DuctDrawing({
                 <g
                   key={id}
                   data-segment={id}
+                  {...revitTarget([id])}
                   data-critical={critical?.has(id) ? "" : undefined}
                   data-selected={selected.has(id) ? "" : undefined}
                   data-hovered={id === hovered ? "" : undefined}
@@ -516,6 +518,7 @@ export function DuctDrawing({
                 key={id}
                 data-node={facts.node.kind}
                 data-node-id={id}
+                {...revitTarget([id])}
                 data-critical={critical?.has(id) ? "" : undefined}
                 data-selected={selected.has(id) ? "" : undefined}
                 data-hovered={id === hovered ? "" : undefined}

@@ -127,7 +127,7 @@ export function servedBy(tree: GroupTree, units: readonly number[]): Map<number,
  * A group's fans with their design flows: the stated one, else the sum of the terminal flows the
  * fan serves in this group (`servedBy`), `served` naming them; a fan serving none states none.
  * Never another group's sum: a unit rooting a supply and a return group derives each from that
- * group's own grilles (SA 19, Chadds: DH-21 read 768 cfm from RA 38's return grilles, outranked
+ * group's own grilles (SA 19, Project A: DH-21 read 768 cfm from RA 38's return grilles, outranked
  * FC-17 and took its trunk).
  */
 export function groupFans(

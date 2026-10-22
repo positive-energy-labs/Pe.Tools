@@ -68,6 +68,7 @@ export function InputsPane(props: InputsPaneProps) {
       selected={selected === id}
       onClick={() => select(id)}
       onMouseEnter={() => light([id])}
+      revitIds={[id]}
       data-key={`${kind}:${id}`}
     />
   );

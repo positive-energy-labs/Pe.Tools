@@ -41,7 +41,7 @@ export function fanCandidates(snapshot: Shape, unitId: number, group?: string): 
  * made the fan of. A unit already some system's base is answered; one with no candidate is left out.
  * A system takes one base equipment, so it is offered once: to its network's lead fan (`lead`, the
  * fan that owns the trunk) when one is known. A system whose candidate fans sit in separate networks
- * (SA 19 on Chadds: FC-17's and FC-35's) is offered to none; it is returned in `split` to be split in
+ * (SA 19 on Project A: FC-17's and FC-35's) is offered to none; it is returned in `split` to be split in
  * Revit first.
  */
 export function fansOwedBase(

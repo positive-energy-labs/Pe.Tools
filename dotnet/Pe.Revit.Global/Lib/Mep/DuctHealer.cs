@@ -94,7 +94,7 @@ public static class DuctHealer {
 
     private static DuctHealOutcome Item(Document doc, DuctHealItem item, bool preview) {
         // Revit creates in the active view's phase; a fitting in another phase than the run it heals is
-        // filtered out of the working phase and the end reads open again (Chadds: cap in Future on a New
+        // filtered out of the working phase and the end reads open again (Project A: cap in Future on a New
         // Construction duct). Read before the heal: a union may replace the owner.
         var phase = Try(() => Find(doc, item.End))?.Owner.CreatedPhaseId;
         using var sub = new SubTransaction(doc);

@@ -6,7 +6,7 @@
  * direction. Three great circles (the plan, and the N-S and E-W vertical planes) carry the 6 poles
  * (N, S, E, W on project north = snapshot +Y, which `iso.tsx` does not re-derive; Up, Down) and 12
  * mid-arc points; a click glides the camera so that point faces the viewer. The compass, not the
- * group's grid, places the poles, so their words never lie (Chadds runs 45° off north, so the
+ * group's grid, places the poles, so their words never lie (Project A runs 45° off north, so the
  * level mid-arc points land square to its ducts). Far-side wire and dots draw dim, behind the
  * system. Elevation stops at 0, so the points below the floor are drawn and refused.
  */

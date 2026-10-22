@@ -2,7 +2,7 @@
  * A passive unit passes air through it (pressure-drop ledger, 2026-10-21, multi-fan spike).
  * `ducts.snapshot` cuts groups at every unit (DuctNetwork.cs), so a filter chassis between a return
  * plenum and its air handler splits one network into two groups and the air handler's critical
- * run stops at the filter (Chadds RA 8, g11055286: FC-33 to filter FR-1; FR-1 on to g6312628).
+ * run stops at the filter (Project A RA 8, g11055286: FC-33 to filter FR-1; FR-1 on to g6312628).
  *
  * Here, for pricing only, every passive unit (`unit-roles.ts`) becomes an inline part: its ports
  * are one node, the groups its ports reach merge into one group under the merged group's fans,

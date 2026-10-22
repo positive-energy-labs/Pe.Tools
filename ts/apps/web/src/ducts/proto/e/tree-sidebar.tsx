@@ -237,6 +237,7 @@ export function SystemTree({ ctx }: { ctx: TreeCtx }) {
             n.kind !== "system" &&
             (n.kind === "run" ? n.terminal : n.id) === ctx.selected,
           onMouseEnter: () => ctx.light(idsOf(n)),
+          revitIds: idsOf(n),
         };
       }}
     />

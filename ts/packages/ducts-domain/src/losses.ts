@@ -262,7 +262,7 @@ function fittingFacts(
       node.connectors.find((c) => c !== walkedInlet && c.connectedTo?.elementId !== prev));
   const transition = node.partType === "Transition";
   const physical = transition ? transitionGeometry(node) : null;
-  // Connectors that are not one In and one Out (bidirectional on Chadds) take the tree walk's direction.
+  // Connectors that are not one In and one Out (bidirectional on Project A) take the tree walk's direction.
   const walked = physical != null && physical.inlet == null;
   const inlet = physical?.inlet ?? walkedInlet;
   const outlet = physical?.outlet ?? walkedOutlet;
@@ -843,7 +843,7 @@ function pathRows(
     if (isTap(node)) {
       const qb = below.get(node.id) ?? 0;
       const fromMain = prev != null && prev === factOf(node, "mainSegment");
-      // Entered from the collar (Chadds: the last run to a grille, fed through the tap's side into
+      // Entered from the collar (Project A: the last run to a grille, fed through the tap's side into
       // a duct capped at its far end), all of the air turns through it: its branch leg at Qb/Qc = 1.
       if (!fromMain && qb > 0) {
         const facts = fittingFacts(

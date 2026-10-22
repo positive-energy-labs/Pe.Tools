@@ -40,7 +40,7 @@ public class RegionMeasurementsTests
     [Test]
     public void A_flipped_zone_scopes_itself_and_a_live_zone_still_scopes_its_rooms()
     {
-        // Duryee's garage flipped to a room is its own zone: no Zoning Region carries its guid, and the snapshot
+        // Project D's garage flipped to a room is its own zone: no Zoning Region carries its guid, and the snapshot
         // threw on the missing zone. Its scope is its own shape.
         List<List<double[]>> garage = [Square(0, 0, 27)];
         List<List<double[]>> room = [Square(0, 0, 10)];

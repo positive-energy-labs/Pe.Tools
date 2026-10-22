@@ -1,5 +1,4 @@
 using Autodesk.Revit.UI;
-using Pe.Shared.RevitData;
 
 namespace Pe.Revit.Extensions.ProjDocument;
 
@@ -67,80 +66,42 @@ public static class UIDocumentShowExtensions {
         return box;
     }
 
-    /// <summary>Which view showed the elements, the name of the view the person was in when it was not that one, and whether the view was made.</summary>
-    public sealed record ShownIn(View View, string? SwitchedFrom, bool Created, bool ShowsAll);
+    /// <summary>The 3D view that boxed the elements, whether it was made, and whether it displays all of them.</summary>
+    public sealed record Boxed(View3D View, bool Created, bool ShowsAll);
+
+    /// <summary>The section box's margin past the elements: at least this many feet, else a quarter of their diagonal.</summary>
+    private const double BoxPadFeet = 8.0;
 
     /// <summary>
-    ///     Select <paramref name="ids" /> and zoom to them in a view that can show them. The active view stays when it
-    ///     is a model view that displays all of them; otherwise the first of the default {3D}, other 3D views, then plans
-    ///     on the elements' levels that does (3D views ranked mechanical-first, never a template) (<see cref="ShowViewPolicy" />). A sheet, schedule or other non-model active
-    ///     view is never zoomed: model coordinates mean nothing there (the zoom landed in empty space, 2026-10-20). When no
-    ///     3D view exists one named "Pe 3D" is made, and the result says so. Call outside a transaction.
+    ///     Select <paramref name="ids" />, box the person's own 3D view around them with a generous margin, open it and
+    ///     zoom to fit. The view is the default {3D}, else this user's {3D - username}, else one named "Pe 3D" is made
+    ///     (Revit refuses braces in a name set by the API). The section box is the one view edit: one undoable transaction,
+    ///     no model element changes. Call outside a transaction.
     /// </summary>
-    public static ShownIn ShowInBestView(this UIDocument uidoc, IReadOnlyCollection<ElementId> ids) {
+    public static Boxed BoxInThreeD(this UIDocument uidoc, IReadOnlyCollection<ElementId> ids) {
         var document = uidoc.Document;
-        var active = uidoc.ActiveView;
-        var idSet = ids.ToHashSet();
-        var levels = idSet
-            .Select(id => document.GetElement(id)?.LevelId)
-            .Where(level => level != null && level != ElementId.InvalidElementId)
-            .Select(level => level!)
-            .ToHashSet();
+        var threeDs = new FilteredElementCollector(document).OfClass(typeof(View3D)).Cast<View3D>()
+            .Where(v => !v.IsTemplate && !v.IsPerspective)
+            .ToList();
+        var mine = $"{{3D - {uidoc.Application.Application.Username}}}";
+        var view = threeDs.FirstOrDefault(v => v.Name == "{3D}") ?? threeDs.FirstOrDefault(v => v.Name == mine);
+        var created = view is null;
+        view ??= CreateThreeD(document);
 
-        var views = new Dictionary<ElementId, View> { [active.Id] = active };
-        foreach (var v in new FilteredElementCollector(document).OfClass(typeof(View3D)).Cast<View3D>()
-                     .Where(v => !v.IsTemplate && !v.IsPerspective))
-            views[v.Id] = v;
-        foreach (var v in new FilteredElementCollector(document).OfClass(typeof(ViewPlan)).Cast<ViewPlan>()
-                     .Where(v => !v.IsTemplate && v.GenLevel != null && levels.Contains(v.GenLevel.Id)))
-            views[v.Id] = v;
-
-        var infos = views.Values.Select(v => new ShowViewInfo(v.Id.Value(), v.Name, RoleOf(v), v.Id == active.Id,
-            v is ViewPlan { GenLevel: { } level } && levels.Contains(level.Id), DisciplineOf(v)));
-        var order = ShowViewPolicy.Order(infos);
-
-        View? chosen = null;
-        foreach (var info in order) {
-            var candidate = views[info.Id.ToElementId()];
-            if (!DisplaysAll(document, candidate, idSet)) continue;
-            chosen = candidate;
-            break;
+        var box = document.UnionBoundingBox(ids, view);
+        if (box != null) {
+            var pad = Math.Max(BoxPadFeet, 0.25 * box.Max.DistanceTo(box.Min));
+            var margin = new XYZ(pad, pad, pad);
+            using var transaction = new Transaction(document, "Pe: box the 3D view");
+            transaction.Start();
+            view.SetSectionBox(new BoundingBoxXYZ { Min = box.Min - margin, Max = box.Max + margin });
+            view.IsSectionBoxActive = true;
+            transaction.Commit();
         }
 
-        var created = false;
-        var showsAll = chosen != null;
-        if (chosen == null) {
-            // Nothing displays them all (hidden by a filter, section box, or visibility). A 3D view is still the best
-            // place to look; make one only when the document has none.
-            chosen = order.FirstOrDefault(i => i.Role == ShowViewRole.ThreeD) is { } first
-                ? views[first.Id.ToElementId()]
-                : null;
-            if (chosen == null) {
-                chosen = CreateThreeD(document);
-                created = true;
-                showsAll = DisplaysAll(document, chosen, idSet);
-            }
-        }
-
-        _ = uidoc.SelectAndZoom(ids, chosen);
-        return new ShownIn(chosen, chosen.Id == active.Id ? null : active.Name, created, showsAll);
+        _ = uidoc.SelectAndZoom(ids, view);
+        return new Boxed(view, created, DisplaysAll(document, view, ids.ToHashSet()));
     }
-
-    private static ShowViewDiscipline DisciplineOf(View view) =>
-        view.get_Parameter(BuiltInParameter.VIEW_DISCIPLINE)?.AsInteger() switch {
-            (int)ViewDiscipline.Mechanical => ShowViewDiscipline.Mechanical,
-            (int)ViewDiscipline.Coordination => ShowViewDiscipline.Coordination,
-            (int)ViewDiscipline.Plumbing => ShowViewDiscipline.Plumbing,
-            (int)ViewDiscipline.Electrical => ShowViewDiscipline.Electrical,
-            _ => ShowViewDiscipline.Other
-        };
-
-    private static ShowViewRole RoleOf(View view) => view switch {
-        View3D => ShowViewRole.ThreeD,
-        ViewPlan => ShowViewRole.Plan,
-        ViewSection => ShowViewRole.Section,
-        _ => ShowViewRole.NonModel
-    };
 
     private static bool DisplaysAll(Document document, View view, HashSet<ElementId> ids) =>
         new FilteredElementCollector(document, view.Id).WherePasses(new ElementIdSetFilter(ids)).ToElementIds().Count == ids.Count;

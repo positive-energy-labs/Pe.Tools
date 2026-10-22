@@ -18,9 +18,9 @@ public enum SourceKind { Host, RevitLink, IfcLink }
 public enum HeightRole { None = 0, Floor = 1, Overhead = 2, ByGeometry = 4 }
 
 public static class HeightRoles {
-    // FOOTGUN: a floor is a triangle within 5 degrees of flat from 1.5 ft below a level plane (Knobs.FloorTolFt; Chadds
+    // FOOTGUN: a floor is a triangle within 5 degrees of flat from 1.5 ft below a level plane (Knobs.FloorTolFt; Project A
     // has sunken proxy slabs at -0.45 to -1.19) to 0.5 ft above it (the island closet's Return Air duct top is at 0.25,
-    // and MEP is excluded anyway). Chadds Main Level's IFC slab top reads z -0.0 at level 0.
+    // and MEP is excluded anyway). Project A Main Level's IFC slab top reads z -0.0 at level 0.
     private static readonly float FlatCos = (float)Math.Cos(5.0 * Math.PI / 180.0);
     public const double BelowLevelFt = 1.5;
     public const double AboveLevelFt = 0.5;
@@ -48,7 +48,7 @@ public static class HeightRoles {
     };
 
     // Winding is not trusted, so facing is not read: a ray down meets a slab's top first, a ray up its underside.
-    // Overhead reads no slope at all: Chadds' vaulted IFC roof undersides slope 9.5 to 33.7 degrees and are the
+    // Overhead reads no slope at all: Project A's vaulted IFC roof undersides slope 9.5 to 33.7 degrees and are the
     // ceiling, whose height at a point is where the ray meets it.
     private static bool Flat(Tri t) {
         var n = Vector3.Cross(t.B - t.A, t.C - t.A);

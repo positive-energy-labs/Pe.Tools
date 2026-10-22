@@ -6,20 +6,20 @@
  * feet (DuctContracts.cs); `tolIn` is inches. A staged `ignore` verdict on a finding id withholds
  * that one inference. Nothing here is stored and nothing reaches Revit.
  * A duct landing on a duct's side and a duct landing on an end cap are one rule (kaitpw
- * 2026-10-19), and so is a duct landing on an open connector's mouth off its centre (Chadds SA 19
+ * 2026-10-19), and so is a duct landing on an open connector's mouth off its centre (Project A SA 19
  * duct 8750451 under grille 8747668): each duct is a solid, its polyline swept by its
  * cross-section, closed at an end an end cap closes, and each open connector is a face its size
  * wide; an open connector whose point is near a face, whose axis points into it, and whose point
  * lies within the face's outline, lands there. Centering is not required and any number of
  * connectors may land on one face. A duct end anywhere inside a duct's body, pointing across it,
- * taps it at its nearest point along it, however deep (kaitpw 2026-10-19: Chadds 7266368 on
+ * taps it at its nearest point along it, however deep (kaitpw 2026-10-19: Project A 7266368 on
  * 14342882 is a real join); the body is part of the solid, not only its surface.
  * An inference is never correct, only likely (kaitpw 2026-10-19): every joint and tap is a
  * warning a person rules on. Ends whose air classifications differ (supply, return, exhaust)
  * never join silently: the would-be join is a `near-miss-across-classifications` warning, and a
  * staged `connect` verdict on its id joins it anyway.
  * An accessory or fitting lying inside one duct's body, aligned with it, neither end connected
- * (Chadds damper 13568060 inside duct 11275610), is inline on that duct (kaitpw 2026-10-19):
+ * (Project A damper 13568060 inside duct 11275610), is inline on that duct (kaitpw 2026-10-19):
  * `tolerate` splices it into the duct where it sits, so its loss prices, and it is a warning too.
  * A connector faces the way the snapshot's `facing` (Revit's BasisZ) says, and a rectangular one
  * is rolled the way its `widthAxis` says; older snapshots without them fall back to geometry.
@@ -28,7 +28,7 @@
  * `bins.ts`), and a path resting on an anomalous one is provisional
  * (`losses.ts`), and only a person's staged `connect` (confirm) or `ignore` (break) rules on
  * it; a Pea proposal never does. A terminal whose open connector sits in a duct's open end but
- * faces the wrong way (a stand-in family; Chadds grilles 10922066, 10922068 in their plenums) joins
+ * faces the wrong way (a stand-in family; Project A grilles 10922066, 10922068 in their plenums) joins
  * that end anyway, always `anomalous`, its note naming the reversed connector and the repair.
  */
 import type { DuctInferenceGrade, DuctsRouteDocument } from "@pe/agent-contracts";
@@ -127,11 +127,11 @@ const segmentClass = (s: Segment) =>
   classOf(s.classification);
 
 /**
- * ponytail: tuned by one case (Chadds 14122436 short of cap 14107111, 1.6 in of air to the cap
+ * ponytail: tuned by one case (Project A 14122436 short of cap 14107111, 1.6 in of air to the cap
  * face). Move to a ruled per-document value if more models disagree.
  */
 export const FACE_TOL_IN = 2;
-/** ponytail: one measured cap (Chadds 14107111's face sits 1.0 in outboard of the duct end); caps carry no size in the snapshot. */
+/** ponytail: one measured cap (Project A 14107111's face sits 1.0 in outboard of the duct end); caps carry no size in the snapshot. */
 export const CAP_THICKNESS_IN = 1;
 /** The least cosine between a landing connector's outward axis and the face's inward normal. */
 const AXIS_COS = 0.7;
@@ -144,7 +144,7 @@ const ALONG_COS = 0.95;
  * `NEAR_MISS_GAP_IN`, its connectors facing each other (cos below `-NEAR_MISS_OPPOSED_COS`) and
  * centred within `NEAR_MISS_CENTRED_IN` of each other's axis; a part's (not a duct's) port deeper
  * than `THROUGH_IN` inside a duct's body is placed through it, `anomalous`.
- * ponytail: tuned on Chadds 2026-10-19 (grille 8747668 on duct 8750451 sits 2.0 in off-centre and
+ * ponytail: tuned on Project A 2026-10-19 (grille 8747668 on duct 8750451 sits 2.0 in off-centre and
  * must read stretched); move to ruled per-document values if more models disagree.
  */
 export const NEAR_MISS_GAP_IN = 1;
@@ -194,7 +194,7 @@ function sectionOf(s: Sized, u: number[], roll: number[] | null = null): Section
  * ponytail: snapshots before `facing` carry no connector frame, so it derives from geometry: a
  * segment's end reads its polyline; a node's port points from the node's point, or, when the
  * node's point is that port (a transition's insertion), away from its other ports. A one-port node
- * whose port is its insertion point (Chadds grilles 10922066, 10922068) derives none.
+ * whose port is its insertion point (Project A grilles 10922066, 10922068) derives none.
  */
 function axisOf(e: Element, c: Element["connectors"][number]): number[] | null {
   if (c.kind === "curve" && "polyline" in e) return null;
@@ -687,7 +687,7 @@ export function inferJoints(
     }
   }
   // (c) A terminal whose open connector lies in a duct's body or within `FACE_TOL_IN` of its open
-  // end, facing along the duct either way, joins that end even facing the wrong way (Chadds
+  // end, facing along the duct either way, joins that end even facing the wrong way (Project A
   // grilles 10922066, 10922068 inside their 72x3 plenums): always `anomalous`.
   const ends = open.filter((q) => q.axis && "polyline" in byId.get(q.id)!);
   for (const p of open) {

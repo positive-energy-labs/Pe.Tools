@@ -18,7 +18,7 @@ import { BindPicker } from "./picker";
 
 afterEach(cleanup);
 
-const MODEL = "C:\\Jobs\\Chadds MEP.rvt";
+const MODEL = "C:\\Jobs\\Project A MEP.rvt";
 const reading: PageTargetReading = {
   page: "page:@pdrop/pages/tour",
   slot: "default",
@@ -39,7 +39,7 @@ const thread = (id: string, title: string): HarnessThreadSummary =>
   ({
     id,
     title,
-    head: { ...emptyThreadHead, displayLabel: "Chadds MEP" },
+    head: { ...emptyThreadHead, displayLabel: "Project A MEP" },
   }) as HarnessThreadSummary;
 
 test("the picker shows what the host resolved and binds a thread, a pin, or nothing", () => {
@@ -51,7 +51,7 @@ test("the picker shows what the host resolved and binds a thread, a pin, or noth
       threads={[thread("t-duct-1", "Duct loss walk")]}
       documents={[
         {
-          title: "Chadds MEP",
+          title: "Project A MEP",
           address: MODEL,
           revit: "Revit 2025 · pid 10",
           ref: { session: "S", openId: "A" },
@@ -73,7 +73,7 @@ test("the picker shows what the host resolved and binds a thread, a pin, or noth
   expect(screen.getAllByText("read")).toHaveLength(2); // the Page, and the ungranted thread
   fireEvent.click(screen.getByText("Duct loss walk"));
   expect(onBind).toHaveBeenLastCalledWith({ kind: "thread", thread: "t-duct-1" });
-  fireEvent.click(screen.getAllByText("Chadds MEP").at(-1)!);
+  fireEvent.click(screen.getAllByText("Project A MEP").at(-1)!);
   expect(onBind).toHaveBeenLastCalledWith({ kind: "pinned", address: MODEL });
   // An unsaved document has no Address, so it refuses the pin.
   fireEvent.click(screen.getByText("Project1"));

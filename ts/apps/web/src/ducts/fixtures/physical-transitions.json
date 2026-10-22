@@ -1,5 +1,5 @@
 {
-  "provenance": "Exact node excerpts from retained Chadds snapshot SHA cb808a82d7c48f25a487fb80de72185c8c557c2e757e29f863b7adba1d6e669c. Tests synthesize surrounding network and explicitly state a manual angle. Excerpts do not attest angle or complete Chadds demand.",
+  "provenance": "Exact node excerpts from retained Project A snapshot SHA cb808a82d7c48f25a487fb80de72185c8c557c2e757e29f863b7adba1d6e669c. Tests synthesize surrounding network and explicitly state a manual angle. Excerpts do not attest angle or complete Project A demand.",
   "nodes": [
     {
       "id": 12809620,

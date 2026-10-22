@@ -24,7 +24,7 @@ Authority runs user, then skill, then this file. A stance is a posture, not a pr
 | root | `reflect` | Theseus' ship and the Ulysses contract — the set refits itself, and binds its own cold reader | set drift: a skill edited by feel, never run cold | - | **yes** | - |
 | lens | `delegate` | Abbot, Falconer, and Breeder — who does what, at what cost, down which line | context rot: one session carrying everything, counsel building | no | **yes** |  |
 | lens | `house` | Cartographer with the Instrument Maker's kit — a chart someone steers by where they cannot see the bottom | templated surfaces: a screen that fits no house | no | no |  |
-| lens | `prove` | Assayer striking the Hallmark, Thomas on another's claim — a claim is stamped with its lane or not at all | plausible, not real: done on a mock, a count, a screenshot, or another agent's word | no | no |  |
+| lens | `prove` | Assayer striking the Hallmark, Thomas on another's claim — a claim is stamped with its lane or not at all | plausible, not real: done on a mock, a count, a screenshot, or another agent's word; or built on assumed soil, a shape settled before the real model was bored | no | no |  |
 | lens | `purge` | Shiva at the winnowing floor, Occam, the Iconoclast, the burn boss — delete at least as much as you add | bloat: adding to a place that already has too much | no | no |  |
 | pass | `relay` | Herald — the message to the next session | the dropped baton: the next session re-derives what this one knew | no | **yes** | baton delivered |
 | pass | `release` | Ferryman — the crossing ends on the other bank | premature release closure: shipped bytes never made the crossing | no | no | exact published bytes reached the consumer, promised outcomes proven, failures and gaps recorded |

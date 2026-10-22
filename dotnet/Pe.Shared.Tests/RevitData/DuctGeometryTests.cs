@@ -70,7 +70,7 @@ public sealed class DuctGeometryTests {
 
     [Test]
     public void Retained_return_transition_geometry_uses_physical_inlet_even_at_the_root() {
-        // Chadds 12398836 / equipment 10205336: exact retained sizes, port indices and directions.
+        // Project A 12398836 / equipment 10205336: exact retained sizes, port indices and directions.
         var fitting = Node(12398836, DuctNodeKind.Fitting, "Transition", [
             Rect(0, 12, 12, 11599307, 1) with { Direction = "in" },
             Round(1, 10, 10205336, 2) with { Direction = "out" }

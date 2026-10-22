@@ -1,5 +1,5 @@
 /**
- * /ducts scene legs, deterministic: the Chadds makeup-air trace (88 ordered elements Pea walked on
+ * /ducts scene legs, deterministic: the Project A makeup-air trace (88 ordered elements Pea walked on
  * 2026-10-17, `fixtures/makeup-path.json`, shaped here into a minimal snapshot on Main 0 / Upper
  * 12.5 / Attic 24.083 ft) cuts into 9 legs and 7 nodes; and, when `PE_DUCTS_FIXTURE` names the
  * saved Project A snapshot, a group's longest run cuts with real connectors, and a skipped id is a gap.
@@ -184,7 +184,7 @@ it("a subject that skips a connected element reports an omission, not a gap, and
 });
 
 it("a break the snapshot bridges outside the subject is an omission; one it cannot bridge is a gap", () => {
-  // The wave-3 Chadds cases, as a chain: open duct 14122436 is NOT joined to end cap 14107111, while
+  // The wave-3 Project A cases, as a chain: open duct 14122436 is NOT joined to end cap 14107111, while
   // FR-1 13760866 reaches FC-23 13760867 only through 13761466, 13761629 and 13761574.
   const chain = [
     14088043, 14107098, 14106988, 14107111, 14122436, 14199815, 13760866, 13761466, 13761629,
@@ -237,7 +237,7 @@ it.skipIf(!FIXTURE || !existsSync(FIXTURE))(
 );
 
 it("a break the builder bridges by proximity is inferred, not a gap, until a verdict ignores it", () => {
-  // Chadds: open duct 14122436 stops 2.63 in short of plenum 14106988's end, which end cap
+  // Project A: open duct 14122436 stops 2.63 in short of plenum 14106988's end, which end cap
   // 14107111 closes (its face 1 in outboard); the builder taps the plenum there.
   const rows: Row[] = [
     { id: 14088043, k: "terminal", p: [0, 10, 0] },

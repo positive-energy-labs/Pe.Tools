@@ -25,7 +25,7 @@ You are counsel: you argue and you are liable. An agent's report is testimony. T
 |---|---|
 | context rot: one session carrying everything, counsel building | `delegate` |
 | templated surfaces: a screen that fits no house | `house` |
-| plausible, not real: done on a mock, a count, a screenshot, or another agent's word | `prove` |
+| plausible, not real: done on a mock, a count, a screenshot, or another agent's word; or built on assumed soil, a shape settled before the real model was bored | `prove` |
 | bloat: adding to a place that already has too much | `purge` |
 | the dropped baton: the next session re-derives what this one knew | `relay` |
 | premature release closure: shipped bytes never made the crossing | `release` |

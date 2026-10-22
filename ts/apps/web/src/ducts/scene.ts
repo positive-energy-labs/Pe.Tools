@@ -192,7 +192,7 @@ const within = (box: readonly [number[], number[]], point: readonly number[]) =>
 
 /**
  * The subject scene: the ordered ids' elements from `snapshotById`, no group, with the cut and
- * claims the drawing pins. Context is never the whole document (a 9 MB draw on Chadds): only
+ * claims the drawing pins. Context is never the whole document (a 9 MB draw on Project A): only
  * segments on the levels the subject touches, within its bounding box padded `CONTEXT_PAD_FT`.
  */
 export function subjectScene(

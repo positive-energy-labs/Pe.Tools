@@ -182,8 +182,8 @@ test("pod.list carries each pod's canonical contribution keys", async () => {
 test("pod.list identity returns a bounded ownership tuple alongside unchanged rich inventory", async () => {
   await writePod("default", { "pod.json": '{"id":"output-owner"}', "settings/kept.json": "{}" });
   for (let i = 0; i < 27; i++) await writePod("default", { [`assets/${i}.txt`]: "kept" });
-  for (let i = 0; i < 890; i++) await writePod("chadds", { [`assets/${i}.json`]: "{}" });
-  await writePod("chadds", { "pod.json": '{"id":"chadds"}' });
+  for (let i = 0; i < 890; i++) await writePod("project-a", { [`assets/${i}.json`]: "{}" });
+  await writePod("project-a", { "pod.json": '{"id":"project-a"}' });
   for (let p = 0; p < 30; p++) {
     await writePod(`sibling-${p}`, { "pod.json": JSON.stringify({ id: `sibling-${p}` }) });
     for (let i = 0; i < (p === 0 ? 38 : 28); i++)
@@ -200,7 +200,7 @@ test("pod.list identity returns a bounded ownership tuple alongside unchanged ri
   expect(inventory.status).toBe(200);
   expect(inventory.json.pods).toHaveLength(32);
   expect(
-    inventory.json.pods.find((pod: { id: string }) => pod.id === "chadds").members,
+    inventory.json.pods.find((pod: { id: string }) => pod.id === "project-a").members,
   ).toHaveLength(891);
   expect(nativeCalls).toEqual([]);
 });

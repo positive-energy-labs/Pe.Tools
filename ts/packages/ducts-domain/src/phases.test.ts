@@ -99,8 +99,8 @@ const snap = (segments: Segment[], order: string[] | null = ORDER): DuctSnapshot
 const working = (phase: string | null, rung: "staged" | "proposal" = "staged") =>
   ductsDocumentSchema.parse({ workingPhase: { [rung]: { value: phase } } });
 
-/** Chadds' shape: Existing run 1 -> 2; Future duct 3 joined to 2's end and lying inside duct 4. */
-const chadds = () => {
+/** Project A's shape: Existing run 1 -> 2; Future duct 3 joined to 2's end and lying inside duct 4. */
+const projectA = () => {
   const a = duct(1, [0, 0, 0], [10, 0, 0], "g1");
   const b = duct(2, [10, 0, 0], [20, 0, 0], "g1");
   const host = duct(4, [30, 0, 0], [40, 0, 0], "g4");
@@ -124,15 +124,15 @@ it("an element exists from the phase it is created in until the phase that demol
 });
 
 it("with no working phase, or one the snapshot does not list, nothing is left out and nothing is said", () => {
-  const before = chadds();
+  const before = projectA();
   for (const work of [null, working(null), working("Phase 9")])
     expect(phased(before, work)).toEqual({ snapshot: before, findings: [] });
   // A snapshot from before phases were read lists none.
-  expect(phased(snap(chadds().segments, null), working("Existing")).findings).toEqual([]);
+  expect(phased(snap(projectA().segments, null), working("Existing")).findings).toEqual([]);
 });
 
 it("an element not in the working phase leaves the network and warns, naming its phase and what it touches", () => {
-  const before = chadds();
+  const before = projectA();
   const { snapshot, findings } = phased(before, working("Existing"));
   expect(snapshot.segments.map((s) => s.id)).toEqual([1, 2, 4]);
   expect(snapshot.segments[1]!.connectors[1]!.connectedTo).toBeNull();
@@ -180,7 +180,7 @@ it("the route reads the staged working phase, else Pea's proposal; a person's st
     workingPhase: { proposal: { value: "Future" }, staged: { value: null } },
   });
   expect(workingPhaseOf(both)).toBeNull();
-  const before = chadds();
+  const before = projectA();
   // Proximity never sees the left-out duct: no inference joins duct 2's freed end to it.
   const t = tolerated(before, working("Existing", "proposal"));
   expect(t.snapshot.segments.map((s) => s.id)).toEqual([1, 2, 4]);

@@ -17,7 +17,8 @@ import { Pane } from "#/components/lang/pane";
 import { PaneSplit } from "#/components/lang/pane-resize";
 
 import { airflowOptions } from "../../airflow";
-import { elementNamer, ShowInRevit } from "../../claims";
+import { elementNamer } from "../../claims";
+import { revitScope, SelectionBoxButton } from "#/revit/element-menu";
 import {
   annotatedFindings,
   fanVerbs,
@@ -360,7 +361,8 @@ function EScreenBody({ props }: { props: ProtoProps }) {
     if (to.system !== null) setPage({ system: to.system, selected: to.selected, issue: "" });
     return to.says;
   };
-  // The selected element, wherever it was picked from, can be shown in Revit.
+
+  // The selected element, wherever it was picked from, offers Revit in plain sight.
   const shown =
     selected != null && props.doc ? (
       <div
@@ -368,7 +370,7 @@ function EScreenBody({ props }: { props: ProtoProps }) {
         data-e-selected={selected}
       >
         <span className="min-w-0 flex-1 truncate">{nameOf(selected)}</span>
-        <ShowInRevit doc={props.doc} elementIds={[selected]} what="it" />
+        <SelectionBoxButton ids={[selected]} doc={props.doc} />
       </div>
     ) : null;
 
@@ -627,7 +629,7 @@ function EScreenBody({ props }: { props: ProtoProps }) {
   );
 
   return (
-    <div data-proto="E2" className="flex size-full min-h-0">
+    <div data-proto="E2" className="flex size-full min-h-0" {...revitScope(props.doc)}>
       <PaneSplit
         axis="horizontal"
         resize={{

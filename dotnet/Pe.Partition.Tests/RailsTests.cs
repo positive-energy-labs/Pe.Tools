@@ -19,7 +19,7 @@ public sealed class RailsTests {
         return [(x * Math.Cos(r)) - (y * Math.Sin(r)), (x * Math.Sin(r)) + (y * Math.Cos(r))];
     };
 
-    /// <summary>A vertical face projects to a degenerate 4-point ring, as Duryee's IFC wall pieces do.</summary>
+    /// <summary>A vertical face projects to a degenerate 4-point ring, as Project D's IFC wall pieces do.</summary>
     private static double[] Face(Func<double, double, double[]> f, double x0, double y0, double x1, double y1) =>
         [.. f(x0, y0), .. f(x1, y1), .. f(x1, y1), .. f(x0, y0)];
 
@@ -131,16 +131,16 @@ public sealed class RailsTests {
 
     /// <summary>
     ///     Falsifier dump, not a gate: writes each capture's rails as JSON for the W1 render. Needs
-    ///     <c>PE_RAILS_OUT</c>; Duryee needs <c>PE_RAILS_DURYEE</c> (a whole-level input JSON).
+    ///     <c>PE_RAILS_OUT</c>; Project D needs <c>PE_RAILS_PROJECT_D</c> (a whole-level input JSON).
     /// </summary>
     [Explicit]
-    [TestCase("duryee-level1")]
+    [TestCase("project-d-level1")]
     [TestCase("project-a-live")]
     public void Dump_rails(string name) {
         var outDir = Environment.GetEnvironmentVariable("PE_RAILS_OUT") ?? throw new AssertionException("PE_RAILS_OUT is unset");
         string json;
-        if (name == "duryee-level1") {
-            json = File.ReadAllText(Environment.GetEnvironmentVariable("PE_RAILS_DURYEE") ?? throw new AssertionException("PE_RAILS_DURYEE is unset"));
+        if (name == "project-d-level1") {
+            json = File.ReadAllText(Environment.GetEnvironmentVariable("PE_RAILS_PROJECT_D") ?? throw new AssertionException("PE_RAILS_PROJECT_D is unset"));
         } else {
             using var file = File.OpenRead(Path.Combine(PrivateFixtures.Dir("project-a/partition/live"), "partition-input.json.gz"));
             using var gzip = new System.IO.Compression.GZipStream(file, System.IO.Compression.CompressionMode.Decompress);

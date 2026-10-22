@@ -62,7 +62,7 @@ different source, or its own shape; where Pea's proposal lands first (override, 
 - Both Revit proofs landed (LEDGER Decided 2026-10-04); the test file stays as the grounding proof
   and ignores itself when no project document is open and `PE_PDROP_FIXTURE` is unset. It ran as
   `Pe.Revit.Tests/Proofs/DuctPressureProofTests.cs`, first attempted on the fresh rung
-  (`pe-revit test --filter`, env `PE_PDROP_FIXTURE` = the Chadds detached copy, opened and closed
+  (`pe-revit test --filter`, env `PE_PDROP_FIXTURE` = the Project A detached copy, opened and closed
   without save, transactions rolled back): (a) tap single-coefficient velocity-pressure basis;
   (b) terminal Flow under network-based calculations. Evidence lands in
   `.artifacts/runs/pdrop-proofs-20261004/`. kaitpw ruled a second Revit beside `tour3` is fine
@@ -71,7 +71,7 @@ different source, or its own shape; where Pea's proposal lands first (override, 
 ## Lane notes (2026-10-04 evening)
 - Fresh rung FALSIFIED for this fixture: a raw `OpenDocumentFile` inside a test blocks on the
   linked-DWG hatch warning dialog (`ADialog::doModal` at 18:38:02, journal 3983) and the engine
-  kills the run at its 10-minute timeout. Proofs on the Chadds copy run attached: own session
+  kills the run at its 10-minute timeout. Proofs on the Project A copy run attached: own session
   `pdrop-proof`, `pe-revit doc open ... --detach --windowed --missing-links allow` (the SDK now
   refuses a windowed detached open without an explicit missing-links policy; the old handoff
   recipe is stale), then `pe-revit test --attach --id pdrop-proof --no-build --filter ...` after a

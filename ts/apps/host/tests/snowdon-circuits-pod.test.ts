@@ -5,6 +5,7 @@ import { join, relative } from "node:path";
 import { createHash } from "node:crypto";
 import { readPackage, capturePackage } from "../src/packages.ts";
 import { exportPod, importPod } from "../src/pod-transfer.ts";
+import { bannedNames } from "./banned-names.ts";
 
 const root = join(import.meta.dirname, "../../../../examples/pods/snowdon-circuits");
 const text = (path: string) => readFile(join(root, path), "utf8");
@@ -82,11 +83,12 @@ test("the skill has valid frontmatter and no seed fingerprints or recorded resul
   const skill = await text("skills/circuit-drop/SKILL.md");
   expect(skill).toMatch(/^---\r?\nname: circuit-drop\r?\n/);
   expect(/^description: (.*)$/m.exec(skill)?.[1]).not.toContain(': "');
+  const names = bannedNames();
   for (const path of await files()) {
     if (path.endsWith("index.html")) continue;
-    expect(await text(path), path).not.toMatch(
-      /chadds|kaitpw|pdrop|proven\[|\b20\d\d-\d\d-\d\d\b/i,
-    );
+    const body = await text(path);
+    expect(body, path).not.toMatch(/kaitpw|pdrop|proven\[|\b20\d\d-\d\d-\d\d\b/i);
+    if (names) expect(body, path).not.toMatch(names);
   }
 });
 
