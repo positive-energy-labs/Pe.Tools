@@ -27,4 +27,9 @@
   <ItemGroup>
     <ProjectReference Include="..\Pe.Shared.Product\Pe.Shared.Product.csproj" />
   </ItemGroup>
+
+  <ItemGroup>
+    <!-- The .rfa schema reader's refusal of an unknown field type is tested on a synthetic schema. -->
+    <InternalsVisibleTo Include="Pe.Shared.Tests" />
+  </ItemGroup>
 </Project>
