@@ -1,58 +1,29 @@
-import type { RevitDetailSpaceScene } from "@pe/host-contracts/generated";
+/**
+ * The cut math: one canonical cut per axis (`spaceCutsSchema`), drawn in that axis's frame
+ * (`scene/plane.ts`) and extruded through the scene; the retained volume is their intersection.
+ * CPU picking (`retained`) and the shader (`packPolygons`) read the same polygons.
+ */
+import type { spaceCutsSchema } from "@pe/agent-contracts/space-view";
+import type { z } from "zod";
 
-export type Metadata = RevitDetailSpaceScene.Res.Response["scene"] & {
-  phase?: "focus" | "context";
-  unavailableElements?: {
-    elementId: number;
-    uniqueId: string | null;
-    category: string | null;
-    reason: string;
-  }[];
-};
-export type Element = Metadata["elements"][number];
-export type { SpaceViewState as ViewState } from "@pe/agent-contracts/space-view";
-import type { SpaceViewState as ViewState } from "@pe/agent-contracts/space-view";
-export const elementKey = (element: Element) =>
-  JSON.stringify([
-    element.handle.documentKey,
-    element.handle.linkInstanceId ?? null,
-    element.handle.uniqueId,
-  ]);
+import { CLIP_POINTS } from "#/scene/renderer";
+import {
+  AXIS_LABEL,
+  PLANE_AXES as AXES,
+  frameRect,
+  toFrame,
+  type PlaneAxis as Axis,
+  type Rect,
+} from "#/scene/plane";
+import type { Bounds } from "#/scene/types";
+
+export { AXES, AXIS_LABEL, type Axis };
 
 export type Point = [number, number];
-export type Axis = "top" | "north" | "east";
-export const AXES: readonly Axis[] = ["top", "north", "east"];
-export type Cut = ViewState["cuts"][Axis];
-export type Cuts = ViewState["cuts"];
+export type Cuts = z.output<typeof spaceCutsSchema>;
+export type Cut = Cuts[Axis];
 type Shape = Pick<Cut, "polyline" | "closed" | "offset">;
 export const emptyCut: Cut = { polyline: [], closed: false, offset: 0, keepInside: true };
-/** An axis frame's extent in feet: u, v span the drawing plane, w is the extrusion. */
-export type Rect = { u0: number; u1: number; v0: number; v1: number; w0: number; w1: number };
-
-/** The one world-to-frame mapping. Each frame is right-handed (u x v = w) with w toward the viewer,
- * so "left of the drawing direction" means the same thing in every editor. Editing, curtains,
- * picking and the shader (`frameOf`) all read this mapping. */
-export function toFrame(axis: Axis, p: ArrayLike<number>): [number, number, number] {
-  const x = p[0]!,
-    y = p[1]!,
-    z = p[2]!;
-  return axis === "top" ? [x, y, z] : axis === "north" ? [-x, z, y] : [y, z, x];
-}
-export function fromFrame(axis: Axis, u: number, v: number, w: number): [number, number, number] {
-  return axis === "top" ? [u, v, w] : axis === "north" ? [-u, w, v] : [w, u, v];
-}
-export function frameRect(axis: Axis, b: Metadata["bounds"]): Rect {
-  const a = toFrame(axis, [b.minX, b.minY, b.minZ]),
-    c = toFrame(axis, [b.maxX, b.maxY, b.maxZ]);
-  return {
-    u0: Math.min(a[0], c[0]),
-    u1: Math.max(a[0], c[0]),
-    v0: Math.min(a[1], c[1]),
-    v1: Math.max(a[1], c[1]),
-    w0: Math.min(a[2], c[2]),
-    w1: Math.max(a[2], c[2]),
-  };
-}
 
 /** Shift a cut parallel by `offset` along the left normal of its drawing direction, mitring each bend. */
 export function offsetCut({ polyline: points, closed, offset }: Shape): Point[] {
@@ -170,7 +141,7 @@ export function insidePolygon(x: number, y: number, points: number[][]): boolean
 
 export type Polygons = Record<Axis, Point[]>;
 /** Every axis polygon, validated together; throws the first failing axis's reason. */
-export function cutPolygons(cuts: Cuts, bounds: Metadata["bounds"]): Polygons {
+export function cutPolygons(cuts: Cuts, bounds: Bounds): Polygons {
   const polygons = {} as Polygons;
   for (const axis of AXES) {
     try {
@@ -181,7 +152,6 @@ export function cutPolygons(cuts: Cuts, bounds: Metadata["bounds"]): Polygons {
   }
   return polygons;
 }
-export const AXIS_LABEL: Record<Axis, string> = { top: "Top", north: "North", east: "East" };
 
 /** The retained volume is the intersection of the three extruded cuts. An empty cut keeps everything. */
 export function retained(p: ArrayLike<number>, cuts: Cuts, polygons: Polygons): boolean {
@@ -193,22 +163,21 @@ export function retained(p: ArrayLike<number>, cuts: Cuts, polygons: Polygons): 
   });
 }
 
-export const SHADER_POINTS = 64;
 /** The exact numbers the shader reads: per axis, polygon points relative to `origin`'s frame
  * coordinates, packed two per vec4. Picking reads the same polygons, so shapes cannot disagree. */
 export function packPolygons(polygons: Polygons, cuts: Cuts, origin: ArrayLike<number>) {
-  const data = new Float32Array(AXES.length * SHADER_POINTS * 2);
+  const data = new Float32Array(AXES.length * CLIP_POINTS * 2);
   const counts = [0, 0, 0],
     keepInside = [true, true, true];
   AXES.forEach((axis, a) => {
     const polygon = polygons[axis];
-    if (polygon.length > SHADER_POINTS) throw Error("Cut polygon exceeds the shader budget");
+    if (polygon.length > CLIP_POINTS) throw Error("Cut polygon exceeds the shader budget");
     const [ou, ov] = toFrame(axis, origin);
     counts[a] = polygon.length;
     keepInside[a] = cuts[axis].keepInside;
     polygon.forEach((p, i) => {
-      data[(a * SHADER_POINTS + i) * 2] = p[0] - ou;
-      data[(a * SHADER_POINTS + i) * 2 + 1] = p[1] - ov;
+      data[(a * CLIP_POINTS + i) * 2] = p[0] - ou;
+      data[(a * CLIP_POINTS + i) * 2 + 1] = p[1] - ov;
     });
   });
   return { data, counts, keepInside };
@@ -323,61 +292,4 @@ export function seedCut(rect: Rect, shape: "line" | "box"): Cut {
           [rect.u0 + du, rect.v1 - dv],
         ],
       };
-}
-
-export function decodeScene(buffer: ArrayBuffer): { metadata: Metadata; positions: Float32Array } {
-  const view = new DataView(buffer);
-  if (buffer.byteLength < 8 || view.getUint32(0, true) !== 0x31435350)
-    throw Error("Not a PSC1 scene artifact");
-  const length = view.getUint32(4, true),
-    offset = Math.ceil((8 + length) / 4) * 4;
-  if (offset > buffer.byteLength) throw Error("Truncated scene metadata");
-  const metadata = JSON.parse(
-    new TextDecoder().decode(new Uint8Array(buffer, 8, length)),
-  ) as Metadata;
-  if (
-    metadata.format !== "space-scene-v1" ||
-    metadata.stamp.frame !== "host-internal-ft" ||
-    !Number.isInteger(metadata.triangles) ||
-    metadata.triangles < 1 ||
-    metadata.triangles > 3000000 ||
-    buffer.byteLength - offset !== metadata.triangles * 36
-  )
-    throw Error("Invalid scene frame or vertex budget");
-  let nextVertex = 0;
-  for (const e of metadata.elements) {
-    if (
-      !Number.isInteger(e.firstVertex) ||
-      !Number.isInteger(e.vertexCount) ||
-      e.firstVertex !== nextVertex ||
-      e.vertexCount <= 0 ||
-      e.firstVertex % 3 !== 0 ||
-      e.vertexCount % 3 !== 0 ||
-      e.firstVertex + e.vertexCount > metadata.triangles * 3
-    )
-      throw Error("Invalid element vertex range");
-    nextVertex += e.vertexCount;
-  }
-  if (nextVertex !== metadata.triangles * 3) throw Error("Incomplete element vertex ranges");
-  return { metadata, positions: new Float32Array(buffer, offset) };
-}
-
-export function initialView(metadata: Metadata, scene: string): ViewState {
-  const b = metadata.bounds;
-  const target: [number, number, number] = [
-    (b.minX + b.maxX) / 2,
-    (b.minY + b.maxY) / 2,
-    (b.minZ + b.maxZ) / 2,
-  ];
-  const radius = Math.max(b.maxX - b.minX, b.maxY - b.minY, b.maxZ - b.minZ, 1);
-  return {
-    version: 2,
-    scene,
-    target,
-    camera: [target[0] + radius, target[1] - radius, target[2] + radius],
-    hidden: [],
-    isolated: null,
-    selected: null,
-    cuts: { top: emptyCut, north: emptyCut, east: emptyCut },
-  };
 }

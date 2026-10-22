@@ -6,11 +6,30 @@
  *
  * The batch holds positions relative to `origin` (the bounds centre) and sits at `origin`, so the
  * camera, controls, layers and raycast hits are all world feet while float32 vertices stay small.
+ *
+ * An axis picture (`setPlane`) swaps in one orthographic camera that pans and zooms only; the
+ * perspective pose is untouched under it. Axis thumbnails (`setThumbs`) are drawn by this same
+ * context into 2D canvases, only when what they show changed, never per orbit frame.
  */
 import * as THREE from "three";
 import { OrbitControls } from "three/addons/controls/OrbitControls.js";
 import { center, fromControls, toCamera, type OrbitViewport } from "./orbit";
-import { newCamera, projectThrough, type Project, type Size } from "./projection";
+import {
+  fitPlane,
+  frameRect,
+  fromFrame,
+  zoomPlane,
+  type PlaneAxis,
+  type PlaneViewport,
+} from "./plane";
+import {
+  newCamera,
+  projectThrough,
+  rayThrough,
+  type Project,
+  type Ray,
+  type Size,
+} from "./projection";
 import type { Layer3D, SceneInstance, SceneMeshes } from "./types";
 
 /** Opt-in timing marks (`?scenePerf`), including GPU completion rather than a bare RAF tick. */
@@ -23,7 +42,8 @@ const mark = (phase: string, detail: Record<string, unknown> = {}) => {
 /** Up to three extruded even-odd polygons whose intersection is kept, packed two points per vec4.
  * Frames (u, v): 0 = (x, y), 1 = (-x, z), 2 = (y, z), batch-local (relative to `origin`). */
 export type ClipVolume = { data: Float32Array; counts: number[]; keepInside: boolean[] };
-const CLIP_POINTS = 64;
+/** Points per axis polygon the shader reads; `space/state.ts` packs its cuts against it. */
+export const CLIP_POINTS = 64;
 
 const clipping = `
 varying vec3 vClipPosition;
@@ -88,6 +108,13 @@ export function createRenderer(mount: HTMLElement, meshes: SceneMeshes) {
     "contextmenu",
     (controls as unknown as { _onContextMenu: EventListener })._onContextMenu,
   );
+  /** Every camera gesture, orbit or plane, as OrbitControls names them: start, change, end. */
+  const moves = new THREE.EventDispatcher<Record<"start" | "change" | "end", object>>();
+  for (const type of ["start", "change", "end"] as const)
+    controls.addEventListener(type, () => moves.dispatchEvent({ type }));
+  const ortho = new THREE.OrthographicCamera(-1, 1, 1, -1, 0.01, 1);
+  let plane: { axis: PlaneAxis; viewport: PlaneViewport } | null = null;
+  const active = (): THREE.Camera => (plane ? ortho : camera);
 
   const uniforms = {
     clipPolygon: { value: new Float32Array(3 * CLIP_POINTS * 2) as Float32Array },
@@ -150,14 +177,76 @@ export function createRenderer(mount: HTMLElement, meshes: SceneMeshes) {
   let frame = 0;
   let size: Size = { width: 1, height: 1 };
   /** Told after a frame whose camera or size moved, so DOM over the canvas follows it. */
-  let onFrame: ((project: Project, size: Size) => void) | null = null;
+  let onFrame: ((project: Project, size: Size, ray: Ray) => void) | null = null;
   let framed = "";
   const tell = () => {
     if (!onFrame) return;
-    const key = `${camera.matrixWorld.elements.join()}|${camera.projectionMatrix.elements.join()}|${size.width}x${size.height}`;
+    const shown = active();
+    const key = `${shown.matrixWorld.elements.join()}|${shown.projectionMatrix.elements.join()}|${size.width}x${size.height}`;
     if (key === framed) return;
     framed = key;
-    onFrame(projectThrough(camera, size), size);
+    onFrame(projectThrough(shown, size), size, rayThrough(shown, size));
+  };
+  /** The orthographic camera showing `v` over a canvas of `at`, from the frame's +w side. */
+  const place = (axis: PlaneAxis, v: PlaneViewport, at: Size) => {
+    const r = frameRect(axis, bounds);
+    const depth = r.w1 - r.w0 + Math.max(r.u1 - r.u0, r.v1 - r.v0) + 10;
+    const u = (at.width / 2 - v.tx) / v.scale,
+      w = (v.ty - at.height / 2) / v.scale;
+    Object.assign(ortho, {
+      left: -at.width / 2,
+      right: at.width / 2,
+      top: at.height / 2,
+      bottom: -at.height / 2,
+      zoom: v.scale,
+      far: depth * 3,
+    });
+    ortho.up.set(...fromFrame(axis, 0, 1, 0));
+    ortho.position.set(...fromFrame(axis, u, w, r.w1 + depth));
+    ortho.lookAt(...fromFrame(axis, u, w, r.w1));
+    ortho.updateProjectionMatrix();
+    ortho.updateMatrixWorld();
+  };
+  /** Thumbnails: an axis drawn at its fit; the axis shown large draws the 3D pose instead. */
+  let thumbs: Partial<Record<PlaneAxis, HTMLCanvasElement | null>> = {};
+  let thumbsStale = true;
+  const drawThumbs = () => {
+    const ratio = renderer.getPixelRatio();
+    for (const axis of Object.keys(thumbs) as PlaneAxis[]) {
+      const paper = thumbs[axis];
+      const at = { width: paper?.clientWidth ?? 0, height: paper?.clientHeight ?? 0 };
+      const ctx = paper?.getContext("2d");
+      if (!paper || !ctx || !at.width || !at.height) continue;
+      if (at.width > size.width || at.height > size.height) continue;
+      paper.width = Math.round(at.width * ratio);
+      paper.height = Math.round(at.height * ratio);
+      renderer.setViewport(0, 0, at.width, at.height);
+      if (plane?.axis === axis) {
+        camera.aspect = at.width / at.height;
+        camera.updateProjectionMatrix();
+        renderer.render(scene, camera);
+        camera.aspect = size.width / size.height;
+        camera.updateProjectionMatrix();
+      } else {
+        place(axis, fitPlane(axis, bounds, at), at);
+        renderer.render(scene, ortho);
+      }
+      // The drawing buffer is still this frame's: copy its bottom-left corner out before compositing.
+      ctx.drawImage(
+        canvas,
+        0,
+        canvas.height - paper.height,
+        paper.width,
+        paper.height,
+        0,
+        0,
+        paper.width,
+        paper.height,
+      );
+    }
+    renderer.setViewport(0, 0, size.width, size.height);
+    if (plane) place(plane.axis, plane.viewport, size);
+    thumbsStale = false;
   };
   // OrbitControls fires per pointer move; coalesce those and every prop change into one frame.
   const render = () => {
@@ -168,7 +257,8 @@ export function createRenderer(mount: HTMLElement, meshes: SceneMeshes) {
         renderer.info.autoReset = false;
         renderer.info.reset();
       }
-      renderer.render(scene, camera);
+      if (thumbsStale) drawThumbs();
+      renderer.render(scene, active());
       if (measuring) fence(started);
       tell();
     });
@@ -200,9 +290,57 @@ export function createRenderer(mount: HTMLElement, meshes: SceneMeshes) {
     renderer.setSize(size.width, size.height, false);
     camera.aspect = size.width / size.height;
     camera.updateProjectionMatrix();
+    if (plane) place(plane.axis, plane.viewport, size);
+    thumbsStale = true;
     render();
   };
   controls.addEventListener("change", render);
+  // The plane picture pans with any drag and zooms about the pointer; it publishes like a gesture.
+  let panning: { x: number; y: number; id: number } | null = null;
+  const planeDown = (event: PointerEvent) => {
+    if (!plane) return;
+    panning = { x: event.clientX, y: event.clientY, id: event.pointerId };
+    moves.dispatchEvent({ type: "start" });
+  };
+  const planeMove = (event: PointerEvent) => {
+    if (!plane || !panning || event.pointerId !== panning.id) return;
+    const v = plane.viewport;
+    plane = {
+      ...plane,
+      viewport: {
+        ...v,
+        tx: v.tx + event.clientX - panning.x,
+        ty: v.ty + event.clientY - panning.y,
+      },
+    };
+    panning = { ...panning, x: event.clientX, y: event.clientY };
+    place(plane.axis, plane.viewport, size);
+    render();
+    moves.dispatchEvent({ type: "change" });
+  };
+  const planeUp = (event: PointerEvent) => {
+    if (!panning || event.pointerId !== panning.id) return;
+    panning = null;
+    moves.dispatchEvent({ type: "end" });
+  };
+  const planeWheel = (event: WheelEvent) => {
+    if (!plane) return;
+    event.preventDefault();
+    const rect = canvas.getBoundingClientRect();
+    const k = Math.exp(-event.deltaY * 0.001);
+    plane = {
+      ...plane,
+      viewport: zoomPlane(plane.viewport, k, event.clientX - rect.left, event.clientY - rect.top),
+    };
+    place(plane.axis, plane.viewport, size);
+    render();
+    moves.dispatchEvent({ type: "start" });
+    moves.dispatchEvent({ type: "end" });
+  };
+  canvas.addEventListener("pointerdown", planeDown);
+  window.addEventListener("pointermove", planeMove);
+  window.addEventListener("pointerup", planeUp);
+  canvas.addEventListener("wheel", planeWheel, { passive: false });
   const observer = new ResizeObserver(resize);
   observer.observe(mount);
   resize();
@@ -224,6 +362,9 @@ export function createRenderer(mount: HTMLElement, meshes: SceneMeshes) {
     canvas,
     camera,
     controls,
+    moves,
+    /** The camera the picture shows now: the orbit's, or the plane's. */
+    active,
     batch,
     origin,
     byId,
@@ -234,6 +375,22 @@ export function createRenderer(mount: HTMLElement, meshes: SceneMeshes) {
       camera.position.fromArray(pose.position);
       controls.target.fromArray(pose.target);
       controls.update();
+      if (plane) thumbsStale = true;
+      render();
+    },
+    /** The plane picture's pose, or null while the orbit is shown. */
+    plane: (): PlaneViewport | null => plane?.viewport ?? null,
+    /** Show an axis orthographically (orbit controls off), or null for the orbit. */
+    setPlane(next: { axis: PlaneAxis; viewport: PlaneViewport } | null) {
+      if (next?.axis !== plane?.axis) thumbsStale = true;
+      plane = next;
+      controls.enabled = !plane;
+      if (plane) place(plane.axis, plane.viewport, size);
+      render();
+    },
+    setThumbs(next: Partial<Record<PlaneAxis, HTMLCanvasElement | null>>) {
+      thumbs = next;
+      thumbsStale = true;
       render();
     },
     setOnFrame(next: typeof onFrame) {
@@ -258,12 +415,14 @@ export function createRenderer(mount: HTMLElement, meshes: SceneMeshes) {
               : colors[id]!,
         );
       });
+      thumbsStale = true;
       render();
     },
     setClip(volume: ClipVolume | null | undefined) {
       uniforms.clipPolygon.value = volume?.data ?? new Float32Array(3 * CLIP_POINTS * 2);
       uniforms.clipCount.value = volume?.counts ?? [0, 0, 0];
       uniforms.clipKeep.value = (volume?.keepInside ?? [true, true, true]).map(Number);
+      thumbsStale = true;
       render();
     },
     /** One group per key, rebuilt when its layer object is replaced, disposed when its key leaves. */
@@ -282,6 +441,7 @@ export function createRenderer(mount: HTMLElement, meshes: SceneMeshes) {
         scene.add(group);
         layers.set(layer.key, { layer, group });
       }
+      thumbsStale = true;
       render();
     },
     dispose() {
@@ -290,6 +450,10 @@ export function createRenderer(mount: HTMLElement, meshes: SceneMeshes) {
       cancelAnimationFrame(frame);
       observer.disconnect();
       controls.dispose();
+      canvas.removeEventListener("pointerdown", planeDown);
+      window.removeEventListener("pointermove", planeMove);
+      window.removeEventListener("pointerup", planeUp);
+      canvas.removeEventListener("wheel", planeWheel);
       batch.dispose();
       scene.remove(batch);
       material.dispose();

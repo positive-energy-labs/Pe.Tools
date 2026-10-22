@@ -1,12 +1,21 @@
 import { createFileRoute } from "@tanstack/react-router";
+import { routeSearch } from "#/route/route-owner";
+import { urlPage } from "#/route";
 import { SpaceRoute } from "#/space/route";
+import { manifest } from "#/space/manifest";
+
+const url = urlPage(manifest)!;
 
 export const Route = createFileRoute("/space")({
-  validateSearch: (s: Record<string, unknown>) => ({
-    scene: typeof s.scene === "string" ? s.scene : undefined,
-    session: typeof s.session === "string" ? s.session : undefined,
-    doc: typeof s.doc === "string" ? s.doc : undefined,
-    ids: typeof s.ids === "string" ? s.ids : undefined,
+  validateSearch: (search: Record<string, unknown>) => ({
+    ...routeSearch(search),
+    ...(search.demo === "fixture" ? { demo: "fixture" } : {}),
+    ...url.read(search),
   }),
-  component: () => <SpaceRoute {...Route.useSearch()} />,
+  search: { middlewares: [...url.middlewares] },
+  component: SpaceFileRoute,
 });
+
+function SpaceFileRoute() {
+  return <SpaceRoute />;
+}

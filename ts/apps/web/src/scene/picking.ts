@@ -24,7 +24,7 @@ export function pickAt(
       ((at.clientX - rect.left) / rect.width) * 2 - 1,
       1 - ((at.clientY - rect.top) / rect.height) * 2,
     ),
-    r.camera,
+    r.active(),
   );
   for (const hit of ray.intersectObject(r.batch)) {
     const instance = hit.batchId === undefined ? undefined : r.byId[hit.batchId];
