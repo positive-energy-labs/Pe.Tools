@@ -171,7 +171,7 @@ test("history pages only settled eligible threads, excludes miner and joins rece
     modelId: null,
     lastSeq: 0,
     cursor: 0,
-    head: { ...emptyThreadHead, hostNow: at.toISOString(), grantView: null },
+    head: emptyThreadHead,
     lifecycle: { ...emptyThreadLifecycle(), status: "settled", settledAt: at.toISOString() },
     tabs: [],
     activity: { state: "idle", pending: 0, lastSeq: 0, message: null },

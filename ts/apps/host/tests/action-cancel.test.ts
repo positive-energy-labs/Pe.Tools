@@ -430,17 +430,23 @@ test("a reply lost mid-write settles unknown and blocks the next mutation on the
 
 function revokeHead(lifetime: DocumentRef): ThreadHead {
   return {
-    defaultTarget: { kind: "open", ref: lifetime },
+    targets: [
+      {
+        request: { kind: "open", ref: lifetime },
+        admission: { revision: 1, at: new Date().toISOString(), via: "local" },
+      },
+    ],
     revision: 1,
-    lastHumanMessageAt: null,
-    grant: {
-      lifetime,
-      revoked: null,
-      grantedVia: "local",
-      grantedAt: new Date().toISOString(),
-      expiresAt: new Date(Date.now() + 60_000).toISOString(),
-    },
   };
+}
+
+/** A human removes the head's one target: the store writes the head, then fires the sweep. */
+function removeTarget(head: ThreadHead) {
+  const request = head.targets[0]!.request;
+  if (request.kind !== "open") throw Error("an admitted target is an open lifetime");
+  head.targets = [];
+  head.revision++;
+  emitRevoke("thread-1", request.ref);
 }
 
 const nativeValue = async (
@@ -483,8 +489,7 @@ test("F-c revoke lets a dispatched step report and refuses the next step without
         );
         const first = yield* Queue.take(outgoing);
         expect(first.request?.operationKey).toBe("first");
-        head.grant!.revoked = { at: new Date().toISOString() };
-        emitRevoke("thread-1", head.grant!);
+        removeTarget(head);
         yield* Effect.sleep("50 millis");
         expect(yield* Queue.size(outgoing)).toBe(0);
         yield* answer(first.request!.requestId, {
@@ -584,8 +589,7 @@ test.each([false, true])(
               return rows;
             };
           }
-          head.grant!.revoked = { at: new Date().toISOString() };
-          emitRevoke("thread-1", head.grant!);
+          removeTarget(head);
           // The driver records every wire request, including an erroneous op.cancel.
           const wire: string[] = [];
           const driver = yield* Effect.forkScoped(
@@ -656,8 +660,7 @@ test("F-c revoke stops a begun step that has not reached the bridge queue yet", 
           ),
         );
         yield* Effect.promise(() => inGap.promise);
-        head.grant!.revoked = { at: new Date().toISOString() };
-        emitRevoke("thread-1", head.grant!);
+        removeTarget(head);
         yield* Effect.sleep("50 millis");
         leaveGap.resolve();
         yield* Effect.sleep("50 millis");

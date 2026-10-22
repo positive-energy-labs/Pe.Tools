@@ -4,7 +4,7 @@
  * pins the refusal code AND the sentence the person reads (door, reason, remedy), because the web
  * renders `refusal` verbatim; a reworded string is a contract change.
  */
-import { afterEach, beforeEach, expect, test, vi } from "vite-plus/test";
+import { afterEach, beforeEach, expect, test } from "vite-plus/test";
 import { Context, Effect, Layer } from "effect";
 import { mkdtemp, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
@@ -14,19 +14,17 @@ import {
   emptyThreadHead,
   type Caller,
   type DocumentRef,
-  type HeadGrant,
   type ThreadHead,
 } from "@pe/agent-contracts";
 import { withInvocationContext } from "@pe/runtime/context";
 import { ActionJournal } from "../src/action-journal.ts";
 import { RevitBridge } from "../src/bridge.ts";
 import { makeCallRoute } from "../src/call-route.ts";
-import { bindControl, grantExpiry } from "../src/control.ts";
+import { bindControl } from "../src/control.ts";
 import { TakeoffCaptures } from "../src/takeoff-captures.ts";
 import { sdkSessions } from "./native-receipt-fixture.ts";
 import { human, pea } from "./callers.ts";
 
-const T0 = Date.parse("2026-10-12T12:00:00.000Z");
 const docA: DocumentRef = { session: "S1", openId: "A" };
 const docB: DocumentRef = { session: "S2", openId: "B" };
 const mcp: Caller = { kind: "external-mcp", context: "mcp-1", label: "some client" };
@@ -56,30 +54,23 @@ beforeEach(async () => {
   );
   // Every document is in a session the person owns, unless a test says otherwise.
   bindControl({ heads: (thread) => heads[thread] ?? emptyThreadHead });
-  vi.useFakeTimers({ toFake: ["Date"] });
-  vi.setSystemTime(T0 + 1000);
 });
 afterEach(async () => {
-  vi.useRealTimers();
   heads = {};
   bindControl({ heads: null, acquired: () => null, acquiredSession: () => null });
   await web.dispose();
   await rm(root, { recursive: true, force: true });
 });
 
-const grantOn = (lifetime: DocumentRef, extra: Partial<HeadGrant> = {}): HeadGrant => ({
-  lifetime,
-  grantedAt: new Date(T0).toISOString(),
-  grantedVia: "local",
-  expiresAt: grantExpiry(T0),
-  revoked: null,
-  ...extra,
-});
-const headWith = (grant: HeadGrant): ThreadHead => ({
-  ...emptyThreadHead,
-  defaultTarget: { kind: "open", ref: grant.lifetime },
+/** A head whose one target a human added. */
+const headWith = (ref: DocumentRef): ThreadHead => ({
+  targets: [
+    {
+      request: { kind: "open", ref },
+      admission: { revision: 3, at: "2026-10-12T12:00:00.000Z", via: "local" },
+    },
+  ],
   revision: 3,
-  grant,
 });
 
 type Wire = { status: number; json: Record<string, any> };
@@ -145,8 +136,8 @@ test("door 1: a read is free for every caller, anonymous included; a mutation is
   }
 });
 
-test("door 2: a grant covers one document, never a session", async () => {
-  heads.t1 = headWith(grantOn(docA));
+test("door 2: a thread targets documents, never a session", async () => {
+  heads.t1 = headWith(docA);
   refused(
     await send(pea("t1"), "/actions", {
       ...admission(),
@@ -156,14 +147,17 @@ test("door 2: a grant covers one document, never a session", async () => {
   );
 });
 
-test("door 2: a grant on another lifetime of the same file is grant.other-lifetime", async () => {
-  heads.t1 = headWith(grantOn(docB));
+test("door 2: under Guarded, another lifetime of the same file is not a target", async () => {
+  heads.t1 = headWith(docB);
   const wire = await send(pea("t1"), "/actions", admission(docA));
-  refused(wire, "grant.other-lifetime");
-  expect(wire.json.refusal.lifetime).toEqual(docB);
+  refused(wire, "grant.required");
+  expect(wire.json.refusal.lifetime).toEqual(docA);
+  expect(wire.json.refusal.reason).toBe(
+    "Refused at /actions: this would write your document S1/A, which thread t1 does not target and Pea did not open. Add it to this thread's documents in the composer, switch access to Full, or open a copy.",
+  );
 });
 
-test("door 2: an external MCP client cannot hold rw on your document", async () => {
+test("door 2: an unpaired external MCP client cannot write your document", async () => {
   refused(await send(mcp, "/actions", admission()), "grant.context-cannot-hold");
 });
 
@@ -194,7 +188,7 @@ test("door 3: resume re-crosses under the current caller and never inherits the 
     true,
   ]);
   expect(wire.json.refusal.door).toBe("/actions");
-  // A Pea context without a grant gets the grant refusal for the same row, not the human's pass.
+  // A Pea context whose thread does not target it is refused for the same row, not the human's pass.
   const agent = await send(pea("t1"), "/actions/resume", { id: "door-3-resume" });
   expect([agent.status, agent.json.refusal?.code]).toEqual([403, "grant.required"]);
 });

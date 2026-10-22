@@ -159,7 +159,7 @@ async function setup(
     automatic: true,
   };
   const machine = createMachine({
-    grants: { grants: () => [], subscribe: () => () => {} },
+    targets: { targets: () => [], subscribe: () => () => {} },
     actions: () => owner.list(),
     host: async () => {
       throw Error("not needed");
@@ -288,19 +288,17 @@ const newRevit = (over: Record<string, unknown> = {}) => ({
   start: { year: "2025", owner: "you", addins: "on", ...over },
 });
 
+const grantedLifetime = { session: "bridge-dev", openId };
+/** A head whose one target a human added. */
 function grantHead(): ThreadHead {
-  const lifetime = { session: "bridge-dev", openId };
   return {
-    defaultTarget: { kind: "open", ref: lifetime },
+    targets: [
+      {
+        request: { kind: "open", ref: grantedLifetime },
+        admission: { revision: 1, at: new Date().toISOString(), via: "local" },
+      },
+    ],
     revision: 1,
-    lastHumanMessageAt: null,
-    grant: {
-      lifetime,
-      grantedVia: "local",
-      revoked: null,
-      grantedAt: new Date().toISOString(),
-      expiresAt: new Date(Date.now() + 60_000).toISOString(),
-    },
   };
 }
 
@@ -335,7 +333,7 @@ test.each(["stop", "restart", "reset"])(
     );
     expect(row).toMatchObject({
       state: "succeeded",
-      basis: { kind: "grant", lifetime: grantHead().grant!.lifetime },
+      basis: { kind: "grant", lifetime: grantedLifetime },
     });
     expect(f.census.reads).toBeGreaterThanOrEqual(2);
   },
@@ -1342,7 +1340,7 @@ test("an agent save is one document crossing: the granted lifetime admits, anoth
   const input = { session, document: sdkDocument, to: { kind: "self" } };
   expect(await f.admit("instances.save", input, undefined, "agent")).toMatchObject({
     state: "succeeded",
-    basis: { kind: "grant", lifetime: grantHead().grant!.lifetime },
+    basis: { kind: "grant", lifetime: grantedLifetime },
   });
   await expect(
     f.admit(
@@ -1351,7 +1349,7 @@ test("an agent save is one document crossing: the granted lifetime admits, anoth
       undefined,
       "agent",
     ),
-  ).rejects.toMatchObject({ refusal: { code: "grant.other-lifetime" } });
+  ).rejects.toMatchObject({ refusal: { code: "grant.required" } });
 });
 
 test("/actions/cancel stops a running Instances step through the SDK op cancel, never the Revit bridge", async () => {

@@ -148,7 +148,7 @@ export type PeApiSchemas = Record<
   | "questionResponseSchema"
   | "forkThreadRequestSchema"
   | "traitRequestSchema"
-  | "threadHeadReadingSchema"
+  | "threadHeadSchema"
   | "putTargetSchema"
   | "putTargetResultSchema"
   | "capabilityCatalogSchema"
@@ -191,7 +191,7 @@ export function peRouteTable<S extends PeApiSchemas>(schemas: S) {
   const questionResponseSchema = schemas.questionResponseSchema as S["questionResponseSchema"];
   const forkThreadRequestSchema = schemas.forkThreadRequestSchema as S["forkThreadRequestSchema"];
   const traitRequestSchema = schemas.traitRequestSchema as S["traitRequestSchema"];
-  const threadHeadReadingSchema = schemas.threadHeadReadingSchema as S["threadHeadReadingSchema"];
+  const threadHeadSchema = schemas.threadHeadSchema as S["threadHeadSchema"];
   const putTargetSchema = schemas.putTargetSchema as S["putTargetSchema"];
   const putTargetResultSchema = schemas.putTargetResultSchema as S["putTargetResultSchema"];
   const capabilityCatalogSchema = schemas.capabilityCatalogSchema as S["capabilityCatalogSchema"];
@@ -593,7 +593,7 @@ export function peRouteTable<S extends PeApiSchemas>(schemas: S) {
       "GET",
       "/pe/scope/:id",
       none,
-      threadHeadReadingSchema.and(z.object({ thread: z.string().optional() })),
+      threadHeadSchema.and(z.object({ thread: z.string().optional() })),
       "read",
       "threads",
       "read",
@@ -606,15 +606,6 @@ export function peRouteTable<S extends PeApiSchemas>(schemas: S) {
       "human-or-pea",
       "threads",
       "grant",
-    ),
-    "scope.revoke": route(
-      "POST",
-      "/pe/scope/:id/revoke",
-      none,
-      threadHeadReadingSchema,
-      "human",
-      "threads",
-      "human",
     ),
     "navigation.get": route(
       "GET",

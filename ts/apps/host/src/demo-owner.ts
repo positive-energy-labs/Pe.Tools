@@ -971,7 +971,7 @@ export async function createDemoOwner(parent: string, raw: unknown) {
       automatic: true,
     };
     machine = createMachine({
-      grants: { grants: () => [], subscribe: () => () => {} },
+      targets: { targets: () => [], subscribe: () => () => {} },
       actions: () => journal.list(),
       host: async () => {
         throw Error("An isolated demo owner simulates Revit, not a host process.");

@@ -1,7 +1,7 @@
 import { z } from "zod";
 import { callerSchema } from "./caller.ts";
 import { mentionSchema } from "./mention.ts";
-import { documentRequestSchema, threadHeadReadingSchema } from "./target.ts";
+import { documentRequestSchema, threadHeadSchema } from "./target.ts";
 import { routeKeys } from "./route-address.ts";
 
 /**
@@ -220,9 +220,9 @@ export function attachmentRefusal(
   return `${harness} cannot read attached ${[...kinds].join(" or ")}: remove ${refused.map((a) => a.name).join(", ")} to send`;
 }
 
-/** The document a turn ran against, stamped on its `prompt` from the thread head at delivery so the
- * record names it without the live inventory. `label` is the head's display snapshot (the document
- * title), absent when the binder supplied none; `request` is the head's default Target verbatim. */
+/** One document a turn ran against, stamped on its `prompt` from the thread head at delivery so
+ * the record names it without the live inventory. `label` is the target's display snapshot (the
+ * document title), absent when the binder supplied none; `request` is the target verbatim. */
 export const promptTargetSchema = z.object({
   request: documentRequestSchema,
   label: z.string().optional(),
@@ -239,8 +239,8 @@ export const harnessEventSchema = z.discriminatedUnion("kind", [
     text: z.string(),
     attachments: z.array(promptAttachmentSchema).optional(),
     mentions: z.array(mentionSchema).optional(),
-    /** Absent when no target was bound (and on events written before this field). */
-    target: promptTargetSchema.optional(),
+    /** The thread's targets as of delivery; absent when it targeted none. */
+    targets: z.array(promptTargetSchema).optional(),
   }),
   /** `turnId` is null for updates the harness sends outside a turn (commands, mode, session info). */
   z.object({
@@ -496,7 +496,7 @@ export const harnessThreadSummarySchema = z.object({
   lastSeq: z.number(),
   /** The host log id this record was read at: follow the `thread` Reading from it. */
   cursor: z.number().int().nonnegative(),
-  head: threadHeadReadingSchema,
+  head: threadHeadSchema,
   lifecycle: threadLifecycleSchema,
   // An absent list is no tabs: summaries written before tabs, and fixtures, read as [].
   tabs: z.array(threadTabSchema).max(THREAD_TABS_MAX).default([]),

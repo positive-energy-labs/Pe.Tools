@@ -72,19 +72,15 @@ export interface MachinePeer {
 }
 
 /**
- * What a caller may do to one open document, projected on the host (ADR 0016/0017). `pea` is a
- * document Pea's own acquisition created (its id is what cleanup and handover name); `rw` is a
- * thread grant. The browser draws access from this and from nothing else.
+ * Whose a document is to Pea, projected on the host (ADR 0017/0021). `pea` is a document Pea's own
+ * acquisition created (its id is what cleanup and handover name); `target` is a user document a
+ * human added to a thread's targets. Whether Pea may write a `read` document as well follows the
+ * harness access switch (`Machine.access`). The browser draws access from this and nothing else.
  */
 export type MachineAccess =
   | { readonly kind: "pea"; readonly acquisition: string }
   | { readonly kind: "read" }
-  | {
-      readonly kind: "rw";
-      readonly context: string;
-      readonly label: string;
-      readonly until: string;
-    };
+  | { readonly kind: "target"; readonly thread: string; readonly label: string };
 
 /** A document as the product socket names it, with what it grants. */
 export interface MachineAttachmentDocument extends DocumentRef {

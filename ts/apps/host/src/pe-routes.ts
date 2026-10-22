@@ -1093,6 +1093,7 @@ export const peRoutesLayer = (
         subscribeHeads: threads.heads.subscribe,
         acquired: machineAcquisition,
         acquiredSession: machineSessionAcquisition,
+        fullAccess: () => !providers.access().guarded,
       });
       const unbindRevoke = bridge ? bindRevoke(hostActionJournal(), bridge) : undefined;
       yield* Effect.addFinalizer(() =>
@@ -1103,6 +1104,7 @@ export const peRoutesLayer = (
             subscribeHeads: undefined,
             acquired: () => null,
             acquiredSession: () => null,
+            fullAccess: () => false,
           });
           useHostMachine(undefined);
           machine.close();

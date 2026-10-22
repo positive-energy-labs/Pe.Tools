@@ -157,5 +157,6 @@ it("admission metadata: one explicit permission per route, and share stays local
     permission: "human-or-pea",
     localOnly: false,
   });
-  expect(peRoutes["scope.revoke"]).toMatchObject({ principal: "human", permission: "human" });
+  // ADR 0021: removal from the target set is the only revoke; there is no separate door.
+  expect(Object.hasOwn(peRoutes, "scope.revoke")).toBe(false);
 });

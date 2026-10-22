@@ -141,7 +141,7 @@ export function createDevices(path?: string, now = () => Date.now()) {
     bind(id: string, thread: string | null) {
       const session = active(id);
       if (session.audience !== "mcp")
-        throw denied("device.pairing", "Only an MCP device binds a thread grant.");
+        throw denied("device.pairing", "Only an MCP device binds a thread.");
       save({
         ...state,
         sessions: state.sessions.map((row) => (row.id === id ? { ...row, thread } : row)),

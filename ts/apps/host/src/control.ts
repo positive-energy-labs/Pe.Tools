@@ -15,7 +15,6 @@ import type {
   Caller,
   DocumentRef,
   ExecutionTarget,
-  HeadGrant,
   PageChoice,
   Refusal,
   RefusalCode,
@@ -27,9 +26,6 @@ import type {
  * whether the reason it was admitted still holds when a step begins. Contexts live in memory only;
  * a host restart kills every harness child, so a token from before it is `context.unknown`.
  */
-
-/** A grant lives 60 minutes past the human's last message in its thread (ADR 0016). */
-const GRANT_MS = 60 * 60_000;
 
 export class Refused extends Error {
   constructor(readonly refusal: Refusal) {
@@ -325,9 +321,16 @@ type Sources = {
   /** The held acquisition that started the Revit behind this bridge session. */
   acquiredSession: (session: string) => string | null;
   deviceThread?: (device: string) => string | null;
+  /** The harness access switch (ADR 0021): true when Full, false when Guarded. */
+  fullAccess: () => boolean;
 };
-const sources: Sources = { heads: null, acquired: () => null, acquiredSession: () => null };
-/** Bound once at boot (and by tests): the harness head store and Machine's acquisitions. */
+const sources: Sources = {
+  heads: null,
+  acquired: () => null,
+  acquiredSession: () => null,
+  fullAccess: () => false,
+};
+/** Bound once at boot (and by tests): the head store, Machine's acquisitions, the access switch. */
 export const bindControl = (bound: Partial<Sources>) => void Object.assign(sources, bound);
 export const documentAcquisition = (lifetime: DocumentRef) => sources.acquired(lifetime);
 export const sessionAcquisition = (session: string) => sources.acquiredSession(session);
@@ -359,17 +362,18 @@ export const subscribeHeads = (notify: () => void) =>
 
 const sameRef = (a: DocumentRef, b: DocumentRef) =>
   a.session === b.session && a.openId === b.openId;
-const hhmm = (iso: string) => iso.slice(11, 16);
+const refText = (ref: DocumentRef) => `${ref.session}/${ref.openId}`;
 
-/** A grant's own verdict at `now`; null while it holds. */
-export function grantDead(
-  grant: HeadGrant,
-  now = Date.now(),
-): "grant.revoked" | "grant.expired" | null {
-  if (grant.revoked) return "grant.revoked";
-  return Date.parse(grant.expiresAt) <= now ? "grant.expired" : null;
-}
-export const grantExpiry = (from: number) => new Date(from + GRANT_MS).toISOString();
+/** The admission a human gave this exact lifetime among a thread's targets; null when none holds. */
+const admissionOn = (thread: string, lifetime: DocumentRef) =>
+  sources
+    .heads?.(thread)
+    .targets.find(
+      (target) =>
+        target.admission !== null &&
+        target.request.kind === "open" &&
+        sameRef(target.request.ref, lifetime),
+    )?.admission ?? null;
 
 /** K9: a ReadOnly target needs read consent; every other open lifetime still needs write authority. */
 export function admitScript(
@@ -393,21 +397,17 @@ export function admitScript(
     throw refuse(
       "script.ungranted-documents",
       door,
-      `Refused at ${door}: scripts can access every open document. Close the ungranted documents or run on a separate copy: ${ungranted.map((ref) => `${ref.session}/${ref.openId}`).join(", ")}.`,
+      `Refused at ${door}: scripts can access every open document, and Pea may not write these. Add them to this thread, close them, or run on a separate copy: ${ungranted.map(refText).join(", ")}.`,
     );
 }
-
-const deadReason = (code: "grant.revoked" | "grant.expired", grant: HeadGrant | null) =>
-  code === "grant.revoked"
-    ? `rw was revoked${grant?.revoked ? ` at ${hhmm(grant.revoked.at)}` : ""}. Steps already running finish; nothing new starts. Re-point the head to grant again.`
-    : `rw expired${grant ? ` at ${hhmm(grant.expiresAt)}` : ""} (60 min after your last message). Send a message in the thread to renew.`;
 
 /* ── The crossing ─────────────────────────────────────────────────────────────────────── */
 
 /**
  * A script whose requested mode is ReadOnly (the contract default). Revit rolls back its changes to
- * the target document, so the target needs no grant; the guard does not roll back a commit on a
- * sibling document, so `admitScript`'s K9 census still holds for every other open document. It is
+ * the target document, so the target needs no write authority; the guard does not roll back a
+ * commit on a sibling document, so `admitScript`'s K9 census still holds for every other open
+ * document (ADR 0021 keeps it until a rollback group per open document is proven in Revit). It is
  * a read for a human, for Pea on an exact document, and for a Page pinned by a human to this exact
  * document. External MCP keeps it a write. NoTransaction and WriteTransaction are always writes.
  */
@@ -415,7 +415,7 @@ export const readsOnly = (key: string, input: unknown): boolean =>
   key === "scripting.execute" &&
   ((input as { permissionMode?: unknown } | null)?.permissionMode ?? "ReadOnly") === "ReadOnly";
 
-/** Who may run a ReadOnly script on `target` without a grant; a person's pin consents only to its own lifetime. */
+/** Who may run a ReadOnly script on `target` without write authority; a person's pin consents only to its own lifetime. */
 const readConsent = (caller: Caller, target?: DocumentRef): boolean => {
   const consent = caller.kind === "page" ? pageDoors.get(caller)?.readConsent : null;
   return (
@@ -471,9 +471,9 @@ export function admitCrossing(
       throw refuse(
         "grant.context-cannot-hold",
         door,
-        "This MCP device needs a host-approved thread with rw on this exact document.",
+        "This MCP device needs a host-approved thread that targets this exact document.",
       );
-    return { ...admitThread(thread, destination, door), device: caller.device };
+    return { ...admitTarget(thread, destination, door), device: caller.device };
   }
   if (caller.kind === "service" || caller.kind === "external-mcp")
     throw refuse(
@@ -489,11 +489,27 @@ export function admitCrossing(
     return null;
   const acquired = acquisitionBasis(destination);
   if (acquired) return acquired;
-  return admitThread(caller.thread, destination, door);
+  // ADR 0021: the harness access switch governs Pea's Revit writes too. Full writes any open
+  // document; Guarded writes Pea's own lifetimes and the documents a human added to the thread.
+  if (sources.fullAccess() && destination.kind === "document") {
+    const target = admissionOn(caller.thread, destination.ref);
+    return target
+      ? {
+          kind: "grant",
+          thread: caller.thread,
+          headRevision: target.revision,
+          lifetime: destination.ref,
+        }
+      : { kind: "full-access", thread: caller.thread, lifetime: destination.ref };
+  }
+  return admitTarget(caller.thread, destination, door);
 }
 
-/** A thread's rw grant on a destination on your Revit: the exact lifetime, unrevoked, unexpired. */
-function admitThread(
+/**
+ * A write to your Revit through a thread's targets: the exact lifetime a human added (ADR 0021).
+ * A thread targets documents, never a session.
+ */
+function admitTarget(
   thread: string,
   destination: Extract<ExecutionTarget, { kind: "session" | "document" }>,
   door: string,
@@ -502,36 +518,25 @@ function admitThread(
     throw refuse(
       "grant.required",
       door,
-      `Refused at ${door}: this would act on your Revit session '${destination.session}', and a thread grant covers one document, never a session.`,
+      `Refused at ${door}: this would act on your Revit session '${destination.session}', and a thread targets documents, never a session.`,
     );
-  const head = sources.heads?.(thread) ?? null;
-  const grant = head?.grant ?? null;
   const lifetime = destination.ref;
-  if (!head || !grant)
-    throw refuse(
-      "grant.required",
-      door,
-      `Refused at ${door}: this would write your document ${lifetime.session}/${lifetime.openId}, and thread ${thread} holds no rw grant on it. Point this thread at it in the composer to grant rw, or open a copy.`,
-      { remedy: "Point this thread at the document in the composer.", lifetime },
-    );
-  if (!sameRef(grant.lifetime, lifetime))
-    throw refuse(
-      "grant.other-lifetime",
-      door,
-      `Refused at ${door}: rw is granted on ${grant.lifetime.session}/${grant.lifetime.openId}, not on ${lifetime.session}/${lifetime.openId}. A per-call override writes only Pea's documents or the granted head.`,
-      { lifetime: grant.lifetime },
-    );
-  const dead = grantDead(grant);
-  if (dead)
-    throw refuse(dead, door, `Refused at ${door}: ${deadReason(dead, grant)}`, { lifetime });
-  return { kind: "grant", thread, headRevision: head.revision, lifetime };
+  const admission = admissionOn(thread, lifetime);
+  if (admission) return { kind: "grant", thread, headRevision: admission.revision, lifetime };
+  throw refuse(
+    "grant.required",
+    door,
+    `Refused at ${door}: this would write your document ${refText(lifetime)}, which thread ${thread} does not target and Pea did not open. Add it to this thread's documents in the composer, switch access to Full, or open a copy.`,
+    { remedy: "Add the document to this thread in the composer.", lifetime },
+  );
 }
 
 /* ── Page doors (D9/D10) ──────────────────────────────────────────────────────────────── */
 
 /**
- * A Page writes as itself under its slot: a thread slot under that thread's grant, a pinned slot
- * on Pea's documents only, no slot never. `door` is the page's own `/pages/<slug>/act`.
+ * A Page writes as itself under its slot: a thread slot on the documents a human added to that
+ * thread, a pinned slot on Pea's documents only, no slot never. `door` is the page's own
+ * `/pages/<slug>/act`. The access switch is Pea's, not a Page's.
  */
 export function admitPage(
   slot: PageChoice,
@@ -553,10 +558,10 @@ export function admitPage(
     throw refuse(
       "grant.required",
       door,
-      `Refused at ${door}: a pinned Page writes only documents Pea acquired, and this one in session '${session}' is not one. Bind this Page to a thread that holds rw on it.`,
+      `Refused at ${door}: a pinned Page writes only documents Pea acquired, and this one in session '${session}' is not one. Bind this Page to a thread that targets it.`,
       destination.kind === "document" ? { lifetime: destination.ref } : {},
     );
-  return admitThread(slot.thread, destination, door);
+  return admitTarget(slot.thread, destination, door);
 }
 
 /**
@@ -587,8 +592,9 @@ export function mintPageDoor(
 }
 
 /**
- * D4: the step-begin check. A grant basis holds while its thread still grants that exact lifetime,
- * unrevoked and unexpired; a document acquisition while that acquisition still holds that exact
+ * D4: the step-begin check. A grant basis holds while its thread still targets that exact lifetime
+ * under the same admission; a Full-access basis while the switch stays Full or a human has since
+ * added the document; a document acquisition while that acquisition still holds that exact
  * lifetime; every other basis holds for the attempt.
  */
 export function live(basis: Basis | null, door = "step begin"): Refused | null {
@@ -611,32 +617,38 @@ export function live(basis: Basis | null, door = "step begin"): Refused | null {
       : refuse(
           "acquisition.unproven",
           door,
-          `Refused at ${door}: acquisition '${basis.id}' no longer holds ${basis.scope.lifetime.session}/${basis.scope.lifetime.openId} (closed, released, or no longer certified independent).`,
+          `Refused at ${door}: acquisition '${basis.id}' no longer holds ${refText(basis.scope.lifetime)} (closed, released, or no longer certified independent).`,
           { lifetime: basis.scope.lifetime },
         );
+  if (basis?.kind === "full-access")
+    return sources.fullAccess() || admissionOn(basis.thread, basis.lifetime)
+      ? null
+      : refuse(
+          "grant.revoked",
+          door,
+          `Refused at ${door}: access was switched to Guarded and thread ${basis.thread} does not target ${refText(basis.lifetime)}. Steps already running finish; nothing new starts.`,
+          { lifetime: basis.lifetime },
+        );
   if (basis?.kind !== "grant") return null;
-  const head = sources.heads?.(basis.thread);
-  const grant = head?.grant ?? null;
-  const code =
-    !grant || head?.revision !== basis.headRevision || !sameRef(grant.lifetime, basis.lifetime)
-      ? "grant.revoked"
-      : grantDead(grant);
-  return code
-    ? refuse(code, door, `Refused at ${door}: ${deadReason(code, grant)}`, {
-        lifetime: basis.lifetime,
-      })
-    : null;
+  return admissionOn(basis.thread, basis.lifetime)?.revision === basis.headRevision
+    ? null
+    : refuse(
+        "grant.revoked",
+        door,
+        `Refused at ${door}: ${refText(basis.lifetime)} was removed from thread ${basis.thread}'s documents. Steps already running finish; nothing new starts. Add it again to write it.`,
+        { lifetime: basis.lifetime },
+      );
 }
 
-/* ── Revoke ───────────────────────────────────────────────────────────────────────────── */
+/* ── Removal ──────────────────────────────────────────────────────────────────────────── */
 
-type RevokeListener = (thread: string, grant: HeadGrant) => void;
+type RevokeListener = (thread: string, lifetime: DocumentRef) => void;
 const revokeListeners = new Set<RevokeListener>();
-/** E2's queue sweep registers here; the head store fires it when a grant ends: revoked, or retired by a head move. */
+/** E2's queue sweep registers here; the head store fires it when a human removes an added document. */
 export function onRevoke(listener: RevokeListener): () => void {
   revokeListeners.add(listener);
   return () => void revokeListeners.delete(listener);
 }
-export function emitRevoke(thread: string, grant: HeadGrant) {
-  for (const listener of revokeListeners) listener(thread, grant);
+export function emitRevoke(thread: string, lifetime: DocumentRef) {
+  for (const listener of revokeListeners) listener(thread, lifetime);
 }

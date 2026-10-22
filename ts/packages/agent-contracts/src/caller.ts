@@ -57,6 +57,12 @@ export const basisSchema = z.discriminatedUnion("kind", [
     device: z.string().optional(),
     lifetime: documentRefSchema,
   }),
+  /** The harness access switch was Full (ADR 0021): Pea writes any open document. */
+  z.strictObject({
+    kind: z.literal("full-access"),
+    thread: z.string(),
+    lifetime: documentRefSchema,
+  }),
   z.strictObject({ kind: z.literal("empty-user-session"), session: z.string() }),
 ]);
 export type Basis = z.infer<typeof basisSchema>;
@@ -72,9 +78,7 @@ export const refusalCodes = [
   "permission.undeclared",
   "human.only",
   "grant.required",
-  "grant.expired",
   "grant.revoked",
-  "grant.other-lifetime",
   "grant.context-cannot-hold",
   "acquisition.unproven",
   "acquisition.changed-after-handover",
@@ -109,8 +113,8 @@ export const refusalSchema = z.strictObject({
 export type Refusal = z.infer<typeof refusalSchema>;
 
 /**
- * D10: what one slot of a Page targets. `thread` follows that thread's head (and writes under its
- * grant); `pinned` names a document by Address, so it survives a reopen; `none` writes nothing.
+ * D10: what one slot of a Page targets. `thread` follows that thread's targets (and writes the
+ * documents a human added to it); `pinned` names a document by Address, so it survives a reopen; `none` writes nothing.
  */
 export const pageChoiceSchema = z.discriminatedUnion("kind", [
   z.strictObject({ kind: z.literal("thread"), thread: z.string().min(1) }),
@@ -135,7 +139,7 @@ export const unboundPage: PageBinding = { slots: { default: { kind: "none" } }, 
 /** What a write from a Page's slot would do now, decided as its act door decides. */
 export type PageWrite =
   | { kind: "pea" }
-  | { kind: "rw"; thread: string; expiresAt: string }
+  | { kind: "thread"; thread: string }
   | { kind: "read"; refusal: Refusal };
 /** `GET /pages/<slug>/target`: one slot, resolved against the live Revits. Never a guess. */
 export type PageTargetReading = {
@@ -145,8 +149,6 @@ export type PageTargetReading = {
   resolution: TargetResolution;
   document: { session: string; openId: string; title: string } | null;
   write: PageWrite | null;
-  /** Host clock, so an rw countdown never trusts the browser's. */
-  hostNow: string;
 };
 
 /** The capability eligibility `human` admits only a human caller; a page is not one. */

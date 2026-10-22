@@ -127,7 +127,7 @@ test("Pea navigation reads real persisted harness summaries and preserves thread
       models: [],
       traits: [],
       traitValues: {},
-      head: { defaultTarget: null, revision: 0 },
+      head: { targets: [], revision: 0 },
       forkOf: null,
       promptCapabilities: null,
       lifecycle: emptyThreadLifecycle(),

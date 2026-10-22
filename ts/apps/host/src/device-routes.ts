@@ -3,7 +3,7 @@ import { HttpEffect, HttpRouter } from "effect/unstable/http";
 import { peRoutes, servePeRoute } from "@pe/agent-contracts/pe-api";
 import { invocationContext } from "@pe/runtime/context";
 import { DEVICE_COOKIE, type Devices } from "./remote-device.ts";
-import { threadHead, live, Refused, refusalHeaders } from "./control.ts";
+import { threadHead, Refused, refusalHeaders } from "./control.ts";
 
 export const deviceRoutes = (devices: Devices) =>
   HttpRouter.use((router) =>
@@ -36,22 +36,13 @@ export const deviceRoutes = (devices: Devices) =>
                     ...listing,
                     sessions: listing.sessions.map((session) => {
                       const head = session.thread ? threadHead(session.thread) : null;
-                      const grant = head?.grant;
-                      const rw = !!(
-                        session.thread &&
-                        head &&
-                        grant &&
+                      // The device writes the documents a human added to its bound thread.
+                      const writes = !!(
+                        head?.targets.some((target) => target.admission !== null) &&
                         !session.revokedAt &&
-                        Date.parse(session.expiresAt) > Date.now() &&
-                        !live({
-                          kind: "grant",
-                          device: session.id,
-                          thread: session.thread,
-                          headRevision: head.revision,
-                          lifetime: grant.lifetime,
-                        })
+                        Date.parse(session.expiresAt) > Date.now()
                       );
-                      return { ...session, rw };
+                      return { ...session, writes };
                     }),
                   });
                 }
@@ -98,7 +89,7 @@ export const deviceRoutes = (devices: Devices) =>
                       code: "device.pairing",
                       door: route.path,
                       reason:
-                        "Choose an existing thread. Its current head grant is the only write authority.",
+                        "Choose an existing thread. The documents a human added to it are the only write authority.",
                     });
                   devices.bind(sessionId, thread);
                 }

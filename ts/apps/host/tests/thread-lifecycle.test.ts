@@ -29,7 +29,7 @@ function fixture(events: HarnessEvent[] = []) {
     models: [],
     traits: [],
     traitValues: {},
-    head: { defaultTarget: null, revision: 0 },
+    head: { targets: [], revision: 0 },
     lifecycle: emptyThreadLifecycle(),
     forkOf: null,
   };
@@ -81,9 +81,8 @@ test("lifecycle transitions persist, reject stale windows, and keep the exact ta
       method: "PUT",
       headers: { "content-type": "application/json" },
       body: JSON.stringify({
-        defaultTarget: scope,
+        targets: [{ request: scope, label: "Operations.rvt" }],
         expectedRevision: 0,
-        displayLabel: "Operations.rvt",
       }),
     }),
   );
@@ -99,8 +98,7 @@ test("lifecycle transitions persist, reject stale windows, and keep the exact ta
   const pinned = await call({ expectedRevision: 2, pinned: true });
   expect(pinned.value.lifecycle.status).toBe("active");
   expect(pinned.value.head).toMatchObject({
-    defaultTarget: scope,
-    displayLabel: "Operations.rvt",
+    targets: [{ request: scope, label: "Operations.rvt" }],
     revision: 1,
   });
   await host.close();
@@ -109,7 +107,7 @@ test("lifecycle transitions persist, reject stale windows, and keep the exact ta
     (await (await reopened.fetch(new Request("http://host/pe/threads/thread"))).json()).lifecycle,
   ).toMatchObject({ pinned: true, revision: 3 });
   expect(
-    JSON.parse(readFileSync(join(root, "thread", "meta.json"), "utf8")).head.defaultTarget,
+    JSON.parse(readFileSync(join(root, "thread", "meta.json"), "utf8")).head.targets[0].request,
   ).toEqual(scope);
   await reopened.close();
 });

@@ -17,7 +17,7 @@
  * page is calling from the page's own path (`pe.page` is the key it minted) and which document from the page's
  * binding, set with the chip in SPA chrome (Bind… opens the picker in the app). A page never names its own origin or
  * target. Reads run on the bound document; a write runs as this page under the binding: a thread binding writes
- * with that thread's rw grant, a pinned document only when it is Pea's own. Anything the host refuses is thrown with
+ * on a document a human added to that thread, a pinned document only when it is Pea's own. Anything the host refuses is thrown with
  * the host's words and shown across the top of the page.
  *
  * The host refuses a browser request that does not name the runtime that served the page. Every door here names
@@ -168,7 +168,7 @@
 
   /**
    * Run any op. A read answers at once on the bound document; a mutation runs as this page through
-   * `/pages/<slug>/act`, under the binding (the bound thread's rw grant, or Pea's own document for a pin), and this
+   * `/pages/<slug>/act`, under the binding (a document a human added to the bound thread, or Pea's own document for a pin), and this
    * waits until its receipt settles. The answer is the op's response either way. A package script key
    * (`script:@snowdon-ducts/src/Census.cs`) always acts: it runs that package's declared script on the binding's
    * document, as this page; `input` passes only `permissionMode` and `timeoutSeconds`.
@@ -408,7 +408,7 @@
     return k;
   };
 
-  // Keep the Page's source fresh. Binding and grant controls belong to SPA chrome.
+  // Keep the Page's source fresh. Binding controls belong to SPA chrome.
   if (pe.slug && typeof EventSource === "function") {
     const followFiles = () => {
       const events = new EventSource(

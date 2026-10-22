@@ -97,17 +97,29 @@ export type TargetResolution =
   | { kind: "failed"; message: string }
   | {
       kind: "choose";
-      reason: "missing" | "session-gone" | "document-closed" | "wrong-document-kind" | "ambiguous";
+      reason:
+        | "missing"
+        | "several-targets"
+        | "session-gone"
+        | "document-closed"
+        | "wrong-document-kind"
+        | "ambiguous";
     };
 
-/** Callers retain the request for recovery; this function never chooses another session. */
+/**
+ * Callers retain the request for recovery; this function never chooses another session. An
+ * explicit call target wins; with none, a thread with exactly one target uses it and a thread with
+ * several refuses (`several-targets`): a write names one. Whether the call may write the resolved
+ * document is admission's question (`admitCrossing`), not this one's.
+ */
 export function resolveCallTarget(
   call: Exclude<CallTarget, { needs: "session" }>,
-  defaultDocument: DocumentRequest | null,
+  targets: readonly DocumentRequest[],
   inventory: TargetInventory,
 ): TargetResolution {
   if (call.needs === "nothing") return { kind: "resolved", target: { kind: "host" } };
-  const request = call.target ?? defaultDocument;
+  if (!call.target && targets.length > 1) return { kind: "choose", reason: "several-targets" };
+  const request = call.target ?? targets[0];
   if (!request) return { kind: "choose", reason: "missing" };
   if (inventory.kind !== "ready") return inventory;
   const session = request.kind === "open" ? request.ref.session : request.session;
@@ -163,78 +175,74 @@ export const targetKey = (target: DocumentRequest | null): string =>
       ? `open:${target.ref.session}/${target.ref.openId}`
       : `named:${target.session}/${target.address}`;
 
-/* ── Thread head: the default Target a thread carries ───────────────────────────────── */
+/* ── Thread head: the documents a thread targets (ADR 0021) ──────────────────────────── */
 
 /**
- * What the user chose for a chat thread: one default Target request plus the revision the host
- * stamped on it. A default is not an execution target; every call resolves it through
- * `resolveCallTarget` against the live inventory and never rewrites it.
+ * The host's admission record for a user document a human added to a thread (ADR 0017 rule 4,
+ * ADR 0021 rule 5). It is a host invariant, not a user-facing noun: no clock, no renewal. The
+ * document's authority ends when its lifetime closes or a human removes it from the targets.
  */
-export const headGrantSchema = z.strictObject({
-  /** D1: equals `defaultTarget.ref`; a closed lifetime is a dead grant with no extra state. */
-  lifetime: documentRefSchema,
-  /** Host clock at the human PUT that stamped it. */
-  grantedAt: z.iso.datetime(),
-  grantedVia: z.enum(["local", "tailnet", "cli", "lan", "ssh"]),
-  grantedDevice: z.string().optional(),
-  /** Authenticated tailnet login that performed this grant; never supplied by the PUT body. */
-  grantedLogin: z.string().optional(),
-  /** Host-written: max(grantedAt, lastHumanMessageAt) + 60 min. */
-  expiresAt: z.iso.datetime(),
-  /** Revoke evidence; only a fresh human PUT clears it. */
-  revoked: z.strictObject({ at: z.iso.datetime() }).nullable(),
+export const headAdmissionSchema = z.strictObject({
+  /** The head revision that added it; a re-add after removal is a new admission (fencing). */
+  revision: z.number().int().nonnegative(),
+  /** Host clock at the human PUT that added it. */
+  at: z.iso.datetime(),
+  via: z.enum(["local", "tailnet", "cli", "lan", "ssh"]),
+  device: z.string().optional(),
+  /** Authenticated tailnet login that added it; never supplied by the PUT body. */
+  login: z.string().optional(),
 });
-export type HeadGrant = z.infer<typeof headGrantSchema>;
+export type HeadAdmission = z.infer<typeof headAdmissionSchema>;
 
-export const threadHeadSchema = z
-  .object({
-    defaultTarget: documentRequestSchema.nullable(),
-    revision: z.number().int().nonnegative(),
+export const headTargetSchema = z
+  .strictObject({
+    request: documentRequestSchema,
     /** Display snapshot only. It never participates in target resolution or admission. */
-    displayLabel: z.string().max(300).optional(),
-    /** The rw grant (ADR 0016/0017 D1). The host is its only writer. */
-    grant: headGrantSchema.nullable().default(null),
-    /** Stamped only by a human `POST /pe/threads/:id/prompt`. */
-    lastHumanMessageAt: z.iso.datetime().nullable().default(null),
+    label: z.string().max(300).optional(),
+    /** Host-written; set only when a human added an exact open lifetime Pea did not acquire. */
+    admission: headAdmissionSchema.nullable(),
   })
   .refine(
-    (h) =>
-      h.grant === null ||
-      (h.defaultTarget?.kind === "open" &&
-        h.defaultTarget.ref.session === h.grant.lifetime.session &&
-        h.defaultTarget.ref.openId === h.grant.lifetime.openId),
-    "a grant binds the exact open head lifetime, never a named address",
+    (target) => target.admission === null || target.request.kind === "open",
+    "an admission binds an exact open lifetime, never a named address",
   );
-export type ThreadHead = z.infer<typeof threadHeadSchema>;
-export const emptyThreadHead: ThreadHead = {
-  defaultTarget: null,
-  revision: 0,
-  grant: null,
-  lastHumanMessageAt: null,
-};
-export const grantViewSchema = z.discriminatedUnion("state", [
-  z.object({ state: z.literal("rw"), minutes: z.number() }),
-  z.object({ state: z.literal("expired") }),
-  z.object({ state: z.literal("revoked") }),
-]);
-export type GrantView = z.infer<typeof grantViewSchema>;
-/** The host projects expiry; a surface formats this observation without advancing its clock. */
-export const threadHeadReadingSchema = threadHeadSchema.and(
-  z.object({ hostNow: z.iso.datetime(), grantView: grantViewSchema.nullable() }),
-);
-export type ThreadHeadReading = z.infer<typeof threadHeadReadingSchema>;
+export type HeadTarget = z.infer<typeof headTargetSchema>;
 
-/** `PUT /pe/scope/:thread`. */
+/**
+ * What a chat thread targets: a set of document requests plus the revision the host stamped on
+ * it. A target is not an execution target; every call resolves it through `resolveCallTarget`
+ * against the live inventory and never rewrites it.
+ */
+export const threadHeadSchema = z.object({
+  targets: z.array(headTargetSchema),
+  revision: z.number().int().nonnegative(),
+});
+export type ThreadHead = z.infer<typeof threadHeadSchema>;
+export const emptyThreadHead: ThreadHead = { targets: [], revision: 0 };
+
+/**
+ * How a set of targets reads in one line: the one document's label, or a count when several. The
+ * targeted document names are the visible consent (ADR 0021 rule 4); null when none is named.
+ */
+export const targetsLabel = (targets: readonly { label?: string | undefined }[]): string | null =>
+  targets.length > 1 ? `${targets.length} documents` : (targets[0]?.label ?? null);
+
+/** The document requests a thread targets, for `resolveCallTarget`. */
+export const headRequests = (head: ThreadHead): DocumentRequest[] =>
+  head.targets.map((target) => target.request);
+
+/** `PUT /pe/scope/:thread`: the whole target set. The host keeps admissions it already holds. */
 export const putTargetSchema = z.object({
-  defaultTarget: documentRequestSchema.nullable(),
+  targets: z.array(
+    z.strictObject({ request: documentRequestSchema, label: z.string().max(300).optional() }),
+  ),
   expectedRevision: z.number().int().nonnegative(),
-  displayLabel: z.string().max(300).optional(),
 });
 export type PutTarget = z.infer<typeof putTargetSchema>;
 
 export const putTargetResultSchema = z.discriminatedUnion("why", [
-  z.object({ ok: z.literal(true), why: z.literal("set"), head: threadHeadReadingSchema }),
+  z.object({ ok: z.literal(true), why: z.literal("set"), head: threadHeadSchema }),
   /** Someone wrote first; `head` is current, re-read and decide again. */
-  z.object({ ok: z.literal(false), why: z.literal("stale"), head: threadHeadReadingSchema }),
+  z.object({ ok: z.literal(false), why: z.literal("stale"), head: threadHeadSchema }),
 ]);
 export type PutTargetResult = z.infer<typeof putTargetResultSchema>;

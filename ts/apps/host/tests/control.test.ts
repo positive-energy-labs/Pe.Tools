@@ -1,4 +1,4 @@
-import { afterEach, expect, test, vi } from "vite-plus/test";
+import { afterEach, expect, test } from "vite-plus/test";
 import { existsSync, readFileSync } from "node:fs";
 import { mkdtemp, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
@@ -8,14 +8,12 @@ import {
   address,
   type Caller,
   type DocumentRef,
-  type HeadGrant,
   type ThreadHead,
 } from "@pe/agent-contracts";
 import {
   admitCrossing,
   bindControl,
   callerOf,
-  grantExpiry,
   live,
   Refused,
   admitScript,
@@ -26,42 +24,93 @@ import {
 import { HOST_CONTEXT_HEADER, productPathNames } from "@pe/host-contracts/contracts";
 import { hostContextTokenPath } from "@pe/host-contracts/service-identity";
 
-const T0 = Date.parse("2026-10-12T12:00:00.000Z");
 const docA: DocumentRef = { session: "S1", openId: "A" };
 // The same saved Address open in a second Revit: a different lifetime.
 const docB: DocumentRef = { session: "S2", openId: "B" };
 const pea: Caller = { kind: "pea", context: "c1", thread: "t1" };
 
-const grantOn = (lifetime: DocumentRef, extra: Partial<HeadGrant> = {}): HeadGrant => ({
-  lifetime,
-  grantedAt: new Date(T0).toISOString(),
-  grantedVia: "local",
-  expiresAt: grantExpiry(T0),
-  revoked: null,
-  ...extra,
+/** A head whose targets a human added at `revision`. */
+const headWith = (lifetimes: DocumentRef[], revision = 3): ThreadHead => ({
+  targets: lifetimes.map((ref) => ({
+    request: { kind: "open", ref },
+    admission: { revision, at: "2026-10-12T12:00:00.000Z", via: "local" },
+  })),
+  revision,
 });
 
-test("access-004 K9: a granted script refuses another ungranted open document", () => {
+test("access-004 K9: a script on a target refuses another open document Pea may not write", () => {
   bind(acquiredCopy);
-  vi.useFakeTimers({ toFake: ["Date"] });
-  vi.setSystemTime(T0 + 1000);
-  heads.t1 = headWith(grantOn(docA));
+  heads.t1 = headWith([docA]);
   expect(
     refusal(() => admitScript(pea, [docA, { session: "S1", openId: "other" }], "/actions")),
   ).toBe("script.ungranted-documents");
   expect(() => admitScript(pea, [docA], "/actions")).not.toThrow();
   expect(() => admitScript(pea, [{ session: "P", openId: "copy" }], "/actions")).not.toThrow();
-});
-const headWith = (grant: HeadGrant | null): ThreadHead => ({
-  ...emptyThreadHead,
-  defaultTarget: grant ? { kind: "open", ref: grant.lifetime } : null,
-  revision: 3,
-  grant,
+  // Under Full every open document is one Pea may write, so K9 finds no sibling to refuse.
+  full = true;
+  expect(() =>
+    admitScript(pea, [docA, { session: "S1", openId: "other" }], "/actions"),
+  ).not.toThrow();
 });
 let heads: Record<string, ThreadHead> = {};
+let full = false;
 /** Pea acquired one copy in Revit "P"; a user document opened there later is not acquired. */
 const acquiredCopy = (ref: DocumentRef) =>
   ref.session === "P" && ref.openId === "copy" ? "acq-copy" : null;
+
+test("ADR 0021: Full writes any open document; Guarded refuses a user document the thread does not target", () => {
+  bind();
+  heads.t1 = headWith([docA]);
+  expect(refusal(() => admitCrossing(pea, { kind: "document", ref: docB }, "/actions"))).toBe(
+    "grant.required",
+  );
+  expect(admitCrossing(pea, { kind: "document", ref: docA }, "/actions")).toEqual({
+    kind: "grant",
+    thread: "t1",
+    headRevision: 3,
+    lifetime: docA,
+  });
+  full = true;
+  const basis = admitCrossing(pea, { kind: "document", ref: docB }, "/actions");
+  expect(basis).toEqual({ kind: "full-access", thread: "t1", lifetime: docB });
+  // A thread still targets documents, never a session, under either setting.
+  expect(refusal(() => admitCrossing(pea, { kind: "session", session: "S2" }, "/actions"))).toBe(
+    "grant.required",
+  );
+  // Switching back to Guarded stops a Full admission at step begin.
+  expect(live(basis)).toBeNull();
+  full = false;
+  expect(live(basis)?.refusal.code).toBe("grant.revoked");
+});
+
+test("ADR 0021: a human removing a target ends its authority; there is no clock", () => {
+  bind();
+  heads.t1 = headWith([docA, docB]);
+  const basis = admitCrossing(pea, { kind: "document", ref: docA }, "/actions");
+  expect(live(basis)).toBeNull();
+  heads.t1 = { ...headWith([docB]), revision: 4 };
+  expect(live(basis)?.refusal.code).toBe("grant.revoked");
+  expect(refusal(() => admitCrossing(pea, { kind: "document", ref: docA }, "/actions"))).toBe(
+    "grant.required",
+  );
+});
+
+test("an external MCP device writes only its thread's human-added targets, never under Full", () => {
+  bindControl({
+    heads: (thread) => heads[thread] ?? emptyThreadHead,
+    deviceThread: (device) => (device === "d1" ? "t1" : null),
+    fullAccess: () => true,
+  });
+  heads.t1 = headWith([docA]);
+  const mcp: Caller = { kind: "external-mcp", context: "m", label: "MCP", device: "d1" };
+  expect(admitCrossing(mcp, { kind: "document", ref: docA }, "/actions")).toMatchObject({
+    kind: "grant",
+    device: "d1",
+  });
+  expect(refusal(() => admitCrossing(mcp, { kind: "document", ref: docB }, "/actions"))).toBe(
+    "grant.required",
+  );
+});
 
 test("a human Page pin consents only to the exact minted document lifetime", () => {
   bind();
@@ -102,6 +151,7 @@ const bind = (acquired: (ref: DocumentRef) => string | null = () => null) =>
     heads: (thread) => heads[thread] ?? emptyThreadHead,
     acquired,
     acquiredSession: (session) => (acquired === acquiredCopy && session === "P" ? "acq-P" : null),
+    fullAccess: () => full,
   });
 const refusal = (run: () => unknown) => {
   try {
@@ -115,17 +165,21 @@ const refusal = (run: () => unknown) => {
 
 afterEach(() => {
   heads = {};
-  bindControl({ heads: null, acquired: () => null, acquiredSession: () => null });
-  vi.useRealTimers();
+  full = false;
+  bindControl({
+    heads: null,
+    acquired: () => null,
+    acquiredSession: () => null,
+    deviceThread: undefined,
+    fullAccess: () => false,
+  });
 });
 
-test("access-052: re-grant on the same lifetime cannot revive an older admission", () => {
+test("access-052: re-adding the same lifetime cannot revive an older admission", () => {
   bind();
-  vi.useFakeTimers({ toFake: ["Date"] });
-  vi.setSystemTime(T0 + 1000);
-  heads.t1 = headWith(grantOn(docA));
+  heads.t1 = headWith([docA]);
   const basis = admitCrossing(pea, { kind: "document", ref: docA }, "/actions");
-  heads.t1 = { ...headWith(grantOn(docA)), revision: 5 };
+  heads.t1 = headWith([docA], 5);
   expect(live(basis)?.refusal.code).toBe("grant.revoked");
 });
 

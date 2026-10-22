@@ -7,6 +7,7 @@ import {
   type PromptAttachment,
   type ReadingFrame,
   emptyThreadHead,
+  targetsLabel,
 } from "./index.ts";
 import { stringify } from "./code-format.ts";
 
@@ -32,7 +33,7 @@ export function emptyChatState(): ChatState {
     session: "closed",
     promptCapabilities: null,
     events: [],
-    head: { ...emptyThreadHead, hostNow: "1970-01-01T00:00:00.000Z", grantView: null },
+    head: emptyThreadHead,
     lifecycle: emptyThreadLifecycle(),
     tabs: [],
     activity: { state: "idle", pending: 0, lastSeq: 0, message: null },
@@ -286,7 +287,9 @@ function fold(state: ChatState): Fold {
           role: "user",
           parts: [{ type: "text", text: event.text }, ...(event.attachments ?? []).map(sentPart)],
           ...(event.mentions?.length ? { mentions: event.mentions } : {}),
-          ...(event.target?.label ? { target: event.target.label } : {}),
+          ...(event.targets && targetsLabel(event.targets)
+            ? { target: targetsLabel(event.targets)! }
+            : {}),
           running: false,
           ...at(event),
         });

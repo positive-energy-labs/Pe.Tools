@@ -115,13 +115,13 @@ test("the host-owned /pe surface answers without Revit", async () => {
     expect(keys).toContain("skill:@product/skills/build-pod");
     expect(keys.some((key) => key.startsWith("op:revit."))).toBe(false);
 
-    // The thread head, its Reading, and route Work, with no tenant behind them.
+    // The thread's targets, their Reading, and route Work, with no tenant behind them.
     // Anonymous loopback is read-only; the owner's terminal token (written at start) is a human.
     const putAs = (headers: Record<string, string>) =>
       fetch(`${base}/pe/scope/t1`, {
         method: "PUT",
         headers: { "content-type": "application/json", ...headers },
-        body: JSON.stringify({ defaultTarget: null, expectedRevision: 0 }),
+        body: JSON.stringify({ targets: [], expectedRevision: 0 }),
       });
     const anonymous = await putAs({});
     expect(anonymous.status).toBe(403);
@@ -140,7 +140,7 @@ test("the host-owned /pe surface answers without Revit", async () => {
     await reader.cancel();
     expect(JSON.parse(frame.slice(frame.indexOf("data: ") + 6))).toMatchObject({
       kind: "snapshot",
-      value: { defaultTarget: null, revision: 1 },
+      value: { targets: [], revision: 1 },
     });
     const routeList = await fetch(`${base}/pe/route-state`);
     expect(routeList.status).toBe(200);

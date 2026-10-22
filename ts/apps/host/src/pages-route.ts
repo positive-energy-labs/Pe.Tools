@@ -28,6 +28,8 @@ import {
   parseContributionKey,
   pageChoiceSchema,
   resolveCallTarget,
+  headRequests,
+  emptyThreadHead,
   resolvePinned,
   unboundPage,
   type Caller,
@@ -224,7 +226,7 @@ function resolveSlot(slot: PageChoice, sessions: readonly LiveSession[]): Target
   if (slot.kind === "thread")
     return resolveCallTarget(
       { needs: "document" },
-      threadHead(slot.thread)?.defaultTarget ?? null,
+      headRequests(threadHead(slot.thread) ?? emptyThreadHead),
       inventoryOf(sessions),
     );
   if (slot.kind === "pinned") return resolvePinned(slot.address, inventoryOf(sessions));
@@ -561,11 +563,8 @@ export function createPagesHandler(
     if (resolution.kind === "resolved")
       try {
         const basis = admitPage(slot, resolution.target, actDoor);
-        const grant = basis?.kind === "grant" ? threadHead(basis.thread)?.grant : null;
         write =
-          basis?.kind === "grant" && grant
-            ? { kind: "rw", thread: basis.thread, expiresAt: grant.expiresAt }
-            : { kind: "pea" };
+          basis?.kind === "grant" ? { kind: "thread", thread: basis.thread } : { kind: "pea" };
       } catch (error) {
         if (!(error instanceof Refused)) throw error;
         write = { kind: "read", refusal: error.refusal };
@@ -577,7 +576,6 @@ export function createPagesHandler(
       resolution,
       document: ref ? { ...ref, title } : null,
       write,
-      hostNow: new Date().toISOString(),
     };
   }
 
@@ -637,7 +635,7 @@ export function createPagesHandler(
     const raw: unknown = await request.json().catch(() => undefined);
     const binding = await bindingOf(dir);
     const slot = binding.slots.default;
-    // Only a person's pin consents to ReadOnly on its resolved document; thread bindings need rw.
+    // Only a person's pin consents to ReadOnly on its resolved document; thread bindings need a human-added target.
     const humanBound = binding.boundBy.default === "human" && slot.kind === "pinned";
     try {
       if (verb === "call") {

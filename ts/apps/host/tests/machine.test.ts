@@ -1,5 +1,5 @@
 import { expect, test, vi } from "vite-plus/test";
-import type { ActionReceipt, HeadGrant, Machine } from "@pe/agent-contracts";
+import type { ActionReceipt, Machine } from "@pe/agent-contracts";
 import type {
   DocListResult,
   ObservedActive,
@@ -10,7 +10,7 @@ import {
   machineSources,
   unavailableShare,
   type AttachmentRead,
-  type HeldGrant,
+  type HeldTarget,
   type MachineSources,
 } from "../src/machine.ts";
 import type { Providers } from "../src/harness/providers.ts";
@@ -139,7 +139,10 @@ function fixture() {
     },
     share: unavailableShare,
     subscribe: vi.fn(() => vi.fn()),
-    grants: { grants: vi.fn((): readonly HeldGrant[] => []), subscribe: vi.fn(() => vi.fn()) },
+    targets: {
+      targets: vi.fn((): readonly HeldTarget[] => []),
+      subscribe: vi.fn(() => vi.fn()),
+    },
   };
   return { sources, machine: createMachine(sources, { periodMs: 60_000 }) };
 }
@@ -414,17 +417,10 @@ test("SDK process read errors fail the real census adapter and restart the full 
 
 /* ── Per-document access: the only place the browser learns who may write ───────────────── */
 
-const grantHeld = (extra: Partial<HeadGrant> = {}): HeldGrant => ({
+const targetHeld = (): HeldTarget => ({
   thread: "t1",
   title: "Retag level 2",
-  grant: {
-    lifetime: { session: "product-open", openId: "product-id" },
-    grantedAt: "2026-10-12T12:00:00.000Z",
-    grantedVia: "local",
-    expiresAt: "2026-10-12T13:00:00.000Z",
-    revoked: null,
-    ...extra,
-  },
+  lifetime: { session: "product-open", openId: "product-id" },
 });
 /** A controlled Revit whose SDK census natively certifies each document's independence. */
 const controlled = (documents: { openId: string; isWorkshared: boolean | null }[]) =>
@@ -439,13 +435,13 @@ const controlled = (documents: { openId: string; isWorkshared: boolean | null }[
     },
   }) as unknown as SessionObservation;
 const accessesAt = async (
-  grants: readonly HeldGrant[],
+  targets: readonly HeldTarget[],
   at: string,
   acquired?: { sdk: { openId: string; isWorkshared: boolean | null }[]; products?: string[] },
   documentIdentity: AttachmentRead["documentIdentity"] = "sdk-open-v1",
 ) => {
   const f = fixture();
-  vi.mocked(f.sources.grants.grants).mockReturnValue(grants);
+  vi.mocked(f.sources.targets.targets).mockReturnValue(targets);
   vi.mocked(f.sources.attachments).mockResolvedValue([{ ...attached, documentIdentity }]);
   if (acquired) {
     vi.mocked(f.sources.actions).mockResolvedValue([acquiring("open", "succeeded", row.process)]);
@@ -471,18 +467,22 @@ const accessesAt = async (
     f.machine.close();
   }
 };
-const accessAt = async (grants: readonly HeldGrant[], at: string) =>
-  (await accessesAt(grants, at))[0];
+const accessAt = async (targets: readonly HeldTarget[], at: string) =>
+  (await accessesAt(targets, at))[0];
 
-test("access: one SDK id joins the acquisition and grant; without the identity marker both stay read", async () => {
+test("access: one SDK id joins the acquisition and a human-added target; without the identity marker both stay read", async () => {
   const at = "2026-10-12T12:30:00.000Z";
   // The SDK doc-list id and the bridge openId are the same string: SDK beta.202's one authority.
   const sdk = [{ openId: "product-id", isWorkshared: false }];
   expect(await accessesAt([], at, { sdk })).toEqual([{ kind: "pea", acquisition: "launch" }]);
-  expect(await accessAt([grantHeld()], at)).toMatchObject({ kind: "rw" });
+  expect(await accessAt([targetHeld()], at)).toEqual({
+    kind: "target",
+    thread: "t1",
+    label: "Retag level 2",
+  });
   // A payload that did not attest SDK identity: equal strings prove nothing, nothing writes.
   expect(await accessesAt([], at, { sdk }, null)).toEqual([{ kind: "read" }]);
-  expect(await accessesAt([grantHeld()], at, undefined, null)).toEqual([{ kind: "read" }]);
+  expect(await accessesAt([targetHeld()], at, undefined, null)).toEqual([{ kind: "read" }]);
 });
 
 test("U-02: an automatic apply slower than the leg deadline is not a failed read and is not re-admitted", async () => {

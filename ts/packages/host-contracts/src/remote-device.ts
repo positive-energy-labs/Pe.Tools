@@ -19,7 +19,7 @@ export const deviceSessionSchema = z.strictObject({
 });
 export const deviceListingSchema = z.strictObject({
   environmentId: z.uuid(),
-  sessions: z.array(deviceSessionSchema.extend({ rw: z.boolean() })),
+  sessions: z.array(deviceSessionSchema.extend({ writes: z.boolean() })),
 });
 export const pairingSchema = z.strictObject({
   environmentId: z.uuid(),

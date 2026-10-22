@@ -55,7 +55,9 @@ import {
   type PromptAttachment,
   type PutTargetResult,
   type ThreadHead,
-  type ThreadHeadReading,
+  type HeadTarget,
+  type DocumentRequest,
+  targetKey,
   type TurnState,
   readingKey,
   type HostLogEntry,
@@ -69,8 +71,6 @@ import {
   currentCaller,
   callerThread,
   emitRevoke,
-  grantExpiry,
-  grantDead,
   mintContext,
   Refused,
   refusalHeaders,
@@ -357,7 +357,6 @@ function writeJson(path: string, value: unknown) {
 export function createHarnessThreads(options: HarnessThreadsOptions) {
   const threads = new Map<string, Thread>();
   const headListeners = new Set<(threadId: string, head: ThreadHead) => void>();
-  const headTimers = new Set<ReturnType<typeof setInterval>>();
   const summaryListeners = new Set<() => void>();
   const notifySummaries = () => {
     for (const listener of summaryListeners) listener();
@@ -559,7 +558,7 @@ export function createHarnessThreads(options: HarnessThreadsOptions) {
     ...(t.meta.origin ? { origin: t.meta.origin } : {}),
     lastSeq: t.events.length,
     cursor: options.log.last,
-    head: reading(t.meta.head),
+    head: t.meta.head,
     lifecycle: t.meta.lifecycle,
     tabs: t.meta.tabs,
     activity: activity(t),
@@ -589,24 +588,6 @@ export function createHarnessThreads(options: HarnessThreadsOptions) {
     if (!parsed.success) warn(`thread head ${threadId}: stored head no longer parses`);
     return parsed.data ?? emptyThreadHead;
   }
-  const reading = (head: ThreadHead): ThreadHeadReading => {
-    const now = Date.now();
-    const dead = head.grant && grantDead(head.grant, now);
-    return {
-      ...head,
-      hostNow: new Date(now).toISOString(),
-      grantView: !head.grant
-        ? null
-        : dead === "grant.revoked"
-          ? { state: "revoked" }
-          : dead === "grant.expired"
-            ? { state: "expired" }
-            : {
-                state: "rw",
-                minutes: Math.ceil((Date.parse(head.grant.expiresAt) - now) / 60_000),
-              },
-    };
-  };
   function writeHead(threadId: string, head: ThreadHead) {
     const t = threads.get(threadId);
     if (t) {
@@ -618,8 +599,10 @@ export function createHarnessThreads(options: HarnessThreadsOptions) {
   }
 
   /**
-   * Door 6, the only grant writer. A human sets any target, and an open lifetime on your Revit
-   * stamps the rw grant; any move retires it. Pea sets only null or Pea's own sessions.
+   * Door 6, the only writer of a thread's targets (ADR 0021). The PUT names the whole set; the host
+   * keeps the admission of every target it already holds. A human adds or removes any document,
+   * and adding an exact open lifetime Pea did not acquire records its admission. Pea adds and
+   * removes only its own acquired documents; it never adds or removes a user document.
    */
   function setHead(
     threadId: string,
@@ -627,104 +610,90 @@ export function createHarnessThreads(options: HarnessThreadsOptions) {
     caller: Extract<Caller, { kind: "human" | "pea" }>,
     door: string,
   ): PutTargetResult {
-    const target = input.defaultTarget;
-    const session =
-      target === null ? null : target.kind === "open" ? target.ref.session : target.session;
-    const acquired =
-      target === null
-        ? null
-        : target.kind === "open"
-          ? documentAcquisition(target.ref)
-          : sessionAcquisition(target.session);
-    if (caller.kind === "pea" && target !== null && acquired === null)
+    const current = readHead(threadId);
+    if (current.revision !== input.expectedRevision)
+      return { ok: false, why: "stale", head: current };
+    const revision = current.revision + 1;
+    const at = new Date().toISOString();
+    const kept = (request: DocumentRequest) =>
+      current.targets.find((held) => targetKey(held.request) === targetKey(request));
+    const keys = new Set(input.targets.map(({ request }) => targetKey(request)));
+    if (keys.size !== input.targets.length)
       throw new Refused({
         code: "grant.required",
         door,
-        reason: `Refused at ${door}: Pea may point its thread only at documents it acquired; this one in session '${session}' is yours. Point this thread at it in the composer to grant rw, or open a copy.`,
+        reason: `Refused at ${door}: a thread targets each document once.`,
       });
-    const current = readHead(threadId);
-    if (current.revision !== input.expectedRevision)
-      return { ok: false, why: "stale", head: reading(current) };
-    const now = Date.now();
-    const head: ThreadHead = {
-      defaultTarget: target,
-      revision: current.revision + 1,
-      ...(input.displayLabel ? { displayLabel: input.displayLabel } : {}),
-      grant:
-        caller.kind === "human" && target?.kind === "open" && acquired === null
-          ? {
-              lifetime: target.ref,
-              grantedAt: new Date(now).toISOString(),
-              grantedVia: caller.via,
-              ...(caller.device ? { grantedDevice: caller.device } : {}),
-              ...(caller.login ? { grantedLogin: caller.login } : {}),
-              expiresAt: grantExpiry(now),
-              revoked: null,
-            }
-          : null,
-      lastHumanMessageAt: current.lastHumanMessageAt,
-    };
-    writeHead(threadId, head);
-    // The move retires a live grant: work it queued but Revit has not begun stops like a revoke.
-    if (current.grant && !current.grant.revoked) emitRevoke(threadId, current.grant);
-    return { ok: true, why: "set", head: reading(head) };
-  }
-
-  /** Door 7: one click revokes. Begun steps finish; the step-begin check refuses the rest. */
-  function revokeHead(threadId: string): ThreadHeadReading {
-    const current = readHead(threadId);
-    if (!current.grant || current.grant.revoked) return reading(current);
-    const grant = { ...current.grant, revoked: { at: new Date().toISOString() } };
-    writeHead(threadId, { ...current, revision: current.revision + 1, grant });
-    emitRevoke(threadId, grant);
-    return reading(readHead(threadId));
-  }
-
-  /** Door 8: a human message renews an unrevoked grant to 60 minutes from now. */
-  function heardHuman(t: Thread) {
-    const now = Date.now();
-    const head = t.meta.head;
-    writeHead(t.meta.id, {
-      ...head,
-      lastHumanMessageAt: new Date(now).toISOString(),
-      grant:
-        head.grant && !head.grant.revoked
-          ? { ...head.grant, expiresAt: grantExpiry(now) }
-          : head.grant,
+    const targets = input.targets.map(({ request, label }): HeadTarget => {
+      const held = kept(request);
+      if (held) return { ...held, ...(label ? { label } : {}) };
+      const acquired =
+        request.kind === "open"
+          ? documentAcquisition(request.ref)
+          : sessionAcquisition(request.session);
+      if (caller.kind === "pea" && acquired === null)
+        throw new Refused({
+          code: "grant.required",
+          door,
+          reason: `Refused at ${door}: Pea may add only documents it acquired; this one in session '${request.kind === "open" ? request.ref.session : request.session}' is yours. Only you add your documents to a thread, from the composer, or open a copy.`,
+        });
+      return {
+        request,
+        ...(label ? { label } : {}),
+        admission:
+          caller.kind === "human" && request.kind === "open" && acquired === null
+            ? {
+                revision,
+                at,
+                via: caller.via,
+                ...(caller.device ? { device: caller.device } : {}),
+                ...(caller.login ? { login: caller.login } : {}),
+              }
+            : null,
+      };
     });
+    const removed = current.targets.filter((held) => !keys.has(targetKey(held.request)));
+    if (caller.kind === "pea" && removed.some((held) => held.admission !== null))
+      throw new Refused({
+        code: "human.only",
+        door,
+        reason: `Refused at ${door}: only you remove a document you added to this thread.`,
+      });
+    const head: ThreadHead = { targets, revision };
+    writeHead(threadId, head);
+    // Removal ends an admission: work it queued but Revit has not begun stops (ADR 0017 rule 6).
+    for (const held of removed)
+      if (held.admission && held.request.kind === "open") emitRevoke(threadId, held.request.ref);
+    return { ok: true, why: "set", head };
   }
 
   const heads = {
     read: readHead,
-    /** Every thread's rw grant, for Machine's per-document access. */
-    grants: () =>
+    /** Every human-added target, for Machine's per-document access. */
+    targets: () =>
       [...threads.values()].flatMap((t) =>
-        t.meta.head.grant
-          ? [{ thread: t.meta.id, title: t.meta.title, grant: t.meta.head.grant }]
-          : [],
+        t.meta.head.targets.flatMap((target) =>
+          target.admission && target.request.kind === "open"
+            ? [{ thread: t.meta.id, title: t.meta.title, lifetime: target.request.ref }]
+            : [],
+        ),
       ),
-    /** Any head set, revoke or renewal. */
+    /** Any head set. */
     subscribe(notify: () => void) {
       const listener = () => notify();
       headListeners.add(listener);
       return () => void headListeners.delete(listener);
     },
     /** The `thread-head` Reading: the current head, then every set. */
-    observe(threadId: string, listener: (value: { value: ThreadHeadReading }) => void) {
+    observe(threadId: string, listener: (value: { value: ThreadHead }) => void) {
       const notify = (id: string, head: ThreadHead) => {
-        if (id === threadId) listener({ value: reading(head) });
+        if (id === threadId) listener({ value: head });
       };
       headListeners.add(notify);
-      const timer = setInterval(() => listener({ value: reading(readHead(threadId)) }), 15_000);
-      headTimers.add(timer);
       queueMicrotask(() => {
-        if (headListeners.has(notify)) listener({ value: reading(readHead(threadId)) });
+        if (headListeners.has(notify)) listener({ value: readHead(threadId) });
       });
-      return () => {
-        clearInterval(timer);
-        headTimers.delete(timer);
-        headListeners.delete(notify);
-      };
+      return () => void headListeners.delete(notify);
     },
   };
 
@@ -1188,12 +1157,12 @@ export function createHarnessThreads(options: HarnessThreadsOptions) {
       text,
       ...(attachments ? { attachments } : {}),
       ...(mentions ? { mentions } : {}),
-      ...(head.defaultTarget
+      ...(head.targets.length
         ? {
-            target: {
-              request: head.defaultTarget,
-              ...(head.displayLabel ? { label: head.displayLabel } : {}),
-            },
+            targets: head.targets.map(({ request, label }) => ({
+              request,
+              ...(label ? { label } : {}),
+            })),
           }
         : {}),
     });
@@ -1276,7 +1245,6 @@ export function createHarnessThreads(options: HarnessThreadsOptions) {
     t.meta.lifecycle.settledAt = null;
     t.meta.lifecycle.snoozedUntil = null;
     t.meta.lifecycle.revision++;
-    heardHuman(t);
   }
 
   /**
@@ -1423,15 +1391,7 @@ export function createHarnessThreads(options: HarnessThreadsOptions) {
           404,
         );
       if (declared.id === "scope.get")
-        return json({ ...(self ? { thread: threadId } : {}), ...reading(readHead(threadId)) });
-      if (declared.id === "scope.revoke") {
-        requireHuman(caller, door, "revoking rw");
-        return json({
-          ...revokeHead(threadId),
-          receipt:
-            "rw revoked. Steps already running finish; nothing new starts. Re-point the head to grant again.",
-        });
-      }
+        return json({ ...(self ? { thread: threadId } : {}), ...readHead(threadId) });
       if (declared.id !== "scope.set")
         return json({ error: `No route ${method} ${url.pathname}` }, 404);
       if (caller.kind === "pea" && caller.thread !== threadId)
@@ -1600,7 +1560,7 @@ export function createHarnessThreads(options: HarnessThreadsOptions) {
         notifySummaries();
         return new Response(null, { status: 204 });
       case "thread.prompt": {
-        // Only a human message moves a thread, and only it renews the grant: Pea cannot renew itself.
+        // Only a human message moves a thread.
         requireHuman(caller, url.pathname, "a thread message");
         const {
           id: turnId,
@@ -1713,7 +1673,11 @@ export function createHarnessThreads(options: HarnessThreadsOptions) {
         const forked = create(
           {
             ...t.meta,
-            head: { ...t.meta.head, grant: null, lastHumanMessageAt: null, revision: 0 },
+            // A fork copies the targets but no human authority (ADR 0017 rule 4).
+            head: {
+              targets: t.meta.head.targets.map((target) => ({ ...target, admission: null })),
+              revision: 0,
+            },
             id: randomUUID(),
             harness: record.harness,
             providerId: record.id,
@@ -1803,13 +1767,10 @@ export function createHarnessThreads(options: HarnessThreadsOptions) {
       const dirty = () => {
         scheduled ??= setTimeout(send, 100);
       };
-      // Republish on the host clock too: a grant's expiry changes the head with no thread event.
-      const tick = setInterval(send, 15_000);
       summaryListeners.add(dirty);
       send();
       return () => {
         clearTimeout(scheduled);
-        clearInterval(tick);
         summaryListeners.delete(dirty);
       };
     }
@@ -1976,8 +1937,6 @@ export function createHarnessThreads(options: HarnessThreadsOptions) {
     /** Host shutdown: stop every harness child and its tree. */
     close: () => {
       clearInterval(sweep);
-      for (const timer of headTimers) clearInterval(timer);
-      headTimers.clear();
       return Promise.all([...threads.values()].map(stop));
     },
   };

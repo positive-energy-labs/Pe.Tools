@@ -195,10 +195,10 @@ test("the harness, Page and route-state doors carry their caller through the rea
     expect(answer.code, answer.text).not.toBe("human.only");
   };
   try {
-    // POST /pe/scope/:thread/revoke: human-only.
-    expect((await at("POST", "/pe/scope/t-doors/revoke", {})).code).toBe("context.missing");
-    expect((await at("POST", "/pe/scope/t-doors/revoke", pea)).code).toBe("human.only");
-    humanReached(await at("POST", "/pe/scope/t-doors/revoke", human));
+    // PUT /pe/scope/:thread: a human sets any thread's targets; anonymous never does.
+    const none = { targets: [], expectedRevision: 0 };
+    expect((await at("PUT", "/pe/scope/t-doors", {}, none)).code).toBe("context.missing");
+    humanReached(await at("PUT", "/pe/scope/t-doors", human, none));
     // PUT /pe/scope/self: Pea's own thread comes from its context, never a path.
     const self = await at("PUT", "/pe/scope/self", pea, { kind: "none" });
     expect(self.text).not.toMatch(/answers only a Pea harness context/);

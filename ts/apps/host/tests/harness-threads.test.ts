@@ -17,7 +17,7 @@ import type {
 import { HARNESS_EVENT_MAX_BYTES } from "@pe/agent-contracts";
 import { withInvocationContext } from "@pe/runtime/context";
 import { human } from "./callers.ts";
-import { admitCrossing, bindControl, onRevoke, Refused } from "../src/control.ts";
+import { admitCrossing, bindControl, live, onRevoke, Refused } from "../src/control.ts";
 import { createProviders } from "../src/harness/providers.ts";
 import { createHarnessThreads, IDLE_CHILD_MS } from "../src/harness/threads.ts";
 import * as adapter from "../src/harness/adapter.ts";
@@ -968,11 +968,12 @@ test("access picks the mode a session starts in: guarded is auto, unguarded bypa
 
 // A 1x1 PNG, the same fixture the Mastra-era attachment test used.
 
-/* ── The head grant: doors 6, 7 and 8 (ADR 0017) ─────────────────────────────────────── */
+/* ── The thread's targets: doors 6, 7 and 8 (ADR 0017, ADR 0021) ─────────────────────── */
 
 const T0 = Date.parse("2026-10-12T12:00:00.000Z");
 const at = (ms: number) => new Date(ms).toISOString();
 const yours = { kind: "open", ref: { session: "S1", openId: "A" } } as const;
+const theirs = { kind: "open", ref: { session: "S2", openId: "B" } } as const;
 const peas = { kind: "open", ref: { session: "P", openId: "copy" } } as const;
 /** Pea acquired the copy in Revit "P"; a user document opened there later is not acquired. */
 const peaAcquiredCopy = {
@@ -983,19 +984,19 @@ const peaAcquiredCopy = {
 const userInPeas = { kind: "open", ref: { session: "P", openId: "B" } } as const;
 const peaOf = (thread: string): Caller => ({ kind: "pea", context: `ctx-${thread}`, thread });
 const onDoc = (ref: { session: string; openId: string }) => ({ kind: "document", ref }) as const;
+const put = (...requests: unknown[]) => requests.map((request) => ({ request }));
 
-test("access-050: fork retains the target but never inherits grant or human-message evidence", async () => {
+test("access-050: fork retains the targets but never inherits a human admission", async () => {
   const threads = host();
   const call = caller(threads);
   const created = await call("POST", "/pe/threads", { providerId: "claude" });
   const id = created.json.id;
-  await call("PUT", `/pe/scope/${id}`, { defaultTarget: yours, expectedRevision: 0 });
+  await call("PUT", `/pe/scope/${id}`, { targets: put(yours), expectedRevision: 0 });
+  expect(threads.heads.read(id).targets[0]?.admission).not.toBeNull();
   const forked = await call("POST", `/pe/threads/${id}/fork`, {});
   expect(forked.status).toBe(200);
-  expect(threads.heads.read(forked.json.id)).toMatchObject({
-    defaultTarget: yours,
-    grant: null,
-    lastHumanMessageAt: null,
+  expect(threads.heads.read(forked.json.id)).toEqual({
+    targets: [{ request: yours, admission: null }],
     revision: 0,
   });
 });
@@ -1007,163 +1008,148 @@ const crossing = (caller: Caller, ref: { session: string; openId: string }) => {
     throw error;
   }
 };
-afterEach(() => bindControl({ heads: null, acquired: () => null, acquiredSession: () => null }));
+afterEach(() =>
+  bindControl({
+    heads: null,
+    acquired: () => null,
+    acquiredSession: () => null,
+    fullAccess: () => false,
+  }),
+);
 
-test("door 6: a human PUT on your open lifetime stamps rw; a move retires it; a named target never holds one", async () => {
+test("door 6: a human adds your open lifetimes with an admission; Pea's own and named targets hold none", async () => {
   vi.useFakeTimers({ toFake: ["Date"] });
   vi.setSystemTime(T0);
   bindControl(peaAcquiredCopy);
   const call = caller(host());
-  const id = "grant-door-6";
-  const set = await call("PUT", `/pe/scope/${id}`, { defaultTarget: yours, expectedRevision: 0 });
+  const id = "target-door-6";
+  const set = await call("PUT", `/pe/scope/${id}`, { targets: put(yours), expectedRevision: 0 });
   expect(set.status).toBe(200);
-  expect(set.json.head).toMatchObject({
+  expect(set.json.head).toEqual({
     revision: 1,
-    hostNow: at(T0),
-    grant: {
-      lifetime: yours.ref,
-      grantedAt: at(T0),
-      grantedVia: "local",
-      expiresAt: at(T0 + 60 * 60_000),
-      revoked: null,
-    },
+    targets: [{ request: yours, admission: { revision: 1, at: at(T0), via: "local" } }],
   });
+  // Adding a second document keeps the first one's admission as it was.
   const named = { kind: "named", session: "S1", address: "C:/Models/A.rvt" };
-  const moved = await call("PUT", `/pe/scope/${id}`, { defaultTarget: named, expectedRevision: 1 });
-  expect(moved.json.head).toMatchObject({ defaultTarget: named, grant: null });
-  const back = await call("PUT", `/pe/scope/${id}`, { defaultTarget: yours, expectedRevision: 2 });
-  expect(back.json.head.grant).not.toBeNull();
-  // Pea's own document needs no grant, so none is stamped.
-  const own = await call("PUT", `/pe/scope/${id}`, { defaultTarget: peas, expectedRevision: 3 });
-  expect(own.json.head.grant).toBeNull();
-  // A user's document inside Pea's Revit is yours: pointing at it grants rw like any other.
-  const mine = await call("PUT", `/pe/scope/${id}`, {
-    defaultTarget: userInPeas,
-    expectedRevision: 4,
+  const both = await call("PUT", `/pe/scope/${id}`, {
+    targets: put(yours, named, peas, userInPeas),
+    expectedRevision: 1,
   });
-  expect(mine.json.head.grant).toMatchObject({ lifetime: userInPeas.ref });
-  const cleared = await call("PUT", `/pe/scope/${id}`, {
-    defaultTarget: null,
-    expectedRevision: 5,
+  expect(both.json.head.targets.map((t: { admission: unknown }) => t.admission)).toEqual([
+    { revision: 1, at: at(T0), via: "local" },
+    null,
+    null,
+    // A user's document inside Pea's Revit is yours: adding it admits it like any other.
+    { revision: 2, at: at(T0), via: "local" },
+  ]);
+  const stale = await call("PUT", `/pe/scope/${id}`, { targets: [], expectedRevision: 1 });
+  expect([stale.status, stale.json.why]).toEqual([409, "stale"]);
+  const twice = await call("PUT", `/pe/scope/${id}`, {
+    targets: put(yours, yours),
+    expectedRevision: 2,
   });
-  expect(cleared.json.head.grant).toBeNull();
+  expect(twice.status).toBe(403);
 });
 
-test("door 6: moving a live grant retires it the way a revoke does, so queued work stops", async () => {
-  vi.useFakeTimers({ toFake: ["Date"] });
-  vi.setSystemTime(T0);
-  bindControl(peaAcquiredCopy);
-  const call = caller(host());
-  const id = "grant-door-6-move";
+test("door 7: a human removing a target ends its authority and fires onRevoke; re-adding is a new admission", async () => {
+  const threads = host();
+  bindControl({ heads: threads.heads.read });
+  const call = caller(threads);
+  const id = "target-door-7";
   const retired: string[] = [];
-  const release = onRevoke((thread, grant) => retired.push(`${thread}:${grant.lifetime.openId}`));
-  await call("PUT", `/pe/scope/${id}`, { defaultTarget: yours, expectedRevision: 0 });
-  expect(retired).toEqual([]);
-  const named = { kind: "named", session: "S1", address: "C:/Models/A.rvt" };
-  await call("PUT", `/pe/scope/${id}`, { defaultTarget: named, expectedRevision: 1 });
-  expect(retired).toEqual([`${id}:${yours.ref.openId}`]);
-  // No live grant remains to retire.
-  await call("PUT", `/pe/scope/${id}`, { defaultTarget: null, expectedRevision: 2 });
-  expect(retired).toHaveLength(1);
+  const release = onRevoke((thread, lifetime) => retired.push(`${thread}:${lifetime.openId}`));
+  await call("PUT", `/pe/scope/${id}`, { targets: put(yours, theirs), expectedRevision: 0 });
+  const basis = crossing(peaOf(id), yours.ref);
+  expect(basis).toMatchObject({ kind: "grant", thread: id, headRevision: 1 });
+  expect(crossing(peaOf(id), theirs.ref)).toMatchObject({ kind: "grant" });
+  await call("PUT", `/pe/scope/${id}`, { targets: put(theirs), expectedRevision: 1 });
+  expect(retired).toEqual([`${id}:A`]);
+  expect(crossing(peaOf(id), yours.ref)).toBe("grant.required");
+  expect(live(basis as never)?.refusal.code).toBe("grant.revoked");
+  // The other target is untouched by the removal.
+  expect(crossing(peaOf(id), theirs.ref)).toMatchObject({ kind: "grant", headRevision: 1 });
+  await call("PUT", `/pe/scope/${id}`, { targets: put(theirs, yours), expectedRevision: 2 });
+  expect(crossing(peaOf(id), yours.ref)).toMatchObject({ kind: "grant", headRevision: 3 });
+  expect(live(basis as never)?.refusal.code).toBe("grant.revoked");
   release();
 });
 
-test("door 6 for Pea: only its own thread, only Pea's documents; anonymous cannot write a head", async () => {
+test("door 6 for Pea: only its own thread, only Pea's documents; it never adds or removes yours", async () => {
   bindControl(peaAcquiredCopy);
   const threads = host();
   const call = caller(threads);
-  const id = "grant-door-6-pea";
+  const id = "target-door-6-pea";
   threads.as = peaOf(id);
   const refused = await call("PUT", "/pe/scope/self", {
-    defaultTarget: yours,
+    targets: put(yours),
     expectedRevision: 0,
   });
   expect([refused.status, refused.json.refusal.code]).toEqual([403, "grant.required"]);
   const inherited = await call("PUT", "/pe/scope/self", {
-    defaultTarget: userInPeas,
+    targets: put(userInPeas),
     expectedRevision: 0,
   });
   expect([inherited.status, inherited.json.refusal.code]).toEqual([403, "grant.required"]);
-  const own = await call("PUT", "/pe/scope/self", { defaultTarget: peas, expectedRevision: 0 });
-  expect(own.json).toMatchObject({ ok: true, head: { defaultTarget: peas, grant: null } });
-  expect((await call("GET", "/pe/scope/self")).json).toMatchObject({
-    thread: id,
-    defaultTarget: peas,
-    revision: 1,
-    hostNow: expect.any(String),
+  const own = await call("PUT", "/pe/scope/self", { targets: put(peas), expectedRevision: 0 });
+  expect(own.json).toMatchObject({
+    ok: true,
+    head: { targets: [{ request: peas, admission: null }] },
   });
+  expect((await call("GET", "/pe/scope/self")).json).toEqual({
+    thread: id,
+    targets: [{ request: peas, admission: null }],
+    revision: 1,
+  });
+  // A human adds yours; Pea may keep it beside its own, but never drop it.
+  threads.as = human;
+  await call("PUT", `/pe/scope/${id}`, { targets: put(peas, yours), expectedRevision: 1 });
+  threads.as = peaOf(id);
+  const ownDropped = await call("PUT", "/pe/scope/self", {
+    targets: put(yours),
+    expectedRevision: 2,
+  });
+  expect(ownDropped.json).toMatchObject({ ok: true, head: { revision: 3 } });
+  const removed = await call("PUT", "/pe/scope/self", { targets: [], expectedRevision: 3 });
+  expect([removed.status, removed.json.refusal.code]).toEqual([403, "human.only"]);
   const foreign = await call("PUT", "/pe/scope/someone-else", {
-    defaultTarget: null,
+    targets: [],
     expectedRevision: 0,
   });
   expect([foreign.status, foreign.json.refusal.code]).toEqual([403, "context.foreign-thread"]);
   threads.as = { kind: "anonymous" };
   const anonymous = await call("PUT", `/pe/scope/${id}`, {
-    defaultTarget: null,
-    expectedRevision: 1,
+    targets: [],
+    expectedRevision: 3,
   });
   expect([anonymous.status, anonymous.json.refusal.code]).toEqual([403, "context.missing"]);
   expect((await call("GET", "/pe/scope/self")).status).toBe(404);
 });
 
-test("door 8: Pea cannot prompt; a human prompt renews rw from the host clock, then it expires", async () => {
+test("door 8: Pea cannot prompt; authority has no clock, and the access switch governs writes", async () => {
   vi.useFakeTimers({ toFake: ["Date"] });
   vi.setSystemTime(T0);
   const threads = host();
-  bindControl({ heads: threads.heads.read });
   const call = caller(threads);
+  let accessFull = false;
+  bindControl({ heads: threads.heads.read, fullAccess: () => accessFull });
   const id = (await call("POST", "/pe/threads", { providerId: "claude" })).json.id as string;
-  await call("PUT", `/pe/scope/${id}`, { defaultTarget: yours, expectedRevision: 0 });
+  await call("PUT", `/pe/scope/${id}`, { targets: put(yours), expectedRevision: 0 });
   threads.as = peaOf(id);
   const self = await call("POST", `/pe/threads/${id}/prompt`, { text: "renew me" });
   expect([self.status, self.json.refusal.code]).toEqual([403, "human.only"]);
-  expect(threads.heads.read(id).grant?.expiresAt).toBe(at(T0 + 60 * 60_000));
   threads.as = human;
-  vi.setSystemTime(T0 + 30 * 60_000);
-  expect((await call("POST", `/pe/threads/${id}/prompt`, { text: "hello" })).status).toBe(200);
-  expect(threads.heads.read(id)).toMatchObject({
-    lastHumanMessageAt: at(T0 + 30 * 60_000),
-    grant: { grantedAt: at(T0), expiresAt: at(T0 + 90 * 60_000) },
-  });
-  vi.setSystemTime(T0 + 89 * 60_000);
+  // A day later, with no message since, the human-added target still writes.
+  vi.setSystemTime(T0 + 24 * 60 * 60_000);
   expect(crossing(peaOf(id), yours.ref)).toMatchObject({ kind: "grant", thread: id });
-  vi.setSystemTime(T0 + 90 * 60_000);
-  expect(crossing(peaOf(id), yours.ref)).toBe("grant.expired");
-  await until(reader(threads), id, (b) => !b.running);
-  await threads.close();
-});
-
-test("door 7: revoke is human-only, keeps evidence, fires onRevoke, and only a fresh human PUT clears it", async () => {
-  vi.useFakeTimers({ toFake: ["Date"] });
-  vi.setSystemTime(T0);
-  const threads = host();
-  bindControl({ heads: threads.heads.read });
-  const call = caller(threads);
-  const id = "grant-door-7";
-  await call("PUT", `/pe/scope/${id}`, { defaultTarget: yours, expectedRevision: 0 });
-  expect(crossing(peaOf(id), yours.ref)).toMatchObject({ kind: "grant" });
-  const fired: string[] = [];
-  const release = onRevoke((thread, grant) => fired.push(`${thread}@${grant.revoked?.at}`));
-  threads.as = peaOf(id);
-  const self = await call("POST", `/pe/scope/${id}/revoke`, {});
-  expect([self.status, self.json.refusal.code]).toEqual([403, "human.only"]);
-  threads.as = human;
-  vi.setSystemTime(T0 + 5 * 60_000);
-  const revoked = await call("POST", `/pe/scope/${id}/revoke`, {});
-  expect(revoked.json.grant).toMatchObject({ revoked: { at: at(T0 + 5 * 60_000) } });
-  expect(revoked.json.receipt).toBe(
-    "rw revoked. Steps already running finish; nothing new starts. Re-point the head to grant again.",
-  );
-  expect(fired).toEqual([`${id}@${at(T0 + 5 * 60_000)}`]);
-  expect(crossing(peaOf(id), yours.ref)).toBe("grant.revoked");
-  // A human message does not revive a revoked grant; re-pointing the head does.
-  const renewed = await call("PUT", `/pe/scope/${id}`, {
-    defaultTarget: yours,
-    expectedRevision: revoked.json.revision,
+  // Guarded refuses a document the thread does not target; Full writes it.
+  expect(crossing(peaOf(id), theirs.ref)).toBe("grant.required");
+  accessFull = true;
+  expect(crossing(peaOf(id), theirs.ref)).toEqual({
+    kind: "full-access",
+    thread: id,
+    lifetime: theirs.ref,
   });
-  expect(renewed.json.head.grant).toMatchObject({ revoked: null, grantedAt: at(T0 + 5 * 60_000) });
-  expect(crossing(peaOf(id), yours.ref)).toMatchObject({ kind: "grant" });
-  release();
+  await threads.close();
 });
 
 /* ── The prompt inbox: client ids, queue and steer, and wait ─────────────────────────────── */

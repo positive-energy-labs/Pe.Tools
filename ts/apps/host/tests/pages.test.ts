@@ -14,7 +14,7 @@ import {
 import { createPagesHandler, type LiveSession, type PageLive } from "../src/pages-route.ts";
 import { hostOwnership } from "../src/host-ownership.ts";
 import { readRequestIdentity, type IdentityOptions } from "../src/request-identity.ts";
-import { admitCrossing, bindControl, callerOf, grantExpiry, Refused } from "../src/control.ts";
+import { admitCrossing, bindControl, callerOf, Refused } from "../src/control.ts";
 import { asCaller, human, pea } from "./callers.ts";
 
 const cleanup: (() => Promise<unknown>)[] = [];
@@ -194,17 +194,15 @@ describe("pages", () => {
       ],
     });
     let heads: Record<string, ThreadHead> = {};
+    /** A head whose one target a human added. */
     const grantedHead = (lifetime: DocumentRef): ThreadHead => ({
-      ...emptyThreadHead,
-      defaultTarget: { kind: "open", ref: lifetime },
+      targets: [
+        {
+          request: { kind: "open", ref: lifetime },
+          admission: { revision: 4, at: new Date().toISOString(), via: "local" },
+        },
+      ],
       revision: 4,
-      grant: {
-        lifetime,
-        grantedAt: new Date().toISOString(),
-        grantedVia: "local",
-        expiresAt: grantExpiry(Date.now()),
-        revoked: null,
-      },
     });
     afterEach(() => {
       heads = {};
@@ -318,14 +316,17 @@ describe("pages", () => {
       expect(forwarded).toEqual([]);
     });
 
-    it("a thread binding writes under that thread's grant, and only while it holds", async () => {
+    it("a thread binding writes the documents a human added to that thread, and only those", async () => {
       bind();
       const { page, as, forwarded } = await host([session("S1")]);
       expect(
         (await as(human).put("/pe/pages/todo/binding", { kind: "thread", thread: "t1" })).status,
       ).toBe(200);
-      // The head points at the document but holds no grant (Pea set it, or it expired away).
-      heads.t1 = { ...emptyThreadHead, defaultTarget: { kind: "open", ref: docA }, revision: 2 };
+      // The thread targets the document with no human admission (a fork copied it).
+      heads.t1 = {
+        targets: [{ request: { kind: "open", ref: docA }, admission: null }],
+        revision: 2,
+      };
       const ungranted = await page.post("/pages/todo/act", { key: "revit.context.lens" });
       expect(ungranted.status).toBe(403);
       expect(await code(ungranted)).toEqual(
@@ -357,7 +358,7 @@ describe("pages", () => {
         page: "page:@pages/todo",
         binding: { kind: "thread", thread: "t1" },
         document: { session: "S1", openId: "A", title: "Project A MEP" },
-        write: { kind: "rw", thread: "t1" },
+        write: { kind: "thread", thread: "t1" },
       });
     });
 
@@ -580,8 +581,7 @@ describe("pages", () => {
         target: { kind: "document", ref: { session: "s1", openId: "d1" } },
       },
       document: { session: "s1", openId: "d1", title: "Project A MEP" },
-      write: { kind: "rw", thread: "t1-abcdef-123", expiresAt: "2026-10-12T13:00:00.000Z" },
-      hostNow: "2026-10-12T12:00:00.000Z",
+      write: { kind: "thread", thread: "t1-abcdef-123" },
     };
     type Answer = (url: URL, init: RequestInit) => Response | undefined;
     /** The served bytes in a page at `/pages/todo/`, with fetch and EventSource recorded and the host's answers. */

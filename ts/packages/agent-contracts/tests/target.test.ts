@@ -47,7 +47,11 @@ it.each([
     },
   };
   expect(
-    resolveCallTarget(read, { kind: "named", session: "process-1", address: requested }, inventory),
+    resolveCallTarget(
+      read,
+      [{ kind: "named", session: "process-1", address: requested }],
+      inventory,
+    ),
   ).toMatchObject({ kind: "resolved" });
   const value = { reading: { at, version: "1", observedAt: "2026-09-08T00:00:00.000Z" } };
   expect(here(value, requested)).toBe(value);
@@ -55,17 +59,17 @@ it.each([
 });
 
 it("launch, document arrival, outage and confirmed closure never silently switch sessions", () => {
-  expect(resolveCallTarget(read, null, fleet)).toEqual({ kind: "choose", reason: "missing" });
+  expect(resolveCallTarget(read, [], fleet)).toEqual({ kind: "choose", reason: "missing" });
   const launching: TargetInventory = {
     kind: "ready",
     sessions: { "process-1": { kind: "checking" } },
   };
-  expect(resolveCallTarget(read, selected, launching)).toEqual({ kind: "checking" });
-  expect(resolveCallTarget(read, selected, fleet)).toEqual({
+  expect(resolveCallTarget(read, [selected], launching)).toEqual({ kind: "checking" });
+  expect(resolveCallTarget(read, [selected], fleet)).toEqual({
     kind: "resolved",
     target: { kind: "document", ref: { session: "process-1", openId: "project-1" } },
   });
-  expect(resolveCallTarget(read, selected, { kind: "failed", message: "Disconnected" })).toEqual({
+  expect(resolveCallTarget(read, [selected], { kind: "failed", message: "Disconnected" })).toEqual({
     kind: "failed",
     message: "Disconnected",
   });
@@ -73,27 +77,42 @@ it("launch, document arrival, outage and confirmed closure never silently switch
     kind: "ready",
     sessions: fleet.kind === "ready" ? { "process-2": fleet.sessions["process-2"]! } : {},
   };
-  expect(resolveCallTarget(read, selected, gone)).toEqual({
+  expect(resolveCallTarget(read, [selected], gone)).toEqual({
     kind: "choose",
     reason: "session-gone",
   });
   expect(selected).toEqual({ kind: "named", session: "process-1", address: project });
   expect(
-    resolveCallTarget({ ...read, target: { ...selected, session: "process-2" } }, selected, gone),
+    resolveCallTarget({ ...read, target: { ...selected, session: "process-2" } }, [selected], gone),
   ).toMatchObject({ kind: "resolved", target: { ref: { session: "process-2" } } });
+});
+
+it("ADR 0021: several targets and no override refuses; an override names one", () => {
+  expect(resolveCallTarget(read, [selected, family], fleet)).toEqual({
+    kind: "choose",
+    reason: "several-targets",
+  });
+  expect(resolveCallTarget({ ...read, target: family }, [selected, family], fleet)).toEqual({
+    kind: "resolved",
+    target: { kind: "document", ref: family.ref },
+  });
+  expect(resolveCallTarget({ needs: "nothing" }, [selected, family], fleet)).toEqual({
+    kind: "resolved",
+    target: { kind: "host" },
+  });
 });
 
 it("a frozen project default supports a family detour without affecting the next call", () => {
   const frozen = Object.freeze(selected);
-  expect(resolveCallTarget({ needs: "family-document", target: family }, frozen, fleet)).toEqual({
+  expect(resolveCallTarget({ needs: "family-document", target: family }, [frozen], fleet)).toEqual({
     kind: "resolved",
     target: { kind: "document", ref: family.ref },
   });
-  expect(resolveCallTarget({ needs: "family-document" }, frozen, fleet)).toEqual({
+  expect(resolveCallTarget({ needs: "family-document" }, [frozen], fleet)).toEqual({
     kind: "choose",
     reason: "wrong-document-kind",
   });
-  expect(resolveCallTarget(read, frozen, fleet)).toMatchObject({
+  expect(resolveCallTarget(read, [frozen], fleet)).toMatchObject({
     kind: "resolved",
     target: { ref: { openId: "project-1" } },
   });
@@ -103,7 +122,7 @@ it("a frozen project default supports a family detour without affecting the next
         needs: "document",
         target: { kind: "open", ref: { session: "process-1", openId: "closed-family" } },
       },
-      frozen,
+      [frozen],
       fleet,
     ),
   ).toEqual({ kind: "choose", reason: "document-closed" });
@@ -117,7 +136,7 @@ it("a frozen project default supports a family detour without affecting the next
           address: address("f2933e8d-9e16-4bf4-b9ca-484f461e4563"),
         },
       },
-      frozen,
+      [frozen],
       fleet,
     ),
   ).toMatchObject({ kind: "resolved", target: { ref: { openId: "cloud-1" } } });
@@ -125,7 +144,7 @@ it("a frozen project default supports a family detour without affecting the next
 
 it("host work needs no Revit and bootstrap needs a session without a document", () => {
   expect(
-    resolveCallTarget({ needs: "nothing" }, null, { kind: "failed", message: "offline" }),
+    resolveCallTarget({ needs: "nothing" }, [], { kind: "failed", message: "offline" }),
   ).toEqual({ kind: "resolved", target: { kind: "host" } });
   expect(callTargetSchema.parse({ needs: "session", target: { id: "4242" } })).toEqual({
     needs: "session",

@@ -8,8 +8,8 @@ import { DOCUMENT_IDENTITY_AUTHORITY, productIdentity } from "@pe/host-contracts
 import type {
   Access,
   ActionReceipt,
+  DocumentRef,
   MachineAccess,
-  HeadGrant,
   Machine,
   MachineAttachment,
   MachineAttachmentDocument,
@@ -46,7 +46,6 @@ import {
   processWhose,
   type Acquisition,
 } from "./acquisition.ts";
-import { grantDead } from "./control.ts";
 import { hostRedirectionTrust } from "./redirection-trust.ts";
 
 export interface MachineShareAdapter {
@@ -66,16 +65,16 @@ export const unavailableShare: MachineShareAdapter = {
   }),
 };
 
-/** One thread's rw grant, as the head store holds it. */
-export interface HeldGrant {
+/** One user document a human added to a thread's targets, as the head store holds it. */
+export interface HeldTarget {
   readonly thread: string;
   readonly title: string;
-  readonly grant: HeadGrant;
+  readonly lifetime: DocumentRef;
 }
 
-/** The thread-head store as Machine reads it: every grant, and a signal when any head moves. */
-export interface GrantSource {
-  grants(): readonly HeldGrant[];
+/** The thread-head store as Machine reads it: every human-added target, and a signal when any head moves. */
+export interface TargetSource {
+  targets(): readonly HeldTarget[];
   subscribe(notify: () => void): () => void;
 }
 
@@ -85,14 +84,13 @@ export type AttachmentRead = Omit<MachineAttachment, "documents"> & {
 };
 
 /**
- * Only acquisitions or unexpired exact-lifetime grants write; stale heads remain read-only. Both
- * join product openIds to SDK ids, so a socket that did not attest SDK identity writes nothing.
+ * Acquisitions are Pea's; exact-lifetime human-added targets are a thread's. Both join product
+ * openIds to SDK ids, so a socket that did not attest SDK identity is read-only here.
  */
 function withAccess(
   attachment: AttachmentRead,
   acquired: ReadonlyMap<string, string>,
-  grants: readonly HeldGrant[],
-  at: number,
+  targets: readonly HeldTarget[],
 ): MachineAttachment {
   const joined = attachment.documentIdentity === DOCUMENT_IDENTITY_AUTHORITY;
   return {
@@ -100,22 +98,15 @@ function withAccess(
     documents:
       attachment.documents?.map((document): MachineAttachmentDocument => {
         if (!joined) return { ...document, access: { kind: "read" } };
-        const held = grants.find(
-          ({ grant }) =>
-            grant.lifetime.session === document.session &&
-            grant.lifetime.openId === document.openId &&
-            grantDead(grant, at) === null,
+        const held = targets.find(
+          ({ lifetime }) =>
+            lifetime.session === document.session && lifetime.openId === document.openId,
         );
         const acquisition = acquired.get(document.openId);
         const access: MachineAccess = acquisition
           ? { kind: "pea", acquisition }
           : held
-            ? {
-                kind: "rw",
-                context: held.thread,
-                label: held.title,
-                until: held.grant.expiresAt,
-              }
+            ? { kind: "target", thread: held.thread, label: held.title }
             : { kind: "read" };
         return { ...document, access };
       }) ?? null,
@@ -123,7 +114,7 @@ function withAccess(
 }
 
 export interface MachineSources {
-  grants: GrantSource;
+  targets: TargetSource;
   actions(this: void): Promise<readonly ActionReceipt[]>;
   host(this: void): Promise<Omit<MachineHost, "peers">>;
   peers(this: void): Promise<readonly MachinePeer[]>;
@@ -427,8 +418,7 @@ export function createMachine(
         );
       const classified = new Set<AttachmentRead>();
       acquisitions = foldAcquisitions(actions);
-      const heldGrants = sources.grants.grants();
-      const at = Date.parse(now());
+      const heldTargets = sources.targets.targets();
       const rows =
         sessions?.map((row): MachineSession => {
           const process = processOf(row);
@@ -460,8 +450,7 @@ export function createMachine(
                         attachment.documents?.map((doc) => doc.openId) ?? [],
                       )
                     : new Map(),
-                  allowed ? heldGrants : [],
-                  at,
+                  allowed ? heldTargets : [],
                 )
               : null,
             documents: held?.value ?? null,
@@ -491,10 +480,10 @@ export function createMachine(
         revit: {
           years,
           sessions: rows,
-          // Nobody proved these Pea's, so they are yours: only a live grant writes.
+          // Nobody proved these Pea's or attested their identity, so they read as yours.
           unclassifiedAttachments: attachments
             .filter((attachment) => !classified.has(attachment))
-            .map((attachment) => withAccess(attachment, new Map(), [], at)),
+            .map((attachment) => withAccess(attachment, new Map(), [])),
         },
         update: sources.update.current(),
         share,
@@ -519,10 +508,10 @@ export function createMachine(
         void refresh();
       };
       const unwatch = sources.subscribe?.(notify);
-      const ungrant = sources.grants.subscribe(notify);
+      const untarget = sources.targets.subscribe(notify);
       const unshare = sources.share.subscribe?.(notify);
       release = () => {
-        ungrant();
+        untarget();
         unwatch?.();
         unshare?.();
       };
@@ -689,10 +678,10 @@ export function machineSources(
   providers: Providers,
   update: UpdateReader["Service"],
   share: MachineShareAdapter = unavailableShare,
-  grants: GrantSource = { grants: () => [], subscribe: () => () => {} },
+  targets: TargetSource = { targets: () => [], subscribe: () => () => {} },
 ): MachineSources {
   return {
-    grants,
+    targets,
     actions: () => hostActionJournal().list(),
     host: async () => {
       const file = await readServiceFile(productRoot(), hostOwnership.serviceName);
