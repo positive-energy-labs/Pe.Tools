@@ -139,12 +139,12 @@ function ChatSurface({ target, docked = false }: ChatShellProps) {
     const media = window.matchMedia("(max-width: 720px)");
     const changed = () => {
       setViewportNarrow(media.matches);
-      if (compact || media.matches) store.actions.setSideOpen(false);
+      if (docked || compact || media.matches) store.actions.setSideOpen(false);
     };
     changed();
     media.addEventListener("change", changed);
     return () => media.removeEventListener("change", changed);
-  }, [compact, store]);
+  }, [docked, compact, store]);
   // The route, re-declared with this thread and the provider's verbs bound.
   const manifest = useMemo(
     () =>

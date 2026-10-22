@@ -1,5 +1,6 @@
 import { sdkBinary, sdkCommand } from "./sdk-replay.ts";
 import { existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
+import { rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { dirname, join } from "node:path";
 import { randomUUID } from "node:crypto";
@@ -324,11 +325,11 @@ test("handover certifies Pea's acquisition only from native SDK document facts",
       const admitted = await handover(acquisition);
       expect(admitted.refusal, `${custody}: ${JSON.stringify(admitted)}`).toBeNull();
       expect(admitted.status).toBeLessThan(300);
+      const settled = await journal.wait(admitted.id!);
       // An observed Revit is admitted here but never saved into: release needs a controlled row.
       if (custody === "observed") continue;
       // Acceptance R4b (d3aaaef1): the SDK refuses a save into a folder that does not exist, so
       // the host creates exactly the planned result folder, receipted, before it asks.
-      const settled = await journal.wait(admitted.id!);
       expect(settled, JSON.stringify(settled)).toMatchObject({ state: "succeeded" });
       const plan = planned[acquisition]!;
       expect(settled.steps.map((step) => [step.key, step.state])).toEqual([
@@ -348,7 +349,8 @@ test("handover certifies Pea's acquisition only from native SDK document facts",
     else process.env.LOCALAPPDATA = prev.localAppData;
     if (prev.sdk === undefined) delete process.env.PE_FAKE_SDK;
     else process.env.PE_FAKE_SDK = prev.sdk;
-    rmSync(localAppData, { recursive: true, force: true });
+    // A retired harness descendant can still finish its npm cache writes on Windows.
+    await rm(localAppData, { recursive: true, force: true, maxRetries: 5, retryDelay: 200 });
     rmSync(dirname(fakeSdk), { recursive: true, force: true });
   }
 }, 60_000);
