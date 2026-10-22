@@ -417,7 +417,12 @@ test("/families Archived inspects a saved reading without a target or Revit conn
     const body = await page.locator("body").innerText();
     expect(new URL(page.url()).searchParams.get("target")).toBeNull();
     expect(body).toContain("Offline.rvt");
-    expect(await page.getByRole("textbox").count()).toBe(0);
+    const archive = page.getByRole("main").filter({
+      has: page.getByRole("grid", { name: "parameters × family types", exact: true }),
+    });
+    expect(await archive.count()).toBe(1);
+    expect(await archive.getByRole("textbox").count()).toBe(0);
+    expect(await page.getByRole("textbox", { name: "Message", exact: true }).count()).toBe(1);
     expect(
       await page.getByRole("button", { name: /^read families|^plan|^apply families/ }).count(),
     ).toBe(0);
@@ -530,6 +535,7 @@ test("live /families: retained readback supports repeat and consecutive family p
     // The apply is one log row; the simulated engine writes no bundle, so it links nothing.
     await logged(page, "apply 1 family · 1 converged", "no artifacts on disk");
     if (SCRATCH) await page.screenshot({ path: join(SCRATCH, "families-applied.png") });
+    await page.getByRole("combobox", { name: "table query" }).focus();
     await expect
       .poll(() =>
         page.getByRole("button", { name: "parameter contains model", exact: true }).count(),
