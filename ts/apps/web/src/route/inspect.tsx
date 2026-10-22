@@ -5,8 +5,8 @@
  * an address through the same `Inspect`, so there is one way to open a produced thing.
  */
 import { useState, type ReactNode } from "react";
-import { Link } from "@tanstack/react-router";
-import { actionAdmissionSchema } from "@pe/agent-contracts";
+import { useRouter } from "@tanstack/react-router";
+import { actionAdmissionSchema, linkTo } from "@pe/agent-contracts";
 
 import { Button } from "@pe/kit/lang/button";
 import { submitAction } from "../../../../packages/mcps/src/shared/takeoff-action-client";
@@ -15,7 +15,8 @@ export interface Inspectable {
   label: (id: string) => string;
   open:
     | { kind: "shell"; path: (id: string) => string }
-    | { kind: "route"; to: string; search: (id: string) => Record<string, string> }
+    /** An app route: the declaration builds its typed link (`linkTo`), without thread or target. */
+    | { kind: "route"; href: (id: string) => string }
     /** A host endpoint the browser opens as a document (raw JSON), outside the app router. */
     | { kind: "href"; href: (id: string) => string };
 }
@@ -31,10 +32,9 @@ const MEMBER: Inspectable = {
   label: (id) => String((JSON.parse(id) as [string, string])[1].split("/").at(-1)),
   open: {
     kind: "route",
-    to: "/pods",
-    search: (id) => {
+    href: (id) => {
       const [pod, path] = JSON.parse(id) as [string, string];
-      return { pod, path };
+      return linkTo("pods", { pod, path });
     },
   },
 };
@@ -42,13 +42,13 @@ const MEMBER: Inspectable = {
 /** An action receipt, opened in `/ops`, where its recovery controls live. Its id is the action id. */
 const RECEIPT: Inspectable = {
   label: (id) => `receipt ${id.slice(0, 8)}`,
-  open: { kind: "route", to: "/ops", search: (id) => ({ actionId: id }) },
+  open: { kind: "route", href: (id) => linkTo("ops", { actionId: id }) },
 };
 
 /** A kept view picture, opened in `/captures` focused on its row. Its id is the blob's sha. */
 const CAPTURE: Inspectable = {
   label: (id) => `capture ${id.slice(0, 8)}`,
-  open: { kind: "route", to: "/captures", search: (id) => ({ sha: id }) },
+  open: { kind: "route", href: (id) => linkTo("captures", { sha: id }) },
 };
 
 /** The kinds every route opens, beside the ones its manifest declares. */
@@ -113,13 +113,34 @@ export function Inspect({
   children?: ReactNode;
 }) {
   const [refusal, setRefusal] = useState<string | null>(null);
+  const router = useRouter();
   const text = children ?? spec.label(id);
-  if (spec.open.kind === "route")
+  if (spec.open.kind === "route") {
+    // The canonical destination (`linkTo`), resolved by the router as any navigation is: the root's
+    // `retainSearchParams` adds the current thread, target and work unless the link names its own.
+    // The rendered href and a plain click are the same location, so a copied or new-tab link keeps them.
+    const url = new URL(spec.open.href(id), window.location.origin);
+    const destination = { to: url.pathname, search: Object.fromEntries(url.searchParams) };
     return (
-      <Link to={spec.open.to as never} search={spec.open.search(id) as never}>
+      <a
+        href={router.buildLocation(destination).href}
+        onClick={(event) => {
+          if (
+            event.button !== 0 ||
+            event.metaKey ||
+            event.ctrlKey ||
+            event.shiftKey ||
+            event.altKey
+          )
+            return;
+          event.preventDefault();
+          void router.navigate(destination);
+        }}
+      >
         {text}
-      </Link>
+      </a>
     );
+  }
   if (spec.open.kind === "href")
     return (
       <a href={spec.open.href(id)} target="_blank" rel="noreferrer">

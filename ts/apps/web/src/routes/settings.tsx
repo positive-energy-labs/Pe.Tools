@@ -1,4 +1,4 @@
-import { createFileRoute, type SearchSchemaInput } from "@tanstack/react-router";
+import { createFileRoute, stripSearchParams, type SearchSchemaInput } from "@tanstack/react-router";
 import { RouteShell } from "#/route";
 import { SettingsBody } from "#/machine/body";
 import { readLink } from "@pe/agent-contracts";
@@ -14,6 +14,8 @@ export const Route = createFileRoute("/settings")({
     ...routeSearch(search),
     ...readLink("settings", search).page,
   }),
+  // The contract defaults never reach the address, as on `/` and `/pea`.
+  search: { middlewares: [stripSearchParams(readLink("settings", {}).page)] },
   component: SettingsRoute,
 });
 function SettingsRoute() {
