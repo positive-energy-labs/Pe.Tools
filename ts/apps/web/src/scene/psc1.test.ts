@@ -1,16 +1,18 @@
 import { describe, expect, it } from "vite-plus/test";
 import { decodeScene, type Psc1Metadata } from "./psc1";
 
-const handle = (elementId: number, linkInstanceId: number | null = null) => ({
-  documentKey: "doc-a",
-  elementId,
-  uniqueId: `u-${elementId}`,
-  linkInstanceId,
-  category: elementId === 1 ? "Ducts" : "Walls",
-});
+const handle = (elementId: number, linkInstanceId: number | null = null) =>
+  ({
+    documentKey: "doc-a",
+    elementId,
+    uniqueId: `u-${elementId}`,
+    linkInstanceId,
+    category: elementId === 1 ? "Ducts" : "Walls",
+    // The decoder reads these fields only; the op's full Handle carries more.
+  }) as Psc1Metadata["elements"][number]["handle"];
 const metadata = (patch: Partial<Psc1Metadata> = {}): Psc1Metadata => ({
   format: "space-scene-v1",
-  stamp: { frame: "host-internal-ft" },
+  stamp: { frame: "host-internal-ft" } as Psc1Metadata["stamp"],
   bounds: { minX: 0, minY: 0, minZ: 0, maxX: 1, maxY: 1, maxZ: 1 },
   triangles: 2,
   elements: [
@@ -61,7 +63,9 @@ describe("PSC1 decode", () => {
   it("refuses what is not a PSC1 scene in the host frame", () => {
     expect(() => decodeScene(psc1(metadata(), 18, 0))).toThrow("Not a PSC1");
     expect(() => decodeScene(new ArrayBuffer(4))).toThrow("Not a PSC1");
-    expect(() => decodeScene(psc1(metadata({ stamp: { frame: "survey" } })))).toThrow("frame");
+    expect(() =>
+      decodeScene(psc1(metadata({ stamp: { frame: "survey" } as Psc1Metadata["stamp"] }))),
+    ).toThrow("frame");
     expect(() => decodeScene(psc1(metadata(), 9))).toThrow("vertex budget");
   });
   it("refuses element ranges that skip, overlap or leave triangles unowned", () => {

@@ -3,28 +3,12 @@
  * metadata JSON, padding to 4 bytes, then float32 xyz positions, nine per triangle, unindexed.
  * Space and ducts fetch the same artifact; both decode it here.
  */
-import type { Bounds, SceneInstance, SceneMeshes } from "./types";
+import type { SceneInstance, SceneMeshes } from "./types";
 
-// SHIM: replace with RevitDetailSpaceScene.Res.SceneMetadata when the revit.detail.space-scene op
-// lands in this tree's generated host contracts. Only the fields decode reads are declared.
-export type Psc1Metadata = {
-  format: string;
-  stamp: { frame: string };
-  bounds: Bounds;
-  triangles: number;
-  elements: {
-    handle: {
-      documentKey: string;
-      elementId: number;
-      uniqueId: string;
-      linkInstanceId?: number | null;
-      category: string;
-    };
-    firstVertex: number;
-    vertexCount: number;
-    focus: boolean;
-  }[];
-};
+import type { RevitDetailSpaceScene } from "@pe/host-contracts/generated";
+
+/** The artifact's metadata, as the op declares it. */
+export type Psc1Metadata = RevitDetailSpaceScene.Res.SceneMetadata;
 
 const MAGIC = 0x31435350; // "PSC1" little-endian
 const MAX_TRIANGLES = 3_000_000;

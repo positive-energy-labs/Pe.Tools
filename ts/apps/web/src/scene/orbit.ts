@@ -5,14 +5,8 @@
  */
 import type { Bounds } from "./types";
 
-// SHIM: replace with the @pe/agent-contracts/page-keys import when W1 lands
-export type OrbitViewport = {
-  kind: "orbit";
-  yaw: number;
-  elev: number;
-  zoom: number;
-  pivot: [number, number, number];
-};
+import type { OrbitViewport } from "@pe/agent-contracts";
+export type { OrbitViewport };
 
 type Vec3 = [number, number, number];
 type XYZ = { x: number; y: number; z: number };

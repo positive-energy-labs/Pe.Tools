@@ -8,26 +8,8 @@ import { useEffect, useMemo, useRef, type MouseEvent, type ReactNode } from "rea
 
 import { tokenRef } from "@pe/kit/lib/token";
 
-// SHIM: swap for @pe/agent-contracts/page-keys when W1 lands
-export interface ScrollViewport {
-  kind: "scroll";
-  top: number;
-  left: number;
-}
-export interface PlaneViewport {
-  kind: "plane";
-  scale: number;
-  tx: number;
-  ty: number;
-}
-/** Degrees, z up; elev 90 is plan. */
-export interface OrbitViewport {
-  kind: "orbit";
-  yaw: number;
-  elev: number;
-  zoom: number;
-  pivot: readonly [number, number, number];
-}
+import type { OrbitViewport, PlaneViewport, ScrollViewport } from "@pe/agent-contracts";
+export type { OrbitViewport, PlaneViewport, ScrollViewport };
 
 export type ViewportHow = "gesture" | "move";
 
