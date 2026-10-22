@@ -43,6 +43,8 @@ export interface ScheduleGridPage {
 const scheduleGridPage = z.object({
   /** The open schedule, the contract field the URL carries. */
   workspaceId: routePageSchema("schedules").shape.workspaceId,
+  /** `?demo=<action>`: the contract field; `frozenDemo` mounts its seed. */
+  demo: routePageSchema("schedules").shape.demo,
   captureId: z.string().default(""),
   unread: z.number().default(0),
   refused: z.record(z.string(), z.string()).default({}),

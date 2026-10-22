@@ -1,4 +1,4 @@
-import { lazy, useState, type ComponentType } from "react";
+import { lazy, type ComponentType } from "react";
 import { createRouteRegistry } from "@pe/kit/route-registry";
 import { manifest as families } from "#/families/manifest";
 import { familyManifest } from "#/family/manifest";
@@ -66,7 +66,7 @@ function HostedRooms() {
   return <RoomsRoute url={false} />;
 }
 
+/** A chat pane owns its Page without the address (`url={false}`), like Ducts and Rooms. */
 function HostedPods({ thread }: { thread: string }) {
-  const [ref, select] = useState<{ pod?: string; path?: string }>({});
-  return <PodsRouteContent {...ref} thread={thread} select={select} />;
+  return <PodsRouteContent thread={thread} url={false} />;
 }
