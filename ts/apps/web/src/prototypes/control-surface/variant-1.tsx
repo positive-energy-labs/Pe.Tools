@@ -13,11 +13,13 @@ import {
 } from "lucide-react";
 import type { Machine } from "@pe/agent-contracts";
 
-import { Button } from "#/components/lang/button";
+import { Button } from "@pe/kit/lang/button";
 import { ProviderMark } from "#/components/lang/provider-mark";
-import { Row } from "#/components/lang/row";
+import { Row } from "@pe/kit/lang/row";
 import { MACHINE_SEEDS } from "#/open/seeds";
-import { attention, peaState, revitState, shareState, updateState } from "#/machine/model";
+import { attention, peaState, revitState, shareState } from "#/machine/model";
+
+import { updateSaid } from "#/machine/update-state";
 
 import type { VariantMeta } from "./lineup";
 
@@ -147,7 +149,7 @@ export default function Variant() {
 
   const lamps = [
     { key: "Revit", said: revitState(machine) },
-    { key: "Update", said: updateState(machine) },
+    { key: "Update", said: updateSaid(machine) },
     { key: "Share", said: shareState(machine) },
     { key: "Pea", said: peaState(machine) },
   ];

@@ -11,18 +11,15 @@ import {
   type MachineSession,
 } from "@pe/agent-contracts";
 
-import { Button } from "#/components/lang/button";
+import { Button } from "@pe/kit/lang/button";
 import { ProviderMark } from "#/components/lang/provider-mark";
-import { Row } from "#/components/lang/row";
-import {
-  activityWord,
-  isUnread,
-  relativeThreadAge,
-  threadActivity,
-} from "#/chat/thread-navigation";
+import { Row } from "@pe/kit/lang/row";
+import { activityWord, isUnread, relativeThreadAge } from "#/chat/thread-navigation";
 import { custodyOf, keyOf, phaseOf, unsavedOf } from "#/machine/session";
-import { chipText, planWaits, shareState, updateState } from "#/machine/model";
+import { chipText, planWaits, shareState } from "#/machine/model";
 import { BAY_THREADS, MACHINE_SEEDS } from "#/open/seeds";
+
+import { updateSaid } from "#/machine/update-state";
 
 import type { VariantMeta } from "./lineup";
 
@@ -94,8 +91,10 @@ const WORK = [
 ];
 
 const notifies = (t: HarnessThreadSummary) => {
-  const a = threadActivity(t);
-  return a === "waiting" || a === "failed" || (a === "idle" && isUnread(t));
+  const { state, pending } = t.activity;
+  return (
+    pending > 0 || state === "waiting" || state === "failed" || (state === "idle" && isUnread(t))
+  );
 };
 const Dot = () => (
   <span
@@ -125,7 +124,7 @@ export default function Variant() {
   const orphans = THREADS.filter(
     (t) => !(t.head.defaultTarget?.kind === "open" && bound.has(t.head.defaultTarget.ref.session)),
   );
-  const update = machine ? updateState(machine) : { text: "unread" };
+  const update = machine ? updateSaid(machine) : { text: "unread" };
   const share = machine ? shareState(machine) : { text: "unread" };
 
   return (

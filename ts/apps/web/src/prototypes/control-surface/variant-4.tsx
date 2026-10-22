@@ -20,10 +20,10 @@ import {
   type LucideIcon,
 } from "lucide-react";
 
-import { Button } from "#/components/lang/button";
+import { Button } from "@pe/kit/lang/button";
 import { Kbd } from "#/components/lang/kbd";
-import { List } from "#/components/lang/list-popup";
-import type { Collection } from "#/components/lang/collection";
+import { List } from "@pe/kit/lang/list-popup";
+import type { Collection } from "@pe/kit/lang/collection";
 import type { VariantMeta } from "./lineup";
 
 export const meta: VariantMeta = {

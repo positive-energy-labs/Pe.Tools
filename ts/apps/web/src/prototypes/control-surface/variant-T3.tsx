@@ -1,8 +1,8 @@
 /** THROWAWAY protoui T3 "Stacked into one": one paged notification, N need you. */
 import { useState } from "react";
 import type { VariantMeta } from "./lineup";
-import { Button } from "#/components/lang/button";
-import { Input } from "#/components/lang/input";
+import { Button } from "@pe/kit/lang/button";
+import { Input } from "@pe/kit/lang/input";
 import { Markdown } from "#/workbench/prose";
 import { APPROVAL_ARGS, FINAL_MD, PROPOSAL_LINES, Win } from "./variant-T.shared";
 

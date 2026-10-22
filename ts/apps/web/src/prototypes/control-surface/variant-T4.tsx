@@ -2,9 +2,8 @@
 import { useEffect, useRef, useState } from "react";
 import { ArrowUp, Square } from "lucide-react";
 import type { VariantMeta } from "./lineup";
-import { Button } from "#/components/lang/button";
-import { Textarea } from "#/components/lang/textarea";
-import { ComposerBox, ComposerFrame, ComposerRow } from "#/components/lang/conversation";
+import { Button } from "@pe/kit/lang/button";
+import { Composer, ComposerFrame } from "#/components/lang/conversation";
 import { Markdown } from "#/workbench/prose";
 import { APPROVAL_ARGS, FINAL_MD, PROPOSAL_LINES, Win } from "./variant-T.shared";
 
@@ -202,44 +201,32 @@ export default function Variant() {
           </div>
           {item.kind === "final" ? (
             <ComposerFrame>
-              <ComposerBox>
-                <Textarea
-                  surface="embedded"
-                  size="compact"
-                  rows={1}
-                  aria-label="reply to Pea"
-                  placeholder="Reply to Pea"
-                  value={reply}
-                  onChange={(e) => {
-                    setReply(e.target.value);
-                    setTyped(true);
-                  }}
-                  onKeyDown={(e) => {
-                    if (e.key === "Enter" && !e.shiftKey) {
-                      e.preventDefault();
-                      send();
-                    }
-                  }}
-                  style={{ maxHeight: "4.5em", minHeight: "1.5em" }}
-                />
-                <ComposerRow
-                  lead={null}
-                  trail={
-                    /* One slot: Stop replaces Send while the reply runs. */
-                    running ? (
-                      <Button
-                        kind="framed"
-                        icon={Square}
-                        label="Stop"
-                        data-tone="alarm"
-                        onClick={() => setRunning(false)}
-                      />
-                    ) : (
-                      <Button kind="commit" icon={ArrowUp} label="Send" onClick={send} />
-                    )
-                  }
-                />
-              </ComposerBox>
+              <Composer
+                variant="reply"
+                aria-label="reply to Pea"
+                placeholder="Reply to Pea"
+                value={reply}
+                onChange={(e) => {
+                  setReply(e.target.value);
+                  setTyped(true);
+                }}
+                onSend={send}
+                style={{ maxHeight: "4.5em", minHeight: "1.5em" }}
+                send={
+                  /* One slot: Stop replaces Send while the reply runs. */
+                  running ? (
+                    <Button
+                      kind="framed"
+                      icon={Square}
+                      label="Stop"
+                      data-tone="alarm"
+                      onClick={() => setRunning(false)}
+                    />
+                  ) : (
+                    <Button kind="commit" icon={ArrowUp} label="Send" onClick={send} />
+                  )
+                }
+              />
             </ComposerFrame>
           ) : (
             <div className="flex gap-1.5">

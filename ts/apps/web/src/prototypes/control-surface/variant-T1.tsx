@@ -1,8 +1,8 @@
 /** THROWAWAY protoui T1 "Compact": Windows-toast-sized, one line each, single-input reply. */
 import { useState } from "react";
 import type { VariantMeta } from "./lineup";
-import { Button } from "#/components/lang/button";
-import { Input } from "#/components/lang/input";
+import { Button } from "@pe/kit/lang/button";
+import { Input } from "@pe/kit/lang/input";
 import { FINAL_ONE_LINE, Win, Who } from "./variant-T.shared";
 
 export const meta: VariantMeta = {

@@ -1,7 +1,7 @@
 /** THROWAWAY: shared fixtures + borderless-window chrome for the T1..T3 notification lineup. */
 import type { ReactNode } from "react";
 import { X } from "lucide-react";
-import { Button } from "#/components/lang/button";
+import { Button } from "@pe/kit/lang/button";
 
 export const FINAL_MD = `Retagged **41 of 43** diffusers on Level 2.
 

@@ -30,9 +30,10 @@ import {
   type LucideIcon,
 } from "lucide-react";
 
-import { Button } from "#/components/lang/button";
+import { Button } from "@pe/kit/lang/button";
 import { CommandPalette } from "#/components/lang/command-palette";
-import { Input } from "#/components/lang/input";
+import { Input } from "@pe/kit/lang/input";
+import { TooltipHint } from "@pe/kit/lang/tooltip";
 import { Kbd } from "#/components/lang/kbd";
 import "#/navigation/app-bar.css";
 
@@ -349,27 +350,28 @@ export function TrayRoutes({ mode }: { mode: "buttons" | "appbar" }) {
       onClick={showSearch}
       style={{ ...style, WebkitAppRegion: "no-drag" } as CSSProperties}
     >
-      <Input
-        ref={setField}
-        surface="embedded"
-        role="combobox"
-        aria-label="Choose route, Work or Pea thread"
-        aria-autocomplete="list"
-        aria-expanded={open}
-        title="Search routes, Work and threads · Ctrl+K"
-        placeholder={placeholder}
-        value={open ? query : ""}
-        onKeyDown={(event) => {
-          if (!open && (event.key === "ArrowDown" || event.key === "Enter")) {
-            event.preventDefault();
-            showSearch();
-          }
-        }}
-        onChange={(event) => {
-          setQuery(event.target.value);
-          setOpen(true);
-        }}
-      />
+      <TooltipHint content="Search routes, Work and threads · Ctrl+K">
+        <Input
+          ref={setField}
+          surface="embedded"
+          role="combobox"
+          aria-label="Choose route, Work or Pea thread"
+          aria-autocomplete="list"
+          aria-expanded={open}
+          placeholder={placeholder}
+          value={open ? query : ""}
+          onKeyDown={(event) => {
+            if (!open && (event.key === "ArrowDown" || event.key === "Enter")) {
+              event.preventDefault();
+              showSearch();
+            }
+          }}
+          onChange={(event) => {
+            setQuery(event.target.value);
+            setOpen(true);
+          }}
+        />
+      </TooltipHint>
       <span className="pe-appbar-search-hint" aria-hidden>
         <Kbd mute>Ctrl K</Kbd>
         <Search aria-hidden />

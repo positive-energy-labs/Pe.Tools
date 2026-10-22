@@ -27,13 +27,13 @@ import {
   type LucideIcon,
 } from "lucide-react";
 
-import { Button } from "#/components/lang/button";
-import { Input } from "#/components/lang/input";
+import { Button } from "@pe/kit/lang/button";
+import { Input } from "@pe/kit/lang/input";
 import { Kbd } from "#/components/lang/kbd";
-import { List } from "#/components/lang/list-popup";
+import { List } from "@pe/kit/lang/list-popup";
 import { ProviderMark } from "#/components/lang/provider-mark";
-import { Row } from "#/components/lang/row";
-import type { Collection } from "#/components/lang/collection";
+import { Row } from "@pe/kit/lang/row";
+import type { Collection } from "@pe/kit/lang/collection";
 
 import type { VariantMeta } from "./lineup";
 

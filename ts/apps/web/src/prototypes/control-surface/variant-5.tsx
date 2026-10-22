@@ -2,10 +2,12 @@
 import { useState } from "react";
 import { Bot, Cpu, FolderKanban, Server, type LucideIcon } from "lucide-react";
 
-import { Button } from "#/components/lang/button";
-import { FactChip, Tag } from "#/components/lang/chip";
+import { Button } from "@pe/kit/lang/button";
+import { FactChip, Tag } from "@pe/kit/lang/chip";
 import { MACHINE_SEEDS } from "#/open/seeds";
-import { machineOf, peaState, revitState, updateState } from "#/machine/model";
+import { machineOf, peaState, revitState } from "#/machine/model";
+
+import { updateSaid } from "#/machine/update-state";
 
 import type { VariantMeta } from "./lineup";
 
@@ -193,7 +195,7 @@ export default function Variant() {
         <FactChip tone="pea" title="Pea providers">
           Pea {machine ? peaState(machine).text : "—"}
         </FactChip>
-        <FactChip title="Update state">{machine ? updateState(machine).text : "—"}</FactChip>
+        <FactChip title="Update state">{machine ? updateSaid(machine).text : "—"}</FactChip>
         <span className="ml-auto">
           <Button
             label="Launch Revit"

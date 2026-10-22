@@ -1,9 +1,8 @@
 /** THROWAWAY protoui T2 "Rich": markdown final response, composer reply, exact tool args, change summary. */
 import { useState } from "react";
 import type { VariantMeta } from "./lineup";
-import { Button } from "#/components/lang/button";
-import { Textarea } from "#/components/lang/textarea";
-import { ComposerBox, ComposerRow } from "#/components/lang/conversation";
+import { Button } from "@pe/kit/lang/button";
+import { Composer } from "#/components/lang/conversation";
 import { Markdown } from "#/workbench/prose";
 import { APPROVAL_ARGS, FINAL_MD, PROPOSAL_LINES, Win, Who } from "./variant-T.shared";
 
@@ -87,24 +86,21 @@ export default function Variant() {
             <div className="max-h-[200px] overflow-auto">
               <Markdown text={FINAL_MD} />
             </div>
-            <ComposerBox>
-              <Textarea
-                surface="embedded"
-                size="compact"
-                aria-label="reply to Pea"
-                placeholder="Reply to Pea"
-                value={reply}
-                onChange={(e) => setReply(e.target.value)}
-              />
-              <ComposerRow
-                lead={<span className="t-small text-ink-2">continues this thread</span>}
-                trail={
-                  <Button kind="commit" label="Send" onClick={() => setReply("")}>
-                    Send
-                  </Button>
-                }
-              />
-            </ComposerBox>
+            <Composer
+              variant="reply"
+              aria-label="reply to Pea"
+              placeholder="Reply to Pea"
+              value={reply}
+              onChange={(e) => setReply(e.target.value)}
+              onSend={() => setReply("")}
+              onKey={(event) => event.key === "Enter"}
+              pickers={<span className="t-small text-ink-2">continues this thread</span>}
+              send={
+                <Button kind="commit" label="Send" onClick={() => setReply("")}>
+                  Send
+                </Button>
+              }
+            />
           </div>
         </Win>
       )}

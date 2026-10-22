@@ -4,17 +4,15 @@ import { Popover } from "@base-ui/react/popover";
 import { ArrowUp, GripHorizontal, Minus, Pin, Plus, X } from "lucide-react";
 import type { HarnessThreadSummary } from "@pe/agent-contracts";
 import { Accordion } from "#/components/lang/accordion";
-import { Button } from "#/components/lang/button";
+import { Button } from "@pe/kit/lang/button";
 import {
-  ComposerBox,
+  Composer,
   ComposerFrame,
-  ComposerRow,
   ConversationBody,
   MessageBubble,
   MessageHead,
 } from "#/components/lang/conversation";
-import { PopupFrame } from "#/components/lang/list-popup";
-import { Textarea } from "#/components/lang/textarea";
+import { PopupFrame } from "@pe/kit/lang/list-popup";
 import { ValueDiff } from "#/components/lang/value-diff";
 import { Markdown } from "#/workbench/prose";
 import { BAY_THREADS } from "#/open/seeds";
@@ -386,13 +384,8 @@ export default function Variant() {
       {/* OWED: ThreadComposer requires Workbench + route handle; reuse its presentational pieces with local send. Attachments, mentions and model execution remain absent. */}
       <div className="shrink-0 pt-3 hairline-t">
         <ComposerFrame>
-          <form
-            onSubmit={(event) => {
-              event.preventDefault();
-              send();
-            }}
-          >
-            <ComposerBox>
+          <Composer
+            work={
               <div className="flex items-center justify-between gap-2 px-3 pt-2 t-small text-ink-2">
                 <span className="truncate">
                   {current ? `Reply · ${current.thread.title}` : "New conversation"}
@@ -401,33 +394,23 @@ export default function Variant() {
                   <Button label="Clear reply target" icon={X} onClick={() => setFocused(null)} />
                 )}
               </div>
-              <Textarea
-                surface="embedded"
-                aria-label="Message Pea"
-                placeholder={current ? "Tell Pea what comes next…" : "What can I help you with?"}
-                value={draft}
-                onChange={(event) => setDraft(event.target.value)}
-                onKeyDown={(event) => {
-                  if (event.key === "Enter" && !event.shiftKey && !event.nativeEvent.isComposing) {
-                    event.preventDefault();
-                    send();
-                  }
-                }}
+            }
+            aria-label="Message Pea"
+            placeholder={current ? "Tell Pea what comes next…" : "What can I help you with?"}
+            value={draft}
+            onChange={(event) => setDraft(event.target.value)}
+            onSend={send}
+            pickers={<span className="t-small">{provider} · Hospital MEP</span>}
+            send={
+              <Button
+                label="Send message"
+                icon={ArrowUp}
+                kind="commit"
+                refusal={!draft.trim() ? "Write a message first" : undefined}
+                onClick={send}
               />
-              <ComposerRow
-                lead={<span className="t-small">{provider} · Hospital MEP</span>}
-                trail={
-                  <Button
-                    type="submit"
-                    label="Send message"
-                    icon={ArrowUp}
-                    kind="commit"
-                    refusal={!draft.trim() ? "Write a message first" : undefined}
-                  />
-                }
-              />
-            </ComposerBox>
-          </form>
+            }
+          />
         </ComposerFrame>
         <div className="flex justify-between gap-2 px-4 pb-3 t-small text-ink-2">
           <span role="status">{notice || "Fixture · small Pea / tray experiment"}</span>

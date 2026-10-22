@@ -26,14 +26,14 @@ import {
   X,
 } from "lucide-react";
 
-import { Button } from "#/components/lang/button";
-import { Input } from "#/components/lang/input";
+import { Button } from "@pe/kit/lang/button";
+import { Input } from "@pe/kit/lang/input";
 import { NavigationGroup, NavigationItem } from "#/components/lang/navigation";
 import { ProviderMark } from "#/components/lang/provider-mark";
-import { Row } from "#/components/lang/row";
+import { Row } from "@pe/kit/lang/row";
 import { ThreadsSidebar } from "#/chat/thread-palette";
 import { demoThreads } from "#/chat/thread-navigation";
-import { emptyChatState } from "#/workbench/chat-state";
+import { emptyChatState } from "@pe/agent-contracts/chat-state";
 
 import type { VariantMeta } from "./lineup";
 
@@ -239,7 +239,7 @@ function PalettePane({ selected, onSelect }: { selected: string; onSelect: (id: 
         {/* Real component, mounted as the app mounts it. OWED: ThreadsSidebar takes no trailing-groups
             slot, so route/Revit/machine rows are a second nav beneath it, outside its filter and search. */}
         <ThreadsSidebar
-          threads={PALETTE_THREADS as never}
+          threads={PALETTE_THREADS}
           currentThreadId={selected}
           providers={[]}
           onSelect={onSelect}

@@ -23,11 +23,11 @@ import {
   X,
 } from "lucide-react";
 
-import { Button } from "#/components/lang/button";
-import { Input } from "#/components/lang/input";
+import { Button } from "@pe/kit/lang/button";
+import { Input } from "@pe/kit/lang/input";
 import { NavigationGroup, NavigationItem } from "#/components/lang/navigation";
 import { ProviderMark } from "#/components/lang/provider-mark";
-import { Row } from "#/components/lang/row";
+import { Row } from "@pe/kit/lang/row";
 
 import type { VariantMeta } from "./lineup";
 
