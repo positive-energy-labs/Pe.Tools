@@ -1,5 +1,20 @@
 import { z } from "zod";
-import { layersKey, modeKey, subjectKey, viewportCodec, viewportKey } from "./page-keys.ts";
+import {
+  INVALID,
+  fitViewportCodec,
+  layersKey,
+  modeKey,
+  orbitLooks,
+  planeViewportSchema,
+  subjectKey,
+  viewportCodec,
+  viewportKey,
+  viewportSchema,
+  type Codec,
+  type OrbitLook,
+  type PlaneViewport,
+  type Viewport,
+} from "./page-keys.ts";
 
 /**
  * A route's address: one set of field definitions, each typed with its default and its string
@@ -17,12 +32,6 @@ import { layersKey, modeKey, subjectKey, viewportCodec, viewportKey } from "./pa
  */
 
 export type History = "push" | "replace";
-
-/** A value as one string: the link and lease form. `decode` is null on malformed text. */
-export interface Codec<T> {
-  encode(value: T): string;
-  decode(text: string): T | null;
-}
 
 interface Access {
   url?: History;
@@ -48,12 +57,12 @@ const CODECS: Record<string, Codec<unknown>> = {
   enum: textCodec as Codec<unknown>,
   number: {
     encode: (value) => String(value),
-    decode: (text) => (text.trim() && Number.isFinite(Number(text)) ? Number(text) : null),
+    decode: (text) => (text.trim() && Number.isFinite(Number(text)) ? Number(text) : INVALID),
   },
   boolean: {
     encode: (value) => (value ? "1" : "0"),
     decode: (text) =>
-      text === "1" || text === "true" ? true : text === "0" || text === "false" ? false : null,
+      text === "1" || text === "true" ? true : text === "0" || text === "false" ? false : INVALID,
   },
   array: {
     encode: (value) => (value as unknown[]).join(","),
@@ -108,6 +117,16 @@ const entityFields = {
 /** `?demo=<action>` mounts one seed in an isolated owner: a link's word, never Pea's. */
 const demo = field(text(), { url: "replace" });
 
+/** A plan picture's pan and zoom; null = fit. A drag replaces; Pea may set it. */
+const planViewport = field(
+  viewportKey(planeViewportSchema),
+  { url: "replace", agent: "set" },
+  fitViewportCodec<PlaneViewport>(),
+);
+
+/** The layer keys the Ducts spatial picture draws; a snapshot may name more (`facts.layers`). */
+export const DUCTS_LAYERS = ["meshes", "context", "centrelines", "labels", "findings"] as const;
+
 const ductsFields = {
   /** The subject: a Revit system name, read across every group it is in; empty = the whole document. */
   system: field(subjectKey(), { url: "push", agent: "set" }),
@@ -117,17 +136,15 @@ const ductsFields = {
   selected: field(text(), { url: "push", agent: "set" }),
   /** The picture's encoding, a key of the web's `ENCODINGS`. */
   encoding: field(z.string().max(200).default("health"), { url: "push", agent: "set" }),
-  /** The layer keys the picture draws, as `ducts.snapshot` names them (no fixed list); empty = none. */
+  /** The layer keys the picture draws (`DUCTS_LAYERS`, or a key the snapshot names); empty = none. */
   layers: field(layersKey([], []), { url: "push", agent: "set" }),
-  /** The camera the model picture looks through: the isometric globe, or `plan` (a preset on it). */
-  camera: field(modeKey(["iso", "plan"], "iso"), { url: "push", agent: "set" }),
   /** What the picture pane draws: the `model` in space, or the `schematic` one-line. */
   picture: field(modeKey(["model", "schematic"], "model"), { url: "push", agent: "set" }),
-  /** Where the model picture looks from; a drag replaces, a preset pushes. */
+  /** Where the model picture looks from; null = fit the subject. A drag replaces, a preset pushes. */
   viewport: field(
-    viewportKey({ kind: "orbit", yaw: 45, elev: 30, zoom: 1, pivot: [0, 0, 0] }),
+    viewportKey(viewportSchema),
     { url: "replace", agent: "set" },
-    viewportCodec,
+    fitViewportCodec<Viewport>(),
   ),
   /** The selected issue id (it may name no element); empty = none. Pea's, never the URL's. */
   issue: field(text(), { agent: "set" }),
@@ -138,7 +155,16 @@ const ductsFields = {
 type DuctsFacts = {
   systems?: { name: string }[];
   levels?: { id: string; name: string }[];
+  /** Layer keys the snapshot names beyond `DUCTS_LAYERS`. */
+  layers?: string[];
+  /** The orbit pose the picture shows, fitted or not, as `viewportCodec` writes it. */
+  pose?: string;
 };
+
+const ductsWords = z.object({
+  /** A direction the person names: plan, iso, north, south, east or west. */
+  look: z.string().max(40),
+});
 
 /**
  * `system` is the page's subject, a Revit system name: the person's word resolves to the one
@@ -147,8 +173,8 @@ type DuctsFacts = {
  */
 function resolveDucts(input: Record<string, unknown>, facts: Record<string, unknown>) {
   const patch = { ...input } as Record<string, string>;
-  const { systems = [], levels = [] } = facts as DuctsFacts;
-  const keys = setKeys(ductsFields);
+  const { systems = [], levels = [], layers = [], pose } = facts as DuctsFacts;
+  const keys = [...setKeys(ductsFields), ...Object.keys(ductsWords.shape)];
   const stray = Object.keys(patch).filter((key) => !keys.includes(key));
   if (stray.length)
     return {
@@ -174,9 +200,39 @@ function resolveDucts(input: Record<string, unknown>, facts: Record<string, unkn
   }
   if (patch.level && !levels.some((level) => level.id === patch.level))
     return { ok: false as const, error: `unknown level '${patch.level}'` };
+  if (patch.layers) {
+    const known = new Set<string>([...DUCTS_LAYERS, ...layers]);
+    const unknown = patch.layers.split(",").filter((name) => !known.has(name.trim()));
+    if (unknown.length)
+      return {
+        ok: false as const,
+        error: `unknown layers ${unknown.join(", ")}; the picture draws ${[...known].join(", ")}`,
+      };
+  }
+  if (patch.look !== undefined) {
+    const word = patch.look.trim().toLowerCase();
+    const look = Object.hasOwn(orbitLooks, word) ? orbitLooks[word as OrbitLook] : null;
+    if (!look)
+      return {
+        ok: false as const,
+        error: `no look '${patch.look}'; say ${Object.keys(orbitLooks).join(", ")}`,
+      };
+    if ("viewport" in patch)
+      return { ok: false as const, error: "name a look or a viewport, not both" };
+    // A look turns the shown pose about its pivot; a fit has no pivot until the drawing publishes one.
+    const shown = pose ? viewportCodec.decode(pose) : null;
+    if (shown?.kind !== "orbit")
+      return {
+        ok: false as const,
+        error:
+          "the Ducts picture has published no orbit pose, so a look has no pivot to turn about; set viewport as orbit:yaw,elev,zoom@x,y,z, or empty to fit",
+      };
+    delete patch.look;
+    patch.viewport = viewportCodec.encode({ ...shown, ...look });
+  }
   return Object.keys(patch).length
     ? { ok: true as const, patch }
-    : { ok: false as const, error: "name a system, level or selected element" };
+    : { ok: false as const, error: "name a system, level, selected element, look or viewport" };
 }
 
 /* ── Routes ──────────────────────────────────────────────────────────────────── */
@@ -188,7 +244,8 @@ export const routeAddresses = {
     fields: ductsFields,
     agent: {
       policy:
-        "Move the Ducts page in the person's open browser. Its subject: system (a Revit system name such as SA 19, as the person said it; it resolves against the view's system names), level and selected element id; an empty string clears the key. The page shows every duct network the system is in. Set the system only when the person named it, and never pick a system they did not name. Its picture: encoding, layers (comma separated layer keys), camera (iso or plan), picture (model or schematic) and viewport (orbit:yaw,elev,zoom@x,y,z in feet). issue selects one finding by id. Each set is one step the person can go Back from. No Work or Revit read.",
+        "Move the Ducts page in the person's open browser. Its subject: system (a Revit system name such as SA 19, as the person said it; it resolves against the view's system names), level and selected element id; an empty string clears the key. The page shows every duct network the system is in. Set the system only when the person named it, and never pick a system they did not name. Its picture: encoding, layers (comma separated: meshes, context, centrelines, labels, findings, or a key the view's facts name), picture (model or schematic), and either look (plan, iso, north, south, east or west: the shown picture turned about its pivot) or viewport (orbit:yaw,elev,zoom@x,y,z in feet; empty fits the subject). issue selects one finding by id. Each set is one step the person can go Back from. No Work or Revit read.",
+      words: ductsWords,
       resolve: resolveDucts,
     },
   },
@@ -237,6 +294,7 @@ export const routeAddresses = {
       layers: field(layersKey([], []), { url: "push" }),
       /** Region labels (`R12,R3`): selected and zoomed to once drawn. */
       focus: field(text(1024), { url: "replace" }),
+      viewport: planViewport,
     },
   },
   takeoffs: {
@@ -246,6 +304,7 @@ export const routeAddresses = {
       level: field(text(), { url: "push" }),
       zone: field(text(), { url: "push" }),
       room: field(text(), { url: "push" }),
+      viewport: planViewport,
       demo,
     },
   },
@@ -336,7 +395,8 @@ const textOf = (raw: unknown): string | undefined =>
 const readField = (field: RouteField, raw: unknown): unknown => {
   const text = textOf(raw);
   const decoded = text === undefined ? undefined : field.codec.decode(text);
-  const parsed = field.schema.safeParse(decoded ?? undefined);
+  // `INVALID` reads as absent (the default); a decoded `null` is a value the schema judges.
+  const parsed = field.schema.safeParse(decoded === INVALID ? undefined : decoded);
   return parsed.success ? parsed.data : field.schema.parse(undefined);
 };
 
@@ -473,7 +533,7 @@ export const routeAddressFields = (route: RouteViewRoute) => {
             ? (inner as z.ZodType<string>)
             : z.string().refine((text) => {
                 const decoded = field.codec.decode(text);
-                return decoded !== null && field.schema.safeParse(decoded).success;
+                return decoded !== INVALID && field.schema.safeParse(decoded).success;
               }, `${key} does not read as its codec writes it`),
         ];
       }),

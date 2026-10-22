@@ -7,6 +7,15 @@ import { z } from "zod";
  * and Pea's lease carry (`route-address.ts` `field`).
  */
 
+/** A codec's answer for text it cannot read: never a value, so `null` stays a legitimate value. */
+export const INVALID: unique symbol = Symbol("invalid");
+
+/** A value as one string: the link and lease form. */
+export interface Codec<T> {
+  encode(value: T): string;
+  decode(text: string): T | typeof INVALID;
+}
+
 /** Viewport: one of three kinds. `viewportCodec` writes the link and lease form. */
 export type ScrollViewport = { kind: "scroll"; top: number; left: number };
 export type PlaneViewport = { kind: "plane"; scale: number; tx: number; ty: number };
@@ -63,20 +72,53 @@ export const viewportCodec = {
 };
 
 const finite = z.number().finite();
+export const planeViewportSchema = z.object({
+  kind: z.literal("plane"),
+  scale: finite,
+  tx: finite,
+  ty: finite,
+});
+export const orbitViewportSchema = z.object({
+  kind: z.literal("orbit"),
+  yaw: finite,
+  elev: finite,
+  zoom: finite,
+  pivot: z.tuple([finite, finite, finite]),
+});
 export const viewportSchema = z.discriminatedUnion("kind", [
   z.object({ kind: z.literal("scroll"), top: finite, left: finite }),
-  z.object({ kind: z.literal("plane"), scale: finite, tx: finite, ty: finite }),
-  z.object({
-    kind: z.literal("orbit"),
-    yaw: finite,
-    elev: finite,
-    zoom: finite,
-    pivot: z.tuple([finite, finite, finite]),
-  }),
+  planeViewportSchema,
+  orbitViewportSchema,
 ]);
 
-/** The Page holds a `Viewport`; its field writes it through `viewportCodec`. */
-export const viewportKey = (initial: Viewport) => viewportSchema.default(initial);
+/**
+ * A viewport key: one kind (or any), or null = fit, the default. A fit has no pose of its own; the
+ * drawing computes it from what it shows, so nothing here invents a pivot or a scale for it.
+ */
+export const viewportKey = <V extends z.ZodType<Viewport>>(kind: V) =>
+  kind.nullable().default(null);
+
+/** `""` is fit (null); malformed text is `INVALID`; a wrong kind is refused by the key's schema. */
+export const fitViewportCodec = <V extends Viewport>(): Codec<V | null> => ({
+  encode: (value) => (value ? viewportCodec.encode(value) : ""),
+  decode: (text) => (text === "" ? null : ((viewportCodec.decode(text) as V | null) ?? INVALID)),
+});
+
+/**
+ * The directions a person names for an orbit picture, in the scene's frame (`scene/orbit.ts`):
+ * yaw 0 = seen from east (+X), 90 = from north (+Y); elev 90 = plan. A look keeps a pose's pivot
+ * and zoom, so it turns the effective pose the drawing shows, never a fit.
+ */
+const ISO_ELEV = Number(((Math.atan(Math.SQRT1_2) * 180) / Math.PI).toFixed(3));
+export const orbitLooks = {
+  plan: { yaw: -90, elev: 90 },
+  iso: { yaw: -45, elev: ISO_ELEV },
+  north: { yaw: 90, elev: 0 },
+  south: { yaw: -90, elev: 0 },
+  east: { yaw: 0, elev: 0 },
+  west: { yaw: 180, elev: 0 },
+} as const satisfies Record<string, Pick<OrbitViewport, "yaw" | "elev">>;
+export type OrbitLook = keyof typeof orbitLooks;
 
 export const modeKey = <const M extends readonly [string, ...string[]]>(
   modes: M,
