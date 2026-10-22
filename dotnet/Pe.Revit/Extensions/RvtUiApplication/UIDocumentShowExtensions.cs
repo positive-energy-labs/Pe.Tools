@@ -1,9 +1,41 @@
 using Autodesk.Revit.UI;
+using Pe.Shared.RevitData;
 
 namespace Pe.Revit.Extensions.ProjDocument;
 
 /// <summary>Show elements to the person: one path for host ops and palettes.</summary>
 public static class UIDocumentShowExtensions {
+    public sealed record ShowTargets(List<ElementId> Resolved, List<long> Missing,
+        List<long> IdentityVerified, List<RevitShowElementsIssue> Issues);
+
+    /// <summary>Resolve paired identities only. A stale ID never unions with a different UniqueId target.</summary>
+    public static ShowTargets ResolveShowTargets(this Document document, IReadOnlyCollection<long> ids,
+        IReadOnlyDictionary<long, string>? expectedUniqueIds = null) {
+        var resolved = new List<ElementId>();
+        var missing = new List<long>();
+        var verified = new List<long>();
+        var issues = new List<RevitShowElementsIssue>();
+        foreach (var id in ids.Distinct()) {
+            if (id <= 0 || id > 9007199254740991L) {
+                issues.Add(new(id, "ElementIdInvalid", "Element IDs must be positive safe integers."));
+                continue;
+            }
+            var element = document.GetElement(id.ToElementId());
+            if (element is null) {
+                missing.Add(id);
+                continue;
+            }
+            if (expectedUniqueIds != null && expectedUniqueIds.TryGetValue(id, out var expected)) {
+                if (string.IsNullOrWhiteSpace(expected) || !string.Equals(expected, element.UniqueId, StringComparison.Ordinal)) {
+                    issues.Add(new(id, "IdentityMismatch", "The element's current UniqueId differs from the displayed observation."));
+                    continue;
+                }
+                verified.Add(id);
+            }
+            resolved.Add(element.Id);
+        }
+        return new(resolved, missing, verified, issues);
+    }
     /// <summary>
     ///     A headless document has no window: <c>Application.OpenDocumentFile</c> opened it, it has no active
     ///     view or selection, and Revit cannot activate it (<c>RequestViewChange</c> throws). A link document
@@ -18,8 +50,8 @@ public static class UIDocumentShowExtensions {
         uiApp.ActiveUIDocument is { } active && active.Document.Equals(document) ? active : null;
 
     /// <summary>
-    ///     Union of the elements' bounding boxes in model coordinates: the box in <paramref name="view" /> first
-    ///     (it respects the view), the model box as fallback. Null when no element has a box.
+    ///     Union of the elements' bounding boxes in model coordinates: model box first, then the box in
+    ///     <paramref name="view" />. Null when no element has a box.
     /// </summary>
     public static BoundingBoxXYZ? UnionBoundingBox(this Document document, IEnumerable<ElementId> ids, View view) {
         var corners = ids
@@ -67,7 +99,8 @@ public static class UIDocumentShowExtensions {
     }
 
     /// <summary>The 3D view that boxed the elements, whether it was made, and whether it displays all of them.</summary>
-    public sealed record Boxed(View3D View, bool Created, bool ShowsAll);
+    public sealed record Boxed(View3D? View, bool Created, List<ElementId> BoxedIds, List<ElementId> HiddenIds,
+        List<RevitShowElementsIssue> Issues);
 
     /// <summary>The section box's margin past the elements: at least this many feet, else a quarter of their diagonal.</summary>
     private const double BoxPadFeet = 8.0;
@@ -80,40 +113,46 @@ public static class UIDocumentShowExtensions {
     /// </summary>
     public static Boxed BoxInThreeD(this UIDocument uidoc, IReadOnlyCollection<ElementId> ids) {
         var document = uidoc.Document;
+        var issues = new List<RevitShowElementsIssue>();
+        var eligible = ids.Where(id => {
+            var element = document.GetElement(id);
+            var available = element is not null and not ElementType and not View && !element.ViewSpecific && element.get_BoundingBox(null) != null;
+            if (!available) issues.Add(new(id.Value(), "BoxUnavailable", "This target has no model geometry for a 3D selection box."));
+            return available;
+        }).ToList();
+        // No view or selection changes when the requested action cannot box any target.
+        if (eligible.Count == 0) return new(null, false, [], [], issues);
         var threeDs = new FilteredElementCollector(document).OfClass(typeof(View3D)).Cast<View3D>()
             .Where(v => !v.IsTemplate && !v.IsPerspective)
             .ToList();
         var mine = $"{{3D - {uidoc.Application.Application.Username}}}";
-        var view = threeDs.FirstOrDefault(v => v.Name == "{3D}") ?? threeDs.FirstOrDefault(v => v.Name == mine);
+        var view = threeDs.FirstOrDefault(v => v.Name == "{3D}") ?? threeDs.FirstOrDefault(v => v.Name == mine)
+            ?? threeDs.FirstOrDefault(v => v.Name == "Pe 3D");
         var created = view is null;
-        view ??= CreateThreeD(document);
-
-        var box = document.UnionBoundingBox(ids, view);
-        if (box != null) {
+        using (var transaction = new Transaction(document, "Pe: box the 3D view")) {
+            transaction.Start();
+            view ??= CreateThreeD(document);
+            var box = document.UnionBoundingBox(eligible, view)
+                ?? throw new InvalidOperationException("Model geometry became unavailable before boxing.");
             var pad = Math.Max(BoxPadFeet, 0.25 * box.Max.DistanceTo(box.Min));
             var margin = new XYZ(pad, pad, pad);
-            using var transaction = new Transaction(document, "Pe: box the 3D view");
-            transaction.Start();
             view.SetSectionBox(new BoundingBoxXYZ { Min = box.Min - margin, Max = box.Max + margin });
             view.IsSectionBoxActive = true;
-            transaction.Commit();
+            if (transaction.Commit() != TransactionStatus.Committed)
+                throw new InvalidOperationException("Revit did not commit the selection box view edit.");
         }
 
-        _ = uidoc.SelectAndZoom(ids, view);
-        return new Boxed(view, created, DisplaysAll(document, view, ids.ToHashSet()));
+        _ = uidoc.SelectAndZoom(eligible, view);
+        var visible = new FilteredElementCollector(document, view.Id)
+            .WherePasses(new ElementIdSetFilter(eligible.ToHashSet())).ToElementIds().ToHashSet();
+        return new Boxed(view, created, eligible, eligible.Where(id => !visible.Contains(id)).ToList(), issues);
     }
-
-    private static bool DisplaysAll(Document document, View view, HashSet<ElementId> ids) =>
-        new FilteredElementCollector(document, view.Id).WherePasses(new ElementIdSetFilter(ids)).ToElementIds().Count == ids.Count;
 
     private static View3D CreateThreeD(Document document) {
         var family = new FilteredElementCollector(document).OfClass(typeof(ViewFamilyType)).Cast<ViewFamilyType>()
             .First(x => x.ViewFamily == ViewFamily.ThreeDimensional);
-        using var transaction = new Transaction(document, "Pe 3D view");
-        transaction.Start();
         var view = View3D.CreateIsometric(document, family.Id);
         view.Name = "Pe 3D";
-        transaction.Commit();
         return view;
     }
 }

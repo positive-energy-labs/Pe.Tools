@@ -35,6 +35,7 @@ export interface InboxRowSpec {
   lit?: boolean;
   /** The Revit elements the row stands for (Row `revitIds`). */
   revitIds?: readonly number[];
+  revitRefs?: readonly import("./row").RevitElementReference[];
 }
 
 export interface InboxGroupSpec {
@@ -157,6 +158,7 @@ export function Inbox<K extends string>({
                         actions={row.verbs}
                         onMouseEnter={row.onMouseEnter}
                         revitIds={row.revitIds}
+                        revitRefs={row.revitRefs}
                         onClick={pick}
                       />
                       {active && row.detail != null ? (

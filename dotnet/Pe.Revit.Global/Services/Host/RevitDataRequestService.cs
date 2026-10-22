@@ -1169,7 +1169,7 @@ internal sealed class RevitDataRequestService {
         }
     }
 
-    [Op("revit.context.show-elements", Does = "Show elements to the person at the window: select them, box the default {3D} view (else the user's {3D - username}, else a made 'Pe 3D') around them with a generous margin, open it and zoom to fit. With viewId it selects and zooms in that view instead and edits nothing; with selectOnly it only selects. Answers which ids it showed, which were missing, and the view. The section box is its only edit: one undoable transaction on that view, never a model element. Needs the active windowed document; a headless document refuses.", Title = "Show Elements (Point At)", Finds = ["show", "select", "selection", "zoom", "focus", "point-at", "section-box", "3d", "highlight", "find", "navigate", "elements", "view"], Tier = OpTier.Default, Example = "{ \"elementIds\": [12345, 67890] }")]
+    [Op("revit.context.show-elements", Does = "Select elements in the active windowed document, or select model elements and box a 3D view around them. Selection changes UI state. Boxing creates or updates one view in one transaction, then activates it and zooms. With viewId, select and zoom that graphical view; with selectOnly, change selection only. ExpectedUniqueIds verify paired identity before selection. Answers selected, missing, identity-verified, boxed, hidden and unavailable targets separately; boxed does not guarantee visible. Nested linked elements are unsupported; no link-instance substitution. Requires an exact open document lifetime and refuses headless or linked documents.", Title = "Show Elements (Point At)", Finds = ["show", "select", "selection", "zoom", "focus", "point-at", "section-box", "3d", "highlight", "find", "navigate", "elements", "view"], Intent = OpIntent.Mutate, Actor = OpActor.Any, Cost = OpCost.Mutation, Tier = OpTier.Default, Example = "{ \"elementIds\": [12345, 67890] }")]
     private static RevitShowElementsData ShowElementsCore(RevitShowElementsRequest request, RevitDocument activeDocument) {
         var document = activeDocument.Value;
         var requested = (request.ElementIds ?? []).Distinct().ToList();
@@ -1186,44 +1186,61 @@ internal sealed class RevitDataRequestService {
                     $"{request.ViewId} is not a graphical, non-template view in '{document.Title}'.",
                     "Omit viewId for the active view, or pass a plan, section, 3D view, or sheet id.")]);
 
-        var shown = requested.Where(id => document.GetElement(id.ToElementId()) != null).ToList();
-        var missing = requested.Except(shown).ToList();
-        if (shown.Count == 0)
-            throw BridgeOperationExceptions.Conflict("None of the elements exist in this document.",
-                [BridgeOperationExceptions.Issue("$.elementIds", "ElementsNotFound",
-                    $"No element in '{document.Title}' has the ids {string.Join(", ", missing)}.",
-                    "Read fresh ids from this document and retry.")]);
-
-        var ids = shown.Select(id => id.ToElementId()).ToList();
+        if (request.ExpectedUniqueIds?.Keys.Except(requested).Any() == true)
+            throw BridgeOperationExceptions.BadRequest("Expected identities must name requested IDs.",
+                [BridgeOperationExceptions.Issue("$.expectedUniqueIds", "UnexpectedIdentity", "An expected identity names an ID outside elementIds.", "Pair each expected UniqueId with its requested element ID.")]);
+        var resolved = document.ResolveShowTargets(requested, request.ExpectedUniqueIds);
+        var ids = resolved.Resolved;
+        var shown = new List<long>();
+        var boxedIds = new List<long>();
+        var hidden = new List<long>();
+        var issues = resolved.Issues;
+        RevitShowElementsData Answer(View target, string message) {
+            var selected = ui.Selection.GetElementIds().Select(id => id.Value()).ToHashSet();
+            issues.AddRange(shown.Where(id => !selected.Contains(id)).Select(id =>
+                new RevitShowElementsIssue(id, "SelectionUnavailable", "Revit did not retain this target in the current selection.")));
+            shown = shown.Where(selected.Contains).ToList();
+            return new(shown, resolved.Missing, target.Id.Value(), target.Name, message,
+                boxedIds, hidden, resolved.IdentityVerified, issues);
+        }
+        if (ids.Count == 0) return Answer(ui.ActiveView, "No requested target could be resolved; selection and view were left as they were.");
         string note;
         View target;
         try {
             if (request.SelectOnly) {
                 ui.Selection.SetElementIds(ids);
+                shown = ids.Select(id => id.Value()).ToList();
                 target = ui.ActiveView;
                 note = $"Selected {shown.Count}; '{target.Name}' left as it was.";
             } else if (view != null) {
                 var box = ui.SelectAndZoom(ids, view);
+                shown = ids.Select(id => id.Value()).ToList();
                 target = ui.ActiveView;
                 note = box is null
                     ? $"Selected {shown.Count}; none has a bounding box, so '{target.Name}' did not zoom."
                     : $"Selected {shown.Count} and zoomed '{target.Name}' to them.";
             } else {
                 var boxed = ui.BoxInThreeD(ids);
+                issues.AddRange(boxed.Issues);
+                if (boxed.View is null) return Answer(ui.ActiveView, "Selection Box unavailable; no target has model geometry. Selection and view were left as they were.");
                 target = boxed.View;
+                shown = boxed.BoxedIds.Select(id => id.Value()).ToList();
+                boxedIds = [..shown];
+                hidden = boxed.HiddenIds.Select(id => id.Value()).ToList();
                 note = $"Selected {shown.Count} and boxed '{target.Name}' around them";
                 if (boxed.Created) note += "; the document had no {3D} view, so 'Pe 3D' was made";
-                if (!boxed.ShowsAll) note += "; the view still hides some of them (filter, phase, or visibility)";
+                if (hidden.Count != 0) note += "; the view still hides some of them (filter, phase, or visibility)";
                 note += ".";
             }
-        } catch (Autodesk.Revit.Exceptions.ApplicationException ex) {
-            throw BridgeOperationExceptions.Conflict("Revit could not show the elements.",
-                [BridgeOperationExceptions.Issue("$", "ShowElementsRefused", ex.Message,
-                    "Close any modal dialog or edit mode in Revit and retry; in a workshared model another user may own the {3D} view.")]);
+        } catch (Exception ex) when (ex is Autodesk.Revit.Exceptions.ApplicationException or InvalidOperationException) {
+            var selected = ui.Selection.GetElementIds().ToHashSet();
+            shown = ids.Where(selected.Contains).Select(id => id.Value()).ToList();
+            issues.AddRange(ids.Select(id => new RevitShowElementsIssue(id.Value(), "ShowElementsRefused", ex.Message)));
+            return Answer(ui.ActiveView, "Revit could not complete the action. The selected IDs report the current selection; a committed view edit may remain.");
         }
 
-        if (missing.Count != 0) note += $" {missing.Count} id(s) not found.";
-        return new RevitShowElementsData(shown, missing, target.Id.Value(), target.Name, note);
+        if (resolved.Missing.Count != 0) note += $" {resolved.Missing.Count} id(s) not found.";
+        return Answer(target, note);
     }
 
     // The clutter a lens hides: everything that is not the model. A whole-house 3D view at Fine with the architect's

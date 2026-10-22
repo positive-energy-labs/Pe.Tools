@@ -48,11 +48,26 @@ export interface RowState {
   refusal?: string | null;
   /** The Revit elements the row stands for: right-click or BX shows them in Revit (the app's element menu). */
   revitIds?: readonly number[];
+  /** Captured native references; the app verifies kind and expected identity before dispatch. */
+  revitRefs?: readonly RevitElementReference[];
 }
 
+/** Structural projection of native element handles; kit owns no document resolution. */
+export type RevitElementReference = {
+  elementId: number | null;
+  uniqueId?: string | null;
+  documentKey?: string;
+  kind?: string;
+  linkInstanceIds?: readonly number[];
+};
+
 /** The attribute the app's element menu reads: put it on any element that stands for Revit elements. */
-export const revitTarget = (ids: readonly number[] | null | undefined) => ({
+export const revitTarget = (
+  ids: readonly number[] | null | undefined,
+  refs?: readonly RevitElementReference[],
+) => ({
   "data-revit-ids": ids?.length ? ids.join(",") : undefined,
+  "data-revit-refs": refs?.length ? JSON.stringify(refs) : undefined,
 });
 
 type RowProps = RowState & {
@@ -118,7 +133,7 @@ const rowStateProps = (state: RowState) => ({
   "aria-disabled": state.refusal ? true : undefined,
   "aria-selected": state.selected === undefined ? undefined : state.selected,
   "aria-checked": state.checked,
-  ...revitTarget(state.revitIds),
+  ...revitTarget(state.revitIds, state.revitRefs),
 });
 
 export function Row(props: RowProps) {
@@ -131,12 +146,23 @@ export function Row(props: RowProps) {
     failed,
     refusal,
     revitIds,
+    revitRefs,
     id,
     role,
     onClick,
     onMouseMove,
   } = props;
-  const states = rowStateProps({ cursor, selected, checked, active, pending, failed, refusal, revitIds });
+  const states = rowStateProps({
+    cursor,
+    selected,
+    checked,
+    active,
+    pending,
+    failed,
+    refusal,
+    revitIds,
+    revitRefs,
+  });
   const shared = {
     id,
     role,

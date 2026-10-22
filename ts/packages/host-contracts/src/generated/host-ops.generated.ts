@@ -3903,7 +3903,7 @@ export namespace RevitContextLens {
   }
 }
 
-/** Show elements to the person at the window: select them, box the default {3D} view (else the user's {3D - username}, else a made 'Pe 3D') around them with a generous margin, open it and zoom to fit. With viewId it selects and zooms in that view instead and edits nothing; with selectOnly it only selects. Answers which ids it showed, which were missing, and the view. The section box is its only edit: one undoable transaction on that view, never a model element. Needs the active windowed document; a headless document refuses. */
+/** Select elements in the active windowed document, or select model elements and box a 3D view around them. Selection changes UI state. Boxing creates or updates one view in one transaction, then activates it and zooms. With viewId, select and zoom that graphical view; with selectOnly, change selection only. ExpectedUniqueIds verify paired identity before selection. Answers selected, missing, identity-verified, boxed, hidden and unavailable targets separately; boxed does not guarantee visible. Nested linked elements are unsupported; no link-instance substitution. Requires an exact open document lifetime and refuses headless or linked documents. */
 export namespace RevitContextShowElements {
   export namespace Req {
     /**
@@ -3922,6 +3922,12 @@ export namespace RevitContextShowElements {
        * Select and nothing else: the view, its zoom and its section box stay as they are.
        */
       selectOnly?: boolean;
+      /**
+       * Expected identities paired with local IDs. A mismatch refuses that ID; never resolve the UniqueId as another target. Omitted identities are ID-only within the exact open document lifetime.
+       */
+      expectedUniqueIds?: null | {
+        [k: string]: string;
+      };
     }
   }
   export namespace Res {
@@ -3949,6 +3955,27 @@ export namespace RevitContextShowElements {
        * One line on what happened.
        */
       note: string;
+      /**
+       * Targets with model geometry included in the committed 3D section box. This does not guarantee visibility.
+       */
+      boxed: number[];
+      /**
+       * Boxed targets absent from that view's visible-element collection.
+       */
+      hidden: number[];
+      /**
+       * Targets whose supplied expected UniqueId matched the local ID. ID-only targets never appear here.
+       */
+      identityVerified: number[];
+      /**
+       * Per-target refusals and partial failures.
+       */
+      issues: RevitShowElementsIssue[];
+    }
+    export interface RevitShowElementsIssue {
+      elementId: number;
+      code: string;
+      message: string;
     }
   }
 }

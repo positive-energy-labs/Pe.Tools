@@ -3,44 +3,66 @@
  * or `revitTarget(ids)` spread on any element) answers right-click with Revit's own two verbs,
  * Selection Box and Select, and answers BX (Revit's Selection Box shortcut) under the pointer or
  * focus. One delegate at the root serves every surface; a surface only declares its ids.
- * Double-click stays free. The document is the nearest `revitScope(doc)` above, else the host's
- * active one.
+ * Double-click stays free. The nearest displayed-observation scope is mandatory.
  */
 import { useEffect, useRef, useState } from "react";
 import { ListPopup } from "@pe/kit/lang/list-popup";
 import { KeyHint } from "@pe/kit/lang/key-hint";
 import { Button } from "@pe/kit/lang/button";
 import { FactChip } from "@pe/kit/lang/chip";
-import { revitTarget } from "@pe/kit/lang/row";
-import { callHostRpc } from "#/host/client";
-
-type Scope = { session: string; openId: string };
-
-/** Spread on a route's root so the menu acts on that route's document, not the host's active one. */
-export const revitScope = (doc: Scope | null | undefined) => ({
-  "data-revit-scope": doc ? `${doc.session} ${doc.openId}` : undefined,
-});
-
-type Target = { ids: number[]; scope: Scope | null };
-
-const targetOf = (el: Element | null): Target | null => {
-  const host = el?.closest<HTMLElement>("[data-revit-ids]");
-  const ids = host?.dataset.revitIds?.split(",").map(Number).filter(Number.isFinite) ?? [];
-  if (!ids.length) return null;
-  const [session, openId] = host!.closest<HTMLElement>("[data-revit-scope]")?.dataset.revitScope?.split(" ") ?? [];
-  return { ids, scope: session && openId ? { session, openId } : null };
-};
+import { revitTarget, type RevitElementReference } from "@pe/kit/lang/row";
+import type { DocumentRef } from "@pe/agent-contracts";
+import { submitAction } from "../../../../packages/mcps/src/shared/takeoff-action-client";
+import {
+  elementTargetOf as targetOf,
+  prepareElements,
+  showElementsMessage,
+  revitScope,
+  type ElementTarget as Target,
+  type RevitObservationScope,
+  type ShowElementsResult,
+} from "./element-target";
+export { revitScope, revitReferences } from "./element-target";
+export type { ElementTarget, RevitObservationScope, ShowElementsResult } from "./element-target";
 
 /** Box: select and section-box the {3D} view, then zoom to fit. Select: select only. */
-export const showInRevit = (target: Target, selectOnly: boolean) =>
-  callHostRpc(
-    "revit.context.show-elements",
-    { elementIds: target.ids, selectOnly },
-    target.scope ? { bridgeSessionId: target.scope.session, openDocumentId: target.scope.openId } : undefined,
-  ).then(
-    (answer) => answer.note,
-    (error: unknown) => (error instanceof Error ? error.message : String(error)),
-  );
+export async function showInRevit(
+  target: Target,
+  selectOnly: boolean,
+): Promise<ShowElementsResult> {
+  const prepared = prepareElements(target, selectOnly);
+  if (prepared.kind === "refused") return prepared;
+  try {
+    const action = await submitAction(
+      {
+        id: crypto.randomUUID(),
+        kind: "operation",
+        key: "revit.context.show-elements",
+        destination: { kind: "document", ref: prepared.document },
+        input: { ...prepared.request },
+        bases: {},
+      },
+      "",
+      30_000,
+    );
+    const data =
+      action.state === "succeeded" && "result" in action
+        ? (action.result as import("@pe/host-contracts/operation-types").OpResponseOf<"revit.context.show-elements">)
+        : null;
+    return {
+      kind: "action",
+      action,
+      data,
+      message: `Revit action ${action.id}: ${action.state}${"error" in action ? `: ${action.error}` : ""}`,
+    };
+  } catch (error) {
+    return {
+      kind: "failed",
+      error,
+      message: error instanceof Error ? error.message : String(error),
+    };
+  }
+}
 
 const VERBS = [
   { key: "box", label: "Selection Box", keys: "BX", selectOnly: false },
@@ -57,13 +79,15 @@ export function ElementMenu() {
   // The answer stands by the pointer: what Revit did, or why it refused.
   const run = (target: Target, selectOnly: boolean, x: number, y: number) => {
     setSaid({ text: selectOnly ? "selecting…" : "boxing…", x, y });
-    void showInRevit(target, selectOnly).then((text) => setSaid({ text, x, y }));
+    void showInRevit(target, selectOnly).then((result) =>
+      setSaid({ text: showElementsMessage(result), x, y }),
+    );
   };
 
   useEffect(() => {
     let pointer: Element | null = null;
     let at = { x: 0, y: 0 };
-    let armed = 0;
+    let armed: number | null = null;
     const onMenu = (event: MouseEvent) => {
       // A surface with its own menu (a thread row) already took the press.
       if (event.defaultPrevented) return;
@@ -79,16 +103,27 @@ export function ElementMenu() {
     const onKey = (event: KeyboardEvent) => {
       // A right-click leaves focus on the page, so the popup's own Escape never hears it.
       if (event.key === "Escape") return setMenu(null);
-      if (event.ctrlKey || event.metaKey || event.altKey || typing(document.activeElement)) return;
+      if (
+        event.defaultPrevented ||
+        event.ctrlKey ||
+        event.metaKey ||
+        event.altKey ||
+        typing(document.activeElement)
+      ) {
+        armed = null;
+        return;
+      }
       const key = event.key.toLowerCase();
       if (key === "b") {
         armed = event.timeStamp;
         return;
       }
       // Revit reads a two-letter shortcut typed within a beat; so does this.
-      if (key !== "x" || event.timeStamp - armed > 1500) return;
-      armed = 0;
-      const target = targetOf(pointer) ?? targetOf(document.activeElement);
+      const wasArmed = armed;
+      armed = null;
+      if (key !== "x" || wasArmed === null || event.timeStamp - wasArmed > 1500) return;
+      const target =
+        targetOf(pointer?.isConnected ? pointer : null) ?? targetOf(document.activeElement);
       if (!target) return;
       event.preventDefault();
       run(target, false, at.x, at.y);
@@ -130,7 +165,7 @@ export function ElementMenu() {
           onOpenChange={(next) => {
             if (!next) setMenu(null);
           }}
-          aria-label={`${menu.ids.length} Revit element(s)`}
+          aria-label={`${menu.ids.length + (menu.refs?.length ?? 0)} Revit element(s)`}
           items={VERBS}
           keyOf={(verb) => verb.key}
           labelOf={(verb) => verb.label}
@@ -169,16 +204,32 @@ export function ElementMenu() {
  * The one visible door, for a surface whose selection must offer Revit in plain sight (the
  * selection strip): Selection Box, its answer beside it, and the BX it teaches.
  */
-export function SelectionBoxButton({ ids, doc }: { ids: readonly number[]; doc: Scope | null }) {
+export function SelectionBoxButton({
+  ids,
+  refs,
+  doc,
+  scope,
+}: {
+  ids: readonly number[];
+  refs?: readonly RevitElementReference[];
+  doc?: DocumentRef | null;
+  scope?: RevitObservationScope | null;
+}) {
   const [said, setSaid] = useState<string | null>(null);
   return (
-    <span className="inline-flex min-w-0 items-center gap-1" {...revitTarget(ids)}>
+    <span
+      className="inline-flex min-w-0 items-center gap-1"
+      {...revitScope(scope ?? doc)}
+      {...revitTarget(ids, refs)}
+    >
       <Button
         kind="framed"
         label="Selection Box: box the {3D} view around it in Revit (right-click or BX anywhere)"
         onClick={() => {
           setSaid("boxing…");
-          void showInRevit({ ids: [...ids], scope: doc }, false).then(setSaid);
+          void showInRevit({ ids, refs, scope: scope ?? doc ?? null }, false).then((result) =>
+            setSaid(showElementsMessage(result)),
+          );
         }}
       >
         Selection Box <KeyHint>BX</KeyHint>
