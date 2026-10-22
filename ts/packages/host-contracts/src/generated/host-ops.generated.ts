@@ -5338,6 +5338,499 @@ export namespace RevitDetailSheets {
   }
 }
 
+/** Build the resident spatial world for the target project: tessellate host and every loaded link into one triangle soup with a BVH per source. Minutes on a large model; holds Revit for the whole ingest. */
+export namespace RevitDetailSpaceBuild {
+  export namespace Req {
+    export interface Request {}
+  }
+  export namespace Res {
+    /**
+     * Which document a partition reads. One partition per source.
+     */
+    export type SourceKind = "Host" | "RevitLink" | "IfcLink";
+    /**
+     * What a triangle came from. Curve2D is a DWG 2D layer raised into a vertical
+     * ribbon; it is never an obstructor unless a filter names it.
+     *
+     */
+    export type PrimKind = "Solid" | "Mesh" | "Curve2D";
+
+    /**
+     * Is there a world, and what does it hold. Built false means every other
+     * answer is empty and honest about it. Bounds are the union of every row box.
+     *
+     */
+    export interface Response {
+      stamp: Stamp;
+      built: boolean;
+      pendingIds: number;
+      categories: SourceCategories[];
+      levels: LevelRow[];
+      bounds?: null | Aabb;
+      ms: number;
+    }
+    /**
+     * Provenance and freshness. Every answer embeds one; it is not optional.
+     */
+    export interface Stamp {
+      hostDocumentKey: string;
+      epoch: number;
+      frame: string;
+      builtUtc: string;
+      sources: SourceRow[];
+      fresh: boolean;
+      resolved: Resolved;
+    }
+    /**
+     * One row per partition. Carried inside every Stamp.
+     */
+    export interface SourceRow {
+      source: number;
+      documentKey: string;
+      linkInstanceId?: number | null;
+      kind: SourceKind;
+      builtAtEpoch: number;
+      dirty: boolean;
+      elements: number;
+      triangles: number;
+      skipped: number;
+    }
+    /**
+     * The options a verb actually ran with, after defaults were applied. Never null and never a
+     * silence: a caller who passed no filter reads back Kinds: [Solid, Mesh] and the sources
+     * and categories spelled out. This is the gate that was in force, not the outcome; what the
+     * verb then had to touch is Searched.
+     *
+     */
+    export interface Resolved {
+      sources: SourceKind[];
+      categories: string[];
+      kinds: PrimKind[];
+      layers: string[];
+      excludedElementIds: number[];
+    }
+    /**
+     * One partition's categories, so a filter can be built without a rows read.
+     */
+    export interface SourceCategories {
+      source: number;
+      categories: string[];
+    }
+    /**
+     * One host level and its project elevation in host internal feet.
+     */
+    export interface LevelRow {
+      name: string;
+      elevationFt: number;
+    }
+    /**
+     * Axis-aligned bounds in host internal feet.
+     */
+    export interface Aabb {
+      minX: number;
+      minY: number;
+      minZ: number;
+      maxX: number;
+      maxY: number;
+      maxZ: number;
+    }
+  }
+}
+
+/** Count what the resident world holds inside a box, by source, category, kind and DWG layer, plus the ten fattest elements by triangle count. */
+export namespace RevitDetailSpaceCensus {
+  export namespace Req {
+    /**
+     * Count rows overlapping Box, six ordered host-internal-feet bounds, under Filter.
+     */
+    export interface Request {
+      box: number[];
+      filter?: null | FilterRequest;
+    }
+    /**
+     * The filter as the wire spells it: enum names as strings, every axis optional.
+     */
+    export interface FilterRequest {
+      sources?: string[] | null;
+      categories?: string[] | null;
+      kinds?: string[] | null;
+      layers?: string[] | null;
+      excludeElementIds?: number[] | null;
+    }
+  }
+  export namespace Res {
+    /**
+     * Which document a partition reads. One partition per source.
+     */
+    export type SourceKind = "Host" | "RevitLink" | "IfcLink";
+    /**
+     * What a triangle came from. Curve2D is a DWG 2D layer raised into a vertical
+     * ribbon; it is never an obstructor unless a filter names it.
+     *
+     */
+    export type PrimKind = "Solid" | "Mesh" | "Curve2D";
+    /**
+     * Architectural height authority, independent of collision geometry. None means never a height.
+     * ByGeometry is an element with no category role (an IFC proxy slab or roof is a nameless Generic
+     * Model) whose triangles answer for it, per HeightRoles.
+     *
+     */
+    export type HeightRole = "None" | "Floor" | "Overhead" | "ByGeometry";
+
+    /**
+     * Stamped counts of matching rows by source kind, category, primitive kind and layer, plus the ten largest rows.
+     */
+    export interface Response {
+      stamp: Stamp;
+      searched: Searched;
+      buckets: CensusBucket[];
+      top: CensusTop[];
+      ms: number;
+    }
+    /**
+     * Provenance and freshness. Every answer embeds one; it is not optional.
+     */
+    export interface Stamp {
+      hostDocumentKey: string;
+      epoch: number;
+      frame: string;
+      builtUtc: string;
+      sources: SourceRow[];
+      fresh: boolean;
+      resolved: Resolved;
+    }
+    /**
+     * One row per partition. Carried inside every Stamp.
+     */
+    export interface SourceRow {
+      source: number;
+      documentKey: string;
+      linkInstanceId?: number | null;
+      kind: SourceKind;
+      builtAtEpoch: number;
+      dirty: boolean;
+      elements: number;
+      triangles: number;
+      skipped: number;
+    }
+    /**
+     * The options a verb actually ran with, after defaults were applied. Never null and never a
+     * silence: a caller who passed no filter reads back Kinds: [Solid, Mesh] and the sources
+     * and categories spelled out. This is the gate that was in force, not the outcome; what the
+     * verb then had to touch is Searched.
+     *
+     */
+    export interface Resolved {
+      sources: SourceKind[];
+      categories: string[];
+      kinds: PrimKind[];
+      layers: string[];
+      excludedElementIds: number[];
+    }
+    /**
+     * How much of the world the verb had to touch to answer. The honesty counter.
+     */
+    export interface Searched {
+      docs: number;
+      categories: number;
+      candidates: number;
+      examined: number;
+      skipped: number;
+    }
+    export interface CensusBucket {
+      source: SourceKind;
+      category: string;
+      kind: PrimKind;
+      elements: number;
+      triangles: number;
+      layer?: null | string;
+    }
+    export interface CensusTop {
+      handle: Handle;
+      triangles: number;
+    }
+    /**
+     * The address of one element. Enough for the host to select it.
+     */
+    export interface Handle {
+      documentKey: string;
+      elementId: number;
+      uniqueId: string;
+      linkInstanceId?: number | null;
+      category: string;
+      kind: PrimKind;
+      layer?: null | string;
+      extrusion?: null | Extrusion;
+      heightRole: HeightRole;
+    }
+    /**
+     * How far a 2D DWG layer was raised and why. A ribbon is an assumption wearing geometry, so the
+     * assumption travels on the row and into the Handle. Heights are per polyline, so one row holds
+     * the tallest band it emitted and the distinct reasons behind all of them.
+     *
+     */
+    export interface Extrusion {
+      maxHeightFt: number;
+      reasons: string[];
+    }
+  }
+}
+
+/** Probe straight down and straight up from one point: the first thing under it and over it, with the Handle and distance of each; null when nothing is hit within maxDistanceFt. */
+export namespace RevitDetailSpaceProbe {
+  export namespace Req {
+    export type ProbePurpose = "Obstructions" | "RoomHeights";
+
+    /**
+     * Probe At (three host-internal-feet coordinates). MaxDistanceFt defaults to 200.
+     * Purpose defaults to Obstructions; RoomHeights applies architectural height-role predicates.
+     */
+    export interface Request {
+      at: number[];
+      filter?: null | FilterRequest;
+      maxDistanceFt?: null | number;
+      purpose?: null | ProbePurpose;
+    }
+    /**
+     * The filter as the wire spells it: enum names as strings, every axis optional.
+     */
+    export interface FilterRequest {
+      sources?: string[] | null;
+      categories?: string[] | null;
+      kinds?: string[] | null;
+      layers?: string[] | null;
+      excludeElementIds?: number[] | null;
+    }
+  }
+  export namespace Res {
+    /**
+     * Which document a partition reads. One partition per source.
+     */
+    export type SourceKind = "Host" | "RevitLink" | "IfcLink";
+    /**
+     * What a triangle came from. Curve2D is a DWG 2D layer raised into a vertical
+     * ribbon; it is never an obstructor unless a filter names it.
+     *
+     */
+    export type PrimKind = "Solid" | "Mesh" | "Curve2D";
+    /**
+     * Architectural height authority, independent of collision geometry. None means never a height.
+     * ByGeometry is an element with no category role (an IFC proxy slab or roof is a nameless Generic
+     * Model) whose triangles answer for it, per HeightRoles.
+     *
+     */
+    export type HeightRole = "None" | "Floor" | "Overhead" | "ByGeometry";
+    export type ProbePurpose = "Obstructions" | "RoomHeights";
+
+    /**
+     * What is under and over one point. Floor and Ceiling are null when
+     * nothing was hit inside the search distance, which is the honest answer for a point outside the
+     * building rather than a fabricated elevation.
+     *
+     */
+    export interface Response {
+      stamp: Stamp;
+      searched: Searched;
+      floor?: null | ProbeHit;
+      ceiling?: null | ProbeHit;
+      maxDistanceFt: number;
+      ms: number;
+      purpose: ProbePurpose;
+    }
+    /**
+     * Provenance and freshness. Every answer embeds one; it is not optional.
+     */
+    export interface Stamp {
+      hostDocumentKey: string;
+      epoch: number;
+      frame: string;
+      builtUtc: string;
+      sources: SourceRow[];
+      fresh: boolean;
+      resolved: Resolved;
+    }
+    /**
+     * One row per partition. Carried inside every Stamp.
+     */
+    export interface SourceRow {
+      source: number;
+      documentKey: string;
+      linkInstanceId?: number | null;
+      kind: SourceKind;
+      builtAtEpoch: number;
+      dirty: boolean;
+      elements: number;
+      triangles: number;
+      skipped: number;
+    }
+    /**
+     * The options a verb actually ran with, after defaults were applied. Never null and never a
+     * silence: a caller who passed no filter reads back Kinds: [Solid, Mesh] and the sources
+     * and categories spelled out. This is the gate that was in force, not the outcome; what the
+     * verb then had to touch is Searched.
+     *
+     */
+    export interface Resolved {
+      sources: SourceKind[];
+      categories: string[];
+      kinds: PrimKind[];
+      layers: string[];
+      excludedElementIds: number[];
+    }
+    /**
+     * How much of the world the verb had to touch to answer. The honesty counter.
+     */
+    export interface Searched {
+      docs: number;
+      categories: number;
+      candidates: number;
+      examined: number;
+      skipped: number;
+    }
+    /**
+     * What a vertical probe met, and how far away it was.
+     */
+    export interface ProbeHit {
+      handle: Handle;
+      distanceFt: number;
+      z: number;
+    }
+    /**
+     * The address of one element. Enough for the host to select it.
+     */
+    export interface Handle {
+      documentKey: string;
+      elementId: number;
+      uniqueId: string;
+      linkInstanceId?: number | null;
+      category: string;
+      kind: PrimKind;
+      layer?: null | string;
+      extrusion?: null | Extrusion;
+      heightRole: HeightRole;
+    }
+    /**
+     * How far a 2D DWG layer was raised and why. A ribbon is an assumption wearing geometry, so the
+     * assumption travels on the row and into the Handle. Heights are per polyline, so one row holds
+     * the tallest band it emitted and the distinct reasons behind all of them.
+     *
+     */
+    export interface Extrusion {
+      maxHeightFt: number;
+      reasons: string[];
+    }
+  }
+}
+
+/** Read every element row of the resident world that passes a filter, as parallel arrays with legend lists for category, kind, layer and height role, plus each row's box and triangle count. */
+export namespace RevitDetailSpaceRows {
+  export namespace Req {
+    /**
+     * Read rows passing Filter; omitted axes use the resolved defaults in the answer stamp.
+     */
+    export interface Request {
+      filter?: null | FilterRequest;
+    }
+    /**
+     * The filter as the wire spells it: enum names as strings, every axis optional.
+     */
+    export interface FilterRequest {
+      sources?: string[] | null;
+      categories?: string[] | null;
+      kinds?: string[] | null;
+      layers?: string[] | null;
+      excludeElementIds?: number[] | null;
+    }
+  }
+  export namespace Res {
+    /**
+     * Which document a partition reads. One partition per source.
+     */
+    export type SourceKind = "Host" | "RevitLink" | "IfcLink";
+    /**
+     * What a triangle came from. Curve2D is a DWG 2D layer raised into a vertical
+     * ribbon; it is never an obstructor unless a filter names it.
+     *
+     */
+    export type PrimKind = "Solid" | "Mesh" | "Curve2D";
+
+    /**
+     * Every row that passes the filter, as parallel arrays: index i across every array is one
+     * PrimRow. Category, kind, layer and height role are indexes into the legend
+     * lists, so a category name travels once. Box is six doubles per row; -1 means no layer.
+     *
+     */
+    export interface Response {
+      stamp: Stamp;
+      searched: Searched;
+      categories: string[];
+      kinds: string[];
+      layers: string[];
+      heightRoles: string[];
+      source: number[];
+      elementId: number[];
+      category: number[];
+      kind: number[];
+      layer: number[];
+      heightRole: number[];
+      triangles: number[];
+      extrusionFt: number[];
+      box: number[];
+      ms: number;
+    }
+    /**
+     * Provenance and freshness. Every answer embeds one; it is not optional.
+     */
+    export interface Stamp {
+      hostDocumentKey: string;
+      epoch: number;
+      frame: string;
+      builtUtc: string;
+      sources: SourceRow[];
+      fresh: boolean;
+      resolved: Resolved;
+    }
+    /**
+     * One row per partition. Carried inside every Stamp.
+     */
+    export interface SourceRow {
+      source: number;
+      documentKey: string;
+      linkInstanceId?: number | null;
+      kind: SourceKind;
+      builtAtEpoch: number;
+      dirty: boolean;
+      elements: number;
+      triangles: number;
+      skipped: number;
+    }
+    /**
+     * The options a verb actually ran with, after defaults were applied. Never null and never a
+     * silence: a caller who passed no filter reads back Kinds: [Solid, Mesh] and the sources
+     * and categories spelled out. This is the gate that was in force, not the outcome; what the
+     * verb then had to touch is Searched.
+     *
+     */
+    export interface Resolved {
+      sources: SourceKind[];
+      categories: string[];
+      kinds: PrimKind[];
+      layers: string[];
+      excludedElementIds: number[];
+    }
+    /**
+     * How much of the world the verb had to touch to answer. The honesty counter.
+     */
+    export interface Searched {
+      docs: number;
+      categories: number;
+      candidates: number;
+      examined: number;
+      skipped: number;
+    }
+  }
+}
+
 /** Export real triangles in host internal feet. Set focusOnly with host elementIds for the first usable exact-membership mesh without preparing the whole world. Request context separately with focusOnly false; contextPaddingFt derives its crop, or bounds sets it explicitly. Metadata phase distinguishes focus/context, unavailableElements identifies requested ids without meshes, and omittedElements counts context excluded by the triangle budget. No document mutation. Browser orbit, visibility and cuts need no further native calls. */
 export namespace RevitDetailSpaceScene {
   export namespace Req {
@@ -5489,6 +5982,472 @@ export namespace RevitDetailSpaceScene {
       uniqueId?: null | string;
       category?: null | string;
       reason: string;
+    }
+  }
+}
+
+/** Slice the resident world with a horizontal band z0..z1: every triangle clipped to the band and flattened to convex xy pieces per element, the exact footprint the partition solver reads; capped at maxPieces with whole elements, and the answer says when it truncated and the total it found. xyClip rejects elements whose box misses the rectangle. */
+export namespace RevitDetailSpaceSlice {
+  export namespace Req {
+    /**
+     * Slice z0..z1 in host internal feet. XyClip is six ordered bounds; only x/y reject whole rows.
+     * MaxPieces defaults to 50000 and retains whole elements in resident order; zero emits none.
+     */
+    export interface Request {
+      z0: number;
+      z1: number;
+      filter?: null | FilterRequest;
+      xyClip?: number[] | null;
+      maxPieces?: number | null;
+    }
+    /**
+     * The filter as the wire spells it: enum names as strings, every axis optional.
+     */
+    export interface FilterRequest {
+      sources?: string[] | null;
+      categories?: string[] | null;
+      kinds?: string[] | null;
+      layers?: string[] | null;
+      excludeElementIds?: number[] | null;
+    }
+  }
+  export namespace Res {
+    /**
+     * Which document a partition reads. One partition per source.
+     */
+    export type SourceKind = "Host" | "RevitLink" | "IfcLink";
+    /**
+     * What a triangle came from. Curve2D is a DWG 2D layer raised into a vertical
+     * ribbon; it is never an obstructor unless a filter names it.
+     *
+     */
+    export type PrimKind = "Solid" | "Mesh" | "Curve2D";
+    /**
+     * Architectural height authority, independent of collision geometry. None means never a height.
+     * ByGeometry is an element with no category role (an IFC proxy slab or roof is a nameless Generic
+     * Model) whose triangles answer for it, per HeightRoles.
+     *
+     */
+    export type HeightRole = "None" | "Floor" | "Overhead" | "ByGeometry";
+
+    /**
+     * A SliceAnswer cut to a piece budget, whole elements or nothing, for the
+     * browser frame budget: a knee band across a whole storey is 164 k pieces. Total is what the slice found regardless.
+     *
+     */
+    export interface Response {
+      stamp: Stamp;
+      searched: Searched;
+      elements: SliceElement[];
+      pieces: number;
+      total: number;
+      truncated: boolean;
+      ms: number;
+    }
+    /**
+     * Provenance and freshness. Every answer embeds one; it is not optional.
+     */
+    export interface Stamp {
+      hostDocumentKey: string;
+      epoch: number;
+      frame: string;
+      builtUtc: string;
+      sources: SourceRow[];
+      fresh: boolean;
+      resolved: Resolved;
+    }
+    /**
+     * One row per partition. Carried inside every Stamp.
+     */
+    export interface SourceRow {
+      source: number;
+      documentKey: string;
+      linkInstanceId?: number | null;
+      kind: SourceKind;
+      builtAtEpoch: number;
+      dirty: boolean;
+      elements: number;
+      triangles: number;
+      skipped: number;
+    }
+    /**
+     * The options a verb actually ran with, after defaults were applied. Never null and never a
+     * silence: a caller who passed no filter reads back Kinds: [Solid, Mesh] and the sources
+     * and categories spelled out. This is the gate that was in force, not the outcome; what the
+     * verb then had to touch is Searched.
+     *
+     */
+    export interface Resolved {
+      sources: SourceKind[];
+      categories: string[];
+      kinds: PrimKind[];
+      layers: string[];
+      excludedElementIds: number[];
+    }
+    /**
+     * How much of the world the verb had to touch to answer. The honesty counter.
+     */
+    export interface Searched {
+      docs: number;
+      categories: number;
+      candidates: number;
+      examined: number;
+      skipped: number;
+    }
+    /**
+     * One census row. Layer is the DWG layer on a Curve2D bucket, null otherwise.
+     */
+    export interface SliceElement {
+      handle: Handle;
+      pieces: number[][];
+    }
+    /**
+     * The address of one element. Enough for the host to select it.
+     */
+    export interface Handle {
+      documentKey: string;
+      elementId: number;
+      uniqueId: string;
+      linkInstanceId?: number | null;
+      category: string;
+      kind: PrimKind;
+      layer?: null | string;
+      extrusion?: null | Extrusion;
+      heightRole: HeightRole;
+    }
+    /**
+     * How far a 2D DWG layer was raised and why. A ribbon is an assumption wearing geometry, so the
+     * assumption travels on the row and into the Handle. Heights are per polyline, so one row holds
+     * the tallest band it emitted and the distinct reasons behind all of them.
+     *
+     */
+    export interface Extrusion {
+      maxHeightFt: number;
+      reasons: string[];
+    }
+  }
+}
+
+/** Read whether the resident spatial world is built for the target project, its stamp (epoch, freshness, sources), the categories each source holds, level elevations, and world bounds. */
+export namespace RevitDetailSpaceStatus {
+  export namespace Req {
+    export interface Request {}
+  }
+  export namespace Res {
+    /**
+     * Which document a partition reads. One partition per source.
+     */
+    export type SourceKind = "Host" | "RevitLink" | "IfcLink";
+    /**
+     * What a triangle came from. Curve2D is a DWG 2D layer raised into a vertical
+     * ribbon; it is never an obstructor unless a filter names it.
+     *
+     */
+    export type PrimKind = "Solid" | "Mesh" | "Curve2D";
+
+    /**
+     * Is there a world, and what does it hold. Built false means every other
+     * answer is empty and honest about it. Bounds are the union of every row box.
+     *
+     */
+    export interface Response {
+      stamp: Stamp;
+      built: boolean;
+      pendingIds: number;
+      categories: SourceCategories[];
+      levels: LevelRow[];
+      bounds?: null | Aabb;
+      ms: number;
+    }
+    /**
+     * Provenance and freshness. Every answer embeds one; it is not optional.
+     */
+    export interface Stamp {
+      hostDocumentKey: string;
+      epoch: number;
+      frame: string;
+      builtUtc: string;
+      sources: SourceRow[];
+      fresh: boolean;
+      resolved: Resolved;
+    }
+    /**
+     * One row per partition. Carried inside every Stamp.
+     */
+    export interface SourceRow {
+      source: number;
+      documentKey: string;
+      linkInstanceId?: number | null;
+      kind: SourceKind;
+      builtAtEpoch: number;
+      dirty: boolean;
+      elements: number;
+      triangles: number;
+      skipped: number;
+    }
+    /**
+     * The options a verb actually ran with, after defaults were applied. Never null and never a
+     * silence: a caller who passed no filter reads back Kinds: [Solid, Mesh] and the sources
+     * and categories spelled out. This is the gate that was in force, not the outcome; what the
+     * verb then had to touch is Searched.
+     *
+     */
+    export interface Resolved {
+      sources: SourceKind[];
+      categories: string[];
+      kinds: PrimKind[];
+      layers: string[];
+      excludedElementIds: number[];
+    }
+    /**
+     * One partition's categories, so a filter can be built without a rows read.
+     */
+    export interface SourceCategories {
+      source: number;
+      categories: string[];
+    }
+    /**
+     * One host level and its project elevation in host internal feet.
+     */
+    export interface LevelRow {
+      name: string;
+      elevationFt: number;
+    }
+    /**
+     * Axis-aligned bounds in host internal feet.
+     */
+    export interface Aabb {
+      minX: number;
+      minY: number;
+      minZ: number;
+      maxX: number;
+      maxY: number;
+      maxZ: number;
+    }
+  }
+}
+
+/** Sweep a rectangular profile (widthFt across, heightFt up) along a polyline and answer HIT, NEAR or CLEAR per segment with the exact gap and the nearest element's Handle. */
+export namespace RevitDetailSpaceSweep {
+  export namespace Req {
+    /**
+     * Sweep a positive width/height profile in feet along at least two host-coordinate triples, with nonnegative clearance.
+     */
+    export interface Request {
+      polyline: number[][];
+      widthFt: number;
+      heightFt: number;
+      clearanceFt: number;
+      filter?: null | FilterRequest;
+    }
+    /**
+     * The filter as the wire spells it: enum names as strings, every axis optional.
+     */
+    export interface FilterRequest {
+      sources?: string[] | null;
+      categories?: string[] | null;
+      kinds?: string[] | null;
+      layers?: string[] | null;
+      excludeElementIds?: number[] | null;
+    }
+  }
+  export namespace Res {
+    /**
+     * Which document a partition reads. One partition per source.
+     */
+    export type SourceKind = "Host" | "RevitLink" | "IfcLink";
+    /**
+     * What a triangle came from. Curve2D is a DWG 2D layer raised into a vertical
+     * ribbon; it is never an obstructor unless a filter names it.
+     *
+     */
+    export type PrimKind = "Solid" | "Mesh" | "Curve2D";
+    /**
+     * Architectural height authority, independent of collision geometry. None means never a height.
+     * ByGeometry is an element with no category role (an IFC proxy slab or roof is a nameless Generic
+     * Model) whose triangles answer for it, per HeightRoles.
+     *
+     */
+    export type HeightRole = "None" | "Floor" | "Overhead" | "ByGeometry";
+
+    /**
+     * Stamped clearance verdicts for each consecutive polyline segment, with search accounting and elapsed milliseconds.
+     */
+    export interface Response {
+      stamp: Stamp;
+      searched: Searched;
+      segments: SweepSegment[];
+      ms: number;
+    }
+    /**
+     * Provenance and freshness. Every answer embeds one; it is not optional.
+     */
+    export interface Stamp {
+      hostDocumentKey: string;
+      epoch: number;
+      frame: string;
+      builtUtc: string;
+      sources: SourceRow[];
+      fresh: boolean;
+      resolved: Resolved;
+    }
+    /**
+     * One row per partition. Carried inside every Stamp.
+     */
+    export interface SourceRow {
+      source: number;
+      documentKey: string;
+      linkInstanceId?: number | null;
+      kind: SourceKind;
+      builtAtEpoch: number;
+      dirty: boolean;
+      elements: number;
+      triangles: number;
+      skipped: number;
+    }
+    /**
+     * The options a verb actually ran with, after defaults were applied. Never null and never a
+     * silence: a caller who passed no filter reads back Kinds: [Solid, Mesh] and the sources
+     * and categories spelled out. This is the gate that was in force, not the outcome; what the
+     * verb then had to touch is Searched.
+     *
+     */
+    export interface Resolved {
+      sources: SourceKind[];
+      categories: string[];
+      kinds: PrimKind[];
+      layers: string[];
+      excludedElementIds: number[];
+    }
+    /**
+     * How much of the world the verb had to touch to answer. The honesty counter.
+     */
+    export interface Searched {
+      docs: number;
+      categories: number;
+      candidates: number;
+      examined: number;
+      skipped: number;
+    }
+    /**
+     * One segment of a swept profile and what it found.
+     */
+    export interface SweepSegment {
+      index: number;
+      verdict: string;
+      minGapFt: number;
+      nearest?: null | Handle;
+      closestPoint?: number[] | null;
+    }
+    /**
+     * The address of one element. Enough for the host to select it.
+     */
+    export interface Handle {
+      documentKey: string;
+      elementId: number;
+      uniqueId: string;
+      linkInstanceId?: number | null;
+      category: string;
+      kind: PrimKind;
+      layer?: null | string;
+      extrusion?: null | Extrusion;
+      heightRole: HeightRole;
+    }
+    /**
+     * How far a 2D DWG layer was raised and why. A ribbon is an assumption wearing geometry, so the
+     * assumption travels on the row and into the Handle. Heights are per polyline, so one row holds
+     * the tallest band it emitted and the distinct reasons behind all of them.
+     *
+     */
+    export interface Extrusion {
+      maxHeightFt: number;
+      reasons: string[];
+    }
+  }
+}
+
+/** Read one source's BVH down to a depth: each node's box, depth, leaf flag and triangle count, so a viewer can draw how a sweep prunes. */
+export namespace RevitDetailSpaceTree {
+  export namespace Req {
+    /**
+     * Read Source's BVH through MaxDepth inclusive. Source defaults to host (0), depth to 8.
+     */
+    export interface Request {
+      source?: number | null;
+      maxDepth?: number | null;
+    }
+  }
+  export namespace Res {
+    /**
+     * Which document a partition reads. One partition per source.
+     */
+    export type SourceKind = "Host" | "RevitLink" | "IfcLink";
+    /**
+     * What a triangle came from. Curve2D is a DWG 2D layer raised into a vertical
+     * ribbon; it is never an obstructor unless a filter names it.
+     *
+     */
+    export type PrimKind = "Solid" | "Mesh" | "Curve2D";
+
+    /**
+     * One source BVH, through MaxDepth inclusive, in post-order with the root last.
+     */
+    export interface Response {
+      stamp: Stamp;
+      source: number;
+      maxDepth: number;
+      nodes: BvhNode[];
+      ms: number;
+    }
+    /**
+     * Provenance and freshness. Every answer embeds one; it is not optional.
+     */
+    export interface Stamp {
+      hostDocumentKey: string;
+      epoch: number;
+      frame: string;
+      builtUtc: string;
+      sources: SourceRow[];
+      fresh: boolean;
+      resolved: Resolved;
+    }
+    /**
+     * One row per partition. Carried inside every Stamp.
+     */
+    export interface SourceRow {
+      source: number;
+      documentKey: string;
+      linkInstanceId?: number | null;
+      kind: SourceKind;
+      builtAtEpoch: number;
+      dirty: boolean;
+      elements: number;
+      triangles: number;
+      skipped: number;
+    }
+    /**
+     * The options a verb actually ran with, after defaults were applied. Never null and never a
+     * silence: a caller who passed no filter reads back Kinds: [Solid, Mesh] and the sources
+     * and categories spelled out. This is the gate that was in force, not the outcome; what the
+     * verb then had to touch is Searched.
+     *
+     */
+    export interface Resolved {
+      sources: SourceKind[];
+      categories: string[];
+      kinds: PrimKind[];
+      layers: string[];
+      excludedElementIds: number[];
+    }
+    /**
+     * One BVH node: its index, depth, leaf flag, subtree triangle count, and six host-feet bounds.
+     */
+    export interface BvhNode {
+      index: number;
+      depth: number;
+      leaf: boolean;
+      triangles: number;
+      box: number[];
     }
   }
 }
@@ -7455,7 +8414,15 @@ export interface HostOps {
   "revit.detail.parameter-links": { request: RevitDetailParameterLinks.Req.Request; response: RevitDetailParameterLinks.Res.Response };
   "revit.detail.schedules": { request: RevitDetailSchedules.Req.Request; response: RevitDetailSchedules.Res.Response };
   "revit.detail.sheets": { request: RevitDetailSheets.Req.Request; response: RevitDetailSheets.Res.Response };
+  "revit.detail.space-build": { request: RevitDetailSpaceBuild.Req.Request; response: RevitDetailSpaceBuild.Res.Response };
+  "revit.detail.space-census": { request: RevitDetailSpaceCensus.Req.Request; response: RevitDetailSpaceCensus.Res.Response };
+  "revit.detail.space-probe": { request: RevitDetailSpaceProbe.Req.Request; response: RevitDetailSpaceProbe.Res.Response };
+  "revit.detail.space-rows": { request: RevitDetailSpaceRows.Req.Request; response: RevitDetailSpaceRows.Res.Response };
   "revit.detail.space-scene": { request: RevitDetailSpaceScene.Req.Request; response: RevitDetailSpaceScene.Res.Response };
+  "revit.detail.space-slice": { request: RevitDetailSpaceSlice.Req.Request; response: RevitDetailSpaceSlice.Res.Response };
+  "revit.detail.space-status": { request: RevitDetailSpaceStatus.Req.Request; response: RevitDetailSpaceStatus.Res.Response };
+  "revit.detail.space-sweep": { request: RevitDetailSpaceSweep.Req.Request; response: RevitDetailSpaceSweep.Res.Response };
+  "revit.detail.space-tree": { request: RevitDetailSpaceTree.Req.Request; response: RevitDetailSpaceTree.Res.Response };
   "revit.glance.attention": { request: RevitGlanceAttention.Req.Request; response: RevitGlanceAttention.Res.Response };
   "revit.glance.model": { request: RevitGlanceModel.Req.Request; response: RevitGlanceModel.Res.Response };
   "revit.matrix.loaded-families": { request: RevitMatrixLoadedFamilies.Req.Request; response: RevitMatrixLoadedFamilies.Res.Response };
@@ -7540,7 +8507,15 @@ export const hostOpKeys = [
   "revit.detail.parameter-links",
   "revit.detail.schedules",
   "revit.detail.sheets",
+  "revit.detail.space-build",
+  "revit.detail.space-census",
+  "revit.detail.space-probe",
+  "revit.detail.space-rows",
   "revit.detail.space-scene",
+  "revit.detail.space-slice",
+  "revit.detail.space-status",
+  "revit.detail.space-sweep",
+  "revit.detail.space-tree",
   "revit.glance.attention",
   "revit.glance.model",
   "revit.matrix.loaded-families",

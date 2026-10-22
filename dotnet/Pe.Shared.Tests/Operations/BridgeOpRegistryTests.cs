@@ -7,6 +7,15 @@ namespace Pe.Revit.Tests;
 
 [TestFixture]
 public sealed class OpRegistryTests {
+    [TestCase("revit.detail.space-build")]
+    [TestCase("revit.detail.space-scene")]
+    public void Declared_expensive_cost_survives_key_inference_in_the_public_catalog(string key) {
+        var definition = OpRegistry.Define(new OpAttribute(key) {
+            Does = "Expensive spatial ingest", Cost = OpCost.Expensive
+        }, typeof(NoRequest), typeof(SchemaData));
+        Assert.That(HostOpsCatalogEntry.FromDefinition(definition).CostTier, Is.EqualTo("Expensive"));
+    }
+
     [Test]
     public void Mutation_requires_an_explicit_actor() {
         Assert.Throws<InvalidOperationException>(() => OpRegistry.Define(

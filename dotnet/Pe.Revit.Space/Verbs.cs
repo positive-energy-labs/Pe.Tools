@@ -9,6 +9,7 @@ public sealed record SweepSegment(
     double[]? ClosestPoint
 );
 
+/// <summary>Stamped clearance verdicts for each consecutive polyline segment, with search accounting and elapsed milliseconds.</summary>
 public sealed record SweepAnswer(Stamp Stamp, Searched Searched, IReadOnlyList<SweepSegment> Segments, double Ms);
 
 /// <summary>One census row. <see cref="Layer" /> is the DWG layer on a Curve2D bucket, null otherwise.</summary>
@@ -56,6 +57,7 @@ public sealed record CensusBucket(
 
 public sealed record CensusTop(Handle Handle, int Triangles);
 
+/// <summary>Stamped counts of matching rows by source kind, category, primitive kind and layer, plus the ten largest rows.</summary>
 public sealed record CensusAnswer(
     Stamp Stamp,
     Searched Searched,
