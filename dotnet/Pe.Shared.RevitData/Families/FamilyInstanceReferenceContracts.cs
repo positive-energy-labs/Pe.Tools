@@ -1,3 +1,4 @@
+using Newtonsoft.Json;
 using System.ComponentModel;
 using System.ComponentModel.DataAnnotations;
 
@@ -9,7 +10,7 @@ public sealed record FamilyInstanceReferencesRequest(
     long FamilyId,
     [property: Required, MinLength(1), RegularExpression(@".*\S.*")]
     string FamilyUniqueId,
-    [property: Range(1, 1000), DefaultValue(500)]
+    [property: Range(1, 1000), DefaultValue(500), JsonProperty(DefaultValueHandling = DefaultValueHandling.Populate)]
     int MaxResults = 500
 );
 
