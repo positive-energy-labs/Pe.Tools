@@ -5,6 +5,7 @@ import {
   layersKey,
   modeKey,
   orbitLooks,
+  orbitViewportSchema,
   planeViewportSchema,
   subjectKey,
   viewportCodec,
@@ -12,9 +13,11 @@ import {
   viewportSchema,
   type Codec,
   type OrbitLook,
+  type OrbitViewport,
   type PlaneViewport,
   type Viewport,
 } from "./page-keys.ts";
+import { emptySpaceCut, spaceCutsSchema, spaceSceneSchema } from "./space-view.ts";
 
 /**
  * A route's address: one set of field definitions, each typed with its default and its string
@@ -93,6 +96,12 @@ export interface RouteAddress<F extends Fields = Fields> {
   path: `/${string}`;
   title: string;
   fields: F;
+  /**
+   * A rule between fields: the key that breaks it and why, or null. `transition` (a person's move
+   * and Pea's alike) refuses a named key that breaks it and resets an unnamed one to its default;
+   * `settlePage` (a forgiving URL read) resets either.
+   */
+  conflict?: (page: Record<string, unknown>) => { key: string; error: string } | null;
   /** Present when the route leases a mounted view to Pea; its `agent` fields are the lease. */
   agent?: {
     /** What the person sees, and the rule Pea follows when it sets a key. */
@@ -235,6 +244,126 @@ function resolveDucts(input: Record<string, unknown>, facts: Record<string, unkn
     : { ok: false as const, error: "name a system, level, selected element, look or viewport" };
 }
 
+/** Lossless JSON in the address: what `schema` parses (its key order), stringified; no rounding. */
+const jsonCodec = <S extends z.ZodType>(schema: S): Codec<z.output<S>> => ({
+  encode: (value) => {
+    const parsed = schema.safeParse(value);
+    return JSON.stringify(parsed.success ? parsed.data : value);
+  },
+  decode: (text) => {
+    try {
+      return JSON.parse(text) as z.output<S>;
+    } catch {
+      return INVALID;
+    }
+  },
+});
+
+/**
+ * A Space element key: `JSON.stringify([documentKey, linkInstanceId ?? null, uniqueId])`, as the
+ * scene's element handle names it. Structure only: whether the key's document is the scene's, and
+ * whether the scene holds it, needs the loaded scene (runtime context, not this contract).
+ */
+export const spaceElementKey = (handle: {
+  documentKey: string;
+  linkInstanceId?: number | null;
+  uniqueId: string;
+}) => JSON.stringify([handle.documentKey, handle.linkInstanceId ?? null, handle.uniqueId]);
+
+const isSpaceElementKey = (key: string) => {
+  try {
+    const value: unknown = JSON.parse(key);
+    return (
+      Array.isArray(value) &&
+      value.length === 3 &&
+      typeof value[0] === "string" &&
+      value[0] !== "" &&
+      (value[1] === null || Number.isSafeInteger(value[1])) &&
+      typeof value[2] === "string" &&
+      value[2] !== "" &&
+      spaceElementKey({ documentKey: value[0], linkInstanceId: value[1], uniqueId: value[2] }) ===
+        key
+    );
+  } catch {
+    return false;
+  }
+};
+export const spaceElementKeySchema = z
+  .string()
+  .max(4096)
+  .refine(isSpaceElementKey, "an element key is JSON [documentKey, linkInstanceId|null, uniqueId]");
+const spaceElementKeys = z.array(spaceElementKeySchema).max(50000);
+
+/** The saved view's own definitions (`space-view.ts`, version 2): the scene hash and the cuts. */
+const spaceCuts = spaceCutsSchema.default({
+  top: emptySpaceCut,
+  north: emptySpaceCut,
+  east: emptySpaceCut,
+});
+
+/** 3D orbits; an axis editor draws its plane. */
+export const SPACE_MODES = ["3d", "top", "north", "east"] as const;
+const spaceViewport = z.discriminatedUnion("kind", [orbitViewportSchema, planeViewportSchema]);
+
+/** Host element ids, comma joined; any non-integer part makes the whole list unreadable. */
+const idsCodec: Codec<number[]> = {
+  encode: (ids) => ids.join(","),
+  decode: (text) => {
+    const parts = text === "" ? [] : text.split(",");
+    return parts.every((part) => /^-?\d+$/.test(part)) ? parts.map(Number) : INVALID;
+  },
+};
+
+/** `""` is none (null); any other text is the key itself. */
+const nullableText: Codec<string | null> = {
+  encode: (value) => value ?? "",
+  decode: (text) => (text === "" ? null : text),
+};
+
+const spaceFields = {
+  /** The captured scene's hash; absent = none open. Only the capture verb writes a new one. */
+  scene: field(spaceSceneSchema.optional(), { url: "push", agent: "read" }),
+  /** Host element ids whose surrounding context a capture includes; a URL read never captures. */
+  ids: field(z.array(z.number().int()).default([]), { url: "push", agent: "set" }, idsCodec),
+  mode: field(modeKey(SPACE_MODES, "3d"), { url: "push", agent: "set" }),
+  /** null = fit. `3d` holds an orbit, an axis a plane (`conflict`). A drag replaces. */
+  viewport: field(
+    viewportKey(spaceViewport),
+    { url: "replace", agent: "set" },
+    fitViewportCodec<OrbitViewport | PlaneViewport>(),
+  ),
+  /** One cut per axis (`space-view.ts`); an empty polyline clips nothing. */
+  cuts: field(spaceCuts, { url: "replace", agent: "set" }, jsonCodec(spaceCuts)),
+  selected: field(
+    spaceElementKeySchema.nullable().default(null),
+    { url: "push", agent: "set" },
+    nullableText,
+  ),
+  hidden: field(
+    spaceElementKeys.default([]),
+    { url: "push", agent: "set" },
+    jsonCodec(spaceElementKeys),
+  ),
+  /** null = every element shown; `[]` = nothing shown. */
+  isolated: field(
+    spaceElementKeys.nullable().default(null),
+    { url: "push", agent: "set" },
+    jsonCodec(spaceElementKeys.nullable()),
+  ),
+};
+
+/** The viewport kind the mode draws: a wrong one is no pose for this mode. */
+const spaceConflict = (page: Record<string, unknown>) => {
+  const viewport = page.viewport as Viewport | null | undefined;
+  const want = page.mode === "3d" ? "orbit" : "plane";
+  return viewport && viewport.kind !== want
+    ? {
+        key: "viewport",
+        error: `mode ${String(page.mode)} needs ${want === "orbit" ? "an orbit" : "a plane"} or fit viewport, not ${viewport.kind}`,
+      }
+    : null;
+};
+
 /* ── Routes ──────────────────────────────────────────────────────────────────── */
 
 export const routeAddresses = {
@@ -307,6 +436,13 @@ export const routeAddresses = {
       viewport: planViewport,
       demo,
     },
+  },
+  // ponytail: no `agent` block until a policy and a web lease exist, so no unusable Space capability is published.
+  space: {
+    path: "/space",
+    title: "Space",
+    fields: spaceFields,
+    conflict: spaceConflict,
   },
   pods: {
     path: "/pods",
@@ -414,6 +550,22 @@ export const routePageSchema = <R extends RouteKey>(route: R) =>
     Object.fromEntries(Object.entries(fieldsOf(route)).map(([key, f]) => [key, f.schema])),
   ) as unknown as z.ZodObject<{ [K in keyof FieldsOf<R> & string]: SchemaOf<FieldsOf<R>[K]> }>;
 
+const conflictOf = (route: RouteKey) => (routeAddresses[route] as RouteAddress).conflict;
+
+/** `page` with each key that breaks the route's `conflict` rule reset to its default. */
+export function settlePage<P extends Record<string, unknown>>(route: RouteKey, page: P): P {
+  const conflict = conflictOf(route);
+  const fields = fieldsOf(route);
+  let settled = page;
+  for (let found = conflict?.(settled); found; found = conflict?.(settled)) {
+    const initial = fields[found.key]!.schema.parse(undefined);
+    if (settled[found.key] === initial)
+      throw Error(`${route}: ${found.key}'s default breaks its own rule`);
+    settled = { ...settled, [found.key]: initial };
+  }
+  return settled;
+}
+
 /* ── URL projection ──────────────────────────────────────────────────────────── */
 
 /** The keys the address bar holds. */
@@ -425,8 +577,9 @@ export function readLink<R extends RouteKey>(
   search: Record<string, unknown>,
 ): { page: UrlPage<R>; carry: Carry } {
   const fields = fieldsOf(route);
-  const page = Object.fromEntries(
-    urlKeys(route).map((key) => [key, readField(fields[key]!, search[key])]),
+  const page = settlePage(
+    route,
+    Object.fromEntries(urlKeys(route).map((key) => [key, readField(fields[key]!, search[key])])),
   );
   const carry = Object.fromEntries(
     carryKeys.flatMap((key) => {
@@ -505,11 +658,10 @@ export const routeViewRoutes = (Object.keys(routeAddresses) as RouteKey[]).filte
 ) as [RouteViewRoute, ...RouteViewRoute[]];
 
 /** The keys Pea reads on a leased view (`read` and `set`). */
-export const agentKeys = (route: RouteViewRoute) =>
-  keysWhere(fieldsOf(route), (field) => !!field.agent);
+export const agentKeys = (route: RouteKey) => keysWhere(fieldsOf(route), (field) => !!field.agent);
 
 /** Page → the lease page: every agent key, as its codec writes it. */
-export const agentPage = <R extends RouteViewRoute>(route: R, page: Partial<RoutePage<R>>) => {
+export const agentPage = <R extends RouteKey>(route: R, page: Partial<RoutePage<R>>) => {
   const fields = fieldsOf(route);
   return Object.fromEntries(
     agentKeys(route).map((key) => {
@@ -520,16 +672,17 @@ export const agentPage = <R extends RouteViewRoute>(route: R, page: Partial<Rout
 };
 
 /** The keys Pea sets, as Pea writes them: each its lease string, no default, none extra. */
-export const routeAddressFields = (route: RouteViewRoute) => {
+export const routeAddressFields = (route: RouteKey) => {
   const fields = fieldsOf(route);
   return z.strictObject(
     Object.fromEntries(
       setKeys(fields).map((key) => {
         const field = fields[key]!;
         const inner = bare(field.schema);
+        // A text field (its codec the identity) keeps its own schema, so an enum reads as one.
         return [
           key,
-          inner.def.type === "string" || inner.def.type === "enum"
+          field.codec === textCodec
             ? (inner as z.ZodType<string>)
             : z.string().refine((text) => {
                 const decoded = field.codec.decode(text);
@@ -542,16 +695,13 @@ export const routeAddressFields = (route: RouteViewRoute) => {
 };
 
 /** The patch Pea sends: a nonempty subset of the route's `set` keys. */
-export const routeViewPatchSchema = (route: RouteViewRoute) =>
+export const routeViewPatchSchema = (route: RouteKey) =>
   routeAddressFields(route)
     .partial()
     .refine((patch) => Object.keys(patch).length > 0, "a patch names at least one key");
 
 /** A checked patch → the typed Page keys it sets. */
-export const readAgentPatch = <R extends RouteViewRoute>(
-  route: R,
-  patch: Record<string, string>,
-) => {
+export const readAgentPatch = <R extends RouteKey>(route: R, patch: Record<string, string>) => {
   const fields = fieldsOf(route);
   return Object.fromEntries(
     Object.entries(routeViewPatchSchema(route).parse(patch)).map(([key, value]) => [
@@ -560,6 +710,62 @@ export const readAgentPatch = <R extends RouteViewRoute>(
     ]),
   ) as Partial<RoutePage<R>>;
 };
+
+/**
+ * The one transition rule, the same for a person and for Pea: `patch` (the keys the mover named)
+ * over `current`. A named key that breaks the route's `conflict` rule is refused; a key it did not
+ * name resets to its default (a mode alone fits its viewport). Field schemas judge one key each and
+ * never this rule, so a page reaches it only through here (or `settlePage`, a forgiving URL read).
+ */
+export function transition<R extends RouteKey, P extends Partial<RoutePage<R>>>(
+  route: R,
+  current: P,
+  patch: Partial<P>,
+): { ok: true; page: P; patch: Partial<P> } | { ok: false; error: string } {
+  const conflict = conflictOf(route);
+  const fields = fieldsOf(route);
+  const settled: Record<string, unknown> = { ...patch };
+  for (;;) {
+    const page = { ...current, ...settled } as P;
+    const found = conflict?.(page);
+    if (!found) return { ok: true, page, patch: settled as Partial<P> };
+    if (found.key in patch || found.key in settled) return { ok: false, error: found.error };
+    settled[found.key] = fields[found.key]!.schema.parse(undefined);
+  }
+}
+
+/**
+ * Pea's patch over the view it leased (`lease`: the lease page, as `agentPage` wrote it), through
+ * `transition`; the settled patch comes back as lease strings. The patch must already pass
+ * `routeViewPatchSchema`.
+ */
+export function settleAgentPatch(
+  route: RouteKey,
+  lease: Record<string, string>,
+  patch: Record<string, string>,
+): { ok: true; patch: Record<string, string> } | { ok: false; error: string } {
+  const fields = fieldsOf(route);
+  const read = (strings: Record<string, string>) =>
+    Object.fromEntries(
+      Object.entries(strings).map(([key, value]) => [key, readField(fields[key]!, value)]),
+    );
+  const current = read(
+    Object.fromEntries(
+      agentKeys(route).flatMap((key) => (key in lease ? [[key, lease[key]!]] : [])),
+    ),
+  );
+  const moved = transition(route, current as never, read(patch) as never);
+  if (!moved.ok) return moved;
+  return {
+    ok: true,
+    patch: Object.fromEntries(
+      Object.entries(moved.patch as Record<string, unknown>).map(([key, value]) => [
+        key,
+        key in patch ? patch[key]! : fields[key]!.codec.encode(value),
+      ]),
+    ),
+  };
+}
 
 /** Browser-owned Page state of one mounted, visible view. `page` holds exactly the agent keys. */
 export const routeViewSchema = z.strictObject({

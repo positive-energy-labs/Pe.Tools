@@ -24,8 +24,14 @@ const cut = z
   })
   .refine((c) => c.polyline.length !== 1, "A cut needs at least two points")
   .refine((c) => !c.closed || c.polyline.length >= 3, "A closed cut needs three points");
+/** A captured scene's content hash. */
+export const spaceSceneSchema = z.string().regex(/^[a-f0-9]{64}$/);
+/** One canonical cut per axis; the retained volume is the intersection of all three.
+ * Frames (u, v | w): top (X, Y | Z), north (-X, Z | Y), east (Y, Z | X). An empty polyline clips nothing. */
+export const spaceCutsSchema = z.strictObject({ top: cut, north: cut, east: cut });
+export const emptySpaceCut = { polyline: [], closed: false, offset: 0, keepInside: true };
 const view = {
-  scene: z.string().regex(/^[a-f0-9]{64}$/),
+  scene: spaceSceneSchema,
   camera: point,
   target: point,
   hidden: z.array(z.string().max(4096)).max(50000),
@@ -35,11 +41,9 @@ const view = {
 const current = z.strictObject({
   version: z.literal(2),
   ...view,
-  /** One canonical cut per axis; the retained volume is the intersection of all three.
-   * Frames (u, v | w): top (X, Y | Z), north (-X, Z | Y), east (Y, Z | X). An empty polyline clips nothing. */
-  cuts: z.strictObject({ top: cut, north: cut, east: cut }),
+  cuts: spaceCutsSchema,
 });
-const empty = { polyline: [], closed: false, offset: 0, keepInside: true };
+const empty = emptySpaceCut;
 /** Version 1 had one plan cut plus a straight plane; its plan cut becomes the top cut, the plane is retired. */
 const legacy = z
   .object({
