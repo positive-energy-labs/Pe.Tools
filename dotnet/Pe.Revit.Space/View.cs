@@ -16,9 +16,9 @@ public static class SpaceView {
         IReadOnlyList<long>? ExcludeElementIds = null
     ) {
         public Filter ToFilter() => new(
-            this.Sources?.Select(s => Enum.Parse<SourceKind>(s, true)).ToList(),
+            this.Sources?.Select(s => (SourceKind)Enum.Parse(typeof(SourceKind), s, true)).ToList(),
             this.Categories,
-            this.Kinds?.Select(k => Enum.Parse<PrimKind>(k, true)).ToList(),
+            this.Kinds?.Select(k => (PrimKind)Enum.Parse(typeof(PrimKind), k, true)).ToList(),
             this.Layers,
             this.ExcludeElementIds);
     }
