@@ -1,10 +1,9 @@
 import { useMemo } from "react";
 import { DUCTS_LAYERS, viewportCodec } from "@pe/agent-contracts";
 import { systemsOf } from "@pe/ducts-domain/system-scope";
-import type { DuctSnapshot } from "@pe/ducts-domain/types";
 import { useRouteViewBridge } from "#/route/view-bridge";
 import type { PageMove } from "#/route/manifest";
-import type { DuctsPage } from "./manifest";
+import type { DuctsPage, LoadedDuctsReading } from "./manifest";
 
 /**
  * What the Ducts page tells Pea it shows: its address (`routeAddresses.ducts`), and the system
@@ -18,16 +17,21 @@ export function useDuctsViewBridge({
   surface,
   page,
   setPage,
-  snapshot,
   document,
+  reading,
+  membersReady,
 }: {
   thread?: string;
   surface: "chat" | "route";
   page: DuctsPage;
   setPage: (patch: Partial<DuctsPage>, move?: PageMove<DuctsPage>) => void;
-  snapshot: DuctSnapshot | null;
   document: unknown;
+  reading: LoadedDuctsReading | null;
+  membersReady: boolean;
 }) {
+  const snapshot = reading?.snapshot ?? null;
+  // A new displayed snapshot (even of the same document) invalidates pending intents.
+  const observation = useMemo(() => (reading ? crypto.randomUUID() : null), [reading]);
   const facts = useMemo(
     () => ({
       systems: (snapshot ? systemsOf(snapshot) : []).slice(0, 800).map((system) => ({
@@ -48,11 +52,11 @@ export function useDuctsViewBridge({
     route: "ducts",
     thread,
     surface,
-    visible: true,
+    visible: reading !== null && membersReady,
     page,
     // A Pea patch is one navigation; the manifest's `transition` couples system, selection and pose.
     apply: (patch) => setPage(patch as Partial<DuctsPage>, { history: "push" }),
-    context: { document },
+    context: { document, observation },
     facts,
   });
 }

@@ -21,12 +21,14 @@ import {
   toggleLayer,
   transitionPatches,
   type DuctAssumption,
+  type DuctClaim,
   type DuctsRouteDocument,
   type OrbitViewport,
   type RouteStatePatch,
 } from "@pe/agent-contracts";
 
 import { defineRoute, semanticActionInput, type Ctx } from "#/route/manifest";
+import { refuse } from "#/route/refusal";
 import { NATIVE_APPLY_WAIT_S } from "#/route/waits";
 import { ductsDocs } from "#/ducts/docs";
 import {
@@ -43,7 +45,8 @@ import type { DuctSnapshot } from "@pe/ducts-domain/types";
 import { fanCandidates, fansOwedBase } from "@pe/ducts-domain/fan-assignment";
 import { healPlan, healRequestGroup } from "@pe/ducts-domain/heal";
 import { survey, unitFlowsIn } from "@pe/ducts-domain/survey";
-import { systemScope } from "@pe/ducts-domain/system-scope";
+import { systemScope, systemsOf } from "@pe/ducts-domain/system-scope";
+import { claimsForGroup } from "@pe/ducts-domain/claims";
 import { sceneRequest } from "#/scene/host";
 import { airflowOptions } from "./airflow";
 import { elementNamer } from "./claims";
@@ -102,6 +105,82 @@ const ductsPageSchema = routePageSchema("ducts").extend({
   pose: z.custom<OrbitViewport>().nullable().default(null),
 });
 export type DuctsPage = z.infer<typeof ductsPageSchema>;
+
+/** The snapshot and claim cells actually displayed, not the effect-provided Reading mirror. */
+export type LoadedDuctsReading = {
+  snapshot: DuctSnapshot;
+  claims: Readonly<Record<string, DuctClaim>>;
+};
+
+function knownSelection(page: DuctsPage, reading: LoadedDuctsReading): boolean {
+  if (!page.selected) return true;
+  const { snapshot, claims } = reading;
+  const members = page.system
+    ? systemScope(snapshot, page.system).members
+    : new Set([
+        ...snapshot.nodes.map((node) => node.id),
+        ...snapshot.segments.map((segment) => segment.id),
+        ...snapshot.groups.flatMap((group) => group.rootIds),
+      ]);
+  const scopedClaims = page.system ? claimsForGroup(claims, members) : claims;
+  if (Object.hasOwn(scopedClaims, page.selected)) return true;
+  const id = Number(page.selected);
+  return Number.isSafeInteger(id) && String(id) === page.selected && members.has(id);
+}
+
+/** Forgiving URL/initial restoration waits for evidence; the route replaces the address once. */
+export function reconcileDuctsMembers(
+  page: DuctsPage,
+  reading: LoadedDuctsReading | null,
+): Partial<DuctsPage> {
+  if (!reading) return {};
+  if (page.system && !systemsOf(reading.snapshot).some((system) => system.name === page.system))
+    return { system: ductsPageSchema.parse({}).system, selected: "", issue: "", viewport: null };
+  return knownSelection(page, reading) ? {} : { selected: "", issue: "" };
+}
+
+/** Human, action and Pea moves all validate the normalized candidate against the displayed read. */
+export function bindDuctsManifest(read: () => LoadedDuctsReading | null): typeof manifest {
+  return {
+    ...manifest,
+    transition: (current, patch, origin) => {
+      const normalized = manifest.transition?.(current, patch, origin) ?? { patch };
+      if ("refusal" in normalized) return normalized;
+      const candidate = { ...current, ...normalized.patch };
+      const reading = read();
+      if (!reading) {
+        // Page-only refreshes can fetch evidence; no named move borrows the previous target's read.
+        if (Object.hasOwn(patch, "system") || Object.hasOwn(patch, "selected"))
+          return {
+            refusal: refuse(
+              "not-ready",
+              "Load this document's ducts before naming a system or selection",
+            ),
+          };
+        return normalized;
+      }
+      if (
+        candidate.system &&
+        !systemsOf(reading.snapshot).some((system) => system.name === candidate.system)
+      )
+        return {
+          refusal: refuse(
+            "not-ready",
+            `System is not in this displayed reading: ${candidate.system}`,
+          ),
+        };
+      if (!knownSelection(candidate, reading))
+        return {
+          refusal: refuse(
+            "not-ready",
+            `Selection is not in this displayed system: ${candidate.selected}`,
+          ),
+        };
+      return normalized;
+    },
+  };
+}
+
 export type DuctsReading = "ducts" | "tables" | "catalogs";
 type DuctsCtx = Ctx<DuctsRouteDocument, DuctsReading, DuctsPage>;
 

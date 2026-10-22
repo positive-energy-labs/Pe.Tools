@@ -8,7 +8,7 @@
  * The ASHRAE tables are always read; the snapshot, tables and catalogs are provided to the verbs so
  * `preview` and `apply` build their request from what is drawn.
  */
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { stagedDucts, type DuctClaim, type TrichotomyCellLike } from "@pe/agent-contracts";
 import type { Reading } from "@pe/agent-contracts";
 
@@ -21,7 +21,13 @@ import { Ladder } from "#/route/ladder";
 import { useChooseTarget } from "#/route/shell";
 import { Situation } from "#/route/situation";
 import { LadderPicker, useDocumentLadder } from "#/route/situation-ladder";
-import { manifest, pendingCount, WRITTEN } from "./manifest";
+import {
+  bindDuctsManifest,
+  reconcileDuctsMembers,
+  pendingCount,
+  WRITTEN,
+  type LoadedDuctsReading,
+} from "./manifest";
 import { withStoredRulings } from "@pe/ducts-domain/rulings";
 import { price } from "@pe/ducts-domain/pricing";
 import { worstRun } from "@pe/ducts-domain/losses";
@@ -49,6 +55,8 @@ export function DuctsRoute({ url = true }: { url?: boolean } = {}) {
   // subject and claims have the staged cells' shapes, and a verdict press stays in this page.
   const demo = useMemo(() => (frozenDemo() === "scene" ? SCENE_FIXTURE : null), []);
   const [demoClaims, setDemoClaims] = useState<Record<string, DuctClaim>>(SCENE_CLAIMS);
+  const loadedReading = useRef<LoadedDuctsReading | null>(null);
+  const manifest = useMemo(() => bindDuctsManifest(() => loadedReading.current), []);
   // The snapshot and tables are read below, once the target resolves; the verbs see them here.
   const [provided, setProvided] = useState<
     Record<"ducts" | "tables" | "catalogs", Reading<unknown>>
@@ -121,19 +129,37 @@ export function DuctsRoute({ url = true }: { url?: boolean } = {}) {
   );
   // Claims live beside the subject, not inside it: a chosen system shows only the claims that name
   // its groups' elements (claimsForGroup), so one system's claims never ride onto another.
+  const claimCells = useMemo(
+    () =>
+      demo
+        ? demoClaims
+        : Object.fromEntries(
+            Object.entries(handle.work.doc?.claims ?? {}).flatMap(([id, cell]) => {
+              const value = cell.staged?.value ?? cell.proposal?.value;
+              return value ? [[id, value] as const] : [];
+            }),
+          ),
+    [demo, demoClaims, handle.work.doc],
+  );
+  const reading = useMemo<LoadedDuctsReading | null>(
+    () => (snapshot ? { snapshot, claims: claimCells } : null),
+    [snapshot, claimCells],
+  );
+  loadedReading.current = reading;
+  const reconciled = reconcileDuctsMembers(page, reading);
+  const membersReady = Object.keys(reconciled).length === 0;
+  const reconciledPage = useRef<object | null>(null);
+  useEffect(() => {
+    if (reading && !membersReady && reconciledPage.current !== page) {
+      reconciledPage.current = page;
+      setPage(reconcileDuctsMembers(page, reading), { history: "replace" });
+    }
+  }, [reading, page, membersReady, setPage]);
   const claims = useMemo(() => {
-    const cells = demo
-      ? demoClaims
-      : Object.fromEntries(
-          Object.entries(handle.work.doc?.claims ?? {}).flatMap(([id, cell]) => {
-            const value = cell.staged?.value ?? cell.proposal?.value;
-            return value ? [[id, value] as const] : [];
-          }),
-        );
-    if (!page.system || !snapshot) return claimsOf(cells);
+    if (!page.system || !snapshot) return claimsOf(claimCells);
     const members = [...systemScope(snapshot, page.system).members];
-    return claimsOf(claimsForGroup(cells, members));
-  }, [demo, demoClaims, handle.work.doc, page.system, snapshot]);
+    return claimsOf(claimsForGroup(claimCells, members));
+  }, [claimCells, page.system, snapshot]);
   const subject = useMemo(
     () =>
       subjectIds
@@ -175,8 +201,9 @@ export function DuctsRoute({ url = true }: { url?: boolean } = {}) {
     surface: url ? "route" : "chat",
     page,
     setPage,
-    snapshot,
     document: doc,
+    reading,
+    membersReady,
   });
   const systems = useMemo(() => (snapshot ? systemsOf(snapshot) : []), [snapshot]);
   const system = systems.find((item) => item.name === page.system) ?? null;
@@ -207,13 +234,13 @@ export function DuctsRoute({ url = true }: { url?: boolean } = {}) {
     };
   }, [system, priced, groups, snapshot]);
   // With the network engine on, ducts.snapshot takes about 30 s on a large model: say so.
-  const reading = snapshot?.document.networkBasedCalculations
+  const readingWord = snapshot?.document.networkBasedCalculations
     ? "reading ducts.snapshot (about 30 s with network-based calculations on)"
     : "reading ducts.snapshot";
   const lossesWord = !snapshot
-    ? reading
+    ? readingWord
     : pending
-      ? `${reading}; the bars show the last read`
+      ? `${readingWord}; the bars show the last read`
       : tables.error
         ? `ducts.tables failed: ${tables.error}`
         : !tables.grids
