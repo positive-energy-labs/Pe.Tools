@@ -4,6 +4,8 @@ Rebuilt 2026-10-21 as current truth after the close of the ducts walk; git holds
 
 ## Decided
 
+- 2026-10-22, camera gestures commit Page only at release (wheel after quiet); captured identity and topology indexes belong to their snapshot. [Interaction evidence and remaining all-systems cost](interaction-performance.md) records browser proof on a controlled Chadds R25 copy.
+
 **The walk**
 - 2026-10-22, the tutorial, Pea's duct skill and the `route:ducts.guide` read are projections of one object, `agent-contracts/ducts-guide.ts`; three of the four probes pass on it, and the fourth (Pea's verbs) passes only when the prompt allows tool calls (agent ledger 2026-10-22). The analysis summary no longer refuses a model whose findings alone exceed the reply budget, and `findingCounts.byKindAndGrade` carries graded join counts that are never cut.
 - 2026-10-21, kaitpw: Pea is scored against this tutorial on black-box `pea --prompt` runs; the baseline (three probes, one half right, two failed because the ducts skill is trigger-gated and the base instructions carry no walk) and the owed one-source refactor are in the agent ledger (2026-10-21).
