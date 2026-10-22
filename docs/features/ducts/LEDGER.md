@@ -93,7 +93,6 @@ Rebuilt 2026-10-21 as current truth after the close of the ducts walk; git holds
 - One duct snapshot shared by every client of a document, read once by the host and invalidated on Revit change, so a new tab or link never re-reads (kaitpw: closer to the final shape); the in-mount search is the interim.
 - Right after a Revit restart, or with two documents open, a tab can show "no document bound" until reloaded or picked by hand.
 - The design friction-rate popover lives under `ducts/proto/e/`; route settings need a settings paradigm the tutorial can also show (design-system ledger).
-- Merge debt from the scene merge: repo guards went from 27 to 38 red; the ducts-attributable ones are design-ratchet debt (dead-word exports, a `<table>` outside the one Table in the help page, fatRoute, static colours) listed in `ts/tests/repo-guards`.
 
 **Long term, filed with story and mechanic**
 - Manufacturer catalogs (unscoped, wanted long term): Pea reads a performance sheet (example: Price LBP/LBPH linear bar grille) with a dedicated skill, the person checks the table beside the PDF crop, a size the sheet does not cover is a "request this page" finding; a catalog service and curve digitizer; the `Pe_Catalog` type link; `IMPORTANT, deferred` firm-wide catalog store in the design-system ledger.
