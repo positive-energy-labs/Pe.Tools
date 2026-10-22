@@ -71,6 +71,23 @@ const doc = roomsRouteState.schema.parse({
 });
 const cards = inboxCards(doc, snapshot, VIEW);
 
+test("a rerun rechurns every guid; a card still finds its regions by the anchor's geometry", () => {
+  // The reject staged on run r1's face, then the rerun held it under a new id.
+  const rerun = {
+    ...snapshot,
+    regions: [
+      { ...region("a2", "Kitchen", 0), runId: "r2" },
+      { ...region("b2", "Nook", 10), runId: "r2" },
+      { ...region("c2", "Closet", 30), runId: "r2", role: "held" as const, reason: "rejected" },
+    ],
+  };
+  const work = roomsRouteState.schema.parse({
+    marks: { m1: { staged: { value: mark("reject", square(30, 0, 10), ["c"]) } } },
+  });
+  expect(inboxCards(work, snapshot, VIEW)[0]!.guids).toEqual(["c"]);
+  expect(inboxCards(work, rerun, VIEW)[0]!.guids).toEqual(["c2"]);
+});
+
 test("accept on Pea's card writes marks/p1/staged through the wire, bound to the revision", async () => {
   const wrote: [RouteStatePatch[], number | undefined][] = [];
   const write = async (patches: RouteStatePatch[], revision?: number) => {

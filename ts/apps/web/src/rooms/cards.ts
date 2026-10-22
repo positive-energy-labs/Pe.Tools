@@ -220,7 +220,11 @@ export interface Card {
   by: "pea" | "person";
   kind: Mark["kind"] | "note";
   polygon: Loop;
-  /** The regions it concerns: the mark's guids, else the regions under its first point. */
+  /**
+   * The regions it concerns in this snapshot, found by geometry: the regions its polygon covers at
+   * least half of, else the regions under its first point. Never the stored guids, since every
+   * rerun gives every face a new id with identical geometry.
+   */
   guids: string[];
   sqft: number;
   text: string;
@@ -232,6 +236,10 @@ export function inboxCards(doc: RoomsRouteDocument, snapshot: Snapshot, view: st
   const regions = snapshot.regions.filter((r) => r.view === view && r.role !== "zone");
   const under = ([x = 0, y = 0]: readonly number[]) =>
     regions.filter((r) => inLoop(x, y, r.outer)).map((r) => r.guid);
+  const concerns = (polygon: Loop) => {
+    const covered = polygon.length > 2 ? coverage(polygon, regions) : [];
+    return covered.length ? covered : under(polygon[0]!);
+  };
   const cards: Card[] = [];
   for (const [id, cell] of Object.entries(doc.marks)) {
     const mark = cell.staged?.value ?? cell.proposal?.value;
@@ -243,7 +251,7 @@ export function inboxCards(doc: RoomsRouteDocument, snapshot: Snapshot, view: st
       by: cell.proposal ? "pea" : "person",
       kind: mark.kind,
       polygon,
-      guids: mark.guids ?? under(polygon[0]!),
+      guids: concerns(polygon),
       sqft: shoelace(polygon),
       text: mark.note ?? "",
       cell,
@@ -258,7 +266,7 @@ export function inboxCards(doc: RoomsRouteDocument, snapshot: Snapshot, view: st
       by: note.by,
       kind: "note",
       polygon,
-      guids: under(polygon[0]!),
+      guids: concerns(polygon),
       sqft: polygon.length > 2 ? shoelace(polygon) : 0,
       text: note.text,
     });

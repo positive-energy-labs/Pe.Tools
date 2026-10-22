@@ -46,8 +46,16 @@ import { roomRows, RoomsTable } from "./table";
 
 type Empty = { says: string; exit: string };
 
-/** `rooms.snapshot` from the one document the sentence names. */
-function useRoomsSnapshot(doc: { session: string; openId: string } | null, epoch: number) {
+/**
+ * `rooms.snapshot` from the one document the sentence names. Fetch on target (kaitpw, 2026-09-26):
+ * it is read again when a view is targeted and when the window takes focus back (from Revit), as
+ * well as after every verb (the epoch); the plan image keys on its view only.
+ */
+function useRoomsSnapshot(
+  doc: { session: string; openId: string } | null,
+  view: string,
+  epoch: number,
+) {
   const call = useHostCall(
     (signal) =>
       callHostRpc(
@@ -62,6 +70,19 @@ function useRoomsSnapshot(doc: { session: string; openId: string } | null, epoch
     ["rooms.snapshot", doc?.session, doc?.openId, epoch],
     doc !== null,
   );
+  // `refresh` keeps the data on screen while the new read runs; a changed dep would blank it.
+  const { refresh } = call;
+  const targeted = useRef(view);
+  useEffect(() => {
+    if (targeted.current === view) return;
+    targeted.current = view;
+    refresh();
+  }, [view, refresh]);
+  useEffect(() => {
+    if (doc === null) return;
+    window.addEventListener("focus", refresh);
+    return () => window.removeEventListener("focus", refresh);
+  }, [doc, refresh]);
   return { snapshot: call.data ?? null, error: call.error?.message ?? null, pending: call.pending };
 }
 
@@ -114,7 +135,7 @@ export function RoomsRoute({ url = true }: { url?: boolean } = {}) {
     handle.resolution.kind === "resolved" && handle.resolution.target.kind === "document"
       ? handle.resolution.target.ref
       : null;
-  const reading = useRoomsSnapshot(demo ? null : doc, page.epoch);
+  const reading = useRoomsSnapshot(demo ? null : doc, page.view, page.epoch);
   const { snapshot, error, pending } = demo
     ? { snapshot: DEMO_ROOMS, error: null, pending: false }
     : reading;
