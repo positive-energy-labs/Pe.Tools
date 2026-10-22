@@ -1,6 +1,12 @@
 // @vitest-environment jsdom
 import { cleanup, fireEvent, render, screen, waitFor } from "@testing-library/react";
 import { afterEach, expect, test, vi } from "vite-plus/test";
+import {
+  createMemoryHistory,
+  createRootRoute,
+  createRouter,
+  RouterProvider,
+} from "@tanstack/react-router";
 import type { PageTargetReading } from "@pe/agent-contracts";
 const mocks = vi.hoisted(() => ({ read: vi.fn(), fetch: vi.fn() }));
 vi.mock("./client", () => ({ readPageTarget: mocks.read }));
@@ -32,6 +38,15 @@ const rw: PageTargetReading = {
   write: { kind: "rw", thread: "t", expiresAt: "2026-10-13T13:00:00.000Z" },
   hostNow: "2026-10-13T12:18:00.000Z",
 };
+async function renderChip(entry = "/") {
+  vi.stubGlobal("scrollTo", vi.fn());
+  const router = createRouter({
+    routeTree: createRootRoute({ component: () => <PageBindingChip slug="todo" /> }),
+    history: createMemoryHistory({ initialEntries: [entry] }),
+  });
+  await router.load();
+  render(<RouterProvider router={router} />);
+}
 afterEach(() => {
   cleanup();
   vi.unstubAllGlobals();
@@ -42,9 +57,11 @@ test("access-007/008: chrome paints host time, revokes once, and refreshes the b
   vi.stubGlobal("EventSource", Stream);
   mocks.read.mockResolvedValue(rw);
   mocks.fetch.mockResolvedValue(Response.json({}));
-  render(<PageBindingChip slug="todo" />);
+  await renderChip("/?target=project%3Aclinic&work=work-a");
   expect(await screen.findByText("rw · 42m")).toBeTruthy();
-  expect(screen.getByRole("link", { name: "Bind…" }).getAttribute("href")).toBe("/bind?page=todo");
+  expect(screen.getByRole("link", { name: "Bind…" }).getAttribute("href")).toBe(
+    "/bind?page=todo&target=project%3Aclinic&work=work-a",
+  );
   mocks.read.mockResolvedValue({
     ...rw,
     write: {
@@ -64,8 +81,9 @@ test("access-007/008: chrome paints host time, revokes once, and refreshes the b
 test("access-061/062: a disconnected Page reading immediately stops painting rw", async () => {
   vi.stubGlobal("EventSource", Stream);
   mocks.read.mockResolvedValue(rw);
-  render(<PageBindingChip slug="todo" />);
+  await renderChip();
   await screen.findByText("rw · 42m");
+  expect(screen.getByRole("link", { name: "Bind…" }).getAttribute("href")).toBe("/bind?page=todo");
   Stream.current.onerror?.();
   await waitFor(() => expect(screen.queryByText("rw · 42m")).toBeNull());
   expect(screen.getByText("unverified")).toBeTruthy();
