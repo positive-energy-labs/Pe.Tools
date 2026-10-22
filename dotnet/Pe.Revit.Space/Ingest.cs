@@ -1,7 +1,8 @@
 namespace Pe.Revit.Space;
 
 /// <summary>
-///     One geometry walk. Medium detail, references off, over one document with one transform.
+///     One geometry walk. Medium detail (Fine when Medium draws no solid), references off, over one
+///     document with one transform.
 ///     Transforms are applied here and nowhere else: everything downstream is host internal feet.
 /// </summary>
 internal static class Ingest {
@@ -19,6 +20,14 @@ internal static class Ingest {
 
     private static readonly Options Opts = new() {
         DetailLevel = ViewDetailLevel.Medium,
+        ComputeReferences = false,
+        IncludeNonVisibleObjects = false,
+    };
+
+    /// <summary>The retry for elements Medium draws as lines only. Proven on Chadds 2026-09-26: all
+    /// 4,707 pipe fittings, 72 plumbing fixtures and 50 conduit fittings have a Solid only at Fine.</summary>
+    private static readonly Options FineOpts = new() {
+        DetailLevel = ViewDetailLevel.Fine,
         ComputeReferences = false,
         IncludeNonVisibleObjects = false,
     };
@@ -53,18 +62,12 @@ internal static class Ingest {
 
     /// <summary>The solid and mesh half: one row, or null when the element tessellates to nothing.</summary>
     private static PrimRow? Faces(Element e, int source, int prim, List<Tri> sink, Transform xf, Aabb? region) {
-        GeometryElement? ge;
-        try {
-            ge = e.get_Geometry(Opts);
-        } catch {
-            return null;
-        }
-
-        if (ge is null) return null;
-
         var start = sink.Count;
         var sawSolid = false;
-        Walk(ge, xf, prim, sink, ref sawSolid, 0, region);
+        Read(e, Opts, xf, prim, sink, ref sawSolid, region);
+        // A solid that the region clip dropped sets sawSolid, so only an element Medium draws no solid
+        // for retries at Fine; a clipped-out element never pays for a second walk.
+        if (sink.Count == start && !sawSolid) Read(e, FineOpts, xf, prim, sink, ref sawSolid, region);
         var count = sink.Count - start;
         if (count == 0) return null;
 
@@ -83,6 +86,17 @@ internal static class Ingest {
             box,
             count,
             HeightRole: HeightRoles.Of(e.Category?.Id.Value(), e is ImportInstance));
+    }
+
+    private static void Read(Element e, Options o, Transform xf, int prim, List<Tri> sink, ref bool sawSolid, Aabb? region) {
+        GeometryElement? ge;
+        try {
+            ge = e.get_Geometry(o);
+        } catch {
+            return;
+        }
+
+        if (ge is not null) Walk(ge, xf, prim, sink, ref sawSolid, 0, region);
     }
 
     /// <summary>

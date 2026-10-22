@@ -3,6 +3,7 @@
 One metric substrate under every Pe.* helper that reads or writes Revit geometry: Placement, Takeoff, filled regions, family placement. Pea asks small, addressable questions; the substrate computes metric truth. Design source: fanout 2026-09-04 (substrate), disposable reports in `.artifacts/handoffs/fanout-20260904-substrate/`.
 
 ## Decided
+- 2026-10-22, `Ingest.Faces` retries an element at `ViewDetailLevel.Fine` (`FineOpts`) when Medium draws no solid and no triangle, ported from branch `space-viewer` cabf6995 (2026-09-26). The retry skips an element whose solid the `region` clip dropped, because that is clipping, not missing geometry. PROVEN[session space-viewer, controlled, dev payload, Chadds detached windowed, 2026-09-26, branch build without `region`]: host rows 23,716 to 28,547 (+4,831, the audit's prediction to the element); `space.rows` answers Pipe Fittings 4,707 of 4,707, Plumbing Fixtures 191 of 191, Conduit Fittings 51 of 51. PROVEN[compile, Debug.R25 and Debug.R24, 2026-10-22] only for this port; the region-clipped build is UNPROVEN in a session, and the build-time cost against Medium-only is untimed.
 
 - 2026-10-21, Space inspection can load exact selected host meshes first and load surrounding context only through an explicit action; unavailable native meshes remain visible as a limitation. [Bounded performance research](viewer-performance.md) records native `1117da1c`, web `62acfa96`, catalog followup `b036225b`, actual request-to-matching-frame evidence and limits.
 
