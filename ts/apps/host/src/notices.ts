@@ -1,4 +1,5 @@
 import {
+  linkTo,
   readingKey,
   type HostLogEntry,
   type MachineNotice,
@@ -39,7 +40,7 @@ export interface NoticeContext {
 const KINDS = ["action", "turn", "permission", "question", "usage"] as const;
 
 const chatHref = (threadId: string | undefined) =>
-  threadId ? `/pea?thread=${encodeURIComponent(threadId)}` : undefined;
+  threadId ? linkTo("pea", {}, { thread: threadId }) : undefined;
 
 /** Pure: one receipt revision to at most one card. Everything not listed here stays quiet. */
 export function noticeOf(r: Receipt, context: NoticeContext): MachineNotice | null {

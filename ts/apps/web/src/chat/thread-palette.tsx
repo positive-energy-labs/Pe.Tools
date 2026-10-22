@@ -23,7 +23,16 @@ import {
   Trash2,
   type LucideIcon,
 } from "lucide-react";
-import { type DocumentRequest, type Provider, type UpdateThreadRequest } from "@pe/agent-contracts";
+import {
+  linkTo,
+  readLink,
+  routeAddresses,
+  type RouteField,
+  type RouteKey,
+  type DocumentRequest,
+  type Provider,
+  type UpdateThreadRequest,
+} from "@pe/agent-contracts";
 import { Dialog, DialogContent, DialogTitle } from "#/components/lang/dialog";
 import { ListPopup } from "@pe/kit/lang/list-popup";
 import { CommandPalette } from "#/components/lang/command-palette";
@@ -320,8 +329,19 @@ function ThreadActionsMenu({
             label: "Thread link",
             run: () => {
               const url = new URL(location.href);
-              url.searchParams.set("thread", thread.id);
-              copy(url.href, "thread link");
+              const route =
+                (Object.keys(routeAddresses) as RouteKey[]).find(
+                  (key) => routeAddresses[key].path === url.pathname,
+                ) ?? "pea";
+              const { page, carry } = readLink(route, Object.fromEntries(url.searchParams));
+              const fields: Record<string, RouteField> = routeAddresses[route].fields;
+              const shareable = Object.fromEntries(
+                Object.entries(page).filter(([key]) => fields[key]?.share !== false),
+              );
+              copy(
+                new URL(linkTo(route, shareable, { ...carry, thread: thread.id }), url.origin).href,
+                "thread link",
+              );
             },
           },
           {

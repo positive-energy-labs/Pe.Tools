@@ -5,7 +5,8 @@
  * implementations. Stage, pod and path are the kernel's `url` keys (`route/url.ts`).
  */
 import { useEffect, useState, type ReactNode } from "react";
-import { Link } from "@tanstack/react-router";
+import { useSearch } from "@tanstack/react-router";
+import { linkTo, readLink } from "@pe/agent-contracts";
 import { usePublishPagePalette } from "#/navigation/route-controls";
 
 import { Pane, PaneSplit } from "#/components/lang/pane";
@@ -96,6 +97,7 @@ export function EntityRouteView({
   /** The audit. */
   children: ReactNode;
 }) {
+  const { carry } = readLink("pods", useSearch({ strict: false }));
   const [page, setPage] = handle.page;
   const ladder = useDocumentLadder(handle);
   // The Situation palette is the sentence's ladder, opened by Ctrl K or its own trigger.
@@ -234,13 +236,9 @@ export function EntityRouteView({
                   {" "}
                   (
                   <TooltipHint content="Open this member in the pods browser">
-                    <Link
-                      to="/pods"
-                      // The root carries the thread and any `?target` pin with it.
-                      search={{ pod: page.pod, path: page.path } as never}
-                    >
+                    <a href={linkTo("pods", { pod: page.pod, path: page.path }, carry)}>
                       open in Pods
-                    </Link>
+                    </a>
                   </TooltipHint>
                   )
                 </>

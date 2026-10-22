@@ -10,6 +10,7 @@ import type {
   NavigationWork,
 } from "@pe/agent-contracts";
 import { HOST_RESTARTED } from "@pe/agent-contracts/chat-state";
+import { linkTo } from "@pe/agent-contracts";
 import { summarizeFailure } from "@pe/host-contracts/failure-summary";
 
 /** In the order the eye takes them; waits and working lead and never fold. */
@@ -89,7 +90,7 @@ function threadRow(
     where: thread.providerName,
     says,
     at: thread.updatedAt,
-    url: `/pea?thread=${thread.id}`,
+    url: linkTo("pea", {}, { thread: thread.id }),
   });
   if (state === "waiting" || pending > 0) {
     const ask = asks.get(thread.id);

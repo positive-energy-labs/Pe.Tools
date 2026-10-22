@@ -23,6 +23,8 @@ import {
 } from "@pe/host-contracts/contracts";
 import {
   addressSchema,
+  linkTo,
+  readLink,
   pageBindingSchema,
   parseContributionKey,
   pageChoiceSchema,
@@ -897,7 +899,13 @@ export function createPagesHandler(
     )
       return new Response(null, {
         status: 302,
-        headers: { location: `/bind?page=${encodeURIComponent(slug)}&view=1` },
+        headers: {
+          location: linkTo(
+            "bind",
+            { page: slug, view: true },
+            readLink("bind", Object.fromEntries(url.searchParams)).carry,
+          ),
+        },
       });
     return file(slug, where.dir, where.key, rest.length ? rest : ["index.html"]);
   };

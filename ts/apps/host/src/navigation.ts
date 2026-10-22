@@ -4,10 +4,13 @@ import {
   addressSchema,
   documentRefSchema,
   harnessThreadSummarySchema,
+  linkTo,
+  routeAddresses,
   sameAddress,
   type NavigationSnapshot,
   type NavigationWork,
   type WorkKey,
+  type RouteKey,
 } from "@pe/agent-contracts";
 import type { RouteWorkspace } from "@pe/runtime";
 
@@ -61,8 +64,12 @@ function destination(
           : "The Work is saved, but its document is not currently available. Open that document to resume.",
     };
   const ref = { session: matching[0]!.session, openId: matching[0]!.openId };
+  const target = JSON.stringify({ kind: "open", ref });
+  const route = (Object.keys(routeAddresses) as RouteKey[]).find(
+    (key) => routeAddresses[key].path === path,
+  );
   return {
-    url: `${path}?${new URLSearchParams({ target: JSON.stringify({ kind: "open", ref }) })}`,
+    url: route ? linkTo(route, {}, { target }) : `${path}?${new URLSearchParams({ target })}`,
     reason: null,
   };
 }
@@ -144,7 +151,7 @@ export async function readNavigation(
       context: thread.head.displayLabel ?? thread.providerName,
       state: thread.activity.state,
       revision: thread.head.revision,
-      url: `/pea?${new URLSearchParams({ thread: thread.id })}`,
+      url: linkTo("pea", {}, { thread: thread.id }),
       reason: null,
     })),
     observations,
