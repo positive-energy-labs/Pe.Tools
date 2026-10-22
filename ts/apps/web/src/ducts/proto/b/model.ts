@@ -18,7 +18,7 @@ import { elementNamer } from "../../claims";
 import { groupLabels } from "../../inputs";
 import { labelOfNode, legsOf } from "../../legs";
 
-export type TreeKind = "system" | "run" | "leg" | "element";
+type TreeKind = "system" | "run" | "leg" | "element";
 
 /** One end of a run's loss: its in-wg and the elements that pay it (the set a hover lights). */
 export interface SplitPart {
@@ -39,7 +39,7 @@ export interface Split {
 }
 
 /** A path's rows dealt to the three parts by what each row prices. */
-export function splitOf(rows: readonly Row[], equipment: ReadonlySet<number>): Split {
+function splitOf(rows: readonly Row[], equipment: ReadonlySet<number>): Split {
   const part = (): SplitPart => ({ dp: 0, ids: [], unpriced: 0 });
   const split: Split = { unit: part(), duct: part(), terminal: part() };
   for (const row of rows) {
@@ -95,7 +95,7 @@ const sumKnown = (values: (number | null)[]) => {
  * the path: it is charged to the main-line element whose rows it follows, so the stretches add up to
  * the run's total and no part of it is lost between rows and tree.
  */
-export function rowsByElement(path: readonly number[], rows: readonly Row[]): Map<number, Row[]> {
+function rowsByElement(path: readonly number[], rows: readonly Row[]): Map<number, Row[]> {
   const on = new Set(path);
   const out = new Map<number, Row[]>(path.map((id) => [id, []]));
   let owner = path[0];
@@ -320,90 +320,6 @@ export function buildTree(
   });
 }
 
-/** The rows a person can see: depth-first, children only under expanded keys. */
-export function visibleRows(
-  roots: readonly TreeNode[],
-  open: ReadonlySet<string>,
-): { node: TreeNode; depth: number; parent: string | null }[] {
-  const out: { node: TreeNode; depth: number; parent: string | null }[] = [];
-  const walk = (nodes: readonly TreeNode[], depth: number, parent: string | null) => {
-    for (const node of nodes) {
-      out.push({ node, depth, parent });
-      if (open.has(node.key)) walk(node.children, depth + 1, node.key);
-    }
-  };
-  walk(roots, 0, null);
-  return out;
-}
-
-/**
- * No groups (the scene fixture carries none): the subject's ordered ids stand in as one run under
- * one "subject" system, cut into legs by `legsOf`. Unpriced: a subject has no fan or terminal path.
- */
-export function subjectTree(
-  snapshot: DuctSnapshot,
-  ids: readonly number[],
-  work: DuctsRouteDocument | null,
-): TreeNode {
-  const nameOf = elementNamer(snapshot, null);
-  const name = (id: number) => nameOf(id) ?? "element not in snapshot";
-  const cut = legsOf(snapshot, ids, labelOfNode(snapshot), work);
-  const blank = {
-    total: null,
-    self: null,
-    ft: null,
-    selfFt: null,
-    rate: null,
-    unpriced: null,
-    split: null,
-    level: null,
-    scale: null,
-    critical: null,
-    provisional: null,
-    terminal: null,
-  };
-  const legs = cut.legs.map(
-    (leg, i): TreeNode => ({
-      ...blank,
-      key: `subject/r/l${i}`,
-      kind: "leg",
-      name: leg.name,
-      id: leg.ids[0] ?? leg.to.id,
-      children: [
-        ...(i === 0 && ids.includes(leg.from.id) ? [leg.from.id] : []),
-        ...leg.ids,
-        ...(ids.includes(leg.to.id) ? [leg.to.id] : []),
-      ].map((id) => ({
-        ...blank,
-        key: `subject/r/l${i}/e${id}`,
-        kind: "element",
-        name: name(id),
-        id,
-        children: [],
-      })),
-    }),
-  );
-  const first = cut.nodes[0]?.name ?? "start";
-  const last = cut.nodes.at(-1)?.name ?? "end";
-  return {
-    ...blank,
-    key: "subject",
-    kind: "system",
-    name: "subject (no group in this snapshot)",
-    id: ids[0] ?? null,
-    children: [
-      {
-        ...blank,
-        key: "subject/r",
-        kind: "run",
-        name: `${first} → ${last}`,
-        id: ids.at(-1) ?? null,
-        children: legs,
-      },
-    ],
-  };
-}
-
 /**
  * The system list: one childless row per Revit system (no run tree is built, so 350 systems stay
  * cheap), keyed by its name. Its total is the largest fan over the groups it is in; `fanless` when
@@ -445,13 +361,4 @@ export function systemList(
       children: [],
     };
   });
-}
-
-/** Every element id of one group: its segments, its nodes and its roots. */
-export function groupElementIds(snapshot: DuctSnapshot, groupId: string): Set<number> {
-  const ids = new Set<number>();
-  for (const s of snapshot.segments) if (s.groupId === groupId) ids.add(s.id);
-  for (const n of snapshot.nodes) if (n.groupId === groupId) ids.add(n.id);
-  for (const g of snapshot.groups) if (g.id === groupId) for (const r of g.rootIds) ids.add(r);
-  return ids;
 }

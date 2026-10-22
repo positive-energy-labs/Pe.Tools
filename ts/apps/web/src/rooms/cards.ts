@@ -10,8 +10,8 @@ type Snapshot = RoomsSnapshot.Res.Response;
 type Region = RoomsSnapshot.Res.RoomsRegion;
 type Loop = readonly (readonly number[])[];
 type Point = readonly [number, number];
-export type MarkCell = RoomsRouteDocument["marks"][string];
-export type MarkState = "proposed" | "accepted" | "pass" | "fail" | "stale" | "gone";
+type MarkCell = RoomsRouteDocument["marks"][string];
+type MarkState = "proposed" | "accepted" | "pass" | "fail" | "stale" | "gone";
 /** A card's state: a mark's derived glyph, or a note, which has no rungs. */
 export type CardState = MarkState | "note";
 
@@ -107,7 +107,7 @@ const box = (loop: Loop) => {
 
 // ponytail: sampled IoU, exact clipping if a mark ever needs sub-foot accuracy
 /** Intersection over union of a polygon and a region (outer minus holes), sampled on a grid. */
-export function iou(polygon: Loop, region: Pick<Region, "outer" | "holes">): number {
+function iou(polygon: Loop, region: Pick<Region, "outer" | "holes">): number {
   const a = box(polygon);
   const b = box(region.outer);
   if (a[2] < b[0] || b[2] < a[0] || a[3] < b[1] || b[3] < a[1]) return 0;
@@ -128,7 +128,7 @@ export function iou(polygon: Loop, region: Pick<Region, "outer" | "holes">): num
 }
 
 /** A mark's glyph: its rungs, then its anchor's overlap with the newest run on its view. */
-export function markState(cell: MarkCell, snapshot: Snapshot): MarkState {
+function markState(cell: MarkCell, snapshot: Snapshot): MarkState {
   const mark = cell.staged?.value;
   if (!mark) return "proposed";
   const newest = newestRun(snapshot, mark.anchor.view);

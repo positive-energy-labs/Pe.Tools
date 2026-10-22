@@ -1,4 +1,3 @@
-import { TooltipHint } from "@pe/kit/lang/tooltip";
 /**
  * The one duct-issue taxonomy: every view, the tables, the legend and Chat read it from here.
  * C# emits only the kind (`DuctIssueKind`); what it means, what it blocks and how it is coloured
@@ -97,16 +96,7 @@ export const ISSUE_KINDS: Record<IssueKind, IssueKindInfo> = {
     4,
   ),
 };
-/** The table's issue column: the kind's word in its class's tone. */
-export const issueVerdict = (issueKind: IssueKind) => {
-  const info = ISSUE_KINDS[issueKind];
-  return { word: info.label, tone: info.color.tone, note: info.what };
-};
-const BLOCKS_WORD: Record<Blocks, string> = {
-  walkable: "blocks walking",
-  budgetable: "blocks the budget",
-  none: "advisory",
-};
+
 /**
  * Who clears a finding, with proximity inferences their own warning tier first: a join the model
  * implies is never taken as correct (kaitpw 2026-10-19), so a person rules on each.
@@ -163,28 +153,6 @@ export function FindingsList({ findings }: { findings: readonly DuctFinding[] })
                   </div>
                 );
               })}
-          </dd>
-        </div>
-      ))}
-    </dl>
-  );
-}
-/** The legend every view shows beside its issues: class, then kinds in shade order. */
-export function IssueLegend() {
-  return (
-    <dl className="grid grid-cols-[auto_1fr] gap-x-3">
-      {(Object.keys(BLOCKS_WORD) as Blocks[]).map((blocks) => (
-        <div key={blocks} className="contents">
-          <dt data-tone={TONE[blocks]}>{BLOCKS_WORD[blocks]}</dt>
-          <dd>
-            {(Object.entries(ISSUE_KINDS) as [IssueKind, IssueKindInfo][])
-              .filter(([, info]) => info.blocks === blocks)
-              .sort(([, a], [, b]) => a.color.shade - b.color.shade)
-              .map(([key, info]) => (
-                <TooltipHint key={key} content={info.what}>
-                  <span data-tone={info.color.tone}>{info.label} </span>
-                </TooltipHint>
-              ))}
           </dd>
         </div>
       ))}

@@ -614,8 +614,6 @@ S.passive = () =>
     "passive unit merging the networks on both sides",
   );
 
-export const SCENE_KEYS: readonly string[] = Object.keys(S);
-
 function Arrowheads({ id }: { id: string }) {
   return (
     <defs>

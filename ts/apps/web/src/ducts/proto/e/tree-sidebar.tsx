@@ -98,7 +98,7 @@ function QuantityBar({ encoding, ids }: { encoding: Encoding; ids: readonly numb
 }
 
 /** Every element id under a node, its own first: the set a hover lights. */
-export const idsOf = (node: TreeNode): number[] => {
+const idsOf = (node: TreeNode): number[] => {
   const out = new Set<number>();
   const walk = (n: TreeNode) => {
     if (n.kind === "element" && n.id != null) out.add(n.id);

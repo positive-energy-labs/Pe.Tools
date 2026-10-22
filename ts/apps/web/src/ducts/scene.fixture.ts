@@ -21,7 +21,7 @@ interface Row {
 }
 
 /** Main 0 / Upper 12.5 / Attic 24.083 ft. */
-export const SCENE_LEVELS = [
+const SCENE_LEVELS = [
   { id: 1, name: "Main", elevationFt: 0 },
   { id: 2, name: "Upper", elevationFt: 12.5 },
   { id: 3, name: "Attic", elevationFt: 24.083 },
@@ -571,7 +571,7 @@ const snapshot: DuctSnapshot = {
   },
 };
 
-export const SCENE_SUBJECT: number[] = ROWS.map((row) => row.id).filter((id) => !OMITTED.has(id));
+const SCENE_SUBJECT: number[] = ROWS.map((row) => row.id).filter((id) => !OMITTED.has(id));
 
 export const SCENE_CLAIMS: Record<string, DuctClaim> = {
   c1: {

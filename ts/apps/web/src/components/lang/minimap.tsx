@@ -11,7 +11,7 @@ import { tokenRef } from "@pe/kit/lib/token";
 import type { OrbitViewport, PlaneViewport, ScrollViewport } from "@pe/agent-contracts";
 export type { OrbitViewport, PlaneViewport, ScrollViewport };
 
-export type ViewportHow = "gesture" | "move";
+type ViewportHow = "gesture" | "move";
 
 interface MinimapProps<V> {
   viewport: V;
@@ -39,7 +39,7 @@ export const canvasColor = (ctx: CanvasRenderingContext2D, role: string): string
 };
 
 /** The field rectangle the viewport shows, in field units. */
-export const visibleRect = (v: PlaneViewport | ScrollViewport, size: Size) =>
+const visibleRect = (v: PlaneViewport | ScrollViewport, size: Size) =>
   v.kind === "scroll"
     ? { x: v.left, y: v.top, width: size.width, height: size.height }
     : {
@@ -50,7 +50,7 @@ export const visibleRect = (v: PlaneViewport | ScrollViewport, size: Size) =>
       };
 
 /** The viewport centred on field point (x, y); a scroll viewport stays inside the field. */
-export const centredOn = <V extends PlaneViewport | ScrollViewport>(
+const centredOn = <V extends PlaneViewport | ScrollViewport>(
   v: V,
   x: number,
   y: number,
@@ -170,7 +170,7 @@ const globeProjection = (yaw: number, elev: number) => {
 };
 
 /** The 18 orientations, as camera yaw (null keeps the yaw) and elevation. */
-export const STOPS: readonly { rel: number | null; elev: number; pole: boolean }[] = [
+const STOPS: readonly { rel: number | null; elev: number; pole: boolean }[] = [
   { rel: null, elev: 90, pole: true },
   { rel: null, elev: -90, pole: true },
   ...[0, 90, 180, 270].map((rel) => ({ rel, elev: 0, pole: true })),

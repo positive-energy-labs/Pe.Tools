@@ -132,7 +132,7 @@ const round2 = (n: number) => (n === 0 ? 0 : Number(n.toPrecision(2)));
  * each, so every step of the ramp is spent on elements that exist. Ties collapse a break; the top
  * is the group's max, never a fixed ceiling.
  */
-export function quantileEdges(values: readonly number[], n: number): number[] {
+function quantileEdges(values: readonly number[], n: number): number[] {
   const sorted = [...values].sort((a, b) => a - b);
   if (sorted.length < 2) return [];
   const edges: number[] = [];
@@ -280,7 +280,7 @@ function sequential(key: keyof typeof SEQUENTIAL, facts: GroupFacts): Encoding {
 }
 
 /** Equivalent round diameter, in: a rectangle's by Huebscher, a round's own. */
-export const equivalentIn = (segment: Segment): number | null => {
+const equivalentIn = (segment: Segment): number | null => {
   if (segment.diameterIn != null) return segment.diameterIn;
   const a = segment.widthIn;
   const b = segment.heightIn;
@@ -494,9 +494,6 @@ export function encodingFor(
       return fixed().health;
   }
 }
-
-/** A drawing with no group facts at hand (a variant's own canvas): the key over nothing. */
-export const encodingOf = (key: string): Encoding => encodingFor(key);
 
 export const strokeOf = (encoding: Encoding, facts: EncodingFacts): Stroke =>
   encoding.bins[encoding.bin(facts)]!.stroke;

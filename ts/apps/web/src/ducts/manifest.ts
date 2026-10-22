@@ -51,7 +51,7 @@ import { groupLabels } from "./inputs";
 import { espWaits, fanRefusal, fanWords, holding, triage } from "./inbox-rows";
 
 /** What Revit said the staged cells would write, and the Work and snapshot it was asked over. */
-export interface DuctsEvaluation {
+interface DuctsEvaluation {
   revision: number;
   epoch: number;
   response: DuctsApply.Res.Response;
@@ -782,7 +782,7 @@ export const manifest = defineRoute<
 });
 
 /** The item keys a heal preview passed. */
-export const passedOf = (run: DuctsHealRun) =>
+const passedOf = (run: DuctsHealRun) =>
   new Set(
     run.response.groups.flatMap((g) =>
       g.items.filter((i) => i.outcome === "planned").map((i) => i.key),

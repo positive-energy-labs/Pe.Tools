@@ -8,20 +8,11 @@ import type { DuctInferenceGrade } from "@pe/agent-contracts";
 import type { Provisional } from "@pe/ducts-domain/losses";
 import { TooltipHint } from "@pe/kit/lang/tooltip";
 
-export const GRADE_TONE: Record<DuctInferenceGrade, "caution" | "alarm" | undefined> = {
+const GRADE_TONE: Record<DuctInferenceGrade, "caution" | "alarm" | undefined> = {
   "near-miss": undefined,
   stretched: "caution",
   anomalous: "alarm",
 };
-/** What a number's wrapper wears: the worst grade's tone, washed when anomalous; nothing when final. */
-export const provisionalTone = (p: Provisional) =>
-  p
-    ? {
-        "data-provisional": p.worst,
-        "data-tone": GRADE_TONE[p.worst],
-        ...(p.worst === "anomalous" ? { "data-wash": "" } : {}),
-      }
-    : {};
 
 /** The words, for a sentence: " provisional · rests on N inferences, worst: G", or "" when final. */
 export const provisionalWords = (p: Provisional) =>

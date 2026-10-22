@@ -13,7 +13,7 @@ import { revitTarget } from "@pe/kit/lang/row";
 import { fitView, PLAN_CLICK_PX as CLICK_PX, usePlaneViewport } from "#/lib/plane-viewport";
 import { usePlanMap } from "#/lib/plan-map";
 import type { RoomsPage } from "./manifest";
-export { fitView } from "#/lib/plane-viewport";
+
 import { EmptyState } from "@pe/kit/lang/empty";
 import { OutcomeLine } from "#/components/lang/outcome";
 import { boundsOf, contentViewport, fitFrame, type Bounds2, type Point2 } from "#/lib/affine-frame";
@@ -39,7 +39,7 @@ const loopOf = (loop: readonly (readonly number[])[]) => loop.map(xy);
 export type RegionState = "zone" | "locked" | "stale" | "held" | "machine" | "unassigned";
 
 /** The legend order. Unassigned is not an ink: it counts rooms outside every zone. */
-export const REGION_STATES = ["zone", "locked", "stale", "held", "machine", "unassigned"] as const;
+const REGION_STATES = ["zone", "locked", "stale", "held", "machine", "unassigned"] as const;
 
 /** The ink order: the first that holds wins. A person's region outranks a stale one. */
 export const regionState = (
@@ -126,7 +126,7 @@ export function focusOf(rows: readonly RoomRow[], focus: string) {
 }
 
 // ponytail: the world is drawn at 4 px per foot; zoom 0.02 to 24 spans 0.08 to 96 screen px per foot.
-export const PLAN_PX_PER_FT = 4;
+const PLAN_PX_PER_FT = 4;
 const ZOOM_PAD_PX = 48;
 /** w16's fill: alpha 70/255 of the state ink. */
 const FILL_PCT = 27;

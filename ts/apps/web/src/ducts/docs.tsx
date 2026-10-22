@@ -275,7 +275,7 @@ function CaseCard({ c }: { c: DuctCase }) {
   );
 }
 
-export function DuctsDocs() {
+function DuctsDocs() {
   return (
     <div className="flex flex-col gap-3 [&>p]:max-w-[80ch] [&>ul]:max-w-[80ch] [&>ol]:max-w-[80ch]">
       <p>

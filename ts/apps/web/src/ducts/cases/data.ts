@@ -1,6 +1,6 @@
 export type CaseGroup = "A" | "B" | "C" | "D" | "E" | "F" | "G" | "H";
-export type CaseStatus = "handled" | "owed" | "open" | "fixed";
-export interface CaseExample {
+type CaseStatus = "handled" | "owed" | "open" | "fixed";
+interface CaseExample {
   system: string | null;
   selected: string | null;
 }

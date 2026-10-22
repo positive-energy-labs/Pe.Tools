@@ -12,7 +12,7 @@ import { groupTree, type GroupTree } from "@pe/ducts-domain/topology";
 import type { DuctSnapshot } from "@pe/ducts-domain/types";
 
 /** A flow's source rung in the words the cell's quiet text uses. */
-export const flowSourceWord = (source: FlowSource | "override" | "revit" | null) =>
+const flowSourceWord = (source: FlowSource | "override" | "revit" | null) =>
   source == null
     ? null
     : source === "override"

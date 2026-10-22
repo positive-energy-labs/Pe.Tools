@@ -37,7 +37,7 @@ export interface InputsPaneProps {
 type InputsScope = Pick<SystemScope, "groups" | "terminals" | "units">;
 
 /** The unit ids and terminal ids of one system, in snapshot order. */
-export function inputRowsOf(snapshot: DuctSnapshot, scope: InputsScope) {
+function inputRowsOf(snapshot: DuctSnapshot, scope: InputsScope) {
   const units = snapshot.nodes.filter((n) => n.kind === "equipment" && scope.units.has(n.id));
   const terminals = snapshot.nodes.filter(
     (n) => n.kind === "terminal" && scope.terminals.has(n.id),

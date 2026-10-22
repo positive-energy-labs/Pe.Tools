@@ -12,7 +12,7 @@ import type { DuctSnapshot } from "@pe/ducts-domain/types";
 
 type Level = DuctSnapshot["levels"][number];
 
-export interface NodeFacts extends EncodingFacts {
+interface NodeFacts extends EncodingFacts {
   node: DuctNode;
   issues: readonly Issue[];
 }
@@ -52,7 +52,7 @@ const push = <K, V>(map: Map<K, V[]>, key: K, value: V) => {
  * rows are counted once by (element, kind, leg, desc): a duct's friction intervals add, while a
  * fitting's or terminal's legs are alternatives and show the largest.
  */
-export function lossesOf(result: LossResult): Map<number, number> {
+function lossesOf(result: LossResult): Map<number, number> {
   const unique = new Map<string, LossResult["paths"][number]["rows"][number]>();
   for (const path of Object.values(result.paths))
     for (const row of path.rows)

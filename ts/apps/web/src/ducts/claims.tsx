@@ -1,30 +1,25 @@
 /**
- * The claims of the subject scene as a list under the drawing, and the one crossing into Revit a
- * place or a leg offers: `revit.context.show-elements` selects and section-boxes the {3D} view; no model element changes.
+ * Claim text and verdict patches, with element links that select and section-box the {3D} view.
  * A verdict is the person's answer on one claim; `verdictPatches` stages it into the claim's Work
  * cell, the same path the assumptions editor uses. An element id in a claim's text reads as that
  * element's name (`claimParts`): hovering it lights the element in the drawing, clicking it selects
  * it in Revit. Pea writes ids; the route names them.
  */
-import { useState } from "react";
 import {
   transitionPatches,
   type DuctsRouteDocument,
   type RouteStatePatch,
 } from "@pe/agent-contracts";
 
-import { FactChip } from "@pe/kit/lang/chip";
-import { Button } from "@pe/kit/lang/button";
 import { TooltipHint } from "@pe/kit/lang/tooltip";
 import { revitTarget } from "@pe/kit/lang/row";
 import { showInRevit, revitScope } from "#/revit/element-menu";
-import { showElementsMessage, type ShowElementsResult } from "#/revit/element-target";
+import type { ShowElementsResult } from "#/revit/element-target";
 import { observedElements, useNativeObservation } from "#/revit/observation";
 import { tokenRef } from "@pe/kit/lib/token";
 import { snapshotById } from "@pe/ducts-domain/readiness";
 import type { DuctSnapshot } from "@pe/ducts-domain/types";
-import { claimInk } from "./encoding";
-import type { Claim, Leg, Place } from "./legs";
+import type { Claim, Place } from "./legs";
 import type { SubjectDrawn } from "./scene";
 
 export type Verdict = NonNullable<Claim["verdict"]>;
@@ -57,10 +52,6 @@ export const verdictPatches = (
       },
     },
   });
-
-/** A human name for a subject element: its place, else the leg it lies on, else its id. */
-export const nameOf = (subject: SubjectDrawn, id: number) =>
-  subject.placeOf.get(id)?.name ?? subject.legOf.get(id)?.name ?? `element ${id}`;
 
 const KIND_WORD: Record<DuctSnapshot["nodes"][number]["kind"], string> = {
   equipment: "equipment",
@@ -194,152 +185,5 @@ export function ClaimText({ parts, ...handlers }: { parts: readonly ClaimPart[] 
     ) : (
       <ClaimElement key={i} part={part} {...handlers} />
     ),
-  );
-}
-
-export function ClaimsList({
-  subject,
-  selected,
-  nameOfId,
-  onSelect,
-  onVerdict,
-  onHover,
-  onPick,
-}: {
-  subject: SubjectDrawn;
-  /** The selected claim id; "" = none. */
-  selected: string;
-  /** `elementNamer` over the read snapshot. */
-  nameOfId: (id: number) => string | null;
-  onSelect: (claim: Claim) => void;
-  onVerdict: (claim: Claim, verdict: Verdict) => void;
-  /** The drawing's hover: an id named in a claim lights its element. */
-  onHover: (id: number | null) => void;
-  /** Select an element in the drawing (no document to send it to). */
-  onPick: (id: number) => void;
-}) {
-  const [said, setSaid] = useState<ShowElementsResult | null>(null);
-  if (!subject.claims.length)
-    return (
-      <p className="text-ink-2 px-1 py-1" data-claims="none">
-        no claims on this subject
-      </p>
-    );
-  return (
-    <ol
-      className="flex flex-col gap-1 px-1 py-1"
-      aria-label="claims"
-      data-claims={subject.claims.length}
-    >
-      {subject.claims.map((claim, i) => {
-        const on = claim.id === selected;
-        const verdict = claim.verdict;
-        const names = [...new Set(claim.at.map((id) => nameOf(subject, id)))];
-        return (
-          <li
-            key={claim.id}
-            data-claim-row={claim.id}
-            data-selected={on ? "" : undefined}
-            className="flex items-start gap-2"
-            style={{
-              outline: on ? `2px solid ${tokenRef("select")}` : undefined,
-              outlineOffset: 2,
-            }}
-          >
-            <TooltipHint
-              content={`select claim ${i + 1}: its places and legs light up in the drawing`}
-            >
-              <button
-                type="button"
-                aria-label={`select claim ${i + 1}`}
-                className="face-mono mt-0.5 inline-flex size-4 shrink-0 cursor-pointer items-center justify-center rounded-full text-[10px]"
-                style={{ backgroundColor: claimInk(claim), color: tokenRef("page") }}
-                onClick={() => onSelect(claim)}
-              >
-                {i + 1}
-              </button>
-            </TooltipHint>
-            <span className="min-w-0 flex-1">
-              <ClaimText
-                parts={claimParts(claim.text, nameOfId)}
-                onHover={onHover}
-                onPick={onPick}
-                onShown={setSaid}
-              />{" "}
-              <TooltipHint
-                content={`select claim ${i + 1}: its places and legs light up in the drawing`}
-              >
-                <button
-                  type="button"
-                  className="text-ink-2 face-mono t-small cursor-pointer text-left"
-                  onClick={() => onSelect(claim)}
-                >
-                  {claim.state} · at {names.join(", ")}
-                  {verdict ? ` · ${VERDICTS.find((v) => v.value === verdict)?.word}` : ""}
-                </button>
-              </TooltipHint>
-            </span>
-            <span
-              className="flex shrink-0 items-center gap-1"
-              role="group"
-              aria-label={`verdict on claim ${i + 1}`}
-            >
-              {VERDICTS.map((option) => (
-                <Button
-                  key={option.value}
-                  type="button"
-                  kind="framed"
-                  label={option.word}
-                  reason={option.says}
-                  pressed={verdict === option.value}
-                  data-verdict={option.value}
-                  onClick={() => onVerdict(claim, option.value)}
-                >
-                  {option.word}
-                </Button>
-              ))}
-            </span>
-          </li>
-        );
-      })}
-      {said ? (
-        <li>
-          <FactChip title="what revit.context.show-elements answered">
-            {showElementsMessage(said)}
-          </FactChip>
-        </li>
-      ) : null}
-    </ol>
-  );
-}
-
-/** The facts of a place or a leg, beside the segment or node facts. */
-export function PlaceFacts({ place }: { place: Place }) {
-  return (
-    <dl className="grid grid-cols-[auto_1fr] gap-x-3 gap-y-1" data-place-facts={place.id}>
-      <dt className="text-ink-2">place</dt>
-      <dd>{place.name}</dd>
-      <dt className="text-ink-2">kind</dt>
-      <dd>{place.kind}</dd>
-      <dt className="text-ink-2">element</dt>
-      <dd className="face-mono">{place.id}</dd>
-    </dl>
-  );
-}
-
-export function LegFacts({ leg }: { leg: Leg }) {
-  return (
-    <dl className="grid grid-cols-[auto_1fr] gap-x-3 gap-y-1" data-leg-facts={leg.name}>
-      <dt className="text-ink-2">leg</dt>
-      <dd>{leg.name}</dd>
-      <dt className="text-ink-2">length</dt>
-      <dd className="face-mono">{leg.lengthFt.toFixed(1)} ft</dd>
-      <dt className="text-ink-2">fittings</dt>
-      <dd className="face-mono">{leg.fittings}</dd>
-      <dt className="text-ink-2">size</dt>
-      <dd className="face-mono">{leg.size ?? "—"}</dd>
-      <dt className="text-ink-2">elements</dt>
-      <dd className="face-mono">{leg.ids.length}</dd>
-    </dl>
   );
 }

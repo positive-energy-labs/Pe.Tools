@@ -16,14 +16,14 @@ export interface StripOption {
   says?: string;
 }
 
-export interface PaneModes {
+interface PaneModes {
   value: string;
   options: readonly StripOption[];
   onChange(key: string): void;
   label?: string;
 }
 
-export interface PaneLayers {
+interface PaneLayers {
   value: readonly string[];
   options: readonly StripOption[];
   onToggle(key: string): void;

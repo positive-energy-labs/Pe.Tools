@@ -54,7 +54,7 @@ export interface TreeLayout {
 }
 
 /** Deterministic tidy layout: x by vertex depth, y by leaf slot, first child on its parent's row. */
-export function layoutTree(tree: GroupTree, chains: Chain[], labelW = LABEL_W): TreeLayout {
+function layoutTree(tree: GroupTree, chains: Chain[], labelW = LABEL_W): TreeLayout {
   const below = new Map<number | null, Chain[]>();
   for (const chain of chains) below.set(chain.from, [...(below.get(chain.from) ?? []), chain]);
   // A subtree's reach: its farthest terminal first (so the critical-path stand-in runs along the

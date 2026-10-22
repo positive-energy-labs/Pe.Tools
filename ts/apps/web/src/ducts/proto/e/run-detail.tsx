@@ -9,7 +9,7 @@ import type { Row } from "@pe/ducts-domain/losses";
 
 import { fmt, fmtFt } from "./bar";
 
-export interface RunPart {
+interface RunPart {
   id: number;
   kind: Row["kind"];
   eqFt: number | null;

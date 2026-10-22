@@ -100,7 +100,7 @@ export interface SubjectCut {
 }
 
 /** The longest chain of connections a break is searched across before it is called a gap. */
-export const OMISSION_HOPS = 12;
+const OMISSION_HOPS = 12;
 
 const PLACE_KINDS = new Set<Node["kind"]>(["equipment", "accessory", "terminal", "cap"]);
 const isNode = (element: Element): element is Node => "category" in element;

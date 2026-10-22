@@ -246,7 +246,7 @@ const plural = (n: number, word: string) => `${n} ${word}${n === 1 ? "" : "s"}`;
 const inWg = (v: number | null) => (v == null ? "no path" : v.toFixed(3));
 
 /** A heal run's standing in words: what the preview passed, or what the apply healed and its ESP. */
-export function healRunWords(run: HealRunView) {
+function healRunWords(run: HealRunView) {
   if (run.mode === "preview")
     return `previewed: ${run.planned} pass · ${run.refused} refused${run.fresh ? "" : " · out of date"}`;
   const esp = run.esp ? ` · ESP ${inWg(run.esp.before)} → ${inWg(run.esp.after)} in-wg` : "";
@@ -342,7 +342,7 @@ const verdict = (
 });
 
 /** The element ids a proximity assumption key names: `proximity:12:0|34:1` or `proximity:12:0|34`. */
-export const proximityIds = (key: string) =>
+const proximityIds = (key: string) =>
   key
     .slice("proximity:".length)
     .split("|")
@@ -872,7 +872,7 @@ const valueWord = (segment: string, value: unknown) => {
 };
 
 /** Pea's claims awaiting a verdict, then its proposals awaiting staging. */
-export function checks(input: TriageInput & { claims: readonly Claim[] }): InboxItem[] {
+function checks(input: TriageInput & { claims: readonly Claim[] }): InboxItem[] {
   const { scope, findings, doc, claims } = input;
   const name = input.nameOf ?? String;
   const items: InboxItem[] = claims
@@ -993,7 +993,7 @@ export interface WriteRow {
   held: string | null;
 }
 
-export function writeRow(left: { fix: number; set: number }, write: WriteState): WriteRow {
+function writeRow(left: { fix: number; set: number }, write: WriteState): WriteRow {
   const waits = write.esp ? espWaits(left) : null;
   return {
     title: write.fresh && write.planned ? `Write ${write.planned} to Revit` : "Write to Revit",

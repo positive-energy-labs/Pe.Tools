@@ -74,7 +74,7 @@ export function roomRows(regions: readonly RoomsRegion[], levels: readonly strin
 }
 
 /** One field's stage: equal to what Revit holds stages nothing (the cell unstages). */
-export const stagePatches = (
+const stagePatches = (
   cells: Cells,
   region: RoomsRegion,
   field: RoomEditField,
