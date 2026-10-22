@@ -14,6 +14,7 @@ import { KeyLegend } from "#/components/lang/kbd";
 import { Pane } from "#/components/lang/pane";
 import { useNativeObservation } from "#/revit/observation";
 import { useScene } from "#/scene/use-scene";
+import type { OrbitViewport } from "#/scene/orbit";
 
 import type { Ruling } from "../../annotations";
 import { elementNamer } from "../../claims";
@@ -115,11 +116,21 @@ function Canvas({
   ); // eslint-disable-line react-hooks/exhaustive-deps
   const read = useScene(request, native, page.epoch);
   const bounds = usePictureBounds(read.meshes, scene);
-  const pose = poseOf(page.viewport, bounds);
+  const committedPose = poseOf(page.viewport, bounds);
+  const [orbitDraft, setOrbitDraft] = useState<{
+    base: typeof page.viewport;
+    system: string;
+    pose: OrbitViewport;
+  } | null>(null);
+  const pose =
+    orbitDraft?.base === page.viewport && orbitDraft.system === page.system
+      ? orbitDraft.pose
+      : committedPose;
   // The pose the picture shows is a fact Pea reads (`facts.pose`); only this effect writes it.
   useEffect(() => {
-    if (JSON.stringify(pose) !== JSON.stringify(page.pose)) setPage({ pose });
-  }, [pose, page.pose, setPage]);
+    if (JSON.stringify(committedPose) !== JSON.stringify(page.pose))
+      setPage({ pose: committedPose });
+  }, [committedPose, page.pose, setPage]);
   const layers = layersOn(page);
   const picture = page.picture;
   const swap = () =>
@@ -203,7 +214,18 @@ function Canvas({
     bounds,
     scene,
     meshes: read.meshes,
-    setPage,
+    onOrbit: (viewport, how) => {
+      if (how === "gesture")
+        setOrbitDraft({ base: page.viewport, system: page.system, pose: viewport });
+      else {
+        setOrbitDraft(null);
+        setPage({ viewport }, { history: "push" });
+      }
+    },
+    onOrbitEnd: (viewport) => {
+      setOrbitDraft(null);
+      if (viewport) setPage({ viewport }, { history: "replace" });
+    },
     swap,
     small: () => schematic("inset"),
   });

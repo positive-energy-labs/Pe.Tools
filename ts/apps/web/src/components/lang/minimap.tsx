@@ -207,13 +207,23 @@ const stopTitle = (v: Vec, elev: number) =>
 export function OrbitMinimap({
   viewport,
   onViewport,
+  onGestureEnd,
   paint,
 }: MinimapProps<OrbitViewport> & {
+  /** With a transient preview consumer, commit once on release; null cancels the preview. */
+  onGestureEnd?: (viewport: OrbitViewport | null) => void;
   paint?(project: (p: readonly number[]) => [number, number]): ReactNode;
   stops?: "globe";
 }) {
   const { yaw, elev } = viewport;
-  const pressed = useRef<{ x: number; y: number; moved: boolean } | null>(null);
+  const pressed = useRef<{
+    x: number;
+    y: number;
+    moved: boolean;
+    ended?: boolean;
+    from: OrbitViewport;
+    latest: OrbitViewport;
+  } | null>(null);
   const body = useMemo(() => {
     const at = globeProjection(yaw, elev);
     const eye = towards(yaw, elev);
@@ -307,7 +317,13 @@ export function OrbitMinimap({
         if (event.button !== 0) return;
         // A drag turns the globe; it never starts a text selection in the pane.
         event.preventDefault();
-        pressed.current = { x: event.clientX, y: event.clientY, moved: false };
+        pressed.current = {
+          x: event.clientX,
+          y: event.clientY,
+          moved: false,
+          from: viewport,
+          latest: viewport,
+        };
       }}
       onPointerMove={(event) => {
         const start = pressed.current;
@@ -319,19 +335,25 @@ export function OrbitMinimap({
           return;
         if (!start.moved) event.currentTarget.setPointerCapture?.(event.pointerId);
         start.moved = true;
-        onViewport(
-          {
-            ...viewport,
-            // A drag carries the globe with the pointer, as the camera's own orbit drag does.
-            yaw: yaw - event.movementX * DEG_PER_PX,
-            elev: clampElev(elev + event.movementY * DEG_PER_PX),
-          },
-          "gesture",
-        );
+        start.latest = {
+          ...start.from,
+          // Absolute displacement survives multiple pointer events before React commits.
+          yaw: start.from.yaw - (event.clientX - start.x) * DEG_PER_PX,
+          elev: clampElev(start.from.elev + (event.clientY - start.y) * DEG_PER_PX),
+        };
+        onViewport(start.latest, "gesture");
       }}
       onPointerUp={() => {
+        if (pressed.current?.moved) onGestureEnd?.(pressed.current.latest);
+        if (pressed.current) pressed.current.ended = true;
         // The click that follows a drag still needs to know it was one.
         setTimeout(() => (pressed.current = null));
+      }}
+      onLostPointerCapture={() => {
+        if (pressed.current && !pressed.current.ended) {
+          pressed.current = null;
+          onGestureEnd?.(null);
+        }
       }}
     >
       <circle

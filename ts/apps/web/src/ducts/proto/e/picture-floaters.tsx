@@ -8,7 +8,6 @@ import { Button } from "@pe/kit/lang/button";
 import { tokenRef } from "@pe/kit/lib/token";
 import type { FloaterSpec } from "#/components/lang/floater";
 import { OrbitMinimap } from "#/components/lang/minimap";
-import type { PageMove } from "#/route/manifest";
 import type { OrbitViewport } from "#/scene/orbit";
 import { Scene3D } from "#/scene/scene3d";
 import type { SceneMeshes } from "#/scene/types";
@@ -27,7 +26,8 @@ export function usePictureFloaters({
   bounds,
   scene,
   meshes,
-  setPage,
+  onOrbit,
+  onOrbitEnd,
   swap,
   small,
 }: {
@@ -36,7 +36,8 @@ export function usePictureFloaters({
   bounds: PictureBounds | null;
   scene: Scene;
   meshes: SceneMeshes | null;
-  setPage: (next: Partial<DuctsPage>, move?: PageMove<DuctsPage>) => void;
+  onOrbit: (pose: OrbitViewport, how: "gesture" | "move") => void;
+  onOrbitEnd: (pose: OrbitViewport | null) => void;
   swap: () => void;
   /** The schematic, small. */
   small: () => ReactNode;
@@ -80,9 +81,8 @@ export function usePictureFloaters({
         pose ? (
           <OrbitMinimap
             viewport={pose}
-            onViewport={(viewport, how) =>
-              setPage({ viewport }, { history: how === "gesture" ? "replace" : "push" })
-            }
+            onViewport={onOrbit}
+            onGestureEnd={onOrbitEnd}
             paint={paint}
           />
         ) : (

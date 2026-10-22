@@ -6,6 +6,31 @@ import { OrbitMinimap, PlaneMinimap, type OrbitViewport } from "./minimap";
 
 afterEach(cleanup);
 
+test("globe preview uses total displacement before a prop echo and commits only on release", () => {
+  const onViewport = vi.fn();
+  const onGestureEnd = vi.fn();
+  const viewport: OrbitViewport = { kind: "orbit", yaw: 30, elev: 30, zoom: 1, pivot: [0, 0, 0] };
+  const view = render(
+    <OrbitMinimap viewport={viewport} onViewport={onViewport} onGestureEnd={onGestureEnd} />,
+  );
+  const globe = view.getByRole("group", { name: "orbit globe" });
+  const pointer = (type: string, x: number) =>
+    fireEvent(globe, new MouseEvent(type, { bubbles: true, button: 0, clientX: x, clientY: 10 }));
+  pointer("pointerdown", 10);
+  pointer("pointermove", 20);
+  pointer("pointermove", 30);
+  expect(onViewport).toHaveBeenLastCalledWith({ ...viewport, yaw: 22 }, "gesture");
+  expect(onGestureEnd).not.toHaveBeenCalled();
+  pointer("pointerup", 30);
+  expect(onGestureEnd).toHaveBeenCalledExactlyOnceWith({ ...viewport, yaw: 22 });
+  pointer("lostpointercapture", 30);
+  expect(onGestureEnd).toHaveBeenCalledTimes(1);
+  pointer("pointerdown", 10);
+  pointer("pointermove", 20);
+  pointer("lostpointercapture", 20);
+  expect(onGestureEnd).toHaveBeenLastCalledWith(null);
+});
+
 // A 4000x3000 field thumbnails at 260/4000 = 0.065: a click at (130, 97.5) is field (2000, 1500).
 const extent = { width: 4000, height: 3000 };
 const viewportSize = { width: 800, height: 600 };
