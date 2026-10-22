@@ -26,7 +26,7 @@ const RAIL_MARGIN = 16;
 export function useLensModel({ state }: { state: ChatState }) {
   const messages = useMemo(() => selectMessages(state), [state]);
 
-  const moments = toMoments(messages);
+  const moments = useMemo(() => toMoments(messages), [messages]);
 
   const breakdown = useMemo(() => selectBreakdown(state), [state]);
 
@@ -73,7 +73,7 @@ export function useLensModel({ state }: { state: ChatState }) {
   const [awayFromTail, setAwayFromTail] = useState(false);
   const awayRef = useRef(false);
 
-  const [, bumpMeasure] = useReducer((tick: number) => tick + 1, 0);
+  const [measureRevision, bumpMeasure] = useReducer((tick: number) => tick + 1, 0);
 
   const bumpPending = useRef(false);
 
@@ -273,10 +273,8 @@ export function useLensModel({ state }: { state: ChatState }) {
       scroller.removeEventListener("scroll", onScroll);
       cancelAnimationFrame(raf);
     };
-    // `moments` is a fresh array each render; re-running re-measures geometry as the thread (and
-    // streaming text heights) change. The register callback re-measures once the moment sections
-    // mount.
-  }, [moments, loading, intent, setIntent]);
+    // Unrelated route renders do not remeasure chat. Content, mounting and resize still do.
+  }, [moments, measureRevision, loading, intent, setIntent]);
   // An empty thread is a claim; while the body loads it is not known (the composer head says so).
   const showEmpty = !loading && moments.length === 0;
   return {
