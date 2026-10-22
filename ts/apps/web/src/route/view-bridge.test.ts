@@ -21,8 +21,10 @@ describe("route addresses match their manifests", () => {
 
   it("a patch carries no defaults and refuses a bad mode, viewport or a read-only key", () => {
     const patch = routeViewPatchSchema("ducts");
-    expect(patch.parse({ camera: "plan" })).toEqual({ camera: "plan" });
-    expect(patch.safeParse({ camera: "side" }).success).toBe(false);
+    expect(patch.parse({ viewport: "orbit:45,30,1.25@0,0,0" })).toEqual({
+      viewport: "orbit:45,30,1.25@0,0,0",
+    });
+    expect(patch.safeParse({ picture: "side" }).success).toBe(false);
     expect(patch.safeParse({ viewport: "orbit:1,2" }).success).toBe(false);
     expect(patch.safeParse({ diagnostic: "x" }).success).toBe(false);
     expect(patch.safeParse({}).success).toBe(false);
