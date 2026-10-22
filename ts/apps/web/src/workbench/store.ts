@@ -93,32 +93,25 @@ export function createChatPageStore(deps: {
         route: R,
         page?: LinkPage<R>,
         carry?: Pick<Carry, "target" | "work">,
-      ) => tabs?.open(route, page, carry) ?? Promise.resolve(false),
-      /** Existing transcript/head entry point. Old group paths cannot identify a route Place. */
-      setPlugin: (route?: ChatPluginRoute, group?: readonly string[]) => {
+      ) => {
         planGeneration++;
         deps.registry.set(planIntent, null);
-        if (!route || group?.length) {
-          set("open-unavailable", planRefusal, {
-            route: route ?? "chat",
-            message: group?.length
-              ? "This group link is unavailable; open the route and choose its exact subject."
-              : "Choose a route Place to open.",
-          });
-          return;
-        }
         set("open", planRefusal, null);
-        void tabs?.open(route);
+        return tabs?.open(route, page, carry) ?? Promise.resolve(false);
       },
       /**
        * The head's commit verb (K3): open the route's pane UNSCOPED (plan consumes the whole staged
        * set, so no group filter may hide part of it) and ask its Situation to run its own commit
        * once. Posts nothing to the thread; it is a route action, never a message.
        */
-      planIn: (route: ChatPluginRoute) => {
+      planIn: (
+        route: ChatPluginRoute,
+        page?: LinkPage<RouteKey>,
+        carry?: Pick<Carry, "target" | "work">,
+      ) => {
         const generation = ++planGeneration;
         set("plan-in", planRefusal, null);
-        void tabs?.open(route, {}).then((opened) => {
+        void tabs?.open(route, page ?? {}, carry).then((opened) => {
           if (opened && generation === planGeneration)
             set("plan-in", planIntent, { route, nonce: Date.now() });
         });

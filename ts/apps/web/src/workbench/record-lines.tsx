@@ -9,6 +9,7 @@ import { Button } from "@pe/kit/lang/button";
 import { previousOf, useReading } from "#/readings";
 import {
   actionRoute,
+  actionPlace,
   actionWord,
   chatPluginTitle,
   type ActionCall,
@@ -22,6 +23,7 @@ const line = "flex min-w-0 items-baseline gap-2 t-small text-ink-2";
 /** `Pea proposed {n} changes in {Route} · {Subject}`: counts are the call's own, never live Work. */
 export function ProposedLine({ record }: { record: ProposedRecord }) {
   const { store } = useWorkbench();
+  const place = record.place;
   return (
     <div className={line} data-proposed={record.route}>
       <span className="truncate">
@@ -29,9 +31,14 @@ export function ProposedLine({ record }: { record: ProposedRecord }) {
         {chatPluginTitle(record.route)}
         {record.subject ? ` · ${record.subject}` : ""}
       </span>
-      <Button label="open ›" onClick={() => store.actions.setPlugin(record.route)}>
+      <Button
+        label="open ›"
+        refusal={place.ok ? null : place.refusal}
+        onClick={() => place.ok && void store.actions.openTab(place.route, place.page, place.carry)}
+      >
         open ›
       </Button>
+      {!place.ok ? <span data-tone="caution">{place.refusal}</span> : null}
     </div>
   );
 }
@@ -47,6 +54,7 @@ export function ActionLine({ call }: { call: ActionCall }) {
   // A control (`action.resume`) names the original receipt; its key is the action's own.
   const key = row?.key ?? call.key;
   const route = actionRoute(key);
+  const place = route ? actionPlace(route, row) : null;
   const state = row?.state ?? (reading.state === "failed" ? "receipt unread" : "reading");
   return (
     <div className="flex min-w-0 flex-col gap-1">
@@ -68,7 +76,13 @@ export function ActionLine({ call }: { call: ActionCall }) {
           </span>
         </span>
         {route ? (
-          <Button label="open ›" onClick={() => store.actions.setPlugin(route)}>
+          <Button
+            label="open ›"
+            refusal={place?.ok ? null : place?.refusal}
+            onClick={() =>
+              place?.ok && void store.actions.openTab(place.route, place.page, place.carry)
+            }
+          >
             open ›
           </Button>
         ) : (
@@ -77,6 +91,7 @@ export function ActionLine({ call }: { call: ActionCall }) {
           </Link>
         )}
       </div>
+      {place && !place.ok ? <span data-tone="caution">{place.refusal}</span> : null}
       {row?.state === "succeeded" ? <NativeReadingReferences receipt={row} /> : null}
     </div>
   );

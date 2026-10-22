@@ -1,12 +1,24 @@
 /**
- * The routes Chat hosts in its plugin pane, by their manifests, and the one transcript record a
- * Pea call that wrote their Work leaves. Views live in `route-panes.tsx`.
+ * Recorded route exits retain the subject and scope of the call that wrote their Work.
  */
 import {
   actionControls,
   parseContributionKey,
   routeCallOf,
   semanticActions,
+  addressSchema,
+  documentRefSchema,
+  documentRequestSchema,
+  workKeySchema,
+  readLink,
+  routeAddresses,
+  urlKeys,
+  type Carry,
+  type LinkPage,
+  type RouteKey,
+  type WorkKey,
+  type ActionReceipt,
+  type DocumentRequest,
 } from "@pe/agent-contracts";
 
 import { publicRoutes } from "#/route/builtin-routes";
@@ -39,6 +51,84 @@ export interface ProposedRecord {
   changes: number;
   /** The document (or named workspace) the call recorded; null when it recorded none. */
   subject: string | null;
+  place: CapturedPlace;
+}
+
+export type CapturedPlace =
+  | { ok: true; route: RouteKey; page: LinkPage<RouteKey>; carry: Pick<Carry, "target" | "work"> }
+  | { ok: false; refusal: string };
+
+/** A recorded exit carries its own scope. Empty carries suppress the dock's current-target defaults. */
+export function capturedPlace(
+  route: string,
+  scope: WorkKey | null,
+  source: unknown,
+  named?: DocumentRequest,
+): CapturedPlace {
+  if (!Object.hasOwn(routeAddresses, route))
+    return { ok: false, refusal: `This route has no saved Place contract: ${route}` };
+  const key = route as RouteKey;
+  if (!scope)
+    return { ok: false, refusal: "This reading did not record its Work or document target." };
+  const input = isRecord(source) ? source : {};
+  if (key === "ducts" && (typeof input.system !== "string" || !input.system.trim()))
+    return {
+      ok: false,
+      refusal:
+        "This reading did not record an exact Ducts system name; open Ducts and choose its subject.",
+    };
+  const target =
+    scope.binding === "open"
+      ? { kind: "open", ref: scope.open }
+      : scope.binding === "address" && scope.from
+        ? { kind: "open", ref: scope.from }
+        : (named ?? null);
+  const needs = (publicRoutes.get(route)?.manifest as { needs?: unknown } | undefined)?.needs;
+  if (!target && (scope.binding !== "host" || needs))
+    return {
+      ok: false,
+      refusal:
+        "This reading did not record its document target; the current chat target cannot replace it.",
+    };
+  const carry = {
+    target: target ? JSON.stringify(target) : "",
+    work: scope.binding === "workspace" ? scope.work : "",
+  };
+  const fields = routeAddresses[key].fields as Record<string, { share?: false }>;
+  const search = Object.fromEntries(
+    urlKeys(key)
+      .filter((name) => fields[name]?.share !== false && name in input)
+      .map((name) => [name, input[name]]),
+  );
+  if (key === "schedules" && scope.binding === "workspace") search.schedule = scope.work;
+  return { ok: true, route: key, page: readLink(key, search).page as LinkPage<RouteKey>, carry };
+}
+
+/** Action receipts retain their execution document, even when the chat head has since moved. */
+export function actionPlace(route: string, receipt: ActionReceipt | undefined): CapturedPlace {
+  const work = isRecord(receipt?.bases.work) ? receipt.bases.work : null;
+  // A receipt's Work key is authority when it explicitly records one.
+  const scope = workKeySchema.safeParse(work?.key);
+  const target = receipt?.destination;
+  const result = receipt && "result" in receipt && isRecord(receipt.result) ? receipt.result : null;
+  const member = isRecord(result?.member) ? result.member : null;
+  const source = isRecord(receipt?.request.source) ? receipt.request.source : null;
+  const workspace =
+    typeof receipt?.request.workspaceId === "string" ? receipt.request.workspaceId : null;
+  return capturedPlace(
+    route,
+    scope.success
+      ? scope.data
+      : workspace
+        ? { binding: "workspace", route, target: null, work: workspace }
+        : target?.kind === "document"
+          ? { binding: "open", route, target: null, open: target.ref }
+          : target?.kind === "host"
+            ? { binding: "host", route, target: null }
+            : null,
+    { ...receipt?.request, ...source, ...member },
+    target?.kind === "document" ? { kind: "open", ref: target.ref } : undefined,
+  );
 }
 
 /**
@@ -70,9 +160,28 @@ export function proposedRecord(
     }),
   );
   const target = isRecord(outer.target) ? outer.target : {};
+  const observation = isRecord(target.nativeObservation) ? target.nativeObservation : null;
+  const ref = documentRefSchema.safeParse(
+    observation?.source === "native" ? observation.document : undefined,
+  );
+  const address = addressSchema.safeParse(target.document);
+  const named = documentRequestSchema.safeParse({
+    kind: "named",
+    session: target.session,
+    address: target.document,
+  });
+  const scope: WorkKey | null =
+    typeof request.workspaceId === "string" && request.workspaceId.trim()
+      ? { binding: "workspace", route, target: null, work: request.workspaceId }
+      : ref.success && ref.data.session === target.session
+        ? { binding: "open", route, target: null, open: ref.data }
+        : address.success && named.success
+          ? { binding: "address", route, target: address.data }
+          : null;
   return {
     route,
     changes: cells.size,
+    place: capturedPlace(route, scope, input, named.success ? named.data : undefined),
     subject:
       typeof target.document === "string"
         ? target.document

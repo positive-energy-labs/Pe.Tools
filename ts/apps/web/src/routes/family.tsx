@@ -13,7 +13,6 @@ export const familySearch = (search: Record<string, unknown>) => ({
   ...routeSearch(search),
   // A deep link (`/pods`, a chat pane) names the stage and member the route opens on.
   ...url.read(search),
-  capture: search.capture === true || search.capture === "true" ? true : undefined,
   /** `?demo=<action>` mounts one seed of `manifest.seeds`. */
   demo: typeof search.demo === "string" && search.demo.trim() ? search.demo.trim() : undefined,
 });
@@ -25,7 +24,7 @@ export const Route = createFileRoute("/family")({
 });
 
 function FamilyRoute() {
-  const { target, capture } = Route.useSearch();
+  const { target } = Route.useSearch();
   const thread = useRouteThread();
-  return <FamilyRouteView target={target ?? null} thread={thread} capture={capture} />;
+  return <FamilyRouteView target={target ?? null} thread={thread} />;
 }

@@ -17,20 +17,16 @@ const DEMO_SCHEMA = "";
 export function FamilyRouteView({
   target = null,
   thread,
-  capture,
   url = true,
 }: {
   target?: string | null;
   thread?: string;
-  /** `?capture=true`: capture the open family as soon as the route can. */
-  capture?: boolean;
   /** False in a chat pane, which does not own the URL. */
   url?: boolean;
 }) {
   const demo = useMemo(() => frozenDemo() !== null, []);
   const [pods, refreshPods] = usePodList(!demo);
   const store = useFamilyStore({ target, thread, pods, url });
-  const captureReady = store.handle.actions.capture.refusal === null;
   const readReady = store.handle.actions.read.refusal === null;
   // Unread once the Work reading is current: a reload must not read over a draft still loading.
   const unread = store.snapshot === null && store.handle.work.current;
@@ -56,10 +52,6 @@ export function FamilyRouteView({
       onReplan={store.actions.armBuild}
     />
   ) : null;
-  useEffect(() => {
-    if (capture && captureReady) void store.actions.capture().catch(() => undefined);
-    // Once per arrival: the flag names an intent, not a standing order.
-  }, [capture, captureReady]); // eslint-disable-line react-hooks/exhaustive-deps
   const name = store.member?.path
     .split("/")
     .at(-1)

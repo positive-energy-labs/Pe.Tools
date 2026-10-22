@@ -408,11 +408,16 @@ export function ComposerWork({ situation }: { situation: ChatSituation }) {
   // Live asks only: an expired ask is a transcript record, never a head row.
   const approvals = selectApprovals(chat);
   const questions = selectQuestions(chat);
-  const works = useHeadWorks(documentAddress(inventory, bound), ladder.docWord ?? "document", {
-    open: store.actions.setPlugin,
-    planIn: store.actions.planIn,
-    planRefusal: useAtomValue(store.atoms.planRefusal),
-  });
+  const works = useHeadWorks(
+    documentAddress(inventory, bound),
+    ladder.docWord ?? "document",
+    {
+      open: (place) => void store.actions.openTab(place.route, place.page, place.carry),
+      planIn: (place) => store.actions.planIn(place.route, place.page, place.carry),
+      planRefusal: useAtomValue(store.atoms.planRefusal),
+    },
+    bound,
+  );
   return (
     <>
       <ComposerPending
