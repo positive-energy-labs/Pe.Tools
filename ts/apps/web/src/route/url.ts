@@ -6,7 +6,7 @@
  * and Forward step through what the Situation targeted; a gesture replaces the entry instead.
  * Nothing here hand-rolls `new URL().searchParams`.
  */
-import { routeAddress, type History, type RouteKey } from "@pe/agent-contracts";
+import { routeAddress, type History, type RouteKey, type RoutePage } from "@pe/agent-contracts";
 import { useRouter, type SearchMiddleware } from "@tanstack/react-router";
 import { useEffect } from "react";
 import { z } from "zod";
@@ -80,6 +80,23 @@ function addressPage<P>(key: string, route: RouteKey, page: z.ZodType<P> | undef
       contract.history(before as never, after as never, override),
     middlewares: [encode],
   };
+}
+
+const routeUrlPages = new Map<RouteKey, UrlPage<never>>();
+
+/**
+ * A contract route's URL page with no manifest: the address schema is the Page (`useAddressPage`).
+ * One object per route, because `useUrlPage` re-subscribes when it changes and a re-subscribe
+ * restores the address over any move still pending.
+ */
+export function routeUrlPage<R extends RouteKey>(route: R): UrlPage<RoutePage<R>> {
+  let found = routeUrlPages.get(route);
+  if (!found)
+    routeUrlPages.set(
+      route,
+      (found = addressPage(route, route, routeAddress(route).schema as never)),
+    );
+  return found as unknown as UrlPage<RoutePage<R>>;
 }
 
 /** The manifest's URL page; null when the manifest names no contract address. */
