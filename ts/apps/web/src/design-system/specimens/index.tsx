@@ -1,5 +1,6 @@
 import { CatalogueSpecimens } from "./catalogue";
 import { RealTable } from "./integration-table";
+import { PaneStripSpecimen } from "./pane-strip";
 import { SatelliteSpecimens } from "./satellites";
 import { TokenSpecimens } from "./tokens";
 
@@ -9,6 +10,7 @@ export function DesignSystemSpecimens() {
       <TokenSpecimens />
       <CatalogueSpecimens />
       <RealTable />
+      <PaneStripSpecimen />
       <SatelliteSpecimens />
     </>
   );

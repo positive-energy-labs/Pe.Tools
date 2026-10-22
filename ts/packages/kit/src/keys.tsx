@@ -89,6 +89,9 @@ export function KeyScope({
   return <ScopeContext value={node}>{children}</ScopeContext>;
 }
 
+/** Whether the innermost scope node is live: a key `available` reads it so a hidden pane binds nothing. */
+export const useScopeLive = (): boolean => use(ScopeContext).live;
+
 /** One chord a scope node binds. */
 export interface ScopeKey {
   hotkey: Chord;

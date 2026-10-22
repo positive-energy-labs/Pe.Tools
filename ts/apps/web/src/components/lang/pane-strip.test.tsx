@@ -1,0 +1,126 @@
+// @vitest-environment jsdom
+import { cleanup, fireEvent, render, screen } from "@testing-library/react";
+import { afterEach, expect, test, vi } from "vite-plus/test";
+
+import { KeyScope, readKeyMeta, readRegistrations } from "@pe/kit/keys";
+
+import { Pane } from "./pane";
+
+vi.mock("#/host/diagnostics", () => ({ reportFault: vi.fn() }));
+afterEach(cleanup);
+
+const modes = (onChange = vi.fn()) => ({
+  value: "plan",
+  label: "view",
+  onChange,
+  options: [
+    { key: "plan", label: "plan", chord: "1" as const, says: "Look straight down." },
+    { key: "iso", label: "iso", chord: "2" as const },
+  ],
+});
+
+/** The live registrations this pane's scope node made, as Help reads them. */
+const bound = (scope: string) =>
+  readRegistrations().flatMap((reg) => {
+    const meta = readKeyMeta(reg.options.meta);
+    return meta?.scope === scope && reg.options.enabled !== false
+      ? [{ hotkey: reg.hotkey, ...meta }]
+      : [];
+  });
+
+test("modes are exclusive: one pressed, a press asks for the other", () => {
+  const onChange = vi.fn();
+  render(
+    <Pane id="canvas" title="canvas" modes={modes(onChange)}>
+      body
+    </Pane>,
+  );
+  const group = screen.getByRole("group", { name: "view" });
+  const pressed = [...group.querySelectorAll("button")].map((b) => b.getAttribute("aria-pressed"));
+  expect(pressed).toEqual(["true", "false"]);
+  fireEvent.click(screen.getByRole("button", { name: "iso" }));
+  expect(onChange).toHaveBeenCalledWith("iso");
+});
+
+test("a chord on a mode, floater or layer registers on the pane's node with its label and says", () => {
+  const onOpenChange = vi.fn();
+  render(
+    <Pane
+      id="canvas"
+      title="canvas"
+      modes={modes()}
+      floaters={[
+        {
+          key: "map",
+          label: "minimap",
+          chord: "M",
+          says: "Show the whole field.",
+          place: "br",
+          open: false,
+          onOpenChange,
+          render: () => null,
+        },
+      ]}
+      layers={{
+        value: ["grid"],
+        onToggle: vi.fn(),
+        options: [{ key: "grid", label: "grid", chord: "G" }],
+      }}
+    >
+      body
+    </Pane>,
+  );
+  const keys = bound("canvas");
+  expect(keys.map((k) => k.hotkey).sort()).toEqual(["1", "2", "G", "M"]);
+  expect(keys.find((k) => k.hotkey === "1")).toMatchObject({
+    name: "plan",
+    description: "Look straight down.",
+    refusal: null,
+  });
+  expect(keys.find((k) => k.hotkey === "M")?.description).toBe("Show the whole field.");
+  expect(screen.getByRole("button", { name: "minimap" }).getAttribute("aria-pressed")).toBe(
+    "false",
+  );
+  expect(screen.getByRole("button", { name: "grid" }).getAttribute("aria-pressed")).toBe("true");
+});
+
+test("an open floater draws over the body and Esc inside it closes it", () => {
+  const onOpenChange = vi.fn();
+  render(
+    <Pane
+      id="canvas"
+      title="canvas"
+      floaters={[
+        {
+          key: "map",
+          label: "minimap",
+          place: "tr",
+          open: true,
+          onOpenChange,
+          render: () => "field",
+        },
+      ]}
+    >
+      body
+    </Pane>,
+  );
+  const floater = screen.getByRole("region", { name: "minimap" });
+  expect(floater.parentElement?.getAttribute("data-slot")).toBe("pane-field");
+  expect(bound("floater:map").map((k) => k.hotkey)).toEqual(["Escape"]);
+  floater.focus();
+  fireEvent.keyDown(floater, { key: "Escape" });
+  expect(onOpenChange).toHaveBeenCalledWith(false);
+});
+
+test("a hidden pane registers nothing", () => {
+  render(
+    <KeyScope id="route" hidden>
+      <Pane id="canvas" title="canvas" modes={modes()}>
+        body
+      </Pane>
+    </KeyScope>,
+  );
+  expect(
+    readRegistrations().filter((reg) => readKeyMeta(reg.options.meta)?.scope === "canvas"),
+  ).toEqual([]);
+});
