@@ -2,7 +2,8 @@ import { z } from "zod";
 import { callerSchema } from "./caller.ts";
 import { mentionSchema } from "./mention.ts";
 import { documentRequestSchema, threadHeadReadingSchema } from "./target.ts";
-import { routeAddresses, type RouteKey } from "./route-address.ts";
+import type { RouteKey } from "./route-address.ts";
+import { routeAddresses } from "./routes/index.ts";
 
 /**
  * The harness-thread wire (ADR 0015: the harness drives; Pea is tools and UI).

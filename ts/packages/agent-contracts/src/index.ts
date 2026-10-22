@@ -1,6 +1,9 @@
 export * from "./activity.ts";
 export * from "./route-state.ts";
 export * from "./route-address.ts";
+export * from "./route-view.ts";
+export * from "./routes/index.ts";
+export type { History, RouteAddress, RouteField } from "./route-field.ts";
 export * from "./page-keys.ts";
 export * from "./route-doc.ts";
 export * from "./reading.ts";
