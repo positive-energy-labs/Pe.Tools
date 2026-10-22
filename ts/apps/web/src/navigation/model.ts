@@ -3,7 +3,6 @@ import {
   APP_TASKS,
   routePath as builtinRoutePath,
   routeKey as builtinRouteKey,
-  type AppExposure,
   type SurfaceShell,
 } from "@pe/agent-contracts";
 import { TOOLS } from "./catalogue";
@@ -12,7 +11,6 @@ import { podPathWork, podWorkPath, podPathName } from "#/route/pod-address";
 export const routePath = (key: string) => podWorkPath(key) ?? builtinRoutePath(key);
 export const routeKey = (path: string) => podPathWork(path) ?? builtinRouteKey(path);
 export const TASKS = APP_TASKS;
-export type Exposure = AppExposure;
 const CATALOGUE = TOOLS;
 export function matches(text: string, query: string) {
   return query

@@ -13,7 +13,6 @@ export type GroupKey = (typeof SETTINGS_SECTIONS)[number];
 /** The one address of every Settings group; `session` focuses a Revit row. */
 export const settingsDestination = (section?: GroupKey, session?: string) =>
   linkTo("settings", { section, ...(section === "revit" && session ? { session } : {}) });
-export const GROUP_KEYS: readonly GroupKey[] = SETTINGS_SECTIONS;
 
 export const machineOf = (reading: Reading<Machine>): Machine | null =>
   reading.state === "ready"
