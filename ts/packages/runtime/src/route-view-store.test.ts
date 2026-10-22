@@ -42,6 +42,7 @@ describe("mounted route view custody", () => {
     const result = store.set("t", "families", id1, first.revision, { query: "blank" });
     const ack = (query: string) =>
       store.ack({
+        outcome: "rendered",
         instance: id1,
         commandId: intent!.commandId,
         revision: first.revision,
@@ -74,6 +75,7 @@ describe("mounted route view custody", () => {
     store.publish({ ...ducts(id1), page: { system: "Supply 1", level: "", selected: "" } });
     expect(
       store.ack({
+        outcome: "rendered",
         instance: id1,
         commandId,
         revision: lease.revision,
@@ -101,6 +103,7 @@ describe("mounted route view custody", () => {
       });
       expect(
         store.ack({
+          outcome: "rendered",
           instance: id1,
           commandId,
           revision: first.revision,
@@ -131,6 +134,7 @@ describe("mounted route view custody", () => {
       expect(store.select("old-thread", "families", id1)).toBeNull();
       expect(
         store.ack({
+          outcome: "rendered",
           instance: id1,
           commandId,
           revision: first.revision,

@@ -14,7 +14,8 @@ import {
 } from "@pe/agent-contracts";
 import { peClient } from "#/host/pe-client";
 import { useHostEvents } from "#/readings";
-import { applyPageIntent } from "./view-owner";
+import { causeRefusal, refuse, type Refusal } from "./refusal";
+import { applyPageIntent, type PageIntent } from "./view-owner";
 
 type Intent = {
   type: "route-view-intent";
@@ -57,7 +58,7 @@ export function useRouteViewBridge({
   const leased = useRef(false);
   const [intent, setIntent] = useState<{
     event: Intent;
-    receipt: NonNullable<ReturnType<typeof applyPageIntent>>;
+    receipt: Extract<PageIntent, { ok: true }>["receipt"];
     context: string;
   } | null>(null);
   const [pageVisible, setPageVisible] = useState(
@@ -139,13 +140,40 @@ export function useRouteViewBridge({
       JSON.stringify(published.current) !== JSON.stringify(value)
     )
       return;
+    // A refusal is answered at once, against the page Pea leased: the owner refused the patch whole,
+    // so that page still stands; the store settles it only if it is still the current lease page.
+    const refused = (refusal: Refusal) =>
+      void peClient
+        .call("view.ack", {
+          params: { route: value.route },
+          body: {
+            outcome: "refused",
+            instance: value.instance,
+            commandId: event.commandId,
+            revision: event.revision,
+            page: value.page,
+            refusal: {
+              code: refusal.code,
+              message: (refusal.message || "The Page refused the patch").slice(0, 2000),
+              ...(refusal.detail ? { detail: refusal.detail.slice(0, 4000) } : {}),
+            },
+          },
+        })
+        .catch(() => {});
+    let patch: ReturnType<typeof readAgentPatch>;
     try {
-      const patch = readAgentPatch(value.route, event.patch);
-      const receipt = applyPageIntent(currentPage.current, () => applyRef.current(patch));
-      if (receipt) setIntent({ event, receipt, context: JSON.stringify(value.context) });
-    } catch {
-      // A malformed or refused patch never earns a success acknowledgement.
+      patch = readAgentPatch(value.route, event.patch);
+    } catch (cause) {
+      return refused(refuse("failed", causeRefusal(cause).message));
     }
+    const result = applyPageIntent(currentPage.current, () => applyRef.current(patch));
+    if (!result.ok) return refused(result.refusal);
+    // No move: only a page that already holds the patch may acknowledge it (against the unchanged
+    // snapshot); otherwise the Page did nothing Pea asked for, and says so.
+    const wanted = agentPage(value.route, patch as never);
+    if (!result.moved && Object.keys(event.patch).some((key) => value.page[key] !== wanted[key]))
+      return refused(refuse("conflict", "The Page made no move for this patch"));
+    setIntent({ event, receipt: result.receipt, context: JSON.stringify(value.context) });
   }, []);
   useHostEvents(Boolean(view), onEvent);
   useEffect(() => {
@@ -170,6 +198,7 @@ export function useRouteViewBridge({
         await peClient.call("view.ack", {
           params: { route },
           body: {
+            outcome: "rendered",
             instance: instance.current,
             commandId: event.commandId,
             revision: event.revision,

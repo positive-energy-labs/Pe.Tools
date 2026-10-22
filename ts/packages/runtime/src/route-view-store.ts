@@ -1,4 +1,9 @@
-import { routeViewPatchSchema, settleAgentPatch, type RouteView } from "@pe/agent-contracts";
+import {
+  routeViewPatchSchema,
+  settleAgentPatch,
+  type RouteView,
+  type RouteViewAck,
+} from "@pe/agent-contracts";
 
 type Lease = { view: RouteView; revision: number; seen: number };
 type Intent = {
@@ -99,7 +104,12 @@ export class RouteViewStore {
     const commandId = crypto.randomUUID();
     const result = new Promise<unknown>((resolve) => {
       const timer = setTimeout(
-        () => this.finish(commandId, { ok: false, error: "view did not acknowledge the patch" }),
+        () =>
+          this.finish(commandId, {
+            ok: false,
+            outcome: "unacknowledged",
+            error: "view did not acknowledge the patch",
+          }),
         8_000,
       );
       this.pending.set(commandId, { lease, patch, resolve, timer });
@@ -109,13 +119,13 @@ export class RouteViewStore {
     return result;
   }
 
-  ack(input: {
-    instance: string;
-    commandId: string;
-    revision: number;
-    page: Record<string, string>;
-    facts: Record<string, unknown>;
-  }) {
+  /**
+   * The browser's answer to one pending command. A stale or foreign answer (no pending command, or
+   * another instance or revision) settles nothing. A refusal settles only when the page it reports
+   * is the page Pea leased and still the current lease page, on the same thread and context: the
+   * patch was refused whole. If the view moved meanwhile, the command ends `stale` now.
+   */
+  ack(input: RouteViewAck) {
     const pending = this.pending.get(input.commandId);
     if (
       !pending ||
@@ -124,10 +134,36 @@ export class RouteViewStore {
     )
       return { ok: false, error: "stale view command" };
     const current = this.leases.get(input.instance)?.view;
+    const sameView =
+      !!current &&
+      current.thread === pending.lease.view.thread &&
+      same(current.context, pending.lease.view.context);
+    if (input.outcome === "refused") {
+      if (
+        !sameView ||
+        !same(input.page, pending.lease.view.page) ||
+        !same(input.page, current.page)
+      ) {
+        this.finish(input.commandId, {
+          ok: false,
+          outcome: "stale",
+          error: "view changed while the patch was refused; read it again",
+          ...(current ? { view: current } : {}),
+        });
+        return { ok: false, error: "view changed before the refusal was reported" };
+      }
+      this.finish(input.commandId, {
+        ok: false,
+        outcome: "refused",
+        refusal: input.refusal,
+        instance: input.instance,
+        revision: input.revision,
+        page: input.page,
+      });
+      return { ok: true };
+    }
     if (
-      !current ||
-      current.thread !== pending.lease.view.thread ||
-      !same(current.context, pending.lease.view.context) ||
+      !sameView ||
       !same(current.page, input.page) ||
       !same(current.facts, input.facts) ||
       Object.entries(pending.patch).some(([key, value]) => input.page[key] !== value)
@@ -135,6 +171,7 @@ export class RouteViewStore {
       return { ok: false, error: "view context changed before acknowledgement" };
     this.finish(input.commandId, {
       ok: true,
+      outcome: "rendered",
       page: input.page,
       facts: input.facts,
       instance: input.instance,

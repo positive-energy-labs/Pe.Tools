@@ -20,12 +20,24 @@ type IntentReceipt = {
   readonly current: () => boolean;
   readonly rendered: (page: object) => boolean;
 };
-type IntentOwner = { apply: (page: object, apply: () => void) => IntentReceipt | null };
+/**
+ * One Pea intent's outcome. `moved`: the owner committed one coupled move. Not moved: the patch made
+ * no move, and the receipt holds only while the Page is still the unchanged snapshot it was applied
+ * to (the bridge acknowledges it only if that page already holds the patch). Refused: the owner's
+ * own refusal, whole; nothing was committed.
+ */
+export type PageIntent =
+  | { readonly ok: true; readonly moved: boolean; readonly receipt: IntentReceipt }
+  | { readonly ok: false; readonly refusal: Refusal };
+type IntentOwner = { apply: (page: object, apply: () => void) => PageIntent };
 const pageOwners = new WeakMap<object, IntentOwner>();
 
 /** A bridge must obtain an accepted owner receipt before it can acknowledge a rendered patch. */
-export const applyPageIntent = (page: object, apply: () => void): IntentReceipt | null =>
-  pageOwners.get(page)?.apply(page, apply) ?? null;
+export const applyPageIntent = (page: object, apply: () => void): PageIntent =>
+  pageOwners.get(page)?.apply(page, apply) ?? {
+    ok: false,
+    refusal: refuse("not-ready", "This Page is no longer the one Pea leased"),
+  };
 
 /** One writable Page, mounted in the route's existing registry. React only subscribes. */
 export function createViewOwner<P>(
@@ -124,11 +136,17 @@ export function createViewOwner<P>(
   };
   const bridge: IntentOwner = {
     apply(page, apply) {
-      if (intent) {
-        reject(refuse("not-ready", "A Pea intent cannot contain another intent"));
-        return null;
-      }
-      if (disposed || read().page !== page) return null;
+      if (intent)
+        return {
+          ok: false,
+          refusal: reject(refuse("not-ready", "A Pea intent cannot contain another intent")),
+        };
+      const before = read();
+      if (disposed || before.page !== page)
+        return {
+          ok: false,
+          refusal: refuse("not-ready", "This Page is no longer the one Pea leased"),
+        };
       const attempt = {
         refusal: null as Refusal | null,
         attempted: false,
@@ -142,12 +160,27 @@ export function createViewOwner<P>(
       } finally {
         intent = null;
       }
-      if (disposed || attempt.refusal || !attempt.staged) return null;
+      if (attempt.refusal) return { ok: false, refusal: attempt.refusal };
+      if (disposed)
+        return { ok: false, refusal: refuse("not-ready", "This Page is no longer mounted") };
+      if (!attempt.staged)
+        return {
+          ok: true,
+          moved: false,
+          receipt: {
+            current: () => !disposed && read() === before,
+            rendered: (value) => value === before.page,
+          },
+        };
       const accepted = attempt.staged;
       commit(accepted);
       return {
-        current: () => !disposed && read() === accepted,
-        rendered: (value) => value === accepted.page,
+        ok: true,
+        moved: true,
+        receipt: {
+          current: () => !disposed && read() === accepted,
+          rendered: (value) => value === accepted.page,
+        },
       };
     },
   };

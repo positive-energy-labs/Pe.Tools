@@ -1269,7 +1269,7 @@ export async function normalizePeError(response: Response): Promise<Response> {
   const code =
     [old.code, refusal.code, old.kind].find((v) => typeof v === "string") ?? "route.refused";
   const message =
-    [old.message, old.error, old.reason, refusal.reason, refusal.detail].find(
+    [old.message, old.error, old.reason, refusal.message, refusal.reason, refusal.detail].find(
       (v) => typeof v === "string",
     ) ??
     (text || response.statusText);
