@@ -35,35 +35,35 @@ public abstract class ProductLaunchCommand : IExternalCommand {
 
 [Transaction(TransactionMode.Manual)]
 public sealed class CmdPeToolsHome : ProductLaunchCommand {
-    protected override string Route => "/";
+    protected override string Route => PeRoutes.Home.Path;
 }
 
 [Transaction(TransactionMode.Manual)]
 public sealed class CmdPea : ProductLaunchCommand {
-    protected override string Route => "/pea";
+    protected override string Route => PeRoutes.Pea.Path;
 }
 
 [Transaction(TransactionMode.Manual)]
 public sealed class CmdFamilyEditor : ProductLaunchCommand {
-    protected override string Route => "/family";
+    protected override string Route => PeRoutes.Family.Path;
 }
 
 [Transaction(TransactionMode.Manual)]
 public sealed class CmdFamilyAudit : ProductLaunchCommand {
-    protected override string Route => "/families";
+    protected override string Route => PeRoutes.Families.Path;
 }
 
 [Transaction(TransactionMode.Manual)]
 public sealed class CmdSchedulesWeb : ProductLaunchCommand {
-    protected override string Route => "/schedules";
+    protected override string Route => PeRoutes.Schedules.Path;
 }
 
 [Transaction(TransactionMode.Manual)]
 public sealed class CmdTakeoffsWeb : ProductLaunchCommand {
-    protected override string Route => "/takeoffs";
+    protected override string Route => PeRoutes.Takeoffs.Path;
 }
 
 [Transaction(TransactionMode.Manual)]
 public sealed class CmdPodsWeb : ProductLaunchCommand {
-    protected override string Route => "/pods";
+    protected override string Route => PeRoutes.Pods.Path;
 }

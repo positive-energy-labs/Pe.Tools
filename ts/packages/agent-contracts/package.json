@@ -42,6 +42,7 @@
     "dev": "vp pack --watch",
     "test": "vp test",
     "check": "vp check",
+    "codegen:routes": "node scripts/route-links-cs.ts",
     "prepublishOnly": "vp run build"
   },
   "dependencies": {

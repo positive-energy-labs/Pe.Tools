@@ -17,13 +17,13 @@ internal static class PeToolsBrowser {
         }
     }
 
-    /// <summary>With a member, opens it on `/pods?pod=&amp;path=`; without one, the app root.</summary>
+    /// <summary>With a member, opens it on the Pods route's <c>pod</c> and <c>path</c> keys; without one, the app root. Path and keys are the route contract's (<see cref="PeRoutes"/>).</summary>
     public static bool TryLaunch(PodMemberAddress? member = null) {
         try {
             var baseUrl = TsHostLauncher.ResolveHostBaseUrl().TrimEnd('/');
             var target = member is null
                 ? baseUrl
-                : $"{baseUrl}/pods?pod={Uri.EscapeDataString(member.Pod)}&path={Uri.EscapeDataString(member.Path)}";
+                : $"{baseUrl}{PeRoutes.Pods.Path}?{PeRoutes.Pods.Keys.Pod}={Uri.EscapeDataString(member.Pod)}&{PeRoutes.Pods.Keys.Path}={Uri.EscapeDataString(member.Path)}";
             _ = Process.Start(new ProcessStartInfo(target) { UseShellExecute = true });
             return true;
         } catch {
