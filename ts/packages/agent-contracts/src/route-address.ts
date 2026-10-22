@@ -525,6 +525,10 @@ const textOf = (raw: unknown): string | undefined =>
 
 /** One field from raw search or lease text; malformed or refused falls to the default. */
 const readField = (field: RouteField, raw: unknown): unknown => {
+  if (raw !== null && typeof raw === "object") {
+    const typed = field.schema.safeParse(raw);
+    if (typed.success) return typed.data;
+  }
   const text = textOf(raw);
   const decoded = text === undefined ? undefined : field.codec.decode(text);
   // `INVALID` reads as absent (the default); a decoded `null` is a value the schema judges.
