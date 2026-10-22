@@ -1,3 +1,4 @@
+import { TooltipHint } from "@pe/kit/lang/tooltip";
 /** The transcript turn (head, body, bubble, tool status) and the composer (frame, box). Presentation
  *  only; the logic lives in workbench/ and chat/. Painted in
  *  conversation.css. */
@@ -45,9 +46,9 @@ export function MessageHead({
         {turn ? <span data-slot="turn">#{turn}</span> : null}
       </span>
       {target ? (
-        <span className="dl-message-target" title={target}>
-          on {target}
-        </span>
+        <TooltipHint content={target}>
+          <span className="dl-message-target">on {target}</span>
+        </TooltipHint>
       ) : null}
     </h2>
   );

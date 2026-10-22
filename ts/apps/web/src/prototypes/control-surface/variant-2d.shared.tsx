@@ -442,38 +442,41 @@ export function TrayRoutes({ mode }: { mode: "buttons" | "appbar" }) {
             role="group"
             aria-label="Window controls"
           >
-            <button
-              type="button"
-              aria-label="Minimize"
-              title="Minimize"
-              onClick={() => setOutcome("Minimize requested")}
-              className="grid w-[46px] cursor-default place-content-center text-ink hover:bg-ink/10"
-            >
-              <Minus aria-hidden strokeWidth={1} className="size-4" />
-            </button>
-            <button
-              type="button"
-              aria-label="Keep on top"
-              title="Keep on top"
-              aria-pressed={pinned}
-              onClick={() => setPinned((v) => !v)}
-              className="grid w-[46px] cursor-default place-content-center text-ink hover:bg-ink/10"
-            >
-              {pinned ? (
-                <Pin aria-hidden strokeWidth={1} className="size-4" />
-              ) : (
-                <PinOff aria-hidden strokeWidth={1} className="size-4" />
-              )}
-            </button>
-            <button
-              type="button"
-              aria-label="Close"
-              title="Close"
-              onClick={() => setOutcome("Close requested")}
-              className="grid w-[46px] cursor-default place-content-center text-ink hover:bg-[#c42b1c] hover:text-white"
-            >
-              <X aria-hidden strokeWidth={1} className="size-4" />
-            </button>
+            <TooltipHint content="Minimize">
+              <button
+                type="button"
+                aria-label="Minimize"
+                onClick={() => setOutcome("Minimize requested")}
+                className="grid w-[46px] cursor-default place-content-center text-ink hover:bg-ink/10"
+              >
+                <Minus aria-hidden strokeWidth={1} className="size-4" />
+              </button>
+            </TooltipHint>
+            <TooltipHint content="Keep on top">
+              <button
+                type="button"
+                aria-label="Keep on top"
+                aria-pressed={pinned}
+                onClick={() => setPinned((v) => !v)}
+                className="grid w-[46px] cursor-default place-content-center text-ink hover:bg-ink/10"
+              >
+                {pinned ? (
+                  <Pin aria-hidden strokeWidth={1} className="size-4" />
+                ) : (
+                  <PinOff aria-hidden strokeWidth={1} className="size-4" />
+                )}
+              </button>
+            </TooltipHint>
+            <TooltipHint content="Close">
+              <button
+                type="button"
+                aria-label="Close"
+                onClick={() => setOutcome("Close requested")}
+                className="grid w-[46px] cursor-default place-content-center text-ink hover:bg-[#c42b1c] hover:text-white"
+              >
+                <X aria-hidden strokeWidth={1} className="size-4" />
+              </button>
+            </TooltipHint>
           </div>
         </header>
       ) : (

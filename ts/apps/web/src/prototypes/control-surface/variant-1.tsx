@@ -1,3 +1,4 @@
+import { TooltipHint } from "@pe/kit/lang/tooltip";
 /** THROWAWAY protoui variant 1 — "Inbox first": the tray is an inbox before it is a status panel. */
 import { useState, type ReactNode } from "react";
 import {
@@ -330,24 +331,22 @@ export default function Variant() {
           onClick={() => setSheet((s) => !s)}
         >
           {lamps.map((l) => (
-            <span
-              key={l.key}
-              className="flex items-center gap-1 face-mono t-small text-ink-2"
-              title={`${l.key}: ${l.said.text}`}
-            >
-              <span className={`size-1.5 rounded-full ${lamp(l.said.tone)}`} />
-              {l.key === "Revit"
-                ? l.said.text.split(" · ")[0]
-                : l.key === "Update"
-                  ? l.said.tone
-                    ? "update"
-                    : "current"
-                  : l.key === "Share"
+            <TooltipHint key={l.key} content={`${l.key}: ${l.said.text}`}>
+              <span className="flex items-center gap-1 face-mono t-small text-ink-2">
+                <span className={`size-1.5 rounded-full ${lamp(l.said.tone)}`} />
+                {l.key === "Revit"
+                  ? l.said.text.split(" · ")[0]
+                  : l.key === "Update"
                     ? l.said.tone
-                      ? "share !"
-                      : "share"
-                    : l.said.text.split(" ")[0] + " pea"}
-            </span>
+                      ? "update"
+                      : "current"
+                    : l.key === "Share"
+                      ? l.said.tone
+                        ? "share !"
+                        : "share"
+                      : l.said.text.split(" ")[0] + " pea"}
+              </span>
+            </TooltipHint>
           ))}
           <ChevronUp
             aria-hidden

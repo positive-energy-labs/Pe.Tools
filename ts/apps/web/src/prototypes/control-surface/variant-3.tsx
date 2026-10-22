@@ -1,3 +1,4 @@
+import { TooltipHint } from "@pe/kit/lang/tooltip";
 /**
  * THROWAWAY protoui variant 3 (2026-10-13): BARE PATCH BAY. Revit is the spine: year sockets on
  * top, one dense line per running Revit, and Pea threads / Work nested UNDER the session they
@@ -136,23 +137,26 @@ export default function Variant() {
             sessions.filter((s) => s.row.year === y).length +
             launched.filter((l) => l === y).length;
           return (
-            <button
+            <TooltipHint
               key={y}
-              type="button"
-              onClick={() => setLaunched((l) => [...l, y])}
-              title={n ? `${n} running · click launches another` : `Launch Revit ${y}`}
-              className="flex h-8 items-center justify-between rounded-sm border border-line px-2 face-mono t-small"
+              content={n ? `${n} running · click launches another` : `Launch Revit ${y}`}
             >
-              <span className="flex items-center gap-1.5">
-                <Lamp on={n > 0} />
-                {y}
-              </span>
-              {n ? (
-                <span className="text-ink-2 tabular-nums">{n}</span>
-              ) : (
-                <Play className="size-3 text-ink-2" />
-              )}
-            </button>
+              <button
+                type="button"
+                onClick={() => setLaunched((l) => [...l, y])}
+                className="flex h-8 items-center justify-between rounded-sm border border-line px-2 face-mono t-small"
+              >
+                <span className="flex items-center gap-1.5">
+                  <Lamp on={n > 0} />
+                  {y}
+                </span>
+                {n ? (
+                  <span className="text-ink-2 tabular-nums">{n}</span>
+                ) : (
+                  <Play className="size-3 text-ink-2" />
+                )}
+              </button>
+            </TooltipHint>
           );
         })}
       </div>

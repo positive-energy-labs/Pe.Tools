@@ -1,3 +1,4 @@
+import { TooltipHint } from "@pe/kit/lang/tooltip";
 /**
  * THROWAWAY protoui lineup (2026-10-13): the Pe.Tools control surface — tray, inbox, Work,
  * patch bay, notifications. `/design-system/control-surface?variant=<id>`; every variant sits on the same fake desktop
@@ -86,9 +87,11 @@ export function Lineup({ variant }: { variant: string }) {
         <button type="button" className="px-3 text-lg" onClick={() => go(-1)} aria-label="previous">
           ←
         </button>
-        <span className="truncate" title="Alt+← / Alt+→">
-          {meta.id} — {meta.label} ({meta.width}×{meta.height})
-        </span>
+        <TooltipHint content="Alt+← / Alt+→">
+          <span className="truncate">
+            {meta.id} — {meta.label} ({meta.width}×{meta.height})
+          </span>
+        </TooltipHint>
         <button type="button" className="px-3 text-lg" onClick={() => go(1)} aria-label="next">
           →
         </button>
