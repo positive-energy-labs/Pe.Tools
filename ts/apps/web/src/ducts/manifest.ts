@@ -23,7 +23,6 @@ import {
   type DuctAssumption,
   type DuctClaim,
   type DuctsRouteDocument,
-  type OrbitViewport,
   type RouteStatePatch,
 } from "@pe/agent-contracts";
 
@@ -98,11 +97,6 @@ const ductsPageSchema = routePageSchema("ducts").extend({
   heal: z.custom<DuctsHealRun>().nullable().default(null),
   /** The last make-the-fan preview or apply; its verbs read it. Page, never URL. */
   fan: z.custom<DuctsFanRun>().nullable().default(null),
-  /**
-   * The orbit pose the model picture shows, fitted or not: what the picture published, read by the
-   * view bridge as `facts.pose`. Page, never URL; only the picture writes it.
-   */
-  pose: z.custom<OrbitViewport>().nullable().default(null),
 });
 export type DuctsPage = z.infer<typeof ductsPageSchema>;
 

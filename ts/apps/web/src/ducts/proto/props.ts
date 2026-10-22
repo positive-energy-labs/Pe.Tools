@@ -1,5 +1,5 @@
 /** The one props object `route.tsx` hands the shell: the reads, the page, the Work and the selection callbacks. */
-import type { DuctClaim, DuctsRouteDocument } from "@pe/agent-contracts";
+import type { DuctClaim, DuctsRouteDocument, OrbitViewport } from "@pe/agent-contracts";
 import type { price } from "@pe/ducts-domain/pricing";
 import type { readiness } from "@pe/ducts-domain/readiness";
 import type { DuctSnapshot } from "@pe/ducts-domain/types";
@@ -33,6 +33,8 @@ export interface ProtoProps {
   page: DuctsPage;
   /** A named move pushes, a gesture replaces (`PageMove`). */
   setPage: (next: Partial<DuctsPage>, move?: PageMove<DuctsPage>) => void;
+  /** Reports the committed renderer pose as derived facts; never writes Page or gesture previews. */
+  onPose?: (pose: OrbitViewport | null) => void;
   /** Selection / hover callbacks over element ids and claims. */
   onSelect: (id: number | null) => void;
   onSelectClaim: (claim: Claim) => void;

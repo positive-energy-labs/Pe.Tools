@@ -196,7 +196,7 @@ export function DuctsRoute({ url = true }: { url?: boolean } = {}) {
   );
   const groups = snapshot?.groups ?? [];
   const levels = snapshot?.levels ?? [];
-  useDuctsViewBridge({
+  const onPose = useDuctsViewBridge({
     thread,
     surface: url ? "route" : "chat",
     page,
@@ -357,6 +357,7 @@ export function DuctsRoute({ url = true }: { url?: boolean } = {}) {
     claimCells: demoClaims,
     page,
     setPage,
+    onPose,
     onSelect: (id) => setPage({ selected: id == null ? "" : String(id), issue: "" }),
     onSelectClaim: (claim) => setPage({ selected: claim.id, issue: "" }),
     onHover: setHovered,

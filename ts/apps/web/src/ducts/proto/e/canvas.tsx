@@ -94,6 +94,7 @@ function Canvas({
   lead,
   scale,
   setPage,
+  onPose,
 }: ProtoProps & ECanvasExtra & { snapshot: NonNullable<ProtoProps["snapshot"]> }) {
   const observation = useNativeObservation();
   const index = useMemo(() => indexOf(snapshot, priced), [snapshot, priced]);
@@ -116,7 +117,7 @@ function Canvas({
   ); // eslint-disable-line react-hooks/exhaustive-deps
   const read = useScene(request, native, page.epoch);
   const bounds = usePictureBounds(read.meshes, scene);
-  const committedPose = poseOf(page.viewport, bounds);
+  const committedPose = useMemo(() => poseOf(page.viewport, bounds), [page.viewport, bounds]);
   // Exception to Page owning visible state: this is a gesture preview, never persisted. Page and
   // Pea's facts.pose receive the released pose; publishing each preview made the whole route stutter.
   const [orbitDraft, setOrbitDraft] = useState<{
@@ -130,9 +131,8 @@ function Canvas({
       : committedPose;
   // Pea reads the committed pose (`facts.pose`), not the in-progress globe preview.
   useEffect(() => {
-    if (JSON.stringify(committedPose) !== JSON.stringify(page.pose))
-      setPage({ pose: committedPose });
-  }, [committedPose, page.pose, setPage]);
+    onPose?.(committedPose);
+  }, [committedPose, onPose]);
   const layers = layersOn(page);
   const picture = page.picture;
   const swap = () =>
