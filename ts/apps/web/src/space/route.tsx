@@ -4,12 +4,12 @@ import { Button } from "@pe/kit/lang/button";
 import { Input } from "@pe/kit/lang/input";
 import { ListPopup } from "@pe/kit/lang/list-popup";
 import { RouteShell, defineRoute } from "#/route";
-import { captureScene } from "./host";
+import { captureScene } from "#/scene/host";
+import { fetchSceneArtifact } from "#/scene/artifact";
 import { spaceViewSchema } from "@pe/agent-contracts/space-view";
-import { hostFetch } from "#/host/runtime";
 import { type CutMenu } from "./canvas";
 import { SpaceViewer } from "./viewer";
-import { SceneCache, type SceneData, type ResidentScene } from "./scene-cache";
+import { SceneCache, type ResidentScene } from "#/scene/scene-cache";
 import { spaceMark } from "./performance";
 import {
   AXES,
@@ -25,8 +25,11 @@ import {
   seedCut,
   type Axis,
   type Cut,
+  type Metadata,
   type ViewState,
 } from "./state";
+
+type SceneData = { metadata: Metadata; positions: Float32Array };
 
 const manifest = defineRoute({
   key: "space",
@@ -41,8 +44,8 @@ export function SpaceRoute({
   ids: initialIds,
 }: { scene?: string; session?: string; doc?: string; ids?: string } = {}) {
   const [data, setData] = useState<SceneData | null>(null);
-  const cache = useRef(new SceneCache());
-  const [scenes, setScenes] = useState<ResidentScene[]>([]);
+  const cache = useRef(new SceneCache<SceneData>());
+  const [scenes, setScenes] = useState<ResidentScene<SceneData>[]>([]);
   const loading = useRef<AbortController | null>(null);
   const [view, setView] = useState<ViewState | null>(null);
   const [ids, setIds] = useState(initialIds ?? "");
@@ -75,7 +78,6 @@ export function SpaceRoute({
     [data, view],
   );
   const load = useCallback(async (id: string, imported?: ViewState) => {
-    if (!/^[a-f0-9]{64}$/.test(id)) throw Error("Scene id must be a SHA-256 artifact id");
     const generation = ++loadGeneration.current;
     spaceMark("selection", { id, generation });
     loading.current?.abort();
@@ -85,18 +87,7 @@ export function SpaceRoute({
     spaceMark("cache", { id, hit: !!loaded });
     if (!loaded) {
       try {
-        // Disk artifacts are durable. Browser HTTP cache and mounted GPU scopes are separate layers.
-        const response = await hostFetch(`/pe/space/scenes/${id}/artifact`, {
-          cache: "no-store",
-          signal: abort.signal,
-        });
-        if (generation !== loadGeneration.current) return;
-        spaceMark("headers", { id });
-        if (!response.ok)
-          throw Error(
-            `Scene artifact unavailable (${response.status}). Capture it from its document again.`,
-          );
-        const buffer = await response.arrayBuffer();
+        const buffer = await fetchSceneArtifact(id, abort.signal);
         if (generation !== loadGeneration.current) return;
         spaceMark("body", { id, bytes: buffer.byteLength });
         const decoded = decodeScene(buffer);
@@ -187,7 +178,12 @@ export function SpaceRoute({
     try {
       spaceMark("capture-request", { ids, focusOnly });
       const artifact = await captureScene(
-        ids,
+        ids.trim()
+          ? ids
+              .trim()
+              .split(/[\s,]+/)
+              .map(Number)
+          : [],
         { bridgeSessionId: session, openDocumentId: doc, signal: abort.signal },
         focusOnly,
       );

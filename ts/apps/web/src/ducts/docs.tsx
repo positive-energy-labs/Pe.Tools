@@ -13,8 +13,27 @@ import { mapLink } from "@pe/agent-contracts/product-map";
 import { Legend, Mermaid, PartsTable, chainChart, pathChart } from "#/product-map/diagram";
 import { CASE_GROUPS, DUCT_CASES, type CaseGroup, type DuctCase } from "./cases/data";
 import { CaseDrawing, CaseLegend } from "./cases/draw";
+import { KeyLegend, type LegendKey } from "#/components/lang/kbd";
 
 const PRESSURE_DROP = mapLink("pressure-drop")!;
+
+/** The picture pane's keys; the pane's own legend and this page read the same list. */
+export const PICTURE_KEYS: readonly LegendKey[] = [
+  { pointer: "drag", does: "orbit" },
+  { pointer: "right drag", does: "pan" },
+  { pointer: "wheel", does: "zoom" },
+  { pointer: "click", does: "select an element" },
+  { pointer: "right click", does: "Select or Selection Box in Revit" },
+  { keys: ["B", "X"], does: "Selection Box under the pointer" },
+  { keys: ["F"], does: "frame the selection; nothing selected fits the system" },
+  { keys: ["P"], does: "plan or isometric, keeping the pivot and zoom" },
+  { keys: ["S"], does: "swap the model and the schematic" },
+  { keys: ["G"], does: "show or hide the globe" },
+  { keys: ["M"], does: "meshes on or off" },
+  { keys: ["C"], does: "context around the system on or off" },
+  { keys: ["L"], does: "centrelines on or off" },
+  { keys: ["Esc"], does: "clear the selection" },
+];
 
 /** One step of the walk: what happens, and who does it. */
 const WALK: [string, string, string][] = [
@@ -283,6 +302,19 @@ export function DuctsDocs() {
         proposes on every row it can, previews heals and applies them after approval. Pea never
         stages a ruling, never writes an ESP, and never computes a number of its own.
       </p>
+
+      <h3>The picture</h3>
+      <p>
+        The model picture is the chosen system's own geometry, captured from Revit: every duct,
+        fitting, terminal and unit of every network the system is in, with the walls and other
+        elements around it when the context layer is on. Leg totals, place names, gaps and the
+        numbered findings ride over it and follow the camera. The centrelines layer draws the
+        network Pe priced inside the meshes, so a short run or a node is easy to pick. The globe in
+        the corner turns the camera and names the direction; the other corner holds the schematic,
+        and a click on it swaps the two. Each move is one step Back can undo; dragging the camera is
+        not.
+      </p>
+      <KeyLegend keys={PICTURE_KEYS} lead={PICTURE_KEYS.length} defaultOpen bind={false} />
 
       <h3>Why not Revit's own pressure drop</h3>
       <p>

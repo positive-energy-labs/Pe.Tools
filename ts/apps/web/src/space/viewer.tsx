@@ -1,11 +1,12 @@
 import { useRef } from "react";
 import { SpaceCanvas } from "./canvas";
-import type { ResidentScene } from "./scene-cache";
+import type { ResidentScene } from "#/scene/scene-cache";
+import type { Metadata } from "./state";
 import type { ComponentProps } from "react";
 
 type Snapshot = Omit<ComponentProps<typeof SpaceCanvas>, "metadata" | "positions" | "active">;
 type Props = Snapshot & {
-  scenes: readonly ResidentScene[];
+  scenes: readonly ResidentScene<{ metadata: Metadata; positions: Float32Array }>[];
 };
 
 /** Reuse the real viewer and its GPU resources on return. Hidden scopes have no animation loop. */

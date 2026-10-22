@@ -1,27 +1,34 @@
-import type { Metadata } from "./state";
+/**
+ * Decoded PSC1 scenes resident in the browser, shared by every route that draws one (space, ducts).
+ * A scene is content-addressed by its artifact id; the stamp's epochs invalidate older captures.
+ */
+import type { Psc1Metadata } from "./psc1";
 
-export type SceneData = { metadata: Metadata; positions: Float32Array };
+export type SceneData = { metadata: Psc1Metadata; positions: Float32Array };
 /** React's development prop logger enumerates changed objects. Geometry must remain opaque. */
-export class ResidentScene {
-  #data: SceneData;
+export class ResidentScene<T extends SceneData = SceneData> {
+  #data: T;
   constructor(
     readonly id: string,
     readonly bytes: number,
-    data: SceneData,
+    data: T,
   ) {
     this.#data = data;
   }
-  get metadata() {
+  get data(): T {
+    return this.#data;
+  }
+  get metadata(): T["metadata"] {
     return this.#data.metadata;
   }
-  get positions() {
+  get positions(): Float32Array {
     return this.#data.positions;
   }
 }
 
 /** Content-addressed snapshots, never a claim that the open Revit document is current. */
-export class SceneCache {
-  readonly entries = new Map<string, ResidentScene>();
+export class SceneCache<T extends SceneData = SceneData> {
+  readonly entries = new Map<string, ResidentScene<T>>();
   constructor(
     readonly maxBytes = 512 * 1024 * 1024,
     readonly maxScenes = 3,
@@ -40,7 +47,7 @@ export class SceneCache {
     return entry;
   }
 
-  put(id: string, data: SceneData) {
+  put(id: string, data: T) {
     // PSC1 buffer + merged CPU positions/normals + GPU positions/normals. Render surfaces are
     // bounded separately by the three-context limit. This is an allocation proxy, not driver VRAM.
     const bytes =
@@ -70,7 +77,7 @@ export class SceneCache {
         this.entries.delete(key);
     }
     this.entries.delete(id);
-    const entry = new ResidentScene(id, bytes, data);
+    const entry = new ResidentScene<T>(id, bytes, data);
     while (
       this.entries.size &&
       (this.bytes + bytes > this.maxBytes || this.entries.size >= this.maxScenes)

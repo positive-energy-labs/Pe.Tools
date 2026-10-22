@@ -14,11 +14,15 @@
  */
 import { z } from "zod";
 import {
+  DUCTS_LAYERS,
   ductsRouteState,
+  layersOf,
   routePageSchema,
+  toggleLayer,
   transitionPatches,
   type DuctAssumption,
   type DuctsRouteDocument,
+  type OrbitViewport,
   type RouteStatePatch,
 } from "@pe/agent-contracts";
 
@@ -40,6 +44,7 @@ import { fanCandidates, fansOwedBase } from "@pe/ducts-domain/fan-assignment";
 import { healPlan, healRequestGroup } from "@pe/ducts-domain/heal";
 import { survey, unitFlowsIn } from "@pe/ducts-domain/survey";
 import { systemScope } from "@pe/ducts-domain/system-scope";
+import { sceneRequest } from "#/scene/host";
 import { airflowOptions } from "./airflow";
 import { elementNamer } from "./claims";
 import { groupLabels } from "./inputs";
@@ -90,6 +95,11 @@ const ductsPageSchema = routePageSchema("ducts").extend({
   heal: z.custom<DuctsHealRun>().nullable().default(null),
   /** The last make-the-fan preview or apply; its verbs read it. Page, never URL. */
   fan: z.custom<DuctsFanRun>().nullable().default(null),
+  /**
+   * The orbit pose the model picture shows, fitted or not: what the picture published, read by the
+   * view bridge as `facts.pose`. Page, never URL; only the picture writes it.
+   */
+  pose: z.custom<OrbitViewport>().nullable().default(null),
 });
 export type DuctsPage = z.infer<typeof ductsPageSchema>;
 export type DuctsReading = "ducts" | "tables" | "catalogs";
@@ -125,6 +135,37 @@ export const pendingCount = (doc: DuctsRouteDocument | null, store: Store) =>
   stagedCells(doc).length + pendingRulings(doc, store).length;
 const pendingOf = (ctx: DuctsCtx) =>
   pendingCount(ctx.work.doc, observed<DuctSnapshot>(ctx, "ducts")?.store);
+
+/** The picture's layers on before the person touches one. */
+const PICTURE_ON: readonly (typeof DUCTS_LAYERS)[number][] = ["meshes", "labels", "findings"];
+
+/** The picture's layers that are on. SHIM: the contract's `layers` default is "" (none) and names
+ * no on-set (thread 3e493705); until it defaults to `PICTURE_ON`, "" reads as that set and a
+ * person who turns every layer off writes "none". */
+export const layersOn = (page: Pick<DuctsPage, "layers">): ReadonlySet<string> =>
+  new Set(page.layers === "" ? PICTURE_ON : layersOf(DUCTS_LAYERS, page.layers));
+
+/** `page.layers` with one picture layer flipped. */
+export const flipLayer = (page: Pick<DuctsPage, "layers">, layer: (typeof DUCTS_LAYERS)[number]) =>
+  toggleLayer(DUCTS_LAYERS, [...layersOn(page)].join(","), layer) || "none";
+
+/**
+ * The `revit.detail.space-scene` request for the picture: every element of every group the chosen
+ * system is in, with what is around it when the `context` layer is on; null with no system. One
+ * capture per subject, never per render (the call keys on this request).
+ */
+export const sceneRequestOf = (
+  snapshot: DuctSnapshot | null,
+  page: Pick<DuctsPage, "system" | "layers">,
+) => {
+  if (!snapshot || !page.system) return null;
+  const ids = [...systemScope(snapshot, page.system).members].filter((id) => id > 0);
+  if (!ids.length) return null;
+  return sceneRequest(
+    ids.sort((a, b) => a - b),
+    !layersOn(page).has("context"),
+  );
+};
 
 /** The chosen system over a snapshot (`system-scope.ts`); null is the whole document. */
 export const scopeOf = (snapshot: DuctSnapshot, page: Pick<DuctsPage, "system">) =>
@@ -508,6 +549,21 @@ export const manifest = defineRoute<
   // target, subject, slots and epoch; the tables on the session.
   readings: { ducts: () => null, tables: () => null, catalogs: () => null },
   page: ductsPageSchema,
+  transition: (current, patch) => {
+    const systemChanged = Object.hasOwn(patch, "system") && (patch.system ?? "") !== current.system;
+    const selected = Object.hasOwn(patch, "selected")
+      ? (patch.selected ?? "")
+      : systemChanged
+        ? ""
+        : current.selected;
+    return {
+      patch: {
+        ...(systemChanged ? { selected: "", viewport: null } : {}),
+        ...(systemChanged || selected !== current.selected ? { issue: "" } : {}),
+        ...patch,
+      },
+    };
+  },
   address: "ducts",
   actions: {
     refresh: {

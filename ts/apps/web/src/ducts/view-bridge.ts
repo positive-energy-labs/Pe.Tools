@@ -1,4 +1,5 @@
 import { useMemo } from "react";
+import { DUCTS_LAYERS, viewportCodec } from "@pe/agent-contracts";
 import { systemsOf } from "@pe/ducts-domain/system-scope";
 import type { DuctSnapshot } from "@pe/ducts-domain/types";
 import { useRouteViewBridge } from "#/route/view-bridge";
@@ -8,7 +9,9 @@ import type { DuctsPage } from "./manifest";
 /**
  * What the Ducts page tells Pea it shows: its address (`routeAddresses.ducts`), and the system
  * names and levels the page can take, so a person's word resolves to a system the page
- * knows. The subject is a Revit system; group ids never reach Pea.
+ * knows; the picture's layer names; and the orbit pose the model picture shows (`page.pose`, the
+ * fit resolved from bounds when the viewport key is null), so a named look turns that pose. The
+ * subject is a Revit system; group ids never reach Pea.
  */
 export function useDuctsViewBridge({
   thread,
@@ -34,8 +37,12 @@ export function useDuctsViewBridge({
         networks: system.groups.length,
       })),
       levels: (snapshot?.levels ?? []).map((level) => ({ id: String(level.id), name: level.name })),
+      layers: [
+        ...new Set([...DUCTS_LAYERS, ...(snapshot?.layers ?? []).map((layer) => layer.key)]),
+      ],
+      ...(page.pose ? { pose: viewportCodec.encode(page.pose) } : {}),
     }),
-    [snapshot],
+    [snapshot, page.pose],
   );
   useRouteViewBridge({
     route: "ducts",
@@ -43,18 +50,8 @@ export function useDuctsViewBridge({
     surface,
     visible: true,
     page,
-    // Choosing a system by hand clears the selection and issue; Pea's patch does the same, as one step.
-    apply: (patch) =>
-      setPage(
-        {
-          ...(patch as Partial<DuctsPage>),
-          ...("system" in patch && !("selected" in patch) ? { selected: "" } : {}),
-          ...(("system" in patch || "selected" in patch) && !("issue" in patch)
-            ? { issue: "" }
-            : {}),
-        },
-        { history: "push" },
-      ),
+    // A Pea patch is one navigation; the manifest's `transition` couples system, selection and pose.
+    apply: (patch) => setPage(patch as Partial<DuctsPage>, { history: "push" }),
     context: { document },
     facts,
   });

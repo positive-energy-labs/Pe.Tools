@@ -9,7 +9,8 @@
  */
 import * as THREE from "three";
 import { OrbitControls } from "three/addons/controls/OrbitControls.js";
-import { ORBIT_FOV, center, fromControls, toCamera, type OrbitViewport } from "./orbit";
+import { center, fromControls, toCamera, type OrbitViewport } from "./orbit";
+import { newCamera, projectThrough, type Project, type Size } from "./projection";
 import type { Layer3D, SceneInstance, SceneMeshes } from "./types";
 
 /** Opt-in timing marks (`?scenePerf`), including GPU completion rather than a bare RAF tick. */
@@ -50,6 +51,8 @@ void sceneClip() {
   }
 }`;
 
+/** A lit element (a hovered row elsewhere on the page) leans to this. */
+const LIT = new THREE.Color(0xf2b544);
 const MEP = /duct|pipe|conduit|tray|mechanical|plumbing|sprinkler|terminal|electrical/i;
 
 /** Throws when WebGL is unavailable; the component says so. */
@@ -75,8 +78,7 @@ export function createRenderer(mount: HTMLElement, meshes: SceneMeshes) {
   const sun = new THREE.DirectionalLight(0xffffff, 2.4);
   sun.position.set(1, -1, 3);
   scene.add(sun);
-  const camera = new THREE.PerspectiveCamera(ORBIT_FOV, 1, 0.05, 100000);
-  camera.up.set(0, 0, 1);
+  const camera = newCamera();
   const controls = new OrbitControls(camera, canvas);
   controls.enableDamping = false;
   controls.screenSpacePanning = true;
@@ -146,7 +148,17 @@ export function createRenderer(mount: HTMLElement, meshes: SceneMeshes) {
   mark("geometry", { meshes: byId.length, multiDraw: renderer.extensions.has("WEBGL_multi_draw") });
 
   let frame = 0;
-  let size = { width: 1, height: 1 };
+  let size: Size = { width: 1, height: 1 };
+  /** Told after a frame whose camera or size moved, so DOM over the canvas follows it. */
+  let onFrame: ((project: Project, size: Size) => void) | null = null;
+  let framed = "";
+  const tell = () => {
+    if (!onFrame) return;
+    const key = `${camera.matrixWorld.elements.join()}|${camera.projectionMatrix.elements.join()}|${size.width}x${size.height}`;
+    if (key === framed) return;
+    framed = key;
+    onFrame(projectThrough(camera, size), size);
+  };
   // OrbitControls fires per pointer move; coalesce those and every prop change into one frame.
   const render = () => {
     frame ||= requestAnimationFrame(() => {
@@ -158,6 +170,7 @@ export function createRenderer(mount: HTMLElement, meshes: SceneMeshes) {
       }
       renderer.render(scene, camera);
       if (measuring) fence(started);
+      tell();
     });
   };
   const fence = (started: number) => {
@@ -223,16 +236,26 @@ export function createRenderer(mount: HTMLElement, meshes: SceneMeshes) {
       controls.update();
       render();
     },
+    setOnFrame(next: typeof onFrame) {
+      onFrame = next;
+      framed = "";
+      render();
+    },
     paint(
       selected: ReadonlySet<string> | undefined,
       hidden: ReadonlySet<string> | undefined,
       isolated: ReadonlySet<string> | null | undefined,
+      lit: ReadonlySet<string> | undefined,
     ) {
       byId.forEach(({ key }, id) => {
         batch.setVisibleAt(id, !hidden?.has(key) && (!isolated || isolated.has(key)));
         batch.setColorAt(
           id,
-          selected?.has(key) ? colors[id]!.clone().multiplyScalar(1.6) : colors[id]!,
+          selected?.has(key)
+            ? colors[id]!.clone().multiplyScalar(1.6)
+            : lit?.has(key)
+              ? colors[id]!.clone().lerp(LIT, 0.55)
+              : colors[id]!,
         );
       });
       render();
@@ -263,6 +286,7 @@ export function createRenderer(mount: HTMLElement, meshes: SceneMeshes) {
     },
     dispose() {
       mark("dispose");
+      onFrame = null;
       cancelAnimationFrame(frame);
       observer.disconnect();
       controls.dispose();

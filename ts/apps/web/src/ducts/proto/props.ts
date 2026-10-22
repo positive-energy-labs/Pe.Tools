@@ -4,6 +4,7 @@ import type { price } from "@pe/ducts-domain/pricing";
 import type { readiness } from "@pe/ducts-domain/readiness";
 import type { DuctSnapshot } from "@pe/ducts-domain/types";
 import type { ActionHandle } from "#/route/handle";
+import type { PageMove } from "#/route/manifest";
 
 import type { DuctsPage } from "../manifest";
 import type { Claim } from "../legs";
@@ -28,9 +29,10 @@ export interface ProtoProps {
   claims: readonly Claim[];
   /** The claim cells keyed by id as the Work (or the `?demo=scene` fixture) holds them. */
   claimCells: Record<string, DuctClaim>;
-  /** Route page state (selected, issue, system, level, layers, encoding, camera, picture, ...). */
+  /** Route page state (selected, issue, system, level, layers, encoding, picture, viewport, ...). */
   page: DuctsPage;
-  setPage: (next: Partial<DuctsPage>) => void;
+  /** A named move pushes, a gesture replaces (`PageMove`). */
+  setPage: (next: Partial<DuctsPage>, move?: PageMove<DuctsPage>) => void;
   /** Selection / hover callbacks over element ids and claims. */
   onSelect: (id: number | null) => void;
   onSelectClaim: (claim: Claim) => void;
@@ -45,7 +47,8 @@ export interface ProtoProps {
   };
   /** Empty-state words, or null when the snapshot is drawable. */
   empty: { says: string; exit: string } | null;
-  /** The bound document (session/openId), or null. */
+  /** The bound document (session/openId), or null. Unread: element targets come from the
+   * displayed observation (`useNativeObservation`); goes when `route.tsx` stops passing it. */
   doc: { session: string; openId: string } | null;
   /** Loading state of the host reads. */
   reading: { pending: boolean; error: string | null };

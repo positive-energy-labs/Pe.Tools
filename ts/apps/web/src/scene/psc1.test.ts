@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vite-plus/test";
 import { decodeScene, type Psc1Metadata } from "./psc1";
 
+const BOX = { minX: 0, minY: 0, minZ: 0, maxX: 1, maxY: 1, maxZ: 1 };
 const handle = (elementId: number, linkInstanceId: number | null = null) =>
   ({
     documentKey: "doc-a",
@@ -10,17 +11,19 @@ const handle = (elementId: number, linkInstanceId: number | null = null) =>
     category: elementId === 1 ? "Ducts" : "Walls",
     // The decoder reads these fields only; the op's full Handle carries more.
   }) as Psc1Metadata["elements"][number]["handle"];
-const metadata = (patch: Partial<Psc1Metadata> = {}): Psc1Metadata => ({
-  format: "space-scene-v1",
-  stamp: { frame: "host-internal-ft" } as Psc1Metadata["stamp"],
-  bounds: { minX: 0, minY: 0, minZ: 0, maxX: 1, maxY: 1, maxZ: 1 },
-  triangles: 2,
-  elements: [
-    { handle: handle(1), firstVertex: 0, vertexCount: 3, focus: true },
-    { handle: handle(2, 7), firstVertex: 3, vertexCount: 3, focus: false },
-  ],
-  ...patch,
-});
+// The decoder reads these fields only; the op's full metadata carries more.
+const metadata = (patch: Partial<Psc1Metadata> = {}): Psc1Metadata =>
+  ({
+    format: "space-scene-v1",
+    stamp: { frame: "host-internal-ft" } as Psc1Metadata["stamp"],
+    bounds: BOX,
+    triangles: 2,
+    elements: [
+      { handle: handle(1), firstVertex: 0, vertexCount: 3, focus: true, bounds: BOX },
+      { handle: handle(2, 7), firstVertex: 3, vertexCount: 3, focus: false, bounds: BOX },
+    ],
+    ...patch,
+  }) as Psc1Metadata;
 /** A PSC1 artifact: magic, u32 length, metadata JSON, pad to 4, float32 xyz. */
 const psc1 = (meta: Psc1Metadata, floats = meta.triangles * 9, magic = 0x31435350) => {
   const json = new TextEncoder().encode(JSON.stringify(meta));

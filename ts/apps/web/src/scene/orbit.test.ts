@@ -1,9 +1,10 @@
 import { describe, expect, it } from "vite-plus/test";
 import {
-  fit,
+  applyLook,
+  boundsOfPoints,
   fitDistance,
+  frame,
   fromControls,
-  presets,
   samePose,
   toCamera,
   type OrbitViewport,
@@ -46,7 +47,7 @@ describe("orbit viewport ↔ camera", () => {
   });
   it("zoom 1 is the fit distance; zoom 2 halves it", () => {
     const d = (zoom: number) => {
-      const { position, target } = toCamera({ ...fit(bounds), zoom }, bounds);
+      const { position, target } = toCamera({ ...frame(bounds), zoom }, bounds);
       return Math.hypot(...position.map((p, i) => p - target[i]!));
     };
     expect(d(1)).toBeCloseTo(fitDistance(bounds), 6);
@@ -54,22 +55,32 @@ describe("orbit viewport ↔ camera", () => {
   });
 });
 
-describe("fit and presets", () => {
-  it("fit centres the pivot at zoom 1 and keeps the direction it is given", () => {
-    const v = fit(bounds, { yaw: 30, elev: 10 });
-    expect(v).toEqual({ kind: "orbit", yaw: 30, elev: 10, zoom: 1, pivot: [120, 215, 6] });
-    expect(fit(bounds).yaw).toBe(-45);
-    expect(fit(bounds).elev).toBeCloseTo(35.264, 3);
+describe("frame and looks", () => {
+  it("frame centres the target, keeps the direction, and zooms against the scene's bounds", () => {
+    expect(frame(bounds, bounds, { yaw: 30, elev: 10 })).toEqual({
+      kind: "orbit",
+      yaw: 30,
+      elev: 10,
+      zoom: 1,
+      pivot: [120, 215, 6],
+    });
+    expect(frame(bounds).yaw).toBe(-45);
+    expect(frame(bounds).elev).toBeCloseTo(35.264, 3);
+    const part = boundsOfPoints([
+      [100, 200, 0],
+      [110, 207.5, 3],
+    ])!;
+    expect(frame(bounds, part).zoom).toBeCloseTo(4, 6);
   });
-  it("the three axes look down, south and west, and plan survives the camera", () => {
-    expect(presets.top(bounds)).toMatchObject({ yaw: -90, elev: 90, zoom: 1 });
-    expect(presets.north(bounds)).toMatchObject({ yaw: 90, elev: 0 });
-    expect(presets.east(bounds)).toMatchObject({ yaw: 0, elev: 0 });
-    for (const preset of Object.values(presets))
-      expectPose(roundTrip(preset(bounds)), preset(bounds));
+  it("a look keeps pivot and zoom; plan and iso keep the yaw, a cardinal sets it", () => {
+    const shown: OrbitViewport = { kind: "orbit", yaw: 12, elev: 20, zoom: 3, pivot: [1, 2, 3] };
+    expect(applyLook("plan", shown)).toEqual({ ...shown, elev: 90 });
+    expect(applyLook("iso", shown).elev).toBeCloseTo(35.264, 3);
+    expect(applyLook("north", shown)).toEqual({ ...shown, yaw: 90, elev: 0 });
+    expectPose(roundTrip(applyLook("plan", shown)), { ...shown, elev: 90 });
   });
   it("a decoded echo is the same pose; a real move is not", () => {
-    const v = fit(bounds);
+    const v = frame(bounds);
     expect(samePose(v, { ...v, yaw: v.yaw + 360.01 }, bounds)).toBe(true);
     expect(samePose(v, { ...v, zoom: 1.0001 }, bounds)).toBe(true);
     expect(samePose(v, { ...v, yaw: v.yaw + 1 }, bounds)).toBe(false);

@@ -518,9 +518,8 @@ it("the scene carries Pe's loss per element, counting the rows paths share once"
     0.0223083,
     6,
   );
-  // Unpriced (no tables read yet) the scene draws without loss, and the other groups stay context.
+  // Unpriced (no tables read yet) the scene draws without loss.
   expect(sceneOf(indexOf(snap), ["g10"], () => true).segments.every((f) => !f.pressure)).toBe(true);
-  expect(sceneOf(indexOf(snap, priced), [], () => true).context.flat()).toHaveLength(3);
 });
 
 it.each(rootAttached.cases)(

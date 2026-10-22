@@ -290,13 +290,11 @@ test("the route sentence, refresh and the one shell mount from the same snapshot
   expect(within(head).getByRole("button", { name: /^refresh/ })).toBeTruthy();
   expect(within(head).queryByRole("button", { name: "Choose view" })).toBeNull();
   await waitFor(() => expect(container.querySelector('[data-proto="E2"]')).not.toBeNull());
-  await waitFor(() =>
-    expect(container.querySelector('[data-ducts-drawing="isometric"]')).not.toBeNull(),
-  );
+  await waitFor(() => expect(container.querySelector("[data-model-picture]")).not.toBeNull());
   expect(router.state.location.search.system).toBe("SA");
 }, 20000);
 
-test("the address carries system, level, selected, encoding, layers, camera and picture, each with a default", async () => {
+test("the address carries system, level, selected, encoding, layers, picture and viewport, each with a default", async () => {
   const bare = await mount("");
   expect(bare.router.state.location.search).toMatchObject({
     system: "",
@@ -304,12 +302,12 @@ test("the address carries system, level, selected, encoding, layers, camera and 
     selected: "",
     encoding: "health",
     layers: "",
-    camera: "iso",
     picture: "model",
+    viewport: null,
   });
   bare.unmount();
   const given = await mount(
-    "&system=SA&level=30&selected=3&encoding=flow&layers=a,b&camera=plan&picture=schematic",
+    "&system=SA&level=30&selected=3&encoding=flow&layers=a,b&picture=schematic",
   );
   expect(given.router.state.location.search).toMatchObject({
     system: "SA",
@@ -317,7 +315,6 @@ test("the address carries system, level, selected, encoding, layers, camera and 
     selected: "3",
     encoding: "flow",
     layers: "a,b",
-    camera: "plan",
     picture: "schematic",
   });
   const search = given.router.state.location.search as Record<string, unknown>;
@@ -380,16 +377,19 @@ test("an exact document lifetime change fences a pending read, including returni
   expect(screen.getByRole("region", { name: "Ducts route" }).textContent).not.toContain("999999");
 });
 
-test("clicking a segment on the drawing selects it in the address", async () => {
-  const { container, router } = await mount();
-  await waitFor(() =>
-    expect(container.querySelector('[data-segment="3"] path:last-child')).not.toBeNull(),
-  );
-  fireEvent.click(container.querySelector('[data-segment="3"] path:last-child')!);
+test("with no meshes the centrelines layer draws over the fitted pose, and a click selects in the address", async () => {
+  const { container, router } = await mount("&system=SA&layers=meshes,centrelines");
+  const hit = () => container.querySelector('[data-segment="3"] path:last-child');
+  await waitFor(() => expect(hit()).not.toBeNull());
+  // The hit target declares the member the displayed read captured, for the element menu.
+  expect(hit()!.getAttribute("data-revit-refs")).toContain('"elementId":3');
+  fireEvent.click(hit()!);
   await waitFor(() => expect(router.state.location.search.selected).toBe("3"));
   await waitFor(() =>
     expect(container.querySelector('[data-segment="3"][data-selected]')).not.toBeNull(),
   );
+  // The fit has no pose of its own in the address; the picture publishes the one it shows.
+  expect(router.state.location.search.viewport).toBeNull();
 }, 20000);
 
 test("every verb that writes to Revit shows in the head too, refused there in words while it has nothing to act on", async () => {

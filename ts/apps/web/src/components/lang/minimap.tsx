@@ -149,10 +149,11 @@ const rad = (deg: number) => (deg * Math.PI) / 180;
 const dot = (a: Vec, b: Vec) => a[0] * b[0] + a[1] * b[1] + a[2] * b[2];
 const clampElev = (v: number) => Math.min(90, Math.max(0, v));
 
-/** The unit vector from the pivot to the eye of a camera at `yaw`/`elev` degrees. */
+/** The unit vector from the pivot to the eye at `yaw`/`elev` degrees, in `scene/orbit.ts`'s frame
+ * (yaw 0 = the eye on +X, 90 = on +Y), so the globe and the camera read one viewport alike. */
 const towards = (yaw: number, elev: number): Vec => {
   const cosE = Math.cos(rad(elev));
-  return [-Math.sin(rad(yaw)) * cosE, -Math.cos(rad(yaw)) * cosE, Math.sin(rad(elev))];
+  return [Math.cos(rad(yaw)) * cosE, Math.sin(rad(yaw)) * cosE, Math.sin(rad(elev))];
 };
 
 /** The globe's projection: a unit-sphere point to SVG coordinates, at the viewport's yaw/elev. */
@@ -162,12 +163,13 @@ const globeProjection = (yaw: number, elev: number) => {
   const sinE = Math.sin(rad(elev));
   const cosE = Math.cos(rad(elev));
   return (p: readonly number[]): [number, number] => {
-    const depth = p[0]! * sin + p[1]! * cos;
-    return [C + (p[0]! * cos - p[1]! * sin) * R, C - (depth * sinE + p[2]! * cosE) * R];
+    // Screen right is the camera's right; depth runs away from the eye.
+    const depth = -(p[0]! * cos + p[1]! * sin);
+    return [C + (p[1]! * cos - p[0]! * sin) * R, C - (depth * sinE + p[2]! * cosE) * R];
   };
 };
 
-/** The 18 orientations, as camera yaw (0 = the eye in the south; null keeps the yaw) and elevation. */
+/** The 18 orientations, as camera yaw (null keeps the yaw) and elevation. */
 export const STOPS: readonly { rel: number | null; elev: number; pole: boolean }[] = [
   { rel: null, elev: 90, pole: true },
   { rel: null, elev: -90, pole: true },
@@ -320,7 +322,8 @@ export function OrbitMinimap({
         onViewport(
           {
             ...viewport,
-            yaw: yaw + event.movementX * DEG_PER_PX,
+            // A drag carries the globe with the pointer, as the camera's own orbit drag does.
+            yaw: yaw - event.movementX * DEG_PER_PX,
             elev: clampElev(elev + event.movementY * DEG_PER_PX),
           },
           "gesture",
