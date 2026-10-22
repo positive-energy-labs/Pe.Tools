@@ -1,3 +1,4 @@
+import { GALVANIZED_STEEL_ROUGHNESS } from "@pe/agent-contracts";
 /**
  * Imperial duct friction loss — ASHRAE Fundamentals, Duct Design (Darcy with the Altshul-Tsal
  * friction factor). Units: cfm, ft, in, fpm, lbm/ft³, in. wg.
@@ -19,7 +20,7 @@ export type DuctInput = {
 
 /** ASHRAE absolute roughness, ft. */
 export const materials = {
-  "galvanized steel": 0.0003,
+  "galvanized steel": GALVANIZED_STEEL_ROUGHNESS,
   "aluminum / PVC / stainless": 0.0001,
   "fibrous glass duct (lined)": 0.003,
   "flexible duct, fully extended": 0.003,
