@@ -330,7 +330,7 @@ function ThreadActionsMenu({
               const at = routeAddress(routeAt(url.pathname) ?? "pea");
               const { page, carry } = at.read(Object.fromEntries(url.searchParams));
               copy(
-                new URL(at.link(page as never, { ...carry, thread: thread.id }), url.origin).href,
+                new URL(at.link(page, { ...carry, thread: thread.id }), url.origin).href,
                 "thread link",
               );
             },

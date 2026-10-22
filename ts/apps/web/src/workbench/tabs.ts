@@ -5,7 +5,6 @@ import {
   THREAD_TABS_MAX,
   documentRequestSchema,
   routeAt,
-  routeOf,
   type DocumentRequest,
   type Carry,
   type LinkPage,
@@ -41,7 +40,7 @@ const focus = (thread: string, id: string | null) => {
 /** Only registered shareable fields and explicit target/work survive in a durable Place. */
 function place(route: RouteKey, search: Record<string, unknown>, target: DocumentRequest | null) {
   const { page, carry } = routeAddress(route).read(search);
-  return routeAddress(route).link(page as LinkPage<RouteKey>, {
+  return routeAddress(route).link(page, {
     target: carry.target ?? (target ? JSON.stringify(target) : undefined),
     work: carry.work,
   });
@@ -340,17 +339,16 @@ export function useRouteTabs() {
     if (previous) void select(previous, true).catch(fail);
   }, [thread, route, legacy, location.pathname, shown.ready]);
 
-  const open = async (
-    key: string,
-    page?: LinkPage<RouteKey>,
+  const open = async <R extends RouteKey>(
+    targetRoute: R,
+    page?: LinkPage<R>,
     explicit?: Pick<Carry, "target" | "work">,
     duplicate = false,
   ) => {
     const epoch = ++navigationEpoch.current;
     const sourcePath = router.state.location.pathname;
-    const targetRoute = routeOf(key);
-    if (!targetRoute || targetRoute === "pea") {
-      setFailure(`This route has no saved Place contract: ${key}`);
+    if (targetRoute === "pea") {
+      setFailure(`This route has no saved Place contract: ${targetRoute}`);
       return false;
     }
     try {
@@ -371,7 +369,7 @@ export function useRouteTabs() {
       const nextLink =
         page === undefined && explicit === undefined && existing
           ? existing.link
-          : routeAddress(targetRoute).link(page ?? {}, {
+          : routeAddress(targetRoute).link(page, {
               target:
                 explicit?.target ?? carry.target ?? (pinned ? JSON.stringify(pinned) : undefined),
               work: explicit?.work ?? carry.work,

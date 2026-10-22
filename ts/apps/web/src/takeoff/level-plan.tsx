@@ -178,7 +178,7 @@ export function LevelPlan({
     surface: "route",
     visible: !!lease?.visible && !!world && !!size,
     page: lease?.page ?? {},
-    apply: (patch) => lease?.applyViewport(patch.viewport as PlaneViewport | null),
+    apply: (patch) => patch.viewport !== undefined && lease?.applyViewport(patch.viewport),
     context: {
       ...lease?.context,
       size,

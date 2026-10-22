@@ -76,8 +76,7 @@ test("takeoffs plane gestures replace the address, minimap moves push, and Back 
     expect(node).toBeTruthy();
     return node!;
   });
-  const place = () =>
-    routeAddress("takeoffs").read(router.state.location.search as Record<string, unknown>).page;
+  const place = () => routeAddress("takeoffs").read(router.state.location.search).page;
   expect(place().viewport).toBeNull();
   fireEvent.wheel(host, { clientX: 200, clientY: 100, deltaY: -120 });
   await waitFor(() => expect(place().viewport).not.toBeNull());

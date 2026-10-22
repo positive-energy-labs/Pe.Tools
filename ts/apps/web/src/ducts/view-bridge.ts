@@ -80,7 +80,7 @@ export function useDuctsViewBridge({
     visible: reading !== null && membersReady,
     page,
     // A Pea patch is one navigation; the manifest's `transition` couples system, selection and viewport.
-    apply: (patch) => setPage(patch as Partial<DuctsPage>, { history: "push" }),
+    apply: (patch) => setPage(patch, { history: "push" }),
     context: { document, observation },
     facts,
   });

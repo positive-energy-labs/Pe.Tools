@@ -38,6 +38,20 @@ describe("the route address", () => {
     expect(routeAt("/duct-loss")).toBe("duct-loss");
   });
 
+  test("a route known only as a key is any route's address, still typed", () => {
+    const key = routeOf("ducts")!;
+    const at = routeAddress(key);
+    const { page } = at.read({ system: "SA" });
+    // The union of every route's page narrows by its keys; a page of no route is refused.
+    expect("system" in page ? page.system.toUpperCase() : null).toBe("SA");
+    expect(at.link(page)).toBe("/ducts?system=SA");
+    // @ts-expect-error no route links a `bogus` key
+    expect(() => at.link({ bogus: true })).toThrow("ducts links carry no 'bogus'");
+    // A union that mixes leasing and non-leasing routes may hold no lease.
+    // @ts-expect-error possibly undefined
+    expect(at.agent.keys).toContain("system");
+  });
+
   test("a link drops defaults and drafts and keeps the carry", () => {
     const pea = routeAddress("pea");
     const { page, carry } = pea.read({ turn: "3", prompt: "draft", thread: "t1" });

@@ -100,6 +100,8 @@ export function createViewOwner<P>(
         if ("refusal" in normalized) return reject(normalized.refusal);
         patch = normalized.patch;
         if (rules.address) {
+          // `rules.address` is any `RouteKey`, untied from P: the manifest's Page extends its
+          // address's schema by construction (`urlPage` checks the keys at load), not by type.
           const moved = routeAddress(rules.address).transition(
             before.page as never,
             patch as never,

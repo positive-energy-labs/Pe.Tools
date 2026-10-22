@@ -46,6 +46,9 @@ function addressPage<P>(key: string, route: RouteKey, page: z.ZodType<P> | undef
   if (!page) throw Error(`${key} names an address without a page schema`);
   const shape = shapeOf(page);
   const contract = routeAddress(route);
+  const defaults: Record<string, unknown> = contract.defaults;
+  // The casts below cross from the address's page to the manifest's P: a manifest names its
+  // `address` as any `RouteKey`, untied from P, so only the key check above proves P holds them.
   const keys = contract.keys as readonly (keyof P & string)[];
   for (const name of keys) {
     if (!shape[name]) throw Error(`${key}: address key ${name} is not a page field`);
@@ -53,7 +56,7 @@ function addressPage<P>(key: string, route: RouteKey, page: z.ZodType<P> | undef
     // The address writes a value at its contract default as nothing; any other default would show.
     const same =
       initial === undefined
-        ? (contract.defaults as Record<string, unknown>)[name] === undefined
+        ? defaults[name] === undefined
         : contract.write({ [name]: initial })[name] === undefined;
     if (!same) throw Error(`${key}: page default for ${name} differs from its contract field's`);
   }
@@ -63,6 +66,7 @@ function addressPage<P>(key: string, route: RouteKey, page: z.ZodType<P> | undef
   // Every way into the address (a navigate, a Link) writes the URL keys as their codec does.
   const encode: SearchMiddleware<Record<string, unknown>> = ({ search, next }) => {
     const out = { ...next(search) };
+    // The router's search is untyped; the address reads only its own keys from it.
     for (const [name, text] of Object.entries(write(out as Partial<P>)))
       if (text === undefined) delete out[name];
       else out[name] = text;

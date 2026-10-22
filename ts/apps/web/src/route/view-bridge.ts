@@ -6,7 +6,12 @@
  * authored Work.
  */
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import { routeAddress, type RouteView, type RouteViewRoute } from "@pe/agent-contracts";
+import {
+  routeAddress,
+  type RoutePage,
+  type RouteView,
+  type RouteViewRoute,
+} from "@pe/agent-contracts";
 import { peClient } from "#/host/pe-client";
 import { useHostEvents } from "#/readings";
 import { causeRefusal, refuse, type Refusal } from "./refusal";
@@ -23,7 +28,7 @@ type Intent = {
   patch: Record<string, string>;
 };
 
-export function useRouteViewBridge({
+export function useRouteViewBridge<R extends RouteViewRoute>({
   route,
   thread,
   surface,
@@ -33,15 +38,15 @@ export function useRouteViewBridge({
   context,
   facts,
 }: {
-  route: RouteViewRoute;
+  route: R;
   thread?: string;
   surface: "chat" | "route";
   /** False while the route shows nothing Pea could address (no thread, hidden, or a stage with no view). */
   visible: boolean;
   /** The route's Page; the lease carries its agent keys, as their codecs write them (`agent.write`). */
-  page: object;
+  page: Partial<RoutePage<R>>;
   /** Applies Pea's patch, typed (`agent.read`), through the route's Page as one pushed move. */
-  apply: (patch: Record<string, unknown>) => void;
+  apply: (patch: Partial<RoutePage<R>>) => void;
   /** Identity of what is shown; an ack fails if it moves while a command is pending. */
   context: Record<string, unknown>;
   /** What the shown Page derives; the ack echoes it. */
@@ -67,7 +72,8 @@ export function useRouteViewBridge({
     changed();
     return () => document.removeEventListener("visibilitychange", changed);
   }, []);
-  const lease = routeAddress(route).agent;
+  // A generic R defers the address's lease type, so the lease is taken over every leasing route.
+  const lease = routeAddress<RouteViewRoute>(route).agent;
   const addressed = lease.write(page);
   const raw: RouteView | null =
     thread && visible && pageVisible && routeCurrent()
@@ -166,9 +172,10 @@ export function useRouteViewBridge({
           })
           .catch(() => {});
       const agent = routeAddress(value.route).agent;
-      let patch: Record<string, unknown>;
+      let patch: Partial<RoutePage<R>>;
       try {
-        patch = agent.read(event.patch);
+        // `value` is the view this hook published, so its route is R; `RouteView` carries any route.
+        patch = agent.read(event.patch) as Partial<RoutePage<R>>;
       } catch (cause) {
         return refused(refuse("failed", causeRefusal(cause).message));
       }

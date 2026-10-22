@@ -97,7 +97,7 @@ export function capturedPlace(
     at.keys.filter((name) => name in input).map((name) => [name, input[name]]),
   );
   if (key === "schedules" && scope.binding === "workspace") search.schedule = scope.work;
-  return { ok: true, route: key, page: at.read(search).page as LinkPage<RouteKey>, carry };
+  return { ok: true, route: key, page: at.read(search).page, carry };
 }
 
 /** Action receipts retain their execution document, even when the chat head has since moved. */

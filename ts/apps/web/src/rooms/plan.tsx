@@ -305,8 +305,7 @@ export function RoomsPlan({
       !!size &&
       (!page.focus || !zoomTo.length || zoomed.current === page.focus),
     page,
-    apply: (patch) =>
-      setPage({ viewport: patch.viewport as RoomsPage["viewport"] }, { history: "push" }),
+    apply: (patch) => setPage({ viewport: patch.viewport }, { history: "push" }),
     context: {
       ...lease?.context,
       size,

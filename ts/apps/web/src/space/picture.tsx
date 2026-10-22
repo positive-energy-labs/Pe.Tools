@@ -160,7 +160,7 @@ export function SpacePicture({
     surface: "route",
     visible: !!lease?.ready && !!meshes && !!metadata && !!size,
     page,
-    apply: (patch) => setPage(patch as Partial<SpacePage>, push),
+    apply: (patch) => setPage(patch, push),
     context: { ...lease?.context, bounds, size },
     facts: {
       pose: axis ? (plane?.viewport ?? null) : pose,

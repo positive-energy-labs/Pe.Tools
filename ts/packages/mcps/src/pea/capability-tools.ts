@@ -863,9 +863,9 @@ async function dispatch(
         }
       }
       const view = /^route:([a-z-]+)\.(view|set-view)$/.exec(row.key);
-      if (view && view[1] && routeViewRoutes.includes(view[1] as RouteViewRoute)) {
+      const route = view && routeViewRoutes.find((key) => key === view[1]);
+      if (view && route) {
         // One channel for every route that leases a view (`routeViewRoutes`): read the leased view, or patch its Page keys.
-        const route = view[1] as RouteViewRoute;
         if (!viewThread) throw Error("This MCP server has no thread (no harness context).");
         const client = createPeClient(base(), fetch);
         const read = (instance: unknown) =>

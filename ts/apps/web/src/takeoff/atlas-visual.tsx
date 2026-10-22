@@ -10,7 +10,7 @@ import { levelsOf } from "#/takeoff/plan-image";
 import { useRouteSearch } from "#/route/activity";
 
 export function AtlasVisual() {
-  const search = useRouteSearch() as { thread?: string };
+  const search = useRouteSearch();
   const {
     store,
     world,

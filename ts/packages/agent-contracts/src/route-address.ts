@@ -28,14 +28,32 @@ type FieldsOf<R extends RouteKey> = Routes[R]["fields"];
 type SchemaOf<F> = F extends { schema: infer S extends z.ZodType } ? S : never;
 type KeysWhere<F, M> = { [K in keyof F]: F[K] extends M ? K : never }[keyof F] & string;
 
-/** Every declared field of a route, typed. */
-export type RoutePage<R extends RouteKey> = {
+/*
+ * Each page type distributes over a union of routes: a caller that knows the route only as
+ * `RouteKey` gets the union of every route's page, narrowed by `in`, never the near-empty
+ * intersection of their keys; so `RouteAddress<RouteKey>` is any route's address, still typed.
+ */
+
+/** A page with no keys is closed: a bare `{}` member would let a union of pages take any object. */
+type Closed<T> = [keyof T] extends [never] ? Record<string, never> : T;
+type Fielded<R extends RouteKey> = {
   [K in keyof FieldsOf<R>]: z.output<SchemaOf<FieldsOf<R>[K]>>;
 };
-type UrlKey<R extends RouteKey> = KeysWhere<FieldsOf<R>, { url: History }>;
+type UrlKey<R extends RouteKey> = R extends RouteKey
+  ? KeysWhere<FieldsOf<R>, { url: History }>
+  : never;
 type ShareKey<R extends RouteKey> = Exclude<UrlKey<R>, KeysWhere<FieldsOf<R>, { share: false }>>;
-export type UrlPage<R extends RouteKey> = Pick<RoutePage<R>, UrlKey<R>>;
-export type LinkPage<R extends RouteKey> = Partial<Pick<RoutePage<R>, ShareKey<R>>>;
+
+/** Every declared field of a route, typed. */
+export type RoutePage<R extends RouteKey> = R extends RouteKey ? Closed<Fielded<R>> : never;
+/** The fields the address bar holds. */
+export type UrlPage<R extends RouteKey> = R extends RouteKey
+  ? Closed<Pick<Fielded<R>, UrlKey<R>>>
+  : never;
+/** The fields a link carries: URL keys, drafts excepted. */
+export type LinkPage<R extends RouteKey> = R extends RouteKey
+  ? Closed<Partial<Pick<Fielded<R>, ShareKey<R>>>>
+  : never;
 
 export type RouteViewRoute = {
   [R in RouteKey]: Routes[R] extends { agent: object } ? R : never;
@@ -81,7 +99,9 @@ export interface RouteAddress<R extends RouteKey> {
   readonly path: Routes[R]["path"];
   readonly title: string;
   /** The typed Page schema of every declared field; a web page `.extend`s it with Page-only state. */
-  readonly schema: z.ZodObject<{ [K in keyof FieldsOf<R> & string]: SchemaOf<FieldsOf<R>[K]> }>;
+  readonly schema: R extends RouteKey
+    ? z.ZodObject<{ [K in keyof FieldsOf<R> & string]: SchemaOf<FieldsOf<R>[K]> }>
+    : never;
   /** Every field at its default: the bare Place. */
   readonly defaults: RoutePage<R>;
   /** The keys the address bar holds. */
@@ -123,7 +143,12 @@ export interface RouteAddress<R extends RouteKey> {
    * each and never this rule, so a page reaches it only through here (or `read`, which forgives).
    */
   transition<P extends Partial<RoutePage<R>>>(current: P, patch: Partial<P>): Moved<P>;
-  readonly agent: [R] extends [RouteViewRoute] ? RouteLease<R> : undefined;
+  /** A union of routes that mixes leasing and non-leasing ones may or may not hold a lease. */
+  readonly agent: [R] extends [RouteViewRoute]
+    ? RouteLease<R>
+    : [Extract<R, RouteViewRoute>] extends [never]
+      ? undefined
+      : RouteLease<Extract<R, RouteViewRoute>> | undefined;
 }
 
 /* ── Field reads and writes ──────────────────────────────────────────────────── */
@@ -357,28 +382,34 @@ function lease(
   };
 }
 
-const built = new Map<RouteKey, RouteAddress<RouteKey>>();
+const built = new Map<RouteKey, ReturnType<typeof build>>();
 
-/** The route's one deep address; the same object on every call. */
+/**
+ * The route's one deep address; the same object on every call. A route known only as `RouteKey`
+ * gets any route's address: its pages are the union of every route's, narrowed by `in`.
+ */
 export function routeAddress<R extends RouteKey>(route: R): RouteAddress<R> {
   let found = built.get(route);
-  if (!found) built.set(route, (found = build(route) as unknown as RouteAddress<RouteKey>));
+  if (!found) built.set(route, (found = build(route)));
+  // `build` runs over untyped fields; the declaration in `routes/<route>.ts` is what types them.
   return found as unknown as RouteAddress<R>;
 }
 
 /* ── The registry ────────────────────────────────────────────────────────────── */
 
+// `Object.keys` types its keys as `string`; these are exactly the registry's.
 export const routeKeys = Object.keys(routeAddresses) as [RouteKey, ...RouteKey[]];
 
 /** The route a key names, or null: the check for a route that arrives as text. */
 export const routeOf = (key: string): RouteKey | null =>
-  Object.hasOwn(routeAddresses, key) ? (key as RouteKey) : null;
+  routeKeys.find((route) => route === key) ?? null;
 
 /** The route whose path `pathname` is, or null. */
 export const routeAt = (pathname: string): RouteKey | null =>
   routeKeys.find((key) => routeAddresses[key].path === pathname) ?? null;
 
 /** The routes that lease a mounted view to Pea. */
+// `filter` cannot narrow by a declaration's `agent` member; `RouteViewRoute` is the same rule, typed.
 export const routeViewRoutes = routeKeys.filter((route) => "agent" in routeAddresses[route]) as [
   RouteViewRoute,
   ...RouteViewRoute[],

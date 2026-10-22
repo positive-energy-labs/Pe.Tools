@@ -42,9 +42,9 @@ export function createChatPageStore(deps: {
 }) {
   let tabs: {
     promote: (from: string, owner: string, current: () => boolean) => Promise<void>;
-    open: (
-      route: string,
-      page?: LinkPage<RouteKey>,
+    open: <R extends RouteKey>(
+      route: R,
+      page?: LinkPage<R>,
       carry?: Pick<Carry, "target" | "work">,
     ) => Promise<boolean>;
   } | null = null;
@@ -156,7 +156,7 @@ export function createChatPageStore(deps: {
        * once. Posts nothing to the thread; it is a route action, never a message.
        */
       planIn: (
-        route: ChatPluginRoute,
+        route: RouteKey,
         page?: LinkPage<RouteKey>,
         carry?: Pick<Carry, "target" | "work">,
       ) => {

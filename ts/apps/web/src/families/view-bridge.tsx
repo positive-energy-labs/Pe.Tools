@@ -33,7 +33,7 @@ export function FamiliesViewBridge({
     surface,
     visible: visible && (stage === "audit" || stage === "apply" || stage === "archived"),
     page: store.page,
-    apply: (patch) => store.setPage({ query: patch.query as string }, { history: "push" }),
+    apply: (patch) => store.setPage({ query: patch.query }, { history: "push" }),
     context: {
       stage,
       readingId: lastReading?.id ?? null,
