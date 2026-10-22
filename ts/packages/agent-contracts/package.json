@@ -28,7 +28,11 @@
       "types": "./src/product-map.ts",
       "import": "./src/product-map.ts"
     },
-    "./space-view": "./src/space-view.ts"
+    "./space-view": "./src/space-view.ts",
+    "./ducts-guide": {
+      "types": "./src/ducts-guide.ts",
+      "import": "./src/ducts-guide.ts"
+    }
   },
   "publishConfig": {
     "access": "public"

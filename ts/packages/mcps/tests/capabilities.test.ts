@@ -3,6 +3,7 @@ import { machineFixture } from "../../agent-contracts/tests/machine-fixture.ts";
 import type { PodList } from "@pe/host-contracts/operation-types";
 import { join } from "node:path";
 import { checkoutRootFrom } from "@pe/host-contracts/service-identity";
+import { DUCTS_GUIDE } from "@pe/agent-contracts";
 import { afterEach, expect, test, vi } from "vite-plus/test";
 import {
   address,
@@ -753,4 +754,76 @@ test("the live head names an open lifetime; reopen needs an explicit override an
     vi.unstubAllGlobals();
     vi.unstubAllEnvs();
   }
+});
+test("route:ducts.guide is one read row and answers without a document or a host read", async () => {
+  fakeRuntimeHost("http://127.0.0.1:9");
+  const rows = catalog().capabilities.filter((row) => row.key === "route:ducts.guide");
+  expect(rows).toHaveLength(1);
+  expect(rows[0]).toMatchObject({ kind: "route-doc", needs: "nothing", mutates: false });
+  const calls: string[] = [];
+  vi.stubGlobal("fetch", async (url: string | URL | Request) => {
+    const path = new URL(url instanceof Request ? url.url : String(url)).pathname;
+    calls.push(path);
+    if (path === "/pe/capabilities") return Response.json(catalog());
+    throw Error(`Unexpected guide request ${path}`);
+  });
+  const read = (await run(peRead, { key: "route:ducts.guide", timeoutSeconds: 30 })) as {
+    ok: boolean;
+    result: { guide: { summary: string; cases: Record<string, unknown>[] }; present?: unknown };
+  };
+  expect(read.ok).toBe(true);
+  expect(read.result.guide.summary).toBe(DUCTS_GUIDE.summary);
+  expect(read.result.guide.cases).toHaveLength(DUCTS_GUIDE.cases.length);
+  expect(Object.keys(read.result.guide.cases[0]!).sort()).toEqual(
+    ["code", "group", "kinds", "number", "status", "title"].sort(),
+  );
+  expect(read.result).not.toHaveProperty("present");
+  expect(calls).toEqual(["/pe/capabilities"]);
+});
+
+test("route:ducts.guide with a document adds the cases its fresh analysis shows, or says why not", async () => {
+  fakeRuntimeHost("http://127.0.0.1:9");
+  const document = { session: "s1", openId: "open-1" };
+  const kase = DUCTS_GUIDE.cases.find((c) => c.kinds.length)!;
+  const [kind, grade = null] = kase.kinds[0]!.split(":");
+  let fail = false;
+  vi.stubGlobal("fetch", async (url: string | URL | Request, init?: RequestInit) => {
+    const path = new URL(url instanceof Request ? url.url : String(url)).pathname;
+    if (path === "/pe/capabilities") return Response.json(catalog());
+    if (path === "/pe/ducts/analysis") {
+      expect(JSON.parse(init?.body as string)).toMatchObject({
+        source: { kind: "fresh", target: document },
+        selector: { kind: "document" },
+        projection: "summary",
+        limit: 1,
+      });
+      if (fail) return Response.json({ error: "no such document" }, { status: 404 });
+      return Response.json({
+        target: document,
+        findings: [{ kind, grade, elementIds: [7, 8] }],
+        findingCounts: { byKindAndGrade: { [kase.kinds[0]!]: 1 } },
+      });
+    }
+    throw Error(`Unexpected guide request ${path}`);
+  });
+  const input = { document, section: "limits" };
+  expect(await run(peRead, { key: "route:ducts.guide", input, timeoutSeconds: 30 })).toMatchObject({
+    ok: true,
+    target: { session: "s1", document: "open-1" },
+    result: {
+      guide: { limits: DUCTS_GUIDE.limits },
+      present: expect.arrayContaining([
+        { number: kase.number, title: kase.title, code: kase.code, count: 1, elementIds: [7, 8] },
+      ]),
+    },
+  });
+  fail = true;
+  expect(await run(peRead, { key: "route:ducts.guide", input, timeoutSeconds: 30 })).toMatchObject({
+    ok: true,
+    result: {
+      guide: { limits: DUCTS_GUIDE.limits },
+      present: null,
+      presentError: expect.stringContaining("no such document"),
+    },
+  });
 });

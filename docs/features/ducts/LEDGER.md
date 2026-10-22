@@ -5,6 +5,8 @@ Rebuilt 2026-10-21 as current truth after the close of the ducts walk; git holds
 ## Decided
 
 **The walk**
+- 2026-10-22, the tutorial, Pea's duct skill and the `route:ducts.guide` read are projections of one object, `agent-contracts/ducts-guide.ts`; three of the four probes pass on it, and the fourth (Pea's verbs) passes only when the prompt allows tool calls (agent ledger 2026-10-22). The analysis summary no longer refuses a model whose findings alone exceed the reply budget, and `findingCounts.byKindAndGrade` carries graded join counts that are never cut.
+- 2026-10-21, kaitpw: Pea is scored against this tutorial on black-box `pea --prompt` runs; the baseline (three probes, one half right, two failed because the ducts skill is trigger-gated and the base instructions carry no walk) and the owed one-source refactor are in the agent ledger (2026-10-21).
 - 2026-10-20, kaitpw: "calc duct pdrop on SA 19" is one walk, in order: name the system; heal the model; point at the airflow; price the ducts and fittings; read the result in the engineer's units; review the pending changes; write. Staying aligned on design intent is not a step: every write to the subject, the inputs or a ruling is visible, named and ruled by a person before it counts.
 - 2026-10-20, kaitpw: the three stages were right as an order and wrong as a control. The inbox is grouped Fix, Set, Check, Write, with Diagnostics collapsed below; the person walks it top to bottom. No stage picker, no view picker, no variant switch. Pea advances the walk by resolving rows, which a hand-picked stage would forbid.
 - 2026-10-20, kaitpw: the route is one shell with four panes: tree, picture, inbox, rules (the E2 prototype, promoted). The globe is the camera, so plan is a camera preset (`P`); the schematic swaps places with the 3D view (`S`) instead of being a view. kaitpw: "lov this concept".
@@ -66,6 +68,7 @@ Rebuilt 2026-10-21 as current truth after the close of the ducts walk; git holds
 - Revit's `size_lookup` as the interpolator: exact match or default only.
 
 ## Owed
+- 2026-10-22, feet shown as pressure divided by the design friction rate, so feet keep the same order as pressure (kaitpw 2026-10-21, tentatively agreed: "analysis is what we need, not sizing"); today the tree shows feet at each duct's own rate, as RHVAC does, and the critical run is picked by pressure.
 
 **Walk and pricing**
 - Open equipment ports never reach the proximity pass: a filter chassis port 1.9 in from an air handler's return port, facing, both return air, never joins, so the return never reaches its air handler and a lone filter chassis stays a fan with its open port hidden. kaitpw agreed: raise equipment ports as open ends and let the face rule join them.
