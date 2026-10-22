@@ -10,6 +10,8 @@ interface ArtifactFrameProps {
   /** Recessed band across the top — the object's name and its machine-measured facts. */
   head?: React.ReactNode;
   headTrail?: React.ReactNode;
+  /** The head's fit (see `Rail`): `wrap` for a trail that accumulates chips. */
+  headFit?: "line" | "wrap";
   /** Recessed band across the bottom — counts, receipts, and the object's one commit verb. */
   foot?: React.ReactNode;
   children: React.ReactNode;
@@ -22,6 +24,7 @@ interface ArtifactFrameProps {
 export function ArtifactFrame({
   head,
   headTrail,
+  headFit,
   foot,
   children,
   className,
@@ -37,9 +40,11 @@ export function ArtifactFrame({
       role={label ? "group" : undefined}
       aria-label={label}
     >
-      {head != null ? <Rail ground="recess" lead={head} trail={headTrail} /> : null}
+      {head != null ? (
+        <Rail ground="recess" lead={head} trail={headTrail} fit={headFit} size="control" />
+      ) : null}
       {children}
-      {foot != null ? <Rail ground="recess" lead={foot} edge="top" /> : null}
+      {foot != null ? <Rail ground="recess" lead={foot} edge="top" size="control" /> : null}
     </div>
   );
 }

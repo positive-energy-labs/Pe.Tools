@@ -38,7 +38,7 @@ export type QueryClause = { text: string; not: boolean } & (
 const CLAUSE = /^(!?)(?:"([^"]*)"|([^\s"~=<>!]+))(~|!=|>=|<=|=|>|<)(?:"([^"]*)"?|(\S*))$/;
 
 /** The query's words: whitespace splits them, except inside quotes ("Room Name"=Office). */
-export const queryWords = (text: string) => text.match(/(?:"[^"]*"?|[^\s"])+/g) ?? [];
+export const queryWords = (text: string): string[] => text.match(/(?:"[^"]*"?|[^\s"])+/g) ?? [];
 
 /** A label or value as the query writes it: quoted when it holds a space or an operator. */
 export const quoted = (text: string) => (!text || /[\s"~=<>!]/.test(text) ? `"${text}"` : text);
@@ -83,8 +83,13 @@ export const QUERY_OPS: Record<"text" | "number", [QueryOp, boolean, string][]> 
     ["<", false, "<"],
     ["<=", false, "≤"],
     ["=", true, "is empty"],
+    ["!=", true, "is not empty"],
   ],
 };
+
+/** One field clause as the query writes it; `value` "" is the empty form (`Label=`). */
+export const clauseText = (not: boolean, label: string, op: QueryOp, value: string) =>
+  `${not ? "!" : ""}${quoted(label)}${op}${value ? quoted(value) : ""}`;
 
 /** What a field clause says after its label: "> 1", "contains millwork", "is empty". */
 export function opSaid(kind: "text" | "number", op: QueryOp, value: string) {
@@ -121,6 +126,8 @@ export type QueryRead<Row> = {
   match?: (row: Row, value: string) => boolean;
   /** The whole vocabulary, suggested even at zero rows in scope (a facet column's `options`). */
   values?: readonly string[];
+  /** Human labels for `values`, when the stored value is not what a person reads. */
+  labels?: ReadonlyMap<string, string>;
 };
 
 /** Whether `row` passes every clause: a field clause on `fields` (keyed by lower-case label), a
@@ -152,11 +159,14 @@ export function conditionValues<Row>(rows: readonly Row[], field: QueryRead<Row>
   if (values)
     return values.map((value) => ({
       value,
+      ...(field.labels?.get(value) !== undefined && field.labels.get(value) !== value
+        ? { label: field.labels.get(value) }
+        : {}),
       count: rows.filter((row) =>
         match ? match(row, value) : fieldMatches(field.read(row), field.kind, "=", value),
       ).length,
     }));
-  const counts = new Map<string, { value: string; count: number }>();
+  const counts = new Map<string, { value: string; label?: string; count: number }>();
   for (const row of rows) {
     const value = String(field.read(row) ?? "").trim();
     const seen = counts.get(value.toLocaleLowerCase());

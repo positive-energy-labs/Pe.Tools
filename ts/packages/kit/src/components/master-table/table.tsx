@@ -62,7 +62,7 @@ function useTableSelection(selection: TableSelection | undefined, shown: readonl
       callback: () => selection?.onChange(new Set()),
       label: "clear selection",
       says: "drop the selected table rows",
-      options: { enabled: (selection?.selected.size ?? 0) > 0 },
+      available: () => (selection?.selected.size ?? 0) > 0,
     },
   ]);
   if (!selection) return null;
@@ -86,6 +86,8 @@ export interface TableProps<Row extends RowData> {
   onRowClick?: (row: Row) => void;
   onRowHover?: (row: Row | null) => void;
   rowClassName?: (row: Row) => string | undefined;
+  /** The Revit elements represented by each row, served by the root element menu. */
+  revitIds?: (row: Row) => readonly number[];
   gutter?: (row: Row) => { count: number; title: string; tone?: "alarm" | "caution" } | null;
   /** Nothing in scope (a filtered-to-nothing table says its own, different story). */
   empty?: ReactNode;
@@ -112,6 +114,7 @@ export function Table<Row extends RowData>({
   onRowClick,
   onRowHover,
   rowClassName,
+  revitIds,
   gutter,
   empty,
   maxHeight,
@@ -207,6 +210,10 @@ export function Table<Row extends RowData>({
       <div
         className={maxHeight ? "overflow-auto" : "min-h-0 flex-1 overflow-auto"}
         style={maxHeight ? { maxHeight } : undefined}
+        // Scrolled sideways, the locked column floats over the rows and casts its shade.
+        onScroll={({ currentTarget }) =>
+          currentTarget.toggleAttribute("data-scrolled-x", currentTarget.scrollLeft > 0)
+        }
       >
         <table
           role="grid"
@@ -223,7 +230,6 @@ export function Table<Row extends RowData>({
           <MasterTableHeader
             table={table}
             columnByKey={columnByKey}
-            query={state.query}
             stickyTop={(rowIndex) => rowTops[rowIndex] ?? 0}
             sortCount={table.state.sorting.length}
             gutter={Boolean(gutter)}
@@ -236,6 +242,7 @@ export function Table<Row extends RowData>({
             columnByKey={columnByKey}
             activeKey={activeKey}
             rowClassName={rowClassName}
+            revitIds={revitIds}
             onRowClick={onRowClick}
             selectedKeys={selection?.selected}
             refusalOf={selection?.refusal}

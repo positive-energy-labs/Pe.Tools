@@ -41,8 +41,9 @@
 /* The one selection paint: a fill, never a hue, re-grounding what sits on it (`--pe-on`). */
 :where(
   [aria-selected="true"],
-  /* A text field that owns an open list is where you type, not a picked thing: it keeps its ground. */
-  [aria-expanded="true"]:not(textarea, input),
+  /* A text field that owns an open list is where you type, not a picked thing: it keeps its ground.
+     An open tree node is a disclosure, not a pick: its chevron says so. */
+  [aria-expanded="true"]:not(textarea, input, [role="treeitem"]),
   [aria-pressed="true"],
   [data-selected],
   [data-highlighted],
@@ -274,6 +275,47 @@ tr.dl-row[data-active]::before {
   flex-shrink: 0;
   align-items: center;
 }
+/* TREE (row.tsx `Tree`): one indent step per level, and the classic guide: each ancestor's column
+   carries a hairline through the chevron's centre, so an open node's line runs down the full
+   span of its descendants. One rule on `--depth` (set by Row from `depth`); no call site indents. */
+.dl-row[data-depth] {
+  --tree-step: calc(var(--item-h) * 2 / 3);
+  padding-left: calc(var(--item-mark-pad-x) + var(--depth) * var(--tree-step));
+}
+.dl-row[data-depth]::after {
+  content: "";
+  position: absolute;
+  inset-block: 0;
+  left: var(--item-mark-pad-x);
+  width: calc(var(--depth) * var(--tree-step));
+  background: repeating-linear-gradient(
+    to right,
+    transparent 0 calc(var(--tree-step) / 2 - 0.5px),
+    var(--pe-line) 0 calc(var(--tree-step) / 2 + 0.5px),
+    transparent 0 var(--tree-step)
+  );
+  pointer-events: none;
+}
+.dl-row-twist {
+  display: inline-flex;
+  flex-shrink: 0;
+  align-items: center;
+  justify-content: center;
+  width: var(--tree-step);
+  align-self: stretch;
+  color: var(--pe-ink-2);
+}
+.dl-row-twist:has(svg) {
+  cursor: pointer;
+}
+.dl-row-twist > svg {
+  width: 1em;
+  height: 1em;
+  transition: transform var(--motion-control);
+}
+.dl-row[aria-expanded="true"] > .dl-row-twist > svg {
+  transform: rotate(90deg);
+}
 .dl-row-label {
   display: flex;
   min-width: 0;
@@ -291,25 +333,41 @@ tr.dl-row[data-active]::before {
   white-space: nowrap;
   text-overflow: ellipsis;
 }
+/* The first line shares its width fairly: each column grows evenly from zero and stops at its own
+   text, so a short title or a short fact is never cut, and two long ones meet at the middle. (Flex
+   could not: a zero-basis title let the trailing slot take the whole line.) */
 .dl-row-line {
-  display: flex;
+  display: grid;
+  grid-template-columns: minmax(0, max-content) minmax(0, max-content);
+  justify-content: space-between;
   min-width: 0;
   align-items: center;
   gap: 6px;
 }
+/* Under a column header the trailing slot is a table: its columns stay whole and the title yields.
+   The tree is a size container, so a caller drops its secondary columns by the tree's width
+   (`@max-[…]:hidden`) rather than leaving the title nothing. */
+[role="tree"][data-columns] {
+  container-type: inline-size;
+}
+[role="tree"][data-columns] :is(.dl-row-line, .dl-row-colhead) {
+  grid-template-columns: minmax(0, 1fr) max-content;
+}
 .dl-row-title {
   min-width: 0;
-  flex: 1;
   overflow: hidden;
   text-overflow: ellipsis;
 }
 /* THE TRAILING SLOT: the state (`.dl-row-fact`) and the verbs (`.dl-row-actions`) stack in one
    grid cell, right-aligned, as wide as the wider and one line tall, so a swap never shifts the
    row. With hover the verbs replace the state on hover, keyboard focus, the list cursor or an
-   open menu; without hover the state stays and the verbs lie unseen over it, so a tap opens them. */
+   open menu; without hover the state stays and the verbs lie unseen over it, so a tap opens them.
+   A fact the line cuts short rides the row's hint (row.tsx). */
 .dl-row-meta {
   display: inline-grid;
-  flex-shrink: 0;
+  grid-template-columns: minmax(0, auto);
+  min-width: 0;
+  overflow: hidden;
   align-items: center;
   justify-items: end;
   font-family: var(--font-mono);
@@ -323,8 +381,15 @@ tr.dl-row[data-active]::before {
 }
 .dl-row-fact {
   display: inline-flex;
+  max-width: 100%;
+  overflow: hidden;
   align-items: center;
   gap: 6px;
+}
+.dl-row-fact > * {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
 }
 .dl-row-actions {
   display: inline-flex;
@@ -393,6 +458,39 @@ tr.dl-row[data-active]::before {
   font-weight: var(--weight-strong);
   color: var(--pe-ink-2);
 }
+/* A Tree's column header: sticky, the rows' own padding and gap, a hairline under it. Its meta cell
+   is a flex-shrink-0 mono block like .dl-row-meta, so the caller's column widths line up. */
+.dl-row-colhead {
+  position: sticky;
+  top: 0;
+  z-index: 1;
+  display: grid;
+  grid-template-columns: minmax(0, max-content) minmax(0, max-content);
+  justify-content: space-between;
+  align-items: center;
+  gap: 6px;
+  min-height: var(--item-h);
+  padding: 0 var(--item-mark-pad-x);
+  background: var(--pe-on);
+  border-bottom: 1px solid var(--pe-line);
+  font-size: var(--type-small-size);
+  color: var(--pe-ink-2);
+  user-select: none;
+}
+.dl-row-colhead-label {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.dl-row-colhead-meta {
+  min-width: 0;
+  overflow: hidden;
+  font-family: var(--font-mono);
+  font-size-adjust: var(--mono-adjust);
+  font-weight: var(--weight-mono);
+  white-space: nowrap;
+}
 .dl-row-head > :first-child::first-letter {
   text-transform: uppercase;
 }
@@ -411,13 +509,15 @@ tr.dl-row[data-active]::before {
   margin-left: 0.5em;
   color: var(--pe-ink-2);
 }
-/* A list's DETAIL: the cursor row's description, said once under the rows. Two lines are always
-   held, so the popup never moves as the cursor does. */
+/* Descriptions wrap inside the row measure and never contribute to intrinsic popup width.
+   At most two lines; the full explanation remains available through its floating hint. */
 .dl-list-detail {
   display: -webkit-box;
-  height: 2lh;
-  box-sizing: content-box;
+  min-width: 0;
+  contain: inline-size;
+  box-sizing: border-box;
   overflow: hidden;
+  overflow-wrap: anywhere;
   padding: 4px var(--item-mark-pad-x) 2px;
   font-size: var(--type-small-size);
   line-height: var(--type-small-line-height);
@@ -445,6 +545,135 @@ tr.dl-row[data-active]::before {
   border-color: var(--pe-caution);
 }
 .dl-control:is(:disabled, :has(input:disabled)) {
+  background-color: transparent;
+}
+
+/* The query control, in two faces chosen by placement. `framed` (a table's title bar, any freestanding
+   query): the control frame with a search glyph at its edge. `bar` (a List's search): a full-bleed
+   command line under a hairline, its glyph on the rows' text edge. Either way the glyph rises with focus. */
+.dl-search {
+  display: flex;
+  align-items: center;
+  gap: 0.25rem;
+  cursor: text;
+  background-color: var(--pe-page);
+}
+.dl-search:focus-within {
+  outline: 1px solid var(--pe-line-2);
+}
+.dl-search[data-face="bar"] {
+  box-sizing: border-box;
+  min-height: var(--control-h);
+  margin: 0;
+  border: 0;
+  border-bottom: 1px solid var(--pe-line);
+  border-radius: 0;
+  /* the command line is a well: recessed ground, shade along its top edge */
+  background-color: var(--pe-recess);
+  box-shadow: var(--shadow-well);
+}
+.dl-search[data-face="bar"]:focus-within {
+  outline: none;
+  border-bottom-color: var(--pe-line-2);
+}
+/* The trailing press keeps its frame and sits inside the line with a gutter's air. */
+.dl-search [data-search-trail] {
+  padding-inline: calc(var(--gutter) / 2);
+}
+/* At rest it stands on the page ground above the well; pressed, it sinks into the well. */
+.dl-search [data-search-trail] .dl-control {
+  min-height: calc(var(--control-h) - 6px);
+  background-color: var(--pe-page);
+}
+.dl-search [data-search-trail] .dl-control[aria-pressed="true"] {
+  border-color: var(--pe-ink-2);
+  background-color: var(--pe-select);
+  box-shadow: var(--shadow-well);
+}
+.dl-search[data-face="bar"] [data-search-field] {
+  padding-inline: var(--item-mark-pad-x);
+}
+.dl-search input {
+  height: calc(var(--control-h) - 4px);
+  min-height: 0;
+}
+.dl-search [data-search-glyph] {
+  color: var(--pe-ink-2);
+}
+.dl-search:focus-within [data-search-glyph] {
+  color: var(--pe-ink);
+}
+.dl-search [data-search-field] {
+  padding-block: 1px;
+}
+/* A long placeholder ellipsizes inside the field instead of pushing the frame wider. */
+.dl-search input {
+  text-overflow: ellipsis;
+}
+/* THE LOCK SHADE: once a table scrolls sideways, its last locked column casts a shade over the
+   rows passing under it. At rest it casts nothing, because nothing is under it. `::before`, because a
+   body cell's `::after` is its inset row rule. */
+[data-lock]:not(:has(+ [data-lock]))::before {
+  content: "";
+  position: absolute;
+  inset-block: 0;
+  right: -6px;
+  width: 6px;
+  pointer-events: none;
+  background: linear-gradient(to right, var(--pe-shade), transparent);
+  opacity: 0;
+  transition: opacity var(--motion-control);
+}
+[data-scrolled-x] [data-lock]:not(:has(+ [data-lock]))::before {
+  opacity: 1;
+}
+/* THE TABLE FOLD (round 12): folded, the query is one line of chips ending "+N more";
+   focus or an open picker unfolds it into a drawer across the artifact frame, over the grid. */
+[data-table-fold]:not(:focus-within, :has([data-popup-open])) [data-search-field] {
+  flex-wrap: nowrap;
+  overflow: hidden;
+}
+[data-table-fold]:not(:focus-within, :has([data-popup-open])) [data-search-field] > * {
+  flex-shrink: 0;
+}
+[data-table-fold]:not(:focus-within, :has([data-popup-open])) [data-search-field] > :last-child {
+  order: 1;
+  flex-shrink: 1;
+  min-width: 12ch;
+}
+[data-table-fold]:not(:focus-within, :has([data-popup-open])) [data-fold-hidden] {
+  display: none;
+}
+[data-table-fold]:not(:focus-within, :has([data-popup-open])) [data-fold-more]::after {
+  content: attr(data-fold-more);
+  flex-shrink: 0;
+  font-family: var(--font-mono);
+  font-weight: var(--weight-mono);
+  color: var(--pe-ink-2);
+  white-space: nowrap;
+}
+[data-table-fold]:is(:focus-within, :has([data-popup-open])) {
+  position: absolute;
+  inset-inline: 0;
+  top: 0;
+  /* over the grid's sticky head, under every popup */
+  z-index: calc(var(--z-popup) - 1);
+  max-width: none;
+  padding: calc(var(--gutter) / 2) var(--gutter);
+  background-color: var(--pe-recess);
+  border-bottom: 1px solid var(--pe-line);
+  box-shadow: var(--shadow-float);
+}
+/* Open, the lead stays one control tall at the top while the chips wrap beside it. */
+[data-table-fold]:is(:focus-within, :has([data-popup-open])) [data-search-lead] {
+  align-self: flex-start;
+  height: calc(var(--control-h) - 2px);
+}
+/* A control in the lead segment shares the frame's border: it keeps its press ground, not its own frame. */
+.dl-search [data-search-lead] .dl-control {
+  border: 0;
+  border-radius: 0;
+  min-height: 0;
   background-color: transparent;
 }
 

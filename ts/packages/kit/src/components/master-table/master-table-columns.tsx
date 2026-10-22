@@ -21,6 +21,7 @@ export function resolveStateColumn<Row>(column: Column<Row>): ResolvedColumn<Row
       read: (row: Row) => facet?.(row) ?? null,
       match: body.match,
       values: body.options?.map((option) => option.value),
+      labels: body.options && new Map(body.options.map((option) => [option.value, option.label])),
     },
   };
 }

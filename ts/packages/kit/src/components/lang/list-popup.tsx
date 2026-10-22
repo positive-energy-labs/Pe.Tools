@@ -3,9 +3,20 @@
  * Popover used for positioning only. Anchors: `trigger`, `caret` (a point in caller-owned text), and
  * `cell` (CellListSelect: mounts no popup machinery at rest, opens from its td).
  */
-import { useContext, useEffect, useState, type ComponentProps, type ReactNode } from "react";
+import {
+  Children,
+  Fragment,
+  isValidElement,
+  useContext,
+  useEffect,
+  useRef,
+  useState,
+  type ComponentProps,
+  type ReactNode,
+} from "react";
 import { Popover, PopoverTrigger, PopoverContent } from "./popover";
 import { ChevronDown, Ellipsis } from "lucide-react";
+import { SearchControl } from "./search-control";
 
 import { CellHost } from "./cell";
 import { Input } from "./input";
@@ -42,6 +53,8 @@ type ListProps<T> = Omit<CollectionOptions<T>, "target"> & {
   /** Show a search input when the list is filterable and holds more than this many items. */
   searchAbove?: number;
   searchPlaceholder?: string;
+  /** A press at the search field's end, optionally projected from the current picker level. */
+  searchTrail?: ReactNode | ((level: number) => ReactNode);
   /** Empty and no-match are different stories with different exits. */
   empty: ReactNode;
   noMatch?: string;
@@ -51,10 +64,13 @@ type ListProps<T> = Omit<CollectionOptions<T>, "target"> & {
   owner?: HTMLElement | null;
   /** Rows scroll inside this height; group heads stick. */
   maxHeight?: string;
+  /** A control above the crumbs and rows (the composer's target/open switch). */
+  header?: ReactNode;
   /** Verbs under the rows that are not rows (the head picker's "Clear target"); a ladder's
    * footer may differ per rung. */
   footer?: ReactNode | ((level: number) => ReactNode);
-  /** What the cursor row is, said once under the rows (two lines), so each row stays one line. */
+  /** Optional explanation of the cursor row. Metadata belongs in `row.meta`; do not repeat it here.
+   * No explanation means no description area or separator. */
   detail?: (item: T) => ReactNode;
   /** Hand the collection to the caller (a table reads its selection, the composer its cursor). */
   onCollection?: (collection: Collection<T>) => void;
@@ -71,8 +87,20 @@ function StatusLine({ children, tone }: { children: ReactNode; tone?: "caution" 
   );
 }
 
+/** Empty layout groups are not footer content. Controls and other leaf elements are content. */
+const hasContent = (node: ReactNode): boolean =>
+  Children.toArray(node).some((child) => {
+    if (typeof child === "string") return child.trim().length > 0;
+    if (
+      isValidElement<{ children?: ReactNode }>(child) &&
+      (child.type === Fragment || child.type === "div" || child.type === "span")
+    )
+      return hasContent(child.props.children);
+    return true;
+  });
+
 export function List<T>(props: ListProps<T>) {
-  const [listEl, setListEl] = useState<HTMLDivElement | null>(null);
+  const [keyRegion, setKeyRegion] = useState<HTMLDivElement | null>(null);
   const [inputEl, setInputEl] = useState<HTMLInputElement | null>(null);
   const total = props.items?.length ?? Infinity;
   // A list that creates always takes typing: the typed text is the new value.
@@ -83,12 +111,24 @@ export function List<T>(props: ListProps<T>) {
   const collection = useCollection<T>({
     ...props,
     refusalOf: (item) => props.row(item).refusal,
-    target: props.owner ?? (searchable ? inputEl : listEl),
+    target: props.owner ?? keyRegion,
   });
   props.onCollection?.(collection);
   const { status, visible, query } = collection;
+  useEffect(() => {
+    if (searchable && inputEl && keyRegion?.contains(document.activeElement))
+      inputEl.focus({ preventScroll: true });
+  }, [collection.level, searchable, inputEl, keyRegion]);
   const cursorRow = visible.find((row) => row.key === collection.cursor);
   const footer = typeof props.footer === "function" ? props.footer(collection.level) : props.footer;
+  const description = cursorRow?.kind === "item" ? props.detail?.(cursorRow.item) : null;
+  const meta = cursorRow?.kind === "item" ? props.row(cursorRow.item).meta : null;
+  const detail =
+    typeof description === "string" &&
+    typeof meta === "string" &&
+    description.trim() === meta.trim()
+      ? null
+      : description;
   // An owner (the composer's textarea, a free-text input) points at the list and its cursor.
   const owner = props.owner;
   const active = collection.inputProps["aria-activedescendant"];
@@ -104,6 +144,15 @@ export function List<T>(props: ListProps<T>) {
       owner.setAttribute("aria-expanded", "false");
     };
   }, [owner, active, collection.listProps.id]);
+  // The crumb band shows only once some rung has a word: a ladder whose first rung has none (a
+  // menu) shows crumbs once it has walked in, and a scoped ladder (a column) never does.
+  const crumbs =
+    props.levels && props.levels.length > 1 && (collection.level > 0 || props.levels[0]!.label)
+      ? props.levels.map((rung, depth) => {
+          const step = collection.path[depth];
+          return rung.crumb ?? (step !== undefined ? props.labelOf(step) : rung.label);
+        })
+      : [];
   const render = (row: VisibleRow<T>) => {
     if (row.kind === "head")
       return (
@@ -121,7 +170,11 @@ export function List<T>(props: ListProps<T>) {
           {...rest}
           onClick={onClick}
           lead="＋"
-          label={props.createLabel?.(row.text) ?? `new “${row.text}”`}
+          label={
+            props.levels?.[collection.level]?.createLabel?.(row.text) ??
+            props.createLabel?.(row.text) ??
+            `new “${row.text}”`
+          }
         />
       );
     }
@@ -147,15 +200,11 @@ export function List<T>(props: ListProps<T>) {
       // An input-owned list never takes focus from its owner: a click picks, the caret stays.
       onMouseDown={props.owner !== undefined ? (event) => event.preventDefault() : undefined}
     >
-      {props.levels &&
-      props.levels.length > 1 &&
-      // A ladder whose first rung has no word (a menu) shows crumbs only once it has walked in.
-      (collection.level > 0 || props.levels[0]!.label) ? (
-        <div className="hairline-b flex flex-wrap items-baseline gap-1 px-2 py-1 t-small">
-          {props.levels.map((rung, depth) => {
-            const step = collection.path[depth];
-            const word = rung.crumb ?? (step !== undefined ? props.labelOf(step) : rung.label);
-            // A rung with no word (a menu's drill-in) draws no crumb: its parent's word says it.
+      {props.header ? <div className="hairline-b p-1">{props.header}</div> : null}
+      {crumbs.some(Boolean) ? (
+        <div className="hairline-b flex flex-wrap items-baseline gap-1 px-(--item-mark-pad-x) py-1 t-small">
+          {crumbs.map((word, depth) => {
+            // A rung with no word (a menu's drill-in, a column's scope) draws no crumb.
             if (!word) return null;
             return (
               <span key={depth} className="inline-flex items-baseline gap-1">
@@ -176,50 +225,79 @@ export function List<T>(props: ListProps<T>) {
           })}
         </div>
       ) : null}
-      {searchable ? (
-        <input
-          ref={setInputEl}
-          {...collection.inputProps}
-          aria-label={`${props["aria-label"]} search`}
-          // The one control frame: a list's search is the same field as any other in the kit.
-          className="dl-control m-1 px-2 t-small outline-none"
-          placeholder={props.searchPlaceholder ?? "search…"}
-          value={query}
-          onChange={(event) => collection.setQuery(event.target.value)}
-        />
-      ) : null}
-      <div
-        ref={setListEl}
-        {...collection.listProps}
-        aria-label={props["aria-label"]}
-        tabIndex={searchable || props.owner !== undefined ? -1 : 0}
-        className="min-h-0 flex-1 overflow-y-auto outline-none"
-        style={{ maxHeight: props.maxHeight }}
-      >
-        {status === "refused" ? (
-          <StatusLine tone="caution">{props.levels?.[collection.level]?.refusal}</StatusLine>
-        ) : status === "pending" ? (
-          <StatusLine>reading…</StatusLine>
-        ) : status === "failed" ? (
-          <StatusLine tone="caution">{props.failure ?? "read failed"}</StatusLine>
-        ) : status === "empty" ? (
-          <StatusLine>{props.levels?.[collection.level]?.note ?? props.empty}</StatusLine>
-        ) : status === "no-match" && !visible.length ? (
-          <StatusLine>{props.noMatch ?? `nothing matches “${query.trim()}”`}</StatusLine>
+      <div ref={setKeyRegion} className="flex min-h-0 flex-1 flex-col">
+        {searchable ? (
+          // A list's query is a command line across its top edge, on the rows' text edge.
+          <SearchControl
+            face="bar"
+            trail={
+              typeof props.searchTrail === "function"
+                ? props.searchTrail(collection.level)
+                : props.searchTrail
+            }
+          >
+            <input
+              ref={setInputEl}
+              {...collection.inputProps}
+              aria-label={`${props["aria-label"]} search`}
+              className="min-w-0 flex-1 bg-transparent outline-none placeholder:text-ink-2"
+              placeholder={props.searchPlaceholder ?? "search…"}
+              value={query}
+              onChange={(event) => collection.setQuery(event.target.value)}
+            />
+          </SearchControl>
         ) : null}
-        {status === "pending" || status === "failed" || status === "refused"
-          ? null
-          : visible.map(render)}
+        <div
+          {...collection.listProps}
+          aria-label={props["aria-label"]}
+          tabIndex={searchable || props.owner !== undefined ? -1 : 0}
+          className="min-h-0 flex-1 overflow-y-auto outline-none"
+          style={{ maxHeight: props.maxHeight }}
+        >
+          {status === "refused" ? (
+            <StatusLine tone="caution">{props.levels?.[collection.level]?.refusal}</StatusLine>
+          ) : status === "pending" ? (
+            <StatusLine>reading…</StatusLine>
+          ) : status === "failed" ? (
+            <StatusLine tone="caution">{props.failure ?? "read failed"}</StatusLine>
+          ) : status === "empty" ? (
+            <StatusLine>{props.levels?.[collection.level]?.note ?? props.empty}</StatusLine>
+          ) : status === "no-match" && !visible.length ? (
+            <StatusLine>{props.noMatch ?? `nothing matches “${query.trim()}”`}</StatusLine>
+          ) : null}
+          {status === "pending" || status === "failed" || status === "refused"
+            ? null
+            : visible.map(render)}
+        </div>
       </div>
-      {props.detail ? (
-        <div className="dl-list-detail hairline-t" data-list-detail="">
-          {cursorRow?.kind === "item" ? props.detail(cursorRow.item) : null}
+      {hasContent(detail) ? (
+        <TooltipHint content={detail}>
+          <div className="dl-list-detail hairline-t" data-list-detail="">
+            {detail}
+          </div>
+        </TooltipHint>
+      ) : null}
+      {hasContent(footer) ? (
+        <div data-list-footer="" className="hairline-t px-1 pt-1">
+          {footer}
         </div>
       ) : null}
-      {footer != null ? <div className="hairline-t px-1 pt-1">{footer}</div> : null}
     </div>
   );
 }
+
+/** What a popup is for, which sizes it whatever it is anchored to: a `picker` varies only within
+ *  a compact two-rem band, a `menu` is compact, an `autocomplete` is a fixed measure under a caret, a `workbench` is
+ *  a working surface over the page. One surface, one padding. */
+export type PopupPurpose = "picker" | "menu" | "autocomplete" | "workbench";
+
+const PURPOSE_SIZE: Record<PopupPurpose, string> = {
+  picker:
+    "w-max min-w-[min(18rem,var(--available-width))] max-w-[min(20rem,var(--available-width))]",
+  menu: "min-w-48 max-w-[min(20rem,var(--available-width))]",
+  autocomplete: "w-[min(28rem,var(--available-width))]",
+  workbench: "w-[min(52rem,var(--available-width))]",
+};
 
 type PopupFrameProps = {
   children: ReactNode;
@@ -227,12 +305,11 @@ type PopupFrameProps = {
   label: string;
   /** An input-owned popup never takes focus: the owner keeps the caret and the keys. */
   owned?: boolean;
-  /** Anchored at a text caret (the composer's `/` and `@`), not at a field or trigger. */
-  atCaret?: boolean;
+  /** Opened by hover: focus enters only for a keyboard open. */
+  hover?: boolean;
+  purpose?: PopupPurpose;
   side?: "top" | "bottom";
   align?: "start" | "end";
-  /** A working surface over the page (the composer's patch bay), not a list: wider than rows. */
-  wide?: boolean;
 };
 
 /** The one popup surface: positioned by Base UI, drawn by the kit. */
@@ -241,21 +318,33 @@ export function PopupFrame({
   anchor,
   label,
   owned,
-  atCaret,
+  hover,
+  purpose = "picker",
   side = "bottom",
   align = "start",
-  wide,
 }: PopupFrameProps) {
+  const popupRef = useRef<HTMLDivElement>(null);
   return (
     <PopoverContent
       anchor={anchor ?? undefined}
       side={side}
       align={align}
       aria-label={label}
-      initialFocus={owned ? false : undefined}
+      ref={popupRef}
+      // The search input takes the open, not the first tabbable (a `searchTrail` button).
+      initialFocus={
+        owned
+          ? false
+          : (event) =>
+              hover && event !== "keyboard"
+                ? false
+                : (popupRef.current?.querySelector<HTMLElement>("[data-search-field] input") ??
+                  true)
+      }
       finalFocus={owned ? false : undefined}
       data-list-popup=""
-      className={`block w-auto overflow-hidden p-1 ${wide ? "w-[min(52rem,var(--available-width))]" : atCaret ? "w-[min(28rem,var(--available-width))]" : owned ? "w-(--anchor-width) min-w-48" : "min-w-48 max-w-[min(36rem,var(--available-width))]"}`}
+      data-purpose={purpose}
+      className={`block w-auto overflow-hidden p-1 ${PURPOSE_SIZE[purpose]}`}
     >
       {children}
     </PopoverContent>
@@ -327,6 +416,7 @@ export function ListPopup<T>({
   onOpenChange,
   caret,
   side,
+  purpose,
   ...list
 }: ListProps<T> & {
   anchor: "trigger" | "caret";
@@ -347,6 +437,8 @@ export function ListPopup<T>({
   caret?: Element | null;
   /** anchor=caret: which side of it the list opens on (the composer's opens above the box). */
   side?: "top" | "bottom";
+  /** Default: `autocomplete` at a caret, `picker` from a trigger. */
+  purpose?: PopupPurpose;
 }) {
   const [own, setOwn] = useState(false);
   const open = controlled ?? own;
@@ -376,7 +468,7 @@ export function ListPopup<T>({
           side={side}
           label={list["aria-label"]}
           owned={list.owner !== undefined}
-          atCaret={anchor === "caret"}
+          purpose={purpose ?? (anchor === "caret" ? "autocomplete" : "picker")}
         >
           <List
             {...list}

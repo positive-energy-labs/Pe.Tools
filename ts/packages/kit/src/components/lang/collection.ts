@@ -28,6 +28,9 @@ export interface Level<T> {
   refusal?: string | null;
   /** What an empty rung says instead of the list's `empty`. */
   note?: string;
+  /** Typed text becomes a value on this rung only (the list's `onCreate` applies to every rung). */
+  onCreate?: (text: string) => void;
+  createLabel?: (text: string) => string;
 }
 
 export interface CollectionOptions<T> {
@@ -193,6 +196,7 @@ export function useCollection<T>(options: CollectionOptions<T>) {
   const level = levels ? Math.min(depth, levels.length - 1) : 0;
   const levelItems = levels ? levels[level]!.items(path) : (options.items ?? []);
 
+  const createOf = levels ? (levels[level]!.onCreate ?? options.onCreate) : options.onCreate;
   const visible = useMemo((): VisibleRow<T>[] => {
     const rows: VisibleRow<T>[] = [];
     // A ladder with a query also shows hits one level down, under a "current › next" head.
@@ -255,11 +259,7 @@ export function useCollection<T>(options: CollectionOptions<T>) {
       }
     }
     const text = query.trim();
-    if (
-      options.onCreate &&
-      text &&
-      !rows.some((r) => r.kind === "item" && labelOf(r.item) === text)
-    )
+    if (createOf && text && !rows.some((r) => r.kind === "item" && labelOf(r.item) === text))
       rows.push({ kind: "create", key: `create:${text}`, text });
     return rows;
     // eslint-disable-next-line react-hooks/exhaustive-deps -- items are identified by the render
@@ -270,7 +270,7 @@ export function useCollection<T>(options: CollectionOptions<T>) {
     path,
     level,
     levels,
-    options.onCreate,
+    createOf,
     groupCap,
     expanded,
     leadingGroups.join("|"),
@@ -318,7 +318,7 @@ export function useCollection<T>(options: CollectionOptions<T>) {
 
   const pick = (row: VisibleRow<T> | undefined, shift = false) => {
     if (!row || row.kind === "head") return;
-    if (row.kind === "create") return options.onCreate?.(row.text);
+    if (row.kind === "create") return createOf?.(row.text);
     if (row.kind === "more") {
       setExpanded([...expanded, row.group]);
       return setCursorKey(row.next);

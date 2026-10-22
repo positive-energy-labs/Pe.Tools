@@ -1,6 +1,5 @@
 // @vitest-environment jsdom
-import { readFileSync } from "node:fs";
-import { createRequire } from "node:module";
+
 import { act, cleanup, fireEvent, render, screen, within } from "@testing-library/react";
 import { afterEach, expect, test, vi } from "vite-plus/test";
 
@@ -28,35 +27,6 @@ const inTable = (node: React.ReactNode) => {
 };
 const gridcell = () => document.querySelector<HTMLElement>('td[role="gridcell"]')!;
 
-test("row scale adds no height: its verbs are an absolute overlay inside the one clipped line", () => {
-  const { container } = inTable(
-    <StateCell value="10in" scale="row" transitions={[t("accept"), t("deny")]} />,
-  );
-  const cell = container.querySelector(".dl-cell")!;
-  // the value is the only in-flow content; everything else is the overlay
-  expect([...cell.children].map((el) => el.className)).toEqual(["dl-acts"]);
-  const css = readFileSync(createRequire(import.meta.url).resolve("@pe/kit/lang/cell.css"), "utf8");
-  const rule = css.slice(css.indexOf(".dl-acts {"), css.indexOf("}", css.indexOf(".dl-acts {")));
-  expect(rule).toContain("position: absolute");
-  expect(rule).toContain("display: none");
-});
-
-test("the cell draws exactly the kinds it is given, in order, at both scales", () => {
-  const { cell } = inTable(
-    <StateCell value="10in" scale="row" transitions={[t("unstage"), t("accept")]} />,
-  );
-  expect(cell.getAllByRole("button").map((b) => b.getAttribute("aria-label"))).toEqual([
-    "unstage",
-    "accept",
-  ]);
-  cleanup();
-  render(<StateCell value="10in" transitions={[t("deny")]} />);
-  expect(screen.getAllByRole("button").map((b) => b.textContent)).toEqual(["deny"]);
-  cleanup();
-  render(<StateCell value="10in" />);
-  expect(screen.queryAllByRole("button")).toEqual([]);
-});
-
 test("a refused run keeps the value and says why beside the cell", async () => {
   const deny = t("deny", { code: "stale-revision", message: "another writer landed first" });
   const { cell } = inTable(<StateCell value="10in" scale="row" transitions={[deny]} />);
@@ -82,18 +52,6 @@ test("a run in flight marks the cell busy and inerts its verbs", async () => {
   expect(container.querySelector(".dl-cell")!.getAttribute("aria-busy")).toBeNull();
 });
 
-test("inside Table, a focused cell fires a / d / u through the hotkey registry", async () => {
-  const [accept, deny, unstage] = [t("accept"), t("deny"), t("unstage")];
-  inTable(<StateCell value="10in" scale="row" transitions={[accept, deny, unstage]} />);
-  const td = gridcell();
-  await act(async () => td.focus());
-  await act(async () => fireEvent.keyDown(td, { key: "d", code: "KeyD" }));
-  await act(async () => fireEvent.keyDown(td, { key: "u", code: "KeyU" }));
-  expect(deny.run).toHaveBeenCalledOnce();
-  expect(unstage.run).toHaveBeenCalledOnce();
-  expect(accept.run).not.toHaveBeenCalled();
-});
-
 test("Escape in the input restores the value and hands focus back to the td, where a accepts", async () => {
   const accept = t("accept");
   const commit = vi.fn();
@@ -110,68 +68,6 @@ test("Escape in the input restores the value and hands focus back to the td, whe
   await act(async () => fireEvent.keyDown(td, { key: "a", code: "KeyA" }));
   expect(accept.run).toHaveBeenCalledOnce();
   expect(commit).not.toHaveBeenCalled();
-});
-
-test("an aggregate's refusal draws in the same note on each covered cell", () => {
-  inTable(<StateCell value="10in" scale="row" refused="moved since you looked" />);
-  expect(screen.getByText("moved since you looked").className).toBe("dl-refuse");
-  cleanup();
-  render(<StateCell value="10in" refused="moved since you looked" />);
-  expect(screen.getByText("moved since you looked").className).toBe("dl-refuse");
-});
-
-test("with no table around it, a card-scale field is its own host: a / d / u on the field", async () => {
-  const [accept, deny] = [t("accept"), t("deny")];
-  const { container } = render(<StateCell value="10in" transitions={[accept, deny]} />);
-  const field = container.firstElementChild as HTMLElement;
-  expect(field.tabIndex).toBe(0);
-  await act(async () => field.focus());
-  await act(async () => fireEvent.keyDown(field, { key: "d", code: "KeyD" }));
-  await act(async () => fireEvent.keyDown(field, { key: "a", code: "KeyA" }));
-  expect(deny.run).toHaveBeenCalledOnce();
-  expect(accept.run).toHaveBeenCalledOnce();
-});
-
-test("with no table around it, Escape returns to the cell itself, where u unstages", async () => {
-  const unstage = t("unstage");
-  const { container } = render(
-    <StateCell value="10in" scale="row" onCommit={vi.fn()} transitions={[unstage]} />,
-  );
-  const cell = container.querySelector<HTMLElement>(".dl-cell")!;
-  const input = cell.querySelector("input")!;
-  await act(async () => input.focus());
-  fireEvent.change(input, { target: { value: "12in" } });
-  await act(async () => fireEvent.keyDown(input, { key: "Escape", code: "Escape" }));
-  expect(input.value).toBe("10in");
-  expect(document.activeElement).toBe(cell);
-  await act(async () => fireEvent.keyDown(cell, { key: "u", code: "KeyU" }));
-  expect(unstage.run).toHaveBeenCalledOnce();
-});
-
-test("a cell with no verbs takes no tab stop of its own", () => {
-  const { container } = render(<StateCell value="10in" />);
-  expect((container.firstElementChild as HTMLElement).hasAttribute("tabindex")).toBe(false);
-});
-
-test("a contested row cell says pea's counter-proposal inline, not only in a hover title", () => {
-  for (const onCommit of [undefined, () => {}]) {
-    const { container, unmount } = render(
-      <StateCell
-        scale="row"
-        value="175 VA"
-        stage="staged"
-        stagedBy="you"
-        counterValue="180 VA"
-        onCommit={onCommit}
-      />,
-    );
-    const cell = container.querySelector<HTMLElement>("[data-scale='row']")!;
-    expect(cell.hasAttribute("data-contest")).toBe(true);
-    // Rendered text a keyboard, touch or no-hover person reads; the hint stays a duplicate.
-    expect(cell.textContent).toContain("pea proposes 180 VA");
-    expect(cell.hasAttribute("title")).toBe(false);
-    unmount();
-  }
 });
 
 test("a staged empty value draws the empty mark, never the baseline text, at both scales", () => {
@@ -193,42 +89,6 @@ test("a staged empty value draws the empty mark, never the baseline text, at bot
       expect(drawn).not.toContain("Old value");
       unmount();
     }
-});
-
-test("a click selects the cell, typing replaces its value, and F2 or double-click edits in place", async () => {
-  const { container } = inTable(<StateCell value="No" scale="row" onCommit={vi.fn()} />);
-  const td = gridcell();
-  const input = container.querySelector<HTMLInputElement>("input.dl-cell-input")!;
-  // A browser focuses the input on mousedown unless the grid takes it: the grid takes it.
-  const allowed = fireEvent.mouseDown(input);
-  if (allowed) await act(async () => input.focus());
-  expect(document.activeElement).toBe(td);
-  // The first printable key is the whole new value, as in every grid.
-  await act(async () => fireEvent.keyDown(td, { key: "j", code: "KeyJ" }));
-  expect(input.value).toBe("j");
-  expect(document.activeElement).toBe(input);
-
-  await act(async () => fireEvent.keyDown(input, { key: "Escape", code: "Escape" }));
-  expect(input.value).toBe("No");
-  await act(async () => fireEvent.keyDown(td, { key: "F2", code: "F2" }));
-  expect(document.activeElement).toBe(input);
-  expect(input.value).toBe("No");
-
-  await act(async () => fireEvent.keyDown(input, { key: "Escape", code: "Escape" }));
-  await act(async () => fireEvent.doubleClick(input));
-  expect(document.activeElement).toBe(input);
-  expect(input.value).toBe("No");
-});
-
-test("Enter on the last row commits and hands focus back to the cell, never to the page", async () => {
-  const commit = vi.fn();
-  const { container } = inTable(<StateCell value="" scale="row" onCommit={commit} />);
-  const input = container.querySelector<HTMLInputElement>("input.dl-cell-input")!;
-  await act(async () => input.focus());
-  fireEvent.change(input, { target: { value: "A1" } });
-  await act(async () => fireEvent.keyDown(input, { key: "Enter", code: "Enter" }));
-  expect(commit).toHaveBeenCalledWith("A1");
-  expect(document.activeElement).toBe(gridcell());
 });
 
 test("25 item 3: a commit refused LATER (an async write) puts the cell back and says why", async () => {

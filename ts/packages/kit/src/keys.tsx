@@ -36,6 +36,7 @@ export type Chord = UseHotkeyDefinition["hotkey"];
 
 /** What `options.meta` carries on every registration. */
 export interface KeyMeta {
+  actionId?: string;
   name: string;
   description: string;
   /** The scope node that bound it: its id, and its depth in the tree (0 = the route). */
@@ -88,6 +89,9 @@ export function KeyScope({
   return <ScopeContext value={node}>{children}</ScopeContext>;
 }
 
+/** Whether the innermost scope node is live: a key `available` reads it so a hidden pane binds nothing. */
+export const useScopeLive = (): boolean => use(ScopeContext).live;
+
 /** One chord a scope node binds. */
 export interface ScopeKey {
   hotkey: Chord;
@@ -98,8 +102,47 @@ export interface ScopeKey {
   says?: string;
   /** The sentence it refuses with right now; the key still fires, so the surface can speak. */
   refusal?: string | null;
+  /** Stable action identity; surfaces that invoke this chord use the same definition. */
+  actionId?: string;
+  /** Omit this registration when the action is not available in the current render. */
+  available?: () => boolean;
   options?: UseHotkeyDefinition["options"];
 }
+
+/** One action definition can feed a menu/button and its scoped keyboard bindings. */
+export interface ActionDefinition {
+  id: string;
+  label: string;
+  description?: string;
+  bindings?: readonly Chord[];
+  available?: () => boolean;
+  refusal?: string | null;
+  invoke: (event?: KeyboardEvent) => boolean | void;
+  options?: UseHotkeyDefinition["options"];
+}
+
+/** The single admission gate used by every surface that invokes an action. */
+export const invokeAction = (action: ActionDefinition, event?: KeyboardEvent): boolean => {
+  if (action.available?.() === false || action.refusal != null) return false;
+  return action.invoke(event) !== false;
+};
+
+/** Adapt action definitions into the existing scope tree; this is not a second registry. */
+export const actionScopeKeys = (actions: readonly ActionDefinition[]): ScopeKey[] =>
+  actions.flatMap((action) =>
+    (action.bindings ?? []).map((hotkey) => ({
+      actionId: action.id,
+      hotkey,
+      callback: (event) => {
+        if (invokeAction(action, event)) event.preventDefault();
+      },
+      label: action.label,
+      says: action.description,
+      available: action.available,
+      refusal: action.refusal,
+      options: { preventDefault: false, ...action.options },
+    })),
+  );
 
 const UNMOUNTED: RefObject<HTMLElement | null> = { current: null };
 
@@ -115,22 +158,25 @@ export function useScopeKeys(
   region?: RefObject<HTMLElement | null> | HTMLElement | null,
 ): void {
   const node = use(ScopeContext);
-  const definitions: UseHotkeyDefinition[] = keys.map((key) => ({
-    hotkey: key.hotkey,
-    callback: key.callback,
-    options: {
-      ignoreInputs: true,
-      ...key.options,
-      enabled: node.live && key.options?.enabled !== false,
-      meta: {
-        name: key.label,
-        description: key.says ?? key.label,
-        scope: node.id,
-        depth: node.depth,
-        refusal: key.refusal ?? null,
-      } satisfies KeyMeta,
-    },
-  }));
+  const definitions: UseHotkeyDefinition[] = (region === null ? [] : keys)
+    .filter((key) => key.available?.() !== false)
+    .map((key) => ({
+      hotkey: key.hotkey,
+      callback: key.callback,
+      options: {
+        ignoreInputs: true,
+        ...key.options,
+        enabled: node.live && key.options?.enabled !== false,
+        meta: {
+          name: key.label,
+          actionId: key.actionId,
+          description: key.says ?? key.label,
+          scope: node.id,
+          depth: node.depth,
+          refusal: key.refusal ?? null,
+        } satisfies KeyMeta,
+      },
+    }));
   // A `null` region is one not mounted yet: it binds nothing, never the node's element instead.
   useHotkeys(definitions, { target: region === null ? UNMOUNTED : (region ?? node.element) });
 }

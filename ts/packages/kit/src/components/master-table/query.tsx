@@ -9,13 +9,15 @@
  * chips follow the arrow chip, its tokens are offered for the word being typed, each complete word
  * (a space, Tab, or a paste) goes through its token, and Enter on an empty word runs the command.
  */
-import { createContext, useEffect, useState, type ReactNode } from "react";
+import { SearchControl } from "../lang/search-control";
+import { useEffect, useState, type ReactNode } from "react";
 
 import { NarrowChip } from "../lang/chip";
 import { ListPopup } from "../lang/list-popup";
 import type { QueryCommand, QueryVocabulary, TableState } from "./model";
 import {
   QUERY_OPS,
+  clauseText,
   opSaid,
   parseConditionNumber,
   queryWords,
@@ -25,15 +27,18 @@ import {
 } from "./view";
 import { TooltipHint } from "../lang/tooltip";
 
-/** The header's way into the box: opens a draft on one field. Absent outside a TableFrame. */
-export const ConditionTarget = createContext<((label: string) => void) | null>(null);
-
 interface Pick {
   key: string;
   label: string;
+  /** A short fact beside the label; the explanation goes to `description` (the list detail). */
   hint: string;
+  description?: string;
   take: () => void;
 }
+
+/** What a field can do, said once for every picker. */
+export const fieldSaid = (field: { kind?: "text" | "number"; sort?: string }) =>
+  [field.kind && `${field.kind} filter`, field.sort && "sortable"].filter(Boolean).join(" · ");
 
 const join = (...words: string[]) => words.filter(Boolean).join(" ");
 const rowsSaid = (count: number) => `${count} row${count === 1 ? "" : "s"}`;
@@ -56,7 +61,14 @@ function tokenOf(words: readonly string[], command: QueryCommand) {
   return null;
 }
 
-function chipOf(clause: QueryClause, { fields, rules }: QueryVocabulary) {
+export function chipOf(clause: QueryClause, { fields, rules, filters }: QueryVocabulary) {
+  const filter = filters?.find((each) => each.clause === clause.text);
+  if (filter)
+    return {
+      label: filter.label,
+      detail: filter.default ? "default" : undefined,
+      title: `${filter.description} Condition: ${filter.clause}.${filter.default ? " A default starting filter; remove it to widen the view." : ""}`,
+    };
   const not = clause.not ? "not " : "";
   if (clause.kind === "field") {
     const field = fields.find((each) => each.label.toLowerCase() === clause.label.toLowerCase());
@@ -89,6 +101,7 @@ export function QueryBox({
   placeholder,
   command,
   children,
+  lead,
 }: {
   vocabulary: QueryVocabulary;
   state: TableState;
@@ -96,12 +109,14 @@ export function QueryBox({
   /** The word being built; the frame holds it so the header can open a draft. */
   draft: string;
   onDraft: (draft: string) => void;
-  onInput: (input: HTMLInputElement | null) => void;
+  onInput?: (input: HTMLInputElement | null) => void;
   placeholder?: string;
   /** The second vocabulary after `→`. */
   command?: QueryCommand;
   /** Route-owned narrowings, drawn as chips ahead of the query's own. */
   children?: ReactNode;
+  /** A leading picker segment in the same frame (the table's filter workbench). */
+  lead?: ReactNode;
 }) {
   const [input, setInput] = useState<HTMLInputElement | null>(null);
   const [open, setOpen] = useState(false);
@@ -130,15 +145,25 @@ export function QueryBox({
     );
   }, [command, draft, onDraft]);
   const { fields, rules } = vocabulary;
+  // A field is nameable when it filters (`kind`) or sorts (`sort`); a sort-only one offers sorts.
   const named = (label: string) =>
-    fields.find((each) => each.kind && each.label.toLowerCase() === label.toLowerCase());
+    fields.find(
+      (each) => (each.kind || each.sort) && each.label.toLowerCase() === label.toLowerCase(),
+    );
   // A draft that may still become a field or a rule is a proposal, not yet a search word.
   const naming = (text: string) => {
-    const lower = text.replace(/^!?"?/, "").toLowerCase();
+    const lower = text.replace(/^!?"?/, "").replace(/"$/, "").toLowerCase();
     return (
       lower !== "" &&
-      (fields.some((each) => each.kind && each.label.toLowerCase().startsWith(lower)) ||
-        rules.some((each) => each.word.startsWith(lower)))
+      (fields.some(
+        (each) => (each.kind || each.sort) && each.label.toLowerCase().startsWith(lower),
+      ) ||
+        rules.some((each) => each.word.startsWith(lower)) ||
+        vocabulary.filters?.some(
+          (each) =>
+            each.label.toLowerCase().startsWith(lower) ||
+            each.clause.toLowerCase().startsWith(lower),
+        ))
     );
   };
   const livens = (text: string) => readClause(text).kind === "word" && !naming(text);
@@ -190,10 +215,13 @@ export function QueryBox({
   } else if (clause.kind === "field" && field?.kind) {
     const kind = field.kind;
     const typed = clause.value.trim();
-    const token = (value: string) => `${neg}${quoted(field.label)}${clause.op}${quoted(value)}`;
+    const token = (value: string) => clauseText(neg !== "", field.label, clause.op, value);
     const valid = typed !== "" && (kind === "text" || parseConditionNumber(typed) != null);
     const values = vocabulary.values(field.label, base);
-    const same = values.find((each) => each.value.toLowerCase() === typed.toLowerCase());
+    const needle = typed.toLowerCase();
+    const same = values.find(
+      (each) => each.value.toLowerCase() === needle || each.label?.toLowerCase() === needle,
+    );
     picks = [
       ...(valid
         ? [
@@ -201,27 +229,32 @@ export function QueryBox({
               key: "typed",
               label: typed,
               hint: same ? rowsSaid(same.count) : "as typed",
-              take: () => commit(token(typed)),
+              take: () => commit(token(same?.value ?? typed)),
             },
           ]
         : []),
       ...values
-        .filter((each) => each !== same && each.value.toLowerCase().includes(typed.toLowerCase()))
+        .filter(
+          (each) =>
+            each !== same &&
+            (each.value.toLowerCase().includes(needle) ||
+              each.label?.toLowerCase().includes(needle)),
+        )
         .slice(0, 50)
         .map((each) => ({
           key: `value:${each.value}`,
-          label: each.value,
+          label: each.label ?? each.value,
           hint: rowsSaid(each.count),
           take: () => commit(token(each.value)),
         })),
     ];
-  } else if (exact?.kind) {
+  } else if (exact) {
     const head = `${neg}${quoted(exact.label)}`;
     const sort = exact.sort;
-    picks = QUERY_OPS[exact.kind].map(([op, empty, said]) => ({
+    picks = (exact.kind ? QUERY_OPS[exact.kind] : []).map(([op, empty, said]) => ({
       key: `${op}${empty}`,
       label: said,
-      hint: empty ? "no value to enter" : "",
+      hint: "",
       take: () => (empty ? commit(`${head}${op}`) : onDraft(`${head}${op}`)),
     }));
     if (sort && !neg)
@@ -229,7 +262,7 @@ export function QueryBox({
         picks.push({
           key: dir,
           label: dir === "asc" ? "sort ↑" : "sort ↓",
-          hint: "a sort chip",
+          hint: `priority ${state.sorts.filter((each) => each.key !== sort).length + 1}`,
           take: () => {
             onDraft("");
             onStateChange({
@@ -242,11 +275,11 @@ export function QueryBox({
   } else {
     const needle = bare.toLowerCase();
     const offered = fields
-      .filter((each) => each.kind && each.label.toLowerCase().includes(needle))
+      .filter((each) => (each.kind || each.sort) && each.label.toLowerCase().includes(needle))
       .map((each) => ({
         key: `field:${each.label}`,
         label: each.label,
-        hint: `${each.kind} field`,
+        hint: fieldSaid(each),
         prefix: each.label.toLowerCase().startsWith(needle),
         take: () => type(`${neg}${quoted(each.label)}`),
       }));
@@ -261,6 +294,20 @@ export function QueryBox({
               take: () => commit(draft),
             },
           ]
+        : []),
+      ...(!neg
+        ? (vocabulary.filters ?? [])
+            .filter((each) => `${each.label} ${each.clause}`.toLowerCase().includes(needle))
+            .map((each) => ({
+              key: `filter:${each.clause}`,
+              label: each.label,
+              hint: `${each.default ? "default · " : ""}${rowsSaid(vocabulary.count(join(base, each.clause)))}`,
+              description: each.description,
+              take: () => {
+                if (!queryWords(base).includes(each.clause)) commit(each.clause);
+                else onDraft("");
+              },
+            }))
         : []),
       ...offered.filter((each) => each.prefix),
       ...rules
@@ -280,59 +327,64 @@ export function QueryBox({
   const runs = armed && draft === "" && !cursored;
 
   return (
-    <div
+    <SearchControl
       data-slot="query-box"
-      className="flex max-h-[calc(var(--item-h)*2)] min-h-(--item-h) min-w-0 flex-1 flex-wrap items-center gap-x-1 gap-y-px overflow-y-auto"
-    >
-      {children}
-      {committed.map((word, index) => {
-        const chip = chipOf(readClause(word), vocabulary);
-        const rest = committed.filter((_, at) => at !== index).join(" ");
-        return (
-          <NarrowChip
-            key={`${index}:${word}`}
-            label={chip.label}
-            detail={chip.detail}
-            caution={chip.caution}
-            onRemove={() => write(join(rest, live ? draft : ""))}
-            onEdit={() => {
-              setEditing(word);
-              type(word, rest);
-              input?.focus();
-            }}
-            title={chip.title}
-          />
-        );
-      })}
-      {state.sorts.map((sort) => (
-        <NarrowChip
-          key={`sort:${sort.key}`}
-          label={sortLabel(sort.key)}
-          detail={sort.dir === "asc" ? "sort ↑" : "sort ↓"}
-          onRemove={() =>
-            onStateChange({ ...state, sorts: state.sorts.filter((each) => each !== sort) })
-          }
-          title="A sort, applied in chip order; removing it keeps the others."
-        />
-      ))}
-      {armed ? (
-        <NarrowChip
-          label="→"
-          onRemove={() => command!.onArmed(false)}
-          title={`${command!.says}. Removing the arrow drops the command and keeps the query.`}
-        />
-      ) : null}
-      {armed
-        ? command!.chips.map((chip) => (
+      className="min-w-0 flex-1"
+      lead={lead}
+      chips={
+        <>
+          {children}
+          {committed.map((word, index) => {
+            const chip = chipOf(readClause(word), vocabulary);
+            const rest = committed.filter((_, at) => at !== index).join(" ");
+            return (
+              <NarrowChip
+                key={`${index}:${word}`}
+                label={chip.label}
+                detail={chip.detail}
+                caution={chip.caution}
+                onRemove={() => write(join(rest, live ? draft : ""))}
+                onEdit={() => {
+                  setEditing(word);
+                  type(word, rest);
+                  input?.focus();
+                }}
+                title={chip.title}
+              />
+            );
+          })}
+          {state.sorts.map((sort) => (
             <NarrowChip
-              key={chip.key}
-              label={chip.label}
-              detail={chip.detail}
-              onRemove={chip.onRemove}
-              title={chip.title}
+              key={`sort:${sort.key}`}
+              label={sortLabel(sort.key)}
+              detail={sort.dir === "asc" ? "sort ↑" : "sort ↓"}
+              onRemove={() =>
+                onStateChange({ ...state, sorts: state.sorts.filter((each) => each !== sort) })
+              }
+              title="A sort, applied in chip order; removing it keeps the others."
             />
-          ))
-        : null}
+          ))}
+          {armed ? (
+            <NarrowChip
+              label="→"
+              onRemove={() => command!.onArmed(false)}
+              title={`${command!.says}. Removing the arrow drops the command and keeps the query.`}
+            />
+          ) : null}
+          {armed
+            ? command!.chips.map((chip) => (
+                <NarrowChip
+                  key={chip.key}
+                  label={chip.label}
+                  detail={chip.detail}
+                  onRemove={chip.onRemove}
+                  title={chip.title}
+                />
+              ))
+            : null}
+        </>
+      }
+    >
       <TooltipHint
         content={
           command
@@ -343,7 +395,7 @@ export function QueryBox({
         <input
           ref={(element) => {
             setInput(element);
-            onInput(element);
+            onInput?.(element);
           }}
           role="combobox"
           aria-label="table query"
@@ -357,7 +409,7 @@ export function QueryBox({
               : undefined
           }
           autoComplete="off"
-          className="t-small face-mono h-(--item-h) min-w-40 flex-1 bg-transparent outline-none placeholder:text-ink-2"
+          className="t-small face-mono h-(--item-h) min-w-0 flex-1 bg-transparent outline-none placeholder:text-ink-2"
           value={draft}
           placeholder={
             armed ? command!.placeholder : (placeholder ?? "search any field, or type a field name")
@@ -412,6 +464,8 @@ export function QueryBox({
       </TooltipHint>
       <ListPopup<Pick>
         anchor="caret"
+        // Suggestions are short facts (a field, an operator, a value): a picker's measure, not prose's.
+        purpose="picker"
         caret={input}
         owner={input}
         open={open && picks.length > 0}
@@ -446,7 +500,8 @@ export function QueryBox({
         }}
         onPick={(entry) => entry.take()}
         row={(entry) => ({ label: entry.label, meta: entry.hint })}
+        detail={(entry) => entry.description}
       />
-    </div>
+    </SearchControl>
   );
 }
