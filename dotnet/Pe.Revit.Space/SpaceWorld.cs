@@ -87,6 +87,11 @@ public sealed class World {
     public long CurrentEpoch { get; private set; }
     public DateTime BuiltUtc { get; private set; }
 
+    /// <summary>Tracker ids waiting for a verb to patch the resident host partition.</summary>
+    public int PendingIds {
+        get { lock (this._sync) return this._added.Count + this._modified.Count + this._deleted.Count; }
+    }
+
     internal IReadOnlyList<Partition> Partitions => this._partitions;
     internal IReadOnlyCollection<long>? SceneFocusMeshIds { get; private set; }
     internal bool Prepared {

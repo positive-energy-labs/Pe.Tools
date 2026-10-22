@@ -1,5 +1,8 @@
 namespace Pe.Revit.Space;
 
+/// <summary>One BVH node: its index, depth, leaf flag, subtree triangle count, and six host-feet bounds.</summary>
+public readonly record struct BvhNode(int Index, int Depth, bool Leaf, int Triangles, float[] Box);
+
 /// <summary>
 ///     Flat binary tree over one partition's triangles. Median split on the centroid of the widest
 ///     axis, up to 8 triangles per leaf. Two queries: closest triangle to a segment within a radius,
@@ -292,6 +295,24 @@ internal sealed class Bvh {
     }
 
     public Tri Triangle(int i) => this._tris[i];
+
+    /// <summary>Nodes through maxDepth inclusive, post-order with the root last.</summary>
+    public List<BvhNode> Walk(int maxDepth) {
+        if (maxDepth < 0) throw new ArgumentOutOfRangeException(nameof(maxDepth));
+        var nodes = new List<BvhNode>();
+        if (this._used == 0) return nodes;
+        _ = Visit(0, 0);
+        return nodes;
+
+        int Visit(int i, int depth) {
+            var node = this._nodes[i];
+            var triangles = node.Count > 0 ? node.Count : Visit(i + 1, depth + 1) + Visit(-node.Count, depth + 1);
+            if (depth <= maxDepth)
+                nodes.Add(new BvhNode(i, depth, node.Count > 0, triangles,
+                    [node.MinX, node.MinY, node.MinZ, node.MaxX, node.MaxY, node.MaxZ]));
+            return triangles;
+        }
+    }
 }
 
 /// <summary>

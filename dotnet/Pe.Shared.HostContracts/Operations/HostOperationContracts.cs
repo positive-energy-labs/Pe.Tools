@@ -222,6 +222,9 @@ public sealed record HostOperationDefinition(
     ) {
         if (intent == HostOperationIntent.Mutate)
             return HostOperationCostTier.Mutation;
+        // A key's default must not downgrade an explicitly expensive operation such as spatial ingest.
+        if (fallback == HostOperationCostTier.Expensive)
+            return fallback;
         if (key.StartsWith("revit.matrix.", StringComparison.Ordinal)
             || key.IndexOf("matrix", StringComparison.Ordinal) >= 0)
             return HostOperationCostTier.Expensive;
