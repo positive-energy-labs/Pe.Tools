@@ -1,3 +1,4 @@
+import { TooltipHint } from "@pe/kit/lang/tooltip";
 /**
  * The per-run panel, the way RHVAC lays one duct out: its straight length, the design loss per
  * 100 ft against its own actual rate, its roughness, the additional SP loss stated on it, and the
@@ -146,10 +147,12 @@ export function RunDetail({
         <ul className="grid grid-cols-[1fr_auto_auto] gap-x-3" data-e-parts="">
           {run.parts.map((part, i) => (
             <li key={`${part.id}:${i}`} className="contents" onMouseEnter={() => light([part.id])}>
-              <span className="truncate" title={part.desc}>
-                {nameOf(part.id)}
-                {part.stated ? <span className="text-ink-mute"> · stated</span> : null}
-              </span>
+              <TooltipHint content={part.desc}>
+                <span className="truncate">
+                  {nameOf(part.id)}
+                  {part.stated ? <span className="text-ink-mute"> · stated</span> : null}
+                </span>
+              </TooltipHint>
               <span className="face-mono text-right">{fmtFt(part.eqFt)}</span>
               <span className="face-mono text-right">{fmt(part.dp, 4)}</span>
             </li>

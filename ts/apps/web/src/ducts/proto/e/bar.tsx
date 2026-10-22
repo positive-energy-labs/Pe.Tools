@@ -1,3 +1,4 @@
+import { TooltipHint } from "@pe/kit/lang/tooltip";
 /**
  * THROWAWAY (protoui round 3, E2): the loss bar the tree draws, and its one-line legend.
  * Full width is the group's critical run (Pe's largest fan-to-grille total), so the critical row
@@ -30,31 +31,33 @@ export function LossBar({
 }) {
   const share = value != null && scale ? Math.min(1, value / scale) : null;
   return (
-    <span className="flex min-w-0 flex-1 items-center gap-2" title={label}>
-      <span className="relative block h-1.5 min-w-8 flex-1" aria-hidden>
-        {share != null ? (
-          <>
-            <span className="absolute inset-0" style={{ backgroundColor: tokenRef("line") }} />
-            <span
-              className="absolute inset-y-0 left-0"
-              style={{ width: `${share * 100}%`, backgroundColor: tokenRef("ink-2") }}
-            />
-          </>
-        ) : null}
+    <TooltipHint content={label}>
+      <span className="flex min-w-0 flex-1 items-center gap-2">
+        <span className="relative block h-1.5 min-w-8 flex-1" aria-hidden>
+          {share != null ? (
+            <>
+              <span className="absolute inset-0" style={{ backgroundColor: tokenRef("line") }} />
+              <span
+                className="absolute inset-y-0 left-0"
+                style={{ width: `${share * 100}%`, backgroundColor: tokenRef("ink-2") }}
+              />
+            </>
+          ) : null}
+        </span>
+        <span className="face-mono w-12 shrink-0 text-right">{fmt(value)}</span>
+        <TooltipHint
+          content={
+            provisional
+              ? `provisional: rests on ${provisional.count} unruled inferred join(s), worst ${provisional.worst}`
+              : undefined
+          }
+        >
+          <span className="w-2 shrink-0" data-tone={provisional ? "caution" : undefined}>
+            {provisional ? "~" : ""}
+          </span>
+        </TooltipHint>
       </span>
-      <span className="face-mono w-12 shrink-0 text-right">{fmt(value)}</span>
-      <span
-        className="w-2 shrink-0"
-        data-tone={provisional ? "caution" : undefined}
-        title={
-          provisional
-            ? `provisional: rests on ${provisional.count} unruled inferred join(s), worst ${provisional.worst}`
-            : undefined
-        }
-      >
-        {provisional ? "~" : ""}
-      </span>
-    </span>
+    </TooltipHint>
   );
 }
 
@@ -128,34 +131,40 @@ function SplitFill({
         // fitting already says so on its own row, and its stub would sit on the grille's.
         const stub =
           part.unpriced > 0 && key !== "duct" ? (
-            <span
+            <TooltipHint
               key={`${key}?`}
-              className="absolute -inset-y-px w-1.5 border border-dashed"
-              data-e-split={`${key}-unpriced`}
-              {...revitTarget(target.ids, target.refs)}
-              title={`${word}: ${part.unpriced} with no drop, so this part is unknown (not zero)`}
-              style={{ left: `min(${at * 100}%, calc(100% - 6px))`, borderColor: tokenRef(ink) }}
-              onMouseEnter={light ? () => light(part.ids) : undefined}
-              onMouseLeave={light ? () => light(back ?? null) : undefined}
-            />
+              content={`${word}: ${part.unpriced} with no drop, so this part is unknown (not zero)`}
+            >
+              <span
+                className="absolute -inset-y-px w-1.5 border border-dashed"
+                data-e-split={`${key}-unpriced`}
+                {...revitTarget(target.ids, target.refs)}
+                style={{ left: `min(${at * 100}%, calc(100% - 6px))`, borderColor: tokenRef(ink) }}
+                onMouseEnter={light ? () => light(part.ids) : undefined}
+                onMouseLeave={light ? () => light(back ?? null) : undefined}
+              />
+            </TooltipHint>
           ) : null;
         if (part.dp <= 0) return stub;
         return [
           stub,
-          <span
+          <TooltipHint
             key={key}
-            className="absolute inset-y-0"
-            data-e-split={key}
-            {...revitTarget(target.ids, target.refs)}
-            title={`${word} ${fmt(part.dp, LOSS_PLACES)} in-wg (${Math.round((part.dp / scale) * 100)}% of the fan)`}
-            style={{
-              left: `${left * 100}%`,
-              width: `${Math.min(1 - left, part.dp / scale) * 100}%`,
-              backgroundColor: tokenRef(ink),
-            }}
-            onMouseEnter={light ? () => light(part.ids) : undefined}
-            onMouseLeave={light ? () => light(back ?? null) : undefined}
-          />,
+            content={`${word} ${fmt(part.dp, LOSS_PLACES)} in-wg (${Math.round((part.dp / scale) * 100)}% of the fan)`}
+          >
+            <span
+              className="absolute inset-y-0"
+              data-e-split={key}
+              {...revitTarget(target.ids, target.refs)}
+              style={{
+                left: `${left * 100}%`,
+                width: `${Math.min(1 - left, part.dp / scale) * 100}%`,
+                backgroundColor: tokenRef(ink),
+              }}
+              onMouseEnter={light ? () => light(part.ids) : undefined}
+              onMouseLeave={light ? () => light(back ?? null) : undefined}
+            />
+          </TooltipHint>,
         ];
       })}
     </>
@@ -192,32 +201,32 @@ export function SplitStrip({
       <span className="flex flex-wrap gap-x-3 text-ink-2">
         {PARTS.filter(({ key }) => split[key].dp > 0 || split[key].unpriced > 0).map(
           ({ key, word, says, ink }) => (
-            <span
-              key={key}
-              className="inline-flex items-center gap-1"
-              title={says}
-              {...declaration(split[key].ids)}
-              onMouseEnter={() => light(split[key].ids)}
-              onMouseLeave={() => light(null)}
-            >
+            <TooltipHint key={key} content={says}>
               <span
-                className="inline-block size-2"
-                style={{ backgroundColor: tokenRef(ink) }}
-                aria-hidden
-              />
-              {word}{" "}
-              {split[key].dp > 0 ? (
-                <>
-                  <span className="face-mono text-ink">{fmt(split[key].dp, 3)}</span>
-                  <span className="face-mono">{Math.round((split[key].dp / scale) * 100)}%</span>
-                </>
-              ) : null}
-              {split[key].unpriced > 0 ? (
-                <span data-tone="caution">
-                  {split[key].dp > 0 ? `+ ${split[key].unpriced} unpriced` : "no drop: unknown"}
-                </span>
-              ) : null}
-            </span>
+                className="inline-flex items-center gap-1"
+                {...declaration(split[key].ids)}
+                onMouseEnter={() => light(split[key].ids)}
+                onMouseLeave={() => light(null)}
+              >
+                <span
+                  className="inline-block size-2"
+                  style={{ backgroundColor: tokenRef(ink) }}
+                  aria-hidden
+                />
+                {word}{" "}
+                {split[key].dp > 0 ? (
+                  <>
+                    <span className="face-mono text-ink">{fmt(split[key].dp, 3)}</span>
+                    <span className="face-mono">{Math.round((split[key].dp / scale) * 100)}%</span>
+                  </>
+                ) : null}
+                {split[key].unpriced > 0 ? (
+                  <span data-tone="caution">
+                    {split[key].dp > 0 ? `+ ${split[key].unpriced} unpriced` : "no drop: unknown"}
+                  </span>
+                ) : null}
+              </span>
+            </TooltipHint>
           ),
         )}
       </span>
@@ -248,19 +257,13 @@ export function MetaHeader() {
   return (
     <span className="inline-flex items-center gap-1.5" data-e-columns="">
       <span className={COL.bar} aria-hidden />
-      <span
-        className={`${COL.ft} text-right`}
-        title="effective length from the fan to this row's far end, in equivalent feet at each duct's own friction rate; the small number beside it is the loss in in-wg"
-      >
-        to here, eq ft
-      </span>
+      <TooltipHint content="effective length from the fan to this row's far end, in equivalent feet at each duct's own friction rate; the small number beside it is the loss in in-wg">
+        <span className={`${COL.ft} text-right`}>to here, eq ft</span>
+      </TooltipHint>
       <span className={COL.wg} aria-hidden />
-      <span
-        className={`${COL.ft} border-line border-l pl-1.5 text-right`}
-        title="this row's own effective length, in equivalent feet; the small number beside it is its own loss in in-wg"
-      >
-        own, eq ft
-      </span>
+      <TooltipHint content="this row's own effective length, in equivalent feet; the small number beside it is its own loss in in-wg">
+        <span className={`${COL.ft} border-line border-l pl-1.5 text-right`}>own, eq ft</span>
+      </TooltipHint>
       <span className={COL.wg} aria-hidden />
       <span className={COL.mark} aria-hidden />
     </span>
@@ -327,31 +330,34 @@ export function MetaBar({
           </>
         ) : null}
       </span>
-      <span
-        className={`${COL.ft} text-right`}
-        data-e-ft={ft ?? ""}
-        title={`${fmt(value, LOSS_PLACES)} in-wg to here`}
-      >
-        {fmtFt(ft)}
-      </span>
-      <span className={`${COL.wg} text-ink-2 t-small`} title="loss to here, in-wg">
-        {fmt(value, LOSS_PLACES)}
-      </span>
+      <TooltipHint content={`${fmt(value, LOSS_PLACES)} in-wg to here`}>
+        <span className={`${COL.ft} text-right`} data-e-ft={ft ?? ""}>
+          {fmtFt(ft)}
+        </span>
+      </TooltipHint>
+      <TooltipHint content="loss to here, in-wg">
+        <span className={`${COL.wg} text-ink-2 t-small`}>{fmt(value, LOSS_PLACES)}</span>
+      </TooltipHint>
       {self !== undefined ? (
         <>
-          <span
-            className={`border-line border-l pl-1.5 ${COL.ft} text-right`}
-            data-e-own={unpriced ? "unpriced" : ""}
-            title={
+          <TooltipHint
+            content={
               unpriced?.why ??
               (typeof self === "number" ? `+${fmt(self, LOSS_PLACES)} in-wg own` : undefined)
             }
           >
-            {own}
-          </span>
-          <span className={`${COL.wg} text-ink-2 t-small`} title="own loss, in-wg">
-            {unpriced || self === "" || self == null ? "" : `+${fmt(self, LOSS_PLACES)}`}
-          </span>
+            <span
+              className={`border-line border-l pl-1.5 ${COL.ft} text-right`}
+              data-e-own={unpriced ? "unpriced" : ""}
+            >
+              {own}
+            </span>
+          </TooltipHint>
+          <TooltipHint content="own loss, in-wg">
+            <span className={`${COL.wg} text-ink-2 t-small`}>
+              {unpriced || self === "" || self == null ? "" : `+${fmt(self, LOSS_PLACES)}`}
+            </span>
+          </TooltipHint>
         </>
       ) : null}
       <span className={COL.mark} data-tone={provisional ? "caution" : undefined}>

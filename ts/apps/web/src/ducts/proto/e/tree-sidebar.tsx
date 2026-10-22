@@ -1,3 +1,4 @@
+import { TooltipHint } from "@pe/kit/lang/tooltip";
 /**
  * THROWAWAY (protoui round 3, E2 "tree sidebar"): B's topology (system → runs → legs → elements) as
  * a kit `Tree`. Each row's trailing slot: the fan-to-here total as a bar, then its own (self) loss.
@@ -66,34 +67,40 @@ function QuantityBar({ encoding, ids }: { encoding: Encoding; ids: readonly numb
   const peak = peakOf(q, ids);
   const share = peak && q.max ? Math.min(1, peak.value / q.max) : null;
   return (
-    <span
-      className="inline-flex items-center gap-1.5"
-      data-e-quantity={peak ? peak.value : ""}
-      data-e-peak={peak?.id ?? ""}
-      title={peak ? `${formatQuantity(q, peak.value)} ${q.unit}` : `no ${encoding.label} here`}
+    <TooltipHint
+      content={peak ? `${formatQuantity(q, peak.value)} ${q.unit}` : `no ${encoding.label} here`}
     >
-      <span className="relative inline-block h-1.5 w-16" aria-hidden>
-        {share != null ? (
-          <>
-            <span className="absolute inset-0" style={{ backgroundColor: tokenRef("line") }} />
-            <span
-              className="absolute inset-y-0 left-0"
-              style={{ width: `${share * 100}%`, backgroundColor: inkOf(encoding, q, peak!.value) }}
-            />
-          </>
-        ) : null}
-      </span>
-      <span className="face-mono w-12 text-right">
-        {peak ? formatQuantity(q, peak.value) : "—"}
-      </span>
-      {peak && peak.id === q.maxId ? (
-        <span className="w-6 text-ink-2" title={`the system's max ${encoding.label}`}>
-          max
+      <span
+        className="inline-flex items-center gap-1.5"
+        data-e-quantity={peak ? peak.value : ""}
+        data-e-peak={peak?.id ?? ""}
+      >
+        <span className="relative inline-block h-1.5 w-16" aria-hidden>
+          {share != null ? (
+            <>
+              <span className="absolute inset-0" style={{ backgroundColor: tokenRef("line") }} />
+              <span
+                className="absolute inset-y-0 left-0"
+                style={{
+                  width: `${share * 100}%`,
+                  backgroundColor: inkOf(encoding, q, peak!.value),
+                }}
+              />
+            </>
+          ) : null}
         </span>
-      ) : (
-        <span className="w-6" />
-      )}
-    </span>
+        <span className="face-mono w-12 text-right">
+          {peak ? formatQuantity(q, peak.value) : "—"}
+        </span>
+        {peak && peak.id === q.maxId ? (
+          <TooltipHint content={`the system's max ${encoding.label}`}>
+            <span className="w-6 text-ink-2">max</span>
+          </TooltipHint>
+        ) : (
+          <span className="w-6" />
+        )}
+      </span>
+    </TooltipHint>
   );
 }
 
@@ -162,9 +169,9 @@ export function SystemTree({ ctx }: { ctx: TreeCtx }) {
       empty="no run in this system"
       columns={{
         label: (
-          <span title="run = the path from the unit to one grille · stretch = the part between two places · part = one duct, fitting or accessory">
-            run · stretch · part
-          </span>
+          <TooltipHint content="run = the path from the unit to one grille · stretch = the part between two places · part = one duct, fitting or accessory">
+            <span>run · stretch · part</span>
+          </TooltipHint>
         ),
         meta: ctx.reading?.quantity ? undefined : <MetaHeader />,
       }}
@@ -178,17 +185,19 @@ export function SystemTree({ ctx }: { ctx: TreeCtx }) {
         const ruleKey = n.kind === "element" && n.id != null ? ctx.ruleOf.get(n.id) : undefined;
         return {
           lead: critical ? (
-            <span title={stand ? "longest developed run: stand-in until priced" : "critical run"}>
-              {stand ? "◇" : "◆"}
-            </span>
-          ) : over ? (
-            <span
-              className="text-ink-2"
-              data-e-over={n.id ?? ""}
-              title={`friction ${n.rate!.toFixed(3)} in-wg per 100 ft is over the design rate ${ctx.designRate} (a diagnostic, not a blocker)`}
+            <TooltipHint
+              content={stand ? "longest developed run: stand-in until priced" : "critical run"}
             >
-              ▴
-            </span>
+              <span>{stand ? "◇" : "◆"}</span>
+            </TooltipHint>
+          ) : over ? (
+            <TooltipHint
+              content={`friction ${n.rate!.toFixed(3)} in-wg per 100 ft is over the design rate ${ctx.designRate} (a diagnostic, not a blocker)`}
+            >
+              <span className="text-ink-2" data-e-over={n.id ?? ""}>
+                ▴
+              </span>
+            </TooltipHint>
           ) : undefined,
           // Kinds read apart by weight and ink: run (a path to one grille) strong, stretch plain, part quiet.
           label: (

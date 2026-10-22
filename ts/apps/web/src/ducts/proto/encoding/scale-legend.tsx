@@ -1,3 +1,4 @@
+import { TooltipHint } from "@pe/kit/lang/tooltip";
 /**
  * The drawing's key to its encoding: `Encoding` read into the kit's `Legend` (the look lives in
  * `@pe/kit/lang/legend`). A sequential scale is a band of its ramp with the breaks under it and the
@@ -37,14 +38,15 @@ export function ScaleLegend({
     quantity && quantity.maxId != null && quantity.max != null ? (
       <span className="flex items-center gap-1 whitespace-nowrap" data-scale-max={quantity.maxId}>
         max <span className="face-mono">{f(quantity.max)}</span> {quantity.unit} at
-        <button
-          type="button"
-          className="max-w-56 cursor-pointer truncate underline decoration-dotted underline-offset-2"
-          title={`select ${nameOf(quantity.maxId) ?? "it"}`}
-          onClick={() => onSelect(quantity.maxId!)}
-        >
-          {nameOf(quantity.maxId) ?? "an unnamed element"}
-        </button>
+        <TooltipHint content={`select ${nameOf(quantity.maxId) ?? "it"}`}>
+          <button
+            type="button"
+            className="max-w-56 cursor-pointer truncate underline decoration-dotted underline-offset-2"
+            onClick={() => onSelect(quantity.maxId!)}
+          >
+            {nameOf(quantity.maxId) ?? "an unnamed element"}
+          </button>
+        </TooltipHint>
       </span>
     ) : quantity ? (
       <span className="text-ink-2">no element in this system has a value</span>

@@ -1,3 +1,4 @@
+import { TooltipHint } from "@pe/kit/lang/tooltip";
 /**
  * THROWAWAY (protoui round 3, E2): the inbox in loop order on the kit `Inbox`: Fix, Set, Check,
  * Write, then the collapsed Diagnostics. The rows are `inbox-rows.ts`' (pure, tested); this draws
@@ -301,9 +302,9 @@ export function Inbox({
         typeof p === "string" ? (
           <span key={j}>{p}</span>
         ) : p.dot ? (
-          <span key={j} className="text-ink-2" title={p.name}>
-            ·
-          </span>
+          <TooltipHint key={j} content={p.name}>
+            <span className="text-ink-2">·</span>
+          </TooltipHint>
         ) : (
           <ClaimElement
             key={j}

@@ -1,3 +1,4 @@
+import { TooltipHint } from "./tooltip";
 /**
  * The key to a drawing's encoding, small and on the page ground, in a corner of the drawing. A
  * `ramp` is a band of swatches with its breaks under the seams; `rows` are one stroke sample, a
@@ -93,73 +94,75 @@ export function Legend({
   className = "",
 }: LegendProps) {
   return (
-    <section
-      aria-label={`${label} legend`}
-      data-legend={reading ?? label}
-      title={says}
-      className={`t-small flex select-none flex-col gap-1 rounded-sm px-2 py-1 font-sans ${className}`}
-      style={{ background: tokenRef("page") }}
-    >
-      <span className="text-ink-2">
-        {label}
-        {unit ? `, ${unit}` : null}
-      </span>
-      {ramp ? (
-        <div className="flex flex-col">
-          <div className="flex gap-0.5" data-legend-band="">
-            {ramp.steps.map((step) => (
-              <span
-                key={step.key}
-                title={step.says}
-                className="h-2.5"
-                style={{ width: SWATCH_W, background: step.ink }}
-              />
-            ))}
-          </div>
-          {/* The min under the band's left end, each break under its seam, the max under the right end. */}
-          <div
-            className="face-mono text-ink-2 relative h-4"
-            style={{ width: ramp.steps.length * (SWATCH_W + 2) - 2 }}
-          >
-            {ramp.breaks.map((text, i, all) => (
-              <span
-                key={i}
-                className="absolute top-0 whitespace-nowrap"
-                style={
-                  i === all.length - 1
-                    ? { right: 0 }
-                    : {
-                        left: i * (SWATCH_W + 2) - (i ? 1 : 0),
-                        transform: i ? "translateX(-50%)" : undefined,
-                      }
-                }
-              >
-                {text}
-              </span>
-            ))}
-          </div>
-        </div>
-      ) : rows?.length ? (
-        <div className="grid grid-cols-[auto_1fr_auto] items-center gap-x-2">
-          {rows.map((row) => (
-            <div key={row.key} className="contents" data-bin={row.key} title={row.says}>
-              <StrokeSample stroke={row.stroke} />
-              <span className="whitespace-nowrap">{row.word}</span>
-              <Count n={row.count} />
+    <TooltipHint content={says}>
+      <section
+        aria-label={`${label} legend`}
+        data-legend={reading ?? label}
+        className={`t-small flex select-none flex-col gap-1 rounded-sm px-2 py-1 font-sans ${className}`}
+        style={{ background: tokenRef("page") }}
+      >
+        <span className="text-ink-2">
+          {label}
+          {unit ? `, ${unit}` : null}
+        </span>
+        {ramp ? (
+          <div className="flex flex-col">
+            <div className="flex gap-0.5" data-legend-band="">
+              {ramp.steps.map((step) => (
+                <TooltipHint key={step.key} content={step.says}>
+                  <span className="h-2.5" style={{ width: SWATCH_W, background: step.ink }} />
+                </TooltipHint>
+              ))}
             </div>
-          ))}
-        </div>
-      ) : plain != null ? (
-        <span className="text-ink-2">{plain}</span>
-      ) : null}
-      {missing ? (
-        <div className="flex items-center gap-2" data-bin={missing.key} title={missing.says}>
-          <StrokeSample stroke={missing.stroke} />
-          <span className="text-ink-2 whitespace-nowrap">{missing.word}</span>
-          <Count n={missing.count} />
-        </div>
-      ) : null}
-      {foot}
-    </section>
+            {/* The min under the band's left end, each break under its seam, the max under the right end. */}
+            <div
+              className="face-mono text-ink-2 relative h-4"
+              style={{ width: ramp.steps.length * (SWATCH_W + 2) - 2 }}
+            >
+              {ramp.breaks.map((text, i, all) => (
+                <span
+                  key={i}
+                  className="absolute top-0 whitespace-nowrap"
+                  style={
+                    i === all.length - 1
+                      ? { right: 0 }
+                      : {
+                          left: i * (SWATCH_W + 2) - (i ? 1 : 0),
+                          transform: i ? "translateX(-50%)" : undefined,
+                        }
+                  }
+                >
+                  {text}
+                </span>
+              ))}
+            </div>
+          </div>
+        ) : rows?.length ? (
+          <div className="grid grid-cols-[auto_1fr_auto] items-center gap-x-2">
+            {rows.map((row) => (
+              <TooltipHint key={row.key} content={row.says}>
+                <div className="contents" data-bin={row.key}>
+                  <StrokeSample stroke={row.stroke} />
+                  <span className="whitespace-nowrap">{row.word}</span>
+                  <Count n={row.count} />
+                </div>
+              </TooltipHint>
+            ))}
+          </div>
+        ) : plain != null ? (
+          <span className="text-ink-2">{plain}</span>
+        ) : null}
+        {missing ? (
+          <TooltipHint content={missing.says}>
+            <div className="flex items-center gap-2" data-bin={missing.key}>
+              <StrokeSample stroke={missing.stroke} />
+              <span className="text-ink-2 whitespace-nowrap">{missing.word}</span>
+              <Count n={missing.count} />
+            </div>
+          </TooltipHint>
+        ) : null}
+        {foot}
+      </section>
+    </TooltipHint>
   );
 }

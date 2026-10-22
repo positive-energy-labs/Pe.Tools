@@ -1,3 +1,4 @@
+import { TooltipHint } from "@pe/kit/lang/tooltip";
 /**
  * The inputs that live on the system tree: a terminal's flow and drop, a unit's flow, ESP and role.
  * Each is one kit trichotomy `StateCell` over its Work cell: a person's edit stages, Pea's proposal
@@ -186,10 +187,12 @@ function RoleCell({
         }}
         transitions={reviewTransitions(wire, key, cell)}
       />
-      <span className="t-small text-ink-2" data-e-source={word ?? ""} title={resolved.reason}>
-        role{word ? ` · ${word}` : ""}
-        {!cell.staged && !cell.proposal && resolved.reason ? ` (${resolved.reason})` : ""}
-      </span>
+      <TooltipHint content={resolved.reason}>
+        <span className="t-small text-ink-2" data-e-source={word ?? ""}>
+          role{word ? ` · ${word}` : ""}
+          {!cell.staged && !cell.proposal && resolved.reason ? ` (${resolved.reason})` : ""}
+        </span>
+      </TooltipHint>
     </span>
   );
 }

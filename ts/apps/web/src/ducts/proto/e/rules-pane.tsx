@@ -164,13 +164,13 @@ export function RulesTree({
                   <span data-tone={priced.staged.rules[n.ruleKey] ? "caution" : undefined}>
                     {tableOf(priced, n.ruleKey)}
                   </span>
-                  <span className="text-ink-2" title="instances this rule governs in scope">
-                    ×{n.count}
-                  </span>
+                  <TooltipHint content="instances this rule governs in scope">
+                    <span className="text-ink-2">×{n.count}</span>
+                  </TooltipHint>
                   {missing ? (
-                    <span data-tone="caution" title="instances with no value under this table">
-                      {missing} unpriced
-                    </span>
+                    <TooltipHint content="instances with no value under this table">
+                      <span data-tone="caution">{missing} unpriced</span>
+                    </TooltipHint>
                   ) : null}
                   <TooltipHint content="What staging another table for this rule would re-price, in every system">
                     <span className="text-ink-2" data-e-fanout={n.ruleKey}>

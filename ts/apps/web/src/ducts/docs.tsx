@@ -1,3 +1,4 @@
+import { TooltipHint } from "@pe/kit/lang/tooltip";
 /**
  * The ducts tutorial (Alt+/): what the route does, why Pe computes instead of Revit, how it
  * differs from Manual D and from Naviate, where every number lives, what an engineer is needed
@@ -258,16 +259,19 @@ function CaseCard({ c }: { c: DuctCase }) {
       {c.examples.length ? (
         <p className="m-0 t-small">
           {c.examples.map((e, i) => (
-            <Link
+            <TooltipHint
               key={i}
-              to="/ducts"
-              search={{ system: e.system ?? "", selected: e.selected ?? "" }}
-              className="mr-3 underline"
-              title="Opens on the project the case was recorded from; the ids will not resolve on another document"
+              content="Opens on the project the case was recorded from; the ids will not resolve on another document"
             >
-              {e.system ?? "no system"}
-              {e.selected ? ` · ${e.selected}` : ""}
-            </Link>
+              <Link
+                to="/ducts"
+                search={{ system: e.system ?? "", selected: e.selected ?? "" }}
+                className="mr-3 underline"
+              >
+                {e.system ?? "no system"}
+                {e.selected ? ` · ${e.selected}` : ""}
+              </Link>
+            </TooltipHint>
           ))}
         </p>
       ) : null}
