@@ -3,6 +3,8 @@ import { Component, Suspense, useRef, type Key, type ReactNode } from "react";
 import { reportFault } from "#/host/diagnostics";
 
 import { HelpTip } from "#/components/lang/help";
+import { Floater } from "#/components/lang/floater";
+import { PaneStrip, type PaneStripProps } from "#/components/lang/pane-strip";
 import { KeyScope } from "@pe/kit/keys";
 import { Button } from "@pe/kit/lang/button";
 import { tv, type VariantProps } from "@pe/kit/lib/tv";
@@ -33,7 +35,7 @@ export const paneRecipe = tv({
   defaultVariants: { scroll: "auto", flush: false },
 });
 
-interface PaneProps extends VariantProps<typeof paneRecipe> {
+interface PaneProps extends VariantProps<typeof paneRecipe>, PaneStripProps {
   id?: string;
   title?: ReactNode;
   /** The title is the thing shown (a thread, a schedule), drawn as the page heading. */
@@ -107,10 +109,17 @@ export function Pane({
   ground,
   boundaryKey,
   onRetry,
+  modes,
+  floaters,
+  layers,
   children,
 }: PaneProps) {
   const { root, body } = paneRecipe({ scroll, flush });
   const rootRef = useRef<HTMLElement>(null);
+  const strip =
+    modes != null || floaters != null || layers != null ? (
+      <PaneStrip modes={modes} floaters={floaters} layers={layers} />
+    ) : null;
   const heading = (
     <>
       {tabs ?? (
@@ -129,6 +138,25 @@ export function Pane({
         </span>
       )}
     </>
+  );
+  const paneBody = (
+    <div data-slot="pane-body" className={body()}>
+      <PaneErrorBoundary key={boundaryKey} what={title} onRetry={onRetry}>
+        <Suspense
+          fallback={
+            <div
+              role="status"
+              aria-live="polite"
+              className="flex flex-1 items-center justify-center t-small text-ink-2"
+            >
+              {title != null ? <>loading {title}…</> : "loading…"}
+            </div>
+          }
+        >
+          {children}
+        </Suspense>
+      </PaneErrorBoundary>
+    </div>
   );
   return (
     <KeyScope id={id ?? "pane"} element={rootRef}>
@@ -159,32 +187,25 @@ export function Pane({
               }
               center={titleAlign === "center" ? heading : undefined}
               trail={
-                actions != null ? (
+                actions != null || strip != null ? (
                   <div data-slot="pane-actions" className="flex shrink-0 items-center gap-1">
                     {actions}
+                    {strip}
                   </div>
                 ) : undefined
               }
             />
           </div>
         )}
-        <div data-slot="pane-body" className={body()}>
-          <PaneErrorBoundary key={boundaryKey} what={title} onRetry={onRetry}>
-            <Suspense
-              fallback={
-                <div
-                  role="status"
-                  aria-live="polite"
-                  className="flex flex-1 items-center justify-center t-small text-ink-2"
-                >
-                  {title != null ? <>loading {title}…</> : "loading…"}
-                </div>
-              }
-            >
-              {children}
-            </Suspense>
-          </PaneErrorBoundary>
-        </div>
+        {floaters == null ? (
+          paneBody
+        ) : (
+          // The floaters' containing block: they sit over the body's corners and never scroll with it.
+          <div data-slot="pane-field" className="relative flex min-h-0 min-w-0 flex-1 flex-col">
+            {paneBody}
+            {floaters.map((spec) => (spec.open ? <Floater key={spec.key} spec={spec} /> : null))}
+          </div>
+        )}
       </section>
     </KeyScope>
   );
