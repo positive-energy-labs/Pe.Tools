@@ -21,13 +21,8 @@ import { Ladder } from "#/route/ladder";
 import { useChooseTarget } from "#/route/shell";
 import { Situation } from "#/route/situation";
 import { LadderPicker, useDocumentLadder } from "#/route/situation-ladder";
-import {
-  bindDuctsManifest,
-  reconcileDuctsMembers,
-  pendingCount,
-  WRITTEN,
-  type LoadedDuctsReading,
-} from "./manifest";
+import { bindDuctsManifest, reconcileDuctsMembers, type LoadedDuctsReading } from "./manifest";
+import { pendingCount, WRITTEN } from "@pe/ducts-domain/staged";
 import { withStoredRulings } from "@pe/ducts-domain/rulings";
 import { price } from "@pe/ducts-domain/pricing";
 import { worstRun } from "@pe/ducts-domain/losses";

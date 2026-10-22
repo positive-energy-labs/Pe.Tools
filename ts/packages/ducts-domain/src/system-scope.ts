@@ -175,3 +175,7 @@ export function sectionNames(
     }),
   );
 }
+
+/** The chosen system over a snapshot; no system chosen is the whole document (null). */
+export const scopeOf = (snapshot: DuctSnapshot, system: string) =>
+  system ? systemScope(snapshot, system) : null;

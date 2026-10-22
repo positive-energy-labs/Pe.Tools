@@ -28,8 +28,10 @@ import {
   type CellRef,
 } from "../../inbox-rows";
 import { navigate } from "../../navigate";
-import { groupLabels } from "../../inputs";
-import { previewFresh, scopeOf, stagedEsp } from "../../manifest";
+import { groupLabels } from "@pe/ducts-domain/words";
+import { scopeOf } from "@pe/ducts-domain/system-scope";
+import { stagedEsp } from "@pe/ducts-domain/staged";
+import { previewFresh } from "../../manifest";
 import type { LossesWork } from "../../work";
 import { reviewLines } from "../../write-review";
 import { buildTree, systemList, type TreeNode } from "../b/model";
@@ -93,7 +95,7 @@ function EScreenBody({ props }: { props: ProtoProps }) {
   // fan-setting run out (g8745870: header 0.186, tree critical 0.109). Healing still plans on raw.
   const drawn = priced?.snapshot ?? snapshot;
   // The subject is a Revit system: every group it is in, over the snapshot that was priced.
-  const scope = useMemo(() => (drawn ? scopeOf(drawn, page) : null), [drawn, page.system]);
+  const scope = useMemo(() => (drawn ? scopeOf(drawn, page.system) : null), [drawn, page.system]);
   const groups = scope?.groups ?? NO_GROUPS;
   // The drawing indexes the raw snapshot: a group the survey merged away is drawn by its raw id too.
   const drawGroups = useMemo(() => {

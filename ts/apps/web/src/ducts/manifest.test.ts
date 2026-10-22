@@ -20,7 +20,8 @@ vi.mock("../../../../packages/mcps/src/shared/takeoff-action-client", () => ({
   actionResult: () => answer,
 }));
 
-const { manifest, stagedEsp } = await import("./manifest");
+const { manifest } = await import("./manifest");
+const { stagedEsp } = await import("@pe/ducts-domain/staged");
 type Page = import("./manifest").DuctsPage;
 
 const links = [

@@ -41,15 +41,16 @@ import type { Grids } from "@pe/ducts-domain/loss-grid";
 import { applyRequest, price } from "@pe/ducts-domain/pricing";
 import { pendingRulings, withStoredRulings } from "@pe/ducts-domain/rulings";
 import type { DuctSnapshot } from "@pe/ducts-domain/types";
-import { fanCandidates, fansOwedBase } from "@pe/ducts-domain/fan-assignment";
-import { healPlan, healRequestGroup } from "@pe/ducts-domain/heal";
-import { survey, unitFlowsIn } from "@pe/ducts-domain/survey";
-import { systemScope, systemsOf } from "@pe/ducts-domain/system-scope";
+import { espBefore, fanOf, healOf, healTarget, offeredFan } from "@pe/ducts-domain/action-targets";
+import { healRequestGroup } from "@pe/ducts-domain/heal";
+import { pendingCount, stagedCells, stagedEsp } from "@pe/ducts-domain/staged";
+import { unitFlowsIn } from "@pe/ducts-domain/survey";
+import { scopeOf, systemScope, systemsOf } from "@pe/ducts-domain/system-scope";
+import { healWords, networkWord, outcomeWords } from "@pe/ducts-domain/words";
 import { claimsForGroup } from "@pe/ducts-domain/claims";
 import { sceneRequest } from "#/scene/host";
 import { airflowOptions } from "./airflow";
 import { elementNamer } from "./claims";
-import { groupLabels } from "./inputs";
 import { espWaits, fanRefusal, fanWords, holding, triage } from "./inbox-rows";
 
 /** What Revit said the staged cells would write, and the Work and snapshot it was asked over. */
@@ -183,29 +184,6 @@ const observed = <T>(ctx: DuctsCtx, key: DuctsReading) => {
   return reading?.state === "ready" ? (reading.observation as T) : null;
 };
 
-/**
- * The segments `ducts.apply` writes to elements and the store; `loads` stays in Pe, and the rulings
- * (`assumptions` verdicts, `roles`) are written to the store as deltas (`pendingRulings`).
- */
-export const WRITTEN = [
-  "rules",
-  "terminalDrops",
-  "componentDrops",
-  "flows",
-  "esp",
-  "equipmentFlows",
-  "parameters",
-] as const;
-const stagedCells = (doc: DuctsRouteDocument | null) =>
-  ([...WRITTEN, "catalogs"] as const).flatMap((segment) =>
-    Object.entries(doc?.[segment] ?? {}).flatMap(([key, cell]) =>
-      cell?.staged ? [{ segment, key, cell }] : [],
-    ),
-  );
-type Store = DuctSnapshot["store"];
-/** How many changes a write would carry: staged cells, and rulings that differ from the store's. */
-export const pendingCount = (doc: DuctsRouteDocument | null, store: Store) =>
-  stagedCells(doc).length + pendingRulings(doc, store).length;
 const pendingOf = (ctx: DuctsCtx) =>
   pendingCount(ctx.work.doc, observed<DuctSnapshot>(ctx, "ducts")?.store);
 
@@ -240,10 +218,6 @@ export const sceneRequestOf = (
   );
 };
 
-/** The chosen system over a snapshot (`system-scope.ts`); null is the whole document. */
-export const scopeOf = (snapshot: DuctSnapshot, page: Pick<DuctsPage, "system">) =>
-  page.system ? systemScope(snapshot, page.system) : null;
-
 /**
  * What stands between the calc and the ESP write, in the inbox's own terms: the Fix and Set rows of
  * the chosen system (`triage`, the rows the Write group counts). Null when the snapshot or tables
@@ -260,7 +234,7 @@ const standing = (ctx: DuctsCtx) => {
     observed<Catalogs>(ctx, "catalogs") ?? EMPTY_CATALOGS,
   );
   // The survey may merge or bridge groups: the scope is read over the snapshot that was priced.
-  const scope = scopeOf(priced.snapshot, ctx.page);
+  const scope = scopeOf(priced.snapshot, ctx.page.system);
   const { fix, set } = triage({
     snapshot: priced.snapshot,
     scope,
@@ -274,10 +248,6 @@ const standing = (ctx: DuctsCtx) => {
   });
   return { fix: holding(fix), set: set.length };
 };
-
-/** Staged ESP cells: the one write that waits for a clean calc. */
-export const stagedEsp = (doc: DuctsRouteDocument | null) =>
-  Object.values(doc?.esp ?? {}).filter((cell) => cell?.staged).length;
 
 /** Why the ESP waits (Fix or Set rows stand), or null when none is staged or it writes now. */
 const espHeld = (ctx: DuctsCtx) =>
@@ -336,84 +306,29 @@ const dispatch = async <T = DuctsApply.Res.Response>(
   return (answer.value ?? answer) as T;
 };
 
-/** A duct network in a person's words: its systems and units (`groupLabels`), never its group id. */
-const networkWord = (snapshot: DuctSnapshot, group: string) =>
-  groupLabels(snapshot).get(group) ?? "the duct network";
-
-/** The group's heal plan over the raw snapshot the route read; throws why there is none. */
-const healOf = (ctx: DuctsCtx, group: string | undefined) => {
+/** The raw duct snapshot the route read; throws when it is not read yet. */
+const snapshotOf = (ctx: DuctsCtx) => {
   const snapshot = observed<DuctSnapshot>(ctx, "ducts");
   if (!snapshot) throw Error("The duct snapshot is not read yet");
-  if (!group) throw Error("Name the duct network to heal");
-  const found = healPlan(snapshot, ctx.work.doc).groups.find((g) => g.group === group);
-  if (!found) throw Error(`Nothing in ${networkWord(snapshot, group)} heals in Revit`);
-  return { snapshot, found };
+  return snapshot;
 };
-
-/** Pe's ESP of a group now (the largest path total with the staged cells), with what finds it again. */
-const espBefore = (ctx: DuctsCtx, snapshot: DuctSnapshot, group: string) => {
-  const grids = observed<Grids>(ctx, "tables");
-  const surveyed = grids
-    ? price(snapshot, grids, ctx.work.doc, observed<Catalogs>(ctx, "catalogs") ?? EMPTY_CATALOGS)
-    : survey(snapshot, ctx.work.doc);
-  const g = surveyed.snapshot.groups.find((x) => x.id === group);
-  const ids = [...surveyed.snapshot.nodes, ...surveyed.snapshot.segments]
-    .filter((e) => e.groupId === group && e.id > 0)
-    .map((e) => e.id);
-  const esp = grids
-    ? ((surveyed as ReturnType<typeof price>).next.byGroup[group]?.fan ?? null)
-    : null;
-  return { esp, roots: g?.rootIds ?? [], ids };
-};
-
-const healWords = (response: DuctsHeal.Res.Response) =>
-  Object.entries(response.counts)
-    .filter(([, n]) => n)
-    .map(([outcome, n]) => `${n} ${outcome}`)
-    .join(" · ") || "nothing to heal";
 
 // The group and the pair are optional: the head runs a verb bare, and it acts on the selection.
 const healInput = z.object({ group: z.string().optional() }) as unknown as z.ZodType<never>;
 /** The group a heal verb names; undefined when it is run bare (the head). */
 const groupOf = (input: unknown) => (input as { group?: string } | undefined)?.group;
 
-/** The element the page selected, by id; null when none (or an issue id). */
-const selectedId = (page: DuctsPage) => {
-  const id = Number(page.selected);
-  return page.selected && Number.isInteger(id) ? id : null;
-};
-
-/**
- * The group a heal verb acts on: the one it names (a Heal row), else the chosen system's Heal row,
- * as the inbox lists them (`triage`). With several, the selected element's network, else the one
- * previewed; otherwise refused, with where to choose.
- */
-const healTarget = (ctx: DuctsCtx, input: unknown): string => {
+/** The group a heal verb acts on: the one it names (a Heal row), else the chosen system's. */
+const healTargetOf = (ctx: DuctsCtx, input: unknown): string => {
   const named = groupOf(input);
   if (named) return named;
-  const snapshot = observed<DuctSnapshot>(ctx, "ducts");
-  if (!snapshot) throw Error("The duct snapshot is not read yet");
-  const scope = ctx.page.system ? systemScope(snapshot, ctx.page.system) : null;
-  const where = ctx.page.system || "this document";
-  const groups = healPlan(snapshot, ctx.work.doc)
-    .groups.filter(
-      (g) =>
-        !scope ||
-        scope.groups.includes(g.group) ||
-        g.items.some((i) => i.ids.some((id) => scope.members.has(id))),
-    )
-    .map((g) => g.group);
-  if (!groups.length) throw Error(`Nothing in ${where} heals in Revit`);
-  if (groups.length === 1) return groups[0]!;
-  const selected = selectedId(ctx.page);
-  const holder = [...snapshot.nodes, ...snapshot.segments].find((e) => e.id === selected)?.groupId;
   const run = ctx.page.heal;
-  const pick =
-    groups.find((g) => g === holder) ??
-    groups.find((g) => run?.mode === "preview" && g === run.group);
-  if (pick) return pick;
-  throw Error(
-    `${groups.length} networks in ${where} heal in Revit; select an element in one, or use its Heal row in the inbox`,
+  return healTarget(
+    snapshotOf(ctx),
+    ctx.work.doc,
+    ctx.page.system,
+    ctx.page.selected,
+    run?.mode === "preview" ? run.group : null,
   );
 };
 
@@ -429,75 +344,34 @@ const pairOf = (input: unknown) => {
     : undefined;
 };
 
-/**
- * The fan the chosen system is offered, as the page offers it (`fansOwedBase` with the lead fan):
- * with several, the selected unit, else the one previewed; otherwise refused, with why.
- */
-const offeredFan = (ctx: DuctsCtx) => {
-  const snapshot = observed<DuctSnapshot>(ctx, "ducts");
-  if (!snapshot) throw Error("The duct snapshot is not read yet");
-  const system = ctx.page.system;
-  if (!system) throw Error("Choose a system to make its fan");
-  const grids = observed<Grids>(ctx, "tables");
-  const priced = grids
-    ? price(snapshot, grids, ctx.work.doc, observed<Catalogs>(ctx, "catalogs") ?? EMPTY_CATALOGS)
-    : null;
-  const owed = fansOwedBase(
+/** The fan the chosen system is offered (`offeredFan`), over what the route read. */
+const offeredFanOf = (ctx: DuctsCtx) => {
+  const snapshot = snapshotOf(ctx);
+  return offeredFan(
     snapshot,
-    (priced ?? survey(snapshot, ctx.work.doc)).roles,
-    (g) => priced?.next.byGroup[g]?.fans[0]?.unit ?? null,
+    ctx.work.doc,
+    observed<Grids>(ctx, "tables"),
+    observed<Catalogs>(ctx, "catalogs"),
+    ctx.page.system,
+    ctx.page.selected,
+    ctx.page.fan,
+    elementNamer(snapshot, null),
   );
-  const name = elementNamer(snapshot, null);
-  const split = owed.split?.get(system);
-  if (split)
-    throw Error(
-      `${system} spans separate networks with their own fans (${split.map((u) => name(u) ?? u).join(", ")}); Revit gives a system one fan, so split ${system} in Revit first`,
-    );
-  const offers = [...owed.values()].flat().filter((a) => a.system === system);
-  if (!offers.length)
-    throw Error(
-      `No unit is offered as the fan of ${system}: it has its base equipment, or none of its units is a fan`,
-    );
-  if (offers.length === 1) return { ...offers[0]!, unit: name(offers[0]!.unitId) };
-  const selected = selectedId(ctx.page);
-  const run = ctx.page.fan;
-  const pick =
-    offers.find((a) => a.unitId === selected) ??
-    offers.find((a) => a.unitId === run?.unitId && a.systemId === run.systemId);
-  if (pick) return { ...pick, unit: name(pick.unitId) };
-  throw Error(`${offers.length} units could be the fan of ${system}; select one`);
 };
 /** The pair a fan verb acts on: the one it names, else the chosen system's offered fan. */
 const fanTarget = (ctx: DuctsCtx, input: unknown) => {
   const named = pairOf(input);
   if (named) return named;
-  const { unitId, systemId } = offeredFan(ctx);
+  const { unitId, systemId } = offeredFanOf(ctx);
   return { unitId, systemId };
 };
 /** The page's words for the offered fan (`fanVerbs`), so the head's button reads as the row's. */
 const fanLabel = (ctx: DuctsCtx, preview: boolean) => {
-  const offered = attempt(() => offeredFan(ctx));
+  const offered = attempt(() => offeredFanOf(ctx));
   if ("no" in offered) return preview ? "preview fan" : "make the fan";
   const words = `make ${offered.ok.unit ?? offered.ok.unitId} the fan of ${offered.ok.system}`;
   return preview ? `preview: ${words}` : words;
 };
-/** The pair as a candidate over the snapshot the route read; throws why it is not offered. */
-const fanOf = (ctx: DuctsCtx, pair: { unitId: number; systemId: number }) => {
-  const snapshot = observed<DuctSnapshot>(ctx, "ducts");
-  if (!snapshot) throw Error("The duct snapshot is not read yet");
-  const found = fanCandidates(snapshot, pair.unitId).find((c) => c.systemId === pair.systemId);
-  if (!found)
-    throw Error(
-      `System ${pair.systemId} has base equipment, or ${pair.unitId} roots none of its groups`,
-    );
-  return found;
-};
-
-const outcomeWords = (response: DuctsApply.Res.Response) =>
-  Object.entries(response.counts)
-    .filter(([, n]) => n)
-    .map(([outcome, n]) => `${n} ${outcome}`)
-    .join(" · ") || "nothing to write";
 
 /** The preview still describes this Work revision and this snapshot. */
 export const previewFresh = (page: DuctsPage, revision: number | null) =>
@@ -724,10 +598,12 @@ export const manifest = defineRoute<
       input: healInput,
       dirties: [],
       waitSeconds: NATIVE_APPLY_WAIT_S,
-      ready: (ctx, input) => why(() => healOf(ctx, healTarget(ctx, input))),
+      ready: (ctx, input) =>
+        why(() => healOf(snapshotOf(ctx), ctx.work.doc, healTargetOf(ctx, input))),
       run: async (ctx, input) => {
-        const group = healTarget(ctx, input);
-        const { snapshot, found } = healOf(ctx, group);
+        const group = healTargetOf(ctx, input);
+        const snapshot = snapshotOf(ctx);
+        const found = healOf(snapshot, ctx.work.doc, group);
         const response = await dispatch<DuctsHeal.Res.Response>(ctx, "ducts.preview-heal", {
           groups: [healRequestGroup(found)],
         });
@@ -737,7 +613,13 @@ export const manifest = defineRoute<
             mode: "preview",
             epoch: ctx.page.epoch,
             response,
-            before: espBefore(ctx, snapshot, group),
+            before: espBefore(
+              snapshot,
+              ctx.work.doc,
+              observed<Grids>(ctx, "tables"),
+              observed<Catalogs>(ctx, "catalogs"),
+              group,
+            ),
           },
         });
         ctx.note(
@@ -752,7 +634,7 @@ export const manifest = defineRoute<
       // The Heal row's word: how many a fresh preview of this group passed.
       labelNow: (ctx) => {
         const run = ctx.page.heal;
-        const target = attempt(() => healTarget(ctx, undefined));
+        const target = attempt(() => healTargetOf(ctx, undefined));
         return "ok" in target &&
           run?.mode === "preview" &&
           run.group === target.ok &&
@@ -766,7 +648,7 @@ export const manifest = defineRoute<
       waitSeconds: NATIVE_APPLY_WAIT_S,
       // Armed only by a preview of this group over this snapshot: what heals is what the person saw pass.
       ready: (ctx, input) => {
-        const target = attempt(() => healTarget(ctx, input));
+        const target = attempt(() => healTargetOf(ctx, input));
         if ("no" in target) return target.no;
         const group = target.ok;
         const run = ctx.page.heal;
@@ -777,8 +659,9 @@ export const manifest = defineRoute<
       },
       run: async (ctx, input) => {
         const run = ctx.page.heal!;
-        const group = healTarget(ctx, input);
-        const { snapshot, found } = healOf(ctx, group);
+        const group = healTargetOf(ctx, input);
+        const snapshot = snapshotOf(ctx);
+        const found = healOf(snapshot, ctx.work.doc, group);
         const response = await dispatch<DuctsHeal.Res.Response>(ctx, "ducts.apply-heal", {
           groups: [healRequestGroup(found, passedOf(run))],
         });
@@ -806,10 +689,10 @@ export const manifest = defineRoute<
       input: fanInput,
       dirties: [],
       waitSeconds: NATIVE_APPLY_WAIT_S,
-      ready: (ctx, input) => why(() => fanOf(ctx, fanTarget(ctx, input))),
+      ready: (ctx, input) => why(() => fanOf(snapshotOf(ctx), fanTarget(ctx, input))),
       run: async (ctx, input) => {
         const pair = fanTarget(ctx, input);
-        const found = fanOf(ctx, pair);
+        const found = fanOf(snapshotOf(ctx), pair);
         const response = await dispatch<DuctsAssignFan.Res.Response>(
           ctx,
           "ducts.preview-assign-fan",

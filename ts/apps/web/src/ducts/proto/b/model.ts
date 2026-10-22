@@ -15,7 +15,7 @@ import { groupTree, runsOf } from "@pe/ducts-domain/topology";
 import type { DuctSnapshot } from "@pe/ducts-domain/types";
 
 import { elementNamer } from "../../claims";
-import { groupLabels } from "../../inputs";
+import { groupLabels } from "@pe/ducts-domain/words";
 import { labelOfNode, legsOf } from "../../legs";
 
 type TreeKind = "system" | "run" | "leg" | "element";
