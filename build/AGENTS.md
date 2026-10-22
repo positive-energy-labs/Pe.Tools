@@ -21,7 +21,7 @@ Owns the repo-level pack and publish automation.
 
 ## Validation
 
-See `../BUILD.md` for the complete build/runtime decision table. This executable is for packaging and release, not ordinary compile proof and not live RRD runtime freshness.
+See `../BUILD.md` for the complete build/runtime decision table. This executable is for packaging and release, not ordinary compile proof and not dev-session runtime freshness.
 
 - Build packages: `dotnet run -c Release -- pack`
 - Publish release artifacts from existing packages: `dotnet run -c Release -- publish`
@@ -52,4 +52,4 @@ See `../BUILD.md` for the complete build/runtime decision table. This executable
 - `.slnx` is IDE organization and parity input only; it is not the build-matrix source of truth.
 - `.slnx` and configuration strings are compatibility surfaces, not the intended orchestration authority.
 - Successful `./build` output does not mean the live Revit session has fresh runtime assemblies.
-- Attached validation belongs to SDK `pe-revit` live/test commands, with Peco wrappers adding Pea status/log hooks. Do not use `./build` for live runtime freshness.
+- Attached validation belongs to `pe-revit test --attach` and `pe-revit session hr`. Do not use `./build` for runtime freshness.

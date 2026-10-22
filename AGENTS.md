@@ -25,7 +25,7 @@ You are counsel: you argue and you are liable. An agent's report is testimony. T
 |---|---|
 | context rot: one session carrying everything, counsel building | `delegate` |
 | templated surfaces: a screen that fits no house | `house` |
-| plausible, not real: done on a mock, a count, a screenshot, or another agent's word | `prove` |
+| plausible, not real: done on a mock, a count, a screenshot, or another agent's word; or built on assumed soil, a shape settled before the real model was bored | `prove` |
 | bloat: adding to a place that already has too much | `purge` |
 | the dropped baton: the next session re-derives what this one knew | `relay` |
 | premature release closure: shipped bytes never made the crossing | `release` |
@@ -77,6 +77,7 @@ Among other things, this requires Pe.Tools packages to expose good "public" apis
 - Long time on task or unprogressing loops warrant a look at underlying problems. Time on task for subagents in particular reveal high "this architecture is bad" signal, in part becasue your context is not contaminated with the implementation history.
 - Name the proof lane. Source compile, package artifact, deterministic, fresh, attached, session, and installed behavior prove different things, and a Revit-backed claim also names the session's custody. Protect the user-owned dev session; SDK `pe-revit` owns execution-loop orchestration.
 - Delete a data-integrity or runtime seam only when the simpler replacement preserves its behavior and proof.
+- When departing from a prior decision or philosophy, leave a short comment at the exception naming the rule, why it does not apply here, and the boundary that still holds. Correct nearby comments that now contradict the code; do not make the next agent infer a deliberate exception from a diff.
 
 Read [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md) for product direction, [docs/BUILD.md](docs/BUILD.md) for proof and runbook guidance, and the nearest package `AGENTS.md` before local changes.
 
@@ -95,9 +96,9 @@ C# development with the Revit API requires very a specific and fragile tooling s
 Use the SDK control plane; do not hand-orchestrate Revit. The `execute` skill is the judgment layer over these rules.
 - Terminal `dotnet build`/`publish` are safe beside a running session (isolated lane → `.artifacts/`; deploy/launch from it is a build error). Raw `dotnet test` is banned for Revit-backed projects — it launches or reuses Revit itself. `pe-revit test --project <P>` is the whole test surface: it picks the rung from the project and says which and why (`--plan` prints the choice and runs nothing).
 - Never `Stop-Process`/`Start-Process`/`taskkill` Revit.exe — `pe-revit session` owns Revit process lifecycle; companion hosts belong to the product that owns them (`pe-revit service` only lists and sweeps their files).
-- `pe-revit start|hr|open|stop` are the checkout's default forms; `session start|list|hr|stop|reset|logs|dialogs` is the lifecycle family. `--id <name>` names a session and `--pid <number>` names a process. `doc open|save|close|list` acts on documents and `op run|wait|cancel|result|list` runs ops and re-reads their durable receipts. Stop/reset/close default to keep for foreground checkout sessions; other shapes require `--unsaved keep|discard`, and cold HR discards by design.
+- `pe-revit start|hr|open|stop` are the checkout's default forms; `session start|list|hr|stop|reset|logs|dialogs` is the lifecycle family. `--id <name>` names a session and `--pid <number>` names a process. `doc open|save|close|list` acts on documents and `op run|wait|cancel|result|list` runs ops and re-reads their durable receipts. A checkout session is disposable: its stop, reset, close and cold HR default to `--unsaved discard`; every other shape requires `--unsaved keep|discard`, so `keep` is always typed.
 - `pe-revit session hr` is the whole edit loop: hot apply when the payload allows it, cold swap otherwise; `--restart` forces the swap. `session list [--id|--all]` is the read-only registry state; `pe-revit doctor [--fix]` is for reported wiring trouble.
-- Custody records acquisition: `controlled` means pe-revit holds a registry row; `observed` permits reads by pid and is adopted by the first targeted mutation. The SDK resolver enforces that boundary. Never re-implement that guard here.
+- Custody records acquisition: `controlled` means pe-revit holds a registry row; `observed` permits reads by pid and is adopted by the first targeted mutation, only inside the caller's execution boundary (SDK ADR 0012: a checkout never drives an installed Revit, nor the reverse). The SDK resolver enforces that boundary. Never re-implement that guard here.
 - Read `pe-revit guide session|test|install` for mechanics; repo docs never restate them. The vendored `pe-revit-contract.ts` is the consumer contract — never hand-sync a selector grammar or argv shape beside it.
 - Use pea scripts, host operations, or `pea --prompt` only after SDK freshness when product behavior is the proof target.
 - Use Pea's doors (`pe_find`, `pe_read`, `pe_do`, Revit API docs) plus the `pea --prompt` CLI probe only for black-box product feedback, not repo source review.
@@ -135,6 +136,7 @@ After any large changes, ALWAYS clarify user intent and capture the durable know
   the payload/pattern to a file (harness Read/Grep tools where available) — see the `execute` skill.
 - Background + poll anything minutes-scale, and read `status` before any retry. (Client-kill orphans
   were field-disproven at beta.118 — the SDK reaps its own children.)
+- A `preview_evaluate` that runs past its 15 s limit kills whatever JavaScript the page is running then; inside a React render that leaves the page wedged with no error (2026-10-21, /ducts read as "stuck on pricing…"). Poll with short evaluates; never wait inside one.
 - `git stash` is one stack shared by every worktree of this repo: a `stash pop` in one worktree applies
   another agent's work (2026-10-13, wave C popped wave B's event-spine WIP). Never stash in a worktree;
   commit WIP on your branch instead.

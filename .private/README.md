@@ -13,8 +13,12 @@ Tests and scripts resolve the root from `PE_PRIVATE_FIXTURES`, defaulting to `<r
 | `fixtures/project-a/web/` | Browser takeoff demo: `manifest.json`, extract, room map, TSVs, `zones.json` (45 declared zones) | derived from `rhvac/` |
 | `fixtures/project-b/rhvac/` | second RHVAC eval set, two levels | kaitpw |
 | `fixtures/project-c/partition/live`, `level2` | Partition captures | recaptured |
+| `fixtures/project-d/partition`, `truth` | Partition solver captures: whole-level doors input, locked zones, probes; hand-drawn and takeoff truth | recaptured; truth from kaitpw and the takeoff PDFs |
 | `fixtures/families/hcb/HCB.rfa` | Mechanical-equipment family: three extrusions on unnamed planes, two face-centred duct connectors, one electrical; read by `FamilyModelCaptureTests` | kaitpw, 2026-10-06 field capture |
 | `rewrite/` | inputs for the 2026-09 history rewrite | disposable after the rewrite |
+| `banned-names.txt` | the client and person names the example-Pod hygiene tests refuse, one per line; the names are the secret, so the list never ships | kaitpw; `ts/apps/host/tests/banned-names.ts` reads it and skips when absent |
 | `sdk-feed/` | optional home for the local NuGet feed if it leaves `eng/sdk-feed` | NuGet |
 
 Project tokens are deliberate. Never put a client name in a path or a file under `dotnet/`, `ts/`, `eval/`, or `docs/`.
+
+The working tree has carried no client name since 2026-10-21 (aliases project-a to project-d). Git history before that still does, in about 2,450 commits' diffs and 38 commit messages; kaitpw deferred that rewrite on 2026-10-21 as too large for now. When it runs, `banned-names.txt` is the term list and `rewrite/` the home for its inputs.

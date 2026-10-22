@@ -12,7 +12,7 @@ Five of six crusade lines on 2026-09-22 reported the same friction: root `vp tes
 
 The ops-catalog guard never builds dotnet. `pnpm codegen` records `ops-catalog.sha`, a hash of every non-test C# source, beside `host-ops.generated.ts`; the guard compares that hash to the sources. `codegen:check` remains the slow lane that proves the generator itself.
 
-A test's lane is its path. `apps/host/tests/**` and `apps/web/src/routes/-*.test.tsx` are surface lanes; a web or host test that parses through a contracts package is a contract test; every other web test is scaffold and counts against the ceiling in `test-bar.test.ts`.
+A test's lane is its path. `apps/host/tests/**` and `apps/web/src/routes/-*.test.tsx` are surface lanes; a web or host test that parses through a contracts package is a contract test; every other web test is scaffold. The `test-bar.test.ts` scaffold ceiling was retired in the 2026-10 test purge: scaffold tests are deleted on sight rather than counted.
 
 ## Consequences
 

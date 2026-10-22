@@ -26,6 +26,8 @@ This file indexes the unique homes of surface rules. The long rationale is in gi
 
 ## 4 · Layout and addressing
 
+- Candidate `lens.house` law (kaitpw, 2026-10-21, ducts): the route head draws every verb that reaches outside the route, the same button as in the page, adapting to the selection; no effectful button is hidden in the body.
+- Candidate `lens.house` law (kaitpw, 2026-10-21, ducts): a link lands on its row; selecting a thing opens every row that names it, and the selection offers "show in Revit". A collapsed diagnostics group carries a key of kind chips with counts that filters rows and picture annotations together.
 - `Situation` (the one route head), `Ladder` (the target picker), `TableFrame` with `MasterTable`, and their specimens hold sentence addressing, visible narrowing, drill-in, fixed controls, and local fact placement.
 - `.agents/skills/lens.house/SKILL.md` laws 1, 4, 7, and 9 hold one meaning, table modes, meaningful frames, and designed empty states.
 - Spatial renderers and their measured/fixture types distinguish surveyed drawings from estimates.
@@ -39,6 +41,7 @@ This file indexes the unique homes of surface rules. The long rationale is in gi
 
 - `.agents/skills/lens.house/SKILL.md` law 10 holds kit-first authoring.
 - Component prop types, `design-guard.test.ts`, recipe-grid tests, and swatch specimens hold primitive capability, keyboard behavior, and variant coverage.
+- Kit `ActionDefinition` and `actionScopeKeys` connect control activation, scoped bindings, and Tutorial. `KeyHint`, `PopupFrame`, and `SearchControl` own shortcut, picker, and search presentation; [normalization](../features/design-system/NORMALIZATION.md) indexes these contracts.
 - `state/route-store.ts` and product manifests hold the route-visible model.
 
 ## 7 · Route anatomy
