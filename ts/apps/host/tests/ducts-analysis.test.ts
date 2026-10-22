@@ -587,6 +587,25 @@ test("analysis pages obey byte budget and preserve complete historical row cover
   );
 });
 
+test("a reading whose findings alone pass the budget keeps a row and every count", async () => {
+  const f = fixture();
+  for (let i = 0; i < 1500; i++)
+    f.snapshot.issues.push({
+      id: `stub:g:${1000 + i}`,
+      kind: "stub",
+      elementId: 1,
+      point: [0, 0, 0],
+      groupId: "g",
+      note: "Y".repeat(60),
+    } as DuctSnapshot["issues"][number]);
+  const page = await f.api.read(
+    read({ kind: "fresh", target: f.target }, { kind: "document" }, { projection: "summary" }),
+  );
+  expect(Buffer.byteLength(JSON.stringify(page))).toBeLessThanOrEqual(65536);
+  expect(page.rows.length).toBeGreaterThan(0);
+  expect(page.findings.length).toBeLessThan(1500);
+  expect(page.findingCounts.byKind.stub).toBe(1500);
+});
 test("v5 rejects malformed input bytes before JSON parsing and never reacquires historical data", async () => {
   const f = fixture();
   const fresh = await f.api.read(read({ kind: "fresh", target: f.target }));
@@ -1023,10 +1042,18 @@ test("the survey joins a sub-tolerance gap, takes the terminal flow from the loa
       note: expect.stringContaining("computed by the route when the path prices"),
     }),
   ]);
-  expect(summary.findingCounts).toEqual({
+  expect(summary.findingCounts).toMatchObject({
     byKind: { "joined-by-proximity": 1, "no-fan-static": 1 },
     byClearer: { route: 1, pea: 0, person: 1 },
   });
+  // Graded keys carry the grade; the ungraded finding keeps its bare kind.
+  expect(Object.values(summary.findingCounts.byKindAndGrade).reduce((a, b) => a + b, 0)).toBe(2);
+  const graded = Object.keys(summary.findingCounts.byKindAndGrade).filter((k) =>
+    k.startsWith("joined-by-proximity:"),
+  );
+  expect(graded).toHaveLength(1);
+  expect(["near-miss", "stretched", "anomalous"]).toContain(graded[0]!.split(":")[1]);
+  expect(summary.findingCounts.byKindAndGrade["no-fan-static"]).toBe(1);
   expect(summary.completeness.reasons.map((r) => r.code)).not.toContain("unreached-terminals");
   expect(summary.completeness.reasons.map((r) => r.code)).not.toContain("unknown-terminal-flow");
   const terminals = ductsAnalysisResponseSchema.parse(

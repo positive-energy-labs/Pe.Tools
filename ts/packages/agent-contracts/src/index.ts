@@ -51,3 +51,4 @@ export * from "./plugin-runtime.ts";
 
 export * from "./thread-export.ts";
 export * from "./ducts-analysis.ts";
+export * from "./ducts-guide.ts";

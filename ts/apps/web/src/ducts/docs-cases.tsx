@@ -1,6 +1,11 @@
 import { TooltipHint } from "@pe/kit/lang/tooltip";
 import { Link } from "@tanstack/react-router";
-import { CASE_GROUPS, DUCT_CASES, type CaseGroup, type DuctCase } from "./cases/data";
+import {
+  CASE_GROUPS,
+  DUCT_CASES,
+  type CaseGroup,
+  type DuctCase,
+} from "@pe/agent-contracts/ducts-guide";
 import { CaseDrawing, CaseLegend } from "./cases/draw";
 
 const groups = Object.keys(CASE_GROUPS) as CaseGroup[];
