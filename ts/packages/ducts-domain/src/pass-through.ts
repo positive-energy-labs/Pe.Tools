@@ -94,7 +94,7 @@ export function passThrough(snapshot: DuctSnapshot, passive: ReadonlySet<number>
   }
   const issueKind = new Map(snapshot.issues.map((i) => [i.id, i]));
   const groups: Group[] = [];
-  const issues = [...snapshot.issues.map((i) => ({ ...i, groupId: find(i.groupId) }))];
+  const issues = snapshot.issues.map((i) => ({ ...i, groupId: find(i.groupId) }));
   const merged = new Map<string, string[]>();
   for (const [id, list] of members) {
     const inline = touched.filter((u) => groupOf.get(u) === id);
