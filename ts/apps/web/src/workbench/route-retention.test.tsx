@@ -10,13 +10,7 @@ import {
   RouterProvider,
   useRouterState,
 } from "@tanstack/react-router";
-import {
-  ductsRouteState,
-  readingKey,
-  readLink,
-  routePageSchema,
-  type ThreadTab,
-} from "@pe/agent-contracts";
+import { ductsRouteState, readingKey, routeAddress, type ThreadTab } from "@pe/agent-contracts";
 import { z } from "zod";
 import { peClient } from "#/host/pe-client";
 import { peReadings } from "#/readings";
@@ -31,13 +25,13 @@ import { RouteRetention } from "./route-retention";
 import * as routeHost from "#/route/host";
 
 const native = vi.fn<(...args: any[]) => Promise<null>>(async () => null);
-const poseA = readLink("ducts", { viewport: "orbit:45,30,1.25@0,0,0" }).page.viewport;
-const poseB = readLink("ducts", { viewport: "orbit:90,20,2@1,2,3" }).page.viewport;
+const poseA = routeAddress("ducts").read({ viewport: "orbit:45,30,1.25@0,0,0" }).page.viewport;
+const poseB = routeAddress("ducts").read({ viewport: "orbit:90,20,2@1,2,3" }).page.viewport;
 const manifest = defineRoute({
   key: "ducts",
   name: "Ducts",
   address: "ducts",
-  page: routePageSchema("ducts"),
+  page: routeAddress("ducts").schema,
   work: ductsRouteState,
   actions: {
     native: {
@@ -56,7 +50,7 @@ const otherManifest = defineRoute({
   key: "families",
   name: "Families",
   address: "families",
-  page: routePageSchema("families"),
+  page: routeAddress("families").schema,
 });
 const url = urlPage(manifest)!;
 const useDuct = (work?: string) => useRoute(manifest, { work });

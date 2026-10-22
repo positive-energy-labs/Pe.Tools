@@ -1,11 +1,6 @@
 import { Activity, Suspense, useEffect, useRef, type ComponentType, type ReactNode } from "react";
 import { useRouter, useRouterState } from "@tanstack/react-router";
-import {
-  THREAD_TABS_MAX,
-  routeAddresses,
-  type RouteKey,
-  type ThreadTab,
-} from "@pe/agent-contracts";
+import { THREAD_TABS_MAX, routeAddress, type RouteKey, type ThreadTab } from "@pe/agent-contracts";
 import { RouteActivity, type RouteActivityScope } from "#/route/activity";
 import { PaneErrorBoundary } from "#/components/lang/pane";
 
@@ -99,7 +94,7 @@ export function RouteRetention({
       : entry.route === route,
   );
   if (route) {
-    const pathname = routeAddresses[route].path;
+    const pathname = routeAddress(route).path;
     const search = location.search as Record<string, unknown>;
     const source = JSON.stringify([search.demo ?? null, search.live ?? null]);
     let entry = retained.current.find(

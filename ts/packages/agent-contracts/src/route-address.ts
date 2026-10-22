@@ -34,7 +34,7 @@ export type RoutePage<R extends RouteKey> = {
 };
 type UrlKey<R extends RouteKey> = KeysWhere<FieldsOf<R>, { url: History }>;
 type ShareKey<R extends RouteKey> = Exclude<UrlKey<R>, KeysWhere<FieldsOf<R>, { share: false }>>;
-type UrlPage<R extends RouteKey> = Pick<RoutePage<R>, UrlKey<R>>;
+export type UrlPage<R extends RouteKey> = Pick<RoutePage<R>, UrlKey<R>>;
 export type LinkPage<R extends RouteKey> = Partial<Pick<RoutePage<R>, ShareKey<R>>>;
 
 export type RouteViewRoute = {
@@ -78,7 +78,7 @@ export interface RouteLease<R extends RouteKey> {
 export interface RouteAddress<R extends RouteKey> {
   readonly route: R;
   /** The link target; the web file route of the same path owns it. */
-  readonly path: `/${string}`;
+  readonly path: Routes[R]["path"];
   readonly title: string;
   /** The typed Page schema of every declared field; a web page `.extend`s it with Page-only state. */
   readonly schema: z.ZodObject<{ [K in keyof FieldsOf<R> & string]: SchemaOf<FieldsOf<R>[K]> }>;

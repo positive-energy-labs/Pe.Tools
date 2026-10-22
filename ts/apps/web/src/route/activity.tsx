@@ -1,6 +1,6 @@
 import { createContext, useCallback, useContext, useMemo, useSyncExternalStore } from "react";
 import { useRouter } from "@tanstack/react-router";
-import { readLink, type Carry, type RouteKey, type UrlPage } from "@pe/agent-contracts";
+import { routeAddress, type Carry, type RouteKey, type UrlPage } from "@pe/agent-contracts";
 
 type Disposable = { dispose(): void };
 
@@ -34,7 +34,7 @@ export function useRouteSearch(route?: RouteKey) {
     () => scope?.search ?? router?.state.location.search ?? fallback,
   );
   const search = scope?.search ?? live;
-  const read = readLink(route ?? "pea", search);
+  const read = routeAddress(route ?? "pea").read(search);
   // Router location is raw search; useSearch used to supply root-validated carry fields.
   return {
     ...(route ? read.page : search),
