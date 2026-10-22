@@ -1,532 +1,298 @@
-import { useCallback, useEffect, useRef, useState, useTransition } from "react";
-import { useScopeKeys } from "@pe/kit/keys";
-import { Button } from "@pe/kit/lang/button";
+/**
+ * /space: what `Pe.Revit.Space` holds for one document, drawn on the spatial kit. The sentence
+ * names the document and the host element ids a capture asks for; `capture` and `context` write
+ * the new scene's hash to the page (the only writers of `scene`), and the scene artifact that hash
+ * names is fetched and decoded once (`useSceneArtifact`), never captured on a URL read. Each answer
+ * verb's result rides the Page and draws as one layer over the meshes.
+ *
+ * `?demo=fixture` mounts a synthetic PSC1 scene and one fixture answer per op; no host is read.
+ */
+import { useEffect, useMemo, useState } from "react";
+import { spaceElementKey, type Reading } from "@pe/agent-contracts";
 import { Input } from "@pe/kit/lang/input";
-import { ListPopup } from "@pe/kit/lang/list-popup";
-import { RouteShell, defineRoute } from "#/route";
-import { captureScene } from "#/scene/host";
-import { fetchSceneArtifact } from "#/scene/artifact";
-import { spaceViewSchema } from "@pe/agent-contracts/space-view";
-import { type CutMenu } from "./canvas";
-import { SpaceViewer } from "./viewer";
-import { SceneCache, type ResidentScene } from "#/scene/scene-cache";
-import { spaceMark } from "./performance";
+
+import { Surface } from "#/components/lang/surface";
+import { frozenDemo } from "#/host/demo-client";
+import { RouteShell, useRoute, useRouteThread } from "#/route";
+import { useChooseTarget } from "#/route/shell";
+import { Situation } from "#/route/situation";
+import { LadderPicker, useDocumentLadder } from "#/route/situation-ladder";
+import { NativeObservationScope, type NativeObservation } from "#/revit/observation";
+import type { Psc1Metadata } from "#/scene/psc1";
+import { useSceneArtifact } from "#/scene/use-scene";
+import type { Layer3D } from "#/scene/types";
+
+import { CutControls } from "./cut-controls";
+import { AnswerForms, EncodingLegend, PickFacts } from "./facts";
+import { FIXTURE_ANSWERS, FIXTURE_SCENE } from "./fixture";
 import {
-  AXES,
-  AXIS_LABEL,
-  cutPolygons,
-  decodeScene,
-  deleteNode,
-  elementKey,
-  emptyCut,
-  frameRect,
-  initialView,
-  insertNode,
-  seedCut,
-  type Axis,
-  type Cut,
-  type Metadata,
-  type ViewState,
-} from "./state";
+  boxesLayer,
+  legendOf,
+  levelsLayer,
+  probeLayer,
+  sliceLayer,
+  sweepLayer,
+  treeLayer,
+  type SpaceLayer,
+} from "./layers";
+import { manifest } from "./manifest";
+import { SpacePicture } from "./picture";
+import { cutPolygons } from "./state";
 
-type SceneData = { metadata: Metadata; positions: Float32Array };
+const idsText = (ids: readonly number[]) => ids.join(", ");
+const DEMO_PAGE = {
+  ...FIXTURE_ANSWERS,
+  ids: [201, 202],
+  layers: ["meshes", "context", "cuts", "boxes", "levels"] as SpaceLayer[],
+};
 
-const manifest = defineRoute({
-  key: "space",
-  name: "Space",
-  views: [{ key: "3d", label: "3D", draws: () => <SpaceRoute /> }],
-  docs: "Real resident Space triangles in host internal feet. Capture once, then orbit, select, hide, isolate and cut locally. Three cuts, one per axis (Top, North, East), each a polyline extruded through the scene; the view keeps their intersection. Click a corner floater to edit that axis orthographically; Esc returns to the saved 3D camera. Drag node or edge grips in 3D or the editor: an edge folds along its neighbours and collapses to their corner when pushed past it; a node dropped on its neighbour merges. Right click an edge to add a node, a node to delete it. Open cuts keep two nodes and extend to the scope edge keeping their left side; closed cuts keep three and keep their inside. Import/export JSON shares the exact view state with an agent.",
-});
-export function SpaceRoute({
-  scene: sceneId,
-  session,
-  doc,
-  ids: initialIds,
-}: { scene?: string; session?: string; doc?: string; ids?: string } = {}) {
-  const [data, setData] = useState<SceneData | null>(null);
-  const cache = useRef(new SceneCache<SceneData>());
-  const [scenes, setScenes] = useState<ResidentScene<SceneData>[]>([]);
-  const loading = useRef<AbortController | null>(null);
-  const [view, setView] = useState<ViewState | null>(null);
-  const [ids, setIds] = useState(initialIds ?? "");
-  const [busy, startTransition] = useTransition();
+/** `url` is false in a chat pane, which does not own the address. */
+export function SpaceRoute({ url = true }: { url?: boolean } = {}) {
+  const demo = useMemo(() => frozenDemo() === "fixture", []);
+  const [chosen] = useChooseTarget();
+  const thread = useRouteThread();
+  const [provided, setProvided] = useState<{ scene: Reading<unknown> }>({
+    scene: { state: "absent" },
+  });
+  const handle = useRoute(manifest, {
+    target: chosen,
+    thread,
+    provided,
+    url,
+    page: demo ? DEMO_PAGE : undefined,
+  });
+  const [page, setPage] = handle.page;
+  const read = useSceneArtifact(demo ? null : (page.scene ?? null));
+  const meshes = demo ? FIXTURE_SCENE.meshes : read.meshes;
+  const metadata: Psc1Metadata | null = demo ? FIXTURE_SCENE.metadata : read.metadata;
+  useEffect(() => {
+    setProvided({
+      scene: metadata ? { state: "ready", observation: metadata } : { state: "absent" },
+    });
+  }, [metadata]);
+  const ladder = useDocumentLadder(handle);
+  const doc =
+    handle.resolution.kind === "resolved" && handle.resolution.target.kind === "document"
+      ? handle.resolution.target.ref
+      : null;
   const [error, setError] = useState<string | null>(null);
-  // Transient: which axis editor holds the main picture, which axis the cut controls act on.
-  const [editing, setEditing] = useState<Axis | null>(null);
-  const [axis, setAxis] = useState<Axis>("top");
-  const [menu, setMenu] = useState<CutMenu | null>(null);
-  const [anchor, setAnchor] = useState<HTMLDivElement | null>(null);
-  const [editor, setEditor] = useState(false);
-  const [json, setJson] = useState("");
-  const loadGeneration = useRef(0);
-  const loadedId = useRef<string | null>(null);
-  const change = useCallback(
-    (patch: Partial<ViewState>) => {
-      if (!view || !data) return false;
-      if (patch.cuts) {
-        try {
-          cutPolygons(patch.cuts, data.metadata.bounds);
-        } catch (e) {
-          setError(String(e));
-          return false;
-        }
-      }
-      setError(null);
-      setView((v) => v && { ...v, ...patch });
-      return true;
-    },
-    [data, view],
+  const [ids, setIds] = useState(idsText(page.ids));
+  useEffect(() => setIds(idsText(page.ids)), [page.ids]);
+  const commitIds = () => {
+    const parts = ids.split(/[\s,]+/).filter(Boolean);
+    if (!parts.every((p) => /^\d+$/.test(p)))
+      return setError("Use positive host element ids separated by commas");
+    setError(null);
+    const next = parts.map(Number);
+    if (idsText(next) !== idsText(page.ids)) setPage({ ids: next }, { history: "push" });
+  };
+
+  // The displayed scene's members (and the rows' host ids) are what the element menu may target.
+  const rows = page.rows?.response ?? null;
+  const nativeObservation = useMemo<NativeObservation>(
+    () => ({
+      scope: {
+        document: demo || !metadata ? null : doc,
+        source: demo ? "fixture" : "native",
+        documentKey: metadata?.stamp.hostDocumentKey,
+      },
+      references: [
+        ...(metadata?.elements ?? [])
+          .filter((e) => e.handle.linkInstanceId == null)
+          .map((e) => ({ elementId: e.handle.elementId, uniqueId: e.handle.uniqueId })),
+        ...(rows?.elementId ?? [])
+          .filter(
+            (_, i) =>
+              rows!.stamp.sources.find((s) => s.source === rows!.source[i])?.kind === "Host",
+          )
+          .map((elementId) => ({ elementId })),
+      ],
+    }),
+    [demo, doc, metadata, rows],
   );
-  const load = useCallback(async (id: string, imported?: ViewState) => {
-    const generation = ++loadGeneration.current;
-    spaceMark("selection", { id, generation });
-    loading.current?.abort();
-    const abort = new AbortController();
-    loading.current = abort;
-    let loaded: SceneData | undefined = cache.current.get(id);
-    spaceMark("cache", { id, hit: !!loaded });
-    if (!loaded) {
-      try {
-        const buffer = await fetchSceneArtifact(id, abort.signal);
-        if (generation !== loadGeneration.current) return;
-        spaceMark("body", { id, bytes: buffer.byteLength });
-        const decoded = decodeScene(buffer);
-        spaceMark("decode", { id });
-        loaded = decoded;
-      } catch (e) {
-        if (abort.signal.aborted || generation !== loadGeneration.current) return;
-        throw e;
-      }
-    }
-    if (generation !== loadGeneration.current) return;
-    let restored = imported;
-    if (!restored) {
-      try {
-        const saved = localStorage.getItem(`pe.space.view.${id}`);
-        const parsed = saved ? spaceViewSchema.safeParse(JSON.parse(saved)) : null;
-        if (parsed?.success && parsed.data.scene === id) restored = parsed.data;
-      } catch {
-        // A corrupt or unavailable local cache must not prevent opening the durable scene.
-      }
-    }
-    if (restored) cutPolygons(restored.cuts, loaded.metadata.bounds);
-    if (!cache.current.entries.has(id)) loaded = cache.current.put(id, loaded);
-    setData(loaded);
-    loadedId.current = id;
-    // LRU order must not move mounted canvases: React StrictMode reconnects effects on moves.
-    setScenes((previous) => {
-      const next = previous.filter((entry) => cache.current.entries.get(entry.id) === entry);
-      for (const entry of cache.current.entries.values())
-        if (!next.includes(entry)) next.push(entry);
-      return next.length === previous.length && next.every((entry, i) => entry === previous[i])
-        ? previous
-        : next;
-    });
-    spaceMark("resident", { id, count: cache.current.entries.size, bytes: cache.current.bytes });
-    setView(restored ?? initialView(loaded.metadata, id));
-    setEditing(null);
-    setMenu(null);
-    setError(null);
-    const url = new URL(window.location.href);
-    url.searchParams.set("scene", id);
-    window.history.replaceState(window.history.state, "", url);
-  }, []);
-  const open = (id: string, imported?: ViewState) => {
-    const read = async () => {
-      try {
-        await load(id, imported);
-      } catch (e) {
-        setError(String(e));
-      }
-    };
-    // A resident scope has no I/O. Its selection is urgent, not background transition work.
-    if (cache.current.entries.has(id)) void read();
-    else startTransition(read);
-  };
-  useEffect(() => {
-    if (!view) return;
-    try {
-      localStorage.setItem(
-        `pe.space.view.${view.scene}`,
-        JSON.stringify(spaceViewSchema.parse(view)),
-      );
-    } catch {
-      setError("View could not be saved in this browser. Export View JSON before reloading.");
-    }
-  }, [view]);
-  useEffect(() => {
-    if (sceneId && loadedId.current !== sceneId) {
-      startTransition(async () => {
-        try {
-          await load(sceneId);
-        } catch (e) {
-          setError(String(e));
-        }
-      });
-    }
-    return () => {
-      loadGeneration.current++;
-      loading.current?.abort();
-    };
-  }, [sceneId, load]);
-  const capture = async (focusOnly = true) => {
-    setError(null);
-    const generation = ++loadGeneration.current;
-    loading.current?.abort();
-    const abort = new AbortController();
-    loading.current = abort;
-    try {
-      spaceMark("capture-request", { ids, focusOnly });
-      const artifact = await captureScene(
-        ids.trim()
-          ? ids
-              .trim()
-              .split(/[\s,]+/)
-              .map(Number)
-          : [],
-        { bridgeSessionId: session, openDocumentId: doc, signal: abort.signal },
-        focusOnly,
-      );
-      if (generation !== loadGeneration.current || abort.signal.aborted) return;
-      spaceMark("capture-response", { id: artifact.id, focusOnly });
-      await load(artifact.id);
-    } catch (e) {
-      if (!abort.signal.aborted && generation === loadGeneration.current) setError(String(e));
-    }
-  };
-  const setCut = (target: Axis, next: Cut | null) => {
-    if (!view) return false;
-    setAxis(target);
-    return change({ cuts: { ...view.cuts, [target]: next ?? emptyCut } });
-  };
-  const edit = (target: Axis | null) => {
-    setMenu(null);
-    setEditing(target);
-    if (target) setAxis(target);
-  };
-  useScopeKeys([
-    {
-      hotkey: "Escape",
-      label: "return to 3D",
-      says: "Leave the axis editor and return to the saved 3D camera",
-      available: () => editing !== null && menu === null,
-      callback: () => edit(null),
-    },
-  ]);
-  const active = view?.cuts[axis];
-  const menuCut = menu && view?.cuts[menu.axis];
-  type MenuAction = {
-    key: string;
-    label: string;
-    refusal: string | null;
-    run: () => Cut | null | string;
-  };
-  const menuActions: MenuAction[] = [];
-  if (menu && menuCut && menu.kind === "edge")
-    menuActions.push({
-      key: "add",
-      label: "Add node",
-      refusal: null,
-      run: () => insertNode(menuCut, menu.index, menu.point),
-    });
-  if (menu && menuCut && menu.kind === "node") {
-    const result = deleteNode(menuCut, menu.index);
-    menuActions.push({
-      key: "delete",
-      label: result === null ? "Delete node (clears the cut)" : "Delete node",
-      refusal: typeof result === "string" ? result : null,
-      run: () => result,
-    });
-  }
-  const selected = data?.metadata.elements.find((e) => elementKey(e) === view?.selected);
+
+  const on = useMemo(() => new Set<SpaceLayer>(page.layers), [page.layers]);
+  const legend = useMemo(() => (rows ? legendOf(rows, page.encoding) : []), [rows, page.encoding]);
+  // One Layer3D per answer that is on, rebuilt only when its answer (or its ink) changes.
+  const boxes = useMemo(
+    () => (rows ? boxesLayer(rows, page.encoding, legend, page.row) : null),
+    [rows, page.encoding, legend, page.row],
+  );
+  const levels = useMemo(
+    () => (page.status && meshes ? levelsLayer(page.status.response, meshes.bounds) : null),
+    [page.status, meshes],
+  );
+  const tree = useMemo(() => page.tree && treeLayer(page.tree.response), [page.tree]);
+  const slice = useMemo(
+    () => page.slice && sliceLayer(page.slice.request, page.slice.response),
+    [page.slice],
+  );
+  const probe = useMemo(
+    () => page.probe && probeLayer(page.probe.request, page.probe.response),
+    [page.probe],
+  );
+  const sweep = useMemo(
+    () => page.sweep && sweepLayer(page.sweep.request, page.sweep.response),
+    [page.sweep],
+  );
+  const layers = useMemo(
+    () =>
+      (
+        [
+          ["boxes", boxes],
+          ["levels", levels],
+          ["tree", tree],
+          ["slice", slice],
+          ["probe", probe],
+          ["sweep", sweep],
+        ] as const
+      ).flatMap(([key, layer]): Layer3D[] => (layer && on.has(key) ? [layer] : [])),
+    [boxes, levels, tree, slice, probe, sweep, on],
+  );
+
+  const element =
+    metadata?.elements.find((e) => spaceElementKey(e.handle) === page.selected) ?? null;
+  const instance = meshes?.instances.find((i) => i.key === page.selected) ?? null;
+  const partition = element
+    ? (metadata!.stamp.sources.find(
+        (s) =>
+          s.documentKey === element.handle.documentKey &&
+          (s.linkInstanceId ?? null) === (element.handle.linkInstanceId ?? null),
+      )?.kind ?? null)
+    : null;
+
+  const status = demo
+    ? null
+    : !page.scene
+      ? doc
+        ? "no scene: name host element ids, then capture (or load context for the whole resident world)"
+        : "no scene: choose a document, then capture"
+      : read.error
+        ? `scene: ${read.error}`
+        : read.pending
+          ? "reading the scene artifact…"
+          : null;
+  const actions = handle.actions;
+  const sentence = (
+    <>
+      on{" "}
+      {demo ? (
+        "the scene fixture"
+      ) : (
+        <LadderPicker ladder={ladder} disabled={handle.busy !== null} />
+      )}
+      {", host ids "}
+      <span className="inline-block w-48 align-middle">
+        <Input
+          aria-label="Host element ids a capture asks for"
+          value={ids}
+          placeholder="comma separated"
+          onChange={(e) => setIds(e.target.value)}
+          onBlur={commitIds}
+          onKeyDown={(e) => e.key === "Enter" && commitIds()}
+        />
+      </span>
+      {metadata
+        ? `; scene ${metadata.phase === "focus" ? "of those alone" : "with its context"}, ${metadata.elements.length} elements`
+        : "; no scene"}
+      .
+    </>
+  );
+
   return (
-    <RouteShell manifest={manifest}>
-      <div className="flex min-h-0 flex-1 flex-col gap-2 p-2">
-        <div className="flex flex-wrap items-center gap-2 hairline-b pb-2">
-          <span>Host MEP ids</span>
-          <div className="w-64">
-            <Input
-              aria-label="Host MEP element ids"
-              value={ids}
-              onChange={(e) => setIds(e.target.value)}
-              placeholder="Comma separated host element ids"
-            />
-          </div>
-          <Button
-            label="Capture scene"
-            busy={busy}
-            onClick={() => startTransition(() => capture())}
-          >
-            Capture scene
-          </Button>
-          {data?.metadata.phase === "focus" && (
-            <Button
-              label="Capture surrounding context"
-              busy={busy}
-              onClick={() => startTransition(() => capture(false))}
-            >
-              Load surrounding context
-            </Button>
-          )}
-          {view && (
-            <>
-              <Button
-                label="Fit scene"
-                onClick={() => {
-                  if (data) {
-                    const fitted = initialView(data.metadata, view.scene);
-                    change({ camera: fitted.camera, target: fitted.target });
-                  }
+    <NativeObservationScope value={nativeObservation}>
+      <Surface
+        head={
+          <RouteShell
+            manifest={manifest}
+            handle={handle}
+            situation={
+              <Situation
+                handle={handle}
+                target={{
+                  session: ladder.sessionWord,
+                  document: demo ? "scene fixture" : ladder.docWord,
                 }}
-              >
-                Fit
-              </Button>
-              <Button
-                label="Hide selected"
-                refusal={!selected ? "Select an element" : null}
-                onClick={() =>
-                  change({ hidden: [...new Set([...view.hidden, view.selected!])], selected: null })
-                }
-              >
-                Hide
-              </Button>
-              <Button
-                label="Isolate selected"
-                refusal={!selected ? "Select an element" : null}
-                onClick={() =>
-                  change({
-                    isolated: [view.selected!],
-                    hidden: view.hidden.filter((key) => key !== view.selected),
-                  })
-                }
-              >
-                Isolate
-              </Button>
-              <Button label="Show all" onClick={() => change({ hidden: [], isolated: null })}>
-                Show all
-              </Button>
-              <Button
-                label="View state JSON"
-                pressed={editor}
-                onClick={() => {
-                  setJson(JSON.stringify(view, null, 2));
-                  setEditor(!editor);
-                }}
-              >
-                View JSON
-              </Button>
-            </>
-          )}
-          {!view && (
-            <Button label="Import view JSON" onClick={() => setEditor(!editor)}>
-              Import view JSON
-            </Button>
-          )}
-        </div>
+                sentence={sentence}
+                ledger={[
+                  ["scene", page.scene ? `${page.scene.slice(0, 12)}…` : demo ? "fixture" : "none"],
+                  [
+                    "captured",
+                    metadata
+                      ? `${metadata.stamp.builtUtc} · epoch ${metadata.stamp.epoch} · ${metadata.stamp.fresh ? "fresh" : "stale"}`
+                      : "none",
+                  ],
+                  ["source", demo ? "fixture" : "host"],
+                ]}
+              />
+            }
+          />
+        }
+      >
+        {demo && (
+          <p className="px-2 py-1 t-small">
+            Fixture review: a synthetic scene and invented answers. No Revit capture.
+          </p>
+        )}
         {error && (
-          <p role="alert" data-tone="alarm">
+          <p role="alert" data-tone="alarm" className="px-2 m-0">
             {error}
           </p>
         )}
-        {data?.metadata.phase === "focus" && (
-          <p>Selected elements only. Surrounding context has not been loaded.</p>
-        )}
-        {!!data?.metadata.unavailableElements?.length && (
-          <p data-tone="caution">
-            {data.metadata.unavailableElements.length} requested elements have no available mesh:{" "}
-            {data.metadata.unavailableElements
-              .map((element) => `${element.elementId} (${element.reason})`)
-              .join(", ")}
+        {!!metadata?.unavailableElements.length && (
+          <p data-tone="caution" className="px-2 m-0">
+            {metadata.unavailableElements.length} requested elements have no mesh:{" "}
+            {metadata.unavailableElements.map((e) => `${e.elementId} (${e.reason})`).join(", ")}
           </p>
         )}
-        {view && active && (
-          <div className="flex flex-wrap items-center gap-2">
-            {AXES.map((a) => (
-              <Button
-                key={a}
-                label={`${AXIS_LABEL[a]} cut controls`}
-                pressed={axis === a}
-                onClick={() => setAxis(a)}
-              >
-                {AXIS_LABEL[a]}
-              </Button>
-            ))}
-            {active.polyline.length === 0 ? (
-              <>
-                <Button
-                  label={`Add a ${AXIS_LABEL[axis]} section line`}
-                  onClick={() =>
-                    setCut(axis, seedCut(frameRect(axis, data!.metadata.bounds), "line"))
-                  }
-                >
-                  Add line
-                </Button>
-                <Button
-                  label={`Add a ${AXIS_LABEL[axis]} box`}
-                  onClick={() =>
-                    setCut(axis, seedCut(frameRect(axis, data!.metadata.bounds), "box"))
-                  }
-                >
-                  Add box
-                </Button>
-              </>
-            ) : (
-              <>
-                <Button
-                  label={active.closed ? "Reopen polygon" : "Close polygon"}
-                  refusal={
-                    !active.closed && active.polyline.length < 3 ? "Add a third node first" : null
-                  }
-                  onClick={() => setCut(axis, { ...active, closed: !active.closed })}
-                >
-                  {active.closed ? "Reopen" : "Close polygon"}
-                </Button>
-                <span>Offset ft</span>
-                <div className="w-20">
-                  <Input
-                    type="number"
-                    aria-label="Cut offset in feet, toward the left of the drawing direction"
-                    step={0.5}
-                    value={active.offset}
-                    onChange={(e) => {
-                      const offset = Number(e.target.value);
-                      if (e.target.value !== "" && Number.isFinite(offset))
-                        setCut(axis, { ...active, offset });
-                    }}
-                  />
-                </div>
-                <Button
-                  label="Reverse retained side"
-                  onClick={() => setCut(axis, { ...active, keepInside: !active.keepInside })}
-                >
-                  Reverse side
-                </Button>
-                <Button
-                  label={`Clear the ${AXIS_LABEL[axis]} cut`}
-                  onClick={() => setCut(axis, null)}
-                >
-                  Clear
-                </Button>
-              </>
-            )}
-            <span>
-              {active.polyline.length === 0
-                ? `No ${AXIS_LABEL[axis]} cut: nothing is clipped on this axis. Add a line or box, then drag it.`
-                : `${active.closed ? (active.keepInside ? "Inside" : "Outside") : active.keepInside ? "Left side" : "Right side"} kept. Drag grips: an edge folds along its neighbours and collapses to their corner when pushed past it; drop a node on a neighbour to merge. Open keeps 2 nodes (removing the last edge clears the cut), closed keeps 3.`}
-            </span>
-          </div>
-        )}
-        {editor && (
-          <div className="flex flex-col gap-2">
-            <textarea
-              aria-label="Serializable Space view state JSON"
-              className="w-full min-h-32 face-mono"
-              value={json}
-              onChange={(e) => setJson(e.target.value)}
+        <div className="flex min-h-0 flex-1">
+          <SpacePicture
+            meshes={meshes}
+            metadata={metadata}
+            page={page}
+            setPage={setPage}
+            layers={layers}
+            status={status}
+            onError={setError}
+          />
+          <aside
+            className="flex w-80 shrink-0 flex-col gap-3 overflow-auto p-2 hairline-l"
+            aria-label="Space facts"
+          >
+            <PickFacts
+              page={page}
+              element={element}
+              instance={instance}
+              partition={partition}
+              actions={actions}
             />
-            <div className="flex gap-2">
-              <Button
-                label="Apply view JSON"
-                onClick={() => {
+            {page.mode !== "3d" && meshes ? (
+              <CutControls
+                axis={page.mode}
+                cuts={page.cuts}
+                bounds={meshes.bounds}
+                onCuts={(cuts, how) => {
                   try {
-                    const imported = spaceViewSchema.parse(JSON.parse(json));
-                    if (view?.scene === imported.scene) {
-                      cutPolygons(imported.cuts, data!.metadata.bounds);
-                      setView(imported);
-                      setEditing(null);
-                      setError(null);
-                    } else {
-                      open(imported.scene, imported);
-                    }
+                    cutPolygons(cuts, meshes.bounds);
                   } catch (e) {
-                    setError(String(e));
+                    return setError((e as Error).message);
                   }
+                  setError(null);
+                  setPage({ cuts }, { history: how });
                 }}
-              >
-                Apply JSON
-              </Button>
-              <Button
-                label="Refresh view JSON"
-                onClick={() => setJson(JSON.stringify(view, null, 2))}
-              >
-                Refresh JSON
-              </Button>
-            </div>
-          </div>
-        )}
-        {data && view ? (
-          <>
-            <div className="relative min-h-64 flex-1" data-surface="recess">
-              <SpaceViewer
-                scenes={scenes}
-                state={view}
-                editing={editing}
-                onEdit={edit}
-                onCut={setCut}
-                onChange={change}
-                onMenu={setMenu}
-                onError={setError}
               />
-              {menu && (
-                <div
-                  ref={setAnchor}
-                  className="pointer-events-none absolute size-px"
-                  style={{ left: menu.x, top: menu.y }}
-                />
-              )}
-              {menu && anchor && (
-                <ListPopup<MenuAction>
-                  anchor="caret"
-                  purpose="menu"
-                  caret={anchor}
-                  open
-                  onOpenChange={(next) => {
-                    if (!next) setMenu(null);
-                  }}
-                  aria-label={`${AXIS_LABEL[menu.axis]} cut ${menu.kind} actions`}
-                  items={menuActions}
-                  keyOf={(item) => item.key}
-                  labelOf={(item) => item.label}
-                  filter="none"
-                  select="single"
-                  empty="no actions"
-                  row={(item) => ({ label: item.label, refusal: item.refusal })}
-                  onPick={(item) => {
-                    const result = item.run();
-                    setMenu(null);
-                    if (typeof result === "string") setError(result);
-                    else setCut(menu.axis, result);
-                  }}
-                />
-              )}
-            </div>
-            <div className="flex flex-wrap gap-x-4 hairline-t pt-1">
-              <span>
-                {data.metadata.triangles.toLocaleString()} triangles ·{" "}
-                {data.metadata.elements.length.toLocaleString()} elements ·{" "}
-                {data.metadata.omittedElements} omitted at budget
-              </span>
-              <span>
-                Snapshot captured {data.metadata.stamp.builtUtc} · epoch {data.metadata.stamp.epoch}{" "}
-                · {data.metadata.stamp.fresh ? "fresh at capture" : "stale at capture"} · host
-                internal ft
-              </span>
-              <a href={`?scene=${view.scene}`}>Saved scene</a>
-            </div>
-            <p className="face-mono">
-              {selected
-                ? `${selected.handle.category} · element ${selected.handle.elementId} · link ${selected.handle.linkInstanceId ?? "host"} · ${selected.handle.uniqueId} · document ${selected.handle.documentKey}`
-                : "No element selected"}
-            </p>
-          </>
-        ) : (
-          <p>
-            {busy
-              ? "Reading real Space mesh…"
-              : "Capture the active document, or import a view JSON referencing a saved scene. Use host MEP ids to include only their surrounding context."}
-          </p>
-        )}
-      </div>
-    </RouteShell>
+            ) : null}
+            {on.has("boxes") && rows ? (
+              <EncodingLegend
+                encoding={page.encoding}
+                legend={legend}
+                onEncoding={(encoding) => setPage({ encoding })}
+              />
+            ) : null}
+            <AnswerForms on={on} page={page} actions={actions} />
+          </aside>
+        </div>
+      </Surface>
+    </NativeObservationScope>
   );
 }

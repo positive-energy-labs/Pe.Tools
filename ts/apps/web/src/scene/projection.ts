@@ -31,6 +31,21 @@ export function projectThrough(camera: THREE.Camera, size: Size): Project {
   };
 }
 
+/** Canvas px to the world ray under them: an origin on the near plane and a unit direction. */
+export type Ray = (x: number, y: number) => { origin: number[]; direction: number[] };
+
+/** The camera as it is now, frozen into the inverse of `projectThrough`. */
+export function rayThrough(camera: THREE.Camera, size: Size): Ray {
+  camera.updateMatrixWorld();
+  const frozen = camera.clone();
+  return (x, y) => {
+    const ndc = new THREE.Vector2((x / size.width) * 2 - 1, 1 - (y / size.height) * 2);
+    const near = new THREE.Vector3(ndc.x, ndc.y, -1).unproject(frozen);
+    const far = new THREE.Vector3(ndc.x, ndc.y, 1).unproject(frozen);
+    return { origin: near.toArray(), direction: far.sub(near).normalize().toArray() };
+  };
+}
+
 /** The projection a `Scene3D` over `bounds` draws `viewport` with, with no renderer at all. */
 export function viewportProject(viewport: OrbitViewport, bounds: Bounds, size: Size): Project {
   const camera = newCamera(size.width / size.height);

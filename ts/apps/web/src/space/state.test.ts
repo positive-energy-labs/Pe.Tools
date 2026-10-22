@@ -1,33 +1,25 @@
-import { spaceViewSchema } from "@pe/agent-contracts/space-view";
 import { describe, expect, it } from "vite-plus/test";
+import { CLIP_POINTS } from "#/scene/renderer";
+import { frameRect } from "#/scene/plane";
 import {
-  AXES,
-  SHADER_POINTS,
   cutPolygon,
   cutPolygons,
   deleteNode,
   dragEdge,
   emptyCut,
-  frameRect,
-  fromFrame,
   insertNode,
   offsetCut,
-  decodeScene,
-  initialView,
   insidePolygon,
   packPolygons,
   retained,
   seedCut,
-  toFrame,
   type Axis,
   type Cut,
   type Cuts,
-  type Metadata,
   type Point,
 } from "./state";
 
 const bounds = { minX: -2, minY: -2, minZ: -100, maxX: 8, maxY: 9, maxZ: 100 };
-const metadata = { bounds } as Metadata;
 const rect = frameRect("top", bounds);
 const open = (polyline: [number, number][], offset = 0) => ({ polyline, closed: false, offset });
 const keep = { ...emptyCut, keepInside: true };
@@ -50,7 +42,7 @@ function shaderKeeps(packed: ReturnType<typeof packPolygons>, local: number[]): 
     if (n < 3) continue;
     const q = frameOf(a, local);
     const at = (i: number) => {
-      const k = (a * SHADER_POINTS + i) * 2;
+      const k = (a * CLIP_POINTS + i) * 2;
       return [packed.data[k]!, packed.data[k + 1]!];
     };
     let inside = false;
@@ -68,7 +60,7 @@ function shaderKeeps(packed: ReturnType<typeof packPolygons>, local: number[]): 
   return true;
 }
 
-describe("Space cuts and portable state", () => {
+describe("Space cuts", () => {
   it("keeps the left side of an open snaking cut without a diagonal closing cut", () => {
     const polyline: [number, number][] = [
       [0, 0],
@@ -181,95 +173,6 @@ describe("Space cuts and portable state", () => {
         offset: 1,
       }),
     ).toThrow("too sharp");
-  });
-  it("roundtrips the canonical state and rejects malformed or unbounded state", () => {
-    const base = initialView(metadata, "a".repeat(64));
-    const line: Point[] = [
-      [0, 0],
-      [1, 1],
-    ];
-    const state = {
-      ...base,
-      hidden: ["host:one"],
-      cuts: only("north", { ...keep, polyline: line }),
-    };
-    const withNorth = (cut: object) => ({ ...state, cuts: { ...state.cuts, north: cut } });
-    expect(spaceViewSchema.parse(JSON.parse(JSON.stringify(state)))).toEqual(state);
-    expect(
-      spaceViewSchema.safeParse(withNorth({ ...keep, polyline: line, closed: true })).success,
-    ).toBe(false);
-    expect(spaceViewSchema.safeParse(withNorth({ ...keep, polyline: [[0, 0]] })).success).toBe(
-      false,
-    );
-    expect(
-      spaceViewSchema.safeParse(withNorth({ ...keep, polyline: line, offset: Infinity })).success,
-    ).toBe(false);
-    expect(
-      spaceViewSchema.safeParse(withNorth({ ...keep, polyline: Array(57).fill([0, 0]) })).success,
-    ).toBe(false);
-    expect(spaceViewSchema.safeParse({ ...state, plane: null }).success).toBe(false);
-    // A saved version 1 view keeps its plan cut as the top cut; the straight plane is retired.
-    const legacy = {
-      version: 1,
-      scene: base.scene,
-      camera: base.camera,
-      target: base.target,
-      hidden: [],
-      isolated: null,
-      selected: null,
-      plane: [1, 0, 0, -2],
-      polyline: [
-        [0, 0],
-        [4, 0],
-        [4, 4],
-      ],
-      keepInside: false,
-      closed: true,
-      offset: 0.5,
-    };
-    expect(spaceViewSchema.parse(legacy)).toEqual({
-      ...base,
-      cuts: only("top", {
-        polyline: legacy.polyline as Point[],
-        closed: true,
-        offset: 0.5,
-        keepInside: false,
-      }),
-    });
-    expect(() => decodeScene(new ArrayBuffer(8))).toThrow("PSC1");
-  });
-  it("decodes aligned binary vertices and rejects overlapping element ranges", () => {
-    const make = (firstVertex: number) => {
-      const json = new TextEncoder().encode(
-        JSON.stringify({
-          format: "space-scene-v1",
-          stamp: { frame: "host-internal-ft" },
-          triangles: 1,
-          elements: [{ firstVertex, vertexCount: 3 }],
-          bounds,
-        }),
-      );
-      const offset = Math.ceil((8 + json.length) / 4) * 4;
-      const buffer = new ArrayBuffer(offset + 36);
-      const header = new DataView(buffer);
-      header.setUint32(0, 0x31435350, true);
-      header.setUint32(4, json.length, true);
-      new Uint8Array(buffer, 8, json.length).set(json);
-      new Float32Array(buffer, offset).set([1, 2, 3, 4, 5, 6, 7, 8, 9]);
-      return buffer;
-    };
-    expect([...decodeScene(make(0)).positions]).toEqual([1, 2, 3, 4, 5, 6, 7, 8, 9]);
-    expect(() => decodeScene(make(3))).toThrow("range");
-  });
-  it("maps each axis frame right-handed and back, and frames the scene bounds per axis", () => {
-    const p = [3, -1, 7];
-    for (const axis of AXES) expect(fromFrame(axis, ...toFrame(axis, p))).toEqual(p);
-    // Top looks down Z with X right; North looks south (-X right, Z up); East looks west (Y right, Z up).
-    expect(toFrame("top", p)).toEqual([3, -1, 7]);
-    expect(toFrame("north", p)).toEqual([-3, 7, -1]);
-    expect(toFrame("east", p)).toEqual([-1, 7, 3]);
-    expect(frameRect("north", bounds)).toEqual({ u0: -8, u1: 2, v0: -100, v1: 100, w0: -2, w1: 9 });
-    expect(frameRect("east", bounds)).toEqual({ u0: -2, u1: 9, v0: -100, v1: 100, w0: -2, w1: 8 });
   });
   it("keeps the intersection of the three axis cuts, and an empty axis clips nothing", () => {
     const box = (axis: Axis) => seedCut(frameRect(axis, bounds), "box");
@@ -502,20 +405,5 @@ describe("Space cuts and portable state", () => {
       [4, 1],
       [4, 4],
     ]);
-  });
-  it("rejects an offset longer than a segment allows", () => {
-    const square: Point[] = [
-      [0, 0],
-      [4, 0],
-      [4, 4],
-      [0, 4],
-    ];
-    expect(() =>
-      cutPolygons(only("east", { ...keep, polyline: square, closed: true, offset: 3 }), bounds),
-    ).toThrow("East cut: Offset is longer");
-    expect(
-      cutPolygons(only("east", { ...keep, polyline: square, closed: true, offset: -3 }), bounds)
-        .east,
-    ).toHaveLength(4);
   });
 });

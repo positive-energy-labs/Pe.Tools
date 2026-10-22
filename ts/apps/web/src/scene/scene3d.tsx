@@ -7,6 +7,10 @@
  * element menu answers right-click and BX here like on any row. Double-click stays free. Named
  * moves (fit, looks) belong to the caller's pane strip and the orbit minimap, not this canvas.
  * `onProject` hands DOM drawn over the canvas the camera of each frame that moved.
+ *
+ * `plane` shows one axis orthographically over the same scene (pan and zoom only); `viewport` is
+ * then the 3D pose kept under it, which the shown axis's thumbnail draws. `thumbs` names 2D
+ * canvases this canvas paints each axis into.
  */
 import { useEffect, useRef, useState, type ReactNode } from "react";
 import { revitTarget } from "@pe/kit/lang/row";
@@ -18,7 +22,8 @@ import {
 } from "#/revit/observation";
 import { samePose, type OrbitViewport } from "./orbit";
 import { isClick, pickAt } from "./picking";
-import type { Project, Size } from "./projection";
+import { samePlane, type PlaneAxis, type PlaneViewport } from "./plane";
+import type { Project, Ray, Size } from "./projection";
 import { createRenderer, type ClipVolume, type SceneRenderer } from "./renderer";
 import type { Layer3D, Pick, SceneInstance, SceneMeshes } from "./types";
 
@@ -27,6 +32,11 @@ export type Scene3DProps = {
   /** Decoded by the route from its page key. */
   viewport: OrbitViewport;
   onViewport: (next: OrbitViewport, how: "gesture" | "move") => void;
+  /** An axis drawn orthographically instead of the orbit; null or absent = the orbit. */
+  plane?: { axis: PlaneAxis; viewport: PlaneViewport } | null;
+  onPlane?: (next: PlaneViewport, how: "gesture" | "move") => void;
+  /** 2D canvases each axis thumbnail is painted into (at that axis's fit). */
+  thumbs?: Partial<Record<PlaneAxis, HTMLCanvasElement | null>>;
   selected?: ReadonlySet<string>;
   /** Tinted, weaker than selected: what a hovered row elsewhere on the page stands for. */
   lit?: ReadonlySet<string>;
@@ -40,7 +50,7 @@ export type Scene3DProps = {
   /** The shader side of the caller's cuts, packed relative to the bounds centre. */
   clipVolume?: ClipVolume | null;
   /** After each rendered frame whose camera or size moved: world feet to canvas px. */
-  onProject?: (project: Project, size: Size) => void;
+  onProject?: (project: Project, size: Size, ray: Ray) => void;
   className?: string;
   children?: ReactNode;
 };
@@ -50,7 +60,7 @@ export type Scene3DProps = {
  * held to the mesh's own UniqueId. A linked element, or one the displayed read never captured,
  * still declares itself so the menu refuses it in words; with no observation the canvas is inert.
  */
-function sceneTarget(
+export function sceneTarget(
   observation: NativeObservation,
   instance: SceneInstance,
 ): ElementTarget | null {
@@ -88,6 +98,7 @@ export function Scene3D(props: Scene3DProps): ReactNode {
   const core = useRef<SceneRenderer | null>(null);
   /** The last pose this canvas published; its decoded echo is not re-applied. */
   const published = useRef<OrbitViewport | null>(null);
+  const publishedPlane = useRef<PlaneViewport | null>(null);
   const gesturing = useRef(false);
   const [failed, setFailed] = useState<{ meshes: SceneMeshes; message: string } | null>(null);
   const meshes = props.meshes;
@@ -103,9 +114,16 @@ export function Scene3D(props: Scene3DProps): ReactNode {
       return;
     }
     core.current = r;
-    r.setOnFrame((project, size) => latest.current.onProject?.(project, size));
-    const { canvas, controls } = r;
+    r.setOnFrame((project, size, ray) => latest.current.onProject?.(project, size, ray));
+    const { canvas, moves } = r;
     const publish = () => {
+      const p = r.plane();
+      if (p) {
+        const want = latest.current.plane?.viewport;
+        if (want && samePlane(p, want)) return;
+        publishedPlane.current = p;
+        return latest.current.onPlane?.(p, "gesture");
+      }
       const v = r.viewport();
       if (samePose(v, latest.current.viewport, meshes.bounds)) return;
       published.current = v;
@@ -122,9 +140,9 @@ export function Scene3D(props: Scene3DProps): ReactNode {
       queued = 0;
       publish();
     };
-    controls.addEventListener("start", start);
-    controls.addEventListener("change", change);
-    controls.addEventListener("end", end);
+    moves.addEventListener("start", start);
+    moves.addEventListener("change", change);
+    moves.addEventListener("end", end);
 
     // The element under the pointer, declared where the element menu looks (absent when none).
     const aim = (at: PointerEvent | MouseEvent) => {
@@ -181,6 +199,7 @@ export function Scene3D(props: Scene3DProps): ReactNode {
       r.dispose();
       core.current = null;
       published.current = null;
+      publishedPlane.current = null;
       gesturing.current = false;
     };
   }, [meshes]);
@@ -194,6 +213,19 @@ export function Scene3D(props: Scene3DProps): ReactNode {
     published.current = null;
     r.setViewport(props.viewport);
   }, [props.viewport, meshes]);
+  // The plane follows the same rule; a fit (null viewport) is the route's to compute.
+  useEffect(() => {
+    const r = core.current;
+    if (!r || gesturing.current) return;
+    const next = props.plane ?? null;
+    const own = publishedPlane.current;
+    if (next && own && samePlane(own, next.viewport)) return;
+    publishedPlane.current = null;
+    r.setPlane(next);
+  }, [props.plane, meshes]);
+  useEffect(() => {
+    core.current?.setThumbs(props.thumbs ?? {});
+  }, [props.thumbs, meshes]);
   useEffect(() => {
     core.current?.paint(props.selected, props.hidden, props.isolated, props.lit);
   }, [props.selected, props.hidden, props.isolated, props.lit, meshes]);
