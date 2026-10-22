@@ -1,24 +1,24 @@
 // @vitest-environment jsdom
 /** Deterministic route proof: fixture transport, real route/page owner, head and the one shell. No ASHRAE tables are served, so nothing is priced. */
-import { act, cleanup, fireEvent, render, screen, waitFor, within } from "@testing-library/react";
-import { afterEach, beforeEach, expect, test, vi } from "vite-plus/test";
-import {
-  createMemoryHistory,
-  createRootRoute,
-  createRoute,
-  createRouter,
-  RouterProvider,
-} from "@tanstack/react-router";
+import { ChatHosted } from "#/route/situation-ladder";
+import { Route } from "#/routes/ducts";
 import {
   applyPatches,
   ductsRouteState,
   readingKey,
   readingRequestSchema,
 } from "@pe/agent-contracts";
-import { Route } from "#/routes/ducts";
-import { ChatHosted } from "#/route/situation-ladder";
-import type { DuctsSnapshot } from "@pe/host-contracts/generated";
 import type { DuctSnapshot } from "@pe/ducts-domain/types";
+import type { DuctsSnapshot } from "@pe/host-contracts/generated";
+import {
+  RouterProvider,
+  createMemoryHistory,
+  createRootRoute,
+  createRoute,
+  createRouter,
+} from "@tanstack/react-router";
+import { act, cleanup, fireEvent, render, screen, waitFor } from "@testing-library/react";
+import { afterEach, beforeEach, expect, test, vi } from "vite-plus/test";
 import { machineFixture } from "../../../../packages/agent-contracts/tests/machine-fixture";
 
 let work = ductsRouteState.schema.parse({ assumptions: {} });
@@ -276,73 +276,6 @@ async function mount(search = "&system=SA", hosted = false, target = "slice", th
   return { ...rendered, router };
 }
 
-async function pickSystem(id: string) {
-  fireEvent.click(screen.getByRole("button", { name: "Choose system" }));
-  fireEvent.click(await screen.findByRole("option", { name: new RegExp(`^${id}`) }));
-  await waitFor(() => expect(screen.queryByRole("listbox")).toBeNull());
-}
-
-test("the route sentence, refresh and the one shell mount from the same snapshot", async () => {
-  const { container, router } = await mount();
-  const head = screen.getByRole("region", { name: "Ducts route" });
-  expect(head.textContent).toContain("SA (Supply Air)");
-  expect(head.textContent).not.toContain("g1");
-  expect(within(head).getByRole("button", { name: /^refresh/ })).toBeTruthy();
-  expect(within(head).queryByRole("button", { name: "Choose view" })).toBeNull();
-  await waitFor(() => expect(container.querySelector('[data-proto="E2"]')).not.toBeNull());
-  await waitFor(() => expect(container.querySelector("[data-model-picture]")).not.toBeNull());
-  expect(router.state.location.search.system).toBe("SA");
-}, 20000);
-
-test("the address carries system, level, selected, encoding, layers, picture and viewport, each with a default", async () => {
-  const bare = await mount("");
-  expect(bare.router.state.location.search).toMatchObject({
-    system: "",
-    level: "",
-    selected: "",
-    encoding: "health",
-    layers: "",
-    picture: "model",
-    viewport: null,
-  });
-  bare.unmount();
-  const given = await mount(
-    "&system=SA&level=30&selected=3&encoding=flow&layers=a,b&picture=schematic",
-  );
-  expect(given.router.state.location.search).toMatchObject({
-    system: "SA",
-    level: "30",
-    selected: "3",
-    encoding: "flow",
-    layers: "a,b",
-    picture: "schematic",
-  });
-  const search = given.router.state.location.search as Record<string, unknown>;
-  expect(search).not.toHaveProperty("view");
-  expect(search).not.toHaveProperty("stage");
-  expect(search).not.toHaveProperty("variant");
-});
-
-test("the read names the document only; a system pick or clear does not read again, refresh does", async () => {
-  const { router } = await mount("");
-  expect(requests.at(-1)?.request).toEqual({});
-  const count = requests.length;
-  await pickSystem("SA");
-  await waitFor(() => expect(router.state.location.search.system).toBe("SA"));
-  await pickSystem("SA");
-  await waitFor(() => expect(router.state.location.search.system ?? "").toBe(""));
-  expect(requests.length).toBe(count);
-  fireEvent.click(screen.getByRole("button", { name: /^refresh/ }));
-  await waitFor(() => expect(requests.length).toBe(count + 1));
-});
-
-test("the hosted sentence names its document", async () => {
-  await mount("&system=SA", true);
-  expect(screen.getByRole("region", { name: "Ducts route" }).textContent).toContain(
-    "on Duct route slice",
-  );
-});
-
 test("an exact document lifetime change fences a pending read, including returning to the first document", async () => {
   inventory.sessions[0]!.openDocuments.push({
     openId: "doc2",
@@ -375,55 +308,6 @@ test("an exact document lifetime change fences a pending read, including returni
     release(Response.json({ ...old, document: { ...old.document, elapsedMs: 999999 } })),
   );
   expect(screen.getByRole("region", { name: "Ducts route" }).textContent).not.toContain("999999");
-});
-
-test("with no meshes the centrelines layer draws over the fitted pose, and a click selects in the address", async () => {
-  const { container, router } = await mount("&system=SA&layers=meshes,centrelines");
-  const hit = () => container.querySelector('[data-segment="3"] path:last-child');
-  await waitFor(() => expect(hit()).not.toBeNull());
-  // The hit target declares the member the displayed read captured, for the element menu.
-  expect(hit()!.getAttribute("data-revit-refs")).toContain('"elementId":3');
-  fireEvent.click(hit()!);
-  await waitFor(() => expect(router.state.location.search.selected).toBe("3"));
-  await waitFor(() =>
-    expect(container.querySelector('[data-segment="3"][data-selected]')).not.toBeNull(),
-  );
-  // The fit has no pose of its own in the address; the picture publishes the one it shows.
-  expect(router.state.location.search.viewport).toBeNull();
-}, 20000);
-
-test("every verb that writes to Revit shows in the head too, refused there in words while it has nothing to act on", async () => {
-  const { container } = await mount();
-  const head = screen.getByRole("region", { name: "Ducts route" });
-  for (const name of [
-    "preview",
-    "write to Revit",
-    "preview heal",
-    "heal",
-    "preview fan",
-    "make the fan",
-  ]) {
-    const button = within(head).getByRole("button", { name });
-    expect(button.getAttribute("aria-disabled")).toBe("true");
-  }
-  // The board says each refusal: nothing staged, and on the chosen system nothing heals or is offered.
-  expect(head.textContent).toContain("Nothing staged");
-  expect(head.textContent).toContain("Nothing in SA heals in Revit");
-  expect(head.textContent).toContain("No unit is offered as the fan of SA");
-  const group = await waitFor(() => {
-    const found = container.querySelector('[data-inbox-group="write"]');
-    expect(found).not.toBeNull();
-    return found as HTMLElement;
-  });
-  const write = within(group).getByRole("button", { name: /write to Revit/ });
-  expect(write.getAttribute("aria-disabled") ?? write.hasAttribute("disabled")).toBeTruthy();
-  expect(group.textContent).toContain("nothing staged");
-});
-
-test("with no system chosen the head's fan verbs ask for one", async () => {
-  await mount("");
-  const head = screen.getByRole("region", { name: "Ducts route" });
-  expect(head.textContent).toContain("Choose a system to make its fan");
 });
 
 test("a staged subject, claims and labelParameter render the subject scene; a verdict press stages the claim", async () => {

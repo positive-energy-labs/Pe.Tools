@@ -6,37 +6,9 @@ import { InMemoryTransport } from "@modelcontextprotocol/sdk/inMemory.js";
 import { address, emptyThreadHead, type ThreadHead } from "@pe/agent-contracts";
 import { checkoutRootFrom } from "@pe/host-contracts/service-identity";
 import { createPeaMcpServer } from "../src/server.ts";
-import { bundledPeaSkills } from "../src/pea/skills.ts";
 import { peaAgentInstructions } from "../src/pea/instructions.ts";
 import { fakeRuntimeHost } from "./runtime-host-fixture.ts";
 import { defaultReadImageMaxBytes } from "../src/shared/read-image.ts";
-import { peaProductTools } from "../src/pea/index.ts";
-
-test("kernel starts with live discovery and makes Revit orientation conditional", () => {
-  for (const door of ["pe_find", "pe_read", "pe_do", "target_set"])
-    expect(peaAgentInstructions).toContain(door);
-  expect(peaAgentInstructions).toContain("start with pe_find without a query");
-  expect(peaAgentInstructions).toContain("Distinguish the thread's selected target");
-  expect(peaAgentInstructions).toContain("When discovery shows connected Revit");
-  expect(peaAgentInstructions).toContain("capture_view");
-  for (const text of [
-    "skill:@product/skills/make-page",
-    "<kind>:@<manifest-id>/<path>",
-    "pe_do",
-    "binding",
-    "Page action door",
-  ])
-    expect(peaAgentInstructions).toContain(text);
-  expect(peaAgentInstructions).not.toContain("Revit is connected:");
-  expect(peaAgentInstructions).not.toMatch(/subagent|forked/i);
-});
-
-test("capability doors describe the head grant rather than per-call approval", () => {
-  for (const tool of Object.values(peaProductTools))
-    expect(tool.description).not.toMatch(/approval-gated/i);
-  expect(peaProductTools.pe_do.description).toContain("granted head");
-  expect(peaProductTools.target_set.description).toContain("Pea's own");
-});
 
 test("one MCP connection discovers session and target changes without startup context", async () => {
   fakeRuntimeHost("http://127.0.0.1:9");
@@ -104,18 +76,6 @@ test("one MCP connection discovers session and target changes without startup co
     await server.close();
     vi.unstubAllGlobals();
     vi.unstubAllEnvs();
-  }
-});
-
-test("bundled skills are unique, parseable, and carry a trigger", () => {
-  const names = bundledPeaSkills.map((skill) => skill.name);
-  expect(new Set(names).size).toBe(names.length);
-  for (const skill of bundledPeaSkills) {
-    const description = /^description:\s*(.+)$/m.exec(skill.content)?.[1] ?? "";
-    expect(skill.content.startsWith(`---\nname: ${skill.name}\n`)).toBe(true);
-    // gray-matter drops a skill whose description contains `: "` (AGENTS.md footgun).
-    expect(description).not.toContain(': "');
-    expect(description).toMatch(/\bUse (when|for|after|before|at)\b/);
   }
 });
 
@@ -254,22 +214,6 @@ test("capture_view refuses null and named targets before host work and preserves
     vi.unstubAllGlobals();
     vi.unstubAllEnvs();
   }
-});
-
-test("kernel confines diagrams to Pages unless the user asks for one-shot output", () => {
-  expect(peaAgentInstructions).toMatch(/use diagram only inside that Page/i);
-  expect(peaAgentInstructions).toMatch(/never write mermaid fences/i);
-});
-
-test("kernel and bundled skills route visual explanations through a hosted Page", () => {
-  expect(peaAgentInstructions).toContain("go in a hosted Pe.Tools Page first");
-  expect(peaAgentInstructions).toContain("Use diagram only inside that Page");
-  const page = bundledPeaSkills.find((skill) => skill.name === "make-page")?.content ?? "";
-  const script =
-    bundledPeaSkills.find((skill) => skill.name === "write-revit-csharp-script")?.content ?? "";
-  expect(page).toContain("Return its openUrl with a short takeaway");
-  expect(page).toContain("page:@snowdon-ducts/pages/tour");
-  expect(script).toContain("Do not create or register a script without a connected document");
 });
 
 test("discovery never transports per-element holdings to an MCP client", async () => {

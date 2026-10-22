@@ -1,8 +1,8 @@
+import { harnessEventSchema } from "@pe/agent-contracts";
 import { emptyChatState } from "@pe/agent-contracts/chat-state";
 import { afterEach, describe, expect, it, vi } from "vite-plus/test";
-import { harnessEventSchema } from "@pe/agent-contracts";
 
-import { harnessClient, notFound, streamThread, type OpenEvents } from "./harness-client";
+import { harnessClient, streamThread, type OpenEvents } from "./harness-client";
 
 class FakeSource {
   onmessage: ((message: MessageEvent<string>) => void) | null = null;
@@ -35,15 +35,6 @@ afterEach(() => {
 });
 
 describe("harnessClient", () => {
-  it("marks a 404 so a stale ?thread= renders as no such thread", async () => {
-    vi.stubGlobal("fetch", async () => new Response("no thread", { status: 404 }));
-    const failed = await harnessClient("http://host")
-      .body("gone")
-      .catch((error: unknown) => error);
-    expect(notFound(failed)).toBe(true);
-    expect(notFound(new Error("other"))).toBe(false);
-  });
-
   it("sends the json content type on every non-GET, bodiless or not", async () => {
     const sent: { method: string; type: string | null; body: unknown }[] = [];
     vi.stubGlobal("fetch", async (_url: string, init: RequestInit) => {

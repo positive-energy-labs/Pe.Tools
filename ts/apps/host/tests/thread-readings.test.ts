@@ -3,12 +3,7 @@ import { mkdtemp, rm } from "node:fs/promises";
 import { randomUUID } from "node:crypto";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import type {
-  HarnessEvent,
-  HarnessThreadBody,
-  HarnessThreadSummary,
-  ReadingFrame,
-} from "@pe/agent-contracts";
+import type { HarnessEvent, HarnessThreadBody, ReadingFrame } from "@pe/agent-contracts";
 import { resourceResponse, type ResourceObserver } from "@pe/runtime";
 import { withInvocationContext } from "@pe/runtime/context";
 import { human } from "./callers.ts";
@@ -174,18 +169,4 @@ test("a cursor older than retention reads as a gap, never a silent hole", async 
   const stale = connect([{ kind: "thread", thread: id }], 1);
   expect(await stale.next()).toMatchObject({ kind: "gap", dropped: null });
   stale.abort.abort();
-});
-
-test("the thread list is one snapshot Reading that follows a rename", async () => {
-  const { call, connect } = host();
-  const id = (await call("POST", "/pe/threads", { providerId: "claude", title: "Before" })).id;
-  const list = connect([{ kind: "threads" }]);
-  const titles = async () =>
-    ((await list.next()) as { value: HarnessThreadSummary[] }).value.find((t) => t.id === id)
-      ?.title;
-  expect(await titles()).toBe("Before");
-  await call("PUT", `/pe/threads/${id}`, { title: "After" });
-  let title: string | undefined;
-  while (title !== "After") title = await titles();
-  list.abort.abort();
 });

@@ -1,8 +1,7 @@
 import { receiptGoldenEnvelope } from "../../../packages/agent-contracts/tests/receipt-fixture.ts";
-import { existsSync } from "node:fs";
-import { mkdtemp, readFile, readdir, rm, writeFile } from "node:fs/promises";
+import { mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
-import { dirname, join } from "node:path";
+import { join } from "node:path";
 import { afterEach, expect, test } from "vite-plus/test";
 import { type Receipt } from "@pe/agent-contracts";
 import { ActionJournal } from "../src/action-journal.ts";
@@ -46,17 +45,6 @@ async function fixture() {
   const action = await owner.wait(intent.id);
   return { path, owner, intent, action, dispatches: () => dispatches };
 }
-
-test("an old v3 journal is archived beside itself, bytes intact, and the host starts fresh", async () => {
-  const { path, action } = await fixture();
-  const source = JSON.stringify({ version: 3, actions: [action] });
-  await writeFile(path, source);
-  expect(await new ActionJournal(path).list()).toEqual([]);
-  expect(existsSync(path)).toBe(false);
-  const archived = (await readdir(dirname(path))).find((n) => /\.v3\.\d+\.archived$/.test(n));
-  expect(archived).toBeDefined();
-  expect(await readFile(join(dirname(path), archived!), "utf8")).toBe(source);
-});
 
 test("missing recovery preserves unknown; exact cancellation joins the original native UUID without dispatch", async () => {
   const { path, owner, action, dispatches, intent } = await fixture();

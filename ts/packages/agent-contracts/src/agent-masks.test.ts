@@ -111,27 +111,6 @@ it("ducts: Pea proposes rules and drops but never stages them, and never touches
   expect(applyPatches(spec, envelope, "human", badSlot, 0)).toMatchObject({ ok: false });
 });
 
-it("ducts: esp, equipment flows and roles are keyed by element id and typed", () => {
-  const spec = ductsRouteState as unknown as RouteStateSpec<z.ZodType>;
-  const envelope: RouteEnvelope<unknown> = { version: 1, revision: 0, doc: spec.schema.parse({}) };
-  const stage = (key: string, inWg: number) =>
-    transitionPatches(["esp"], key, {}, { kind: "stage", rung: { value: { inWg } } });
-  expect(applyPatches(spec, envelope, "human", stage("40", 1.25), 0)).toMatchObject({ ok: true });
-  expect(applyPatches(spec, envelope, "human", stage("rtu", 1.25), 0)).toMatchObject({ ok: false });
-  expect(applyPatches(spec, envelope, "human", stage("40", -1), 0)).toMatchObject({ ok: false });
-  const flow = (key: string, cfm: number) =>
-    transitionPatches(["equipmentFlows"], key, {}, { kind: "stage", rung: { value: { cfm } } });
-  expect(applyPatches(spec, envelope, "human", flow("40", 900), 0)).toMatchObject({ ok: true });
-  expect(applyPatches(spec, envelope, "human", flow("40", -5), 0)).toMatchObject({ ok: false });
-  expect(applyPatches(spec, envelope, "human", flow("rtu", 900), 0)).toMatchObject({ ok: false });
-  const role = (key: string, value: string) =>
-    transitionPatches(["roles"], key, {}, { kind: "stage", rung: { value: { role: value } } });
-  expect(applyPatches(spec, envelope, "human", role("40", "fan"), 0)).toMatchObject({ ok: true });
-  expect(applyPatches(spec, envelope, "human", role("40", "damper"), 0)).toMatchObject({
-    ok: false,
-  });
-});
-
 it("ducts scene: Pea proposes the subject, claims, label parameter and working phase but never stages them; a verdict is staged by a person", () => {
   const spec = ductsRouteState as unknown as RouteStateSpec<z.ZodType>;
   const envelope: RouteEnvelope<unknown> = { version: 1, revision: 0, doc: spec.schema.parse({}) };

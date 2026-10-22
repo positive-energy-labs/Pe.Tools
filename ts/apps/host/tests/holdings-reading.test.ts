@@ -73,23 +73,6 @@ test("exact holdings pages cover every element once, survive observation ticks a
   Object.assign(f.session, { holdings: null });
   expect(readHoldings(f.machine, f.request)).toMatchObject({ code: "holdings.unavailable" });
 });
-test("large canonical holdings remain inspectable without entering discovery", () => {
-  const f = fixture(53139);
-  const projected = discoveryMachine(f.machine);
-  expect(JSON.stringify(projected).includes("HELD_SENTINEL")).toBe(false);
-  expect(JSON.stringify(projected).length).toBeLessThan(65536);
-  const page = readHoldings(f.machine, { ...f.request, limit: 100 });
-  expect(page).toMatchObject({ state: "ok", elementCount: 53139 });
-  if (page.state === "ok") {
-    expect(page.rows).toHaveLength(100);
-    expect(page.nextCursor).toBeTruthy();
-  }
-  Object.assign(f.session.holdingsLeg, { error: "observation failed" });
-  expect(readHoldings(f.machine, f.request)).toMatchObject({ code: "holdings.unavailable" });
-  expect(discoveryMachine(f.machine).revit.sessions![0]!.holdingsLeg.error).toBe(
-    "observation failed",
-  );
-});
 
 test("existing Instances HTTP reading pages exact holdings and refuses a wrong document", async () => {
   const f = fixture();

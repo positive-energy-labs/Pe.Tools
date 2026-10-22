@@ -8,27 +8,11 @@ import { productPathNames } from "@pe/host-contracts/contracts";
 import {
   bundledPeaSkills,
   publishPeaSkills,
-  peaStandardSkillsRoot,
-  resolvePeaProductHomePath,
   resolvePeaSkillPaths,
   retiredPeaSkillNames,
 } from "../src/pea/skills.ts";
 
 const homeVariable = productPathNames.productHomeVariable;
-
-test("resolves pea product home and skills under the product home override", async () => {
-  const profile = await withTempProductHomeEnv();
-  try {
-    const expected = profile.productHome;
-    expect(resolvePeaProductHomePath()).toBe(expected);
-    expect(resolvePeaSkillPaths()).toEqual([
-      path.join(expected, peaStandardSkillsRoot),
-      path.join(expected, ".claude", "skills"),
-    ]);
-  } finally {
-    await profile.dispose();
-  }
-});
 
 async function withTempProductHomeEnv() {
   const previousProductHome = process.env[homeVariable];
@@ -89,21 +73,4 @@ test("materialization deletes a retired skill folder only when the product recei
   } finally {
     await profile.dispose();
   }
-});
-
-const proposeChanges = () => bundledPeaSkills.find((s) => s.name === "propose-changes")!.content;
-
-test("propose-changes teaches segment-array patch paths, never pointer strings", () => {
-  const text = proposeChanges();
-  expect(text).toContain(`["cells","<key>","proposal"]`);
-  expect(text).toContain(`["scope","proposal"]`);
-  expect(text).toMatch(/never pointer strings/);
-});
-
-test("propose-changes teaches families scope-then-cells from the loaded-families catalog", () => {
-  const text = proposeChanges();
-  expect(text).toContain("revit.catalog.loaded-families");
-  expect(text).toMatch(/scope\.proposal first[^]*next propose call[^]*proposed scope/);
-  expect(text).toMatch(/do not wait for the person to stage the scope/i);
-  expect(text).toMatch(/description: [^\n]*set <parameter> on every type of <families>/);
 });

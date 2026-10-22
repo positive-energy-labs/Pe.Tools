@@ -140,7 +140,12 @@ it("never pairs two ends Revit already connects through a bend; each is a cap", 
   s.segments[1]!.connectors[0]!.connectedTo = { elementId: 30, connectorIndex: 2 } as never;
   const plan = items(s);
   expect(plan.filter((i) => i.kind === "join")).toEqual([]);
-  expect(plan.filter((i) => i.kind === "cap").map((i) => i.end).sort()).toEqual(["20:0", "21:1"]);
+  expect(
+    plan
+      .filter((i) => i.kind === "cap")
+      .map((i) => i.end)
+      .sort(),
+  ).toEqual(["20:0", "21:1"]);
 });
 
 it("connects coincident same-size ends, covering the inferred join and both open ends", () => {

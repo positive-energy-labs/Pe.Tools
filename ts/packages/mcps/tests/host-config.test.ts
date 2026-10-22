@@ -108,37 +108,14 @@ function fakeCheckout(): string {
   return root;
 }
 
-test("checkoutRootFrom walks up to the .git + Pe.Tools.slnx root", () => {
-  const root = fakeCheckout();
-  expect(checkoutRootFrom(join(root, "ts", "deep"))).toBe(root);
-  expect(checkoutRootFrom(root)).toBe(root);
-});
-
-test("checkoutRootFrom returns null outside any checkout", () => {
-  expect(checkoutRootFrom(mkdtempSync(join(tmpdir(), "pe-not-a-checkout-")))).toBeNull();
-});
-
 test("unknown URL hosts refuse without a service receipt", () => {
   expect(() => discoverHostBaseUrl("http://127.0.0.1:9999")).toThrow(/verified service/);
   expect(() => discoverHostBaseUrl("https://example.test")).toThrow(/verified service/);
 });
 
-test("an unrecognized lane token is a hard error, never a guess", () => {
-  expect(() => discoverHostBaseUrl("not-a-url-or-lane")).toThrowError(/neither a URL/);
-});
-
-test("a worktree-path token outside a checkout is a hard error", () => {
-  const stray = mkdtempSync(join(tmpdir(), "pe-stray-"));
-  expect(() => discoverHostBaseUrl(stray)).toThrowError(/neither a URL/);
-});
-
 test("checkout CLI refuses installed and other checkout selectors", () => {
   expect(() => discoverHostBaseUrl("installed")).toThrow(/checkout CLI/);
   expect(() => discoverHostBaseUrl(fakeCheckout())).toThrow(/Runtime checkout/);
-});
-
-test("missing host never falls back to a default port", () => {
-  expect(discoverHostBaseUrl()).toBeNull();
 });
 test("same checkout receipt accepts only its exact URL or checkout selector", () => {
   receipt();

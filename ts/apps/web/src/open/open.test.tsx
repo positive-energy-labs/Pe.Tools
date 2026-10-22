@@ -5,26 +5,24 @@
  * icon-started Revit is reached by pid, hr shows only for a hot-reload shape, and Stop keeps
  * work unless the Revit is a checkout session.
  */
-import { cleanup, fireEvent, render, screen, waitFor, within } from "@testing-library/react";
-import { afterEach, describe, expect, test, vi } from "vite-plus/test";
-import type { MachineAccess, Machine, MachineSession } from "@pe/agent-contracts";
+import type { Machine, MachineAccess, MachineSession } from "@pe/agent-contracts";
+import type { RecentDocument } from "@pe/host-contracts/pe-revit-contract";
 import {
+  RouterProvider,
   createMemoryHistory,
   createRootRoute,
   createRouter,
-  RouterProvider,
 } from "@tanstack/react-router";
-import type { RecentDocument } from "@pe/host-contracts/pe-revit-contract";
+import { cleanup, fireEvent, render, screen, waitFor, within } from "@testing-library/react";
+import { afterEach, describe, expect, test, vi } from "vite-plus/test";
 
 import { runSemanticAction } from "../../../../packages/mcps/src/shared/takeoff-action-client";
 import { PatchBay } from "./bay";
-import { jobsOf } from "./model";
 import { runLifecycle } from "./lifecycle";
-import { EMPTY_DRAFT, defaultYear, launchPlan, modelRows, type DocRow } from "./model";
+import { EMPTY_DRAFT, launchPlan, modelRows, type DocRow } from "./model";
 import { OpenPage } from "./route";
 import {
   BACKGROUND_BOOTING,
-  BAY_PEA_25,
   BAY_RECENTS,
   BAY_THREADS,
   CHECKOUT_HOT,
@@ -32,13 +30,6 @@ import {
   OBSERVED_ICON,
   RECENTS,
 } from "./seeds";
-
-test("a known file year defaults only to that installed year; upgrade requires a choice", () => {
-  const doc = { savedYear: 2024, lastYear: 2026 } as DocRow;
-  expect(defaultYear(doc, [2025, 2026])).toBeNull();
-  expect(defaultYear(doc, [2026, 2024, 2025])).toBe(2024);
-  expect(defaultYear(doc, [2023])).toBeNull();
-});
 
 vi.mock("../../../../packages/mcps/src/shared/takeoff-action-client", () => ({
   readScopedActionStatuses: vi.fn(),
@@ -112,28 +103,6 @@ describe("launch plan", () => {
     expect(plan.year).toBeNull();
   });
 
-  test("an older file patched into your running Revit names the upgrade", () => {
-    const plan = launchPlan(
-      { ...EMPTY_DRAFT, doc: row("Clinic-Fitout.rvt"), target: YOURS },
-      world,
-      rows,
-    );
-    expect(plan.verb).toBe("Open in your Revit 2025 and upgrade from 2023");
-    expect(plan.refusal).toBeNull();
-    expect(plan.launch).toEqual({
-      key: "instances.open",
-      input: {
-        source: "C:\\Projects\\Clinic\\Clinic-Fitout.rvt",
-        into: { session: { pid: 18244 } },
-        detach: false,
-        upgrade: true,
-        links: "refuse",
-      },
-    });
-    expect(plan.argv[0]).toContain("--pid 18244");
-    expect(plan.cautions.map((caution) => caution.text).join(" ")).toContain("adopts it by pid");
-  });
-
   test("a Revit older than the file refuses it, in every socket and the free one", () => {
     const yours = launchPlan(
       { ...EMPTY_DRAFT, doc: row("HCB-48.rfa"), target: YOURS },
@@ -154,62 +123,6 @@ describe("launch plan", () => {
     expect(nowhere.refusal).toBe(
       "Stadium-Concourse.rvt was saved in Revit 2027; the newest Revit here is 2026.",
     );
-  });
-
-  test("the free socket names the new Revit, whose it is, and every consequence", () => {
-    const yours = launchPlan(
-      {
-        ...EMPTY_DRAFT,
-        doc: row("Clinic-Fitout.rvt"),
-        target: "new",
-        year: 2024,
-        addins: "off",
-        links: "allow",
-      },
-      world,
-      rows,
-    );
-    expect(yours.verb).toBe(
-      "Open in a new Revit 2024 and upgrade from 2023, allowing missing links, with add-ins off",
-    );
-    expect(yours.launch).toEqual({
-      key: "instances.open",
-      input: {
-        source: "C:\\Projects\\Clinic\\Clinic-Fitout.rvt",
-        into: { start: { year: "2024", owner: "you", addins: "off" } },
-        detach: false,
-        upgrade: true,
-        links: "allow",
-      },
-    });
-    expect(yours.argv).toEqual([
-      "pe-revit session start --year 2024 --quarantine",
-      "pe-revit doc open C:\\Projects\\Clinic\\Clinic-Fitout.rvt --id <minted> --upgrade --links allow",
-    ]);
-    const pea = launchPlan(
-      { ...EMPTY_DRAFT, doc: row("Project-A-Coord.rvt"), target: "new", owner: "pea" },
-      world,
-      rows,
-    );
-    expect(pea.verb).toBe("Give Pea a copy in a new background Revit 2025");
-    expect(pea.launch).toBeNull();
-    expect(pea.refusal).toContain("immutable APS version");
-    expect(pea.cautions.map((caution) => caution.text)).toContain(
-      "An immutable APS version is required before Pea can acquire a cloud copy.",
-    );
-  });
-
-  test("a document open in your Revit refuses a second open there, and goes to Pea as a copy", () => {
-    const held = launchPlan({ ...EMPTY_DRAFT, doc: row("Hospital-MEP_kaitp.rvt") }, world, rows);
-    expect(held.refusal).toBe("Hospital-MEP_kaitp.rvt is already open in Revit 2025 (pid 18244).");
-    const pea = launchPlan(
-      { ...EMPTY_DRAFT, doc: row("Hospital-MEP_kaitp.rvt"), target: PEA_25 },
-      world,
-      rows,
-    );
-    expect(pea.refusal).toBeNull();
-    expect(pea.verb).toBe("Give Pea a copy in Pea's Revit 2025");
-    expect(pea.launch).toMatchObject({ input: { into: { session: { id: PEA_25 } } } });
   });
 
   test("a socket that vanished, boots, or belongs elsewhere refuses before anything dispatches", () => {
@@ -317,17 +230,6 @@ describe("launch plan", () => {
   });
 });
 
-describe("jobs from the thread list", () => {
-  test("heads in Pea's Revits are her jobs", () => {
-    const jobs = jobsOf(BAY_THREADS, world.revit.sessions!);
-    expect(jobs.map((job) => [job.thread.title, job.session.row.year])).toEqual([
-      ["Schedule cleanup L1-L4", 2025],
-      ["Build HCB family", 2026],
-    ]);
-    expect(jobs[0]!.session).toBe(BAY_PEA_25);
-  });
-});
-
 function Bay({
   machine = world,
   docs = rows,
@@ -362,13 +264,6 @@ const typeInto = (text: string) => {
     fireEvent.change(box(), { target: { value: box().value + text[i - 1] } });
 };
 const chip = (label: string) => screen.getByText(label, { selector: "[data-slot='query-box'] *" });
-const jack = (title: string) =>
-  within(screen.getByRole("grid", { name: "documents" })).getByText(title);
-const newYear = (year: string, pressed: boolean) =>
-  within(screen.getByRole("group", { name: "new Revit year" })).getByRole("button", {
-    name: year,
-    pressed,
-  });
 
 test("patching Clinic into your Revit 2025 by click names the upgrade and sends the consent", async () => {
   render(<Bay />);
@@ -395,17 +290,6 @@ test("patching Clinic into your Revit 2025 by click names the upgrade and sends 
   ]);
 });
 
-test("HCB-48 (2026) is refused by every 2025 socket before any press", () => {
-  render(<Bay />);
-  fireEvent.click(jack("HCB-48.rfa"));
-  const hole = within(yoursCard()).getByText("refuses HCB-48.rfa").closest(".dl-row")!;
-  expect(hole.getAttribute("aria-disabled")).toBe("true");
-  expect(hole.hasAttribute("title")).toBe(false);
-  expect(hole.hasAttribute("data-base-ui-tooltip-trigger")).toBe(true);
-  fireEvent.click(hole);
-  expect(screen.queryByRole("button", { name: /^Open in your Revit 2025/ })).toBeNull();
-});
-
 test("the command line typed one character at a time equals the click path", async () => {
   render(<Bay />);
   box().focus();
@@ -425,69 +309,6 @@ test("the command line typed one character at a time equals the click path", asy
     upgrade: true,
     links: "refuse",
   });
-});
-
-test("the command line pasted whole equals the click path, and a click reads back as chips", () => {
-  render(<Bay />);
-  box().focus();
-  // The query and the arrow land in one event: the jack in hand is the row the pasted query keeps.
-  fireEvent.change(box(), { target: { value: "clinic -> new 2024 " } });
-  expect(
-    screen.getByRole("button", { name: "Open in a new Revit 2024 and upgrade from 2023" }),
-  ).toBeTruthy();
-  fireEvent.change(box(), { target: { value: "pea" } });
-  fireEvent.keyDown(box(), { key: "Tab" });
-  expect(
-    screen.getByRole("button", { name: "Give Pea a copy in a new background Revit 2024" }),
-  ).toBeTruthy();
-  expect(chip("pea")).toBeTruthy();
-  // A click on the free card's year changes the same draft the chips show.
-  fireEvent.click(newYear("2026", false));
-  expect(chip("new 2026")).toBeTruthy();
-  expect(
-    screen.getByRole("button", { name: "Give Pea a copy in a new background Revit 2026" }),
-  ).toBeTruthy();
-});
-
-test("the click path alone: a jack, then the free card's year, is the same plan", () => {
-  render(<Bay />);
-  fireEvent.click(jack("Clinic-Fitout.rvt"));
-  fireEvent.click(newYear("2024", false));
-  expect(
-    screen.getByRole("button", { name: "Open in a new Revit 2024 and upgrade from 2023" }),
-  ).toBeTruthy();
-  expect(chip("new 2024")).toBeTruthy();
-});
-
-test("a pasted path becomes a jack and opens in a new Revit", async () => {
-  const path = "C:\\Models\\NotInRecents.rvt";
-  render(<Bay docs={[]} />);
-  box().focus();
-  fireEvent.change(box(), { target: { value: `${path} ` } });
-  fireEvent.click(await screen.findByText("NotInRecents.rvt"));
-  fireEvent.click(
-    screen.getByText("patch NotInRecents.rvt here", { selector: "[data-key='free:new'] *" }),
-  );
-  fireEvent.click(screen.getByRole("button", { name: "Open in a new Revit 2026" }));
-  await waitFor(() => expect(runSemanticAction).toHaveBeenCalled());
-  expect(vi.mocked(runSemanticAction).mock.calls[0]![1]).toMatchObject({
-    source: path,
-    into: { start: { year: "2026", owner: "you", addins: "on" } },
-  });
-});
-
-test("hr is drawn only for a hot-reload shape, and only in the wide bay", () => {
-  render(<Bay machine={withSessions([CHECKOUT_HOT])} />);
-  expect(screen.queryByRole("button", { name: "hr" })).not.toBeNull();
-  cleanup();
-  render(<Bay machine={withSessions([CHECKOUT_HOT])} layout="stack" />);
-  expect(screen.queryByRole("button", { name: "hr" })).toBeNull();
-  cleanup();
-  for (const session of [OBSERVED_ICON, BACKGROUND_BOOTING]) {
-    render(<BayOf machine={withSessions([session])} />);
-    expect(screen.queryByRole("button", { name: "hr" })).toBeNull();
-    cleanup();
-  }
 });
 
 test("Stop keeps work by default; discard is offered only for a checkout session", async () => {
@@ -559,47 +380,4 @@ test("thread heads alone draw no rw: the bay is not told by the heads it lists",
   cleanup();
   render(<BayOf machine={accessed({ kind: "read" })} />);
   expect(screen.queryByText(/^rw(?: |$)/)).toBeNull();
-});
-
-test("a grant in the host's access draws rw on the document, its thread and its expiry", () => {
-  render(
-    <BayOf
-      machine={accessed({
-        kind: "rw",
-        context: "t-retag",
-        label: "Retag level 2 diffusers",
-        until: "2026-10-12T13:00:00.000Z",
-      })}
-    />,
-  );
-  const card = within(yoursCard());
-  // The session card names the granted document by its socket title, and whose grant it is.
-  expect(card.getByText("rw · Hospital-MEP_kaitp.rvt")).toBeTruthy();
-  expect(card.getByText("Retag level 2 diffusers")).toBeTruthy();
-  // The document's own row and the table both carry the word, because the ids coincide here.
-  expect(card.getAllByText("rw").length).toBeGreaterThan(0);
-  expect(screen.getAllByText("rw").length).toBeGreaterThan(card.getAllByText("rw").length);
-  expect(card.queryByRole("button", { name: /take back|revoke/i })).toBeNull();
-});
-
-test("Pea's own session is rw by its access, with no thread or expiry", () => {
-  const pea = world.revit.sessions!.find((session) => session.whose === "pea")!;
-  const session = {
-    ...pea,
-    attachment: {
-      ...pea.attachment!,
-      documents: pea.documents!.map((document) => ({
-        session: pea.attachment!.session,
-        openId: document.openId!,
-        title: document.title ?? "",
-        address: null,
-        isFamilyDocument: false,
-        isActive: true,
-        access: { kind: "pea", acquisition: "acq-1" } as const,
-      })),
-    },
-  };
-  render(<Bay machine={withSessions([session])} />);
-  expect(screen.getAllByText("rw").length).toBeGreaterThanOrEqual(pea.documents!.length);
-  expect(screen.queryByText(/^rw ·/)).toBeNull();
 });

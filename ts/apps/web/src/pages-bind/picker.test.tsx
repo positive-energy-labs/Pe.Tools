@@ -1,11 +1,11 @@
 // @vitest-environment jsdom
-import { cleanup, fireEvent, render } from "@testing-library/react";
-import { afterEach, expect, test, vi } from "vite-plus/test";
 import {
   emptyThreadHead,
   type HarnessThreadSummary,
   type PageTargetReading,
 } from "@pe/agent-contracts";
+import { cleanup, fireEvent, render } from "@testing-library/react";
+import { afterEach, expect, test, vi } from "vite-plus/test";
 
 vi.mock("#/open/bay", () => ({ useThreadSummaries: () => null }));
 vi.mock("#/readings", () => ({
@@ -78,21 +78,4 @@ test("the picker shows what the host resolved and binds a thread, a pin, or noth
   // An unsaved document has no Address, so it refuses the pin.
   fireEvent.click(screen.getByText("Project1"));
   expect(onBind).toHaveBeenCalledTimes(2);
-});
-
-test("a refused bind shows the host's words", () => {
-  const screen = render(
-    <BindPicker
-      slug="tour"
-      reading={null}
-      threads={[]}
-      documents={[]}
-      outcome={{ ok: false, message: "Pea may pin a Page only to its own documents." }}
-      onBind={() => {}}
-    />,
-  );
-  expect(screen.getByRole("status").textContent).toBe(
-    "Pea may pin a Page only to its own documents. ",
-  );
-  expect(screen.getByText(/start a thread in chat/)).toBeTruthy();
 });

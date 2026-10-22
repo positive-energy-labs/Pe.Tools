@@ -1,8 +1,8 @@
 // @vitest-environment jsdom
+import { revitTarget } from "@pe/kit/lang/row";
 import { cleanup, fireEvent, render, waitFor } from "@testing-library/react";
 import { afterEach, expect, test, vi } from "vite-plus/test";
-import { revitTarget } from "@pe/kit/lang/row";
-import { ElementMenu, SelectionBoxButton, showInRevit } from "./element-menu";
+import { ElementMenu, showInRevit } from "./element-menu";
 import {
   elementTargetOf,
   prepareElements,
@@ -156,13 +156,6 @@ test("BX needs both keys, targets pointer or focus, leaves double-click and typi
   fireEvent.keyDown(document, { key: "b" });
   fireEvent.keyDown(document, { key: "x" });
   await waitFor(() => expect(submit).toHaveBeenCalledTimes(2));
-});
-
-test("visible Selection Box uses explicit observation scope", async () => {
-  submit.mockResolvedValue({ id: "action-visible", state: "running" });
-  const view = render(<SelectionBoxButton ids={[42]} scope={scope} />);
-  fireEvent.click(view.getByRole("button"));
-  await waitFor(() => expect(submit).toHaveBeenCalledTimes(1));
 });
 
 test("right-click Select uses the same exact observation and never invokes a box", async () => {

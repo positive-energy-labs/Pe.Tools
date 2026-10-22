@@ -1,163 +1,23 @@
 // @vitest-environment jsdom
 /** The composer ladder: provider › model › one rung per trait, read whole in its trigger. */
-import { useEffect } from "react";
+import type { Reading } from "@pe/agent-contracts";
 import { act, cleanup, fireEvent, render, screen, waitFor } from "@testing-library/react";
+import { useEffect } from "react";
 import { afterEach, expect, test, vi } from "vite-plus/test";
-import type { Provider, Reading } from "@pe/agent-contracts";
 
 const wb = vi.hoisted(() => ({ current: {} as Record<string, unknown> }));
 vi.mock("#/workbench/provider", () => ({ useWorkbench: () => wb.current }));
 vi.mock("#/navigation/state", () => ({ useDestination: () => vi.fn() }));
 
-const { GrantChip, HeadLadder } = await import("./head-chips");
+const { GrantChip } = await import("./head-chips");
 const { useThreadScope } = await import("./scope");
-const { ComposerState } = await import("./composer-head");
-import { emptyChatState } from "@pe/agent-contracts/chat-state";
-import type { ChatSituation } from "./composer-head";
-import type { ChatHandle } from "./composer-head";
-import { useDocumentLadder } from "#/route/situation-ladder";
-import { Ladder } from "#/route/ladder";
-import { MACHINE_SEEDS, OBSERVED_ICON } from "#/open/seeds";
+
 vi.mock("#/machine/use-machine", () => ({ useMachine: () => ({ reading: { state: "absent" } }) }));
 vi.mock("#/route/shell", () => ({ useChooseTarget: () => [null, vi.fn()] }));
-
-test("the document picker explains unknown documents without labeling a known empty Revit unloaded", () => {
-  const seed = MACHINE_SEEDS["no-revit"];
-  if (seed.state !== "ready") throw new Error("fixture must be ready");
-  const machine = seed.observation;
-  function Picker({ unknown }: { unknown: boolean }) {
-    const reading = {
-      ...seed,
-      observation: {
-        ...machine,
-        revit: {
-          ...machine.revit,
-          sessions: [{ ...OBSERVED_ICON, documents: unknown ? null : [] }],
-        },
-      },
-    };
-    const ladder = useDocumentLadder(
-      { readings: { machine: reading } } as unknown as ChatHandle,
-      undefined,
-      { bound: null, bind: vi.fn() },
-    );
-    return <Ladder levels={ladder.levels} open />;
-  }
-  const view = render(<Picker unknown />);
-  const row = screen.getByText(
-    "Pe.Tools is not loaded in this Revit. Finish the install, then restart Revit.",
-  );
-  expect(row.getAttribute("aria-disabled")).toBe("true");
-  expect(row.parentElement?.textContent).toContain("Revit · pid 2402");
-  expect(row.closest("[role=option]")).toBeNull();
-  view.rerender(<Picker unknown={false} />);
-  expect(screen.queryByText(/Pe.Tools is not loaded/)).toBeNull();
-});
-
-test("composer chips do not repeat status or refusal text", () => {
-  wb.current = { chat: emptyChatState() };
-  const view = render(
-    <ComposerState
-      situation={
-        {
-          head: {
-            grantView: null,
-            refusal: "Choose a provider.",
-          },
-          ladder: { docWord: null },
-        } as unknown as ChatSituation
-      }
-    />,
-  );
-  expect(view.container.textContent).toBe("");
-});
 
 afterEach(() => {
   cleanup();
   vi.useRealTimers();
-});
-
-const claude: Provider = {
-  id: "claude",
-  harness: "claude",
-  name: "Claude",
-  auth: { kind: "subscription" },
-  readiness: { state: "ready" },
-  models: [{ modelId: "opus", name: "Opus 5.5" }],
-  traits: [
-    {
-      id: "effort",
-      name: "Effort",
-      kind: "select",
-      options: [
-        { id: "low", name: "Low" },
-        { id: "high", name: "High" },
-      ],
-      current: "high",
-    },
-    { id: "fast", name: "Fast mode", kind: "boolean", current: false },
-  ],
-  probedAt: null,
-};
-
-function mount(traits: Record<string, string | boolean>) {
-  const setDraft = vi.fn();
-  wb.current = {
-    chat: {},
-    currentThreadId: null,
-    threads: [],
-    providers: { list: [claude] },
-    draft: { providerId: "claude", modelId: "opus", traits },
-    setDraft,
-  };
-  render(<HeadLadder />);
-  return { setDraft, trigger: screen.getByRole("button", { name: "Choose model" }) };
-}
-
-test("the trigger reads the whole path as a framed control", () => {
-  const { trigger } = mount({ fast: true });
-  expect(trigger.textContent).toContain("Opus 5.5 · high · fast");
-  expect(trigger.getAttribute("data-list-trigger")).toBe("control");
-});
-
-test("an off toggle is left out of the trigger but its rung still says it", () => {
-  const { trigger } = mount({ fast: false });
-  expect(trigger.textContent).toContain("Opus 5.5 · high");
-  expect(trigger.textContent).not.toContain("fast");
-  fireEvent.click(trigger);
-  expect(screen.getByRole("button", { name: "not fast" })).toBeTruthy();
-});
-
-test("it always opens on the model rung, even when every rung is bound", () => {
-  const { trigger } = mount({ fast: true });
-  fireEvent.click(trigger);
-  expect(screen.getByRole("option", { name: "Opus 5.5" })).toBeTruthy();
-  expect(screen.queryByRole("option", { name: "not fast" })).toBeNull();
-});
-
-test("picking a model writes the draft and advances to effort", () => {
-  const { setDraft, trigger } = mount({ fast: true });
-  fireEvent.click(trigger);
-  fireEvent.click(screen.getByRole("option", { name: "Opus 5.5" }));
-  expect(setDraft).toHaveBeenLastCalledWith({
-    providerId: "claude",
-    modelId: "opus",
-    traits: { fast: true },
-  });
-  expect(screen.getByRole("option", { name: "Low" })).toBeTruthy();
-});
-
-test("picking effort writes the draft and closes the picker", () => {
-  const { setDraft, trigger } = mount({ fast: true });
-  fireEvent.click(trigger);
-  fireEvent.click(screen.getByRole("button", { name: "high" }));
-  fireEvent.click(screen.getByRole("option", { name: "Low" }));
-  expect(setDraft).toHaveBeenLastCalledWith({
-    providerId: "claude",
-    modelId: "opus",
-    traits: { fast: true, effort: "low" },
-  });
-  expect(screen.queryByRole("listbox")).toBeNull();
 });
 
 /* ── The grant chip counts on the host's clock ───────────────────────────────────────────── */

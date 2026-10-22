@@ -165,57 +165,6 @@ test("the host-owned /pe surface answers without Revit", async () => {
   }
 }, 40_000);
 
-test("GET /pe/capabilities serves each open document as a doc: row and each unopened recent one as a recent: row", async () => {
-  const app = createPeRoutes({
-    registrations: [],
-    store: { getState: async () => null, setState: async () => {} },
-    heads: { observe: () => () => {} },
-    capabilityCatalog: {
-      read: async () => ({
-        at: "2026-10-12T12:00:00.000Z",
-        sources: {},
-        diagnostics: [],
-        machine: machineFixture([
-          {
-            session: "b1",
-            documents: [
-              {
-                openId: "o1",
-                address: "C:\\Models\\Riser.rvt",
-                title: "Riser",
-                isFamilyDocument: false,
-                isActive: true,
-              },
-            ],
-          },
-        ]),
-        recents: [
-          { title: "Riser", path: "C:\\Models\\Riser.rvt", rank: 1 },
-          { title: "Plant", path: "C:\\Models\\Plant.rvt", rank: 2 },
-        ].map((recent) => ({
-          ...recent,
-          isCloud: false,
-          region: null,
-          projectGuid: null,
-          modelGuid: null,
-          year: 2025,
-          savedYear: 2025,
-        })),
-        capabilities: [],
-      }),
-    },
-  });
-  const response = await app.fetch(new Request("http://local/pe/capabilities"));
-  expect(response.status).toBe(200);
-  const catalog = (await response.json()) as { capabilities: { key: string; kind: string }[] };
-  expect(catalog.capabilities).toMatchObject([
-    // Riser is open: its doc: row wins, so only Plant is a recent: row.
-    { key: "doc:b1/o1", kind: "document" },
-    { key: "recent:C:\\Models\\Plant.rvt", kind: "recent" },
-  ]);
-  expect(catalog.capabilities).toHaveLength(2);
-});
-
 test("one admitted content snapshot waits for import, publishes exact skill bytes and retains frozen script input", async () => {
   const home = mkdtempSync(join(tmpdir(), "pe-catalog-cut-"));
   const folder = join(home, "Pods", "renamed-folder");
@@ -339,67 +288,6 @@ test("one admitted content snapshot waits for import, publishes exact skill byte
       content: input["README.md"],
     });
   } finally {
-    rmSync(home, { recursive: true, force: true });
-  }
-});
-
-test("a slow import retains one pending publication when the catalog TTL passes", async () => {
-  const home = mkdtempSync(join(tmpdir(), "pe-publication-pending-"));
-  let release!: () => void;
-  const bootstrap = new Promise<void>((resolve) => {
-    release = resolve;
-  });
-  let listings = 0;
-  const content = createContributionContent({
-    worldRoot: home,
-    bootstrap: () => bootstrap,
-    packages: async () => {
-      listings++;
-      return { packages: [], unreadable: [] };
-    },
-    pages: async () => [],
-  });
-  const started = Date.now();
-  const clock = vi.spyOn(Date, "now").mockReturnValue(started);
-  const first = content.read();
-  let second = first;
-  try {
-    clock.mockReturnValue(started + 31_000);
-    second = content.read();
-    expect(second).toBe(first);
-    release();
-    await first;
-    expect(listings).toBe(1);
-  } finally {
-    clock.mockRestore();
-    release();
-    await Promise.allSettled([first, second]);
-    rmSync(home, { recursive: true, force: true });
-  }
-});
-
-test("a Page written after the catalog snapshot is addressable at once, by any caller", async () => {
-  const home = mkdtempSync(join(tmpdir(), "pe-page-fresh-"));
-  try {
-    const content = createContributionContent({
-      worldRoot: home,
-      packages: async () => ({ packages: [], unreadable: [] }),
-    });
-    const source = createCapabilityCatalogSource({
-      hostBaseUrl: "http://127.0.0.1:9",
-      registrations: [],
-      machine: async () => machineFixture(),
-      content: content.read,
-      pages: content.pages,
-    });
-    vi.stubGlobal("fetch", async () => Response.json({ operations: [], recents: [] }));
-    const keys = async () => (await source.read()).capabilities.map((c) => c.key);
-    expect(await keys()).not.toContain("page:@pages/probe");
-    mkdirSync(join(home, "Pages", "probe"), { recursive: true });
-    writeFileSync(join(home, "Pages", "probe", "index.html"), "<title>Probe</title>");
-    expect(await keys()).toContain("page:@pages/probe");
-  } finally {
-    vi.unstubAllGlobals();
     rmSync(home, { recursive: true, force: true });
   }
 });

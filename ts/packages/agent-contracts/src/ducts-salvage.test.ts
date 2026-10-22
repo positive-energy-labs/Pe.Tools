@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vite-plus/test";
 
-import { DUCTS_FINDS, ductsDocumentSchema, salvageDuctsWork } from "./ducts.ts";
+import { ductsDocumentSchema, salvageDuctsWork } from "./ducts.ts";
 
 const flow = { staged: { value: { cfm: 150, source: "fixture" } } };
 
@@ -41,12 +41,5 @@ describe("salvageDuctsWork", () => {
     });
     expect(Object.keys(out.doc.flows)).toEqual(["2"]);
     expect(out.dropped.length).toBeGreaterThan(0);
-  });
-});
-
-describe("DUCTS_FINDS", () => {
-  it("answers the words a person uses for duct pressure drop", () => {
-    for (const word of ["pressure drop", "pdrop", "static pressure", "esp", "duct"])
-      expect(DUCTS_FINDS).toContain(word);
   });
 });

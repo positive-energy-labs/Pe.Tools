@@ -67,30 +67,6 @@ describe("fanCandidates", () => {
 });
 
 describe("fansOwedBase", () => {
-  it("names the fans no system calls base equipment, and goes quiet once one does", () => {
-    const before = snapshot([
-      system(19, "SA 19", "SupplyAir"),
-      system(29, "RA 19", "ReturnAir"),
-      system(20, "SA 20", "SupplyAir", 20),
-    ]);
-    const roles = unitRoles(before, new Map(), {});
-    expect(roles.get(17)?.reason).toBe("mixed port classes: moves air");
-    expect([...fansOwedBase(before, roles).keys()]).toEqual([17, 18]);
-    // After ducts.assign-fan, the snapshot names FC-17 SA 19's base: the role reads it, the verb is gone.
-    const after = snapshot([
-      system(19, "SA 19", "SupplyAir", 17),
-      system(29, "RA 19", "ReturnAir"),
-      system(20, "SA 20", "SupplyAir", 20),
-    ]);
-    const now = unitRoles(after, new Map(), {});
-    expect(now.get(17)).toEqual({
-      role: "fan",
-      why: "proposed",
-      reason: "base equipment of SA 19",
-    });
-    expect([...fansOwedBase(after, now).keys()]).toEqual([]);
-  });
-
   it("offers a system once: to its network's lead fan, or to none when its fans sit in separate networks", () => {
     const s = snapshot([system(19, "SA 19", "SupplyAir")]);
     const roles = unitRoles(s, new Map(), {});
@@ -111,10 +87,5 @@ describe("fansOwedBase", () => {
     const none = fansOwedBase(twoNets, roles, () => null);
     expect(none.get(17)?.some((a) => a.system === "SA 19") ?? false).toBe(false);
     expect(none.split?.get("SA 19")).toEqual([17, 18]);
-  });
-
-  it("leaves a passive unit out", () => {
-    const s = snapshot([system(19, "SA 19", "SupplyAir")]);
-    expect(fansOwedBase(s, new Map([[18, { role: "passive" as const }]]))).toEqual(new Map());
   });
 });

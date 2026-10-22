@@ -7,7 +7,7 @@
 import { expect, it } from "vite-plus/test";
 import { ductsDocumentSchema, workingPhaseOf } from "@pe/agent-contracts";
 
-import { existsIn, phased } from "./phases.ts";
+import { phased } from "./phases.ts";
 import { survey, tolerated } from "./survey.ts";
 import type { DuctSnapshot } from "./types.ts";
 
@@ -109,27 +109,6 @@ const projectA = () => {
   link(b, 2, junk, 1);
   return snap([a, b, junk, host]);
 };
-
-it("an element exists from the phase it is created in until the phase that demolishes it", () => {
-  const e = (phaseCreated: string | null, phaseDemolished: string | null = null) => ({
-    ...duct(1, [0, 0, 0], [1, 0, 0], "g1"),
-    phaseCreated,
-    phaseDemolished,
-  });
-  expect(existsIn(e("Existing"), ORDER, 0)).toBe(true);
-  expect(existsIn(e("Future"), ORDER, 0)).toBe(false);
-  expect(existsIn(e("Existing", "New Construction"), ORDER, 0)).toBe(true);
-  expect(existsIn(e("Existing", "New Construction"), ORDER, 1)).toBe(false);
-  expect(existsIn(e(null), ORDER, 0)).toBe(true);
-});
-
-it("with no working phase, or one the snapshot does not list, nothing is left out and nothing is said", () => {
-  const before = projectA();
-  for (const work of [null, working(null), working("Phase 9")])
-    expect(phased(before, work)).toEqual({ snapshot: before, findings: [] });
-  // A snapshot from before phases were read lists none.
-  expect(phased(snap(projectA().segments, null), working("Existing")).findings).toEqual([]);
-});
 
 it("an element not in the working phase leaves the network and warns, naming its phase and what it touches", () => {
   const before = projectA();

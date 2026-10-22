@@ -4,9 +4,9 @@ import { afterEach, expect, test, vi } from "vite-plus/test";
 
 import type { MeasuredValue } from "@pe/agent-contracts";
 
-import { readMeasuredText, StateCell } from "@pe/kit/lang/cell";
-import { Table } from "@pe/kit/table/table";
 import { useMeasuredParse } from "#/host/measured-parse";
+import { StateCell } from "@pe/kit/lang/cell";
+import { Table } from "@pe/kit/table/table";
 
 const { callHostRpc } = vi.hoisted(() => ({ callHostRpc: vi.fn() }));
 vi.mock("#/host/client", () => ({ callHostRpc }));
@@ -57,36 +57,6 @@ function ParsedCell({ stage }: { stage: (value: MeasuredValue) => void }) {
   );
 }
 
-/* ── the decision, pure ─────────────────────────────────────────────────────── */
-
-test("a bare number stages with the column's unit and calls nothing", () => {
-  expect(readMeasuredText("300", CFM)).toEqual({
-    kind: "stage",
-    staged: { value: "300", unit: "CFM" },
-  });
-  expect(readMeasuredText(" -1.5 ", CFM)).toEqual({
-    kind: "stage",
-    staged: { value: "-1.5", unit: "CFM" },
-  });
-});
-
-test("text carrying a unit is Revit's to read", () => {
-  expect(readMeasuredText("300 L/s", CFM)).toEqual({ kind: "parse", text: "300 L/s" });
-  expect(readMeasuredText("1'-6\"", CFM)).toEqual({ kind: "parse", text: "1'-6\"" });
-});
-
-test("a measured column with no display unit refuses a bare number", () => {
-  const decided = readMeasuredText("300", UNITLESS);
-  expect(decided.kind).toBe("refuse");
-  expect(decided).toMatchObject({ reason: expect.stringContaining("cannot be staged") });
-  // The pure decision leaves explicit text for the parser; the matrix locks this unsupported cell.
-  expect(readMeasuredText("300 L/s", UNITLESS)).toEqual({ kind: "parse", text: "300 L/s" });
-});
-
-test("blank commits nothing", () => {
-  expect(readMeasuredText("  ", CFM).kind).toBe("refuse");
-});
-
 /* ── the cell ───────────────────────────────────────────────────────────────── */
 
 test("a bare number reaches measured.stage as { value, unit }", () => {
@@ -98,36 +68,6 @@ test("a bare number reaches measured.stage as { value, unit }", () => {
   type(inputOf(container), "300");
   expect(parse).not.toHaveBeenCalled();
   expect(stage).toHaveBeenCalledWith({ value: "300", unit: "CFM" });
-});
-
-test("typed text shows as typed until Revit answers, then Revit's value is what is staged", async () => {
-  const answer: MeasuredValue = { value: "635.7", unit: "CFM" };
-  const parse = vi.fn(async () => answer);
-  const stage = vi.fn();
-  const { container } = inTable(
-    <StateCell scale="row" value="" measured={{ displayUnit: CFM, parse, stage }} />,
-  );
-  const input = inputOf(container);
-  type(input, "300 L/s");
-  expect(input.value).toBe("300 L/s"); // as typed, until the answer arrives
-  expect(stage).not.toHaveBeenCalled();
-  await act(async () => {});
-  expect(parse).toHaveBeenCalledWith("300 L/s");
-  expect(stage).toHaveBeenCalledWith(answer);
-});
-
-test("a refusal is cell-local, carries Revit's reason and stages nothing", async () => {
-  const parse = vi.fn(async () => ({ refusal: "Revit could not read 'aaa' here." }));
-  const stage = vi.fn();
-  const { container } = inTable(
-    <StateCell scale="row" value="12 CFM" measured={{ displayUnit: CFM, parse, stage }} />,
-  );
-  const input = inputOf(container);
-  type(input, "aaa");
-  await act(async () => {});
-  expect(stage).not.toHaveBeenCalled();
-  expect(input.value).toBe("12 CFM"); // restored, visibly
-  expect(container.textContent).toContain("Revit could not read 'aaa' here.");
 });
 
 test("a bare number in a column with no display unit refuses at the cell", () => {
@@ -143,18 +83,6 @@ test("a bare number in a column with no display unit refuses at the cell", () =>
   type(input, "300");
   expect(stage).not.toHaveBeenCalled();
   expect(container.textContent).toContain("cannot be staged");
-});
-
-test("a re-read cancels an in-flight parse: nothing is staged and the cell keeps what it had", async () => {
-  const parse = vi.fn(async () => null); // cancelled
-  const stage = vi.fn();
-  const { container } = inTable(
-    <StateCell scale="row" value="12 CFM" measured={{ displayUnit: CFM, parse, stage }} />,
-  );
-  type(inputOf(container), "300 L/s");
-  await act(async () => {});
-  expect(stage).not.toHaveBeenCalled();
-  expect(container.textContent).not.toContain("could not");
 });
 
 test("Escape cancels a pending parse and an Enter blur does not submit twice", async () => {

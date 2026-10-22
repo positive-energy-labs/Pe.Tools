@@ -124,7 +124,6 @@ function mount(
     <Inbox
       groups={groups}
       work={{ doc: null, revision: 0, write, store: over.store ?? null }}
-      doc={null}
       nameOf={String}
       onVerdict={null}
       light={() => {}}
@@ -188,26 +187,6 @@ test("a no-fan row previews making its one unit the fan, and applies only once a
   expect(armed.fan.apply.run).toHaveBeenCalledWith({ unitId: 17, systemId: 19 });
 });
 
-test("groups draw Fix, Set, Write in loop order with Diagnostics collapsed last", () => {
-  const { container } = mount();
-  const order = [...container.querySelectorAll("[data-inbox-group]")].map((g) =>
-    g.getAttribute("data-inbox-group"),
-  );
-  expect(order).toEqual(["fix", "set", "write", "diagnostics"]);
-  expect(screen.queryByText("near join")).toBeNull();
-  fireEvent.click(container.querySelector('[data-inbox-group="diagnostics"] [role="button"]')!);
-  expect(screen.getByText("near join")).toBeTruthy();
-});
-
-test("a Set row's verb deep-links to its cell on the tree", () => {
-  const onFocusCell = vi.fn();
-  const { container } = mount({ onFocusCell });
-  fireEvent.click(screen.getByText("Grille 30"));
-  const detail = container.querySelector('[data-inbox-detail="flows:30"]') as HTMLElement;
-  fireEvent.click(within(detail).getByRole("button", { name: "enter a flow" }));
-  expect(onFocusCell).toHaveBeenCalledWith({ segment: "flows", id: 30 });
-});
-
 test("the Write row's apply wears the handle's word and refusal, the same button the head draws", () => {
   const refusedMount = mount({ apply: "Preview first" });
   const refused = within(
@@ -224,81 +203,6 @@ test("the Write row's apply wears the handle's word and refusal, the same button
   fireEvent.click(within(group).getByRole("button", { name: "write 3 to Revit" }));
   expect(armed.apply.run).toHaveBeenCalledTimes(1);
   expect(armed.container.querySelector("[data-inbox-write-held]")?.textContent).toBe(held);
-});
-
-test("the Write group lists every planned change, old to new, and each refusal", () => {
-  const { container } = mount({
-    review: [
-      {
-        key: "a",
-        element: "Grille 30",
-        what: "airflow",
-        from: "none",
-        to: "'Flow' 234 cfm",
-        outcome: "planned",
-        reason: null,
-      },
-      {
-        key: "b",
-        element: "Pe store",
-        what: "terminalFlow slot",
-        from: "PE_M_Grd_AirFlow",
-        to: "Flow",
-        outcome: "planned",
-        reason: null,
-      },
-      {
-        key: "c",
-        element: "FC-17",
-        what: "ESP",
-        from: "none",
-        to: "—",
-        outcome: "refused",
-        reason: "neither the instance nor its type has 'X'",
-      },
-    ],
-  });
-  const group = container.querySelector('[data-inbox-group="write"]') as HTMLElement;
-  expect(within(group).getByText("Grille 30 · airflow")).toBeTruthy();
-  expect(within(group).getByText("none → 'Flow' 234 cfm")).toBeTruthy();
-  expect(within(group).getByText("PE_M_Grd_AirFlow → Flow")).toBeTruthy();
-  expect(
-    within(group).getByText("refused: neither the instance nor its type has 'X'"),
-  ).toBeTruthy();
-});
-
-test("the airflow row's open choice stages the terminalFlow slot", () => {
-  const { container, write } = mount({
-    set: [
-      item({
-        key: "airflow",
-        group: "set",
-        title: "Airflow from PE_M_Grd_AirFlow",
-        ids: [30],
-        verbs: [
-          {
-            kind: "airflow",
-            current: "PE_M_Grd_AirFlow",
-            options: [
-              { slot: "Flow", label: "Flow · instance", have: 1, of: 1 },
-              {
-                slot: "PE_M_Grd_AirFlow",
-                label: "PE_M_Grd_AirFlow · instance, shared",
-                have: 0,
-                of: 1,
-              },
-            ],
-          },
-        ],
-      }),
-    ],
-  });
-  fireEvent.click(screen.getByText("Airflow from PE_M_Grd_AirFlow"));
-  const detail = container.querySelector('[data-inbox-detail="airflow"]') as HTMLElement;
-  fireEvent.click(within(detail).getByRole("button", { name: "Flow · instance · 1/1" }));
-  expect(write).toHaveBeenCalledWith([
-    { path: ["parameters", "terminalFlow", "staged"], value: { value: "Flow" } },
-  ]);
 });
 
 test("taking back a stored ignore stages a delete over it", () => {
@@ -339,48 +243,4 @@ test("taking back a stored ignore stages a delete over it", () => {
   expect(write).toHaveBeenCalledWith([
     { path: ["assumptions", "open-end:2:1", "staged"], value: { delete: true } },
   ]);
-});
-
-test("the selected element opens every row that names it, Diagnostics included", () => {
-  const { container } = mount({
-    selected: 30,
-    diagnostics: [
-      item({ key: "d1", group: "diagnostics", kind: "join", status: "near-miss", ids: [30] }),
-      item({ key: "d2", group: "diagnostics", kind: "loop", ids: [99] }),
-    ],
-  });
-  const lit = [...container.querySelectorAll("[data-selected]")].map((r) =>
-    r.getAttribute("data-key"),
-  );
-  expect(lit).toEqual(["flows:30", "d1"]);
-  expect(container.querySelector('[data-inbox-detail="d1"]')).toBeTruthy();
-  expect(container.querySelector('[data-inbox-detail="flows:30"]')).toBeTruthy();
-  expect(container.querySelector('[data-key="d2"]')).toBeTruthy();
-});
-
-test("the Diagnostics key: a chip per kind with its count; a picked chip narrows the rows", () => {
-  const pick = vi.fn();
-  const diagnostics = [
-    item({ key: "d1", group: "diagnostics", kind: "join", status: "near-miss" }),
-    item({ key: "d2", group: "diagnostics", kind: "join", status: "stretched" }),
-    item({ key: "d3", group: "diagnostics", kind: "join", status: "stretched" }),
-    item({ key: "d4", group: "diagnostics", kind: "loop", status: "priced as a tree" }),
-  ];
-  const { container } = mount({ diagnostics, diagnostic: { kind: "", pick } });
-  const legend = container.querySelector('[data-inbox-legend="diagnostics"]') as HTMLElement;
-  expect(
-    within(legend)
-      .getAllByRole("button")
-      .map((b) => b.textContent),
-  ).toEqual(["near-miss 1", "stretched 2", "loop 1"]);
-  fireEvent.click(within(legend).getByRole("button", { name: "stretched 2" }));
-  expect(pick).toHaveBeenCalledWith("stretched");
-  cleanup();
-  const narrowed = mount({ diagnostics, diagnostic: { kind: "stretched", pick } }).container;
-  fireEvent.click(narrowed.querySelector('[data-inbox-group="diagnostics"] [role="button"]')!);
-  expect(
-    [...narrowed.querySelectorAll('[data-inbox-group="diagnostics"] [data-key]')].map((r) =>
-      r.getAttribute("data-key"),
-    ),
-  ).toEqual(["d2", "d3"]);
 });

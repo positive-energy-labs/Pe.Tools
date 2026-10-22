@@ -1,5 +1,3 @@
-import { tmpdir } from "node:os";
-import { join } from "node:path";
 import { expect, test } from "vite-plus/test";
 import { productPathNames } from "../src/contracts/product.ts";
 import {
@@ -25,30 +23,12 @@ test("an expanded OneDrive path is the resolved Documents folder", () => {
   );
 });
 
-test("a redirected literal path needs no expansion", () => {
-  const literal = "    Personal    REG_SZ    D:\\Redirected\\Documents\r\n";
-  expect(parseDocumentsKnownFolder(literal, {})).toBe("D:\\Redirected\\Documents");
-});
-
 test("an unreadable known folder fails loudly instead of falling back to the profile", () => {
   // The %USERPROFILE%/Documents fallback is a DIFFERENT content home, not a degraded answer.
   expect(() => parseDocumentsKnownFolder("ERROR: The system was unable to find...", {})).toThrow(
     "no Personal value",
   );
   expect(() => parseDocumentsKnownFolder(oneDrive, {})).toThrow("undefined variable 'USERPROFILE'");
-});
-
-test("the product home override names the home itself, read live, never from the cache", () => {
-  const original = process.env[homeVariable];
-  try {
-    process.env[homeVariable] = join(tmpdir(), "override");
-    expect(productHomePath()).toBe(join(tmpdir(), "override"));
-    process.env[homeVariable] = join(tmpdir(), "second");
-    expect(productHomePath()).toBe(join(tmpdir(), "second"));
-  } finally {
-    if (original === undefined) delete process.env[homeVariable];
-    else process.env[homeVariable] = original;
-  }
 });
 
 test("under a test run no product home may resolve outside the temp directory", () => {

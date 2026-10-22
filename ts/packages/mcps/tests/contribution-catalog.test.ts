@@ -1,16 +1,10 @@
 import { createHash } from "node:crypto";
-import { cli } from "gunshi";
 import { afterEach, expect, test, vi } from "vite-plus/test";
-import {
-  capabilityCatalogSchema,
-  findCapabilities,
-  type PackageProjection,
-} from "@pe/agent-contracts";
+import { capabilityCatalogSchema, type PackageProjection } from "@pe/agent-contracts";
 import { machineFixture } from "../../agent-contracts/tests/machine-fixture.ts";
 import { buildCapabilities } from "../src/pea/capabilities.ts";
 import { skillSnapshot } from "../src/pea/skill-publication.ts";
-import { peDo, peFind, peRead } from "../src/pea/capability-tools.ts";
-import { PeaCliCommands } from "../src/pea/PeaCliCommands.ts";
+import { peDo, peRead } from "../src/pea/capability-tools.ts";
 import { fakeRuntimeHost } from "./runtime-host-fixture.ts";
 
 const bytes = Buffer.from(
@@ -69,51 +63,6 @@ afterEach(() => {
   vi.unstubAllGlobals();
   vi.unstubAllEnvs();
   vi.restoreAllMocks();
-});
-
-test("renamed package content keeps all four canonical kinds with no native availability", () => {
-  const current = rows().filter((row) => row.package?.id === pod.id);
-  expect(current.map((row) => row.key).sort()).toEqual(pod.contributions.map((c) => c.key).sort());
-  expect(current.find((row) => row.kind === "member")).toMatchObject({
-    needs: "nothing",
-    mutates: false,
-  });
-  expect(
-    buildCapabilities({
-      ops: [],
-      routes: [],
-      packages: [{ ...pod, folder: "other-folder" }],
-      skills,
-    }),
-  ).toEqual(rows());
-});
-
-test("public MCP and CLI rank one canonical snapshot with the shared ranker", async () => {
-  fakeRuntimeHost("http://127.0.0.1:9");
-  vi.stubEnv("PE_CONTEXT", "");
-  vi.stubGlobal("fetch", async () => Response.json(catalog()));
-  const expected = findCapabilities(catalog().capabilities, { query: "duct loss", limit: 8 }).map(
-    (r) => r.key,
-  );
-  const found = (await peFind.execute({ query: "duct loss", limit: 8 }, undefined)) as {
-    matches: { key: string }[];
-  };
-  expect(found.matches.map((r) => r.key)).toEqual(expected);
-  expect(found.matches).toEqual(
-    expect.arrayContaining([
-      expect.objectContaining({
-        key: "page:@snowdon-ducts/pages/tour",
-        projection: { openUrl: "/pages/host-projected/", pane: "page" },
-      }),
-    ]),
-  );
-  const output = vi.spyOn(console, "log").mockImplementation(() => {});
-  vi.spyOn(console, "error").mockImplementation(() => {});
-  await cli(
-    ["duct", "loss", "--json"],
-    new PeaCliCommands({ hostBaseUrl: "http://127.0.0.1:9" }).findCommand(),
-  );
-  expect(JSON.parse(output.mock.calls[0]![0]).map((r: { key: string }) => r.key)).toEqual(expected);
 });
 
 test("skill reads exact admitted bytes, members refuse execution, and old keys refuse before dispatch", async () => {

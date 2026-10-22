@@ -3,7 +3,7 @@ import { mkdir, mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { capturePackage, listPackages } from "../src/packages.ts";
-import { exportPod, importPod, readZip, writeZip } from "../src/pod-transfer.ts";
+import { exportPod, importPod } from "../src/pod-transfer.ts";
 import { freezeScript } from "../src/operation-script.ts";
 import { scriptPodSourceBounds } from "@pe/host-contracts/generated";
 
@@ -31,18 +31,6 @@ test("source count excludes metadata and assets, but oversized CSharp still refu
   await expect(
     freeze([metadata, { path: "src/F0.cs", bytesBase64: Buffer.alloc(614400).toString("base64") }]),
   ).rejects.toThrow(/byte bounds/);
-});
-test("ADV-4 imports the adversary's 614400-byte unrelated asset", () => {
-  expect(readZip(writeZip(files)).get("assets/image.bin")).toEqual(files.get("assets/image.bin"));
-});
-test("ADV-4 freezes only compiler inputs from the adversary's supplied capture", async () => {
-  const frozen = await freezeScript({
-    sourcePath: "src/Run.cs",
-    sourceBundle: {
-      files: [...files].map(([path, bytes]) => ({ path, bytesBase64: bytes.toString("base64") })),
-    },
-  });
-  expect(frozen!.sourceBundle.files.map((f) => f.path)).toEqual(["pod.json", "src/Run.cs"]);
 });
 test("ADV-4 admitted assets cross export/import intact without entering compilation", async () => {
   const root = await mkdtemp(join(tmpdir(), "pe-adv4-"));

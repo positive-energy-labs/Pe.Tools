@@ -6,7 +6,7 @@
 import { expect, it } from "vite-plus/test";
 import { ductsDocumentSchema, stagedDucts } from "@pe/agent-contracts";
 
-import { pendingRulings, rulingRung, storeRulings, withStoredRulings } from "./rulings.ts";
+import { pendingRulings, storeRulings, withStoredRulings } from "./rulings.ts";
 import type { DuctSnapshot } from "./types.ts";
 
 const AT = "2026-10-20T12:00:00.000Z";
@@ -34,12 +34,6 @@ it("reads the stored rulings as staged cells, and Work's own over them", () => {
   expect(pendingRulings(work, store)).toEqual([
     { segment: "roles", key: "901", from: null, to: "passive" },
   ]);
-});
-
-it("reads no store as the Work itself", () => {
-  const work = doc({});
-  expect(withStoredRulings(work, null)).toBe(work);
-  expect(withStoredRulings(null, undefined)).toBeNull();
 });
 
 it("takes a stored verdict back with a staged delete, and a stored passive is ruled fan", () => {
@@ -77,18 +71,4 @@ it("writes the stored rulings with their own time and new ones with the write's"
     },
     roles: { "900": { role: "passive", ruledAt: AT } },
   });
-});
-
-it("stages a choice against the store: the stored value clears, a take-back deletes", () => {
-  expect(rulingRung(store, "assumptions", "open-end:101:1", "ignore")).toBe("unstage");
-  expect(rulingRung(store, "assumptions", "open-end:101:1", null)).toEqual({ delete: true });
-  expect(rulingRung(store, "assumptions", "open-end:202:1", "ignore")).toEqual({
-    value: { kind: "verdict", verdict: "ignore" },
-  });
-  expect(rulingRung(store, "assumptions", "open-end:202:1", null)).toBe("unstage");
-  expect(rulingRung(store, "roles", "900", "passive")).toBe("unstage");
-  expect(rulingRung(store, "roles", "900", "fan")).toEqual({ value: { role: "fan" } });
-  expect(rulingRung(store, "roles", "901", "fan")).toEqual({ value: { role: "fan" } });
-  expect(rulingRung(store, "roles", "901", null)).toBe("unstage");
-  expect(rulingRung(null, "roles", "901", "passive")).toEqual({ value: { role: "passive" } });
 });

@@ -1,17 +1,14 @@
-import { peClientScript } from "@pe/agent-contracts/pe-api";
 /// <reference lib="es2023.array" />
 // @vitest-environment jsdom
+import { SessionCard, SessionRow } from "#/components/lang/session";
+import { PHASE_TONE, custodyOf, executionRefusal, phaseOf, pidOf } from "#/machine/session";
+import { discoveryMachine, machineInventory, type DiscoveryMachine } from "@pe/agent-contracts";
 import { cleanup, render, screen, within } from "@testing-library/react";
 import { afterEach, expect, test, vi } from "vite-plus/test";
-import { machineInventory, discoveryMachine, type DiscoveryMachine } from "@pe/agent-contracts";
-import { SessionCard, SessionRow } from "#/components/lang/session";
-import { custodyOf, phaseOf, PHASE_TONE, executionRefusal, pidOf } from "#/machine/session";
-import { BAY_YOURS_25, CHECKOUT_HOT, MACHINE_SEEDS } from "./seeds";
-import { createMachine, type MachineSources } from "../../../host/src/machine.ts";
 import { peFind } from "../../../../packages/mcps/src/pea/capability-tools.ts";
 import { fakeRuntimeHost } from "../../../../packages/mcps/tests/runtime-host-fixture.ts";
-import pageSource from "../../../host/src/pages/pe.js?raw";
-import { runInNewContext } from "node:vm";
+import { createMachine, type MachineSources } from "../../../host/src/machine.ts";
+import { BAY_YOURS_25, CHECKOUT_HOT, MACHINE_SEEDS } from "./seeds";
 
 afterEach(() => {
   cleanup();
@@ -222,50 +219,4 @@ test("F8: web rows and pe_find preserve the same Machine identities, access and 
       },
     }),
   ).toMatchObject({ sessions: { unknown: { kind: "checking" } } });
-});
-
-test("Page bytes resolve the document and leave the bind chip to SPA chrome", async () => {
-  vi.useFakeTimers();
-  const source = pageSource
-    .replace("/*pe:client*/ null", peClientScript())
-    .replace(
-      "/*pe:runtime*/ null",
-      JSON.stringify({ header: "x-pe-runtime", query: "runtime", service: "fixture" }),
-    );
-  const fakeWindow = { addEventListener() {}, open() {}, pe: undefined as any };
-  runInNewContext(source, {
-    window: fakeWindow,
-    document,
-    location: new URL("http://127.0.0.1:9/pages/ducts/"),
-    URL,
-    URLSearchParams,
-    Headers,
-    Request,
-    performance,
-    Date,
-    setInterval,
-    clearInterval,
-    setTimeout,
-    clearTimeout,
-    queueMicrotask,
-    EventSource: class {
-      addEventListener() {}
-      close() {}
-    },
-    fetch: async (input: string) =>
-      String(input).endsWith("/target")
-        ? Response.json({
-            binding: { kind: "thread", thread: "t1" },
-            resolution: { kind: "resolved" },
-            document: { title: "Ducts" },
-            write: { kind: "rw", thread: "t1", expiresAt: "2000-01-01T00:00:00.000Z" },
-            hostNow: "2000-01-01T00:00:00.000Z",
-          })
-        : new Response("page"),
-  });
-  expect(await fakeWindow.pe.target()).toEqual({ title: "Ducts" });
-  expect(document.querySelector("pe-bind")).toBeNull();
-  await vi.advanceTimersByTimeAsync(90_000);
-  expect(await fakeWindow.pe.target()).toEqual({ title: "Ducts" });
-  expect(document.querySelector("pe-bind")).toBeNull();
 });

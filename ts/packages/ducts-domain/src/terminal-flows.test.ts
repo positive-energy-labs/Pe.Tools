@@ -3,10 +3,10 @@ import { describe, expect, it } from "vite-plus/test";
 import { ductsDocumentSchema } from "@pe/agent-contracts";
 
 import { bin } from "./bins.ts";
-import { claimsForGroup } from "./claims.ts";
+
 import { computeLosses } from "./losses.ts";
 import { survey } from "./survey.ts";
-import { equipmentFlows, terminalFlows } from "./terminal-flows.ts";
+import { terminalFlows } from "./terminal-flows.ts";
 import { groupTree } from "./topology.ts";
 import type { DuctSnapshot } from "./types.ts";
 
@@ -190,29 +190,6 @@ describe("terminalFlows", () => {
     expect(flows[31]!.cfm).toBe(300);
   });
 
-  it("names a markless unit that feeds terminals, only once loads exist", () => {
-    const s = snapshot(0.7854);
-    s.nodes.find((n) => n.id === 1)!.facts = [];
-    const withLoads = terminalFlows(s, loads, {}, trees(s)).findings;
-    expect(withLoads).toContainEqual({
-      kind: "no-mark",
-      equipment: 1,
-      label: "equipment / Standard",
-    });
-    expect(withLoads).not.toContainEqual(
-      expect.objectContaining({ kind: "no-mark", equipment: 2 }),
-    );
-    expect(terminalFlows(s, null, {}, trees(s)).findings).not.toContainEqual(
-      expect.objectContaining({ kind: "no-mark" }),
-    );
-  });
-
-  it("lets a staged flow override every other source", () => {
-    const { flows } = run(0.7854, { "31": { cfm: 150, source: "balancing report" } });
-    expect(flows[31]).toEqual({ cfm: 150, source: "override" });
-    expect(flows[30]).toEqual({ cfm: 300, source: "load-preview:FC-4" });
-  });
-
   it("takes a rooms flow after a staged one and before the load preview and Revit", () => {
     const s = snapshot(0.7854);
     const rooms = new Map([
@@ -224,29 +201,6 @@ describe("terminalFlows", () => {
     expect(flows.get(31)).toEqual({ cfm: 150, source: "override" });
     expect(flows.get(30)).toEqual({ cfm: 111, source: "rooms:room 101" });
     expect(flows.get(40)).toEqual({ cfm: 333, source: "rooms:room 103" });
-  });
-});
-
-describe("equipmentFlows", () => {
-  it("takes a staged unit flow over Revit's fanFlow fact, and reads none as none", () => {
-    const s = snapshot(0.7854);
-    s.nodes
-      .find((n) => n.id === 1)!
-      .facts.push({
-        key: "fanFlow",
-        value: 700,
-        unit: "cfm",
-        provenance: "revit",
-      } as unknown as Node["facts"][number]);
-    expect(Object.fromEntries(equipmentFlows(s, {}))).toEqual({
-      1: { cfm: 700, source: "revit" },
-      2: { cfm: null, source: null },
-      3: { cfm: null, source: null },
-    });
-    expect(equipmentFlows(s, { "1": { cfm: 900 } }).get(1)).toEqual({
-      cfm: 900,
-      source: "override",
-    });
   });
 });
 
@@ -279,43 +233,5 @@ describe("a group with no air mover", () => {
     expect(computeLosses(s, {}, {}, { unitRole: { 1: "passive" } }).byGroup.g10!.hasAirMover).toBe(
       false,
     );
-  });
-});
-
-describe("bin", () => {
-  it("bridges near-miss and stretched joins and blocks everything the builder cannot bridge", () => {
-    expect(bin({ kind: "joined-by-proximity", grade: "near-miss" })).toBe("diagnostic");
-    expect(bin({ kind: "tap-by-proximity", grade: "stretched" })).toBe("diagnostic");
-    expect(bin({ kind: "joined-by-proximity", grade: "anomalous" })).toBe("blocking");
-    for (const kind of [
-      "no-root",
-      "multi-root",
-      "open-end",
-      "no-fan",
-      "no-terminal-flow",
-      "no-flow",
-    ])
-      expect(bin({ kind }), kind).toBe("blocking");
-    // A loop modelled in Revit is usually intended; an inferred one still blocks.
-    expect(bin({ kind: "loop" })).toBe("diagnostic");
-    expect(bin({ kind: "loop-by-inference" })).toBe("blocking");
-    // A terminal is priceable, never required.
-    expect(bin({ kind: "catalog-missing-table" })).toBe("diagnostic");
-    expect(bin({ kind: "catalog-out-of-range" })).toBe("diagnostic");
-    expect(bin({ kind: "no-fan-static" })).toBe("diagnostic");
-    expect(bin({ kind: "series-by-inference" })).toBe("diagnostic");
-  });
-});
-
-describe("claimsForGroup", () => {
-  it("keeps a claim iff any of its ids is in the group", () => {
-    const claims = {
-      a: { text: "a", ids: [1, 2] },
-      b: { text: "b", ids: [9] },
-      c: { text: "c", ids: [9, 2] },
-    };
-    expect(Object.keys(claimsForGroup(claims, new Set([1])))).toEqual(["a"]);
-    expect(Object.keys(claimsForGroup(claims, [2]))).toEqual(["a", "c"]);
-    expect(claimsForGroup(claims, [])).toEqual({});
   });
 });

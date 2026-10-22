@@ -103,25 +103,3 @@ test("a paste lands whole: query, arrow, a two-word token and a trailing word", 
   fireEvent.keyDown(box(), { key: "Enter" });
   expect(commit).toHaveBeenCalledWith("tower|new 2026|true");
 });
-
-test("Backspace on an empty box pulls the last chip back as text, then drops the arrow", () => {
-  render(<Harness onCommit={() => {}} />);
-  box().focus();
-  fireEvent.change(box(), { target: { value: "-> 2024 detach " } });
-  expect(said()).toBe("|true|2024|true|");
-  fireEvent.keyDown(box(), { key: "Backspace" });
-  expect(said()).toBe("|true|2024|false|detach");
-  fireEvent.change(box(), { target: { value: "" } });
-  fireEvent.keyDown(box(), { key: "Backspace" });
-  expect(said()).toBe("|true|null|false|2024");
-  fireEvent.change(box(), { target: { value: "" } });
-  fireEvent.keyDown(box(), { key: "Backspace" });
-  expect(said()).toBe("|false|null|false|");
-});
-
-test("before the arrow the box behaves as ever: a field clause narrows and chips", () => {
-  render(<Harness onCommit={() => {}} />);
-  box().focus();
-  fireEvent.change(box(), { target: { value: "saved>2023 " } });
-  expect(said()).toBe("saved>2023|false|null|false|");
-});

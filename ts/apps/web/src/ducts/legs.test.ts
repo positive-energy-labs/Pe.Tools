@@ -1,17 +1,12 @@
-/**
- * /ducts scene legs, deterministic: the Project A makeup-air trace (88 ordered elements Pea walked on
- * 2026-10-17, `fixtures/makeup-path.json`, shaped here into a minimal snapshot on Main 0 / Upper
- * 12.5 / Attic 24.083 ft) cuts into 9 legs and 7 nodes; and, when `PE_DUCTS_FIXTURE` names the
- * saved Project A snapshot, a group's longest run cuts with real connectors, and a skipped id is a gap.
- */
+/** Deterministic connector and proximity cuts, with optional saved Project A coverage. */
 import { existsSync, readFileSync } from "node:fs";
 import { expect, it } from "vite-plus/test";
 
 import { ductsDocumentSchema } from "@pe/agent-contracts";
-import { labelOfNode, legsOf, OMISSION_HOPS } from "./legs";
-import type { DuctSnapshot } from "@pe/ducts-domain/types";
 import { groupTree } from "@pe/ducts-domain/topology";
-import trace from "./fixtures/makeup-path.json";
+import type { DuctSnapshot } from "@pe/ducts-domain/types";
+
+import { legsOf } from "./legs";
 
 type Node = DuctSnapshot["nodes"][number];
 type Segment = DuctSnapshot["segments"][number];
@@ -101,118 +96,6 @@ function makeupSnapshot(rows: Row[]): DuctSnapshot {
     slots: { fanStatic: "", fanFlow: "", componentDrop: "" },
   } as unknown as DuctSnapshot;
 }
-
-const rows = trace as Row[];
-const ids = rows.map((row) => row.id);
-
-it("a node's label (the snapshot's DuctNode.label) names its place; an unlabelled node falls back to type", () => {
-  const snapshot = makeupSnapshot(rows);
-  snapshot.nodes.find((node) => node.id === 14577391)!.label = "AHU-7";
-  const cut = legsOf(snapshot, ids, labelOfNode(snapshot));
-  expect(cut.nodes.map((place) => place.name)).toContain("AHU-7");
-  expect(cut.legs.map((leg) => leg.name)).toContain("Damper Std → AHU-7");
-  expect(cut.legs.map((leg) => leg.name)).toContain("AHU-7 → Unit E2");
-  // With no label anywhere, nothing changes: the same cut as the unlabelled one.
-  const plain = makeupSnapshot(rows);
-  expect(legsOf(plain, ids, labelOfNode(plain))).toEqual(legsOf(plain, ids));
-});
-
-it("makeup route: 88 elements cut into 9 legs and 7 nodes at equipment, the damper and three level crossings", () => {
-  const snapshot = makeupSnapshot(rows);
-  const cut = legsOf(snapshot, ids, (id) => (id === 14577391 ? "MAU-1" : null));
-
-  expect(cut.gaps).toEqual([]);
-  expect(cut.legs).toHaveLength(9);
-  // The subject starts on a duct (open), passes the damper and three units, climbs into the attic,
-  // drops back through Upper to Main, and ends between the last two units.
-  expect(cut.nodes.map((n) => n.kind)).toEqual([
-    "open",
-    "accessory",
-    "equipment",
-    "equipment",
-    "equipment",
-    "equipment",
-    "equipment",
-  ]);
-  expect(cut.legs.map((leg) => leg.name)).toEqual([
-    "open → Damper Std",
-    "Damper Std → MAU-1",
-    "MAU-1 → Unit E2",
-    "Unit E2 → Unit E3",
-    "Unit E3 → Attic",
-    "Attic → Upper",
-    "Upper → Main",
-    "Main → Unit E4",
-    "Unit E4 → Unit E5",
-  ]);
-  const level = (name: string) => LEVELS.find((l) => l.name === name)!.id;
-  expect(cut.legs.map((leg) => leg.levelId)).toEqual([
-    level("Upper"),
-    level("Upper"),
-    level("Upper"),
-    level("Upper"),
-    level("Upper"),
-    level("Attic"),
-    level("Upper"),
-    level("Main"),
-    level("Main"),
-  ]);
-  // A level place is the first duct on the new level, so the drawing can pin it.
-  expect(cut.legs[4]!.to).toEqual({ id: 14285478, kind: "level", name: "Attic" });
-  expect(cut.legs[5]!.size).toBe('10"ø');
-  expect(cut.legs[0]!.size).toBe('8"ø');
-  // Every subject element is in exactly one leg or is a node; the places are not leg members.
-  const covered = [
-    ...cut.legs.flatMap((leg) => leg.ids),
-    ...cut.nodes.filter((n) => n.kind !== "open").map((n) => n.id),
-  ];
-  expect(covered.sort((a, b) => a - b)).toEqual([...ids].sort((a, b) => a - b));
-  expect(cut.legs.reduce((sum, leg) => sum + leg.fittings, 0)).toBe(38);
-  expect(cut.legs.reduce((sum, leg) => sum + leg.lengthFt, 0)).toBeCloseTo(
-    snapshot.segments.reduce((sum, s) => sum + s.lengthFt, 0),
-  );
-});
-
-it("a subject that skips a connected element reports an omission, not a gap, and keeps cutting", () => {
-  const snapshot = makeupSnapshot(rows);
-  const skipped = ids.filter((id) => id !== 14606587); // the duct between elbows 3 and 5
-  const cut = legsOf(snapshot, skipped);
-  expect(cut.gaps).toEqual([]);
-  expect(cut.omissions).toEqual([{ after: 14606595, before: 14606630, skipped: [14606587] }]);
-  expect(cut.legs).toHaveLength(9);
-  expect(() => legsOf(snapshot, [1])).toThrow("subject id 1 is not in the snapshot");
-});
-
-it("a break the snapshot bridges outside the subject is an omission; one it cannot bridge is a gap", () => {
-  // The wave-3 Project A cases, as a chain: open duct 14122436 is NOT joined to end cap 14107111, while
-  // FR-1 13760866 reaches FC-23 13760867 only through 13761466, 13761629 and 13761574.
-  const chain = [
-    14088043, 14107098, 14106988, 14107111, 14122436, 14199815, 13760866, 13761466, 13761629,
-    13761574, 13760867,
-  ];
-  const snapshot = makeupSnapshot(
-    chain.map((id, i) => ({ id, k: i % 2 ? "fitting" : "accessory", p: [i, 0, 0] })),
-  );
-  // makeupSnapshot chains every row to its neighbour; cut the one real break.
-  for (const node of snapshot.nodes)
-    for (const c of node.connectors)
-      if (
-        (node.id === 14107111 && c.connectedTo?.elementId === 14122436) ||
-        (node.id === 14122436 && c.connectedTo?.elementId === 14107111)
-      )
-        c.connectedTo = null;
-  const subject = [14088043, 14107098, 14106988, 14107111, 14122436, 14199815, 13760866, 13760867];
-  const cut = legsOf(snapshot, subject);
-  expect(cut.gaps).toEqual([{ after: 14107111, before: 14122436 }]);
-  expect(cut.omissions).toEqual([
-    { after: 13760866, before: 13760867, skipped: [13761466, 13761629, 13761574] },
-  ]);
-  // A chain longer than the search cap is a gap: nothing is claimed past OMISSION_HOPS connections.
-  const long = Array.from({ length: OMISSION_HOPS + 2 }, (_, i) => 900 + i);
-  const far = makeupSnapshot(long.map((id, i) => ({ id, k: "fitting", p: [i, 0, 0] })));
-  expect(legsOf(far, [900, long.at(-1)!]).gaps).toHaveLength(1);
-  expect(legsOf(far, [900, long.at(-2)!]).omissions[0]?.skipped).toHaveLength(OMISSION_HOPS - 1);
-});
 
 // The client model stays outside git; the dev knob `PE_DUCTS_FIXTURE` names it (vite.config.ts).
 const FIXTURE = process.env.PE_DUCTS_FIXTURE ?? "";

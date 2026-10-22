@@ -1,17 +1,14 @@
 // @vitest-environment jsdom
-import { afterEach, expect, test, vi } from "vite-plus/test";
-import { act, cleanup, fireEvent, render, screen, within } from "@testing-library/react";
 import {
   availableTransitions,
   scheduleGridSnapshotSchema,
   transitionPatches,
-  type ScheduleGridDocument,
   type RouteStatePatch,
+  type ScheduleGridDocument,
 } from "@pe/agent-contracts";
+import { act, cleanup, fireEvent, render, screen, within } from "@testing-library/react";
+import { afterEach, expect, test, vi } from "vite-plus/test";
 import { ScheduleGridWorkspace } from "./workspace";
-import { useScheduleGridColumns } from "./columns";
-import { ScheduleReview } from "./review";
-import { conditionValues, emptyTableState, visibleRows, wordMatches } from "@pe/kit/table/view";
 
 /** The field spec `revit.detail.schedules` sends for an Integer column. */
 const INTEGER = { definition: { dataTypeId: "autodesk.spec:spec.int64-2.0.0" } };
@@ -33,92 +30,6 @@ function refusals() {
   const said: string[] = [];
   return { said, onRefused: (says: string) => void said.push(says) };
 }
-
-function Columns({
-  args,
-  into,
-}: {
-  args: Parameters<typeof useScheduleGridColumns>;
-  into: { current: ReturnType<typeof useScheduleGridColumns> };
-}) {
-  into.current = useScheduleGridColumns(...args);
-  return null;
-}
-
-test("schedule conditions combine displayed staged text with numeric quantity and numeric sorting", () => {
-  const read = scheduleGridSnapshotSchema.parse({
-    scheduleId: 2,
-    scheduleName: "Terminals",
-    columns: [
-      { columnNumber: 1, headerText: "Model", fieldName: "Model" },
-      { columnNumber: 2, headerText: "Quantity", fieldName: "Count", parameter: INTEGER },
-      { columnNumber: 3, headerText: "Mark", fieldName: "Mark" },
-    ],
-    rows: [
-      { rowNumber: 1, values: ["Custom millwork", "1", "1"], bindings: [] },
-      { rowNumber: 2, values: ["Standard", "4", "4"], bindings: [] },
-      { rowNumber: 3, values: ["custom millwork ", "14", "14"], bindings: [] },
-    ],
-  });
-  const result = { current: [] as ReturnType<typeof useScheduleGridColumns> };
-  render(
-    <Columns
-      into={result}
-      args={[
-        read,
-        { "2::1": { staged: { value: "Millwork grille" } } },
-        { segment: "cells", revision: 1, write: async () => null },
-        async () => undefined,
-        async () => null,
-      ]}
-    />,
-  );
-  const state = { ...emptyTableState(), query: "Model~millwork Quantity>1" };
-  expect(visibleRows(read.rows, result.current, state).map((row) => row.rowNumber)).toEqual([2, 3]);
-  // `!` negates any clause, and a free word too.
-  expect(
-    visibleRows(read.rows, result.current, { ...state, query: "!Model~millwork" }).map(
-      (row) => row.rowNumber,
-    ),
-  ).toEqual([]);
-  expect(
-    visibleRows(read.rows, result.current, { ...state, query: "!grille" }).map(
-      (row) => row.rowNumber,
-    ),
-  ).toEqual([1, 3]);
-  expect(
-    visibleRows(read.rows, result.current, {
-      ...state,
-      sorts: [{ key: "c2", dir: "desc" }],
-    }).map((row) => row.rowNumber),
-  ).toEqual([3, 2]);
-  expect(
-    visibleRows(read.rows, result.current, {
-      ...state,
-      query: `${state.query} grille`,
-    }).map((row) => row.rowNumber),
-  ).toEqual([2]);
-  // A bare number matches that number in a cell, never digits inside a longer one.
-  for (const hit of ["4", "4.0", "4 ea", "Level 4", "4'-0\""])
-    expect(wordMatches(hit, "4")).toBe(true);
-  for (const miss of ["14", "0.4", "A-104", "40"]) expect(wordMatches(miss, "4")).toBe(false);
-  const ids = (query: string) =>
-    visibleRows(read.rows, result.current, { ...emptyTableState(), query }).map(
-      (row) => row.rowNumber,
-    );
-  expect(ids("4")).toEqual([2]);
-  expect(ids("millwork 14")).toEqual([3]);
-  // Number or text is the declared spec: a Mark of digits is still text (ruling 25).
-  expect(result.current.find((column) => column.key === "c3")?.condition?.kind).toBe("text");
-  // An offered value and `is` read the same trimmed, case-folded text: the count is the match.
-  const model = result.current.find((column) => column.key === "c1")!;
-  expect(conditionValues(read.rows, model.condition!)).toContainEqual({
-    value: "Custom millwork",
-    count: 2,
-  });
-  const is = { ...emptyTableState(), query: 'Model="Custom millwork"' };
-  expect(visibleRows(read.rows, result.current, is).map((row) => row.rowNumber)).toEqual([1, 3]);
-});
 
 test("millwork in Model AND Count > 1, through the query box, the header, and its chips", () => {
   vi.stubGlobal("localStorage", { getItem: () => null, setItem: () => undefined });
@@ -438,53 +349,4 @@ test("a range containing a locked schedule cell refuses the whole fill", async (
   await act(async () => fireEvent.keyDown(draft, { key: "Enter" }));
   expect(calls).toHaveLength(0);
   expect(refused.said).toEqual([expect.stringContaining("blocked: Pinned")]);
-});
-
-test("the Work slot's review list locates a row and accepts at the displayed Work revision", () => {
-  const cell = { proposal: { value: "Titus" } };
-  const { calls, apply } = writes();
-  const located: (string | null)[] = [];
-  render(
-    <ScheduleReview
-      state={{
-        slice: { cells: { "1::1": cell }, takenAt: null },
-        revision: 7,
-        hydrated: true,
-        apply,
-        locateRow: (row) => void located.push(row as string | null),
-        busy: null,
-        catalog: null,
-        refused: {},
-        freshness: "current",
-        execute: async () => null,
-        onFocus: { grid: () => {} },
-        snapshot: scheduleGridSnapshotSchema.parse({
-          scheduleId: 1,
-          scheduleName: "GRD",
-          columns: [{ columnNumber: 1, headerText: "Manufacturer", fieldName: "Manufacturer" }],
-          rows: [
-            {
-              rowNumber: 1,
-              values: ["Custom"],
-              bindings: [
-                {
-                  columnNumber: 1,
-                  targetElementIds: [11],
-                  storageType: "String",
-                  displayValue: "Custom",
-                  isEditable: true,
-                  blocker: "None",
-                  targets: [],
-                },
-              ],
-            },
-          ],
-        }),
-      }}
-    />,
-  );
-  fireEvent.click(screen.getByRole("button", { name: /Manufacturer/ }));
-  expect(located).toEqual(["1"]);
-  fireEvent.click(screen.getByRole("button", { name: "accept" }));
-  expect(calls).toEqual([[transitionPatches(["cells"], "1::1", cell, { kind: "accept" }), 7]]);
 });

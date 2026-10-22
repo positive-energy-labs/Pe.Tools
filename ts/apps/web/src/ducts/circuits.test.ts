@@ -305,7 +305,9 @@ it("writes a staged unit flow for any unit rooted in the group, not only the bas
   );
   expect(ids).toEqual([100, 200]);
   expect(
-    applyRequest(s, price(s, {}, doc), "purpose-time", ["downstream"]).equipmentFlows.map((f) => f.id),
+    applyRequest(s, price(s, {}, doc), "purpose-time", ["downstream"]).equipmentFlows.map(
+      (f) => f.id,
+    ),
   ).toEqual([200]);
 });
 

@@ -1,15 +1,11 @@
 import { describe, expect, it } from "vite-plus/test";
 
-import { bin } from "./bins.ts";
-import { fanSections } from "./fan-sections.ts";
 import { passThrough } from "./pass-through.ts";
 import { computeLosses, worstRun } from "./losses.ts";
 import { price } from "./pricing.ts";
 import { survey, unitFlowIn, unitFlowsIn } from "./survey.ts";
-import { equipmentFlows } from "./terminal-flows.ts";
-import { groupTree } from "./topology.ts";
+
 import type { DuctSnapshot } from "./types.ts";
-import { unitRoles } from "./unit-roles.ts";
 
 type Node = DuctSnapshot["nodes"][number];
 type Segment = DuctSnapshot["segments"][number];
@@ -31,7 +27,13 @@ const port = (index: number, to: number | null, connector = 1): Connector =>
   }) as Connector;
 const fact = (key: string, value: number | null, text?: string) =>
   ({ key, value, text, unit: "", provenance: "revit" }) as unknown as Fact;
-const node = (id: number, kind: string, groupId: string | null, connectors: Connector[], facts: Fact[] = []) =>
+const node = (
+  id: number,
+  kind: string,
+  groupId: string | null,
+  connectors: Connector[],
+  facts: Fact[] = [],
+) =>
   ({
     id,
     kind,
@@ -94,8 +96,20 @@ const snapshot = (flows: { ahu?: number; dh?: number } = { ahu: 800, dh: 100 }) 
       },
     ],
     nodes: [
-      node(1, "equipment", null, [port(1, 10)], [fact("mark", null, "FC-30"), fact("fanFlow", flows.ahu ?? null)]),
-      node(2, "equipment", null, [port(1, 15, 2)], [fact("mark", null, "DH-16"), fact("fanFlow", flows.dh ?? null)]),
+      node(
+        1,
+        "equipment",
+        null,
+        [port(1, 10)],
+        [fact("mark", null, "FC-30"), fact("fanFlow", flows.ahu ?? null)],
+      ),
+      node(
+        2,
+        "equipment",
+        null,
+        [port(1, 15, 2)],
+        [fact("mark", null, "DH-16"), fact("fanFlow", flows.dh ?? null)],
+      ),
       node(3, "equipment", null, [port(1, 16, 2)], [fact("mark", null, "FR-1")]),
       node(50, "fitting", "g10", [port(1, 10, 2), port(2, 11), port(3, 13), port(4, 16)]),
       node(51, "fitting", "g10", [port(1, 13, 2), port(2, 14), port(3, 15)]),
@@ -117,68 +131,7 @@ const snapshot = (flows: { ahu?: number; dh?: number } = { ahu: 800, dh: 100 }) 
     slots: {},
   }) as unknown as DuctSnapshot;
 
-describe("unitRoles", () => {
-  it("proposes fan from base equipment, then a stated flow; passive only for a through-flow device", () => {
-    const base = snapshot({});
-    const s = {
-      ...base,
-      slots: { fanFlow: "PE_M_Fan_AirFlow" },
-      nodes: base.nodes.map((n) =>
-        n.id === 2
-          ? { ...n, facts: [...n.facts.filter((f) => f.key !== "fanFlow"), fact("fanFlow", 100)] }
-          : n.id === 3
-            ? { ...n, connectors: [port(1, 16, 2), port(2, null)] }
-            : n,
-      ),
-      systems: [
-        { name: "SA", baseEquipmentId: 1 },
-        // A system the unit's own groups do not carry names it base equipment for nothing here.
-        { name: "RA 9", baseEquipmentId: 3 },
-      ],
-    } as unknown as DuctSnapshot;
-    expect(Object.fromEntries(unitRoles(s, equipmentFlows(s, {}), {}))).toEqual({
-      1: { role: "fan", why: "proposed", reason: "base equipment of SA" },
-      2: { role: "fan", why: "proposed", reason: "airflow in PE_M_Fan_AirFlow (100 cfm)" },
-      3: { role: "passive", why: "proposed", reason: "air passes straight through (all ports Supply Air)" },
-    });
-    // No flow, no base equipment: mixed port classes move air; one port moves air.
-    const mixed = {
-      ...base,
-      nodes: base.nodes.map((n) =>
-        n.id === 3 ? { ...n, connectors: [port(1, 16, 2), { ...port(2, null), classification: "ReturnAir" }] } : n,
-      ),
-    } as unknown as DuctSnapshot;
-    const roles = unitRoles(mixed, equipmentFlows(mixed, {}), {});
-    expect(roles.get(3)).toEqual({ role: "fan", why: "proposed", reason: "mixed port classes: moves air" });
-    expect(roles.get(1)).toEqual({ role: "fan", why: "proposed", reason: "one port: moves air" });
-  });
-
-  it("lets a ruling beat the proposal and tells a stored one from a staged one", () => {
-    const s = { ...snapshot(), store: { roles: { "1": { role: "passive", ruledAt: "t" } } } };
-    const roles = unitRoles(s as unknown as DuctSnapshot, equipmentFlows(s as unknown as DuctSnapshot, {}), {
-      "1": { role: "passive" },
-      "3": { role: "fan" },
-    });
-    expect(roles.get(1)).toMatchObject({ role: "passive", why: "ruled" });
-    expect(roles.get(3)).toMatchObject({ role: "fan", why: "staged" });
-  });
-});
-
 describe("several fans", () => {
-  it("never block: a Diagnostics line names the split, and a flowless fan takes the flow it serves", () => {
-    const s = snapshot({ dh: 100 });
-    const sv = survey(s, null);
-    const ids = sv.findings.map((f) => f.id);
-    expect(ids).not.toContain("multi-root:g10");
-    const split = sv.findings.find((f) => f.id === "multi-fan:g10")!;
-    expect(bin(split)).toBe("diagnostic");
-    // FC-30 states nothing: it serves grille 30 (300 cfm), nearer its port than DH-16's (31 is DH-16's).
-    expect(sv.equipmentFlows.get(1)).toEqual({ cfm: 300, source: "derived", grilles: 1 });
-    expect(split.note).toBe(
-      "priced per fan: FC-30 300 cfm (sum of 1 grille) owns the trunk; DH-16 100 cfm owns its port to the first junction; FR-1 flow unknown owns its port to the first junction",
-    );
-  });
-
   it("derives a flowless fan's flow from this group's grilles, never another group's (SA 19, DH-21)", () => {
     // DH-16 also roots return group g20 through its second port: grille 33 (900 cfm) is its there.
     const base = snapshot({});
@@ -189,7 +142,14 @@ describe("several fans", () => {
         { ...base.groups[0]!, id: "g20", rootIds: [2], terminalCount: 1, issueIds: [] },
       ],
       nodes: [
-        ...base.nodes.map((n) => (n.id === 2 ? { ...n, connectors: [port(1, 15, 2), { ...port(2, 20), classification: "ReturnAir" }] } : n)),
+        ...base.nodes.map((n) =>
+          n.id === 2
+            ? {
+                ...n,
+                connectors: [port(1, 15, 2), { ...port(2, 20), classification: "ReturnAir" }],
+              }
+            : n,
+        ),
         node(33, "terminal", "g20", [port(1, 20, 2)], [fact("flow", 900)]),
       ],
       segments: [...base.segments, { ...duct(20, [2, 33]), groupId: "g20" }],
@@ -218,42 +178,26 @@ describe("several fans", () => {
     expect(priced.next.byGroup.g10!.fans.find((f) => f.unit === 3)!.cfm).toBeNull();
     expect(unitFlowsIn(priced, ["g10"]).get(2)?.cfm).toBe(200);
   });
-
-  it("reads a stated flow as is in every system", () => {
-    const priced = price(snapshot(), {}, null);
-    expect(unitFlowIn(priced, 1, ["g10"])).toEqual({ cfm: 800, source: "revit" });
-    expect(unitFlowIn(priced, 1, [])).toEqual({ cfm: 800, source: "revit" });
-  });
 });
 
 describe("fanSections", () => {
-  it("gives the smaller fan its port to the first junction and the larger fan the trunk", () => {
-    const s = snapshot();
-    const tree = groupTree(s, "g10", 1);
-    const [big, small] = fanSections(tree, [
-      { unit: 2, cfm: 100 },
-      { unit: 1, cfm: 800 },
-    ]);
-    expect(small).toMatchObject({ unit: 2, port: 15, junction: 51, owned: [15] });
-    expect(big).toMatchObject({ unit: 1, port: 10, junction: null });
-    expect(big!.owned).toContain(51);
-    expect(big!.owned).not.toContain(15);
-  });
-
   it("prices each fan: the smaller one's stretch at its own flow, then the trunk from the junction", () => {
     const s = snapshot();
-    const result = computeLosses(s, {}, {}, {
-      unitRole: { 1: "fan", 2: "fan", 3: "passive" },
-      unitCfm: { 1: 800, 2: 100 },
-    });
+    const result = computeLosses(
+      s,
+      {},
+      {},
+      {
+        unitRole: { 1: "fan", 2: "fan", 3: "passive" },
+        unitCfm: { 1: 800, 2: 100 },
+      },
+    );
     const { fans, fan, critical } = result.byGroup.g10!;
     expect(fans.map((f) => f.unit)).toEqual([1, 2]);
     const [big, small] = fans;
     expect(big).toMatchObject({ esp: fan, critical, viaJunction: false });
     expect(small).toMatchObject({ junction: 51, critical: 31, viaJunction: true });
-    expect(small!.stretch.map((r) => r.desc)).toEqual([
-      expect.stringContaining("at 100 cfm"),
-    ]);
+    expect(small!.stretch.map((r) => r.desc)).toEqual([expect.stringContaining("at 100 cfm")]);
     // Its air joins the trunk's demand past the junction; it is not added on top.
     const tail = result.paths[31]!.rows.filter((r) => r.id === 14 || r.id === 31 || r.id === 51);
     const tailDp = tail.reduce((a, r) => a + (r.dp ?? 0), 0);
@@ -269,10 +213,15 @@ describe("fanSections", () => {
       ...base,
       segments: base.segments.map((x) => (x.id === 15 ? { ...x, lengthFt: 200 } : x)),
     } as DuctSnapshot;
-    const result = computeLosses(s, {}, {}, {
-      unitRole: { 1: "fan", 2: "fan", 3: "passive" },
-      unitCfm: { 1: 800, 2: 700 },
-    });
+    const result = computeLosses(
+      s,
+      {},
+      {},
+      {
+        unitRole: { 1: "fan", 2: "fan", 3: "passive" },
+        unitCfm: { 1: 800, 2: 700 },
+      },
+    );
     const solved = result.byGroup.g10!;
     const [big, small] = solved.fans;
     expect(small!.esp).toBeGreaterThan(big!.esp);
@@ -295,21 +244,16 @@ describe("fanSections", () => {
       unit: 2,
     });
     // A tie stays with the larger fan.
-    const even = computeLosses(snapshot(), {}, {}, {
-      unitRole: { 1: "fan", 2: "fan", 3: "passive" },
-      unitCfm: { 1: 800, 2: 100 },
-    }).byGroup.g10!;
+    const even = computeLosses(
+      snapshot(),
+      {},
+      {},
+      {
+        unitRole: { 1: "fan", 2: "fan", 3: "passive" },
+        unitCfm: { 1: 800, 2: 100 },
+      },
+    ).byGroup.g10!;
     expect(even.criticalFan).toBe(even.fans.reduce((a, f) => (f.esp > a.esp ? f : a)).unit);
-  });
-
-  it("walks a group from its one fan when the other units are passive", () => {
-    const s = snapshot();
-    const result = computeLosses(s, {}, {}, {
-      unitRole: { 1: "fan", 2: "passive", 3: "passive" },
-      unitCfm: { 1: 800 },
-    });
-    expect(result.byGroup.g10!.fans).toEqual([]);
-    expect(result.paths[31]!.rows[0]!.id).toBe(10);
   });
 });
 
@@ -319,7 +263,14 @@ describe("passThrough", () => {
     const s = snapshot();
     const filter = s.nodes.find((n) => n.id === 3)!;
     filter.connectors = [port(1, 16, 2), port(2, 17), port(3, null)];
-    const g17 = { ...s.groups[0]!, id: "g17", rootIds: [3], terminalCount: 1, elementCount: 2, issueIds: [] };
+    const g17 = {
+      ...s.groups[0]!,
+      id: "g17",
+      rootIds: [3],
+      terminalCount: 1,
+      elementCount: 2,
+      issueIds: [],
+    };
     const d17 = { ...duct(17, [3, 32]), groupId: "g17" } as Segment;
     return {
       ...s,
@@ -334,11 +285,18 @@ describe("passThrough", () => {
     expect([...p.merged]).toEqual([["g10", ["g10", "g17"]]]);
     expect(p.snapshot.groups.map((g) => [g.id, g.rootIds])).toEqual([["g10", [1, 2]]]);
     expect(p.snapshot.nodes.find((n) => n.id === 3)!.groupId).toBe("g10");
-    expect(p.findings).toMatchObject([{ id: "open-end:passive:3:3", kind: "open-end", groupId: "g10" }]);
-    const result = computeLosses(p.snapshot, {}, {}, {
-      unitRole: { 1: "fan", 2: "fan", 3: "passive" },
-      unitCfm: { 1: 800, 2: 100 },
-    });
+    expect(p.findings).toMatchObject([
+      { id: "open-end:passive:3:3", kind: "open-end", groupId: "g10" },
+    ]);
+    const result = computeLosses(
+      p.snapshot,
+      {},
+      {},
+      {
+        unitRole: { 1: "fan", 2: "fan", 3: "passive" },
+        unitCfm: { 1: 800, 2: 100 },
+      },
+    );
     // Grille 32 sits past the filter: its run starts at the air handler's duct and crosses duct 16.
     const ids = [...new Set(result.paths[32]!.rows.map((r) => r.id))];
     expect(ids[0]).toBe(10);

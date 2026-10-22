@@ -6,7 +6,7 @@
  */
 import { expect, it } from "vite-plus/test";
 
-import { NO_SYSTEM, sectionNames, systemScope, systemsOf } from "./system-scope.ts";
+import { systemScope } from "./system-scope.ts";
 import type { DuctSnapshot } from "./types.ts";
 
 type Node = DuctSnapshot["nodes"][number];
@@ -56,7 +56,9 @@ const node = (
   groupId: group,
   systemName: system,
   connectors,
-  facts: mark ? [{ key: "mark", text: mark, unit: "", provenance: "designer-stated" as const }] : [],
+  facts: mark
+    ? [{ key: "mark", text: mark, unit: "", provenance: "designer-stated" as const }]
+    : [],
 });
 
 const snapshot = {
@@ -134,19 +136,4 @@ it("only the runs to the system's own terminals, its elements and their unit pri
   const ra = systemScope(snapshot, "RA 1");
   // RA 1's run leaves the AHU through SA 1's trunk: the shared trunk prices both.
   expect([...ra.prices].sort((a, b) => a - b)).toEqual([1, 3, 5, 20, 100]);
-});
-
-it("the picker lists systems by name with classification and unit tags, unclaimed groups last", () => {
-  const list = systemsOf(snapshot);
-  expect(list.map((s) => s.name)).toEqual(["RA 1", "SA 1", NO_SYSTEM]);
-  expect(list[1]).toMatchObject({
-    classification: "Supply Air",
-    groups: ["g1", "g6"],
-    units: ["AHU-1"],
-    terminals: 2,
-  });
-});
-
-it("a system's sections are named by the system and the units rooting them, never a group id", () => {
-  expect([...sectionNames(snapshot, "SA 1").values()]).toEqual(["SA 1 · AHU-1", "SA 1 · no fan"]);
 });

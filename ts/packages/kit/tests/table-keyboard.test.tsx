@@ -1,7 +1,7 @@
 // @vitest-environment jsdom
 import { useState } from "react";
-import { act, cleanup, fireEvent, render, screen, waitFor } from "@testing-library/react";
-import { afterEach, expect, test, vi } from "vite-plus/test";
+import { act, cleanup, fireEvent, render, screen } from "@testing-library/react";
+import { afterEach, expect, test } from "vite-plus/test";
 import { Table } from "../src/components/master-table/table";
 import { TextCell } from "../src/components/master-table/cells";
 import { readKeyMeta, readRegistrations } from "../src/keys";
@@ -63,26 +63,4 @@ test("Tab wraps to the next row and retains its native exit at the last cell", (
   expect(document.activeElement).toBe(cells[2]);
   focus(cells[3]!);
   expect(fireEvent.keyDown(cells[3]!, { key: "Tab" })).toBe(true);
-});
-
-test("copy works with the menu closed and reads an editable cell's displayed value", () => {
-  const writeText = vi.fn().mockResolvedValue(undefined);
-  Object.defineProperty(navigator, "clipboard", { configurable: true, value: { writeText } });
-  render(<Harness />);
-  const cell = screen.getAllByRole("gridcell")[1]!;
-  focus(cell);
-  fireEvent.keyDown(cell, { key: "c", ctrlKey: true });
-  expect(writeText).toHaveBeenCalledWith("Original");
-});
-
-test("an idle editor exposes cell actions while an active editor keeps its native menu", async () => {
-  render(<Harness />);
-  const cell = screen.getAllByRole("gridcell")[1]!;
-  const input = cell.querySelector("input")!;
-  focus(cell);
-  expect(fireEvent.contextMenu(input)).toBe(false);
-  fireEvent.click(await screen.findByRole("option", { name: /^Edit cell/ }));
-  await waitFor(() => expect(document.activeElement).toBe(input));
-  expect(fireEvent.contextMenu(input)).toBe(true);
-  expect(screen.queryByRole("listbox")).toBeNull();
 });

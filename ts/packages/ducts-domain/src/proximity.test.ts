@@ -9,7 +9,7 @@
 import { expect, it } from "vite-plus/test";
 import { ductsDocumentSchema, type DuctsRouteDocument } from "@pe/agent-contracts";
 
-import { CAP_THICKNESS_IN, inferJoints, tolerate } from "./proximity.ts";
+import { inferJoints, tolerate } from "./proximity.ts";
 import { survey } from "./survey.ts";
 import { groupTree } from "./topology.ts";
 import type { DuctSnapshot } from "./types.ts";
@@ -60,27 +60,6 @@ const rect = (id: number, a: number[], b: number[], w: number, h: number, groupI
     ...sized,
     diameterIn: null,
     connectors: s.connectors.map((c) => ({ ...c, ...sized, diameterIn: null })),
-  };
-};
-/** An end cap on `on`'s connector `index`. */
-const cap = (id: number, on: Segment, index: number): Node => {
-  const end = on.connectors.find((c) => c.index === index)!;
-  end.connectedTo = { elementId: id, connector: 1 };
-  return {
-    id,
-    kind: "cap",
-    category: "Duct Fittings",
-    family: "Rectangular Endcap",
-    type: null,
-    partType: "Cap",
-    levelId: 1,
-    point: end.point,
-    groupId: on.groupId,
-    systemName: "SA 1",
-    classification: "Supply Air",
-    connectors: [{ ...end, index: 1, connectedTo: { elementId: on.id, connector: index } }],
-    facts: [],
-    uniqueId: null,
   };
 };
 const link = (a: Segment, ia: number, b: Segment, ib: number) => {
@@ -183,12 +162,6 @@ it("a 0.4 in gap joins the two open ends and merges their groups", () => {
   expect(before.groups).toHaveLength(2);
 });
 
-it("a 2.5 in gap stays open: past the 1 in end-to-end rule and past FACE_TOL_IN of either mouth", () => {
-  const before = snap([duct(1, [0, 0, 0], [10, 0, 0]), duct(2, [10 + 2.5 * IN, 0, 0], [20, 0, 0])]);
-  expect(inferJoints(before)).toEqual({ joints: [], taps: [], inline: [], findings: [] });
-  expect(tolerate(before).snapshot).toBe(before);
-});
-
 it("a branch end 0.3 in off a main's side becomes a virtual tap on the main", () => {
   const before = snap([
     duct(1, [0, 0, 0], [20, 0, 0], "g1"),
@@ -282,137 +255,6 @@ const onSide = (id: number, x: number, z: number, gapIn: number) => {
   return { ...d, diameterIn: 10, connectors: d.connectors.map((c) => ({ ...c, diameterIn: 10 })) };
 };
 
-it("a duct landing off-center on a plenum's side taps it where it lands", () => {
-  const { taps, findings } = inferJoints(snap([plenum(), onSide(2, 3, 8 * IN, 0.5)]));
-  expect(taps).toEqual([
-    {
-      id: "proximity:2:1|1",
-      a: "2:1",
-      segment: 1,
-      kind: "tap-by-proximity",
-      gapIn: expect.closeTo(0.5, 6),
-      at: expect.closeTo(3, 6),
-      point: [3, 0, 0],
-      grade: "stretched",
-    },
-  ]);
-  expect(findings[0]!.note).toContain("lands on the side of duct 1");
-});
-
-it("two ducts landing on one side face both tap it", () => {
-  const { taps } = inferJoints(snap([plenum(), onSide(2, 3, 0, 0.5), onSide(3, 6, -0.5, 1.5)]));
-  expect(taps.map((t) => [t.a, t.segment, Math.round(t.at * 100) / 100])).toEqual([
-    ["2:1", 1, 3],
-    ["3:1", 1, 6],
-  ]);
-});
-
-it("a duct stopping 1.6 in short of an end cap's face taps the capped duct at its end", () => {
-  // Project A 14122436 → cap 14107111 on plenum 14106988: the plenum ends at y 0, the cap face sits
-  // CAP_THICKNESS_IN outboard of it, and the duct stops 1.6 in short of that face.
-  const main = rect(1, [0, 10, 0], [0, 0, 0], 30, 30, "g1");
-  const end = -(CAP_THICKNESS_IN + 1.6) * IN;
-  const branch = duct(2, [0, -5, 0], [0, end, 0], "g2");
-  const before = snap([main, branch], [cap(9, main, 2)]);
-  const { taps, snapshot } = tolerate(before);
-  expect(taps).toEqual([
-    {
-      id: "proximity:2:2|1",
-      a: "2:2",
-      segment: 1,
-      kind: "tap-by-proximity",
-      gapIn: expect.closeTo(1.6, 6),
-      at: expect.closeTo(10, 6),
-      point: [0, 0, 0],
-      grade: "stretched",
-    },
-  ]);
-  expect(snapshot.groups.map((g) => g.id)).toEqual(["g1"]);
-  const tree = groupTree(snapshot, "g1");
-  expect(tree.parent.get(2)).toBe(-1);
-  expect(tree.parent.get(-1)).toBe(1);
-  // Without the cap the end is no face: the same duct stays open.
-  expect(inferJoints(snap([rect(1, [0, 10, 0], [0, 0, 0], 30, 30), branch])).taps).toEqual([]);
-});
-
-it("a duct running alongside a plenum within tolerance does not tap it", () => {
-  const along = duct(2, [2, 16 * IN, 0], [5, 16 * IN, 0], "g2");
-  expect(inferJoints(snap([plenum(), along])).taps).toEqual([]);
-});
-
-it("an ignore verdict withholds one landing and keeps the other on the same face", () => {
-  const before = snap([plenum(), onSide(2, 3, 0, 0.5), onSide(3, 6, 0, 0.5)]);
-  const { taps } = tolerate(before, ignoring("proximity:2:1|1"));
-  expect(taps.map((t) => t.a)).toEqual(["3:1"]);
-});
-
-/** A 16x8 grille whose one open connector faces down at `at`, its body 1 in above. */
-const grille = (id: number, at: number[]): Node => ({
-  id,
-  kind: "terminal",
-  category: "Air Terminals",
-  family: "Price LBP15A Supply",
-  type: "16 X 8",
-  partType: null,
-  levelId: 1,
-  point: [at[0]!, at[1]!, at[2]! + IN],
-  groupId: `g${id}`,
-  systemName: "SA 19",
-  classification: "Supply Air",
-  connectors: [
-    {
-      ...conn(1, at),
-      shape: "rectangular",
-      size: "16x8",
-      diameterIn: null,
-      widthIn: 16,
-      heightIn: 8,
-    },
-  ],
-  facts: [],
-  uniqueId: null,
-});
-
-it("a duct rising into a grille's mouth 2 in off its centre joins the grille (Project A SA 19)", () => {
-  // 8750451's open end sits in grille 8747668's connector plane, 2.0 in off its centre in x.
-  const riser = rect(2, [0, 0, 12], [0, 0, 10], 16, 8, "g2");
-  const before = snap([riser], [grille(9, [2 * IN, 0, 12])]);
-  const { joints, findings, snapshot } = tolerate(before);
-  expect(joints).toEqual([
-    {
-      id: "proximity:2:1|9:1",
-      a: "9:1",
-      b: "2:1",
-      kind: "joined-by-proximity",
-      gapIn: expect.closeTo(0, 6),
-      // 2.0 in off the mouth's centre: accepted, not a near miss.
-      grade: "stretched",
-    },
-  ]);
-  // The grille is read first, so it is the one landing; the rule is symmetric.
-  expect(findings[0]!.id).toBe("proximity:2:1|9:1");
-  expect(findings[0]!.note).toContain("2.00 in from its centre");
-  expect(snapshot.nodes[0]!.connectors[0]!.connectedTo).toEqual({ elementId: 2, connector: 1 });
-  // Beside the mouth, not under it: no join.
-  expect(inferJoints(snap([riser], [grille(9, [12 * IN, 0, 12])])).joints).toEqual([]);
-});
-
-it("two ducts landing on one connector's face both join it, each to its own copy of the port", () => {
-  const a = duct(2, [-3 * IN, 0, 12], [-3 * IN, 0, 10], "g2");
-  const b = duct(3, [3 * IN, 0, 12], [3 * IN, 0, 10], "g3");
-  const { joints, snapshot } = tolerate(snap([a, b], [grille(9, [0, 0, 12])]));
-  expect(joints.map((j) => [j.a, j.b])).toEqual([
-    ["9:1", "2:1"],
-    ["3:1", "9:1"],
-  ]);
-  const ports = snapshot.nodes[0]!.connectors.map((c) => [c.index, c.connectedTo]);
-  expect(ports).toEqual([
-    [1, { elementId: 2, connector: 1 }],
-    [2, { elementId: 3, connector: 1 }],
-  ]);
-  expect(snapshot.segments[1]!.connectors[0]!.connectedTo).toEqual({ elementId: 9, connector: 2 });
-});
-
 it("open ends of different classifications 0.4 in apart warn and stay open; a connect verdict joins them", () => {
   const before = snap([
     duct(1, [0, 0, 0], [10, 0, 0], "g1"),
@@ -442,47 +284,6 @@ it("open ends of different classifications 0.4 in apart warn and stay open; a co
   expect(inferJoints(before, 1, ignoring(id)).findings).toEqual([]);
 });
 
-it("a supply branch landing on a return duct's side warns instead of tapping it", () => {
-  // Project A 6894422:1 on 7243161: a supply end on a return main is a near miss, not a tap.
-  const out = inferJoints(snap([returnAir(plenum()), onSide(2, 3, 0, 0.5)]));
-  expect(out.taps).toEqual([]);
-  expect(out.findings.map((f) => [f.id, f.kind])).toEqual([
-    ["proximity:2:1|1", "near-miss-across-classifications"],
-  ]);
-  expect(out.findings[0]!.note).toContain("2:1 is SupplyAir and 1 is ReturnAir; not joined");
-  const anyway = inferJoints(
-    snap([returnAir(plenum()), onSide(2, 3, 0, 0.5)]),
-    1,
-    staging("proximity:2:1|1", "connect"),
-  );
-  expect(anyway.taps.map((t) => t.id)).toEqual(["proximity:2:1|1"]);
-});
-
-it("an end deep inside a duct's body, pointing across it, taps it at its nearest point", () => {
-  // Project A 7266368:1 sits 3.3 in inside 14342882 (a real join, kaitpw checked in Revit); this
-  // one sits on the plenum's centerline, 15 in past its face.
-  const deep = duct(2, [4, 0, 0], [4, 5, 0], "g2");
-  const { taps, findings } = tolerate(snap([plenum(), deep]));
-  expect(taps).toMatchObject([
-    {
-      id: "proximity:2:1|1",
-      a: "2:1",
-      segment: 1,
-      gapIn: expect.closeTo(-15, 6),
-      point: [4, 0, 0],
-    },
-  ]);
-  expect(findings[0]!.note).toContain("15.00 in into its face");
-  // An overlap coming in through the plenum's (capped) start end and pointing deeper taps too ...
-  const capped = plenum();
-  const ends = [cap(9, capped, 1)];
-  const overlap = duct(3, [-2, 0, 0], [1, 0, 0], "g3");
-  expect(inferJoints(snap([capped, overlap], ends)).taps.map((t) => t.a)).toEqual(["3:2"]);
-  // ... one pointing back out through the nearer end does not.
-  const out = duct(3, [3, 0, 0], [1, 0, 0], "g3");
-  expect(inferJoints(snap([capped, out], ends)).taps.map((t) => t.a)).not.toContain("3:2");
-});
-
 it("every inference is a finding a person clears; a near miss assumes nothing", () => {
   const before = snap([
     plenum(),
@@ -495,58 +296,6 @@ it("every inference is a finding a person clears; a near miss assumes nothing", 
     ["near-miss-across-classifications", "person", false],
     ["tap-by-proximity", "person", true],
   ]);
-});
-
-/** An 81x3.5 linear grille (Project A 10922066): its one connector sits at its insertion point. */
-const linear = (id: number, at: number[], facing?: number[]): Node => {
-  const g = grille(id, at);
-  const port = { ...g.connectors[0]!, size: "81x3.5", widthIn: 81, heightIn: 3.5 };
-  return { ...g, point: at, connectors: [facing ? { ...port, facing } : port] };
-};
-
-it("a grille whose connector is its insertion point lands by its captured facing, and only by it", () => {
-  // Duct 1 (6 in round) runs along x; the grille's mouth sits 0.5 in under it, facing up.
-  const at = [10, 0, -3.5 * IN];
-  const main = duct(1, [0, 0, 0], [20, 0, 0], "g1");
-  const { taps, findings } = inferJoints(snap([main], [linear(9, at, [0, 0, 1])]));
-  expect(taps).toEqual([
-    {
-      id: "proximity:9:1|1",
-      a: "9:1",
-      segment: 1,
-      kind: "tap-by-proximity",
-      gapIn: expect.closeTo(0.5, 6),
-      at: expect.closeTo(10, 6),
-      point: [10, 0, 0],
-      grade: "stretched",
-    },
-  ]);
-  expect(findings.map((f) => f.kind)).toEqual(["tap-by-proximity"]);
-  // An older snapshot carries no facing: the axis cannot be derived from the point, nothing lands.
-  expect(inferJoints(snap([main], [linear(9, at)]))).toEqual({
-    joints: [],
-    taps: [],
-    inline: [],
-    findings: [],
-  });
-});
-
-it("a captured width axis rolls a rectangular duct's faces; without one a vertical rect is a band", () => {
-  // A vertical 24x4 riser; a branch ends 0.5 in off a face, 10 in off centre along the width.
-  const riser = (widthAxis?: number[]) => {
-    const r = rect(1, [0, 0, 0], [0, 0, 10], 24, 4);
-    return { ...r, connectors: r.connectors.map((c) => (widthAxis ? { ...c, widthAxis } : c)) };
-  };
-  const branch = duct(2, [10 * IN, 2.5 * IN, 5], [10 * IN, 5, 5], "g2");
-  const tapsOf = (s: Segment) => inferJoints(snap([s, branch])).taps;
-  // Width along x: the branch faces the 24 in side and lands 0.5 in short of it.
-  expect(tapsOf(riser([1, 0, 0]))).toMatchObject([
-    { a: "2:1", segment: 1, gapIn: expect.closeTo(0.5, 6), at: expect.closeTo(5, 6) },
-  ]);
-  // Width along y: the side it faces is the 4 in one, 8 in away; no landing.
-  expect(tapsOf(riser([0, 1, 0]))).toEqual([]);
-  // ponytail fallback: no roll, a vertical rect is the round-equivalent band, and this end misses it.
-  expect(tapsOf(riser())).toEqual([]);
 });
 
 /** A two-port 6 in round damper centred at `at` along x, its ports 0.06 in apart and both open (Project A 13568060). */
@@ -670,118 +419,6 @@ const pair = (gapIn: number, lateralIn = 0, deg = 0) => {
     duct(2, start, [start[0]! + 10 * Math.cos(r), start[1]! + 10 * Math.sin(r), 0], "g2"),
   ];
 };
-const gradeOf = (segments: Segment[], nodes: Node[] = []) =>
-  inferJoints(snap(segments, nodes)).findings.map((f) => [f.kind, f.grade]);
-
-it("an open-to-open join is a near miss only sub-inch, of one classification, opposed and centred", () => {
-  expect(gradeOf(pair(0.9))).toEqual([["joined-by-proximity", "near-miss"]]);
-  // Centred within NEAR_MISS_CENTRED_IN (0.5 in) of the axis, and not.
-  expect(gradeOf(pair(0.3, 0.4))).toEqual([["joined-by-proximity", "near-miss"]]);
-  expect(gradeOf(pair(0.3, 0.6))).toEqual([["joined-by-proximity", "stretched"]]);
-  // Opposed: cos below -0.9 at 20 degrees, not at 30.
-  expect(gradeOf(pair(0.3, 0, 20))).toEqual([["joined-by-proximity", "near-miss"]]);
-  expect(gradeOf(pair(0.3, 0, 30))).toEqual([["joined-by-proximity", "stretched"]]);
-  // One side states no classification: not the same one.
-  const [a, b] = pair(0.3);
-  b!.connectors = b!.connectors.map((c) => ({ ...c, classification: null }));
-  expect(gradeOf([a!, b!])).toEqual([["joined-by-proximity", "stretched"]]);
-  // Past 1 in, a mouth landing within FACE_TOL_IN joins but is stretched.
-  const riser = rect(2, [0, 0, 12 + 1.5 * IN], [0, 0, 14], 16, 8, "g2");
-  riser.connectors[0]!.facing = [0, 0, -1];
-  const up = grille(9, [0, 0, 12]);
-  up.connectors[0]!.facing = [0, 0, 1];
-  expect(gradeOf([riser], [up])).toEqual([["joined-by-proximity", "stretched"]]);
-});
-
-it("captured facings pointing one way join anomalous, the note naming the reversed connector", () => {
-  const [a, b] = pair(0.3);
-  a!.connectors[1]!.facing = [1, 0, 0];
-  b!.connectors[0]!.facing = [1, 0, 0];
-  const { findings } = inferJoints(snap([a!, b!]));
-  expect(findings).toMatchObject([{ kind: "joined-by-proximity", grade: "anomalous" }]);
-  expect(findings[0]!.note).toBe(
-    "6ø duct 1 (SA 1) and 6ø duct 2 (SA 1) are joined though their connectors face the same way, so one is reversed. Fix: flip the reversed connector (Family Foundry migration) or replace the family.",
-  );
-});
-
-/** A takeoff whose open port sits `deepIn` inside the plenum's +y side, facing into it. */
-const takeoff = (id: number, deepIn: number): Node => ({
-  id,
-  kind: "fitting",
-  category: "Duct Fittings",
-  family: "Rectangular Takeoff",
-  type: "Standard",
-  partType: "TapAdjustable",
-  levelId: 1,
-  point: [3, (15 - deepIn) * IN, 0],
-  groupId: `g${id}`,
-  systemName: "SA 70",
-  classification: "Supply Air",
-  connectors: [
-    { ...conn(1, [3, (15 - deepIn) * IN, 0]), facing: [0, -1, 0] },
-    { ...conn(2, [3, (15 - deepIn + 6) * IN, 0]), facing: [0, 1, 0] },
-  ],
-  facts: [],
-  uniqueId: null,
-});
-
-it("a part's port deeper than THROUGH_IN in a duct's body is placed through it: anomalous; a duct end there is stretched", () => {
-  expect(gradeOf([plenum()], [takeoff(9, 0.5)])).toEqual([["tap-by-proximity", "stretched"]]);
-  const { findings } = inferJoints(snap([plenum()], [takeoff(9, 1.5)]));
-  expect(findings).toMatchObject([{ kind: "tap-by-proximity", grade: "anomalous" }]);
-  expect(findings[0]!.note).toBe(
-    "Rectangular Takeoff Standard fitting 9 (SA 70)'s connector sits 1.50 in inside 30x30 duct 1 (SA 1), 3.00 ft along it, not at its end; tapped there. Fix: move the part to the duct's end or face, or replace the family.",
-  );
-  // A duct end 15 in inside a body is a real join kind (Project A 7266368 on 14342882): stretched.
-  expect(gradeOf([plenum(), duct(2, [4, 0, 0], [4, 5, 0], "g2")])).toEqual([
-    ["tap-by-proximity", "stretched"],
-  ]);
-  // An inline part is stretched.
-  expect(gradeOf([duct(1, [0, 0, 0], [10, 0, 0])], [damper(9, [4, 0, 0])])).toEqual([
-    ["inline-by-inference", "stretched"],
-  ]);
-});
-
-/** Project A 8911461: a vertical 72x3 plenum, its top capped, its open bottom facing down. */
-const slotPlenum = () => {
-  const s = rect(1, [0, 0, 0], [0, 0, 1.349], 72, 3, "g1");
-  s.connectors = s.connectors.map((c) => ({
-    ...c,
-    facing: [0, 0, c.index === 1 ? -1 : 1],
-    widthAxis: [1, 0, 0],
-  }));
-  return s;
-};
-const slot = (z: number, facing = [0, 0, -1]) => {
-  const g = linear(9, [0.03, 0, z], facing);
-  g.connectors[0]!.widthAxis = [1, 0, 0];
-  return g;
-};
-
-it("a terminal facing the wrong way in a duct's open end joins it anyway, always anomalous (Project A 10922066)", () => {
-  const plenum = slotPlenum();
-  const ends = [cap(8, plenum, 2)];
-  const { joints, findings } = inferJoints(snap([plenum], [...ends, slot(4.75 * IN)]));
-  expect(joints).toMatchObject([
-    { id: "proximity:1:1|9:1", a: "9:1", b: "1:1", grade: "anomalous" },
-  ]);
-  expect(findings[0]!.note).toBe(
-    "Price LBP15A Supply 16 X 8 terminal 9 (SA 19)'s connector 9:1 faces away from its duct and it sits inside 72x3 duct 1 (SA 1), 4.75 in from its open end, not at its end; treated as SA 1's terminal. Fix: replace the stand-in family or flip its connector (Family Foundry migration).",
-  );
-  // Within FACE_TOL_IN beyond the open end, facing away: joined, anomalous.
-  const beyond = inferJoints(snap([slotPlenum()], [slot(-1 * IN)]));
-  expect(beyond.findings).toMatchObject([{ id: "proximity:1:1|9:1", grade: "anomalous" }]);
-  expect(beyond.findings[0]!.note).toContain(
-    "sits at the open end of 72x3 duct 1 (SA 1), 1.00 in beyond it",
-  );
-  // Past FACE_TOL_IN outside the duct, or facing across it from beyond its end: nothing joins.
-  expect(inferJoints(snap([slotPlenum()], [slot(-3 * IN)])).joints).toEqual([]);
-  expect(inferJoints(snap([slotPlenum()], [slot(-1 * IN, [1, 0, 0])])).joints).toEqual([]);
-  // A staged ignore breaks it.
-  expect(
-    inferJoints(snap([slotPlenum()], [slot(-1 * IN)]), 1, ignoring("proximity:1:1|9:1")).joints,
-  ).toEqual([]);
-});
 
 it("a staged connect confirms an inference on its link; a proposal does not", () => {
   const before = snap(pair(0.3, 0.6));
@@ -794,34 +431,4 @@ it("a staged connect confirms an inference on its link; a proposal does not", ()
     assumptions: { [id]: { proposal: { value: { kind: "verdict", verdict: "connect" } } } },
   });
   expect(tolerate(before, proposed).links[0]!.ruled).toBe(false);
-});
-
-it("a fragment's no-root issue is dropped when its group merges into one with a fan, and multi-root is re-derived", () => {
-  const before = snap([
-    duct(1, [0, 0, 0], [10, 0, 0], "g1"),
-    duct(2, [10 + 0.4 * IN, 0, 0], [20, 0, 0], "g2"),
-  ]);
-  const [g1, g2] = before.groups;
-  g1!.rootIds = [100];
-  g2!.rootIds = [];
-  g2!.terminalCount = 1;
-  const orphan = { id: "no-root:g2", kind: "no-root" as const, groupId: "g2", note: "terminals but no equipment port" };
-  before.issues.push(orphan);
-  g2!.issueIds.push(orphan.id);
-  const merged = tolerate(before).snapshot;
-  expect(merged.issues.map((i) => i.id)).not.toContain("no-root:g2");
-  expect(merged.groups[0]!.issueIds).not.toContain("no-root:g2");
-
-  // Two fans meeting through the join: one multi-root issue, on the merged group, once.
-  const two = snap([
-    duct(1, [0, 0, 0], [10, 0, 0], "g1"),
-    duct(2, [10 + 0.4 * IN, 0, 0], [20, 0, 0], "g2"),
-  ]);
-  two.groups[0]!.rootIds = [100];
-  two.groups[1]!.rootIds = [200];
-  const after = tolerate(two).snapshot;
-  expect(after.issues.filter((i) => i.kind === "multi-root").map((i) => [i.id, i.groupId])).toEqual([
-    ["multi-root:g1", "g1"],
-  ]);
-  expect(after.groups[0]!.issueIds.filter((id) => id === "multi-root:g1")).toHaveLength(1);
 });

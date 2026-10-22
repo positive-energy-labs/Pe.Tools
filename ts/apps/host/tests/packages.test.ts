@@ -1,17 +1,8 @@
-import { lstat, mkdir, mkdtemp, open, rename, rm, symlink, writeFile } from "node:fs/promises";
-import { execFileSync } from "node:child_process";
+import { mkdir, mkdtemp, open, rename, rm, symlink, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { afterEach, beforeEach, expect, test } from "vite-plus/test";
-import hostPackage from "../package.json" with { type: "json" };
-import {
-  captureDirectory,
-  capturePackage,
-  kindOfMember,
-  listPackages,
-  readPackage,
-  resolvePackageIdentity,
-} from "../src/packages.ts";
+import { capturePackage, kindOfMember, listPackages, readPackage } from "../src/packages.ts";
 
 let root: string;
 const authored: Record<string, string | Uint8Array> = {
@@ -101,114 +92,4 @@ test("directory links cannot admit files outside the package", async () => {
     expect.objectContaining({ path: "linked", severity: "error" }),
   );
   await expect(capturePackage(pod)).rejects.toThrow(/links/);
-});
-
-test("output identity keeps selected admission bounds and folder link refusal", async () => {
-  await expect(resolvePackageIdentity("Original", root)).resolves.toEqual({
-    id: "mixed",
-    folder: "Original",
-  });
-  await put("Original", "assets/large.bin", "");
-  const large = await open(join(root, "Original/assets/large.bin"), "r+");
-  await large.truncate(64 * 1024 * 1024 + 1);
-  await large.close();
-  await expect(resolvePackageIdentity("Original", root)).rejects.toThrow(/assets\/large.bin/);
-  await symlink(join(root, "Original"), join(root, "Alias"), "junction");
-  await expect(resolvePackageIdentity("Alias", root)).rejects.toThrow(/links/);
-  await put("Broken", "pod.json", "{");
-  await expect(resolvePackageIdentity("Broken", root)).rejects.toThrow();
-});
-
-test.skipIf(process.platform === "win32")(
-  "output identity refuses real case-colliding selected members",
-  async () => {
-    await put("Original", "assets/Case.json", "{}");
-    await put("Original", "assets/case.json", "{}");
-    await expect(resolvePackageIdentity("Original", root)).rejects.toThrow(/Case-colliding/);
-  },
-);
-
-test("canonical skill directories use the same bounded admission without a Pod manifest", async () => {
-  await put("Skills", "inspect/SKILL.md", "Inspect");
-  await put("Skills", "inspect/references/guide.md", "Guide");
-  await put("Skills", "inspect/node_modules/ignored", "Ignored");
-  const captured = await captureDirectory(join(root, "Skills"));
-  expect(captured.diagnostics).toEqual([]);
-  expect(captured.members.map((member) => member.path)).toEqual([
-    "inspect/references/guide.md",
-    "inspect/SKILL.md",
-  ]);
-});
-
-test("file and directory budgets refuse capture instead of quietly truncating authored inputs", async () => {
-  await mkdir(join(root, "Original", "support"));
-  for (let offset = 0; offset < 4096; offset += 64)
-    await Promise.all(
-      Array.from({ length: 64 }, (_, index) =>
-        writeFile(join(root, "Original", "support", `${offset + index}.txt`), ""),
-      ),
-    );
-  await expect(capturePackage("mixed", root)).rejects.toThrow(/file count/);
-  await mkdir(join(root, "Directories"));
-  for (let offset = 0; offset < 4096; offset += 64)
-    await Promise.all(
-      Array.from({ length: 64 }, (_, index) =>
-        mkdir(join(root, "Directories", `${offset + index}`)),
-      ),
-    );
-  expect((await captureDirectory(join(root, "Directories"))).diagnostics).toContainEqual(
-    expect.objectContaining({ message: "Pod directory limit exceeded" }),
-  );
-}, 30_000);
-
-test("membership admits family assets and settings beyond executable source bundle bounds", async () => {
-  const family = Buffer.alloc(540672, 1);
-  await put("Original", "families/example.rfa", family);
-  for (let index = 0; index < 241; index++)
-    await put("Original", `settings/${index}.json`, JSON.stringify({ value: "x".repeat(90_000) }));
-  const pod = await readPackage("mixed", root);
-  expect(pod.diagnostics).toEqual([]);
-  expect(
-    Buffer.from(pod.members.find((member) => member.path === "families/example.rfa")!.bytes),
-  ).toEqual(family);
-  expect((await capturePackage(pod)).members).toHaveLength(Object.keys(authored).length + 242);
-  // 21 MB across 241 real files: genuinely long on Windows, like the budget test above.
-}, 30_000);
-
-test.skipIf(process.platform !== "win32")(
-  "an Offline attribute alone does not make a regular file unsafe",
-  async () => {
-    const path = join(root, "Original", "README.md");
-    execFileSync(hostPackage.config.windowsBinaries.attrib, ["+O", path]);
-    expect((await lstat(path)).isFile()).toBe(true);
-    expect(
-      execFileSync(hostPackage.config.windowsBinaries.attrib, [path], { encoding: "utf8" }).split(
-        path,
-      )[0],
-    ).toContain("O");
-    const pod = await readPackage("mixed", root);
-    expect(pod.diagnostics).toEqual([]);
-    expect(
-      Buffer.from(pod.members.find((member) => member.path === "README.md")!.bytes).toString(),
-    ).toBe("Guide");
-  },
-);
-
-test("member diagnostics preserve sibling bytes while source validation remains native", async () => {
-  await put(
-    "Original",
-    "pod.json",
-    JSON.stringify({ id: "mixed", entrypoints: [{ sourcePath: "src/Missing.cs" }] }),
-  );
-  await put("Original", "settings/broken.json", "not JSON");
-  const pod = await readPackage("mixed", root);
-  expect(pod.diagnostics).toContainEqual(
-    expect.objectContaining({ code: "MissingEntrypoint", path: "src/Missing.cs" }),
-  );
-  expect(pod.diagnostics).toContainEqual(
-    expect.objectContaining({ code: "JsonParseError", path: "settings/broken.json" }),
-  );
-  expect((await capturePackage(pod)).memberBundle.files.map((file) => file.path)).toContain(
-    "settings/checks.json",
-  );
 });

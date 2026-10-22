@@ -15,7 +15,13 @@ afterEach(() => {
 });
 
 const doc = (openId: string) => ({ ...CHECKOUT_HOT.documents![0]!, openId, title: openId });
-function Probe({ docs, lost }: { docs: string[]; lost?: { title: string | null; reason?: string } }) {
+function Probe({
+  docs,
+  lost,
+}: {
+  docs: string[];
+  lost?: { title: string | null; reason?: string };
+}) {
   const seed = MACHINE_SEEDS["no-revit"];
   if (seed.state !== "ready") throw new Error("fixture must be ready");
   const reading = {
@@ -38,7 +44,13 @@ function Probe({ docs, lost }: { docs: string[]; lost?: { title: string | null; 
     readings: { machine: reading },
     resolution: { kind: "none" },
     bindingLost: lost
-      ? { ref: { session: "old", openId: "old" }, title: lost.title, sentence: "", reason: lost.reason ?? "session-gone", reopened: null }
+      ? {
+          ref: { session: "old", openId: "old" },
+          title: lost.title,
+          sentence: "",
+          reason: lost.reason ?? "session-gone",
+          reopened: null,
+        }
       : null,
   } as never);
   return <LadderPicker ladder={ladder} />;
@@ -47,7 +59,10 @@ function Probe({ docs, lost }: { docs: string[]; lost?: { title: string | null; 
 test("one session with one document is bound without a pick", () => {
   render(<Probe docs={["a"]} />);
   expect(choose).toHaveBeenCalledTimes(1);
-  expect(JSON.parse(choose.mock.calls[0]![0])).toMatchObject({ kind: "open", ref: { openId: "a" } });
+  expect(JSON.parse(choose.mock.calls[0]![0])).toMatchObject({
+    kind: "open",
+    ref: { openId: "a" },
+  });
 });
 
 test("several documents keep asking", () => {

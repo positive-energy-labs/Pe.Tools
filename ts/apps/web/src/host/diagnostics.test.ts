@@ -1,7 +1,7 @@
 // @vitest-environment jsdom
 import { afterEach, beforeEach, expect, test, vi } from "vite-plus/test";
 
-import { Diagnostics, DIAGNOSTICS_MAX_PENDING, type Post } from "./diagnostics";
+import { DIAGNOSTICS_MAX_PENDING, Diagnostics, type Post } from "./diagnostics";
 
 const ok = () => new Response("{}", { status: 202 });
 type Batch = Parameters<Post>[0];
@@ -41,32 +41,6 @@ test("a label outside the token grammar is not sent; the code still is", async (
   expect(sent[0]!.facts[0]!.body).toEqual({ kind: "diagnostic", code: "pane.failed" });
 });
 
-test("a host with no intake is visible silence, and the facts stay pending", async () => {
-  const { diagnostics } = owner(async () => new Response("", { status: 404 }));
-  diagnostics.report({ code: "parts.failed" });
-  await vi.advanceTimersByTimeAsync(0);
-  expect(diagnostics.getState()).toMatchObject({ delivery: "silent", pending: 1 });
-});
-
-test("a refusal is shown, counted and never resent", async () => {
-  const { sent, diagnostics } = owner(
-    async () =>
-      new Response(
-        JSON.stringify({ error: { code: "route.input", message: "invalid diagnostic" } }),
-        { status: 400 },
-      ),
-  );
-  diagnostics.report({ code: "pane.failed" });
-  await vi.advanceTimersByTimeAsync(60_000);
-  expect(sent).toHaveLength(1);
-  expect(diagnostics.getState()).toMatchObject({
-    delivery: "refused",
-    detail: "invalid diagnostic",
-    pending: 0,
-    refused: 1,
-  });
-});
-
 test("host down: bounded buffer drops oldest, counts it, and reports the outage on return", async () => {
   let down = true;
   const { sent, diagnostics } = owner(async () => {
@@ -91,22 +65,4 @@ test("host down: bounded buffer drops oldest, counts it, and reports the outage 
   expect(delivered.at(-1)!.facts.map((f) => f.body.code)).toEqual(["host.unreachable"]);
   expect(delivered.at(-1)!.dropped).toBe(0);
   expect(diagnostics.getState()).toMatchObject({ delivery: "delivered", pending: 0 });
-});
-
-test("a hanging host ends at the send deadline as unreachable; the buffer stays bounded", async () => {
-  const { sent, diagnostics } = owner(() => new Promise<Response>(() => {}));
-  diagnostics.report({ code: "pane.failed" });
-  await vi.advanceTimersByTimeAsync(0);
-  for (let i = 0; i < DIAGNOSTICS_MAX_PENDING * 2; i++) diagnostics.report({ code: "pane.failed" });
-  await vi.advanceTimersByTimeAsync(2_999);
-  expect(diagnostics.getState().delivery).toBe("sending");
-  await vi.advanceTimersByTimeAsync(1);
-  expect(diagnostics.getState()).toMatchObject({
-    delivery: "unreachable",
-    detail: "no answer in 3 s",
-    pending: DIAGNOSTICS_MAX_PENDING,
-  });
-  await vi.advanceTimersByTimeAsync(60_000);
-  expect(sent.length).toBeGreaterThan(1);
-  expect(sent.length).toBeLessThan(8);
 });

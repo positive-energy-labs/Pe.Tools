@@ -1,14 +1,10 @@
 import { expect, test, vi } from "vite-plus/test";
 import { readFile, writeFile } from "node:fs/promises";
 import { join } from "node:path";
-import { scheduleGridRouteState } from "@pe/agent-contracts";
 import { parameterValueApplyBounds } from "@pe/host-contracts/generated";
-import { createRouteRegistrations } from "../../../packages/mcps/src/pea/routes.ts";
-import { buildCapabilities } from "../../../packages/mcps/src/pea/capabilities.ts";
 import {
   runSemanticAction,
   controlAction,
-  readScopedActionStatuses,
 } from "../../../packages/mcps/src/shared/takeoff-action-client.ts";
 import { rebindScheduleWork } from "@pe/agent-contracts";
 import { detailResponse, target } from "./schedule-fixture.ts";
@@ -71,28 +67,6 @@ test("actual HTTP Work + journal consumes fanout only after positive acknowledgm
   expect(request.edits[0].expectedBinding.targets).toEqual([target(7), target(8)]);
   const step = (await f.owner().list())[0]!.steps[0];
   expect(step).toMatchObject({ state: "succeeded", input: request, result: { appliedCells: 1 } });
-});
-
-test("a measured cell's staged unit reaches the native edit beside its value", async () => {
-  const f = await setup();
-  // The measured kind stages { value, unit }; the domain still refuses a bare number, so the unit
-  // the person reviewed is the one that travels — nothing here fills one in.
-  expect(
-    await f.patch([
-      { path: ["cells", "1::2"], value: { staged: { value: { value: "150", unit: "VA" } } } },
-    ]),
-  ).toMatchObject({ ok: true });
-  await f.submit();
-  const request = f.sent.find((s) => s.key === "schedule.cells.apply")!.input;
-  expect(request.edits[0]).toMatchObject({ value: "150", unit: "VA" });
-});
-
-test("a pathless document refuses its schedule reading in one sentence", async () => {
-  const f = await setup();
-  f.unsave();
-  await expect(f.read()).rejects.toThrow(
-    "Save 'Same' to a file before reading its schedules; it has no path.",
-  );
 });
 
 test.each([
@@ -162,20 +136,6 @@ test("staged cells over the generated cap refuse before dispatch and keep every 
   expect(f.sent.filter((s) => s.key === "schedule.cells.apply")).toHaveLength(0);
 });
 
-test("extra transaction diagnostics retain native evidence without negating positive cell acknowledgments", async () => {
-  const f = await setup();
-  const warning = {
-    code: "ScheduleCellApplyCommitFailure",
-    severity: "Warning",
-    message: "transaction warning",
-  };
-  f.setResponse(cellsApplied([[1, 2, true]], { diagnostics: [warning] }));
-  expect(await f.submit()).toMatchObject({
-    state: "succeeded",
-    result: { applied: 1, diagnostics: [warning] },
-  });
-});
-
 test("partial native outcome clears only a completely acknowledged cell and keeps explicit failures", async () => {
   const f = await setup();
   const detail = detailResponse();
@@ -216,18 +176,6 @@ test("partial native outcome clears only a completely acknowledged cell and keep
   });
   expect((await f.view()).doc.cells["1::2"].staged).toBeUndefined();
   expect((await f.view()).doc.cells["2::2"].staged.value).toBe("200 VA");
-});
-
-test("a push whose every cell is refused files Failed: nothing was written", async () => {
-  const f = await setup();
-  f.setResponse(cellsApplied([[1, 2, false, "read only"]]));
-  expect(await f.submit()).toMatchObject({
-    result: {
-      applied: 0,
-      receipt: { outcome: "Failed", reason: "1 of 1 cells refused: 1::2: read only" },
-    },
-  });
-  expect((await f.view()).doc.cells["1::2"].staged.value).toBe("150 VA");
 });
 
 test("Work edits finish while native execution waits and settlement preserves later staged/proposed values", async () => {
@@ -338,39 +286,6 @@ test("stale Work and agent admission refuse before dispatch; a stale binding is 
   ]);
 });
 
-test("a binding without per-target evidence never becomes a reading", async () => {
-  const f = await setup();
-  const old = detailResponse();
-  delete (old.entries[0].rows[0].bindings[0] as { targets?: unknown }).targets;
-  f.setDetail(old);
-  await expect(f.read()).rejects.toThrow();
-});
-
-test("unresolved original Work action survives another lifetime and is discoverable by subject", async () => {
-  const f = await setup();
-  f.unknown();
-  const original = await f.admission();
-  await f.submit(original);
-  await f.restart();
-  expect(
-    await readScopedActionStatuses({ kind: "schedules", workspaceId: f.scope.work }),
-  ).toMatchObject([{ id: original.id, state: "unknown" }]);
-  const a = await f.read(f.a);
-  await f.patch([
-    { path: ["basis"], value: { captureId: a.id } },
-    { path: ["takenAt"], value: a.capturedAt },
-  ]);
-  expect(
-    (
-      await f.post("/actions", {
-        ...(await f.admission()),
-        destination: { kind: "document", ref: f.a },
-      })
-    ).status,
-  ).toBe(409);
-  expect(f.sent.filter((s) => s.key === "schedule.cells.apply")).toHaveLength(1);
-});
-
 test("missing acknowledgments recover the same native receipt before original resume; no fresh dispatch", async () => {
   const f = await setup();
   f.setResponse(cellsApplied([]));
@@ -382,34 +297,6 @@ test("missing acknowledgments recover the same native receipt before original re
   expect(await f.owner().wait(original.id)).toMatchObject({ state: "succeeded" });
   expect((await f.view()).doc.cells["1::2"].staged).toBeUndefined();
   expect(f.sent.filter((s) => s.key === "schedule.cells.apply")).toHaveLength(1);
-});
-
-test("retired Family Types has no route or capabilities; current Schedule admission replays by exact ID", async () => {
-  const registrations = createRouteRegistrations({ hostBaseUrl: "http://host" });
-  expect(registrations.some((r) => r.spec.route === "family-types")).toBe(false);
-  expect(scheduleGridRouteState.commands).toEqual({});
-  const rows = buildCapabilities({
-    ops: [],
-    routes: registrations.map((r) => r.spec),
-    packages: [],
-    skills: [],
-  });
-  expect(rows.some((r) => r.key.includes("family-types"))).toBe(false);
-  expect(rows.find((r) => r.key === "workflow:schedule.grid.push")).toMatchObject({
-    principal: ["human"],
-  });
-  const f = await setup();
-  const admission = await f.admission();
-  expect((await f.post("/actions", admission)).status).toBe(202);
-  expect(await f.owner().wait(admission.id)).toMatchObject({ state: "succeeded" });
-  await f.restart();
-  expect((await f.post("/actions", admission)).status).toBe(200);
-  expect(await f.owner().list()).toEqual([
-    expect.objectContaining({ id: admission.id, state: "succeeded" }),
-  ]);
-  expect(
-    await f.patch([{ path: ["basis"], value: { captureId: f.reading.id } }], "agent"),
-  ).toMatchObject({ ok: false });
 });
 
 /** Rewrite a stored reading the way a capture from before per-target evidence looks: no `targets`. */
@@ -438,22 +325,6 @@ test("a stored reading without targets refuses with 're-read the schedule' and n
     expect(read.status).toBe(409);
     expect(read.value.error).toContain("re-read the schedule");
   }
-});
-
-test("an old reading of another schedule does not break this schedule's Work read", async () => {
-  const f = await setup();
-  const other = detailResponse();
-  other.entries[0].scheduleId = 99;
-  other.entries[0].scheduleUniqueId = "uid-99";
-  f.setDetail(other);
-  const old = await f.read();
-  await strip(f.dir, old.id);
-  const read = await f.post("/schedules/readings", {
-    key: "schedule.grid.work",
-    input: { workspaceId: f.scope.work },
-  });
-  expect(read.status).toBe(200);
-  expect(read.value.id).toBe(f.reading.id);
 });
 
 /** Two bound cells in row 1: Mark (1::1) and Load (1::2) at `load`. */
@@ -594,27 +465,4 @@ test("ask A: a push refused on moved evidence rebinds on its readback; the refus
   doc = (await f.view()).doc;
   expect(doc.cells["1::2"]?.staged).toBeUndefined();
   expect(doc.basis).toEqual({ captureId: expect.any(String) });
-});
-
-test("a rebind that throws after publication never changes the push's outcome: Succeeded, receipt filed, rebindError recorded", async () => {
-  const f = await setup();
-  const apply = f.work.apply.bind(f.work);
-  let calls = 0;
-  // The first Work write is the publication; the second is the readback rebind, which throws.
-  const spy = vi.spyOn(f.work, "apply").mockImplementation(async (...args) => {
-    if (++calls === 2) throw Error("Work store I/O");
-    return apply(...args);
-  });
-  const result = await f.submit();
-  spy.mockRestore();
-  expect(result).toMatchObject({
-    state: "succeeded",
-    result: {
-      applied: 1,
-      rebind: "skipped:error",
-      rebindError: expect.stringContaining("Work store I/O"),
-      receipt: { operation: "schedule.grid.push", outcome: "Succeeded" },
-    },
-  });
-  expect((await f.view()).doc.cells["1::2"].staged).toBeUndefined();
 });

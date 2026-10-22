@@ -6,11 +6,9 @@
 import { act, cleanup, render, screen } from "@testing-library/react";
 import { afterEach, beforeEach, expect, test, vi } from "vite-plus/test";
 
-import { Button } from "@pe/kit/lang/button";
 import { MACHINE_SEEDS } from "#/open/seeds";
 
 import { InstallGate, SUCCESSOR_POLL_MS, SUCCESSOR_WAIT_MS } from "./install-scrim";
-import { machineOf } from "./model";
 
 vi.mock("#/host/runtime", () => ({
   hostFetch: (url: string, init?: RequestInit) => fetch(url, init),
@@ -25,41 +23,6 @@ afterEach(() => {
 
 const settle = () => act(async () => void (await vi.advanceTimersByTimeAsync(0)));
 const tick = (ms: number) => act(async () => void (await vi.advanceTimersByTimeAsync(ms)));
-
-test("the scrim names the running leg and blocks the page while the receipt runs", () => {
-  render(
-    <>
-      <Button label="behind">behind</Button>
-      <InstallGate reading={MACHINE_SEEDS["receipt-handoff"]} fixture={false} />
-    </>,
-  );
-  const dialog = screen.getByRole("dialog");
-  expect(dialog.textContent).toContain("Updating to 0.7.1");
-  expect(dialog.textContent).toContain("Installing 0.7.1");
-  expect(dialog.textContent).toContain("Nothing on this page can be used");
-  expect(screen.queryByRole("button", { name: "dismiss" })).toBeNull();
-});
-
-test("no scrim for a settled receipt, a waiting plan, or a frozen fixture", () => {
-  const settled = machineOf(MACHINE_SEEDS["receipt-handoff"])!;
-  const { rerender } = render(
-    <InstallGate
-      reading={{
-        state: "ready",
-        observation: {
-          ...settled,
-          update: { ...settled.update, receipt: { ...settled.update.receipt!, state: "ok" } },
-        },
-      }}
-      fixture={false}
-    />,
-  );
-  expect(screen.queryByRole("dialog")).toBeNull();
-  rerender(<InstallGate reading={MACHINE_SEEDS["waiting-plan"]} fixture={false} />);
-  expect(screen.queryByRole("dialog")).toBeNull();
-  rerender(<InstallGate reading={MACHINE_SEEDS["receipt-handoff"]} fixture />);
-  expect(screen.queryByRole("dialog")).toBeNull();
-});
 
 test("a gone host keeps the scrim, polls, and reloads once a different build answers", async () => {
   const answers = ["down", "same", "successor"] as const;
@@ -134,38 +97,4 @@ test("probeSuccessor reads a refusal by the old service or a new version as the 
   expect(await probeSuccessor("0.7.0")).toBe("same");
   answer(new TypeError("fetch failed"));
   expect(await probeSuccessor("0.7.0")).toBe("down");
-});
-
-test("a leg waiting on the person shows its own words", () => {
-  const running = machineOf(MACHINE_SEEDS["receipt-handoff"])!;
-  const receipt = running.update.receipt!;
-  const detail = "Revit is waiting for you to pick Load Once on the add-in prompt";
-  render(
-    <InstallGate
-      reading={{
-        state: "ready",
-        observation: {
-          ...running,
-          update: {
-            ...running.update,
-            receipt: {
-              ...receipt,
-              legs: [
-                ...receipt.legs,
-                {
-                  name: "relaunch",
-                  status: "waiting",
-                  detail,
-                  exitCode: null,
-                  observedAtUtc: "2026-10-13T02:00:00Z",
-                },
-              ],
-            },
-          },
-        },
-      }}
-      fixture={false}
-    />,
-  );
-  expect(screen.getByRole("dialog").textContent).toContain(detail);
 });

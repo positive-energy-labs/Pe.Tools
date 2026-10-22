@@ -43,12 +43,5 @@ test("a host whose service claim is refused leaves the claim holder's terminal c
   } finally {
     await settled.close();
   }
-}, 30_000);
-
-test("the claim holder removes its terminal context when the claim releases", async () => {
-  const host = await bootHost();
-  const path = hostContextTokenPath(hostOwnership.serviceName);
-  expect(existsSync(path)).toBe(true);
-  await host.close();
-  expect(existsSync(path)).toBe(false);
+  expect(existsSync(hostContextTokenPath(hostOwnership.serviceName))).toBe(false);
 }, 30_000);

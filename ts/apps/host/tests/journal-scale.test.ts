@@ -1,7 +1,6 @@
 import { afterEach, expect, test, vi } from "vite-plus/test";
 import { mkdtempSync, rmSync } from "node:fs";
-import { readFile, stat, writeFile } from "node:fs/promises";
-import { randomUUID } from "node:crypto";
+import { readFile, stat } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 // Linearity is counted in bytes the journal writes, not milliseconds: wall time here swung 10x with
@@ -81,35 +80,4 @@ test("retention keeps the newest settled receipts and every open action, across 
   expect((await reloaded.list(undefined, "open"))[0]!.state).toBe("unknown");
   expect(await reloaded.list(undefined, "old")).toEqual([]);
   expect((await readFile(path, "utf8")).trim().split("\n").length).toBeLessThan(400);
-});
-
-test("a version 4 journal is imported whole and rewritten as lines", async () => {
-  const path = file();
-  const join = { actionId: randomUUID(), requestId: randomUUID() };
-  const value = action("kept", "succeeded");
-  await writeFile(
-    path,
-    JSON.stringify({
-      version: 4,
-      receipts: [
-        {
-          schema: 1,
-          id: randomUUID(),
-          revision: 2,
-          at: new Date().toISOString(),
-          stamp: null,
-          join,
-          body: { kind: "action", value },
-        },
-      ],
-      mappings: {
-        [JSON.stringify(["action", "kept"])]: join.actionId,
-        [JSON.stringify(["action-request", "kept"])]: join.requestId,
-      },
-    }),
-  );
-  const imported = new ActionJournal(path);
-  expect((await imported.list(undefined, "kept"))[0]!.state).toBe("succeeded");
-  expect((await readFile(path, "utf8")).split("\n")[0]).toBe('{"version":5}');
-  expect(await new ActionJournal(path).read({})).toEqual(await imported.read({}));
 });

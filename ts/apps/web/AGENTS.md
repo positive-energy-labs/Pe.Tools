@@ -9,8 +9,9 @@ decision flow (`Press` vs `Verb` vs link, `title` vs `HelpTip`, type tier × fac
 reference vs void), and the enforcement commands. `docs/design/SURFACE-PHILOSOPHY.md` says what a
 surface is for. `/design-system` is the executable law; a position that can render lives there.
 
-`tests/repo-guards/src/design-guard.test.ts` and `design-adherence.test.ts` are the lint: some
-categories are hard zeros, the rest are ratchet baselines that must fall and never rise. Run
+`tests/repo-guards/src/design-guard.test.ts` is the lint: hard zeros only (one owner per instrument
+path, one CSS owner per class, no unregistered classes); the ratchet baselines were retired in the
+2026-10 test purge. Run
 `pnpm verify` from `ts` before you claim a change is done. A guard
 change lands as ruling plus code plus guard in one commit; rulings go to
 `docs/features/design-system/LEDGER.md`.

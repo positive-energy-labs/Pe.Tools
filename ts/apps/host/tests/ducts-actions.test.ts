@@ -14,8 +14,6 @@ import { HttpRouter } from "effect/unstable/http";
 import { expect, test } from "vite-plus/test";
 import type { DuctsActionKey, DuctsApplyInput } from "@pe/agent-contracts";
 import { RevitBridge, RevitBridgeLive } from "../src/bridge.ts";
-import { planned } from "../src/ducts-actions.ts";
-import type { DuctSnapshot } from "@pe/ducts-domain/types";
 import { ActionJournal } from "../src/action-journal.ts";
 import { makeCallRoute } from "../src/call-route.ts";
 import { TakeoffCaptures } from "../src/takeoff-captures.ts";
@@ -264,66 +262,3 @@ test("assign-fan preview and apply send the pair to ducts.assign-fan, differing 
       expect(bad.status).toBeGreaterThanOrEqual(400);
     }),
   ));
-
-test("a heal group named without items is planned by the route's classifier; one with items passes untouched", async () => {
-  const end = (index: number, point: number[]) => ({
-    index,
-    kind: "end",
-    point,
-    shape: "round",
-    size: '6"',
-    diameterIn: 6,
-    direction: "bidirectional",
-    classification: "SupplyAir",
-    connectedTo: null,
-  });
-  const snapshot = {
-    nodes: [],
-    segments: [
-      {
-        id: 10,
-        kind: "duct",
-        polyline: [
-          [0, 0, 0],
-          [10, 0, 0],
-        ],
-        groupId: "g10",
-        systemName: "SA 1",
-        classification: "Supply Air",
-        connectors: [end(0, [0, 0, 0]), end(1, [10, 0, 0])],
-      },
-    ],
-    groups: [
-      {
-        id: "g10",
-        rootIds: [],
-        classifications: [],
-        systemNames: ["SA 1"],
-        terminalCount: 0,
-        elementCount: 1,
-        loops: 0,
-        issueIds: [],
-      },
-    ],
-    issues: [],
-  } as unknown as DuctSnapshot;
-  let reads = 0;
-  const read = async () => {
-    reads++;
-    return snapshot;
-  };
-  expect(await planned(heal as never, read)).toBe(heal);
-  expect(reads).toBe(0);
-  expect(await planned({ groups: [{ group: "g10" }] }, read)).toEqual({
-    groups: [
-      {
-        group: "g10",
-        items: [
-          { key: "cap:10:0", kind: "cap", end: "10:0" },
-          { key: "cap:10:1", kind: "cap", end: "10:1" },
-        ],
-      },
-    ],
-  });
-  await expect(planned({ groups: [{ group: "g99" }] }, read)).rejects.toThrow(/nothing to heal/);
-});

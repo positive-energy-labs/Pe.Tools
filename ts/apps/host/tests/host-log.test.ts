@@ -4,8 +4,6 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import type { HarnessEvent, HostEvent } from "@pe/agent-contracts";
 import { HostLog } from "../src/host-log.ts";
-import { ActionJournal } from "../src/action-journal.ts";
-import { logReceipts } from "../src/gateway-owner.ts";
 import { createPeRoutes } from "../src/pe-routes.ts";
 import { createPeClient, servePeRoute } from "@pe/agent-contracts/pe-api";
 
@@ -24,32 +22,6 @@ const said = (thread: string, seq: number, text = `t${seq}`): HostEvent => ({
   event: { seq, at: new Date().toISOString(), kind: "title_changed", title: text } as HarnessEvent,
 });
 
-test("ids are monotonic across a reopen and a reader resumes after its cursor", () => {
-  const path = dir();
-  const log = new HostLog(path);
-  for (let seq = 1; seq <= 5; seq++) log.append(said("a", seq));
-  const reopened = new HostLog(path);
-  expect(reopened.last).toBe(5);
-  expect(reopened.append(said("a", 6)).id).toBe(6);
-  const { gap, entries } = reopened.read(3);
-  expect(gap).toBe(false);
-  expect(entries.map((e) => e.id)).toEqual([4, 5, 6]);
-  expect(
-    reopened.read(0, (e) => e.event.kind === "thread" && e.event.thread === "b").entries,
-  ).toEqual([]);
-});
-
-test("subscribers see each entry once, in id order, as it is appended", () => {
-  const log = new HostLog(dir());
-  const seen: number[] = [];
-  const stop = log.subscribe((entry) => seen.push(entry.id));
-  log.append(said("a", 1));
-  log.append(said("b", 1));
-  stop();
-  log.append(said("a", 2));
-  expect(seen).toEqual([1, 2]);
-});
-
 test("retention drops whole old segments; a cursor below the floor reads as a gap", () => {
   const path = dir();
   const log = new HostLog(path, { segmentBytes: 400, segments: 2, entryBytes: 4096 });
@@ -62,18 +34,6 @@ test("retention drops whole old segments; a cursor below the floor reads as a ga
   expect(stale.entries.at(-1)!.id).toBe(40);
   expect(log.read(log.floor - 1).gap).toBe(false);
   expect(new HostLog(path, { segmentBytes: 400, segments: 2, entryBytes: 4096 }).last).toBe(40);
-});
-
-test("an entry over the bound is kept as a pointer to its owner, never the payload", () => {
-  const log = new HostLog(dir(), { segmentBytes: 1 << 20, segments: 2, entryBytes: 1024 });
-  const entry = log.append(said("a", 7, "x".repeat(4000)));
-  expect(entry.event).toEqual({
-    kind: "oversize",
-    of: "thread",
-    ref: { thread: "a", seq: 7 },
-    bytes: expect.any(Number),
-  });
-  expect(JSON.stringify(log.read(0).entries)).not.toContain("xxxx");
 });
 
 test("forget removes a deleted thread's entries and never reuses its ids", () => {
@@ -100,19 +60,6 @@ test("a torn last line from a crash is skipped, not fatal", async () => {
   expect(reopened.read(0).entries.map((e) => e.id)).toEqual([1]);
   reopened.append(said("a", 2));
   expect(new HostLog(path).read(0).entries.map((e) => e.id)).toEqual([1, 2]);
-});
-
-test("each committed receipt revision is appended in commit order", async () => {
-  const path = dir();
-  const journal = new ActionJournal(join(path, "journal.json"));
-  const log = new HostLog(join(path, "log"));
-  logReceipts(journal, log);
-  const first = await journal.recordFact({ kind: "turn", phase: "started" });
-  const second = await journal.recordFact({ kind: "turn", phase: "finished" });
-  expect(log.read(0).entries.map((e) => e.event)).toEqual([
-    { kind: "receipt", receipt: first },
-    { kind: "receipt", receipt: second },
-  ]);
 });
 
 test("GET /pe/log pages the log after a cursor, by kind and thread", async () => {

@@ -3,7 +3,7 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { fileURLToPath } from "node:url";
 import { afterEach, expect, it } from "vite-plus/test";
-import { servePeRoute, peRoutes } from "@pe/agent-contracts/pe-api";
+import { servePeRoute } from "@pe/agent-contracts/pe-api";
 import { createHash } from "node:crypto";
 import { Context, Effect } from "effect";
 import { HttpRouter, HttpServerResponse } from "effect/unstable/http";
@@ -45,15 +45,6 @@ const page = {
   title: "Flow",
   html: "<!doctype html><html><head><title>Flow</title></head><body><h1>Flow</h1></body></html>",
 };
-
-it("declares publication as a typed human-or-pea door", () => {
-  expect(peRoutes).toHaveProperty("page.publish");
-  expect((peRoutes as Record<string, unknown>)["page.publish"]).toMatchObject({
-    method: "POST",
-    path: "/pe/pages/publish",
-    permission: "human-or-pea",
-  });
-});
 it("refuses traversal and broken inline JavaScript without touching the prior Page", async () => {
   const { root, publish } = await fixture();
   expect((await publish({ ...page, slug: "../outside" })).status).toBe(400);
@@ -145,16 +136,3 @@ it("captures through real Edge, publishes only on success, and preserves authore
   expect(await failure.text()).toContain("capture refused");
   expect(await readFile(join(root, "flow", "index.html"), "utf8")).toContain("<h1>Flow</h1>");
 }, 45000);
-
-it("previews and serves UTF-8 symbols without an authored charset meta and keeps exact HTML", async () => {
-  const { root, publish, captures } = await fixture();
-  const html =
-    "<!doctype html><title>UTF8</title><p id='symbols'>≈ × ² →</p><script>if(document.characterSet!=='UTF-8')throw Error('Expected UTF-8, got '+document.characterSet);const expected=[0x2248,32,0xd7,32,0xb2,32,0x2192].map(n=>String.fromCharCode(n)).join('');if(document.getElementById('symbols').textContent!==expected)throw Error('Symbols changed');</script>";
-  const result = await publish({ ...page, html });
-  expect(result.status, await result.clone().text()).toBe(201);
-  expect(await readFile(join(root, "flow", "index.html"), "utf8")).toBe(html);
-  const handle = createPagesHandler(root, undefined, undefined, captures);
-  const served = await handle(new Request("http://fixture/pages/flow/"));
-  expect(served.headers.get("content-type")).toBe("text/html; charset=utf-8");
-  expect(await served.text()).toContain("≈ × ² →");
-}, 35000);

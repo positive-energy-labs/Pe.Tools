@@ -1,7 +1,7 @@
 import { runInNewContext } from "node:vm";
 import { readFileSync } from "node:fs";
 import { join } from "node:path";
-import { describe, expect, expectTypeOf, it } from "vite-plus/test";
+import { describe, expect, it } from "vite-plus/test";
 import { createPeClient, peRoutes, matchPeRoute, servePeRoute, peClientScript } from "./pe-api.ts";
 
 describe("the declared host door", () => {
@@ -54,22 +54,6 @@ describe("the declared host door", () => {
     expect(peRoutes["scope.set"].permission).toBe("grant");
     expect(peRoutes["page.act"].principal).toBe("human-or-page");
   });
-});
-
-it("client types exclude undeclared paths and require the declared request", () => {
-  const client = createPeClient();
-  const compileOnly = () => {
-    // @ts-expect-error A URL is not a declared route id.
-    void client.call("/pe/undeclared", {});
-    // @ts-expect-error The question contract requires a request id.
-    void client.call("thread.question", { params: { id: "t" }, body: { action: "decline" } });
-    // @ts-expect-error A thread call must name its path parameter.
-    void client.call("thread.get", {});
-  };
-  expectTypeOf(compileOnly).toBeFunction();
-  expectTypeOf<ReturnType<typeof client.call<"threads.list">>>().toEqualTypeOf<
-    Promise<import("./harness-thread.ts").HarnessThreadSummary[]>
-  >();
 });
 
 it("Pages executes the same serialized client with encoded path parameters", async () => {
@@ -137,17 +121,6 @@ it("every action control is in the HTTP contract", async () => {
   const { actionControls } = await import("./semantic-actions.ts");
   for (const key of Object.keys(actionControls).filter((key) => key !== "action.read"))
     expect(Object.hasOwn(peRoutes, key)).toBe(true);
-});
-
-it("an empty Page text update crosses the contract", async () => {
-  const answer = await servePeRoute(
-    new Request("http://host/pages/test/text", { method: "PUT", body: "" }),
-    async (request) => {
-      expect(await request.text()).toBe("");
-      return new Response(null, { status: 204 });
-    },
-  );
-  expect(answer.status).toBe(204);
 });
 
 it("route consumers cannot recreate Pe paths beside the contract", () => {

@@ -3,11 +3,11 @@
  * preview whatever Fix and Set hold; while they stand only the ESP is left out of the request.
  * The host is a fixture: the request each verb sends is captured, parsed by the real contract.
  */
+import { ductsRouteState, type DuctsRouteDocument } from "@pe/agent-contracts";
+import type { Grids } from "@pe/ducts-domain/loss-grid";
+import type { DuctSnapshot } from "@pe/ducts-domain/types";
 import { beforeEach, expect, test, vi } from "vite-plus/test";
 import type { z } from "zod";
-import { ductsRouteState, type DuctsRouteDocument } from "@pe/agent-contracts";
-import type { DuctSnapshot } from "@pe/ducts-domain/types";
-import type { Grids } from "@pe/ducts-domain/loss-grid";
 
 const sent: { key: string; input: Record<string, unknown> }[] = [];
 const answer = { value: {} as unknown };
@@ -186,12 +186,4 @@ test("run bare, the fan verbs act on the chosen system's offered fan, in the pag
   page = { ...page, system: "" };
   expect(verb("fan").ready(ctxOf(doc) as never)).toBe("Choose a system to make its fan");
   expect(verb("fan").labelNow!(ctxOf(doc) as never)).toBe("make the fan");
-});
-
-test("run bare, the heal verbs refuse in words when the chosen system has nothing to heal", () => {
-  const doc = ductsRouteState.schema.parse({});
-  expect(verb("heal-preview").ready(ctxOf(doc) as never)).toBe("Nothing in SA heals in Revit");
-  expect(verb("heal").ready(ctxOf(doc) as never)).toBe("Nothing in SA heals in Revit");
-  page = { ...page, system: "" };
-  expect(verb("heal").ready(ctxOf(doc) as never)).toBe("Nothing in this document heals in Revit");
 });

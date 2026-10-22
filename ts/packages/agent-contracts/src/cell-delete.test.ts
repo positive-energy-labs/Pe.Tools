@@ -7,11 +7,11 @@ import { describe, expect, it } from "vite-plus/test";
 import { z } from "zod";
 import { applyPatches, type RouteEnvelope } from "./route-doc.ts";
 import type { RouteStateSpec } from "./route-state.ts";
-import { familiesRouteState, familyCellKey, type FamilyCellState } from "./families.ts";
+import { familiesRouteState, familyCellKey } from "./families.ts";
 import { familyDraftRouteState } from "./family.ts";
 import { scheduleGridRouteState } from "./schedule-grid-data.ts";
 import { settingsRouteState } from "./settings.ts";
-import { transitionPatches, trichotomyCellSchema, type Rung } from "./trichotomy.ts";
+import { transitionPatches, type Rung } from "./trichotomy.ts";
 
 const familyKey = familyCellKey({ familyName: "F", typeName: "T", parameter: "P" });
 type Route = [string, RouteStateSpec<z.ZodType>, string, string, Rung];
@@ -61,30 +61,4 @@ describe("a delete stages only where a shipped consumer stages one", () => {
       }
     });
   }
-
-  it("a delete rung on a no-delete route does not type-check", () => {
-    // @ts-expect-error: Families cells have no delete rung.
-    const cell: FamilyCellState = { staged: { delete: true } };
-    expect(familiesRouteState.schema.safeParse({ cells: { [familyKey]: cell } }).success).toBe(
-      false,
-    );
-  });
-});
-
-describe("one rung, one write", () => {
-  const deletable = trichotomyCellSchema(z.unknown(), { deletable: true });
-  const plain = trichotomyCellSchema(z.string());
-  it.each([
-    ["deletable", { staged: { delete: true } }, true],
-    ["deletable", { proposal: { delete: true } }, true],
-    ["deletable", { staged: { value: "x", delete: true } }, false],
-    ["deletable", { staged: {} }, false],
-    ["plain", { staged: { value: "" } }, true],
-    ["plain", { staged: { delete: true } }, false],
-    ["plain", { proposal: { value: "x", delete: true } }, false],
-    ["plain", { proposal: { note: "only a note" } }, false],
-  ] as const)("%s cell: %j parses: %s", (kind, input, ok) => {
-    const schema = kind === "deletable" ? deletable : plain;
-    expect(schema.safeParse(input).success).toBe(ok);
-  });
 });

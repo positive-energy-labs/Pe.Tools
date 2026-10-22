@@ -90,6 +90,7 @@ const summary = (): HarnessThreadSummary => ({
   providerId: "codex",
   providerName: "Codex",
   head: { ...emptyThreadHead, hostNow: "1970-01-01T00:00:00.000Z", grantView: null },
+  tabs: [],
   lifecycle: emptyThreadLifecycle(),
   activity: { state: "idle", pending: 0, lastSeq: log.length, message: null },
   cursor: log.length,

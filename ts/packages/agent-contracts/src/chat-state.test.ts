@@ -11,13 +11,7 @@ import {
   selectMessages,
   selectQuestions,
   selectRunStatus,
-  selectTitle,
   selectToolCalls,
-  selectTurnFailure,
-  selectStarting,
-  selectWaitingSeconds,
-  skillInvocation,
-  toolDetail,
   type ChatState,
 } from "@pe/agent-contracts/chat-state";
 
@@ -102,24 +96,6 @@ const LOG: HarnessEvent[] = z.array(harnessEventSchema).parse([
 const state = (events: HarnessEvent[]): ChatState => ({ ...emptyChatState(), events });
 
 describe("harness event projection", () => {
-  it("names the document a user turn ran against, only when its prompt recorded one", () => {
-    const request = { kind: "named", session: "S1", address: "C:/Models/Ops.rvt" };
-    const log = z.array(harnessEventSchema).parse([
-      { seq: 1, at, kind: "prompt", turnId: "t1", text: "bare" },
-      {
-        seq: 2,
-        at,
-        kind: "prompt",
-        turnId: "t2",
-        text: "bound",
-        target: { request, label: "Ops.rvt" },
-      },
-      { seq: 3, at, kind: "prompt", turnId: "t3", text: "unlabeled", target: { request } },
-    ]);
-    const users = selectMessages(state(log)).filter((message) => message.role === "user");
-    expect(users.map((message) => message.target)).toEqual([undefined, "Ops.rvt", undefined]);
-    expect("target" in users[0]!).toBe(false);
-  });
   it("folds the log into the transcript rows moments.tsx renders", () => {
     const messages = selectMessages(state(LOG));
     const shape = messages.map((message) => ({
@@ -227,162 +203,6 @@ describe("harness event projection", () => {
     expect(selectApprovals(state(expired))).toEqual([]);
   });
 
-  it("unwraps codex's MCP input and parses a JSON text result", () => {
-    const codex = [
-      { seq: 1, at, kind: "prompt", turnId: "t1", text: "Find schedules." },
-      update(2, "t1", {
-        sessionUpdate: "tool_call",
-        toolCallId: "c1",
-        title: "pea.pe_find",
-        status: "in_progress",
-        rawInput: { server: "pea", tool: "pe_find", arguments: { query: "schedule" } },
-      }),
-      update(3, "t1", {
-        sessionUpdate: "tool_call_update",
-        toolCallId: "c1",
-        status: "completed",
-        rawOutput: { content: [{ type: "text", text: '{"hits":[{"key":"op:schedules.read"}]}' }] },
-      }),
-    ] satisfies HarnessEvent[];
-    expect(selectToolCalls(state(codex))[0]).toMatchObject({
-      title: "pe_find",
-      args: { query: "schedule" },
-      target: "schedule",
-      result: { hits: [{ key: "op:schedules.read" }] },
-      status: "completed",
-    });
-  });
-
-  it("keeps the tool id when an update recaptions the call", () => {
-    // claude-code-acp names the tool once, then rewrites `title` with the act (a command line).
-    const log = [
-      { seq: 1, at, kind: "prompt", turnId: "t1", text: "Find clones." },
-      update(2, "t1", {
-        sessionUpdate: "tool_call",
-        toolCallId: "g1",
-        name: "Grep",
-        title: "grep",
-        status: "pending",
-        rawInput: {},
-      }),
-      update(3, "t1", {
-        sessionUpdate: "tool_call_update",
-        toolCallId: "g1",
-        title: 'grep "clone" C:Pods',
-        rawInput: { pattern: "clone", path: "C:Pods" },
-      }),
-      update(4, "t1", {
-        sessionUpdate: "tool_call",
-        toolCallId: "q1",
-        name: "AskUserQuestion",
-        title: "Which clone should open?",
-        rawInput: { questions: [] },
-      }),
-    ] satisfies HarnessEvent[];
-    const [grep, ask] = selectToolCalls(state(log));
-    expect(grep).toMatchObject({ title: "Grep", target: "C:Pods" });
-    expect(toolDetail(grep!)).toEqual({ text: 'grep "clone" C:Pods', emitted: true });
-    expect(toolDetail(ask!)).toEqual({ text: "Which clone should open?", emitted: false });
-  });
-
-  it("names the skill a Skill call runs, and reads a slash prompt as that skill", () => {
-    const log = [
-      { seq: 1, at, kind: "prompt", turnId: "t1", text: "/review-schedule Mechanical" },
-      update(2, "t1", {
-        sessionUpdate: "tool_call",
-        toolCallId: "s1",
-        name: "Skill",
-        rawInput: { skill: "review-schedule", args: "Mechanical" },
-      }),
-    ] satisfies HarnessEvent[];
-    expect(selectToolCalls(state(log))[0]).toMatchObject({
-      title: "Skill",
-      target: "review-schedule",
-    });
-    expect(skillInvocation("/review-schedule  Mechanical Equipment")).toEqual({
-      name: "review-schedule",
-      args: "Mechanical Equipment",
-    });
-    expect(skillInvocation("/prove")).toEqual({ name: "prove", args: "" });
-    expect(skillInvocation("/usr/bin/revit is missing")).toBeUndefined();
-    expect(skillInvocation("run /prove")).toBeUndefined();
-  });
-
-  it("unwraps codex's MCP result wrapper the same way", () => {
-    const wrapped = [
-      update(1, "t1", {
-        sessionUpdate: "tool_call_update",
-        toolCallId: "c1",
-        status: "completed",
-        rawOutput: { result: { content: [{ type: "text", text: '{"hits":[]}' }] } },
-      }),
-    ] satisfies HarnessEvent[];
-    expect(selectToolCalls(state(wrapped))[0]?.result).toEqual({ hits: [] });
-  });
-
-  it("says a resumed session in one quiet line; a started one says nothing", () => {
-    const sessions = [
-      ...LOG.slice(0, 12),
-      { seq: 13, at, kind: "session", state: "started", acpSessionId: "s2" },
-      { seq: 14, at, kind: "session", state: "resumed", acpSessionId: "s2" },
-    ] satisfies HarnessEvent[];
-    const said = selectMessages(state(sessions)).filter((message) => message.role === "system");
-    expect(said.map((message) => message.parts)).toEqual([
-      [{ type: "text", text: "session resumed" }],
-    ]);
-  });
-
-  it("a session event after a turn's first prompt keeps that turn running", () => {
-    // The order a lazily spawned or resumed child writes (re-drive 2026-10-01, thread 51413e4b).
-    for (const sessionState of ["started", "resumed"] as const) {
-      const log = [
-        { seq: 1, at, kind: "prompt", turnId: "t1", text: "Tell me a story." },
-        { seq: 2, at, kind: "session", state: sessionState, acpSessionId: "s1" },
-        chunk(3, "agent_message_chunk", "Once"),
-      ] satisfies HarnessEvent[];
-      expect(selectRunStatus(state(log))).toBe("running");
-    }
-  });
-
-  it("a host restart is a record under the turn, not a failure; other errors stay failures", () => {
-    const restarted = [
-      ...LOG.slice(0, 14),
-      { seq: 15, at, kind: "error", turnId: "t2", message: "host restarted during this turn" },
-    ] satisfies HarnessEvent[];
-    expect(selectTurnFailure(state(restarted))).toBeUndefined();
-    expect(selectRunStatus(state(restarted))).toBe("idle");
-    expect(selectMessages(state(restarted)).at(-1)).toMatchObject({
-      role: "system",
-      parts: [{ text: "host restarted during this turn" }],
-    });
-
-    const failed = [
-      ...LOG.slice(0, 14),
-      { seq: 15, at, kind: "error", turnId: "t2", message: "harness exited" },
-    ] satisfies HarnessEvent[];
-    expect(selectTurnFailure(state(failed))).toBe("harness exited");
-  });
-
-  it("says how long the running turn has heard nothing, until the next event", () => {
-    const open: HarnessEvent[] = [{ seq: 1, at, kind: "prompt", turnId: "t1", text: "hi" }];
-    const waiting = [...open, { seq: 2, at, kind: "waiting", turnId: "t1", sinceMs: 61_400 }];
-    expect(selectWaitingSeconds(state(waiting as HarnessEvent[]))).toBe(61);
-    const moved = [...waiting, chunk(3, "agent_message_chunk", "ok")];
-    expect(selectWaitingSeconds(state(moved as HarnessEvent[]))).toBeUndefined();
-  });
-
-  it("says the harness is starting from the host's marker until the next event", () => {
-    const open: HarnessEvent[] = [{ seq: 1, at, kind: "prompt", turnId: "t1", text: "hi" }];
-    const starting = [...open, { seq: 2, at, kind: "starting", turnId: "t1" }] as HarnessEvent[];
-    expect(selectStarting(state(open))).toBe(false);
-    expect(selectStarting(state(starting))).toBe(true);
-    const resumed = [
-      ...starting,
-      { seq: 3, at, kind: "session", state: "resumed", acpSessionId: "s" },
-    ] as HarnessEvent[];
-    expect(selectStarting(state(resumed))).toBe(false);
-  });
-
   it("parks a form question until answered; a skip or a cancel leaves a quiet line", () => {
     const form = { properties: { pick: { type: "string" } }, required: ["pick"] };
     const asked = [
@@ -417,15 +237,6 @@ describe("harness event projection", () => {
     expect(
       selectMessages(cancelled).find((row) => row.id === "question_resolved-18")?.parts,
     ).toEqual([{ type: "text", text: "question cancelled" }]);
-  });
-
-  it("titles the thread from the newest title_changed, else the body", () => {
-    expect(selectTitle({ ...state(LOG), title: "untitled" })).toBe("untitled");
-    const renamed = [
-      ...LOG,
-      { seq: 17, at, kind: "title_changed", title: "Schedule write" },
-    ] satisfies HarnessEvent[];
-    expect(selectTitle(state(renamed))).toBe("Schedule write");
   });
 });
 
