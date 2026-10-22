@@ -1,4 +1,4 @@
-import { routeViewPatchSchema, type RouteView } from "@pe/agent-contracts";
+import { routeViewPatchSchema, settleAgentPatch, type RouteView } from "@pe/agent-contracts";
 
 type Lease = { view: RouteView; revision: number; seen: number };
 type Intent = {
@@ -91,6 +91,11 @@ export class RouteViewStore {
       return { ok: false, error: "view changed; read it again", view: selected };
     if ([...this.pending.values()].some((entry) => entry.lease.view.instance === instance))
       return { ok: false, error: "view command already pending" };
+    const settled = settleAgentPatch(lease.view.route, lease.view.page, patch);
+    if (!settled.ok) return settled;
+    if (Object.keys(settled.patch).some((key) => !(key in lease.view.page)))
+      return { ok: false, error: `patch names keys Pea may not set on ${route}` };
+    patch = settled.patch;
     const commandId = crypto.randomUUID();
     const result = new Promise<unknown>((resolve) => {
       const timer = setTimeout(
