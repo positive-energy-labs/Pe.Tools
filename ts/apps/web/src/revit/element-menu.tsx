@@ -15,11 +15,13 @@ import { submitAction } from "../../../../packages/mcps/src/shared/takeoff-actio
 import {
   elementTargetOf as targetOf,
   prepareElements,
+  prepareFamilyPlacements,
   showElementsMessage,
   revitScope,
   type ElementTarget as Target,
   type ShowElementsResult,
 } from "./element-target";
+import { readFamilyPlacements } from "./observation";
 export { revitScope, revitReferences } from "./element-target";
 export type { ElementTarget, RevitObservationScope, ShowElementsResult } from "./element-target";
 
@@ -28,9 +30,31 @@ export async function showInRevit(
   target: Target,
   selectOnly: boolean,
 ): Promise<ShowElementsResult> {
-  const prepared = prepareElements(target, selectOnly);
+  let prepared = prepareElements(target, selectOnly);
   if (prepared.kind === "refused") return prepared;
   try {
+    if (prepared.kind === "family") {
+      const captured = prepared;
+      const scope = captured.scope;
+      const reading = await readFamilyPlacements(captured.request, captured.document);
+      if (reading.kind === "refused") return reading;
+      if (!target.isCurrent?.())
+        return {
+          kind: "refused",
+          code: "ObservationChanged",
+          message:
+            "The displayed family reading changed while placements were resolving; nothing was selected or boxed.",
+        };
+      prepared = prepareFamilyPlacements(reading.data, captured.request, scope, selectOnly);
+      if (prepared.kind !== "ready")
+        return prepared.kind === "refused"
+          ? prepared
+          : {
+              kind: "refused",
+              code: "FamilyResolutionIncomplete",
+              message: "No concrete placements were resolved.",
+            };
+    }
     const action = await submitAction(
       {
         id: crypto.randomUUID(),
@@ -75,6 +99,9 @@ export function ElementMenu() {
   const count = menu
     ? new Set([...menu.ids, ...(menu.refs ?? []).map((ref) => ref.elementId)]).size
     : 0;
+  const subject = menu?.family
+    ? "current placements across all family types"
+    : `${count} element(s)`;
   const [said, setSaid] = useState<{ text: string; x: number; y: number } | null>(null);
   const caret = useRef<HTMLSpanElement>(null);
   // The answer stands by the pointer: what Revit did, or why it refused.
@@ -166,7 +193,7 @@ export function ElementMenu() {
           onOpenChange={(next) => {
             if (!next) setMenu(null);
           }}
-          aria-label={`${count} Revit element(s)`}
+          aria-label={`Revit ${subject}`}
           items={VERBS}
           keyOf={(verb) => verb.key}
           labelOf={(verb) => verb.label}
@@ -177,8 +204,8 @@ export function ElementMenu() {
             label: verb.label,
             title:
               verb.key === "box"
-                ? `select ${count}, box the {3D} view around them and zoom to fit; no model element changes`
-                : `select ${count} in Revit; the view stays as it is`,
+                ? `select ${subject}, box the {3D} view around them and zoom to fit; no model element changes`
+                : `select ${subject} in Revit; the view stays as it is`,
             meta: verb.keys ? <KeyHint>{verb.keys}</KeyHint> : undefined,
           })}
           onPick={(verb) => {

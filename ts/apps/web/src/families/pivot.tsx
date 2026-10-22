@@ -1,5 +1,5 @@
 import { familyCellAddress } from "@pe/agent-contracts";
-import { useContext, useEffect, useMemo, useRef, type ReactNode } from "react";
+import { useMemo, useRef, type ReactNode } from "react";
 
 import { ReadCell } from "@pe/kit/table/cells";
 import { Pane } from "#/components/lang/pane";
@@ -8,7 +8,6 @@ import { TableFrame } from "#/components/master-table/table-frame";
 import {
   conditionValues,
   passes,
-  quoted,
   readQuery,
   visibleRows,
   wordMatches,
@@ -19,7 +18,6 @@ import { TypeGrid, type TypeGridEdit } from "#/families/pivot-grid";
 import { usePivotMap } from "#/families/pivot-map";
 import { useFamiliesWorkspace } from "#/families/workspace-context";
 import type { FamilySnapshotRecord } from "#/host/loaded-families-view";
-import { ChatFocus } from "#/route/situation-ladder";
 import type { ParameterMetadataRecord } from "./parameter-metadata";
 import { FAMILIES_FILTERS } from "./query-filters";
 
@@ -39,6 +37,8 @@ export interface PivotRow {
 }
 
 export interface PivotFamily {
+  familyId: number;
+  familyUniqueId: string;
   name: string;
   category: string;
   types: number;
@@ -86,6 +86,8 @@ export function buildPivot(
     };
   });
   const pivotFamilies: PivotFamily[] = families.map((family) => ({
+    familyId: family.familyId,
+    familyUniqueId: family.familyUniqueId,
     name: family.familyName,
     category: family.categoryName ?? "",
     types: family.typeNames.length,
@@ -233,7 +235,6 @@ const identityColumns: Column<PivotRow>[] = [
 ];
 
 export function FamiliesPivot({ empty, above }: { empty?: ReactNode; above?: ReactNode }) {
-  const focus = useContext(ChatFocus);
   const {
     rows,
     params,
@@ -241,6 +242,7 @@ export function FamiliesPivot({ empty, above }: { empty?: ReactNode; above?: Rea
     tableState,
     store,
     archived,
+    nativeScope,
     live,
     parse,
     overlay,
@@ -256,20 +258,6 @@ export function FamiliesPivot({ empty, above }: { empty?: ReactNode; above?: Rea
     );
     return { ...pivot, pivotRows: [...pivot.pivotRows, ...created] };
   }, [rows, params, families, overlay]);
-  const focusKey = focus?.[0] ?? null;
-  const appliedFocus = useRef<string | null>(null);
-  useEffect(() => {
-    if (!focusKey) {
-      appliedFocus.current = null;
-      return;
-    }
-    if (appliedFocus.current === focusKey) return;
-    const param = params.find((entry) => entry.key === focusKey);
-    if (param) {
-      appliedFocus.current = focusKey;
-      store.setPage({ query: `parameter=${quoted(param.name)}` });
-    }
-  }, [focusKey, params, store.setPage]);
   const filtered = useMemo(() => {
     const ruled = applyFamiliesQuery(tableState.query, pivotRows, pivotFamilies);
     // A row the patch writes is never hidden by a rule word; a parameter clause or a free word narrows it.
@@ -346,6 +334,7 @@ export function FamiliesPivot({ empty, above }: { empty?: ReactNode; above?: Rea
           rows={mappedRows}
           types={types}
           families={filtered.shownFamilies}
+          nativeScope={nativeScope}
           edit={edit}
           scroller={scroller}
           empty={mappedRows.length ? undefined : empty}

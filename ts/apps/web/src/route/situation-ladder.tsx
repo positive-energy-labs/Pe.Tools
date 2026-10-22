@@ -43,9 +43,6 @@ export function useChatPlanIntent(
   }, [intended, intent, commit]);
 }
 
-/** The head's group drill-in: the hosted route narrows to the addresses under this path. */
-export const ChatFocus = createContext<readonly string[] | null>(null);
-
 export const ChatPlanIntent = createContext<{
   route: string;
   take: () => boolean;
@@ -120,10 +117,7 @@ export function useDocumentLadder(
   const onlySession = sessions.length === 1 ? sessions[0]! : null;
   const onlyDoc = onlySession?.documents?.length === 1 ? onlySession.documents[0]! : null;
   const sameReopened =
-    !lost ||
-    (lost.title != null
-      ? onlyDoc?.title === lost.title
-      : lost.reason === "session-gone");
+    !lost || (lost.title != null ? onlyDoc?.title === lost.title : lost.reason === "session-gone");
   const only =
     !binding && !hosted && !bound && sameReopened && onlySession && onlyDoc
       ? { session: onlySession.session, openId: onlyDoc.openId }
