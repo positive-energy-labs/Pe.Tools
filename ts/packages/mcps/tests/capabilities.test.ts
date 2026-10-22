@@ -188,16 +188,13 @@ test.each(["http", "stdio"])(
     const own = { session: "pea", openId: "copy" };
     const other = { session: "you", openId: "b" };
     const head: ThreadHead = {
-      ...emptyThreadHead,
       revision: 7,
-      defaultTarget: { kind: "open", ref: user },
-      grant: {
-        lifetime: user,
-        grantedAt: new Date().toISOString(),
-        grantedVia: "local",
-        expiresAt: new Date(Date.now() + 60_000).toISOString(),
-        revoked: null,
-      },
+      targets: [
+        {
+          request: { kind: "open", ref: user },
+          admission: { revision: 7, at: new Date().toISOString(), via: "local" },
+        },
+      ],
     };
     bindControl({
       acquired: (ref) => (ref.session === "pea" ? "acq-copy" : null),
@@ -414,7 +411,7 @@ test.each(["http", "stdio"])(
       });
       expect(JSON.stringify(refused)).toContain("grant.context-cannot-hold");
       expect(writes).toEqual([]);
-      const moved = await call("target_set", { defaultTarget: { kind: "open", ref: user } });
+      const moved = await call("target_set", { add: { kind: "open", ref: user } });
       expect(moved.isError).toBe(true);
       expect(JSON.stringify(moved)).toContain("grant.required");
       const result = await call("pe_do", {
@@ -428,7 +425,7 @@ test.each(["http", "stdio"])(
         expect.arrayContaining([{ key: "revit.context.view-image", ref: user }]),
       );
       expect(tokens.size).toBe(1);
-      // Chat keeps the head default, permits that grant and Pea detours, and refuses another user lifetime.
+      // Chat keeps its one target, writes it and Pea's detours, and refuses another user lifetime under Guarded.
       const chat = await connect({ "x-pe-context": peaToken });
       const beforeNamedCapture = reads.length;
       expect(
@@ -461,14 +458,14 @@ test.each(["http", "stdio"])(
             ...(ref ? { target: { kind: "open", ref } } : {}),
           },
         });
-      expect(JSON.stringify(await chatCall(other))).toContain("grant.other-lifetime");
+      expect(JSON.stringify(await chatCall(other))).toContain("grant.required");
       expect(
         JSON.parse(((await chatCall()).content as Array<{ text: string }>)[0]!.text),
       ).toMatchObject({ ok: true, revision: 7 });
       expect(
         JSON.parse(((await chatCall(own)).content as Array<{ text: string }>)[0]!.text),
       ).toMatchObject({ ok: true });
-      expect(head.defaultTarget).toEqual({ kind: "open", ref: user });
+      expect(head.targets.map((target) => target.request)).toEqual([{ kind: "open", ref: user }]);
       expect(writes[0]).toMatchObject({ basis: { kind: "grant", thread: "chat", lifetime: user } });
     } finally {
       for (const client of clients) await client.close();
@@ -549,9 +546,13 @@ test("F-H6-3: plan and capture over loaded families are human verbs; Pea never f
 type ExecutableTool = { execute?: (input: never, context: never) => Promise<unknown> };
 type Head = ThreadHead & { thread: string };
 const turn: Head = {
-  ...emptyThreadHead,
   thread: "t1",
-  defaultTarget: { kind: "named", session: "b1", address: address("C:\\Models\\A.rvt") },
+  targets: [
+    {
+      request: { kind: "named", session: "b1", address: address("C:\\Models\\A.rvt") },
+      admission: null,
+    },
+  ],
   revision: 4,
 };
 /** A harness child's call: its context names the thread, and the host answers `/pe/scope/self`. */
@@ -603,7 +604,9 @@ test("an exact-open turn Target reads and writes route Work under its document's
   });
   const open: Head = {
     ...turn,
-    defaultTarget: { kind: "open", ref: { session: "b1", openId: "project-a" } },
+    targets: [
+      { request: { kind: "open", ref: { session: "b1", openId: "project-a" } }, admission: null },
+    ],
   };
   try {
     const read = (await run(peRead, { key: "route:families", timeoutSeconds: 30 }, open)) as {
@@ -632,12 +635,66 @@ test("an exact-open turn Target reads and writes route Work under its document's
       { key: "route:families", timeoutSeconds: 30 },
       {
         ...open,
-        defaultTarget: { kind: "open", ref: { session: "b1", openId: "closed" } },
+        targets: [
+          { request: { kind: "open", ref: { session: "b1", openId: "closed" } }, admission: null },
+        ],
       },
     )) as { isError?: boolean; content?: string };
     expect(gone.isError).toBe(true);
     expect(gone.content).toContain("no longer open");
     expect(routeCalls).toHaveLength(2);
+  } finally {
+    vi.unstubAllGlobals();
+    vi.unstubAllEnvs();
+  }
+});
+
+test("ADR 0021: a thread with several targets refuses a call with no override; an override names one", async () => {
+  fakeRuntimeHost("http://127.0.0.1:9");
+  const dispatched: (string | null)[] = [];
+  vi.stubGlobal("fetch", async (input: string, init?: RequestInit) => {
+    const url = new URL(input);
+    if (url.pathname === "/pe/capabilities") return Response.json(catalog());
+    if (url.pathname === "/ops") return Response.json({ operations: [] });
+    const body = JSON.parse(typeof init?.body === "string" ? init.body : "{}");
+    if (body.key === "bridge.sessions.list")
+      return Response.json({
+        sessions: [
+          {
+            sessionId: "b1",
+            connected: true,
+            openDocuments: [
+              { openId: "a", address: "C:\\Models\\A.rvt", isFamilyDocument: false },
+              { openId: "b", address: "C:\\Models\\B.rvt", isFamilyDocument: false },
+            ],
+          },
+        ],
+      });
+    dispatched.push(new Headers(init?.headers).get("x-pe-open-document-id"));
+    return Response.json({ done: true });
+  });
+  const head: Head = {
+    thread: "t1",
+    revision: 2,
+    targets: ["a", "b"].map((openId) => ({
+      request: { kind: "open" as const, ref: { session: "b1", openId } },
+      admission: null,
+    })),
+  };
+  try {
+    const key = "op:revit.catalog.loaded-families";
+    expect(await run(peRead, { key, timeoutSeconds: 30 }, head)).toMatchObject({
+      ok: false,
+      content: expect.stringContaining("several-targets"),
+    });
+    expect(
+      await run(
+        peRead,
+        { key, timeoutSeconds: 30, target: { kind: "open", ref: { session: "b1", openId: "b" } } },
+        head,
+      ),
+    ).toMatchObject({ ok: true, revision: 2 });
+    expect(dispatched).toEqual(["b"]);
   } finally {
     vi.unstubAllGlobals();
     vi.unstubAllEnvs();
@@ -692,9 +749,10 @@ test("the live head names an open lifetime; reopen needs an explicit override an
   });
   try {
     const head: Head = {
-      ...emptyThreadHead,
       thread: "t1",
-      defaultTarget: { kind: "open", ref: { session: "b1", openId: "a" } },
+      targets: [
+        { request: { kind: "open", ref: { session: "b1", openId: "a" } }, admission: null },
+      ],
       revision: 4,
     };
     const call = (input: unknown) => run(peRead, input, head);

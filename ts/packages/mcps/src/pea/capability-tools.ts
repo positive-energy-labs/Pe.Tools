@@ -38,8 +38,8 @@ import { readScheduleCapture } from "../shared/schedule-client.ts";
  *
  * `pe_find` ranks the one capability catalog (no query → the map plus the connected sessions).
  * `pe_read` runs any row with `mutates: false`. `pe_do` runs any row. Two runners rather than one
- * so reads run freely and writes cross the host's grant check. Op calls may override their target without changing
- * the thread head's default Target, and every result carries `revision` (the Scope revision it ran under) and `target` (what the host actually
+ * so reads run freely and writes cross the host's write admission. Op calls may override their target without
+ * changing the thread's targets, and every result carries `revision` (the Scope revision it ran under) and `target` (what the host actually
  * resolved to), so the transcript card shows what was touched, not what was typed.
  */
 import { createTool } from "../shared/tool.ts";
@@ -62,6 +62,8 @@ import {
   putTargetResultSchema,
   putTargetSchema,
   threadHeadSchema,
+  headRequests,
+  targetKey,
   pageChoiceSchema,
   type Capability,
   type CapabilityCatalog,
@@ -182,12 +184,19 @@ async function openToolTab(
   };
 }
 
-/** The Scope's default Target; a call with no Scope runs with none. */
-async function targetOf(): Promise<{ target: Target; revision: number }> {
+/** The one Target a call runs under with no override: the thread's only target, else none. */
+export const soleTarget = (targets: readonly DocumentRequest[]): Target =>
+  targets.length === 1 ? targets[0]! : null;
+
+/** The Scope's sole Target; a call with no Scope, or a thread with several targets, runs with none. */
+async function targetOf(): Promise<{
+  target: Target;
+  targets: DocumentRequest[];
+  revision: number;
+}> {
   const turn = await scopeOf();
-  return turn
-    ? { target: turn.defaultTarget, revision: turn.revision }
-    : { target: null, revision: 0 };
+  const targets = turn ? headRequests(turn) : [];
+  return { target: soleTarget(targets), targets, revision: turn?.revision ?? 0 };
 }
 
 /** The Work key query a route or capability read runs under: `?target=<address>`, or none. */
@@ -237,7 +246,7 @@ export const peFind = createTool({
     limit: z.number().int().min(1).max(50).default(8),
   }),
   execute: async (input) => {
-    const { target, revision } = await targetOf();
+    const { target, targets, revision } = await targetOf();
     const catalog = await readCatalog(target, undefined, {
       bridgeSessionId: targetSession(target),
     });
@@ -252,6 +261,7 @@ export const peFind = createTool({
       return {
         at: catalog.at,
         target,
+        targets,
         revision,
         bridgeSessionId: catalog.bridgeSessionId,
         machine: catalog.machine,
@@ -260,7 +270,7 @@ export const peFind = createTool({
         source: peSourceTree(),
         diagnostics: catalog.diagnostics,
         map: capabilityMap(offered),
-        hint: "Query pe_find for rows. pe_read runs a row that does not mutate; pe_do runs authorized actions through the host grant check. Reads need no grant: pe_read may name any open document by exact target, and a ReadOnly scripting.execute needs a target but no grant. Writes target Pea's own lifetimes or the granted head; to grant rw the user does one thing: select the open document in the composer; that selection is the rw grant and renews with each message. Any script refuses while another open document in its Revit lacks Pea's acquisition or the grant. External MCP clients cannot hold rw in this release. defaultDocument is read live per call. Op target overrides affect one call only. Session work accepts SDK id-or-pid selection; host work needs no document. target_set selects only Pea's own documents for later calls.",
+        hint: "Query pe_find for rows. pe_read runs a row that does not mutate; pe_do runs authorized actions through the host's write admission. Reads need only a target: pe_read may name any open document by exact target, and a ReadOnly scripting.execute needs a target and nothing more. Writes follow the user's access setting: under Full, Pea writes any open document; under Guarded, Pea writes its own documents and the documents the user added to this thread in the composer. targets lists this thread's documents; with exactly one, calls use it (defaultDocument); with several, a call names one by exact per-call target. Any script refuses while another open document in its Revit is one Pea may not write. External MCP clients write only Pea's own documents in this release. targets is read live per call. Op target overrides affect one call only. Session work accepts SDK id-or-pid selection; host work needs no document. target_set adds or removes only Pea's own documents.",
       };
     const rows = findCapabilities(offered, input);
     return {
@@ -298,7 +308,7 @@ const runInputSchema = z.object({
     .union([sdkSessionSelectionSchema, documentRequestSchema.options[0]])
     .optional()
     .describe(
-      "Op calls only: SDK selection {id: name} or {pid: number} for session work, or {kind: open, ref: {session, openId}} for an exact product document. Overrides only this call; omission follows the live thread head. Reads (non-mutating ops and ReadOnly scripts) may name any open document with no grant; writes target only Pea's own lifetimes or the granted head.",
+      "Op calls only: SDK selection {id: name} or {pid: number} for session work, or {kind: open, ref: {session, openId}} for an exact product document. Overrides only this call; omission uses the thread's one target and refuses when it has several. Reads (non-mutating ops and ReadOnly scripts) may name any open document; writes follow the user's access setting (Full: any open document; Guarded: Pea's own documents and the ones the user added to this thread).",
     ),
   expectedRevision: z
     .number()
@@ -341,14 +351,16 @@ export const peRead = createTool({
   inputSchema: runInputSchema,
   execute: (input, context) =>
     executeTool(input, context, (row) =>
-      row.mutates ? `'${row.key}' mutates; run it with pe_do under the host grant check.` : null,
+      row.mutates
+        ? `'${row.key}' mutates; run it with pe_do under the host's write admission.`
+        : null,
     ),
 });
 
 export const peDo = createTool({
   id: "pe_do",
   description:
-    "Publish an authored HTML Page directly with {kind: 'page', slug, title, html, width?}; no target or discovery call is needed. Returns its canonical Page key, absolute openUrl and a real PNG image. HTML must be a valid document with a doctype; inline JavaScript is validated and preview errors preserve the prior Page. pe.js and pe.kit are optional. For corrections or updates, resubmit complete HTML through this same Page arm with the same slug; do not edit Page files through terminal tools. Or do one authorized capability by key from pe_find. The host admits writes only to Pea's own lifetimes or the granted head; the user grants rw in one step: select the open document in the composer; that selection is the rw grant and renews with each message. op:scripting.execute with permissionMode ReadOnly is a read: it needs an exact target, not a grant, and refuses while another open document in that Revit lacks Pea's acquisition or the grant. External MCP clients can read any document and write Pea's own, but cannot hold rw in this release. Use pe_read for rows that do not mutate. Human-only rows refuse. Op calls accept an exact per-call target override; omission follows the live thread head. The result separately names Scope revision and actual target. For Takeoffs actions, retain input.actionId from the first result to recover the same attempt; never mint another ID after an uncertain outcome.",
+    "Publish an authored HTML Page directly with {kind: 'page', slug, title, html, width?}; no target or discovery call is needed. Returns its canonical Page key, absolute openUrl and a real PNG image. HTML must be a valid document with a doctype; inline JavaScript is validated and preview errors preserve the prior Page. pe.js and pe.kit are optional. For corrections or updates, resubmit complete HTML through this same Page arm with the same slug; do not edit Page files through terminal tools. Or do one authorized capability by key from pe_find. Writes follow the user's access setting: under Full, Pea writes any open document; under Guarded, Pea writes its own documents and the documents the user added to this thread in the composer. A thread may target several documents; a write names one with an exact per-call target unless the thread has exactly one. op:scripting.execute with permissionMode ReadOnly is a read: it needs an exact target and nothing more, and refuses while another open document in that Revit is one Pea may not write. External MCP clients can read any document and write Pea's own in this release. Use pe_read for rows that do not mutate. Human-only rows refuse. Op calls accept an exact per-call target override; omission uses the thread's one target. The result separately names Scope revision and actual target. For Takeoffs actions, retain input.actionId from the first result to recover the same attempt; never mint another ID after an uncertain outcome.",
   inputSchema: peDoInputSchema,
   toModelOutput: (output) => {
     const parsed = pagePublicationResultSchema.safeParse(output);
@@ -402,9 +414,9 @@ async function executeTool(
   replayOperations = false,
 ): Promise<Record<string, unknown>> {
   const scope = await scopeOf();
-  const { target: defaultTarget, revision } = scope
-    ? { target: scope.defaultTarget, revision: scope.revision }
-    : { target: null, revision: 0 };
+  const targets = scope ? headRequests(scope) : [];
+  const defaultTarget = soleTarget(targets);
+  const revision = scope?.revision ?? 0;
   const contribution = parseContributionKey(input.key);
   if (/^(pod|script|page|skill|member):/.test(input.key) && !contribution)
     return refuse(
@@ -543,7 +555,7 @@ async function executeTool(
     const outcome = await dispatch(
       row,
       input,
-      defaultTarget,
+      targets,
       requestIdentity(context),
       scope?.thread,
       catalog,
@@ -576,18 +588,19 @@ type Outcome = {
 async function dispatch(
   row: Capability,
   input: RunInput,
-  defaultTarget: Target,
+  targets: readonly DocumentRequest[],
   requestId: string,
   viewThread?: string,
   catalog?: CapabilityCatalog,
 ): Promise<Outcome> {
+  const defaultTarget = soleTarget(targets);
   const coerced = coerceJsonObject(input.input);
   const payload: Record<string, unknown> =
     coerced && typeof coerced === "object" ? (coerced as Record<string, unknown>) : {};
   const scopeTarget = namedTarget(defaultTarget);
   switch (row.kind) {
     case "op": {
-      const target = await operationTarget(row, input.target, defaultTarget);
+      const target = await operationTarget(row, input.target, targets);
       const caller = new HostRpcCaller({
         hostBaseUrl: base(),
         ...target,
@@ -764,7 +777,7 @@ async function dispatch(
       const target = await operationTarget(
         { ...row, needs: definition.needs === "nothing" ? "session" : definition.needs! },
         input.target,
-        defaultTarget,
+        targets,
       );
       const caller = new HostRpcCaller({
         hostBaseUrl: base(),
@@ -979,7 +992,7 @@ async function dispatch(
             (candidate) => candidate.key === "op:revit.catalog.loaded-families",
           );
           if (!catalogRow) throw Error("Loaded-families catalog capability unavailable.");
-          const target = await operationTarget(catalogRow, undefined, defaultTarget);
+          const target = await operationTarget(catalogRow, undefined, targets);
           const catalogResult = await new HostRpcCaller({
             hostBaseUrl: base(),
             ...target,
@@ -1012,7 +1025,7 @@ async function dispatch(
         // Ducts Work is keyed by document: an unbound write lands in Work no page reads (wave 3, 2026-10-19).
         if (parsed.route === "ducts" && !workspaceId && !defaultTarget)
           throw new Error(
-            "route:ducts.propose needs this thread's document, and none is bound: Ducts Work belongs to one document, so this proposal would land where no page reads it. Ask the person to select the open document in the composer (that binds this thread), or target_set one of your own open documents; then read route:ducts again and propose.",
+            "route:ducts.propose needs this thread's one document, and none (or several) is targeted: Ducts Work belongs to one document, so this proposal would land where no page reads it. Ask the person to add the open document to this thread in the composer, or target_set one of your own open documents; then read route:ducts again and propose.",
           );
         // Ducts: a raw Load Preview paste is parsed here and proposed as loads/preview.
         const loads =
@@ -1086,7 +1099,7 @@ function transportScope(target: RunInput["target"], fallback: Target = null): Ho
 async function operationTarget(
   row: Capability,
   override: RunInput["target"],
-  defaultTarget: Target,
+  targets: readonly DocumentRequest[],
 ): Promise<HostSessionScope> {
   if (row.needs === "nothing") {
     if (override !== undefined) throw Error("This capability needs no Revit target.");
@@ -1119,11 +1132,11 @@ async function operationTarget(
       ]),
     ),
   };
-  const resolution = resolveCallTarget(
-    { needs: row.needs, target: override },
-    defaultTarget,
-    inventory,
-  );
+  const resolution = resolveCallTarget({ needs: row.needs, target: override }, targets, inventory);
+  if (resolution.kind === "choose" && resolution.reason === "several-targets")
+    throw Error(
+      "Target choose: several-targets. This thread targets several documents; name one with an exact per-call target {kind: open, ref: {session, openId}}.",
+    );
   if (resolution.kind !== "resolved")
     throw Error(
       `Target ${resolution.kind}: ${"reason" in resolution ? resolution.reason : "message" in resolution ? resolution.message : "inventory pending"}`,
@@ -1265,18 +1278,27 @@ function requestIdentity(context: unknown): string {
 export const targetSet = createTool({
   id: "target_set",
   description:
-    "Select Pea's own document as this thread's default Target for later calls. Name an exact open lifetime Pea acquired (pe_find access kind pea names its acquisition), or a saved Address in a Revit Pea's acquisition started. Only the human puts the head on a user document: they select the open document in the composer; that selection is the rw grant and renews with each message. null removes the default. Calls resolve against the live inventory; a close or reopen never silently redirects. Without a bound thread, use exact per-call op targets. The new revision applies to the next call.",
-  inputSchema: z.object({ defaultTarget: documentRequestSchema.nullable() }),
+    "Add or remove one of Pea's own documents in this thread's targets. Name an exact open lifetime Pea acquired (pe_find access kind pea names its acquisition), or a saved Address in a Revit Pea's acquisition started. Only the user adds or removes their own documents, from the composer. With exactly one target, later calls use it; with several, a call names one by exact per-call target. Calls resolve against the live inventory; a close or reopen never silently redirects. Without a bound thread, use exact per-call op targets. The new revision applies to the next call.",
+  inputSchema: z.object({
+    add: documentRequestSchema.optional(),
+    remove: documentRequestSchema.optional(),
+  }),
   execute: async (input) => {
     const turn = await scopeOf();
     if (!turn)
       return {
         isError: true,
         content:
-          "grant.required: target_set needs a bound thread to change its head. External MCP clients cannot hold rw in this release; use an exact per-call target for reads or Pea's own documents.",
+          "grant.required: target_set needs a bound thread to change its targets. External MCP clients write only Pea's own documents in this release; use an exact per-call target.",
       };
+    const drop = new Set([input.add, input.remove].flatMap((t) => (t ? [targetKey(t)] : [])));
     const body = putTargetSchema.parse({
-      defaultTarget: input.defaultTarget,
+      targets: [
+        ...turn.targets
+          .filter((held) => !drop.has(targetKey(held.request)))
+          .map(({ request, label }) => ({ request, ...(label ? { label } : {}) })),
+        ...(input.add ? [{ request: input.add }] : []),
+      ],
       expectedRevision: turn.revision,
     });
     const response = await createPeClient(base(), fetch).response("scope.set", {
@@ -1286,7 +1308,7 @@ export const targetSet = createTool({
     const wire = await response.json().catch(() => null);
     const answer: unknown = response.ok ? wire : wire?.error?.details;
     const result = putTargetResultSchema.safeParse(answer).data;
-    // A host refusal (`grant.required`, `context.foreign-thread`) is returned in its own words.
+    // A host refusal (`grant.required`, `human.only`, `context.foreign-thread`) is returned in its own words.
     if (!result)
       return {
         isError: true,
@@ -1296,11 +1318,11 @@ export const targetSet = createTool({
     if (!result.ok)
       return {
         isError: true,
-        content: `The thread head is at revision ${result.head.revision}, not ${turn.revision}; it changed under you.`,
+        content: `The thread's targets are at revision ${result.head.revision}, not ${turn.revision}; they changed under you.`,
       };
     return {
       head: result.head,
-      note: `The new Target (revision ${result.head.revision}) applies to the next call.`,
+      note: `The new targets (revision ${result.head.revision}) apply to the next call.`,
     };
   },
 });

@@ -10,9 +10,10 @@ import {
   peRead,
   peaHostBaseUrl,
   scopeOf,
+  soleTarget,
   targetSet,
 } from "./capability-tools.ts";
-import { documentRequestSchema, type DocumentRequest } from "@pe/agent-contracts";
+import { documentRequestSchema, headRequests, type DocumentRequest } from "@pe/agent-contracts";
 import { createTool } from "../shared/tool.ts";
 import z from "zod";
 export { peDo, peFind, peRead } from "./capability-tools.ts";
@@ -33,10 +34,11 @@ export {
 } from "./skills.ts";
 
 async function captureCaller(override?: DocumentRequest) {
-  const target = override ?? (await scopeOf())?.defaultTarget;
+  const scope = await scopeOf();
+  const target = override ?? soleTarget(scope ? headRequests(scope) : []);
   if (target?.kind !== "open")
     throw new Error(
-      "capture_view requires an exact selected open document. Pass target {kind: open, ref: {session, openId}} from pe_find, or ask the user to select the thread head.",
+      "capture_view requires one exact open document. Pass target {kind: open, ref: {session, openId}} from pe_find, or ask the user to add the document to this thread in the composer.",
     );
   return new HostRpcCaller({
     hostBaseUrl: peaHostBaseUrl(),
@@ -74,7 +76,7 @@ const captureView = createTool({
  * and docs helpers that do not fit a JSON row. Session lifecycle is in the catalog like everything
  * else. Writes cross the host grant check (ADR 0017); lifecycle checks cover the affected documents.
  * Document calls follow the live thread head (`/pe/scope/self`) unless an exact per-call target
- * is supplied. Reads need no grant; writes name Pea's own lifetimes or the granted head.
+ * is supplied. Reads need only a target; writes follow the user's access setting (ADR 0021).
  */
 export const peaProductTools = {
   [peFind.id]: peFind,

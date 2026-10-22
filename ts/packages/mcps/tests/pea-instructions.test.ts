@@ -57,19 +57,19 @@ test("one MCP connection discovers session and target changes without startup co
     expect(await discover()).toMatchObject({ target: null, machine });
     for (const [index, openId] of ["a", "b"].entries()) {
       head = {
-        ...head,
-        defaultTarget: { kind: "open", ref: { session: "s1", openId } },
+        targets: [{ request: { kind: "open", ref: { session: "s1", openId } }, admission: null }],
         revision: index + 1,
       };
       expect(await discover()).toMatchObject({
-        target: head.defaultTarget,
+        target: head.targets[0]!.request,
+        targets: [head.targets[0]!.request],
         revision: head.revision,
         defaultDocument: { session: "s1", openId },
         machine,
       });
     }
     machine = machineFixture();
-    expect(await discover()).toMatchObject({ target: head.defaultTarget, machine });
+    expect(await discover()).toMatchObject({ target: head.targets[0]!.request, machine });
     expect(client.getInstructions()).toBe(peaAgentInstructions);
   } finally {
     await client.close();
@@ -131,19 +131,23 @@ test("capture_view refuses null and named targets before host work and preserves
       null,
       { kind: "named" as const, session: "selected-session", address: address("C:/Models/A.rvt") },
     ]) {
-      head = { ...head, defaultTarget: target, revision: head.revision + 1 };
+      head = {
+        targets: target ? [{ request: target, admission: null }] : [],
+        revision: head.revision + 1,
+      };
       paths.length = 0;
       const result = await client.callTool({ name: "capture_view", arguments: {} });
       expect(result.isError).toBe(true);
-      expect(JSON.stringify(result.content)).toContain("requires an exact selected open document");
+      expect(JSON.stringify(result.content)).toContain("requires one exact open document");
       expect(paths).toEqual(["/pe/scope/self"]);
     }
     head = {
-      ...head,
-      defaultTarget: {
-        kind: "open",
-        ref: { session: "selected-session", openId: "selected-open" },
-      },
+      targets: [
+        {
+          request: { kind: "open", ref: { session: "selected-session", openId: "selected-open" } },
+          admission: null,
+        },
+      ],
       revision: head.revision + 1,
     };
     paths.length = 0;

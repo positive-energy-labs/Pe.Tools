@@ -75,7 +75,11 @@ test("Pea Schedule A/B/A reads honor the thread head and cannot perform human-on
     new URL(input instanceof Request ? input.url : String(input), "http://host").pathname ===
     "/pe/scope/self"
       ? Promise.resolve(
-          Response.json({ thread: "t", defaultTarget: { kind: "open", ref: f.a }, revision: 1 }),
+          Response.json({
+            thread: "t",
+            targets: [{ request: { kind: "open", ref: f.a }, admission: null }],
+            revision: 1,
+          }),
         )
       : inner(input as string, init),
   );
