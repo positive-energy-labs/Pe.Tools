@@ -331,7 +331,7 @@ export function ThreadDetail({ id, onOutcome }: { id: string; onOutcome: (text: 
     return (
       <DetailFrame title="Retag supply diffusers" eyebrow="Approval · Tower A · Level 03">
         <p>Pea wants to set the Mark parameter on 214 supply diffusers.</p>
-        <div data-surface="artifact" className="my-3 rounded p-2 face-mono t-small">
+        <div data-surface="artifact" className="my-3 rounded-sm p-2 face-mono t-small">
           <div className="text-ink-2">host operation</div>
           <div>family.parameters.set</div>
           <div className="mt-2 text-ink-2">arguments</div>
@@ -377,7 +377,7 @@ export function ThreadDetail({ id, onOutcome }: { id: string; onOutcome: (text: 
     return (
       <DetailFrame title="Audit family parameters" eyebrow="Running · Office Fitout.rvt">
         <p>Compared 12 of 18 loaded families.</p>
-        <div className="my-3 h-1 overflow-hidden rounded bg-ink/10">
+        <div className="my-3 h-1 overflow-hidden rounded-sm bg-ink/10">
           <div className="h-full w-2/3 bg-current" data-tone="pea" />
         </div>
         <Button
@@ -503,8 +503,8 @@ export function DetailFrame({
   return (
     <section className="min-h-0 flex-1 overflow-y-auto p-4">
       <p className="face-mono t-small t-upper text-ink-2">{eyebrow}</p>
-      <h1 className="mt-1 text-lg font-semibold">{title}</h1>
-      <div className="mt-4 t-small leading-relaxed">{children}</div>
+      <h1 className="mt-1 t-title font-semibold">{title}</h1>
+      <div className="mt-4 t-small">{children}</div>
     </section>
   );
 }
@@ -864,17 +864,14 @@ export default function Variant() {
     } else setOutcome(`${hit.verb} · ${hit.label} (fixture)`);
   };
   return (
-    <div
-      data-surface="page"
-      className="relative flex size-full flex-col overflow-hidden bg-surface text-ink"
-    >
+    <div data-surface="page" className="relative flex size-full flex-col overflow-hidden text-ink">
       {/* OWED: WebView2 window chrome needs a shared draggable title-bar primitive and native hit-test contract. */}
       <header className="hairline-b flex h-8 shrink-0 items-center pl-3">
         <div
           className="flex min-w-0 items-center gap-2"
           style={{ WebkitAppRegion: "drag" } as CSSProperties}
         >
-          <span className="grid size-4 place-content-center rounded-sm bg-ink text-[8px] font-bold text-surface">
+          <span className="grid size-4 place-content-center rounded-sm bg-ink text-[8px] font-bold text-on">
             Pe
           </span>
           <span className="t-small font-semibold">Pe.Tools</span>
@@ -887,7 +884,7 @@ export default function Variant() {
             type="button"
             aria-label="Find anything"
             onClick={() => setOpen(true)}
-            className="hairline flex h-6 w-72 max-w-full cursor-pointer items-center gap-1.5 rounded px-2 t-small text-ink-2 hover:text-ink"
+            className="hairline flex h-6 w-72 max-w-full cursor-pointer items-center gap-1.5 rounded-control px-2 t-small text-ink-2 hover:text-ink"
           >
             <Search aria-hidden className="size-3.5" />
             <span className="min-w-0 flex-1 truncate text-left">{outcome}</span>

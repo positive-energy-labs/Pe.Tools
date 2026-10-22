@@ -115,13 +115,13 @@ export default function Variant() {
 
   const footnote = (
     <div className="absolute bottom-2 left-3 flex items-center gap-3">
-      <span className="t-small face-mono text-white/50">
+      <span className="t-small face-mono text-document/50">
         items buffer 30 s before the first notification
       </span>
       {!alive ? (
         <button
           type="button"
-          className="t-small rounded border border-white/30 px-2 py-0.5 text-white/80"
+          className="t-small rounded-control border border-document/30 px-2 py-0.5 text-document/80"
           onClick={replay}
         >
           show again

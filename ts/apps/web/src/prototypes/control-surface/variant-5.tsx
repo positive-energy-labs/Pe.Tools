@@ -128,7 +128,7 @@ export default function Variant() {
   const dividerAt = rows.findIndex((e) => e.fresh);
 
   return (
-    <div data-surface="artifact" className="flex h-full w-full flex-col bg-paper text-ink t-small">
+    <div data-surface="artifact" className="flex h-full w-full flex-col text-ink t-small">
       <header className="hairline-b flex items-center gap-1 px-3 py-2">
         {FILTERS.map((f) => (
           <Button
@@ -150,7 +150,10 @@ export default function Variant() {
           return (
             <li key={e.id} className="flex flex-col">
               {i === dividerAt && (
-                <div className="sticky top-0 z-10 my-1.5 flex items-center gap-2 bg-paper py-0.5">
+                <div
+                  data-surface="artifact"
+                  className="sticky top-0 z-10 my-1.5 flex items-center gap-2 py-0.5"
+                >
                   <span className="hairline-t flex-1" />
                   <Tag>since you last looked</Tag>
                   <span className="hairline-t flex-1" />

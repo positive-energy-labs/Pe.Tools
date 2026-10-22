@@ -75,7 +75,7 @@ export default function Variant() {
               </Button>
             </div>
           </div>
-          <div className="h-[2px] bg-caution/70" />
+          <div data-tone="caution" className="h-[2px] bg-current/70" />
         </Win>
       )}
       {open.a && (

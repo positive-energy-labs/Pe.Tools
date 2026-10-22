@@ -245,9 +245,7 @@ export function LadderPicker({
         open={open}
         onOpenChange={onOpenChange}
       />
-      {ladder.autoBound ? (
-        <span className="text-muted-foreground"> (the only open document)</span>
-      ) : null}
+      {ladder.autoBound ? <span className="text-ink-2"> (the only open document)</span> : null}
     </>
   );
 }

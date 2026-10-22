@@ -380,10 +380,7 @@ export function TrayRoutes({ mode }: { mode: "buttons" | "appbar" }) {
   );
 
   return (
-    <div
-      data-surface="page"
-      className="relative flex size-full flex-col overflow-hidden bg-surface text-ink"
-    >
+    <div data-surface="page" className="relative flex size-full flex-col overflow-hidden text-ink">
       {/* OWED: WebView2 window chrome needs a shared draggable title-bar primitive and native hit-test contract. */}
       {mode === "appbar" ? (
         <header
@@ -406,7 +403,7 @@ export function TrayRoutes({ mode }: { mode: "buttons" | "appbar" }) {
             <Button
               label="Home / tray"
               icon={
-                <span className="grid size-4 place-content-center rounded-sm bg-ink text-[8px] font-bold text-surface">
+                <span className="grid size-4 place-content-center rounded-sm bg-ink text-[8px] font-bold text-on">
                   Pe
                 </span>
               }
@@ -472,7 +469,7 @@ export function TrayRoutes({ mode }: { mode: "buttons" | "appbar" }) {
                 type="button"
                 aria-label="Close"
                 onClick={() => setOutcome("Close requested")}
-                className="grid w-[46px] cursor-default place-content-center text-ink hover:bg-[#c42b1c] hover:text-white"
+                className="grid w-[46px] cursor-default place-content-center text-ink hover:bg-[#c42b1c] hover:text-document"
               >
                 <X aria-hidden strokeWidth={1} className="size-4" />
               </button>
@@ -500,7 +497,7 @@ export function TrayRoutes({ mode }: { mode: "buttons" | "appbar" }) {
           <Button
             label="Home / tray"
             icon={
-              <span className="grid size-4 place-content-center rounded-sm bg-ink text-[8px] font-bold text-surface">
+              <span className="grid size-4 place-content-center rounded-sm bg-ink text-[8px] font-bold text-on">
                 Pe
               </span>
             }

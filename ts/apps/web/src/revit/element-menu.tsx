@@ -218,7 +218,8 @@ export function ElementMenu() {
         <span
           role="status"
           data-element-menu-said=""
-          className="t-small border-line bg-surface fixed z-50 max-w-80 rounded-sm border px-1.5 py-0.5 text-ink-2 shadow-sm"
+          data-surface="artifact"
+          className="t-small border-line fixed z-50 max-w-80 rounded-sm border px-1.5 py-0.5 text-ink-2 shadow-sm"
           style={{ left: said.x + 12, top: said.y + 12 }}
         >
           {said.text}

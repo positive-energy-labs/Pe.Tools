@@ -50,7 +50,7 @@ export function Lineup({ variant }: { variant: string }) {
     return () => window.removeEventListener("keydown", onKey);
   });
 
-  if (!current) return <div className="p-6 font-mono">No variants landed yet.</div>;
+  if (!current) return <div className="p-6 face-mono">No variants landed yet.</div>;
   const { meta, default: Variant } = current;
   return (
     <div
@@ -65,26 +65,27 @@ export function Lineup({ variant }: { variant: string }) {
         </div>
       ) : (
         <div
-          className="absolute overflow-hidden rounded-[10px] shadow-[0_18px_60px_rgba(0,0,0,.55)] ring-1 ring-white/10"
+          className="absolute overflow-hidden rounded-[10px] shadow-[0_18px_60px_rgba(0,0,0,.55)] ring-1 ring-document/10"
           style={{ right: 12, bottom: 48 + 12, width: meta.width, height: meta.height }}
         >
           <Variant />
         </div>
       )}
       {/* fake taskbar */}
-      <div className="absolute inset-x-0 bottom-0 flex h-12 items-center justify-end gap-4 bg-[#1b1f3a]/95 px-4 text-[13px] text-white/80">
+      <div className="absolute inset-x-0 bottom-0 flex h-12 items-center justify-end gap-4 bg-[#1b1f3a]/95 px-4 text-[13px] text-document/80">
         <span>^</span>
-        <span className="grid size-6 place-content-center rounded bg-white/15 text-[11px] font-bold">
+        <span className="grid size-6 place-content-center rounded-sm bg-document/15 text-[11px] font-bold">
           Pe
         </span>
         <span>10:53 AM</span>
       </div>
       {/* protoui switcher: alien on purpose */}
       <div
-        className="fixed left-1/2 z-[2147483646] flex w-[440px] -translate-x-1/2 items-center justify-between rounded-full border-2 border-dashed border-fuchsia-400 bg-yellow-300 px-2 py-1 font-mono text-[13px] text-black shadow-lg"
+        data-surface="artifact"
+        className="fixed left-1/2 z-[2147483646] flex w-[440px] -translate-x-1/2 items-center justify-between rounded-full border-2 border-dashed border-line-2 px-2 py-1 face-mono text-[13px] text-ink shadow-lg"
         style={{ bottom: 56 + 4 }}
       >
-        <button type="button" className="px-3 text-lg" onClick={() => go(-1)} aria-label="previous">
+        <button type="button" className="px-3 t-title" onClick={() => go(-1)} aria-label="previous">
           ←
         </button>
         <TooltipHint content="Alt+← / Alt+→">
@@ -92,7 +93,7 @@ export function Lineup({ variant }: { variant: string }) {
             {meta.id} — {meta.label} ({meta.width}×{meta.height})
           </span>
         </TooltipHint>
-        <button type="button" className="px-3 text-lg" onClick={() => go(1)} aria-label="next">
+        <button type="button" className="px-3 t-title" onClick={() => go(1)} aria-label="next">
           →
         </button>
       </div>

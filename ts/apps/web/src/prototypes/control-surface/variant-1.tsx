@@ -247,7 +247,7 @@ export default function Variant() {
       <header className="hairline-b px-3 pb-2 pt-3">
         <div className="flex items-center gap-2">
           <MessageSquareText aria-hidden className="size-4 text-ink-2" />
-          <h1 className="t-body flex-1 font-semibold">{head}</h1>
+          <h1 className="t-prose flex-1 font-semibold">{head}</h1>
         </div>
         <p className="mt-0.5 face-mono t-small text-ink-2">
           {said ?? "Inbox · only threads that ask or finished"}
