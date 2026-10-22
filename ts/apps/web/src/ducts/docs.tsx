@@ -1,6 +1,6 @@
 /**
- * The ducts tutorial (Alt+/): what the route does, why Pe computes instead of Revit, how it
- * differs from Manual D and from Naviate, where every number lives, what an engineer is needed
+ * The ducts tutorial (Alt+/): what the route does, how it compares with native Revit and
+ * Naviate, where every number lives, what an engineer is needed
  * for, the limits, and the catalogue of cases the engine handles. Parts and statuses come from the
  * product map (`@pe/agent-contracts/product-map`); everything else, cases included, is the data
  * in `@pe/agent-contracts/ducts-guide`, which Pea reads too. The record behind each claim is
@@ -17,9 +17,6 @@ import {
   DUCT_CASES,
   DUCTS_ENGINEER_DECIDES,
   DUCTS_LIMITS,
-  DUCTS_METHODS,
-  DUCTS_METHODS_NOTE,
-  DUCTS_NAVIATE,
   DUCTS_NOT_ONE_CLICK,
   DUCTS_PEA_DOES,
   DUCTS_PEA_NEVER,
@@ -27,12 +24,11 @@ import {
   DUCTS_RESIDENCY_RULE,
   DUCTS_SUMMARY,
   DUCTS_WALK,
-  DUCTS_WHY_NOT_REVIT,
-  DUCTS_WHY_WRITE_BACK,
   type CaseGroup,
   type DuctCase,
 } from "@pe/agent-contracts/ducts-guide";
 import { CaseDrawing, CaseLegend } from "./cases/draw";
+import { CompareTable } from "./compare-table";
 
 const PRESSURE_DROP = mapLink("pressure-drop")!;
 
@@ -116,39 +112,8 @@ export function DuctsDocs() {
         ))}
       </ul>
 
-      <h3>Why not Revit's own pressure drop</h3>
-      <ul className="list-disc pl-5">
-        {DUCTS_WHY_NOT_REVIT.map((line) => (
-          <li key={line}>{line}</li>
-        ))}
-      </ul>
-      <p>{DUCTS_WHY_WRITE_BACK}</p>
-
-      <h3>How it differs from Manual D (RHVAC) and from Revit</h3>
-      <p>{DUCTS_METHODS_NOTE}</p>
-      <div className="grid grid-cols-[9rem_1fr_1fr_1fr] gap-x-3 gap-y-1 t-small">
-        <span />
-        <b>Manual D (RHVAC)</b>
-        <b>Revit</b>
-        <b>Pe</b>
-        {DUCTS_METHODS.map(({ question, manualD, revit, pe }) => (
-          <div key={question} className="contents">
-            <b>{question}</b>
-            <span>{manualD}</span>
-            <span>{revit}</span>
-            <span>{pe}</span>
-          </div>
-        ))}
-      </div>
-
-      <h3>Compared with Naviate</h3>
-      <ul className="list-disc pl-5">
-        {DUCTS_NAVIATE.map(({ topic, body }) => (
-          <li key={topic}>
-            <b>{topic}.</b> {body}
-          </li>
-        ))}
-      </ul>
+      <h3>Against Revit and Naviate</h3>
+      <CompareTable />
 
       <h3>Where every number lives</h3>
       <p>{DUCTS_RESIDENCY_RULE}</p>

@@ -70,17 +70,18 @@ export function renderDuctsSkill(guide: DuctsGuide = DUCTS_GUIDE): string {
       ),
     ),
     "",
-    "## Why not Revit's own pressure drop",
+    "## Against Revit and Naviate",
     "",
-    bullets(guide.whyNotRevit),
+    bullets(
+      guide.compare.flatMap(({ rows }) =>
+        rows.map(
+          (r) =>
+            `${r.feature}. Revit: ${r.revit.note}. Naviate: ${r.naviate.note}. Pe: ${r.pe.note}.`,
+        ),
+      ),
+    ),
     "",
-    guide.whyWriteBack,
-    "",
-    "## Methods",
-    "",
-    guide.methodsNote,
-    "",
-    "The row-by-row comparison with Manual D and Revit, and with Naviate, is pe_read route:ducts.guide with section methods or naviate.",
+    "The evidence behind each cell is pe_read route:ducts.guide with section compare.",
     "",
     "## The engineer decides",
     "",

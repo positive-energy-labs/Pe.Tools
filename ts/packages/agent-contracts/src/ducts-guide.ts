@@ -10,8 +10,11 @@
  * the route, "Pea" the agent, "the route" the page. No second person, no project-specific ids.
  */
 import { CASE_GROUPS, DUCT_CASES, type CaseGroup, type DuctCase } from "./ducts-cases.ts";
+import { DUCTS_COMPARE } from "./ducts-compare.ts";
 
 export { CASE_GROUPS, DUCT_CASES };
+export { DUCTS_COMPARE, onPeRoadmap } from "./ducts-compare.ts";
+export type { DuctsCompareCell, DuctsCompareRow, DuctsProduct } from "./ducts-compare.ts";
 export type { CaseGroup, DuctCase };
 export type { CaseExample, CaseStatus } from "./ducts-cases.ts";
 
@@ -29,14 +32,6 @@ export interface DuctsResidency {
   survivesSave: string;
   whoSees: string;
   whoWrites: string;
-}
-
-/** One row of the method comparison: the question, then Manual D, Revit and Pe. */
-export interface DuctsMethodRow {
-  question: string;
-  manualD: string;
-  revit: string;
-  pe: string;
 }
 
 export const DUCTS_SUMMARY =
@@ -160,101 +155,6 @@ export const DUCTS_RESIDENCY: readonly DuctsResidency[] = [
 export const DUCTS_RESIDENCY_RULE =
   "Anything that affects the calculation is stored in the model, so another person or another tool sees the same thing. The only state Pe keeps for itself is what has been typed and not yet written.";
 
-/** Why not Revit's own pressure drop: the supervisor's question. */
-export const DUCTS_WHY_NOT_REVIT: readonly string[] = [
-  "Revit's straight-duct friction matches a hand calculation within 0.1%. Its arithmetic is correct; its inputs cannot be filled in at scale, so its result is rarely complete.",
-  "A fitting's loss coefficient is not a parameter. It cannot be scheduled, filtered or edited in bulk. It is set one fitting at a time in the Properties palette, with no type default. A fitting that was never set charges 0 and raises no warning, so Revit reports a static pressure that is only friction plus whichever fittings someone set.",
-  "The \"Coefficient from ASHRAE Table\" option stores no table until someone presses OK in each fitting's dialog. When Revit picks a table itself, it takes the first allowed one in text order, which is often the wrong shape. It measures an elbow's angle from the ducts drawn into it with almost no tolerance, so some elbows can never hold a table at all. On one test model that was 221 round elbows holding a flat-back elbow's table and about 7% of elbows with no table possible.",
-  "A takeoff holds one coefficient, but the physics needs two: the branch and the straight leg run at different velocity pressures. Revit's path can be right for the branch grille or for the downstream grilles, not both.",
-  "Revit's critical path needs one connected network from the fan to every grille, and it reports disconnects one warning at a time. On the same test model, 336 of 465 open ends sat in or against another element: drafters draw the joint in because Revit refuses the small takeoff that would make it. Pe reads the graph, lists every open end, loop, missing fan and shared junction, and heals the safe ones.",
-  "On open, every fitting reads 0 and Revit's critical paths are stale until the system is touched. Pe recomputes on every read.",
-];
-
-export const DUCTS_WHY_WRITE_BACK =
-  "Pe still writes to Revit because the model is the deliverable. The firm hands over an .rvt, not a Pe page. Flows, ESP and coefficients travel with it to reviewers who do not have Pe, and Revit's own critical path becomes a check that the model is whole.";
-
-export const DUCTS_METHODS_NOTE =
-  "Manual D and ASHRAE are two methods. Manual D converts a fitting into equivalent feet at one design friction rate, which is accurate near the velocity the table was calibrated at and convenient for sizing by hand. ASHRAE multiplies a coefficient by the velocity pressure at the actual speed. Pe analyses the system as drawn with ASHRAE coefficients, then shows every loss in feet the way RHVAC does, converted at that duct's own rate. Straight-duct friction should match RHVAC closely. Fittings differ because the methods differ, not because either is wrong.";
-
-export const DUCTS_METHODS: readonly DuctsMethodRow[] = [
-  {
-    question: "Purpose",
-    manualD: "Sizing: choose duct sizes so every run meets one design friction rate",
-    revit: "Analysis of a drawn system, once its inputs are filled in",
-    pe: "Analysis of the drawn system as it is, with the inputs it has",
-  },
-  {
-    question: "Lengths",
-    manualD: "Typed by hand per section",
-    revit: "Measured from the model",
-    pe: "Measured from the model",
-  },
-  {
-    question: "Fittings",
-    manualD:
-      "Equivalent feet from an ACCA table, accurate near the velocity the table was calibrated at",
-    revit:
-      "ASHRAE coefficient times velocity pressure, but only after a table is stored on each fitting; a fitting with none charges 0 with no warning",
-    pe: "ASHRAE coefficient times velocity pressure at the actual flow, chosen by a family and type rule, for every fitting",
-  },
-  {
-    question: "Terminals and devices",
-    manualD: "Typed drops, or 0 if none were typed",
-    revit: "A drop on the connector, typed per instance",
-    pe: "Included when a drop is entered; otherwise listed as not priced and never blocking",
-  },
-  {
-    question: "Broken geometry",
-    manualD: "Not seen; the file has no geometry",
-    revit: "Stops at the first open end, one warning at a time",
-    pe: "Bridged and graded; caps and joins healed in Revit after approval; the rest listed with a repair",
-  },
-  {
-    question: "Output",
-    manualD: "Total effective length, friction rate, ESP",
-    revit: "Static pressure per system, two decimals, stale until the system is touched",
-    pe: "Feet per leg at its own rate, total effective length and ESP per fan, four decimals, every assumption listed",
-  },
-  {
-    question: "Typed by the engineer",
-    manualD: "Everything",
-    revit: "Every coefficient, one fitting at a time",
-    pe: "Which parameter holds the airflow, the rulings, the side-stream flows",
-  },
-];
-
-/** Compared with Naviate's duct pressure tool. Claims come from the decompiled add-in; see the ledger. */
-export const DUCTS_NAVIATE: readonly { topic: string; body: string }[] = [
-  {
-    topic: "Entry",
-    body: "Naviate starts from one selected element and walks its connectors. Pe starts from a system name, chosen by the engineer or by Pea.",
-  },
-  {
-    topic: "An open end or a loop",
-    body: "Naviate stops the run and lists element ids. Pe bridges what it can, grades it, heals caps and joins in Revit, and lists the rest with a repair.",
-  },
-  {
-    topic: "A grille with no catalog match",
-    body: "Naviate prices it at 0 Pa without a notice. Pe lists it as not priced.",
-  },
-  {
-    topic: "Writing",
-    body: "Naviate writes nine shared parameters when its dialog closes, with no preview. Pe lists every change as old and new, then writes.",
-  },
-  {
-    topic: "Where results live",
-    body: "Naviate stores results on the elements and overrides in extensible storage. Pe stores inputs on the elements and rulings in Project Information; results are recomputed.",
-  },
-  {
-    topic: "Manufacturer data",
-    body: "Naviate ships a catalog of about 12,000 products and converts residual pressure into damper settings. Pe does not price terminals from catalogs yet; balancing is a later module.",
-  },
-  {
-    topic: "The agent",
-    body: "Naviate's assistant runs a fixed plan or returns script text and cannot see the model. Pea reads the findings, proposes values on rows, previews heals and applies them after approval.",
-  },
-];
-
 /** What an engineer has to decide; the route cannot settle these from the model alone. */
 export const DUCTS_ENGINEER_DECIDES: readonly string[] = [
   "Anomalous joins: a reversed connector, a part pushed through a duct, supply meeting return. The route objects and waits for a ruling.",
@@ -288,11 +188,7 @@ export const DUCTS_GUIDE = {
   peaNever: DUCTS_PEA_NEVER,
   residencyRule: DUCTS_RESIDENCY_RULE,
   residency: DUCTS_RESIDENCY,
-  whyNotRevit: DUCTS_WHY_NOT_REVIT,
-  whyWriteBack: DUCTS_WHY_WRITE_BACK,
-  methodsNote: DUCTS_METHODS_NOTE,
-  methods: DUCTS_METHODS,
-  naviate: DUCTS_NAVIATE,
+  compare: DUCTS_COMPARE,
   engineerDecides: DUCTS_ENGINEER_DECIDES,
   limits: DUCTS_LIMITS,
   caseGroups: CASE_GROUPS,
