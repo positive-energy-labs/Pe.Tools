@@ -360,7 +360,8 @@ function RoomsBody({
 
   // Feedback: the inbox and the plan's marks read one derived list; the pin is the only local state.
   const review = page.stage === "review";
-  const [pinned, setPinned] = useState<string | null>(null);
+  const pinned = page.card || null;
+  const setPinned = (id: string | null) => setPage({ card: id ?? "" });
   const cards = useMemo(
     () => (doc && snapshot && page.view ? inboxCards(doc, snapshot, page.view) : []),
     [doc, snapshot, page.view],
@@ -509,6 +510,8 @@ function RoomsBody({
                 labelOf={labelOf}
                 pinned={pinned}
                 onPin={setPinned}
+                show={page.show}
+                onShow={(show) => setPage({ show })}
                 onHover={setHovered}
                 markdown={() => (doc && snapshot ? cardsMarkdown(doc, snapshot) : "")}
                 snap={() => snapPlan(page.view)}

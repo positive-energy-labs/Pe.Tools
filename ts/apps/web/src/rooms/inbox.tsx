@@ -20,6 +20,7 @@ import { Button } from "@pe/kit/lang/button";
 import { Switcher } from "#/components/lang/switcher";
 import { tokenRef } from "@pe/kit/lib/token";
 import { CARD_META, CARD_STATES, type Card, type CardState } from "./cards";
+import type { RoomsPage } from "./manifest";
 import { TooltipHint } from "@pe/kit/lang/tooltip";
 
 type Region = RoomsSnapshot.Res.RoomsRegion;
@@ -242,7 +243,7 @@ export function FeedbackCard({
   );
 }
 
-type Filter = "all" | CardState;
+type Filter = RoomsPage["show"];
 
 /** The inbox pane: filter, rows, and the two exports (markdown to the clipboard, the plan PNG). */
 export function RoomsInbox({
@@ -251,6 +252,8 @@ export function RoomsInbox({
   labelOf,
   pinned,
   onPin,
+  show: filter,
+  onShow,
   onHover,
   markdown,
   snap,
@@ -260,12 +263,14 @@ export function RoomsInbox({
   labelOf: (guid: string) => string | undefined;
   pinned: string | null;
   onPin: (id: string) => void;
+  /** The state filter, held in the address beside the pinned card. */
+  show: Filter;
+  onShow: (show: Filter) => void;
   onHover: (guid: string | null) => void;
   markdown: () => string;
   /** Downloads the plan picture; answers what it could not include, else null. */
   snap: () => Promise<string | null>;
 }) {
-  const [filter, setFilter] = useState<Filter>("all");
   const [said, setSaid] = useState<string | null>(null);
   const say = (word: string) => {
     setSaid(word);
@@ -310,7 +315,7 @@ export function RoomsInbox({
           <Switcher<Filter>
             ariaLabel="filter the inbox by state"
             value={filter}
-            onChange={setFilter}
+            onChange={onShow}
             options={[
               { value: "all", label: `all ${cards.length}`, title: "every card on this view" },
               ...CARD_STATES.filter((state) => count(state) > 0).map((state) => ({
