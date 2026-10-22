@@ -3,7 +3,28 @@ import * as Atom from "effect/unstable/reactivity/Atom";
 import type * as AtomRegistry from "effect/unstable/reactivity/AtomRegistry";
 
 import { createRouteOwner } from "#/route/route-owner";
-import type { RouteKey, LinkPage, DocumentRequest, Carry } from "@pe/agent-contracts";
+import {
+  THREAD_TABS_MAX,
+  threadTabSchema,
+  type ThreadTab,
+  type RouteKey,
+  type LinkPage,
+  type Carry,
+} from "@pe/agent-contracts";
+
+/** Local issuance is a draft, or the host thread it was promoted to; never host metadata. */
+export function routeThreadIssue(thread: string, state: unknown): string | null {
+  if (!thread) return null;
+  try {
+    const issued = sessionStorage.getItem(`pe.routeThread.${thread}`);
+    if (issued) return issued;
+  } catch {
+    /* History still identifies the current draft. */
+  }
+  return (state as { __peMintedThread?: string } | null)?.__peMintedThread === thread
+    ? "minted"
+    : null;
+}
 
 export interface ChatSearch {
   readonly thread?: string;
@@ -20,15 +41,31 @@ export function createChatPageStore(deps: {
   search: ChatSearch;
 }) {
   let tabs: {
+    promote: (from: string, owner: string, current: () => boolean) => Promise<void>;
     open: (
       route: string,
       page?: LinkPage<RouteKey>,
       carry?: Pick<Carry, "target" | "work">,
     ) => Promise<boolean>;
   } | null = null;
-  let createThread:
-    | ((expected: string, target: DocumentRequest | null) => Promise<string | null>)
-    | null = null;
+  const drafts = new Map<string, ThreadTab[]>();
+  const draftTabs = (thread: string) => {
+    if (!drafts.has(thread)) {
+      let saved: ThreadTab[] = [];
+      try {
+        saved =
+          threadTabSchema
+            .array()
+            .max(THREAD_TABS_MAX)
+            .safeParse(JSON.parse(sessionStorage.getItem(`pe.draftTabs.${thread}`) ?? "[]")).data ??
+          [];
+      } catch {
+        /* An unavailable browser cache does not invent a saved Place. */
+      }
+      drafts.set(thread, saved);
+    }
+    return drafts.get(thread)!;
+  };
   let planGeneration = 0;
   const core = createRouteOwner("chat", deps.registry);
   const paletteOpen = core.owned("widget/palette-open", Atom.make(false));
@@ -66,15 +103,29 @@ export function createChatPageStore(deps: {
       planRefusal,
     },
     actions: {
-      connectThread: (create: NonNullable<typeof createThread>) => {
-        createThread = create;
-        return () => {
-          if (createThread === create) createThread = null;
-        };
+      draftTabs,
+      saveDraftTabs: (thread: string, next: ThreadTab[]) => {
+        drafts.set(thread, next);
+        try {
+          sessionStorage.setItem(`pe.draftTabs.${thread}`, JSON.stringify(next));
+        } catch {
+          /* Keep this mounted draft. */
+        }
       },
-      ensureThread: (expected: string, target: DocumentRequest | null) => {
-        if (!createThread) return Promise.reject(Error("Chat is not ready to create this thread."));
-        return createThread(expected, target);
+      promoteThread: (from: string, owner: string, current: () => boolean) => {
+        if (!tabs)
+          return Promise.reject(Error("The workspace is not ready to promote this draft."));
+        return tabs.promote(from, owner, current);
+      },
+      finishDraft: (from: string, owner: string) => {
+        drafts.delete(from);
+        if (!from) return;
+        try {
+          sessionStorage.setItem(`pe.routeThread.${from}`, owner);
+          sessionStorage.removeItem(`pe.draftTabs.${from}`);
+        } catch {
+          /* The replaced URL still names the confirmed owner. */
+        }
       },
       setPaletteOpen: (value: Setter<boolean>) => set("set-palette", paletteOpen, value),
       setSideOpen: (value: Setter<boolean>) => setPaneOpen("side", value),

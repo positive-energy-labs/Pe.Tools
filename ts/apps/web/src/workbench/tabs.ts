@@ -20,6 +20,7 @@ import { peClient } from "#/host/pe-client";
 import { previousOf, useReading } from "#/readings";
 import { useSurfaceHost } from "#/navigation/surface-host";
 import { useWorkbench } from "./provider";
+import { routeThreadIssue } from "./store";
 
 const routes = Object.keys(routeAddresses) as RouteKey[];
 const focusKey = (thread: string) => `pe.tab.${thread}`;
@@ -57,23 +58,18 @@ type Snapshot = { thread: string; tabs: ThreadTab[]; ready: boolean };
 type TabHistory = {
   __peMintedThread?: string;
   __peRouteTab?: { thread: string; id: string; route: RouteKey };
+  __peChat?: boolean;
 };
 const historyOf = (state: unknown) => state as TabHistory;
-const wasMinted = (thread: string, state: unknown) => {
-  if (historyOf(state).__peMintedThread === thread) return true;
-  try {
-    return sessionStorage.getItem(`pe.routeThread.${thread}`) === "minted";
-  } catch {
-    return false;
-  }
-};
 
 /** Host owns tab records; URL/history and sessionStorage own this browser's focus. */
 export function useRouteTabs() {
-  const { store, currentThreadId: thread, threads, providers } = useWorkbench();
+  const { store, threads } = useWorkbench();
   const router = useRouter();
   const surface = useSurfaceHost().surface;
   const location = useRouterState({ select: (state) => state.location });
+  const thread = location.search.thread ?? "";
+  const draft = routeThreadIssue(thread, location.state) === "minted";
   const legacy =
     location.pathname === "/pea" &&
     ["plugin", "focus"].some((key) => new URLSearchParams(location.searchStr).has(key));
@@ -100,46 +96,36 @@ export function useRouteTabs() {
   const navigationEpoch = useRef(0);
   const liveThread = useRef(thread);
   liveThread.current = thread;
-  const shown = snapshot.thread === thread ? snapshot : { thread, tabs: [], ready: false };
+  const shown = draft
+    ? { thread, tabs: store.actions.draftTabs(thread), ready: true }
+    : snapshot.thread === thread
+      ? snapshot
+      : { thread, tabs: [], ready: false };
   const tabs = shown.tabs;
   const known = threads.find((item) => item.id === thread);
-  const providerState = providers.list;
-  const creationTarget = JSON.stringify(pinned);
 
   useEffect(() => {
-    if (!thread || known) return;
+    if (!thread || known || draft) {
+      setFailure(null);
+      return;
+    }
     let cancelled = false;
     void peClient
       .call("thread.get", { params: { id: thread } })
       .then((summary) => {
-        if (!cancelled) setSnapshot({ thread, tabs: summary.tabs, ready: true });
+        if (!cancelled) {
+          setSnapshot({ thread, tabs: summary.tabs, ready: true });
+          setFailure(null);
+        }
       })
-      .catch(async (error: unknown) => {
+      .catch((error: unknown) => {
         if (cancelled) return;
-        const minted = wasMinted(thread, router.state.location.state);
-        if (
-          (error as { status?: number }).status === 404 &&
-          minted &&
-          headReading.state === "ready"
-        ) {
-          try {
-            const created = await store.actions.ensureThread(thread, pinned);
-            if (created) {
-              try {
-                sessionStorage.removeItem(`pe.routeThread.${thread}`);
-              } catch {
-                /* Issuance is local recovery state only. */
-              }
-            }
-          } catch (caught) {
-            if (!cancelled) setFailure(caught instanceof Error ? caught.message : String(caught));
-          }
-        } else setFailure(error instanceof Error ? error.message : String(error));
+        setFailure(error instanceof Error ? error.message : String(error));
       });
     return () => {
       cancelled = true;
     };
-  }, [thread, known?.id, retry, providerState, headReading.state, creationTarget, store, router]);
+  }, [thread, known?.id, retry, draft]);
 
   // Summary notifications may change the strip, never this browser's active URL or owner.
   useEffect(() => {
@@ -179,28 +165,53 @@ export function useRouteTabs() {
     } as never);
   }, [router, thread, active?.id, location.pathname, location.search, location.state]);
 
-  const write = useCallback((owner: string, body: ThreadTabRequest, current?: () => boolean) => {
-    const task = serial.current
-      .catch(() => {})
-      .then(async () => {
-        if (current && !current()) return null;
-        const summary = await peClient.call(
-          "thread.tabs",
-          { params: { id: owner }, body },
-          { keepalive: true },
-        );
-        if (liveThread.current === owner) {
-          setSnapshot({ thread: owner, tabs: summary.tabs, ready: true });
-          setFailure(null);
-        }
-        return summary;
-      });
-    serial.current = task.then(
-      () => {},
-      () => {},
-    );
-    return task;
-  }, []);
+  const write = useCallback(
+    (owner: string, body: ThreadTabRequest, current?: () => boolean, local = false) => {
+      const task = serial.current
+        .catch(() => {})
+        .then(async () => {
+          if (current && !current()) return null;
+          let summary: { tabs: ThreadTab[] };
+          if (local || routeThreadIssue(owner, router.state.location.state) === "minted") {
+            const prior = store.actions.draftTabs(owner);
+            let tabs: ThreadTab[];
+            if (body.op === "close") tabs = prior.filter((tab) => tab.id !== body.id);
+            else {
+              const existing = prior.some((tab) => tab.id === body.id);
+              if (!existing && prior.length >= THREAD_TABS_MAX)
+                throw Error(`A thread keeps ${THREAD_TABS_MAX} tabs; close one first.`);
+              const next = {
+                id: body.id,
+                route: body.route,
+                link: body.link,
+                at: new Date().toISOString(),
+              };
+              tabs = existing
+                ? prior.map((tab) => (tab.id === body.id ? next : tab))
+                : [...prior, next];
+            }
+            store.actions.saveDraftTabs(owner, tabs);
+            summary = { tabs };
+          } else
+            summary = await peClient.call(
+              "thread.tabs",
+              { params: { id: owner }, body },
+              { keepalive: true },
+            );
+          if (liveThread.current === owner) {
+            setSnapshot({ thread: owner, tabs: summary.tabs, ready: true });
+            setFailure(null);
+          }
+          return summary;
+        });
+      serial.current = task.then(
+        () => {},
+        () => {},
+      );
+      return task;
+    },
+    [router, store],
+  );
   const flush = useCallback(async () => {
     // A fixed batch: a newer Place arriving during the await belongs to the next flush.
     const batch = [...pending.current];
@@ -221,12 +232,21 @@ export function useRouteTabs() {
     if (!active) return;
     focus(thread, active.id);
     if (tabs.some((tab) => tab.id === active.id && tab.link === active.link)) return;
+    if (draft) {
+      void write(thread, {
+        op: "put",
+        id: active.id,
+        route: active.route,
+        link: active.link,
+      }).catch(fail);
+      return;
+    }
     pending.current.set(`${thread}:${active.id}`, { ...active });
     const timer = setTimeout(() => {
       void flush().catch(fail);
     }, 500);
     return () => clearTimeout(timer);
-  }, [thread, active?.id, active?.link, flush]);
+  }, [thread, active?.id, active?.link, flush, draft, write]);
 
   useEffect(() => {
     const save = () => {
@@ -252,6 +272,7 @@ export function useRouteTabs() {
     destination: string,
     id: string | null,
     replace = false,
+    issued = false,
   ) => {
     const url = new URL(destination, "http://tab.invalid");
     const search = Object.fromEntries(url.searchParams);
@@ -275,6 +296,9 @@ export function useRouteTabs() {
               route: routes.find((key) => routeAddresses[key].path === url.pathname),
             }
           : undefined,
+        __peChat: id === null,
+        __peMintedThread:
+          issued || routeThreadIssue(owner, previous) === "minted" ? owner : undefined,
       }),
       replace,
     } as never);
@@ -287,7 +311,15 @@ export function useRouteTabs() {
       await navigate(thread, tab.link, tab.id, replace);
   };
   useEffect(() => {
-    if (route || legacy || location.pathname !== "/pea" || !thread || !shown.ready) return;
+    if (
+      route ||
+      legacy ||
+      location.pathname !== "/pea" ||
+      !thread ||
+      !shown.ready ||
+      historyOf(location.state).__peChat
+    )
+      return;
     const previous = tabs.find((tab) => tab.id === readFocus(thread)) ?? tabs[0];
     if (previous) void select(previous, true).catch(fail);
   }, [thread, route, legacy, location.pathname, shown.ready]);
@@ -309,16 +341,14 @@ export function useRouteTabs() {
       if (thread && !shown.ready)
         throw Error(failure ?? "Thread Places are loading; retry when they are current.");
       await flush();
-      let openingTarget = pinned;
-      if (explicit?.target) {
+      const owner = thread || crypto.randomUUID();
+      if (!thread) {
         try {
-          openingTarget = documentRequestSchema.safeParse(JSON.parse(explicit.target)).data ?? null;
+          sessionStorage.setItem(`pe.routeThread.${owner}`, "minted");
         } catch {
-          openingTarget = null;
+          /* Navigation carries issuance too. */
         }
       }
-      const owner = thread || (await store.actions.ensureThread(thread, openingTarget));
-      if (!owner) return false;
       const existing = !duplicate && tabs.find((tab) => tab.route === targetRoute);
       if (!existing && tabs.length >= THREAD_TABS_MAX)
         throw Error(`A thread keeps ${THREAD_TABS_MAX} tabs; close one first.`);
@@ -333,14 +363,19 @@ export function useRouteTabs() {
       const canonical = tabLink(targetRoute, nextLink);
       if (!canonical.ok) throw Error(canonical.error);
       const id = existing ? existing.id : crypto.randomUUID();
-      await write(owner, { op: "put", id, route: targetRoute, link: canonical.link });
+      await write(
+        owner,
+        { op: "put", id, route: targetRoute, link: canonical.link },
+        undefined,
+        !thread || draft,
+      );
       if (
         epoch !== navigationEpoch.current ||
         router.state.location.pathname !== sourcePath ||
-        router.state.location.search.thread !== owner
+        (router.state.location.search.thread ?? "") !== thread
       )
         return false;
-      await navigate(owner, canonical.link, id);
+      await navigate(owner, canonical.link, id, false, !thread || draft);
       return (
         router.state.location.pathname === routeAddresses[targetRoute].path &&
         historyOf(router.state.location.state).__peRouteTab?.id === id
@@ -351,7 +386,54 @@ export function useRouteTabs() {
     }
   };
   useEffect(
-    () => store.actions.connectTabs({ open }),
+    () =>
+      store.actions.connectTabs({
+        open,
+        promote: async (from, owner, current) => {
+          const location = router.state.location;
+          const route = routes.find(
+            (key) => key !== "pea" && routeAddresses[key].path === location.pathname,
+          );
+          if (route && from) {
+            const id =
+              historyOf(location.state).__peRouteTab?.id ?? held.current?.id ?? crypto.randomUUID();
+            await write(
+              from,
+              {
+                op: "put",
+                id,
+                route,
+                link: place(route, location.search, head?.defaultTarget ?? null),
+              },
+              current,
+              true,
+            );
+          }
+          await flush();
+          const saved = store.actions.draftTabs(from);
+          for (const tab of saved) {
+            if (!current()) throw Error("The Place changed before its draft tabs were saved.");
+            await write(owner, { op: "put", id: tab.id, route: tab.route, link: tab.link });
+          }
+          if (!current()) throw Error("The Place changed before its draft was promoted.");
+          const selected = readFocus(from);
+          focus(owner, selected);
+          await router.navigate({
+            to: router.state.location.pathname,
+            search: (previous: Record<string, unknown>) => ({ ...previous, thread: owner }),
+            state: (previous: Record<string, unknown>) => ({
+              ...previous,
+              __peMintedThread: undefined,
+              __peRouteTab: historyOf(previous).__peRouteTab
+                ? { ...historyOf(previous).__peRouteTab!, thread: owner }
+                : undefined,
+            }),
+            replace: true,
+          } as never);
+          store.actions.finishDraft(from, owner);
+          setSnapshot({ thread: owner, tabs: saved, ready: true });
+        },
+      }),
     [store, thread, link, tabs, pinned, carry.target, carry.work],
   );
 

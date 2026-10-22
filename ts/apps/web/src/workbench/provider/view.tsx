@@ -1,10 +1,10 @@
 import { useCallback, useEffect, useMemo, useRef, useState, type ReactNode } from "react";
-import { useNavigate, useSearch } from "@tanstack/react-router";
+import { useNavigate, useSearch, useRouter, useRouterState } from "@tanstack/react-router";
 import { resolveWorkbenchConfig } from "../config";
 import { selectRunStatus, selectTurnFailure } from "@pe/agent-contracts/chat-state";
-import { previousOf, useHostStatusSlice } from "#/readings";
+import { previousOf, useHostStatusSlice, useReading } from "#/readings";
 import { appAtomRegistry, useRouteOwner } from "#/route/route-owner";
-import { createChatPageStore } from "../store";
+import { createChatPageStore, routeThreadIssue } from "../store";
 import type { StoredThreadSummary, WorkbenchContextValue } from "./thread-summary";
 import { WorkbenchContext } from "./thread-summary";
 import { chatLoading, useThreadStream } from "./thread-stream";
@@ -14,7 +14,12 @@ import * as AsyncResult from "effect/unstable/reactivity/AsyncResult";
 import { CHAT_SEEDS } from "#/chat/seeds";
 import { errorMessage } from "./use-workbench";
 import { EMPTY_HEAD, isReady, useProviders, type HeadDraft } from "./providers";
-import { targetKey, type DocumentRequest } from "@pe/agent-contracts";
+import {
+  documentRequestSchema,
+  targetKey,
+  type DocumentRequest,
+  type ThreadHead,
+} from "@pe/agent-contracts";
 import { demoThreads } from "#/chat/thread-navigation";
 import { mergeThreadRoster, mergeThreadSummary } from "./thread-merge";
 import { emptyPrompt } from "../prompt";
@@ -25,10 +30,33 @@ import { useMachine } from "#/machine/use-machine";
 export function WorkbenchProvider({ children }: { children: ReactNode }) {
   const config = useMemo(() => resolveWorkbenchConfig(), []);
   const navigate = useNavigate();
+  const router = useRouter();
+  const routeLocation = useRouterState({ select: (state) => state.location });
+  const navigationEpoch = useRef(0);
+  useEffect(() => {
+    let href = router.state.location.href;
+    return router.history.subscribe(({ location }) => {
+      if (location.href !== href) navigationEpoch.current++;
+      href = location.href;
+    });
+  }, [router]);
   const search = useSearch({ strict: false });
-  const currentThreadId = search.thread ?? "";
-  const currentAddress = useRef("");
-  currentAddress.current = JSON.stringify([currentThreadId, search.target, search.work]);
+  const addressedThread = search.thread ?? "";
+  const issue = routeThreadIssue(addressedThread, routeLocation.state);
+  const currentThreadId = issue === "minted" ? "" : (issue ?? addressedThread);
+  const draftHead = useReading<ThreadHead>(
+    issue === "minted" ? { kind: "thread-head", thread: addressedThread } : null,
+  );
+  const liveHead = useRef(draftHead);
+  liveHead.current = draftHead;
+  useEffect(() => {
+    if (!issue || issue === "minted") return;
+    void navigate({
+      to: ".",
+      search: (previous: Record<string, unknown>) => ({ ...previous, thread: issue }),
+      replace: true,
+    });
+  }, [issue, navigate]);
   const store = useRouteOwner(() =>
     createChatPageStore({
       registry: appAtomRegistry,
@@ -165,57 +193,104 @@ export function WorkbenchProvider({ children }: { children: ReactNode }) {
             ? `${drafted.name} is not ready`
             : undefined;
 
-  /** Binds the draft: the thread is created on its provider, then takes the draft's model and traits. */
-  const createThread = useCallback(
-    async (initialTarget = draftTarget, stillCurrent?: () => boolean) => {
-      if (sendRefusal || !drafted) throw Error(sendRefusal ?? "no provider is ready");
-      const created = await client.create(drafted.id);
-      if (initialTarget) {
-        const displayLabel = threads.find(
-          (thread) => targetKey(thread.head.defaultTarget) === targetKey(initialTarget),
-        )?.head.displayLabel;
-        const outcome = await client.target(created.id, {
-          defaultTarget: initialTarget,
-          revision: created.head.revision,
-          displayLabel,
-        });
-        if (!outcome.ok)
-          throw Error("The new thread target changed; choose its target before sending");
+  const creatingThread = useRef<{
+    address: string;
+    epoch: number;
+    promise: Promise<string>;
+  } | null>(null);
+  /** Only an explicit create/send promotes a browser draft; one in-flight create owns its address. */
+  const createThread = useCallback((): Promise<string> => {
+    const source = router.state.location;
+    if (demo)
+      return Promise.reject(Error("Fixture threads are read-only; open a real draft to send."));
+    const epoch = navigationEpoch.current;
+    if (creatingThread.current)
+      return creatingThread.current.address === source.href &&
+        creatingThread.current.epoch === epoch
+        ? creatingThread.current.promise
+        : Promise.reject(
+            Error("Another draft is being created; wait for its outcome before sending here."),
+          );
+    const from = source.search.thread ?? "";
+    if (from !== addressedThread)
+      return Promise.reject(Error("The draft address changed; read it again before sending."));
+    if (from && routeThreadIssue(from, source.state) !== "minted")
+      return Promise.reject(
+        Error("This thread is not a locally issued draft; reopen its existing conversation."),
+      );
+    if (sendRefusal || !drafted)
+      return Promise.reject(Error(sendRefusal ?? "no provider is ready"));
+    if (from && draftHead.state !== "ready")
+      return Promise.reject(
+        Error("The draft target is not current; read it again before sending."),
+      );
+    const head = draftHead.state === "ready" ? draftHead.observation : null;
+    let initialTarget = from && chosenTarget === undefined ? head!.defaultTarget : draftTarget;
+    const current = () =>
+      router.state.location.href === source.href &&
+      navigationEpoch.current === epoch &&
+      (!from ||
+        (liveHead.current.state === "ready" &&
+          liveHead.current.observation.revision === head!.revision));
+    const promise = (async () => {
+      if (source.search.target) {
+        initialTarget = documentRequestSchema.parse(JSON.parse(source.search.target));
       }
-      if (draft.modelId && draft.modelId !== created.modelId)
-        await client.model(created.id, draft.modelId);
-      for (const [id, value] of Object.entries(draft.traits))
-        await client.trait(created.id, id, value);
-      await refreshThreads();
-      if (stillCurrent && !stillCurrent())
-        throw Error(
-          `The Place changed while creating thread ${created.id}; open it from Threads to continue.`,
-        );
-      await gotoThread(created.id);
-      return created.id;
-    },
-    [client, draft, draftTarget, drafted, gotoThread, sendRefusal, refreshThreads],
-  );
-
-  const creatingThread = useRef<Promise<string> | null>(null);
-  useEffect(
-    () =>
-      store.actions.connectThread(async (expected, target) => {
-        if (expected !== currentThreadId) return null;
-        if (demo) throw Error("Fixture threads cannot save route tabs.");
-        if (!creatingThread.current) {
-          const address = currentAddress.current;
-          creatingThread.current = createThread(
-            target,
-            () => currentAddress.current === address,
-          ).finally(() => {
-            creatingThread.current = null;
+      const created = await client.create(drafted.id);
+      try {
+        if (!current()) throw Error("The Place changed during creation.");
+        if (initialTarget) {
+          const displayLabel = threads.find(
+            (thread) => targetKey(thread.head.defaultTarget) === targetKey(initialTarget),
+          )?.head.displayLabel;
+          const outcome = await client.target(created.id, {
+            defaultTarget: initialTarget,
+            revision: created.head.revision,
+            displayLabel,
           });
+          if (!outcome.ok) throw Error("The new thread target changed.");
         }
-        return creatingThread.current;
-      }),
-    [store, currentThreadId, demo, createThread],
-  );
+        if (draft.modelId && draft.modelId !== created.modelId)
+          await client.model(created.id, draft.modelId);
+        for (const [id, value] of Object.entries(draft.traits))
+          await client.trait(created.id, id, value);
+        if (!current()) throw Error("The Place changed during creation.");
+        await store.actions.promoteThread(from, created.id, current);
+        const promoted = router.state.location.href;
+        const promotedEpoch = navigationEpoch.current;
+        await refreshThreads();
+        if (
+          router.state.location.search.thread !== created.id ||
+          router.state.location.href !== promoted ||
+          navigationEpoch.current !== promotedEpoch
+        )
+          throw Error("The Place changed after promotion.");
+        return created.id;
+      } catch (caught) {
+        throw Error(
+          `Thread ${created.id} was created, but ${errorMessage(caught)} Open it from Threads to continue.`,
+        );
+      }
+    })().finally(() => {
+      creatingThread.current = null;
+    });
+    creatingThread.current = { address: source.href, epoch, promise };
+    return promise;
+  }, [
+    client,
+    addressedThread,
+    chosenTarget,
+    demo,
+    draft,
+    draftHead,
+    draftTarget,
+    drafted,
+    router,
+    sendRefusal,
+    refreshThreads,
+    store,
+    threads,
+  ]);
 
   const sendPrompt = useCallback(
     async (input: PromptRequest) => {
