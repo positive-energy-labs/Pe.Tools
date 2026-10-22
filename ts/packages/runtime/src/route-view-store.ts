@@ -1,9 +1,4 @@
-import {
-  routeViewPatchSchema,
-  settleAgentPatch,
-  type RouteView,
-  type RouteViewAck,
-} from "@pe/agent-contracts";
+import { routeAddress, type RouteView, type RouteViewAck } from "@pe/agent-contracts";
 
 type Lease = { view: RouteView; revision: number; seen: number };
 type Intent = {
@@ -87,8 +82,9 @@ export class RouteViewStore {
     const selected = this.select(thread, route, instance);
     if (!selected || "ok" in selected) return { ok: false, error: "view unavailable" };
     const lease = this.leases.get(instance)!;
+    const agent = routeAddress(lease.view.route).agent;
     if (
-      !routeViewPatchSchema(lease.view.route).safeParse(patch).success ||
+      !agent.patch.safeParse(patch).success ||
       Object.keys(patch).some((key) => !(key in lease.view.page))
     )
       return { ok: false, error: `patch names keys Pea may not set on ${route}` };
@@ -96,7 +92,7 @@ export class RouteViewStore {
       return { ok: false, error: "view changed; read it again", view: selected };
     if ([...this.pending.values()].some((entry) => entry.lease.view.instance === instance))
       return { ok: false, error: "view command already pending" };
-    const settled = settleAgentPatch(lease.view.route, lease.view.page, patch);
+    const settled = agent.settle(lease.view.page, patch);
     if (!settled.ok) return settled;
     if (Object.keys(settled.patch).some((key) => !(key in lease.view.page)))
       return { ok: false, error: `patch names keys Pea may not set on ${route}` };

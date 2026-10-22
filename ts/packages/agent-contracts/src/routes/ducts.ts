@@ -11,7 +11,7 @@ import {
   type OrbitLook,
   type Viewport,
 } from "../page-keys.ts";
-import { field, setKeys, text, type RouteAddress } from "../route-field.ts";
+import { field, setKeys, text, type RouteDeclaration } from "../route-field.ts";
 
 /** The layer keys the Ducts spatial picture draws. */
 export const DUCTS_LAYERS = ["meshes", "context", "centrelines", "labels", "findings"] as const;
@@ -135,4 +135,4 @@ export const ductsAddress = {
     words: ductsWords,
     resolve: resolveDucts,
   },
-} satisfies RouteAddress;
+} satisfies RouteDeclaration;

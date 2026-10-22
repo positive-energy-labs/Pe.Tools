@@ -2,8 +2,7 @@ import { z } from "zod";
 import { callerSchema } from "./caller.ts";
 import { mentionSchema } from "./mention.ts";
 import { documentRequestSchema, threadHeadReadingSchema } from "./target.ts";
-import type { RouteKey } from "./route-address.ts";
-import { routeAddresses } from "./routes/index.ts";
+import { routeKeys } from "./route-address.ts";
 
 /**
  * The harness-thread wire (ADR 0015: the harness drives; Pea is tools and UI).
@@ -457,14 +456,14 @@ export const updateThreadRequestSchema = z
 export type UpdateThreadRequest = z.infer<typeof updateThreadRequestSchema>;
 
 /**
- * The route tabs a thread remembers, in open order: each a Place (`tabLink`, a canonical
- * `linkTo` with its target and work, never its thread). Which tab is active belongs to each browser
+ * The route tabs a thread remembers, in open order: each a Place (`routeAddress(route).tab`, a canonical
+ * `link` with its target and work, never its thread). Which tab is active belongs to each browser
  * workspace and is never stored here. Writes are per tab, last writer wins; the host stamps `at`.
  */
 export const THREAD_TABS_MAX = 12;
 export const threadTabSchema = z.strictObject({
   id: z.uuid(),
-  route: z.enum(Object.keys(routeAddresses) as [RouteKey, ...RouteKey[]]),
+  route: z.enum(routeKeys),
   link: z.string().min(1).max(8192),
   at: z.iso.datetime(),
 });

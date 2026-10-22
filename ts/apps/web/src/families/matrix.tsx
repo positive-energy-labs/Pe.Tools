@@ -1,5 +1,5 @@
 import { EmptyState } from "@pe/kit/lang/empty";
-import { linkTo } from "@pe/agent-contracts";
+import { routeAddress } from "@pe/agent-contracts";
 import { OutcomeLine } from "#/components/lang/outcome";
 import { FamiliesPivot } from "#/families/pivot";
 import { filterWords, standingFilterProposal } from "#/families/scope-band";
@@ -88,7 +88,9 @@ export function FamiliesMatrix() {
           {fixture && (
             <p className="px-4 py-1 t-small">
               Fixture review (no Revit capture).{" "}
-              <a href={linkTo("families", { demo: "apply" })}>plan confirmation fixture</a>
+              <a href={routeAddress("families").link({ demo: "apply" })}>
+                plan confirmation fixture
+              </a>
             </p>
           )}
         </>

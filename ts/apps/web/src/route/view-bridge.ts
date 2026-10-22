@@ -1,17 +1,12 @@
 /**
- * The one browser half of Pea's route-view channel (`routeAddresses` in agent-contracts). A route
+ * The one browser half of Pea's route-view channel (`routeAddress(route).agent` in agent-contracts). A route
  * with an address mounts this hook with its Page, what it shows, and how to apply a patch through
  * its own Page; the keys Pea may set are the address's. The hook leases the visible view to the host, takes Pea's patch from
  * the event stream, and acknowledges only after the patched Page has rendered. No Page field enters
  * authored Work.
  */
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import {
-  agentPage,
-  readAgentPatch,
-  type RouteView,
-  type RouteViewRoute,
-} from "@pe/agent-contracts";
+import { routeAddress, type RouteView, type RouteViewRoute } from "@pe/agent-contracts";
 import { peClient } from "#/host/pe-client";
 import { useHostEvents } from "#/readings";
 import { causeRefusal, refuse, type Refusal } from "./refusal";
@@ -43,9 +38,9 @@ export function useRouteViewBridge({
   surface: "chat" | "route";
   /** False while the route shows nothing Pea could address (no thread, hidden, or a stage with no view). */
   visible: boolean;
-  /** The route's Page; the lease carries its agent keys, as their codecs write them (`agentPage`). */
+  /** The route's Page; the lease carries its agent keys, as their codecs write them (`agent.write`). */
   page: object;
-  /** Applies Pea's patch, typed (`readAgentPatch`), through the route's Page as one pushed move. */
+  /** Applies Pea's patch, typed (`agent.read`), through the route's Page as one pushed move. */
   apply: (patch: Record<string, unknown>) => void;
   /** Identity of what is shown; an ack fails if it moves while a command is pending. */
   context: Record<string, unknown>;
@@ -72,7 +67,8 @@ export function useRouteViewBridge({
     changed();
     return () => document.removeEventListener("visibilitychange", changed);
   }, []);
-  const addressed = agentPage(route, page as never);
+  const lease = routeAddress(route).agent;
+  const addressed = lease.write(page);
   const raw: RouteView | null =
     thread && visible && pageVisible && routeCurrent()
       ? { route, thread, instance: instance.current, surface, page: addressed, context, facts }
@@ -169,9 +165,10 @@ export function useRouteViewBridge({
             },
           })
           .catch(() => {});
-      let patch: ReturnType<typeof readAgentPatch>;
+      const agent = routeAddress(value.route).agent;
+      let patch: Record<string, unknown>;
       try {
-        patch = readAgentPatch(value.route, event.patch);
+        patch = agent.read(event.patch);
       } catch (cause) {
         return refused(refuse("failed", causeRefusal(cause).message));
       }
@@ -179,7 +176,7 @@ export function useRouteViewBridge({
       if (!result.ok) return refused(result.refusal);
       // No move: only a page that already holds the patch may acknowledge it (against the unchanged
       // snapshot); otherwise the Page did nothing Pea asked for, and says so.
-      const wanted = agentPage(value.route, patch as never);
+      const wanted = agent.write(patch);
       if (!result.moved && Object.keys(event.patch).some((key) => value.page[key] !== wanted[key]))
         return refused(refuse("conflict", "The Page made no move for this patch"));
       setIntent({ event, receipt: result.receipt, context: JSON.stringify(value.context) });
@@ -201,7 +198,7 @@ export function useRouteViewBridge({
       JSON.stringify(view.context) === intent.context;
     if (!eligible()) return;
     // The rendered page holds the patch once each key writes back as its codec writes the decoded value.
-    const wanted = agentPage(route, readAgentPatch(route, event.patch) as never);
+    const wanted = lease.write(lease.read(event.patch));
     if (Object.keys(event.patch).some((key) => view.page[key] !== wanted[key])) return;
     let canceled = false;
     void publish(view)
@@ -224,5 +221,5 @@ export function useRouteViewBridge({
     return () => {
       canceled = true;
     };
-  }, [intent, view, page, publish, route, routeCurrent]);
+  }, [intent, view, page, publish, route, lease, routeCurrent]);
 }

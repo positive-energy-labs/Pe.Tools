@@ -3,7 +3,7 @@
  * one human line, the one door that fixes it when one exists, and the raw text folded behind
  * Details with copy. The words come from `summarizeFailure` in host-contracts, never from here.
  */
-import { linkTo } from "@pe/agent-contracts";
+import { routeAddress } from "@pe/agent-contracts";
 import { summarizeFailure } from "@pe/host-contracts/failure-summary";
 import { Button } from "@pe/kit/lang/button";
 import { Code } from "@pe/kit/lang/code";
@@ -20,7 +20,7 @@ export function FailureNote({ text, onDoor }: { text: string; onDoor: (href: str
           label={door.label}
           onClick={() =>
             onDoor(
-              `${linkTo("settings", { section: door.section })}${door.hash ? `#${door.hash}` : ""}`,
+              `${routeAddress("settings").link({ section: door.section })}${door.hash ? `#${door.hash}` : ""}`,
             )
           }
         >

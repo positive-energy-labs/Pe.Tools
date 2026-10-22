@@ -1,11 +1,11 @@
 import { Plus, X } from "lucide-react";
-import { readLink, routeAddresses, type ThreadTab } from "@pe/agent-contracts";
+import { routeAddress, type ThreadTab } from "@pe/agent-contracts";
 import { Button } from "@pe/kit/lang/button";
 import { TooltipHint } from "@pe/kit/lang/tooltip";
 
 function tabTitle(tab: ThreadTab) {
-  const { page } = readLink(
-    tab.route,
+  const at = routeAddress(tab.route);
+  const { page } = at.read(
     Object.fromEntries(new URL(tab.link, "http://tab.invalid").searchParams),
   );
   const subject =
@@ -18,7 +18,7 @@ function tabTitle(tab: ThreadTab) {
           : "query" in page
             ? page.query
             : "";
-  return `${routeAddresses[tab.route].title}${typeof subject === "string" && subject ? ` · ${subject}` : ""}`;
+  return `${at.title}${typeof subject === "string" && subject ? ` · ${subject}` : ""}`;
 }
 
 /** Each button names one durable Place; the route body is the existing standalone outlet. */

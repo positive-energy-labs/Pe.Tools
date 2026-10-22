@@ -7,7 +7,7 @@ import {
   RouterProvider,
 } from "@tanstack/react-router";
 import { afterEach, expect, test, vi } from "vite-plus/test";
-import { readLink } from "@pe/agent-contracts";
+import { routeAddress } from "@pe/agent-contracts";
 import { useRoute } from "#/route";
 import { LevelPlan } from "./level-plan";
 import { manifest } from "./manifest";
@@ -76,17 +76,17 @@ test("takeoffs plane gestures replace the address, minimap moves push, and Back 
     expect(node).toBeTruthy();
     return node!;
   });
-  const address = () =>
-    readLink("takeoffs", router.state.location.search as Record<string, unknown>).page;
-  expect(address().viewport).toBeNull();
+  const place = () =>
+    routeAddress("takeoffs").read(router.state.location.search as Record<string, unknown>).page;
+  expect(place().viewport).toBeNull();
   fireEvent.wheel(host, { clientX: 200, clientY: 100, deltaY: -120 });
-  await waitFor(() => expect(address().viewport).not.toBeNull());
+  await waitFor(() => expect(place().viewport).not.toBeNull());
   expect(history.length).toBe(1);
-  const zoomed = address().viewport;
+  const zoomed = place().viewport;
   fireEvent.click(view.getByRole("button", { name: "map" }));
   fireEvent.click(view.container.querySelector("canvas")!, { clientX: 210, clientY: 30 });
   await waitFor(() => expect(history.length).toBe(2));
-  expect(address().viewport).not.toEqual(zoomed);
+  expect(place().viewport).not.toEqual(zoomed);
   act(() => history.back());
-  await waitFor(() => expect(address().viewport).toEqual(zoomed));
+  await waitFor(() => expect(place().viewport).toEqual(zoomed));
 });

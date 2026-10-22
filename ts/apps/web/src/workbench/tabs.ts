@@ -1,16 +1,14 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import { useRouter, useRouterState } from "@tanstack/react-router";
 import {
+  routeAddress,
   THREAD_TABS_MAX,
   documentRequestSchema,
-  linkTo,
-  readLink,
-  routeAddresses,
-  tabLink,
+  routeAt,
+  routeOf,
   type DocumentRequest,
   type Carry,
   type LinkPage,
-  type RouteField,
   type RouteKey,
   type ThreadHead,
   type ThreadTab,
@@ -22,7 +20,6 @@ import { useSurfaceHost } from "#/navigation/surface-host";
 import { useWorkbench } from "./provider";
 import { routeThreadIssue } from "./store";
 
-const routes = Object.keys(routeAddresses) as RouteKey[];
 const focusKey = (thread: string) => `pe.tab.${thread}`;
 const readFocus = (thread: string) => {
   try {
@@ -42,16 +39,18 @@ const focus = (thread: string, id: string | null) => {
 
 /** Only registered shareable fields and explicit target/work survive in a durable Place. */
 function place(route: RouteKey, search: Record<string, unknown>, target: DocumentRequest | null) {
-  const { page, carry } = readLink(route, search);
-  const fields: Record<string, RouteField> = routeAddresses[route].fields;
-  const shared = Object.fromEntries(
-    Object.entries(page).filter(([key]) => fields[key]?.share !== false),
-  );
-  return linkTo(route, shared, {
+  const { page, carry } = routeAddress(route).read(search);
+  return routeAddress(route).link(page as LinkPage<RouteKey>, {
     target: carry.target ?? (target ? JSON.stringify(target) : undefined),
     work: carry.work,
   });
 }
+
+/** The route a tab holds at `pathname`: any but Pea's own page. */
+const tabRouteAt = (pathname: string) => {
+  const route = routeAt(pathname);
+  return route === "pea" ? null : route;
+};
 
 type Active = { thread: string; id: string; route: RouteKey; link: string };
 type Snapshot = { thread: string; tabs: ThreadTab[]; ready: boolean };
@@ -74,11 +73,10 @@ export function useRouteTabs() {
   const legacy =
     location.pathname === "/pea" &&
     ["plugin", "focus"].some((key) => new URLSearchParams(location.searchStr).has(key));
-  const route =
-    routes.find((key) => key !== "pea" && routeAddresses[key].path === location.pathname) ?? null;
+  const route = tabRouteAt(location.pathname);
   const headReading = useReading<ThreadHead>(thread ? { kind: "thread-head", thread } : null);
   const head = previousOf(headReading);
-  const carry = readLink(route ?? "pea", location.search).carry;
+  const carry = routeAddress(route ?? "pea").read(location.search).carry;
   const pinned = (() => {
     if (!carry.target) return head?.defaultTarget ?? null;
     try {
@@ -295,7 +293,7 @@ export function useRouteTabs() {
           ? {
               thread: owner,
               id,
-              route: routes.find((key) => routeAddresses[key].path === url.pathname),
+              route: routeAt(url.pathname) ?? undefined,
             }
           : undefined,
         __peChat: id === null,
@@ -334,11 +332,11 @@ export function useRouteTabs() {
   ) => {
     const epoch = ++navigationEpoch.current;
     const sourcePath = router.state.location.pathname;
-    if (!Object.hasOwn(routeAddresses, key) || key === "pea") {
+    const targetRoute = routeOf(key);
+    if (!targetRoute || targetRoute === "pea") {
       setFailure(`This route has no saved Place contract: ${key}`);
       return false;
     }
-    const targetRoute = key as RouteKey;
     try {
       if (thread && !shown.ready)
         throw Error(failure ?? "Thread Places are loading; retry when they are current.");
@@ -357,12 +355,12 @@ export function useRouteTabs() {
       const nextLink =
         page === undefined && explicit === undefined && existing
           ? existing.link
-          : linkTo(targetRoute, page ?? {}, {
+          : routeAddress(targetRoute).link(page ?? {}, {
               target:
                 explicit?.target ?? carry.target ?? (pinned ? JSON.stringify(pinned) : undefined),
               work: explicit?.work ?? carry.work,
             });
-      const canonical = tabLink(targetRoute, nextLink);
+      const canonical = routeAddress(targetRoute).tab(nextLink);
       if (!canonical.ok) throw Error(canonical.error);
       const id = existing ? existing.id : crypto.randomUUID();
       await write(
@@ -379,7 +377,7 @@ export function useRouteTabs() {
         return false;
       await navigate(owner, canonical.link, id, false, !thread || draft);
       return (
-        router.state.location.pathname === routeAddresses[targetRoute].path &&
+        router.state.location.pathname === routeAddress(targetRoute).path &&
         historyOf(router.state.location.state).__peRouteTab?.id === id
       );
     } catch (error) {
@@ -393,9 +391,7 @@ export function useRouteTabs() {
         open,
         promote: async (from, owner, current) => {
           const location = router.state.location;
-          const route = routes.find(
-            (key) => key !== "pea" && routeAddresses[key].path === location.pathname,
-          );
+          const route = tabRouteAt(location.pathname);
           if (route && from) {
             const id =
               historyOf(location.state).__peRouteTab?.id ?? held.current?.id ?? crypto.randomUUID();
@@ -458,7 +454,11 @@ export function useRouteTabs() {
       try {
         await flush();
         if (epoch !== navigationEpoch.current || liveThread.current !== thread) return;
-        await navigate(thread, linkTo("pea", {}, { target: carry.target, work: carry.work }), null);
+        await navigate(
+          thread,
+          routeAddress("pea").link({}, { target: carry.target, work: carry.work }),
+          null,
+        );
       } catch (error) {
         fail(error);
       }
@@ -486,7 +486,7 @@ export function useRouteTabs() {
                 result.tabs.length - 1,
               )
             ];
-          await navigate(thread, next?.link ?? linkTo("pea"), next?.id ?? null, true);
+          await navigate(thread, next?.link ?? routeAddress("pea").link(), next?.id ?? null, true);
         }
       } catch (error) {
         fail(error);
@@ -495,7 +495,12 @@ export function useRouteTabs() {
     duplicate: async () => {
       store.actions.cancelPlan();
       if (active)
-        await open(active.route, readLink(active.route, location.search).page, undefined, true);
+        await open(
+          active.route,
+          routeAddress(active.route).read(location.search).page,
+          undefined,
+          true,
+        );
     },
     retry: () => {
       void flush().catch(fail);

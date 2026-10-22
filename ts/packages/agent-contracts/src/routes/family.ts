@@ -1,4 +1,4 @@
-import { type RouteAddress } from "../route-field.ts";
+import { type RouteDeclaration } from "../route-field.ts";
 import { demo, entityFields } from "./shared.ts";
 
 export const familyAddress = {
@@ -8,4 +8,4 @@ export const familyAddress = {
     ...entityFields,
     demo,
   },
-} satisfies RouteAddress;
+} satisfies RouteDeclaration;

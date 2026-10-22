@@ -6,7 +6,7 @@
  */
 import { useState, type ReactNode } from "react";
 import { useRouter } from "@tanstack/react-router";
-import { actionAdmissionSchema, linkTo } from "@pe/agent-contracts";
+import { routeAddress, actionAdmissionSchema } from "@pe/agent-contracts";
 
 import { Button } from "@pe/kit/lang/button";
 import { submitAction } from "../../../../packages/mcps/src/shared/takeoff-action-client";
@@ -15,7 +15,7 @@ export interface Inspectable {
   label: (id: string) => string;
   open:
     | { kind: "shell"; path: (id: string) => string }
-    /** An app route: the declaration builds its typed link (`linkTo`), without thread or target. */
+    /** An app route: the declaration builds its typed link (`routeAddress(route).link`), without thread or target. */
     | { kind: "route"; href: (id: string) => string }
     /** A host endpoint the browser opens as a document (raw JSON), outside the app router. */
     | { kind: "href"; href: (id: string) => string };
@@ -34,7 +34,7 @@ const MEMBER: Inspectable = {
     kind: "route",
     href: (id) => {
       const [pod, path] = JSON.parse(id) as [string, string];
-      return linkTo("pods", { pod, path });
+      return routeAddress("pods").link({ pod, path });
     },
   },
 };
@@ -42,13 +42,13 @@ const MEMBER: Inspectable = {
 /** An action receipt, opened in `/ops`, where its recovery controls live. Its id is the action id. */
 const RECEIPT: Inspectable = {
   label: (id) => `receipt ${id.slice(0, 8)}`,
-  open: { kind: "route", href: (id) => linkTo("ops", { actionId: id }) },
+  open: { kind: "route", href: (id) => routeAddress("ops").link({ actionId: id }) },
 };
 
 /** A kept view picture, opened in `/captures` focused on its row. Its id is the blob's sha. */
 const CAPTURE: Inspectable = {
   label: (id) => `capture ${id.slice(0, 8)}`,
-  open: { kind: "route", href: (id) => linkTo("captures", { sha: id }) },
+  open: { kind: "route", href: (id) => routeAddress("captures").link({ sha: id }) },
 };
 
 /** The kinds every route opens, beside the ones its manifest declares. */
@@ -116,7 +116,7 @@ export function Inspect({
   const router = useRouter();
   const text = children ?? spec.label(id);
   if (spec.open.kind === "route") {
-    // The canonical destination (`linkTo`), resolved by the router as any navigation is: the root's
+    // The canonical destination (`routeAddress(route).link`), resolved by the router as any navigation is: the root's
     // `retainSearchParams` adds the current thread, target and work unless the link names its own.
     // The rendered href and a plain click are the same location, so a copied or new-tab link keeps them.
     const url = new URL(spec.open.href(id), window.location.origin);

@@ -1,5 +1,5 @@
 import { createFileRoute, stripSearchParams, type SearchSchemaInput } from "@tanstack/react-router";
-import { readLink } from "@pe/agent-contracts";
+import { routeAddress } from "@pe/agent-contracts";
 import { routeSearch } from "#/route/route-owner";
 import { Directory } from "#/navigation/directory";
 import { Ledger } from "#/navigation/ledger";
@@ -8,9 +8,9 @@ import { LEDGER_PRESENTATIONS } from "#/navigation/ledger-model";
 export const Route = createFileRoute("/")({
   validateSearch: (search: SearchSchemaInput & Record<string, unknown>) => ({
     ...routeSearch(search),
-    ...readLink("home", search).page,
+    ...routeAddress("home").read(search).page,
   }),
-  search: { middlewares: [stripSearchParams(readLink("home", {}).page)] },
+  search: { middlewares: [stripSearchParams(routeAddress("home").defaults)] },
   component: Home,
 });
 

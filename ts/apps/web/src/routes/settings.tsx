@@ -2,7 +2,7 @@ import { useRouteSearch } from "#/route/activity";
 import { createFileRoute, stripSearchParams, type SearchSchemaInput } from "@tanstack/react-router";
 import { RouteShell } from "#/route";
 import { SettingsBody } from "#/machine/body";
-import { readLink } from "@pe/agent-contracts";
+import { routeAddress } from "@pe/agent-contracts";
 import { settingsDestination } from "#/machine/model";
 import { routeSearch } from "#/route/route-owner";
 import { useMachine } from "#/machine/use-machine";
@@ -13,10 +13,10 @@ import { settingsManifest as manifest } from "#/route/surface-manifests";
 export const Route = createFileRoute("/settings")({
   validateSearch: (search: SearchSchemaInput & Record<string, unknown>) => ({
     ...routeSearch(search),
-    ...readLink("settings", search).page,
+    ...routeAddress("settings").read(search).page,
   }),
   // The contract defaults never reach the address, as on `/` and `/pea`.
-  search: { middlewares: [stripSearchParams(readLink("settings", {}).page)] },
+  search: { middlewares: [stripSearchParams(routeAddress("settings").defaults)] },
   component: SettingsRoute,
 });
 function SettingsRoute() {

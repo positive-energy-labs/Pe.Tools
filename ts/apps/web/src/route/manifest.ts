@@ -146,9 +146,9 @@ export interface RouteManifest<W, R extends string, P, A extends string> {
   /** One normalization boundary for human, action and Pea moves. Never runs native work. */
   transition?: PageTransition<P>;
   /**
-   * The route's address in agent-contracts `routeAddresses`: its fields say which Page keys the URL
-   * carries, how each moves history, and what Pea reads and sets. The page schema extends
-   * `routePageSchema(address)`.
+   * The route's address in agent-contracts (`routeAddress(route)`): its fields say which Page keys the
+   * URL carries, how each moves history, and what Pea reads and sets. The page schema extends
+   * `routeAddress(route).schema`.
    */
   address?: RouteKey;
   /** The stages a route works in; `word` is the first word of the Situation ("Auditing rooms"). */

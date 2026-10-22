@@ -15,9 +15,8 @@ import {
   semanticActions,
   familyReads,
   familiesRouteState,
-  routeAddresses,
+  routeAddress,
   routeViewRoutes,
-  type RouteAddress,
   type RouteViewRoute,
   familyCatalogRequest,
   workKeySchema,
@@ -812,7 +811,7 @@ async function dispatch(
         if (view[2] === "view") response = await read(payload.instance);
         else {
           const { instance, revision, ...rest } = payload;
-          const spec = routeAddresses[route].agent as NonNullable<RouteAddress["agent"]>;
+          const spec = routeAddress(route).agent;
           let patch = rest as Record<string, string>;
           let refused: string | null = null;
           if (spec.resolve) {

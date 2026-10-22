@@ -1,5 +1,5 @@
 import { z } from "zod";
-import { field, text, type RouteAddress } from "../route-field.ts";
+import { field, text, type RouteDeclaration } from "../route-field.ts";
 
 export const bindAddress = {
   path: "/bind",
@@ -8,4 +8,4 @@ export const bindAddress = {
     page: field(text(), { url: "push" }),
     view: field(z.boolean().default(false), { url: "push" }),
   },
-} satisfies RouteAddress;
+} satisfies RouteDeclaration;

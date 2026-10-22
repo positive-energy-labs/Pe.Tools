@@ -4,7 +4,7 @@ import { useRouteSearch } from "#/route/activity";
  * runs filed against the open member. It performs no Revit action; a spec links to the product
  * route its `$schema` names.
  */
-import { linkTo, routePageSchema } from "@pe/agent-contracts";
+import { routeAddress } from "@pe/agent-contracts";
 import { routeSearch } from "#/route/route-owner";
 import { useRouteDemo } from "#/route/activity";
 import { useEffect, useState, type ReactNode } from "react";
@@ -58,7 +58,7 @@ export const manifest = defineRoute({
   needs: "document",
   runs: ["settings.write"],
   address: "pods",
-  page: routePageSchema("pods"),
+  page: routeAddress("pods").schema,
   seeds: PODS_SEEDS,
 });
 
@@ -202,7 +202,7 @@ export function PodsRouteContent({
                           router={router}
                           // The spec opens selected in the product route's apply stage; the demo
                           // lane keeps its seed so the link lands on a rendered route.
-                          href={linkTo(product.route, {
+                          href={routeAddress(product.route).link({
                             stage: "apply",
                             pod: row!.id,
                             path: member!.path,
@@ -371,7 +371,7 @@ function usePodRuns(pod: string | null, path: string | null, demo: boolean) {
 }
 
 /**
- * A canonical link (`linkTo`) resolved by the router as any navigation is: the root's
+ * A canonical link (`routeAddress(route).link`) resolved by the router as any navigation is: the root's
  * `retainSearchParams` adds the current thread, target and work, so the rendered href and a
  * plain click are one location; a modified click is left to the browser. As `route/inspect.tsx`.
  */

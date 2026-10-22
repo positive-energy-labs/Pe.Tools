@@ -1,6 +1,6 @@
 import * as Atom from "effect/unstable/reactivity/Atom";
 import { deepEqual } from "@tanstack/react-router";
-import { transition as transitionPage, type RouteKey } from "@pe/agent-contracts";
+import { routeAddress, type RouteKey } from "@pe/agent-contracts";
 import type { z } from "zod";
 import type { PageMove, PageTransition, PageTransitionOrigin } from "./manifest";
 import type { createRouteOwner } from "./route-owner";
@@ -100,7 +100,10 @@ export function createViewOwner<P>(
         if ("refusal" in normalized) return reject(normalized.refusal);
         patch = normalized.patch;
         if (rules.address) {
-          const moved = transitionPage(rules.address, before.page as never, patch as never);
+          const moved = routeAddress(rules.address).transition(
+            before.page as never,
+            patch as never,
+          );
           if (!moved.ok) return reject(refuse("not-ready", moved.error));
           patch = moved.patch as Partial<P>;
         }

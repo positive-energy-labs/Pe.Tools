@@ -14,8 +14,8 @@
  */
 import { z } from "zod";
 import {
+  routeAddress,
   ductsRouteState,
-  routePageSchema,
   transitionPatches,
   type DuctAssumption,
   type DuctClaim,
@@ -83,10 +83,10 @@ export interface DuctsFanRun {
 }
 
 /**
- * The contract's fields (`routeAddresses.ducts`: subject, picture, viewport on the URL; `issue` and
+ * The contract's fields (`routeAddress("ducts")`: subject, picture, viewport on the URL; `issue` and
  * `diagnostic` Pea's only) and the Page-only rest. `viewport` is a typed `Viewport`.
  */
-const ductsPageSchema = routePageSchema("ducts").extend({
+const ductsPageSchema = routeAddress("ducts").schema.extend({
   /** Bumped by `refresh` and `apply`; the snapshot read keys on it. */
   epoch: z.number().default(0),
   /** The last preview; `apply` is armed while it matches the Work revision and epoch. Page, never URL. */

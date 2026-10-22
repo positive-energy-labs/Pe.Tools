@@ -1,7 +1,7 @@
 import { useRouteSearch } from "#/route/activity";
 import { createFileRoute } from "@tanstack/react-router";
 
-import { readLink, routePageSchema } from "@pe/agent-contracts";
+import { routeAddress } from "@pe/agent-contracts";
 import { defineRoute, urlPage } from "#/route";
 import { routeSearch } from "#/route/route-owner";
 import { BindRoute } from "#/pages-bind/picker";
@@ -10,7 +10,7 @@ const manifest = defineRoute({
   key: "bind",
   name: "Bind",
   address: "bind",
-  page: routePageSchema("bind"),
+  page: routeAddress("bind").schema,
 });
 const url = urlPage(manifest)!;
 
@@ -18,7 +18,7 @@ const url = urlPage(manifest)!;
 export const Route = createFileRoute("/bind")({
   validateSearch: (search: Record<string, unknown>) => ({
     ...routeSearch(search),
-    ...readLink("bind", search).page,
+    ...routeAddress("bind").read(search).page,
   }),
   search: { middlewares: [...url.middlewares] },
   component: Bind,

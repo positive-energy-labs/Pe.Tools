@@ -1,4 +1,4 @@
-import { field, text, type RouteAddress } from "../route-field.ts";
+import { field, text, type RouteDeclaration } from "../route-field.ts";
 import { demo, entityFields } from "./shared.ts";
 
 export const schedulesAddress = {
@@ -10,4 +10,4 @@ export const schedulesAddress = {
     workspaceId: field(text(), { url: "replace" }),
     demo,
   },
-} satisfies RouteAddress;
+} satisfies RouteDeclaration;

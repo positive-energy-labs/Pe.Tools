@@ -12,11 +12,8 @@ import {
   familyReads,
   actionBasesSchema,
   settingsRouteState,
-  agentKeys,
-  routeAddressFields,
-  routeAddresses,
+  routeAddress,
   routeViewRoutes,
-  type RouteAddress,
   type RouteViewRoute,
 } from "@pe/agent-contracts";
 /** One discovery projection and ranker: native availability is contextual; installed content
@@ -231,12 +228,11 @@ function opRow(op: OpsCatalogEntry): Capability {
   };
 }
 
-/** A route with an address (`routeAddresses`) gets one read and one set, both over the person's open page. */
+/** A route that leases its view (`routeAddress(route).agent`) gets one read and one set, both over the person's open page. */
 function routeViewRows(route: RouteViewRoute): Capability[] {
-  const spec = routeAddresses[route];
-  const { policy, words } = spec.agent as NonNullable<RouteAddress["agent"]>;
-  const keys = agentKeys(route);
-  const sets = Object.keys(routeAddressFields(route).shape);
+  const spec = routeAddress(route);
+  const { policy, words, keys, fields } = spec.agent;
+  const sets = Object.keys(fields.shape);
   const lower = spec.title.toLowerCase();
   return [
     {
@@ -276,7 +272,7 @@ function routeViewRows(route: RouteViewRoute): Capability[] {
         z.object({
           instance: z.uuid(),
           revision: z.number().int().nonnegative(),
-          ...routeAddressFields(route).partial().shape,
+          ...fields.partial().shape,
           ...words?.partial().shape,
         }),
       ) as Record<string, unknown>,

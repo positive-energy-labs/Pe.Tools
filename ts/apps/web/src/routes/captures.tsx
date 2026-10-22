@@ -8,7 +8,7 @@ import { useRouteSearch } from "#/route/activity";
 import { createFileRoute } from "@tanstack/react-router";
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { z } from "zod";
-import { routePageSchema, type CaptureReceipt } from "@pe/agent-contracts";
+import { routeAddress, type CaptureReceipt } from "@pe/agent-contracts";
 
 import { readCaptures } from "#/captures/host";
 import { CapturesList } from "#/captures/list";
@@ -21,7 +21,7 @@ import { RouteShell, useRoute, urlPage, type RouteManifest } from "#/route";
  * The receipts are a host read, not a Reading: no Revit change mark lights them, so `refresh`
  * names `work`, which this route never has, and the verb is the only way the list re-reads.
  */
-const capturePage = routePageSchema("captures");
+const capturePage = routeAddress("captures").schema;
 const captureLocation = {
   key: "captures",
   name: "Captures",

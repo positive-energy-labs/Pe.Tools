@@ -5,7 +5,7 @@
 import { z } from "zod";
 import {
   address,
-  routePageSchema,
+  routeAddress,
   documentRefSchema,
   workKeySchema,
   workKey,
@@ -55,7 +55,7 @@ const syncReviewSchema = z.object({
  * short-lived review state and every scope transition invalidates them. Standalone room navigation
  * lives in its URL, embedded navigation in its controller, and authored decisions in Work.
  */
-export const takeoffPageSchema = routePageSchema("takeoffs").extend({
+export const takeoffPageSchema = routeAddress("takeoffs").schema.extend({
   work: z.string().optional(),
   views: z.array(z.string()).readonly().default([]),
   zones: z.array(z.string()).readonly().default([]),

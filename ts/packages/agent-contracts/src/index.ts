@@ -2,8 +2,16 @@ export * from "./activity.ts";
 export * from "./route-state.ts";
 export * from "./route-address.ts";
 export * from "./route-view.ts";
-export * from "./routes/index.ts";
-export type { History, RouteAddress, RouteField } from "./route-field.ts";
+export {
+  DUCTS_LAYERS,
+  FAMILIES_DEFAULT_QUERY,
+  GALVANIZED_STEEL_ROUGHNESS,
+  ROOMS_LAYERS,
+  SETTINGS_SECTIONS,
+  SPACE_LAYERS,
+  spaceElementKey,
+} from "./routes/index.ts";
+export type { History } from "./route-field.ts";
 export * from "./page-keys.ts";
 export * from "./route-doc.ts";
 export * from "./reading.ts";

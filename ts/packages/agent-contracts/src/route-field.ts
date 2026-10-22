@@ -73,7 +73,7 @@ export type Resolve = (
 
 export type Fields = Record<string, RouteField>;
 
-export interface RouteAddress<F extends Fields = Fields> {
+export interface RouteDeclaration<F extends Fields = Fields> {
   /** The link target; the web file route of the same path owns it. */
   path: `/${string}`;
   title: string;
@@ -81,7 +81,7 @@ export interface RouteAddress<F extends Fields = Fields> {
   /**
    * A rule between fields: the key that breaks it and why, or null. `transition` (a person's move
    * and Pea's alike) refuses a named key that breaks it and resets an unnamed one to its default;
-   * `settlePage` (a forgiving URL read) resets either.
+   * `read` (a forgiving URL read) resets either.
    */
   conflict?: (page: Record<string, unknown>) => { key: string; error: string } | null;
   /** Present when the route leases a mounted view to Pea; its `agent` fields are the lease. */

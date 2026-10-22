@@ -1,4 +1,4 @@
-import { SETTINGS_SECTIONS, linkTo } from "@pe/agent-contracts";
+import { routeAddress, SETTINGS_SECTIONS } from "@pe/agent-contracts";
 /**
  * The Machine reading, said in words: the version chip, the status line, and each group's
  * critical state. Runtime ownership comes from the host's enforced connections; stale readings
@@ -12,7 +12,10 @@ import { phaseOf, unsavedOf } from "./session";
 export type GroupKey = (typeof SETTINGS_SECTIONS)[number];
 /** The one address of every Settings group; `session` focuses a Revit row. */
 export const settingsDestination = (section?: GroupKey, session?: string) =>
-  linkTo("settings", { section, ...(section === "revit" && session ? { session } : {}) });
+  routeAddress("settings").link({
+    section,
+    ...(section === "revit" && session ? { session } : {}),
+  });
 
 export const machineOf = (reading: Reading<Machine>): Machine | null =>
   reading.state === "ready"

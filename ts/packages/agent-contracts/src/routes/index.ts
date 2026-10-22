@@ -1,4 +1,4 @@
-import type { RouteAddress } from "../route-field.ts";
+import type { RouteDeclaration } from "../route-field.ts";
 import { ductsAddress } from "./ducts.ts";
 import { familiesAddress } from "./families.ts";
 import { familyAddress } from "./family.ts";
@@ -43,4 +43,4 @@ export const routeAddresses = {
   "parameter-links": parameterLinksAddress,
   captures: capturesAddress,
   "data-tables": dataTablesAddress,
-} satisfies Record<string, RouteAddress>;
+} satisfies Record<string, RouteDeclaration>;

@@ -1,4 +1,4 @@
-import { linkTo, takeoffDecisionKey } from "@pe/agent-contracts";
+import { routeAddress, takeoffDecisionKey } from "@pe/agent-contracts";
 import { useCallback, useMemo, useState, type ReactNode } from "react";
 
 import type { TableState } from "@pe/kit/table/model";
@@ -206,8 +206,7 @@ function useAtlasModel({ store, headRail, sidePanel, readoutBand }: AtlasProps) 
   const scopeSqft = visibleRows.reduce((s, r) => s + r.room.sqft, 0);
 
   // The room's address, as the contract writes a takeoffs link (defaults drop; target carried).
-  const proposedUrl = linkTo(
-    "takeoffs",
+  const proposedUrl = routeAddress("takeoffs").link(
     {
       level,
       ...(selected ? { zone: selected.zone.guid } : {}),

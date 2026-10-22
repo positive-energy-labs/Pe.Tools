@@ -4,7 +4,7 @@ import {
   stripSearchParams,
   type SearchSchemaInput,
 } from "@tanstack/react-router";
-import { readLink } from "@pe/agent-contracts";
+import { routeAddress } from "@pe/agent-contracts";
 import { routeSearch } from "#/route/route-owner";
 import { ChatShell } from "#/chat/chat-shell";
 /**
@@ -18,13 +18,13 @@ import { ChatShell } from "#/chat/chat-shell";
  *            attachments are present (attachments never serialize).
  * `?demo=<action>` is read by `useRoute`, not here: it mounts one seed in an isolated owner.
  */
-/** The contract defaults (`routeAddresses.pea`): a stale value (the old `mode=chat`) reads as one. */
-const DEFAULTS = readLink("pea", {}).page;
+/** The contract defaults (`routeAddress("pea")`): a stale value (the old `mode=chat`) reads as one. */
+const DEFAULTS = routeAddress("pea").defaults;
 
 export const Route = createFileRoute("/pea")({
   validateSearch: (search: SearchSchemaInput & Record<string, unknown>) => ({
     ...routeSearch(search),
-    ...readLink("pea", search).page,
+    ...routeAddress("pea").read(search).page,
   }),
   search: {
     middlewares: [retainSearchParams(["thread"]), stripSearchParams(DEFAULTS)],

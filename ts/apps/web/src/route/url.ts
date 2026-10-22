@@ -1,22 +1,12 @@
 /**
- * The URL half of a route's Page, derived from the manifest. A route with an `address` reads and
- * writes through its contract fields (agent-contracts `routeAddresses`: `readLink`, `writeSearch`,
- * `historyOf`); a route not yet in the contract names its `url` keys and the page schema says how
- * to read them. TanStack Router owns the rest: `validateSearch` takes the derived reader, the
+ * The URL half of a route's Page, derived from the manifest: a route with an `address` reads and
+ * writes through its contract (agent-contracts `routeAddress(route)`: `read`, `write`, `history`).
+ * TanStack Router owns the rest: `validateSearch` takes the derived reader, the
  * middleware keeps a bare route URL bare, and each change of place is one history entry, so Back
  * and Forward step through what the Situation targeted; a gesture replaces the entry instead.
  * Nothing here hand-rolls `new URL().searchParams`.
  */
-import {
-  historyOf,
-  readLink,
-  routeAddresses,
-  urlKeys,
-  writeSearch,
-  type History,
-  type RouteField,
-  type RouteKey,
-} from "@pe/agent-contracts";
+import { routeAddress, type History, type RouteKey } from "@pe/agent-contracts";
 import { useRouter, type SearchMiddleware } from "@tanstack/react-router";
 import { useEffect } from "react";
 import { z } from "zod";
@@ -55,19 +45,21 @@ const shapeOf = (schema: z.ZodType): Shape => {
 function addressPage<P>(key: string, route: RouteKey, page: z.ZodType<P> | undefined): UrlPage<P> {
   if (!page) throw Error(`${key} names an address without a page schema`);
   const shape = shapeOf(page);
-  const fields = routeAddresses[route].fields as Record<string, RouteField>;
-  const keys = urlKeys(route) as (keyof P & string)[];
+  const contract = routeAddress(route);
+  const keys = contract.keys as readonly (keyof P & string)[];
   for (const name of keys) {
     if (!shape[name]) throw Error(`${key}: address key ${name} is not a page field`);
-    const field = fields[name]!;
-    const encode = (value: unknown) =>
-      value === undefined ? undefined : field.codec.encode(value);
-    if (encode(shape[name]!.parse(undefined)) !== encode(field.schema.parse(undefined)))
-      throw Error(`${key}: page default for ${name} differs from its contract field's`);
+    const initial = shape[name]!.parse(undefined);
+    // The address writes a value at its contract default as nothing; any other default would show.
+    const same =
+      initial === undefined
+        ? (contract.defaults as Record<string, unknown>)[name] === undefined
+        : contract.write({ [name]: initial })[name] === undefined;
+    if (!same) throw Error(`${key}: page default for ${name} differs from its contract field's`);
   }
-  const read = (search: Record<string, unknown>) => readLink(route, search).page as Partial<P>;
+  const read = (search: Record<string, unknown>) => contract.read(search).page as Partial<P>;
   const write = (value: Partial<P>): Record<string, string | undefined> =>
-    writeSearch(route, value as never);
+    contract.write(value as never);
   // Every way into the address (a navigate, a Link) writes the URL keys as their codec does.
   const encode: SearchMiddleware<Record<string, unknown>> = ({ search, next }) => {
     const out = { ...next(search) };
@@ -81,7 +73,7 @@ function addressPage<P>(key: string, route: RouteKey, page: z.ZodType<P> | undef
     read,
     write,
     history: (before, after, override) =>
-      historyOf(route, before as never, after as never, override),
+      contract.history(before as never, after as never, override),
     middlewares: [encode],
   };
 }

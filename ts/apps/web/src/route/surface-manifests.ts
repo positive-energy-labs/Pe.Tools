@@ -1,6 +1,6 @@
 import { z } from "zod";
 import { defineRoute } from "./manifest";
-import { routePageSchema } from "@pe/agent-contracts";
+import { routeAddress } from "@pe/agent-contracts";
 import { SHEET_ROWS, solve } from "#/grilles/math";
 
 export const ductLossManifest = defineRoute({
@@ -8,7 +8,7 @@ export const ductLossManifest = defineRoute({
   name: "Duct Loss",
   docs: "Calculate duct friction from dimensions and airflow. The wheel, charts and formula use the same inputs. All calculation runs in this browser.",
   address: "duct-loss",
-  page: routePageSchema("duct-loss"),
+  page: routeAddress("duct-loss").schema,
 });
 
 const grilleInput = z

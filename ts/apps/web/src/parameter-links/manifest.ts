@@ -4,12 +4,12 @@
  */
 import { z } from "zod";
 import {
+  routeAddress,
   parameterLinksRouteState,
   semanticActions,
   type ParameterLinksDocument,
   type WorkKey,
   stagedParameterProfile,
-  routePageSchema,
 } from "@pe/agent-contracts";
 
 import { defineRoute, type Ctx as RouteCtx } from "#/route";
@@ -21,7 +21,7 @@ import {
 
 type ParameterLinksPage = z.infer<typeof parameterLinksPageSchema>;
 
-const parameterLinksPageSchema = routePageSchema("parameter-links");
+const parameterLinksPageSchema = routeAddress("parameter-links").schema;
 
 type ParameterLinksReadingKey = "links" | "receipts" | "inventory";
 type ParameterLinksAction = "refresh" | "preview" | "previewProposal" | "apply";

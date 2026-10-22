@@ -1,5 +1,5 @@
 import { z } from "zod";
-import { field, type RouteAddress } from "../route-field.ts";
+import { field, type RouteDeclaration } from "../route-field.ts";
 
 /** Galvanized steel's absolute roughness in feet: the duct-loss default and its material row. */
 export const GALVANIZED_STEEL_ROUGHNESS = 0.0003;
@@ -18,4 +18,4 @@ export const ductLossAddress = {
     density: field(z.number().default(0.075), { url: "replace" }),
     face: field(z.enum(["commercial", "residential"]).default("commercial"), { url: "push" }),
   },
-} satisfies RouteAddress;
+} satisfies RouteDeclaration;

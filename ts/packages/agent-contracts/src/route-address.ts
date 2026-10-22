@@ -7,15 +7,17 @@ import {
   textCodec,
   type Fields,
   type History,
-  type RouteAddress,
+  type Resolve,
+  type RouteDeclaration,
   type RouteField,
 } from "./route-field.ts";
 import { routeAddresses } from "./routes/index.ts";
 
 /**
- * What a route's address derives: its typed Page, its URL and link projection, its history rule,
- * and Pea's lease of it. The fields themselves live in `routes/<route>.ts` over the kernel in
- * `route-field.ts`; nothing here declares a key.
+ * A route's address, deep: `routeAddress(route)` is the one door every caller reaches a route through,
+ * its typed Page, URL and link, history rule, transition and Pea's lease, all derived from the
+ * fields `routes/<route>.ts` declares over the kernel in `route-field.ts`; nothing here declares a
+ * key. A new capability grows as a member of `RouteAddress`, never as a loose helper beside it.
  */
 
 /* ── Types ───────────────────────────────────────────────────────────────────── */
@@ -32,7 +34,7 @@ export type RoutePage<R extends RouteKey> = {
 };
 type UrlKey<R extends RouteKey> = KeysWhere<FieldsOf<R>, { url: History }>;
 type ShareKey<R extends RouteKey> = Exclude<UrlKey<R>, KeysWhere<FieldsOf<R>, { share: false }>>;
-export type UrlPage<R extends RouteKey> = Pick<RoutePage<R>, UrlKey<R>>;
+type UrlPage<R extends RouteKey> = Pick<RoutePage<R>, UrlKey<R>>;
 export type LinkPage<R extends RouteKey> = Partial<Pick<RoutePage<R>, ShareKey<R>>>;
 
 export type RouteViewRoute = {
@@ -43,9 +45,88 @@ export type RouteViewRoute = {
 const carryKeys = ["thread", "target", "work"] as const;
 export type Carry = Partial<Record<(typeof carryKeys)[number], string>>;
 
-/* ── Field reads and writes ──────────────────────────────────────────────────── */
+type Moved<P> = { ok: true; page: P; patch: Partial<P> } | { ok: false; error: string };
 
-const fieldsOf = (route: RouteKey) => routeAddresses[route].fields as Fields;
+/** Pea's lease of a mounted view: present on a route that declares `agent`. */
+export interface RouteLease<R extends RouteKey> {
+  /** What the person sees, and the rule Pea follows when it sets a key. */
+  readonly policy: string;
+  /** Input words beside the keys that `resolve` turns into keys. */
+  readonly words?: z.ZodObject<Record<string, z.ZodString>>;
+  /** Turns the patch Pea wrote into one the lease can take, or refuses it by name. */
+  readonly resolve?: Resolve;
+  /** The keys Pea reads (`read` and `set`). */
+  readonly keys: readonly string[];
+  /** The keys Pea sets, as Pea writes them: each its lease string, no default, none extra. */
+  readonly fields: z.ZodObject<Record<string, z.ZodType<string>>>;
+  /** The patch Pea sends: a nonempty subset of `fields`. */
+  readonly patch: z.ZodType<Record<string, string>>;
+  /** Page → the lease page: every agent key, as its codec writes it. */
+  write(page: Partial<RoutePage<R>>): Record<string, string>;
+  /** A patch that passes `patch` → the typed Page keys it sets; throws on one that does not. */
+  read(patch: Record<string, string>): Partial<RoutePage<R>>;
+  /**
+   * Pea's patch over the view it leased (`lease`: the lease page, as `write` wrote it), through
+   * `transition`; the settled patch comes back as lease strings. The patch must already pass `patch`.
+   */
+  settle(
+    lease: Record<string, string>,
+    patch: Record<string, string>,
+  ): { ok: true; patch: Record<string, string> } | { ok: false; error: string };
+}
+
+export interface RouteAddress<R extends RouteKey> {
+  readonly route: R;
+  /** The link target; the web file route of the same path owns it. */
+  readonly path: `/${string}`;
+  readonly title: string;
+  /** The typed Page schema of every declared field; a web page `.extend`s it with Page-only state. */
+  readonly schema: z.ZodObject<{ [K in keyof FieldsOf<R> & string]: SchemaOf<FieldsOf<R>[K]> }>;
+  /** Every field at its default: the bare Place. */
+  readonly defaults: RoutePage<R>;
+  /** The keys the address bar holds. */
+  readonly keys: readonly UrlKey<R>[];
+  /** Search (router-parsed or raw strings) → the URL page, typed, and the root carry. */
+  read(search: Record<string, unknown>): { page: UrlPage<R>; carry: Carry };
+  /**
+   * Page → the address bar's search: each URL key the page names, a default as `undefined` so a
+   * merge drops it. Draft keys (`share: false`) included; this is the address, not a link.
+   */
+  write(page: Partial<RoutePage<R>>): Record<string, string | undefined>;
+  /**
+   * The one link builder: a shareable path with the given keys and carry, defaults and drafts
+   * dropped. A key that is not a URL key is a type error, and a thrown one for an untyped caller;
+   * nothing is read from the current location, so no draft or shell leaks.
+   */
+  link(page?: LinkPage<R>, carry?: Carry): string;
+  /**
+   * A thread tab's link, canonical: `link(page, { target, work })`. The path must be the route's; a
+   * draft or the browser `shell` drops; `thread` (the tab's own thread), an unknown key, or a value
+   * its field cannot read is refused, never defaulted. Target and work are kept: dropping them
+   * would retarget the tab.
+   */
+  tab(link: string): { ok: true; link: string } | { ok: false; error: string };
+  /**
+   * How one move lands in history: null when no URL key changed (an agent-only or Page-only move
+   * makes no entry); else the override (a gesture `replace`, a named move or Pea's patch `push`);
+   * else `push` if any changed key is a step, `replace` when all are tweaks.
+   */
+  history(
+    before: Partial<RoutePage<R>>,
+    after: Partial<RoutePage<R>>,
+    override?: History,
+  ): History | null;
+  /**
+   * The one transition rule, the same for a person and for Pea: `patch` (the keys the mover named)
+   * over `current`. A named key that breaks the route's `conflict` rule is refused; a key it did
+   * not name resets to its default (a mode alone fits its viewport). Field schemas judge one key
+   * each and never this rule, so a page reaches it only through here (or `read`, which forgives).
+   */
+  transition<P extends Partial<RoutePage<R>>>(current: P, patch: Partial<P>): Moved<P>;
+  readonly agent: [R] extends [RouteViewRoute] ? RouteLease<R> : undefined;
+}
+
+/* ── Field reads and writes ──────────────────────────────────────────────────── */
 
 /** The router JSON-parses `selected=8081605` into a number and `target={..}` into an object. */
 const textOf = (raw: unknown): string | undefined =>
@@ -80,184 +161,143 @@ const writeField = (field: RouteField, value: unknown): string | undefined => {
   return initial !== undefined && encoded === field.codec.encode(initial) ? undefined : encoded;
 };
 
-/** The route's typed Page schema of every declared field; a web page `.extend`s it with Page-only state. */
-export const routePageSchema = <R extends RouteKey>(route: R) =>
-  z.object(
-    Object.fromEntries(Object.entries(fieldsOf(route)).map(([key, f]) => [key, f.schema])),
-  ) as unknown as z.ZodObject<{ [K in keyof FieldsOf<R> & string]: SchemaOf<FieldsOf<R>[K]> }>;
+/* ── The address ─────────────────────────────────────────────────────────────── */
 
-const conflictOf = (route: RouteKey) => (routeAddresses[route] as RouteAddress).conflict;
+type Page = Record<string, unknown>;
 
-/** `page` with each key that breaks the route's `conflict` rule reset to its default. */
-function settlePage<P extends Record<string, unknown>>(route: RouteKey, page: P): P {
-  const conflict = conflictOf(route);
-  const fields = fieldsOf(route);
-  let settled = page;
-  for (let found = conflict?.(settled); found; found = conflict?.(settled)) {
-    const initial = fields[found.key]!.schema.parse(undefined);
-    if (settled[found.key] === initial)
-      throw Error(`${route}: ${found.key}'s default breaks its own rule`);
-    settled = { ...settled, [found.key]: initial };
-  }
-  return settled;
-}
+function build(route: RouteKey) {
+  const spec = routeAddresses[route] as RouteDeclaration;
+  const fields: Fields = spec.fields;
+  const conflict = spec.conflict;
+  const urlKeys = keysWhere(fields, (field) => !!field.url);
+  const agentKeys = keysWhere(fields, (field) => !!field.agent);
+  const initial = (key: string) => fields[key]!.schema.parse(undefined);
+  const defaults = Object.fromEntries(Object.keys(fields).map((key) => [key, initial(key)]));
 
-/* ── URL projection ──────────────────────────────────────────────────────────── */
-
-/** The keys the address bar holds. */
-export const urlKeys = (route: RouteKey) => keysWhere(fieldsOf(route), (field) => !!field.url);
-
-/** Search (router-parsed or raw strings) → the URL page, typed, and the root carry. */
-export function readLink<R extends RouteKey>(
-  route: R,
-  search: Record<string, unknown>,
-): { page: UrlPage<R>; carry: Carry } {
-  const fields = fieldsOf(route);
-  const page = settlePage(
-    route,
-    Object.fromEntries(urlKeys(route).map((key) => [key, readField(fields[key]!, search[key])])),
-  );
-  const carry = Object.fromEntries(
-    carryKeys.flatMap((key) => {
-      const value = textOf(search[key])?.trim();
-      return value ? [[key, value]] : [];
-    }),
-  );
-  return { page: page as UrlPage<R>, carry };
-}
-
-/**
- * Page → the address bar's search: each URL key the page names, a default as `undefined` so a merge
- * drops it. Draft keys (`share: false`) included; this is the address, not a link.
- */
-export function writeSearch<R extends RouteKey>(
-  route: R,
-  page: Partial<RoutePage<R>>,
-): Record<string, string | undefined> {
-  const fields = fieldsOf(route);
-  return Object.fromEntries(
-    urlKeys(route)
-      .filter((key) => key in page)
-      .map((key) => [key, writeField(fields[key]!, (page as Record<string, unknown>)[key])]),
-  );
-}
-
-/**
- * The one link builder: a shareable path for `route` with the given keys and carry, defaults
- * dropped. A key that is not a shareable URL key is a type error, and a thrown one for an untyped
- * caller; nothing is read from the current location, so no draft or shell leaks.
- */
-export function linkTo<R extends RouteKey>(
-  route: R,
-  page: LinkPage<R> = {},
-  carry: Carry = {},
-): string {
-  const fields = fieldsOf(route);
-  const params = new URLSearchParams();
-  for (const [key, value] of Object.entries(page)) {
-    const field = fields[key];
-    if (!field?.url || field.share === false) throw Error(`${route} links carry no '${key}'`);
-    const written = writeField(field, value);
-    if (written !== undefined) params.set(key, written);
-  }
-  for (const key of carryKeys) if (carry[key]) params.set(key, carry[key]);
-  const search = params.toString();
-  return `${routeAddresses[route].path}${search ? `?${search}` : ""}`;
-}
-
-/**
- * A thread tab's link, canonical: `linkTo(route, page, { target, work })`. The path must be the
- * route's; a draft (`share: false`) or the browser `shell` drops; `thread` (the tab's own thread),
- * an unknown key, or a value its field cannot read is refused, never defaulted. Target and work
- * are kept: dropping them would retarget the tab.
- */
-export function tabLink(
-  route: string,
-  link: string,
-): { ok: true; route: RouteKey; link: string } | { ok: false; error: string } {
-  if (!Object.hasOwn(routeAddresses, route)) return { ok: false, error: `no route '${route}'` };
-  const key = route as RouteKey;
-  let url: URL;
-  try {
-    url = new URL(link, "http://tab.invalid");
-  } catch {
-    return { ok: false, error: "a tab link is a path and search" };
-  }
-  if (url.origin !== "http://tab.invalid" || url.hash)
-    return { ok: false, error: "a tab link is a path and search, no origin or hash" };
-  if (url.pathname !== routeAddresses[key].path)
-    return {
-      ok: false,
-      error: `a ${key} tab links ${routeAddresses[key].path}, not ${url.pathname}`,
-    };
-  const fields = fieldsOf(key);
-  const page: Record<string, unknown> = {};
-  const carry: Carry = {};
-  for (const [name, text] of url.searchParams) {
-    const field = fields[name];
-    if (name === "target" || name === "work") carry[name] = text;
-    else if (name === "shell" || (field?.url && field.share === false)) continue;
-    else if (!field?.url) return { ok: false, error: `a ${key} tab link carries no '${name}'` };
-    else {
-      const decoded = field.codec.decode(text);
-      const parsed = decoded === INVALID ? null : field.schema.safeParse(decoded);
-      if (!parsed?.success) return { ok: false, error: `${key} '${name}' does not read: ${text}` };
-      page[name] = parsed.data;
+  /** `page` with each key that breaks the `conflict` rule reset to its default. */
+  const settle = (page: Page): Page => {
+    let settled = page;
+    for (let found = conflict?.(settled); found; found = conflict?.(settled)) {
+      if (settled[found.key] === initial(found.key))
+        throw Error(`${route}: ${found.key}'s default breaks its own rule`);
+      settled = { ...settled, [found.key]: initial(found.key) };
     }
-  }
-  // The route's rule between fields, as a move from the bare Place: a named key that breaks it is
-  // refused, so a stored Place is never one `readLink` would silently fit.
-  const moved = transition(key, readLink(key, {}).page as never, page as never);
-  if (!moved.ok) return { ok: false, error: `${key} tab link: ${moved.error}` };
-  return { ok: true, route: key, link: linkTo(key, moved.patch as never, carry) };
-}
+    return settled;
+  };
 
-/**
- * How one transition moves history: null when no URL key changed (an agent-only or Page-only move
- * makes no entry); else the override (a gesture `replace`, a named move or Pea's patch `push`);
- * else `push` if any changed key is a step, `replace` when all are tweaks.
- */
-export function historyOf<R extends RouteKey>(
-  route: R,
-  before: Partial<RoutePage<R>>,
-  after: Partial<RoutePage<R>>,
-  override?: History,
-): History | null {
-  const fields = fieldsOf(route);
-  const changed = urlKeys(route).filter((key) => {
-    const field = fields[key]!;
-    const read = (page: object) =>
-      key in page ? writeField(field, (page as Record<string, unknown>)[key]) : undefined;
-    return key in after && read(before) !== read(after);
+  const transition = (current: Page, patch: Page): Moved<Page> => {
+    const settled: Page = { ...patch };
+    for (;;) {
+      const page = { ...current, ...settled };
+      const found = conflict?.(page);
+      if (!found) return { ok: true, page, patch: settled };
+      if (found.key in patch || found.key in settled) return { ok: false, error: found.error };
+      settled[found.key] = initial(found.key);
+    }
+  };
+
+  const read = (search: Page) => ({
+    page: settle(
+      Object.fromEntries(urlKeys.map((key) => [key, readField(fields[key]!, search[key])])),
+    ),
+    carry: Object.fromEntries(
+      carryKeys.flatMap((key) => {
+        const value = textOf(search[key])?.trim();
+        return value ? [[key, value]] : [];
+      }),
+    ) as Carry,
   });
-  if (!changed.length) return null;
-  return override ?? (changed.some((key) => fields[key]!.url === "push") ? "push" : "replace");
+
+  const link = (page: Page = {}, carry: Carry = {}) => {
+    const params = new URLSearchParams();
+    for (const [key, value] of Object.entries(page)) {
+      const field = fields[key];
+      if (!field?.url) throw Error(`${route} links carry no '${key}'`);
+      if (field.share === false) continue;
+      const written = writeField(field, value);
+      if (written !== undefined) params.set(key, written);
+    }
+    for (const key of carryKeys) if (carry[key]) params.set(key, carry[key]);
+    const search = params.toString();
+    return `${spec.path}${search ? `?${search}` : ""}`;
+  };
+
+  const tab = (text: string) => {
+    let url: URL;
+    try {
+      url = new URL(text, "http://tab.invalid");
+    } catch {
+      return { ok: false as const, error: "a tab link is a path and search" };
+    }
+    if (url.origin !== "http://tab.invalid" || url.hash)
+      return { ok: false as const, error: "a tab link is a path and search, no origin or hash" };
+    if (url.pathname !== spec.path)
+      return {
+        ok: false as const,
+        error: `a ${route} tab links ${spec.path}, not ${url.pathname}`,
+      };
+    const page: Page = {};
+    const carry: Carry = {};
+    for (const [name, value] of url.searchParams) {
+      const field = fields[name];
+      if (name === "target" || name === "work") carry[name] = value;
+      else if (name === "shell" || (field?.url && field.share === false)) continue;
+      else if (!field?.url)
+        return { ok: false as const, error: `a ${route} tab link carries no '${name}'` };
+      else {
+        const decoded = field.codec.decode(value);
+        const parsed = decoded === INVALID ? null : field.schema.safeParse(decoded);
+        if (!parsed?.success)
+          return { ok: false as const, error: `${route} '${name}' does not read: ${value}` };
+        page[name] = parsed.data;
+      }
+    }
+    // The route's rule between fields, as a move from the bare Place: a named key that breaks it is
+    // refused, so a stored Place is never one `read` would silently fit.
+    const moved = transition(read({}).page, page);
+    if (!moved.ok) return { ok: false as const, error: `${route} tab link: ${moved.error}` };
+    return { ok: true as const, link: link(moved.patch, carry) };
+  };
+
+  const history = (before: Page, after: Page, override?: History): History | null => {
+    const changed = urlKeys.filter((key) => {
+      const field = fields[key]!;
+      const written = (page: Page) => (key in page ? writeField(field, page[key]) : undefined);
+      return key in after && written(before) !== written(after);
+    });
+    if (!changed.length) return null;
+    return override ?? (changed.some((key) => fields[key]!.url === "push") ? "push" : "replace");
+  };
+
+  return {
+    route,
+    path: spec.path,
+    title: spec.title,
+    schema: z.object(Object.fromEntries(Object.entries(fields).map(([key, f]) => [key, f.schema]))),
+    defaults,
+    keys: urlKeys,
+    read,
+    write: (page: Page) =>
+      Object.fromEntries(
+        urlKeys
+          .filter((key) => key in page)
+          .map((key) => [key, writeField(fields[key]!, page[key])]),
+      ),
+    link,
+    tab,
+    history,
+    transition,
+    agent: spec.agent && lease(fields, agentKeys, spec.agent, transition),
+  };
 }
 
-/* ── Agent projection ────────────────────────────────────────────────────────── */
-
-export const routeViewRoutes = (Object.keys(routeAddresses) as RouteKey[]).filter(
-  (route) => "agent" in routeAddresses[route],
-) as [RouteViewRoute, ...RouteViewRoute[]];
-
-/** The keys Pea reads on a leased view (`read` and `set`). */
-export const agentKeys = (route: RouteKey) => keysWhere(fieldsOf(route), (field) => !!field.agent);
-
-/** Page → the lease page: every agent key, as its codec writes it. */
-export const agentPage = <R extends RouteKey>(route: R, page: Partial<RoutePage<R>>) => {
-  const fields = fieldsOf(route);
-  return Object.fromEntries(
-    agentKeys(route).map((key) => {
-      const value = (page as Record<string, unknown>)[key] ?? fields[key]!.schema.parse(undefined);
-      return [key, value === undefined ? "" : fields[key]!.codec.encode(value)];
-    }),
-  );
-};
-
-/** The keys Pea sets, as Pea writes them: each its lease string, no default, none extra. */
-export const routeAddressFields = (route: RouteKey) => {
-  const fields = fieldsOf(route);
-  return z.strictObject(
+function lease(
+  fields: Fields,
+  agentKeys: string[],
+  spec: NonNullable<RouteDeclaration["agent"]>,
+  transition: (current: Page, patch: Page) => Moved<Page>,
+) {
+  const sets = z.strictObject(
     Object.fromEntries(
       setKeys(fields).map((key) => {
         const field = fields[key]!;
@@ -275,77 +315,71 @@ export const routeAddressFields = (route: RouteKey) => {
       }),
     ) as Record<string, z.ZodType<string>>,
   );
-};
-
-/** The patch Pea sends: a nonempty subset of the route's `set` keys. */
-export const routeViewPatchSchema = (route: RouteKey) =>
-  routeAddressFields(route)
+  const patch = sets
     .partial()
-    .refine((patch) => Object.keys(patch).length > 0, "a patch names at least one key");
-
-/** A checked patch → the typed Page keys it sets. */
-export const readAgentPatch = <R extends RouteKey>(route: R, patch: Record<string, string>) => {
-  const fields = fieldsOf(route);
-  return Object.fromEntries(
-    Object.entries(routeViewPatchSchema(route).parse(patch)).map(([key, value]) => [
-      key,
-      readField(fields[key]!, value),
-    ]),
-  ) as Partial<RoutePage<R>>;
-};
-
-/**
- * The one transition rule, the same for a person and for Pea: `patch` (the keys the mover named)
- * over `current`. A named key that breaks the route's `conflict` rule is refused; a key it did not
- * name resets to its default (a mode alone fits its viewport). Field schemas judge one key each and
- * never this rule, so a page reaches it only through here (or `settlePage`, a forgiving URL read).
- */
-export function transition<R extends RouteKey, P extends Partial<RoutePage<R>>>(
-  route: R,
-  current: P,
-  patch: Partial<P>,
-): { ok: true; page: P; patch: Partial<P> } | { ok: false; error: string } {
-  const conflict = conflictOf(route);
-  const fields = fieldsOf(route);
-  const settled: Record<string, unknown> = { ...patch };
-  for (;;) {
-    const page = { ...current, ...settled } as P;
-    const found = conflict?.(page);
-    if (!found) return { ok: true, page, patch: settled as Partial<P> };
-    if (found.key in patch || found.key in settled) return { ok: false, error: found.error };
-    settled[found.key] = fields[found.key]!.schema.parse(undefined);
-  }
-}
-
-/**
- * Pea's patch over the view it leased (`lease`: the lease page, as `agentPage` wrote it), through
- * `transition`; the settled patch comes back as lease strings. The patch must already pass
- * `routeViewPatchSchema`.
- */
-export function settleAgentPatch(
-  route: RouteKey,
-  lease: Record<string, string>,
-  patch: Record<string, string>,
-): { ok: true; patch: Record<string, string> } | { ok: false; error: string } {
-  const fields = fieldsOf(route);
-  const read = (strings: Record<string, string>) =>
+    .refine((value) => Object.keys(value).length > 0, "a patch names at least one key");
+  const readStrings = (strings: Record<string, string>) =>
     Object.fromEntries(
       Object.entries(strings).map(([key, value]) => [key, readField(fields[key]!, value)]),
     );
-  const current = read(
-    Object.fromEntries(
-      agentKeys(route).flatMap((key) => (key in lease ? [[key, lease[key]!]] : [])),
-    ),
-  );
-  const moved = transition(route, current as never, read(patch) as never);
-  if (!moved.ok) return moved;
   return {
-    ok: true,
-    patch: Object.fromEntries(
-      Object.entries(moved.patch as Record<string, unknown>).map(([key, value]) => [
-        key,
-        key in patch ? patch[key]! : fields[key]!.codec.encode(value),
-      ]),
-    ),
+    ...spec,
+    keys: agentKeys,
+    fields: sets,
+    patch: patch as z.ZodType<Record<string, string>>,
+    write: (page: Page) =>
+      Object.fromEntries(
+        agentKeys.map((key) => {
+          const value = page[key] ?? fields[key]!.schema.parse(undefined);
+          return [key, value === undefined ? "" : fields[key]!.codec.encode(value)];
+        }),
+      ),
+    read: (value: Record<string, string>) =>
+      readStrings(patch.parse(value) as Record<string, string>),
+    settle: (leased: Record<string, string>, value: Record<string, string>) => {
+      const current = readStrings(
+        Object.fromEntries(
+          agentKeys.flatMap((key) => (key in leased ? [[key, leased[key]!]] : [])),
+        ),
+      );
+      const moved = transition(current, readStrings(value));
+      if (!moved.ok) return moved;
+      return {
+        ok: true as const,
+        patch: Object.fromEntries(
+          Object.entries(moved.patch).map(([key, settled]) => [
+            key,
+            key in value ? value[key]! : fields[key]!.codec.encode(settled),
+          ]),
+        ),
+      };
+    },
   };
 }
+
+const built = new Map<RouteKey, RouteAddress<RouteKey>>();
+
+/** The route's one deep address; the same object on every call. */
+export function routeAddress<R extends RouteKey>(route: R): RouteAddress<R> {
+  let found = built.get(route);
+  if (!found) built.set(route, (found = build(route) as unknown as RouteAddress<RouteKey>));
+  return found as unknown as RouteAddress<R>;
+}
+
+/* ── The registry ────────────────────────────────────────────────────────────── */
+
+export const routeKeys = Object.keys(routeAddresses) as [RouteKey, ...RouteKey[]];
+
+/** The route a key names, or null: the check for a route that arrives as text. */
+export const routeOf = (key: string): RouteKey | null =>
+  Object.hasOwn(routeAddresses, key) ? (key as RouteKey) : null;
+
+/** The route whose path `pathname` is, or null. */
+export const routeAt = (pathname: string): RouteKey | null =>
+  routeKeys.find((key) => routeAddresses[key].path === pathname) ?? null;
+
+/** The routes that lease a mounted view to Pea. */
+export const routeViewRoutes = routeKeys.filter((route) => "agent" in routeAddresses[route]) as [
+  RouteViewRoute,
+  ...RouteViewRoute[],
+];

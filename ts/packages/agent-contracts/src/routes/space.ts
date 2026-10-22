@@ -12,7 +12,7 @@ import {
   type PlaneViewport,
   type Viewport,
 } from "../page-keys.ts";
-import { field, type RouteAddress } from "../route-field.ts";
+import { field, type RouteDeclaration } from "../route-field.ts";
 import { demo } from "./shared.ts";
 import { emptySpaceCut, spaceCutsSchema, spaceSceneSchema } from "../space-view.ts";
 
@@ -166,4 +166,4 @@ export const spaceAddress = {
     policy:
       "Change the visible captured Space picture using ids, mode, viewport, cuts, selected, hidden, isolated and layers. Scene is read-only. Use exact element keys from this loaded scene, preserving document and link identity; unknown members are refused. A null isolation shows all; an empty isolation shows none. Viewport must match the mode, or be empty to fit. Cuts use the scene frame. Editing ids only prepares a later explicit capture. View changes never capture, recapture, select in Revit or write Work.",
   },
-} satisfies RouteAddress;
+} satisfies RouteDeclaration;

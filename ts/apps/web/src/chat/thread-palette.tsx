@@ -24,11 +24,8 @@ import {
   type LucideIcon,
 } from "lucide-react";
 import {
-  linkTo,
-  readLink,
-  routeAddresses,
-  type RouteField,
-  type RouteKey,
+  routeAddress,
+  routeAt,
   type DocumentRequest,
   type Provider,
   type UpdateThreadRequest,
@@ -329,17 +326,10 @@ function ThreadActionsMenu({
             label: "Thread link",
             run: () => {
               const url = new URL(location.href);
-              const route =
-                (Object.keys(routeAddresses) as RouteKey[]).find(
-                  (key) => routeAddresses[key].path === url.pathname,
-                ) ?? "pea";
-              const { page, carry } = readLink(route, Object.fromEntries(url.searchParams));
-              const fields: Record<string, RouteField> = routeAddresses[route].fields;
-              const shareable = Object.fromEntries(
-                Object.entries(page).filter(([key]) => fields[key]?.share !== false),
-              );
+              const at = routeAddress(routeAt(url.pathname) ?? "pea");
+              const { page, carry } = at.read(Object.fromEntries(url.searchParams));
               copy(
-                new URL(linkTo(route, shareable, { ...carry, thread: thread.id }), url.origin).href,
+                new URL(at.link(page as never, { ...carry, thread: thread.id }), url.origin).href,
                 "thread link",
               );
             },

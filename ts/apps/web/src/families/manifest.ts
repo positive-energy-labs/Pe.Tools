@@ -6,9 +6,9 @@
  */
 import { z } from "zod";
 import {
+  routeAddress,
   familiesRouteState,
   ffPlanEntrySchema,
-  routePageSchema,
   workKey,
   type ActionReceipt,
   type AppliedFilter,
@@ -61,7 +61,7 @@ export interface FamiliesPage {
   carryOver: boolean;
 }
 
-const familiesPageSchema = routePageSchema("families").extend({
+const familiesPageSchema = routeAddress("families").schema.extend({
   // A newly bound document drafts its placed families (ruling 44): the cheaper, relevant read.
   draft: z
     .object({

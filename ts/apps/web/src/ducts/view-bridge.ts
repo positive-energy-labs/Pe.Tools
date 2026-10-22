@@ -6,7 +6,7 @@ import type { PageMove } from "#/route/manifest";
 import type { DuctsPage, LoadedDuctsReading } from "./manifest";
 
 /**
- * What the Ducts page tells Pea it shows: its address (`routeAddresses.ducts`), and the system
+ * What the Ducts page tells Pea it shows: its address (`routeAddress("ducts")`), and the system
  * names and levels the page can take, so a person's word resolves to a system the page
  * knows; the picture's layer names; and the committed orbit pose the model picture reports (the
  * fit resolved from bounds when the viewport key is null), so a named look turns that pose. The

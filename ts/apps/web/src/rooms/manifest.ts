@@ -5,13 +5,13 @@
 import { z } from "zod";
 import type { RoomsMerge, RoomsPartition } from "@pe/host-contracts/generated";
 import {
+  routeAddress,
   roomEditAddress,
   roomsRouteState,
   stagedRoomWrites,
   transitionPatches,
   type Mark,
   type RoomsRouteDocument,
-  routePageSchema,
 } from "@pe/agent-contracts";
 
 import { defineRoute, semanticActionInput, type Ctx } from "#/route/manifest";
@@ -27,8 +27,8 @@ const ROOMS_STAGES = [
   { key: "history", word: "History" },
 ] as const;
 
-/** The contract's fields (`routeAddresses.rooms`: stage, view, layers, focus) and the Page-only rest. */
-const roomsPageSchema = routePageSchema("rooms").extend({
+/** The contract's fields (`routeAddress("rooms")`: stage, view, layers, focus) and the Page-only rest. */
+const roomsPageSchema = routeAddress("rooms").schema.extend({
   /** Region guids the plan and the table hold selected. */
   selected: z.array(z.string()).default([]),
   /** Bumped by every verb that lands; the snapshot read keys on it. */

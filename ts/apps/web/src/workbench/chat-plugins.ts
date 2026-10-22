@@ -2,6 +2,7 @@
  * Recorded route exits retain the subject and scope of the call that wrote their Work.
  */
 import {
+  routeAddress,
   actionControls,
   parseContributionKey,
   routeCallOf,
@@ -10,9 +11,7 @@ import {
   documentRefSchema,
   documentRequestSchema,
   workKeySchema,
-  readLink,
-  routeAddresses,
-  urlKeys,
+  routeOf,
   type Carry,
   type LinkPage,
   type RouteKey,
@@ -65,9 +64,8 @@ export function capturedPlace(
   source: unknown,
   named?: DocumentRequest,
 ): CapturedPlace {
-  if (!Object.hasOwn(routeAddresses, route))
-    return { ok: false, refusal: `This route has no saved Place contract: ${route}` };
-  const key = route as RouteKey;
+  const key = routeOf(route);
+  if (!key) return { ok: false, refusal: `This route has no saved Place contract: ${route}` };
   if (!scope)
     return { ok: false, refusal: "This reading did not record its Work or document target." };
   const input = isRecord(source) ? source : {};
@@ -94,14 +92,12 @@ export function capturedPlace(
     target: target ? JSON.stringify(target) : "",
     work: scope.binding === "workspace" ? scope.work : "",
   };
-  const fields = routeAddresses[key].fields as Record<string, { share?: false }>;
+  const at = routeAddress(key);
   const search = Object.fromEntries(
-    urlKeys(key)
-      .filter((name) => fields[name]?.share !== false && name in input)
-      .map((name) => [name, input[name]]),
+    at.keys.filter((name) => name in input).map((name) => [name, input[name]]),
   );
   if (key === "schedules" && scope.binding === "workspace") search.schedule = scope.work;
-  return { ok: true, route: key, page: readLink(key, search).page as LinkPage<RouteKey>, carry };
+  return { ok: true, route: key, page: at.read(search).page as LinkPage<RouteKey>, carry };
 }
 
 /** Action receipts retain their execution document, even when the chat head has since moved. */

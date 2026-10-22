@@ -1,17 +1,17 @@
 import { useRouteNavigate, useRouteSearch } from "#/route/activity";
 import { createFileRoute, stripSearchParams, type SearchSchemaInput } from "@tanstack/react-router";
 
-import { readLink } from "@pe/agent-contracts";
+import { routeAddress } from "@pe/agent-contracts";
 import { OpsRoute } from "#/ops/workspace";
 import { routeSearch } from "#/route/route-owner";
 
 export const Route = createFileRoute("/ops")({
   validateSearch: (search: SearchSchemaInput & Record<string, unknown>) => ({
     ...routeSearch(search),
-    ...readLink("ops", search).page,
+    ...routeAddress("ops").read(search).page,
   }),
   // The contract defaults never reach the address, as on `/` and `/pea`.
-  search: { middlewares: [stripSearchParams(readLink("ops", {}).page)] },
+  search: { middlewares: [stripSearchParams(routeAddress("ops").defaults)] },
   component: OpsFileRoute,
 });
 

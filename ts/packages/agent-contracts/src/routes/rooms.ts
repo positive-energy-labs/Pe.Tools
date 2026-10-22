@@ -1,6 +1,6 @@
 import { z } from "zod";
 import { layersKey } from "../page-keys.ts";
-import { field, text, type RouteAddress } from "../route-field.ts";
+import { field, text, type RouteDeclaration } from "../route-field.ts";
 import { demo, planViewport } from "./shared.ts";
 
 /** The solver layers the Rooms plan draws, in strip order. */
@@ -26,4 +26,4 @@ export const roomsAddress = {
     policy:
       "Change only the viewport of the visible Rooms plan. Use plane:scale,tx,ty in the displayed frame, or an empty viewport to fit. Facts name the displayed document, acquired snapshot and plan. Focus, view, stage, layers and room selection remain the person's. A view change does not partition rooms, stage Work or write Revit.",
   },
-} satisfies RouteAddress;
+} satisfies RouteDeclaration;

@@ -1,5 +1,5 @@
 import { useEffect, useState } from "react";
-import { linkTo, readLink, type PageTargetReading } from "@pe/agent-contracts";
+import { routeAddress, type PageTargetReading } from "@pe/agent-contracts";
 import { useRouteSearch } from "#/route/activity";
 import { Button } from "@pe/kit/lang/button";
 import { openEventSource } from "#/readings";
@@ -9,7 +9,7 @@ import { TooltipHint } from "@pe/kit/lang/tooltip";
 
 /** SPA chrome owns consent. Page code never draws or answers this control. */
 export function PageBindingChip({ slug }: { slug: string }) {
-  const { carry } = readLink("bind", useRouteSearch());
+  const { carry } = routeAddress("bind").read(useRouteSearch());
   const [reading, setReading] = useState<PageTargetReading | null>(null);
   const [refusal, setRefusal] = useState<string | null>(null);
   const [version, setVersion] = useState(0);
@@ -94,7 +94,7 @@ export function PageBindingChip({ slug }: { slug: string }) {
           <span className="face-mono">{write?.kind ?? "unverified"}</span>
         </TooltipHint>
       )}
-      <a href={linkTo("bind", { page: slug }, carry)}>Bind…</a>
+      <a href={routeAddress("bind").link({ page: slug }, carry)}>Bind…</a>
       {refusal && (
         <span role="status" data-tone="alarm">
           {refusal}

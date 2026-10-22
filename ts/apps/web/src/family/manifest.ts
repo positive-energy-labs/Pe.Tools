@@ -5,6 +5,7 @@
  */
 import { z } from "zod";
 import {
+  routeAddress,
   actionStatusSchema,
   familyActions,
   familyDraftRouteState,
@@ -25,7 +26,6 @@ import {
   type DocumentRef,
   settingsCandidate,
   settingsFieldPointer,
-  routePageSchema,
 } from "@pe/agent-contracts";
 import type { BridgeSessionListEntry } from "@pe/host-contracts/operation-types";
 
@@ -82,7 +82,7 @@ export type FamilyAuthoringFacts = Omit<BuildFacts, "armedToken" | "boundTarget"
 
 const familyPageSchema = z.object({
   /** `?demo=<action>`: the contract field; `frozenDemo` mounts its seed. */
-  demo: routePageSchema("family").shape.demo,
+  demo: routeAddress("family").schema.shape.demo,
   view: z.enum(["sheet", "anatomy", "drill", "inspector"]).default("sheet"),
   buildReview: z
     .object({

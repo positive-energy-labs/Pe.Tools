@@ -1,5 +1,5 @@
 import { z } from "zod";
-import { field, text, type RouteAddress } from "../route-field.ts";
+import { field, text, type RouteDeclaration } from "../route-field.ts";
 
 /** The home directory: its filters. */
 export const homeAddress = {
@@ -12,4 +12,4 @@ export const homeAddress = {
     }),
     sort: field(z.enum(["workflow", "name"]).default("workflow"), { url: "push" }),
   },
-} satisfies RouteAddress;
+} satisfies RouteDeclaration;

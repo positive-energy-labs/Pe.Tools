@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vite-plus/test";
-import { agentKeys, agentPage, routeViewPatchSchema, urlKeys } from "@pe/agent-contracts";
+import { routeAddress } from "@pe/agent-contracts";
 import { manifest as ducts } from "#/ducts/manifest";
 import { manifest as families } from "#/families/manifest";
 import { urlPage } from "./url";
@@ -13,14 +13,15 @@ describe("route addresses match their manifests", () => {
     ] as const) {
       expect(manifest.address).toBe(route);
       const page = (manifest.page as unknown as { parse: (v: unknown) => object }).parse({});
-      for (const key of [...urlKeys(route), ...agentKeys(route)]) expect(page).toHaveProperty(key);
-      expect(urlPage(manifest as never)!.keys).toEqual(urlKeys(route));
-      expect(Object.keys(agentPage(route, page as never))).toEqual(agentKeys(route));
+      const { keys, agent } = routeAddress(route);
+      for (const key of [...keys, ...agent.keys]) expect(page).toHaveProperty(key);
+      expect(urlPage(manifest as never)!.keys).toEqual(keys);
+      expect(Object.keys(agent.write(page))).toEqual(agent.keys);
     }
   });
 
   it("a patch carries no defaults and refuses a bad mode, viewport or a read-only key", () => {
-    const patch = routeViewPatchSchema("ducts");
+    const { patch } = routeAddress("ducts").agent;
     expect(patch.parse({ viewport: "orbit:45,30,1.25@0,0,0" })).toEqual({
       viewport: "orbit:45,30,1.25@0,0,0",
     });

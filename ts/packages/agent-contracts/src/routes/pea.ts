@@ -1,6 +1,6 @@
 import { z } from "zod";
 import { modeKey } from "../page-keys.ts";
-import { field, text, type RouteAddress } from "../route-field.ts";
+import { field, text, type RouteDeclaration } from "../route-field.ts";
 
 export const peaAddress = {
   path: "/pea",
@@ -12,4 +12,4 @@ export const peaAddress = {
     /** The composer draft: in the address bar, never in a link. */
     prompt: field(text(), { url: "replace", share: false }),
   },
-} satisfies RouteAddress;
+} satisfies RouteDeclaration;

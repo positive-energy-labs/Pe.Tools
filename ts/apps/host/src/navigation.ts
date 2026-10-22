@@ -1,16 +1,15 @@
 import { z } from "zod";
 import {
+  routeAddress,
   APP_ROUTES,
   addressSchema,
   documentRefSchema,
   harnessThreadSummarySchema,
-  linkTo,
-  routeAddresses,
+  routeAt,
   sameAddress,
   type NavigationSnapshot,
   type NavigationWork,
   type WorkKey,
-  type RouteKey,
 } from "@pe/agent-contracts";
 import type { RouteWorkspace } from "@pe/runtime";
 
@@ -65,11 +64,11 @@ function destination(
     };
   const ref = { session: matching[0]!.session, openId: matching[0]!.openId };
   const target = JSON.stringify({ kind: "open", ref });
-  const route = (Object.keys(routeAddresses) as RouteKey[]).find(
-    (key) => routeAddresses[key].path === path,
-  );
+  const route = routeAt(path);
   return {
-    url: route ? linkTo(route, {}, { target }) : `${path}?${new URLSearchParams({ target })}`,
+    url: route
+      ? routeAddress(route).link({}, { target })
+      : `${path}?${new URLSearchParams({ target })}`,
     reason: null,
   };
 }
@@ -151,7 +150,7 @@ export async function readNavigation(
       context: thread.head.displayLabel ?? thread.providerName,
       state: thread.activity.state,
       revision: thread.head.revision,
-      url: linkTo("pea", {}, { thread: thread.id }),
+      url: routeAddress("pea").link({}, { thread: thread.id }),
       reason: null,
     })),
     observations,

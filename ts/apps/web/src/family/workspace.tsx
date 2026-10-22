@@ -106,7 +106,7 @@
  */
 import { useEffect, type ReactNode } from "react";
 import { useRouteSearch } from "#/route/activity";
-import { linkTo, readLink } from "@pe/agent-contracts";
+import { routeAddress } from "@pe/agent-contracts";
 
 import { Button } from "@pe/kit/lang/button";
 import { Code, stringify } from "@pe/kit/lang/code";
@@ -252,8 +252,8 @@ function PodMemberLink({
   path: string;
   children: ReactNode;
 }) {
-  const { carry } = readLink("pods", useRouteSearch());
-  return <a href={linkTo("pods", { pod, path }, carry)}>{children}</a>;
+  const { carry } = routeAddress("pods").read(useRouteSearch());
+  return <a href={routeAddress("pods").link({ pod, path }, carry)}>{children}</a>;
 }
 
 /** The ledger lines the audit adds to the kernel's Situation. */

@@ -22,9 +22,8 @@ import {
   HOST_RUNTIME_SERVICE_QUERY,
 } from "@pe/host-contracts/contracts";
 import {
+  routeAddress,
   addressSchema,
-  linkTo,
-  readLink,
   pageBindingSchema,
   parseContributionKey,
   pageChoiceSchema,
@@ -900,10 +899,9 @@ export function createPagesHandler(
       return new Response(null, {
         status: 302,
         headers: {
-          location: linkTo(
-            "bind",
+          location: routeAddress("bind").link(
             { page: slug, view: true },
-            readLink("bind", Object.fromEntries(url.searchParams)).carry,
+            routeAddress("bind").read(Object.fromEntries(url.searchParams)).carry,
           ),
         },
       });

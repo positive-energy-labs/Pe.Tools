@@ -1,6 +1,6 @@
 /**
  * The static /space contract: see what `Pe.Revit.Space` collects about one document, how its rows
- * group, and how a drawn thing ties to its Revit or DWG source. The address (`routeAddresses.space`)
+ * group, and how a drawn thing ties to its Revit or DWG source. The address (`routeAddress("space")`)
  * carries the scene hash, the subject ids, the mode, the viewport, the cuts and the visibility; the
  * Page adds the layers, the row encoding and each answer the verbs read.
  *
@@ -9,7 +9,7 @@
  * new scene. Every answer layer is one verb's result held on the Page, never a render-time fetch.
  */
 import { z } from "zod";
-import { routePageSchema, spaceElementKey } from "@pe/agent-contracts";
+import { routeAddress, spaceElementKey } from "@pe/agent-contracts";
 import type { OpKey, OpRequestOf, OpResponseOf } from "@pe/host-contracts/operation-types";
 
 import { defineRoute, type Ctx } from "#/route/manifest";
@@ -32,7 +32,7 @@ import {
 export type Answer<K extends OpKey> = { request: OpRequestOf<K>; response: OpResponseOf<K> };
 const answer = <K extends OpKey>() => z.custom<Answer<K>>().nullable().default(null);
 
-const spacePageSchema = routePageSchema("space").extend({
+const spacePageSchema = routeAddress("space").schema.extend({
   /** What a row box's colour means (`ENCODING_SAYS`). Page only. */
   encoding: z.enum(ENCODINGS).default("category"),
   /** The row box the person picked, by its index in `rows`; null = none. Page only. */

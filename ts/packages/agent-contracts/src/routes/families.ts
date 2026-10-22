@@ -1,5 +1,5 @@
 import { z } from "zod";
-import { field, type RouteAddress } from "../route-field.ts";
+import { field, type RouteDeclaration } from "../route-field.ts";
 import { demo, entityFields } from "./shared.ts";
 
 /** The Families query a page opens with: its filter clauses that default on (web `FAMILIES_FILTERS`). */
@@ -20,4 +20,4 @@ export const familiesAddress = {
     policy:
       "Change the query line of one mounted Families view. The browser acknowledges the rendered query and counts. No Work or Revit read.",
   },
-} satisfies RouteAddress;
+} satisfies RouteDeclaration;

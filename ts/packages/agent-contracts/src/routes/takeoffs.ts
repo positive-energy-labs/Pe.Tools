@@ -1,4 +1,4 @@
-import { field, text, type RouteAddress } from "../route-field.ts";
+import { field, text, type RouteDeclaration } from "../route-field.ts";
 import { demo, planViewport } from "./shared.ts";
 
 export const takeoffsAddress = {
@@ -15,4 +15,4 @@ export const takeoffsAddress = {
     policy:
       "Change only the viewport of the visible Takeoffs plan. Use plane:scale,tx,ty in the displayed frame, or an empty viewport to fit. Facts identify the exact live, saved or fixture capture and current level scope. This does not change level, zone, room, action scope, Work or an RHVAC file, and does not read or write Revit.",
   },
-} satisfies RouteAddress;
+} satisfies RouteDeclaration;

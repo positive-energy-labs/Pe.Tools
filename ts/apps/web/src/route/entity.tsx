@@ -6,7 +6,7 @@
  */
 import { useEffect, useState, type ReactNode } from "react";
 import { useRouteSearch } from "#/route/activity";
-import { linkTo, readLink } from "@pe/agent-contracts";
+import { routeAddress } from "@pe/agent-contracts";
 import { usePublishPagePalette } from "#/navigation/route-controls";
 
 import { Pane, PaneSplit } from "#/components/lang/pane";
@@ -103,7 +103,7 @@ export function EntityRouteView({
   /** The audit. */
   children: ReactNode;
 }) {
-  const { carry } = readLink("pods", useRouteSearch());
+  const { carry } = routeAddress("pods").read(useRouteSearch());
   const [page, setPage] = handle.page;
   const ladder = useDocumentLadder(handle);
   // The Situation palette is the sentence's ladder, opened by Ctrl K or its own trigger.
@@ -242,7 +242,7 @@ export function EntityRouteView({
                   {" "}
                   (
                   <TooltipHint content="Open this member in the pods browser">
-                    <a href={linkTo("pods", { pod: page.pod, path: page.path }, carry)}>
+                    <a href={routeAddress("pods").link({ pod: page.pod, path: page.path }, carry)}>
                       open in Pods
                     </a>
                   </TooltipHint>

@@ -32,7 +32,8 @@ import {
   createThreadRequestSchema,
   emptyThreadLifecycle,
   harnessThreadSummarySchema,
-  tabLink,
+  routeAddress,
+  routeOf,
   THREAD_TABS_MAX,
   threadTabRequestSchema,
   threadLifecycleSchema,
@@ -1558,14 +1559,13 @@ export function createHarnessThreads(options: HarnessThreadsOptions) {
           if (index < 0) return json(summary(t));
           tabs.splice(index, 1);
         } else {
-          const canonical = tabLink(change.route, change.link);
+          const route = routeOf(change.route);
+          if (!route) return json({ error: `no route '${change.route}'` }, 400);
+          const canonical = routeAddress(route).tab(change.link);
           if (!canonical.ok) return json({ error: canonical.error }, 400);
           const held = index < 0 ? null : tabs[index]!;
-          if (held && held.route !== canonical.route)
-            return json(
-              { error: `Tab ${change.id} is a ${held.route} tab, not ${canonical.route}` },
-              409,
-            );
+          if (held && held.route !== route)
+            return json({ error: `Tab ${change.id} is a ${held.route} tab, not ${route}` }, 409);
           if (held?.link === canonical.link) return json(summary(t));
           if (!held && tabs.length >= THREAD_TABS_MAX)
             return json(
@@ -1577,7 +1577,7 @@ export function createHarnessThreads(options: HarnessThreadsOptions) {
             );
           const tab = {
             id: change.id,
-            route: canonical.route,
+            route,
             link: canonical.link,
             at: new Date().toISOString(),
           };
