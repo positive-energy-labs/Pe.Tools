@@ -20,18 +20,45 @@ export type OwedBase = Map<number, FanAssignment[]> & { split?: Map<string, numb
 
 type Shape = Pick<DuctSnapshot, "groups" | "nodes"> & Partial<Pick<DuctSnapshot, "systems">>;
 
+const indexes = new WeakMap<Shape, ReturnType<typeof buildIndex>>();
+function buildIndex(snapshot: Shape) {
+  const nodes = new Map<number, Shape["nodes"][number]>();
+  const groups = new Map<number, Shape["groups"]>();
+  const systems = new Map<string, NonNullable<Shape["systems"]>>();
+  for (const node of snapshot.nodes) if (!nodes.has(node.id)) nodes.set(node.id, node);
+  for (const group of snapshot.groups)
+    for (const id of new Set(group.rootIds)) {
+      const list = groups.get(id) ?? [];
+      list.push(group);
+      groups.set(id, list);
+    }
+  for (const system of snapshot.systems ?? []) {
+    const list = systems.get(system.name) ?? [];
+    list.push(system);
+    systems.set(system.name, list);
+  }
+  return { nodes, groups, systems };
+}
+function indexOf(snapshot: Shape) {
+  let index = indexes.get(snapshot);
+  if (!index) indexes.set(snapshot, (index = buildIndex(snapshot)));
+  return index;
+}
+
 /** The systems a unit could be made the fan of; `group` narrows to that group's systems. */
 export function fanCandidates(snapshot: Shape, unitId: number, group?: string): FanAssignment[] {
-  const unit = snapshot.nodes.find((n) => n.id === unitId);
+  const index = indexOf(snapshot);
+  const unit = index.nodes.get(unitId);
   if (unit?.kind !== "equipment") return [];
   const classes = new Set(unit.connectors.map((c) => c.classification).filter(Boolean));
   const names = new Set(
-    snapshot.groups
-      .filter((g) => g.rootIds.includes(unitId) && (!group || g.id === group))
+    (index.groups.get(unitId) ?? [])
+      .filter((g) => !group || g.id === group)
       .flatMap((g) => g.systemNames),
   );
-  return (snapshot.systems ?? [])
-    .filter((s) => s.baseEquipmentId == null && names.has(s.name) && classes.has(s.classification))
+  return [...names]
+    .flatMap((name) => index.systems.get(name) ?? [])
+    .filter((s) => s.baseEquipmentId == null && classes.has(s.classification))
     .map((s) => ({ unitId, systemId: s.id, system: s.name }))
     .sort((a, b) => a.system.localeCompare(b.system));
 }
@@ -59,8 +86,8 @@ export function fansOwedBase(
   }
   // The networks a unit offers a system from: the groups it roots that carry that system.
   const networks = (a: FanAssignment) =>
-    snapshot.groups
-      .filter((g) => g.rootIds.includes(a.unitId) && g.systemNames.includes(a.system))
+    (indexOf(snapshot).groups.get(a.unitId) ?? [])
+      .filter((g) => g.systemNames.includes(a.system))
       .map((g) => g.id);
   const split = new Map<string, number[]>();
   const bySystem = new Map<string, FanAssignment[]>();

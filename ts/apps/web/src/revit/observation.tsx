@@ -39,20 +39,30 @@ export function NativeObservationScope({
 }
 
 /** A missing captured member refuses; authored numbers cannot invent a native reference. */
+const referenceIndexes = new WeakMap<
+  readonly RevitElementReference[],
+  ReadonlyMap<number, RevitElementReference>
+>();
+
 export function observedElements(
   observation: NativeObservation,
   ids: readonly number[],
 ): ElementTarget {
-  return observation.references
-    ? {
-        scope: observation.scope,
-        ids: [],
-        refs: ids.map(
-          (id) =>
-            observation.references!.find((ref) => ref.elementId === id) ?? { elementId: null },
-        ),
-      }
-    : { scope: observation.scope, ids };
+  const references = observation.references;
+  if (!references) return { scope: observation.scope, ids };
+  let byId = referenceIndexes.get(references);
+  if (!byId) {
+    const index = new Map<number, RevitElementReference>();
+    // Preserve the first captured reference, as Array.find did. A new capture gets a new index.
+    for (const ref of references)
+      if (ref.elementId != null && !index.has(ref.elementId)) index.set(ref.elementId, ref);
+    referenceIndexes.set(references, (byId = index));
+  }
+  return {
+    scope: observation.scope,
+    ids: [],
+    refs: ids.map((id) => byId.get(id) ?? { elementId: null }),
+  };
 }
 
 /** Keep response authority when a native read will feed a later action. */
