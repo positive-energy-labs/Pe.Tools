@@ -260,10 +260,13 @@ def setup(run: str, args: list[str]) -> None:
         home.mkdir(parents=True)
     for name in ([] if installed else COPIED):
         source = owner / name
+        destination = home / name
+        if os.name == "nt":
+            destination = Path("\\\\?\\" + str(destination))
         if source.is_dir():
-            shutil.copytree(source, home / name, symlinks=True)
+            shutil.copytree(source, destination, symlinks=True)
         elif source.is_file():
-            shutil.copy2(source, home / name)
+            shutil.copy2(source, destination)
     models = [a.split("=", 1) for a in value_list(args, "--model")] or [[str(SAMPLE), "A.rvt"]]
     docs = []
     model_copies = []
