@@ -1,5 +1,6 @@
 import {
   actionReceiptSchema,
+  documentRefSchema,
   scheduleReadingSchema,
   type ActionReceipt,
 } from "@pe/agent-contracts";
@@ -94,6 +95,19 @@ export function NativeReadingReferences({
     action?.state === "succeeded" && action.destination.kind === "document"
       ? { document: action.destination.ref, source: "native" }
       : null;
+  if (!action && outer?.ok === true && outer?.kind === "op") {
+    const target = readRecord(outer.target);
+    const observation = readRecord(target?.nativeObservation);
+    const document = documentRefSchema.safeParse(observation?.document);
+    if (
+      observation?.source === "native" &&
+      typeof observation.requestId === "string" &&
+      observation.requestId.trim() &&
+      document.success &&
+      document.data.session === target?.session
+    )
+      scope = { document: document.data, source: "native" };
+  }
   let references: Reference[];
   if (key === "schedule.grid.snapshot" && outer?.ok === true) {
     const reading = scheduleReadingSchema.safeParse(data);
