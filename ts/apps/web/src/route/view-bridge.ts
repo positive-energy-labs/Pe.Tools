@@ -14,6 +14,7 @@ import {
 } from "@pe/agent-contracts";
 import { peClient } from "#/host/pe-client";
 import { useHostEvents } from "#/readings";
+import { applyPageIntent } from "./view-owner";
 
 type Intent = {
   type: "route-view-intent";
@@ -54,7 +55,11 @@ export function useRouteViewBridge({
   const published = useRef<RouteView | null>(null);
   const publishing = useRef<Promise<void>>(Promise.resolve());
   const leased = useRef(false);
-  const [intent, setIntent] = useState<Intent | null>(null);
+  const [intent, setIntent] = useState<{
+    event: Intent;
+    receipt: NonNullable<ReturnType<typeof applyPageIntent>>;
+    context: string;
+  } | null>(null);
   const [pageVisible, setPageVisible] = useState(
     () => typeof document === "undefined" || document.visibilityState !== "hidden",
   );
@@ -71,9 +76,11 @@ export function useRouteViewBridge({
   const viewKey = JSON.stringify(raw);
   const view = useMemo(() => JSON.parse(viewKey) as RouteView | null, [viewKey]);
   const current = useRef(view);
+  const currentPage = useRef(page);
   const applyRef = useRef(apply);
   applyRef.current = apply;
   current.current = view;
+  currentPage.current = page;
   const publish = useCallback((value: RouteView) => {
     const next = publishing.current
       .catch(() => {})
@@ -132,25 +139,40 @@ export function useRouteViewBridge({
       JSON.stringify(published.current) !== JSON.stringify(value)
     )
       return;
-    setIntent(event);
-    applyRef.current(readAgentPatch(value.route, event.patch));
+    try {
+      const patch = readAgentPatch(value.route, event.patch);
+      const receipt = applyPageIntent(currentPage.current, () => applyRef.current(patch));
+      if (receipt) setIntent({ event, receipt, context: JSON.stringify(value.context) });
+    } catch {
+      // A malformed or refused patch never earns a success acknowledgement.
+    }
   }, []);
   useHostEvents(Boolean(view), onEvent);
   useEffect(() => {
     if (!intent || !view) return;
+    const { event, receipt } = intent;
+    const eligible = () =>
+      document.visibilityState !== "hidden" &&
+      receipt.current() &&
+      receipt.rendered(currentPage.current) &&
+      current.current === view &&
+      event.thread === view.thread &&
+      event.instance === view.instance &&
+      JSON.stringify(view.context) === intent.context;
+    if (!eligible()) return;
     // The rendered page holds the patch once each key writes back as its codec writes the decoded value.
-    const wanted = agentPage(route, readAgentPatch(route, intent.patch) as never);
-    if (Object.keys(intent.patch).some((key) => view.page[key] !== wanted[key])) return;
+    const wanted = agentPage(route, readAgentPatch(route, event.patch) as never);
+    if (Object.keys(event.patch).some((key) => view.page[key] !== wanted[key])) return;
     let canceled = false;
     void publish(view)
       .then(async () => {
-        if (canceled) return;
+        if (canceled || !eligible()) return;
         await peClient.call("view.ack", {
           params: { route },
           body: {
             instance: instance.current,
-            commandId: intent.commandId,
-            revision: intent.revision,
+            commandId: event.commandId,
+            revision: event.revision,
             page: view.page,
             facts: view.facts,
           },
@@ -161,5 +183,5 @@ export function useRouteViewBridge({
     return () => {
       canceled = true;
     };
-  }, [intent, view, publish, route]);
+  }, [intent, view, page, publish, route]);
 }

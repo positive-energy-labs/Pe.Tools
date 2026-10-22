@@ -6,7 +6,7 @@
  */
 import * as Atom from "effect/unstable/reactivity/Atom";
 import { frozenDemo } from "#/host/demo-client";
-import { useCallback, useMemo, useRef, useState } from "react";
+import { useMemo, useRef, useState } from "react";
 import {
   UNREADABLE_WORK,
   bindWork,
@@ -25,9 +25,9 @@ import {
   targetInventory,
 } from "#/readings";
 import { situationCells } from "./cells";
-import type { History } from "@pe/agent-contracts";
 import { DEFAULT_WAIT_S, type PageMove, type RouteManifest } from "./manifest";
 import { urlPage, useInitialUrlPage, useUrlPage } from "./url";
+import { createViewOwner } from "./view-owner";
 import { actionFacts, staticNeed } from "./facts";
 import { callHostRpc, type HostCallOptions } from "#/host/client";
 import type { OpKey, OpCallArgs } from "@pe/host-contracts/operation-types";
@@ -68,23 +68,29 @@ export function useRoute<W, R extends string, P, A extends string>(
     [manifest, options.url, seed],
   );
   const urlInitial = useInitialUrlPage(url);
-  const owner = useRouteOwner(() =>
-    createRouteOwner(
+  const owner = useRouteOwner(() => {
+    const route = createRouteOwner(
       manifest.key,
       seed ? makeAtomRegistry({ defaultIdleTTL: 400 }) : appAtomRegistry,
-    ),
-  );
-  const [page, setPageState] = useState<P>(() => {
-    const initial = { ...seed?.page, ...options.page, ...urlInitial };
-    return manifest.page ? manifest.page.parse(initial) : (initial as P);
+    );
+    const view = createViewOwner(route, manifest.page, {
+      ...seed?.page,
+      ...options.page,
+      ...urlInitial,
+    });
+    return {
+      ...route,
+      view,
+      dispose: () => {
+        view.dispose();
+        route.dispose();
+      },
+    };
   });
-  const override = useRef<History | null>(null);
-  /** Records how a move asked to land in history (`PageMove`); a push wins over a replace in one commit. */
-  const moved = (history: History | undefined) => {
-    override.current =
-      history === "push" || override.current === "push" ? "push" : (history ?? override.current);
-  };
-  useUrlPage(url, page, setPageState, override);
+  const pageSnapshot = useOwned(owner.registry, owner.view.state)!;
+  const page = pageSnapshot.page;
+  const setPage = owner.view.setPage;
+  useUrlPage(url, owner.view);
   const [outcome, setOutcome] = useState<RouteOutcome<A> | null>(null);
   // Busy and failure live in the OWNER, which is what `runAction` writes and what refuses a second
   // action. Holding a second copy in render state is how the button and the chord drifted apart:
@@ -279,13 +285,6 @@ export function useRoute<W, R extends string, P, A extends string>(
       return result;
     };
   }, [writer, owner, seed]);
-  // Stable: it is `page[1]`, `ctx.setPage`, and a dep of consumer memos (families/store.ts).
-  const pageEpoch = useRef(0);
-  const setPage = useCallback((next: Partial<P>, move?: PageMove<P>) => {
-    pageEpoch.current += 1;
-    moved(move?.history);
-    setPageState((current) => ({ ...current, ...next }));
-  }, []); // eslint-disable-line react-hooks/exhaustive-deps -- `moved` writes a ref
   const scopeKey = JSON.stringify([boundKey, key]);
   const actionScope = useMemo(() => ({}), [scopeKey]);
   const currentActionScope = useRef(actionScope);
@@ -338,7 +337,6 @@ export function useRoute<W, R extends string, P, A extends string>(
     // An action's Work is one snapshot. Its late writes must let the host reject that snapshot,
     // not silently borrow a newer revision observed while the action was computing.
     const actionRevision = workCurrent ? (doc?.revision ?? 0) : null;
-    const actionPageEpoch = pageEpoch.current;
     const ctx = {
       target: resolution.kind === "resolved" ? resolution.target : ({ kind: "host" } as const),
       work: {
@@ -374,19 +372,8 @@ export function useRoute<W, R extends string, P, A extends string>(
       setPage: (next: Partial<P>, options?: PageMove<P> | readonly (keyof P)[]) => {
         if (currentActionScope.current !== actionScope) return;
         const move = (Array.isArray(options) ? { guard: options } : (options ?? {})) as PageMove<P>;
-        const guard = move.guard;
-        setPageState((current) => {
-          const currentPage = current as Record<keyof P, unknown>;
-          const actionPage = page as Record<keyof P, unknown>;
-          if (
-            guard
-              ? guard.some((field) => !Object.is(currentPage[field], actionPage[field]))
-              : pageEpoch.current !== actionPageEpoch
-          )
-            return current;
-          moved(move.history);
-          return { ...current, ...next };
-        });
+        const refusal = owner.view.move(next, move, "action", pageSnapshot);
+        if (refusal) throw new ActionRefusal(refusal);
       },
     };
     return Object.fromEntries(
@@ -459,6 +446,7 @@ export function useRoute<W, R extends string, P, A extends string>(
     readingAtoms,
     readings,
     page,
+    pageSnapshot,
     doc,
     workCurrent,
     sliceResult,

@@ -18,9 +18,11 @@ import {
   type RouteKey,
 } from "@pe/agent-contracts";
 import { stripSearchParams, useRouter, type SearchMiddleware } from "@tanstack/react-router";
-import { useEffect, useSyncExternalStore, type RefObject } from "react";
+import { useEffect } from "react";
 import { z } from "zod";
 import type { RouteManifest } from "./manifest";
+import type { ViewOwner } from "./view-owner";
+import { causeRefusal } from "./refusal";
 
 export interface UrlPage<P> {
   readonly keys: readonly (keyof P & string)[];
@@ -152,56 +154,100 @@ export function urlPage<W, R extends string, P, A extends string>(
   return { keys, read, write, history, middlewares: [stripSearchParams(write(read({})))] };
 }
 
-const NO_SEARCH: Record<string, unknown> = {};
-const none = () => () => {};
-
 /**
- * Two-way sync between the Page and the address, inside the route owner. Reads the router from
- * context when there is one (`useRoute` also runs in tests and chat panes that own no URL).
- * `override` is what the page moves since the last commit asked (`PageMove.history`): null = none,
- * so each changed key's own class decides (`historyOf`). A push wins over a replace.
+ * The router is an adapter to the external Page owner. History notifications restore synchronously,
+ * before a pending write can flush. A restore never produces a navigation or runs a route action.
  */
-export function useUrlPage<P>(
-  url: UrlPage<P> | null,
-  page: P,
-  setPage: (next: (current: P) => P) => void,
-  override: RefObject<History | null>,
-) {
+export function useUrlPage<P>(url: UrlPage<P> | null, owner: ViewOwner<P>) {
   const router = useRouter({ warn: false });
-  const live = router && url ? { router, url } : null;
-  const search = useSyncExternalStore(
-    (notify) => (live ? live.router.subscribe("onResolved", notify) : none()),
-    () => (live ? (live.router.state.location.search as Record<string, unknown>) : NO_SEARCH),
-    () => (live ? (live.router.state.location.search as Record<string, unknown>) : NO_SEARCH),
-  );
-  const fromUrl = live ? live.url.read(search) : null;
-  const urlKey = JSON.stringify(live && fromUrl ? live.url.write(fromUrl) : null);
-  const pageKey = JSON.stringify(live ? live.url.write(page) : null);
-  // The address moved (Back, Forward, a link): the page follows.
   useEffect(() => {
-    if (live && urlKey !== pageKey) setPage((current) => ({ ...current, ...fromUrl }));
-  }, [urlKey]); // eslint-disable-line react-hooks/exhaustive-deps
-  // The page moved: the address follows, one history entry per place, or the same entry for a gesture.
-  // ponytail: both moving in one commit settles on whichever effect ran last; neither has yet.
-  useEffect(() => {
-    if (!live || urlKey === pageKey) return;
-    const history = live.url.history(
-      fromUrl ?? {},
-      page as Partial<P>,
-      override.current ?? undefined,
-    );
-    if (!history) return;
-    const written = live.url.write(page);
-    void live.router.navigate({
-      to: live.router.state.location.pathname,
-      search: (previous: Record<string, unknown>) => ({ ...previous, ...written }),
-      replace: history === "replace",
-    } as never);
-  }, [pageKey]); // eslint-disable-line react-hooks/exhaustive-deps
-  // Every commit consumes the moves that made it, written or not (a Page-only key writes nothing).
-  useEffect(() => {
-    override.current = null;
-  });
+    if (!router || !url) return;
+    const token = crypto.randomUUID();
+    const marker = "__pePageMove";
+    let generation = 0;
+    let active = true;
+    let queued = false;
+    let writing = false;
+    let pending: History | null = null;
+    let previous = owner.read();
+    const location = () => router.parseLocation(router.history.location);
+    const pathname = location().pathname;
+    const stamp = (state: object) =>
+      (state as Record<string, unknown>)[marker] as
+        | { token: string; generation: number }
+        | undefined;
+    const restore = () => {
+      generation += 1;
+      pending = null;
+      const next = location();
+      if (next.pathname === pathname) owner.move(url.read(next.search), {}, "url");
+      previous = owner.read();
+    };
+    const unhistory = router.history.subscribe(({ location: next, action }) => {
+      const move = stamp(next.state);
+      if (
+        (action.type === "PUSH" || action.type === "REPLACE") &&
+        move?.token === token &&
+        move.generation === generation
+      )
+        return;
+      restore();
+    });
+    const schedule = () => {
+      if (queued || writing || !pending || !active) return;
+      queued = true;
+      queueMicrotask(() => {
+        queued = false;
+        if (!active || !pending || location().pathname !== pathname) return;
+        const history = pending;
+        pending = null;
+        const current = owner.read().page;
+        const fromUrl = url.read(location().search);
+        if (!url.history(fromUrl, current)) return;
+        const written = url.write(current);
+        const at = generation;
+        writing = true;
+        void router
+          .navigate({
+            to: pathname,
+            search: (search: Record<string, unknown>) => ({ ...search, ...written }),
+            state: (state: Record<string, unknown>) => ({
+              ...state,
+              [marker]: { token, generation: at },
+            }),
+            replace: history === "replace",
+            // Like the router's canonicalization, this projects the current same-path Page.
+            // Blockers yield before committing; a delayed projection could overwrite a later link.
+            ignoreBlocker: true,
+          } as never)
+          .catch((cause: unknown) => {
+            if (active && generation === at) owner.fail(causeRefusal(cause));
+          })
+          .finally(() => {
+            writing = false;
+            schedule();
+          });
+      });
+    };
+    const unpage = owner.subscribe(() => {
+      const next = owner.read();
+      const history =
+        next.origin === "url" ? null : url.history(previous.page, next.page, next.history);
+      previous = next;
+      if (!history) return;
+      pending = history === "push" || pending === "push" ? "push" : history;
+      schedule();
+    });
+    // Catch navigation between initialization and subscription without rewriting a bare URL.
+    if (url.history(url.read(location().search), previous.page)) restore();
+    return () => {
+      active = false;
+      generation += 1;
+      pending = null;
+      unpage();
+      unhistory();
+    };
+  }, [router, url, owner]);
 }
 
 /** First render: the page the address names, before any effect runs. */
