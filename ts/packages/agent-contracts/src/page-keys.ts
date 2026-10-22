@@ -107,17 +107,21 @@ export const fitViewportCodec = <V extends Viewport>(): Codec<V | null> => ({
 /**
  * The directions a person names for an orbit picture, in the scene's frame (`scene/orbit.ts`):
  * yaw 0 = seen from east (+X), 90 = from north (+Y); elev 90 = plan. A look keeps a pose's pivot
- * and zoom, so it turns the effective pose the drawing shows, never a fit.
+ * and zoom, so it turns the effective pose the drawing shows, never a fit. Plan and iso tilt only,
+ * keeping the shown yaw; a cardinal names its yaw.
  */
 const ISO_ELEV = Number(((Math.atan(Math.SQRT1_2) * 180) / Math.PI).toFixed(3));
 export const orbitLooks = {
-  plan: { yaw: -90, elev: 90 },
-  iso: { yaw: -45, elev: ISO_ELEV },
+  plan: { elev: 90 },
+  iso: { elev: ISO_ELEV },
   north: { yaw: 90, elev: 0 },
   south: { yaw: -90, elev: 0 },
   east: { yaw: 0, elev: 0 },
   west: { yaw: 180, elev: 0 },
-} as const satisfies Record<string, Pick<OrbitViewport, "yaw" | "elev">>;
+} as const satisfies Record<
+  string,
+  Pick<OrbitViewport, "elev"> & Partial<Pick<OrbitViewport, "yaw">>
+>;
 export type OrbitLook = keyof typeof orbitLooks;
 
 export const modeKey = <const M extends readonly [string, ...string[]]>(
