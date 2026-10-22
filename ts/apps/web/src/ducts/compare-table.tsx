@@ -41,12 +41,12 @@ function Cell({ row, product }: { row: DuctsCompareRow; product: DuctsProduct })
         <span>
           {cell.note}
           {product === "pe" && onPeRoadmap(row) ? (
-            <span data-tone="nav" data-wash className="ml-1 rounded px-1 t-small">
+            <span data-tone="nav" data-wash className="ml-1 rounded-sm px-1 t-small">
               roadmap
             </span>
           ) : null}
           {product === "pe" && row.unproven ? (
-            <span className="ml-1 rounded border border-dashed px-1 t-small text-ink-mute">
+            <span className="ml-1 rounded-sm border border-dashed px-1 t-small text-ink-mute">
               unproven
             </span>
           ) : null}
