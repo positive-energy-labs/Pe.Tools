@@ -4,6 +4,8 @@ One metric substrate under every Pe.* helper that reads or writes Revit geometry
 
 ## Decided
 
+- 2026-10-22, user permits ending the TypeGPU experiment at the useful evidence boundary. Preserve source, captures and raw results on local branch `archive/typegpu-20261022`, worktree `C:/Users/kaitp/.t3/worktrees/Pe.Tools/archive-typegpu-20261022`; do not adopt a renderer from GPU-pass timing alone. See [evaluation](typegpu-evaluation.md).
+
 - 2026-10-22, user verdict: pursue full TypeGPU product proof and judge the foundation without counting cutover cost. The earlier [bounded evaluation](typegpu-evaluation.md) is evidence, not a settled rejection. Meanwhile `createMeshPicker` specializes the shared static batch's nearest retained hit, preserving Three triangle math and rendered coordinates; [picking proof](../ducts/interaction-performance.md#nearest-retained-picking) records 2,904 matching Chadds rays and 42% less aggregate query time.
 
 - 2026-10-22, user ruling: all camera controls share one live pose; Page keeps the committed snapshot. `scene/live-orbit.ts` implements the gesture boundary for Ducts and Space. Separate globe/renderer previews are retired because they cannot stay synchronized during motion. Section editing remains on `/space`; see [interaction evidence](../ducts/interaction-performance.md#shared-live-camera).
