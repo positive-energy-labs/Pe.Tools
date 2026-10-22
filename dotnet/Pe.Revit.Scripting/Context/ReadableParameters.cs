@@ -11,5 +11,5 @@ public static class ReadableParameterExtensions {
     public static IEnumerable<Parameter> ReadableParameters(this Element element) =>
         element.Parameters.Cast<Parameter>()
             .Where(p => p.Definition is { Name.Length: > 0 } def
-                        && (def is not InternalDefinition d || Enum.IsDefined(d.BuiltInParameter)));
+                        && (def is not InternalDefinition d || Enum.IsDefined(typeof(BuiltInParameter), d.BuiltInParameter)));
 }
