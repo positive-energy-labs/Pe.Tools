@@ -64,10 +64,15 @@ const unitOverrides = (
 });
 
 /** The units as Revit holds them: stored rulings over roles proposed from Revit's own state, and each unit's stated flow. */
+const appliedUnitCache = new WeakMap<DuctSnapshot, ReturnType<typeof unitOverrides>>();
 const appliedUnits = (raw: DuctSnapshot) => {
+  const cached = appliedUnitCache.get(raw);
+  if (cached) return cached;
   const stated = equipmentFlows(raw, {});
   const roles = unitRoles(raw, stated, stagedDucts(withStoredRulings(null, raw.store)).roles);
-  return unitOverrides(roles, stated);
+  const units = unitOverrides(roles, stated);
+  appliedUnitCache.set(raw, units);
+  return units;
 };
 
 const byId = <V>(cells: Record<string, V>, pick: (value: V) => number) =>
