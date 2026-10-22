@@ -73,11 +73,12 @@ export function useRoute<W, R extends string, P, A extends string>(
       manifest.key,
       seed ? makeAtomRegistry({ defaultIdleTTL: 400 }) : appAtomRegistry,
     );
-    const view = createViewOwner(route, manifest.page, {
-      ...seed?.page,
-      ...options.page,
-      ...urlInitial,
-    });
+    const view = createViewOwner(
+      route,
+      manifest.page,
+      { ...seed?.page, ...options.page, ...urlInitial },
+      { address: manifest.address, transition: manifest.transition },
+    );
     return {
       ...route,
       view,

@@ -85,6 +85,17 @@ export interface PageMove<P> {
   readonly guard?: readonly (keyof P)[];
 }
 
+export type PageTransitionOrigin = "page" | "action" | "pea";
+
+/** Pure coupled Page rules. The owner validates the normalized patch as one complete candidate.
+ * URL restoration bypasses these rules so restored fields keep their explicit values.
+ */
+export type PageTransition<P> = (
+  current: Readonly<P>,
+  patch: Readonly<Partial<P>>,
+  origin: PageTransitionOrigin,
+) => { readonly patch: Partial<P> } | { readonly refusal: Refusal };
+
 import { DEFAULT_WAIT_S, HOST_READ_WAIT_S, NATIVE_APPLY_WAIT_S, NATIVE_READ_WAIT_S } from "./waits";
 export { DEFAULT_WAIT_S, HOST_READ_WAIT_S };
 
@@ -138,6 +149,8 @@ export interface RouteManifest<W, R extends string, P, A extends string> {
   inspectables?: Readonly<Record<string, Inspectable>>;
   readings?: Readonly<Record<R, ReadingSpec<P>>>;
   page?: z.ZodType<P>;
+  /** One normalization boundary for human, action and Pea moves. Never runs native work. */
+  transition?: PageTransition<P>;
   /**
    * The route's address in agent-contracts `routeAddresses`: its fields say which Page keys the URL
    * carries, how each moves history, and what Pea reads and sets. The page schema extends
@@ -395,7 +408,7 @@ export function entityRoute<W, const R extends string, P extends object, const A
     | "actions"
     | "runs"
     | "seeds"
-  > = {},
+  > & { transition?: PageTransition<P & EntityPage> } = {},
 ): RouteManifest<W, R | EntityReading, P & EntityPage, A | EntityAction> {
   const plan = def.plan as ApplyPlan<unknown, string, object> | undefined;
   const staged = def.staged as EntityRouteDef<unknown, string, object>["staged"];
@@ -540,6 +553,7 @@ export function entityRoute<W, const R extends string, P extends object, const A
     page: (audit.page ? z.intersection(audit.page, entityPage) : entityPage) as z.ZodType<
       P & EntityPage
     >,
+    transition: audit.transition,
     address: audit.address,
     // Stage, pod and path live in the URL so `/pods` can deep-link a spec and Back steps through them;
     // a route with an address carries them as its contract's entity fields.

@@ -1,11 +1,12 @@
 import * as Atom from "effect/unstable/reactivity/Atom";
 import { deepEqual } from "@tanstack/react-router";
+import { transition as transitionPage, type RouteKey } from "@pe/agent-contracts";
 import type { z } from "zod";
-import type { PageMove } from "./manifest";
+import type { PageMove, PageTransition, PageTransitionOrigin } from "./manifest";
 import type { createRouteOwner } from "./route-owner";
 import { causeRefusal, refuse, type Refusal } from "./refusal";
 
-type Origin = "initial" | "page" | "action" | "url" | "pea";
+type Origin = "initial" | "url" | PageTransitionOrigin;
 export interface PageSnapshot<P> {
   readonly page: P;
   readonly revision: number;
@@ -31,6 +32,7 @@ export function createViewOwner<P>(
   owner: Pick<ReturnType<typeof createRouteOwner>, "registry" | "owned" | "failure" | "write">,
   schema: z.ZodType<P> | undefined,
   initial: Partial<P>,
+  rules: { address?: RouteKey; transition?: PageTransition<P> } = {},
 ) {
   const initialPage = schema ? schema.parse(initial) : (initial as P);
   const state = owner.owned(
@@ -39,7 +41,11 @@ export function createViewOwner<P>(
   );
   const read = () => owner.registry.get(state);
   let disposed = false;
-  let intent: { refusal: Refusal | null; writes: number } | null = null;
+  let intent: {
+    refusal: Refusal | null;
+    attempted: boolean;
+    staged: PageSnapshot<P> | null;
+  } | null = null;
   const reject = (refusal: Refusal) => {
     if (intent) intent.refusal = refusal;
     if (!disposed) owner.registry.set(owner.failure, refusal);
@@ -48,6 +54,10 @@ export function createViewOwner<P>(
   const remember = (page: P) => {
     if (page !== null && typeof page === "object") pageOwners.set(page, bridge);
   };
+  const commit = (after: PageSnapshot<P>) => {
+    remember(after.page);
+    owner.write(after.origin, "page", () => owner.registry.set(state, after));
+  };
   const move = (
     next: Partial<P>,
     options: PageMove<P> = {},
@@ -55,6 +65,11 @@ export function createViewOwner<P>(
     snapshot?: PageSnapshot<P>,
   ): Refusal | null => {
     if (disposed) return reject(refuse("not-ready", "This Page is no longer mounted"));
+    if (intent) {
+      if (intent.attempted)
+        return reject(refuse("not-ready", "A Pea intent must use one coupled Page transition"));
+      intent.attempted = true;
+    }
     const before = read();
     if (snapshot) {
       const guard = options.guard;
@@ -65,7 +80,23 @@ export function createViewOwner<P>(
       )
         return null;
     }
-    const candidate = { ...before.page, ...next };
+    const source = intent ? "pea" : origin;
+    let patch = next;
+    if (source !== "url" && source !== "initial") {
+      try {
+        const normalized = rules.transition?.(before.page, next, source) ?? { patch: next };
+        if ("refusal" in normalized) return reject(normalized.refusal);
+        patch = normalized.patch;
+        if (rules.address) {
+          const moved = transitionPage(rules.address, before.page as never, patch as never);
+          if (!moved.ok) return reject(refuse("not-ready", moved.error));
+          patch = moved.patch as Partial<P>;
+        }
+      } catch (cause) {
+        return reject(causeRefusal(cause));
+      }
+    }
+    const candidate = { ...before.page, ...patch };
     const parsed = schema?.safeParse(candidate);
     if (parsed && !parsed.success)
       return reject(
@@ -80,7 +111,6 @@ export function createViewOwner<P>(
     for (const key of Object.keys(page as object) as (keyof P)[])
       if (deepEqual(page[key], candidate[key], { ignoreUndefined: false }))
         page[key] = candidate[key];
-    const source = intent ? "pea" : origin;
     const after: PageSnapshot<P> = {
       page,
       revision: before.revision + 1,
@@ -88,15 +118,22 @@ export function createViewOwner<P>(
       origin: source,
       history: options.history,
     };
-    remember(page);
-    if (intent) intent.writes += 1;
-    owner.write(source, "page", () => owner.registry.set(state, after));
+    if (intent) intent.staged = after;
+    else commit(after);
     return null;
   };
   const bridge: IntentOwner = {
     apply(page, apply) {
+      if (intent) {
+        reject(refuse("not-ready", "A Pea intent cannot contain another intent"));
+        return null;
+      }
       if (disposed || read().page !== page) return null;
-      const attempt = { refusal: null as Refusal | null, writes: 0 };
+      const attempt = {
+        refusal: null as Refusal | null,
+        attempted: false,
+        staged: null as PageSnapshot<P> | null,
+      };
       intent = attempt;
       try {
         apply();
@@ -105,8 +142,9 @@ export function createViewOwner<P>(
       } finally {
         intent = null;
       }
-      if (attempt.refusal || !attempt.writes) return null;
-      const accepted = read();
+      if (disposed || attempt.refusal || !attempt.staged) return null;
+      const accepted = attempt.staged;
+      commit(accepted);
       return {
         current: () => !disposed && read() === accepted,
         rendered: (value) => value === accepted.page,
