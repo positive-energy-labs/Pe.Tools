@@ -12,6 +12,7 @@
  * context into 2D canvases, only when what they show changed, never per orbit frame.
  */
 import * as THREE from "three";
+import { createMeshPicker } from "./picking";
 import { OrbitControls } from "three/addons/controls/OrbitControls.js";
 import { center, fromControls, toCamera, type OrbitViewport } from "./orbit";
 import {
@@ -140,7 +141,7 @@ export function createRenderer(mount: HTMLElement, meshes: SceneMeshes) {
     0,
     material,
   );
-  // Opaque geometry needs no per-frame depth sort. Per-element visibility and picking stay native.
+  // Opaque geometry needs no per-frame depth sort. Per-element visibility stays native; picking reads this same packed geometry.
   batch.sortObjects = false;
   batch.position.copy(origin);
   scene.add(batch);
@@ -368,6 +369,7 @@ export function createRenderer(mount: HTMLElement, meshes: SceneMeshes) {
     batch,
     origin,
     byId,
+    pick: createMeshPicker(batch, byId),
     render,
     viewport: (): OrbitViewport => fromControls(controls, bounds),
     setViewport(v: OrbitViewport) {
