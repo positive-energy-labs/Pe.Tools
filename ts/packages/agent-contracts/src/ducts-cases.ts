@@ -543,7 +543,8 @@ export const DUCT_CASES: readonly DuctCase[] = [
     why: 'Revit reports "connected" even for ends 13.7 in apart, so Revit\'s flag is not proof.',
     status: "handled",
     code: "open-end · fix in Revit",
-    kinds: ["open-end"],
+    // An open-end finding cannot say whether the heal caps it or refuses it; case 18 counts them all.
+    kinds: [],
     ids: '"Fix in Revit" rows from healPlan: SA 44 fitting 9098869 "lands on a duct\'s side or inside it: a takeoff"; RA 25 fitting 6751903 (18.6x14.2) vs duct 6751644 (23.9x15.4) "differ in size: a transition". Look for the reason text on the row.',
     examples: [
       {

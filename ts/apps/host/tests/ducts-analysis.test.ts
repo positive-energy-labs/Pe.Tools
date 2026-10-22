@@ -975,6 +975,26 @@ test("analysis pages obey byte budget and preserve complete historical row cover
   );
 });
 
+test("a reading whose findings alone pass the budget keeps a row and every count", async () => {
+  const f = fixture();
+  for (let i = 0; i < 1500; i++)
+    f.snapshot.issues.push({
+      id: `stub:g:${1000 + i}`,
+      kind: "stub",
+      elementId: 1,
+      point: [0, 0, 0],
+      groupId: "g",
+      note: "Y".repeat(60),
+    } as DuctSnapshot["issues"][number]);
+  const page = await f.api.read(
+    read({ kind: "fresh", target: f.target }, { kind: "document" }, { projection: "summary" }),
+  );
+  expect(Buffer.byteLength(JSON.stringify(page))).toBeLessThanOrEqual(65536);
+  expect(page.rows.length).toBeGreaterThan(0);
+  expect(page.findings.length).toBeLessThan(1500);
+  expect(page.findingCounts.byKind.stub).toBe(1500);
+});
+
 test("artifact v5 interns witness records without merging different role partitions", async () => {
   const f = fixture();
   for (const n of f.snapshot.nodes) n.uniqueId = `purpose-${n.id}`;
@@ -1723,9 +1743,12 @@ test("the survey joins a sub-tolerance gap, takes the terminal flow from the loa
   });
   // Graded keys carry the grade; the ungraded finding keeps its bare kind.
   expect(Object.values(summary.findingCounts.byKindAndGrade).reduce((a, b) => a + b, 0)).toBe(2);
-  expect(Object.keys(summary.findingCounts.byKindAndGrade).sort()).toEqual(
-    expect.arrayContaining(["no-fan-static"]),
+  const graded = Object.keys(summary.findingCounts.byKindAndGrade).filter((k) =>
+    k.startsWith("joined-by-proximity:"),
   );
+  expect(graded).toHaveLength(1);
+  expect(["near-miss", "stretched", "anomalous"]).toContain(graded[0]!.split(":")[1]);
+  expect(summary.findingCounts.byKindAndGrade["no-fan-static"]).toBe(1);
   expect(summary.completeness.reasons.map((r) => r.code)).not.toContain("unreached-terminals");
   expect(summary.completeness.reasons.map((r) => r.code)).not.toContain("unknown-terminal-flow");
   const terminals = ductsAnalysisResponseSchema.parse(

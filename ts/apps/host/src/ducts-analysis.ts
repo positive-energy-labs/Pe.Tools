@@ -974,8 +974,11 @@ function project(
   // last row goes only when the base reading alone is over budget (2026-10-22: a model with 1,300
   // findings emptied the rows before the first finding was cut and refused the whole reading).
   while (over() && response.rows.length > 1) popRow();
+  // Findings can run to thousands: pop by the measured excess, then measure again.
   while (over() && response.findings.length) {
-    response.findings.pop();
+    let excess = Buffer.byteLength(JSON.stringify(response), "utf8") - byteLimit;
+    while (excess > 0 && response.findings.length)
+      excess -= Buffer.byteLength(JSON.stringify(response.findings.pop()), "utf8") + 1;
     response.page.truncated = true;
   }
   while (over() && response.rows.length) popRow();
