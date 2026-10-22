@@ -1,5 +1,5 @@
 import {
-  casesForFindings,
+  casesForCounts,
   documentRefSchema,
   DUCTS_GUIDE,
   type DuctsGuide,
@@ -129,11 +129,15 @@ export function ductsGuideReading(
   return { ...DUCTS_GUIDE, cases };
 }
 
-/** The cases a document's findings show, each with up to ten of the element ids behind it. */
+/**
+ * The cases a document shows: counts from `findingCounts.byKindAndGrade` (never budgeted), and up
+ * to ten element ids per case from whatever findings the reading kept.
+ */
 export function presentDuctCases(
+  counts: Readonly<Record<string, number>>,
   findings: readonly { kind: string; grade?: string | null; elementIds: readonly number[] }[],
 ) {
-  return casesForFindings(findings).map(({ case: c, count }) => {
+  return casesForCounts(counts).map(({ case: c, count }) => {
     const elementIds = [
       ...new Set(
         findings

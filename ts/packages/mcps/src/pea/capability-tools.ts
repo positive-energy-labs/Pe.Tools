@@ -766,6 +766,8 @@ async function dispatch(
               source: { kind: "fresh", target: document },
               selector: { kind: "document" },
               projection: "summary",
+              // One row: the guide wants the counts and the findings, not the page.
+              limit: 1,
             }),
           });
           if (!response.ok)
@@ -778,7 +780,10 @@ async function dispatch(
           return {
             ok: true,
             target: { session: result.target.session, document: result.target.openId },
-            result: { guide, present: presentDuctCases(result.findings) },
+            result: {
+              guide,
+              present: presentDuctCases(result.findingCounts.byKindAndGrade, result.findings),
+            },
           };
         } catch (error) {
           return {

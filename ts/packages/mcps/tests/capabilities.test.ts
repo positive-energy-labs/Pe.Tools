@@ -1921,11 +1921,13 @@ test("route:ducts.guide with a document adds the cases its fresh analysis shows,
         source: { kind: "fresh", target: document },
         selector: { kind: "document" },
         projection: "summary",
+        limit: 1,
       });
       if (fail) return Response.json({ error: "no such document" }, { status: 404 });
       return Response.json({
         target: document,
         findings: [{ kind, grade, elementIds: [7, 8] }],
+        findingCounts: { byKindAndGrade: { [kase.kinds[0]!]: 1 } },
       });
     }
     throw Error(`Unexpected guide request ${path}`);

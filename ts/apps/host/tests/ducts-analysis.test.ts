@@ -1717,10 +1717,15 @@ test("the survey joins a sub-tolerance gap, takes the terminal flow from the loa
       note: expect.stringContaining("computed by the route when the path prices"),
     }),
   ]);
-  expect(summary.findingCounts).toEqual({
+  expect(summary.findingCounts).toMatchObject({
     byKind: { "joined-by-proximity": 1, "no-fan-static": 1 },
     byClearer: { route: 1, pea: 0, person: 1 },
   });
+  // Graded keys carry the grade; the ungraded finding keeps its bare kind.
+  expect(Object.values(summary.findingCounts.byKindAndGrade).reduce((a, b) => a + b, 0)).toBe(2);
+  expect(Object.keys(summary.findingCounts.byKindAndGrade).sort()).toEqual(
+    expect.arrayContaining(["no-fan-static"]),
+  );
   expect(summary.completeness.reasons.map((r) => r.code)).not.toContain("unreached-terminals");
   expect(summary.completeness.reasons.map((r) => r.code)).not.toContain("unknown-terminal-flow");
   const terminals = ductsAnalysisResponseSchema.parse(

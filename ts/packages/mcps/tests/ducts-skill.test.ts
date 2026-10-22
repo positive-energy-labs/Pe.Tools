@@ -52,7 +52,8 @@ test("present cases carry counts and at most ten element ids", () => {
   const kind = kase.kinds[0]!.split(":")[0]!;
   const grade = kase.kinds[0]!.split(":")[1] ?? null;
   const findings = Array.from({ length: 12 }, (_, i) => ({ kind, grade, elementIds: [i + 1] }));
-  const present = presentDuctCases(findings).find((p) => p.number === kase.number)!;
+  const counts = { [kase.kinds[0]!]: 12 };
+  const present = presentDuctCases(counts, findings).find((p) => p.number === kase.number)!;
   expect(present).toMatchObject({ title: kase.title, code: kase.code });
   expect(present.count).toBeGreaterThanOrEqual(12);
   expect(present.elementIds).toEqual([1, 2, 3, 4, 5, 6, 7, 8, 9, 10]);

@@ -300,17 +300,36 @@ export const DUCTS_GUIDE = {
 } as const;
 export type DuctsGuide = typeof DUCTS_GUIDE;
 
-/** The cases whose `kinds` include one of the given finding kinds (`kind` or `kind:grade`). */
+/**
+ * The cases whose `kinds` are counted in `counts`, the analysis's `findingCounts.byKindAndGrade`
+ * (keys `kind` or `kind:grade`). A case naming an ungraded kind counts every grade of it.
+ */
+export const casesForCounts = (
+  counts: Readonly<Record<string, number>>,
+): { case: DuctCase; count: number }[] =>
+  DUCT_CASES.flatMap((c) => {
+    const count = c.kinds.reduce(
+      (sum, k) =>
+        sum +
+        (k.includes(":")
+          ? (counts[k] ?? 0)
+          : Object.entries(counts).reduce(
+              (n, [key, v]) => (key === k || key.startsWith(`${k}:`) ? n + v : n),
+              0,
+            )),
+      0,
+    );
+    return count ? [{ case: c, count }] : [];
+  });
+
+/** `casesForCounts` over a findings list, for callers that hold the list rather than the counts. */
 export const casesForFindings = (
   findings: readonly { kind: string; grade?: string | null }[],
 ): { case: DuctCase; count: number }[] => {
-  const counts = new Map<string, number>();
+  const counts: Record<string, number> = {};
   for (const f of findings) {
-    counts.set(f.kind, (counts.get(f.kind) ?? 0) + 1);
-    if (f.grade) counts.set(`${f.kind}:${f.grade}`, (counts.get(`${f.kind}:${f.grade}`) ?? 0) + 1);
+    const key = f.grade ? `${f.kind}:${f.grade}` : f.kind;
+    counts[key] = (counts[key] ?? 0) + 1;
   }
-  return DUCT_CASES.flatMap((c) => {
-    const count = c.kinds.reduce((sum, k) => sum + (counts.get(k) ?? 0), 0);
-    return count ? [{ case: c, count }] : [];
-  });
+  return casesForCounts(counts);
 };

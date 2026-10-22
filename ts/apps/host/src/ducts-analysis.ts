@@ -949,6 +949,7 @@ function project(
         : [],
     findingCounts: {
       byKind: countBy(findings, (f) => f.kind),
+      byKindAndGrade: countBy(findings, (f) => (f.grade ? `${f.kind}:${f.grade}` : f.kind)),
       byClearer: { route: 0, pea: 0, person: 0, ...countBy(findings, (f) => f.clearer) },
     },
     page: {
@@ -961,20 +962,23 @@ function project(
   };
   // Full input/witnesses stay in the artifact; every normal reading has a hard UTF-8 byte budget.
   const byteLimit = 65536;
-  while (Buffer.byteLength(JSON.stringify(response), "utf8") > byteLimit && response.rows.length) {
+  const over = () => Buffer.byteLength(JSON.stringify(response), "utf8") > byteLimit;
+  const popRow = () => {
     response.rows.pop();
     response.page.returned = response.rows.length;
     response.page.truncated = true;
     response.page.nextCursor = { offset: offset + response.rows.length, basis };
-  }
-  // Findings go last; the full list is the web's (no byte budget) and the artifact's inputs.
-  while (
-    Buffer.byteLength(JSON.stringify(response), "utf8") > byteLimit &&
-    response.findings.length
-  ) {
+  };
+  // Rows go first, down to one: a reading keeps a row as long as one fits. Then findings, whose
+  // full list is the web's (no byte budget) and the artifact's; `findingCounts` is never cut. The
+  // last row goes only when the base reading alone is over budget (2026-10-22: a model with 1,300
+  // findings emptied the rows before the first finding was cut and refused the whole reading).
+  while (over() && response.rows.length > 1) popRow();
+  while (over() && response.findings.length) {
     response.findings.pop();
     response.page.truncated = true;
   }
+  while (over() && response.rows.length) popRow();
   if (
     Buffer.byteLength(JSON.stringify(response), "utf8") > byteLimit ||
     (rows.length > offset && !response.rows.length)
