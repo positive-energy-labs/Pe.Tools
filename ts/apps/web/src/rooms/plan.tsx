@@ -18,7 +18,7 @@ import { EmptyState } from "@pe/kit/lang/empty";
 import { OutcomeLine } from "#/components/lang/outcome";
 import { boundsOf, contentViewport, fitFrame, type Bounds2, type Point2 } from "#/lib/affine-frame";
 import { token } from "@pe/kit/lib/token";
-import { PlanImageLayer, type TakeoffPlanImage } from "#/takeoff/level-plan";
+import { PlanImageLayer, planCorners, type TakeoffPlanImage } from "#/takeoff/level-plan";
 import { pathD } from "#/takeoff/model";
 import { PLAN_REFUSAL, type PlanRefusal } from "#/takeoff/plan-image";
 import { layersOf, toggleLayer } from "@pe/agent-contracts";
@@ -124,11 +124,6 @@ export function focusOf(rows: readonly RoomRow[], focus: string) {
     missing: labels.filter((label) => !rows.some((row) => row.label === label)),
   };
 }
-
-const planCorners = (plan: TakeoffPlanImage): Point2[] => {
-  const { topLeft: a, topRight: b, bottomLeft: c } = plan.registration;
-  return [a, b, c, [b[0] + c[0] - a[0], b[1] + c[1] - a[1]]];
-};
 
 // ponytail: the world is drawn at 4 px per foot; zoom 0.02 to 24 spans 0.08 to 96 screen px per foot.
 export const PLAN_PX_PER_FT = 4;
