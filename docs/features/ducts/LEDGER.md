@@ -5,6 +5,7 @@ Rebuilt 2026-10-21 as current truth after the close of the ducts walk; git holds
 ## Decided
 
 **The walk**
+- 2026-10-21, kaitpw: Pea is scored against this tutorial on black-box `pea --prompt` runs; the baseline (three probes, one half right, two failed because the ducts skill is trigger-gated and the base instructions carry no walk) and the owed one-source refactor are in the agent ledger (2026-10-21).
 - 2026-10-20, kaitpw: "calc duct pdrop on SA 19" is one walk, in order: name the system; heal the model; point at the airflow; price the ducts and fittings; read the result in the engineer's units; review the pending changes; write. Staying aligned on design intent is not a step: every write to the subject, the inputs or a ruling is visible, named and ruled by a person before it counts.
 - 2026-10-20, kaitpw: the three stages were right as an order and wrong as a control. The inbox is grouped Fix, Set, Check, Write, with Diagnostics collapsed below; the person walks it top to bottom. No stage picker, no view picker, no variant switch. Pea advances the walk by resolving rows, which a hand-picked stage would forbid.
 - 2026-10-20, kaitpw: the route is one shell with four panes: tree, picture, inbox, rules (the E2 prototype, promoted). The globe is the camera, so plan is a camera preset (`P`); the schematic swaps places with the 3D view (`S`) instead of being a view. kaitpw: "lov this concept".
