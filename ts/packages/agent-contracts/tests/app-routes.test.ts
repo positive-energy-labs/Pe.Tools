@@ -17,7 +17,8 @@ describe("application route identities and surfaces", () => {
     ]);
     expect(new Set(paths).size).toBe(paths.length);
     expect(new Set(APP_ROUTES.map((route) => route.key)).size).toBe(APP_ROUTES.length);
-    expect(APP_ROUTES.filter((route) => route.directory)).toHaveLength(19);
+    expect(APP_ROUTES.filter((route) => route.directory)).toHaveLength(20);
+    expect(appRouteByPath("/space")).toMatchObject({ key: "space", exposure: "Preview" });
     expect(
       APP_ROUTES.filter((route) => !route.directory)
         .map((route) => route.path)
