@@ -92,11 +92,11 @@ public sealed class DuctHealPinnedProofTests {
         _ = t.Commit();
     }
 
-    /// <summary>Every duct and duct fitting: id, pin, connector origins and whether each is connected.</summary>
+    /// <summary>Every duct and duct fitting: id, pin, connector origins and whether each is connected (by connector id: Revit enumerates them in no stable order).</summary>
     private static string State(Document doc) =>
         string.Join("\n", new FilteredElementCollector(doc).WherePasses(new ElementMulticategoryFilter(new List<BuiltInCategory> {
                 BuiltInCategory.OST_DuctCurves, BuiltInCategory.OST_DuctFitting
             })).WhereElementIsNotElementType().ToElements().OrderBy(e => e.Id.Value())
-            .Select(e => $"{e.Id.Value()} {e.Pinned} " + string.Join(" ", DuctSnapshots.HvacConnectors(e)
+            .Select(e => $"{e.Id.Value()} {e.Pinned} " + string.Join(" ", DuctSnapshots.HvacConnectors(e).OrderBy(c => c.Id)
                 .Select(c => $"{c.Id}@{c.Origin.X:0.0000},{c.Origin.Y:0.0000},{c.Origin.Z:0.0000}:{c.IsConnected}"))));
 }
