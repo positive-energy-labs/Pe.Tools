@@ -157,8 +157,6 @@ export interface RouteManifest<W, R extends string, P, A extends string> {
    * `routePageSchema(address)`.
    */
   address?: RouteKey;
-  /** A route outside the contract: the Page keys the address carries (`route/url.ts`): what the Situation targets, so Back steps through places. Each needs a default. */
-  url?: readonly (keyof P & string)[];
   /** The stages a route works in; `word` is the first word of the Situation ("Auditing rooms"). */
   stages?: readonly { key: string; word: string }[];
   actions?: {
@@ -404,7 +402,6 @@ export function entityRoute<W, const R extends string, P extends object, const A
     | "readings"
     | "page"
     | "address"
-    | "url"
     | "actions"
     | "runs"
     | "seeds"
@@ -554,10 +551,8 @@ export function entityRoute<W, const R extends string, P extends object, const A
       P & EntityPage
     >,
     transition: audit.transition,
+    // Stage, pod and path are the contract's entity fields, so `/pods` deep-links a spec.
     address: audit.address,
-    // Stage, pod and path live in the URL so `/pods` can deep-link a spec and Back steps through them;
-    // a route with an address carries them as its contract's entity fields.
-    url: audit.address ? undefined : ([...(audit.url ?? []), "stage", "pod", "path"] as never),
     actions: {
       ...audit.actions,
       ...(read && def.read !== "explicit" ? { read: { ...read, visible: false } } : {}),

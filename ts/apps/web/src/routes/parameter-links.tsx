@@ -12,6 +12,7 @@ import {
 } from "@pe/agent-contracts";
 
 import { ArmingStrip } from "#/components/lang/arming-strip";
+import { routeSearch } from "#/route/route-owner";
 import { FactChip } from "@pe/kit/lang/chip";
 import { OutcomeLine } from "#/components/lang/outcome";
 import { Button } from "@pe/kit/lang/button";
@@ -47,13 +48,9 @@ import { manifest } from "#/parameter-links/manifest";
  * Preview evaluates it without writing; Apply (human-only, freshness-gated) stores it and
  * reconciles the changed target parameters.
  */
-export const parameterLinksSearch = (
-  search: Record<string, unknown>,
-): { thread?: string; demo?: string; view?: "links" | "plan" } => ({
+export const parameterLinksSearch = (search: Record<string, unknown>) => ({
+  ...routeSearch(search),
   ...urlPage(manifest)!.read(search),
-  thread:
-    typeof search.thread === "string" && search.thread.trim() ? search.thread.trim() : undefined,
-  demo: typeof search.demo === "string" && search.demo.trim() ? search.demo.trim() : undefined,
 });
 
 export const Route = createFileRoute("/parameter-links")({

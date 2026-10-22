@@ -1,5 +1,4 @@
 import { useEffect, useMemo, useRef, useState, type ReactNode } from "react";
-import { useNavigate } from "@tanstack/react-router";
 import { frozenDemo } from "#/host/demo-client";
 import {
   unstale,
@@ -91,19 +90,7 @@ export function LiveScheduleGridWorkspace({
     if (workspaceId !== undefined) setPage({ workspaceId });
   }, [setPage, workspaceId]);
 
-  // `/schedules` owns its URL: the open schedule rides it, so a reload reopens it.
-  const navigate = useNavigate();
-  useEffect(() => {
-    if (!framed || !url) return;
-    void navigate({
-      to: ".",
-      search: (previous: Record<string, unknown>) => ({
-        ...previous,
-        schedule: page.workspaceId || undefined,
-      }),
-      replace: true,
-    } as never);
-  }, [framed, url, navigate, page.workspaceId]);
+  // `/schedules` owns its URL through its contract address: `workspaceId` rides it, so a reload reopens it.
 
   const work = handle.work;
   const catalog = valueOf(handle.readings.catalog, scheduleCatalogSchema);

@@ -6,14 +6,12 @@ import { manifest } from "#/families/manifest";
 import { urlPage, useRouteThread } from "#/route";
 import { routeSearch } from "#/route/route-owner";
 
-const str = (value: unknown) => (typeof value === "string" ? value : "");
 const url = urlPage(manifest)!;
 
-/** `?demo=<action>` mounts one seed of `manifest.seeds`; the Page's url keys (`query` among them) are the manifest's. */
+/** The contract's `families` fields (`query`, `demo` among them), with the root carry. */
 export const familiesSearch = (search: Record<string, unknown>) => ({
   ...routeSearch(search),
   ...url.read(search),
-  demo: str(search.demo) || undefined,
 });
 
 export const Route = createFileRoute("/families")({

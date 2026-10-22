@@ -364,6 +364,36 @@ const spaceConflict = (page: Record<string, unknown>) => {
     : null;
 };
 
+/** The Space picture's layers, in strip order; `meshes`, `context` and `cuts` are the scene's own. */
+export const SPACE_LAYERS = [
+  "meshes",
+  "context",
+  "cuts",
+  "boxes",
+  "levels",
+  "tree",
+  "slice",
+  "probe",
+  "sweep",
+] as const;
+
+/** The Families query a page opens with: its filter clauses that default on (web `FAMILIES_FILTERS`). */
+export const FAMILIES_DEFAULT_QUERY = "!empty !absent";
+
+/** The Settings sections a link may open, in page order. */
+export const SETTINGS_SECTIONS = [
+  "revit",
+  "update",
+  "share",
+  "pea",
+  "host",
+  "notices",
+  "appearance",
+] as const;
+
+/** Galvanized steel's absolute roughness in feet: the duct-loss default and its material row. */
+export const GALVANIZED_STEEL_ROUGHNESS = 0.0003;
+
 /* ── Routes ──────────────────────────────────────────────────────────────────── */
 
 export const routeAddresses = {
@@ -383,8 +413,10 @@ export const routeAddresses = {
     title: "Families",
     fields: {
       ...entityFields,
-      // ponytail: the web page overrides this default with its filter clauses (`DEFAULT_FAMILIES_QUERY`); move those clauses here to make this field the only default.
-      query: field(text(4096), { url: "push", agent: "set" }),
+      query: field(z.string().max(4096).default(FAMILIES_DEFAULT_QUERY), {
+        url: "push",
+        agent: "set",
+      }),
       demo,
     },
     agent: {
@@ -405,8 +437,8 @@ export const routeAddresses = {
     title: "Schedules",
     fields: {
       ...entityFields,
-      /** The open schedule's reading (`workspaceId`), so a reload reopens it. */
-      schedule: field(text(), { url: "push" }),
+      /** The open schedule's reading, so a reload reopens it; opening one replaces the place. */
+      workspaceId: field(text(), { url: "replace" }),
     },
   },
   rooms: {
@@ -423,6 +455,7 @@ export const routeAddresses = {
       /** Region labels (`R12,R3`): selected and zoomed to once drawn. */
       focus: field(text(1024), { url: "replace" }),
       viewport: planViewport,
+      demo,
     },
   },
   takeoffs: {
@@ -440,7 +473,15 @@ export const routeAddresses = {
   space: {
     path: "/space",
     title: "Space",
-    fields: spaceFields,
+    fields: {
+      ...spaceFields,
+      /** The layers the picture draws, in `SPACE_LAYERS` order. */
+      layers: field(z.array(z.enum(SPACE_LAYERS)).default(["meshes", "context", "cuts"]), {
+        url: "push",
+        agent: "set",
+      }),
+      demo,
+    },
     conflict: spaceConflict,
   },
   pods: {
@@ -459,7 +500,10 @@ export const routeAddresses = {
   settings: {
     path: "/settings",
     title: "Settings",
-    fields: { section: field(text(), { url: "push" }), session: field(text(), { url: "push" }) },
+    fields: {
+      section: field(z.enum(SETTINGS_SECTIONS).optional(), { url: "push" }),
+      session: field(text(), { url: "push" }),
+    },
   },
   ops: {
     path: "/ops",
@@ -477,6 +521,45 @@ export const routeAddresses = {
       prompt: field(text(), { url: "replace", share: false }),
     },
   },
+  /** The home directory: its filters. */
+  home: {
+    path: "/",
+    title: "Home",
+    fields: {
+      query: field(text(), { url: "replace" }),
+      exposure: field(z.enum(["All", "Main", "Preview", "Archive"]).default("All"), {
+        url: "push",
+      }),
+      sort: field(z.enum(["workflow", "name"]).default("workflow"), { url: "push" }),
+    },
+  },
+  "duct-loss": {
+    path: "/duct-loss",
+    title: "Duct Loss",
+    fields: {
+      shape: field(z.enum(["round", "rect"]).default("round"), { url: "push" }),
+      // Typed inputs: each keystroke tweaks the place, so they replace.
+      a: field(z.number().default(12), { url: "replace" }),
+      b: field(z.number().default(8), { url: "replace" }),
+      cfm: field(z.number().default(1000), { url: "replace" }),
+      length: field(z.number().default(100), { url: "replace" }),
+      roughness: field(z.number().default(GALVANIZED_STEEL_ROUGHNESS), { url: "replace" }),
+      density: field(z.number().default(0.075), { url: "replace" }),
+      face: field(z.enum(["commercial", "residential"]).default("commercial"), { url: "push" }),
+    },
+  },
+  "parameter-links": {
+    path: "/parameter-links",
+    title: "Parameter Links",
+    fields: { view: field(z.enum(["links", "plan"]).default("links"), { url: "push" }), demo },
+  },
+  captures: {
+    path: "/captures",
+    title: "Captures",
+    fields: { sha: field(z.string().max(64).optional(), { url: "push" }) },
+  },
+  /** Carry only (target, work, thread): a typed link with no route keys. */
+  "data-tables": { path: "/data-tables", title: "Data Tables", fields: {} },
 } satisfies Record<string, RouteAddress>;
 
 /* ── Types ───────────────────────────────────────────────────────────────────── */

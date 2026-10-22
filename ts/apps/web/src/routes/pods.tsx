@@ -3,7 +3,8 @@
  * runs filed against the open member. It performs no Revit action; a spec links to the product
  * route its `$schema` names.
  */
-import { z } from "zod";
+import { routePageSchema } from "@pe/agent-contracts";
+import { routeSearch } from "#/route/route-owner";
 import { frozenDemo } from "#/host/demo-client";
 import { useEffect, useState } from "react";
 import { Link, createFileRoute, useNavigate } from "@tanstack/react-router";
@@ -55,12 +56,8 @@ export const manifest = defineRoute({
   name: "Pods",
   needs: "document",
   runs: ["settings.write"],
-  page: z.object({
-    pod: z.string().optional(),
-    path: z.string().optional(),
-    demo: z.string().optional(),
-  }),
-  url: ["pod", "path", "demo"],
+  address: "pods",
+  page: routePageSchema("pods"),
   seeds: PODS_SEEDS,
 });
 
@@ -100,9 +97,14 @@ export const DEMO_MEMBER_SPECS = new Map<string, DemoSpec>([
   }),
 ]);
 
+const url = urlPage(manifest)!;
+
 export const Route = createFileRoute("/pods")({
-  validateSearch: urlPage(manifest)!.read,
-  search: { middlewares: [...urlPage(manifest)!.middlewares] },
+  validateSearch: (search: Record<string, unknown>) => ({
+    ...routeSearch(search),
+    ...url.read(search),
+  }),
+  search: { middlewares: [...url.middlewares] },
   component: PodsRoute,
 });
 
@@ -110,8 +112,9 @@ function PodsRoute() {
   const search = Route.useSearch();
   const thread = useRouteThread();
   const navigate = useNavigate();
+  // Choosing a member is a step (`pods` fields push), so Back returns to the previous one.
   const select = (ref: MemberRef) =>
-    void navigate({ to: ".", search: (previous) => ({ ...previous, ...ref }), replace: true });
+    void navigate({ to: ".", search: (previous) => ({ ...previous, ...ref }) });
   // The live demo lane browses the demo owner's pods through the live path.
   return (
     <PodsRouteContent

@@ -4,6 +4,7 @@
  * one `Layer3D` built from one op answer the page holds; nothing here fetches.
  */
 import * as THREE from "three";
+import { SPACE_LAYERS } from "@pe/agent-contracts";
 import type {
   RevitDetailSpaceProbe,
   RevitDetailSpaceRows,
@@ -26,18 +27,8 @@ export type ProbeRes = RevitDetailSpaceProbe.Res.Response;
 export type SweepReq = RevitDetailSpaceSweep.Req.Request;
 export type SweepRes = RevitDetailSpaceSweep.Res.Response;
 
-/** The picture's layers, in strip order; `meshes`, `context` and `cuts` are the scene's own. */
-export const SPACE_LAYERS = [
-  "meshes",
-  "context",
-  "cuts",
-  "boxes",
-  "levels",
-  "tree",
-  "slice",
-  "probe",
-  "sweep",
-] as const;
+/** The picture's layers, in strip order: the contract's `space.layers` field owns the list. */
+export { SPACE_LAYERS };
 export type SpaceLayer = (typeof SPACE_LAYERS)[number];
 
 export const LAYER_SAYS: Record<SpaceLayer, string> = {

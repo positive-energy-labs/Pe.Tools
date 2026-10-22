@@ -1,6 +1,6 @@
-import { createFileRoute, retainSearchParams, stripSearchParams } from "@tanstack/react-router";
-import { z } from "zod";
-import { MODES } from "#/workbench/depth";
+import { createFileRoute, retainSearchParams, stripSearchParams, type SearchSchemaInput } from "@tanstack/react-router";
+import { readLink } from "@pe/agent-contracts";
+import { routeSearch } from "#/route/route-owner";
 import { ChatShell } from "#/chat/chat-shell";
 /**
  * Chat URL state — the single home for navigable/shareable state. TanStack Router owns all of it
@@ -9,27 +9,18 @@ import { ChatShell } from "#/chat/chat-shell";
  *            state)
  *   mode   — threads | world sidebar view (default stripped from the URL)
  *   turn   — turn number to focal-scroll on open/share (absent = tail)
- *   prompt — short composer draft; the composer drops it from the URL past PROMPT_MAX or when
+ *   prompt — short composer draft; the composer drops it from the URL past the contract field's 200 characters or when
  *            attachments are present (attachments never serialize).
  * `?demo=<action>` is read by `useRoute`, not here: it mounts one seed in an isolated owner.
  */
-export const PROMPT_MAX = 200;
-
-const DEFAULTS = { mode: "threads" as const };
-
-export const chatSearchSchema = z.object({
-  thread: z.string().optional(),
-  // .catch keeps stale bookmarks (e.g. the old mode=chat) from throwing — they fall back to default.
-  mode: z
-    .enum(MODES as [string, ...string[]])
-    .default(DEFAULTS.mode)
-    .catch(DEFAULTS.mode),
-  turn: z.coerce.number().int().positive().optional().catch(undefined),
-  prompt: z.string().max(PROMPT_MAX).optional(),
-});
+/** The contract defaults (`routeAddresses.pea`): a stale value (the old `mode=chat`) reads as one. */
+const DEFAULTS = readLink("pea", {}).page;
 
 export const Route = createFileRoute("/pea")({
-  validateSearch: chatSearchSchema,
+  validateSearch: (search: SearchSchemaInput & Record<string, unknown>) => ({
+    ...routeSearch(search),
+    ...readLink("pea", search).page,
+  }),
   search: {
     middlewares: [retainSearchParams(["thread"]), stripSearchParams(DEFAULTS)],
   },
@@ -42,8 +33,6 @@ function RouteComponent() {
   return <ChatRouteContent thread={thread} target={target} />;
 }
 
-export function ChatRouteContent({
-  target,
-}: Pick<z.infer<typeof chatSearchSchema>, "thread"> & { target?: string }) {
+export function ChatRouteContent({ target }: { thread?: string; target?: string }) {
   return <ChatShell target={target} />;
 }

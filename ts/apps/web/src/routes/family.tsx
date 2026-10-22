@@ -13,8 +13,6 @@ export const familySearch = (search: Record<string, unknown>) => ({
   ...routeSearch(search),
   // A deep link (`/pods`, a chat pane) names the stage and member the route opens on.
   ...url.read(search),
-  /** `?demo=<action>` mounts one seed of `manifest.seeds`. */
-  demo: typeof search.demo === "string" && search.demo.trim() ? search.demo.trim() : undefined,
 });
 
 export const Route = createFileRoute("/family")({

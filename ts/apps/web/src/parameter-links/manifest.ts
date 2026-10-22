@@ -9,6 +9,7 @@ import {
   type ParameterLinksDocument,
   type WorkKey,
   stagedParameterProfile,
+  routePageSchema,
 } from "@pe/agent-contracts";
 
 import { defineRoute, type Ctx as RouteCtx } from "#/route";
@@ -18,13 +19,9 @@ import {
   runSemanticAction,
 } from "../../../../packages/mcps/src/shared/takeoff-action-client";
 
-interface ParameterLinksPage {
-  view: "links" | "plan";
-}
+type ParameterLinksPage = z.infer<typeof parameterLinksPageSchema>;
 
-const parameterLinksPageSchema = z.object({
-  view: z.enum(["links", "plan"]).default("links"),
-});
+const parameterLinksPageSchema = routePageSchema("parameter-links");
 
 type ParameterLinksReadingKey = "links" | "receipts" | "inventory";
 type ParameterLinksAction = "refresh" | "preview" | "previewProposal" | "apply";
@@ -61,8 +58,8 @@ export const manifest = defineRoute<
     receipts: { kind: "receipts" },
     inventory: { kind: "inventory" },
   } as never,
+  address: "parameter-links",
   page: parameterLinksPageSchema,
-  url: ["view"],
   actions: {
     refresh: {
       label: "refresh",

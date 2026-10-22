@@ -9,7 +9,6 @@ const url = urlPage(manifest)!;
 export const Route = createFileRoute("/rooms")({
   validateSearch: (search: Record<string, unknown>) => ({
     ...routeSearch(search),
-    ...(search.demo === "plan" ? { demo: "plan" } : {}),
     ...url.read(search),
   }),
   search: { middlewares: [...url.middlewares] },

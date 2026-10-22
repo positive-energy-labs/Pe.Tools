@@ -9,7 +9,6 @@ const url = urlPage(manifest)!;
 export const Route = createFileRoute("/space")({
   validateSearch: (search: Record<string, unknown>) => ({
     ...routeSearch(search),
-    ...(search.demo === "fixture" ? { demo: "fixture" } : {}),
     ...url.read(search),
   }),
   search: { middlewares: [...url.middlewares] },

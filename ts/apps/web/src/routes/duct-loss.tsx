@@ -16,12 +16,16 @@ import { FACES, type FaceKey } from "#/duct/ductulator";
 import { Ductulator } from "#/duct/wheel";
 import { type DuctInput, materials, solve } from "#/duct/math";
 import { RouteShell, useRoute, urlPage } from "#/route";
+import { routeSearch } from "#/route/route-owner";
 
 import { ductLossManifest as manifest } from "#/route/surface-manifests";
 const url = urlPage(manifest)!;
 
 export const Route = createFileRoute("/duct-loss")({
-  validateSearch: url.read,
+  validateSearch: (search: Record<string, unknown>) => ({
+    ...routeSearch(search),
+    ...url.read(search),
+  }),
   search: { middlewares: [...url.middlewares] },
   component: DuctLossRoute,
 });

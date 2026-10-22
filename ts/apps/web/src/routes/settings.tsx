@@ -1,31 +1,24 @@
-import { createFileRoute } from "@tanstack/react-router";
+import { createFileRoute, type SearchSchemaInput } from "@tanstack/react-router";
 import { RouteShell } from "#/route";
 import { SettingsBody } from "#/machine/body";
-import { GROUP_KEYS, settingsDestination, type GroupKey } from "#/machine/model";
+import { readLink } from "@pe/agent-contracts";
+import { settingsDestination } from "#/machine/model";
+import { routeSearch } from "#/route/route-owner";
 import { useMachine } from "#/machine/use-machine";
 import { useDestination } from "#/navigation/state";
 import { useSurfaceHost } from "#/navigation/surface-host";
 import { settingsManifest as manifest } from "#/route/surface-manifests";
 
-export function settingsSearch(search: Record<string, unknown>): {
-  section?: GroupKey;
-  session?: string;
-} {
-  return {
-    section:
-      typeof search.section === "string" && GROUP_KEYS.includes(search.section as GroupKey)
-        ? (search.section as GroupKey)
-        : undefined,
-    session:
-      typeof search.session === "string" && search.session.trim() ? search.session : undefined,
-  };
-}
 export const Route = createFileRoute("/settings")({
-  validateSearch: settingsSearch,
+  validateSearch: (search: SearchSchemaInput & Record<string, unknown>) => ({
+    ...routeSearch(search),
+    ...readLink("settings", search).page,
+  }),
   component: SettingsRoute,
 });
 function SettingsRoute() {
-  const { section, session } = Route.useSearch();
+  const { section, session: named } = Route.useSearch();
+  const session = named || undefined;
   const { reading, fixture } = useMachine();
   const host = useSurfaceHost();
   const go = useDestination();

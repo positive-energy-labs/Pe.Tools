@@ -9,6 +9,7 @@ import {
   type ActionStatus,
   type ScheduleGridDocument,
   type WorkKey,
+  routePageSchema,
 } from "@pe/agent-contracts";
 
 import {
@@ -40,7 +41,8 @@ export interface ScheduleGridPage {
 }
 
 const scheduleGridPage = z.object({
-  workspaceId: z.string().default(""),
+  /** The open schedule, the contract field the URL carries. */
+  workspaceId: routePageSchema("schedules").shape.workspaceId,
   captureId: z.string().default(""),
   unread: z.number().default(0),
   refused: z.record(z.string(), z.string()).default({}),
@@ -211,6 +213,7 @@ export const schedulesManifest = () =>
               }
             : null,
       },
+      address: "schedules",
       page: scheduleGridPage,
       actions: {
         // No button and no chord (ruling 37): the Ladder pick and the stale grid's focus run it.

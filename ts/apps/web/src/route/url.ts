@@ -17,7 +17,7 @@ import {
   type RouteField,
   type RouteKey,
 } from "@pe/agent-contracts";
-import { stripSearchParams, useRouter, type SearchMiddleware } from "@tanstack/react-router";
+import { useRouter, type SearchMiddleware } from "@tanstack/react-router";
 import { useEffect } from "react";
 import { z } from "zod";
 import type { RouteManifest } from "./manifest";
@@ -47,59 +47,26 @@ const shapeOf = (schema: z.ZodType): Shape => {
   throw Error(`a page schema is an object or an intersection of objects, not ${def.type}`);
 };
 
-const WRAPPERS = new Set(["default", "optional", "nullable", "readonly", "catch"]);
-const bare = (schema: z.ZodType): z.ZodType => {
-  let inner = schema;
-  while (WRAPPERS.has(inner.def.type))
-    inner = (inner.def as unknown as { innerType: z.ZodType }).innerType;
-  return inner;
-};
-
-/** The router JSON-parses `selected=8081605` into a number; the schema says what it meant. */
-const coerce = (field: z.ZodType, raw: unknown): unknown => {
-  if (raw === undefined || raw === null || raw === "") return undefined;
-  const kind = bare(field).def.type;
-  const text = String(raw as string | number | boolean);
-  if (kind === "array")
-    return Array.isArray(raw) ? raw.map(String) : text.split(",").filter(Boolean);
-  return kind === "string" || kind === "enum" ? text : raw;
-};
-
 /**
- * A contract route's URL page. A Page default that differs from its field's (families' `query`)
- * stays the bare address: absent reads as the Page default, and the Page default writes nothing.
+ * A contract route's URL page. The contract field is the one default: a Page field the address
+ * carries must default to the same value, or the address could not stay bare (fails at load).
  */
 function addressPage<P>(key: string, route: RouteKey, page: z.ZodType<P> | undefined): UrlPage<P> {
   if (!page) throw Error(`${key} names an address without a page schema`);
   const shape = shapeOf(page);
   const fields = routeAddresses[route].fields as Record<string, RouteField>;
   const keys = urlKeys(route) as (keyof P & string)[];
-  for (const name of keys)
+  for (const name of keys) {
     if (!shape[name]) throw Error(`${key}: address key ${name} is not a page field`);
-  // ponytail: one drifted default today (families' query); moving its clauses into the contract field empties this.
-  const drift = keys.flatMap((name) => {
     const field = fields[name]!;
     const encode = (value: unknown) =>
       value === undefined ? undefined : field.codec.encode(value);
-    const initial = shape[name]!.parse(undefined);
-    return encode(initial) === encode(field.schema.parse(undefined))
-      ? []
-      : [{ name, initial, bare: encode(initial), encode }];
-  });
-  const read = (search: Record<string, unknown>) => {
-    const linked = { ...readLink(route, search).page } as Record<string, unknown>;
-    for (const { name, initial } of drift) if (search[name] === undefined) linked[name] = initial;
-    return linked as Partial<P>;
-  };
-  const write = (value: Partial<P>) => {
-    const written: Record<string, string | undefined> = writeSearch(route, value as never);
-    for (const { name, bare, encode } of drift)
-      if (name in value) {
-        const text = encode((value as Record<string, unknown>)[name]);
-        written[name] = text === bare ? undefined : text;
-      }
-    return written;
-  };
+    if (encode(shape[name]!.parse(undefined)) !== encode(field.schema.parse(undefined)))
+      throw Error(`${key}: page default for ${name} differs from its contract field's`);
+  }
+  const read = (search: Record<string, unknown>) => readLink(route, search).page as Partial<P>;
+  const write = (value: Partial<P>): Record<string, string | undefined> =>
+    writeSearch(route, value as never);
   // Every way into the address (a navigate, a Link) writes the URL keys as their codec does.
   const encode: SearchMiddleware<Record<string, unknown>> = ({ search, next }) => {
     const out = { ...next(search) };
@@ -118,40 +85,11 @@ function addressPage<P>(key: string, route: RouteKey, page: z.ZodType<P> | undef
   };
 }
 
-/** The manifest's URL page; null when the manifest names no address or `url` keys. */
+/** The manifest's URL page; null when the manifest names no contract address. */
 export function urlPage<W, R extends string, P, A extends string>(
   manifest: RouteManifest<W, R, P, A>,
 ): UrlPage<P> | null {
-  if (manifest.address) return addressPage(manifest.key, manifest.address, manifest.page);
-  const keys = manifest.url ?? [];
-  if (keys.length === 0) return null;
-  if (!manifest.page) throw Error(`${manifest.key} names url keys without a page schema`);
-  const shape = shapeOf(manifest.page);
-  for (const key of keys) {
-    const field = shape[key];
-    if (!field) throw Error(`${manifest.key}: url key ${key} is not a page field`);
-    if (!field.safeParse(undefined).success)
-      throw Error(`${manifest.key}: url key ${key} needs a default, so a bare URL has a page`);
-  }
-  const read = (search: Record<string, unknown>) =>
-    Object.fromEntries(
-      keys.map((key) => {
-        const field = shape[key]!;
-        const parsed = field.safeParse(coerce(field, search[key]));
-        return [key, parsed.success ? parsed.data : field.parse(undefined)];
-      }),
-    ) as Partial<P>;
-  const write = (page: Partial<P>) =>
-    Object.fromEntries(
-      keys.map((key) => {
-        const value = page[key];
-        return [key, Array.isArray(value) ? value.join(",") : value];
-      }),
-    );
-  // A route outside the contract has no history classes: every move pushes unless it says otherwise.
-  const history = (before: Partial<P>, after: Partial<P>, override?: History) =>
-    JSON.stringify(write(before)) === JSON.stringify(write(after)) ? null : (override ?? "push");
-  return { keys, read, write, history, middlewares: [stripSearchParams(write(read({})))] };
+  return manifest.address ? addressPage(manifest.key, manifest.address, manifest.page) : null;
 }
 
 /**

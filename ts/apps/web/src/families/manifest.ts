@@ -16,7 +16,6 @@ import {
   type PodDraftSource,
 } from "@pe/agent-contracts";
 import { filterWords } from "./scope-band";
-import { DEFAULT_FAMILIES_QUERY } from "./query-filters";
 
 import { FF_SPEC_SCHEMA, ffPlanRow } from "#/host/familyfoundry";
 import { FAMILY_MODEL_SCHEMA } from "#/family/manifest";
@@ -93,8 +92,6 @@ const familiesPageSchema = routePageSchema("families").extend({
     })
     .nullable()
     .default(null),
-  // ponytail: a second default over the contract's `""`; `route/url.ts` keeps it the bare address until the clauses move into the contract field.
-  query: z.string().max(4096).default(DEFAULT_FAMILIES_QUERY),
   carryOver: z.boolean().default(false),
 });
 

@@ -30,8 +30,6 @@ export type Answer<K extends OpKey> = { request: OpRequestOf<K>; response: OpRes
 const answer = <K extends OpKey>() => z.custom<Answer<K>>().nullable().default(null);
 
 const spacePageSchema = routePageSchema("space").extend({
-  /** Page only: the contract has no Space `layers` field yet. */
-  layers: z.array(z.enum(SPACE_LAYERS)).default(["meshes", "context", "cuts"]),
   /** What a row box's colour means (`ENCODING_SAYS`). Page only. */
   encoding: z.enum(ENCODINGS).default("category"),
   /** The row box the person picked, by its index in `rows`; null = none. Page only. */
