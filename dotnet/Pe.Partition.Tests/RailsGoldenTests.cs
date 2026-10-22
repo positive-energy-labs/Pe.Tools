@@ -12,8 +12,8 @@ namespace Pe.Partition.Tests;
 
 /// <summary>
 ///     Behaviour lock on <see cref="Solve.RunRails" />: every Room field at full precision, hashed per fixture against
-///     <c>golden/rails-solve.sha256</c> (a hash, because the fixtures are private). Inputs are the bench's (Duryee's doors
-///     capture over its five zones, project-a live, main-09; proposals stripped, framing on), plus Duryee and project-a
+///     <c>golden/rails-solve.sha256</c> (a hash, because the fixtures are private). Inputs are the bench's (Project D's doors
+///     capture over its five zones, project-a live, main-09; proposals stripped, framing on), plus Project D and project-a
 ///     live rerun with every other accepted room locked and an architect Room over the first locked one, so the locked-scrap,
 ///     adopted and contested paths are held too. On a mismatch the keys
 ///     are written to <c>.artifacts/runs/golden/&lt;fixture&gt;.txt</c> for diffing. PE_GOLDEN_WRITE=1 rewrites the file.
@@ -26,7 +26,7 @@ public sealed class RailsGoldenTests {
     private static string Expected => Path.Combine(Here(), "golden", "rails-solve.sha256");
 
     private static IEnumerable<TestCaseData> Fixtures() {
-        foreach (var name in new[] { "duryee-level1", "duryee-level1-locked", "project-a-live", "project-a-live-locked", "project-a-main-09" })
+        foreach (var name in new[] { "project-d-level1", "project-d-level1-locked", "project-a-live", "project-a-live-locked", "project-a-main-09" })
             yield return new TestCaseData(name).SetName(name);
     }
 
@@ -60,10 +60,10 @@ public sealed class RailsGoldenTests {
         Assert.That(hash, Is.EqualTo(want), $"{name}: rails solve output changed");
     }
 
-    /// <summary>Layer 1's trace on a Duryee zone: rails, a door-scale opening, a face per room; it reads back as the wire contract.</summary>
+    /// <summary>Layer 1's trace on a Project D zone: rails, a door-scale opening, a face per room; it reads back as the wire contract.</summary>
     [Test]
-    public void Duryee_trace_carries_layer_one() {
-        var answer = Run(Inputs("duryee-level1").First());
+    public void ProjectD_trace_carries_layer_one() {
+        var answer = Run(Inputs("project-d-level1").First());
         var trace = answer.Trace;
         TestContext.Out.WriteLine($"rails {trace.Rails.Count} segments {trace.Segments.Count} openings "
             + string.Join(' ', trace.Openings.GroupBy(o => o.Kind).Select(g => $"{g.Key}={g.Count()}")) + $" faces {trace.Faces.Count}");
@@ -99,7 +99,7 @@ public sealed class RailsGoldenTests {
 
     private static IEnumerable<PartitionInput> Inputs(string name) {
         IEnumerable<PartitionInput> raw = name switch {
-            "duryee-level1" or "duryee-level1-locked" => Duryee(),
+            "project-d-level1" or "project-d-level1-locked" => ProjectD(),
             "project-a-live" or "project-a-live-locked" => [Gz("project-a/partition/live")],
             "project-a-main-09" => [Main09()],
             _ => throw new ArgumentException(name),
@@ -122,11 +122,11 @@ public sealed class RailsGoldenTests {
             Knobs.Default, [knee.Stamp.Resolved], "historical synthetic fixture", []);
     }
 
-    // Duryee Level 1's doors capture over the five hand-drawn zones, as the bench solves them.
-    private static IEnumerable<PartitionInput> Duryee() {
-        var dir = PrivateFixtures.Dir("duryee/partition");
-        var level = JsonConvert.DeserializeObject<PartitionInput>(File.ReadAllText(Path.Combine(dir, "duryee-level-input.json")))!;
-        return JArray.Parse(File.ReadAllText(Path.Combine(dir, "duryee-locked.json")))
+    // Project D Level 1's doors capture over the five hand-drawn zones, as the bench solves them.
+    private static IEnumerable<PartitionInput> ProjectD() {
+        var dir = PrivateFixtures.Dir("project-d/partition");
+        var level = JsonConvert.DeserializeObject<PartitionInput>(File.ReadAllText(Path.Combine(dir, "project-d-level-input.json")))!;
+        return JArray.Parse(File.ReadAllText(Path.Combine(dir, "project-d-locked.json")))
             .Where(r => (double)r["Sqft"]! > 200)
             .Select(r => level with { ZoneLoops = [r["Outer"]!.SelectMany(p => new[] { (double)p[0]!, (double)p[1]! }).ToArray()] })
             .ToList();

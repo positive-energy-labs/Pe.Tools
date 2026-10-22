@@ -77,6 +77,8 @@ export function sourceHostServiceName(sourceRoot: string): string {
 export const DEV_LANE_FRONTEND_PORT = 5175;
 export const DEV_FRONTEND_PORTS = { first: 5200, count: 800 } as const;
 export function devFrontendPort(sourceRoot: string): number {
+  // An isolated product home shares the checkout; it takes any free port, never the owner's.
+  if (process.env[productPathNames.productHomeVariable]?.trim()) return 0;
   if (statSync(join(sourceRoot, ".git"), { throwIfNoEntry: false })?.isDirectory())
     return DEV_LANE_FRONTEND_PORT;
   const hash = /([0-9a-f]{8})[0-9a-f]*$/.exec(sourceHostServiceName(sourceRoot))?.[1];

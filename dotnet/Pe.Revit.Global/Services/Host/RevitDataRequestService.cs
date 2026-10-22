@@ -29,6 +29,7 @@ using Pe.Revit.Loader.Documents;
 using Pe.Shared.HostContracts.Operations;
 using Pe.Shared.HostContracts.SettingsStorage;
 using Pe.Shared.RevitData;
+using Pe.Shared.RevitData.Ducts;
 using Pe.Shared.RevitData.Families;
 using Pe.Shared.RevitData.Schedules;
 using Pe.Shared.RevitData.Takeoffs;
@@ -82,7 +83,96 @@ internal sealed class RevitDataRequestService {
     private static RoomsSnapshotData GetRoomsSnapshotCore(NoRequest _, ProjectDocument activeDocument) =>
         RunTakeoff(activeDocument.Value, Rooms.Snapshot);
 
-    [Op("rooms.trace", Does = "Read the solver's layer 1 for each zone on one plan view from a rooms.partition run, the newest when runId is absent: rails, network segments by kind, openings with their evidence, per-face facts before judgment, and accounting.", Title = "Get Rooms Solver Trace", Finds = ["rooms", "trace", "partition", "rails", "openings", "solver"], Cost = OpCost.Bounded)]
+    [Op("ducts.snapshot", Does = "Read every duct network in the project: ducts, flex, fittings, accessories, terminals and HVAC equipment with their connectors, grouped by topology with equipment cut out, plus pass-1 terminal flow, fitting geometry ratios, fitting and accessory loss methods, terminal drops, Revit's supply/return/exhaust systems with critical path and sections, issues and the query behind each layer. Slots name the fan static, fan flow, component drop and terminal catalog drop parameters; labelParameter names the instance parameter whose value names equipment for people (each node's label). Read-only.", Title = "Get Duct Snapshot", Finds = ["ducts", "snapshot", "networks", "hvac", "connectors", "flow", "pressure", "loss", "critical-path"], Cost = OpCost.Bounded, Example = "{}")]
+    private static DuctSnapshotData GetDuctSnapshotCore(DuctSnapshotRequest request, ProjectDocument activeDocument) =>
+        Lib.Mep.DuctSnapshots.Snapshot(activeDocument.Value, request.Slots, request.LabelParameter);
+
+    [Op("ducts.apply", Does = "Write duct losses into Revit so they travel with the model. Each fitting names a method: pe-server points it at the Pe loss server, which charges the family's own coefficient parameter live (the fittingCoefficient slot, default Pe_C) when the family carries one and otherwise prices each leg live from the write's ASHRAE table and the connectors' flows (taps, transitions, unstamped elbows); specific-coefficient freezes a number (export only). Revit's own ASHRAE-table route is never written. Also Specific Loss (in-wg) on duct accessories, terminal connector drops where the family connector is Specific Loss, fan external static on equipment through the fanStatic slot, and Pe's provenance store in the hidden _PE_DuctLosses Project Information parameter. previewOnly plans every write and refusal without a transaction. A real apply commits Not Defined on every targeted fitting, then the losses, in one undo step; a failed stage rolls everything back and is named. Returns per-target outcomes and the touched systems' critical path after.", Title = "Apply Duct Losses", Finds = ["ducts", "apply", "pressure", "loss", "coefficient", "terminal", "fan-static", "critical-path", "mutation"], Intent = OpIntent.Mutate, Actor = OpActor.Any, Cost = OpCost.Mutation, Example = "{ \"previewOnly\": true, \"fittings\": [{ \"id\": 12345, \"method\": \"pe-server\", \"coefficient\": 0.25, \"table\": \"CD3-1\", \"ruleKey\": \"elbow-1d-le10\" }, { \"id\": 12346, \"method\": \"pe-server\", \"coefficient\": 0.35, \"table\": \"SD5-10\", \"ruleKey\": \"tap-std\" }], \"terminals\": [], \"components\": [], \"equipment\": [], \"store\": { \"version\": 1 } }")]
+    private static DuctApplyResult ApplyDuctsCore(DuctApplyRequest request, ProjectDocument activeDocument) {
+        var document = activeDocument.Value;
+        if (!request.PreviewOnly && document.IsReadOnly)
+            throw BridgeOperationExceptions.Conflict(
+                "The active project document is read-only.",
+                [BridgeOperationExceptions.Issue("$", "DuctsDocumentReadOnly", "The active project document is read-only.",
+                    "Open a writable project document and retry, or use previewOnly=true.")]);
+        if (request.Store is null)
+            throw BridgeOperationExceptions.Conflict(
+                "ducts.apply needs the store read from ducts.snapshot.",
+                [BridgeOperationExceptions.Issue("$.store", "DuctsStoreMissing", "The request carries no store.",
+                    "Send ducts.snapshot's store (or { \"version\": 1 } when it has none) with the changes merged in.")]);
+        try {
+            return Lib.Mep.DuctApplier.Apply(document, request);
+        } catch (BridgeOperationException) {
+            throw;
+        } catch (Exception ex) {
+            Serilog.Log.Error(ex, "ducts.apply failed outside a stage");
+            throw BridgeOperationExceptions.Unexpected("DuctsApplyException", ex, "Run ducts.apply with previewOnly=true and read each refusal, then retry.");
+        }
+    }
+
+    [Op("ducts.heal", Does = "Heal duct geometry so the model itself is whole: cap a dangling open end with its duct type's Caps routing rule, connect coincident same-size ends, and close a same-size gap of at most 3 in with a union (two ducts) or by extending the duct (duct to part). Each item names connector keys elementId:connectorIndex from ducts.snapshot; the op refuses size changes, cross-class or cross-system joins, equipment, and longer gaps (a person's, in Revit). Every item must pass Pe's own post-check (connected, sizes equal, origins within 1/16 in, no system split or merged) or it is refused and rolled back alone. previewOnly runs everything and rolls it back; a real heal commits one transaction per group. Returns per-item outcomes with created and replaced element ids (Revit gives new ids to what it rebuilds; read ducts.snapshot again) and the touched systems' Revit critical path before and after.", Title = "Heal Duct Geometry", Finds = ["ducts", "heal", "cap", "open-end", "connect", "union", "repair", "mutation"], Intent = OpIntent.Mutate, Actor = OpActor.Any, Cost = OpCost.Mutation, Example = "{ \"previewOnly\": true, \"groups\": [{ \"group\": \"g12345\", \"items\": [{ \"key\": \"cap:12345:1\", \"kind\": \"cap\", \"end\": \"12345:1\" }, { \"key\": \"join:12350:0|12351:1\", \"kind\": \"join\", \"end\": \"12350:0\", \"other\": \"12351:1\" }] }] }")]
+    private static DuctHealResult HealDuctsCore(DuctHealRequest request, ProjectDocument activeDocument) {
+        var document = activeDocument.Value;
+        if (document.IsReadOnly)
+            throw BridgeOperationExceptions.Conflict(
+                "The active project document is read-only.",
+                [BridgeOperationExceptions.Issue("$", "DuctsDocumentReadOnly", "The active project document is read-only.",
+                    "Open a writable project document and retry.")]);
+        try {
+            return Lib.Mep.DuctHealer.Heal(document, request);
+        } catch (BridgeOperationException) {
+            throw;
+        } catch (Exception ex) {
+            Serilog.Log.Error(ex, "ducts.heal failed outside an item");
+            throw BridgeOperationExceptions.Unexpected("DuctsHealException", ex, "Run ducts.heal with previewOnly=true and read each refusal, then retry.");
+        }
+    }
+
+    [Op("ducts.assign-fan", Does = "Make a unit the base equipment of a duct system (Revit's Duct Systems > Select Equipment), keeping the system's id, name, type and parameters. Refuses a system that already has base equipment (a swap drops the old base from the members and Revit does not restore it), anything that is not mechanical equipment, and a unit with no port of the system's air classification that is a member of the system or joined to its ducts (Revit itself checks neither). Reads back that the base equipment is the unit and the name, type and classification are unchanged, else refuses and rolls back. previewOnly runs the write and the read back and rolls them back. Returns the outcome and the system before and after (read ducts.snapshot again: systems[].baseEquipmentId).", Title = "Assign Duct System Fan", Finds = ["ducts", "fan", "base-equipment", "system", "select-equipment", "unit", "mutation"], Intent = OpIntent.Mutate, Actor = OpActor.Any, Cost = OpCost.Mutation, Example = "{ \"previewOnly\": true, \"systemId\": 6103113, \"unitId\": 9668311 }")]
+    private static DuctAssignFanResult AssignDuctFanCore(DuctAssignFanRequest request, ProjectDocument activeDocument) {
+        var document = activeDocument.Value;
+        if (document.IsReadOnly)
+            throw BridgeOperationExceptions.Conflict(
+                "The active project document is read-only.",
+                [BridgeOperationExceptions.Issue("$", "DuctsDocumentReadOnly", "The active project document is read-only.",
+                    "Open a writable project document and retry.")]);
+        try {
+            return Lib.Mep.DuctFanAssigner.Assign(document, request);
+        } catch (BridgeOperationException) {
+            throw;
+        } catch (Exception ex) {
+            Serilog.Log.Error(ex, "ducts.assign-fan failed outside its guards");
+            throw BridgeOperationExceptions.Unexpected("DuctsAssignFanException", ex, "Run ducts.assign-fan with previewOnly=true and read its refusal, then retry.");
+        }
+    }
+
+    [Op("ducts.family-patch", Does = "Build the Family Foundry patch that gives a duct fitting family its own loss coefficient: an embedded lookup table (PeElbowC, dense over r/D, angle and diameter from Revit's shipped ASHRAE CD3 grids) and an instance number parameter (default Pe_C) with a rounding size_lookup formula, plus the run policy that lets Revit disconnect a fitting it cannot keep joined on reload. Hand the patch to families.plan then families.apply; ducts.apply with method pe-server then charges it live. Read-only; needs no document.", Title = "Build Duct Family Patch", Finds = ["ducts", "family", "patch", "lookup-table", "coefficient", "family-foundry", "elbow"], Actor = OpActor.Any, Cost = OpCost.Cheap, Example = "{ \"family\": \"Round Elbow\", \"kind\": \"round-elbow\", \"parameter\": \"Pe_C\" }")]
+    private static DuctFamilyPatchData GetDuctFamilyPatchCore(DuctFamilyPatchRequest request) {
+        try {
+            return DuctFamilyTables.Patch(request, AshraeTables.Read(AshraeTables.DefaultFolder, DuctFamilyTables.ElbowSources));
+        } catch (Exception ex) when (ex is DirectoryNotFoundException or InvalidOperationException or ArgumentException) {
+            throw BridgeOperationExceptions.Conflict(
+                ex.Message,
+                [BridgeOperationExceptions.Issue("$", "DuctFamilyPatchUnavailable", ex.Message, "Name a loaded fitting family and make sure Revit's ASHRAE duct fitting tables are installed.")]);
+        }
+    }
+
+    [Op("ducts.tables", Does = "Read ASHRAE duct fitting coefficient grids (Co, Cb, Cs) by table id from the .tbl files Revit installs, verbatim: axes, labels and values for a web lookup. Read-only; needs no document.", Title = "Get ASHRAE Duct Tables", Finds = ["ducts", "ashrae", "tables", "coefficient", "fittings", "pressure"], Actor = OpActor.Any, Cost = OpCost.Cheap, Example = "{ \"ids\": [\"CD3-2\", \"SD5-9\"] }")]
+    private static DuctTablesData GetDuctTablesCore(DuctTablesRequest request) {
+        try {
+            return AshraeTables.Read(AshraeTables.DefaultFolder, request.Ids);
+        } catch (DirectoryNotFoundException ex) {
+            throw BridgeOperationExceptions.Conflict(
+                ex.Message,
+                [BridgeOperationExceptions.Issue(
+                    "$",
+                    "AshraeTablesMissing",
+                    ex.Message,
+                    "Install Revit's ASHRAE duct fitting tables (they ship with Revit 2025) and retry.")]);
+        }
+    }
+
+    [Op("rooms.trace",Does = "Read the solver's layer 1 for each zone on one plan view from a rooms.partition run, the newest when runId is absent: rails, network segments by kind, openings with their evidence, per-face facts before judgment, and accounting.", Title = "Get Rooms Solver Trace", Finds = ["rooms", "trace", "partition", "rails", "openings", "solver"], Cost = OpCost.Bounded)]
     private static RoomsTraceData GetRoomsTraceCore(RoomsTraceRequest request, ProjectDocument activeDocument) =>
         RunTakeoff(activeDocument.Value, document => Rooms.Trace(document, request));
 
@@ -999,6 +1089,13 @@ internal sealed class RevitDataRequestService {
         }
     }
 
+    [Op("revit.resolve.family-instances", Does = "Resolve the exact captured familyId and familyUniqueId into current placed FamilyInstance refs across all of that family's types in this project document. Checks the paired family identity with no name or UniqueId fallback. Read-only; no transaction, family editor, active-view filter, or linked traversal. Scans document instances, returns exact total and at most maxResults refs (default 500, range 1..1000) with IDs and UniqueIds. Error issues refuse identity; empty or truncated results must not authorize Select or Selection Box. Does not select a family definition or resolve a type name. Use the captured document lifetime for this read and any later action.", Title = "Resolve Placed Family Instances", Finds = ["families", "family-instances", "placements", "resolve", "element-references", "select", "selection-box"], Intent = OpIntent.Read, Actor = OpActor.Any, Cost = OpCost.Bounded, Tier = OpTier.Default, Thread = OpThread.Revit, Example = "{ \"familyId\": 12345, \"familyUniqueId\": \"captured-family-unique-id\", \"maxResults\": 500 }")]
+    private static FamilyInstanceReferencesData ResolveFamilyInstancesCore(
+        FamilyInstanceReferencesRequest request,
+        ProjectDocument document
+    ) =>
+        document.Value.ResolveFamilyInstances(request);
+
     [Op("revit.resolve.unit-value", Does = "Read what typed text means as a measured value in this document: Revit parses it for the given spec with the document's own units and answers with the value converted into the given display unit plus Revit's own rendering of it in that unit (no symbol). Read-only, no transaction. A surface stages { text, unit }; a refusal carries Revit's reason and stages nothing.", Title = "Resolve Measured Value", Finds = ["unit", "units", "parse", "measured", "value", "display-unit", "cell"], Cost = OpCost.Bounded, Example = "{ \"spec\": \"autodesk.spec.aec:airFlow-2.0.0\", \"unit\": \"CFM\", \"text\": \"300 L/s\" }")]
     private UnitValueResolveData ResolveUnitValueCore(
         UnitValueResolveRequest request,
@@ -1079,7 +1176,7 @@ internal sealed class RevitDataRequestService {
         }
     }
 
-    [Op("revit.context.show-elements", Does = "Show elements to the person at the window: select them and zoom the active view, or the given view, to their extents. Answers which ids it showed, which were missing, and the view. Changes the selection and the zoom only, never the model. Needs the active windowed document; a headless document refuses.", Title = "Show Elements (Point At)", Finds = ["show", "select", "selection", "zoom", "focus", "point-at", "highlight", "find", "navigate", "elements", "view"], Tier = OpTier.Default, Example = "{ \"elementIds\": [12345, 67890] }")]
+    [Op("revit.context.show-elements", Does = "Select elements in the active windowed document, or select model elements and box a 3D view around them. Selection changes UI state. Boxing creates or updates one view in one transaction, then activates it and zooms. With viewId, select and zoom that graphical view; with selectOnly, change selection only. ExpectedUniqueIds verify paired identity before selection. Answers selected, missing, identity-verified, boxed, hidden and unavailable targets separately; boxed does not guarantee visible. Nested linked elements are unsupported; no link-instance substitution. Requires an exact open document lifetime and refuses headless or linked documents.", Title = "Show Elements (Point At)", Finds = ["show", "select", "selection", "zoom", "focus", "point-at", "section-box", "3d", "highlight", "find", "navigate", "elements", "view"], Intent = OpIntent.Mutate, Actor = OpActor.Any, Cost = OpCost.Mutation, Tier = OpTier.Default, Example = "{ \"elementIds\": [12345, 67890] }")]
     private static RevitShowElementsData ShowElementsCore(RevitShowElementsRequest request, RevitDocument activeDocument) {
         var document = activeDocument.Value;
         var requested = (request.ElementIds ?? []).Distinct().ToList();
@@ -1096,29 +1193,61 @@ internal sealed class RevitDataRequestService {
                     $"{request.ViewId} is not a graphical, non-template view in '{document.Title}'.",
                     "Omit viewId for the active view, or pass a plan, section, 3D view, or sheet id.")]);
 
-        var shown = requested.Where(id => document.GetElement(id.ToElementId()) != null).ToList();
-        var missing = requested.Except(shown).ToList();
-        if (shown.Count == 0)
-            throw BridgeOperationExceptions.Conflict("None of the elements exist in this document.",
-                [BridgeOperationExceptions.Issue("$.elementIds", "ElementsNotFound",
-                    $"No element in '{document.Title}' has the ids {string.Join(", ", missing)}.",
-                    "Read fresh ids from this document and retry.")]);
-
-        BoundingBoxXYZ? box;
+        if (request.ExpectedUniqueIds?.Keys.Except(requested).Any() == true)
+            throw BridgeOperationExceptions.BadRequest("Expected identities must name requested IDs.",
+                [BridgeOperationExceptions.Issue("$.expectedUniqueIds", "UnexpectedIdentity", "An expected identity names an ID outside elementIds.", "Pair each expected UniqueId with its requested element ID.")]);
+        var resolved = document.ResolveShowTargets(requested, request.ExpectedUniqueIds);
+        var ids = resolved.Resolved;
+        var shown = new List<long>();
+        var boxedIds = new List<long>();
+        var hidden = new List<long>();
+        var issues = resolved.Issues;
+        RevitShowElementsData Answer(View target, string message) {
+            var selected = ui.Selection.GetElementIds().Select(id => id.Value()).ToHashSet();
+            issues.AddRange(shown.Where(id => !selected.Contains(id)).Select(id =>
+                new RevitShowElementsIssue(id, "SelectionUnavailable", "Revit did not retain this target in the current selection.")));
+            shown = shown.Where(selected.Contains).ToList();
+            return new(shown, resolved.Missing, target.Id.Value(), target.Name, message,
+                boxedIds, hidden, resolved.IdentityVerified, issues);
+        }
+        if (ids.Count == 0) return Answer(ui.ActiveView, "No requested target could be resolved; selection and view were left as they were.");
+        string note;
+        View target;
         try {
-            box = ui.SelectAndZoom(shown.Select(id => id.ToElementId()).ToList(), view);
-        } catch (Autodesk.Revit.Exceptions.InvalidOperationException ex) {
-            throw BridgeOperationExceptions.Conflict("Revit could not show the elements.",
-                [BridgeOperationExceptions.Issue("$", "ShowElementsRefused", ex.Message,
-                    "Close any modal dialog or edit mode in Revit and retry.")]);
+            if (request.SelectOnly) {
+                ui.Selection.SetElementIds(ids);
+                shown = ids.Select(id => id.Value()).ToList();
+                target = ui.ActiveView;
+                note = $"Selected {shown.Count}; '{target.Name}' left as it was.";
+            } else if (view != null) {
+                var box = ui.SelectAndZoom(ids, view);
+                shown = ids.Select(id => id.Value()).ToList();
+                target = ui.ActiveView;
+                note = box is null
+                    ? $"Selected {shown.Count}; none has a bounding box, so '{target.Name}' did not zoom."
+                    : $"Selected {shown.Count} and zoomed '{target.Name}' to them.";
+            } else {
+                var boxed = ui.BoxInThreeD(ids);
+                issues.AddRange(boxed.Issues);
+                if (boxed.View is null) return Answer(ui.ActiveView, "Selection Box unavailable; no target has model geometry. Selection and view were left as they were.");
+                target = boxed.View;
+                shown = boxed.BoxedIds.Select(id => id.Value()).ToList();
+                boxedIds = [..shown];
+                hidden = boxed.HiddenIds.Select(id => id.Value()).ToList();
+                note = $"Selected {shown.Count} and boxed '{target.Name}' around them";
+                if (boxed.Created) note += "; the document had no {3D} view, so 'Pe 3D' was made";
+                if (hidden.Count != 0) note += "; the view still hides some of them (filter, phase, or visibility)";
+                note += ".";
+            }
+        } catch (Exception ex) when (ex is Autodesk.Revit.Exceptions.ApplicationException or InvalidOperationException) {
+            var selected = ui.Selection.GetElementIds().ToHashSet();
+            shown = ids.Where(selected.Contains).Select(id => id.Value()).ToList();
+            issues.AddRange(ids.Select(id => new RevitShowElementsIssue(id.Value(), "ShowElementsRefused", ex.Message)));
+            return Answer(ui.ActiveView, "Revit could not complete the action. The selected IDs report the current selection; a committed view edit may remain.");
         }
 
-        var target = ui.ActiveView;
-        var note = box is null
-            ? $"Selected {shown.Count}; none has a bounding box, so '{target.Name}' did not zoom."
-            : $"Selected {shown.Count} and zoomed '{target.Name}' to them.";
-        if (missing.Count != 0) note += $" {missing.Count} id(s) not found.";
-        return new RevitShowElementsData(shown, missing, target.Id.Value(), target.Name, note);
+        if (resolved.Missing.Count != 0) note += $" {resolved.Missing.Count} id(s) not found.";
+        return Answer(target, note);
     }
 
     // The clutter a lens hides: everything that is not the model. A whole-house 3D view at Fine with the architect's

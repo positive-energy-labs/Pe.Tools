@@ -29,7 +29,7 @@ public static class Kernel
     // FOOTGUN: WeldFt keeps FilledRegion.Create from refusing a loop whose consecutive points are closer than
     // Revit's short-curve tolerance (1/256 ft). SpikeFt drops a vertex within that distance of the chord of its
     // neighbours: a collinear midpoint, or a spike that runs out and back along one line, which Revit reads as
-    // self-intersection (Duryee L1's 719 sf room, 2026-09-25: a 0.19 ft retrace off by 1e-7 ft was refused R14).
+    // self-intersection (Project D L1's 719 sf room, 2026-09-25: a 0.19 ft retrace off by 1e-7 ft was refused R14).
     // Neither is a smoothing knob.
     public const double WeldFt = 0.01;
     public const double SpikeFt = 0.005;
@@ -40,7 +40,7 @@ public static class Kernel
     public static List<CurveLoop> ToLoops(List<double[]> outer, IEnumerable<List<double[]>> holes, double z = 0) =>
         Rings(outer, holes).Select(r => ToLoop(r, z)).ToList();
 
-    private static CurveLoop ToLoop(List<double[]> ring, double z)
+    public static CurveLoop ToLoop(List<double[]> ring, double z)
     {
         var cl = new CurveLoop();
         for (int i = 0; i < ring.Count; i++)
@@ -49,7 +49,7 @@ public static class Kernel
         return cl;
     }
 
-    // FOOTGUN: Revit refuses a hole that touches its outer ring (Chadds Main 27022a9d R02, 2026-09-25: an 18 sf hole
+    // FOOTGUN: Revit refuses a hole that touches its outer ring (Project A Main 27022a9d R02, 2026-09-25: an 18 sf hole
     // filling a notch of the outer, 2.7e-5 ft off two of its edges). Such a hole is snapped to the outer and
     // subtracted, which can split the face; every cleaned ring, part or hole, under MinRingSqft is dropped (a 0 sf
     // face of three collinear points on a zone edge builds nothing).

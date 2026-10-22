@@ -7,12 +7,12 @@ namespace Pe.Revit.Partition;
 ///     disposition out, first match wins. Geometry never changes here.
 /// </summary>
 public static class Judge {
-    // FOOTGUN: widest envelope band (outer face to zone edge) counted as excluded wall. Duryee Level 1's thirteen
+    // FOOTGUN: widest envelope band (outer face to zone edge) counted as excluded wall. Project D Level 1's thirteen
     // bands measure 0.23 to 1.26 ft (the 6693266 west bay is 1.0 ft); project-a live's widest is 1.46 ft. A wider
     // band means the person drew the zone off the wall, and it is held with its width.
     public const double BandHoldFt = 2.5;
 
-    // FOOTGUN: smallest rail-bounded face kept as a room. Duryee's closets are 11, 20 and 22 sf; under this is a
+    // FOOTGUN: smallest rail-bounded face kept as a room. Project D's closets are 11, 20 and 22 sf; under this is a
     // chase or a junction scrap even when every edge is on a rail.
     private const double MinRailRoomSqft = 6.0;
 

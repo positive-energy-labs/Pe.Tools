@@ -3,7 +3,7 @@ using Pe.Revit.Takeoff;
 
 namespace Pe.Takeoff.Tests;
 
-// The five faces rails16 failed to draw on Chadds Main Level (main 0c1b4597), reconstructed by Solve.RunRails on the
+// The five faces rails16 failed to draw on Project A Main Level (main 0c1b4597), reconstructed by Solve.RunRails on the
 // main-09-doors knee with each zone's outline from the w14 snapshot.
 public sealed class KernelRingsTests
 {

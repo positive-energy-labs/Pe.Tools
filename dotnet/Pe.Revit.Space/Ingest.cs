@@ -38,20 +38,21 @@ internal static class Ingest {
     ///     geometry. A DWG import produces one row for its 3D content and one Curve2D ribbon row per
     ///     layer, so a filter can name a layer and a Handle can report one. Returns the row count.
     /// </summary>
-    public static int Element(Element e, int source, int firstPrim, List<Tri> sink, Transform xf, List<PrimRow> rows) {
+    public static int Element(Element e, int source, int firstPrim, List<Tri> sink, Transform xf, List<PrimRow> rows,
+        bool includeCurves = true, Aabb? region = null) {
         var added = 0;
-        var solid = Faces(e, source, firstPrim, sink, xf);
+        var solid = Faces(e, source, firstPrim, sink, xf, region);
         if (solid is not null) {
             rows.Add(solid);
             added++;
         }
 
-        if (e is ImportInstance ii) added += Ribbons(ii, source, firstPrim + added, sink, xf, rows);
+        if (includeCurves && e is ImportInstance ii) added += Ribbons(ii, source, firstPrim + added, sink, xf, rows);
         return added;
     }
 
     /// <summary>The solid and mesh half: one row, or null when the element tessellates to nothing.</summary>
-    private static PrimRow? Faces(Element e, int source, int prim, List<Tri> sink, Transform xf) {
+    private static PrimRow? Faces(Element e, int source, int prim, List<Tri> sink, Transform xf, Aabb? region) {
         GeometryElement? ge;
         try {
             ge = e.get_Geometry(Opts);
@@ -63,7 +64,7 @@ internal static class Ingest {
 
         var start = sink.Count;
         var sawSolid = false;
-        Walk(ge, xf, prim, sink, ref sawSolid, 0);
+        Walk(ge, xf, prim, sink, ref sawSolid, 0, region);
         var count = sink.Count - start;
         if (count == 0) return null;
 
@@ -108,12 +109,13 @@ internal static class Ingest {
     // — multiplying again is the double-transform bug probe 1 hit.
     // ponytail: loose curves outside a DWG import, and points, are still dropped. Only an
     // ImportInstance raises its curves into ribbons, because only there does a layer name exist.
-    private static void Walk(GeometryElement ge, Transform xf, int prim, List<Tri> outp, ref bool sawSolid, int depth) {
+    private static void Walk(GeometryElement ge, Transform xf, int prim, List<Tri> outp, ref bool sawSolid, int depth, Aabb? region) {
         if (depth > 4) return;
         foreach (var go in ge) {
             switch (go) {
                 case Solid s when s.Faces.Size > 0:
                     sawSolid = true;
+                    if (region is { } bounds && !Overlaps(s, xf, bounds)) break;
                     foreach (Face f in s.Faces) {
                         Mesh? m;
                         try {
@@ -137,20 +139,38 @@ internal static class Ingest {
                         continue;
                     }
 
-                    if (inner is not null) Walk(inner, xf, prim, outp, ref sawSolid, depth + 1);
+                    if (inner is not null) Walk(inner, xf, prim, outp, ref sawSolid, depth + 1, region);
                     break;
                 }
             }
         }
     }
 
+    private static bool Overlaps(Solid solid, Transform transform, Aabb region) {
+        try {
+            var bounds = solid.GetBoundingBox();
+            var toHost = transform.Multiply(bounds.Transform);
+            var box = Aabb.Empty;
+            foreach (var x in new[] { bounds.Min.X, bounds.Max.X })
+            foreach (var y in new[] { bounds.Min.Y, bounds.Max.Y })
+            foreach (var z in new[] { bounds.Min.Z, bounds.Max.Z })
+                box = box.Include(P(toHost, new XYZ(x, y, z)));
+            return box.Overlaps(region);
+        } catch {
+            // Missing native bounds must retain the geometry, never erase context.
+            return true;
+        }
+    }
+
     private static void Emit(Mesh m, Transform xf, int prim, List<Tri> outp) {
+        // Revit vertices are shared by triangles. Cross the native XYZ boundary once per vertex.
+        var vertices = m.Vertices.Select(vertex => P(xf, vertex)).ToArray();
         for (var i = 0; i < m.NumTriangles; i++) {
             var t = m.get_Triangle(i);
             var tri = new Tri {
-                A = P(xf, t.get_Vertex(0)),
-                B = P(xf, t.get_Vertex(1)),
-                C = P(xf, t.get_Vertex(2)),
+                A = vertices[t.get_Index(0)],
+                B = vertices[t.get_Index(1)],
+                C = vertices[t.get_Index(2)],
                 Prim = prim,
             };
             if (!tri.IsDegenerate) outp.Add(tri);

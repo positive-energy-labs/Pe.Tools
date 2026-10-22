@@ -3,7 +3,7 @@
  * one-line human summary keyed by the refusal code, the one door that fixes it when one exists,
  * and the raw text to fold behind a disclosure. Codes are the SDK's own `CoreDiagnosticCode`
  * (vendored contract beside this file) plus the host's; a code with no line here says its first
- * sentence. A door is an address to open, never a write.
+ * sentence. A door names a settings destination; the consuming surface builds its address.
  */
 import type { CoreDiagnosticCode } from "./vendor/generated/pe-revit-contract.ts";
 
@@ -11,18 +11,25 @@ export interface FailureSummary {
   /** The refusal code the text opened with, when it opened with one. */
   code: string | null;
   summary: string;
-  door: { label: string; href: string } | null;
+  door: { label: string; section: "revit" | "update"; hash?: "align-addins" } | null;
   /** The raw text, when the summary does not already say all of it. */
   detail: string | null;
 }
 
 type Line = (message: string) => string;
-const REVIT_DOOR = { label: "Revit in Settings", href: "/settings?section=revit" };
-const ALIGN_DOOR = {
-  label: "Align Revit add-ins with this build",
-  href: "/settings?section=revit#align-addins",
+const REVIT_DOOR: NonNullable<FailureSummary["door"]> = {
+  label: "Revit in Settings",
+  section: "revit",
 };
-const UPDATE_DOOR = { label: "Update in Settings", href: "/settings?section=update" };
+const ALIGN_DOOR: NonNullable<FailureSummary["door"]> = {
+  label: "Align Revit add-ins with this build",
+  section: "revit",
+  hash: "align-addins",
+};
+const UPDATE_DOOR: NonNullable<FailureSummary["door"]> = {
+  label: "Update in Settings",
+  section: "update",
+};
 
 const beta = (version: string) => /beta\.(\d+)/.exec(version)?.[1];
 /** "(version skew: 0.1.0-beta.208 installed, 0.1.0-beta.207 here)" says which side is ahead. */

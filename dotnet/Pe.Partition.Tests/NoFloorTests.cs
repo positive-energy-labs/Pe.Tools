@@ -6,7 +6,7 @@ using Pe.Revit.Space;
 namespace Pe.Partition.Tests;
 
 /// <summary>
-///     Chadds Ford's IFC link has 0 Floors: its slabs are nameless Generic Models (IfcBuildingElementProxy), so a
+///     Project A's IFC link has 0 Floors: its slabs are nameless Generic Models (IfcBuildingElementProxy), so a
 ///     category-only height role left the live RoomHeights probe with no floor anywhere on the file (every Main
 ///     Level face held no-floor). The live read under ML09 (.artifacts/runs/rails/w13/rays.json): proxy slab top at
 ///     z -0.0, and in the island closet a Return Air duct top at 0.25; w15/no-ceiling-rays.json: a vaulted proxy roof

@@ -22,7 +22,7 @@ public static partial class Rails {
     public const string Wall = "wall";
     public const string Dwg = "dwg";
 
-    // FOOTGUN: face spacing band. Duryee Level 1 walls measure 0.04 to 0.94 ft between faces
+    // FOOTGUN: face spacing band. Project D Level 1 walls measure 0.04 to 0.94 ft between faces
     // (.artifacts/runs/rails/w1/REPORT.md, per-element minimum rectangles); 0.03 keeps the
     // half-inch glazing walls and drops float-coincident duplicates, 1.25 admits a thick
     // exterior wall and refuses a room-scale pair.
@@ -46,8 +46,8 @@ public static partial class Rails {
     private const double StationFt = 0.1;
 
     // FOOTGUN: side-by-side spans merge when they overlap along at least this share of the shorter.
-    // Duryee Level 1 exterior walls drew two and three parallel centerlines per element before the
-    // merge (duryee-level1-rails.png, first run); a half share keeps a wall that only abuts at a
+    // Project D Level 1 exterior walls drew two and three parallel centerlines per element before the
+    // merge (project-d-level1-rails.png, first run); a half share keeps a wall that only abuts at a
     // corner as its own rail.
     private const double SharedLengthMin = 0.5;
 

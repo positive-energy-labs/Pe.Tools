@@ -6,7 +6,6 @@
 
 import { readFileSync } from "node:fs";
 import { join } from "node:path";
-import { fileURLToPath } from "node:url";
 import { checkoutLayout, checkoutRootFrom } from "../src/service-identity.ts";
 import { expect, test } from "vite-plus/test";
 import {
@@ -106,15 +105,26 @@ test("product.payloads.json host payload mirrors the host service contract", () 
   expect(host!.service?.shutdown).toBe(hostProcessIdentity.shutdownPath);
 });
 
-test("pea dev shim pins the workspace package manager", () => {
-  const manifest = JSON.parse(readFileSync(manifestPath, "utf8")) as {
-    payloads: { type: string; name: string; dev?: string }[];
-  };
-  const workspace = JSON.parse(
-    readFileSync(fileURLToPath(new URL("../../../package.json", import.meta.url)), "utf8"),
-  ) as { packageManager: string };
-  const pea = manifest.payloads.find((p) => p.type === "PathShim" && p.name === "pea");
-  expect(pea?.dev).toBe(
-    `corepack ${workspace.packageManager} --dir "{root}/ts" --filter @pe/pea pea`,
+// The dev shim is a plain `node` launch (corepack is no exe the shim can start; 0e98869d) of the
+// checkout's own jiti on the checkout's Pea source, the entry its package script runs (BUILD.md).
+test("pea dev shim runs the checkout's jiti on the checkout's Pea entry", () => {
+  const json = <T>(path: string) => JSON.parse(readFileSync(path, "utf8")) as T;
+  const manifest = json<{ payloads: { type: string; name: string; dev?: string }[] }>(manifestPath);
+  const workspace = json<{ devDependencies: Record<string, string> }>(
+    join(checkoutRoot, "ts", "package.json"),
   );
+  const jiti = json<{ bin: { jiti: string } }>(
+    join(checkoutRoot, "ts", "node_modules", "jiti", "package.json"),
+  );
+  const script = json<{ scripts: { pea: string } }>(
+    join(checkoutRoot, "ts", "apps", "pea", "package.json"),
+  ).scripts.pea;
+  expect(script, "the pea package script runs its entry through jiti").toMatch(/\bjiti (\S+)$/);
+  const entry = /\bjiti (\S+)$/.exec(script)![1]!;
+  const cli = `ts/node_modules/jiti/${jiti.bin.jiti.replace(/^\.\//, "")}`;
+  expect(workspace.devDependencies.jiti, "jiti is a pinned workspace dependency").toBeTruthy();
+  const pea = manifest.payloads.find((p) => p.type === "PathShim" && p.name === "pea");
+  expect(pea?.dev).toBe(`node "{root}/${cli}" "{root}/ts/apps/pea/${entry}"`);
+  for (const path of [cli, `ts/apps/pea/${entry}`])
+    expect(readFileSync(join(checkoutRoot, path)).length, path).toBeGreaterThan(0);
 });

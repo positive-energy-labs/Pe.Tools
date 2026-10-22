@@ -9,7 +9,7 @@ namespace Pe.Revit.Partition;
 ///     studs, not Walls (1,112 elements, 766 near the ML09 zone, footprints mostly 0.13 x 0.5 ft). A stud is a
 ///     framing piece whose footprint is short and thin; studs on one line at stud spacing are a wall whose axis runs
 ///     through the stud centres and whose thickness is the stud depth. Generic Models never count: they carry
-///     project-a's duplicate wall bodies and Duryee's vanities and tubs, and a stud-shaped Generic Model is still one.
+///     project-a's duplicate wall bodies and Project D's vanities and tubs, and a stud-shaped Generic Model is still one.
 /// </summary>
 public static partial class Rails {
     public const string Framing = "framing";

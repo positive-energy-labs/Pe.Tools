@@ -127,43 +127,48 @@ function route<const P extends string, B extends z.ZodType, O extends z.ZodType>
   };
 }
 
-export function definePeApi<
-  S extends Record<
-    | "accessSchema"
-    | "addProviderRequestSchema"
-    | "providerSchema"
-    | "createThreadRequestSchema"
-    | "updateThreadRequestSchema"
-    | "harnessThreadSummarySchema"
-    | "harnessThreadBodySchema"
-    | "harnessEventSchema"
-    | "threadExportSchema"
-    | "pluginStatusSchema"
-    | "promptRequestSchema"
-    | "turnStateSchema"
-    | "queueRequestSchema"
-    | "hostLogPageSchema"
-    | "permissionResponseSchema"
-    | "questionResponseSchema"
-    | "forkThreadRequestSchema"
-    | "traitRequestSchema"
-    | "threadHeadReadingSchema"
-    | "putTargetSchema"
-    | "putTargetResultSchema"
-    | "capabilityCatalogSchema"
-    | "navigationSnapshotSchema"
-    | "routeStatePatchSchema"
-    | "familiesViewSchema"
-    | "familiesViewCommandSchema"
-    | "familiesViewAckSchema"
-    | "pageChoiceSchema"
-    | "diagnosticBodySchema"
-    | "actionAdmissionSchema"
-    | "actionReceiptSchema"
-    | "actionControlInputSchema",
-    z.ZodType
-  >,
->(schemas: S) {
+/** The schemas a route table names; each domain owner supplies its own. */
+export type PeApiSchemas = Record<
+  | "accessSchema"
+  | "addProviderRequestSchema"
+  | "providerSchema"
+  | "createThreadRequestSchema"
+  | "updateThreadRequestSchema"
+  | "threadTabRequestSchema"
+  | "harnessThreadSummarySchema"
+  | "harnessThreadBodySchema"
+  | "harnessEventSchema"
+  | "threadExportSchema"
+  | "pluginStatusSchema"
+  | "promptRequestSchema"
+  | "turnStateSchema"
+  | "queueRequestSchema"
+  | "hostLogPageSchema"
+  | "permissionResponseSchema"
+  | "questionResponseSchema"
+  | "forkThreadRequestSchema"
+  | "traitRequestSchema"
+  | "threadHeadReadingSchema"
+  | "putTargetSchema"
+  | "putTargetResultSchema"
+  | "capabilityCatalogSchema"
+  | "navigationSnapshotSchema"
+  | "routeStatePatchSchema"
+  | "ductsAnalysisRequestSchema"
+  | "ductsAnalysisResponseSchema"
+  | "routeViewSchema"
+  | "routeViewSetSchema"
+  | "routeViewAckSchema"
+  | "pageChoiceSchema"
+  | "diagnosticBodySchema"
+  | "actionAdmissionSchema"
+  | "actionReceiptSchema"
+  | "actionControlInputSchema",
+  z.ZodType
+>;
+
+/** The one route table: every declared door, built from the domain schemas. */
+export function peRouteTable<S extends PeApiSchemas>(schemas: S) {
   const accessSchema = schemas.accessSchema as S["accessSchema"];
   const pluginStatusSchema = schemas.pluginStatusSchema as S["pluginStatusSchema"];
   const addProviderRequestSchema =
@@ -173,6 +178,7 @@ export function definePeApi<
     schemas.createThreadRequestSchema as S["createThreadRequestSchema"];
   const updateThreadRequestSchema =
     schemas.updateThreadRequestSchema as S["updateThreadRequestSchema"];
+  const threadTabRequestSchema = schemas.threadTabRequestSchema as S["threadTabRequestSchema"];
   const harnessThreadSummarySchema =
     schemas.harnessThreadSummarySchema as S["harnessThreadSummarySchema"];
   const harnessThreadBodySchema = schemas.harnessThreadBodySchema as S["harnessThreadBodySchema"];
@@ -192,10 +198,9 @@ export function definePeApi<
   const navigationSnapshotSchema =
     schemas.navigationSnapshotSchema as S["navigationSnapshotSchema"];
   const routeStatePatchSchema = schemas.routeStatePatchSchema as S["routeStatePatchSchema"];
-  const familiesViewSchema = schemas.familiesViewSchema as S["familiesViewSchema"];
-  const familiesViewCommandSchema =
-    schemas.familiesViewCommandSchema as S["familiesViewCommandSchema"];
-  const familiesViewAckSchema = schemas.familiesViewAckSchema as S["familiesViewAckSchema"];
+  const routeViewSchema = schemas.routeViewSchema as S["routeViewSchema"];
+  const routeViewSetSchema = schemas.routeViewSetSchema as S["routeViewSetSchema"];
+  const routeViewAckSchema = schemas.routeViewAckSchema as S["routeViewAckSchema"];
   const pageChoiceSchema = schemas.pageChoiceSchema as S["pageChoiceSchema"];
   const feedbackSchema = z.strictObject({
     comment: z.string().trim().min(1).max(8000),
@@ -492,6 +497,15 @@ export function definePeApi<
       "threads",
       "caller",
     ),
+    "thread.tabs": route(
+      "POST",
+      "/pe/threads/:id/tabs",
+      threadTabRequestSchema,
+      harnessThreadSummarySchema,
+      "caller",
+      "threads",
+      "caller",
+    ),
     "thread.remove": route("DELETE", "/pe/threads/:id", none, none, "caller", "threads", "caller"),
     "thread.prompt": route(
       "POST",
@@ -716,20 +730,49 @@ export function definePeApi<
       "pe",
       "human",
     ),
-    "view.get": route("GET", "/pe/route-view/families", none, object, "read", "pe", "read"),
+    "ducts.analysis": route(
+      "POST",
+      "/pe/ducts/analysis",
+      schemas.ductsAnalysisRequestSchema as S["ductsAnalysisRequestSchema"],
+      schemas.ductsAnalysisResponseSchema as S["ductsAnalysisResponseSchema"],
+      "read",
+      "pe",
+      "read",
+    ),
+    "ducts.analysis-artifact": route(
+      "GET",
+      "/pe/ducts/analyses/:id/artifact",
+      none,
+      z.unknown(),
+      "read",
+      "pe",
+      "read",
+      "asset",
+    ),
+    "space.scene-artifact": route(
+      "GET",
+      "/pe/space/scenes/:id/artifact",
+      none,
+      z.unknown(),
+      "read",
+      "pe",
+      "read",
+      "asset",
+    ),
+    "view.get": route("GET", "/pe/route-view/:route", none, object, "read", "pe", "read"),
     "view.publish": route(
       "PUT",
-      "/pe/route-view/families",
-      familiesViewSchema,
+      "/pe/route-view/:route",
+      routeViewSchema,
       object,
       "caller",
       "pe",
       "caller",
     ),
-    "view.query": route(
+    "view.set": route(
       "POST",
-      "/pe/route-view/families/set-query",
-      familiesViewCommandSchema,
+      "/pe/route-view/:route/set",
+      routeViewSetSchema,
       object,
       "caller",
       "pe",
@@ -737,8 +780,8 @@ export function definePeApi<
     ),
     "view.ack": route(
       "POST",
-      "/pe/route-view/families/ack",
-      familiesViewAckSchema,
+      "/pe/route-view/:route/ack",
+      routeViewAckSchema,
       object,
       "caller",
       "pe",
@@ -746,7 +789,7 @@ export function definePeApi<
     ),
     "view.remove": route(
       "DELETE",
-      "/pe/route-view/families/:instance",
+      "/pe/route-view/:route/:instance",
       none,
       ok,
       "caller",
@@ -903,22 +946,77 @@ export function definePeApi<
       "human-or-pea",
     ),
   } as const;
+  return peRoutes;
+}
+/** The route table `definePeApi` serves, for a schema set. */
+export type PeRouteTable<S extends PeApiSchemas> = ReturnType<typeof peRouteTable<S>>;
+/** What any table entry carries for typing a call. */
+type PeRouteLike = { path: string; body: z.ZodType; output: z.ZodType };
+type ParamNames<P extends string> = P extends `${string}:${infer N}/${infer Tail}`
+  ? N | ParamNames<Tail>
+  : P extends `${string}:${infer N}`
+    ? N
+    : never;
+export type PeRouteInput<T extends Record<string, PeRouteLike>, K extends keyof T> = ([
+  ParamNames<T[K]["path"]>,
+] extends [never]
+  ? { params?: never }
+  : { params: Record<ParamNames<T[K]["path"]>, string> }) &
+  (undefined extends z.input<T[K]["body"]>
+    ? { body?: z.input<T[K]["body"]> }
+    : { body: z.input<T[K]["body"]> }) & {
+    query?: Record<string, string | number | boolean | undefined>;
+  };
+export type PeRouteOutput<T extends Record<string, PeRouteLike>, K extends keyof T> = z.output<
+  T[K]["output"]
+>;
+export interface PeClient<T extends Record<string, PeRouteLike>> {
+  call<K extends keyof T & string>(
+    id: K,
+    input: PeRouteInput<T, K>,
+    init?: RequestInit,
+  ): Promise<PeRouteOutput<T, K>>;
+  /** An untyped caller (a Page script, an agent): the id and raw input are checked at runtime. */
+  invoke(id: string, raw: unknown): Promise<unknown>;
+  response<K extends keyof T & string>(
+    id: K,
+    input: PeRouteInput<T, K>,
+    init?: RequestInit,
+  ): Promise<Response>;
+  url<K extends keyof T & string>(id: K, input: PeRouteInput<T, K>): string;
+}
+/**
+ * The served API over one route table. Named, so a declaration names it instead of inlining the
+ * whole table into every export.
+ */
+export interface PeApi<T extends Record<string, PeRouteLike>> {
+  peRoutes: T;
+  isPeRouteId(id: string): id is keyof T & string;
+  peRouteUrl<K extends keyof T & string>(
+    id: K,
+    input: Omit<PeRouteInput<T, K>, "body">,
+    base?: string,
+  ): string;
+  matchPeRoute(
+    method: string,
+    path: string,
+  ): { id: keyof T & string; route: T[keyof T]; params: Record<string, string> } | undefined;
+  servePeRoute(
+    request: Request,
+    handle: (request: Request) => Promise<Response>,
+  ): Promise<Response>;
+  createPeClient(
+    base?: string,
+    transport?: (url: string, init?: RequestInit) => Promise<Response>,
+  ): PeClient<T>;
+  peClientScript(): string;
+}
 
+export function definePeApi<S extends PeApiSchemas>(schemas: S): PeApi<PeRouteTable<S>> {
+  const peRoutes = peRouteTable(schemas);
   type PeRouteId = keyof typeof peRoutes;
-  type ParamNames<P extends string> = P extends `${string}:${infer N}/${infer Tail}`
-    ? N | ParamNames<Tail>
-    : P extends `${string}:${infer N}`
-      ? N
-      : never;
-  type PeInput<K extends PeRouteId> = ([ParamNames<(typeof peRoutes)[K]["path"]>] extends [never]
-    ? { params?: never }
-    : { params: Record<ParamNames<(typeof peRoutes)[K]["path"]>, string> }) &
-    (undefined extends z.input<(typeof peRoutes)[K]["body"]>
-      ? { body?: z.input<(typeof peRoutes)[K]["body"]> }
-      : { body: z.input<(typeof peRoutes)[K]["body"]> }) & {
-      query?: Record<string, string | number | boolean | undefined>;
-    };
-  type PeOutput<K extends PeRouteId> = z.output<(typeof peRoutes)[K]["output"]>;
+  type PeInput<K extends PeRouteId> = PeRouteInput<typeof peRoutes, K>;
+  type PeOutput<K extends PeRouteId> = PeRouteOutput<typeof peRoutes, K>;
   const isPeRouteId = (id: string): id is PeRouteId => Object.hasOwn(peRoutes, id);
 
   function peRouteUrl<K extends PeRouteId>(
@@ -1171,7 +1269,7 @@ export async function normalizePeError(response: Response): Promise<Response> {
   const code =
     [old.code, refusal.code, old.kind].find((v) => typeof v === "string") ?? "route.refused";
   const message =
-    [old.message, old.error, old.reason, refusal.reason, refusal.detail].find(
+    [old.message, old.error, old.reason, refusal.message, refusal.reason, refusal.detail].find(
       (v) => typeof v === "string",
     ) ??
     (text || response.statusText);

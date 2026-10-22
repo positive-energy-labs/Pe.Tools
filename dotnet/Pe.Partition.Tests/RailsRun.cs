@@ -9,7 +9,7 @@ using Pe.Revit.Space;
 namespace Pe.Partition.Tests;
 
 /// <summary>
-///     Runs <see cref="Solve.RunRails" /> on Duryee Level 1's five hand-drawn zones and project-a live, and
+///     Runs <see cref="Solve.RunRails" /> on Project D Level 1's five hand-drawn zones and project-a live, and
 ///     writes rails, network, openings, rooms and ink to <c>.artifacts/runs/rails/$PE_RAILS_RUN/data</c> (default w2) for
 ///     <c>eval/partition/network.py</c>. Probes replay the fixture's session recording where it has the point, else
 ///     the stub (floor at level, ceiling 9 ft up); see <see cref="RecordedProbes" />.
@@ -22,15 +22,15 @@ public sealed class RailsRun {
     private static IEnumerable<TestCaseData> Cases() {
         yield return new TestCaseData("project-a-live", null).SetName("project-a-live");
         foreach (var id in new[] { 6692266L, 6693266L, 6693828L, 6694146L, 7466453L })
-            yield return new TestCaseData($"duryee-{id}", id).SetName($"duryee-{id}");
+            yield return new TestCaseData($"project-d-{id}", id).SetName($"project-d-{id}");
     }
 
     [TestCaseSource(nameof(Cases))]
-    public void Run(string name, long? duryeeZone) {
+    public void Run(string name, long? projectDZone) {
         PartitionInput input;
-        if (duryeeZone is { } id) {
-            var level = Path.Combine(PrivateFixtures.Dir("duryee/partition"), "duryee-level-input.json");
-            var locked = Path.Combine(PrivateFixtures.Dir("duryee/partition"), "duryee-locked.json");
+        if (projectDZone is { } id) {
+            var level = Path.Combine(PrivateFixtures.Dir("project-d/partition"), "project-d-level-input.json");
+            var locked = Path.Combine(PrivateFixtures.Dir("project-d/partition"), "project-d-locked.json");
             input = JsonConvert.DeserializeObject<PartitionInput>(File.ReadAllText(level))!;
             var zone = JArray.Parse(File.ReadAllText(locked)).Single(z => (long)z["ElementId"]! == id);
             double[] Flat(JToken ring) => ring.SelectMany(p => new[] { (double)p[0]!, (double)p[1]! }).ToArray();
@@ -41,10 +41,10 @@ public sealed class RailsRun {
             input = JsonConvert.DeserializeObject<PartitionInput>(reader.ReadToEnd())!;
         }
 
-        // As the bench does: the solver's own shape. Duryee's level capture carries the Astra session's locked hand
+        // As the bench does: the solver's own shape. Project D's level capture carries the Astra session's locked hand
         // fills of these very zones, which RunRails now honours as locked rooms.
         input = input with { Proposals = [], Knobs = input.Knobs with { FramingRails = Environment.GetEnvironmentVariable("PE_FRAMING_RAILS") != "0" } };
-        var probes = RecordedProbes.For(duryeeZone is null ? "project-a/partition/live" : "duryee/partition");
+        var probes = RecordedProbes.For(projectDZone is null ? "project-a/partition/live" : "project-d/partition");
         var sw = System.Diagnostics.Stopwatch.StartNew();
         var answer = Solve.RunRails(input, probes.For(input));
         var ms = sw.ElapsedMilliseconds;

@@ -167,6 +167,927 @@ export namespace DocumentTemporaryStatus {
   }
 }
 
+/** Write duct losses into Revit so they travel with the model. Each fitting names a method: pe-server points it at the Pe loss server, which charges the family's own coefficient parameter live (the fittingCoefficient slot, default Pe_C) when the family carries one and otherwise prices each leg live from the write's ASHRAE table and the connectors' flows (taps, transitions, unstamped elbows); specific-coefficient freezes a number (export only). Revit's own ASHRAE-table route is never written. Also Specific Loss (in-wg) on duct accessories, terminal connector drops where the family connector is Specific Loss, fan external static on equipment through the fanStatic slot, and Pe's provenance store in the hidden _PE_DuctLosses Project Information parameter. previewOnly plans every write and refusal without a transaction. A real apply commits Not Defined on every targeted fitting, then the losses, in one undo step; a failed stage rolls everything back and is named. Returns per-target outcomes and the touched systems' critical path after. */
+export namespace DuctsApply {
+  export namespace Req {
+    /**
+     * How Revit is told a fitting's loss (pressure-drop ledger, 2026-10-12): the Pe server live, or a frozen number for export.
+     */
+    export type DuctFittingMethod = "pe-server" | "specific-coefficient";
+
+    /**
+     * A fitting write names its Method: PeServer points the fitting at the Pe loss server, which reads the family's
+     * coefficient parameter live (the FittingCoefficient slot, default Pe_C); AshraeTable stores Table as Revit's
+     * ASHRAETableName and Revit looks the legs up itself; SpecificCoefficient freezes Coefficient (the export route,
+     * never the web's). Coefficient, Table, Inputs and RuleKey are Pe's provenance and land in the store.
+     * Terminals and Components carry a drop in in-wg; Equipment the fan external static; TerminalFlows and EquipmentFlows
+     * a design flow in cfm (the TerminalFlow slot on the terminal instance, the FanFlow slot on the unit).
+     *
+     */
+    export interface Request {
+      previewOnly: boolean;
+      slots?: null | DuctParameterSlots;
+      fittings: DuctFittingWrite[];
+      terminals: DuctDropWrite[];
+      components: DuctDropWrite[];
+      equipment: DuctEquipmentWrite[];
+      terminalFlows: DuctFlowWrite[];
+      equipmentFlows: DuctFlowWrite[];
+      store: DuctLossStore;
+    }
+    /**
+     * Parameter names the census reads, instance first and then type. FanStatic (in-wg) and FanFlow (CFM) on HVAC
+     * equipment, ComponentDrop (in-wg) on accessories, TerminalDrop (in-wg) and TerminalFlow (CFM) on terminals,
+     * FittingCoefficient (a number) on fittings: the family's own loss coefficient, which the Pe loss server reads
+     * live (the configurable door, kaitpw 2026-10-08).
+     *
+     */
+    export interface DuctParameterSlots {
+      fanStatic?: string;
+      fanFlow?: string;
+      componentDrop?: string;
+      terminalDrop?: null | string;
+      fittingCoefficient?: string;
+      terminalFlow?: string;
+    }
+    /**
+     * Table is the rule's ASHRAE table the Pe server prices the legs from when the family carries no coefficient; Coefficient is the web's number for the store and the export route.
+     */
+    export interface DuctFittingWrite {
+      id: number;
+      method: DuctFittingMethod;
+      coefficient: number;
+      table?: null | string;
+      inputs?: null | string;
+      ruleKey?: null | string;
+    }
+    export interface DuctDropWrite {
+      id: number;
+      inWg: number;
+      source?: null | string;
+    }
+    export interface DuctEquipmentWrite {
+      id: number;
+      externalStaticInWg: number;
+    }
+    /**
+     * A design flow in cfm and where it came from (override, load preview, rooms, a person's note).
+     */
+    export interface DuctFlowWrite {
+      id: number;
+      cfm: number;
+      source?: null | string;
+    }
+    /**
+     * Pe's provenance for duct losses: one versioned JSON blob in the hidden Project Information text parameter
+     * `_PE_DuctLosses` (pressure-drop ledger: never extensible storage). WorkRevision counts applies; a request
+     * carrying an older revision than the model holds is stale. Unknown keys survive read-modify-write.
+     * v2 adds the rulings that remain after healing (pressure-drop ledger, 2026-10-20): Verdicts keyed by issue or
+     * finding id, Roles keyed by unit id. They live here, not on elements and not in Pe Work; Work holds only pending
+     * edits. A v1 blob reads as v2 with no rulings; every write is v2.
+     *
+     */
+    export interface DuctLossStore {
+      version?: number;
+      rules?: {
+        [k: string]: DuctRuleChoice;
+      };
+      instances?: {
+        [k: string]: DuctInstanceRecord;
+      };
+      terminals?: {
+        [k: string]: DuctDropRecord;
+      };
+      terminalFlows?: {
+        [k: string]: DuctFlowRecord;
+      };
+      equipmentFlows?: {
+        [k: string]: DuctFlowRecord;
+      };
+      verdicts?: {
+        [k: string]: DuctVerdictRecord;
+      };
+      roles?: {
+        [k: string]: DuctRoleRecord;
+      };
+      slots?: null | DuctParameterSlots;
+      workRevision?: number;
+      appliedAt?: null | string;
+      [k: string]: unknown;
+    }
+    /**
+     * A rule's chosen ASHRAE table (rule key is family:type plus a geometry condition, owned by the web).
+     */
+    export interface DuctRuleChoice {
+      table?: null | string;
+    }
+    /**
+     * What Pe wrote on one fitting: the table and lookup inputs behind the coefficient.
+     */
+    export interface DuctInstanceRecord {
+      table?: null | string;
+      inputs?: null | string;
+      coefficient: number;
+      appliedAt: string;
+    }
+    /**
+     * What Pe wrote on one terminal or component: the drop and where it came from (catalog, typed).
+     */
+    export interface DuctDropRecord {
+      inWg: number;
+      source?: null | string;
+      appliedAt: string;
+    }
+    /**
+     * What Pe wrote on one terminal or unit: the design flow in cfm and where it came from.
+     */
+    export interface DuctFlowRecord {
+      cfm: number;
+      source?: null | string;
+      appliedAt: string;
+    }
+    /**
+     * A person's ruling on an issue or inferred-join finding id: `ignore` leaves an open end out of the walk, or
+     * withholds (objects to) an inferred join.
+     *
+     */
+    export interface DuctVerdictRecord {
+      verdict: string;
+      ruledAt: string;
+    }
+    /**
+     * A person's ruling on an air mover: `passive` moves no design air (or `fan`, the default, said aloud).
+     */
+    export interface DuctRoleRecord {
+      role: string;
+      ruledAt: string;
+    }
+  }
+  export namespace Res {
+    /**
+     * StoreRevision is the store's WorkRevision after this call (unchanged on preview).
+     */
+    export interface Response {
+      previewOnly: boolean;
+      writes: DuctWrite[];
+      counts: DuctApplyCounts;
+      systemsAfter?: DuctSystem[] | null;
+      storeRevision: number;
+    }
+    /**
+     * One target's outcome. Kind: fitting, terminal, component, equipment, terminal-flow, equipment-flow, store, and the
+     * store entries a write changes: slot (Key names the slot), verdict (Key is the issue or finding id, Id its first
+     * element) and role (Id is the unit). Outcome: planned (preview), written, refused (Reason says why), unchanged
+     * (already holds the value). Before and After are display text; "none" is no entry.
+     *
+     */
+    export interface DuctWrite {
+      id?: number | null;
+      kind: string;
+      outcome: string;
+      reason?: null | string;
+      before?: null | string;
+      after?: null | string;
+      key?: null | string;
+    }
+    export interface DuctApplyCounts {
+      planned: number;
+      written: number;
+      refused: number;
+      unchanged: number;
+    }
+    /**
+     * One supply, return or exhaust MechanicalSystem as Revit reports it: the check beside Pe's own solve.
+     * CriticalPath is GetCriticalPathSectionNumbers(); empty when Revit found none.
+     *
+     */
+    export interface DuctSystem {
+      id: number;
+      name: string;
+      classification: string;
+      isWellConnected?: boolean | null;
+      baseEquipmentId?: number | null;
+      baseEquipmentConnector?: number | null;
+      criticalPathLossInWg?: null | number;
+      criticalPath: number[];
+      sections: DuctSection[];
+    }
+    /**
+     * One MEPSection: Revit's run of elements carrying one flow.
+     */
+    export interface DuctSection {
+      number: number;
+      flowCfm?: null | number;
+      totalPressureLossInWg?: null | number;
+      elementIds: number[];
+    }
+  }
+}
+
+/** Make a unit the base equipment of a duct system (Revit's Duct Systems > Select Equipment), keeping the system's id, name, type and parameters. Refuses a system that already has base equipment (a swap drops the old base from the members and Revit does not restore it), anything that is not mechanical equipment, and a unit with no port of the system's air classification that is a member of the system or joined to its ducts (Revit itself checks neither). Reads back that the base equipment is the unit and the name, type and classification are unchanged, else refuses and rolls back. previewOnly runs the write and the read back and rolls them back. Returns the outcome and the system before and after (read ducts.snapshot again: systems[].baseEquipmentId). */
+export namespace DuctsAssignFan {
+  export namespace Req {
+    /**
+     * SystemId is the MechanicalSystem; UnitId the mechanical equipment to make its base equipment.
+     */
+    export interface Request {
+      previewOnly: boolean;
+      systemId: number;
+      unitId: number;
+    }
+  }
+  export namespace Res {
+    /**
+     * Outcome: planned (preview), assigned, refused (Reason says why; nothing changed). Connector is the
+     * unit's connector index made the base. Check is the read back's words. Before and After are the system as
+     * Revit reports it (After inside the rolled-back run on preview; null when refused).
+     *
+     */
+    export interface Response {
+      previewOnly: boolean;
+      systemId: number;
+      unitId: number;
+      outcome: string;
+      reason?: null | string;
+      connector?: number | null;
+      check?: null | string;
+      before?: null | DuctSystem;
+      after?: null | DuctSystem;
+    }
+    /**
+     * One supply, return or exhaust MechanicalSystem as Revit reports it: the check beside Pe's own solve.
+     * CriticalPath is GetCriticalPathSectionNumbers(); empty when Revit found none.
+     *
+     */
+    export interface DuctSystem {
+      id: number;
+      name: string;
+      classification: string;
+      isWellConnected?: boolean | null;
+      baseEquipmentId?: number | null;
+      baseEquipmentConnector?: number | null;
+      criticalPathLossInWg?: null | number;
+      criticalPath: number[];
+      sections: DuctSection[];
+    }
+    /**
+     * One MEPSection: Revit's run of elements carrying one flow.
+     */
+    export interface DuctSection {
+      number: number;
+      flowCfm?: null | number;
+      totalPressureLossInWg?: null | number;
+      elementIds: number[];
+    }
+  }
+}
+
+/** Build the Family Foundry patch that gives a duct fitting family its own loss coefficient: an embedded lookup table (PeElbowC, dense over r/D, angle and diameter from Revit's shipped ASHRAE CD3 grids) and an instance number parameter (default Pe_C) with a rounding size_lookup formula, plus the run policy that lets Revit disconnect a fitting it cannot keep joined on reload. Hand the patch to families.plan then families.apply; ducts.apply with method pe-server then charges it live. Read-only; needs no document. */
+export namespace DuctsFamilyPatch {
+  export namespace Req {
+    export type DuctFamilyKind = "round-elbow";
+
+    /**
+     * Family is the loaded family name to select; Parameter is the coefficient parameter the formula fills (the FittingCoefficient slot).
+     */
+    export interface Request {
+      family: string;
+      kind?: DuctFamilyKind;
+      parameter?: string;
+    }
+  }
+  export namespace Res {
+    /**
+     * Patch is the FamilyPatch JSON as `families.plan` reads it; Rows counts the table; Sources names the ASHRAE grids behind it.
+     */
+    export interface Response {
+      patch: unknown;
+      table: string;
+      rows: number;
+      sources: string[];
+      formula: string;
+    }
+  }
+}
+
+/** Heal duct geometry so the model itself is whole: cap a dangling open end with its duct type's Caps routing rule, connect coincident same-size ends, and close a same-size gap of at most 3 in with a union (two ducts) or by extending the duct (duct to part). Each item names connector keys elementId:connectorIndex from ducts.snapshot; the op refuses size changes, cross-class or cross-system joins, equipment, and longer gaps (a person's, in Revit). Every item must pass Pe's own post-check (connected, sizes equal, origins within 1/16 in, no system split or merged) or it is refused and rolled back alone. previewOnly runs everything and rolls it back; a real heal commits one transaction per group. Returns per-item outcomes with created and replaced element ids (Revit gives new ids to what it rebuilds; read ducts.snapshot again) and the touched systems' Revit critical path before and after. */
+export namespace DuctsHeal {
+  export namespace Req {
+    export type DuctHealKind = "cap" | "join";
+
+    /**
+     * Groups are the approved systems; each group is one transaction on apply.
+     */
+    export interface Request {
+      previewOnly: boolean;
+      groups: DuctHealGroup[];
+    }
+    /**
+     * Group is the route's group id (`g<lowest element id>`), a label only: the items name the geometry.
+     */
+    export interface DuctHealGroup {
+      group: string;
+      items: DuctHealItem[];
+    }
+    /**
+     * One repair. End and Other are connector keys `elementId:connectorIndex` as `ducts.snapshot` names them.
+     * A cap closes End with the Caps routing rule of its duct type. A join meets End and Other: coincident ends
+     * are connected, a small gap between two ducts gets a union fitting, a small gap from a duct to a part
+     * extends the duct; the op picks which from the geometry and refuses anything outside its limits.
+     *
+     */
+    export interface DuctHealItem {
+      key: string;
+      kind: DuctHealKind;
+      end: string;
+      other?: null | string;
+    }
+  }
+  export namespace Res {
+    export interface Response {
+      previewOnly: boolean;
+      groups: DuctHealGroupOutcome[];
+      counts: DuctHealCounts;
+    }
+    /**
+     * One group's run. Outcome: planned (preview), healed, refused (Reason says why: the group's transaction
+     * failed and rolled back), empty (nothing healed). SystemsBefore and SystemsAfter are Revit's touched systems
+     * with their critical path, read before the first item and after the last (inside the rolled-back run on
+     * preview).
+     *
+     */
+    export interface DuctHealGroupOutcome {
+      group: string;
+      outcome: string;
+      reason?: null | string;
+      items: DuctHealOutcome[];
+      systemsBefore: DuctSystem[];
+      systemsAfter: DuctSystem[];
+    }
+    /**
+     * One item. How: cap, connect, union, extend (null when refused before choosing). Outcome: planned (preview),
+     * healed, refused. Created: new element ids (the cap, the union); Replaced: ids Revit deleted while healing (a
+     * duct it split or rebuilt), each replaced by an id in Created. Check is the post-check's words.
+     * On preview the ids are those of the rolled-back run and do not exist.
+     *
+     */
+    export interface DuctHealOutcome {
+      key: string;
+      kind: string;
+      how?: null | string;
+      outcome: string;
+      reason?: null | string;
+      created: number[];
+      replaced: number[];
+      check?: null | string;
+    }
+    /**
+     * One supply, return or exhaust MechanicalSystem as Revit reports it: the check beside Pe's own solve.
+     * CriticalPath is GetCriticalPathSectionNumbers(); empty when Revit found none.
+     *
+     */
+    export interface DuctSystem {
+      id: number;
+      name: string;
+      classification: string;
+      isWellConnected?: boolean | null;
+      baseEquipmentId?: number | null;
+      baseEquipmentConnector?: number | null;
+      criticalPathLossInWg?: null | number;
+      criticalPath: number[];
+      sections: DuctSection[];
+    }
+    /**
+     * One MEPSection: Revit's run of elements carrying one flow.
+     */
+    export interface DuctSection {
+      number: number;
+      flowCfm?: null | number;
+      totalPressureLossInWg?: null | number;
+      elementIds: number[];
+    }
+    export interface DuctHealCounts {
+      planned: number;
+      healed: number;
+      refused: number;
+    }
+  }
+}
+
+/** Read every duct network in the project: ducts, flex, fittings, accessories, terminals and HVAC equipment with their connectors, grouped by topology with equipment cut out, plus pass-1 terminal flow, fitting geometry ratios, fitting and accessory loss methods, terminal drops, Revit's supply/return/exhaust systems with critical path and sections, issues and the query behind each layer. Slots name the fan static, fan flow, component drop and terminal catalog drop parameters; labelParameter names the instance parameter whose value names equipment for people (each node's label). Read-only. */
+export namespace DuctsSnapshot {
+  export namespace Req {
+    /**
+     * Optional: which parameters carry the designer-stated values (absent reads the defaults), and LabelParameter, the
+     * instance parameter whose string value names equipment for people (absent reads the firm tag, PE_G___TagInstance:
+     * PE's alternative to the built-in Mark, never the Mark itself).
+     *
+     */
+    export interface Request {
+      slots?: null | DuctParameterSlots;
+      labelParameter?: null | string;
+    }
+    /**
+     * Parameter names the census reads, instance first and then type. FanStatic (in-wg) and FanFlow (CFM) on HVAC
+     * equipment, ComponentDrop (in-wg) on accessories, TerminalDrop (in-wg) and TerminalFlow (CFM) on terminals,
+     * FittingCoefficient (a number) on fittings: the family's own loss coefficient, which the Pe loss server reads
+     * live (the configurable door, kaitpw 2026-10-08).
+     *
+     */
+    export interface DuctParameterSlots {
+      fanStatic?: string;
+      fanFlow?: string;
+      componentDrop?: string;
+      terminalDrop?: null | string;
+      fittingCoefficient?: string;
+      terminalFlow?: string;
+    }
+  }
+  export namespace Res {
+    /**
+     * Physical XYZ and segment LengthFt preserve native model-foot binary64 values; other facts retain their stated units/rounding.
+     */
+    export type DuctCoordinateEncoding = "native-double";
+    export type DuctNodeKind = "equipment" | "terminal" | "fitting" | "accessory" | "cap";
+    export type DuctShape = "round" | "rectangular" | "oval" | "other";
+    /**
+     * Where a value came from. The route prints it beside the value.
+     */
+    export type DuctProvenance = "geometry" | "revit-reported" | "revit-default" | "designer-stated" | "derived";
+    export type DuctLossMethod =
+      | "not-defined"
+      | "ashrae-table"
+      | "specific-coefficient"
+      | "specific-loss"
+      | "pe-server"
+      | "other";
+    export type DuctSegmentKind = "duct" | "flex";
+    /**
+     * The native path form; samples alone do not certify nonlinear curve arclength stations.
+     */
+    export type DuctCurveKind = "line" | "arc" | "flex-polyline" | "other";
+    export type DuctIssueKind =
+      | "open-end"
+      | "loop"
+      | "stub"
+      | "mixed-classification"
+      | "implausible-size"
+      | "default-flex-roughness"
+      | "no-fan-static"
+      | "no-component-drop"
+      | "no-terminal-flow"
+      | "no-root"
+      | "multi-root"
+      | "high-velocity"
+      | "no-flow-leg";
+
+    /**
+     * Store is Pe's `_PE_DuctLosses` provenance blob, absent when the model has none. StoreError is set instead when
+     * the blob is unreadable or another version (fail-closed: ducts.apply refuses to overwrite it).
+     * AirflowCandidates are the air flow parameters the terminals carry, the picker for the TerminalFlow slot;
+     * FanFlowCandidates the same over HVAC equipment, the picker for the FanFlow slot (coverage per group the unit roots).
+     *
+     */
+    export interface Response {
+      document: DuctDocument;
+      coordinateEncoding: DuctCoordinateEncoding;
+      levels: DuctLevel[];
+      groups: DuctGroup[];
+      nodes: DuctNode[];
+      segments: DuctSegment[];
+      flows: DuctFlow[];
+      issues: DuctIssue[];
+      layers: DuctLayer[];
+      systems: DuctSystem[];
+      slots: DuctParameterSlots;
+      store?: null | DuctLossStore;
+      storeError?: null | string;
+      phases?: null | DuctPhases;
+      airflowCandidates?: DuctAirflowCandidate[] | null;
+      fanFlowCandidates?: DuctAirflowCandidate[] | null;
+    }
+    /**
+     * The document read, when, and how long the read took. NetworkBasedCalculations is DuctSettings' engine switch:
+     * read only: the snapshot guards an access violation on it, and apply never sets it (pressure-drop ledger).
+     *
+     */
+    export interface DuctDocument {
+      title: string;
+      readAt: string;
+      elapsedMs: number;
+      networkBasedCalculations: boolean;
+    }
+    /**
+     * A level; ElevationFt is Level.ProjectElevation (geometry frame), never Level.Elevation.
+     */
+    export interface DuctLevel {
+      id: number;
+      name: string;
+      elevationFt: number;
+    }
+    /**
+     * A connected duct network with equipment cut out: the unit a solver runs on. Id is "g" plus the smallest
+     * element id in it, stable while that element exists. RootIds are the equipment it hangs off.
+     *
+     */
+    export interface DuctGroup {
+      id: string;
+      rootIds: number[];
+      classifications: string[];
+      systemNames: string[];
+      terminalCount: number;
+      elementCount: number;
+      loops: number;
+      issueIds: string[];
+    }
+    /**
+     * PhaseCreated and PhaseDemolished name the element's phases (null when it has none, or none demolished it).
+     * FlowParameter, on a terminal, is the TerminalFlow slot that supplied its terminalFlow fact; on equipment, the
+     * FanFlow slot that supplied its fanFlow fact; null when none did.
+     *
+     */
+    export interface DuctNode {
+      id: number;
+      kind: DuctNodeKind;
+      category: string;
+      family?: null | string;
+      type?: null | string;
+      partType?: null | string;
+      levelId?: number | null;
+      point: number[];
+      groupId?: null | string;
+      systemName?: null | string;
+      classification?: null | string;
+      connectors: DuctConnector[];
+      facts: DuctFact[];
+      loss?: null | DuctLoss;
+      terminalDrop?: null | DuctTerminalDrop;
+      label?: null | string;
+      uniqueId?: null | string;
+      phaseCreated?: null | string;
+      phaseDemolished?: null | string;
+      flowParameter?: null | string;
+    }
+    /**
+     * One physical HVAC connector. Kind is "end" or "curve" (a tap on a duct's side). Direction is Revit's
+     * (in, out, bidirectional); flow direction for the solver comes from the root, never from this.
+     * FlowCfm is Revit's connector flow, read only on the legacy engine: under network-based calculations the getter can
+     * crash Revit 2025 (pressure-drop ledger, W3).
+     * Facing is Connector.CoordinateSystem.BasisZ, the unit axis the connector faces out of its owner, and WidthAxis its
+     * BasisX on a rectangular or oval connector (the side WidthIn runs along), both model coordinates; null when Revit
+     * gives no frame and in snapshots taken before they were read.
+     *
+     */
+    export interface DuctConnector {
+      index: number;
+      kind: string;
+      point: number[];
+      shape: DuctShape;
+      size: string;
+      diameterIn?: null | number;
+      widthIn?: null | number;
+      heightIn?: null | number;
+      flowCfm?: null | number;
+      direction: string;
+      classification?: null | string;
+      connectedTo?: null | DuctRef;
+      areaFt2?: null | number;
+      facing?: number[] | null;
+      widthAxis?: number[] | null;
+    }
+    /**
+     * What a connector touches: an element id and that element's connector index.
+     */
+    export interface DuctRef {
+      elementId: number;
+      connector: number;
+    }
+    /**
+     * One stated or reported value with its unit and provenance.
+     */
+    export interface DuctFact {
+      key: string;
+      value?: null | number;
+      text?: null | string;
+      unit: string;
+      provenance: DuctProvenance;
+    }
+    /**
+     * A fitting's or accessory's loss state: the server in RBS_DUCT_FITTING_LOSS_METHOD_SERVER_PARAM and the string
+     * fields of that server's entity on the instance, verbatim in Fields. Table, Coefficient and SpecificLossInWg are
+     * read from them. RevitPressureDropInWg is the element's own RBS_DUCT_PRESSURE_DROP (RBS_PRESSURE_DROP is empty under a stored ASHRAE table).
+     *
+     */
+    export interface DuctLoss {
+      method: DuctLossMethod;
+      serverId?: null | string;
+      table?: null | string;
+      coefficient?: null | number;
+      specificLossInWg?: null | number;
+      revitPressureDropInWg?: null | number;
+      fields: {
+        [k: string]: string;
+      };
+    }
+    /**
+     * A terminal's drop. AssignedPressureDropInWg is the first HVAC connector's AssignedPressureDrop; ConnectorLossMethod
+     * its AssignedDuctLossMethod (NotDefined, Coefficient, SpecificLoss). Writable is true only for SpecificLoss, and
+     * is necessary, not sufficient: Revit refuses the connector setter on a family's Specific Loss connector too (W3), so
+     * ducts.apply writes the instance parameter the family binds to it, named by the TerminalDrop slot.
+     * CatalogDropInWg is the TerminalDrop slot, if one is named.
+     *
+     */
+    export interface DuctTerminalDrop {
+      assignedPressureDropInWg?: null | number;
+      connectorLossMethod?: null | string;
+      writable: boolean;
+      catalogDropInWg?: null | number;
+    }
+    /**
+     * PhaseCreated and PhaseDemolished as on DuctNode.
+     */
+    export interface DuctSegment {
+      id: number;
+      kind: DuctSegmentKind;
+      curveKind: DuctCurveKind;
+      type?: null | string;
+      shape: DuctShape;
+      size: string;
+      diameterIn?: null | number;
+      widthIn?: null | number;
+      heightIn?: null | number;
+      lengthFt: number;
+      polyline: number[][];
+      levelId?: number | null;
+      groupId?: null | string;
+      systemName?: null | string;
+      classification?: null | string;
+      roughness: DuctRoughness;
+      revit: DuctRevitValues;
+      connectors: DuctConnector[];
+      uniqueId?: null | string;
+      phaseCreated?: null | string;
+      phaseDemolished?: null | string;
+    }
+    export interface DuctRoughness {
+      valueFt: number;
+      provenance: DuctProvenance;
+    }
+    /**
+     * What Revit reports on the segment. Partial in most models; a check, never an input.
+     */
+    export interface DuctRevitValues {
+      flowCfm?: null | number;
+      velocityFpm?: null | number;
+      frictionInWgPer100Ft?: null | number;
+      pressureDropInWg?: null | number;
+    }
+    /**
+     * Pass-1 flow: terminal design flow summed up the tree from the single root. At a tapped duct it is the upstream-end flow.
+     */
+    export interface DuctFlow {
+      segmentId: number;
+      cfm: number;
+      provenance: DuctProvenance;
+    }
+    /**
+     * Id is "kind:elementId" (open ends add ":connector"); an assumption verdict keys on it.
+     */
+    export interface DuctIssue {
+      id: string;
+      kind: DuctIssueKind;
+      elementId?: number | null;
+      point?: number[] | null;
+      groupId: string;
+      note: string;
+    }
+    /**
+     * One real query, printed verbatim in Query, and how much of the model it answered.
+     */
+    export interface DuctLayer {
+      key: string;
+      title: string;
+      query: string;
+      coverage: DuctCoverage;
+      provenance: DuctProvenance;
+    }
+    export interface DuctCoverage {
+      have: number;
+      of: number;
+    }
+    /**
+     * One supply, return or exhaust MechanicalSystem as Revit reports it: the check beside Pe's own solve.
+     * CriticalPath is GetCriticalPathSectionNumbers(); empty when Revit found none.
+     *
+     */
+    export interface DuctSystem {
+      id: number;
+      name: string;
+      classification: string;
+      isWellConnected?: boolean | null;
+      baseEquipmentId?: number | null;
+      baseEquipmentConnector?: number | null;
+      criticalPathLossInWg?: null | number;
+      criticalPath: number[];
+      sections: DuctSection[];
+    }
+    /**
+     * One MEPSection: Revit's run of elements carrying one flow.
+     */
+    export interface DuctSection {
+      number: number;
+      flowCfm?: null | number;
+      totalPressureLossInWg?: null | number;
+      elementIds: number[];
+    }
+    /**
+     * Parameter names the census reads, instance first and then type. FanStatic (in-wg) and FanFlow (CFM) on HVAC
+     * equipment, ComponentDrop (in-wg) on accessories, TerminalDrop (in-wg) and TerminalFlow (CFM) on terminals,
+     * FittingCoefficient (a number) on fittings: the family's own loss coefficient, which the Pe loss server reads
+     * live (the configurable door, kaitpw 2026-10-08).
+     *
+     */
+    export interface DuctParameterSlots {
+      fanStatic: string;
+      fanFlow: string;
+      componentDrop: string;
+      terminalDrop?: null | string;
+      fittingCoefficient: string;
+      terminalFlow: string;
+    }
+    /**
+     * Pe's provenance for duct losses: one versioned JSON blob in the hidden Project Information text parameter
+     * `_PE_DuctLosses` (pressure-drop ledger: never extensible storage). WorkRevision counts applies; a request
+     * carrying an older revision than the model holds is stale. Unknown keys survive read-modify-write.
+     * v2 adds the rulings that remain after healing (pressure-drop ledger, 2026-10-20): Verdicts keyed by issue or
+     * finding id, Roles keyed by unit id. They live here, not on elements and not in Pe Work; Work holds only pending
+     * edits. A v1 blob reads as v2 with no rulings; every write is v2.
+     *
+     */
+    export interface DuctLossStore {
+      version: number;
+      rules: {
+        [k: string]: DuctRuleChoice;
+      };
+      instances: {
+        [k: string]: DuctInstanceRecord;
+      };
+      terminals: {
+        [k: string]: DuctDropRecord;
+      };
+      terminalFlows: {
+        [k: string]: DuctFlowRecord;
+      };
+      equipmentFlows: {
+        [k: string]: DuctFlowRecord;
+      };
+      verdicts: {
+        [k: string]: DuctVerdictRecord;
+      };
+      roles: {
+        [k: string]: DuctRoleRecord;
+      };
+      slots?: null | DuctParameterSlots;
+      workRevision: number;
+      appliedAt?: null | string;
+      [k: string]: unknown;
+    }
+    /**
+     * A rule's chosen ASHRAE table (rule key is family:type plus a geometry condition, owned by the web).
+     */
+    export interface DuctRuleChoice {
+      table?: null | string;
+    }
+    /**
+     * What Pe wrote on one fitting: the table and lookup inputs behind the coefficient.
+     */
+    export interface DuctInstanceRecord {
+      table?: null | string;
+      inputs?: null | string;
+      coefficient: number;
+      appliedAt: string;
+    }
+    /**
+     * What Pe wrote on one terminal or component: the drop and where it came from (catalog, typed).
+     */
+    export interface DuctDropRecord {
+      inWg: number;
+      source?: null | string;
+      appliedAt: string;
+    }
+    /**
+     * What Pe wrote on one terminal or unit: the design flow in cfm and where it came from.
+     */
+    export interface DuctFlowRecord {
+      cfm: number;
+      source?: null | string;
+      appliedAt: string;
+    }
+    /**
+     * A person's ruling on an issue or inferred-join finding id: `ignore` leaves an open end out of the walk, or
+     * withholds (objects to) an inferred join.
+     *
+     */
+    export interface DuctVerdictRecord {
+      verdict: string;
+      ruledAt: string;
+    }
+    /**
+     * A person's ruling on an air mover: `passive` moves no design air (or `fan`, the default, said aloud).
+     */
+    export interface DuctRoleRecord {
+      role: string;
+      ruledAt: string;
+    }
+    /**
+     * The document's phases, Document.Phases in order (earliest first), and Views: how many non-template plan and 3D
+     * views show each phase (VIEW_PHASE) under each phase filter (VIEW_PHASE_FILTER), most first. A firm models what its
+     * views show; an element in a phase no view shows is often forgotten (pressure-drop ledger, 2026-10-19).
+     *
+     */
+    export interface DuctPhases {
+      order: string[];
+      views: DuctPhaseViews[];
+    }
+    /**
+     * Count views show Phase (null when a view has none) under Filter (null when none).
+     */
+    export interface DuctPhaseViews {
+      phase?: null | string;
+      filter?: null | string;
+      count: number;
+    }
+    /**
+     * One parameter a terminal's design airflow could be read from (pressure-drop ledger, 2026-10-20: the airflow read
+     * slot is a walk step). Slot is the parameter name, the TerminalFlow slot value that reads it; Where is instance or
+     * type; Shared is true for a shared parameter. A terminal's built-in `Flow` (RBS_DUCT_FLOW_PARAM, the connector's
+     * flow) is the instance candidate `Flow`. Have counts terminals with a nonzero value, Of every terminal; Groups the
+     * same per group, for groups where any terminal has one.
+     *
+     */
+    export interface DuctAirflowCandidate {
+      slot: string;
+      where: string;
+      shared: boolean;
+      have: number;
+      of: number;
+      groups: DuctGroupCoverage[];
+    }
+    export interface DuctGroupCoverage {
+      groupId: string;
+      have: number;
+      of: number;
+    }
+  }
+}
+
+/** Read ASHRAE duct fitting coefficient grids (Co, Cb, Cs) by table id from the .tbl files Revit installs, verbatim: axes, labels and values for a web lookup. Read-only; needs no document. */
+export namespace DuctsTables {
+  export namespace Req {
+    /**
+     * The table ids to read, as ASHRAE names them ("CD3-2", "SD5-9"); case does not matter.
+     */
+    export interface Request {
+      ids: string[];
+    }
+  }
+  export namespace Res {
+    /**
+     * Tables keyed by upper-case id, then by result key (Co, Cb, Cs; a block printed twice gets "#2").
+     * A table Revit ships as "No table" has no results. Missing names ids with no file in Folder. Unsupported maps
+     * an id to why it was not parsed: three-axis tables (a second Y such as Re or As/Ac) and fixed-width rows whose
+     * numbers run together; a wrong grid is worse than none.
+     *
+     */
+    export interface Response {
+      folder: string;
+      tables: {
+        [k: string]: {
+          [k: string]: AshraeGrid;
+        };
+      };
+      missing: string[];
+      unsupported: {
+        [k: string]: string;
+      };
+    }
+    /**
+     * One coefficient grid; the wire shape the web's loss-grid.ts reads. With Y present, Grid is number[][]: one row
+     * per Y, one column per X. With Y absent, Grid is number[] over X; a constant ("Co= 0.12") is one value with X
+     * empty. Grid is typed object because the wire is a union; Rows and Values build it.
+     *
+     */
+    export interface AshraeGrid {
+      title: string;
+      xLabel: string;
+      x: number[];
+      yLabel?: null | string;
+      y?: number[] | null;
+      grid: unknown;
+    }
+  }
+}
+
 /** Reconcile explicit loaded families to a saved spec or supplied draft, refusing plan drift per family and any family reloaded since the plan (its name now resolves to another id), and write the run receipt beside its operation output. */
 export namespace FamiliesApply {
   export namespace Req {
@@ -2982,21 +3903,31 @@ export namespace RevitContextLens {
   }
 }
 
-/** Show elements to the person at the window: select them and zoom the active view, or the given view, to their extents. Answers which ids it showed, which were missing, and the view. Changes the selection and the zoom only, never the model. Needs the active windowed document; a headless document refuses. */
+/** Select elements in the active windowed document, or select model elements and box a 3D view around them. Selection changes UI state. Boxing creates or updates one view in one transaction, then activates it and zooms. With viewId, select and zoom that graphical view; with selectOnly, change selection only. ExpectedUniqueIds verify paired identity before selection. Answers selected, missing, identity-verified, boxed, hidden and unavailable targets separately; boxed does not guarantee visible. Nested linked elements are unsupported; no link-instance substitution. Requires an exact open document lifetime and refuses headless or linked documents. */
 export namespace RevitContextShowElements {
   export namespace Req {
     /**
-     * Request for revit.context.show-elements: select elements and zoom a view to them, for the person at the window.
+     * Request for revit.context.show-elements: select elements and show them, for the person at the window.
      */
     export interface Request {
       /**
-       * Element ids to select and zoom to, from any handle-returning op.
+       * Element ids to select, from any handle-returning op.
        */
       elementIds: number[];
       /**
-       * Graphical view to activate and zoom; omit for the active view.
+       * Graphical view to activate and zoom instead of boxing the {3D} view; edits nothing.
        */
       viewId?: number | null;
+      /**
+       * Select and nothing else: the view, its zoom and its section box stay as they are.
+       */
+      selectOnly?: boolean;
+      /**
+       * Expected identities paired with local IDs. A mismatch refuses that ID; never resolve the UniqueId as another target. Omitted identities are ID-only within the exact open document lifetime.
+       */
+      expectedUniqueIds?: null | {
+        [k: string]: string;
+      };
     }
   }
   export namespace Res {
@@ -3024,6 +3955,27 @@ export namespace RevitContextShowElements {
        * One line on what happened.
        */
       note: string;
+      /**
+       * Targets with model geometry included in the committed 3D section box. This does not guarantee visibility.
+       */
+      boxed: number[];
+      /**
+       * Boxed targets absent from that view's visible-element collection.
+       */
+      hidden: number[];
+      /**
+       * Targets whose supplied expected UniqueId matched the local ID. ID-only targets never appear here.
+       */
+      identityVerified: number[];
+      /**
+       * Per-target refusals and partial failures.
+       */
+      issues: RevitShowElementsIssue[];
+    }
+    export interface RevitShowElementsIssue {
+      elementId: number;
+      code: string;
+      message: string;
     }
   }
 }
@@ -4386,6 +5338,1120 @@ export namespace RevitDetailSheets {
   }
 }
 
+/** Build the resident spatial world for the target project: tessellate host and every loaded link into one triangle soup with a BVH per source. Minutes on a large model; holds Revit for the whole ingest. */
+export namespace RevitDetailSpaceBuild {
+  export namespace Req {
+    export interface Request {}
+  }
+  export namespace Res {
+    /**
+     * Which document a partition reads. One partition per source.
+     */
+    export type SourceKind = "Host" | "RevitLink" | "IfcLink";
+    /**
+     * What a triangle came from. Curve2D is a DWG 2D layer raised into a vertical
+     * ribbon; it is never an obstructor unless a filter names it.
+     *
+     */
+    export type PrimKind = "Solid" | "Mesh" | "Curve2D";
+
+    /**
+     * Is there a world, and what does it hold. Built false means every other
+     * answer is empty and honest about it. Bounds are the union of every row box.
+     *
+     */
+    export interface Response {
+      stamp: Stamp;
+      built: boolean;
+      pendingIds: number;
+      categories: SourceCategories[];
+      levels: LevelRow[];
+      bounds?: null | Aabb;
+      ms: number;
+    }
+    /**
+     * Provenance and freshness. Every answer embeds one; it is not optional.
+     */
+    export interface Stamp {
+      hostDocumentKey: string;
+      epoch: number;
+      frame: string;
+      builtUtc: string;
+      sources: SourceRow[];
+      fresh: boolean;
+      resolved: Resolved;
+    }
+    /**
+     * One row per partition. Carried inside every Stamp.
+     */
+    export interface SourceRow {
+      source: number;
+      documentKey: string;
+      linkInstanceId?: number | null;
+      kind: SourceKind;
+      builtAtEpoch: number;
+      dirty: boolean;
+      elements: number;
+      triangles: number;
+      skipped: number;
+    }
+    /**
+     * The options a verb actually ran with, after defaults were applied. Never null and never a
+     * silence: a caller who passed no filter reads back Kinds: [Solid, Mesh] and the sources
+     * and categories spelled out. This is the gate that was in force, not the outcome; what the
+     * verb then had to touch is Searched.
+     *
+     */
+    export interface Resolved {
+      sources: SourceKind[];
+      categories: string[];
+      kinds: PrimKind[];
+      layers: string[];
+      excludedElementIds: number[];
+    }
+    /**
+     * One partition's categories, so a filter can be built without a rows read.
+     */
+    export interface SourceCategories {
+      source: number;
+      categories: string[];
+    }
+    /**
+     * One host level and its project elevation in host internal feet.
+     */
+    export interface LevelRow {
+      name: string;
+      elevationFt: number;
+    }
+    /**
+     * Axis-aligned bounds in host internal feet.
+     */
+    export interface Aabb {
+      minX: number;
+      minY: number;
+      minZ: number;
+      maxX: number;
+      maxY: number;
+      maxZ: number;
+    }
+  }
+}
+
+/** Count what the resident world holds inside a box, by source, category, kind and DWG layer, plus the ten fattest elements by triangle count. */
+export namespace RevitDetailSpaceCensus {
+  export namespace Req {
+    /**
+     * Count rows overlapping Box, six ordered host-internal-feet bounds, under Filter.
+     */
+    export interface Request {
+      box: number[];
+      filter?: null | FilterRequest;
+    }
+    /**
+     * The filter as the wire spells it: enum names as strings, every axis optional.
+     */
+    export interface FilterRequest {
+      sources?: string[] | null;
+      categories?: string[] | null;
+      kinds?: string[] | null;
+      layers?: string[] | null;
+      excludeElementIds?: number[] | null;
+    }
+  }
+  export namespace Res {
+    /**
+     * Which document a partition reads. One partition per source.
+     */
+    export type SourceKind = "Host" | "RevitLink" | "IfcLink";
+    /**
+     * What a triangle came from. Curve2D is a DWG 2D layer raised into a vertical
+     * ribbon; it is never an obstructor unless a filter names it.
+     *
+     */
+    export type PrimKind = "Solid" | "Mesh" | "Curve2D";
+    /**
+     * Architectural height authority, independent of collision geometry. None means never a height.
+     * ByGeometry is an element with no category role (an IFC proxy slab or roof is a nameless Generic
+     * Model) whose triangles answer for it, per HeightRoles.
+     *
+     */
+    export type HeightRole = "None" | "Floor" | "Overhead" | "ByGeometry";
+
+    /**
+     * Stamped counts of matching rows by source kind, category, primitive kind and layer, plus the ten largest rows.
+     */
+    export interface Response {
+      stamp: Stamp;
+      searched: Searched;
+      buckets: CensusBucket[];
+      top: CensusTop[];
+      ms: number;
+    }
+    /**
+     * Provenance and freshness. Every answer embeds one; it is not optional.
+     */
+    export interface Stamp {
+      hostDocumentKey: string;
+      epoch: number;
+      frame: string;
+      builtUtc: string;
+      sources: SourceRow[];
+      fresh: boolean;
+      resolved: Resolved;
+    }
+    /**
+     * One row per partition. Carried inside every Stamp.
+     */
+    export interface SourceRow {
+      source: number;
+      documentKey: string;
+      linkInstanceId?: number | null;
+      kind: SourceKind;
+      builtAtEpoch: number;
+      dirty: boolean;
+      elements: number;
+      triangles: number;
+      skipped: number;
+    }
+    /**
+     * The options a verb actually ran with, after defaults were applied. Never null and never a
+     * silence: a caller who passed no filter reads back Kinds: [Solid, Mesh] and the sources
+     * and categories spelled out. This is the gate that was in force, not the outcome; what the
+     * verb then had to touch is Searched.
+     *
+     */
+    export interface Resolved {
+      sources: SourceKind[];
+      categories: string[];
+      kinds: PrimKind[];
+      layers: string[];
+      excludedElementIds: number[];
+    }
+    /**
+     * How much of the world the verb had to touch to answer. The honesty counter.
+     */
+    export interface Searched {
+      docs: number;
+      categories: number;
+      candidates: number;
+      examined: number;
+      skipped: number;
+    }
+    export interface CensusBucket {
+      source: SourceKind;
+      category: string;
+      kind: PrimKind;
+      elements: number;
+      triangles: number;
+      layer?: null | string;
+    }
+    export interface CensusTop {
+      handle: Handle;
+      triangles: number;
+    }
+    /**
+     * The address of one element. Enough for the host to select it.
+     */
+    export interface Handle {
+      documentKey: string;
+      elementId: number;
+      uniqueId: string;
+      linkInstanceId?: number | null;
+      category: string;
+      kind: PrimKind;
+      layer?: null | string;
+      extrusion?: null | Extrusion;
+      heightRole: HeightRole;
+    }
+    /**
+     * How far a 2D DWG layer was raised and why. A ribbon is an assumption wearing geometry, so the
+     * assumption travels on the row and into the Handle. Heights are per polyline, so one row holds
+     * the tallest band it emitted and the distinct reasons behind all of them.
+     *
+     */
+    export interface Extrusion {
+      maxHeightFt: number;
+      reasons: string[];
+    }
+  }
+}
+
+/** Probe straight down and straight up from one point: the first thing under it and over it, with the Handle and distance of each; null when nothing is hit within maxDistanceFt. */
+export namespace RevitDetailSpaceProbe {
+  export namespace Req {
+    export type ProbePurpose = "Obstructions" | "RoomHeights";
+
+    /**
+     * Probe At (three host-internal-feet coordinates). MaxDistanceFt defaults to 200.
+     * Purpose defaults to Obstructions; RoomHeights applies architectural height-role predicates.
+     */
+    export interface Request {
+      at: number[];
+      filter?: null | FilterRequest;
+      maxDistanceFt?: null | number;
+      purpose?: null | ProbePurpose;
+    }
+    /**
+     * The filter as the wire spells it: enum names as strings, every axis optional.
+     */
+    export interface FilterRequest {
+      sources?: string[] | null;
+      categories?: string[] | null;
+      kinds?: string[] | null;
+      layers?: string[] | null;
+      excludeElementIds?: number[] | null;
+    }
+  }
+  export namespace Res {
+    /**
+     * Which document a partition reads. One partition per source.
+     */
+    export type SourceKind = "Host" | "RevitLink" | "IfcLink";
+    /**
+     * What a triangle came from. Curve2D is a DWG 2D layer raised into a vertical
+     * ribbon; it is never an obstructor unless a filter names it.
+     *
+     */
+    export type PrimKind = "Solid" | "Mesh" | "Curve2D";
+    /**
+     * Architectural height authority, independent of collision geometry. None means never a height.
+     * ByGeometry is an element with no category role (an IFC proxy slab or roof is a nameless Generic
+     * Model) whose triangles answer for it, per HeightRoles.
+     *
+     */
+    export type HeightRole = "None" | "Floor" | "Overhead" | "ByGeometry";
+    export type ProbePurpose = "Obstructions" | "RoomHeights";
+
+    /**
+     * What is under and over one point. Floor and Ceiling are null when
+     * nothing was hit inside the search distance, which is the honest answer for a point outside the
+     * building rather than a fabricated elevation.
+     *
+     */
+    export interface Response {
+      stamp: Stamp;
+      searched: Searched;
+      floor?: null | ProbeHit;
+      ceiling?: null | ProbeHit;
+      maxDistanceFt: number;
+      ms: number;
+      purpose: ProbePurpose;
+    }
+    /**
+     * Provenance and freshness. Every answer embeds one; it is not optional.
+     */
+    export interface Stamp {
+      hostDocumentKey: string;
+      epoch: number;
+      frame: string;
+      builtUtc: string;
+      sources: SourceRow[];
+      fresh: boolean;
+      resolved: Resolved;
+    }
+    /**
+     * One row per partition. Carried inside every Stamp.
+     */
+    export interface SourceRow {
+      source: number;
+      documentKey: string;
+      linkInstanceId?: number | null;
+      kind: SourceKind;
+      builtAtEpoch: number;
+      dirty: boolean;
+      elements: number;
+      triangles: number;
+      skipped: number;
+    }
+    /**
+     * The options a verb actually ran with, after defaults were applied. Never null and never a
+     * silence: a caller who passed no filter reads back Kinds: [Solid, Mesh] and the sources
+     * and categories spelled out. This is the gate that was in force, not the outcome; what the
+     * verb then had to touch is Searched.
+     *
+     */
+    export interface Resolved {
+      sources: SourceKind[];
+      categories: string[];
+      kinds: PrimKind[];
+      layers: string[];
+      excludedElementIds: number[];
+    }
+    /**
+     * How much of the world the verb had to touch to answer. The honesty counter.
+     */
+    export interface Searched {
+      docs: number;
+      categories: number;
+      candidates: number;
+      examined: number;
+      skipped: number;
+    }
+    /**
+     * What a vertical probe met, and how far away it was.
+     */
+    export interface ProbeHit {
+      handle: Handle;
+      distanceFt: number;
+      z: number;
+    }
+    /**
+     * The address of one element. Enough for the host to select it.
+     */
+    export interface Handle {
+      documentKey: string;
+      elementId: number;
+      uniqueId: string;
+      linkInstanceId?: number | null;
+      category: string;
+      kind: PrimKind;
+      layer?: null | string;
+      extrusion?: null | Extrusion;
+      heightRole: HeightRole;
+    }
+    /**
+     * How far a 2D DWG layer was raised and why. A ribbon is an assumption wearing geometry, so the
+     * assumption travels on the row and into the Handle. Heights are per polyline, so one row holds
+     * the tallest band it emitted and the distinct reasons behind all of them.
+     *
+     */
+    export interface Extrusion {
+      maxHeightFt: number;
+      reasons: string[];
+    }
+  }
+}
+
+/** Read every element row of the resident world that passes a filter, as parallel arrays with legend lists for category, kind, layer and height role, plus each row's box and triangle count. */
+export namespace RevitDetailSpaceRows {
+  export namespace Req {
+    /**
+     * Read rows passing Filter; omitted axes use the resolved defaults in the answer stamp.
+     */
+    export interface Request {
+      filter?: null | FilterRequest;
+    }
+    /**
+     * The filter as the wire spells it: enum names as strings, every axis optional.
+     */
+    export interface FilterRequest {
+      sources?: string[] | null;
+      categories?: string[] | null;
+      kinds?: string[] | null;
+      layers?: string[] | null;
+      excludeElementIds?: number[] | null;
+    }
+  }
+  export namespace Res {
+    /**
+     * Which document a partition reads. One partition per source.
+     */
+    export type SourceKind = "Host" | "RevitLink" | "IfcLink";
+    /**
+     * What a triangle came from. Curve2D is a DWG 2D layer raised into a vertical
+     * ribbon; it is never an obstructor unless a filter names it.
+     *
+     */
+    export type PrimKind = "Solid" | "Mesh" | "Curve2D";
+
+    /**
+     * Every row that passes the filter, as parallel arrays: index i across every array is one
+     * PrimRow. Category, kind, layer and height role are indexes into the legend
+     * lists, so a category name travels once. Box is six doubles per row; -1 means no layer.
+     *
+     */
+    export interface Response {
+      stamp: Stamp;
+      searched: Searched;
+      categories: string[];
+      kinds: string[];
+      layers: string[];
+      heightRoles: string[];
+      source: number[];
+      elementId: number[];
+      category: number[];
+      kind: number[];
+      layer: number[];
+      heightRole: number[];
+      triangles: number[];
+      extrusionFt: number[];
+      box: number[];
+      ms: number;
+    }
+    /**
+     * Provenance and freshness. Every answer embeds one; it is not optional.
+     */
+    export interface Stamp {
+      hostDocumentKey: string;
+      epoch: number;
+      frame: string;
+      builtUtc: string;
+      sources: SourceRow[];
+      fresh: boolean;
+      resolved: Resolved;
+    }
+    /**
+     * One row per partition. Carried inside every Stamp.
+     */
+    export interface SourceRow {
+      source: number;
+      documentKey: string;
+      linkInstanceId?: number | null;
+      kind: SourceKind;
+      builtAtEpoch: number;
+      dirty: boolean;
+      elements: number;
+      triangles: number;
+      skipped: number;
+    }
+    /**
+     * The options a verb actually ran with, after defaults were applied. Never null and never a
+     * silence: a caller who passed no filter reads back Kinds: [Solid, Mesh] and the sources
+     * and categories spelled out. This is the gate that was in force, not the outcome; what the
+     * verb then had to touch is Searched.
+     *
+     */
+    export interface Resolved {
+      sources: SourceKind[];
+      categories: string[];
+      kinds: PrimKind[];
+      layers: string[];
+      excludedElementIds: number[];
+    }
+    /**
+     * How much of the world the verb had to touch to answer. The honesty counter.
+     */
+    export interface Searched {
+      docs: number;
+      categories: number;
+      candidates: number;
+      examined: number;
+      skipped: number;
+    }
+  }
+}
+
+/** Export real triangles in host internal feet. Set focusOnly with host elementIds for the first usable exact-membership mesh without preparing the whole world. Request context separately with focusOnly false; contextPaddingFt derives its crop, or bounds sets it explicitly. Metadata phase distinguishes focus/context, unavailableElements identifies requested ids without meshes, and omittedElements counts context excluded by the triangle budget. No document mutation. Browser orbit, visibility and cuts need no further native calls. */
+export namespace RevitDetailSpaceScene {
+  export namespace Req {
+    export interface Request {
+      elementIds?: number[] | null;
+      contextPaddingFt?: number;
+      maxTriangles?: number;
+      bounds?: null | Aabb;
+      focusOnly?: boolean;
+    }
+    /**
+     * Axis-aligned bounds in host internal feet.
+     */
+    export interface Aabb {
+      minX: number;
+      minY: number;
+      minZ: number;
+      maxX: number;
+      maxY: number;
+      maxZ: number;
+    }
+  }
+  export namespace Res {
+    /**
+     * Which document a partition reads. One partition per source.
+     */
+    export type SourceKind = "Host" | "RevitLink" | "IfcLink";
+    /**
+     * What a triangle came from. Curve2D is a DWG 2D layer raised into a vertical
+     * ribbon; it is never an obstructor unless a filter names it.
+     *
+     */
+    export type PrimKind = "Solid" | "Mesh" | "Curve2D";
+    /**
+     * Architectural height authority, independent of collision geometry. None means never a height.
+     * ByGeometry is an element with no category role (an IFC proxy slab or roof is a nameless Generic
+     * Model) whose triangles answer for it, per HeightRoles.
+     *
+     */
+    export type HeightRole = "None" | "Floor" | "Overhead" | "ByGeometry";
+
+    export interface Response {
+      scene: SceneMetadata;
+      id: string;
+      url: string;
+      bytes: number;
+    }
+    export interface SceneMetadata {
+      format: string;
+      stamp: Stamp;
+      bounds: Aabb;
+      triangles: number;
+      elements: SceneElement[];
+      requestedElementIds: number[];
+      omittedElements: number;
+      sources: SceneSource[];
+      phase: string;
+      unavailableElements: SceneUnavailableElement[];
+    }
+    /**
+     * Provenance and freshness. Every answer embeds one; it is not optional.
+     */
+    export interface Stamp {
+      hostDocumentKey: string;
+      epoch: number;
+      frame: string;
+      builtUtc: string;
+      sources: SourceRow[];
+      fresh: boolean;
+      resolved: Resolved;
+    }
+    /**
+     * One row per partition. Carried inside every Stamp.
+     */
+    export interface SourceRow {
+      source: number;
+      documentKey: string;
+      linkInstanceId?: number | null;
+      kind: SourceKind;
+      builtAtEpoch: number;
+      dirty: boolean;
+      elements: number;
+      triangles: number;
+      skipped: number;
+    }
+    /**
+     * The options a verb actually ran with, after defaults were applied. Never null and never a
+     * silence: a caller who passed no filter reads back Kinds: [Solid, Mesh] and the sources
+     * and categories spelled out. This is the gate that was in force, not the outcome; what the
+     * verb then had to touch is Searched.
+     *
+     */
+    export interface Resolved {
+      sources: SourceKind[];
+      categories: string[];
+      kinds: PrimKind[];
+      layers: string[];
+      excludedElementIds: number[];
+    }
+    /**
+     * Axis-aligned bounds in host internal feet.
+     */
+    export interface Aabb {
+      minX: number;
+      minY: number;
+      minZ: number;
+      maxX: number;
+      maxY: number;
+      maxZ: number;
+    }
+    export interface SceneElement {
+      handle: Handle;
+      firstVertex: number;
+      vertexCount: number;
+      bounds: Aabb;
+      focus: boolean;
+    }
+    /**
+     * The address of one element. Enough for the host to select it.
+     */
+    export interface Handle {
+      documentKey: string;
+      elementId: number;
+      uniqueId: string;
+      linkInstanceId?: number | null;
+      category: string;
+      kind: PrimKind;
+      layer?: null | string;
+      extrusion?: null | Extrusion;
+      heightRole: HeightRole;
+    }
+    /**
+     * How far a 2D DWG layer was raised and why. A ribbon is an assumption wearing geometry, so the
+     * assumption travels on the row and into the Handle. Heights are per polyline, so one row holds
+     * the tallest band it emitted and the distinct reasons behind all of them.
+     *
+     */
+    export interface Extrusion {
+      maxHeightFt: number;
+      reasons: string[];
+    }
+    export interface SceneSource {
+      documentKey: string;
+      linkInstanceId?: number | null;
+      sourceToHost: number[];
+    }
+    export interface SceneUnavailableElement {
+      elementId: number;
+      uniqueId?: null | string;
+      category?: null | string;
+      reason: string;
+    }
+  }
+}
+
+/** Slice the resident world with a horizontal band z0..z1: every triangle clipped to the band and flattened to convex xy pieces per element, the exact footprint the partition solver reads; capped at maxPieces with whole elements, and the answer says when it truncated and the total it found. xyClip rejects elements whose box misses the rectangle. */
+export namespace RevitDetailSpaceSlice {
+  export namespace Req {
+    /**
+     * Slice z0..z1 in host internal feet. XyClip is six ordered bounds; only x/y reject whole rows.
+     * MaxPieces defaults to 50000 and retains whole elements in resident order; zero emits none.
+     */
+    export interface Request {
+      z0: number;
+      z1: number;
+      filter?: null | FilterRequest;
+      xyClip?: number[] | null;
+      maxPieces?: number | null;
+    }
+    /**
+     * The filter as the wire spells it: enum names as strings, every axis optional.
+     */
+    export interface FilterRequest {
+      sources?: string[] | null;
+      categories?: string[] | null;
+      kinds?: string[] | null;
+      layers?: string[] | null;
+      excludeElementIds?: number[] | null;
+    }
+  }
+  export namespace Res {
+    /**
+     * Which document a partition reads. One partition per source.
+     */
+    export type SourceKind = "Host" | "RevitLink" | "IfcLink";
+    /**
+     * What a triangle came from. Curve2D is a DWG 2D layer raised into a vertical
+     * ribbon; it is never an obstructor unless a filter names it.
+     *
+     */
+    export type PrimKind = "Solid" | "Mesh" | "Curve2D";
+    /**
+     * Architectural height authority, independent of collision geometry. None means never a height.
+     * ByGeometry is an element with no category role (an IFC proxy slab or roof is a nameless Generic
+     * Model) whose triangles answer for it, per HeightRoles.
+     *
+     */
+    export type HeightRole = "None" | "Floor" | "Overhead" | "ByGeometry";
+
+    /**
+     * A SliceAnswer cut to a piece budget, whole elements or nothing, for the
+     * browser frame budget: a knee band across a whole storey is 164 k pieces. Total is what the slice found regardless.
+     *
+     */
+    export interface Response {
+      stamp: Stamp;
+      searched: Searched;
+      elements: SliceElement[];
+      pieces: number;
+      total: number;
+      truncated: boolean;
+      ms: number;
+    }
+    /**
+     * Provenance and freshness. Every answer embeds one; it is not optional.
+     */
+    export interface Stamp {
+      hostDocumentKey: string;
+      epoch: number;
+      frame: string;
+      builtUtc: string;
+      sources: SourceRow[];
+      fresh: boolean;
+      resolved: Resolved;
+    }
+    /**
+     * One row per partition. Carried inside every Stamp.
+     */
+    export interface SourceRow {
+      source: number;
+      documentKey: string;
+      linkInstanceId?: number | null;
+      kind: SourceKind;
+      builtAtEpoch: number;
+      dirty: boolean;
+      elements: number;
+      triangles: number;
+      skipped: number;
+    }
+    /**
+     * The options a verb actually ran with, after defaults were applied. Never null and never a
+     * silence: a caller who passed no filter reads back Kinds: [Solid, Mesh] and the sources
+     * and categories spelled out. This is the gate that was in force, not the outcome; what the
+     * verb then had to touch is Searched.
+     *
+     */
+    export interface Resolved {
+      sources: SourceKind[];
+      categories: string[];
+      kinds: PrimKind[];
+      layers: string[];
+      excludedElementIds: number[];
+    }
+    /**
+     * How much of the world the verb had to touch to answer. The honesty counter.
+     */
+    export interface Searched {
+      docs: number;
+      categories: number;
+      candidates: number;
+      examined: number;
+      skipped: number;
+    }
+    /**
+     * One census row. Layer is the DWG layer on a Curve2D bucket, null otherwise.
+     */
+    export interface SliceElement {
+      handle: Handle;
+      pieces: number[][];
+    }
+    /**
+     * The address of one element. Enough for the host to select it.
+     */
+    export interface Handle {
+      documentKey: string;
+      elementId: number;
+      uniqueId: string;
+      linkInstanceId?: number | null;
+      category: string;
+      kind: PrimKind;
+      layer?: null | string;
+      extrusion?: null | Extrusion;
+      heightRole: HeightRole;
+    }
+    /**
+     * How far a 2D DWG layer was raised and why. A ribbon is an assumption wearing geometry, so the
+     * assumption travels on the row and into the Handle. Heights are per polyline, so one row holds
+     * the tallest band it emitted and the distinct reasons behind all of them.
+     *
+     */
+    export interface Extrusion {
+      maxHeightFt: number;
+      reasons: string[];
+    }
+  }
+}
+
+/** Read whether the resident spatial world is built for the target project, its stamp (epoch, freshness, sources), the categories each source holds, level elevations, and world bounds. */
+export namespace RevitDetailSpaceStatus {
+  export namespace Req {
+    export interface Request {}
+  }
+  export namespace Res {
+    /**
+     * Which document a partition reads. One partition per source.
+     */
+    export type SourceKind = "Host" | "RevitLink" | "IfcLink";
+    /**
+     * What a triangle came from. Curve2D is a DWG 2D layer raised into a vertical
+     * ribbon; it is never an obstructor unless a filter names it.
+     *
+     */
+    export type PrimKind = "Solid" | "Mesh" | "Curve2D";
+
+    /**
+     * Is there a world, and what does it hold. Built false means every other
+     * answer is empty and honest about it. Bounds are the union of every row box.
+     *
+     */
+    export interface Response {
+      stamp: Stamp;
+      built: boolean;
+      pendingIds: number;
+      categories: SourceCategories[];
+      levels: LevelRow[];
+      bounds?: null | Aabb;
+      ms: number;
+    }
+    /**
+     * Provenance and freshness. Every answer embeds one; it is not optional.
+     */
+    export interface Stamp {
+      hostDocumentKey: string;
+      epoch: number;
+      frame: string;
+      builtUtc: string;
+      sources: SourceRow[];
+      fresh: boolean;
+      resolved: Resolved;
+    }
+    /**
+     * One row per partition. Carried inside every Stamp.
+     */
+    export interface SourceRow {
+      source: number;
+      documentKey: string;
+      linkInstanceId?: number | null;
+      kind: SourceKind;
+      builtAtEpoch: number;
+      dirty: boolean;
+      elements: number;
+      triangles: number;
+      skipped: number;
+    }
+    /**
+     * The options a verb actually ran with, after defaults were applied. Never null and never a
+     * silence: a caller who passed no filter reads back Kinds: [Solid, Mesh] and the sources
+     * and categories spelled out. This is the gate that was in force, not the outcome; what the
+     * verb then had to touch is Searched.
+     *
+     */
+    export interface Resolved {
+      sources: SourceKind[];
+      categories: string[];
+      kinds: PrimKind[];
+      layers: string[];
+      excludedElementIds: number[];
+    }
+    /**
+     * One partition's categories, so a filter can be built without a rows read.
+     */
+    export interface SourceCategories {
+      source: number;
+      categories: string[];
+    }
+    /**
+     * One host level and its project elevation in host internal feet.
+     */
+    export interface LevelRow {
+      name: string;
+      elevationFt: number;
+    }
+    /**
+     * Axis-aligned bounds in host internal feet.
+     */
+    export interface Aabb {
+      minX: number;
+      minY: number;
+      minZ: number;
+      maxX: number;
+      maxY: number;
+      maxZ: number;
+    }
+  }
+}
+
+/** Sweep a rectangular profile (widthFt across, heightFt up) along a polyline and answer HIT, NEAR or CLEAR per segment with the exact gap and the nearest element's Handle. */
+export namespace RevitDetailSpaceSweep {
+  export namespace Req {
+    /**
+     * Sweep a positive width/height profile in feet along at least two host-coordinate triples, with nonnegative clearance.
+     */
+    export interface Request {
+      polyline: number[][];
+      widthFt: number;
+      heightFt: number;
+      clearanceFt: number;
+      filter?: null | FilterRequest;
+    }
+    /**
+     * The filter as the wire spells it: enum names as strings, every axis optional.
+     */
+    export interface FilterRequest {
+      sources?: string[] | null;
+      categories?: string[] | null;
+      kinds?: string[] | null;
+      layers?: string[] | null;
+      excludeElementIds?: number[] | null;
+    }
+  }
+  export namespace Res {
+    /**
+     * Which document a partition reads. One partition per source.
+     */
+    export type SourceKind = "Host" | "RevitLink" | "IfcLink";
+    /**
+     * What a triangle came from. Curve2D is a DWG 2D layer raised into a vertical
+     * ribbon; it is never an obstructor unless a filter names it.
+     *
+     */
+    export type PrimKind = "Solid" | "Mesh" | "Curve2D";
+    /**
+     * Architectural height authority, independent of collision geometry. None means never a height.
+     * ByGeometry is an element with no category role (an IFC proxy slab or roof is a nameless Generic
+     * Model) whose triangles answer for it, per HeightRoles.
+     *
+     */
+    export type HeightRole = "None" | "Floor" | "Overhead" | "ByGeometry";
+
+    /**
+     * Stamped clearance verdicts for each consecutive polyline segment, with search accounting and elapsed milliseconds.
+     */
+    export interface Response {
+      stamp: Stamp;
+      searched: Searched;
+      segments: SweepSegment[];
+      ms: number;
+    }
+    /**
+     * Provenance and freshness. Every answer embeds one; it is not optional.
+     */
+    export interface Stamp {
+      hostDocumentKey: string;
+      epoch: number;
+      frame: string;
+      builtUtc: string;
+      sources: SourceRow[];
+      fresh: boolean;
+      resolved: Resolved;
+    }
+    /**
+     * One row per partition. Carried inside every Stamp.
+     */
+    export interface SourceRow {
+      source: number;
+      documentKey: string;
+      linkInstanceId?: number | null;
+      kind: SourceKind;
+      builtAtEpoch: number;
+      dirty: boolean;
+      elements: number;
+      triangles: number;
+      skipped: number;
+    }
+    /**
+     * The options a verb actually ran with, after defaults were applied. Never null and never a
+     * silence: a caller who passed no filter reads back Kinds: [Solid, Mesh] and the sources
+     * and categories spelled out. This is the gate that was in force, not the outcome; what the
+     * verb then had to touch is Searched.
+     *
+     */
+    export interface Resolved {
+      sources: SourceKind[];
+      categories: string[];
+      kinds: PrimKind[];
+      layers: string[];
+      excludedElementIds: number[];
+    }
+    /**
+     * How much of the world the verb had to touch to answer. The honesty counter.
+     */
+    export interface Searched {
+      docs: number;
+      categories: number;
+      candidates: number;
+      examined: number;
+      skipped: number;
+    }
+    /**
+     * One segment of a swept profile and what it found.
+     */
+    export interface SweepSegment {
+      index: number;
+      verdict: string;
+      minGapFt: number;
+      nearest?: null | Handle;
+      closestPoint?: number[] | null;
+    }
+    /**
+     * The address of one element. Enough for the host to select it.
+     */
+    export interface Handle {
+      documentKey: string;
+      elementId: number;
+      uniqueId: string;
+      linkInstanceId?: number | null;
+      category: string;
+      kind: PrimKind;
+      layer?: null | string;
+      extrusion?: null | Extrusion;
+      heightRole: HeightRole;
+    }
+    /**
+     * How far a 2D DWG layer was raised and why. A ribbon is an assumption wearing geometry, so the
+     * assumption travels on the row and into the Handle. Heights are per polyline, so one row holds
+     * the tallest band it emitted and the distinct reasons behind all of them.
+     *
+     */
+    export interface Extrusion {
+      maxHeightFt: number;
+      reasons: string[];
+    }
+  }
+}
+
+/** Read one source's BVH down to a depth: each node's box, depth, leaf flag and triangle count, so a viewer can draw how a sweep prunes. */
+export namespace RevitDetailSpaceTree {
+  export namespace Req {
+    /**
+     * Read Source's BVH through MaxDepth inclusive. Source defaults to host (0), depth to 8.
+     */
+    export interface Request {
+      source?: number | null;
+      maxDepth?: number | null;
+    }
+  }
+  export namespace Res {
+    /**
+     * Which document a partition reads. One partition per source.
+     */
+    export type SourceKind = "Host" | "RevitLink" | "IfcLink";
+    /**
+     * What a triangle came from. Curve2D is a DWG 2D layer raised into a vertical
+     * ribbon; it is never an obstructor unless a filter names it.
+     *
+     */
+    export type PrimKind = "Solid" | "Mesh" | "Curve2D";
+
+    /**
+     * One source BVH, through MaxDepth inclusive, in post-order with the root last.
+     */
+    export interface Response {
+      stamp: Stamp;
+      source: number;
+      maxDepth: number;
+      nodes: BvhNode[];
+      ms: number;
+    }
+    /**
+     * Provenance and freshness. Every answer embeds one; it is not optional.
+     */
+    export interface Stamp {
+      hostDocumentKey: string;
+      epoch: number;
+      frame: string;
+      builtUtc: string;
+      sources: SourceRow[];
+      fresh: boolean;
+      resolved: Resolved;
+    }
+    /**
+     * One row per partition. Carried inside every Stamp.
+     */
+    export interface SourceRow {
+      source: number;
+      documentKey: string;
+      linkInstanceId?: number | null;
+      kind: SourceKind;
+      builtAtEpoch: number;
+      dirty: boolean;
+      elements: number;
+      triangles: number;
+      skipped: number;
+    }
+    /**
+     * The options a verb actually ran with, after defaults were applied. Never null and never a
+     * silence: a caller who passed no filter reads back Kinds: [Solid, Mesh] and the sources
+     * and categories spelled out. This is the gate that was in force, not the outcome; what the
+     * verb then had to touch is Searched.
+     *
+     */
+    export interface Resolved {
+      sources: SourceKind[];
+      categories: string[];
+      kinds: PrimKind[];
+      layers: string[];
+      excludedElementIds: number[];
+    }
+    /**
+     * One BVH node: its index, depth, leaf flag, subtree triangle count, and six host-feet bounds.
+     */
+    export interface BvhNode {
+      index: number;
+      depth: number;
+      leaf: boolean;
+      triangles: number;
+      box: number[];
+    }
+  }
+}
+
 /** One bounded 'what is on the user's screen' packet: active-view identity, observed view state, visible category composition (counts, generous bounds), and the verbatim trust strip (confidenceWarnings, apiLimitations, notInspected). observedAtUtc stamps freshness. Escalate to visible-summary for element handles or view-rendering-state for multi-view comparison. */
 export namespace RevitGlanceAttention {
   export namespace Req {
@@ -5233,6 +7299,59 @@ export namespace RevitMatrixScheduleProfiles {
       displayValue?: null | string;
       storageType: RequestedParameterStorageType;
       name: string;
+    }
+    export interface RevitDataIssue {
+      code: string;
+      severity: RevitDataIssueSeverity;
+      message: string;
+      familyName?: null | string;
+      typeName?: null | string;
+      parameterName?: null | string;
+    }
+  }
+}
+
+/** Resolve the exact captured familyId and familyUniqueId into current placed FamilyInstance refs across all of that family's types in this project document. Checks the paired family identity with no name or UniqueId fallback. Read-only; no transaction, family editor, active-view filter, or linked traversal. Scans document instances, returns exact total and at most maxResults refs (default 500, range 1..1000) with IDs and UniqueIds. Error issues refuse identity; empty or truncated results must not authorize Select or Selection Box. Does not select a family definition or resolve a type name. Use the captured document lifetime for this read and any later action. */
+export namespace RevitResolveFamilyInstances {
+  export namespace Req {
+    /**
+     * Resolve current placements across every type of one exactly identified loaded family.
+     */
+    export interface Request {
+      familyId: number;
+      familyUniqueId: string;
+      maxResults?: number;
+    }
+  }
+  export namespace Res {
+    export type RevitDataIssueSeverity = "Info" | "Warning" | "Error";
+
+    /**
+     * Echoes the requested family identity; error issues mean it was not resolved.
+     * Empty or truncated placements must not authorize Select or Selection Box.
+     *
+     */
+    export interface Response {
+      familyId: number;
+      familyUniqueId: string;
+      instances: ElementContextElementRef[];
+      page: RevitDataResultPage;
+      issues: RevitDataIssue[];
+    }
+    export interface ElementContextElementRef {
+      elementId: number;
+      elementUniqueId: string;
+      className: string;
+      categoryName?: null | string;
+      name: string;
+      familyName?: null | string;
+      typeName?: null | string;
+      mark?: null | string;
+    }
+    export interface RevitDataResultPage {
+      totalCount: number;
+      returnedCount: number;
+      isTruncated: boolean;
     }
     export interface RevitDataIssue {
       code: string;
@@ -6298,6 +8417,12 @@ export interface HostOps {
   "data-table.apply": { request: DataTableApply.Req.Request; response: DataTableApply.Res.Response };
   "document.temporary.release": { request: DocumentTemporaryRelease.Req.Request; response: DocumentTemporaryRelease.Res.Response };
   "document.temporary.status": { request: DocumentTemporaryStatus.Req.Request; response: DocumentTemporaryStatus.Res.Response };
+  "ducts.apply": { request: DuctsApply.Req.Request; response: DuctsApply.Res.Response };
+  "ducts.assign-fan": { request: DuctsAssignFan.Req.Request; response: DuctsAssignFan.Res.Response };
+  "ducts.family-patch": { request: DuctsFamilyPatch.Req.Request; response: DuctsFamilyPatch.Res.Response };
+  "ducts.heal": { request: DuctsHeal.Req.Request; response: DuctsHeal.Res.Response };
+  "ducts.snapshot": { request: DuctsSnapshot.Req.Request; response: DuctsSnapshot.Res.Response };
+  "ducts.tables": { request: DuctsTables.Req.Request; response: DuctsTables.Res.Response };
   "families.apply": { request: FamiliesApply.Req.Request; response: FamiliesApply.Res.Response };
   "families.capture": { request: FamiliesCapture.Req.Request; response: FamiliesCapture.Res.Response };
   "families.plan": { request: FamiliesPlan.Req.Request; response: FamiliesPlan.Res.Response };
@@ -6342,12 +8467,22 @@ export interface HostOps {
   "revit.detail.parameter-links": { request: RevitDetailParameterLinks.Req.Request; response: RevitDetailParameterLinks.Res.Response };
   "revit.detail.schedules": { request: RevitDetailSchedules.Req.Request; response: RevitDetailSchedules.Res.Response };
   "revit.detail.sheets": { request: RevitDetailSheets.Req.Request; response: RevitDetailSheets.Res.Response };
+  "revit.detail.space-build": { request: RevitDetailSpaceBuild.Req.Request; response: RevitDetailSpaceBuild.Res.Response };
+  "revit.detail.space-census": { request: RevitDetailSpaceCensus.Req.Request; response: RevitDetailSpaceCensus.Res.Response };
+  "revit.detail.space-probe": { request: RevitDetailSpaceProbe.Req.Request; response: RevitDetailSpaceProbe.Res.Response };
+  "revit.detail.space-rows": { request: RevitDetailSpaceRows.Req.Request; response: RevitDetailSpaceRows.Res.Response };
+  "revit.detail.space-scene": { request: RevitDetailSpaceScene.Req.Request; response: RevitDetailSpaceScene.Res.Response };
+  "revit.detail.space-slice": { request: RevitDetailSpaceSlice.Req.Request; response: RevitDetailSpaceSlice.Res.Response };
+  "revit.detail.space-status": { request: RevitDetailSpaceStatus.Req.Request; response: RevitDetailSpaceStatus.Res.Response };
+  "revit.detail.space-sweep": { request: RevitDetailSpaceSweep.Req.Request; response: RevitDetailSpaceSweep.Res.Response };
+  "revit.detail.space-tree": { request: RevitDetailSpaceTree.Req.Request; response: RevitDetailSpaceTree.Res.Response };
   "revit.glance.attention": { request: RevitGlanceAttention.Req.Request; response: RevitGlanceAttention.Res.Response };
   "revit.glance.model": { request: RevitGlanceModel.Req.Request; response: RevitGlanceModel.Res.Response };
   "revit.matrix.loaded-families": { request: RevitMatrixLoadedFamilies.Req.Request; response: RevitMatrixLoadedFamilies.Res.Response };
   "revit.matrix.parameter-coverage": { request: RevitMatrixParameterCoverage.Req.Request; response: RevitMatrixParameterCoverage.Res.Response };
   "revit.matrix.schedule-coverage": { request: RevitMatrixScheduleCoverage.Req.Request; response: RevitMatrixScheduleCoverage.Res.Response };
   "revit.matrix.schedule-profiles": { request: RevitMatrixScheduleProfiles.Req.Request; response: RevitMatrixScheduleProfiles.Res.Response };
+  "revit.resolve.family-instances": { request: RevitResolveFamilyInstances.Req.Request; response: RevitResolveFamilyInstances.Res.Response };
   "revit.resolve.references": { request: RevitResolveReferences.Req.Request; response: RevitResolveReferences.Res.Response };
   "revit.resolve.unit-value": { request: RevitResolveUnitValue.Req.Request; response: RevitResolveUnitValue.Res.Response };
   "rooms.draw": { request: RoomsDraw.Req.Request; response: RoomsDraw.Res.Response };
@@ -6376,6 +8511,12 @@ export const hostOpKeys = [
   "data-table.apply",
   "document.temporary.release",
   "document.temporary.status",
+  "ducts.apply",
+  "ducts.assign-fan",
+  "ducts.family-patch",
+  "ducts.heal",
+  "ducts.snapshot",
+  "ducts.tables",
   "families.apply",
   "families.capture",
   "families.plan",
@@ -6420,12 +8561,22 @@ export const hostOpKeys = [
   "revit.detail.parameter-links",
   "revit.detail.schedules",
   "revit.detail.sheets",
+  "revit.detail.space-build",
+  "revit.detail.space-census",
+  "revit.detail.space-probe",
+  "revit.detail.space-rows",
+  "revit.detail.space-scene",
+  "revit.detail.space-slice",
+  "revit.detail.space-status",
+  "revit.detail.space-sweep",
+  "revit.detail.space-tree",
   "revit.glance.attention",
   "revit.glance.model",
   "revit.matrix.loaded-families",
   "revit.matrix.parameter-coverage",
   "revit.matrix.schedule-coverage",
   "revit.matrix.schedule-profiles",
+  "revit.resolve.family-instances",
   "revit.resolve.references",
   "revit.resolve.unit-value",
   "rooms.draw",
