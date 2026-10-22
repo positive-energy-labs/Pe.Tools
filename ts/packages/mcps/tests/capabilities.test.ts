@@ -827,3 +827,82 @@ test("route:ducts.guide with a document adds the cases its fresh analysis shows,
     },
   });
 });
+
+test("route:ducts.set-view with no mounted view opens Ducts as a thread tab, then moves it once mounted", async () => {
+  fakeRuntimeHost("http://127.0.0.1:9");
+  const tabs: unknown[] = [];
+  const sets: unknown[] = [];
+  let mounted = false;
+  let held = false;
+  vi.stubGlobal("fetch", async (input: string | URL | Request, init?: RequestInit) => {
+    const url = new URL(input instanceof Request ? input.url : String(input));
+    const method = init?.method ?? "GET";
+    if (url.pathname === "/pe/capabilities") return Response.json(catalog());
+    if (url.pathname === "/pe/threads/t1" && method === "GET")
+      return Response.json({ tabs: held ? [{ route: "ducts" }] : [] });
+    if (url.pathname === "/pe/threads/t1/tabs") {
+      tabs.push(JSON.parse(init!.body as string));
+      mounted = true; // the browser on this chat focuses the new tab and publishes its view
+      return Response.json({ tabs: [] });
+    }
+    if (url.pathname === "/pe/route-view/ducts" && method === "GET")
+      return mounted
+        ? Response.json({
+            instance: "6f1c2a9e-4b7d-4c3e-9a1f-2d8e5b7c0a11",
+            revision: 3,
+            route: "ducts",
+            thread: "t1",
+            page: { system: "" },
+            facts: { systems: [{ name: "SA 19" }], levels: [] },
+          })
+        : Response.json(
+            { ok: false, error: "no mounted ducts view", instances: [] },
+            { status: 409 },
+          );
+    if (url.pathname === "/pe/route-view/ducts/set") {
+      sets.push(JSON.parse(init!.body as string));
+      return Response.json({ ok: true, context: {} });
+    }
+    throw Error(`unexpected ${method} ${url.pathname}`);
+  });
+  const result = await run(peDo, {
+    key: "route:ducts.set-view",
+    input: { system: "sa 19" },
+    timeoutSeconds: 30,
+  });
+  expect(tabs).toEqual([
+    { op: "put", id: expect.any(String), route: "ducts", link: expect.stringMatching(/^\/ducts/) },
+  ]);
+  // The open is the set: the mounted view's own names resolve "sa 19", and its lease revision is used.
+  expect(sets).toMatchObject([
+    {
+      thread: "t1",
+      instance: "6f1c2a9e-4b7d-4c3e-9a1f-2d8e5b7c0a11",
+      revision: 3,
+      patch: { system: "SA 19" },
+    },
+  ]);
+  expect(result).toMatchObject({ ok: true });
+
+  // A Ducts tab already in the thread but off screen is reused, never duplicated.
+  tabs.length = 0;
+  sets.length = 0;
+  mounted = false;
+  held = true;
+  vi.useFakeTimers({ toFake: ["setTimeout"] });
+  try {
+    const pending = run(peDo, {
+      key: "route:ducts.set-view",
+      input: { system: "SA 19" },
+      timeoutSeconds: 30,
+    });
+    await vi.runAllTimersAsync();
+    expect(await pending).toMatchObject({
+      result: { mounted: false, outcome: "unmounted", applied: false },
+    });
+  } finally {
+    vi.useRealTimers();
+  }
+  expect(tabs).toEqual([]);
+  expect(sets).toEqual([]);
+});

@@ -62,7 +62,9 @@ export class RouteViewStore {
       ? views[0]
       : {
           ok: false,
-          error: views.length ? `ambiguous mounted ${route} views` : `no mounted ${route} view`,
+          error: views.length
+            ? `ambiguous mounted ${route} views`
+            : `no mounted ${route} view; route:${route}.set-view opens it in this thread`,
           instances: views.map((view) => view.instance),
         };
   }

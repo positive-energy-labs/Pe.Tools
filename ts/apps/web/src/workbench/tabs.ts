@@ -92,6 +92,7 @@ export function useRouteTabs() {
   const held = useRef<Active | null>(null);
   const pending = useRef(new Map<string, Active>());
   const serial = useRef(Promise.resolve());
+  const written = useRef(new Set<string>());
   const navigationEpoch = useRef(0);
   const liveThread = useRef(thread);
   liveThread.current = thread;
@@ -126,9 +127,22 @@ export function useRouteTabs() {
     };
   }, [thread, known?.id, retry, draft]);
 
-  // Summary notifications may change the strip, never this browser's active URL or owner.
+  // Summary notifications may change the strip, never this browser's active URL or owner, with one
+  // exception: a tab that arrives from the host while this browser shows the thread's chat is Pea
+  // opening a tool (`route:<tool>.set-view`), so it opens beside the chat.
+  // ponytail: "not written here" stands in for "written by Pea"; a tab the person opens in another
+  // window also opens here. A host-stamped opener on the tab replaces this if that bites.
+  const seen = useRef<{ thread: string; ids: Set<string> } | null>(null);
   useEffect(() => {
-    if (known) setSnapshot({ thread, tabs: known.tabs, ready: true });
+    if (!known) return;
+    const prior = seen.current?.thread === thread ? seen.current.ids : null;
+    seen.current = { thread, ids: new Set(known.tabs.map((tab) => tab.id)) };
+    setSnapshot({ thread, tabs: known.tabs, ready: true });
+    const arrived = prior
+      ? known.tabs.find((tab) => !prior.has(tab.id) && !written.current.has(tab.id))
+      : undefined;
+    if (arrived && !route && location.pathname === "/pea" && document.visibilityState === "visible")
+      void select(arrived).catch(fail);
   }, [thread, known?.tabs]);
 
   if (route && link && thread && shown.ready) {
@@ -171,6 +185,7 @@ export function useRouteTabs() {
         .catch(() => {})
         .then(async () => {
           if (current && !current()) return null;
+          written.current.add(body.id);
           let summary: { tabs: ThreadTab[] };
           if (local || routeThreadIssue(owner, router.state.location.state) === "minted") {
             const prior = store.actions.draftTabs(owner);
