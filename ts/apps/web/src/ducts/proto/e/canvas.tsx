@@ -117,6 +117,8 @@ function Canvas({
   const read = useScene(request, native, page.epoch);
   const bounds = usePictureBounds(read.meshes, scene);
   const committedPose = poseOf(page.viewport, bounds);
+  // Exception to Page owning visible state: this is a gesture preview, never persisted. Page and
+  // Pea's facts.pose receive the released pose; publishing each preview made the whole route stutter.
   const [orbitDraft, setOrbitDraft] = useState<{
     base: typeof page.viewport;
     system: string;
@@ -126,7 +128,7 @@ function Canvas({
     orbitDraft?.base === page.viewport && orbitDraft.system === page.system
       ? orbitDraft.pose
       : committedPose;
-  // The pose the picture shows is a fact Pea reads (`facts.pose`); only this effect writes it.
+  // Pea reads the committed pose (`facts.pose`), not the in-progress globe preview.
   useEffect(() => {
     if (JSON.stringify(committedPose) !== JSON.stringify(page.pose))
       setPage({ pose: committedPose });

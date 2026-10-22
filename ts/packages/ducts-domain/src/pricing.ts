@@ -64,6 +64,8 @@ const unitOverrides = (
 });
 
 /** The units as Revit holds them: stored rulings over roles proposed from Revit's own state, and each unit's stated flow. */
+// Only immutable captured inputs are reused. Staged Work still prices separately below; refreshing
+// Revit replaces the snapshot identity, so this cache cannot carry an old read into a new one.
 const appliedUnitCache = new WeakMap<DuctSnapshot, ReturnType<typeof unitOverrides>>();
 const appliedUnits = (raw: DuctSnapshot) => {
   const cached = appliedUnitCache.get(raw);

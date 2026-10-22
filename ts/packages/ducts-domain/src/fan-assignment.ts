@@ -20,6 +20,8 @@ export type OwedBase = Map<number, FanAssignment[]> & { split?: Map<string, numb
 
 type Shape = Pick<DuctSnapshot, "groups" | "nodes"> & Partial<Pick<DuctSnapshot, "systems">>;
 
+// Derived lookup only, not a second source of model truth: snapshots are immutable and a new read
+// gets a new identity. Eligibility is still checked per call; native mutation revalidates in Revit.
 const indexes = new WeakMap<Shape, ReturnType<typeof buildIndex>>();
 function buildIndex(snapshot: Shape) {
   const nodes = new Map<number, Shape["nodes"][number]>();

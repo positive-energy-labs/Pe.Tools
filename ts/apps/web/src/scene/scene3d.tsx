@@ -1,7 +1,9 @@
 /**
- * The one 3D renderer in the web app. The route owns the viewport (a Page key of kind `orbit`) and
- * hands it in; the canvas never keeps camera state across renders. Orbit and zoom report as
- * "gesture" (the route replaces history); the caller's named moves push.
+ * The one 3D renderer in the web app. The route's viewport (a Page key of kind `orbit`) owns the
+ * committed pose. Exception to publishing every visible change through Page: the renderer
+ * owns a transient gesture until release (wheel until quiet). Per-move Page writes rerun route and
+ * domain work; the Chadds orbit probe measured 918 ms submission gaps that way. The final pose
+ * reports as "gesture" (replace history); named moves push. No second persisted camera exists.
  *
  * The canvas names the Revit element under the pointer in `data-revit-ids`, so the app-root
  * element menu answers right-click and BX here like on any row. Double-click stays free. Named

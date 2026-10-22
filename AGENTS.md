@@ -77,6 +77,7 @@ Among other things, this requires Pe.Tools packages to expose good "public" apis
 - Long time on task or unprogressing loops warrant a look at underlying problems. Time on task for subagents in particular reveal high "this architecture is bad" signal, in part becasue your context is not contaminated with the implementation history.
 - Name the proof lane. Source compile, package artifact, deterministic, fresh, attached, session, and installed behavior prove different things, and a Revit-backed claim also names the session's custody. Protect the user-owned dev session; SDK `pe-revit` owns execution-loop orchestration.
 - Delete a data-integrity or runtime seam only when the simpler replacement preserves its behavior and proof.
+- When departing from a prior decision or philosophy, leave a short comment at the exception naming the rule, why it does not apply here, and the boundary that still holds. Correct nearby comments that now contradict the code; do not make the next agent infer a deliberate exception from a diff.
 
 Read [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md) for product direction, [docs/BUILD.md](docs/BUILD.md) for proof and runbook guidance, and the nearest package `AGENTS.md` before local changes.
 
