@@ -12,6 +12,7 @@ import {
   type RouteField,
 } from "./route-field.ts";
 import { routeAddresses } from "./routes/index.ts";
+import { threadListFields } from "./routes/shared.ts";
 
 /**
  * A route's address, deep: `routeAddress(route)` is the one door every caller reaches a route through,
@@ -24,7 +25,7 @@ import { routeAddresses } from "./routes/index.ts";
 
 type Routes = typeof routeAddresses;
 export type RouteKey = keyof Routes;
-type FieldsOf<R extends RouteKey> = Routes[R]["fields"];
+type FieldsOf<R extends RouteKey> = Routes[R]["fields"] & typeof threadListFields;
 type SchemaOf<F> = F extends { schema: infer S extends z.ZodType } ? S : never;
 type KeysWhere<F, M> = { [K in keyof F]: F[K] extends M ? K : never }[keyof F] & string;
 
@@ -48,11 +49,11 @@ type ShareKey<R extends RouteKey> = Exclude<UrlKey<R>, KeysWhere<FieldsOf<R>, { 
 export type RoutePage<R extends RouteKey> = R extends RouteKey ? Closed<Fielded<R>> : never;
 /** The fields the address bar holds. */
 export type UrlPage<R extends RouteKey> = R extends RouteKey
-  ? Closed<Pick<Fielded<R>, UrlKey<R>>>
+  ? Closed<Pick<Fielded<R>, UrlKey<R> & keyof Fielded<R>>>
   : never;
 /** The fields a link carries: URL keys, drafts excepted. */
 export type LinkPage<R extends RouteKey> = R extends RouteKey
-  ? Closed<Partial<Pick<Fielded<R>, ShareKey<R>>>>
+  ? Closed<Partial<Pick<Fielded<R>, ShareKey<R> & keyof Fielded<R>>>>
   : never;
 
 export type RouteViewRoute = {
@@ -194,7 +195,7 @@ type Page = Record<string, unknown>;
 
 function build(route: RouteKey) {
   const spec = routeAddresses[route] as RouteDeclaration;
-  const fields: Fields = spec.fields;
+  const fields: Fields = { ...threadListFields, ...spec.fields };
   const conflict = spec.conflict;
   const urlKeys = keysWhere(fields, (field) => !!field.url);
   const agentKeys = keysWhere(fields, (field) => !!field.agent);
@@ -351,6 +352,26 @@ function lease(
     );
   return {
     ...spec,
+    resolve:
+      spec.resolve &&
+      ((input: Record<string, unknown>, facts: Record<string, unknown>) => {
+        const shared = Object.fromEntries(
+          Object.entries(input).filter(([key]) => Object.hasOwn(threadListFields, key)),
+        );
+        const own = Object.fromEntries(
+          Object.entries(input).filter(([key]) => !Object.hasOwn(threadListFields, key)),
+        );
+        const checked = Object.keys(shared).length ? patch.safeParse(shared) : undefined;
+        if (checked && !checked.success)
+          return { ok: false as const, error: checked.error.message };
+        const resolved =
+          Object.keys(own).length || !checked
+            ? spec.resolve!(own, facts)
+            : { ok: true as const, patch: {} };
+        return resolved.ok
+          ? { ok: true as const, patch: { ...resolved.patch, ...checked?.data } }
+          : resolved;
+      }),
     keys: agentKeys,
     fields: sets,
     patch: patch as z.ZodType<Record<string, string>>,

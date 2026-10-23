@@ -5,7 +5,8 @@ import { createFileRoute, Link } from "@tanstack/react-router";
 import { FactChip } from "@pe/kit/lang/chip";
 import { OutcomeLine } from "#/components/lang/outcome";
 import { ThemeToggle } from "@pe/kit/lang/theme-toggle";
-import { Tree } from "@pe/kit/lang/row";
+import { useList } from "@pe/kit/lang/collection";
+import { ListView } from "@pe/kit/lang/list-view";
 import {
   FieldOptionsPanel,
   FreeTextPanel,
@@ -18,12 +19,19 @@ import {
   SlashPanel,
   TablePanel,
   ZonesPanel,
+  CoreListPanel,
+  readCoreListState,
 } from "#/design-system/list-specimen";
 import { CATEGORY_OPTIONS } from "#/design-system/specimens-data";
 import type { FieldOptionState } from "#/lib/schema-to-field-render/shared";
 import { FieldOptions } from "#/lib/schema-to-field-render/field-metadata";
 
-export const Route = createFileRoute("/design-system_/list")({ component: ListRoute });
+export const Route = createFileRoute("/design-system_/list")({
+  validateSearch: (search: Record<string, unknown>): { list?: string } => ({
+    list: typeof search.list === "string" ? search.list : undefined,
+  }),
+  component: ListRoute,
+});
 
 /** A baked HostOnly domain and a LiveDocument one Revit changed after the read. Specimen data. */
 const FIELD_OPTION_STATES: FieldOptionState[] = [
@@ -97,21 +105,30 @@ const SYSTEM_TREE: SpecNode[] = [
 ];
 
 function TreePanel({ say }: { say: (text: string) => void }) {
+  const list = useList({
+    items: SYSTEM_TREE,
+    keyOf: (n) => n.key,
+    search: (n) => ({ text: [n.name] }),
+    tree: { childrenOf: (n) => n.children ?? [] },
+    initialState: { open: ["sa19", "sa19/r1", "sa19/r1/b"] },
+    onPick: (n) => say(`pick “${n.name}”`),
+  });
   return (
-    <Tree
+    <ListView
+      list={list}
+      bar={false}
+      maxHeight="16rem"
+      estimate={20}
       aria-label="system call tree"
-      roots={SYSTEM_TREE}
-      keyOf={(n) => n.key}
-      childrenOf={(n) => n.children ?? []}
-      defaultOpen={["sa19", "sa19/r1", "sa19/r1/b"]}
-      empty="no systems in this document"
-      onPick={(n) => say(`pick “${n.name}”`)}
+      empty={{ message: "No systems in this document", exit: "Read a model" }}
       row={(n) => ({ label: n.name, meta: n.loss })}
     />
   );
 }
 
 function ListRoute() {
+  const search = Route.useSearch();
+  const navigate = Route.useNavigate();
   const [said, say] = useState<string | null>(null);
   return (
     <div className="min-h-screen">
@@ -133,6 +150,16 @@ function ListRoute() {
       </header>
 
       <main className="flex flex-col gap-8 pt-6 pb-16">
+        <CoreListPanel
+          state={readCoreListState(search.list)}
+          onState={(state) => {
+            void navigate({
+              search: { list: JSON.stringify(state) },
+              replace: true,
+              resetScroll: false,
+            });
+          }}
+        />
         <div className="grid gap-x-8 gap-y-6 md:grid-cols-2 xl:grid-cols-4">
           <Panel title="sidebar" kind="List · actions">
             <SidebarPanel say={say} />
@@ -165,7 +192,7 @@ function ListRoute() {
           <Panel title="free text" kind="ListInput · suggestions">
             <FreeTextPanel say={say} />
           </Panel>
-          <Panel title="tree" kind="Tree · depth · guides · cut hint">
+          <Panel title="tree" kind="ListView · depth · guides · cut hint">
             <TreePanel say={say} />
           </Panel>
           <Panel title="table" kind="Row as tr · cell list · multi">

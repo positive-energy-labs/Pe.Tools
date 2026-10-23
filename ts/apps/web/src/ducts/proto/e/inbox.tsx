@@ -1,4 +1,4 @@
-import { useMemo, useState, type ReactNode } from "react";
+import { useEffect, useRef, useState, type ReactNode } from "react";
 import {
   Ban,
   Check,
@@ -15,8 +15,8 @@ import type { DuctsRouteDocument, RouteStatePatch } from "@pe/agent-contracts";
 import type { DuctSnapshot } from "@pe/ducts-domain/types";
 import { Button } from "@pe/kit/lang/button";
 import { FactChip } from "@pe/kit/lang/chip";
-import { EmptyState } from "@pe/kit/lang/empty";
-import { Inbox as KitInbox, type InboxRowSpec } from "@pe/kit/lang/inbox";
+import { useList, emptyListState, type ListState } from "@pe/kit/lang/collection";
+import { ListView } from "@pe/kit/lang/list-view";
 import { reviewTransitions, type CellWire } from "#/components/work/band";
 import type { ActionHandle } from "#/route/handle";
 import { SelectInRevitIcon, showInRevit } from "#/revit/element-menu";
@@ -32,7 +32,6 @@ import { rulingPatches, verdictPatches } from "../../assumptions";
 import { VERDICTS, type Verdict } from "../../claims";
 import {
   diagnosticKind,
-  diagnosticsKey,
   INBOX_LABELS,
   INBOX_ORDER,
   type CellRef,
@@ -41,7 +40,7 @@ import {
   type RowVerb,
 } from "../../inbox-rows";
 import type { Claim } from "../../legs";
-import { inboxWriteRows, type WriteVerbs } from "./inbox-write";
+import { inboxWriteRows, type WriteVerbs, type RulingRow } from "./inbox-write";
 import { SlotPicker } from "./slot-picker";
 import { InboxClaim, claimLine } from "./inbox-claim";
 
@@ -109,7 +108,7 @@ export function Inbox({
   fan,
   selected,
   focused,
-  diagnostic,
+  address,
 }: {
   groups: Record<Exclude<InboxGroup, "write">, readonly InboxItem[]>;
   work: InboxWork;
@@ -126,8 +125,11 @@ export function Inbox({
   selected: number | null;
   /** The inbox row a review named (`focusRow`): it opens, wears selected and pulses once. */
   focused: string | null;
-  /** The Diagnostics kind picked in its key (empty = none), and its press. */
-  diagnostic: { kind: string; pick: (kind: string) => void };
+  address?: {
+    query: string;
+    sort: "" | "name" | "status";
+    onChange: (query: string, sort: "" | "name" | "status") => void;
+  };
 }) {
   const observation = useNativeObservation();
   const [nativeResult, setNativeResult] = useState<ShowElementsResult | null>(null);
@@ -280,23 +282,27 @@ export function Inbox({
   const verbsOf = (item: InboxItem, worded: boolean) =>
     item.verbs.flatMap((verb, i) => [verbButton(verb, i, worded)].flat());
 
-  const spec = (item: InboxItem): InboxRowSpec => {
+  const spec = (item: InboxItem): RulingRow => {
     const target = observedElements(observation, item.ids);
     const claim = item.verbs.find((v) => v.kind === "claim");
     const title = claim?.kind === "claim" ? claimLine(claim.claim, nameOf) : item.title;
     return {
       key: item.key,
       search: { text: [title, item.status, item.kind, item.note], ids: item.ids },
-      "data-kind": item.kind,
+      kind: diagnosticKind(item),
+      group: item.group,
+      statusText: item.status,
+      label: title,
       title,
-      titleText: title,
-      status: <span data-tone={item.tone}>{item.status}</span>,
-      verbs: verbsOf(item, false),
+      stage: item.kind === "proposal" ? "proposed" : undefined,
+      stagedBy: item.kind === "proposal" ? "pea" : undefined,
+      meta: <span data-tone={item.tone}>{item.status}</span>,
+      actions: verbsOf(item, false),
       onMouseEnter: () => light(item.ids),
       revitIds: target.ids,
       revitRefs: target.refs,
       lit: (selected != null && item.ids.includes(selected)) || item.key === focused,
-      onClick: () => onSelect(item.ids[0] ?? null),
+      pick: () => onSelect(item.ids[0] ?? null),
       detail: (
         <>
           {claim?.kind === "claim" ? (
@@ -322,81 +328,91 @@ export function Inbox({
 
   const { writeSpec, reviewSpecs } = inboxWriteRows(write);
 
-  const legend = diagnosticsKey(groups.diagnostics).map(({ kind, count }) => (
-    <Button
-      key={kind}
-      kind="framed"
-      label={`${kind} ${count}`}
-      reason={
-        diagnostic.kind === kind
-          ? "Show every Diagnostics row again, and annotate only the Fix rows on the picture"
-          : `Show only the ${kind} rows, here and on the picture`
-      }
-      pressed={diagnostic.kind === kind}
-      onClick={() => diagnostic.pick(diagnostic.kind === kind ? "" : kind)}
-    >
-      {kind} <span className="text-ink-mute tabular-nums">{count}</span>
-    </Button>
-  ));
-  const specs = useMemo(
-    () =>
-      ({
-        fix: { label: INBOX_LABELS.fix, rows: groups.fix.map(spec) },
-        set: { label: INBOX_LABELS.set, rows: groups.set.map(spec) },
-        check: { label: INBOX_LABELS.check, rows: groups.check.map(spec) },
-        write: {
-          label: INBOX_LABELS.write,
-          rows: [{ ...writeSpec, lit: focused === "write" }, ...reviewSpecs],
-          always: true,
-        },
-        diagnostics: {
-          label: INBOX_LABELS.diagnostics,
-          rows: groups.diagnostics
-            .filter((r) => !diagnostic.kind || diagnosticKind(r) === diagnostic.kind)
-            .map(spec),
-          legend: legend.length ? legend : undefined,
-          collapsible: true,
-          defaultCollapsed: true,
-        },
-      }) satisfies Record<InboxGroup, unknown>,
-    // eslint-disable-next-line react-hooks/exhaustive-deps -- spec closes over props that change with them
-    [
-      groups,
-      work.doc,
-      work.revision,
-      work.store,
-      observation,
-      selecting,
-      write.row,
-      write.review,
-      write.preview.refusal,
-      write.preview.label,
-      write.apply.refusal,
-      write.apply.label,
-      write.busy,
-      heal.busy,
-      fan.busy,
-      onVerdict,
-      selected,
-      focused,
-      diagnostic.kind,
-      diagnostic.pick,
-    ],
-  );
+  const rows: RulingRow[] = [
+    ...groups.fix.map(spec),
+    ...groups.set.map(spec),
+    ...groups.check.map(spec),
+    { ...writeSpec, lit: focused === "write" },
+    ...reviewSpecs,
+    ...groups.diagnostics.map(spec),
+  ];
+  const [view, setView] = useState<ListState<"name" | "status">>(() => ({
+    ...emptyListState(),
+    closed: [INBOX_LABELS.diagnostics],
+  }));
+  const list = useList({
+    items: rows,
+    keyOf: (row) => row.key,
+    search: (row) => row.search,
+    fields: {
+      kind: { kind: "text", read: (row) => row.kind },
+      section: { kind: "text", read: (row) => INBOX_LABELS[row.group] },
+      status: { kind: "text", read: (row) => row.statusText },
+    },
+    sorts: { name: (row) => row.title, status: (row) => row.statusText },
+    groups: {
+      of: (row) => INBOX_LABELS[row.group],
+      order: INBOX_ORDER.map((key) => INBOX_LABELS[key]),
+      collapsible: INBOX_ORDER.map((key) => INBOX_LABELS[key]),
+    },
+    state: { ...view, query: address?.query ?? view.query, sort: address?.sort ?? view.sort },
+    onState: (next) => {
+      setView(next);
+      if (address && (next.query !== address.query || next.sort !== address.sort))
+        address.onChange(next.query, next.sort);
+    },
+    stageOf: (row) => row.stage ?? "clean",
+    onPick: (row) => {
+      setView((previous) => ({
+        ...previous,
+        selected: [row.key],
+        open: previous.open.includes(row.key) ? [] : [row.key],
+      }));
+      row.pick?.();
+    },
+  });
+  const desired =
+    rows.find((row) => row.key === focused) ??
+    rows.find((row) => row.lit && view.selected.includes(row.key)) ??
+    rows.find((row) => row.lit);
+  const reveal = useRef<string | null>(null);
+  useEffect(() => {
+    reveal.current = desired?.key ?? null;
+  }, [desired?.key]);
+  useEffect(() => {
+    const key = reveal.current;
+    if (!key) return;
+    const section = list.sections.find((section) => section.rows.some((row) => row.key === key));
+    if (!section) return;
+    if (section.closed || !view.open.includes(key) || !view.selected.includes(key)) {
+      setView((previous) => ({
+        ...previous,
+        closed: previous.closed.filter((name) => name !== section.key),
+        open: [key],
+        selected: [key],
+      }));
+      return;
+    }
+    reveal.current = null;
+    list.reveal(key);
+  });
   return (
     <>
-      <KitInbox
-        aria-label="inbox"
-        filter={{ label: "filter the inbox", placeholder: "title, status or element id  ( / )" }}
-        order={INBOX_ORDER}
-        groups={specs}
-        onMouseLeave={() => light(null)}
-        empty={
-          <EmptyState story="scope" exit="stage a change or ask Pea">
-            nothing to rule on
-          </EmptyState>
-        }
-      />
+      <div onMouseLeave={() => light(null)}>
+        <ListView
+          aria-label="rulings"
+          list={list}
+          row={({ key: _key, ...parts }) => parts}
+          detail={(row) =>
+            row.detail ? (
+              <div data-inbox-detail={row.key} className="px-4 py-1 flex flex-col gap-1.5">
+                {row.detail}
+              </div>
+            ) : null
+          }
+          empty={{ message: "Nothing to rule on", exit: "Stage a change or ask Pea" }}
+        />
+      </div>
       {nativeResult ? (
         <div role="status" className="px-2 py-1">
           <FactChip title="what revit.context.show-elements answered">

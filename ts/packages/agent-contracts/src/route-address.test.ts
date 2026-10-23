@@ -32,6 +32,46 @@ describe("a layers field", () => {
 });
 
 describe("the route address", () => {
+  test("the thread sidebar query and sort round-trip on Pea and a docked route", () => {
+    for (const key of ["pea", "ducts"] as const) {
+      const at = routeAddress(key);
+      const query = 'scope=attention state!=idle "supply air"';
+      const link = at.link({ threadQuery: query, threadSort: "recent" });
+      const params = Object.fromEntries(new URL(link, "https://pe.test").searchParams);
+      expect(at.read(params).page).toMatchObject({ threadQuery: query, threadSort: "recent" });
+      expect(at.write({ threadQuery: "scope=all", threadSort: "" })).toMatchObject({
+        threadQuery: undefined,
+        threadSort: undefined,
+      });
+      expect(at.write({ threadQuery: "" }).threadQuery).toBe("");
+      expect(at.read({ threadSort: "invalid" }).page.threadSort).toBe("");
+    }
+    const ducts = routeAddress("ducts");
+    expect(
+      ducts.agent.patch.safeParse({ threadQuery: "scope=archived", threadSort: "title" }).success,
+    ).toBe(true);
+  });
+
+  test("a custom route resolver accepts shared sidebar keys and still validates the route patch", () => {
+    const ducts = routeAddress("ducts");
+    const facts = { systems: [{ name: "SA 19" }, { name: "RA 12" }] };
+    const resolve = ducts.agent.resolve!;
+    expect(resolve({ threadQuery: "scope=archived", threadSort: "title" }, facts)).toEqual({
+      ok: true,
+      patch: { threadQuery: "scope=archived", threadSort: "title" },
+    });
+    const mixed = resolve({ threadQuery: "scope=attention", system: "sa 19" }, facts);
+    expect(mixed).toEqual({ ok: true, patch: { threadQuery: "scope=attention", system: "SA 19" } });
+    if (mixed.ok) {
+      expect(ducts.agent.patch.safeParse(mixed.patch).success).toBe(true);
+      expect(ducts.agent.settle(ducts.agent.write(ducts.defaults), mixed.patch)).toEqual(mixed);
+    }
+    expect(resolve({ threadQuery: "x", system: "unknown" }, facts).ok).toBe(false);
+    expect(resolve({ threadQuery: "x", bogus: "unknown" }, facts).ok).toBe(false);
+    expect(resolve({ threadSort: "invalid", system: "SA 19" }, facts).ok).toBe(false);
+    expect(resolve({}, facts).ok).toBe(false);
+  });
+
   test("is one object per route, found by key or path", () => {
     expect(routeAddress("pea")).toBe(routeAddress("pea"));
     expect(routeOf("ducts")).toBe("ducts");
@@ -106,10 +146,34 @@ describe("the route address", () => {
 });
 
 describe("the thin routes adopt the contract", () => {
+  test("ducts list queries and sorts round-trip through links and the agent lease", () => {
+    const ducts = routeAddress("ducts");
+    const patch = {
+      systemQuery: "status=priced sort:loss",
+      systemSort: "loss" as const,
+      rulingQuery: "kind=heal",
+      rulingSort: "status" as const,
+      treeQuery: "12345",
+      treeSort: "name" as const,
+      inputQuery: "fan",
+      inputSort: "name" as const,
+    };
+    const params = Object.fromEntries(new URL(ducts.link(patch), "https://pe.test").searchParams);
+    expect(ducts.read(params).page).toMatchObject(patch);
+    expect(ducts.agent.patch.safeParse(patch).success).toBe(true);
+    expect(ducts.agent.resolve!(patch, {}).ok).toBe(true);
+    expect(ducts.history(ducts.defaults, patch)).toBe("replace");
+    expect(ducts.keys).not.toContain("diagnostic");
+  });
   test("every navigable key round-trips through its link", () => {
     const captures = routeAddress("captures");
     expect(captures.link({ sha: "ab", open: ["ab", "cd"] })).toBe("/captures?sha=ab&open=ab%2Ccd");
-    expect(captures.read({ open: "ab,cd" }).page).toEqual({ sha: undefined, open: ["ab", "cd"] });
+    expect(captures.read({ open: "ab,cd" }).page).toEqual({
+      sha: undefined,
+      open: ["ab", "cd"],
+      threadQuery: "scope=all",
+      threadSort: "",
+    });
     const home = routeAddress("home");
     expect(home.link({ query: "duct", folded: ["/ducts"], sort: "name" })).toBe(
       "/?query=duct&folded=%2Fducts&sort=name",
@@ -122,7 +186,7 @@ describe("the thin routes adopt the contract", () => {
   });
 
   test("a route that declared a key nothing renders no longer carries it", () => {
-    expect(routeAddress("parameter-links").keys).toEqual(["rail"]);
+    expect(routeAddress("parameter-links").keys).toEqual(["threadQuery", "threadSort", "rail"]);
   });
 
   test("history: a pick pushes, a typed or receipt move replaces", () => {

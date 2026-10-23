@@ -170,6 +170,8 @@ export function useUrlPage<P>(url: UrlPage<P> | null, owner: ViewOwner<P>) {
               [marker]: { token, generation: at },
             }),
             replace: history === "replace",
+            // A same-page filter, selection or view change preserves the list's own reveal.
+            resetScroll: false,
             // Like the router's canonicalization, this projects the current same-path Page.
             // Blockers yield before committing; a delayed projection could overwrite a later link.
             ignoreBlocker: true,

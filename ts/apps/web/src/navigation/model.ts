@@ -12,21 +12,6 @@ export const routePath = (key: string) => podWorkPath(key) ?? builtinRoutePath(k
 export const routeKey = (path: string) => podPathWork(path) ?? builtinRouteKey(path);
 export const TASKS = APP_TASKS;
 const CATALOGUE = TOOLS;
-export function matches(text: string, query: string) {
-  return query
-    .toLowerCase()
-    .trim()
-    .split(/\s+/)
-    .every((word) => text.toLowerCase().includes(word));
-}
-export function matchingTools(query: string) {
-  return CATALOGUE.filter((tool) =>
-    matches(
-      `${tool.title} ${tool.label} ${tool.description} ${tool.aliases} ${tool.task} ${tool.to}`,
-      query,
-    ),
-  );
-}
 /** Home and the shell's route icons. Without the global field, the pressed icon is the location. */
 export function shellButtons(shell: SurfaceShell, pathname: string) {
   return [

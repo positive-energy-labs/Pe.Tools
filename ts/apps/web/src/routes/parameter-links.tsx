@@ -21,7 +21,8 @@ import { Surface } from "#/components/lang/surface";
 import { EvaluationView, RuntimeStatusBar } from "#/parameter-links/Evaluation";
 import { ProfileEditor } from "#/parameter-links/ProfileEditor";
 import { ActivityDisclosure } from "#/components/lang/activity";
-import { Row } from "@pe/kit/lang/row";
+import { useList } from "@pe/kit/lang/collection";
+import { ListView } from "@pe/kit/lang/list-view";
 import {
   applyRefusal,
   isDraftDirty,
@@ -412,23 +413,37 @@ export function ParameterLinksRouteContent({ thread }: { thread?: string } = {})
 
 /** Pea's proposal against staged, item by item: what accept would change, not just its counts. */
 function ProfileChanges({ changes }: { changes: ProfileChange[] }) {
+  const list = useList({
+    items: changes,
+    keyOf: (change) => `${change.kind}:${change.id}`,
+    search: (change) => ({
+      text: [
+        change.kind,
+        change.id,
+        change.change,
+        ...(change.change === "changed" ? change.fields : []),
+      ],
+    }),
+  });
   return (
     <ActivityDisclosure
       label="changes against staged"
       summary={`${changes.length} change${changes.length === 1 ? "" : "s"} against staged`}
     >
-      {changes.length
-        ? changes.map((change) => (
-            <Row
-              key={`${change.kind}:${change.id}`}
-              data-key={`${change.kind}:${change.id}`}
-              label={`${change.kind} ${change.id}`}
-              meta={
-                change.change === "changed" ? `changed: ${change.fields.join(", ")}` : change.change
-              }
-            />
-          ))
-        : null}
+      <ListView
+        list={list}
+        aria-label="changes against staged"
+        bar={false}
+        empty={{
+          message: "No changes against staged",
+          exit: "Propose a profile change to compare it",
+        }}
+        row={(change) => ({
+          label: `${change.kind} ${change.id}`,
+          meta:
+            change.change === "changed" ? `changed: ${change.fields.join(", ")}` : change.change,
+        })}
+      />
     </ActivityDisclosure>
   );
 }

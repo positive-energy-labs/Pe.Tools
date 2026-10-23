@@ -1,6 +1,6 @@
 // @vitest-environment jsdom
 import { cleanup, fireEvent, render, screen, waitFor, within } from "@testing-library/react";
-import { afterEach, expect, test, vi } from "vite-plus/test";
+import { afterEach, beforeEach, expect, test, vi } from "vite-plus/test";
 
 import type { UpdateThreadRequest } from "@pe/agent-contracts";
 import { emptyChatState } from "@pe/agent-contracts/chat-state";
@@ -8,6 +8,38 @@ import { demoThreads } from "./thread-navigation";
 import { ThreadsSidebar } from "./thread-palette";
 
 afterEach(cleanup);
+beforeEach(() => {
+  vi.stubGlobal(
+    "ResizeObserver",
+    class {
+      observe() {}
+      unobserve() {}
+      disconnect() {}
+    },
+  );
+  vi.spyOn(HTMLElement.prototype, "offsetHeight", "get").mockReturnValue(400);
+  vi.spyOn(HTMLElement.prototype, "offsetWidth", "get").mockReturnValue(300);
+  vi.spyOn(HTMLElement.prototype, "clientHeight", "get").mockReturnValue(400);
+  vi.spyOn(HTMLElement.prototype, "clientWidth", "get").mockReturnValue(300);
+  HTMLElement.prototype.scrollTo ??= () => {};
+  vi.spyOn(HTMLElement.prototype, "scrollTo").mockImplementation(() => {});
+  vi.spyOn(HTMLElement.prototype, "getBoundingClientRect").mockReturnValue({
+    x: 0,
+    y: 0,
+    top: 0,
+    left: 0,
+    bottom: 400,
+    right: 300,
+    width: 300,
+    height: 400,
+    toJSON() {},
+  });
+  vi.stubGlobal("localStorage", { getItem: () => null, setItem: vi.fn() });
+});
+afterEach(() => {
+  vi.restoreAllMocks();
+  vi.unstubAllGlobals();
+});
 
 const surface = vi.hoisted(() => ({ value: "web" }));
 const exportResponse = vi.hoisted(() => vi.fn());
@@ -25,13 +57,14 @@ function mount(
   onUpdate = vi.fn(async (_id: string, _change: UpdateThreadRequest) => true),
   compactRows = false,
   roster = threads(),
+  onSelect = vi.fn(),
 ) {
   render(
     <ThreadsSidebar
       threads={roster as never}
       currentThreadId="open"
       providers={[]}
-      onSelect={vi.fn()}
+      onSelect={onSelect}
       onNew={vi.fn()}
       onSearch={vi.fn()}
       onFork={vi.fn()}
@@ -44,8 +77,7 @@ function mount(
   );
   return onUpdate;
 }
-const row = (title: string) =>
-  screen.getByText(title).closest<HTMLElement>("[data-navigation-item] .dl-row")!;
+const row = (title: string) => screen.getByText(title).closest<HTMLElement>('[role="option"]')!;
 
 test("the menu on a selected row acts on every selected thread and greys what needs one", async () => {
   const onUpdate = mount();
@@ -82,4 +114,137 @@ test("the menu on a selected row acts on every selected thread and greys what ne
     ["fixture-local", { status: "settled" }],
     ["fixture-family", { status: "settled" }],
   ]);
+});
+
+test("plain click activates while modifiers and Space select through the shared list", () => {
+  const onSelect = vi.fn();
+  mount(undefined, false, threads(), onSelect);
+  fireEvent.click(row("Draft the BIM handoff notes"));
+  expect(onSelect).toHaveBeenLastCalledWith("fixture-local");
+  fireEvent.click(row("Draft the BIM handoff notes"), { metaKey: true });
+  expect(onSelect).toHaveBeenCalledTimes(1);
+  expect(row("Draft the BIM handoff notes").getAttribute("aria-selected")).toBe("true");
+  const list = screen.getByRole("listbox", { name: "threads" });
+  list.focus();
+  fireEvent.keyDown(list, { key: " ", code: "Space" });
+  expect(row("Draft the BIM handoff notes").getAttribute("aria-selected")).toBe("false");
+  fireEvent.keyDown(list, { key: "Enter" });
+  expect(onSelect).toHaveBeenCalledTimes(2);
+});
+
+test("table query narrows target, provider, state, unread and Attention and reveals archived shelves", async () => {
+  mount();
+  const search = screen.getByRole("textbox", { name: "Search threads" });
+  fireEvent.change(search, {
+    target: { value: "scope=attention state=working provider=codex unread=yes" },
+  });
+  expect(screen.getAllByRole("option").map((item) => item.getAttribute("data-key"))).toEqual([
+    "fixture-running",
+  ]);
+  fireEvent.change(search, { target: { value: 'scope=archived "Original schedule"' } });
+  expect(row("Original schedule exploration")).toBeTruthy();
+  expect(screen.queryByText(/Show .*more/)).toBeNull();
+  fireEvent.change(search, { target: { value: "scope=attention !state=working no-such-thread" } });
+  expect(screen.getByText("No matching threads")).toBeTruthy();
+  fireEvent.click(screen.getByRole("button", { name: "Clear search" }));
+  expect(screen.queryByText("No matching threads")).toBeNull();
+});
+
+test("drag reorder and shelf drops keep their lifecycle requests", () => {
+  const onUpdate = mount();
+  const dataTransfer = { getData: () => "fixture-family", setData: vi.fn() };
+  fireEvent.drop(row("Draft the BIM handoff notes"), { dataTransfer });
+  expect(onUpdate).toHaveBeenLastCalledWith(
+    "fixture-family",
+    expect.objectContaining({ status: "active", pinned: false, order: expect.any(Number) }),
+  );
+  const pinned = screen.getByRole("region", { name: "Pinned" });
+  fireEvent.drop(pinned, { dataTransfer });
+  expect(onUpdate).toHaveBeenLastCalledWith("fixture-family", {
+    pinned: true,
+    order: expect.any(Number),
+  });
+});
+
+test("changing the current thread reveals an offscreen row among 355 without replacing an addressed filter", async () => {
+  vi.spyOn(HTMLElement.prototype, "scrollHeight", "get").mockReturnValue(355 * 400);
+  const base = threads().find((thread) => thread.id === "fixture-local")!;
+  const roster = Array.from({ length: 355 }, (_, index) => ({
+    ...base,
+    id: `thread-${index}`,
+    title: `Thread ${index}`,
+    providerId: index === 354 ? "other" : "codex",
+    lifecycle: { ...base.lifecycle, order: index },
+  }));
+  const onAddressChange = vi.fn();
+  const props = {
+    threads: roster as never,
+    providers: [],
+    onSelect: vi.fn(),
+    onNew: vi.fn(),
+    onSearch: vi.fn(),
+    onFork: vi.fn(),
+    onRename: vi.fn(),
+    onDelete: vi.fn(),
+    onUpdate: vi.fn(async () => true),
+    onNewTarget: vi.fn(),
+  };
+  const address = { query: "scope=all", sort: "" as const, onChange: onAddressChange };
+  const { rerender } = render(
+    <ThreadsSidebar {...props} currentThreadId="thread-0" address={address} />,
+  );
+  expect(screen.getAllByRole("option").length).toBeLessThan(355);
+  expect(screen.queryByText("Thread 354")).toBeNull();
+  const scroll = vi.mocked(HTMLElement.prototype.scrollTo);
+  const scrolledDown = () =>
+    scroll.mock.calls.some(([value]) => {
+      const options = value as number | ScrollToOptions;
+      return typeof options === "object" && (options.top ?? 0) > 0;
+    });
+  scroll.mockClear();
+  rerender(<ThreadsSidebar {...props} currentThreadId="thread-354" address={address} />);
+  await waitFor(() => expect(scrolledDown()).toBe(true));
+  expect(
+    screen.getByRole("listbox", { name: "threads" }).getAttribute("aria-activedescendant"),
+  ).toContain("thread-354");
+  expect(onAddressChange).not.toHaveBeenCalled();
+
+  const filtered = { ...address, query: "provider=codex" };
+  rerender(<ThreadsSidebar {...props} currentThreadId="thread-0" address={filtered} />);
+  scroll.mockClear();
+  rerender(<ThreadsSidebar {...props} currentThreadId="thread-354" address={filtered} />);
+  expect(screen.getByRole("textbox", { name: "Search threads" }).getAttribute("value")).toBe(
+    "provider=codex",
+  );
+  expect(screen.queryByText("Thread 354")).toBeNull();
+  expect(onAddressChange).not.toHaveBeenCalled();
+  expect(scrolledDown()).toBe(false);
+
+  rerender(<ThreadsSidebar {...props} currentThreadId="thread-0" address={address} />);
+  const settled = roster.map((thread, index) =>
+    index === 354
+      ? {
+          ...thread,
+          lifecycle: { ...thread.lifecycle, status: "settled" as const },
+        }
+      : thread,
+  );
+  rerender(
+    <ThreadsSidebar
+      {...props}
+      threads={settled as never}
+      currentThreadId="thread-354"
+      address={address}
+    />,
+  );
+  expect(
+    screen
+      .getByRole("region", { name: "Settled" })
+      .querySelector("button")
+      ?.getAttribute("aria-expanded"),
+  ).toBe("true");
+  expect(
+    screen.getByRole("listbox", { name: "threads" }).getAttribute("aria-activedescendant"),
+  ).toContain("thread-354");
+  expect(onAddressChange).not.toHaveBeenCalled();
 });

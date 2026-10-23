@@ -147,6 +147,68 @@
   cursor: default;
   user-select: none;
 }
+/* Lists share the cell staging vocabulary: square = unsaved, bold = unsaved title. */
+.dl-row[data-stage]:is([data-stage="proposed"], [data-stage="staged"])::before {
+  content: "";
+  position: absolute;
+  left: 2px;
+  top: calc(var(--item-h) / 2 - 2px);
+  bottom: auto;
+  width: 4px;
+  height: 4px;
+  background: var(--pe-pea-ink);
+}
+.dl-row:is([data-stage="proposed"], [data-stage="staged"])[data-staged-by="you"]::before {
+  background: var(--pe-caution);
+}
+.dl-row:is([data-stage="proposed"], [data-stage="staged"]) .dl-row-title {
+  font-weight: var(--weight-strong);
+}
+[data-list-section] {
+  display: contents;
+}
+[data-list-bar] [data-search-control][data-face="bar"] {
+  background-color: var(--pe-artifact);
+  box-shadow: none;
+}
+[data-list-section-home] {
+  display: block;
+  height: 0;
+}
+[data-list-section][data-dim="true"] .dl-row {
+  color: var(--pe-ink-2);
+}
+[data-list-section-head] {
+  position: sticky;
+  z-index: 1;
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  width: 100%;
+  height: var(--item-h);
+  padding: 0 var(--item-mark-pad-x);
+  border: 0;
+  background: var(--pe-artifact);
+  color: var(--pe-ink-2);
+  font-size: var(--type-small-size);
+  text-align: left;
+  cursor: pointer;
+}
+[data-list-section-head] > svg {
+  width: 1.2em;
+  height: 1.2em;
+}
+[data-list-section-head][aria-expanded="true"] > svg {
+  transform: rotate(90deg);
+}
+[data-list-section-head] > [data-slot="rule"] {
+  height: 1px;
+  flex: 1;
+  background: var(--pe-line);
+}
+[data-list-detail] {
+  padding: var(--item-pad-x) var(--item-mark-pad-x);
+}
 tr.dl-row {
   display: table-row;
   height: var(--item-h);
@@ -304,7 +366,7 @@ tr/* Landed: a row that becomes selected (a link, a pick) draws a full-ink outli
   flex-shrink: 0;
   align-items: center;
 }
-/* TREE (row.tsx `Tree`): one indent step per level, and the classic guide: each ancestor's column
+/* TREE (ListView): one indent step per level, and the classic guide: each ancestor's column
    carries a hairline through the chevron's centre, so an open node's line runs down the full
    span of its descendants. One rule on `--depth` (set by Row from `depth`); no call site indents. */
 .dl-row[data-depth] {
@@ -381,6 +443,13 @@ tr/* Landed: a row that becomes selected (a link, a pick) draws a full-ink outli
 }
 [role="tree"][data-columns] :is(.dl-row-line, .dl-row-colhead) {
   grid-template-columns: minmax(0, 1fr) max-content;
+}
+.dl-row[data-meta-fill] .dl-row-line {
+  grid-template-columns: max-content minmax(0, 1fr);
+  gap: calc(var(--space-unit) * 2);
+}
+.dl-row[data-meta-fill] :is(.dl-row-meta, .dl-row-fact) {
+  width: 100%;
 }
 .dl-row-title {
   min-width: 0;

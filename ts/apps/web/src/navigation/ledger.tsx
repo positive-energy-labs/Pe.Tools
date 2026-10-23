@@ -1,12 +1,9 @@
-/**
- * The open-work ledger, drawn once. `useLedgerList` turns the host's rows and one presentation
- * record into the kit List's props; `<Ledger>` draws them inline (Home's column, the tray Inbox)
- * and the Ctrl+Shift+K overlay spreads the same props into the anchored palette.
- */
+/** One Activity model and row anatomy for Home, tray and the anchored search palette. */
 import { useEffect, useMemo, useRef, useState, type ReactNode } from "react";
 import { Copy, RotateCcw } from "lucide-react";
 import { useCopy } from "@pe/kit/lib/use-copy";
-import { List } from "@pe/kit/lang/list-popup";
+import { useList } from "@pe/kit/lang/collection";
+import { ListView } from "@pe/kit/lang/list-view";
 import { Button } from "@pe/kit/lang/button";
 import type { HarnessThreadSummary } from "@pe/agent-contracts";
 import { peClient } from "#/host/pe-client";
@@ -30,8 +27,6 @@ import {
   LEDGER_GROUPS,
   ledgerRows,
   openAsk,
-  presentLedger,
-  type LedgerGroup,
   type LedgerItem,
   type LedgerPresentation,
   type LedgerRow,
@@ -154,14 +149,26 @@ export function useLedgerList(
   const { rows, status, fault } = useLedgerRows();
   const { snapshot, loading, error } = useNavigation();
   const go = useDestination();
-  const [open, setOpen] = useState<ReadonlySet<LedgerGroup>>(new Set());
   const [resuming, setResuming] = useState<string | null>(null);
   const { copied, copy } = useCopy();
   const [refusal, setRefusal] = useState<string | null>(null);
   const searching = query.trim() !== "";
   const items: Item[] = [
     ...(kind === "All"
-      ? presentLedger(rows, presentation, searching ? new Set(LEDGER_GROUPS) : open)
+      ? [
+          ...rows.map((row): LedgerItem => ({ kind: "row", key: row.key, row })),
+          ...(["waits", "working"] as const)
+            .filter((group) => !rows.some((row) => row.group === group))
+            .map(
+              (group): LedgerItem => ({
+                kind: "note",
+                key: `note:${group}`,
+                group,
+                count: 0,
+                text: group === "waits" ? "Nothing waits on you" : "Nothing is working",
+              }),
+            ),
+        ]
       : []),
     ...(presentation.destinations && (searching || kind !== "All")
       ? globalItems(snapshot, kind, pods?.rows).map((destination) => ({
@@ -184,7 +191,7 @@ export function useLedgerList(
       return {
         lead: <span className="inline-block w-[11ch]" />,
         label: <span className="text-ink-2">{item.text}</span>,
-        refusal: item.count ? undefined : "Nothing to open",
+        refusal: "Nothing to open",
       };
     const shown =
       item.kind === "go"
@@ -267,7 +274,7 @@ export function useLedgerList(
       noMatch: "No matching open work, tools, Works or Pea threads",
       row,
       onPick: (item: Item) => {
-        if (item.kind === "note") setOpen((prior) => new Set(prior).add(item.group));
+        if (item.kind === "note") return;
         else if (item.kind === "row" && item.row.url) go(item.row.url);
         else if (item.kind === "go" && item.destination.url) go(item.destination.url);
       },
@@ -278,7 +285,7 @@ export function useLedgerList(
 /** The tray's counter strip: one count per group, waits and working first. */
 function Counters({ rows }: { rows: readonly LedgerRow[] }) {
   return (
-    <dl className="m-0 flex hairline-b" aria-label="Open work by group">
+    <dl className="m-0 flex hairline-b" aria-label="Activity by group">
       {LEDGER_GROUPS.map((group) => {
         const count = rows.filter((row) => row.group === group).length;
         return (
@@ -297,7 +304,7 @@ function Counters({ rows }: { rows: readonly LedgerRow[] }) {
   );
 }
 
-/** The ledger drawn inline: Home's column and the tray Inbox. */
+/** The ledger drawn inline: Home's column and the tray Activity. */
 export function Ledger({
   presentation,
   head,
@@ -306,17 +313,54 @@ export function Ledger({
   head?: ReactNode;
 }) {
   const ledger = useLedgerList(presentation);
+  const list = useList({
+    items: ledger.props.items.filter((item) => item.kind !== "note"),
+    keyOf: ledger.props.keyOf,
+    search: (item) => ({ text: [ledger.props.labelOf(item), ledger.props.detailOf(item)] }),
+    groups: {
+      of: ledger.props.groupOf,
+      order: LEADING_GROUPS,
+      collapsible: LEDGER_GROUPS.filter((group) => group !== "waits" && group !== "working").map(
+        (group) => GROUP_NAME[group],
+      ),
+    },
+    refusalOf: (item) => ledger.props.row(item).refusal,
+    onPick: ledger.props.onPick,
+  });
   return (
     <section
       aria-label={presentation.label}
       data-ledger={presentation.id}
       className="flex min-h-0 flex-col"
     >
-      {head}
+      {head ?? <h2 className="role-titlebar m-0 px-2 py-1">{presentation.label}</h2>}
       {presentation.counters && <Counters rows={ledger.rows} />}
       {ledger.refusal && <p className="m-0 px-2 py-1 text-ink-2">{ledger.refusal}</p>}
       <div className="min-h-0 flex-1 overflow-auto">
-        <List {...ledger.props} />
+        {ledger.props.status === "pending" ? (
+          <p role="status">Reading activity...</p>
+        ) : ledger.props.status === "failed" ? (
+          <p role="alert">{ledger.props.failure ?? "Open work unavailable"}</p>
+        ) : (
+          <>
+            {ledger.props.items
+              .filter((item) => item.kind === "note")
+              .map((item) =>
+                item.kind === "note" ? (
+                  <p key={item.key} className="m-0 px-2 py-1 text-ink-2">
+                    {item.text}
+                  </p>
+                ) : null,
+              )}
+            <ListView
+              list={list}
+              aria-label={presentation.label}
+              bar={false}
+              empty={{ message: ledger.props.empty, exit: "Open a tool or ask Pea to begin work" }}
+              row={ledger.props.row}
+            />
+          </>
+        )}
       </div>
     </section>
   );

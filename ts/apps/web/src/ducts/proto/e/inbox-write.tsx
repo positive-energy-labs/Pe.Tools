@@ -1,5 +1,20 @@
 import { Button } from "@pe/kit/lang/button";
-import type { InboxRowSpec } from "@pe/kit/lang/inbox";
+import type { ReactNode } from "react";
+import type { ListRowParts } from "@pe/kit/lang/list-view";
+import type { ListSearch } from "@pe/kit/lang/collection";
+import type { InboxGroup } from "../../inbox-rows";
+
+export type RulingRow = ListRowParts & {
+  key: string;
+  title: string;
+  group: InboxGroup;
+  kind: string;
+  statusText: string;
+  search: ListSearch;
+  detail?: ReactNode;
+  lit?: boolean;
+  pick?: () => void;
+};
 import type { ActionHandle } from "#/route/handle";
 import type { WriteRow } from "../../inbox-rows";
 import type { ReviewLine } from "../../write-review";
@@ -15,12 +30,19 @@ export interface WriteVerbs {
 }
 
 export function inboxWriteRows(write: WriteVerbs) {
-  const writeSpec: InboxRowSpec = {
+  const writeSpec: RulingRow = {
     key: "write",
-    "data-kind": "write",
+    group: "write",
+    kind: "write",
+    statusText: write.row.status,
+    search: { text: [write.row.title, write.row.status] },
+    label: write.row.title,
     title: write.row.title,
-    status: (
-      <span className="inline-flex max-w-full min-w-0 flex-wrap items-center gap-1" data-inbox-write="">
+    meta: (
+      <span
+        className="inline-flex max-w-full min-w-0 flex-wrap items-center gap-1"
+        data-inbox-write=""
+      >
         <span>{write.row.status}</span>
         {/* The handle's own words, so the button reads as the Situation's does. */}
         <Button
@@ -55,12 +77,17 @@ export function inboxWriteRows(write: WriteVerbs) {
   };
 
   // Every change the fresh preview plans, one row each: element · what, old -> new; a refusal says why.
-  const reviewSpecs: InboxRowSpec[] = write.review.map((line) => ({
+  const reviewSpecs: RulingRow[] = write.review.map((line) => ({
     key: line.key,
-    "data-kind": "write-review",
+    group: "write",
+    kind: "write-review",
+    statusText: line.outcome,
+    search: { text: [line.element, line.what, line.from, line.to, line.reason] },
+    label: `${line.element} · ${line.what}`,
     title: `${line.element} · ${line.what}`,
-    titleText: `${line.element} · ${line.what}`,
-    status: (
+    stage: "staged",
+    stagedBy: "you",
+    meta: (
       <span
         data-tone={line.outcome === "refused" ? "alarm" : undefined}
         data-outcome={line.outcome}

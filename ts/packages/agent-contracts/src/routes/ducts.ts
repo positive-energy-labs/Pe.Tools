@@ -31,6 +31,14 @@ const ductsFields = {
   level: field(text(), { url: "push", agent: "set" }),
   /** The selected element id; empty = none. */
   selected: field(text(), { url: "push", agent: "set" }),
+  systemQuery: field(z.string().max(4000).default(""), { url: "replace", agent: "set" }),
+  systemSort: field(z.enum(["", "name", "loss"]).default(""), { url: "replace", agent: "set" }),
+  rulingQuery: field(z.string().max(4000).default(""), { url: "replace", agent: "set" }),
+  rulingSort: field(z.enum(["", "name", "status"]).default(""), { url: "replace", agent: "set" }),
+  treeQuery: field(z.string().max(4000).default(""), { url: "replace", agent: "set" }),
+  treeSort: field(z.enum(["", "name"]).default(""), { url: "replace", agent: "set" }),
+  inputQuery: field(z.string().max(4000).default(""), { url: "replace", agent: "set" }),
+  inputSort: field(z.enum(["", "name"]).default(""), { url: "replace", agent: "set" }),
   /** The picture's encoding, a key of the web's `ENCODINGS`. */
   encoding: field(z.string().max(200).default("health"), { url: "push", agent: "set" }),
   /** The layer keys the picture draws; empty = none. */
@@ -53,8 +61,6 @@ const ductsFields = {
    * row pick never fills history; the issue-id half still resets whenever the selection moves.
    */
   issue: field(text(), { url: "replace", agent: "set" }),
-  /** The Diagnostics kind picked in its key; empty = none. Pea reads it; only the person sets it. */
-  diagnostic: field(text(), { agent: "read" }),
 };
 
 type DuctsFacts = {

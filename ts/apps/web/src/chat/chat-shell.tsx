@@ -44,6 +44,7 @@ import { ThreadBody } from "#/workbench/lens/thread-body";
 import { ComposerBank } from "#/chat/composer-bank";
 import { Dialog, DialogContent, DialogTitle } from "#/components/lang/dialog";
 import { useThreadPresence } from "#/machine/os-notices";
+import { routeAddress, routeAt } from "@pe/agent-contracts";
 
 type ChatShellProps = { target?: string; docked?: boolean };
 
@@ -75,11 +76,11 @@ function ChatSurface({ target, docked = false }: ChatShellProps) {
     return () => observer.disconnect();
   }, []);
   const compact = useSurfaceHost().shell.mount === "compact";
-  // The tray's Inbox: with no thread in the address, the body is the open-work ledger.
+  // The tray's Activity view: with no thread in the address, the body is the open-work ledger.
   const addressedThread = useRouterState({
     select: (state) => (state.location.search as { thread?: string }).thread,
   });
-  // "New thread" in the tray: no address would show the Inbox again, so the draft is its own state
+  // "New thread" in the tray: no address would show Activity again, so the draft is its own state
   // until the first send addresses the thread it creates.
   const [composing, setComposing] = useState(false);
   useEffect(() => {
@@ -88,7 +89,7 @@ function ChatSurface({ target, docked = false }: ChatShellProps) {
   useEffect(() => {
     if (composing) composerRef.current?.querySelector("textarea")?.focus();
   }, [composing]);
-  const inbox = compact && !addressedThread && !composing;
+  const activity = compact && !addressedThread && !composing;
   const {
     store,
     chat,
@@ -113,7 +114,7 @@ function ChatSurface({ target, docked = false }: ChatShellProps) {
     deleteThread,
     updateThread,
   } = useWorkbench();
-  useThreadPresence(inbox ? null : currentThreadId);
+  useThreadPresence(activity ? null : currentThreadId);
   const newThread = useCallback(
     (target?: Parameters<typeof startThread>[0]) => {
       setComposing(true);
@@ -122,6 +123,24 @@ function ChatSurface({ target, docked = false }: ChatShellProps) {
     [startThread],
   );
   const navigate = useNavigate();
+  const location = useRouterState({ select: (state) => state.location });
+  const sidebarAddress = routeAddress(routeAt(location.pathname) ?? "pea");
+  const sidebarPage = sidebarAddress.read(location.search).page;
+  const threadListAddress = {
+    query: sidebarPage.threadQuery,
+    sort: sidebarPage.threadSort,
+    onChange: (threadQuery: string, threadSort: "recent" | "title" | "") => {
+      void navigate({
+        to: ".",
+        replace: true,
+        resetScroll: false,
+        search: (previous: Record<string, unknown>) => ({
+          ...previous,
+          ...sidebarAddress.write({ threadQuery, threadSort }),
+        }),
+      });
+    },
+  };
   const urlMode = useRouterState({ select: (state) => state.location.search.mode });
   const [dockMode, setDockMode] = useState<Mode>("threads");
   const mode = docked ? dockMode : urlMode === "world" ? "world" : "threads";
@@ -348,6 +367,7 @@ function ChatSurface({ target, docked = false }: ChatShellProps) {
               >
                 {mode === "threads" ? (
                   <ThreadsSidebar
+                    address={threadListAddress}
                     threads={sidebarThreads}
                     providers={providers.list ?? []}
                     currentThreadId={currentThreadId || chat.id}
@@ -366,7 +386,7 @@ function ChatSurface({ target, docked = false }: ChatShellProps) {
               </Pane>
             }
             end={
-              inbox ? (
+              activity ? (
                 <Ledger
                   presentation={LEDGER_PRESENTATIONS.tray}
                   head={
@@ -393,6 +413,7 @@ function ChatSurface({ target, docked = false }: ChatShellProps) {
             <div className="h-[75dvh] min-h-0 min-w-0">
               {mode === "threads" ? (
                 <ThreadsSidebar
+                  address={threadListAddress}
                   threads={sidebarThreads}
                   providers={providers.list ?? []}
                   currentThreadId={currentThreadId || chat.id}

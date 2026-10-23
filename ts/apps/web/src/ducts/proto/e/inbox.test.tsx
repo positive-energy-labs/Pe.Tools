@@ -37,7 +37,7 @@ function mount(
     selected?: number | null;
     focused?: string | null;
     check?: InboxItem[];
-    diagnostic?: { kind: string; pick: (kind: string) => void };
+    address?: Parameters<typeof Inbox>[0]["address"];
   } = {},
 ) {
   const apply = handle(over.apply ?? null, "write 3 to Revit");
@@ -147,7 +147,7 @@ function mount(
       fan={fan}
       selected={over.selected ?? null}
       focused={over.focused ?? null}
-      diagnostic={over.diagnostic ?? { kind: "", pick: () => {} }}
+      address={over.address}
     />,
   );
   return { ...utils, apply, heal, fan, write };
@@ -194,7 +194,7 @@ test("a no-fan row previews making its one unit the fan, and applies only once a
 test("the Write row's apply wears the handle's word and refusal, the same button the head draws", () => {
   const refusedMount = mount({ apply: "Preview first" });
   const refused = within(
-    refusedMount.container.querySelector('[data-inbox-group="write"]') as HTMLElement,
+    refusedMount.container.querySelector('[aria-label="Write"]') as HTMLElement,
   ).getByRole("button", { name: "write 3 to Revit" });
   expect(refused.getAttribute("aria-disabled")).toBe("true");
   fireEvent.click(refused);
@@ -203,7 +203,8 @@ test("the Write row's apply wears the handle's word and refusal, the same button
   // Fix and Set rows standing hold back only the ESP: apply stays armed and the row says what waits.
   const held = "1 staged ESP left out of this write: 1 to fix before the ESP writes";
   const armed = mount({ held });
-  const group = armed.container.querySelector('[data-inbox-group="write"]') as HTMLElement;
+  const group = armed.container.querySelector('[aria-label="Write"]') as HTMLElement;
+  fireEvent.click(screen.getByText("Write to Revit"));
   fireEvent.click(within(group).getByRole("button", { name: "write 3 to Revit" }));
   expect(armed.apply.run).toHaveBeenCalledTimes(1);
   expect(armed.container.querySelector("[data-inbox-write-held]")?.textContent).toBe(held);
@@ -240,7 +241,7 @@ test("taking back a stored ignore stages a delete over it", () => {
       }),
     ],
   });
-  fireEvent.click(container.querySelector('[data-inbox-group="diagnostics"] [role="button"]')!);
+  fireEvent.click(container.querySelector('[aria-label="Diagnostics"] button')!);
   fireEvent.click(screen.getByText("Open end at 2"));
   const detail = container.querySelector('[data-inbox-detail="open-end:2:1"]') as HTMLElement;
   fireEvent.click(within(detail).getByRole("button", { name: "take back" }));
@@ -305,4 +306,84 @@ test("a loss-rule group reads as its family, type and condition", () => {
   const family = manifest.cells!.find((one) => one.segment === "rules")!;
   expect(family.label!("elbow-1d-le10")).toBe("Round Elbow 1 D · D ≤ 10 in");
   expect(family.label!("not-a-rule")).toBe("not-a-rule");
+});
+
+test("picking another ruling for the selected element retains that row's details", () => {
+  const { container } = mount({
+    selected: 10,
+    check: [
+      item({ key: "same-element", group: "check", title: "Another ruling for 10", ids: [10] }),
+    ],
+  });
+  fireEvent.click(screen.getByText("Another ruling for 10"));
+  expect(container.querySelector('[data-inbox-detail="same-element"]')).not.toBeNull();
+  expect(container.querySelector('[data-inbox-detail="heal:g1"]')).toBeNull();
+  expect(container.querySelector('[data-key="same-element"]')?.getAttribute("aria-selected")).toBe(
+    "true",
+  );
+});
+
+test("Rulings use counted query facets and stage marks without replacing an excluding address", () => {
+  const onChange = vi.fn();
+  const { container } = mount({
+    focused: "rules:one",
+    check: [
+      item({ key: "rules:one", group: "check", kind: "proposal", title: "Proposed elbow rule" }),
+    ],
+    address: { query: "kind=heal", sort: "name", onChange },
+  });
+  expect(screen.queryByText("Proposed elbow rule")).toBeNull();
+  expect(container.querySelectorAll('[role="option"]')).toHaveLength(1);
+  expect(onChange).not.toHaveBeenCalled();
+  fireEvent.change(screen.getByRole("textbox", { name: "Search rulings" }), {
+    target: { value: "kind=proposal sort:name" },
+  });
+  expect(onChange).toHaveBeenCalledWith("kind=proposal sort:name", "name");
+  cleanup();
+  const staged = mount({
+    check: [
+      item({ key: "rules:one", group: "check", kind: "proposal", title: "Proposed elbow rule" }),
+    ],
+    review: [
+      {
+        key: "review:one",
+        element: "Elbow 30",
+        what: "loss",
+        from: "1",
+        to: "2",
+        outcome: "would-write",
+        reason: null,
+      },
+    ],
+  });
+  expect(staged.container.querySelector('[data-key="rules:one"]')?.getAttribute("data-stage")).toBe(
+    "proposed",
+  );
+  expect(
+    staged.container.querySelector('[data-key="review:one"]')?.getAttribute("data-stage"),
+  ).toBe("staged");
+});
+
+test("missed-join diagnostics retain their label, status, selection action and inline note", () => {
+  mount({
+    diagnostics: [
+      item({
+        key: "missed:10:20",
+        group: "diagnostics",
+        kind: "missed-join",
+        title: "Open ends 4.0 inches apart: 10 and 20",
+        status: "possible missed join",
+        ids: [10, 20],
+        note: "Facing open ends need inspection in Revit.",
+        verbs: [{ kind: "select", ids: [10, 20] }],
+      }),
+    ],
+    focused: "missed:10:20",
+  });
+  const row = document.querySelector<HTMLElement>('[data-key="missed:10:20"]')!;
+  expect(within(row).getByText("Open ends 4.0 inches apart: 10 and 20")).toBeTruthy();
+  expect(within(row).getByText("possible missed join")).toBeTruthy();
+  expect(row.getAttribute("data-revit-ids")).toBe("10,20");
+  expect(within(row).getByRole("button", { name: /select/i })).toBeTruthy();
+  expect(screen.getByText("Facing open ends need inspection in Revit.")).toBeTruthy();
 });

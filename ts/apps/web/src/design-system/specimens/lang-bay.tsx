@@ -11,7 +11,12 @@ import { Button } from "@pe/kit/lang/button";
 import { Connectors, type Connection } from "#/components/lang/connector";
 import { PidChip } from "#/components/lang/process";
 import { Row } from "@pe/kit/lang/row";
-import { HeldRow, SessionCard, SessionRow, type SessionFacts } from "#/components/lang/session";
+import {
+  heldRowParts,
+  SessionCard,
+  SessionRow,
+  type SessionFacts,
+} from "#/components/lang/session";
 import type { QueryCommand, QueryVocabulary } from "@pe/kit/table/model";
 import { QueryBox } from "@pe/kit/table/query";
 import { useTableState } from "@pe/kit/table/view";
@@ -269,15 +274,17 @@ export function LangBaySpecimens() {
               facts={facts({ year: 2024, name: null, pid: 2402, custody: "observed" })}
               anchor="card:pid:2402"
               verbs={fixtureVerbs}
-              documentRow={(document) => (
-                <HeldRow
-                  document={document}
-                  active
-                  verbs={
-                    <Button label="close" kind="framed" refusal="fixture: no host">
-                      close
-                    </Button>
-                  }
+              documentParts={(document) => heldRowParts(document)}
+              documentDetail={(document) => (
+                <ArmingStrip
+                  verb="close, keep work"
+                  target={document.title ?? "document"}
+                  icon={Square}
+                  says="Closing saves unsaved work first."
+                  state={{ phase: "arming" }}
+                  refusal="fixture: no host"
+                  onCommit={() => {}}
+                  onCancel={() => {}}
                 />
               )}
             >

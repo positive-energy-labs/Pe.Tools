@@ -14,11 +14,9 @@ import {
 } from "@pe/agent-contracts";
 
 export type ThreadShelf = "active" | "pinned" | "snoozed" | "settled" | "archived";
-/** The roster (everything not archived) or the archive; shelves, not filters, sort the rest. */
-export type ThreadFilter = "inbox" | "all" | "archived";
-
-/** Inbox observes work in flight and answers the user has not read; pinning alone is not work. */
-function inThreadInbox(thread: HarnessThreadSummary, now = Date.now()): boolean {
+export const THREAD_SHELVES: ThreadShelf[] = ["pinned", "active", "snoozed", "settled", "archived"];
+/** Attention observes work in flight and unread answers; pinning alone is not work. */
+export function inAttention(thread: HarnessThreadSummary, now = Date.now()): boolean {
   if (thread.activity.state === "running") return true;
   const shelf = shelfOf(thread, now);
   if (shelf === "archived" || shelf === "snoozed") return false;
@@ -105,7 +103,7 @@ export function readThreadTarget<T extends HarnessThreadSummary>(
 /** The one Target-filter option every closed target collapses into. */
 const CLOSED_TARGETS = "closed";
 export const targetFacet = (thread: HarnessThreadSummary & TargetRead) =>
-  thread.targetClosed ? CLOSED_TARGETS : navigationTargetKey(thread.head);
+  thread.targetClosed ? CLOSED_TARGETS : encodeURIComponent(navigationTargetKey(thread.head));
 /** Live targets one by one; closed ones are never listed, only the single "Closed" option. */
 export function targetFacets(threads: (HarnessThreadSummary & TargetRead)[]) {
   const live = new Map<string, string>();
@@ -183,57 +181,28 @@ export function activityWord(thread: HarnessThreadSummary): string | undefined {
 /** What a thread is doing, as the roster's state filter asks it. */
 export const THREAD_STATES = ["working", "waiting", "failed", "idle"] as const;
 export type ThreadActivity = (typeof THREAD_STATES)[number];
-function threadActivity(thread: HarnessThreadSummary): ThreadActivity {
+export function threadActivity(thread: HarnessThreadSummary): ThreadActivity {
   if (thread.activity.pending || thread.activity.state === "waiting") return "waiting";
   if (thread.activity.state === "running") return "working";
   if (thread.activity.state === "failed") return "failed";
   return "idle";
 }
-/** Target, provider and state narrow the roster ("*" is all); `unread` composes with all three. */
-export function visibleThreads<T extends HarnessThreadSummary & TargetRead>(
-  threads: T[],
-  options: {
-    query: string;
-    filter: ThreadFilter;
-    target: string;
-    provider: string;
-    state: ThreadActivity | "*";
-    unread: boolean;
-    now?: number;
-  },
-) {
-  const query = options.query.trim().toLowerCase();
-  return threads
-    .filter((thread) => {
-      if (options.target !== "*" && targetFacet(thread) !== options.target) return false;
-      if (options.provider !== "*" && thread.providerId !== options.provider) return false;
-      if (options.state !== "*" && threadActivity(thread) !== options.state) return false;
-      if (options.unread && !isUnread(thread)) return false;
-      if (options.filter === "inbox") {
-        if (!inThreadInbox(thread, options.now)) return false;
-      } else if (
-        options.filter === "archived"
-          ? thread.lifecycle.status !== "archived"
-          : thread.lifecycle.status === "archived"
-      )
-        return false;
-      return threadSearchText(thread).toLowerCase().includes(query);
-    })
-    .sort((a, b) => {
-      const aShelf = shelfOf(a, options.now),
-        bShelf = shelfOf(b, options.now);
-      const anchor = (thread: HarnessThreadSummary, shelf: ThreadShelf) =>
-        shelf === "snoozed"
-          ? thread.lifecycle.snoozedUntil!
-          : shelf === "settled"
-            ? (thread.lifecycle.settledAt ?? thread.updatedAt)
-            : (thread.lifecycle.reopenedAt ?? thread.createdAt);
-      return aShelf === "snoozed" && bShelf === "snoozed"
-        ? anchor(a, aShelf).localeCompare(anchor(b, bShelf))
-        : aShelf === "settled" || aShelf === "archived"
-          ? anchor(b, bShelf).localeCompare(anchor(a, aShelf))
-          : threadOrder(a) - threadOrder(b) || a.id.localeCompare(b.id);
-    });
+/** Shelf order remains domain-owned; search, facets and selection belong to useList. */
+export function compareThreads(a: HarnessThreadSummary, b: HarnessThreadSummary, now = Date.now()) {
+  const aShelf = shelfOf(a, now),
+    bShelf = shelfOf(b, now);
+  if (aShelf !== bShelf) return THREAD_SHELVES.indexOf(aShelf) - THREAD_SHELVES.indexOf(bShelf);
+  const anchor = (thread: HarnessThreadSummary, shelf: ThreadShelf) =>
+    shelf === "snoozed"
+      ? thread.lifecycle.snoozedUntil!
+      : shelf === "settled"
+        ? (thread.lifecycle.settledAt ?? thread.updatedAt)
+        : (thread.lifecycle.reopenedAt ?? thread.createdAt);
+  return aShelf === "snoozed" && bShelf === "snoozed"
+    ? anchor(a, aShelf).localeCompare(anchor(b, bShelf))
+    : aShelf === "settled" || aShelf === "archived"
+      ? anchor(b, bShelf).localeCompare(anchor(a, aShelf))
+      : threadOrder(a) - threadOrder(b) || a.id.localeCompare(b.id);
 }
 
 const isBusy = (thread: HarnessThreadSummary) =>

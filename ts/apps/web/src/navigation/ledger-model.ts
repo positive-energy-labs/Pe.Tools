@@ -1,6 +1,6 @@
 /**
  * The open-work ledger: one row model, three presentations (Home's column, the Ctrl+Shift+K
- * overlay, the tray Inbox). Rows come from the host's own stores; a notice is a row arriving.
+ * overlay, the tray Activity). Rows come from the host's own stores; a notice is a row arriving.
  * Waits and working lead every presentation and never fold (owner, 2026-10-13).
  */
 import type {
@@ -23,7 +23,6 @@ export const GROUP_NAME: Record<LedgerGroup, string> = {
   failed: "failed",
   unread: "unread",
 };
-const LEADING = new Set<LedgerGroup>(["waits", "working"]);
 /** A host-restart death leaves the ledger after this long; Pea's thread list still holds it. */
 const INTERRUPTED_FOR_MS = 24 * 3_600_000;
 
@@ -199,10 +198,6 @@ export function ledgerRows(sources: LedgerSources, now: number): LedgerRow[] {
 export interface LedgerPresentation {
   id: "home" | "overlay" | "tray";
   label: string;
-  /** Rows a foldable group shows before one "n more" note. */
-  cap: number;
-  /** Unread as rows (capped like the rest) or as one count that unfolds on pick. */
-  unread: "rows" | "count";
   /** The group counter strip on top. */
   counters: boolean;
   /** Tools, Works and threads join the rows while a query is typed. */
@@ -214,9 +209,7 @@ export interface LedgerPresentation {
 export const LEDGER_PRESENTATIONS: Record<LedgerPresentation["id"], LedgerPresentation> = {
   home: {
     id: "home",
-    label: "Open work",
-    cap: 5,
-    unread: "rows",
+    label: "Activity",
     counters: false,
     destinations: false,
     says: true,
@@ -224,17 +217,13 @@ export const LEDGER_PRESENTATIONS: Record<LedgerPresentation["id"], LedgerPresen
   overlay: {
     id: "overlay",
     label: "Find open work, tools, Works and Pea threads",
-    cap: 3,
-    unread: "count",
     counters: false,
     destinations: true,
     says: false,
   },
   tray: {
     id: "tray",
-    label: "Inbox",
-    cap: 30,
-    unread: "count",
+    label: "Activity",
     counters: true,
     destinations: false,
     says: true,
@@ -243,37 +232,5 @@ export const LEDGER_PRESENTATIONS: Record<LedgerPresentation["id"], LedgerPresen
 
 export type LedgerItem =
   | { kind: "row"; key: string; row: LedgerRow }
-  /** A group's note: its folded tail ("4 more failed", "58 unread") or a stated nothing (0). */
-  | { kind: "note"; key: string; group: LedgerGroup; count: number; text: string };
-
-/** The rows a presentation draws, folded: waits and working never fold; `open` groups unfold. */
-export function presentLedger(
-  rows: readonly LedgerRow[],
-  presentation: LedgerPresentation,
-  open: ReadonlySet<LedgerGroup>,
-): LedgerItem[] {
-  return LEDGER_GROUPS.flatMap((group): LedgerItem[] => {
-    const members = rows.filter((row) => row.group === group);
-    const note = (count: number, text: string): LedgerItem => ({
-      kind: "note",
-      key: `note:${group}`,
-      group,
-      count,
-      text,
-    });
-    if (!members.length)
-      return LEADING.has(group)
-        ? [note(0, group === "waits" ? "Nothing waits on you" : "Nothing is working")]
-        : [];
-    const counted = group === "unread" && presentation.unread === "count";
-    const cap =
-      LEADING.has(group) || open.has(group) ? members.length : counted ? 0 : presentation.cap;
-    const hidden = members.length - cap;
-    return [
-      ...members.slice(0, cap).map((row): LedgerItem => ({ kind: "row", key: row.key, row })),
-      ...(hidden > 0
-        ? [note(hidden, `${hidden}${counted ? "" : " more"} ${GROUP_NAME[group]}`)]
-        : []),
-    ];
-  });
-}
+  /** An explicit empty leading group; it never stands in for hidden rows. */
+  | { kind: "note"; key: string; group: LedgerGroup; count: 0; text: string };

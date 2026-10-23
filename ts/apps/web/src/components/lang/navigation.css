@@ -64,75 +64,6 @@
   top: 0;
   bottom: 0;
 }
-/* The search field wears `dl-control`; this only lays out its parts. */
-[data-navigation-search] {
-  display: flex;
-  height: var(--control-h);
-  min-width: 0;
-  align-items: center;
-  gap: 2px;
-  overflow: hidden;
-  color: var(--pe-ink-2);
-}
-[data-navigation-search] > svg {
-  flex-shrink: 0;
-  margin-left: var(--gutter);
-}
-[data-navigation-search] svg {
-  width: 1.2em;
-  height: 1.2em;
-}
-[data-navigation-search] input {
-  padding-left: 4px;
-}
-/* Parts sit inside the frame's hairline, so the field stays one control height. */
-[data-navigation-search] > button {
-  height: calc(var(--control-h) - 2px);
-}
-/* Filters read as shelf heads: item height, the head's type; they wrap at a narrow pane. */
-/* Each trigger pads its own hover fill; the strip steps back by that pad so the words keep the edge. */
-[data-navigation-filters] {
-  display: flex;
-  flex-wrap: wrap;
-  min-width: 0;
-  margin-inline-start: calc(var(--item-pad-x) * -1);
-}
-[data-navigation-filter] {
-  display: inline-flex;
-  min-width: 0;
-  max-width: 100%;
-  height: var(--item-h);
-  align-items: center;
-  gap: 2px;
-}
-[data-navigation-filter] > [data-list-trigger] {
-  max-width: 100%;
-  height: 100%;
-  font-weight: var(--weight-strong);
-  color: var(--pe-ink-2);
-}
-[data-navigation-filter] > [data-list-trigger]:hover,
-[data-navigation-filter][data-active] > [data-list-trigger] {
-  color: var(--pe-ink);
-}
-[data-navigation-filter] > .dl-button {
-  flex-shrink: 0;
-  height: var(--item-h);
-}
-/* A toggle (Unread) is a framed control on the strip's line, its count quiet. */
-[data-navigation-filters] > .dl-button {
-  min-height: 0;
-  height: calc(var(--item-h) - 2px);
-  align-self: center;
-  margin-inline-start: var(--item-pad-x);
-}
-[data-navigation-filters] > .dl-button > [data-slot="count"] {
-  font-variant-numeric: tabular-nums;
-  color: var(--pe-ink-mute);
-}
-[data-navigation-search] > button:last-child {
-  margin-right: 4px;
-}
 [data-navigation-item][data-unread] .dl-row-label {
   font-weight: var(--weight-strong);
 }
@@ -183,7 +114,7 @@
   outline-offset: -1px;
 }
 /* Inside the roster, heads, rows and the tail pad back to the text edge the roster gave up. */
-[data-navigation-roster] :is([data-navigation-group] > button, [data-navigation-more]) {
+[data-navigation-roster] [data-navigation-group] > button {
   padding-inline: var(--gutter);
 }
 /* A stacked shelf steps aside (`display: contents`) so its head sticks to the scroller, not the
@@ -222,27 +153,6 @@
 }
 [data-navigation-group][data-dim] .dl-row {
   color: var(--pe-ink-2);
-}
-[data-navigation-more] {
-  display: flex;
-  width: 100%;
-  min-height: var(--item-h);
-  align-items: center;
-  gap: 6px;
-  padding: 0;
-  border: 0;
-  background: transparent;
-  color: var(--pe-ink-2);
-  font-size: var(--type-small-size);
-  cursor: pointer;
-}
-[data-navigation-more]:hover {
-  color: var(--pe-ink);
-  background-image: var(--fill-veil);
-}
-[data-navigation-more] > [data-slot="count"] {
-  margin-left: auto;
-  color: var(--pe-ink-mute);
 }
 /* Two rows: title/activity above, target/provider below. */
 [data-navigation-item][data-layout="title-target"] .dl-row {

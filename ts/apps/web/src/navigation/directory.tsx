@@ -1,8 +1,11 @@
-import { ChevronRight, Info, RefreshCw } from "lucide-react";
+import { Info, RefreshCw } from "lucide-react";
 import { Button } from "@pe/kit/lang/button";
-import { Input } from "@pe/kit/lang/input";
-import { NavigationGroup } from "#/components/lang/navigation";
-import { TASKS, matchingTools, routeKey, friendlyObservation, resumeRefusal } from "./model";
+import { useState } from "react";
+import { useList, emptyListState } from "@pe/kit/lang/collection";
+import { ListView, type ListRowParts } from "@pe/kit/lang/list-view";
+import { TOOLS } from "./catalogue";
+import type { PodRouteDescriptor } from "@pe/agent-contracts";
+import { TASKS, routeKey, friendlyObservation, resumeRefusal } from "./model";
 import { useDestination, useNavigation } from "./state";
 import { Information } from "./popover";
 import type { NavigationWork } from "./navigation-client";
@@ -14,7 +17,6 @@ import type { PageOption } from "#/settings/option-state";
 import type { DirectorySearch } from "./directory-search";
 import { usePodRoutes } from "#/route/pod-routes";
 import { podRoutePath } from "#/route/pod-address";
-import { matches } from "./model";
 
 type DirectoryPage = DirectorySearch;
 const directoryOptions: readonly PageOption<DirectoryPage>[] = [
@@ -27,7 +29,7 @@ const directoryOptions: readonly PageOption<DirectoryPage>[] = [
     projections: ["quick"],
     choices: [
       { value: "workflow", label: "Task", title: "Group tools by engineering task" },
-      { value: "name", label: "A–Z", title: "Sort all tools by name in two columns" },
+      { value: "name", label: "A–Z", title: "Sort tools by name" },
     ],
     read: (page) => page.sort,
     patch: (sort) => (sort === "workflow" || sort === "name" ? { sort } : {}),
@@ -52,44 +54,19 @@ const directoryOptions: readonly PageOption<DirectoryPage>[] = [
   },
 ];
 
-function WorkItem({
-  work,
-  onNavigate,
-}: {
-  work: NavigationWork;
-  onNavigate?: (destination: string) => void;
-}) {
-  const go = useDestination();
-  const { loading, error } = useNavigation();
-  return (
-    <div className="pe-navigation-row">
-      <div className="min-w-0 flex-1">
-        <Button
-          label={`Resume ${work.label}`}
-          refusal={resumeRefusal(work, !!(loading || error))}
-          onClick={() => {
-            if (work.url) (onNavigate ?? go)(work.url);
-          }}
-        >
-          {work.label}
-        </Button>
-        <p className="truncate text-ink-2">{work.context}</p>
-      </div>
-      <span className="t-small text-ink-2">{work.state}</span>
-      <Information label={`Work: ${work.label}`} icon={Info}>
-        <p>{work.context}</p>
-        <p className="mt-2">
-          {work.state} · revision {work.revision ?? "unknown"}
-        </p>
-        <p className="mt-2">
-          {work.reason ??
-            "Opens this Work's explicit destination; does not apply its staged changes."}
-        </p>
-        {work.url && <p className="mt-3 break-all face-mono">{work.url}</p>}
-      </Information>
-    </div>
-  );
-}
+type DirectoryItem =
+  | { kind: "tool"; tool: (typeof TOOLS)[number]; works: DirectoryItem[] }
+  | { kind: "work"; work: NavigationWork }
+  | { kind: "pod"; pod: PodRouteDescriptor };
+const itemKey = (item: DirectoryItem) =>
+  item.kind === "tool"
+    ? item.tool.to
+    : item.kind === "work"
+      ? `work:${item.work.id}`
+      : `pod:${item.pod.key}`;
+const itemTitle = (item: DirectoryItem) =>
+  item.kind === "tool" ? item.tool.title : item.kind === "work" ? item.work.label : item.pod.name;
+
 function NavigationStatus() {
   const { snapshot, loading, error, refresh } = useNavigation();
   return (
@@ -123,83 +100,146 @@ export function Directory({ page: address }: { page: AddressPage<"home"> }) {
   const [page, setPage] = address;
   const { query, exposure, sort, folded } = page;
   usePublishRouteOptions("index", "Tools", directoryOptions, page, setPage);
-  const { snapshot } = useNavigation();
+  const { snapshot, loading, error } = useNavigation();
   const go = useDestination();
-  const tools = matchingTools(query).filter(
-    (tool) => exposure === "All" || tool.exposure === exposure,
-  );
-  if (sort === "name") tools.sort((a, b) => a.title.localeCompare(b.title));
-  useRouteLease("home", address, {
-    facts: { tools: tools.slice(0, 200).map((tool) => ({ to: tool.to, exposure: tool.exposure })) },
+  const tools = TOOLS.filter((tool) => exposure === "All" || tool.exposure === exposure);
+  const items: DirectoryItem[] = [
+    ...(pods?.rows ?? []).map((pod): DirectoryItem => ({ kind: "pod", pod })),
+    ...tools.map(
+      (tool): DirectoryItem => ({
+        kind: "tool",
+        tool,
+        works: (snapshot?.works ?? [])
+          .filter((work) => work.route === routeKey(tool.to))
+          .map((work) => ({ kind: "work", work })),
+      }),
+    ),
+  ];
+  const [local, setLocal] = useState(emptyListState<"workflow" | "name">);
+  const list = useList<DirectoryItem, "workflow" | "name">({
+    items,
+    keyOf: itemKey,
+    search: (item) => ({
+      text:
+        item.kind === "tool"
+          ? [
+              item.tool.title,
+              item.tool.label,
+              item.tool.description,
+              item.tool.aliases,
+              item.tool.task,
+              item.tool.to,
+            ]
+          : item.kind === "work"
+            ? [item.work.label, item.work.context, item.work.state]
+            : [item.pod.name, item.pod.description, item.pod.packageId],
+    }),
+    sorts: { workflow: () => 0, name: itemTitle },
+    groups: {
+      of: (item) =>
+        item.kind === "pod"
+          ? "Pod routes"
+          : item.kind === "tool"
+            ? sort === "workflow"
+              ? item.tool.task
+              : "Tools"
+            : "",
+      order: ["Pod routes", ...(sort === "workflow" ? TASKS : ["Tools"])],
+    },
+    tree: { childrenOf: (item) => (item.kind === "tool" ? item.works : []) },
+    state: {
+      ...local,
+      query,
+      sort,
+      open: tools.filter((tool) => !folded.includes(tool.to)).map((tool) => tool.to),
+    },
+    onState: (next) => {
+      setLocal(next);
+      setPage({
+        query: next.query,
+        sort: next.sort || "workflow",
+        folded: [
+          ...folded.filter((path) => !tools.some((tool) => tool.to === path)),
+          ...tools.filter((tool) => !next.open.includes(tool.to)).map((tool) => tool.to),
+        ],
+      });
+    },
+    refusalOf: (item) =>
+      item.kind === "work" ? resumeRefusal(item.work, !!(loading || error)) : undefined,
+    onPick: (item) => {
+      const url =
+        item.kind === "tool"
+          ? item.tool.to
+          : item.kind === "pod"
+            ? podRoutePath(item.pod.key)
+            : item.work.url;
+      if (url) go(url);
+    },
   });
-  const reset = () => {
-    setPage({ query: "", exposure: "All" });
-  };
-  const renderTool = (tool: ReturnType<typeof matchingTools>[number]) => {
-    const works = snapshot?.works.filter((work) => work.route === routeKey(tool.to)) ?? [];
-    const expanded = !folded.includes(tool.to);
-    return (
-      <div key={tool.to} className="min-w-0 py-2">
-        <div className="pe-navigation-row">
-          <tool.icon className="size-4 shrink-0" aria-hidden />
-          <span className="min-w-0 flex-1">
-            <Button label={`Open ${tool.title}`} onClick={() => go(tool.to)}>
-              {tool.title}
-            </Button>
-          </span>
-          {tool.exposure !== "Main" && <span className="t-small text-ink-2">{tool.exposure}</span>}
-          {works.length > 0 && (
-            <Button
-              label={`${expanded ? "Collapse" : "Expand"} ${tool.title} Works`}
-              icon={ChevronRight}
-              aria-expanded={expanded}
-              onClick={() =>
-                setPage({
-                  folded: expanded
-                    ? [...folded, tool.to]
-                    : folded.filter((path) => path !== tool.to),
-                })
-              }
-            >
-              {works.length} Works
-            </Button>
-          )}
-          <Information label={`${tool.title} information`} icon={Info}>
-            <p>{tool.description}</p>
-            <p className="mt-3">
-              {tool.to} · {tool.exposure} exposure proposal · maturity unverified.
+  useRouteLease("home", address, {
+    facts: {
+      tools: list.rows
+        .filter((item) => item.item.kind === "tool")
+        .slice(0, 200)
+        .map(({ item }) =>
+          item.kind === "tool" ? { to: item.tool.to, exposure: item.tool.exposure } : {},
+        ),
+    },
+  });
+  const row = (item: DirectoryItem): ListRowParts => {
+    if (item.kind === "work")
+      return {
+        label: item.work.label,
+        lines: 2,
+        sub: item.work.context,
+        meta: item.work.state,
+        actions: (
+          <Information label={`Work: ${item.work.label}`} icon={Info}>
+            <p>{item.work.context}</p>
+            <p>
+              {item.work.state} revision {item.work.revision ?? "unknown"}
             </p>
-            <p className="mt-3">Runtime requirement (source-derived): {tool.runtimeNeed}.</p>
-            <p className="mt-3">
-              Runtime availability is not checked by this catalogue. The destination owns target
-              selection and action readiness.
+            <p>
+              {item.work.reason ??
+                "Opens this Work's explicit destination; does not apply its staged changes."}
             </p>
-            {tool.satellites && (
-              <div className="mt-3 flex flex-wrap gap-2">
-                {tool.satellites.map((satellite) => (
-                  <Button
-                    key={satellite.to}
-                    label={satellite.label}
-                    onClick={() => go(satellite.to)}
-                  >
-                    {satellite.label}
-                  </Button>
-                ))}
-              </div>
-            )}
           </Information>
-        </div>
-        <p className="mt-1 truncate pl-6 text-ink-2">{tool.description}</p>
-        {expanded && works.length > 0 && (
-          <div className="hairline-l mt-2 ml-6 pl-3">
-            <p className="t-small text-ink-2">Saved Works</p>
-            {works.map((work) => (
-              <WorkItem key={work.id} work={work} />
-            ))}
-          </div>
-        )}
-      </div>
-    );
+        ),
+      };
+    if (item.kind === "pod")
+      return {
+        label: item.pod.name,
+        lines: 2,
+        sub: item.pod.description,
+        meta: item.pod.trusted ? "Trusted" : "Trust required",
+      };
+    const { tool, works } = item;
+    return {
+      lead: <tool.icon aria-hidden />,
+      label: tool.title,
+      lines: 2,
+      sub: tool.description,
+      aside: works.length ? `${works.length} Works` : undefined,
+      meta: tool.exposure === "Main" ? undefined : tool.exposure,
+      actions: (
+        <Information label={`${tool.title} information`} icon={Info}>
+          <p>{tool.description}</p>
+          <p>
+            {tool.to} / {tool.exposure} exposure proposal; maturity unverified.
+          </p>
+          <p>Runtime requirement (source-derived): {tool.runtimeNeed}.</p>
+          <p>
+            Runtime availability is not checked by this catalogue. The destination owns target
+            selection and action readiness.
+          </p>
+          {tool.satellites?.map((satellite) => (
+            <Button key={satellite.to} label={satellite.label} onClick={() => go(satellite.to)}>
+              {satellite.label}
+            </Button>
+          ))}
+        </Information>
+      ),
+    };
   };
   return (
     <main className="mx-auto w-full max-w-6xl p-5">
@@ -213,14 +253,6 @@ export function Directory({ page: address }: { page: AddressPage<"home"> }) {
       <p className="mt-2 mb-5 text-ink-2">
         Find a tool for engineering design work. Saved Works sit beneath their tools.
       </p>
-      <div className="mb-4 max-w-xl">
-        <Input
-          aria-label="Search tools and tasks"
-          placeholder="Search a task, tool or description…"
-          value={query}
-          onChange={(event) => setPage({ query: event.target.value })}
-        />
-      </div>
       <div className="mb-4 flex flex-wrap items-center gap-2">
         <span className="text-ink-2">Exposure proposal:</span>
         {(["All", "Main", "Preview", "Archive"] as const).map((value) => (
@@ -233,70 +265,22 @@ export function Directory({ page: address }: { page: AddressPage<"home"> }) {
             {value}
           </Button>
         ))}
-        <span className="ml-auto text-ink-2">Sort:</span>
-        {(["workflow", "name"] as const).map((value) => (
-          <Button
-            key={value}
-            label={`Sort by ${value}`}
-            pressed={sort === value}
-            onClick={() => setPage({ sort: value })}
-          >
-            {value === "workflow" ? "Workflow" : "A–Z"}
-          </Button>
-        ))}
       </div>
       <p className="mb-4 text-ink-2">
         Main, Preview and Archive are provisional exposure choices. No maturity or runtime
         availability is certified.
       </p>
       <NavigationStatus />
-      {pods?.rows.length ? (
-        <NavigationGroup label="Pod routes" count={pods.rows.length} forceOpen={query.length > 0}>
-          <div className="hairline-rows">
-            {pods.rows
-              .filter((row) => matches(`${row.name} ${row.description} ${row.packageId}`, query))
-              .map((row) => (
-                <div key={row.key} className="pe-navigation-row py-2">
-                  <div className="min-w-0 flex-1">
-                    <Button label={`Open ${row.name}`} onClick={() => go(podRoutePath(row.key))}>
-                      {row.name}
-                    </Button>
-                    <p className="truncate text-ink-2">{row.description}</p>
-                  </div>
-                  <span className="t-small text-ink-2">
-                    {row.trusted ? "Trusted" : "Trust required"}
-                  </span>
-                </div>
-              ))}
-          </div>
-        </NavigationGroup>
-      ) : null}
-      <div className="mt-5 grid min-w-0 gap-x-8 gap-y-5 md:grid-cols-2">
-        {sort === "name"
-          ? tools.map(renderTool)
-          : TASKS.map((task) => {
-              const members = tools.filter((tool) => tool.task === task);
-              if (!members.length) return null;
-              return (
-                <NavigationGroup
-                  key={task}
-                  label={task}
-                  count={members.length}
-                  forceOpen={query.length > 0}
-                >
-                  <div className="hairline-rows">{members.map(renderTool)}</div>
-                </NavigationGroup>
-              );
-            })}
-      </div>
-      {tools.length === 0 && (
-        <p className="mt-5">
-          No tools match these filters.{" "}
-          <Button label="Clear directory filters" onClick={reset}>
-            Clear filters
-          </Button>
-        </p>
-      )}
+      <ListView
+        list={list}
+        row={row}
+        aria-label="tools and saved Works"
+        primary
+        empty={{
+          message: "No tools in this exposure",
+          exit: "Choose All exposure to see the catalogue",
+        }}
+      />
     </main>
   );
 }
