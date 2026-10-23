@@ -79,7 +79,7 @@
    lane, hugging the right edge, never over the transcript's text. */
 .chat-tail-floater {
   position: absolute;
-  bottom: var(--gutter);
+  bottom: calc(var(--chat-composer-height, 0px) + var(--gutter));
   right: calc(var(--side-lane) / 2);
   transform: translateX(50%);
   z-index: 8;

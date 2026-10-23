@@ -10,7 +10,10 @@ import { afterEach, expect, test, vi } from "vite-plus/test";
 
 import { OrbitMinimap, PlaneMinimap, type OrbitViewport } from "./minimap";
 
-afterEach(cleanup);
+afterEach(() => {
+  cleanup();
+  vi.useRealTimers();
+});
 
 test("an alias pan/zoom flight does not render the globe, and a stop uses the latest pose", () => {
   const viewport: OrbitViewport = { kind: "orbit", yaw: 30, elev: 30, zoom: 1, pivot: [0, 0, 0] };
@@ -146,6 +149,7 @@ test("a globe stop click writes that stop's yaw and elevation as a move; below t
 });
 
 test("the rim N always glides north (eye at 270), keeping elevation, zoom and pivot, with no S marker", async () => {
+  vi.useFakeTimers();
   const onViewport = vi.fn();
   const viewport: OrbitViewport = { kind: "orbit", yaw: 30, elev: 30, zoom: 2, pivot: [1, 2, 3] };
   const orbit = createLiveOrbit(viewport, onViewport);
@@ -153,10 +157,12 @@ test("the rim N always glides north (eye at 270), keeping elevation, zoom and pi
   const view = render(<OrbitMinimap orbit={orbit} />);
   expect(view.container.querySelector('[data-orbit-look="S"]')).toBeNull();
   fireEvent.click(view.container.querySelector('[data-orbit-look="N"]')!);
-  await vi.waitFor(() => expect(onViewport).toHaveBeenCalledTimes(1));
+  await act(() => vi.advanceTimersByTimeAsync(1_000));
+  expect(onViewport).toHaveBeenCalledTimes(1);
   expect(onViewport).toHaveBeenLastCalledWith({ ...viewport, yaw: 270 }, "move");
   fireEvent.click(view.container.querySelector('[data-orbit-look="N"]')!);
-  await vi.waitFor(() => expect(end).toHaveBeenCalledTimes(2));
+  await act(() => vi.advanceTimersByTimeAsync(1_000));
+  expect(end).toHaveBeenCalledTimes(2);
   expect(orbit.read()).toEqual({ ...viewport, yaw: 270 });
   expect(onViewport).toHaveBeenCalledTimes(1);
 });

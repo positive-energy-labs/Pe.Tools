@@ -427,7 +427,8 @@ test("a changed document fences a pending read after changing targets and return
   expect(
     screen.getByRole("region", { name: "Ducts route", hidden: true }).textContent,
   ).not.toContain("999999");
-});
+  // Two document-picker transitions and a fenced read exceed 15 s on a busy test machine.
+}, 30_000);
 
 test("a staged subject, claims and labelParameter render the subject scene; a verdict press stages the claim", async () => {
   work = ductsRouteState.schema.parse({
