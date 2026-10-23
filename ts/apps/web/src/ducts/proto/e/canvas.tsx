@@ -10,6 +10,7 @@ import {
   useRef,
   useState,
   type ReactNode,
+  type ComponentProps,
   type RefObject,
 } from "react";
 
@@ -38,7 +39,6 @@ import { boundsOfIds, ModelPicture, poseOf, usePictureBounds } from "../../model
 import { PictureStage, useStage, stageViewport, projectBounds } from "#/scene/stage-controller";
 import { GoToSubject } from "./go-to";
 import { PictureReadout } from "@pe/kit/lang/readout";
-import { OutcomeLine } from "@pe/kit/lang/outcome";
 import { RunDetail, runOf } from "./run-detail";
 import { DEFAULT_DESIGN_FRICTION_RATE } from "@pe/ducts-domain/equivalent-length";
 import { ProvisionalNote } from "../../provisional";
@@ -76,14 +76,14 @@ const fmt = (n: number | null | undefined, d = 3) => (n == null ? "—" : n.toFi
 /** The system a switch is opening ("" = every system) while the held screen still draws the last. */
 export const OpeningContext = createContext<string | null>(null);
 
-/** The plate's transitional line: the only thing a switch repaints before the new system renders. */
-function OpeningNote() {
+// Keep the opening acknowledgement below the expensive picture/capture builders.
+function DuctsReadout(props: ComponentProps<typeof PictureReadout>) {
   const opening = useContext(OpeningContext);
-  if (opening == null) return null;
   return (
-    <span className="truncate text-ink-2" data-e-opening={opening}>
-      {opening ? `opening ${opening}…` : "opening every system…"}
-    </span>
+    <PictureReadout
+      {...props}
+      pending={opening == null ? props.pending : `opening ${opening || "every system"}`}
+    />
   );
 }
 
@@ -448,25 +448,6 @@ function Canvas({
     });
   };
 
-  // I4/L3: pending and retained state share the existing line; a re-read inserts no row.
-  const readoutLine = (value: ReactNode) => (
-    <div className="grid min-w-0" aria-busy={identity.refreshing || undefined}>
-      <div
-        className={`col-start-1 row-start-1 min-w-0 ${identity.refreshing ? "invisible" : ""}`}
-        aria-hidden={identity.refreshing || undefined}
-      >
-        {value}
-      </div>
-      <div
-        className={`col-start-1 row-start-1 min-w-0 ${identity.refreshing ? "" : "invisible"}`}
-        aria-hidden={!identity.refreshing || undefined}
-        data-e-refreshing={identity.refreshing ? "" : undefined}
-      >
-        <OutcomeLine kind="busy" label="refreshing" says="the last read stays drawn" />
-      </div>
-    </div>
-  );
-
   return (
     <PictureStage
       goTo={(stage) => (
@@ -500,9 +481,81 @@ function Canvas({
         const goBack = () => stage.go("back");
 
         const readout = (
-          <PictureReadout
+          <DuctsReadout
             subject={systemName ?? undefined}
-            title={readId == null ? undefined : readoutLine(nameOrFallback(nameOf(readId)))}
+            title={readId == null ? undefined : nameOrFallback(nameOf(readId))}
+            pending={read.pending ? "refreshing" : undefined}
+            retained={
+              holding
+                ? `showing ${holding.system}`
+                : read.pending
+                  ? "the last read stays drawn"
+                  : undefined
+            }
+            summary={
+              readId != null ? undefined : identity.system == null ? (
+                <span className="truncate" data-e-census="">
+                  <span className="face-mono">{identity.census.systems}</span> systems
+                </span>
+              ) : (
+                <span data-e-state="">
+                  {systemState.length ? (
+                    <>
+                      <SystemMark issues={systemState} open={identity.open} />{" "}
+                    </>
+                  ) : null}
+                  {solved?.fan == null ? (
+                    <span data-tone={solved ? "alarm" : undefined}>
+                      {solved ? "no ESP: an implausible loss" : "not priced"}
+                    </span>
+                  ) : flowless.length ? (
+                    // A terminal with no design flow is priced at 0 cfm, so the sum would read as a
+                    // confident 0.000: missing reads as missing (house law 2), never as a number.
+                    <span className="text-ink-2" data-readout-missing="">
+                      no ESP: {flowless.length} of {terminals} grille
+                      {terminals === 1 ? "" : "s"} {flowless.length === 1 ? "has" : "have"} no
+                      design flow
+                    </span>
+                  ) : (
+                    <>
+                      {identity.breakdown ? (
+                        <BarPopover
+                          split={identity.breakdown.split}
+                          scale={identity.breakdown.scale}
+                          head={identity.breakdown.fans}
+                          className="inline-flex! underline decoration-dotted decoration-line-2 underline-offset-2"
+                        >
+                          ESP <span className="face-mono">{fmt(solved.fan, 3)} in-wg</span>
+                        </BarPopover>
+                      ) : (
+                        <>
+                          ESP <span className="face-mono">{fmt(solved.fan, 3)} in-wg</span>
+                        </>
+                      )}
+                      {solved.critical != null ? (
+                        <>
+                          {" "}
+                          · TEL <span className="face-mono">
+                            {fmtFt(solved.criticalTel)} ft
+                          </span> to{" "}
+                          {/* A name in text: the alias-click, which brings it into view. */}
+                          <button
+                            type="button"
+                            className="underline decoration-line-2 underline-offset-2"
+                            onClick={() =>
+                              subjects?.go ? subjects.go(solved.critical!) : pick(solved.critical!)
+                            }
+                          >
+                            {criticalName}
+                          </button>
+                        </>
+                      ) : null}{" "}
+                      <ProvisionalNote provisional={solved.provisional} of="the fan static" />
+                    </>
+                  )}
+                </span>
+              )
+            }
             onClear={readId == null ? undefined : () => pick(null)}
             foot={
               landed ? (
@@ -518,12 +571,6 @@ function Canvas({
               ) : null
             }
           >
-            <OpeningNote />
-            {holding ? (
-              <span className="text-ink-2" role="status" data-e-capturing="">
-                opening {page.system}… showing {holding.system}
-              </span>
-            ) : null}
             {readId != null ? (
               <>
                 {ruled && ruled.at === readId ? (
@@ -573,11 +620,6 @@ function Canvas({
               </>
             ) : identity.system == null ? (
               <>
-                {readoutLine(
-                  <span className="truncate" data-e-census="">
-                    <span className="face-mono">{identity.census.systems}</span> systems
-                  </span>,
-                )}
                 <span className="truncate">
                   <span className="face-mono">{identity.census.priced}</span> priced ·{" "}
                   <span className="face-mono">{identity.census.fix}</span> need a fix
@@ -585,66 +627,6 @@ function Canvas({
               </>
             ) : (
               <>
-                {readoutLine(
-                  <span data-e-state="">
-                    {systemState.length ? (
-                      <>
-                        <SystemMark issues={systemState} open={identity.open} />{" "}
-                      </>
-                    ) : null}
-                    {solved?.fan == null ? (
-                      <span data-tone={solved ? "alarm" : undefined}>
-                        {solved ? "no ESP: an implausible loss" : "not priced"}
-                      </span>
-                    ) : flowless.length ? (
-                      // A terminal with no design flow is priced at 0 cfm, so the sum would read as a
-                      // confident 0.000: missing reads as missing (house law 2), never as a number.
-                      <span className="text-ink-2" data-readout-missing="">
-                        no ESP: {flowless.length} of {terminals} grille
-                        {terminals === 1 ? "" : "s"} {flowless.length === 1 ? "has" : "have"} no
-                        design flow
-                      </span>
-                    ) : (
-                      <>
-                        {identity.breakdown ? (
-                          <BarPopover
-                            split={identity.breakdown.split}
-                            scale={identity.breakdown.scale}
-                            head={identity.breakdown.fans}
-                            className="inline-flex! underline decoration-dotted decoration-line-2 underline-offset-2"
-                          >
-                            ESP <span className="face-mono">{fmt(solved.fan, 3)} in-wg</span>
-                          </BarPopover>
-                        ) : (
-                          <>
-                            ESP <span className="face-mono">{fmt(solved.fan, 3)} in-wg</span>
-                          </>
-                        )}
-                        {solved.critical != null ? (
-                          <>
-                            {" "}
-                            · TEL <span className="face-mono">
-                              {fmtFt(solved.criticalTel)} ft
-                            </span>{" "}
-                            to {/* A name in text: the alias-click, which brings it into view. */}
-                            <button
-                              type="button"
-                              className="underline decoration-line-2 underline-offset-2"
-                              onClick={() =>
-                                subjects?.go
-                                  ? subjects.go(solved.critical!)
-                                  : pick(solved.critical!)
-                              }
-                            >
-                              {criticalName}
-                            </button>
-                          </>
-                        ) : null}{" "}
-                        <ProvisionalNote provisional={solved.provisional} of="the fan static" />
-                      </>
-                    )}
-                  </span>,
-                )}
                 <TooltipHint content={identity.system.sub}>
                   <span className="truncate text-ink-2" data-e-identity="">
                     {identity.system.sub}
@@ -652,7 +634,7 @@ function Canvas({
                 </TooltipHint>
               </>
             )}
-          </PictureReadout>
+          </DuctsReadout>
         );
         const model = (
           <ModelPicture
