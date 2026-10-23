@@ -9,6 +9,7 @@ import { useEffect, useMemo, useRef, useState } from "react";
 
 import { DUCTS_LAYERS, toggleLayer } from "@pe/agent-contracts";
 import { snapshotById } from "@pe/ducts-domain/readiness";
+import { systemScope } from "@pe/ducts-domain/system-scope";
 import { Popover, PopoverContent } from "@pe/kit/lang/popover";
 import { KeyLegend } from "#/components/lang/kbd";
 import { Pane } from "#/components/lang/pane";
@@ -158,8 +159,16 @@ function Canvas({
   });
 
   const findings3d = useMemo(
-    () => findingLayers(findingShapes(snapshot, annotated, work.doc)),
-    [snapshot, annotated, work.doc],
+    () =>
+      findingLayers(
+        findingShapes(
+          snapshot,
+          annotated,
+          work.doc,
+          page.system ? systemScope(snapshot, page.system).members : undefined,
+        ),
+      ),
+    [snapshot, annotated, work.doc, page.system],
   );
 
   // Header facts: a system name (never a group id), Pe fan static, critical run total.

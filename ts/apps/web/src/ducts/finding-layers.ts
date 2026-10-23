@@ -3,9 +3,9 @@
  * orange ring on an open end, an amber outline on a capped end, a red dashed bar across the gap of
  * a join Pe infers with both end faces outlined and the overhung edges bright red, a bar from each
  * tapping end to its landing, and an amber translucent box where a heal adds a piece or a cap.
- * Only the findings the picture already annotates (`annotated`, the same ids the 2D pins use) are
- * drawn. The face maths is `ducts-domain/faces` over the grader's own `sectionOf`, so what is
- * painted as overhung is what the proximity rule measured. Points are model feet.
+ * A chosen system draws every finding touching its mesh-capture members. With no system, only
+ * `annotated` findings draw. The face maths is `ducts-domain/faces` over the grader's `sectionOf`,
+ * so what is painted as overhung is what the proximity rule measured. Points are model feet.
  */
 import * as THREE from "three";
 
@@ -18,7 +18,9 @@ import {
   capFacesOf,
   inferJoints,
   rollOf,
+  verdictOf,
 } from "@pe/ducts-domain/proximity";
+import { withStoredRulings } from "@pe/ducts-domain/rulings";
 import type { DuctSnapshot } from "@pe/ducts-domain/types";
 import type { Layer3D } from "#/scene/types";
 
@@ -53,11 +55,50 @@ const unit = (p: number[]) => {
   return n < 1e-9 ? null : p.map((v) => v / n);
 };
 
+// System and diagnostic changes reuse the same model-wide inference, which is the expensive part.
+const inferences = new WeakMap<
+  DuctSnapshot,
+  { work: DuctsRouteDocument | null; value: ReturnType<typeof inferJoints> }
+>();
+
 export function findingShapes(
   snapshot: DuctSnapshot,
   annotated: ReadonlySet<string>,
   work: DuctsRouteDocument | null,
+  /** The raw system's mesh-capture scope, not its priced tree's shared equipment and other ports. */
+  members?: ReadonlySet<number>,
 ): FindingShapes {
+  work = withStoredRulings(work, snapshot.store);
+  let cached = inferences.get(snapshot);
+  if (!cached || cached.work !== work) {
+    cached = { work, value: inferJoints(snapshot, 1, work) };
+    inferences.set(snapshot, cached);
+  }
+  const inference = cached.value;
+  const shown = new Set(
+    members
+      ? inference.findings
+          .filter((f) => f.elementIds.some((id) => members.has(id)))
+          .map((f) => f.id)
+      : annotated,
+  );
+  if (members) {
+    // Inferred joins replace their raw open-end warnings, as in the survey used by the inbox.
+    const closed = new Set([
+      ...inference.joints.flatMap((j) => [j.a, j.b]),
+      ...inference.taps.map((t) => t.a),
+      ...inference.inline.flatMap((i) => i.ports),
+    ]);
+    for (const issue of snapshot.issues)
+      if (
+        issue.kind === "open-end" &&
+        issue.elementId != null &&
+        members.has(issue.elementId) &&
+        !closed.has(`${issue.elementId}:${issue.id.split(":").at(-1)}`) &&
+        verdictOf(work, issue.id) !== "ignore"
+      )
+        shown.add(issue.id);
+  }
   const shapes: FindingShapes = { outlines: [], bars: [], overhang: [], boxes: [] };
   const elements = new Map<number, Element>(
     [...snapshot.nodes, ...snapshot.segments].map((e) => [e.id, e]),
@@ -93,14 +134,13 @@ export function findingShapes(
   };
 
   for (const issue of snapshot.issues)
-    if (issue.kind === "open-end" && issue.elementId != null && annotated.has(issue.id)) {
+    if (issue.kind === "open-end" && issue.elementId != null && shown.has(issue.id)) {
       outline(`${issue.elementId}:${issue.id.split(":").at(-1)}`, "open");
       named.add(issue.elementId);
     }
 
-  const inference = inferJoints(snapshot, 1, work);
   for (const j of inference.joints) {
-    if (!annotated.has(j.id)) continue;
+    if (!shown.has(j.id)) continue;
     const [a, b] = [outline(j.a, "inferred"), outline(j.b, "inferred")];
     if (!a || !b) continue;
     shapes.bars.push([a.center, b.center]);
@@ -108,7 +148,7 @@ export function findingShapes(
     named.add(Number(j.a.split(":")[0])).add(Number(j.b.split(":")[0]));
   }
   for (const t of inference.taps) {
-    if (!annotated.has(t.id)) continue;
+    if (!shown.has(t.id)) continue;
     const from = outline(t.a, "inferred");
     if (!from) continue;
     named.add(Number(t.a.split(":")[0]));
@@ -132,7 +172,7 @@ export function findingShapes(
 
   for (const group of healPlan(snapshot, work).groups)
     for (const item of group.items) {
-      if (!item.covers.some((id) => annotated.has(id))) continue;
+      if (!item.covers.some((id) => shown.has(id))) continue;
       const at = end(item.end);
       const face = at && faceOf(at.e, at.c);
       if (!face) continue;
