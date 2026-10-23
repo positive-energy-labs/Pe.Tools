@@ -2,6 +2,7 @@ import { Activity, Suspense, useEffect, useRef, type ComponentType, type ReactNo
 import { useRouter, useRouterState } from "@tanstack/react-router";
 import { THREAD_TABS_MAX, routeAddress, type RouteKey, type ThreadTab } from "@pe/agent-contracts";
 import { RouteActivity, type RouteActivityScope } from "#/route/activity";
+import { currentLocation } from "#/route/url";
 import { PaneErrorBoundary } from "#/components/lang/pane";
 
 interface RetainedRoute {
@@ -130,7 +131,7 @@ export function RouteRetention({
           search: location.search,
           current: () => {
             if (!next.visible) return false;
-            const at = router.parseLocation(router.history.location);
+            const at = currentLocation(router);
             const tab = (at.state as { __peRouteTab?: { id: string; thread: string } })
               .__peRouteTab;
             return (

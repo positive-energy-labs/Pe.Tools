@@ -14,7 +14,7 @@ import { Scene3D } from "#/scene/scene3d";
 import type { SceneMeshes } from "#/scene/types";
 
 import type { DuctsPage } from "../../manifest";
-import type { PictureBounds } from "../../model-picture";
+import type { PictureBounds } from "#/scene/framing";
 import type { Scene } from "../../scene";
 
 const CORNER = { width: 300, height: 176 } as const;

@@ -54,9 +54,7 @@ export function PictureReadout({
           <span className="min-w-0 flex-1 truncate font-medium" data-readout-title="">
             {title}
           </span>
-          {onClear ? (
-            <Button label="Clear the selection · Esc" icon={X} onClick={onClear} />
-          ) : null}
+          {onClear ? <Button label="Clear the selection · Esc" icon={X} onClick={onClear} /> : null}
         </header>
       ) : null}
       <div ref={body} className="flex min-h-0 flex-1 flex-col gap-1 overflow-y-auto px-1.5 py-1">
