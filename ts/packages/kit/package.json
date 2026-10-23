@@ -16,6 +16,8 @@
     "./lang/chip": "./src/components/lang/chip.tsx",
     "./lang/gesture-glyph": "./src/components/lang/gesture-glyph.tsx",
     "./lang/code": "./src/components/lang/code.tsx",
+    "./lang/hover-grace": "./src/components/lang/hover-grace.ts",
+    "./lang/declutter": "./src/components/lang/declutter.ts",
     "./lang/reach": "./src/components/lang/reach.ts",
     "./lang/collection": "./src/components/lang/collection.ts",
     "./lang/empty": "./src/components/lang/empty.tsx",

@@ -1,3 +1,5 @@
+import { declutter } from "./declutter";
+import { Popover, PopoverTrigger, SubjectPopoverContent } from "./popover";
 /**
  * Floaters yield in DOM order and announce each move; parallel siblings otherwise take one slot.
  * They may overlap neighbouring panes, but avoid the field's legends, readouts and earlier floaters.
@@ -41,9 +43,6 @@ const flip = (c: Corner, v: boolean, h: boolean) =>
   `${v ? (c[0] === "t" ? "b" : "t") : c[0]}${h ? (c[1] === "l" ? "r" : "l") : c[1]}` as Corner;
 const nearest = (c: Corner) => [c, flip(c, false, true), flip(c, true, false), flip(c, true, true)];
 
-const meets = (a: DOMRect, b: DOMRect) =>
-  a.left < b.right && b.left < a.right && a.top < b.bottom && b.top < a.bottom;
-
 /** Where the floater would sit in a corner of the field, `gutter` in from its edges. */
 function cornerRect(field: DOMRect, own: DOMRect, gutter: number, c: Corner) {
   const x = c[1] === "l" ? field.left + gutter : field.right - gutter - own.width;
@@ -51,29 +50,49 @@ function cornerRect(field: DOMRect, own: DOMRect, gutter: number, c: Corner) {
   return new DOMRect(x, y, own.width, own.height);
 }
 
-interface At {
-  corner: Corner;
-  /** Px down (+) or up (-) from the corner, past a floater already there. */
-  dy: number;
-}
+type At = { corner: Corner; dy: number; folded: boolean; width?: number; height?: number };
 
 const MOVED = "pe:floater-moved";
 
-function useYield(ref: RefObject<HTMLDivElement | null>, place: Corner) {
-  const [at, setAt] = useState<At>({ corner: place, dy: 0 });
+function useYield(
+  ref: RefObject<HTMLDivElement | null>,
+  place: Corner,
+  preferred?: FloaterSpec["size"],
+) {
+  const [at, setAt] = useState<At>({ corner: place, dy: 0, folded: false, ...preferred });
   useLayoutEffect(() => {
     const own = ref.current;
     const field = own?.parentElement;
     const settle = (next: At) =>
       setAt((was) => {
-        if (was.corner === next.corner && was.dy === next.dy) return was;
+        if (
+          was.corner === next.corner &&
+          was.dy === next.dy &&
+          was.folded === next.folded &&
+          was.width === next.width &&
+          was.height === next.height
+        )
+          return was;
         requestAnimationFrame(() => field?.dispatchEvent(new Event(MOVED)));
         return next;
       });
-    if (!own || !field) return settle({ corner: place, dy: 0 });
+    if (!own || !field) return;
     const run = () => {
       const f = field.getBoundingClientRect();
       const o = own.getBoundingClientRect();
+      const folded = getComputedStyle(own).getPropertyValue("--floater-folded").trim() === "1";
+      const ratio =
+        preferred && f.width > 0 && f.height > 0
+          ? Math.min(
+              1,
+              Math.max(MIN.width, f.width * CAP.width) / preferred.width,
+              Math.max(MIN.height, f.height * CAP.height) / preferred.height,
+            )
+          : 1;
+      const shown = preferred && {
+        width: preferred.width * ratio,
+        height: preferred.height * ratio,
+      };
       const gutter = parseFloat(getComputedStyle(own).getPropertyValue("--gutter")) || 0;
       const fixed = [...field.querySelectorAll(PANE_OBSTACLES)]
         .filter((el) => !el.closest("[data-slot='floater']"))
@@ -82,22 +101,25 @@ function useYield(ref: RefObject<HTMLDivElement | null>, place: Corner) {
         .filter((el) => el.compareDocumentPosition(own) & Node.DOCUMENT_POSITION_FOLLOWING)
         .map((el) => el.getBoundingClientRect())
         .concat(fixed);
-      const free = nearest(place)
-        .flatMap((corner) => {
-          const r = cornerRect(f, o, gutter, corner);
-          const past = others.map((x) =>
-            corner[0] === "t" ? x.bottom + gutter - r.top : x.top - gutter - r.bottom,
-          );
-          return [0, ...past].map((dy) => ({
-            corner,
-            dy,
-            r: new DOMRect(r.x, r.y + dy, r.width, r.height),
-          }));
-        })
-        .find(
-          ({ r }) => r.top >= f.top && r.bottom <= f.bottom && !others.some((x) => meets(r, x)),
+      const candidates = (folded ? ["br" as const] : nearest(place)).flatMap((corner) => {
+        const r = cornerRect(f, o, gutter, corner);
+        const past = others.map((x) =>
+          corner[0] === "t" ? x.bottom + gutter - r.top : x.top - gutter - r.bottom,
         );
-      settle(free ? { corner: free.corner, dy: free.dy } : { corner: place, dy: 0 });
+        return [0, ...past].map((dy) => ({
+          x: r.x,
+          y: r.y + dy,
+          width: r.width,
+          height: r.height,
+          value: { corner, dy, folded, ...shown },
+        }));
+      });
+      const [slot] = declutter(
+        [{ ...candidates[0]!, candidates: candidates.slice(1) }],
+        { x: f.x, y: f.y, width: f.width, height: f.height },
+        others.map((r) => ({ x: r.x, y: r.y, width: r.width, height: r.height })),
+      );
+      settle(slot?.value ?? { corner: place, dy: 0, folded, ...shown });
     };
     run();
     const moved = () => requestAnimationFrame(run);
@@ -111,7 +133,7 @@ function useYield(ref: RefObject<HTMLDivElement | null>, place: Corner) {
       observer.disconnect();
       field.removeEventListener(MOVED, moved);
     };
-  }, [ref, place]);
+  }, [ref, place, preferred?.width, preferred?.height]);
   return at;
 }
 
@@ -161,39 +183,14 @@ type FloaterSurfaceSpec = Omit<FloaterSpec, "onOpenChange"> &
 
 export function Floater({ spec }: { spec: FloaterSurfaceSpec }) {
   const ref = useRef<HTMLDivElement>(null);
-  const at = useYield(ref, spec.place);
   const [slide, setSlide] = useState(0);
   const [box, setBox] = useState(spec.size);
-  const [fieldSize, setFieldSize] = useState({ width: 0, height: 0 });
-  useLayoutEffect(() => {
-    const own = ref.current;
-    const field = own?.parentElement;
-    if (!own || !field) return;
-    const measure = () => {
-      const { width, height } = field.getBoundingClientRect();
-      setFieldSize((before) =>
-        before.width === width && before.height === height ? before : { width, height },
-      );
-    };
-    measure();
-    if (typeof ResizeObserver === "undefined") return;
-    const observer = new ResizeObserver(measure);
-    observer.observe(field);
-    return () => observer.disconnect();
-  }, []);
-  const preferred = box;
-  const ratio =
-    preferred && fieldSize.width > 0 && fieldSize.height > 0
-      ? Math.min(
-          1,
-          Math.max(MIN.width, fieldSize.width * CAP.width) / preferred.width,
-          Math.max(MIN.height, fieldSize.height * CAP.height) / preferred.height,
-        )
-      : 1;
-  const shown = preferred && { width: preferred.width * ratio, height: preferred.height * ratio };
+  const at = useYield(ref, spec.place, box);
+  const { folded, width, height } = at;
+  const shown = box && { width, height };
   useLayoutEffect(() => {
     ref.current?.parentElement?.dispatchEvent(new Event(MOVED));
-  }, [slide, shown?.width, shown?.height]);
+  }, [slide]);
   const gutter = () => parseFloat(getComputedStyle(ref.current!).getPropertyValue("--gutter")) || 0;
   const startSlide = useRef(0);
   const sliding = (e: ReactPointerEvent<HTMLElement>) => {
@@ -229,6 +226,7 @@ export function Floater({ spec }: { spec: FloaterSurfaceSpec }) {
         data-slot="floater"
         data-floater={spec.key}
         data-place={at.corner}
+        data-folded={folded ? "" : undefined}
         data-surface="artifact"
         className={`absolute z-popup shadow-float p-1 ${PLACE[at.corner]}`}
         style={{
@@ -243,7 +241,28 @@ export function Floater({ spec }: { spec: FloaterSurfaceSpec }) {
         }}
       >
         {spec.onOpenChange ? <FloaterKeys spec={spec} element={ref} /> : null}
-        <div data-slot="floater-content">{spec.render()}</div>
+        {folded ? (
+          <Popover>
+            <PopoverTrigger className="dl-button dl-control" aria-label={spec.label}>
+              {spec.label}
+            </PopoverTrigger>
+            <SubjectPopoverContent
+              aria-label={spec.label}
+              style={
+                box
+                  ? {
+                      ["--floater-w" as string]: `${box.width}px`,
+                      ["--floater-h" as string]: `${box.height}px`,
+                    }
+                  : undefined
+              }
+            >
+              <div data-slot="floater-content">{spec.render()}</div>
+            </SubjectPopoverContent>
+          </Popover>
+        ) : (
+          <div data-slot="floater-content">{spec.render()}</div>
+        )}
         <div
           data-slot="floater-grip"
           aria-label={`move ${spec.label}`}

@@ -1,63 +1,19 @@
-import { SvgTip } from "@pe/kit/lang/tooltip";
-/** The subject's own words over the model picture (gaps, inferred joins, omissions, legs, places),
- * and the caption every annotation label wears. */
 import { createContext, useContext, type ReactNode } from "react";
-
+import { declutter, type Box } from "@pe/kit/lang/declutter";
 import { token } from "@pe/kit/lib/token";
 import type { Project } from "#/scene/projection";
-
 import { DASH_CLASS, inferredInk } from "./encoding";
 import type { Scene } from "./scene";
 
-const GLYPH = 4;
-/** A leg shorter than this carries no caption (its endpoints' names say enough). */
-const LABEL_LEG_FT = 2;
-
-/** The picture a caption must stay inside (the annotation layer's size); none = unclamped. */
 export const CaptionBounds = createContext<{ width: number; height: number } | null>(null);
-/** The 10 px mono face's advance, a little generous so the halo fits too. */
-const CHAR_PX = 6.3;
-
-/** A caption on a page-coloured halo, so it reads over any mesh; kept wholly inside the picture. */
-export function Caption({
-  x,
-  y,
-  children,
-  anchor = "start",
-  ink = token("ink-2"),
-}: {
+export type ScreenLabel = {
+  key: string;
   x: number;
   y: number;
-  children: string;
-  anchor?: "start" | "middle";
-  ink?: string;
-}) {
-  const bounds = useContext(CaptionBounds);
-  if (bounds) {
-    const width = children.length * CHAR_PX;
-    const left = anchor === "middle" ? x - width / 2 : x;
-    const right = bounds.width - 3 - (left + width);
-    x += left < 3 ? 3 - left : Math.min(0, right);
-    y = Math.min(Math.max(y, 11), bounds.height - 4);
-  }
-  return (
-    <text
-      x={x}
-      y={y}
-      fontSize={10}
-      className="face-mono"
-      textAnchor={anchor}
-      fill={ink}
-      stroke={token("page")}
-      strokeWidth={3}
-      paintOrder="stroke"
-    >
-      {children}
-    </text>
-  );
-}
-
-/** A polyline's projected `d`; null when any point is behind the camera. */
+  text: string;
+  ids?: readonly number[];
+  priced?: boolean;
+};
 export const pathOf = (line: readonly (readonly number[])[], project: Project) => {
   let d = "";
   for (const [i, p] of line.entries()) {
@@ -68,107 +24,164 @@ export const pathOf = (line: readonly (readonly number[])[], project: Project) =
   return d;
 };
 
-/** The subject's own words over the picture: gaps, inferred joins, omissions, legs and places. */
+/** Text and geometry share the annotation plane; all captions compete with pins and badges. */
+export function layoutCaptions(
+  labels: readonly ScreenLabel[],
+  bounds: Box,
+  obstacles: readonly Box[] = [],
+  hovered: number | null = null,
+) {
+  const unique = labels.filter(
+    (a, i) =>
+      !labels
+        .slice(0, i)
+        .some(
+          (b) =>
+            a.text === b.text &&
+            Math.abs(a.x - b.x) < 6 * a.text.length &&
+            Math.abs(a.y - b.y) < 12,
+        ),
+  );
+  const ordered = [...unique].sort(
+    (a, b) => Number(!!b.ids?.includes(hovered!)) - Number(!!a.ids?.includes(hovered!)),
+  );
+  return declutter(
+    ordered.map((value) => {
+      const width = value.text.length * 6.3 + 4;
+      const x = Math.max(bounds.x, Math.min(value.x, bounds.x + bounds.width - width));
+      const y = Math.max(bounds.y, Math.min(value.y - 10, bounds.y + bounds.height - 12));
+      return {
+        value,
+        x,
+        y,
+        width,
+        height: 12,
+      };
+    }),
+    bounds,
+    obstacles,
+  ).flatMap((slot) => (slot ? [{ ...slot.value, x: slot.x + 2, y: slot.y + 10 }] : []));
+}
 export function SubjectLabels({
   sub,
   project,
+  extra,
+  bounds,
+  obstacles,
+  hovered,
 }: {
-  sub: NonNullable<Scene["subject"]>;
+  sub: Scene["subject"];
   project: Project;
+  extra: readonly ScreenLabel[];
+  bounds: Box;
+  obstacles: readonly Box[];
+  hovered: number | null;
 }): ReactNode {
-  const span = (from: readonly number[], to: readonly number[]) => {
-    const a = project(from);
-    const b = project(to);
-    return a && b
-      ? { x1: a[0], y1: a[1], x2: b[0], y2: b[1], mx: (a[0] + b[0]) / 2, my: (a[1] + b[1]) / 2 }
-      : null;
+  const field = useContext(CaptionBounds);
+  if (field) bounds = { x: 0, y: 0, ...field };
+  const labels: ScreenLabel[] = [...extra];
+  const marks: ReactNode[] = [];
+  const caption = (
+    key: string,
+    at: readonly number[],
+    text: string,
+    ids: readonly number[],
+    centered = false,
+  ) => {
+    const xy = project(at);
+    if (xy)
+      labels.push({
+        key,
+        x: xy[0] + (centered ? -text.length * 3.15 : 8),
+        y: xy[1] - 8,
+        text,
+        ids,
+      });
   };
-  const caption = (id: number) => {
-    const p = sub.pointOf(id);
-    return p ? project(p) : null;
+  const reference = (
+    span: { after: number; before: number },
+    line: readonly (readonly number[])[],
+    text: string,
+    ink: string,
+    width = 1.5,
+    dash?: string,
+    opacity = 1,
+  ) => {
+    const key = `${text}:${span.after}-${span.before}`;
+    const mid =
+      line.length === 2
+        ? line[0]!.map((v, i) => (v + line[1]![i]!) / 2)
+        : line[Math.floor(line.length / 2)];
+    if (mid) caption(key, mid, text, [span.after, span.before], true);
+    const d = pathOf(line, project);
+    if (d)
+      marks.push(
+        <path
+          key={key}
+          d={d}
+          fill="none"
+          stroke={ink}
+          strokeWidth={width}
+          strokeOpacity={opacity}
+          className={dash}
+        />,
+      );
   };
+  if (sub) {
+    for (const span of sub.gaps)
+      reference(span, [span.from, span.to], "gap", token("ink-2"), 1.5, "dash-void");
+    for (const span of sub.inferred)
+      reference(
+        span,
+        [span.from, span.to],
+        span.confirmed ? "confirmed" : span.grade === "near-miss" ? "near miss" : span.grade,
+        inferredInk(span),
+      );
+    for (const span of sub.omissions)
+      reference(
+        span,
+        span.line,
+        `skipped ${span.skipped.length}`,
+        token("ink"),
+        3,
+        DASH_CLASS.reference,
+        0.5,
+      );
+    for (const leg of sub.cut.legs) {
+      const id = leg.ids[Math.floor(leg.ids.length / 2)],
+        at = id == null ? null : sub.pointOf(id);
+      if (at && leg.lengthFt >= 2)
+        caption(
+          `leg:${leg.name}|${leg.ids[0]}`,
+          at,
+          `${leg.size ?? "?"} · ${leg.lengthFt.toFixed(1)} ft · ${leg.fittings} elb`,
+          leg.ids,
+        );
+    }
+    for (const [i, place] of sub.cut.nodes.entries()) {
+      const at = sub.pointOf(place.id);
+      if (at) caption(`place:${place.id}-${i}`, at, place.name, [place.id]);
+    }
+  }
   return (
     <g data-subject="">
-      {sub.gaps.map((gap) => {
-        const s = span(gap.from, gap.to);
-        return s ? (
-          <g key={`${gap.after}-${gap.before}`} data-gap={`${gap.after}-${gap.before}`}>
-            <SvgTip content={"gap"} />
-            <line {...s} stroke={token("ink-2")} strokeWidth={1.5} className="dash-void" />
-            <Caption x={s.mx} y={s.my - 8} anchor="middle">
-              gap
-            </Caption>
-          </g>
-        ) : null;
-      })}
-      {sub.inferred.map((bridge) => {
-        const s = span(bridge.from, bridge.to);
-        return s ? (
-          <g
-            key={`${bridge.after}-${bridge.before}`}
-            data-inferred={`${bridge.after}-${bridge.before}`}
+      {marks}
+      {layoutCaptions(labels, bounds, obstacles, hovered).map((label) => (
+        <g key={label.key} data-loss-label={label.text}>
+          <text
+            x={label.x}
+            y={label.y}
+            fontSize={10}
+            className="face-mono"
+            fill={token(label.priced ? "ink" : "ink-2")}
+            stroke={token("page")}
+            strokeWidth={3}
+            paintOrder="stroke"
           >
-            <line {...s} stroke={inferredInk(bridge)} strokeWidth={1.5} />
-            <Caption x={s.mx} y={s.my - 8} anchor="middle">
-              {bridge.confirmed
-                ? "confirmed"
-                : bridge.grade === "near-miss"
-                  ? "near miss"
-                  : bridge.grade}
-            </Caption>
-          </g>
-        ) : null;
-      })}
-      {sub.omissions.map((omission) => {
-        const d = pathOf(omission.line, project);
-        const mid = omission.line[Math.floor(omission.line.length / 2)];
-        const m = mid && project(mid);
-        return d ? (
-          <g
-            key={`${omission.after}-${omission.before}`}
-            data-omission={`${omission.after}-${omission.before}`}
-          >
-            <path
-              d={d}
-              fill="none"
-              stroke={token("ink")}
-              strokeOpacity={0.5}
-              strokeWidth={3}
-              className={DASH_CLASS.reference}
-            />
-            {m ? (
-              <Caption x={m[0]} y={m[1] - 8} anchor="middle">
-                {`skipped ${omission.skipped.length}`}
-              </Caption>
-            ) : null}
-          </g>
-        ) : null;
-      })}
-      {sub.cut.legs.map((leg) => {
-        const middle = leg.ids[Math.floor(leg.ids.length / 2)];
-        const xy = leg.lengthFt < LABEL_LEG_FT || middle === undefined ? null : caption(middle);
-        return xy ? (
-          <g key={`${leg.name}|${leg.ids[0]}`} data-leg-label={leg.name}>
-            <Caption x={xy[0] + 6} y={xy[1] - 6}>
-              {`${leg.size ?? "?"} · ${leg.lengthFt.toFixed(1)} ft · ${leg.fittings} elb`}
-            </Caption>
-          </g>
-        ) : null;
-      })}
-      {sub.cut.nodes.map((place, i) => {
-        const xy = caption(place.id);
-        return xy ? (
-          <g
-            key={`${place.id}-${i}`}
-            data-place={place.kind}
-            transform={`translate(${xy[0]} ${xy[1]})`}
-          >
-            <Caption x={GLYPH * 2} y={GLYPH * 3.5} ink={token("ink")}>
-              {place.name}
-            </Caption>
-          </g>
-        ) : null;
-      })}
+            {label.text}
+          </text>
+        </g>
+      ))}
     </g>
   );
 }

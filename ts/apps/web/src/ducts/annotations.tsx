@@ -1,3 +1,4 @@
+import { declutter, type Box } from "@pe/kit/lang/declutter";
 import { SvgTip } from "@pe/kit/lang/tooltip";
 /**
  * The model picture's annotation layer: real DOM over the meshes, re-projected every frame the
@@ -28,8 +29,8 @@ import {
 } from "./encoding";
 import type { Claim } from "./legs";
 import type { Scene } from "./scene";
-import { Caption, pathOf, SubjectLabels } from "./subject-labels";
-import { SubjectTextContext } from "@pe/kit/lang/reach";
+import { pathOf, SubjectLabels } from "./subject-labels";
+import { reachProps, SubjectTextContext } from "@pe/kit/lang/reach";
 import { useSubjectLighting } from "@pe/kit/lang/subject-text";
 
 export type Ruling =
@@ -38,7 +39,13 @@ export type Ruling =
   | { kind: "issue"; n: number; at: number; issue: Issue };
 
 /** A label at a model point: a leg's total, or a terminal's path total. */
-export type Label = { key: string; at: readonly number[]; text: string; priced: boolean };
+export type Label = {
+  key: string;
+  at: readonly number[];
+  text: string;
+  priced: boolean;
+  ids: readonly number[];
+};
 
 type Point = { x: number; y: number };
 
@@ -46,47 +53,17 @@ const GLYPH = 4;
 const PIN = 8;
 /** A footnote chip's diameter: the kit's `.subject-badge` circle. */
 const CHIP = 18;
-/** Where a chip may sit around its element, nearest and most legible first: above, the upper
- * diagonals, the sides, then below; then the same ring further out. */
-const RING = [
-  [0, -1],
-  [0.72, -0.72],
-  [-0.72, -0.72],
-  [1, 0],
-  [-1, 0],
-  [0.72, 0.72],
-  [-0.72, 0.72],
-  [0, 1],
-] as const;
-
-/** Chip centres for numbered anchors: each takes the first ring slot that stays inside the picture
- * and clears every chip already placed and every anchor dot, so close connectors keep legible
- * numbers with a leader each. Order is the anchors' order (footnote order). */
+/** Numbered chips share the kit search with captions and pins, clearing their anchor dots. */
 export function placeChips(
   anchors: readonly { x: number; y: number; n: number }[],
   size: { width: number; height: number },
-): { x: number; y: number }[] {
-  type Box = { x0: number; y0: number; x1: number; y1: number };
-  const taken: Box[] = anchors.map((a) => ({ x0: a.x - 4, y0: a.y - 4, x1: a.x + 4, y1: a.y + 4 }));
-  const clear = (b: Box) =>
-    !taken.some((t) => b.x0 < t.x1 && t.x0 < b.x1 && b.y0 < t.y1 && t.y0 < b.y1);
-  return anchors.map((a) => {
-    const w = CHIP + 4;
-    const h = CHIP + 4;
-    let first: { x: number; y: number } | null = null;
-    for (const r of [24, 40, 58])
-      for (const [dx, dy] of RING) {
-        const x = a.x + dx * (r + (dx ? w / 2 - h / 2 : 0));
-        const y = a.y + dy * r;
-        const box = { x0: x - w / 2, y0: y - h / 2, x1: x + w / 2, y1: y + h / 2 };
-        if (box.x0 < 0 || box.y0 < 0 || box.x1 > size.width || box.y1 > size.height) continue;
-        first ??= { x, y };
-        if (!clear(box)) continue;
-        taken.push(box);
-        return { x, y };
-      }
-    return first ?? { x: a.x, y: a.y - 24 };
-  });
+  obstacles: readonly Box[] = [],
+) {
+  return declutter(
+    anchors.map((a) => ({ x: a.x - 11, y: a.y - 35, width: 22, height: 22 })),
+    { x: 0, y: 0, ...size },
+    [...obstacles, ...anchors.map((a) => ({ x: a.x - 4, y: a.y - 4, width: 8, height: 8 }))],
+  ).map((b) => (b ? { x: b.x + 11, y: b.y + 11 } : null));
 }
 const HIT: React.CSSProperties = { pointerEvents: "auto", cursor: "pointer" };
 
@@ -189,7 +166,7 @@ export function Annotations({
         ? token("veil")
         : null;
   const sub = scene.subject;
-  const taken = new Map<number, number>();
+
   // Footnote chips are placed together so each can clear the others. A badge sits on a drawn
   // subject: its mesh, else its centreline drawn as a ghost; never on empty space.
   const sceneSegments = new Map(scene.segments.map((f) => [f.segment.id, f.segment.polyline]));
@@ -204,10 +181,36 @@ export function Annotations({
       ? [{ ref, at: { x: xy[0], y: xy[1] }, ghost: ghost ? pathOf(ghost, project) : null, drawn }]
       : [];
   });
+  const bounds = { x: 0, y: 0, ...size };
+  const pins = declutter(
+    (layers.has("findings") ? rulings : []).flatMap((r) => {
+      const p = pointOf(r.at),
+        xy = p && project(p);
+      if (!xy) return [];
+      return [
+        {
+          x: xy[0] - PIN,
+          y: xy[1] - PIN * 3.4,
+          width: PIN * 2,
+          height: PIN * 2,
+          value: r,
+        },
+      ];
+    }),
+    bounds,
+  ).flatMap((box) => (box ? [box] : []));
   const chips = placeChips(
     anchored.map(({ ref, at }) => ({ ...at, n: ref.number })),
     size,
-  ).map((chip, i) => ({ ...anchored[i]!, chip }));
+    pins,
+  ).flatMap((chip, i) => (chip ? [{ ...anchored[i]!, chip }] : []));
+  const chipBoxes = chips.map(({ chip }) => ({
+    x: chip.x - 11,
+    y: chip.y - 11,
+    width: 22,
+    height: 22,
+  }));
+  const obstacles = [...chipBoxes, ...pins];
 
   return (
     <svg
@@ -277,24 +280,21 @@ export function Annotations({
           </g>
         );
       })}
-      {layers.has("labels") && sub ? <SubjectLabels sub={sub} project={project} /> : null}
-      {layers.has("labels")
-        ? placeLabels(labels, project).map(({ key, x, y, text, priced }) => (
-            <g key={key} data-loss-label={text}>
-              <Caption x={x} y={y} ink={priced ? token("ink") : token("ink-2")}>
-                {text}
-              </Caption>
-            </g>
-          ))
-        : null}
+      {layers.has("labels") ? (
+        <SubjectLabels
+          sub={sub}
+          project={project}
+          bounds={bounds}
+          obstacles={obstacles}
+          hovered={lighting.focus ?? hovered}
+          extra={labels.flatMap((label) => {
+            const xy = project(label.at);
+            return xy ? [{ ...label, x: xy[0] + 8, y: xy[1] + 14 }] : [];
+          })}
+        />
+      ) : null}
       {layers.has("findings")
-        ? rulings.map((r) => {
-            const p = pointOf(r.at);
-            const xy = p && project(p);
-            if (!xy) return null;
-            // Pins on one element step right by one pin.
-            const slot = taken.get(r.at) ?? 0;
-            taken.set(r.at, slot + 1);
+        ? pins.map(({ value: r, x, y }) => {
             const ink =
               r.kind === "claim"
                 ? claimInk(r.claim)
@@ -308,7 +308,7 @@ export function Annotations({
                 : r.kind === "issue"
                   ? r.issue.id
                   : r.finding.id;
-            const target = {
+            const issueTarget = {
               key: issues.find((i) => i.findings.includes(finding))?.key ?? finding,
               elementId: r.at,
             };
@@ -317,9 +317,13 @@ export function Annotations({
                 key={`${r.n}:${r.at}`}
                 data-ruling-pin={r.n}
                 data-ruling-kind={r.kind}
-                transform={`translate(${xy[0] + slot * PIN * 2.2} ${xy[1] - PIN * 2.4})`}
+                transform={`translate(${x + PIN} ${y + PIN})`}
+                {...target(r.at)}
+                {...reachProps()}
                 style={HIT}
-                onMouseEnter={() => onIssueHover?.(target)}
+                tabIndex={0}
+                aria-label={`finding ${r.n}`}
+                onMouseEnter={() => onIssueHover?.(issueTarget)}
                 onMouseLeave={() => onIssueHover?.(null)}
                 onClick={(e) => onRuling(r, at(e))}
                 onDoubleClick={() => onFrame(r.at)}
@@ -424,22 +428,4 @@ export function Annotations({
       })}
     </svg>
   );
-}
-
-/** Loss labels in screen px: the same words at the same place draw once (a leg total and a path
- * total can coincide), and a label that would overprint another steps down a line. */
-export function placeLabels(labels: readonly Label[], project: Project) {
-  const placed: { key: string; x: number; y: number; text: string; priced: boolean }[] = [];
-  for (const { key, at, text, priced } of labels) {
-    const xy = project(at);
-    if (!xy) continue;
-    const x = xy[0] + 8;
-    let y = xy[1] + 14;
-    const near = (p: { x: number; y: number }) =>
-      Math.abs(p.x - x) < 6 * text.length && Math.abs(p.y - y) < 12;
-    if (placed.some((p) => p.text === text && near(p))) continue;
-    while (placed.some(near)) y += 12;
-    placed.push({ key, x, y, text, priced });
-  }
-  return placed;
 }

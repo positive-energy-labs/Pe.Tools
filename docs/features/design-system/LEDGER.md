@@ -15,6 +15,8 @@ The one-system design cluster: the design LANGUAGE (raw values in `apps/web/src/
 - 2026-10-23, L4/I2: `scene/grounds.ts` owns subject/context presets and bounds-scaled fog; resting marks obey depth, lit subjects permit x-ray, and glow cuts out full-resolution mesh coverage with half-resolution blur. Census row `scene-ground-presets` rejects local colour/opacity literals.
 - 2026-10-23, N1: Kit `LiveOrbit` publishes released gestures only beyond three screen pixels or a 0.5 percent zoom ratio; selection alone never writes a viewport.
 - 2026-10-23, N5: `PictureStage` owns perspective and parallel projection through its layer Switcher and O key; `viewportCodec` carries the projection so links and history restore it.
+- 2026-10-23, N7/L2/L3: Hover travel uses kit HOVER_GRACE; Floater folds by field container size; declutter owns bounded annotation placement, with subject hover prioritizing dropped captions.
+
 - 2026-10-23, I4: A picture `Pane` derives its crumb from its scope title, `PictureReadout` subject and selection, and `PictureStage` selection state. `PaneCrumb.segments` remains only for a scope the picture cannot know.
 - 2026-10-23, I5: A picture `Pane` supplies its projected selection box, or pane rectangle, through the reach channel. `SubjectPopoverContent` uses it across sibling panes; routes do not provide `SubjectBox`.
 - 2026-10-23, N7: `Scene3D` and plane-stage native targets share the kit row reach channel. Ducts retains aggregate lighting and footnote numbering.

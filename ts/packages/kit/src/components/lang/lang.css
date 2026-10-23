@@ -1172,7 +1172,7 @@ svg [data-damage] {
   outline: 2px solid var(--pe-ink);
   outline-offset: -2px;
 }
-:is([data-svg-tip], svg [data-revit-ids]):is(
+:is([data-svg-tip], svg [data-reach]):is(
   [data-reach="reach"],
   [data-reach="hover"],
   [data-reach="focus"],
@@ -1356,4 +1356,32 @@ svg [data-damage] {
   display: block;
   background: currentColor;
   box-shadow: inset -1px 0 0 var(--pe-page);
+}
+
+/* The field owns folding, including both dimensions; routes only declare furniture. */
+[data-slot="pane-field"]:has(> [data-slot="floater"]) {
+  container: pane-field / size;
+}
+[data-slot="floater"] {
+  --floater-folded: 0;
+}
+@container pane-field (max-width: 28rem) or (max-height: 22rem) {
+  [data-slot="floater"] {
+    --floater-folded: 1;
+  }
+  [data-slot="floater"]:has([data-slot="pane-legend"]) {
+    --floater-folded: 0;
+    max-width: calc(100% - 2 * var(--gutter)) !important;
+  }
+  [data-slot="floater"][data-folded] {
+    width: max-content !important;
+    height: auto !important;
+    max-width: calc(100% - 2 * var(--gutter)) !important;
+    max-height: var(--control-h) !important;
+    padding: 0;
+  }
+  [data-slot="floater"][data-folded]
+    > :is([data-slot="floater-grip"], [data-slot="floater-resize"]) {
+    display: none;
+  }
 }
