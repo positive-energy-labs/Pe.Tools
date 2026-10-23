@@ -862,8 +862,8 @@ tr.dl-row[data-active] {
    a link by its rule, not by a hue: full ink over a solid underline at a fixed offset. The number is
    one mark drawn in two places, the chip after the name here and the numbered badge over the element
    in the picture (`.subject-badge`), so a reader matches them at a glance. At rest the chip is a
-   ring; lit (its own token hovered or focused, or the badge hovered) it fills with ink. Hovering
-   the prose block that holds them draws every rule in it at full weight, the picture lights the
+   ring; lit (its own token hovered or focused, or `data-lit`) it fills with ink. Hovering
+   the prose block that holds them (or `data-lit` on it) draws every rule at full weight; the picture lights the
    same subjects. Geometry is fixed: no state changes a size, so nothing reflows. */
 :root {
   --subject-mark-size: 14px;
@@ -891,7 +891,7 @@ tr.dl-row[data-active] {
   position: absolute;
   inset: -2px -2px;
 }
-[data-subject-text]:hover .subject-ref {
+[data-subject-text]:is(:hover, [data-lit]) .subject-ref {
   text-decoration-color: var(--pe-ink-2);
 }
 .subject-ref:is(:hover, :focus-visible, [data-lit]) {
@@ -924,7 +924,7 @@ tr.dl-row[data-active] {
   transform: translateY(-0.45em);
   text-decoration: none;
 }
-[data-subject-text]:hover .subject-mark {
+[data-subject-text]:is(:hover, [data-lit]) .subject-mark {
   border-color: var(--pe-ink);
 }
 .subject-ref:is(:hover, :focus-visible, [data-lit]) .subject-mark,
