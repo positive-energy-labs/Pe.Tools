@@ -91,7 +91,7 @@ export function PlanSheetView({
       <Tag>plan</Tag>
       {sheet ? (
         <FactChip
-          tone={included.length ? "caution" : "meta"}
+          tone={included.length ? "caution" : undefined}
           title="Rows apply will send: the selected rows. Held-back and flagged rows are skipped."
         >
           {included.length} / {sheet.entries.length} included

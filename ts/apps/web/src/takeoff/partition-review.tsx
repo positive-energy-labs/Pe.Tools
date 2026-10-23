@@ -1,3 +1,4 @@
+import { nameOrFallback } from "@pe/kit/lang/subject-text";
 import { useId, useState } from "react";
 import type { PartitionReviewData } from "@pe/agent-contracts";
 import { List } from "@pe/kit/lang/list-popup";
@@ -119,7 +120,7 @@ const partitionReviewShapes = (review: PartitionReviewData): ReviewShape[] =>
     label: label ?? undefined,
   }));
 const reviewLabel = (shape: ReviewShape) =>
-  `${shape.disposition ?? "unknown"} ${shape.id} · ${shape.sqft ?? "unknown"} sf · ${shape.reason ?? "reason unavailable"}`;
+  `${shape.disposition ?? "unknown"} ${nameOrFallback()} · ${shape.sqft ?? "unknown"} sf · ${shape.reason ?? "reason unavailable"}`;
 
 /** Screen and exported SVG share marks; flags never change the solver's disposition. */
 function ReviewShapes({
@@ -222,7 +223,7 @@ function ReviewShapes({
                 pointerEvents="none"
               >
                 {flagged ? "⚑ " : ""}
-                {shape.disposition?.[0]?.toUpperCase() ?? "?"} {shape.id}
+                {shape.disposition?.[0]?.toUpperCase() ?? "?"} {nameOrFallback()}
               </text>
             )}
           </g>
@@ -261,11 +262,10 @@ function ReviewList({
         active: selected === shape.key,
         actions: onFlag ? (
           <Button
-            label={`${flags.includes(shape.key) ? "unflag" : "flag"} ${shape.id}`}
+            label={`${flags.includes(shape.key) ? "unflag" : "flag"} ${nameOrFallback()}`}
             onClick={() => onFlag(shape.key)}
           >
-            {flags.includes(shape.key) ? "unflag" : "flag"}{" "}
-            <span className="face-mono">{shape.id}</span>
+            {flags.includes(shape.key) ? "unflag" : "flag"} <span>{nameOrFallback()}</span>
           </Button>
         ) : undefined,
       })}

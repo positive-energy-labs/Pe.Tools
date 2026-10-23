@@ -1,6 +1,6 @@
 import * as THREE from "three";
 import { expect, it } from "vite-plus/test";
-import { damageLayer, heartbeat } from "./damage";
+import { damageLayer, heartbeat, setDamageHue } from "./damage";
 import { landing } from "./marks";
 import { SceneMeshes, type LayerFrame, type SceneInstance } from "./types";
 
@@ -36,6 +36,8 @@ it("beats lub-dub then rests, and lands with an eased swell", () => {
 
 it("damage keeps mesh and row identity, beats, flashes once, and holds still for reduced motion", () => {
   const targets = [{ key: "equipmentFlows:7", elementId: 7 }];
+  const alarm = new THREE.Color(0.3, 0.1, 0.05);
+  setDamageHue(alarm);
   const layer = damageLayer(meshes, instance, targets, ["no-flow:7"]);
   const group = new THREE.Group();
   layer.build(group);
@@ -43,6 +45,7 @@ it("damage keeps mesh and row identity, beats, flashes once, and holds still for
   expect(layer.targets).toEqual(targets);
   expect(group.position.toArray()).toEqual([101, 101, 0]);
   const skin = group.children[1] as THREE.Mesh<THREE.BufferGeometry, THREE.ShaderMaterial>;
+  expect(skin.material.uniforms.core!.value).toEqual(alarm);
   const energy = () => skin.material.uniforms.energy!.value as number;
   const at = (seconds: number, extra: Partial<LayerFrame> = {}): LayerFrame => ({
     seconds,

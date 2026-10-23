@@ -334,6 +334,8 @@ export function Inbox({
 
   const spec = useCallback(
     (item: InboxItem): RulingRow => {
+      const blocked = (item.group === "fix" && item.blocks !== false) || item.group === "set";
+      const status = compactStatus(item.status);
       const target = observedElements(observation, item.ids);
       const claim = item.verbs.find((v) => v.kind === "claim");
       const title = claim?.kind === "claim" ? claimLine(claim.claim, nameOf) : item.title;
@@ -370,7 +372,8 @@ export function Inbox({
         stage: item.kind === "proposal" ? "proposed" : undefined,
         stagedBy: item.kind === "proposal" ? "pea" : undefined,
         // The closed row gives the label the width: the status in its compact words.
-        meta: <span data-tone={item.tone}>{compactStatus(item.status)}</span>,
+        damage: blocked ? status : undefined,
+        meta: blocked ? undefined : status,
         actions: () => verbsOf(item, false),
         onMouseEnter: () => {
           // The collapsed row shows its heading: badge what the heading names, tint all it stands for.
@@ -407,9 +410,7 @@ export function Inbox({
               <span>Evidence</span>
               <HelpTip>
                 {compactStatus(item.status) !== item.status ? (
-                  <p data-tone={item.tone} data-inbox-status="">
-                    {item.status}
-                  </p>
+                  <p data-inbox-status="">{item.status}</p>
                 ) : null}
                 {subjects ? (
                   // Evidence help badges the subjects it names; the row itself badges its heading.

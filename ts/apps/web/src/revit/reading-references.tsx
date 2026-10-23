@@ -1,3 +1,4 @@
+import { nameOrFallback } from "@pe/kit/lang/subject-text";
 import {
   actionReceiptSchema,
   documentRefSchema,
@@ -37,7 +38,7 @@ function referencesOf(key: string, data: unknown, request?: unknown): Reference[
         uniqueId:
           typeof expected?.[elementId] === "string" ? (expected[elementId] as string) : null,
         kind: "Element",
-        label: `selected element ${elementId}`,
+        label: `selected ${nameOrFallback()}`,
       }));
   }
   if (key === "revit.resolve.references") {
@@ -69,7 +70,7 @@ function referencesOf(key: string, data: unknown, request?: unknown): Reference[
       elementId: typeof entry.elementId === "number" ? entry.elementId : null,
       uniqueId: typeof entry.elementUniqueId === "string" ? entry.elementUniqueId : null,
       kind: "Element",
-      label: typeof entry.name === "string" ? entry.name : `element ${String(entry.elementId)}`,
+      label: nameOrFallback(typeof entry.name === "string" ? entry.name : null),
     }));
   }
   return [];
@@ -115,7 +116,7 @@ export function NativeReadingReferences({
     if (!reading.success) return null;
     scope = { document: reading.data.target, source: "native" };
     references = [...new Set(reading.data.snapshot.rows.flatMap((row) => row.subjectIds))].map(
-      (elementId) => ({ elementId, kind: "Element", label: `element ${elementId}` }),
+      (elementId) => ({ elementId, kind: "Element", label: nameOrFallback() }),
     );
   } else {
     if (!action && (outer?.ok !== true || outer?.kind !== "op")) return null;

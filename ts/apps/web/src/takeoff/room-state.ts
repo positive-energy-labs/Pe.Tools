@@ -1,17 +1,17 @@
+import type { Tone } from "@pe/kit/lib/token";
 import { token } from "@pe/kit/lib/token";
-import { VERDICT_INK } from "@pe/kit/table/cells";
-import type { Verdict as RowVerdict, VerdictTone } from "@pe/kit/table/model";
+import { verdictInk } from "@pe/kit/table/cells";
+import type { Verdict as RowVerdict } from "@pe/kit/table/model";
 import { ATLAS_ROOM_STATE_LABEL, type AtlasRoomState as RoomState } from "#/takeoff/controller";
 import type { Phase } from "#/takeoff/world";
 
-export const STATE_META: Record<RoomState, { tone: VerdictTone; label: string; note: string }> = {
+export const STATE_META: Record<RoomState, { tone?: Tone; label: string; note: string }> = {
   call: {
     tone: "alarm",
     label: ATLAS_ROOM_STATE_LABEL.call,
     note: "a human must decide: an open detector flag, or the .r10 no longer matches the model",
   },
   unreviewed: {
-    tone: "mute",
     label: ATLAS_ROOM_STATE_LABEL.unreviewed,
     note: "nothing open, but no Manual J data entered yet — export would refuse this room",
   },
@@ -27,7 +27,8 @@ export const STATE_META: Record<RoomState, { tone: VerdictTone; label: string; n
   },
 };
 
-export const stateInk = (state: RoomState): string => VERDICT_INK[STATE_META[state].tone];
+export const stateInk = (state: RoomState): string =>
+  STATE_META[state].tone ? verdictInk(STATE_META[state].tone) : token("ink-mute");
 
 export const stateMeta = (state: RoomState): RowVerdict => ({
   word: STATE_META[state].label,

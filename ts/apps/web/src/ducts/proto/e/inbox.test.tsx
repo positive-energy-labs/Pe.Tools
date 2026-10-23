@@ -496,3 +496,11 @@ test("taking back a family assignment clears only its staged rung", async () => 
   ]);
   expect(doc.ruleAssignments[family]?.proposal).toEqual(proposal);
 });
+
+test("blocking input rows carry damage while diagnostic rows stay calm", () => {
+  mount({ focused: "d1" });
+  expect(document.querySelector('[data-key="flows:30"]')?.getAttribute("data-damage")).toBe(
+    "no flow",
+  );
+  expect(document.querySelector('[data-key="d1"]')?.hasAttribute("data-damage")).toBe(false);
+});

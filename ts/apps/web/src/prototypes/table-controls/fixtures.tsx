@@ -98,7 +98,7 @@ const SYSTEM_OPTIONS = [
   { value: "EA", label: "Exhaust air" },
   { value: "OA", label: "Outdoor air" },
 ];
-const TONE = { approved: "done", submitted: "ink", revise: "caution", hold: "alarm" } as const;
+const TONE = { approved: "done", submitted: undefined, revise: "caution", hold: "alarm" } as const;
 
 const SEGMENTS: readonly Segment[] = [
   {
@@ -469,7 +469,7 @@ const FINDING_TONE = {
   clean: "done",
   unused: "caution",
   conflict: "alarm",
-  unreviewed: "mute",
+  unreviewed: undefined,
 } as const;
 
 const PARAMETERS: readonly ParameterAudit[] = [

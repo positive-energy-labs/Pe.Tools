@@ -78,12 +78,14 @@ function InputCell({
   work,
   resolved,
   label,
+  damage,
 }: {
   spec: CellSpec;
   id: number;
   work: LossesWork;
   resolved: Resolved<number>;
   label: string;
+  damage?: string;
 }) {
   const key = String(id);
   const cell = work.doc?.[spec.segment][key] ?? {};
@@ -108,6 +110,7 @@ function InputCell({
           (value) => spec.text(value as Rung) ?? "",
         )}
         scale="row"
+        damage={damage}
         unit={spec.unit}
         numeric={{ min: 0, digits: spec.digits }}
         onCommit={(text: string) =>
@@ -216,6 +219,7 @@ export function TerminalCells({ ctx, id }: { ctx: InputsCtx; id: number }) {
         spec={SPECS.flows}
         id={id}
         work={ctx.work}
+        damage={inputs.flow.value == null ? "no airflow" : undefined}
         resolved={inputs.flow}
         label={`flow of ${id}`}
       />

@@ -98,11 +98,11 @@ const shown = (value: string | number | null | undefined) =>
   value === null || value === undefined ? "" : String(value);
 
 const VERDICT_TONE = {
-  zone: "mute",
-  locked: "ink",
+  zone: undefined,
+  locked: undefined,
   stale: "caution",
-  held: "mute",
-  machine: "mute",
+  held: undefined,
+  machine: undefined,
 } as const;
 
 export function RoomsTable({

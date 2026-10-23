@@ -43,6 +43,8 @@ interface StateCellBase {
   fresh?: "fresh" | "stale" | "unverified" | "never";
   /** Whether the model holds the same value. `drift` is the ONE alarm. */
   agree?: "agree" | "drift";
+  /** A blocking value: damage stays on the cell at either scale. */
+  damage?: string | null;
   /** Whose unsaved event, if any, is sitting on this cell. */
   stage?: "clean" | "proposed" | "staged";
   /**
@@ -340,6 +342,7 @@ export function readCell(p: StateCellProps): CellRead {
  * A state column with no explicit `sort` orders by this, not alphabetically.
  */
 export const CELL_STATE_ORDER = [
+  "damage",
   "drift",
   "proposed",
   "staged",
@@ -357,6 +360,7 @@ type CellStateName = (typeof CELL_STATE_ORDER)[number];
  */
 export function cellStateLabel(p: StateCellProps): CellStateName {
   const read = readCell(p);
+  if (p.damage) return "damage";
   if (read.body === "locked") return "locked";
   if (read.unsettled === "drift") return "drift";
   if (read.body === "proposed") return "proposed";
@@ -373,6 +377,7 @@ export function cellStateLabel(p: StateCellProps): CellStateName {
  */
 export function cellFactsText(p: StateCellProps): string | null {
   const parts: string[] = [];
+  if (p.damage) parts.push(p.damage);
   if (p.agree === "drift" && p.modelValue != null)
     parts.push(
       p.reviewed !== undefined

@@ -1,3 +1,5 @@
+import type { Tone } from "@pe/kit/lib/token";
+import { nameOrFallback } from "@pe/kit/lang/subject-text";
 import type { IssueKind } from "@pe/ducts-domain/issues";
 /**
  * The group as a one-line schematic, fan at the left, registers at the right: the same picture as
@@ -12,7 +14,6 @@ import type { IssueKind } from "@pe/ducts-domain/issues";
  */
 import { useMemo } from "react";
 
-import type { VerdictTone } from "@pe/kit/table/model";
 import { tokenRef } from "@pe/kit/lib/token";
 import {
   chainsOf,
@@ -36,7 +37,7 @@ const LABEL_W = 340;
 const INSET_LABEL_W = 24;
 
 /** A tone's ink role: `mute` is the one tone with no role of its own name. */
-const inkOf = (tone: VerdictTone) => tokenRef(tone === "mute" ? "ink-mute" : tone);
+const inkOf = (tone: Tone | undefined) => tokenRef(tone ?? "ink-mute");
 const issueInk = (kind: IssueKind) => inkOf(ISSUE_KINDS[kind].color.tone);
 
 interface Placed {
@@ -195,10 +196,7 @@ export function Schematic({
           className={tree.rooted === "port" ? undefined : "dash-reference"}
         />
         <text x={10} y={rootY} dominantBaseline="central" fill={tokenRef("ink")}>
-          {clip(
-            equipment ? (equipment.family ?? `equipment ${equipment.id}`) : "stand-in root",
-            16,
-          )}
+          {clip(equipment ? nameOrFallback(equipment.family) : "stand-in root", 16)}
         </text>
       </g>
       {layout.placed.map(({ chain, x1, y1, x2, y2 }) => {

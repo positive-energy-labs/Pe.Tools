@@ -1,3 +1,4 @@
+import { nameOrFallback } from "@pe/kit/lang/subject-text";
 /**
  * Claim text and verdict patches, with element links that select and section-box the {3D} view.
  * A verdict is the person's answer on one claim; `verdictPatches` stages it into the claim's Work
@@ -145,14 +146,14 @@ export function ClaimElement({
   const native = observation.scope?.source === "native" && observation.scope.document !== null;
   return (
     <TooltipHint
-      content={`${part.name} · element ${part.id}: ${native ? "click to select it in Revit" : "click to select it in the drawing"}`}
+      content={`${nameOrFallback(part.name)}: ${native ? "click to select it in Revit" : "click to select it in the drawing"}`}
     >
       <button
         type="button"
         data-claim-element={part.id}
         {...revitScope(observation.scope)}
         {...revitTarget(target.ids, target.refs)}
-        aria-label={`${part.name} ${part.id}`}
+        aria-label={nameOrFallback(part.name)}
         className="subject-ref"
         onMouseEnter={() => onHover(part.id)}
         onMouseLeave={() => onHover(null)}

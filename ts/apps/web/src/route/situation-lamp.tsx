@@ -90,7 +90,7 @@ export function ChainLamp({
     stamp: `${kind}|${stageWord}|${session}|${document}|${health}|${handle.failure?.message}|${handle.busy?.key}`,
   });
   if (primary || inspection) return null;
-  const dot = (on: boolean, tone: "done" | "alarm" | "caution" | "mute" = "done") =>
+  const dot = (on: boolean, tone: "done" | "alarm" | "caution" | undefined = "done") =>
     on ? (
       <StateDot tone={tone} />
     ) : (

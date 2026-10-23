@@ -16,7 +16,7 @@ const UPDATE_STAGES = ["download", "stop", "handoff", "install", "reopen", "rela
 
 const stageOf = (name: string) => name.split(":")[0]!;
 const toneOf = (status: string) =>
-  status === "ok" ? "done" : status === "failed" || status === "refused" ? "alarm" : "meta";
+  status === "ok" ? "done" : status === "failed" || status === "refused" ? "alarm" : undefined;
 
 export function LegStrip({
   legs,

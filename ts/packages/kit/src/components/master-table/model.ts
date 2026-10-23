@@ -1,3 +1,4 @@
+import type { Tone } from "../../lib/token";
 /** Table's public product model. TanStack's types stay behind the component boundary. */
 import type { ReactNode } from "react";
 
@@ -45,21 +46,12 @@ export interface ValueColumn<Row> extends ColumnBase<Row> {
   verdict?: never;
 }
 
-/** The meaning-band tones a verdict may wear. NARROW BY CONSTRUCTION (takeoffs #11(b), ruled
- * 2026-08-16 R5): a consumer physically cannot hand this a viz/taxonomy colour, which is the
- * defect that let one cell draw its dot in alarm and its word in kiln. */
-export type VerdictTone = "alarm" | "caution" | "done" | "ink" | "mute";
-/* `done` ALSO covers healthy/connected/running, as a deliberate stretch. The fleet table ruled it
- * 2026-08-16: the meaning band has no running role, `ink` under-states "the bridge connection
- * landed" against `booting`, and minting a sixth hue for liveness is not worth it. The next
- * fleet-ish surface reads this line instead of inventing a different answer — DO NOT mint a hue. */
-
 /** A row-level pipeline verdict — what the plan/receipts/pipeline says about the ROW. */
 export interface Verdict {
   /** The route's own word — `applied`, `synced`, `needs a call`. Domain vocabulary is the
    * point: a pipeline verdict is not a value state and never lies in the grammar's eight. */
   word: string;
-  tone: VerdictTone;
+  tone?: Tone;
   /** The cell title — say what the verdict MEANS, not what it is called. */
   note: string;
   dim?: boolean;

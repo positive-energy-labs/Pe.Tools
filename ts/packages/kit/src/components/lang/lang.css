@@ -383,47 +383,39 @@ tr.dl-row[data-active] {
   color: var(--pe-ink-2);
   font-style: italic;
 }
-/* Row pseudo-elements draw on div rows only: on a `tr` a ::before or ::after is an anonymous table
-   cell, which pushed the active (rail) table row one column right. */
-/* DAMAGE (I2): the 2D burn. An alarm edge that beats like the 3D burn (scene/damage.ts: lub-dub,
-   1.5 s), a resting wash so a still screenshot still reads it, and the flame + word beside the
-   title (row.tsx). Shape and word, never hue alone; reduced motion holds the edge steady. */
-@keyframes pe-burn {
+/* Damage (I2) belongs to the thing: DOM, table row, cell and SVG share one beat and hue. */
+@keyframes pe-damage-beat {
   0%,
   40%,
   100% {
-    opacity: 0.55;
+    filter: drop-shadow(0 0 1px var(--pe-alarm));
   }
-  10%,
-  27% {
-    opacity: 1;
+  10% {
+    filter: drop-shadow(0 0 5px var(--pe-alarm));
   }
   18% {
-    opacity: 0.7;
+    filter: drop-shadow(0 0 2px var(--pe-alarm));
+  }
+  27% {
+    filter: drop-shadow(0 0 4px var(--pe-alarm));
   }
 }
-.dl-row[data-damage]:not([data-selected], [aria-selected="true"]) {
+[data-damage] {
+  animation: pe-damage-beat 1.5s ease-in-out infinite;
+  outline: 1px solid var(--pe-alarm);
+  outline-offset: -1px;
   background-color: color-mix(in srgb, var(--pe-alarm) 9%, var(--pe-on));
 }
-.dl-row:not(tr)[data-damage]::after,
-tr.dl-row[data-damage] > td:first-child::after {
-  content: "";
-  position: absolute;
-  top: 0;
-  bottom: 0;
-  left: 0;
-  width: 3px;
-  background: var(--pe-alarm);
-  animation: pe-burn 1.5s ease-in-out infinite;
-  pointer-events: none;
-}
-tr.dl-row[data-damage]:not([data-selected], [data-active]) > td {
-  background-color: color-mix(in srgb, var(--pe-alarm) 9%, var(--pe-on));
+svg [data-damage] {
+  stroke: var(--pe-alarm);
+  stroke-opacity: 1;
+  stroke-width: 2.5px;
+  outline: none;
 }
 @media (prefers-reduced-motion: reduce) {
-  .dl-row:not(tr)[data-damage]::after,
-  tr.dl-row[data-damage] > td:first-child::after {
+  [data-damage] {
     animation: none;
+    filter: drop-shadow(0 0 3px var(--pe-alarm));
   }
 }
 .dl-row-burn {

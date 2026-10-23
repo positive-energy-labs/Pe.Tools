@@ -1,3 +1,5 @@
+export type Tone = "alarm" | "caution" | "done" | "commit" | "nav" | "pea";
+
 /** The one runtime token read. `viz-*` and `dash-*` are their own raw families in base.css;
  * everything else is a `--pe-*` role. */
 const tokenName = (role: string) =>

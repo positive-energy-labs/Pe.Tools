@@ -14,6 +14,7 @@ function UnitCellSpecimen({ width }: { width: number }) {
   const item = (value: string, unit: typeof CFM, note: string) => (
     <span className="dl-cells-item">
       <StateCell
+        damage={value === "" ? "no price" : undefined}
         value={value}
         cap="editable"
         scale="row"
@@ -75,11 +76,7 @@ export function LangCellSpecimens() {
         recipe={chipRecipe}
         render={(props) => (
           <div className="flex flex-wrap items-center gap-2">
-            <FactChip
-              tone={props.tone as "meta" | "caution" | "done" | "alarm" | "pea"}
-              dashed={props.state === "seam"}
-              title={`${props.tone} · ${props.state}`}
-            >
+            <FactChip dashed={props.state === "seam"} title={`neutral fact · ${props.state}`}>
               42 written
             </FactChip>
             <NarrowChip

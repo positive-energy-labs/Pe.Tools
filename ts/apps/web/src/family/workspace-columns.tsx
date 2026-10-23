@@ -1,7 +1,7 @@
 import { useMemo } from "react";
 import { Button } from "@pe/kit/lang/button";
 import { ListPopup } from "@pe/kit/lang/list-popup";
-import { ReadCell, StateDot, VERDICT_INK, VerdictCell } from "@pe/kit/table/cells";
+import { ReadCell, StateDot, verdictInk, VerdictCell } from "@pe/kit/table/cells";
 import type { Column, TableState, Verdict } from "@pe/kit/table/model";
 import { visibleRows } from "@pe/kit/table/view";
 import {
@@ -228,7 +228,7 @@ export function useFamilyColumns(core: FamilyWorkspaceCore) {
             <TooltipHint content={MARK_TITLE[state]}>
               <span
                 className="px-(--item-pad-x)"
-                style={{ color: VERDICT_INK[AGREEMENT_TONE[state]] }}
+                style={{ color: verdictInk(AGREEMENT_TONE[state]) }}
               >
                 {MARK[state]}
               </span>

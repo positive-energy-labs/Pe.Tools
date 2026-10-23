@@ -104,7 +104,7 @@ function CodeCatalogue() {
         <Code code={POD} lang="csharp" />
       </div>
       <div className="max-w-lg">
-        <Code code={FAILED_OUT} lang="json" title="out" tone="error" />
+        <Code code={FAILED_OUT} lang="json" title="out" tone="alarm" />
       </div>
       <div className="max-w-lg">
         <Code code={DUCT_DIAGRAM} lang="mermaid" />

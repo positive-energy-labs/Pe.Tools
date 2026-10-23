@@ -1,18 +1,9 @@
-/**
- * MASTER-TABLE CELL RENDERERS — thin wrappers over the language, not a second editor.
- *
- * RULED 2026-08-16 (fit reviews, #2 — "the editable cell fractured into parallel editors"):
- * `BaseCell` was a parallel implementation of `StateCell`'s keyboard/commit contract, and it
- * silently swallowed refused numeric commits (§3's named defect, in canon). It is deleted.
- * `TextCell`/`NumberCell` now RENDER `StateCell` at row scale — one editor, one refusal
- * mechanism (the visible dismissible note), one focus treatment (the inset hairline, per the
- * focus law). A select-shaped cell is the list grammar's `CellListSelect` (lang/list-popup).
- */
-
+import type { Tone } from "../../lib/token";
+/** Table cells render the shared language primitives. */
 import { useCellNavigation } from "./cell-navigation";
 import { StateCell, fmtNum } from "../lang/cell";
-import type { Verdict, VerdictTone } from "./model";
-import { token } from "../../lib/token";
+import type { Verdict } from "./model";
+import { tokenRef } from "../../lib/token";
 import { cn } from "../../lib/utils";
 import { TooltipHint } from "../lang/tooltip";
 
@@ -86,7 +77,7 @@ export function ReadCell({
   value: React.ReactNode;
   reason?: string;
   className?: string;
-  "data-tone"?: "alarm" | "caution" | "done" | "commit" | "nav" | "pea";
+  "data-tone"?: Tone;
 }) {
   return (
     <TooltipHint content={reason}>
@@ -102,24 +93,22 @@ export function ReadCell({
 
 /** The verdict swatch. Tone is the NARROW meaning-role union — never a raw CSS colour
  * (takeoffs #11, ruled 2026-08-16 R5; `stateColumn`, which took any string, died with it). */
-export function StateDot({ tone, dim, bar }: { tone: VerdictTone; dim?: boolean; bar?: boolean }) {
+export function StateDot({ tone, dim, bar }: { tone?: Tone; dim?: boolean; bar?: boolean }) {
   return (
     <span
       className={
         bar ? "h-full min-w-0 flex-1" : "inline-block size-2 shrink-0 rounded-[1px] align-middle"
       }
-      style={{ backgroundColor: VERDICT_INK[tone], opacity: dim ? 0.35 : 1 }}
+      style={{
+        backgroundColor: verdictInk(tone),
+        opacity: dim ? 0.35 : 1,
+      }}
     />
   );
 }
 
-export const VERDICT_INK: Record<VerdictTone, string> = {
-  alarm: token("alarm"),
-  caution: token("caution"),
-  done: token("done"),
-  ink: token("ink-2"),
-  mute: token("ink-mute"),
-};
+/** Unmarked verdicts stay neutral; CSS resolves all six meaning tokens. */
+export const verdictInk = (tone?: Tone): string => tokenRef(tone ?? "ink-2");
 
 /** How a `verdict:` column draws — the table calls this itself (master-table.tsx resolve). The
  * WORD wears its tone only at alarm rank (the one alarm must be unmissable); every quieter
