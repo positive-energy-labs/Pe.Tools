@@ -1,4 +1,4 @@
-import { Suspense, useEffect } from "react";
+import { Suspense } from "react";
 import { emptyListState, useList } from "@pe/kit/lang/collection";
 import { ListView } from "@pe/kit/lang/list-view";
 import { Pane } from "@pe/kit/lang/pane";
@@ -21,6 +21,7 @@ export function AtlasNavigation() {
     useAtlasWorkspace();
   const levels = levelsOf(world.lanes);
   const list = useList<ModelZone>({
+    followSelection: { key: zoneKey },
     // Levels in the world's order, each once: many view lanes share a level.
     items: levels.flatMap((label) => filteredZones.filter((z) => z.zone.lane.label === label)),
     keyOf: (z) => z.zone.guid,
@@ -33,12 +34,6 @@ export function AtlasNavigation() {
     select: "single",
     onPick: (z) => selectZone(z.zone.guid === zoneKey ? null : z),
   });
-  // A zone picked on the plan or the table opens its level and lands on its row.
-  useEffect(() => {
-    if (zoneKey && list.target && list.rows.some((row) => row.key === zoneKey))
-      list.reveal(zoneKey);
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [zoneKey, list.target]);
   return (
     <Suspense fallback={<div className="t-small t-upper p-2 text-ink-2">reading zones…</div>}>
       <Pane id="zones" flush scroll="clip" title="zones" meta={`${world.zones.length} declared`}>

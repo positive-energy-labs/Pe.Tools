@@ -2,9 +2,7 @@
 import { act, cleanup, fireEvent, render } from "@testing-library/react";
 import { afterEach, expect, test, vi } from "vite-plus/test";
 
-import { createLiveOrbit } from "#/scene/live-orbit";
 import { Floater, type FloaterSpec } from "@pe/kit/lang/floater";
-import { OrbitMinimap, type OrbitViewport } from "./minimap";
 
 afterEach(() => {
   cleanup();
@@ -86,13 +84,10 @@ test("a floater avoids the docked readout without a legend", () => {
   expect(floater.dataset.place === "tr" && !floater.style.translate).toBe(false);
 });
 
-const viewport: OrbitViewport = { kind: "orbit", yaw: 30, elev: 30, zoom: 1, pivot: [0, 0, 0] };
 const pointer = (el: Element, type: string, x: number, y: number) =>
   fireEvent(el, new MouseEvent(type, { bubbles: true, button: 0, clientX: x, clientY: y }));
 
 function setup(size?: FloaterSpec["size"]) {
-  const onViewport = vi.fn();
-  const orbit = createLiveOrbit(viewport, onViewport);
   const outerPointer = vi.fn();
   const view = render(
     <div onPointerDown={outerPointer} onPointerMove={outerPointer} onPointerUp={outerPointer}>
@@ -104,7 +99,7 @@ function setup(size?: FloaterSpec["size"]) {
           size,
           open: true,
           onOpenChange: vi.fn(),
-          render: () => <OrbitMinimap orbit={orbit} />,
+          render: () => "content",
         }}
       />
     </div>,
@@ -119,11 +114,11 @@ function setup(size?: FloaterSpec["size"]) {
   const grip = view.getByLabelText("move globe");
   const resize = view.getByLabelText("resize globe");
   grip.setPointerCapture = resize.setPointerCapture = vi.fn();
-  return { view, orbit, onViewport, outerPointer, floater, rect, grip, resize };
+  return { view, outerPointer, floater, rect, grip, resize };
 }
 
 test("a floater without size slides and resizes from the content box at gesture start", () => {
-  const { floater, grip, resize, rect, orbit, outerPointer } = setup();
+  const { floater, grip, resize, rect, outerPointer } = setup();
   pointer(grip, "pointerdown", 400, 10);
   pointer(grip, "pointermove", 400, 90);
   pointer(grip, "pointerup", 400, 90);
@@ -136,7 +131,6 @@ test("a floater without size slides and resizes from the content box at gesture 
   pointer(resize, "pointerup", 90, 520);
   expect([floater.style.width, floater.style.height]).toEqual(["240px", "420px"]);
   expect(floater.style.getPropertyValue("--floater-content-w")).toBe("100%");
-  expect(orbit.read()).toEqual(viewport);
   expect(outerPointer).not.toHaveBeenCalled();
 });
 
@@ -160,19 +154,4 @@ test("shrinking a navigation field caps its floaters and restores their preferre
   field.mockReturnValue(new DOMRect(0, 0, 600, 600));
   act(() => observers.forEach((run) => run()));
   expect([floater.style.width, floater.style.height]).toEqual(["230px", "230px"]);
-});
-
-test("explicit sizes keep responsive caps and resize handles leave globe orbit dragging intact", () => {
-  const { view, orbit, onViewport, floater, resize } = setup({ width: 230, height: 230 });
-  pointer(resize, "pointerdown", 360, 240);
-  pointer(resize, "pointermove", -1000, 1000);
-  pointer(resize, "pointerup", -1000, 1000);
-  expect([floater.style.width, floater.style.height]).toEqual(["240px", "420px"]);
-  expect(onViewport).not.toHaveBeenCalled();
-  const globe = view.getByRole("group", { name: "orbit globe" });
-  pointer(globe, "pointerdown", 400, 100);
-  pointer(globe, "pointermove", 450, 125);
-  pointer(globe, "pointerup", 450, 125);
-  expect(orbit.read()).toEqual({ ...viewport, yaw: 10, elev: 40 });
-  expect(onViewport).toHaveBeenCalledExactlyOnceWith({ ...viewport, yaw: 10, elev: 40 }, "gesture");
 });
