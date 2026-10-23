@@ -47,7 +47,6 @@ type At = {
   corner: Corner;
   dy: number;
   folded: boolean;
-  hidden?: true;
   width?: number;
   height?: number;
 };
@@ -114,7 +113,9 @@ function useYield(
           )
         );
       });
-      settle({ corner, dy: dy ?? 0, hidden: dy == null ? true : undefined, folded, ...shown });
+      // No clear slot: stay at the corner. A field too small for its floaters folds them to
+      // chips (the fold rule); a floater never vanishes.
+      settle({ corner, dy: dy ?? 0, folded, ...shown });
     };
     const moved = () => requestAnimationFrame(run);
     field.addEventListener(MOVED, moved);
@@ -261,7 +262,6 @@ export function Floater({ spec }: { spec: FloaterSurfaceSpec }) {
           ["--floater-h" as string]: shown && `${shown.height}px`,
           ["--floater-content-w" as string]: shown && "100%",
           ["--floater-content-h" as string]: shown && "100%",
-          visibility: at.hidden ? "hidden" : undefined,
           translate: at.dy ? `0 ${at.dy}px` : undefined,
         }}
       >
