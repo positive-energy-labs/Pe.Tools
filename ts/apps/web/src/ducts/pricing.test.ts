@@ -3,6 +3,9 @@ import { ductsRouteState } from "@pe/agent-contracts";
 import { EMPTY_CATALOGS } from "@pe/ducts-domain/catalog";
 import { price, rememberPrice } from "@pe/ducts-domain/pricing";
 import { readiness } from "@pe/ducts-domain/readiness";
+import { healPlan } from "@pe/ducts-domain/heal";
+import { systemsNeedingFix } from "./system-list-search";
+import { systemList } from "./system-list";
 import { SCENE_FIXTURE } from "./scene.fixture";
 import { pricingClient, type PricingPort } from "./pricing-client";
 import {
@@ -68,6 +71,12 @@ test("worker result has full solve/readiness parity through structured clone, in
     const expected = price(original.snapshot, original.grids, doc, original.catalogs);
     expect(response.result.priced).toEqual(expected);
     expect(response.result.ready).toEqual(readiness(original.snapshot, doc));
+    const heal = healPlan(original.snapshot, doc);
+    expect(response.result.analysis).toEqual({
+      heal,
+      needsFix: systemsNeedingFix(expected, doc, heal),
+      systems: systemList(expected.snapshot, expected),
+    });
     expect(response.result.priced.flows).toBeInstanceOf(Map);
     expect(response.result.priced.fanFlows).toBeInstanceOf(Map);
     for (const flows of response.result.priced.fanFlows.values()) expect(flows).toBeInstanceOf(Map);

@@ -19,7 +19,6 @@ import type { DuctsApply } from "@pe/host-contracts/generated";
 import { flushSync } from "react-dom";
 import { survey, unitFlowsIn } from "@pe/ducts-domain/survey";
 import { fansOwedBase, type OwedBase } from "@pe/ducts-domain/fan-assignment";
-import { healPlan } from "@pe/ducts-domain/heal";
 import { sectionNames, systemOfGroup, systemScope } from "@pe/ducts-domain/system-scope";
 import { Button } from "@pe/kit/lang/button";
 import { systemSearch } from "@pe/ducts-domain/system-search";
@@ -29,7 +28,6 @@ import { Pane } from "#/components/lang/pane";
 import { PaneSplit } from "#/components/lang/pane-resize";
 
 import { airflowOptions } from "../../airflow";
-import { systemsNeedingFix } from "../../system-list-search";
 import { noRunParts, subjectNamer } from "../../subject-text";
 import { useRevitSubjectProps } from "#/revit/element-menu";
 import { noRunBranches } from "@pe/ducts-domain/no-runs";
@@ -58,7 +56,8 @@ import { stagedEsp } from "@pe/ducts-domain/staged";
 import { previewFresh } from "../../manifest";
 import type { LossesWork } from "../../work";
 import { reviewLines, writePreview } from "../../write-review";
-import { buildTree, systemList, type TreeNode } from "../b/model";
+import { buildTree, type TreeNode } from "../b/model";
+import type { systemList } from "../../system-list";
 import type { ProtoProps } from "../props";
 import { DEFAULT_DESIGN_FRICTION_RATE } from "@pe/ducts-domain/equivalent-length";
 import { BarRules, systemIssues, systemRowParts } from "./bar";
@@ -74,6 +73,8 @@ import { SystemTree } from "./tree-sidebar";
 import { useGroupEncoding } from "../encoding/use-encoding";
 
 const NO_GROUPS: readonly string[] = [];
+const NO_FIXES: ReadonlySet<string> = new Set();
+const NO_SYSTEMS: ReturnType<typeof systemList> = [];
 
 const plural = (n: number, word: string) => `${n} ${word}${n === 1 ? "" : "s"}`;
 
@@ -264,7 +265,7 @@ function LoadedScreenBody({
     const raw = systemScope(snapshot, page.system).groups;
     return raw.every((g) => groups.includes(g)) ? groups : [...new Set([...groups, ...raw])];
   }, [snapshot, page.system, groups]);
-  const systems = useMemo(() => (drawn ? systemList(drawn, priced) : []), [drawn, priced]);
+  const systems = props.analysis?.systems ?? NO_SYSTEMS;
   // Each group the system is in is its own section, named by the system and its units; a group
   // that carries other systems says so, and shows whole.
   const sections = useMemo(
@@ -321,11 +322,8 @@ function LoadedScreenBody({
   );
   const preview = props.work.preview as DuctsApply.Res.Response | null;
   // What heals in Revit is planned over the raw snapshot (the tolerated one has bridged it already).
-  const heal = useMemo(() => (snapshot ? healPlan(snapshot, doc) : null), [snapshot, doc]);
-  const needsFix = useMemo(
-    () => (surveyed ? systemsNeedingFix(surveyed, doc, heal) : new Set<string>()),
-    [surveyed, doc, heal],
-  );
+  const heal = props.analysis?.heal ?? null;
+  const needsFix = props.analysis?.needsFix ?? NO_FIXES;
   // The document at a glance: how many systems price clean, and how many a person must fix first.
   const census = useMemo(() => {
     const issues = systems.map((s) => systemIssues({ ...s, needsFix: needsFix.has(s.key) }));
@@ -334,7 +332,7 @@ function LoadedScreenBody({
       priced: systems.filter((s) => s.total != null).length,
       fix: issues.filter((i) => i.some((x) => x.tone === "alarm")).length,
     };
-  }, [systems]);
+  }, [systems, needsFix]);
   const chosenRow = useMemo(() => {
     const row = systems.find((s) => s.key === page.system);
     return row ? { ...row, needsFix: needsFix.has(row.key) } : null;

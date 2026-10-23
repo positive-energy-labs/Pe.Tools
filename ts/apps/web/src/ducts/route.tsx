@@ -227,9 +227,16 @@ export function DuctsRoute({ url = true }: { url?: boolean } = {}) {
     snapshot: DuctSnapshot;
     priced: NonNullable<typeof priced>;
     observation: NativeObservation;
+    analysis: NonNullable<typeof pricingState.observation>["result"]["analysis"];
   } | null>(null);
   if (snapshot && priced)
-    lastPriced.current = { key: documentKey, snapshot, priced, observation: nativeObservation };
+    lastPriced.current = {
+      key: documentKey,
+      snapshot,
+      priced,
+      observation: nativeObservation,
+      analysis: pricingState.observation!.result.analysis,
+    };
   const held =
     !priced && lastPriced.current?.key === documentKey && (pending || !!snapshot)
       ? lastPriced.current
@@ -434,6 +441,7 @@ export function DuctsRoute({ url = true }: { url?: boolean } = {}) {
     pricing,
     findings: catalogs.findings,
     ready,
+    analysis: pricingState.observation?.result.analysis ?? held?.analysis ?? null,
     subject,
     claims,
     onVerdict,

@@ -8,67 +8,17 @@
  * number is null (never a stand-in figure).
  */
 import type { DuctsRouteDocument } from "@pe/agent-contracts";
-import { criticalRows, lossGroups, type LossGroup } from "@pe/ducts-domain/loss-breakdown";
 import type { Priced } from "@pe/ducts-domain/pricing";
 import type { FanResult, Provisional, Row } from "@pe/ducts-domain/losses";
-import { systemsOf } from "@pe/ducts-domain/system-scope";
 import { groupTree, runsOf } from "@pe/ducts-domain/topology";
 import type { DuctSnapshot } from "@pe/ducts-domain/types";
 
+import { splitOf, type Split } from "../../loss-split";
 import { elementNamer } from "../../claims";
 import { groupLabels } from "@pe/ducts-domain/words";
 import { labelOfNode, legsOf } from "../../legs";
 
 type TreeKind = "system" | "run" | "leg" | "element";
-
-/** One end of a run's loss: its in-wg and the elements that pay it (the set a hover lights). */
-export interface SplitPart {
-  dp: number;
-  ids: number[];
-  /** Rows in this part with no drop (a grille with no catalog link): the part is unknown, never 0. */
-  unpriced: number;
-}
-/**
- * A whole run's loss in three: the unit end (passive devices in series with the fan: a coil, a
- * dehu), the ducts and fittings between, and the terminal's drop. The fan is not a part: it is the
- * whole, the largest run's total.
- */
-export interface Split {
-  /** The exact run behind this bar; rule columns must not borrow another path's lookup. */
-  rows: readonly Row[];
-  unit: SplitPart;
-  duct: SplitPart;
-  terminal: SplitPart;
-  /** The same loss per element group (duct type, fitting family type, ...), in bar order. */
-  groups: LossGroup[];
-}
-
-/** Whether a breakdown group is also split by size. A choice, off: 12" and 8" of one duct type share a group. */
-export const BREAKDOWN_BY_SIZE = false;
-
-/** A path's rows dealt to the three parts by what each row prices, and to groups by what each row is. */
-function splitOf(
-  snapshot: DuctSnapshot,
-  rows: readonly Row[],
-  equipment: ReadonlySet<number>,
-): Split {
-  const part = (): SplitPart => ({ dp: 0, ids: [], unpriced: 0 });
-  const split: Split = {
-    rows,
-    unit: part(),
-    duct: part(),
-    terminal: part(),
-    groups: lossGroups(snapshot, rows, { bySize: BREAKDOWN_BY_SIZE }),
-  };
-  for (const row of rows) {
-    const to =
-      row.kind === "terminal" ? split.terminal : equipment.has(row.id) ? split.unit : split.duct;
-    if (row.dp == null || row.error) to.unpriced++;
-    to.dp += row.dp ?? 0;
-    if (!to.ids.includes(row.id)) to.ids.push(row.id);
-  }
-  return split;
-}
 
 export interface TreeNode {
   key: string;
@@ -334,86 +284,6 @@ export function buildTree(
       provisional: solved?.provisional ?? null,
       terminal: null,
       children: runNodes.sort((a, b) => (b.critical ? 1 : 0) - (a.critical ? 1 : 0)),
-    };
-  });
-}
-
-/**
- * The system list: one childless row per Revit system (no run tree is built, so 350 systems stay
- * cheap), keyed by its name. Its total is the largest fan over the groups it is in; `fanless` when
- * none of them has an air mover.
- */
-export function systemList(
-  snapshot: DuctSnapshot,
-  priced: Priced | null,
-): (TreeNode & {
-  fanless: boolean;
-  blocked: boolean;
-  /** The groups the system is in (its fans are theirs). */
-  groups: readonly string[];
-  classification: string | null;
-  sub: string;
-  rating: number | null;
-})[] {
-  const nodes = new Map(snapshot.nodes.map((n) => [n.id, n]));
-  const equipment = new Set(snapshot.nodes.filter((n) => n.kind === "equipment").map((n) => n.id));
-  return systemsOf(snapshot).map((system) => {
-    const solved = system.groups.flatMap((g) => priced?.next.byGroup[g] ?? []);
-    // The minibar's breakdown: the system's worst group's critical run, as its tree would split it.
-    // A group with an implausible row has no price: the system reads needs a fix, never a partial number.
-    const blocked = solved.some((s) => s.implausible.length > 0);
-    const worst = blocked
-      ? undefined
-      : system.groups
-          .filter((g) => priced?.next.byGroup[g]?.critical != null)
-          .sort((a, b) => priced!.next.byGroup[b]!.fan! - priced!.next.byGroup[a]!.fan!)[0];
-    const rows = priced && worst ? criticalRows(priced.next, worst) : null;
-    const totals = blocked
-      ? []
-      : solved.flatMap((s) => (s.critical != null && s.fan != null ? [s.fan] : []));
-    const first = snapshot.groups.find((g) => g.id === system.groups[0]);
-    // The unit that must deliver the system's fan static: the worst group's largest-static fan
-    // (several fans root a group), else its one root. Its rated ESP is the `externalStatic` fact.
-    const lead = worst
-      ? (priced!.next.byGroup[worst]!.fans.reduce<FanResult | null>(
-          (best, f) => (best == null || f.esp > best.esp ? f : best),
-          null,
-        )?.unit ?? snapshot.groups.find((g) => g.id === worst)?.rootIds[0])
-      : undefined;
-    const rated =
-      lead != null ? nodes.get(lead)?.facts.find((f) => f.key === "externalStatic")?.value : null;
-    return {
-      key: system.name,
-      kind: "system",
-      name: system.name,
-      classification: system.classification,
-      // Identity at a glance: the air (in words, never Revit's enum), what moves it, how much it feeds.
-      sub: [
-        system.classification?.replace(/Air$/, ""),
-        `${system.terminals} terminal${system.terminals === 1 ? "" : "s"}`,
-        system.units.join(", ") || "no fan",
-        system.groups.length > 1 ? `${system.groups.length} networks` : "",
-      ]
-        .filter(Boolean)
-        .join(" · "),
-      blocked,
-      groups: system.groups,
-      fanless: !!priced && solved.length > 0 && solved.every((s) => !s.hasAirMover),
-      rating: rated ?? null,
-      id: first?.rootIds[0] ?? null,
-      total: totals.length ? Math.max(...totals) : null,
-      self: null,
-      ft: null,
-      selfFt: null,
-      rate: null,
-      unpriced: null,
-      split: rows ? splitOf(snapshot, rows, equipment) : null,
-      level: null,
-      scale: null,
-      critical: null,
-      provisional: solved.find((s) => s.provisional)?.provisional ?? null,
-      terminal: null,
-      children: [],
     };
   });
 }

@@ -2,7 +2,7 @@ import { expect, test } from "vite-plus/test";
 import type { DuctSnapshot } from "@pe/ducts-domain/types";
 import { ruleByKey } from "@pe/ducts-domain/loss-rules";
 import { barRows, ruleConditions, selectedBarRow } from "./bar-model";
-import type { Split } from "../b/model";
+import type { Split } from "../../loss-split";
 
 test("the open rule editor follows its fittings when repricing changes their group key", () => {
   const selected = { key: "unpriced radius", ids: [7, 8] };

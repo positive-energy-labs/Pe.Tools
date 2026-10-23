@@ -5,6 +5,9 @@ import { price, type Priced } from "@pe/ducts-domain/pricing";
 import { readiness } from "@pe/ducts-domain/readiness";
 import type { DuctSnapshot } from "@pe/ducts-domain/types";
 import type { PricingDelta } from "./pricing-delta";
+import { healPlan } from "@pe/ducts-domain/heal";
+import { systemsNeedingFix } from "./system-list-search";
+import { systemList } from "./system-list";
 
 export interface PricingBase {
   snapshot: DuctSnapshot;
@@ -20,6 +23,11 @@ export interface PricingInput extends PricingBase {
 export interface PricingResult {
   priced: Priced;
   ready: ReturnType<typeof readiness>;
+  analysis: {
+    heal: ReturnType<typeof healPlan>;
+    needsFix: ReadonlySet<string>;
+    systems: ReturnType<typeof systemList>;
+  };
 }
 export interface PricingObservation {
   input: PricingInput;
@@ -44,7 +52,19 @@ export function pricingJob() {
       if (request.base) base = request.base;
       if (!base) throw Error("Pricing has no snapshot or tables");
       const priced = price(base.snapshot, base.grids, request.doc, base.catalogs);
-      return { id: request.id, result: { priced, ready: readiness(base.snapshot, request.doc) } };
+      const heal = healPlan(base.snapshot, request.doc);
+      return {
+        id: request.id,
+        result: {
+          priced,
+          ready: readiness(base.snapshot, request.doc),
+          analysis: {
+            heal,
+            needsFix: systemsNeedingFix(priced, request.doc, heal),
+            systems: systemList(priced.snapshot, priced),
+          },
+        },
+      };
     } catch (error) {
       return { id: request.id, error: error instanceof Error ? error.message : String(error) };
     }
