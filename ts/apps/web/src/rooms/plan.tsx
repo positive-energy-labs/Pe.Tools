@@ -6,7 +6,7 @@ import { useStage, stageViewport } from "#/scene/stage-controller";
 import { PictureReadout } from "@pe/kit/lang/readout";
 import type { RoomsSnapshot } from "@pe/host-contracts/generated";
 
-import { FactChip } from "@pe/kit/lang/chip";
+import { Legend, legendWord } from "@pe/kit/lang/legend";
 import { Pane } from "#/components/lang/pane";
 import { revitTarget } from "@pe/kit/lang/row";
 import { PLAN_CLICK_PX as CLICK_PX, usePlaneViewport } from "#/scene/use-plane-viewport";
@@ -396,39 +396,32 @@ export function RoomsPlan({
   }, [world, size, view, callouts]);
 
   const legend = (
-    <div className="flex flex-wrap items-center gap-1" aria-label="plan legend">
-      {REGION_STATES.map((state) => (
-        <FactChip
-          key={state}
-          tone={state === "stale" ? "caution" : undefined}
-          title={REGION_INK[state].says}
-        >
-          <span className="flex items-center gap-1">
-            {REGION_INK[state].ink ? (
-              <svg aria-hidden width="10" height="10" viewBox="0 0 10 10">
-                <rect
-                  x="1"
-                  y="1"
-                  width="8"
-                  height="8"
-                  fill="none"
-                  stroke={token(REGION_INK[state].ink!)}
-                  className={REGION_INK[state].dash ?? undefined}
-                />
-              </svg>
-            ) : null}
-            {state} <span className="face-mono">{counts[state]}</span>
-          </span>
-        </FactChip>
-      ))}
-      {!trace.data && trace.none ? (
-        <FactChip title="partition this view to write a trace">{trace.none}</FactChip>
-      ) : null}
-    </div>
+    <Legend
+      label="rooms"
+      rows={REGION_STATES.map((state) => ({
+        key: state,
+        stroke: {
+          ink: token(REGION_INK[state].ink ?? "ink-mute"),
+          width: 1,
+          shape: "box",
+          className: REGION_INK[state].dash ?? undefined,
+        },
+        word: legendWord(state),
+        count: counts[state],
+        says: REGION_INK[state].says,
+      }))}
+    />
   );
 
   const notice = (
     <>
+      {!trace.data && trace.none ? (
+        <OutcomeLine
+          kind="advisory"
+          label={trace.none}
+          says="Partition this view to write a trace"
+        />
+      ) : null}
       {trace.data && layers.includes("faces") ? <TraceFaces trace={trace.data} /> : null}
       {planRefusal ? (
         <OutcomeLine
@@ -451,8 +444,7 @@ export function RoomsPlan({
 
   if (empty || !world)
     return (
-      <Pane {...pane}>
-        {legend}
+      <Pane {...pane} legend={legend}>
         {notice}
         <div className="flex flex-1 items-center justify-center px-4">
           <EmptyState
@@ -478,14 +470,7 @@ export function RoomsPlan({
   const font = CALLOUT_FONT_PX;
 
   return (
-    <Pane
-      {...pane}
-      legend={
-        <div data-surface="page" className="max-w-full rounded-sm">
-          {legend}
-        </div>
-      }
-    >
+    <Pane {...pane} legend={legend}>
       {notice}
       <div
         ref={setHost}

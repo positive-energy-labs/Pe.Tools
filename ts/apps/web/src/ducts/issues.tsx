@@ -1,3 +1,4 @@
+import { legendWord, type LegendWord } from "@pe/kit/lang/legend";
 import type { Tone } from "@pe/kit/lib/token";
 /**
  * The one duct-issue taxonomy: every view, the tables, the legend and Chat read it from here.
@@ -11,8 +12,8 @@ import { ISSUE_BLOCKS, type Blocks, type IssueKind } from "@pe/ducts-domain/issu
 import { INFERRED_KINDS } from "@pe/ducts-domain/proximity";
 import { SubjectText } from "@pe/kit/lang/subject-text";
 export interface IssueKindInfo {
-  /** One to three words. */
-  label: string;
+  /** One to four words; explanation stays in `what`. */
+  label: LegendWord;
   /** One sentence. */
   what: string;
   blocks: Blocks;
@@ -27,7 +28,7 @@ const TONE: Record<Blocks, Tone | undefined> = {
   none: undefined,
 };
 const kind = (key: IssueKind, label: string, what: string, shade: number): IssueKindInfo => ({
-  label,
+  label: legendWord(label),
   what,
   blocks: ISSUE_BLOCKS[key],
   color: { tone: TONE[ISSUE_BLOCKS[key]], shade },

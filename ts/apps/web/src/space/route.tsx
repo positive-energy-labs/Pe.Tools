@@ -325,6 +325,15 @@ export function SpaceRoute({ url = true }: { url?: boolean } = {}) {
             status={status}
             onError={setError}
             alias={alias}
+            legend={
+              on.has("boxes") && rows ? (
+                <EncodingLegend
+                  encoding={page.encoding}
+                  legend={legend}
+                  onEncoding={(encoding) => setPage({ encoding })}
+                />
+              ) : null
+            }
             readout={
               metadata ? (
                 <PictureReadout
@@ -369,13 +378,6 @@ export function SpaceRoute({ url = true }: { url?: boolean } = {}) {
                     setError(null);
                     setPage({ cuts }, { history: how });
                   }}
-                />
-              ) : null}
-              {on.has("boxes") && rows ? (
-                <EncodingLegend
-                  encoding={page.encoding}
-                  legend={legend}
-                  onEncoding={(encoding) => setPage({ encoding })}
                 />
               ) : null}
               <AnswerForms on={on} page={page} actions={actions} />

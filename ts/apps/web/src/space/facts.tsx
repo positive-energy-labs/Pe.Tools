@@ -10,6 +10,7 @@ import { Button } from "@pe/kit/lang/button";
 import { Input } from "@pe/kit/lang/input";
 import { TooltipHint } from "@pe/kit/lang/tooltip";
 import { tokenRef } from "@pe/kit/lib/token";
+import { Legend as KitLegend, legendWord } from "@pe/kit/lang/legend";
 import { Switcher } from "@pe/kit/lang/switcher";
 import type { ActionHandle } from "#/route/handle";
 import type { ElementTarget } from "#/revit/element-target";
@@ -217,14 +218,23 @@ export function EncodingLegend({
         onChange={onEncoding}
         options={ENCODINGS.map((e) => ({ value: e, label: e, title: ENCODING_SAYS[e] }))}
       />
-      <ul className="m-0 flex list-none flex-wrap gap-x-3 p-0 t-small" data-legend={encoding}>
-        {legend.map((entry) => (
-          <li key={entry.value} className="flex items-center gap-1">
-            <span className="inline-block size-2.5" style={{ background: tokenRef(entry.role) }} />
-            {entry.value} <span className="text-ink-2">{entry.count}</span>
-          </li>
-        ))}
-      </ul>
+      <KitLegend
+        label={encoding}
+        says={ENCODING_SAYS[encoding]}
+        rows={legend.map((entry, index) => ({
+          key: entry.value,
+          word: legendWord(
+            !entry.value.trim() ||
+              /[.!?](?:\s|$)/.test(entry.value) ||
+              entry.value.trim().split(/\s+/).length > 4
+              ? `${encoding} ${index + 1}`
+              : entry.value,
+          ),
+          says: entry.value,
+          count: entry.count,
+          stroke: { ink: tokenRef(entry.role), width: 1, shape: "box", fill: tokenRef(entry.role) },
+        }))}
+      />
     </section>
   );
 }
