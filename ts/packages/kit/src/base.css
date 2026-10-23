@@ -18,6 +18,11 @@
   --pe-ink-mute: light-dark(#8e8679, #6e665a);
   --pe-line: light-dark(#e0d9ca, #2a2620);
   --pe-line-2: light-dark(#c5bbaa, #403a30);
+  /* The same two hairlines one step up the ramp, for a dimmed ground (the side pane, the list bar):
+     --pe-line is tuned for --pe-page and vanishes on --pe-recess (1.05:1). A dimmed scope remaps
+     --pe-line/--pe-line-2 to these, so every border and rule inside follows with no per-part edit. */
+  --pe-line-dim: var(--pe-line-2);
+  --pe-line-2-dim: light-dark(#a89e8c, #4f493c);
 
   /* Meaning */
   --pe-pea: light-dark(#4f7d55, #93ad86);

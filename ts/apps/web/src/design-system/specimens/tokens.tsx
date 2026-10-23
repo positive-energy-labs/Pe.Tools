@@ -73,6 +73,16 @@ const TOKEN_GROUPS: readonly { group: string; asks: string; tokens: readonly Tok
         means: "firm: seams, citation underline, chip edge, focus",
         modes: "ink @22% ↔ @26%",
       },
+      {
+        token: "--pe-line-dim",
+        means: "quiet hairline on a dimmed ground: side pane, list bar (remaps --pe-line there)",
+        modes: "= --pe-line-2; 1.42:1 on recess vs 1.05:1 for --pe-line",
+      },
+      {
+        token: "--pe-line-2-dim",
+        means: "firm hairline on a dimmed ground (remaps --pe-line-2 there)",
+        modes: "one step past --pe-line-2; ~2:1 on recess and page",
+      },
     ],
   },
   {

@@ -11,6 +11,9 @@
 [data-pane-secondary] [data-slot="pane"] {
   --pe-surface: light-dark(var(--pe-recess), var(--pe-page));
   --pe-on: var(--pe-surface);
+  /* Dimmed ground: hairlines step up the ramp (base.css --pe-line-dim) or they vanish on it. */
+  --pe-line: var(--pe-line-dim);
+  --pe-line-2: var(--pe-line-2-dim);
   background: light-dark(var(--pe-recess), var(--pe-page));
 }
 [data-pane-secondary] [data-slot="pane-split"] {
