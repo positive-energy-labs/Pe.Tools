@@ -337,7 +337,7 @@ function ChatSurface({ target, docked = false }: ChatShellProps) {
       </div>
       <div data-chat-composer="" ref={composerRef}>
         <ComposerBank
-          currentThreadId={currentThreadId}
+          currentThreadId={addressedThread ?? currentThreadId}
           deletedThreadIds={deletedThreadIds}
           prompt={prompt}
           handle={handle}
