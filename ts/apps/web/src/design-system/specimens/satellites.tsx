@@ -1,6 +1,6 @@
 import { Link } from "@tanstack/react-router";
 
-import { Provenance, Section } from "#/components/lang/section";
+import { Provenance, Section } from "@pe/kit/lang/section";
 
 const SATELLITES: readonly { to: string; name: string; purpose: string }[] = [
   {

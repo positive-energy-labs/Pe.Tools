@@ -1,9 +1,9 @@
 import { useState } from "react";
 
-import { Accordion } from "#/components/lang/accordion";
+import { Accordion } from "@pe/kit/lang/accordion";
 import { LegStrip } from "#/components/lang/leg-strip";
 import { PidChip, ShapeCells } from "#/components/lang/process";
-import { SwitchRow } from "#/components/lang/switch-row";
+import { SwitchRow } from "@pe/kit/lang/switch-row";
 
 import { SpecimenFrame } from "./recipe-grid";
 
@@ -35,7 +35,7 @@ export function LangMachineSpecimens() {
           />
         </span>
       </SpecimenFrame>
-      <SpecimenFrame name="Accordion" importPath="#/components/lang/accordion">
+      <SpecimenFrame name="Accordion" importPath="@pe/kit/lang/accordion">
         <span className="block w-[356px]">
           <Accordion
             label="specimen groups"
@@ -62,7 +62,7 @@ export function LangMachineSpecimens() {
           <LegStrip legs={[{ ...LEGS[0]!, status: "failed", detail: "digest mismatch" }]} />
         </span>
       </SpecimenFrame>
-      <SpecimenFrame name="SwitchRow" importPath="#/components/lang/switch-row">
+      <SpecimenFrame name="SwitchRow" importPath="@pe/kit/lang/switch-row">
         <span className="flex w-[356px] flex-col gap-2">
           <SwitchRow
             label="Share over tailnet"

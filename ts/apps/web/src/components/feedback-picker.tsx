@@ -6,7 +6,7 @@ import { MessageSquarePlus, Send } from "lucide-react";
 import { Button } from "@pe/kit/lang/button";
 import { HotkeyCommand } from "#/components/lang/hotkey-command";
 import { PopupFrame } from "@pe/kit/lang/list-popup";
-import { OutcomeLine } from "#/components/lang/outcome";
+import { OutcomeLine } from "@pe/kit/lang/outcome";
 import { Textarea } from "@pe/kit/lang/input";
 import { deliverFeedback, sendFeedback, type FeedbackReceipt } from "#/host/feedback";
 import { useAction } from "#/readings";

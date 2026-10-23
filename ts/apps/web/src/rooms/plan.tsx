@@ -21,7 +21,7 @@ import { usePlanMap } from "#/lib/plan-map";
 import type { RoomsPage } from "./manifest";
 
 import { EmptyState } from "@pe/kit/lang/empty";
-import { OutcomeLine } from "#/components/lang/outcome";
+import { OutcomeLine } from "@pe/kit/lang/outcome";
 import { boundsOf, contentViewport, fitFrame, type Bounds2, type Point2 } from "#/lib/affine-frame";
 import { token } from "@pe/kit/lib/token";
 import { PlanImageLayer, planCorners, type TakeoffPlanImage } from "#/takeoff/level-plan";

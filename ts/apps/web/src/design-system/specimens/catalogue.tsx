@@ -1,4 +1,4 @@
-import { Provenance, Section } from "#/components/lang/section";
+import { Provenance, Section } from "@pe/kit/lang/section";
 
 import { CatalogueActions } from "./catalogue-actions";
 import { CatalogueCells } from "./catalogue-cells";

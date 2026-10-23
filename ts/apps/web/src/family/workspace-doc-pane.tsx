@@ -6,7 +6,7 @@ import { EmptyState } from "@pe/kit/lang/empty";
 import { FactChip, Tag } from "@pe/kit/lang/chip";
 
 import { List } from "@pe/kit/lang/list-popup";
-import { Switcher } from "#/components/lang/switcher";
+import { Switcher } from "@pe/kit/lang/switcher";
 import { Button } from "@pe/kit/lang/button";
 import { Pane } from "#/components/lang/pane";
 import { SpecSheet, SpecText, ProposalCard } from "#/family/doc-pane";

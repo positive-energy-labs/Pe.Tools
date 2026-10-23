@@ -35,7 +35,7 @@ import {
   type Provider,
   type UpdateThreadRequest,
 } from "@pe/agent-contracts";
-import { Dialog, DialogContent, DialogTitle } from "#/components/lang/dialog";
+import { Dialog, DialogContent, DialogTitle } from "@pe/kit/lang/dialog";
 import { ListPopup } from "@pe/kit/lang/list-popup";
 import { Input } from "@pe/kit/lang/input";
 import { useList, type ListState } from "@pe/kit/lang/collection";

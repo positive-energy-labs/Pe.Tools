@@ -5,10 +5,10 @@ import { ArtifactFrame } from "@pe/kit/lang/artifact-frame";
 import { fmtNum, StateCell, type StateCellProps } from "@pe/kit/lang/cell";
 import { FactChip } from "@pe/kit/lang/chip";
 
-import { Switcher } from "#/components/lang/switcher";
+import { Switcher } from "@pe/kit/lang/switcher";
 import { Button } from "@pe/kit/lang/button";
 import { Pane } from "#/components/lang/pane";
-import { Surface } from "#/components/lang/surface";
+import { Surface } from "@pe/kit/lang/surface";
 import { FC_UNITS } from "#/param-tables/variants/data";
 import type {
   FactKey,

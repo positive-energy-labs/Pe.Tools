@@ -9,7 +9,7 @@
 import { useEffect, useSyncExternalStore } from "react";
 import type { MachineNotice } from "@pe/agent-contracts";
 
-import { SwitchRow } from "#/components/lang/switch-row";
+import { SwitchRow } from "@pe/kit/lang/switch-row";
 import { useSurfaceHost } from "#/navigation/surface-host";
 import { resolveWorkbenchConfig } from "#/workbench/config";
 import { peClient } from "#/host/pe-client";

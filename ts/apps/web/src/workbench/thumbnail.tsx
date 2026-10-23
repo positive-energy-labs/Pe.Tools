@@ -1,5 +1,5 @@
 import { useState } from "react";
-import { Dialog, DialogContent } from "#/components/lang/dialog";
+import { Dialog, DialogContent } from "@pe/kit/lang/dialog";
 import { Button } from "@pe/kit/lang/button";
 
 /**

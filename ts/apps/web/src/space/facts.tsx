@@ -10,7 +10,7 @@ import { Button } from "@pe/kit/lang/button";
 import { Input } from "@pe/kit/lang/input";
 import { TooltipHint } from "@pe/kit/lang/tooltip";
 import { tokenRef } from "@pe/kit/lib/token";
-import { Switcher } from "#/components/lang/switcher";
+import { Switcher } from "@pe/kit/lang/switcher";
 import type { ActionHandle } from "#/route/handle";
 import type { ElementTarget } from "#/revit/element-target";
 import { SelectionBoxButton } from "#/revit/element-menu";

@@ -6,7 +6,7 @@
 import { useEffect, useRef, useState, type ReactNode } from "react";
 
 import { Button } from "@pe/kit/lang/button";
-import { Switcher } from "#/components/lang/switcher";
+import { Switcher } from "@pe/kit/lang/switcher";
 import type { Point2, Viewport2 } from "#/lib/affine-frame";
 import { useScopeKeys } from "@pe/kit/keys";
 import { token } from "@pe/kit/lib/token";

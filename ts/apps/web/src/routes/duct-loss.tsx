@@ -9,8 +9,8 @@ import { type ReactNode } from "react";
 
 import { FactChip } from "@pe/kit/lang/chip";
 import { Input } from "@pe/kit/lang/input";
-import { Surface } from "#/components/lang/surface";
-import { Switcher } from "#/components/lang/switcher";
+import { Surface } from "@pe/kit/lang/surface";
+import { Switcher } from "@pe/kit/lang/switcher";
 import { DuctCharts } from "#/duct/charts";
 import { FACES, type FaceKey } from "#/duct/ductulator";
 import { Ductulator } from "#/duct/wheel";

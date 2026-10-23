@@ -41,10 +41,10 @@ import "#/workbench/lens.css";
 import "./chat-shell.css";
 import { CurrentThreadViewOwner } from "#/workbench/thread-view";
 import { Pane, PaneSplit } from "#/components/lang/pane";
-import { Surface as PageSurface } from "#/components/lang/surface";
+import { Surface as PageSurface } from "@pe/kit/lang/surface";
 import { ThreadBody } from "#/workbench/lens/thread-body";
 import { ComposerBank } from "#/chat/composer-bank";
-import { Dialog, DialogContent, DialogTitle } from "#/components/lang/dialog";
+import { Dialog, DialogContent, DialogTitle } from "@pe/kit/lang/dialog";
 import { useThreadPresence } from "#/machine/os-notices";
 import { routeAddress, routeAt } from "@pe/agent-contracts";
 

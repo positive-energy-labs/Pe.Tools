@@ -2,7 +2,7 @@ import { useState } from "react";
 import type { EndpointFailure } from "@pe/agent-contracts";
 import { Button } from "@pe/kit/lang/button";
 import { Code } from "@pe/kit/lang/code";
-import { OutcomeLine } from "#/components/lang/outcome";
+import { OutcomeLine } from "@pe/kit/lang/outcome";
 
 export function EndpointError({
   message,

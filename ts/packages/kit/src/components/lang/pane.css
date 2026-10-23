@@ -97,52 +97,6 @@
   padding-bottom: 0;
 }
 
-/* Pane views share the header's line and use an underline, leaving framed switches to controls. */
-.dl-pane-tabs {
-  display: flex;
-  align-self: stretch;
-  align-items: stretch;
-  gap: calc(var(--space-unit) * 4);
-  height: var(--rail-h);
-}
-.dl-pane-tabs > button {
-  display: inline-flex;
-  align-items: center;
-  gap: var(--space-unit);
-  padding: 0;
-  border: 0;
-  border-bottom: 2px solid transparent;
-  background: transparent;
-  font-size: var(--type-small-size);
-  font-weight: var(--weight-strong);
-  color: var(--pe-ink-2);
-  cursor: pointer;
-}
-.dl-pane-tabs > button > span::first-letter {
-  text-transform: uppercase;
-}
-.dl-pane-tabs > button[aria-pressed="true"] {
-  border-bottom-color: var(--pe-ink);
-  color: var(--pe-ink);
-}
-.dl-pane-tabs small {
-  font-size: var(--type-small-size);
-  font-weight: var(--weight-regular);
-  color: var(--pe-ink-mute);
-}
-[data-slot="pane-header"]:has(.dl-pane-tabs) [data-slot="rail-lead"] {
-  padding-bottom: 0;
-  align-items: center;
-}
-.dl-pane-tabs button:focus-visible {
-  outline: 1px solid var(--pe-line-2);
-  outline-offset: -2px;
-}
-[data-slot="pane-header"] [data-slot="rail-lead"] > .dl-pane-tabs {
-  padding-bottom: 0;
-  text-box: normal;
-}
-
 /* Header controls come in groups (a pane's own actions, then modes, floaters, layers): a gap inside
    a group, a hairline between groups, so a row of toggles never runs into the verbs beside it. */
 [data-slot="pane-actions"],

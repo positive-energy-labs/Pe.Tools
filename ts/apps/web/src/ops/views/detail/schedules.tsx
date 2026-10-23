@@ -2,7 +2,7 @@ import { token } from "@pe/kit/lib/token";
 import type { ReactNode } from "react";
 import type { RevitDetailSchedules, RevitDetailSheets } from "@pe/host-contracts/generated";
 import { EmptyState } from "@pe/kit/lang/empty";
-import { Provenance } from "#/components/lang/section";
+import { Provenance } from "@pe/kit/lang/section";
 import { type Column } from "@pe/kit/table/model";
 import { Table } from "@pe/kit/table/table";
 import { type VizIndex, vizVar } from "#/ops/primitives";

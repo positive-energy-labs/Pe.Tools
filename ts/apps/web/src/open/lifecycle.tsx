@@ -12,9 +12,9 @@ import { useState, type ReactNode } from "react";
 import { Square } from "lucide-react";
 import { instancesActions, nativeProcessSchema, type MachineSession } from "@pe/agent-contracts";
 
-import { ArmingStrip } from "#/components/lang/arming-strip";
+import { ArmingStrip } from "@pe/kit/lang/arming-strip";
 import { Button } from "@pe/kit/lang/button";
-import { OutcomeLine, type OutcomeKind } from "#/components/lang/outcome";
+import { OutcomeLine, type OutcomeKind } from "@pe/kit/lang/outcome";
 import { PidChip } from "#/components/lang/process";
 import type { SessionFacts } from "#/components/lang/session";
 import {

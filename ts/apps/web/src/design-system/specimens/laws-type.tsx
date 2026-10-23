@@ -4,7 +4,7 @@ import { Button } from "@pe/kit/lang/button";
 import { Input } from "@pe/kit/lang/input";
 import { KeyHint } from "@pe/kit/lang/key-hint";
 import { ProviderMark } from "#/components/lang/provider-mark";
-import { Switcher } from "#/components/lang/switcher";
+import { Switcher } from "@pe/kit/lang/switcher";
 import { GitFork, Paperclip, Plus, SendHorizontal } from "lucide-react";
 import { CounterExample, Law } from "#/design-system/exhibit";
 

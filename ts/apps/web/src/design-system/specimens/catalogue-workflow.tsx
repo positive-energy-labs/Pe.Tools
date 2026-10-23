@@ -1,12 +1,12 @@
 import { useState } from "react";
 import { Save } from "lucide-react";
 
-import { ArmingStrip } from "#/components/lang/arming-strip";
+import { ArmingStrip } from "@pe/kit/lang/arming-strip";
 import { ArtifactFrame } from "@pe/kit/lang/artifact-frame";
 import { Code, JsonEditor } from "@pe/kit/lang/code";
 import { StateCell } from "@pe/kit/lang/cell";
 import { FactChip, Tag } from "@pe/kit/lang/chip";
-import { OutcomeLine } from "#/components/lang/outcome";
+import { OutcomeLine } from "@pe/kit/lang/outcome";
 import { Button } from "@pe/kit/lang/button";
 import { CounterExample, Demo, Gap } from "#/design-system/exhibit";
 import { ARMING_SPECIMEN } from "#/design-system/specimens-data";

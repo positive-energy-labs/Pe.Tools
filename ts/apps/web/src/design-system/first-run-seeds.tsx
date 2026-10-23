@@ -6,7 +6,7 @@ import { useState } from "react";
 import type { Provider } from "@pe/agent-contracts";
 
 import { FirstOpenCard, ProviderRepair } from "#/chat/first-open";
-import { Switcher } from "#/components/lang/switcher";
+import { Switcher } from "@pe/kit/lang/switcher";
 import { SettingsBody } from "#/machine/body";
 import { UpdateGroup } from "#/machine/update";
 import { MACHINE_SEEDS } from "#/open/seeds";

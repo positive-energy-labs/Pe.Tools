@@ -1,8 +1,8 @@
 /** Sharing: the host-owned switches, then what the host observed. */
 import { useState } from "react";
 import type { Machine } from "@pe/agent-contracts";
-import { OutcomeLine } from "#/components/lang/outcome";
-import { SwitchRow } from "#/components/lang/switch-row";
+import { OutcomeLine } from "@pe/kit/lang/outcome";
+import { SwitchRow } from "@pe/kit/lang/switch-row";
 import { switchRemoteAdministration, switchShare } from "#/host/machine";
 import { hhmm } from "./model";
 import { SEED_REFUSAL } from "./use-machine";

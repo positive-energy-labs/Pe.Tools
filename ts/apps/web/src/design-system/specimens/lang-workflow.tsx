@@ -2,7 +2,7 @@ import { useState } from "react";
 import type { TrichotomyCellLike } from "@pe/agent-contracts";
 import { Save } from "lucide-react";
 
-import { ArmingStrip, armingStripRecipe } from "#/components/lang/arming-strip";
+import { ArmingStrip, armingStripRecipe } from "@pe/kit/lang/arming-strip";
 import { ArtifactFrame } from "@pe/kit/lang/artifact-frame";
 import {
   reviewAddresses,
@@ -160,7 +160,7 @@ export function LangWorkflowSpecimens() {
       </SpecimenFrame>
       <RecipeGrid
         name="ArmingStrip"
-        importPath="#/components/lang/arming-strip"
+        importPath="@pe/kit/lang/arming-strip"
         recipe={armingStripRecipe}
         render={(props) => <ArmingSpecimen props={props} />}
       />

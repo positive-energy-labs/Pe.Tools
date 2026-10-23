@@ -3,7 +3,7 @@ import { CELL_STATE_ORDER, StateCell, cellStateLabel } from "@pe/kit/lang/cell";
 import type { StateCellProps } from "@pe/kit/lang/cell";
 import { FactChip, Tag } from "@pe/kit/lang/chip";
 import { TooltipHint } from "@pe/kit/lang/tooltip";
-import { OutcomeLine } from "#/components/lang/outcome";
+import { OutcomeLine } from "@pe/kit/lang/outcome";
 import { Button } from "@pe/kit/lang/button";
 import { CounterExample, Gap, Law } from "#/design-system/exhibit";
 import { PARAM_ROWS, cellProps } from "#/design-system/specimens-data";

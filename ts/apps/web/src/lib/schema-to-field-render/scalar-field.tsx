@@ -1,6 +1,6 @@
 import { Input } from "@pe/kit/lang/input";
 import { ListInput, ListPopup } from "@pe/kit/lang/list-popup";
-import { Switch } from "#/components/lang/switch";
+import { Switch } from "@pe/kit/lang/switch";
 import { FieldLabelRow, FieldMessages, FieldOptions } from "./field-metadata";
 import {
   coercePrimitive,

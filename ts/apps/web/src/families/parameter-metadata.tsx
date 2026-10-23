@@ -5,7 +5,7 @@ import { Button } from "@pe/kit/lang/button";
 import type { FamilyParameterSnapshot } from "#/host/loaded-families-view";
 import type { PivotRow } from "./pivot";
 import type { OverlayParameter } from "./patch-overlay";
-import { ValueDiff } from "#/components/lang/value-diff";
+import { ValueDiff } from "@pe/kit/lang/value-diff";
 
 export type ParameterMetadataRecord = { family: string; parameter: FamilyParameterSnapshot };
 

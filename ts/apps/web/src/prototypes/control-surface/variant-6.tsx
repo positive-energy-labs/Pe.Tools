@@ -3,7 +3,7 @@ import { useState, type ReactNode } from "react";
 import { Popover } from "@base-ui/react/popover";
 import { ArrowUp, GripHorizontal, Minus, Pin, Plus, X } from "lucide-react";
 import type { HarnessThreadSummary } from "@pe/agent-contracts";
-import { Accordion } from "#/components/lang/accordion";
+import { Accordion } from "@pe/kit/lang/accordion";
 import { Button } from "@pe/kit/lang/button";
 import {
   Composer,
@@ -13,7 +13,7 @@ import {
   MessageHead,
 } from "#/components/lang/conversation";
 import { PopupFrame } from "@pe/kit/lang/list-popup";
-import { ValueDiff } from "#/components/lang/value-diff";
+import { ValueDiff } from "@pe/kit/lang/value-diff";
 import { Markdown } from "#/workbench/prose";
 import { BAY_THREADS } from "#/open/seeds";
 import { activityWord } from "#/chat/thread-navigation";

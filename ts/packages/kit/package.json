@@ -27,7 +27,6 @@
     "./lang/legend": "./src/components/lang/legend.tsx",
     "./lang/list-popup": "./src/components/lang/list-popup.tsx",
     "./lang/list-view": "./src/components/lang/list-view.tsx",
-    "./lang/pane-tabs": "./src/components/lang/pane-tabs.tsx",
     "./lang/pane.css": "./src/components/lang/pane.css",
     "./lang/rail": "./src/components/lang/rail.tsx",
     "./lang/row": "./src/components/lang/row.tsx",
@@ -52,7 +51,19 @@
     "./theme": "./src/theme.ts",
     "./lang/popover": "./src/components/lang/popover.tsx",
     "./lang/preview-action": "./src/components/lang/preview-action.tsx",
-    "./lang/hover-card": "./src/components/lang/hover-card.tsx"
+    "./lang/hover-card": "./src/components/lang/hover-card.tsx",
+    "./lang/outcome": "./src/components/lang/outcome.tsx",
+    "./lang/surface": "./src/components/lang/surface.tsx",
+    "./lang/section": "./src/components/lang/section.tsx",
+    "./lang/switcher": "./src/components/lang/switcher.tsx",
+    "./lang/switch": "./src/components/lang/switch.tsx",
+    "./lang/switch-row": "./src/components/lang/switch-row.tsx",
+    "./lang/dialog": "./src/components/lang/dialog.tsx",
+    "./lang/value-diff": "./src/components/lang/value-diff.tsx",
+    "./lang/accordion": "./src/components/lang/accordion.tsx",
+    "./lang/activity": "./src/components/lang/activity.tsx",
+    "./lang/coverage-bar": "./src/components/lang/coverage-bar.tsx",
+    "./lang/arming-strip": "./src/components/lang/arming-strip.tsx"
   },
   "scripts": {
     "build": "vp build && node scripts/page.mjs",

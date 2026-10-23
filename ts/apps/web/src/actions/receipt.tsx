@@ -5,7 +5,7 @@ import { controlAction } from "../../../../packages/mcps/src/shared/takeoff-acti
 import { Button } from "@pe/kit/lang/button";
 import { ArtifactFrame } from "@pe/kit/lang/artifact-frame";
 import { Code, stringify } from "@pe/kit/lang/code";
-import { OutcomeLine, type OutcomeKind } from "#/components/lang/outcome";
+import { OutcomeLine, type OutcomeKind } from "@pe/kit/lang/outcome";
 import { outputRenderers } from "#/ops/renderers";
 
 /**

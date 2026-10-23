@@ -1,8 +1,8 @@
 import { token } from "@pe/kit/lib/token";
 import { FactChip } from "@pe/kit/lang/chip";
-import { CoverageBar } from "#/components/lang/coverage-bar";
+import { CoverageBar } from "@pe/kit/lang/coverage-bar";
 import { EmptyState } from "@pe/kit/lang/empty";
-import { Provenance, Section } from "#/components/lang/section";
+import { Provenance, Section } from "@pe/kit/lang/section";
 import { KVGrid } from "#/ops/primitives";
 import { UnrecognizedShape, asNumber, asRecord, asRecords, asString, text } from "#/ops/registry";
 import type { SyntheticOp, SyntheticViewProps } from "#/lab/synthetic";

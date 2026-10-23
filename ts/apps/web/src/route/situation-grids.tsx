@@ -1,7 +1,7 @@
 /** The Situation's grids: the ledger behind the gauge and the page log column. */
 import { useState, type ReactNode } from "react";
 import { Button } from "@pe/kit/lang/button";
-import { Switcher } from "#/components/lang/switcher";
+import { Switcher } from "@pe/kit/lang/switcher";
 import { Inspect, inspectableOf } from "./inspect";
 import type { RouteManifest } from "./manifest";
 import type { LogEntry } from "./route-owner";

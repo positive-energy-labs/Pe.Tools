@@ -2,7 +2,7 @@
 import { useState } from "react";
 import type { AppSurface, Machine } from "@pe/agent-contracts";
 import { Button } from "@pe/kit/lang/button";
-import { OutcomeLine } from "#/components/lang/outcome";
+import { OutcomeLine } from "@pe/kit/lang/outcome";
 import { PidChip } from "#/components/lang/process";
 import { hostAdmin } from "#/host/machine";
 import { useSurfaceHost } from "#/navigation/surface-host";

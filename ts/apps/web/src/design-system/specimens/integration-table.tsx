@@ -5,7 +5,7 @@ import { ArtifactFrame } from "@pe/kit/lang/artifact-frame";
 import { CellStateKey } from "@pe/kit/lang/cell";
 import { FactChip, Tag } from "@pe/kit/lang/chip";
 import { TooltipHint } from "@pe/kit/lang/tooltip";
-import { Provenance, Section } from "#/components/lang/section";
+import { Provenance, Section } from "@pe/kit/lang/section";
 import { Button } from "@pe/kit/lang/button";
 import { Table } from "@pe/kit/table/table";
 import { TableFrame } from "#/components/master-table/table-frame";

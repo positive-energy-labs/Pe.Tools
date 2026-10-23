@@ -26,7 +26,7 @@ import { useMemo, type SetStateAction } from "react";
 import { FactChip } from "@pe/kit/lang/chip";
 import { Button } from "@pe/kit/lang/button";
 import { Pane, PaneSplit } from "#/components/lang/pane";
-import { Surface } from "#/components/lang/surface";
+import { Surface } from "@pe/kit/lang/surface";
 import { FieldChart, stepField } from "#/grilles/chart";
 import { ExportSheet } from "#/grilles/export";
 import { type GrilleInput, enumerate, ribToFill, solve } from "#/grilles/math";

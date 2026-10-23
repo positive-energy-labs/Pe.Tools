@@ -1,7 +1,7 @@
 import { token } from "@pe/kit/lib/token";
 import { FactChip } from "@pe/kit/lang/chip";
 import { EmptyState } from "@pe/kit/lang/empty";
-import { Provenance, Section } from "#/components/lang/section";
+import { Provenance, Section } from "@pe/kit/lang/section";
 import { KVGrid } from "#/ops/primitives";
 import {
   type OpViewProps,

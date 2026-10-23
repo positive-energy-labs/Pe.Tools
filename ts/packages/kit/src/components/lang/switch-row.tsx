@@ -1,5 +1,5 @@
 import { Switch } from "./switch";
-import { TooltipHint } from "@pe/kit/lang/tooltip";
+import { TooltipHint } from "./tooltip";
 
 /**
  * A switch with its refusal beside it: a refused switch is disabled and says why on the surface,

@@ -7,13 +7,13 @@
 import { RefreshCw, Upload, type LucideIcon } from "lucide-react";
 import type { ReactNode } from "react";
 
-import { tv } from "@pe/kit/lib/tv";
+import { tv } from "../../lib/tv";
 
-import { ArtifactFrame } from "@pe/kit/lang/artifact-frame";
-import { FactChip } from "@pe/kit/lang/chip";
-import { Button } from "@pe/kit/lang/button";
+import { ArtifactFrame } from "./artifact-frame";
+import { FactChip } from "./chip";
+import { Button } from "./button";
 
-import "@pe/kit/lang/lang.css";
+import "./lang.css";
 
 export const armingStripRecipe = tv({
   slots: {

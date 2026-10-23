@@ -7,7 +7,7 @@ import { createFileRoute } from "@tanstack/react-router";
 import { useMemo, useRef, useState } from "react";
 import { z } from "zod";
 
-import { Switcher } from "#/components/lang/switcher";
+import { Switcher } from "@pe/kit/lang/switcher";
 import { syntheticOps } from "#/lab/glance";
 import { SyntheticGlance, useSynthetic } from "#/lab/synthetic";
 import { RouteShell, useRoute, type RouteManifest } from "#/route";

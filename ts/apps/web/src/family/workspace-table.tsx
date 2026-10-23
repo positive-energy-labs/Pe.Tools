@@ -2,7 +2,7 @@ import { TooltipHint } from "@pe/kit/lang/tooltip";
 import { EmptyState } from "@pe/kit/lang/empty";
 import { FactChip } from "@pe/kit/lang/chip";
 
-import { Switcher } from "#/components/lang/switcher";
+import { Switcher } from "@pe/kit/lang/switcher";
 import { Button } from "@pe/kit/lang/button";
 import { Table } from "@pe/kit/table/table";
 import { TableFrame } from "#/components/master-table/table-frame";

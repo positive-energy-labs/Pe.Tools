@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useState } from "react";
 
-import { Provenance, Section } from "#/components/lang/section";
+import { Provenance, Section } from "@pe/kit/lang/section";
 import { Gap } from "#/design-system/exhibit";
 import { TooltipHint } from "@pe/kit/lang/tooltip";
 

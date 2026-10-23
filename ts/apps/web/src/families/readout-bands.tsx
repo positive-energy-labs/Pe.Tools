@@ -2,10 +2,10 @@ import { showFamilyCell, type FamiliesPatchCell, type PodDraftSource } from "@pe
 
 import { FactChip } from "@pe/kit/lang/chip";
 import { EmptyState } from "@pe/kit/lang/empty";
-import { OutcomeLine } from "#/components/lang/outcome";
+import { OutcomeLine } from "@pe/kit/lang/outcome";
 import { Button } from "@pe/kit/lang/button";
 import { ReviewRow } from "#/components/work/band";
-import { ValueDiff } from "#/components/lang/value-diff";
+import { ValueDiff } from "@pe/kit/lang/value-diff";
 import type { Column } from "@pe/kit/table/model";
 import { Table } from "@pe/kit/table/table";
 import { familyCellEntries } from "#/families/staged";

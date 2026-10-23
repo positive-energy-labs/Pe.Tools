@@ -5,8 +5,8 @@
  */
 import { useEffect, useState } from "react";
 import type { PluginStatus, PodRouteDescriptor } from "@pe/agent-contracts";
-import { OutcomeLine } from "#/components/lang/outcome";
-import { SwitchRow } from "#/components/lang/switch-row";
+import { OutcomeLine } from "@pe/kit/lang/outcome";
+import { SwitchRow } from "@pe/kit/lang/switch-row";
 import { peClient } from "#/host/pe-client";
 import { useAction } from "#/readings";
 

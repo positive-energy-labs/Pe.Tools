@@ -12,13 +12,13 @@ import { createFileRoute, useRouter } from "@tanstack/react-router";
 
 import { FactChip } from "@pe/kit/lang/chip";
 import { EmptyState } from "@pe/kit/lang/empty";
-import { OutcomeLine } from "#/components/lang/outcome";
+import { OutcomeLine } from "@pe/kit/lang/outcome";
 import { Pane, PaneSplit } from "#/components/lang/pane";
 import { List } from "@pe/kit/lang/list-popup";
 import { Button } from "@pe/kit/lang/button";
 import { RunsList } from "#/route/runs-list";
 import { PodPlugins } from "#/route/pod-plugins";
-import { Surface } from "#/components/lang/surface";
+import { Surface } from "@pe/kit/lang/surface";
 import {
   RouteShell,
   defineRoute,

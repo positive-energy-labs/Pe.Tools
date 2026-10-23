@@ -4,7 +4,7 @@ import { RefreshCw, Save, Upload } from "lucide-react";
 import { ActionGroup, Button } from "@pe/kit/lang/button";
 import { PreviewAction } from "@pe/kit/lang/preview-action";
 import { HotkeyCommand, HotkeyHint } from "#/components/lang/hotkey-command";
-import { Section } from "#/components/lang/section";
+import { Section } from "@pe/kit/lang/section";
 
 import { SpecimenFrame } from "./recipe-grid";
 import { SituationAction } from "#/route/situation-verbs";

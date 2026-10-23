@@ -1,7 +1,7 @@
 import { FileUp, Link2 } from "lucide-react";
 import { memo, useCallback, useEffect, useRef, useState } from "react";
 import { EmptyState } from "@pe/kit/lang/empty";
-import { OutcomeLine } from "#/components/lang/outcome";
+import { OutcomeLine } from "@pe/kit/lang/outcome";
 import { Button } from "@pe/kit/lang/button";
 import { Input } from "@pe/kit/lang/input";
 import type { GroundedDocEngine } from "#/grounded-doc/engine";

@@ -2,7 +2,7 @@ import { useAtomValue } from "@effect/atom-react";
 import { Key } from "#/components/anatomy";
 import type { ContextBreakdown, ContextItem } from "@pe/agent-contracts/chat-state";
 import { EmptyState } from "@pe/kit/lang/empty";
-import { Switcher } from "#/components/lang/switcher";
+import { Switcher } from "@pe/kit/lang/switcher";
 import { cn } from "@pe/kit/lib/utils";
 import { token } from "@pe/kit/lib/token";
 import { useCurrentThreadView } from "../thread-view";

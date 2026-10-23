@@ -4,10 +4,10 @@
  */
 import type { ReactNode } from "react";
 
-import { tv } from "@pe/kit/lib/tv";
+import { tv } from "../../lib/tv";
 
-import "@pe/kit/lang/lang.css";
-import { TooltipHint } from "@pe/kit/lang/tooltip";
+import "./lang.css";
+import { TooltipHint } from "./tooltip";
 
 export const switcherRecipe = tv({
   slots: {

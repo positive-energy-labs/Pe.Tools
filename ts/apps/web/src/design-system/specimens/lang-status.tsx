@@ -1,11 +1,11 @@
-import { ActivityDisclosure } from "#/components/lang/activity";
+import { ActivityDisclosure } from "@pe/kit/lang/activity";
 import { FactChip } from "@pe/kit/lang/chip";
-import { CoverageBar, coverageBarRecipe } from "#/components/lang/coverage-bar";
+import { CoverageBar, coverageBarRecipe } from "@pe/kit/lang/coverage-bar";
 import { EmptyState, emptyStateRecipe } from "@pe/kit/lang/empty";
 import { TooltipHint } from "@pe/kit/lang/tooltip";
-import { OutcomeLine, outcomeLineRecipe, type OutcomeKind } from "#/components/lang/outcome";
-import { Provenance, Section, sectionRecipe } from "#/components/lang/section";
-import { Switcher, switcherRecipe } from "#/components/lang/switcher";
+import { OutcomeLine, outcomeLineRecipe, type OutcomeKind } from "@pe/kit/lang/outcome";
+import { Provenance, Section, sectionRecipe } from "@pe/kit/lang/section";
+import { Switcher, switcherRecipe } from "@pe/kit/lang/switcher";
 
 import { RecipeGrid, SpecimenFrame } from "./recipe-grid";
 
@@ -14,7 +14,7 @@ const noop = () => {};
 export function LangStatusSpecimens() {
   return (
     <>
-      <SpecimenFrame name="ActivityDisclosure" importPath="#/components/lang/activity">
+      <SpecimenFrame name="ActivityDisclosure" importPath="@pe/kit/lang/activity">
         <ActivityDisclosure summary="2 unresolved" tone="caution">
           <div>lost write: the document moved on before the apply landed</div>
           <div className="text-ink-2">reading families: waiting on the session</div>
@@ -22,7 +22,7 @@ export function LangStatusSpecimens() {
       </SpecimenFrame>
       <RecipeGrid
         name="CoverageBar"
-        importPath="#/components/lang/coverage-bar"
+        importPath="@pe/kit/lang/coverage-bar"
         recipe={coverageBarRecipe}
         render={() => (
           <div className="w-[28rem]">
@@ -55,7 +55,7 @@ export function LangStatusSpecimens() {
       </SpecimenFrame>
       <RecipeGrid
         name="OutcomeLine"
-        importPath="#/components/lang/outcome"
+        importPath="@pe/kit/lang/outcome"
         recipe={outcomeLineRecipe}
         render={(props) => (
           <OutcomeLine
@@ -67,7 +67,7 @@ export function LangStatusSpecimens() {
       />
       <RecipeGrid
         name="Section · Provenance"
-        importPath="#/components/lang/section"
+        importPath="@pe/kit/lang/section"
         recipe={sectionRecipe}
         render={() => (
           <Section
@@ -82,7 +82,7 @@ export function LangStatusSpecimens() {
       />
       <RecipeGrid
         name="Switcher"
-        importPath="#/components/lang/switcher"
+        importPath="@pe/kit/lang/switcher"
         recipe={switcherRecipe}
         render={(props) => {
           const state = props.state;
