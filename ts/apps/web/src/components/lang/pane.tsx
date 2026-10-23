@@ -3,7 +3,6 @@ import { Component, Suspense, useRef, type Key, type ReactNode } from "react";
 
 import { reportFault } from "#/host/diagnostics";
 
-
 import { Floater } from "#/components/lang/floater";
 import { PaneStrip, type PaneStripProps } from "#/components/lang/pane-strip";
 import { KeyScope } from "@pe/kit/keys";
@@ -12,7 +11,6 @@ import { tv, type VariantProps } from "@pe/kit/lib/tv";
 
 import { Rail } from "@pe/kit/lang/rail";
 import "@pe/kit/lang/pane.css";
-
 
 // A pane is a header, a scrolling body and an error boundary; it is also a key scope, so a child's
 // `useScopeKeys` binds while focus is inside it. No `title` and no `tabs` draws no header.

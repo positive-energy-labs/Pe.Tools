@@ -12,7 +12,13 @@ import { useRouterState } from "@tanstack/react-router";
 import { HostedChrome } from "#/route/hosted-chrome";
 import { routePath } from "./model";
 
-export type RouteControlName = "controls" | "lamp" | "situation" | "palette" | "inspector" | "settings";
+export type RouteControlName =
+  | "controls"
+  | "lamp"
+  | "situation"
+  | "palette"
+  | "inspector"
+  | "settings";
 export type SituationSignal = {
   kind: "history" | "failure" | "busy" | "health" | "ready" | "unbound";
   tone: "nav" | "alarm" | "commit" | "caution" | "done";

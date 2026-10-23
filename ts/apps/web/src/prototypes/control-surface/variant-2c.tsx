@@ -1,3 +1,4 @@
+import { ProviderMark } from "#/components/lang/provider-mark";
 /**
  * THROWAWAY protoui variant 2c — "Palette as a rail view": variant 2 plus one rail item, Palette, whose
  * mini sidebar IS the real ThreadsSidebar (every thread, filters, shelves) plus route/Revit/machine
@@ -158,14 +159,34 @@ function ThreadRoster({
   const attention = THREADS.filter((thread) => thread.activity !== "running");
   const running = THREADS.filter((thread) => thread.activity === "running");
   const row = (thread: Thread) => (
-    <Row role="button" tabIndex={0} lines={2} key={thread.id} id={thread.id} label={thread.title} sub={thread.target} meta={thread.age} active={selected === thread.id} actions={null} onClick={() => onSelect(thread.id)} onDoubleClick={() => undefined} onContextMenu={() => undefined} />
+    <Row
+      role="button"
+      tabIndex={0}
+      lines={2}
+      key={thread.id}
+      id={thread.id}
+      label={thread.title}
+      sub={thread.target}
+      meta={
+        <>
+          {activityWord[thread.activity]} / {thread.age}
+        </>
+      }
+      active={selected === thread.id}
+      actions={null}
+      onClick={() => onSelect(thread.id)}
+      onDoubleClick={() => undefined}
+      onContextMenu={() => undefined}
+    />
   );
   return (
     <nav data-navigation="" aria-label="Inbox threads" className="min-h-0 flex-1 overflow-y-auto">
-      <section><RowGroupHead label="Needs attention" count={attention.length} />
+      <section>
+        <RowGroupHead label="Needs attention" count={attention.length} />
         {attention.map(row)}
       </section>
-      <section><RowGroupHead label="Running" count={running.length} />
+      <section>
+        <RowGroupHead label="Running" count={running.length} />
         {running.map(row)}
       </section>
     </nav>
@@ -231,9 +252,24 @@ function PalettePane({ selected, onSelect }: { selected: string; onSelect: (id: 
         className="hairline-t max-h-[34%] shrink-0 overflow-y-auto"
       >
         {PALETTE_EXTRAS.map((section) => (
-          <section key={section.group}><RowGroupHead label={section.group} count={section.rows.length} />
+          <section key={section.group}>
+            <RowGroupHead label={section.group} count={section.rows.length} />
             {section.rows.map(([id, title, target]) => (
-              <Row role="button" tabIndex={0} lines={2} key={id} id={id} label={title} sub={target} meta={null} active={selected === id} actions={null} onClick={() => onSelect(id)} onDoubleClick={() => undefined} onContextMenu={() => undefined} />
+              <Row
+                role="button"
+                tabIndex={0}
+                lines={2}
+                key={id}
+                id={id}
+                label={title}
+                sub={target}
+                meta={null}
+                active={selected === id}
+                actions={null}
+                onClick={() => onSelect(id)}
+                onDoubleClick={() => undefined}
+                onContextMenu={() => undefined}
+              />
             ))}
           </section>
         ))}

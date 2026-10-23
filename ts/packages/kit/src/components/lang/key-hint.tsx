@@ -22,8 +22,6 @@ export function KeyHint({
 import { Fragment, useState } from "react";
 import { useScopeKeys } from "../../keys";
 
-
-
 import { tokenRef } from "../../lib/token";
 
 /**

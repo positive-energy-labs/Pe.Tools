@@ -5,7 +5,6 @@ import {
   useId,
   useState,
   type ComponentProps,
-  type ReactElement,
   type ReactNode,
 } from "react";
 import { Tooltip as Primitive } from "@base-ui/react/tooltip";
@@ -30,26 +29,30 @@ if (typeof window !== "undefined") {
 }
 
 /** A short hint composed onto its existing element, without adding layout or a native title. */
-export function TooltipHint({
-  content,
-  children,
-  side,
-  keep = false,
-}: ({
-  content: ReactNode;
-  children: ReactElement<{ id?: string; tabIndex?: number }>;
-} | { content?: never; children: ReactNode }) & {
+export function TooltipHint(props: {
+  content?: ReactNode;
+  children: ReactNode;
   side?: ComponentProps<typeof TooltipContent>["side"];
   /** Keep the tooltip mounted (closed) while `content` is empty, so content that arrives on
    *  pointer entry (a row's measured cut) opens it instead of remounting the element. */
   keep?: boolean;
 }) {
-  if (content === undefined && !keep) return (
-    <Tooltip>
-      <TooltipTrigger type="button" aria-label="What is this?" className="veil grid size-5 cursor-help place-items-center rounded-control t-small face-mono text-ink-2 hover:text-ink">?</TooltipTrigger>
-      <TooltipContent side={side ?? "bottom"} align="start">{children}</TooltipContent>
-    </Tooltip>
-  );
+  const { content, children, side, keep = false } = props;
+  if (!("content" in props))
+    return (
+      <Tooltip>
+        <TooltipTrigger
+          type="button"
+          aria-label="What is this?"
+          className="veil grid size-5 cursor-help place-items-center rounded-control t-small face-mono text-ink-2 hover:text-ink"
+        >
+          ?
+        </TooltipTrigger>
+        <TooltipContent side={side ?? "bottom"} align="start">
+          {children}
+        </TooltipContent>
+      </Tooltip>
+    );
   if (!isValidElement<{ id?: string; tabIndex?: number }>(children)) return null;
   const empty = content == null || content === "" || content === false;
   if (empty && !keep) return children;

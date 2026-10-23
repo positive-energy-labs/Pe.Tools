@@ -1,11 +1,19 @@
-import { CellListSelect, List, ListChips, ListInput, ListPopup, ListSegmentInput, PopupFrame, CommandPalette } from "@pe/kit/lang/list-popup";
+import {
+  CellListSelect,
+  List,
+  ListChips,
+  ListInput,
+  ListPopup,
+  ListSegmentInput,
+  PopupFrame,
+  CommandPalette,
+} from "@pe/kit/lang/list-popup";
 /**
  * The list grammar's swatch frames: the one Row (its recipe and every state), and the containers
  * that draw it — List inline, ListPopup on a trigger, and the in-cell list. The full comparison of
  * every list kind on real data is /design-system/list.
  */
 import { useState } from "react";
-
 
 import { Popover } from "@base-ui/react/popover";
 import { MoreHorizontal } from "lucide-react";

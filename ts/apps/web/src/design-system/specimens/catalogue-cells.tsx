@@ -1,8 +1,6 @@
 import { CellStateKey, StateCell } from "@pe/kit/lang/cell";
 import { useState } from "react";
 
-
-
 import { FactChip, NarrowChip, Tag } from "@pe/kit/lang/chip";
 import { OutcomeLine, type OutcomeKind } from "@pe/kit/lang/outcome";
 import { CounterExample, Demo, Gap } from "#/design-system/exhibit";

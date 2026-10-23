@@ -6,7 +6,7 @@ import { worksheetCss } from './styles.mjs';
 export function createInstruments(api) {
 const React = api.React;
 const { createElement: h, useEffect, useState } = React;
-const { ArtifactFrame, PaneTabs, Picker, Input, Table, Code, Mermaid, Button } = api.kit;
+const { ArtifactFrame, Switcher, Picker, Input, Table, Code, Mermaid, Button } = api.kit;
 const offline = Boolean(api.exported);
 const sources = api.sources || {};
 const fmt = value => value == null ? 'Unavailable' : Number(value).toFixed(2);
@@ -154,7 +154,7 @@ function VoltageDrop() {
           { key: 'status', label: 'Design target', cell: row => h('span', { 'data-tone': row.status === 'above' ? 'alarm' : undefined }, row.status === 'above' ? '△ Above' : 'Within') },
         ], rowKey: row => row.size, activeKey: input.size, label: 'Conductor comparison', maxHeight: '300px', empty: 'Complete the unavailable circuit facts to compare conductors.' })),
       h('section', { 'aria-label': 'Calculation artifact' }, h(ArtifactFrame, { label: 'Voltage drop worksheet', head: h('span', null, selected ? 'Circuit element ' + selected.id : 'Manual calculation'), foot: h('span', { className: 'muted' }, 'Copper · 75 °C · resistance only') },
-        h(PaneTabs, { options: tabs, value: state.tab, onChange: value => set('tab', value), ariaLabel: 'Artifact views' }),
+        h(Switcher, { options: tabs, value: state.tab, onChange: value => set('tab', value), ariaLabel: 'Artifact views' }),
         h('div', { className: 'artifact-body' }, state.tab === 'inputs' ? h('div', { className: 'fields' },
           pick('size', 'Conductor size', sizes.map(row => ({ value: row.size, label: row.size + ' AWG · copper' }))), field('length', 'One-way length · ft'), field('amps', 'Apparent load · A'), field('voltage', 'Supply · V'),
           pick('phase', 'Phase assumption', [{ value: '1', label: '1φ · two wire' }, { value: '3', label: '3φ · balanced' }]), pick('material', 'Conductor material', [{ value: 'Copper', label: 'Copper · explicit confirmation' }]))

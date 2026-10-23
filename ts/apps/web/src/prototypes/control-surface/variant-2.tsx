@@ -1,3 +1,4 @@
+import { ProviderMark } from "#/components/lang/provider-mark";
 /**
  * THROWAWAY protoui variant 2 — "Rail + pane": a persistent Pe.Tools mini-window with one
  * compact control rail, one contextual roster, and one real work detail. Fixture-only.
@@ -146,14 +147,34 @@ function ThreadRoster({
   const attention = THREADS.filter((thread) => thread.activity !== "running");
   const running = THREADS.filter((thread) => thread.activity === "running");
   const row = (thread: Thread) => (
-    <Row role="button" tabIndex={0} lines={2} key={thread.id} id={thread.id} label={thread.title} sub={thread.target} meta={thread.age} active={selected === thread.id} actions={null} onClick={() => onSelect(thread.id)} onDoubleClick={() => undefined} onContextMenu={() => undefined} />
+    <Row
+      role="button"
+      tabIndex={0}
+      lines={2}
+      key={thread.id}
+      id={thread.id}
+      label={thread.title}
+      sub={thread.target}
+      meta={
+        <>
+          {activityWord[thread.activity]} / {thread.age}
+        </>
+      }
+      active={selected === thread.id}
+      actions={null}
+      onClick={() => onSelect(thread.id)}
+      onDoubleClick={() => undefined}
+      onContextMenu={() => undefined}
+    />
   );
   return (
     <nav data-navigation="" aria-label="Inbox threads" className="min-h-0 flex-1 overflow-y-auto">
-      <section><RowGroupHead label="Needs attention" count={attention.length} />
+      <section>
+        <RowGroupHead label="Needs attention" count={attention.length} />
         {attention.map(row)}
       </section>
-      <section><RowGroupHead label="Running" count={running.length} />
+      <section>
+        <RowGroupHead label="Running" count={running.length} />
         {running.map(row)}
       </section>
     </nav>

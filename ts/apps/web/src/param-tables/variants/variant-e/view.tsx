@@ -34,7 +34,6 @@ import { VariantGridLens } from "./grid-lens";
 import { VariantFomLens } from "./fom-lens";
 import { VariantBodLens } from "./bod-lens";
 
-
 /** The address's lens and its push; a module-level hook, so only its readers re-render (N6). */
 export type UseLens = () => readonly [Lens, (lens: Lens) => void];
 

@@ -24,7 +24,6 @@ import { useFamilyWorkspace } from "#/family/workspace-context";
 import { FamilyMetaControl } from "#/family/workspace-meta-control";
 import { Code, stringify } from "@pe/kit/lang/code";
 
-
 export function FamilyWorkspaceDocPane() {
   const {
     world,

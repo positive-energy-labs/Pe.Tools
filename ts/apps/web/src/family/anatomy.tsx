@@ -48,7 +48,6 @@ import { AnatomyViews } from "#/family/anatomy-fixture-views";
 import { ModelViews } from "#/family/anatomy-model-views";
 import { Code, stringify } from "@pe/kit/lang/code";
 
-
 export function AnatomyDrawing({
   world,
   draft,

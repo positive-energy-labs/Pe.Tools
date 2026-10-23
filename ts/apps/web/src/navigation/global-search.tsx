@@ -84,7 +84,8 @@ export function GlobalSearch({
             onClick={refresh}
           />
           <span className="flex items-center gap-1 t-small text-ink-2">
-            <KeyHint>↑↓</KeyHint> move <KeyHint hotkey="Enter" /> open <KeyHint hotkey="Escape" /> close
+            <KeyHint>↑↓</KeyHint> move <KeyHint hotkey="Enter" /> open <KeyHint hotkey="Escape" />{" "}
+            close
           </span>
           {ledger.refusal && <p className="w-full text-ink-2">{ledger.refusal}</p>}
           {error && (

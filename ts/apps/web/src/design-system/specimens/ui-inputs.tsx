@@ -1,6 +1,11 @@
-import { Input, inputRecipe, Label, labelRecipe, Textarea, textareaRecipe } from "@pe/kit/lang/input";
-
-
+import {
+  Input,
+  inputRecipe,
+  Label,
+  labelRecipe,
+  Textarea,
+  textareaRecipe,
+} from "@pe/kit/lang/input";
 
 import { RecipeGrid } from "./recipe-grid";
 

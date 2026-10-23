@@ -37,8 +37,6 @@ function Input({
 
 export { Input };
 
-
-
 export const labelRecipe = tv({
   base: "flex items-center gap-2 t-small font-semibold select-none peer-disabled:cursor-not-allowed peer-disabled:opacity-50",
 });
@@ -49,8 +47,6 @@ function Label(props: Omit<React.ComponentProps<"label">, "className">) {
 }
 
 export { Label };
-
-
 
 export const textareaRecipe = tv({
   base: "flex field-sizing-content w-full resize-none rounded-control border border-line bg-line/20 px-(--control-pad-x) py-2 transition-colors outline-none placeholder:text-ink-2 focus-visible:border-line-2 focus-visible:ring-2 focus-visible:ring-line-2/30 disabled:cursor-not-allowed disabled:opacity-50 aria-invalid:border-caution aria-invalid:ring-2 aria-invalid:ring-caution dark:bg-line/30",

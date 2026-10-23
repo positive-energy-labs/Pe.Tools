@@ -32,7 +32,6 @@ import { Button } from "@pe/kit/lang/button";
 import { Input } from "@pe/kit/lang/input";
 import { KeyHint } from "@pe/kit/lang/key-hint";
 import { List } from "@pe/kit/lang/list-popup";
-import { NavigationGroup, NavigationItem } from "#/components/lang/navigation";
 import { ProviderMark } from "#/components/lang/provider-mark";
 import { Row, RowGroupHead } from "@pe/kit/lang/row";
 
@@ -160,14 +159,34 @@ function ThreadRoster({
   const attention = THREADS.filter((thread) => thread.activity !== "running");
   const running = THREADS.filter((thread) => thread.activity === "running");
   const row = (thread: Thread) => (
-    <Row role="button" tabIndex={0} lines={2} key={thread.id} id={thread.id} label={thread.title} sub={thread.target} meta={thread.age} active={selected === thread.id} actions={null} onClick={() => onSelect(thread.id)} onDoubleClick={() => undefined} onContextMenu={() => undefined} />
+    <Row
+      role="button"
+      tabIndex={0}
+      lines={2}
+      key={thread.id}
+      id={thread.id}
+      label={thread.title}
+      sub={thread.target}
+      meta={
+        <>
+          {activityWord[thread.activity]} / {thread.age}
+        </>
+      }
+      active={selected === thread.id}
+      actions={null}
+      onClick={() => onSelect(thread.id)}
+      onDoubleClick={() => undefined}
+      onContextMenu={() => undefined}
+    />
   );
   return (
     <nav data-navigation="" aria-label="Inbox threads" className="min-h-0 flex-1 overflow-y-auto">
-      <section><RowGroupHead label="Needs attention" count={attention.length} />
+      <section>
+        <RowGroupHead label="Needs attention" count={attention.length} />
         {attention.map(row)}
       </section>
-      <section><RowGroupHead label="Running" count={running.length} />
+      <section>
+        <RowGroupHead label="Running" count={running.length} />
         {running.map(row)}
       </section>
     </nav>
@@ -798,7 +817,8 @@ function WindowPalette({ onClose, onPick }: { onClose: () => void; onPick: (hit:
           }}
           footer={
             <div className="flex items-center justify-end gap-1.5 px-1 pb-1 t-small text-ink-2">
-              <KeyHint>↑↓</KeyHint> move <KeyHint hotkey="Enter" /> choose <KeyHint hotkey="Escape" /> close
+              <KeyHint>↑↓</KeyHint> move <KeyHint hotkey="Enter" /> choose{" "}
+              <KeyHint hotkey="Escape" /> close
             </div>
           }
         />

@@ -520,8 +520,6 @@ export function StateCell(props: StateCellProps) {
  * artifact frame of the thing it describes.
  */
 
-
-
 export const cellStateKeyRecipe = tv({
   slots: {
     base: "grid grid-cols-[repeat(auto-fit,minmax(168px,1fr))] gap-x-[18px] gap-y-[9px] border-t border-line on-recess px-2.5 pt-2 pb-[9px]",

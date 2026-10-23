@@ -592,7 +592,8 @@ export function TrayRoutes({ mode }: { mode: "buttons" | "appbar" }) {
             className="flex items-center justify-end gap-1.5 px-1 pb-1 t-small text-ink-2"
             onClick={noop}
           >
-            <KeyHint>↑↓</KeyHint> move <KeyHint hotkey="Enter" /> choose <KeyHint hotkey="Escape" /> close
+            <KeyHint>↑↓</KeyHint> move <KeyHint hotkey="Enter" /> choose <KeyHint hotkey="Escape" />{" "}
+            close
           </div>
         }
       />

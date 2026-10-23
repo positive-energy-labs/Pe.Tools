@@ -670,7 +670,6 @@ export function CellListSelect<T>({
   );
 }
 
-
 import { Dialog, DialogContent } from "./dialog";
 
 /** One destination-picker body; callers supply the catalogue, row anatomy and verbs. */
