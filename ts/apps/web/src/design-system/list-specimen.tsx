@@ -17,6 +17,7 @@ import { ZoneThumb } from "#/takeoff/zone-plan";
 import { selectSkillCommands } from "@pe/agent-contracts/chat-state";
 import { emptyListState, useList, type ListState } from "@pe/kit/lang/collection";
 import { ListView } from "@pe/kit/lang/list-view";
+import { Pane, PaneSplit } from "#/components/lang/pane";
 
 /* ── fixtures ────────────────────────────────────────────────────────────────────────────── */
 
@@ -480,17 +481,26 @@ interface CoreItem {
 /** Synthetic and labelled: 5 roots plus 350 children exercise 355 data-owned identities. */
 const CORE_ITEMS: CoreItem[] = Array.from({ length: 5 }, (_, shelf) => {
   const make = (index: number): CoreItem => ({
-    id: `system-${10000 + index}`, name: `System ${String(index + 1).padStart(3, "0")}`,
-    elementId: 10000 + index, kind: index % 3 === 0 ? "Return" : "Supply",
-    shelf: shelf < 3 ? "Active" : "Settled", loss: Math.round((355 - index) * 1.37) / 100,
+    id: `system-${10000 + index}`,
+    name: `System ${String(index + 1).padStart(3, "0")}`,
+    elementId: 10000 + index,
+    kind: index % 3 === 0 ? "Return" : "Supply",
+    shelf: shelf < 3 ? "Active" : "Settled",
+    loss: Math.round((355 - index) * 1.37) / 100,
     stage: index % 17 === 0 ? "proposed" : index % 13 === 0 ? "staged" : "clean",
-    stagedBy: index % 2 === 0 ? "pea" : "you", children: [],
+    stagedBy: index % 2 === 0 ? "pea" : "you",
+    children: [],
   });
-  return { ...make(shelf * 71), children: Array.from({ length: 70 }, (_, child) => make(shelf * 71 + child + 1)) };
+  return {
+    ...make(shelf * 71),
+    children: Array.from({ length: 70 }, (_, child) => make(shelf * 71 + child + 1)),
+  };
 });
 
 export const initialCoreListState = (): ListState<SpecimenSort> => ({
-  ...emptyListState<SpecimenSort>(), sort: "name", open: CORE_ITEMS.map((item) => item.id),
+  ...emptyListState<SpecimenSort>(),
+  sort: "name",
+  open: CORE_ITEMS.map((item) => item.id),
 });
 
 /** The specimen's address adapter validates restored data before handing it to the kit. */
@@ -500,50 +510,142 @@ export function readCoreListState(raw: string | undefined): ListState<SpecimenSo
     const value: unknown = JSON.parse(raw);
     if (!value || typeof value !== "object") return initialCoreListState();
     const input = value as Record<string, unknown>;
-    const keys = (name: string) => Array.isArray(input[name]) ? (input[name] as unknown[]).filter((key): key is string => typeof key === "string") : [];
-    return { query: typeof input.query === "string" ? input.query : "",
+    const keys = (name: string) =>
+      Array.isArray(input[name])
+        ? (input[name] as unknown[]).filter((key): key is string => typeof key === "string")
+        : [];
+    return {
+      query: typeof input.query === "string" ? input.query : "",
       sort: input.sort === "name" || input.sort === "loss" ? input.sort : "",
-      closed: keys("closed"), open: keys("open"), selected: keys("selected").slice(0, 1) };
-  } catch { return initialCoreListState(); }
+      closed: keys("closed"),
+      open: keys("open"),
+      selected: keys("selected").slice(0, 1),
+    };
+  } catch {
+    return initialCoreListState();
+  }
 }
 
-export function CoreListPanel({ state, onState }: {
-  state: ListState<SpecimenSort>; onState: (state: ListState<SpecimenSort>) => void;
+export function CoreListPanel({
+  state,
+  onState,
+}: {
+  state: ListState<SpecimenSort>;
+  onState: (state: ListState<SpecimenSort>) => void;
 }) {
   const list = useList({
-    items: CORE_ITEMS, keyOf: (item) => item.id,
+    items: CORE_ITEMS,
+    keyOf: (item) => item.id,
     search: (item) => ({ text: [item.name, item.kind], ids: [item.elementId] }),
-    fields: { kind: { kind: "text", read: (item) => item.kind, values: ["Supply", "Return"] },
-      loss: { kind: "number", read: (item) => item.loss } },
+    fields: {
+      kind: { kind: "text", read: (item) => item.kind, values: ["Supply", "Return"] },
+      loss: { kind: "number", read: (item) => item.loss },
+    },
     sorts: { name: (item) => item.name, loss: (item) => -item.loss },
     groups: { of: (item) => item.shelf, order: ["Active", "Settled"] },
-    tree: { childrenOf: (item) => item.children }, stageOf: (item) => item.stage,
-    state, onState,
+    tree: { childrenOf: (item) => item.children },
+    stageOf: (item) => item.stage,
+    state,
+    onState,
   });
   const selected = state.selected.at(-1);
-  return <section aria-label="Shared list core" className="flex flex-col gap-2">
-    <div className="flex flex-wrap items-center gap-2">
-      <span>355 synthetic rows · 5 tree roots · single selection</span>
-      <Button label="Select last row" onClick={() => {
-        onState({ ...state, selected: ["system-10354"] });
-      }}>Select last row</Button>
-      <Button label="Reveal last selected" refusal={selected ? null : "Select a row first"}
-        onClick={() => { if (selected) list.reveal(selected); }}>Reveal last selected</Button>
-      <Button label="Reset list address" onClick={() => onState(initialCoreListState())}>Reset</Button>
-    </div>
-    <ListView list={list} aria-label="specimen systems" maxHeight="28rem" primary estimate={40}
-      empty={{ message: "No fixture systems", exit: "Reset the specimen" }}
-      row={(item) => ({ label: item.name, aside: item.kind,
-        meta: <span className="face-mono">{item.loss.toFixed(2)} Pa</span>,
-        sub: `${item.stage} · ${item.stagedBy === "you" ? "person" : "Pea"}`, lines: 2,
-        stagedBy: item.stagedBy,
-        band: item.stage !== "clean" ? <div className="hairline-b" aria-label="Unsaved row band" /> : undefined,
-      })}
-      detail={(item) => <div className="flex flex-col gap-1">
-        <span>{item.name} · synthetic detail · no model writes</span>
-        <span>Current stage: {item.stage}; author: {item.stagedBy === "you" ? "person" : "Pea"}.</span>
-        <span>Expanding this content changes the measured row height inside its section.</span>
-      </div>} />
-    <output aria-label="List address state" className="face-mono t-small wrap-anywhere">{JSON.stringify(state)}</output>
-  </section>;
+  const subject = list.all.find((entry) => entry.key === selected)?.item;
+  return (
+    <section aria-label="Shared list core" className="flex flex-col gap-2">
+      <div className="flex flex-wrap items-center gap-2">
+        <span>355 synthetic rows · 5 tree roots · single selection</span>
+        <Button
+          label="Select last row"
+          onClick={() => {
+            onState({ ...state, selected: ["system-10354"] });
+          }}
+        >
+          Select last row
+        </Button>
+        <Button
+          label="Reveal last selected"
+          refusal={selected ? null : "Select a row first"}
+          onClick={() => {
+            if (selected) list.reveal(selected);
+          }}
+        >
+          Reveal last selected
+        </Button>
+        <Button label="Reset list address" onClick={() => onState(initialCoreListState())}>
+          Reset
+        </Button>
+      </div>
+      <div className="h-[30rem] min-h-0">
+        <PaneSplit
+          axis="horizontal"
+          secondary="start"
+          resize={{ target: "start", defaultSize: 460, minSize: 220, minOtherSize: 220 }}
+          start={
+            <Pane id="list-specimen-navigation" title="Systems" flush>
+              <ListView
+                list={list}
+                aria-label="specimen systems"
+                primary
+                estimate={40}
+                empty={{ message: "No fixture systems", exit: "Reset the specimen" }}
+                row={(item) => ({
+                  label: item.name,
+                  aside: item.kind,
+                  meta: <span className="face-mono">{item.loss.toFixed(2)} Pa</span>,
+                  sub: `${item.stage} · ${item.stagedBy === "you" ? "person" : "Pea"}`,
+                  lines: 2,
+                  stagedBy: item.stagedBy,
+                  band:
+                    item.stage !== "clean" ? (
+                      <div className="hairline-b" aria-label="Unsaved row band" />
+                    ) : undefined,
+                })}
+                detail={(item) => (
+                  <div className="flex flex-col gap-1">
+                    <span>{item.name} · synthetic detail · no model writes</span>
+                    <span>
+                      Current stage: {item.stage}; author:{" "}
+                      {item.stagedBy === "you" ? "person" : "Pea"}.
+                    </span>
+                    <span>
+                      Expanding this content changes the measured row height inside its section.
+                    </span>
+                  </div>
+                )}
+              />
+            </Pane>
+          }
+          end={
+            <Pane
+              id="list-specimen-subject"
+              title={subject?.name ?? "System detail"}
+              ground="artifact"
+            >
+              {subject ? (
+                <dl className="grid grid-cols-[auto_1fr] gap-x-4 gap-y-2">
+                  <dt>Kind</dt>
+                  <dd>{subject.kind}</dd>
+                  <dt>Loss</dt>
+                  <dd className="face-mono">{subject.loss.toFixed(2)} Pa</dd>
+                  <dt>Stage</dt>
+                  <dd>{subject.stage}</dd>
+                  <dt>Author</dt>
+                  <dd>{subject.stagedBy === "you" ? "Person" : "Pea"}</dd>
+                </dl>
+              ) : (
+                <p>Select a system to inspect it here.</p>
+              )}
+              <p className="mt-4 text-ink-2">
+                Synthetic specimen. The supporting systems pane uses the darker surface; its filter
+                and sticky section headers use the next surface step.
+              </p>
+            </Pane>
+          }
+        />
+      </div>
+      <output aria-label="List address state" className="face-mono t-small wrap-anywhere">
+        {JSON.stringify(state)}
+      </output>
+    </section>
+  );
 }
