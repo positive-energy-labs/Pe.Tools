@@ -5,8 +5,8 @@ import { routeAddress, routeAt, routeOf } from "./route-address.ts";
 describe("a layers field", () => {
   test("opens on its declared set, and the address stays bare there", () => {
     const ducts = routeAddress("ducts");
-    expect(ducts.defaults.layers).toEqual(["meshes", "labels", "findings"]);
-    expect(ducts.write({ layers: ["meshes", "labels", "findings"] })).toEqual({
+    expect(ducts.defaults.layers).toEqual(["meshes", "no-run", "labels", "findings"]);
+    expect(ducts.write({ layers: ["meshes", "no-run", "labels", "findings"] })).toEqual({
       layers: undefined,
     });
     expect(routeAddress("space").link({ layers: ["meshes", "context", "cuts"] })).toBe("/space");
@@ -24,6 +24,7 @@ describe("a layers field", () => {
   test("an unknown layer name falls to the default", () => {
     expect(routeAddress("ducts").read({ layers: "none" }).page.layers).toEqual([
       "meshes",
+      "no-run",
       "labels",
       "findings",
     ]);

@@ -9,6 +9,7 @@ import { useEffect, useMemo, useRef, useState } from "react";
 
 import { DUCTS_LAYERS, toggleLayer } from "@pe/agent-contracts";
 import { snapshotById } from "@pe/ducts-domain/readiness";
+import { noRunBranches } from "@pe/ducts-domain/no-runs";
 import { systemScope } from "@pe/ducts-domain/system-scope";
 import { Popover, PopoverContent } from "@pe/kit/lang/popover";
 import { TooltipHint } from "@pe/kit/lang/tooltip";
@@ -52,6 +53,7 @@ const LAYER_WORDS: Record<
   meshes: { label: "meshes", chord: "M" },
   context: { label: "context", chord: "C" },
   centrelines: { label: "centrelines", chord: "L" },
+  "no-run": { label: "branches with no run" },
   labels: { label: "labels" },
   findings: { label: "findings" },
 };
@@ -165,6 +167,18 @@ function Canvas({
     pointOf,
   });
 
+  const noRuns = useMemo<ReturnType<typeof noRunBranches>>(
+    () =>
+      priced && page.system
+        ? noRunBranches(
+            priced.snapshot,
+            priced.next,
+            systemScope(priced.snapshot, page.system),
+            priced.flows,
+          )
+        : new Map(),
+    [priced, page.system],
+  );
   const findings3d = useMemo(
     () =>
       findingLayers(
@@ -345,6 +359,7 @@ function Canvas({
             labels={labels}
             rulings={rulings}
             findings3d={findings3d}
+            noRuns={noRuns}
             pointOf={pointOf}
             issue={page.issue}
             setPage={setPage}
@@ -412,6 +427,15 @@ function Canvas({
               />
             ) : elementId != null ? (
               <div className="flex flex-col gap-2">
+                {noRuns.has(elementId) ? (
+                  <p>
+                    No run:{" "}
+                    {noRuns
+                      .get(elementId)!
+                      .reasons.map((r) => r.text)
+                      .join("; ")}
+                  </p>
+                ) : null}
                 {segFacts ? (
                   <SegmentFactsView {...segFacts} />
                 ) : nodeFacts ? (

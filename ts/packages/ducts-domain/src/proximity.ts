@@ -91,11 +91,15 @@ export interface ProximityFinding {
     | InferredInline["kind"]
     | "loop-by-inference"
     | "near-miss-across-classifications"
+    | "missed-join"
     | "out-of-phase";
   elementIds: number[];
   note: string;
   /** A join's grade; null on a finding that joins nothing (a refused near miss, a loop, out of phase). */
   grade: DuctInferenceGrade | null;
+  /** Advisory only: the two open connector keys and their centre-to-centre gap. */
+  connectors?: [string, string];
+  gapIn?: number;
 }
 export interface Inference {
   joints: InferredJoint[];
@@ -131,6 +135,8 @@ const segmentClass = (s: Segment) =>
  * face). Move to a ruled per-document value if more models disagree.
  */
 export const FACE_TOL_IN = 2;
+/** First guess: recalibrate against the model-wide gap histogram before widening this search. */
+export const MISSED_JOIN_MAX_IN = 12;
 /** ponytail: one measured cap (Project A 14107111's face sits 1.0 in outboard of the duct end); caps carry no size in the snapshot. */
 export const CAP_THICKNESS_IN = 1;
 /** The least cosine between a landing connector's outward axis and the face's inward normal. */
@@ -773,6 +779,36 @@ export function inferJoints(
     });
     closes(id, p.id, s.id);
   }
+  // Inspect the mouths left open after inference. These findings never enter `joints` or `used`.
+  const mouths = faces.filter(
+    (f): f is Extract<Face, { origin: number[] }> =>
+      f.label === "connector face" && "port" in f.onto && !used.has(f.onto.port.k),
+  );
+  for (let i = 0; i < mouths.length; i++)
+    for (let j = i + 1; j < mouths.length; j++) {
+      const a = mouths[i]!,
+        b = mouths[j]!;
+      if (!("port" in a.onto) || !("port" in b.onto) || a.owner === b.owner) continue;
+      const gapIn = dist(a.origin, b.origin) * 12;
+      if (gapIn <= Math.max(FACE_TOL_IN, tolIn) || gapIn > MISSED_JOIN_MAX_IN) continue;
+      if (dot(a.normal, b.normal) > -NEAR_MISS_OPPOSED_COS) continue;
+      // Chadds SA 44's opposed mouths overlap: captured normals point away along their separation.
+      // An advisory accepts either signed side of the plane; both centres must lie within the sections.
+      const ab = land(a, b.origin, b.normal),
+        ba = land(b, a.origin, a.normal);
+      if (!ab || !ba) continue;
+      const ports = [a.onto.port, b.onto.port].sort((p, q) => p.id - q.id || p.index - q.index);
+      const connectors: [string, string] = [ports[0]!.k, ports[1]!.k];
+      findings.push({
+        id: `missed-join:${connectors.join("|")}`,
+        kind: "missed-join",
+        elementIds: ports.map((p) => p.id),
+        connectors,
+        gapIn,
+        note: `Open ends ${connectors.join(" and ")} are ${gapIn.toFixed(2)} in apart with opposed faces; possible missed join, not joined or priced across the gap.`,
+        grade: null,
+      });
+    }
   return { joints, taps, inline, findings };
 }
 

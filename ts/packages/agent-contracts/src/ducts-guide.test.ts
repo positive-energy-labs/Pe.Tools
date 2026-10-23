@@ -12,6 +12,7 @@ import { DUCT_CASES, casesForFindings } from "./ducts-guide.ts";
  */
 const FINDING_KINDS = new Set([
   "joined-by-proximity",
+  "missed-join",
   "tap-by-proximity",
   "inline-by-inference",
   "near-miss-across-classifications",

@@ -445,6 +445,17 @@ export function triage(input: TriageInput) {
     });
     const toFix = (item: InboxItem) => (off ? diagnostics : fix).push(off ? offRow(item) : item);
     const toSet = (item: InboxItem) => (off ? diagnostics : set).push(off ? offRow(item) : item);
+    if (f.kind === "missed-join") {
+      diagnostics.push({
+        ...base,
+        group: "diagnostics",
+        kind: f.kind,
+        title: `Open ends ${f.gapIn?.toFixed(1) ?? "?"}″ apart: ${f.elementIds.join(" ↔ ")}`,
+        status: "possible missed join",
+        verbs: [select(f.elementIds)],
+      });
+      continue;
+    }
     if (f.grade && f.grade !== "anomalous") {
       // Bridged, so it prices; Revit still has no join here, and the note says whose repair it is.
       diagnostics.push({
@@ -885,13 +896,7 @@ const ELEMENT_WORD: Record<string, string> = {
   terminalDrops: "Drop",
   componentDrops: "Drop",
 };
-const FOCUSABLE = new Set([
-  "flows",
-  "equipmentFlows",
-  "esp",
-  "roles",
-  "terminalDrops",
-]);
+const FOCUSABLE = new Set(["flows", "equipmentFlows", "esp", "roles", "terminalDrops"]);
 
 const valueWord = (segment: string, value: unknown) => {
   const v = value as Record<string, unknown> | undefined;

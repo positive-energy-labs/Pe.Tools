@@ -9,7 +9,7 @@
 import { expect, it } from "vite-plus/test";
 import { ductsDocumentSchema, type DuctsRouteDocument } from "@pe/agent-contracts";
 
-import { inferJoints, tolerate } from "./proximity.ts";
+import { inferJoints, tolerate, MISSED_JOIN_MAX_IN } from "./proximity.ts";
 import { survey } from "./survey.ts";
 import { groupTree } from "./topology.ts";
 import type { DuctSnapshot } from "./types.ts";
@@ -120,6 +120,66 @@ const staging = (id: string, verdict: "ignore" | "connect"): DuctsRouteDocument 
     assumptions: { [id]: { staged: { value: { kind: "verdict", verdict } } } },
   });
 const ignoring = (id: string) => staging(id, "ignore");
+
+it("reports a facing 2.88 in gap without joining it, while a 1.5 in gap still infers", () => {
+  const at = (gapIn: number) =>
+    snap([duct(1, [0, 0, 0], [10, 0, 0]), duct(2, [10 + gapIn * IN, 0, 0], [20, 0, 0])]);
+  const raw = at(2.88);
+  const wide = inferJoints(raw);
+  expect(wide.joints).toEqual([]);
+  expect(tolerate(raw).snapshot).toBe(raw);
+  expect(tolerate(raw).links).toEqual([]);
+  expect(wide.findings.filter((f) => f.kind === "missed-join")).toMatchObject([
+    {
+      id: "missed-join:1:2|2:1",
+      connectors: ["1:2", "2:1"],
+      gapIn: expect.closeTo(2.88, 5),
+      grade: null,
+    },
+  ]);
+  const small = inferJoints(at(1.5));
+  expect(small.joints).toHaveLength(1);
+  expect(small.findings.some((f) => f.kind === "missed-join")).toBe(false);
+  expect(inferJoints(at(MISSED_JOIN_MAX_IN)).findings.some((f) => f.kind === "missed-join")).toBe(
+    true,
+  );
+  expect(inferJoints(at(MISSED_JOIN_MAX_IN + 0.1)).findings).toEqual([]);
+});
+
+it("does not report larger open gaps when faces share a direction or miss the section", () => {
+  for (const [facings, offset] of [
+    [
+      [
+        [1, 0, 0],
+        [1, 0, 0],
+      ],
+      0,
+    ],
+    [
+      [
+        [1, 0, 0],
+        [-1, 0, 0],
+      ],
+      7 * IN,
+    ],
+  ] as const) {
+    const a = duct(1, [0, 0, 0], [10, 0, 0]);
+    const b = duct(2, [10 + 2.88 * IN, offset, 0], [20, offset, 0]);
+    a.connectors[1]!.facing = [...facings[0]];
+    b.connectors[0]!.facing = [...facings[1]];
+    expect(inferJoints(snap([a, b])).findings.some((f) => f.kind === "missed-join")).toBe(false);
+  }
+});
+
+it("reports opposed overlapping mouths too, as captured in Chadds SA 44", () => {
+  const a = duct(1, [0, 0, 0], [10, 0, 0]);
+  const b = duct(2, [10 + 2.88 * IN, 0, 0], [20, 0, 0]);
+  a.connectors[1]!.facing = [-1, 0, 0];
+  b.connectors[0]!.facing = [1, 0, 0];
+  const inferred = inferJoints(snap([a, b]));
+  expect(inferred.joints).toEqual([]);
+  expect(inferred.findings.filter((f) => f.kind === "missed-join")).toHaveLength(1);
+});
 /** `s` carried as return air, its ports too. */
 const returnAir = <T extends Segment>(s: T): T => ({
   ...s,

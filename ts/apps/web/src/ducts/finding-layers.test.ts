@@ -96,8 +96,20 @@ it("an annotated near-miss draws both faces, the gap bar and the overhung edges"
 
 it("a join the picture does not annotate draws nothing", () => {
   const shapes = findingShapes(snapshot, new Set(), null);
-  expect(shapes).toEqual({ outlines: [], bars: [], overhang: [], boxes: [] });
+  expect(shapes).toEqual({ outlines: [], bars: [], missedBars: [], overhang: [], boxes: [] });
   expect(findingLayers(shapes)).toEqual([]);
+});
+
+it("a possible missed join draws two advisory faces and a separate dotted gap bar", () => {
+  const raw = structuredClone(snapshot);
+  raw.segments[1]!.polyline[0] = [10 + 2.88 * IN, 0, 0];
+  raw.segments[1]!.connectors[0]!.point = [10 + 2.88 * IN, 0, 0];
+  const shapes = findingShapes(raw, new Set(), null, new Set([1, 2]));
+  expect(shapes.outlines.map((o) => o.ink)).toEqual(["missed", "missed"]);
+  expect(shapes.bars).toEqual([]);
+  expect(shapes.overhang).toEqual([]);
+  expect(shapes.missedBars).toHaveLength(1);
+  expect(findingLayers(shapes).map((l) => l.key.split(":")[1])).toEqual(["missed", "missed-bars"]);
 });
 
 it("a chosen system draws its findings without annotations and excludes annotations outside it", () => {

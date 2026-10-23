@@ -90,6 +90,28 @@ const base = {
 };
 
 describe("the ducts inbox", () => {
+  it("a possible missed join is non-blocking Diagnostics with its measured gap and select verb", () => {
+    const rows = inboxRows({
+      ...base,
+      findings: [
+        finding({
+          id: "missed-join:12317607:0|12317611:0",
+          kind: "missed-join",
+          elementIds: [12317607, 12317611],
+          connectors: ["12317607:0", "12317611:0"],
+          gapIn: 2.88,
+        }),
+      ],
+    });
+    expect(rows.fix).toEqual([]);
+    expect(rows.diagnostics).toMatchObject([
+      {
+        kind: "missed-join",
+        title: "Open ends 2.9″ apart: 12317607 ↔ 12317611",
+        verbs: [{ kind: "select", ids: [12317607, 12317611] }],
+      },
+    ]);
+  });
   it("a fitting no rule prices is a Diagnostics row with a verb to state its drop, never a holding Fix row", () => {
     const rows = inboxRows({
       ...base,

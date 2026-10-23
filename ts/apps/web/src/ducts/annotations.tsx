@@ -10,6 +10,7 @@ import { useMemo } from "react";
 import { revitTarget } from "@pe/kit/lang/row";
 import { token } from "@pe/kit/lib/token";
 import type { DuctFinding } from "@pe/agent-contracts";
+import type { NoRunBranch } from "@pe/ducts-domain/no-runs";
 import { observedElements, useNativeObservation } from "#/revit/observation";
 import type { Project, Size } from "#/scene/projection";
 
@@ -71,6 +72,7 @@ export function Annotations({
   selected,
   hovered,
   labels,
+  noRuns,
   rulings,
   pointOf,
   issue,
@@ -86,6 +88,7 @@ export function Annotations({
   selected: ReadonlySet<number>;
   hovered: number | null;
   labels: readonly Label[];
+  noRuns?: ReadonlyMap<number, NoRunBranch>;
   rulings: readonly Ruling[];
   /** A model point for an element: a node's point, or a segment's middle vertex. */
   pointOf: (id: number) => readonly number[] | null;
@@ -135,9 +138,22 @@ export function Annotations({
       {lines.map(({ facts, d, stroke }) => {
         const id = facts.segment.id;
         const back = halo(id);
-        if (!d || (!back && !layers.has("centrelines"))) return null;
+        const noRun = layers.has("no-run") ? noRuns?.get(id) : null;
+        if (!d || (!back && !noRun && !layers.has("centrelines"))) return null;
         return (
           <g key={id} data-segment={id} data-selected={selected.has(id) ? "" : undefined}>
+            {noRun ? (
+              <path
+                d={d}
+                fill="none"
+                stroke={token("viz-3")}
+                strokeWidth={5}
+                strokeLinecap="round"
+                {...element(id)}
+              >
+                <title>No run: {noRun.reasons.map((r) => r.text).join("; ")}</title>
+              </path>
+            ) : null}
             {back ? (
               <path
                 d={d}
@@ -168,7 +184,8 @@ export function Annotations({
         const id = facts.node.id;
         const back = halo(id);
         const xy = project(facts.node.point);
-        if (!xy || (!back && !layers.has("centrelines"))) return null;
+        const noRun = layers.has("no-run") ? noRuns?.get(id) : null;
+        if (!xy || (!back && !noRun && !layers.has("centrelines"))) return null;
         const ink = encoding.nodes
           ? strokeOf(encoding, facts).ink
           : nodeInk(encoding, facts.issues);
@@ -181,6 +198,12 @@ export function Annotations({
             transform={`translate(${xy[0]} ${xy[1]})`}
           >
             {back ? <circle r={GLYPH * 2.5} fill={back} fillOpacity={0.7} /> : null}
+            {noRun ? (
+              <g {...element(id)}>
+                <title>No run: {noRun.reasons.map((r) => r.text).join("; ")}</title>
+                <circle r={GLYPH} fill={token("viz-3")} />
+              </g>
+            ) : null}
             {layers.has("centrelines") ? (
               <g {...element(id)}>
                 <circle r={GLYPH * 2.5} fill="transparent" />

@@ -10,6 +10,7 @@
 import * as THREE from "three";
 
 import type { DuctsRouteDocument } from "@pe/agent-contracts";
+import { tokenRef } from "@pe/kit/lib/token";
 import { edgesOf, outlineOf, overhang, type Edge, type Outline } from "@pe/ducts-domain/faces";
 import { healPlan } from "@pe/ducts-domain/heal";
 import {
@@ -25,7 +26,13 @@ import type { DuctSnapshot } from "@pe/ducts-domain/types";
 import type { Layer3D } from "#/scene/types";
 
 /** The illustrations' inks (the duct cases page): inferred red, open end orange, cap and heal amber. */
-const INK = { inferred: 0xd32f2f, overhang: 0xff1744, open: 0xe07a00, cap: 0xd9a400 } as const;
+const INK = {
+  inferred: 0xd32f2f,
+  overhang: 0xff1744,
+  open: 0xe07a00,
+  cap: 0xd9a400,
+  missed: "viz-1",
+} as const;
 type Ink = keyof typeof INK;
 
 type Element = DuctSnapshot["nodes"][number] | DuctSnapshot["segments"][number];
@@ -42,6 +49,8 @@ export interface FindingShapes {
   outlines: { outline: Outline; ink: Ink }[];
   /** Dashed bars: the gap of a join, or a tapping end to its landing. */
   bars: Edge[];
+  /** Advisory gap bars; never a join in the priced graph. */
+  missedBars: Edge[];
   overhang: Edge[];
   /** What a heal adds. */
   boxes: OrientedBox[];
@@ -99,7 +108,7 @@ export function findingShapes(
       )
         shown.add(issue.id);
   }
-  const shapes: FindingShapes = { outlines: [], bars: [], overhang: [], boxes: [] };
+  const shapes: FindingShapes = { outlines: [], bars: [], missedBars: [], overhang: [], boxes: [] };
   const elements = new Map<number, Element>(
     [...snapshot.nodes, ...snapshot.segments].map((e) => [e.id, e]),
   );
@@ -146,6 +155,11 @@ export function findingShapes(
     shapes.bars.push([a.center, b.center]);
     shapes.overhang.push(...overhang(a, b), ...overhang(b, a));
     named.add(Number(j.a.split(":")[0])).add(Number(j.b.split(":")[0]));
+  }
+  for (const f of inference.findings) {
+    if (f.kind !== "missed-join" || !shown.has(f.id) || !f.connectors) continue;
+    const [a, b] = f.connectors.map((k) => outline(k, "missed"));
+    if (a && b) shapes.missedBars.push([a.center, b.center]);
   }
   for (const t of inference.taps) {
     if (!shown.has(t.id)) continue;
@@ -202,15 +216,35 @@ function lines(edges: readonly Edge[], ink: Ink, dashed: boolean) {
     "position",
     new THREE.BufferAttribute(new Float32Array(edges.flatMap(([p, q]) => [...p, ...q])), 3),
   );
-  const color = new THREE.Color(INK[ink]);
+  const color = ink === "missed" ? advisoryColor() : new THREE.Color(INK[ink]);
   // Dash sizes are feet: a 0.7 in dash reads across a half-inch near miss and a 2 in stub gap.
   const material = dashed
-    ? new THREE.LineDashedMaterial({ color, dashSize: 0.06, gapSize: 0.04, depthTest: false })
+    ? new THREE.LineDashedMaterial({
+        color,
+        dashSize: ink === "missed" ? 0.015 : 0.06,
+        gapSize: 0.04,
+        depthTest: false,
+      })
     : new THREE.LineBasicMaterial({ color, depthTest: false });
   const segments = new THREE.LineSegments(geometry, material);
   segments.renderOrder = 10;
   if (dashed) segments.computeLineDistances();
   return segments;
+}
+
+/** Resolve the existing viz token through the browser, including light-dark and OKLCH, to sRGB. */
+function advisoryColor(): THREE.Color {
+  const canvas = document.createElement("canvas");
+  canvas.width = canvas.height = 1;
+  canvas.style.color = tokenRef(INK.missed);
+  document.documentElement.append(canvas);
+  const css = getComputedStyle(canvas).color;
+  canvas.remove();
+  const ctx = canvas.getContext("2d")!;
+  ctx.fillStyle = css;
+  ctx.fillRect(0, 0, 1, 1);
+  const [r, g, b] = ctx.getImageData(0, 0, 1, 1).data;
+  return new THREE.Color().setRGB(r! / 255, g! / 255, b! / 255, THREE.SRGBColorSpace);
 }
 
 /** The drawing as `Layer3D`s; each key carries a hash of its geometry so an unchanged one is not rebuilt. */
@@ -221,7 +255,7 @@ export function findingLayers(shapes: FindingShapes): Layer3D[] {
     for (const c of JSON.stringify(geometry)) h = (h * 31 + c.charCodeAt(0)) | 0;
     return `finding:${name}:${h}`;
   };
-  for (const ink of ["open", "cap", "inferred"] as const) {
+  for (const ink of ["open", "cap", "inferred", "missed"] as const) {
     const edges = shapes.outlines.filter((o) => o.ink === ink).flatMap((o) => edgesOf(o.outline));
     if (edges.length)
       out.push({
@@ -233,6 +267,11 @@ export function findingLayers(shapes: FindingShapes): Layer3D[] {
     out.push({
       key: key("bars", shapes.bars),
       build: (group) => void group.add(lines(shapes.bars, "inferred", true)),
+    });
+  if (shapes.missedBars.length)
+    out.push({
+      key: key("missed-bars", shapes.missedBars),
+      build: (group) => void group.add(lines(shapes.missedBars, "missed", true)),
     });
   if (shapes.overhang.length)
     out.push({

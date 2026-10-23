@@ -1346,4 +1346,21 @@ export const DUCT_CASES: readonly DuctCase[] = [
     scene: null,
     sceneLabel: null,
   },
+  {
+    number: 61,
+    group: "A",
+    title: "Possible missed join",
+    case: "Two open connectors have opposed faces beyond the 2 in inference limit, up to 12 in apart, with both centres within the opposite face's section. Overlapping mouths qualify too.",
+    whatWeDo:
+      "Reports the gap and both connector ids in Diagnostics. Draws both faces and a dotted advisory bar; leaves the gap open and pricing unchanged.",
+    why: "A gap outside inference tolerance still needs to be findable. The 12 in search cap is a first guess to recalibrate from the model-wide gap histogram.",
+    status: "handled",
+    code: "missed-join",
+    kinds: ["missed-join"],
+    ids: "Chadds SA 44: 12317607:0 ↔ 12317611:0, 2.88 in apart. Duct 10368760's branch ends at the first mouth without reaching a grille.",
+    examples: [{ system: "SA 44", selected: "12317607" }],
+    idea: null,
+    scene: null,
+    sceneLabel: null,
+  },
 ];
