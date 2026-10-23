@@ -3,7 +3,6 @@ import { ButtonGroup } from "@pe/kit/lang/button-group";
 /** The model/schematic pane, its fixed readout and floaters. Camera policy belongs to useStage. */
 import { nameOrFallback } from "@pe/kit/lang/subject-text";
 import {
-  cloneElement,
   createContext,
   useContext,
   useEffect,
@@ -23,7 +22,7 @@ import { SelectionBoxButton } from "#/revit/element-menu";
 import { observedElements } from "#/revit/observation";
 import { Pane, PaneWork } from "@pe/kit/lang/pane";
 import { useNativeObservation } from "#/revit/observation";
-import { useScene } from "#/scene/use-scene";
+import { useScene, usePictureRead } from "#/scene/use-scene";
 import { useLiveOrbit } from "@pe/kit/lang/live-orbit";
 import type { Bounds } from "#/scene/types";
 import { Button } from "@pe/kit/lang/button";
@@ -136,6 +135,7 @@ export function ECanvas(props: ProtoProps & ECanvasExtra) {
 
 function Canvas({
   snapshot,
+  doc,
   priced,
   page,
   subject,
@@ -179,20 +179,9 @@ function Canvas({
     () => sceneRequestOf(snapshot, page, groups),
     [snapshot, page.system, page.layers, groups],
   ); // eslint-disable-line react-hooks/exhaustive-deps
-  const read = useScene(request, native, page.epoch);
-  // N6: a new capture keeps the last picture, with its own pose and marks, until it can draw.
-  // Never carry a picture across document custody. The held view is inert and names its source.
-  const pictureKey = native ? `${native.session}/${native.openId}` : null;
-  const lastPicture = useRef<{
-    key: string;
-    system: string;
-    view: ReturnType<typeof ModelPicture>;
-    orbit: ReturnType<typeof useLiveOrbit>;
-  } | null>(null);
-  const holding =
-    !read.meshes && read.pending && pictureKey && lastPicture.current?.key === pictureKey
-      ? lastPicture.current
-      : null;
+  const capture = useScene(request, native, page.epoch);
+  const pictureKey = doc && request ? `${doc.session}/${doc.openId}` : null;
+  const { read, holding } = usePictureRead(capture, pictureKey, page.system, identity.refreshing);
   const bounds = usePictureBounds(read.meshes, scene);
   const [pictureHost, setPictureHost] = useState<HTMLDivElement | null>(null);
   const [pictureSize, setPictureSize] = useState<{ width: number; height: number } | null>(null);
@@ -211,23 +200,22 @@ function Canvas({
     observer.observe(pictureHost);
     return () => observer.disconnect();
   }, [pictureHost]);
-  const committedPose = useMemo(
-    () => holding?.orbit.read() ?? poseOf(page.viewport, bounds, pictureSize),
-    [page.viewport, bounds, pictureSize, holding],
+  const pose = useMemo(
+    () => poseOf(page.viewport, bounds, pictureSize),
+    [page.viewport, bounds, pictureSize],
   );
-  const pose = committedPose;
   const landing = useRef<(() => void) | null>(null);
   const orbit = useLiveOrbit(
-    committedPose,
+    pose,
     stageViewport(setPage),
-    `${native?.session}/${native?.openId}/${page.system}/${page.picture}`,
+    `${pictureKey}/${page.system}/${page.picture}`,
     page.viewport,
     bounds?.scene,
     landing,
   );
   useEffect(() => {
-    onPose?.(committedPose);
-  }, [committedPose, onPose]);
+    onPose?.(pose);
+  }, [pose, onPose]);
   const layers = new Set<string>(page.layers);
   const picture = page.picture;
   const swap = () =>
@@ -511,7 +499,6 @@ function Canvas({
         if (jump) jump.current = (id) => jumpTo(stage, id);
         const goBack = () => stage.go("back");
 
-        // The picture and a held picture share the current selection readout.
         const readout = (
           <PictureReadout
             subject={systemName ?? undefined}
@@ -694,9 +681,6 @@ function Canvas({
             onHover={onHover}
           />
         );
-        if (read.meshes && pictureKey)
-          lastPicture.current = { key: pictureKey, system: page.system, view: model, orbit };
-
         return (
           <Pane
             picture
@@ -762,29 +746,21 @@ function Canvas({
             }
             floaters={floaters}
           >
-            <PaneWork
-              pending={!!holding || identity.refreshing}
-              label={holding ? "capturing meshes… gestures wait" : undefined}
-            />
+            <PaneWork pending={identity.refreshing} />
             <div
               ref={setPictureHost}
               data-proto="E"
-              aria-busy={holding || identity.refreshing ? true : undefined}
-              data-reading={holding || identity.refreshing ? "pending" : undefined}
+              aria-busy={read.pending || undefined}
+              data-reading={read.pending ? "pending" : undefined}
               className="relative flex size-full min-h-0 flex-col"
               onPointerDownCapture={(e) => {
-                if (holding) {
-                  e.preventDefault();
-                  e.stopPropagation();
-                  return;
-                }
                 pointer.current = { x: e.clientX, y: e.clientY };
                 // A gesture is the eye moving on: the landing marks and the way back go.
                 if (landed && !(e.target as Element).closest("[data-picture-readout]"))
                   setLanded(null);
               }}
               onWheelCapture={(e) => {
-                if (holding) {
+                if (read.pending) {
                   e.nativeEvent.preventDefault();
                   e.stopPropagation();
                   return;
@@ -793,17 +769,7 @@ function Canvas({
                   setLanded(null);
               }}
             >
-              {picture === "model" ? (
-                <div
-                  className="flex min-h-0 flex-1"
-                  inert={holding ? true : undefined}
-                  data-held-picture={holding?.system}
-                >
-                  {holding ? cloneElement(holding.view, { readout }) : model}
-                </div>
-              ) : (
-                schematic("main", readout)
-              )}
+              {picture === "model" ? model : schematic("main", readout)}
 
               {landed?.box ? (
                 <div

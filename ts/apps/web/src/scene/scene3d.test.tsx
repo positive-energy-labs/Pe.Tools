@@ -6,6 +6,7 @@ import type { OrbitViewport } from "./orbit";
 import { createLiveOrbit } from "@pe/kit/lang/live-orbit";
 import { OrbitMinimap } from "@pe/kit/lang/minimap";
 import { Scene3D } from "./scene3d";
+import { usePictureRead, type SceneRead } from "./use-scene";
 import { Row } from "@pe/kit/lang/row";
 import type { Pick } from "./types";
 
@@ -24,7 +25,7 @@ vi.mock("./renderer", () => ({
 }));
 vi.mock("#/revit/observation", () => ({ useNativeObservation: () => ({ scope: null }) }));
 
-it("keeps motion local, publishes on release and accepts external camera moves", () => {
+it("keeps camera gestures local and meshes mounted across native re-reads", () => {
   const frames: FrameRequestCallback[] = [];
   vi.stubGlobal("requestAnimationFrame", (frame: FrameRequestCallback) => frames.push(frame));
   const moves = new EventTarget();
@@ -40,30 +41,17 @@ it("keeps motion local, publishes on release and accepts external camera moves",
     viewport: () => pose,
     gestureSize: () => [600, 2],
     setViewport,
-    setOrbitPivot: vi.fn(),
-    setOnFrame: vi.fn(),
-    reportFrame: vi.fn(),
-    setPlane: vi.fn(),
-    setThumbs: vi.fn(),
-    paint: vi.fn(),
-    setLayers: vi.fn(),
-    lightIssue: vi.fn(),
+    ...Object.fromEntries(
+      "setOrbitPivot setOnFrame reportFrame setPlane setThumbs paint setLayers lightIssue reach hoverElement setClip"
+        .split(" ")
+        .map((name) => [name, vi.fn()]),
+    ),
     pickIssue: () => null,
-    reach: vi.fn(),
-    hoverElement: vi.fn(),
-    setClip: vi.fn(),
-    dispose: vi.fn(),
+    dispose: vi.fn(() => renderer.current.canvas.remove()),
   };
   const meshes = new SceneMeshes(
     new Float32Array(9),
-    {
-      minX: -1,
-      minY: -1,
-      minZ: -1,
-      maxX: 1,
-      maxY: 1,
-      maxZ: 1,
-    },
+    { minX: -1, minY: -1, minZ: -1, maxX: 1, maxY: 1, maxZ: 1 },
     [
       {
         key: "mesh42",
@@ -81,13 +69,20 @@ it("keeps motion local, publishes on release and accepts external camera moves",
   const onViewport = vi.fn();
   const onPick = vi.fn();
   const orbit = createLiveOrbit(initial, onViewport);
-  const view = render(
+  const draw = (pivot?: readonly number[]) => (
     <>
-      <Scene3D readout={<span>picture state</span>} meshes={meshes} orbit={orbit} onPick={onPick} />
+      <Scene3D
+        readout={<span>picture state</span>}
+        meshes={meshes}
+        orbit={orbit}
+        onPick={onPick}
+        orbitPivot={pivot}
+      />
       <OrbitMinimap orbit={orbit} />
       <Row label="linked row" revit={[42]} />
-    </>,
+    </>
   );
+  const view = render(draw());
   expect(view.getByText("picture state")).toBeTruthy();
   const row = view.getByText("linked row").closest(".dl-row")!;
   fireEvent.mouseEnter(row);
@@ -114,9 +109,7 @@ it("keeps motion local, publishes on release and accepts external camera moves",
   expect(onViewport).not.toHaveBeenCalled();
   expect(orbit.read()).toEqual(pose);
   expect(globe.innerHTML).not.toEqual(initialGlobe);
-  act(() => {
-    moves.dispatchEvent(new Event("end"));
-  });
+  act(() => void moves.dispatchEvent(new Event("end")));
   expect(onViewport).toHaveBeenCalledExactlyOnceWith(pose, "gesture");
   setViewport.mockClear();
   act(() => orbit.accept({ ...pose }));
@@ -137,11 +130,8 @@ it("keeps motion local, publishes on release and accepts external camera moves",
     }
   });
   expect(onViewport).not.toHaveBeenCalled();
-  act(() => {
-    vi.advanceTimersByTime(150);
-  });
+  act(() => void vi.advanceTimersByTime(150));
   expect(onViewport).toHaveBeenCalledExactlyOnceWith(pose, "gesture");
-  // The other input drives the same renderer immediately, without a Page prop round trip.
   onViewport.mockClear();
   setViewport.mockClear();
   const from = orbit.read()!;
@@ -158,18 +148,7 @@ it("keeps motion local, publishes on release and accepts external camera moves",
   expect(setViewport).toHaveBeenCalledTimes(1);
   const beforeSelection = orbit.read();
   setViewport.mockClear();
-  view.rerender(
-    <>
-      <Scene3D
-        readout={null}
-        meshes={meshes}
-        orbit={orbit}
-        onPick={onPick}
-        orbitPivot={[10, 20, 30]}
-      />
-      <OrbitMinimap orbit={orbit} />
-    </>,
-  );
+  view.rerender(draw([10, 20, 30]));
   expect(renderer.current.setOrbitPivot).toHaveBeenLastCalledWith([10, 20, 30]);
   expect(orbit.read()).toBe(beforeSelection);
   expect(setViewport).not.toHaveBeenCalled();
@@ -207,6 +186,45 @@ it("keeps motion local, publishes on release and accepts external camera moves",
   });
   expect(onViewport).toHaveBeenCalledExactlyOnceWith(pose, "gesture");
   view.unmount();
+  type PictureProps = { capture: SceneRead; document?: string };
+  function Picture({ capture, document = "native/doc" }: PictureProps) {
+    const { read } = usePictureRead(capture, document, "SA 71", !capture.meshes && !capture.error);
+    return (
+      <div data-reading={read.pending ? "pending" : undefined}>
+        <Scene3D readout={null} meshes={read.meshes} orbit={orbit} />
+      </div>
+    );
+  }
+  const capture: SceneRead = {
+    meshes,
+    pending: false,
+    error: null,
+    omittedElements: 3,
+    unavailableElements: 1,
+  };
+  const picture = render(<Picture capture={capture} />);
+  const drawn = picture.container.querySelector("canvas");
+  renderer.current.dispose.mockClear();
+  for (const pending of [false, true]) {
+    picture.rerender(<Picture capture={{ ...capture, meshes: null, pending }} />);
+    expect(picture.container.querySelectorAll("canvas")).toHaveLength(1);
+    expect(picture.container.querySelector("canvas")).toBe(drawn);
+    expect(picture.container.firstElementChild?.getAttribute("data-reading")).toBe("pending");
+    expect(renderer.current.dispose).not.toHaveBeenCalled();
+  }
+  picture.rerender(<Picture capture={{ ...capture, meshes: null, error: "capture failed" }} />);
+  expect(picture.container.querySelector("canvas")).toBe(drawn);
+  expect(picture.container.firstElementChild?.hasAttribute("data-reading")).toBe(false);
+  const replacement = new SceneMeshes(meshes.positions, meshes.bounds, meshes.instances);
+  picture.rerender(<Picture capture={{ ...capture, meshes: replacement }} />);
+  expect(picture.container.querySelectorAll("canvas")).toHaveLength(1);
+  expect(picture.container.firstElementChild?.hasAttribute("data-reading")).toBe(false);
+  expect(renderer.current.dispose).toHaveBeenCalledTimes(1);
+  picture.rerender(
+    <Picture capture={{ ...capture, meshes: null, pending: true }} document="native/other" />,
+  );
+  expect(picture.container.querySelector("canvas")).toBeNull();
+  picture.unmount();
   vi.useRealTimers();
   vi.unstubAllGlobals();
 });
