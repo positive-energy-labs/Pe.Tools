@@ -1,4 +1,5 @@
-import { revitTarget } from "@pe/kit/lang/row";
+import { useList } from "@pe/kit/lang/collection";
+import { PlainList } from "@pe/kit/lang/list-view";
 import { nameOrFallback } from "@pe/kit/lang/subject-text";
 import { TooltipHint } from "@pe/kit/lang/tooltip";
 /**
@@ -9,7 +10,7 @@ import { TooltipHint } from "@pe/kit/lang/tooltip";
  * instance count and the table choice inline (the one decision, on the rule's own line). A fitting with a stated drop is an exception:
  * an override row under its type's rule, its drop editable. The tree's element rows jump here.
  */
-import { memo, useEffect, useMemo } from "react";
+import { memo, useMemo } from "react";
 import type { LossResult } from "@pe/ducts-domain/losses";
 import { ruleByKey } from "@pe/ducts-domain/loss-rules";
 import { unpriced, type Priced } from "@pe/ducts-domain/pricing";
@@ -21,8 +22,8 @@ import { Chips, DropCell, StagedRules } from "./rules";
 import { RuleAssignment } from "./rule-assignment";
 
 type RuleNode =
-  | { kind: "rule"; key: string; ruleKey: string; count: number; children: RuleNode[] }
-  | { kind: "override"; key: string; id: number; ruleKey: string | null; children: RuleNode[] };
+  | { kind: "rule"; key: string; ids: number[] }
+  | { kind: "override"; key: string; id: number };
 
 /** Each fitting id's rule key, over every priced path (applied first, then staged). */
 export function ruleOfIds(priced: Priced | null): Map<number, string> {
@@ -78,34 +79,19 @@ export const RulesTree = memo(function RulesTree({
     const overrides = Object.keys(priced.staged.componentDrops).map(Number).filter(inScope);
     const rules = [...ids]
       .sort(([, a], [, b]) => b.size - a.size)
-      .map(
-        ([ruleKey, set]): RuleNode => ({
-          kind: "rule",
-          key: ruleKey,
-          ruleKey,
-          count: set.size,
-          children: [
-            ...overrides
-              .filter((id) => ruleOf.get(id) === ruleKey)
-              .map(
-                (id): RuleNode => ({
-                  kind: "override",
-                  key: `${ruleKey}/o${id}`,
-                  id,
-                  ruleKey,
-                  children: [],
-                }),
-              ),
-          ],
-        }),
-      );
-    // A stated drop on an element no rule prices (an accessory) has no type row to sit under.
-    const loose = overrides
-      .filter((id) => !ruleOf.has(id))
-      .map(
-        (id): RuleNode => ({ kind: "override", key: `o${id}`, id, ruleKey: null, children: [] }),
-      );
-    return [...rules, ...loose];
+      .flatMap(([key, set]): RuleNode[] => [
+        { kind: "rule", key, ids: [...set] },
+        ...overrides
+          .filter((id) => ruleOf.get(id) === key)
+          .map((id): RuleNode => ({ kind: "override", key: `${key}/o${id}`, id })),
+      ]);
+    // A stated drop with no pricing rule has no type row to sit under.
+    return [
+      ...rules,
+      ...overrides
+        .filter((id) => !ruleOf.has(id))
+        .map((id): RuleNode => ({ kind: "override", key: `o${id}`, id })),
+    ];
   }, [priced, ruleOf, groupOf, groups, wide]);
 
   // What staging each rule's table would move, known before anything is staged: the grilles
@@ -114,25 +100,10 @@ export const RulesTree = memo(function RulesTree({
     const trees = new Map();
     return new Map(
       roots.flatMap((n) =>
-        n.kind === "rule"
-          ? [[n.ruleKey, ruleFanOut(snapshot, ruleOf, n.ruleKey, trees)] as const]
-          : [],
+        n.kind === "rule" ? [[n.key, ruleFanOut(snapshot, ruleOf, n.key, trees)] as const] : [],
       ),
     );
   }, [roots, snapshot, ruleOf]);
-
-  // A jump focuses the rule's row: scroll it into view once it is drawn.
-  useEffect(() => {
-    if (!focus) return;
-    document
-      .querySelector(`[data-e-rules="this"] [data-key="${CSS.escape(focus)}"]`)
-      ?.scrollIntoView({ block: "nearest" });
-  }, [focus]);
-
-  const idsUnder = (ruleKey: string) =>
-    [...ruleOf]
-      .filter(([id, k]) => k === ruleKey && (wide || groups.includes(groupOf.get(id) ?? "")))
-      .map(([id]) => id);
 
   // Fittings no rule prices, by family, plus the families a person has assigned a rule to.
   const unruled = useMemo(() => {
@@ -151,133 +122,119 @@ export const RulesTree = memo(function RulesTree({
       if (!byFamily.has(family)) byFamily.set(family, { family, ids: new Set() });
     return [...byFamily.values()].sort((a, b) => b.ids.size - a.ids.size);
   }, [priced, groupOf, groups, wide]);
-  const overrideRow = (n: Extract<RuleNode, { kind: "override" }>, nested = false) => {
-    return (
-      <TooltipHint
-        key={n.key}
-        content={`override: a stated drop on ${nameOf(n.id)} replaces the rule's lookup for this one fitting`}
-      >
-        <div
-          {...revitTarget([n.id])}
-          data-key={nested ? undefined : n.key}
-          className={`${COLS} items-baseline ${nested ? "pt-0.5" : "py-1"}`}
-          onMouseEnter={() => light([n.id])}
-        >
-          <p className="t-small min-w-0 break-words">
-            <span data-tone="caution">override</span> · {nameOf(n.id)}
-          </p>
-          <DropCell
-            segment="componentDrops"
-            id={n.id}
-            held={snapshot.nodes.find((x) => x.id === n.id)?.loss?.revitPressureDropInWg}
-            work={work}
-            label={`stated drop on ${nameOrFallback(nameOf(n.id))}`}
-          />
-        </div>
-      </TooltipHint>
-    );
-  };
-
-  // Keep both columns aligned; stack only when the pane cannot hold a readable pair.
-  const COLS =
-    "grid grid-cols-1 @min-[360px]:grid-cols-[minmax(0,2fr)_minmax(0,3fr)] gap-x-2 gap-y-1";
+  const list = useList({
+    items: roots,
+    keyOf: (n) => n.key,
+    search: (n) => {
+      if (n.kind === "override") return { text: [nameOf(n.id)], ids: [n.id] };
+      const rule = ruleByKey(n.key);
+      return { text: [n.key, rule?.family, rule?.type, rule?.cond], ids: n.ids };
+    },
+    followSelection: { key: focus },
+    onPick: (n) => onFocus(n.key),
+  });
+  const unassigned = useList({
+    items: unruled,
+    keyOf: (n) => n.family ?? `#${[...n.ids][0]}`,
+    search: (n) => ({ text: [n.family], ids: [...n.ids] }),
+  });
   return (
     <div
-      className="@container flex min-w-0 flex-col px-(--item-mark-pad-x)"
+      className="@container flex min-w-0 flex-col"
       data-e-rules={wide ? "all" : "this"}
       onMouseLeave={() => light(null)}
     >
-      <ul aria-label="loss rules" className="flex flex-col">
-        {roots.length === 0 ? (
-          <li className="text-ink-2 t-small py-1">No priced fittings</li>
-        ) : null}
-        {roots.map((n) => {
-          if (n.kind === "override") return overrideRow(n);
-          const rule = ruleByKey(n.ruleKey);
-          const name = rule ? `${rule.family} : ${rule.type}` : n.ruleKey;
-          const missing = unpriced(priced, n.ruleKey);
-          return (
-            <li
-              key={n.key}
-              {...revitTarget(idsUnder(n.ruleKey))}
-              data-key={n.key}
-              data-highlighted={focus === n.key ? "" : undefined}
-              className="hairline-b py-1 last:border-b-0"
-              onMouseEnter={() => light(idsUnder(n.ruleKey))}
-              onClick={() => onFocus(n.key)}
-            >
-              <div className={COLS}>
-                <div className="min-w-0">
-                  <TooltipHint content={rule?.cond ? `${name} · ${rule.cond}` : name}>
-                    <p className="wrap-anywhere">{name}</p>
-                  </TooltipHint>
-                  <p className="t-small text-ink-2 wrap-anywhere">{rule?.cond || "any size"}</p>
-                </div>
-                <div className="flex min-w-0 flex-col gap-0.5">
-                  <Chips ruleKey={n.ruleKey} priced={priced} work={work} />
-                  <p className="t-small text-ink-2 flex flex-wrap items-center gap-x-2">
-                    <TooltipHint content="instances this rule governs in scope">
-                      <span>×{n.count}</span>
-                    </TooltipHint>
-                    {missing ? (
-                      <TooltipHint content="instances with no value under this table">
-                        <span data-tone="caution">{missing} unpriced</span>
-                      </TooltipHint>
-                    ) : null}
-                    <TooltipHint content="What staging another table for this rule would re-price, in every system">
-                      <span data-e-fanout={n.ruleKey}>
-                        {fanOutWords(fanOuts.get(n.ruleKey) ?? { grilles: 0, systems: 0 })}
-                      </span>
-                    </TooltipHint>
-                  </p>
-                </div>
+      <PlainList
+        list={list}
+        aria-label="loss rules"
+        empty={{ message: "No priced fittings", exit: "Read or choose another system" }}
+        row={(n) => {
+          if (n.kind === "override")
+            return {
+              label: (
+                <span>
+                  <span data-tone="caution">override</span> · {nameOf(n.id)}
+                  <DropCell
+                    segment="componentDrops"
+                    id={n.id}
+                    held={snapshot.nodes.find((x) => x.id === n.id)?.loss?.revitPressureDropInWg}
+                    work={work}
+                    label={`stated drop on ${nameOrFallback(nameOf(n.id))}`}
+                  />
+                </span>
+              ),
+              revitIds: [n.id],
+              onMouseEnter: () => light([n.id]),
+              wrap: true,
+            };
+          const rule = ruleByKey(n.key);
+          const name = rule ? `${rule.family} : ${rule.type}` : n.key;
+          const missing = unpriced(priced, n.key);
+          return {
+            label: name,
+            sub: (
+              <div>
+                <p>{rule?.cond || "any size"}</p>
+                <Chips ruleKey={n.key} priced={priced} work={work} />
+                <TooltipHint content="What staging another table for this rule would re-price, in every system">
+                  <span data-e-fanout={n.key}>
+                    {fanOutWords(fanOuts.get(n.key) ?? { grilles: 0, systems: 0 })}
+                  </span>
+                </TooltipHint>
               </div>
-              {n.children.map((o) =>
-                overrideRow(o as Extract<RuleNode, { kind: "override" }>, true),
-              )}
-            </li>
-          );
-        })}
-      </ul>
+            ),
+            meta: `×${n.ids.length}${missing ? ` · ${missing} unpriced` : ""}`,
+            lines: 2,
+            wrap: true,
+            revitIds: n.ids,
+            onMouseEnter: () => light(n.ids),
+          };
+        }}
+      />
       {unruled.length ? (
-        <div className="border-line border-t pt-1" data-e-unruled="">
+        <div className="hairline-t pt-1" data-e-unruled="">
           <p className="t-small text-ink-2 pb-1">Unassigned families</p>
-          {unruled.map(({ family, ids }) => {
-            const first = [...ids][0];
-            const picked = family
-              ? work.doc?.ruleAssignments?.[family]?.staged?.value?.rule
-              : undefined;
-            return (
-              <div
-                key={family ?? `#${first}`}
-                className={`${COLS} items-baseline py-0.5`}
-                {...revitTarget([...ids])}
-                data-e-unruled-family={family ?? undefined}
-                data-e-unruled-ids={[...ids].join(" ")}
-                onMouseEnter={() => light([...ids])}
-              >
-                <p className="min-w-0 wrap-anywhere">
-                  {family ?? nameOf(first!)}
-                  {ids.size ? <span className="t-small text-ink-2"> ×{ids.size}</span> : null}
-                </p>
-                <div className="flex min-w-0 flex-wrap items-baseline gap-x-3 gap-y-0.5">
-                  {family ? <RuleAssignment family={family} work={work} /> : null}
-                  {first != null && !picked ? (
-                    <DropCell
-                      segment="componentDrops"
-                      id={first}
-                      held={snapshot.nodes.find((x) => x.id === first)?.loss?.revitPressureDropInWg}
-                      work={work}
-                      label={`stated drop on ${first}`}
-                    />
-                  ) : null}
-                </div>
-              </div>
-            );
-          })}
+          <PlainList
+            list={unassigned}
+            aria-label="unassigned families"
+            empty={{ message: "No unassigned families", exit: "Read another system" }}
+            row={({ family, ids }) => {
+              const first = [...ids][0];
+              const picked = family
+                ? work.doc?.ruleAssignments?.[family]?.staged?.value?.rule
+                : undefined;
+              return {
+                label: family ?? nameOf(first!),
+                revitIds: [...ids],
+                meta: ids.size ? `×${ids.size}` : undefined,
+                lines: 2,
+                wrap: true,
+                onMouseEnter: () => light([...ids]),
+                sub: (
+                  <div
+                    data-e-unruled-family={family ?? undefined}
+                    data-e-unruled-ids={[...ids].join(" ")}
+                  >
+                    {family ? <RuleAssignment family={family} work={work} /> : null}
+                    {first != null && !picked ? (
+                      <DropCell
+                        segment="componentDrops"
+                        id={first}
+                        held={
+                          snapshot.nodes.find((x) => x.id === first)?.loss?.revitPressureDropInWg
+                        }
+                        work={work}
+                        label={`stated drop on ${first}`}
+                      />
+                    ) : null}
+                  </div>
+                ),
+              };
+            }}
+          />
         </div>
       ) : null}
-      <div className="border-line border-t pt-1">
+      <div className="hairline-t pt-1">
         <StagedRules priced={priced} groups={wide ? [] : groups} work={work} />
       </div>
     </div>

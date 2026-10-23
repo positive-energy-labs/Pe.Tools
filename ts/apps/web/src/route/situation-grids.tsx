@@ -1,3 +1,5 @@
+import { useList } from "@pe/kit/lang/collection";
+import { PlainList } from "@pe/kit/lang/list-view";
 /** The Situation's grids: the ledger behind the gauge and the page log column. */
 import { useState, type ReactNode } from "react";
 import { Button } from "@pe/kit/lang/button";
@@ -6,7 +8,6 @@ import { Inspect, inspectableOf } from "./inspect";
 import type { RouteManifest } from "./manifest";
 import type { LogEntry } from "./route-owner";
 import { Label } from "./situation-verbs";
-import { TooltipHint } from "@pe/kit/lang/tooltip";
 
 /** Label gutter shared by every grid on the board, so columns line up across rows. */
 const GUTTER = "grid grid-cols-[9rem_minmax(0,1fr)] items-baseline gap-x-4 gap-y-1 t-prose";
@@ -61,6 +62,12 @@ export function PageLog({
   const tab = tabs.includes(picked) ? picked : "all";
   const shown = tab === "all" ? entries : entries.filter((entry) => tabOf(entry).includes(tab));
   const rows = !open ? shown.slice(0, 1) : all ? shown : shown.slice(0, CAP);
+  const list = useList({
+    items: rows,
+    keyOf: (entry) => `${entry.at}:${entries.indexOf(entry)}`,
+    search: (entry) => ({ text: [entry.label, entry.says] }),
+    onPick: () => setOpen(true),
+  });
   const column = (
     <div
       data-surface={collapsible && open ? "artifact" : undefined}
@@ -110,45 +117,29 @@ export function PageLog({
           ) : null}
         </span>
       </div>
-      <ul className={`hairline-t mt-1.5 t-prose ${open ? "h-[7lh] overflow-y-auto" : "h-[1lh]"}`}>
-        {rows.map((entry, index) => (
-          <TooltipHint content={`${entry.at} · ${entry.says}`} key={index}>
-            <li
-              className={`flex min-w-0 items-baseline gap-2${open ? "" : " cursor-pointer"}`}
-              onClick={
-                open
-                  ? undefined
-                  : (event) => {
-                      // The receipt link opens its inspectable; the rest of the row opens the log.
-                      if (!(event.target as Element).closest("a,button")) setOpen(true);
-                    }
-              }
-            >
-              {open ? (
-                <span className="face-mono shrink-0 t-small text-ink-mute">{entry.at}</span>
-              ) : null}
-              <span
-                className="w-[1ch] shrink-0 t-small"
-                data-tone={entry.refused ? "caution" : entry.kind === "verb" ? "done" : undefined}
-              >
-                {entry.refused ? "✕" : entry.kind === "verb" ? "✓" : ""}
-              </span>
-              <span className="min-w-0 truncate text-ink">
-                {entry.link && inspectableOf(manifest.inspectables, entry.link.kind) ? (
-                  <Inspect
-                    spec={inspectableOf(manifest.inspectables, entry.link.kind)!}
-                    id={entry.link.id}
-                  >
-                    {entry.label}
-                  </Inspect>
-                ) : (
-                  entry.label
-                )}
-              </span>
-            </li>
-          </TooltipHint>
-        ))}
-      </ul>
+      <div className={`hairline-t mt-1.5 ${open ? "h-[7lh] overflow-y-auto" : "h-[1lh]"}`}>
+        <PlainList
+          list={list}
+          aria-label="page log"
+          empty={{ message: "No log entries", exit: "Read or run an action" }}
+          row={(entry) => ({
+            title: `${entry.at} · ${entry.says}`,
+            meta: open ? entry.at : undefined,
+            lead: entry.refused ? "✕" : entry.kind === "verb" ? "✓" : "",
+            label:
+              entry.link && inspectableOf(manifest.inspectables, entry.link.kind) ? (
+                <Inspect
+                  spec={inspectableOf(manifest.inspectables, entry.link.kind)!}
+                  id={entry.link.id}
+                >
+                  {entry.label}
+                </Inspect>
+              ) : (
+                entry.label
+              ),
+          })}
+        />
+      </div>
     </div>
   );
   // Folded or open, the head column keeps one height; the open column floats over the grid.

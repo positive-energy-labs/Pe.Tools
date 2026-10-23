@@ -1,5 +1,7 @@
+import { GoToPopup } from "@pe/kit/lang/list-popup";
 /** Space's model, axis cuts and thumbnails; an axis remembers the 3D pose it left. */
-import { useEffect, useMemo, useRef, useState, type ReactNode } from "react";
+import { useContext, useEffect, useMemo, useRef, useState, type ReactNode } from "react";
+import { SubjectTextContext } from "@pe/kit/lang/subject-text";
 
 import { type Chord } from "@pe/kit/keys";
 import { Button } from "@pe/kit/lang/button";
@@ -23,6 +25,7 @@ import type { Layer3D, Pick, SceneMeshes } from "#/scene/types";
 
 import { CutOverlay, type Framed } from "./cuts";
 import { LAYER_SAYS, SPACE_LAYERS, rowUnder, type SpaceLayer } from "./layers";
+import { pickName } from "./facts";
 import type { SpacePage } from "./manifest";
 import { cutPolygons, packPolygons, retained, type Cuts, type Polygons } from "./state";
 import { useRouteLease } from "#/route/view-bridge";
@@ -73,6 +76,9 @@ export function SpacePicture({
   /** Filled here: the alias-click a Subject named in text calls. It selects and flies (N4). */
   alias?: { current: ((key: string) => void) | null };
 }) {
+  const subjects = useContext(SubjectTextContext);
+  const [goHover, setGoHover] = useState<string | null>(null);
+  const lit = useMemo(() => (goHover ? new Set([goHover]) : undefined), [goHover]);
   const [host, setHost] = useState<HTMLDivElement | null>(null);
   const size = useSize(host);
   const [framed, setFramed] = useState<Framed | null>(null);
@@ -331,6 +337,28 @@ export function SpacePicture({
           ? `${metadata.triangles.toLocaleString()} triangles · ${metadata.elements.length} elements`
           : undefined
       }
+      actions={
+        <GoToPopup
+          hover={(item) => setGoHover(item?.key ?? null)}
+          items={() =>
+            (metadata?.elements ?? []).map((element) => ({
+              key: spaceElementKey(element.handle),
+              name:
+                (!element.handle.linkInstanceId && subjects?.nameOf(element.handle.elementId)) ||
+                pickName(element.handle),
+              id: element.handle.elementId,
+              revitIds: element.handle.linkInstanceId ? [] : [element.handle.elementId],
+              detail: element.handle.uniqueId,
+            }))
+          }
+          onGo={(item) => {
+            setPage({ selected: item.key, row: null }, push);
+            frameOn(
+              meshes ? boundsOfInstances(meshes, (instance) => instance.key === item.key) : null,
+            );
+          }}
+        />
+      }
       flush
       scroll="clip"
       modes={{
@@ -367,6 +395,7 @@ export function SpacePicture({
             onPlane={stageViewport(setPage)}
             thumbs={thumbs}
             selected={selected}
+            lit={lit}
             hidden={hidden}
             isolated={isolated}
             layers={layers}

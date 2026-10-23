@@ -1,3 +1,4 @@
+import { GoToPopup } from "@pe/kit/lang/list-popup";
 /** Revit's registered picture under selectable room regions, paired with the table. */
 import { SvgTip } from "@pe/kit/lang/tooltip";
 import { type CSSProperties, type ReactNode, useEffect, useMemo, useRef } from "react";
@@ -265,6 +266,27 @@ export function RoomsPlan({
   const map = usePlanMap(view, move, world, size, mapShapes, plan);
   const pane = {
     title: "plan",
+    actions: (
+      <GoToPopup
+        items={() =>
+          rows.map((row) => ({
+            key: row.region.guid,
+            name: row.region.name || row.label,
+            id: row.region.elementId ?? row.region.guid,
+            detail: `${row.label} ${row.region.guid}`,
+          }))
+        }
+        hover={(item) => onHover(item?.key ?? null)}
+        onGo={(item) => {
+          onSelect(item.key, false);
+          const shape = world?.shapes.find((shape) => shape.region.guid === item.key);
+          if (shape) {
+            const to = frameBox(shape.box, ZOOM_PAD_PX);
+            if (to) move(to, "move");
+          }
+        }}
+      />
+    ),
     meta:
       [page.view, fixture ? "fixture · no Revit capture" : null].filter(Boolean).join(" · ") ||
       undefined,

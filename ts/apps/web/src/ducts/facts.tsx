@@ -1,5 +1,5 @@
-import { revitTarget } from "@pe/kit/lang/row";
-import { TooltipHint } from "@pe/kit/lang/tooltip";
+import { useList } from "@pe/kit/lang/collection";
+import { PlainList } from "@pe/kit/lang/list-view";
 /**
  * What the drawings say about one element on hover or selection: its size, length and flows, each
  * value beside where it came from. A missing value is printed as missing, never left blank.
@@ -32,25 +32,26 @@ function Issues({ issues: all }: { issues: readonly Issue[] }) {
   const issues = all.filter(
     (issue, k) => all.findIndex((x) => x.kind === issue.kind && x.note === issue.note) === k,
   );
-  if (!issues.length) return <p className="text-ink-2">no issue names it</p>;
+  const list = useList({
+    items: issues,
+    keyOf: (issue) => issue.id,
+    search: (issue) => ({ text: [issue.note, issue.kind] }),
+  });
   return (
-    <ul>
-      {issues.map((issue) => (
-        <TooltipHint key={issue.id} content={ISSUE_KINDS[issue.kind].what}>
-          <li {...revitTarget(issue.elementId == null ? [] : [issue.elementId])}>
-            <span data-tone={ISSUE_KINDS[issue.kind].color.tone}>
-              {ISSUE_KINDS[issue.kind].label}
-            </span>{" "}
-            <span className="text-ink-2">
-              <SubjectText
-                text={issue.note}
-                ids={issue.elementId == null ? [] : [issue.elementId]}
-              />
-            </span>
-          </li>
-        </TooltipHint>
-      ))}
-    </ul>
+    <PlainList
+      list={list}
+      aria-label="element issues"
+      empty={{ message: "no issue names it", exit: "Select another element" }}
+      row={(issue) => ({
+        label: (
+          <SubjectText text={issue.note} ids={issue.elementId == null ? [] : [issue.elementId]} />
+        ),
+        meta: ISSUE_KINDS[issue.kind].label,
+        title: ISSUE_KINDS[issue.kind].what,
+        revitIds: issue.elementId == null ? [] : [issue.elementId],
+        wrap: true,
+      })}
+    />
   );
 }
 export function SegmentFactsView({

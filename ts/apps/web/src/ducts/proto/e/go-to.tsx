@@ -7,11 +7,7 @@
  * (grilles, units); any other element answers its typed id (the list's create row). Listing all
  * eleven thousand elements of a large model cost a 200 ms open (Chadds, 2026-10-23).
  */
-import { useMemo, useRef, useState } from "react";
-import { Search } from "lucide-react";
-
-import { useSearchKey } from "@pe/kit/lang/list-view";
-import { ListPopup } from "@pe/kit/lang/list-popup";
+import { GoToPopup } from "@pe/kit/lang/list-popup";
 import { NO_SYSTEM, systemScope, systemsOf } from "@pe/ducts-domain/system-scope";
 import type { DuctSnapshot } from "@pe/ducts-domain/types";
 
@@ -80,60 +76,25 @@ export function GoToSubject({
   onGo: (target: GoTarget) => void;
   onHover: (id: number | null) => void;
 }) {
-  const [open, setOpen] = useState(false);
-  // Built only while open: naming eleven thousand elements is not a render's work.
-  const items = useMemo(
-    () => (open ? itemsOf(snapshot, system, nameOf) : []),
-    [open, snapshot, system, nameOf],
-  );
-  const byKey = useMemo(() => new Map(items.map((i) => [i.key, i])), [items]);
-  const trigger = useRef<SVGSVGElement>(null);
-  useSearchKey({
-    region: () =>
-      trigger.current?.closest<HTMLElement>("[data-slot=pane]") ??
-      trigger.current?.parentElement ??
-      null,
-    focus: () => setOpen(true),
-  });
   return (
-    <ListPopup<Item>
-      anchor="trigger"
-      face="icon"
-      trigger={<Search ref={trigger} aria-hidden />}
-      triggerLabel="go to a subject"
-      title="Go to a subject · /"
-      open={open}
-      onOpenChange={(next) => {
-        setOpen(next);
-        if (!next) onHover(null);
-      }}
-      aria-label="go to a subject"
-      purpose="autocomplete"
-      items={items}
-      keyOf={(i) => i.key}
-      labelOf={(i) => i.name}
-      detailOf={(i) => i.detail}
-      groupOf={(i) => i.group}
+    <GoToPopup<Item>
+      items={() => itemsOf(snapshot, system, nameOf)}
       leadingGroups={system ? [HERE, SYSTEMS, ELSEWHERE] : [SYSTEMS, ELSEWHERE]}
-      groupCap={8}
-      filter="words"
-      select="single"
-      searchAbove={0}
-      searchPlaceholder="name, family, size, system or id"
-      empty="nothing read yet"
-      noMatch="no system or element matches"
-      maxHeight="24rem"
-      onCursorChange={(key) => onHover((key ? byKey.get(key)?.id : null) ?? null)}
-      onPick={(i) => onGo({ system: i.system, id: i.id })}
-      onCreate={(text) => {
-        const to = byId(snapshot, text);
-        if (to) onGo(to);
-        setOpen(false);
+      onGo={onGo}
+      hover={(item) => onHover(item?.id ?? null)}
+      resolveId={(text) => {
+        const target = byId(snapshot, text);
+        return target
+          ? {
+              ...target,
+              key: `e${target.id}`,
+              name: nameOf(target.id!),
+              detail: "",
+              group: ELSEWHERE,
+              meta: "",
+            }
+          : null;
       }}
-      createLabel={(text) =>
-        byId(snapshot, text) ? "go to matching element" : `${text.trim()}: no element by that id`
-      }
-      row={(i) => ({ label: i.name, meta: i.meta })}
     />
   );
 }
