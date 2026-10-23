@@ -285,6 +285,7 @@ export function StateCell(props: StateCellProps) {
           tabIndex={ownHost ? 0 : undefined}
           className={slots.base()}
           data-scale="row"
+          data-unit={props.unit != null ? "" : undefined}
           data-focus={focusHost != null ? "" : undefined}
           aria-busy={pending || undefined}
           onClick={locate}
@@ -299,7 +300,7 @@ export function StateCell(props: StateCellProps) {
             <input
               key={value as string}
               defaultValue={value as string}
-              placeholder={emptied ? EMPTY_MARK : props.placeholder}
+              placeholder={emptied || (props.unit != null && !props.placeholder) ? EMPTY_MARK : props.placeholder}
               data-empty={emptied ? "" : undefined}
               inputMode={props.numeric != null ? "decimal" : undefined}
               tabIndex={-1}
@@ -349,6 +350,12 @@ export function StateCell(props: StateCellProps) {
           ) : (
             shown
           )}
+          {props.unit != null ? (
+            <span className="dl-cell-unit">
+              <span className="dl-cell-unit-full">{props.unit.label}</span>
+              <span className="dl-cell-unit-short" aria-hidden>{props.unit.short ?? props.unit.label}</span>
+            </span>
+          ) : null}
           {/* A contest on the row's one line: a title alone hides it from keyboard, touch and no-hover readers. */}
           {read.contested ? (
             <span className={slots.counter()}>pea proposes {props.counterValue}</span>

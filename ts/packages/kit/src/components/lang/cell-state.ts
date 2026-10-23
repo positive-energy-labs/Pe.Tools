@@ -85,6 +85,14 @@ interface StateCellBase {
    */
   scale?: "card" | "row";
   /**
+   * Row scale only: the unit drawn INSIDE the box as an always-visible trailing suffix, so an empty
+   * or unfocused cell still says what goes there. `short` is what a narrow `.dl-cells` container
+   * shows instead (`in-wg` -> `wg`). SEAM for a later unit combo: when typed units arrive (Pa as
+   * well as in-wg) this becomes a `units` list with the chosen one; the suffix turns into its
+   * trigger. Not built: the unit is display only today.
+   */
+  unit?: { label: string; short?: string };
+  /**
    * Where the card-scale footline goes. It may not wrap to two lines nor shrink below the 10px
    * floor, so in a constrained context it collapses to `hover` (the `title` row scale uses);
    * `inline` keeps it where the card has room. Row scale is always hover.

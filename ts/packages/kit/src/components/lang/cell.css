@@ -351,3 +351,94 @@
   text-decoration-thickness: 1px;
   text-underline-offset: 2px;
 }
+
+/* 4 · The unit-bearing cell (`unit`): the box is a flex line, value then an always-visible suffix,
+   drawn on a hairline so an empty cell still shows where to type. Under a `.dl-cells` container's
+   width the decoration and the group's note drop (never wrap, never collapse), then the unit
+   shortens; hover and focus bring it all back. Container queries, so the pane decides, not the viewport. */
+.dl-cell[data-unit] {
+  display: flex;
+  align-items: center;
+  gap: 3px;
+  min-width: 3.25rem;
+  --dl-cell-ring: inset 0 0 0 1px var(--pe-line-2);
+}
+.dl-cell[data-unit][data-body="locked"] {
+  --dl-cell-ring: none;
+}
+.dl-cell[data-unit] > .dl-cell-input {
+  flex: 1 1 0;
+  min-width: 1.5ch;
+  width: auto;
+  text-align: right;
+}
+.dl-cell-unit {
+  flex: none;
+  color: var(--pe-ink-mute);
+  font-size: var(--type-small-size);
+  pointer-events: none;
+}
+.dl-cell-unit-short {
+  display: none;
+}
+/* the verbs overlay the trailing edge on hover: the unit steps left of them. */
+.dl-cell[data-unit]:hover,
+.dl-cell[data-unit]:focus-within {
+  padding-right: calc(var(--acts, 0) * (var(--item-h) - 2px) + var(--item-pad-x));
+}
+
+.dl-cells {
+  container: dl-cells / inline-size;
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  gap: 2px 8px;
+  width: 100%;
+  min-width: 0;
+}
+.dl-cells-item {
+  position: relative;
+  display: inline-flex;
+  align-items: baseline;
+  gap: 4px;
+  flex: 1 1 0;
+  min-width: 3.75rem;
+  white-space: nowrap;
+}
+.dl-cells-item > .dl-cell {
+  flex: 1 1 auto;
+  min-width: 3.25rem;
+}
+.dl-cells-note {
+  flex: none;
+  color: var(--pe-ink-2);
+}
+@container dl-cells (max-width: 24rem) {
+  .dl-cells-note {
+    display: none;
+  }
+  /* it returns as an overlay hanging under its cell, so revealing it never shoves a neighbour. */
+  .dl-cells-item:hover .dl-cells-note,
+  .dl-cells-item:focus-within .dl-cells-note {
+    display: block;
+    position: absolute;
+    top: 100%;
+    left: 0;
+    z-index: 5;
+    padding: 0 4px;
+    background: var(--pe-on);
+    box-shadow: inset 0 0 0 1px var(--pe-line-2);
+  }
+  .dl-cell[data-unit]:not(:hover):not(:focus-within) {
+    --dl-cell-ring: none;
+    padding-inline: 0;
+  }
+}
+@container dl-cells (max-width: 16rem) {
+  .dl-cell[data-unit]:not(:hover):not(:focus-within) .dl-cell-unit-full {
+    display: none;
+  }
+  .dl-cell[data-unit]:not(:hover):not(:focus-within) .dl-cell-unit-short {
+    display: inline;
+  }
+}

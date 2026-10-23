@@ -21,10 +21,9 @@ type Rung = Record<string, unknown>;
 
 interface CellSpec {
   segment: CellSegment;
-  /** The unit word after the value. */
-  unit: string;
+  /** The unit drawn inside the box, and the shorter form a narrow pane shows. */
+  unit: { label: string; short?: string };
   digits: number;
-  placeholder: string;
   /** The text a rung's value draws as. */
   text: (value: Rung | undefined) => string | undefined;
   /** The rung a typed number stages, keeping what the standing rung carries (a stated source). */
@@ -34,9 +33,8 @@ interface CellSpec {
 const SPECS = {
   flows: {
     segment: "flows",
-    unit: "cfm",
+    unit: { label: "cfm" },
     digits: 0,
-    placeholder: "cfm",
     text: (v) => (v?.cfm == null ? undefined : String(v.cfm)),
     rung: (typed, standing) => ({
       cfm: Number(typed),
@@ -45,9 +43,8 @@ const SPECS = {
   },
   equipmentFlows: {
     segment: "equipmentFlows",
-    unit: "cfm",
+    unit: { label: "cfm" },
     digits: 0,
-    placeholder: "cfm",
     text: (v) => (v?.cfm == null ? undefined : String(v.cfm)),
     rung: (typed, standing) => ({
       cfm: Number(typed),
@@ -56,9 +53,8 @@ const SPECS = {
   },
   terminalDrops: {
     segment: "terminalDrops",
-    unit: "in-wg",
+    unit: { label: "in-wg", short: "wg" },
     digits: 4,
-    placeholder: "drop",
     text: (v) => (v?.inWg == null ? undefined : String(v.inWg)),
     rung: (typed, standing) => ({
       inWg: Number(typed),
@@ -67,9 +63,8 @@ const SPECS = {
   },
   esp: {
     segment: "esp",
-    unit: "in-wg",
+    unit: { label: "in-wg", short: "wg" },
     digits: 4,
-    placeholder: "ESP",
     text: (v) => (v?.inWg == null ? undefined : String(v.inWg)),
     rung: (typed) => ({ inWg: Number(typed) }),
   },
@@ -96,7 +91,7 @@ function InputCell({
   const word = cell.staged ? "override" : cell.proposal ? "Pea proposes" : resolved.word;
   return (
     <span
-      className="inline-flex items-baseline gap-1 whitespace-nowrap [&_.dl-cell]:min-w-[4.5rem]"
+      className="dl-cells-item"
       data-e-cell={`${spec.segment}:${id}`}
       aria-label={label}
       onClick={(event) => event.stopPropagation()}
@@ -111,8 +106,8 @@ function InputCell({
           (value) => spec.text(value as Rung) ?? "",
         )}
         scale="row"
+        unit={spec.unit}
         numeric={{ min: 0, digits: spec.digits }}
-        placeholder={spec.placeholder}
         onCommit={(text: string) =>
           work
             .write(
@@ -125,9 +120,8 @@ function InputCell({
         }
         transitions={reviewTransitions(wire, key, cell)}
       />
-      <span className="t-small text-ink-2" data-e-source={word ?? ""}>
-        {spec.unit}
-        {word ? ` · ${word}` : ""}
+      <span className="dl-cells-note t-small" data-e-source={word ?? ""}>
+        {word}
       </span>
     </span>
   );
@@ -164,7 +158,7 @@ function RoleCell({
           : resolved.word;
   return (
     <span
-      className="inline-flex items-baseline gap-1 whitespace-nowrap [&_.dl-cell]:min-w-[4.5rem]"
+      className="dl-cells-item"
       data-e-cell={`roles:${id}`}
       aria-label={`role of ${id}`}
       onClick={(event) => event.stopPropagation()}
@@ -188,7 +182,7 @@ function RoleCell({
         transitions={reviewTransitions(wire, key, cell)}
       />
       <TooltipHint content={resolved.reason}>
-        <span className="t-small text-ink-2" data-e-source={word ?? ""}>
+        <span className="dl-cells-note t-small" data-e-source={word ?? ""}>
           role{word ? ` · ${word}` : ""}
           {!cell.staged && !cell.proposal && resolved.reason ? ` (${resolved.reason})` : ""}
         </span>
@@ -212,7 +206,7 @@ export function TerminalCells({ ctx, id }: { ctx: InputsCtx; id: number }) {
   const from = ctx.snapshot.nodes.find((n) => n.id === id)?.flowParameter ?? null;
   const inputs = terminalInputs(ctx.priced, id, from);
   return (
-    <span className="inline-flex items-baseline gap-3">
+    <span className="dl-cells">
       <InputCell
         spec={SPECS.flows}
         id={id}
@@ -236,7 +230,7 @@ export function EquipmentCells({ ctx, id }: { ctx: InputsCtx; id: number }) {
   if (!ctx.priced) return null;
   const inputs = equipmentInputs(ctx.snapshot, ctx.priced, id, ctx.groups ?? null);
   return (
-    <span className="inline-flex items-baseline gap-3">
+    <span className="dl-cells">
       <InputCell
         spec={SPECS.equipmentFlows}
         id={id}
