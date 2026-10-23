@@ -250,8 +250,9 @@ export function VariantE({ useLens }: { useLens: UseLens }) {
             // L3: the frame fills the pane so its foot hugs the bottom edge; only the body scrolls.
             className="flex min-h-0 flex-1 flex-col"
             head={
-              <span className="flex w-full items-center gap-3">
-                <span>
+              <span className="flex w-full min-w-0 items-center gap-3">
+                {/* L3: the crumb ellipsizes; the lens and the verb never leave the frame. */}
+                <span className="min-w-0 truncate">
                   ProjectA_Clone_Aug_11 <span style={muted}>›</span> Mechanical Equipment{" "}
                   <span style={muted}>›</span> Main House fan coils × PE_* parameters
                 </span>
@@ -263,7 +264,7 @@ export function VariantE({ useLens }: { useLens: UseLens }) {
                   grouped by type, because the parameters live at type scope.
                 </HelpTip>
                 <LensSwitcher useLens={useLens} />
-                <span className="ml-auto flex items-center gap-2">
+                <span className="ml-auto flex shrink-0 items-center gap-2">
                   <FactChip
                     dashed
                     title="prototype fixture lane — pulled from ProjectA_Clone_Aug_11 on 2026-08-17; a live host session would replace this"
@@ -333,7 +334,11 @@ export function VariantE({ useLens }: { useLens: UseLens }) {
             {/* LANG GAP (3): the authored lane — a pinned band of design facts riding ON the
               machine-operated table — has no primitive; hand-rolled, hairline-separated,
               deliberately on the frame's own ground (border budget: no second enclosure). */}
-            <div className="flex items-start gap-6 px-3 py-2" style={{ borderBottom: hairline }}>
+            {/* L3: facts wrap whole, never inside a label; the last second is a new line. */}
+            <div
+              className="flex flex-wrap items-start gap-x-6 gap-y-1 px-3 py-2 whitespace-nowrap"
+              style={{ borderBottom: hairline }}
+            >
               <span className="pt-0.5" style={secondary}>
                 design facts
               </span>

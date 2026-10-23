@@ -149,29 +149,28 @@ export function FamilyWorkspaceTable() {
       state={tableState}
       onStateChange={setTableState}
       summary={
-        <span className="inline-flex flex-wrap items-center gap-1">
-          <span className="t-small face-mono text-ink-2">
+        // L3: one line in a fixed bar (a wrapped second line was clipped out of sight); the grey
+        // counts ellipsize first. I2: a state chip shows only when it is not calm.
+        <span className="inline-flex min-w-0 flex-nowrap items-center gap-1">
+          <span className="min-w-0 truncate t-small face-mono text-ink-2">
             {Object.keys(world.grounding).length} grounded · {openProposals.length} open ·{" "}
             {world.typeNames.length} types
           </span>
-          <FactChip
-            tone={ghostCount > 0 ? "caution" : undefined}
-            title="Geometry rows without a parameter binding."
-          >
-            {ghostCount} unbound
-          </FactChip>
-          <FactChip
-            tone={unsavedCount > 0 ? "caution" : undefined}
-            title="Cells the next profile save would write."
-          >
-            {unsavedCount} unsaved
-          </FactChip>
-          <FactChip
-            tone={driftCells.length > 0 ? "alarm" : undefined}
-            title="Cells where Revit disagrees with the draft."
-          >
-            {driftCells.length} drift
-          </FactChip>
+          {ghostCount > 0 ? (
+            <FactChip tone="caution" title="Geometry rows without a parameter binding.">
+              {ghostCount} unbound
+            </FactChip>
+          ) : null}
+          {unsavedCount > 0 ? (
+            <FactChip tone="caution" title="Cells the next profile save would write.">
+              {unsavedCount} unsaved
+            </FactChip>
+          ) : null}
+          {driftCells.length > 0 ? (
+            <FactChip tone="alarm" title="Cells where Revit disagrees with the draft.">
+              {driftCells.length} drift
+            </FactChip>
+          ) : null}
           {/* Region orientation: how to read the counts, what an unbound geom row is, and what
               each of the two bind choices does. Every ghost row's title defers to this. */}
           <HelpTip>

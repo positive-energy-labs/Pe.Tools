@@ -83,10 +83,7 @@ export function ModelViews({
 
   return (
     <div className="flex min-w-0 flex-1 flex-col">
-      <p className="px-2 py-1 t-small text-ink-2">
-        Planes move with labeled and locked dimensions; the rest sit at their captured seeds.
-        Formula labels, nested geometry and non-orthogonal forms require Revit.
-      </p>
+      {/* I6: the drawing's rules are the anatomy pane's help, not a sentence over it. */}
       <div className="flex min-h-0 flex-1">
         {VIEWS.map((view) => {
           const [uMin, uMax] = bounds[view.u];
