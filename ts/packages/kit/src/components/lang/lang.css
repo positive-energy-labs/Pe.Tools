@@ -1191,6 +1191,13 @@ svg [data-damage] {
   border-color: var(--pe-line-2);
   background-color: color-mix(in srgb, var(--pe-line) 20%, transparent);
 }
+/* A control's outcome portal lives inside the control's host; the portal node itself takes no
+   layout (its positioner is fixed), so the control row never moves. */
+[data-slot="button-host"] > [data-base-ui-portal] {
+  position: absolute;
+  inline-size: 0;
+  block-size: 0;
+}
 .dl-button-outcome {
   width: max-content;
   max-inline-size: min(20rem, var(--available-width));

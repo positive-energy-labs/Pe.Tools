@@ -34,8 +34,13 @@ it("keeps Send's refusal under Send on the overlay plane without changing the dr
   expect(alert.closest('[data-slot="popover-content"]')).toBeTruthy();
   expect(alert.textContent).toBe("choose a provider");
   expect([shape(draft), shape(send)]).toEqual(before);
+  // Beside Send sits only its portal node (zero-size, absolute via lang.css) or a fixed positioner.
   for (const child of send.parentElement!.children)
-    expect(child === send || (child as HTMLElement).style.position === "fixed").toBe(true);
+    expect(
+      child === send ||
+        child.hasAttribute("data-base-ui-portal") ||
+        (child as HTMLElement).style.position === "fixed",
+    ).toBe(true);
   rerender(view(null));
   expect(screen.queryByRole("alert")).toBeNull();
 });
