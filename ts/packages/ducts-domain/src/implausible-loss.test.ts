@@ -2,7 +2,7 @@ import { describe, expect, it } from "vite-plus/test";
 
 import { bin } from "./bins.ts";
 import type { Grids } from "./loss-grid.ts";
-import { computeLosses, IMPLAUSIBLE_COEFFICIENT } from "./losses.ts";
+import { computeLosses, IMPLAUSIBLE_ROW_IN_WG } from "./losses.ts";
 import { price } from "./pricing.ts";
 import type { DuctSnapshot } from "./types.ts";
 
@@ -154,14 +154,15 @@ describe("implausible loss", () => {
       table: "SD5-9",
       dp: 0,
       c: 670,
-      implausible: { res: "Cb", cfm: 400, reasons: expect.arrayContaining(["coefficient"]) },
+      implausible: { res: "Cb", cfm: 400, reasons: expect.arrayContaining(["drop"]) },
     });
-    expect(670).toBeGreaterThan(IMPLAUSIBLE_COEFFICIENT);
+    expect(670).toBeGreaterThan(IMPLAUSIBLE_ROW_IN_WG);
     expect(row!.error).toContain("tap-std");
     expect(row!.error).toContain("SD5-9");
     expect(row!.error).toContain("400 cfm");
     expect(r.errors.some((e) => e.id === 50 && e.rule === "tap-std")).toBe(true);
     expect(r.byGroup.g10!.implausible).toEqual([50]);
+    expect(r.byGroup.g10!.fan).toBeNull();
     // The absurd 670 x Pv never reaches the path total.
     expect(r.paths[30]!.rows.some((x) => (x.dp ?? 0) > 100)).toBe(false);
   });

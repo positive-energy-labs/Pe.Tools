@@ -360,6 +360,8 @@ export function proposedStatic(snapshot: DuctSnapshot, result: LossResult, unit:
   const byKind = new Map<string, number>();
   for (const group of snapshot.groups) {
     const solved = result.byGroup[group.id];
+    // A blocked group has no price: no ESP is proposed for its unit (never written to Revit).
+    if (solved?.implausible.length) continue;
     // A fan of a multi-fan group delivers its own section's ESP (`fan-sections.ts`).
     const own = solved?.fans.find((f) => f.unit === unit);
     const fan = own
@@ -479,8 +481,17 @@ export function applyRequest(
     throw Error(
       "Physical fan circuits have no admitted manufacturer scalar ESP mapping; clear the esp cell. Circuit evidence is calculation-only.",
     );
+  // A unit of a group an implausible row blocks is never written an ESP: that group has no price.
+  const blockedUnits = new Set(
+    snapshot.groups.flatMap((group) =>
+      priced.next.byGroup[group.id]?.implausible.length
+        ? [...group.rootIds, unitOf(snapshot, priced.next, group) ?? -1]
+        : [],
+    ),
+  );
   const equipment = Object.entries(priced.staged.esp)
     .map(([id, { inWg }]) => ({ id: Number(id), externalStaticInWg: inWg }))
+    .filter(({ id }) => !blockedUnits.has(id))
     // Any unit rooted in the group, not the baseline's one pick (it is blind to a staged passive role).
     .filter(({ id }) => !scoped.size || roots.has(id))
     .sort((a, b) => a.id - b.id);

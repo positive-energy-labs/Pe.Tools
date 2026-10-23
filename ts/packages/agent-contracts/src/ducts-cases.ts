@@ -1333,9 +1333,9 @@ export const DUCT_CASES: readonly DuctCase[] = [
     number: 60,
     group: "E",
     title: "Implausible fitting loss",
-    case: "A fitting row prices at a coefficient over 20 or a velocity over 4000 fpm, e.g. a collar entry at Qb/Qc = 1 on a small Ab/Ac, or a welded other-classification network riding one collar.",
+    case: "A fitting row drops more than 0.5 in-wg or runs over 4000 fpm, e.g. a collar entry at Qb/Qc = 1 on a small Ab/Ac, or a welded other-classification network riding one collar.",
     whatWeDo:
-      "Blocks that row and its path with an implausible-loss finding naming the element, rule, table, coefficient, velocity and flow; the system reads needs a fix, not a number. The limits are first guesses to recalibrate (IMPLAUSIBLE_COEFFICIENT, IMPLAUSIBLE_FPM in losses.ts).",
+      "Blocks that row and its path with an implausible-loss finding naming the element, rule, table, coefficient, velocity and flow; the system reads needs a fix, not a number. The limits are first guesses to recalibrate (IMPLAUSIBLE_ROW_IN_WG, IMPLAUSIBLE_FPM in losses.ts).",
     why: "A lookup that fell off its table once priced one system at 1393 in-wg; an absurd figure must not read as a price.",
     status: "handled",
     code: "implausible-loss",

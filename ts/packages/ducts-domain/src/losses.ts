@@ -110,14 +110,15 @@ export interface ImplausibleLoss {
   res: "Co" | "Cb" | "Cs";
   fpm: number;
   cfm: number;
-  reasons: ("coefficient" | "velocity")[];
+  reasons: ("drop" | "velocity")[];
 }
 
 /**
- * First guesses to recalibrate (kaitpw 2026-10-22: "we can always recalibrate"). A Co or Cb above
- * this reads a lookup that fell off its table's plausible range (SD5-9 gives 670 at a small Ab/Ac).
+ * First guesses to recalibrate (kaitpw 2026-10-22: "we can always recalibrate"). A single fitting
+ * that drops more than this is a lookup that fell off its table (SD5-9 gave 1375 in-wg from one
+ * row); a bare coefficient limit also stopped small real drops (Cb 36 at 309 fpm), so it is gone.
  */
-export const IMPLAUSIBLE_COEFFICIENT = 20;
+export const IMPLAUSIBLE_ROW_IN_WG = 0.5;
 /** Residential sanity bound on a fitting's velocity, fpm; a first guess to recalibrate. */
 export const IMPLAUSIBLE_FPM = 4000;
 
@@ -201,8 +202,8 @@ export interface LossResult {
   byGroup: Record<
     string,
     {
-      /** The worst fan's ESP, in-wg: the most static any fan of the group must deliver. */
-      fan: number;
+      /** The worst fan's ESP, in-wg: the most static any fan of the group must deliver. Null when an implausible row blocks the group (`implausible`): it has no price, never a partial sum. */
+      fan: number | null;
       /** The terminal the worst fan's critical run ends at. */
       critical: number | null;
       /** The critical run's total effective length, ft; null with no critical path. */
@@ -606,9 +607,18 @@ export function computeLosses(
       : critical == null
         ? []
         : result.paths[critical]!.rows;
+    // A group with an implausible row on its priced runs has no price: its fan is a partial sum.
+    const implausible = [
+      ...new Set(
+        [
+          ...Object.values(result.paths).filter((p) => p.groupId === group.id),
+          ...fanResults.map((f) => ({ rows: [...f.stretch, ...f.rows] })),
+        ].flatMap((p) => p.rows.flatMap((r) => (r.implausible ? [r.id] : []))),
+      ),
+    ];
     result.byGroup[group.id] = {
       fans: fanResults,
-      fan: groupFan,
+      fan: implausible.length ? null : groupFan,
       critical: groupCritical,
       criticalTel: worstFan
         ? worstFan.tel
@@ -620,18 +630,15 @@ export function computeLosses(
         (groupCritical == null ? null : systemFor(snapshot, groupCritical)?.criticalPathLossInWg) ??
         null,
       hasAirMover,
-      implausible: [
-        ...new Set(
-          [
-            ...Object.values(result.paths).filter((p) => p.groupId === group.id),
-            ...fanResults.map((f) => ({ rows: [...f.stretch, ...f.rows] })),
-          ].flatMap((p) => p.rows.flatMap((r) => (r.implausible ? [r.id] : []))),
-        ),
-      ],
+      implausible,
       provisional: provisionalOf(under),
     };
     everywhere.push(...under);
-    if (groupCritical != null && (result.critical == null || groupFan > result.fan)) {
+    if (
+      !implausible.length &&
+      groupCritical != null &&
+      (result.critical == null || groupFan > result.fan)
+    ) {
       result.fan = groupFan;
       result.critical = groupCritical;
       criticalRows = groupRows;
@@ -753,13 +760,13 @@ function pathRows(
     // An implausible lookup never prices silently: the row carries an error (its path reads
     // unpriced, as for a table not loaded) and `implausibleFindings` names why.
     const reasons: ImplausibleLoss["reasons"] = [];
-    if (input.res !== "Cs" && found.value > IMPLAUSIBLE_COEFFICIENT) reasons.push("coefficient");
+    if (found.value * f.pv > IMPLAUSIBLE_ROW_IN_WG) reasons.push("drop");
     if (f.fpm > IMPLAUSIBLE_FPM) reasons.push("velocity");
     let implausible: { implausible: ImplausibleLoss; error: string } | null = null;
     if (reasons.length) {
       const why = reasons.map((r) =>
-        r === "coefficient"
-          ? `${input.res} over ${IMPLAUSIBLE_COEFFICIENT}`
+        r === "drop"
+          ? `${round4(found.value * f.pv)} in-wg over ${IMPLAUSIBLE_ROW_IN_WG}`
           : `velocity over ${IMPLAUSIBLE_FPM} fpm`,
       );
       const error = `implausible loss at ${rule.family} ${node.id}, rule ${rule.key}, table ${table}: ${input.res} ${round4(found.value)}, ${Math.round(f.fpm)} fpm, ${Math.round(basis.cfm)} cfm (${why.join(", ")})`;

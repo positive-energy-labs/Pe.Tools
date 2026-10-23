@@ -306,7 +306,13 @@ function Canvas({
         >
           <span>
             fan static{" "}
-            <span className="face-mono">{solved ? `${fmt(solved.fan, 4)} in-wg` : "unpriced"}</span>{" "}
+            <span className="face-mono">
+              {solved
+                ? solved.fan == null
+                  ? "needs a fix: implausible loss"
+                  : `${fmt(solved.fan, 4)} in-wg`
+                : "unpriced"}
+            </span>{" "}
             {solved ? (
               <ProvisionalNote provisional={solved.provisional} of="the fan static" />
             ) : null}

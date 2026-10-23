@@ -45,7 +45,11 @@ export interface Split {
 export const BREAKDOWN_BY_SIZE = false;
 
 /** A path's rows dealt to the three parts by what each row prices, and to groups by what each row is. */
-function splitOf(snapshot: DuctSnapshot, rows: readonly Row[], equipment: ReadonlySet<number>): Split {
+function splitOf(
+  snapshot: DuctSnapshot,
+  rows: readonly Row[],
+  equipment: ReadonlySet<number>,
+): Split {
   const part = (): SplitPart => ({ dp: 0, ids: [], unpriced: 0 });
   const split: Split = {
     unit: part(),
@@ -339,16 +343,22 @@ export function buildTree(
 export function systemList(
   snapshot: DuctSnapshot,
   priced: Priced | null,
-): (TreeNode & { fanless: boolean; sub: string })[] {
+): (TreeNode & { fanless: boolean; blocked: boolean; sub: string })[] {
   const equipment = new Set(snapshot.nodes.filter((n) => n.kind === "equipment").map((n) => n.id));
   return systemsOf(snapshot).map((system) => {
     const solved = system.groups.flatMap((g) => priced?.next.byGroup[g] ?? []);
     // The minibar's breakdown: the system's worst group's critical run, as its tree would split it.
-    const worst = system.groups
-      .filter((g) => priced?.next.byGroup[g]?.critical != null)
-      .sort((a, b) => priced!.next.byGroup[b]!.fan - priced!.next.byGroup[a]!.fan)[0];
+    // A group with an implausible row has no price: the system reads needs a fix, never a partial number.
+    const blocked = solved.some((s) => s.implausible.length > 0);
+    const worst = blocked
+      ? undefined
+      : system.groups
+          .filter((g) => priced?.next.byGroup[g]?.critical != null)
+          .sort((a, b) => priced!.next.byGroup[b]!.fan! - priced!.next.byGroup[a]!.fan!)[0];
     const rows = priced && worst ? criticalRows(priced.next, worst) : null;
-    const totals = solved.filter((s) => s.critical != null).map((s) => s.fan);
+    const totals = blocked
+      ? []
+      : solved.flatMap((s) => (s.critical != null && s.fan != null ? [s.fan] : []));
     const first = snapshot.groups.find((g) => g.id === system.groups[0]);
     return {
       key: system.name,
@@ -361,6 +371,7 @@ export function systemList(
       ]
         .filter(Boolean)
         .join(" · "),
+      blocked,
       fanless: !!priced && solved.length > 0 && solved.every((s) => !s.hasAirMover),
       id: first?.rootIds[0] ?? null,
       total: totals.length ? Math.max(...totals) : null,
