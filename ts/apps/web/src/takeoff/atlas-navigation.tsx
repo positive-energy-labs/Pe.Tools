@@ -1,5 +1,4 @@
 import { Suspense, useEffect } from "react";
-import { FactChip } from "@pe/kit/lang/chip";
 import { emptyListState, useList } from "@pe/kit/lang/collection";
 import { ListView } from "@pe/kit/lang/list-view";
 import { Pane } from "#/components/lang/pane";
@@ -66,16 +65,9 @@ export function AtlasNavigation() {
                     {off ? "off-plan scribble" : z.name}
                   </span>
                 ),
-                meta: (
-                  <span className="flex items-center gap-1">
-                    {calls > 0 && (
-                      <FactChip tone="alarm" title="Rooms in this zone need a human call">
-                        {calls} call{calls === 1 ? "" : "s"}
-                      </FactChip>
-                    )}
-                    <ZoneStateBar zone={z} states={states} className="w-12 shrink-0" />
-                  </span>
-                ),
+                // Open calls block the zone's sync (I2): the kit burn on the row, not a chip.
+                damage: calls > 0 ? `${calls} call${calls === 1 ? "" : "s"}` : null,
+                meta: <ZoneStateBar zone={z} states={states} className="w-12 shrink-0" />,
                 title: off
                   ? `off-plan scribble · ${fmtNum(z.zone.declaredSqft, 0)} sf, drawn far from the level; listed, not drawn`
                   : `${z.name} · ${z.zone.lane.label} · ${fmtNum(z.zone.declaredSqft, 0)} sf declared`,

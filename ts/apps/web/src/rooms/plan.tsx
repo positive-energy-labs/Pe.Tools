@@ -146,6 +146,7 @@ const FILL_PCT = 27;
 const FILL_HOT_PCT = 40;
 
 export function RoomsPlan({
+  fixture = false,
   lease,
   rows,
   plan,
@@ -163,6 +164,8 @@ export function RoomsPlan({
   setPage,
   overlay,
 }: {
+  /** A synthetic plan (`?demo=plan`): said in the pane's meta, where the view is named. */
+  fixture?: boolean;
   lease?: RoomsPlanLease;
   /** Drawn over the plan in screen px (the feedback layer), given the plan's frame. */
   overlay?: (geo: PlanGeo) => ReactNode;
@@ -265,7 +268,9 @@ export function RoomsPlan({
   const map = usePlanMap(view, move, world, size, mapShapes, plan);
   const pane = {
     title: "plan",
-    meta: page.view || undefined,
+    meta:
+      [page.view, fixture ? "fixture · no Revit capture" : null].filter(Boolean).join(" · ") ||
+      undefined,
     scroll: "clip" as const,
     flush: true,
     floaters: [map],
