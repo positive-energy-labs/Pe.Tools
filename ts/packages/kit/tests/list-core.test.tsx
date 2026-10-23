@@ -4,7 +4,7 @@ import { afterEach, expect, test, vi } from "vite-plus/test";
 import { emptyListState, filterItems, listModel, useCollection, useList, type ListOptions } from "../src/components/lang/collection";
 import { ListView } from "../src/components/lang/list-view";
 
-afterEach(() => { cleanup(); vi.restoreAllMocks(); vi.unstubAllGlobals(); Reflect.deleteProperty(HTMLElement.prototype, "scrollTo"); });
+afterEach(() => { cleanup(); vi.restoreAllMocks(); vi.unstubAllGlobals(); Reflect.deleteProperty(HTMLElement.prototype, "scrollTo"); Reflect.deleteProperty(HTMLElement.prototype, "scrollIntoView"); });
 
 interface Item { id: string; name: string; kind: string; loss: number; stage: "clean" | "staged"; children: Item[] }
 const items: Item[] = Array.from({ length: 355 }, (_, i) => ({
@@ -105,6 +105,31 @@ test("tiny lists render through the same rows without ResizeObserver or viewport
   const { container } = render(<Harness />);
   expect(screen.getAllByRole("option")).toHaveLength(3);
   expect(container.querySelector("[data-index]")).toBeNull();
+});
+
+test("small-list keyboard and repeated reveal scroll the mounted row with the nearest rule", () => {
+  vi.stubGlobal("ResizeObserver", undefined);
+  const scrolled: string[] = [];
+  Object.defineProperty(HTMLElement.prototype, "scrollIntoView", { configurable: true,
+    value: function(this: HTMLElement, rule: ScrollIntoViewOptions) {
+      expect(rule).toEqual({ block: "nearest" });
+      scrolled.push(this.dataset.key!);
+    } });
+  function Harness() {
+    const list = useList({ ...options, items: items.slice(0, 40) });
+    return <><button onClick={() => list.reveal("10039")}>Reveal last</button>
+      <ListView list={list} bar={false} maxHeight="100px" aria-label="small systems"
+        row={(item) => ({ label: item.name })} empty={{ message: "No systems", exit: "Read a model" }} /></>;
+  }
+  render(<Harness />);
+  const region = screen.getByRole("listbox", { name: "small systems" });
+  act(() => region.focus());
+  fireEvent.keyDown(region, { key: "End" });
+  expect(scrolled.at(-1)).toBe("10039");
+  const count = scrolled.length;
+  fireEvent.click(screen.getByRole("button", { name: "Reveal last" }));
+  expect(scrolled).toHaveLength(count + 1);
+  expect(scrolled.at(-1)).toBe("10039");
 });
 
 test("renderer mounts a bounded viewport, exposes drop targets and distinguishes filtered empty", async () => {
