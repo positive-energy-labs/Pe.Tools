@@ -21,15 +21,19 @@ const spec = (key: string, size?: FloaterSpec["size"]): FloaterSpec => ({
 });
 
 function mockField() {
-  vi.spyOn(HTMLElement.prototype, "getBoundingClientRect").mockImplementation(function (this: HTMLElement) {
-    if (this.dataset.field !== undefined) return new DOMRect(0, 0, 600, 600);
-    if (this.matches("[data-picture-readout], [data-slot='pane-work'], [data-slot='pane-legend']"))
-      return new DOMRect(450, 0, 150, 100);
-    if (this.dataset.slot !== "floater") return new DOMRect();
-    const corner = this.dataset.place!;
-    const dy = Number(this.style.translate.split(" ")[1]?.replace("px", "")) || 0;
-    return new DOMRect(corner[1] === "r" ? 500 : 0, (corner[0] === "b" ? 500 : 0) + dy, 100, 100);
-  });
+  vi.spyOn(HTMLElement.prototype, "getBoundingClientRect").mockImplementation(
+    function (this: HTMLElement) {
+      if (this.dataset.field !== undefined) return new DOMRect(0, 0, 600, 600);
+      if (
+        this.matches("[data-picture-readout], [data-slot='pane-work'], [data-slot='pane-legend']")
+      )
+        return new DOMRect(450, 0, 150, 100);
+      if (this.dataset.slot !== "floater") return new DOMRect();
+      const corner = this.dataset.place!;
+      const dy = Number(this.style.translate.split(" ")[1]?.replace("px", "")) || 0;
+      return new DOMRect(corner[1] === "r" ? 500 : 0, (corner[0] === "b" ? 500 : 0) + dy, 100, 100);
+    },
+  );
 }
 
 test.each(["sibling", "pane-legend", "data-picture-readout", "pane-work"])(
