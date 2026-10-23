@@ -70,6 +70,7 @@ export type {
   CellTransitionKind,
   StateCellProps,
 } from "./cell-state";
+import { focusQuiet } from "../../lib/utils";
 
 /** Each kind's glyph, key and plain sentence. The caller's `reason` overrides the sentence. */
 const TRANSITION: Record<CellTransitionKind, { key: string; says: string }> = {
@@ -294,7 +295,7 @@ export function StateCell(props: StateCellProps) {
                   if (input == null || event.target === input) return;
                   if ((event.target as HTMLElement).closest("button") != null) return;
                   event.preventDefault();
-                  input.focus();
+                  focusQuiet(input);
                   input.setSelectionRange(input.value.length, input.value.length);
                 }
               : undefined
@@ -313,7 +314,11 @@ export function StateCell(props: StateCellProps) {
             <input
               key={value as string}
               defaultValue={value as string}
-              placeholder={emptied || (props.unit != null && !props.placeholder) ? EMPTY_MARK : props.placeholder}
+              placeholder={
+                emptied || (props.unit != null && !props.placeholder)
+                  ? EMPTY_MARK
+                  : props.placeholder
+              }
               data-empty={emptied ? "" : undefined}
               inputMode={props.numeric != null ? "decimal" : undefined}
               tabIndex={-1}
@@ -334,7 +339,7 @@ export function StateCell(props: StateCellProps) {
                   // No row that way: stay on this cell (its host), never drop focus to the page.
                   if (!props.onNavigate?.(e.shiftKey ? "up" : "down")) {
                     const host = keyHost();
-                    if (host) host.focus();
+                    if (host) focusQuiet(host);
                     else e.currentTarget.blur();
                   }
                 } else if (e.key === "ArrowUp" || e.key === "ArrowDown") {
@@ -350,7 +355,7 @@ export function StateCell(props: StateCellProps) {
                   e.currentTarget.value = initial.current;
                   // spreadsheet convention: Escape hands focus back to the cell, where a/d/u live
                   const host = keyHost();
-                  if (host) host.focus();
+                  if (host) focusQuiet(host);
                   else e.currentTarget.blur();
                 }
               }}
@@ -366,7 +371,9 @@ export function StateCell(props: StateCellProps) {
           {props.unit != null ? (
             <span className="dl-cell-unit">
               <span className="dl-cell-unit-full">{props.unit.label}</span>
-              <span className="dl-cell-unit-short" aria-hidden>{props.unit.short ?? props.unit.label}</span>
+              <span className="dl-cell-unit-short" aria-hidden>
+                {props.unit.short ?? props.unit.label}
+              </span>
             </span>
           ) : null}
           {/* A contest on the row's one line: a title alone hides it from keyboard, touch and no-hover readers. */}

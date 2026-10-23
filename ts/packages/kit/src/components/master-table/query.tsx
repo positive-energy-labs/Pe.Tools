@@ -26,6 +26,7 @@ import {
   type QueryClause,
 } from "./view";
 import { TooltipHint } from "../lang/tooltip";
+import { focusQuiet } from "../../lib/utils";
 
 interface Pick {
   key: string;
@@ -368,7 +369,7 @@ export function QueryBox({
                 onEdit={() => {
                   setEditing(word);
                   type(word, rest);
-                  input?.focus();
+                  focusQuiet(input);
                 }}
                 title={chip.title}
               />

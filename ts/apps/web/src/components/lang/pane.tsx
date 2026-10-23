@@ -172,7 +172,8 @@ export function Pane({
           const focusable = (event.target as HTMLElement).closest<HTMLElement>(
             "a,button,input,select,textarea,[contenteditable='true'],[tabindex]",
           );
-          if (!focusable || focusable === event.currentTarget) event.currentTarget.focus();
+          if (!focusable || focusable === event.currentTarget)
+            event.currentTarget.focus({ preventScroll: true });
         }}
         className={root()}
       >

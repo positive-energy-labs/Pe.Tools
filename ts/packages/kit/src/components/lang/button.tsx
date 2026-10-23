@@ -76,9 +76,9 @@ export function Button({
         <GlyphOf icon={Glyph as LucideIcon} />
       )}
       {typeof children === "string" ? (
-        <span className="dl-button-label" title={tipped ? undefined : children}>
-          {busy ? `${children}…` : children}
-        </span>
+        // No native title (the hint guard): the full label stays the button's accessible name.
+        // ponytail: a cut label has no hover hint; measure on pointer entry like Row if missed.
+        <span className="dl-button-label">{busy ? `${children}…` : children}</span>
       ) : (
         (children as ReactNode)
       )}

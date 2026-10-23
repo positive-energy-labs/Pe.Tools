@@ -211,7 +211,15 @@ export function useCollection<T>(options: CollectionOptions<T>) {
   const setQuery = (next: string) => setOwnQuery(next);
   const [ownCursor, setOwnCursor] = useState<string | null>(null);
   const cursorKey = options.cursor !== undefined ? options.cursor : ownCursor;
-  const setCursorKey = (key: string | null) => {
+  // N1: a cursor the keys moved is followed into view; one the pointer moved never scrolls.
+  // `steer` counts key moves, so a virtual renderer scrolls on a key and on nothing else.
+  const [steer, setSteer] = useState(0);
+  const hovered = useRef<string | null>(null);
+  const setCursorKey = (key: string | null, steered = false) => {
+    if (steered) {
+      hovered.current = null;
+      setSteer((serial) => serial + 1);
+    }
     if (key === cursorKey) return;
     if (options.cursor === undefined) setOwnCursor(key);
     options.onCursorChange?.(key);
@@ -337,7 +345,7 @@ export function useCollection<T>(options: CollectionOptions<T>) {
     if (!pickable.length) return;
     const at = cursor ? pickable.indexOf(cursor) : -1;
     const next = pickable[Math.max(0, Math.min(pickable.length - 1, at + step))]!;
-    setCursorKey(next.key);
+    setCursorKey(next.key, true);
     return next;
   };
   const toggle = (key: string) =>
@@ -359,7 +367,7 @@ export function useCollection<T>(options: CollectionOptions<T>) {
     if (row.kind === "create") return createOf?.(row.text);
     if (row.kind === "more") {
       setExpanded([...expanded, row.group]);
-      return setCursorKey(row.next);
+      return setCursorKey(row.next, true);
     }
     setCursorKey(row.key);
     if (options.refusalOf?.(row.item)) return;
@@ -486,10 +494,11 @@ export function useCollection<T>(options: CollectionOptions<T>) {
   useScopeKeys(keys, options.target);
 
   const optionId = (key: string) => `${listId}-${key.replace(/[^\w-]/g, "_")}`;
-  // The cursored row stays in view as the keys move it.
+  // The cursored row stays in view as the keys move it; a row the pointer cursored is already
+  // where the person looks, so following it would scroll the list under the pointer (N1).
   const cursorId = cursor ? optionId(cursor.key) : null;
   useEffect(() => {
-    if (cursorId && options.scrollCursor !== false)
+    if (cursorId && options.scrollCursor !== false && cursor?.key !== hovered.current)
       document.getElementById(cursorId)?.scrollIntoView?.({ block: "nearest" });
   }, [cursorId, options.scrollCursor]);
   return {
@@ -502,7 +511,10 @@ export function useCollection<T>(options: CollectionOptions<T>) {
     visible,
     status,
     cursor: cursor?.key ?? null,
+    /** `steered`: the person's key moved it, so a renderer follows it into view. */
     setCursor: setCursorKey,
+    /** Counts key-driven cursor moves: the only cursor change a list scrolls for. */
+    steer,
     selected: selectedKeys,
     path,
     level,
@@ -540,7 +552,10 @@ export function useCollection<T>(options: CollectionOptions<T>) {
       "data-key": key,
       cursor: key === cursor?.key,
       selected: select === "none" ? undefined : selectedKeys.includes(key),
-      onMouseMove: () => setCursorKey(key),
+      onMouseMove: () => {
+        hovered.current = key;
+        setCursorKey(key);
+      },
       onClick: (event: { shiftKey: boolean; ctrlKey?: boolean; metaKey?: boolean }) =>
         pick(
           visible.find((row) => row.key === key),
@@ -858,6 +873,9 @@ export function useList<T, Sort extends string = string>(options: ListOptions<T,
     keyOf: (row) => row.key,
     labelOf: (row) => String(searchIndex.get(row.item)?.text[0] ?? row.key),
     query: "",
+    // I4: no phantom cursor on the first row; the cursor appears with the pointer or the keys, so
+    // it never reads as the open or selected item.
+    autoCursor: false,
     filter: "none",
     select: options.select ?? "single",
     selected: state.selected,
@@ -894,7 +912,7 @@ export function useList<T, Sort extends string = string>(options: ListOptions<T,
             if (cursor.branch && !state.open.includes(cursor.key)) toggleOpen(cursor.key);
             else {
               const child = rows.find((row) => row.ancestors.at(-1) === cursor.key);
-              if (child) collection.setCursor(child.key);
+              if (child) collection.setCursor(child.key, true);
             }
           },
           options: { ignoreInputs: false },
@@ -906,7 +924,7 @@ export function useList<T, Sort extends string = string>(options: ListOptions<T,
           callback: () => {
             if (!cursor) return;
             if (state.open.includes(cursor.key)) toggleOpen(cursor.key);
-            else if (cursor.ancestors.length) collection.setCursor(cursor.ancestors.at(-1)!);
+            else if (cursor.ancestors.length) collection.setCursor(cursor.ancestors.at(-1)!, true);
             else if (options.groups)
               setState({ ...state, closed: [...new Set([...state.closed, cursor.section])] });
           },

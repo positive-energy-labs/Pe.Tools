@@ -256,6 +256,9 @@ export function ModelTable({
         onStateChange={onStateChange}
         activeKey={picked ?? undefined}
         onRowClick={onPick}
+        // A held document's row is a cable's end (bay.tsx): drawn even scrolled away, so the cable
+        // clamps to the grid's edge instead of falling back to the jacks.
+        keep={(row) => row.openIn != null}
         empty={
           loading ? (
             <OutcomeLine kind="busy" label="reading recents and the machine" />

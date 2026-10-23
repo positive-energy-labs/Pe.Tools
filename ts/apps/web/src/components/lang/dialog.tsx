@@ -75,9 +75,19 @@ function DialogHeader(props: Omit<React.ComponentProps<"div">, "className">) {
   return <div data-slot="dialog-header" className={header()} {...props} />;
 }
 
-function DialogTitle(props: Omit<DialogPrimitive.Title.Props, "className">) {
+/** `hidden`: the dialog's name for assistive tech only, when its body already shows it (L1). */
+function DialogTitle({
+  hidden,
+  ...props
+}: Omit<DialogPrimitive.Title.Props, "className" | "hidden"> & { hidden?: boolean }) {
   const { title } = dialogRecipe();
-  return <DialogPrimitive.Title data-slot="dialog-title" className={title()} {...props} />;
+  return (
+    <DialogPrimitive.Title
+      data-slot="dialog-title"
+      className={hidden ? "sr-only" : title()}
+      {...props}
+    />
+  );
 }
 
 export { Dialog, DialogContent, DialogHeader, DialogTitle };

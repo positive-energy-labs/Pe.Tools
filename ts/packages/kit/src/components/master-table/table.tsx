@@ -88,6 +88,11 @@ export interface TableProps<Row extends RowData> {
   rowClassName?: (row: Row) => string | undefined;
   /** The Revit elements represented by each row, served by the root element menu. */
   revitIds?: (row: Row) => readonly number[];
+  /** Rows kept drawn while scrolled out of view (a long grid draws only the rows in view): the
+   *  rows another surface anchors to, such as a connector's end. */
+  keep?: (row: Row) => boolean;
+  /** The word for a row's critical damage (I2: kit `Row` damage), or nothing for a calm row. */
+  damage?: (row: Row) => string | null | undefined;
   gutter?: (row: Row) => { count: number; title: string; tone?: "alarm" | "caution" } | null;
   /** Nothing in scope (a filtered-to-nothing table says its own, different story). */
   empty?: ReactNode;
@@ -115,6 +120,8 @@ export function Table<Row extends RowData>({
   onRowHover,
   rowClassName,
   revitIds,
+  keep,
+  damage,
   gutter,
   empty,
   maxHeight,
@@ -181,6 +188,7 @@ export function Table<Row extends RowData>({
   );
 
   const theadRef = useRef<HTMLTableSectionElement | null>(null);
+  const [scroller, setScroller] = useState<HTMLDivElement | null>(null);
   const [rowTops, setRowTops] = useState<number[]>([]);
   useLayoutEffect(() => {
     const thead = theadRef.current;
@@ -208,6 +216,7 @@ export function Table<Row extends RowData>({
   return (
     <>
       <div
+        ref={setScroller}
         className={maxHeight ? "overflow-auto" : "min-h-0 flex-1 overflow-auto"}
         style={maxHeight ? { maxHeight } : undefined}
         // Scrolled sideways, the locked column floats over the rows and casts its shade.
@@ -243,6 +252,8 @@ export function Table<Row extends RowData>({
             activeKey={activeKey}
             rowClassName={rowClassName}
             revitIds={revitIds}
+            damage={damage}
+            keep={keep}
             onRowClick={onRowClick}
             selectedKeys={selection?.selected}
             refusalOf={selection?.refusal}
@@ -251,6 +262,7 @@ export function Table<Row extends RowData>({
             gutter={gutter}
             gutterWidth={GUTTER_PX}
             cellEdit={cellEdit}
+            scroller={scroller}
           />
         </table>
         {shownRows.length === 0 && (
