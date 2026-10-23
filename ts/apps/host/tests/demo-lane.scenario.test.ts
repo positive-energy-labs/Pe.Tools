@@ -120,6 +120,63 @@ type Page = any;
 
 const SCRATCH = process.env.PE_DEMO_LANE_SHOTS;
 
+test("issued Pea draft survives Home and Back in its mounted composer bank", async () => {
+  const page = await browser!.newPage();
+  const draft = "Unsent Home Back draft: preserve the original composer.";
+  const evidence: Record<string, unknown> = {};
+  try {
+    await page.goto(`${baseUrl}/ducts?demo=navigation`, { waitUntil: "domcontentloaded" });
+    await expect
+      .poll(() => page.getByText("All systems", { exact: true }).count(), { timeout: 30_000 })
+      .toBeGreaterThan(0);
+    await expect
+      .poll(() => new URL(page.url()).searchParams.get("thread"), { timeout: 30_000 })
+      .toMatch(/^[0-9a-f-]{36}$/);
+    const issuedThread = new URL(page.url()).searchParams.get("thread");
+    // Closing the last Place opens its own Pea thread; global Open Pea starts another address.
+    await page.getByRole("button", { name: "Close Ducts", exact: true }).click();
+    await expect.poll(() => new URL(page.url()).pathname).toBe("/pea");
+    expect(new URL(page.url()).searchParams.get("thread")).toBe(issuedThread);
+    const address = page.url();
+    const composer = page.getByRole("textbox", { name: "Message", exact: true });
+    await composer.fill(draft);
+    expect(await composer.inputValue()).toBe(draft);
+    const original = await composer.elementHandle();
+    evidence.before = {
+      address,
+      draft: await composer.inputValue(),
+      connected: await original.evaluate((node: HTMLElement) => node.isConnected),
+    };
+    await page.getByRole("button", { name: "Home / tool directory", exact: true }).click();
+    await expect.poll(() => new URL(page.url()).pathname).toBe("/");
+    evidence.home = {
+      url: page.url(),
+      originalConnected: await original.evaluate((node: HTMLElement) => node.isConnected),
+    };
+    await page.goBack({ waitUntil: "domcontentloaded" });
+    await expect.poll(() => page.url()).toBe(address);
+    await expect.poll(() => composer.inputValue(), { timeout: 15_000 }).toBe(draft);
+    expect(
+      await composer.evaluate(
+        (node: HTMLElement, original: HTMLElement) => node === original,
+        original,
+      ),
+    ).toBe(true);
+    evidence.after = {
+      address: page.url(),
+      draft: await composer.inputValue(),
+      originalConnected: await original.evaluate((node: HTMLElement) => node.isConnected),
+    };
+  } finally {
+    if (SCRATCH) {
+      writeFileSync(join(SCRATCH, "draft-home-back.json"), JSON.stringify(evidence, null, 2));
+      writeFileSync(join(SCRATCH, "draft-home-back.html"), await page.content());
+      await page.screenshot({ path: join(SCRATCH, "draft-home-back.png") });
+    }
+    await page.close();
+  }
+}, 90_000);
+
 test("unsent draft remains current across real offline/online stream recovery", async () => {
   const page = await browser!.newPage();
   const requests: { method: string; url: string }[] = [];
