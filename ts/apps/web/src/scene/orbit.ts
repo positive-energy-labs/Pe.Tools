@@ -4,12 +4,29 @@
  * +Y (north). elev: degrees above the horizon, 90 = plan. zoom: 1 = the scene bounds fill the view.
  */
 import type { Bounds, SceneInstance, SceneMeshes } from "./types";
+import { Quaternion, Vector3, type Camera } from "three";
 
 import { orbitLooks, type OrbitLook, type OrbitViewport } from "@pe/agent-contracts";
 export type { OrbitLook, OrbitViewport };
 
 type Vec3 = [number, number, number];
 type XYZ = { x: number; y: number; z: number };
+
+/** OrbitControls turns about its look target. Translate that turn to the selected pivot, keeping
+ * the same camera orientation. Merely changing the pivot never calls this or moves the picture. */
+export function rotateAbout(
+  camera: Camera,
+  target: Vector3,
+  pivot: readonly number[],
+  before: Quaternion,
+) {
+  const rotation = camera.quaternion.clone().multiply(before.clone().invert());
+  const offset = new Vector3().fromArray(pivot).sub(target);
+  const shift = offset.clone().sub(offset.applyQuaternion(rotation));
+  camera.position.add(shift);
+  target.add(shift);
+  camera.updateMatrixWorld();
+}
 
 /** Vertical field of view of the one perspective camera, in degrees. */
 export const ORBIT_FOV = 45;

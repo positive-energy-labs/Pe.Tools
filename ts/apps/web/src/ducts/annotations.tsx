@@ -77,6 +77,7 @@ export function Annotations({
   pointOf,
   issue,
   onPick,
+  onFrame,
   onRuling,
   onHover,
 }: {
@@ -95,6 +96,7 @@ export function Annotations({
   /** The selected issue id; its mark draws heavier. */
   issue: string;
   onPick: (id: number, at: Point) => void;
+  onFrame: (id: number) => void;
   onRuling: (r: Ruling, at: Point) => void;
   onHover: (id: number | null) => void;
 }) {
@@ -109,7 +111,10 @@ export function Annotations({
     style: HIT,
     onMouseEnter: () => onHover(id),
     onMouseLeave: () => onHover(null),
-    onClick: (e: React.MouseEvent) => onPick(id, at(e)),
+    onClick: (e: React.MouseEvent) => {
+      if (e.detail < 2) onPick(id, at(e));
+    },
+    onDoubleClick: () => onFrame(id),
   });
   // The heavy strings rebuild per projection, never per hover.
   const lines = useMemo(
@@ -249,6 +254,7 @@ export function Annotations({
                 transform={`translate(${xy[0] + slot * PIN * 2.2} ${xy[1] - PIN * 2.4})`}
                 style={HIT}
                 onClick={(e) => onRuling(r, at(e))}
+                onDoubleClick={() => onFrame(r.at)}
               >
                 {r.kind === "claim" ? (
                   <circle r={PIN} fill={ink} stroke={token(on ? "ink" : "page")} />

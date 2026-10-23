@@ -1,10 +1,13 @@
 import { describe, expect, it } from "vite-plus/test";
+import { Quaternion, Vector3 } from "three";
+import { newCamera } from "./projection";
 import {
   applyLook,
   boundsOfPoints,
   fitDistance,
   frame,
   fromControls,
+  rotateAbout,
   samePose,
   toCamera,
   type OrbitViewport,
@@ -23,6 +26,29 @@ const expectPose = (a: OrbitViewport, b: OrbitViewport) => {
   expect(a.zoom).toBeCloseTo(b.zoom, 6);
   a.pivot.forEach((x, i) => expect(x).toBeCloseTo(b.pivot[i]!, 6));
 };
+
+it("turns about an off-centre selection without recentering it or changing its distance", () => {
+  const camera = newCamera(1.6);
+  const target = new Vector3(0, 0, 0);
+  camera.position.set(20, -30, 15);
+  camera.lookAt(target);
+  camera.updateMatrixWorld();
+  const pivot = [8, 3, 2];
+  const point = new Vector3().fromArray(pivot);
+  const screen = point.clone().project(camera);
+  const distance = camera.position.distanceTo(point);
+  for (let i = 0; i < 5; i++) {
+    const before = camera.quaternion.clone();
+    const turn = new Quaternion().setFromAxisAngle(new Vector3(0, 0, 1), 0.1);
+    camera.position.sub(target).applyQuaternion(turn).add(target);
+    camera.lookAt(target);
+    rotateAbout(camera, target, pivot, before);
+    const after = point.clone().project(camera);
+    expect(after.x).toBeCloseTo(screen.x, 8);
+    expect(after.y).toBeCloseTo(screen.y, 8);
+    expect(camera.position.distanceTo(point)).toBeCloseTo(distance, 8);
+  }
+});
 
 describe("orbit viewport ↔ camera", () => {
   it("round trips through the camera pose", () => {

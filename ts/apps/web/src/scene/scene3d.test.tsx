@@ -8,7 +8,12 @@ import { OrbitMinimap } from "#/components/lang/minimap";
 import { Scene3D } from "./scene3d";
 
 const renderer = vi.hoisted(() => ({ current: null as any }));
-vi.mock("./renderer", () => ({ createRenderer: () => renderer.current }));
+vi.mock("./renderer", () => ({
+  createRenderer: (host: HTMLElement) => {
+    host.prepend(renderer.current.canvas);
+    return renderer.current;
+  },
+}));
 vi.mock("#/revit/observation", () => ({ useNativeObservation: () => ({ scope: null }) }));
 
 it("keeps motion local, publishes on release and accepts external camera moves", () => {
@@ -26,6 +31,7 @@ it("keeps motion local, publishes on release and accepts external camera moves",
     plane: () => null,
     viewport: () => pose,
     setViewport,
+    setOrbitPivot: vi.fn(),
     setOnFrame: vi.fn(),
     setPlane: vi.fn(),
     setThumbs: vi.fn(),
@@ -47,10 +53,11 @@ it("keeps motion local, publishes on release and accepts external camera moves",
     [],
   );
   const onViewport = vi.fn();
+  const onPick = vi.fn();
   const orbit = createLiveOrbit(initial, onViewport);
   const view = render(
     <>
-      <Scene3D meshes={meshes} orbit={orbit} />
+      <Scene3D meshes={meshes} orbit={orbit} onPick={onPick} />
       <OrbitMinimap orbit={orbit} />
     </>,
   );
@@ -80,7 +87,7 @@ it("keeps motion local, publishes on release and accepts external camera moves",
   onViewport.mockClear();
   act(() => {
     for (let zoom = 2; zoom <= 10; zoom++) {
-      renderer.current.canvas.dispatchEvent(new WheelEvent("wheel"));
+      renderer.current.canvas.dispatchEvent(new WheelEvent("wheel", { bubbles: true }));
       moves.dispatchEvent(new Event("start"));
       pose = { ...external, zoom };
       moves.dispatchEvent(new Event("change"));
@@ -108,6 +115,23 @@ it("keeps motion local, publishes on release and accepts external camera moves",
   expect(onViewport).toHaveBeenCalledExactlyOnceWith(turned, "gesture");
   act(() => orbit.accept({ ...turned }));
   expect(setViewport).toHaveBeenCalledTimes(1);
+  const beforeSelection = orbit.read();
+  setViewport.mockClear();
+  view.rerender(
+    <>
+      <Scene3D meshes={meshes} orbit={orbit} onPick={onPick} orbitPivot={[10, 20, 30]} />
+      <OrbitMinimap orbit={orbit} />
+    </>,
+  );
+  expect(renderer.current.setOrbitPivot).toHaveBeenLastCalledWith([10, 20, 30]);
+  expect(orbit.read()).toBe(beforeSelection);
+  expect(setViewport).not.toHaveBeenCalled();
+  const canvas = renderer.current.canvas;
+  fireEvent(canvas, new MouseEvent("pointerdown", { button: 0, clientX: 10, clientY: 10 }));
+  fireEvent(canvas, new MouseEvent("pointerup", { button: 0, clientX: 10, clientY: 10 }));
+  expect(onPick).not.toHaveBeenCalled();
+  fireEvent.click(canvas, { button: 0, clientX: 10, clientY: 10 });
+  expect(onPick).toHaveBeenCalledExactlyOnceWith(null, expect.any(MouseEvent));
   view.unmount();
   vi.useRealTimers();
   vi.unstubAllGlobals();

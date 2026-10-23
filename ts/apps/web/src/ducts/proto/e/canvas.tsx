@@ -2,10 +2,10 @@
  * The picture pane: one `Pane` whose strip holds the picture mode (model or schematic, `S` swaps),
  * the layers, and two floaters, the orbit globe (`G`) and the other picture small (a click swaps).
  * The model is the subject system's real meshes (`model-picture.tsx`) with its annotations; the
- * schematic is the one-line. Facts and rulings open in popovers where the pointer was. A pick, a
+ * schematic is the one-line. Element facts open beside its projected box; rulings open at the pointer. A pick, a
  * frame, a look and a gesture each write only their own Page keys.
  */
-import { useEffect, useMemo, useRef, useState } from "react";
+import { useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
 
 import { DUCTS_LAYERS, toggleLayer } from "@pe/agent-contracts";
 import { snapshotById } from "@pe/ducts-domain/readiness";
@@ -21,6 +21,8 @@ import { Pane } from "#/components/lang/pane";
 import { useNativeObservation } from "#/revit/observation";
 import { useScene } from "#/scene/use-scene";
 import { useLiveOrbit } from "#/scene/live-orbit";
+import { boundsOfInstances } from "#/scene/orbit";
+import { viewportProject } from "#/scene/projection";
 
 import type { Ruling } from "../../annotations";
 import { elementNamer } from "../../claims";
@@ -42,7 +44,7 @@ import { usePictureFloaters } from "./picture-floaters";
 import { RulingBody, useMarks } from "./rulings";
 
 type Open =
-  | { what: "element"; id: number; x: number; y: number }
+  | { what: "element"; id: number; x: number; y: number; box: DOMRect; side: "left" | "right" }
   | { what: "ruling"; n: number; x: number; y: number }
   | null;
 
@@ -149,7 +151,22 @@ function Canvas({
   const byId = useMemo(() => snapshotById(snapshot), [snapshot]);
   const nameOfId = useMemo(() => elementNamer(snapshot, sub), [snapshot, sub]);
   const pointer = useRef({ x: 0, y: 0 });
+  const [pictureHost, setPictureHost] = useState<HTMLDivElement | null>(null);
   const [open, setOpen] = useState<Open>(null);
+  const selectionFrame = useRef(0);
+  useEffect(() => () => cancelAnimationFrame(selectionFrame.current), []);
+  useLayoutEffect(() => {
+    if (open?.what !== "element") return;
+    // Start after the popup mounts. Scheduling from the click starts one frame too early:
+    // the router's synchronous selection render would still block its first visible frame.
+    cancelAnimationFrame(selectionFrame.current);
+    selectionFrame.current = requestAnimationFrame(() => {
+      selectionFrame.current = requestAnimationFrame(() => {
+        selectionFrame.current = 0;
+        setPage({ selected: String(open.id) }, { history: "push" });
+      });
+    });
+  }, [open, setPage]);
   const pointOf = (id: number): readonly number[] | null => {
     const node = byId.nodes.get(id);
     if (node) return node.point;
@@ -220,12 +237,57 @@ function Canvas({
     [lit, hovered],
   );
 
-  /** A pick writes the selection alone, and opens the element's facts where the pointer was. */
+  // Opening facts is local and urgent. Updating the address also renders the tree and rules;
+  // let that work follow the first paint instead of holding the popover behind it.
   const pick = (id: number | null, at = pointer.current) => {
-    setPage({ selected: id == null ? "" : String(id) }, { history: "push" });
-    setOpen(id == null ? null : { what: "element", id, ...at });
+    const host = pictureHost?.querySelector("[data-model-picture]");
+    const rect = host?.getBoundingClientRect();
+    const now = orbit.read();
+    const b =
+      id != null && read.meshes ? boundsOfInstances(read.meshes, (i) => i.revitId === id) : null;
+    const project = now && bounds && rect ? viewportProject(now, bounds.scene, rect) : null;
+    const points =
+      b && project
+        ? [b.minX, b.maxX].flatMap((x) =>
+            [b.minY, b.maxY].flatMap((y) =>
+              [b.minZ, b.maxZ].flatMap((z) => {
+                const p = project([x, y, z]);
+                return p ? [p] : [];
+              }),
+            ),
+          )
+        : [];
+    const xs = points.map((p) => p[0] + rect!.left);
+    const ys = points.map((p) => p[1] + rect!.top);
+    const box = points.length
+      ? DOMRect.fromRect({
+          x: Math.min(...xs),
+          y: Math.min(...ys),
+          width: Math.max(...xs) - Math.min(...xs),
+          height: Math.max(...ys) - Math.min(...ys),
+        })
+      : DOMRect.fromRect({ ...at, width: 0, height: 0 });
+    setOpen(
+      id == null
+        ? null
+        : {
+            what: "element",
+            id,
+            ...at,
+            box,
+            side: box.left > window.innerWidth - box.right ? "left" : "right",
+          },
+    );
+    if (id == null) {
+      cancelAnimationFrame(selectionFrame.current);
+      setPage({ selected: "" }, { history: "push" });
+    }
   };
+  useEffect(() => {
+    if (!page.selected) setOpen(null);
+  }, [page.selected]);
   const ruling = (r: Ruling, at: { x: number; y: number }) => {
+    cancelAnimationFrame(selectionFrame.current);
     setPage({ selected: String(r.at) }, { history: "push" });
     setOpen({ what: "ruling", n: r.n, ...at });
   };
@@ -261,7 +323,9 @@ function Canvas({
   const anchor = open
     ? {
         getBoundingClientRect: () =>
-          DOMRect.fromRect({ x: open.x, y: open.y, width: 0, height: 0 }),
+          open.what === "element"
+            ? open.box
+            : DOMRect.fromRect({ x: open.x, y: open.y, width: 0, height: 0 }),
       }
     : undefined;
 
@@ -341,15 +405,29 @@ function Canvas({
       floaters={floaters}
     >
       <div
+        ref={setPictureHost}
         data-proto="E"
         className="relative flex size-full min-h-0 flex-col"
         onPointerDownCapture={(e) => (pointer.current = { x: e.clientX, y: e.clientY })}
+        onPointerMoveCapture={(e) => {
+          if (
+            open &&
+            e.buttons &&
+            Math.hypot(e.clientX - pointer.current.x, e.clientY - pointer.current.y) > 5
+          )
+            setOpen(null);
+        }}
+        onWheelCapture={() => {
+          if (open) setOpen(null);
+        }}
+        onDoubleClickCapture={() => setOpen(null)}
       >
         {picture === "model" ? (
           <ModelPicture
             read={read}
             bounds={bounds}
             orbit={orbit}
+            wheelHost={pictureHost?.closest<HTMLElement>("[data-slot='pane-field']")}
             scene={scene}
             layers={layers}
             encoding={scale.encoding}
@@ -415,8 +493,25 @@ function Canvas({
           {picture === "model" ? <KeyLegend keys={PICTURE_KEYS} lead={0} /> : null}
         </div>
 
-        <Popover open={!!open} onOpenChange={(o) => (o ? null : setOpen(null))}>
-          <PopoverContent anchor={anchor} data-proto-c-popover={open?.what ?? ""}>
+        <Popover
+          open={!!open}
+          onOpenChange={(o, details) => {
+            if (o) return;
+            setOpen(null);
+            if (details.reason === "escape-key") {
+              cancelAnimationFrame(selectionFrame.current);
+              setPage({ selected: "" }, { history: "push" });
+            }
+          }}
+        >
+          <PopoverContent
+            anchor={anchor}
+            side={open?.what === "element" ? open.side : "bottom"}
+            collisionAvoidance={{ side: "none", align: "shift" }}
+            initialFocus={false}
+            finalFocus={false}
+            data-proto-c-popover={open?.what ?? ""}
+          >
             {openRuling ? (
               <RulingBody
                 r={openRuling}

@@ -1,5 +1,5 @@
 import { expect, test, vi } from "vite-plus/test";
-import { createLiveOrbit } from "./live-orbit";
+import { createLiveOrbit, glideTo } from "./live-orbit";
 import type { OrbitViewport } from "./orbit";
 
 const initial: OrbitViewport = { kind: "orbit", yaw: 0, elev: 30, zoom: 1, pivot: [0, 0, 0] };
@@ -57,4 +57,41 @@ test("external moves and replacement gestures invalidate late input; cancellatio
   orbit.cancel(second);
   expect(orbit.read()).toEqual(external);
   expect(commit).not.toHaveBeenCalled();
+});
+
+test("a frame eases from the current camera, commits once, and yields to new input", () => {
+  let now = 0;
+  const frames: FrameRequestCallback[] = [];
+  vi.spyOn(performance, "now").mockImplementation(() => now);
+  vi.stubGlobal("requestAnimationFrame", (f: FrameRequestCallback) => frames.push(f));
+  const tick = (at: number) => {
+    now = at;
+    frames.shift()!(at);
+  };
+  try {
+    const commit = vi.fn();
+    const orbit = createLiveOrbit(initial, commit);
+    const to = { ...initial, zoom: 4, pivot: [10, 20, 30] as [number, number, number] };
+    glideTo(orbit, to, 100);
+    expect(orbit.read()).toEqual(initial);
+    tick(50);
+    expect(orbit.read()!.zoom).toBeGreaterThan(1);
+    expect(orbit.read()!.zoom).toBeLessThan(4);
+    expect(commit).not.toHaveBeenCalled();
+    tick(100);
+    expect(orbit.read()).toEqual(to);
+    expect(commit).toHaveBeenCalledExactlyOnceWith(to, "move");
+    commit.mockClear();
+    glideTo(orbit, initial, 100);
+    const input = orbit.begin();
+    const dragged = { ...to, yaw: 15 };
+    orbit.preview(input, dragged);
+    tick(150);
+    expect(orbit.read()).toEqual(dragged);
+    expect(frames).toHaveLength(0);
+    expect(commit).not.toHaveBeenCalled();
+  } finally {
+    vi.unstubAllGlobals();
+    vi.restoreAllMocks();
+  }
 });
