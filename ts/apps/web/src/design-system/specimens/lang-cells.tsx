@@ -6,9 +6,45 @@ import { RecipeGrid } from "./recipe-grid";
 
 const noop = () => {};
 
+const CFM = { label: "cfm" };
+const INWG = { label: "in-wg", short: "wg" };
+
+/** The unit-bearing cell in a `.dl-cells` group at the three sidebar widths: nothing wraps, and the
+ *  decoration, note and unit label give way in that order (hover or focus returns them). */
+function UnitCellSpecimen({ width }: { width: number }) {
+  const item = (value: string, unit: typeof CFM, note: string) => (
+    <span className="dl-cells-item">
+      <StateCell
+        value={value}
+        cap="editable"
+        scale="row"
+        unit={unit}
+        numeric={{ min: 0, digits: 2 }}
+        onCommit={noop}
+      />
+      <span className="dl-cells-note t-small">{note}</span>
+    </span>
+  );
+  return (
+    <div style={{ width }} data-specimen-width={width}>
+      <span className="dl-cells">
+        {item("1200", CFM, "override")}
+        {item("", INWG, "from table")}
+        {item("0.5", INWG, "Pea proposes")}
+      </span>
+    </div>
+  );
+}
+
 export function LangCellSpecimens() {
   return (
     <>
+      <div className="flex flex-col gap-3 p-2" data-specimen="unit-cell">
+        <p className="t-small text-ink-2">StateCell unit (always-on suffix) at 270, 360, 520 px</p>
+        {[270, 360, 520].map((w) => (
+          <UnitCellSpecimen key={w} width={w} />
+        ))}
+      </div>
       <RecipeGrid
         name="StateCell"
         importPath="@pe/kit/lang/cell"

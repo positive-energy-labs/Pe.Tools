@@ -110,3 +110,27 @@ test("25 item 3: a commit refused LATER (an async write) puts the cell back and 
   expect(input.value).toBe("10in");
   expect(document.body.textContent).toContain("that family isn't in this page's scope");
 });
+
+test("a unit-bearing cell draws its unit inside the box, empty or filled, and keeps committing", async () => {
+  const onCommit = vi.fn(() => null);
+  const { cell } = inTable(
+    <StateCell
+      value=""
+      cap="editable"
+      scale="row"
+      unit={{ label: "in-wg", short: "wg" }}
+      numeric={{ min: 0, digits: 2 }}
+      onCommit={onCommit}
+    />,
+  );
+  const box = document.querySelector<HTMLElement>(".dl-cell[data-unit]")!;
+  expect(within(box).getByText("in-wg")).toBeTruthy();
+  expect(within(box).getByText("wg").getAttribute("aria-hidden")).toBe("true");
+  const input = cell.getByRole("textbox") as HTMLInputElement;
+  expect(input.placeholder).toBe("–");
+  await act(async () => {
+    fireEvent.change(input, { target: { value: "0.5" } });
+    fireEvent.blur(input);
+  });
+  expect(onCommit).toHaveBeenCalledWith("0.5");
+});
