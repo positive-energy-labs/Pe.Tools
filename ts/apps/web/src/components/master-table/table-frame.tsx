@@ -1,3 +1,4 @@
+import { useSearchKey } from "@pe/kit/lang/list-view";
 /**
  * TABLE FRAME — a table's chrome, as a wrapper (the approved reshape): the box and one head line
  * holding the query box (every narrowing is a chip), summary, modes, select-all and actions. The
@@ -76,14 +77,16 @@ export function TableFrame<Row extends RowData>({
   const [draft, setDraft] = useState("");
   const [queryInput, setQueryInput] = useState<HTMLInputElement | null>(null);
   const region = queryInput?.closest<HTMLElement>('[data-slot="artifact-frame"]') ?? null;
+  useSearchKey({
+    region: () => region,
+    available: () => !!queryInput,
+    focus: () => {
+      queryInput?.focus();
+      queryInput?.select();
+    },
+  });
   useScopeKeys(
     actionScopeKeys([
-      {
-        id: "table.search",
-        bindings: ["/"],
-        label: "Search this table",
-        invoke: () => queryInput?.focus(),
-      },
       {
         id: "table.filters",
         bindings: ["Shift+F"],

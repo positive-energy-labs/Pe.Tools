@@ -586,7 +586,26 @@ export const emptyListState = <Sort extends string = string>(): ListState<Sort> 
   selected: [],
 });
 
+/** The shared address seam: the sink owns keywords, picked pills and ordering. */
+export interface ListPersist<Sort extends string = string> {
+  scope?: string;
+  search: ListSearch;
+  sort: Sort | "";
+  onChange: (search: ListSearch, sort: Sort | "") => void;
+}
+
 export interface ListOptions<T, Sort extends string = string> {
+  persist?: ListPersist<Sort>;
+  /** External selection opens context once; a manual collapse sticks until the next selection. */
+  followSelection?: {
+    key:
+      | string
+      | null
+      | ((rows: readonly ListItem<T>[], selected: readonly string[]) => string | null);
+    context?: string;
+    /** Context rows to open when the context changes, including their ancestors. */
+    open?: readonly string[];
+  };
   items: readonly T[];
   keyOf: (item: T) => string;
   /** Keep this reader stable; its index is rebuilt when the data or reader changes. */
@@ -808,9 +827,12 @@ export function useList<T, Sort extends string = string>(options: ListOptions<T,
     closed: options.groups?.defaultClosed ?? [],
     ...options.initialState,
   }));
-  const source = options.state ?? ownState;
+  const local = options.state ?? ownState;
+  const source = options.persist
+    ? { ...local, search: options.persist.search, sort: options.persist.sort }
+    : local;
   const sourceKey = JSON.stringify(source.search);
-  const scope = options.scope ?? "";
+  const scope = options.scope ?? options.persist?.scope ?? "";
   const [draft, setDraft] = useState({ sourceKey, scope, search: source.search });
   const published = useRef(new Set<string>());
   const reset = useRef(0);
@@ -836,6 +858,12 @@ export function useList<T, Sort extends string = string>(options: ListOptions<T,
     published.current.add(JSON.stringify(next.search));
     if (!current.state) setOwnState(next);
     current.onState?.(next);
+    if (
+      current.persist &&
+      (JSON.stringify(next.search) !== JSON.stringify(current.persist.search) ||
+        next.sort !== current.persist.sort)
+    )
+      current.persist.onChange(next.search, next.sort);
   };
   useEffect(() => {
     if (
@@ -935,6 +963,53 @@ export function useList<T, Sort extends string = string>(options: ListOptions<T,
     target,
   );
   const [revealRequest, setRevealRequest] = useState<{ key: string; serial: number } | null>(null);
+  const reveal = (key: string) => {
+    const row = model.all.find((each) => each.key === key);
+    if (!row) return;
+    setState({
+      ...state,
+      search: rows.some((each) => each.key === key) ? state.search : emptyListSearch(),
+      closed: state.closed.filter((each) => each !== row.section),
+      open: [...new Set([...state.open, ...row.ancestors])],
+    });
+    collection.setCursor(key);
+    setRevealRequest((previous) => ({ key, serial: (previous?.serial ?? 0) + 1 }));
+  };
+  const follow = options.followSelection;
+  const followKey =
+    typeof follow?.key === "function" ? follow.key(model.all, state.selected) : follow?.key;
+  const followedContext = useRef<string | undefined>(undefined);
+  const pendingReveal = useRef<string | null>(null);
+  useEffect(() => {
+    if (!follow) return;
+    const changedContext = followedContext.current !== (follow.context ?? "");
+    followedContext.current = follow.context ?? "";
+    const selected = model.all.find((row) => row.key === followKey);
+    const context = changedContext ? model.all.filter((row) => follow.open?.includes(row.key)) : [];
+    pendingReveal.current = selected?.key ?? null;
+    setState({
+      ...state,
+      selected: selected ? [selected.key] : [],
+      closed: state.closed.filter((key) => key !== selected?.section),
+      open: [
+        ...new Set([
+          ...state.open,
+          ...context.flatMap((row) => [...row.ancestors, row.key]),
+          ...(selected?.ancestors ?? []),
+        ]),
+      ],
+    });
+    // Selection identity, rather than rerenders, owns the one opening move.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [followKey, follow?.context]);
+  useEffect(() => {
+    const key = pendingReveal.current;
+    // Never erase authored search to follow a linked selection; wait until it is included.
+    if (key && state.selected.includes(key) && rows.some((row) => row.key === key)) {
+      pendingReveal.current = null;
+      reveal(key);
+    }
+  });
   return {
     ...model,
     state,
@@ -973,18 +1048,7 @@ export function useList<T, Sort extends string = string>(options: ListOptions<T,
         ...state.search,
         pills: state.search.pills.filter((pill) => pill.field !== field),
       }),
-    reveal: (key: string) => {
-      const row = model.all.find((each) => each.key === key);
-      if (!row) return;
-      setState({
-        ...state,
-        search: rows.some((each) => each.key === key) ? state.search : emptyListSearch(),
-        closed: state.closed.filter((each) => each !== row.section),
-        open: [...new Set([...state.open, ...row.ancestors])],
-      });
-      collection.setCursor(key);
-      setRevealRequest((previous) => ({ key, serial: (previous?.serial ?? 0) + 1 }));
-    },
+    reveal,
     tree: !!options.tree,
     grouped: !!options.groups,
     stageOf: options.stageOf,

@@ -18,7 +18,8 @@ import {
   type ListOptions,
 } from "../src/components/lang/collection";
 import { type ListSearch } from "@pe/agent-contracts";
-import { ListBar, ListView } from "../src/components/lang/list-view";
+import { ListBar, ListView, PlainList, useSearchKey } from "../src/components/lang/list-view";
+import { land } from "../src/components/lang/row";
 import { readGestures, readKeyMeta, readRegistrations } from "../src/keys";
 
 const search = (keywords = "", pills: Record<string, string> = {}): ListSearch => ({
@@ -486,9 +487,8 @@ test("tiny lists render through the same rows without ResizeObserver or viewport
   function Harness() {
     const list = useList({ ...options, items: items.slice(0, 3) });
     return (
-      <ListView
+      <PlainList
         list={list}
-        bar={false}
         aria-label="tiny systems"
         row={(item) => ({ label: item.name })}
         empty={{ message: "No systems", exit: "Read a model" }}
@@ -506,7 +506,7 @@ test("small-list keyboard and repeated reveal scroll the mounted row with the ne
   Object.defineProperty(HTMLElement.prototype, "scrollIntoView", {
     configurable: true,
     value: function (this: HTMLElement, rule: ScrollIntoViewOptions) {
-      expect(rule).toEqual({ block: "nearest" });
+      expect(rule).toMatchObject({ block: "nearest" });
       scrolled.push(this.dataset.key!);
     },
   });
@@ -535,6 +535,7 @@ test("small-list keyboard and repeated reveal scroll the mounted row with the ne
   fireEvent.click(screen.getByRole("button", { name: "Reveal last" }));
   expect(scrolled).toHaveLength(count + 1);
   expect(scrolled.at(-1)).toBe("10039");
+  expect(document.querySelector('[data-key="10039"]')?.hasAttribute("data-landed")).toBe(true);
 });
 
 test("renderer mounts a bounded viewport, exposes drop targets and distinguishes filtered empty", async () => {
@@ -781,4 +782,113 @@ test("list help declares pointer behavior and keeps cursor keys registered once"
   expect(down).toHaveLength(1);
   view.unmount();
   expect(readGestures()).toEqual([]);
+});
+
+test("land restarts one token-timed mark and optionally focuses the destination control", () => {
+  vi.useFakeTimers();
+  const el = document.createElement("div");
+  el.style.setProperty("--motion-land", "1.4s");
+  el.innerHTML = '<input aria-label="destination" />';
+  document.body.append(el);
+  const scroll = vi.fn();
+  el.scrollIntoView = scroll;
+  land(el, { focus: true });
+  expect(document.activeElement).toBe(el.firstElementChild);
+  expect(scroll).toHaveBeenCalledWith({ block: "nearest", behavior: "instant" });
+  expect(el.hasAttribute("data-landed")).toBe(true);
+  vi.advanceTimersByTime(1000);
+  land(el);
+  vi.advanceTimersByTime(1000);
+  expect(el.hasAttribute("data-landed")).toBe(true);
+  vi.advanceTimersByTime(400);
+  expect(el.hasAttribute("data-landed")).toBe(false);
+  el.remove();
+});
+
+test("persist owns search and sort without publishing selection-only changes", () => {
+  vi.useFakeTimers();
+  const changed = vi.fn();
+  const hook = renderHook(
+    ({ keywords }) =>
+      useList({
+        ...options,
+        persist: { search: search(keywords), sort: "name", onChange: changed },
+      }),
+    { initialProps: { keywords: "System 1" } },
+  );
+  act(() => hook.result.current.toggleOpen("10001"));
+  expect(changed).not.toHaveBeenCalled();
+  act(() => hook.result.current.setSort("loss"));
+  expect(changed).toHaveBeenLastCalledWith(search("System 1"), "loss");
+  act(() => hook.result.current.setKeywords("waiting"));
+  hook.rerender({ keywords: "System 2" });
+  act(() => {
+    vi.advanceTimersByTime(300);
+  });
+  expect(changed).toHaveBeenCalledTimes(1);
+  expect(hook.result.current.state.search).toEqual(search("System 2"));
+});
+
+test("slash arbitration prioritizes focused regions, leaves text editing alone and hands off on unmount", () => {
+  const first = vi.fn(),
+    second = vi.fn();
+  function Owner({ id, primary, focus }: { id: string; primary?: boolean; focus: () => void }) {
+    useSearchKey({ region: () => document.getElementById(id), primary, focus });
+    return (
+      <div id={id} tabIndex={0}>
+        <input aria-label={id} />
+      </div>
+    );
+  }
+  const view = render(
+    <>
+      <Owner id="first" primary focus={first} />
+      <Owner id="second" focus={second} />
+    </>,
+  );
+  expect(
+    readRegistrations().filter((entry) => readKeyMeta(entry.options.meta)?.name === "Search"),
+  ).toHaveLength(1);
+  document.getElementById("second")!.focus();
+  fireEvent.keyDown(document.activeElement!, { key: "/", code: "Slash" });
+  expect(second).toHaveBeenCalledTimes(1);
+  expect(first).not.toHaveBeenCalled();
+  screen.getByRole("textbox", { name: "second" }).focus();
+  fireEvent.keyDown(document.activeElement!, { key: "/", code: "Slash" });
+  expect(second).toHaveBeenCalledTimes(1);
+  view.rerender(<Owner id="second" primary focus={second} />);
+  document.getElementById("second")!.focus();
+  fireEvent.keyDown(document.activeElement!, { key: "/", code: "Slash" });
+  expect(second).toHaveBeenCalledTimes(2);
+});
+
+test("following waits for an excluded query and opens ancestors only once per selection", () => {
+  const child = { ...items[1]!, children: [] };
+  const root = { ...items[0]!, children: [child] };
+  const hook = renderHook(
+    ({ selected }) =>
+      useList({
+        ...options,
+        items: [root],
+        tree: { childrenOf: (item) => item.children },
+        initialState: { search: search("excluded") },
+        followSelection: { key: selected },
+      }),
+    { initialProps: { selected: child.id as string | null } },
+  );
+  expect(hook.result.current.state.open).toContain(root.id);
+  expect(hook.result.current.state.search.keywords).toBe("excluded");
+  expect(hook.result.current.revealRequest).toBeNull();
+  act(() => hook.result.current.clearSearch());
+  expect(hook.result.current.revealRequest?.key).toBe(child.id);
+  const serial = hook.result.current.revealRequest?.serial;
+  act(() => hook.result.current.toggleOpen(root.id));
+  expect(hook.result.current.state.open).not.toContain(root.id);
+  hook.rerender({ selected: child.id });
+  expect(hook.result.current.state.open).not.toContain(root.id);
+  expect(hook.result.current.revealRequest?.serial).toBe(serial);
+  hook.rerender({ selected: null });
+  hook.rerender({ selected: child.id });
+  expect(hook.result.current.state.open).toContain(root.id);
+  expect(hook.result.current.revealRequest?.serial).toBe((serial ?? 0) + 1);
 });

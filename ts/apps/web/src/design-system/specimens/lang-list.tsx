@@ -1,3 +1,5 @@
+import { useList } from "@pe/kit/lang/collection";
+import { PlainList } from "@pe/kit/lang/list-view";
 /**
  * The list grammar's swatch frames: the one Row (its recipe and every state), and the containers
  * that draw it — List inline, ListPopup on a trigger, and the in-cell list. The full comparison of
@@ -33,8 +35,17 @@ const common = {
 };
 
 export function LangListSpecimens() {
+  const plain = useList({ ...common, search: (kind) => ({ text: [kind] }) });
   return (
     <>
+      <SpecimenFrame name="PlainList" importPath="@pe/kit/lang/list-view">
+        <PlainList
+          list={plain}
+          aria-label="storage types"
+          row={common.row}
+          empty={{ message: "No storage types", exit: "Read a family" }}
+        />
+      </SpecimenFrame>
       <RecipeGrid
         name="Row"
         importPath="@pe/kit/lang/row"

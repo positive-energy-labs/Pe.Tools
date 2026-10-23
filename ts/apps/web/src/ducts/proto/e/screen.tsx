@@ -1,3 +1,4 @@
+import { land } from "@pe/kit/lang/row";
 /**
  * THROWAWAY (protoui round 3): E2 ("C simplicity, B layout"). LEFT a resizable double sidebar: a
  * top pane (all systems | the chosen system, tree over Inputs) over a bottom pane (all-systems
@@ -517,12 +518,8 @@ function LoadedScreenBody({
       half?.querySelector<HTMLElement>(`[data-e-unruled-ids~="${landing.id}"]`) ??
       half?.querySelector<HTMLElement>(`[data-e-cell="componentDrops:${landing.id}"]`);
     if (!row) return;
-    row.scrollIntoView?.({ block: "nearest" });
-    row.querySelector<HTMLElement>("input, select")?.focus();
-    row.setAttribute("data-landed", "");
-    const done = window.setTimeout(() => row.removeAttribute("data-landed"), 1600);
+    land(row, { focus: true });
     setLanding(null);
-    return () => window.clearTimeout(done);
   }, [landing, priced, sideFor]);
   useEffect(() => {
     if (!cellFocus) return;

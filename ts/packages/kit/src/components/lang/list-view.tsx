@@ -5,6 +5,7 @@ import {
   useLayoutEffect,
   useRef,
   useState,
+  useSyncExternalStore,
   type ReactNode,
   type HTMLAttributes,
   type RefObject,
@@ -14,10 +15,10 @@ import { ChevronDown, ChevronRight, ChevronUp } from "lucide-react";
 import { Button } from "./button";
 import { type ListController, type ListItem } from "./collection";
 import { EmptyState } from "./empty";
-import { useScopeGestures, useScopeKeys } from "../../keys";
+import { useScopeGestures, useScopeKeys, useScopeLive } from "../../keys";
 import { ListPopup } from "./list-popup";
 import { ListSearchBox } from "./list-search";
-import { Row, type RowProps } from "./row";
+import { land, Row, type RowProps } from "./row";
 import "./lang.css";
 import { focusQuiet } from "../../lib/utils";
 
@@ -120,6 +121,17 @@ export interface ListViewProps<T, Sort extends string = string> {
 
 /** One renderer, one common scroller, one measured virtual body per section. No paged tails. */
 export function ListView<T, Sort extends string = string>(props: ListViewProps<T, Sort>) {
+  return <ListRenderer {...props} />;
+}
+
+/** Small collections share rows, keys and sections without search chrome or virtualization. */
+export function PlainList<T, Sort extends string = string>(
+  props: Omit<ListViewProps<T, Sort>, "bar" | "primary" | "estimate" | "overscan">,
+) {
+  return <ListRenderer {...props} bar={false} plain />;
+}
+
+function ListRenderer<T, Sort extends string>(props: ListViewProps<T, Sort> & { plain?: boolean }) {
   useScopeGestures([
     { pointer: "click", label: "select the row" },
     { pointer: "hover", label: "move the cursor" },
@@ -136,9 +148,14 @@ export function ListView<T, Sort extends string = string>(props: ListViewProps<T
   // reveal named it. A refresh, resize, hover or a linked pane's cursor never scrolls the list.
   const request = `${list.collection.steer}:${list.revealRequest?.serial ?? 0}`;
   const served = useRef("0:0");
+  const landed = useRef(0);
+  useLayoutEffect(() => landRequest(list, landed));
   useLayoutEffect(() => {
-    if (list.total >= 60 || served.current === request || !list.collection.cursor) return;
+    if ((!props.plain && list.total >= 60) || served.current === request || !list.collection.cursor)
+      return;
+    const revealing = served.current.split(":")[1] !== request.split(":")[1];
     served.current = request;
+    if (revealing) return;
     document
       .getElementById(list.collection.rowProps(list.collection.cursor).id)
       ?.scrollIntoView?.({ block: "nearest" });
@@ -218,6 +235,7 @@ export function ListView<T, Sort extends string = string>(props: ListViewProps<T
           {!section.closed ? (
             <SectionBody
               list={list}
+              plain={props.plain}
               live={live}
               rows={section.rows}
               row={row}
@@ -227,6 +245,7 @@ export function ListView<T, Sort extends string = string>(props: ListViewProps<T
               detail={detail}
               request={request}
               served={served}
+              landed={landed}
             />
           ) : null}
         </section>
@@ -236,6 +255,7 @@ export function ListView<T, Sort extends string = string>(props: ListViewProps<T
 }
 
 type SectionBodyProps<T, Sort extends string> = {
+  plain?: boolean;
   list: ListController<T, Sort>;
   live: RefObject<ListController<T, Sort>>;
   rows: readonly ListItem<T>[];
@@ -247,10 +267,11 @@ type SectionBodyProps<T, Sort extends string> = {
   /** The latest scroll request (key move or reveal) and the last one a body honoured. */
   request: string;
   served: RefObject<string>;
+  landed: RefObject<number>;
 };
 
 function SectionBody<T, Sort extends string>(props: SectionBodyProps<T, Sort>) {
-  if (props.list.total >= 60) return <VirtualSectionBody {...props} />;
+  if (!props.plain && props.list.total >= 60) return <VirtualSectionBody {...props} />;
   return (
     <div data-list-body="" role="presentation">
       {props.rows.map((item) => (
@@ -385,6 +406,7 @@ function VirtualSectionBody<T, Sort extends string>({
   detail,
   request,
   served,
+  landed,
 }: SectionBodyProps<T, Sort>) {
   const body = useRef<HTMLDivElement>(null);
   // Null until measured: a request made as this body mounts waits for its real margin.
@@ -426,6 +448,7 @@ function VirtualSectionBody<T, Sort extends string>({
     scrollPaddingStart: headroom,
     scrollPaddingEnd: headroom,
   });
+  useLayoutEffect(() => landRequest(list, landed));
   const requestedKey = list.collection.cursor;
   const cursorIndex = rows.findIndex((item) => item.key === requestedKey);
   useLayoutEffect(() => {
@@ -466,13 +489,34 @@ function VirtualSectionBody<T, Sort extends string>({
   );
 }
 
-interface Target {
-  input: () => HTMLInputElement | null;
-  /** The region the filter belongs to: the pointer is "over" the list when it is over this. */
-  region: () => HTMLElement | null;
-  primary: boolean;
+function landRequest<T, Sort extends string>(
+  list: ListController<T, Sort>,
+  landed: RefObject<number>,
+) {
+  const request = list.revealRequest;
+  if (!request || landed.current === request.serial) return;
+  const el = document.getElementById(list.collection.rowProps(request.key).id);
+  if (!el) return;
+  landed.current = request.serial;
+  land(el);
 }
-const targets = new Set<Target>();
+
+export interface SearchKeyOwner {
+  region: () => HTMLElement | null;
+  focus: () => void;
+  available?: () => boolean;
+  primary?: boolean;
+}
+const targets = new Set<SearchKeyOwner>();
+const listeners = new Set<() => void>();
+const subscribe = (listener: () => void) => {
+  listeners.add(listener);
+  return () => {
+    listeners.delete(listener);
+  };
+};
+const leader = () => targets.values().next().value ?? null;
+const noLeader = () => null;
 
 /** The nearest ancestor that scrolls vertically (the pane body a list lives in). */
 export function scrollParent(el: HTMLElement | null): HTMLElement | null {
@@ -484,17 +528,67 @@ export function scrollParent(el: HTMLElement | null): HTMLElement | null {
 }
 
 /** The filter `/` goes to: the one with focus in its region, then the one under the pointer, then the primary. */
-function pick(): Target | null {
-  const all = [...targets].filter((t) => t.input());
+function pick(): SearchKeyOwner | null {
+  const all = [...targets].filter((t) => t.available?.() !== false);
   const active = document.activeElement;
   return (
-    all.find((t) => active && (t.region()?.contains(active) || t.input() === active)) ??
-    all.find(
-      (t) =>
-        t.region()?.matches(":hover") || t.input()?.closest("[data-list-bar]")?.matches(":hover"),
-    ) ??
+    all.find((t) => active && t.region()?.contains(active)) ??
+    all.find((t) => t.region()?.matches(":hover")) ??
     all.find((t) => t.primary) ??
     null
+  );
+}
+
+/** Register search intent; the first mounted registration owns the sole body binding. */
+export function useSearchKey(owner: SearchKeyOwner) {
+  const live = useScopeLive();
+  const latest = useRef(owner);
+  latest.current = owner;
+  const [self] = useState<SearchKeyOwner>(() => ({
+    region: () => latest.current.region(),
+    focus: () => latest.current.focus(),
+    available: () => latest.current.available?.() !== false,
+    get primary() {
+      return latest.current.primary;
+    },
+  }));
+  useEffect(() => {
+    if (!live) return;
+    targets.add(self);
+    listeners.forEach((notify) => notify());
+    return () => {
+      targets.delete(self);
+      listeners.forEach((notify) => notify());
+    };
+  }, [self, live]);
+  const bindingOwner = useSyncExternalStore(subscribe, leader, noLeader);
+  const [body, setBody] = useState<HTMLElement | null>(null);
+  useEffect(() => setBody(document.body), []);
+  useScopeKeys(
+    bindingOwner === self
+      ? [
+          {
+            hotkey: "/",
+            label: "Search",
+            says: "Search the focused region, then the region under the pointer, then the primary list.",
+            callback: (event) => {
+              // The composer owns slash commands while its text field has focus.
+              if (
+                (document.activeElement as HTMLElement | null)?.closest(
+                  "input, textarea, select, [contenteditable=true]",
+                )
+              )
+                return;
+              const target = pick();
+              if (!target) return;
+              event.preventDefault();
+              target.focus();
+            },
+            options: { preventDefault: false },
+          },
+        ]
+      : [],
+    body,
   );
 }
 
@@ -503,40 +597,16 @@ function useListSearchFocus(
   region: HTMLElement | null | undefined,
   primary: boolean,
 ) {
-  const self = useRef<Target | null>(null);
-  self.current ??= {
-    input: () => input.current,
-    region: () => null,
+  useSearchKey({
+    region: () =>
+      region ??
+      input.current?.closest<HTMLElement>("[data-list-view]") ??
+      scrollParent(input.current),
+    available: () => !!input.current,
     primary,
-  };
-  self.current.primary = primary;
-  self.current.region = () =>
-    region ??
-    input.current?.closest<HTMLElement>("[data-list-view]") ??
-    scrollParent(input.current);
-  useEffect(() => {
-    const target = self.current!;
-    targets.add(target);
-    return () => void targets.delete(target);
-  }, []);
-  // The key binds on the document body: the list under the pointer need not hold focus.
-  const [body, setBody] = useState<HTMLElement | null>(null);
-  useEffect(() => setBody(document.body), []);
-  useScopeKeys(
-    [
-      {
-        hotkey: "/",
-        label: "Filter the list",
-        says: "Focuses the filter of the focused list, else the list under the pointer, else the primary list.",
-        callback: (event) => {
-          if (pick() !== self.current) return;
-          event.preventDefault();
-          focusQuiet(input.current);
-          input.current?.select();
-        },
-        options: { conflictBehavior: "allow", preventDefault: false },
-      },
-    ],
-    body,
-  );
+    focus: () => {
+      focusQuiet(input.current);
+      input.current?.select();
+    },
+  });
 }
