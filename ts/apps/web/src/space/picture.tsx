@@ -1,3 +1,4 @@
+import { OutcomeLine } from "@pe/kit/lang/outcome";
 import { GoToPopup } from "@pe/kit/lang/go-to";
 /** Space's model, axis cuts and thumbnails; an axis remembers the 3D pose it left. */
 import { useContext, useEffect, useMemo, useRef, useState, type ReactNode } from "react";
@@ -389,14 +390,9 @@ export function SpacePicture({
             }}
             floaters={meshes ? floaters : undefined}
           >
-            <div
-              ref={setHost}
-              className="relative min-h-0 min-w-0 flex-1"
-              data-space-picture=""
-              data-work-label={
-                status ?? (cut?.error ? `cuts clip nothing: ${cut.error}` : undefined)
-              }
-            >
+            {status && <OutcomeLine kind="advisory" label={status} />}
+            {cut?.error && <OutcomeLine kind="error" label={`cuts clip nothing: ${cut.error}`} />}
+            <div ref={setHost} className="relative min-h-0 min-w-0 flex-1" data-space-picture="">
               {meshes && pose && size ? (
                 <Scene3D
                   readout={readout}

@@ -23,7 +23,7 @@ const NAV_ICON = { back: ArrowLeft, forward: ArrowRight, out: ExternalLink };
 
 export type ButtonProps = Omit<
   ComponentProps<"button">,
-  "className" | "title" | "aria-label" | "aria-pressed" | "disabled"
+  "className" | "title" | "aria-label" | "aria-pressed" | "aria-busy" | "disabled"
 > &
   (
     | { kind?: "quiet" | "framed" | "commit"; direction?: never }
@@ -53,7 +53,6 @@ export function Button({
   type,
   onClick,
   id,
-  "aria-busy": declaredBusy,
   "data-tone": toneProp,
   ...props
 }: ButtonProps) {
@@ -61,7 +60,7 @@ export function Button({
   const [outcome, setOutcome] = useState<OutcomeLineProps | null>(null);
   const anchor = useRef<HTMLButtonElement | null>(null);
   const running = useRef(false);
-  const busy = suppliedBusy || pending || declaredBusy === true || declaredBusy === "true";
+  const busy = suppliedBusy || pending;
   useWork(busy, `${label}…`);
   const inert = refusal != null || busy === true;
   const press: ComponentProps<"button">["onClick"] = (event) => {

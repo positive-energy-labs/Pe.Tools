@@ -1,3 +1,4 @@
+import { useWork } from "@pe/kit/lang/pane";
 /**
  * The question card: one ACP elicitation form (`question_request`) in the composer head, beside
  * the approval cards. Each property of the requested schema is one field: a `oneOf` is a pick, an
@@ -48,6 +49,7 @@ export function QuestionForm({
   const required = new Set(schema.required ?? []);
   const [content, setContent] = useState<Record<string, unknown>>({});
   const [busy, setBusy] = useState(false);
+  useWork(busy, "sending answer…");
   const region = useRef<HTMLDivElement>(null);
   const sending = useRef(false);
   const set = (key: string, value: unknown) =>

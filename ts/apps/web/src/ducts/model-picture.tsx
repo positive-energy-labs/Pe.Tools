@@ -1,3 +1,5 @@
+import { OutcomeLine } from "@pe/kit/lang/outcome";
+import { useWork } from "@pe/kit/lang/pane";
 /** The subject's real meshes and annotations. Camera policy belongs to useStage. */
 import { emptyListSearch } from "@pe/agent-contracts";
 import {
@@ -214,16 +216,19 @@ export function ModelPicture({
         : !meshes
           ? "no meshes: choose a system on a Revit document"
           : null;
+  useWork(read.pending, "capturing meshes… gestures wait");
   return (
     <div
       ref={setHost}
       data-model-picture=""
-      data-work-label={status ?? undefined}
       aria-busy={read.pending || undefined}
       data-reading={read.pending ? "pending" : undefined}
       className="relative min-h-0 flex-1 overflow-hidden"
       onPointerMove={subjects?.hold}
     >
+      {!read.pending && status && (
+        <OutcomeLine kind={read.error ? "error" : "advisory"} label={status} />
+      )}
       {meshes && pose ? (
         <Scene3D
           readout={readout}

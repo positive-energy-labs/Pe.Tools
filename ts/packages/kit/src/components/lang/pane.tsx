@@ -34,58 +34,27 @@ import "./lang.css";
 import "./pane.css";
 import { TeachRegion, teachText, useTeach } from "./use-teach";
 
-type Work = { label: string; pending: boolean };
-const WorkContext = createContext<{
-  work: readonly Work[];
-  register: (key: object, work: Work) => () => void;
-} | null>(null);
-/** Portals retain the pane context; DOM descendants also register through their busy attributes. */
+const WorkContext = createContext<((key: object, label: string) => () => void) | null>(null);
+/** Context preserves pane ownership across arbitrary portals, which DOM ancestry cannot do. */
 export function useWork(pending?: boolean, label = "reading…") {
-  const context = useContext(WorkContext);
-  const register = context?.register;
+  const register = useContext(WorkContext);
   const key = useRef({});
   useEffect(
-    () => (pending ? register?.(key.current, { label, pending }) : undefined),
+    () => (pending ? register?.(key.current, label) : undefined),
     [pending, label, register],
   );
-  return context?.work ?? [];
 }
-function usePaneWork(host: React.RefObject<HTMLElement | null>) {
-  const [work, setWork] = useState<Work[]>([]);
-  useEffect(() => {
-    const pane = host.current;
-    if (!pane) return;
-    const read = () => {
-      const next = [
-        ...pane.querySelectorAll<HTMLElement>(
-          '[aria-busy="true"], [data-reading="pending"], [data-work-label]',
-        ),
-      ]
-        .filter((node) => node.closest('[data-slot="pane"]') === pane)
-        .map((node) => ({
-          label: node.dataset.workLabel ?? node.getAttribute("aria-label") ?? "reading…",
-          pending: node.getAttribute("aria-busy") === "true" || node.dataset.reading === "pending",
-        }));
-      setWork((old) => (JSON.stringify(old) === JSON.stringify(next) ? old : next));
-    };
-    const observer = new MutationObserver(read);
-    observer.observe(pane, {
-      subtree: true,
-      childList: true,
-      attributes: true,
-      attributeFilter: ["aria-busy", "aria-label", "data-reading", "data-work-label"],
-    });
-    read();
-    return () => observer.disconnect();
-  }, [host]);
-  return work;
+/** Use inside the pane when the state owner also renders that pane. */
+export function PaneWork({ pending = true, label }: { pending?: boolean; label?: string }) {
+  useWork(pending, label);
+  return null;
 }
 
 /** The renderer supplies geometry; the pane never knows a camera or a domain identity. */
 export const PictureContext = createContext<{
   selected: boolean;
   box: () => DOMRect | null;
-  layers?: ReactNode;
+  projection?: ReactNode;
 } | null>(null);
 type ReadoutIdentity = { subject?: ReactNode; title?: ReactNode; onClear?: () => void };
 export const PictureReadoutContext = createContext<
@@ -278,9 +247,8 @@ export function Pane({
   });
   const { root, body } = paneRecipe({ scroll, flush });
   const rootRef = useRef<HTMLElement>(null);
-  const descendants = usePaneWork(rootRef);
-  const [registered, setRegistered] = useState(new Map<object, Work>());
-  const registerWork = useCallback((key: object, entry: Work) => {
+  const [registered, setRegistered] = useState(new Map<object, string>());
+  const registerWork = useCallback((key: object, entry: string) => {
     setRegistered((old) => new Map(old).set(key, entry));
     return () =>
       setRegistered((old) => {
@@ -289,8 +257,7 @@ export function Pane({
         return next;
       });
   }, []);
-  const work = [...descendants, ...registered.values()];
-  const pending = work.some((entry) => entry.pending);
+  const work = [...registered.values()];
   const stage = useContext(PictureContext);
   const reach = useReachChannel();
   const [identity, setIdentity] = useState<ReadoutIdentity>({});
@@ -333,10 +300,13 @@ export function Pane({
     (modes?.options.length ?? 0) > 0 ||
     (floaters?.length ?? 0) > 0 ||
     (layers?.options.length ?? 0) > 0 ||
-    (picture && stage?.layers) ? (
-      <PaneStrip modes={modes} floaters={floaters} layers={layers}>
-        {picture && stage?.layers}
-      </PaneStrip>
+    (picture && stage?.projection) ? (
+      <PaneStrip
+        modes={modes}
+        floaters={floaters}
+        layers={layers}
+        projection={picture && stage?.projection}
+      />
     ) : null;
   const heading = (
     <>
@@ -364,10 +334,7 @@ export function Pane({
       <PaneErrorBoundary key={boundaryKey} what={title} onRetry={onRetry}>
         <Suspense
           fallback={
-            <span
-              aria-busy
-              data-work-label={typeof title === "string" ? `loading ${title}…` : "loading…"}
-            />
+            <PaneWork label={typeof title === "string" ? `loading ${title}…` : "loading…"} />
           }
         >
           {children}
@@ -377,7 +344,7 @@ export function Pane({
   );
   return (
     <TeachRegion value={teachId}>
-      <WorkContext value={{ work, register: registerWork }}>
+      <WorkContext value={registerWork}>
         <PictureReadoutContext value={picture ? register : null}>
           <SubjectBox box={picture ? pictureBox : null}>
             <KeyScope id={id ?? "pane"} element={rootRef}>
@@ -425,7 +392,7 @@ export function Pane({
                   <div
                     ref={setField}
                     data-slot="pane-field"
-                    data-working={pending || undefined}
+                    data-working={work.length > 0 || undefined}
                     className="relative flex min-h-0 min-w-0 flex-1 flex-col"
                   >
                     {paneBody}
@@ -438,12 +405,12 @@ export function Pane({
                       spec.open ? <Floater key={spec.key} spec={spec} /> : null,
                     )}
                     <PaneGestureLegend host={rootRef}>{legend}</PaneGestureLegend>
+                    {work.length > 0 && (
+                      <div data-slot="pane-work" role="status" className="t-small">
+                        {[...new Set(work)].join(" · ")}
+                      </div>
+                    )}
                   </div>
-                  {work.length > 0 && (
-                    <div data-slot="pane-work" role="status" className="t-small">
-                      {[...new Set(work.map((entry) => entry.label))].join(" · ")}
-                    </div>
-                  )}
                 </PaneOverlayContext>
               </section>
             </KeyScope>

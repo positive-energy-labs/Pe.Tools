@@ -4,7 +4,7 @@ import { createPortal } from "react-dom";
 import { use } from "react";
 import { afterEach, expect, it, vi } from "vite-plus/test";
 import { Button } from "../src/components/lang/button";
-import { Pane, useWork } from "../src/components/lang/pane";
+import { Pane, PaneWork, useWork } from "../src/components/lang/pane";
 
 afterEach(cleanup);
 
@@ -17,33 +17,37 @@ it("ignores domain work ids and derives the Suspense read until it settles", asy
     use(read);
     return <div data-work="proposal-id">ready</div>;
   }
-  render(
-    <Pane title="schedule">
-      <Reading />
-    </Pane>,
-  );
+  await act(async () => {
+    render(
+      <Pane title="schedule">
+        <Reading />
+      </Pane>,
+    );
+  });
   expect(await screen.findByText("loading schedule…")).toBeTruthy();
   await act(async () => finish());
   await waitFor(() => expect(document.querySelector('[data-slot="pane-work"]')).toBeNull());
   expect(screen.getByText("ready")).toBeTruthy();
 });
 
-it("derives one chip from busy descendants, clears it, and keeps nested panes separate", async () => {
+it("registers one chip, clears it, and keeps nested panes separate", async () => {
   const view = (pending: boolean) => (
     <Pane title="outer">
-      <div aria-busy={pending} data-work-label="capturing meshes… gestures wait" />
-      <div data-reading={pending ? "pending" : "ready"} />
+      <div aria-busy data-work-label="attributes are accessibility only" />
+      <PaneWork pending={pending} label="capturing meshes… gestures wait" />
+      <PaneWork pending={pending} />
       <Pane title="inner">
-        <div aria-busy data-work-label="inner read" />
+        <PaneWork label="inner read" />
       </Pane>
     </Pane>
   );
   const { container, rerender } = render(view(true));
   const outer = screen.getByRole("region", { name: "outer" });
   await waitFor(() =>
-    expect(outer.querySelector(':scope > [data-slot="pane-work"]')?.textContent).toBe(
-      "capturing meshes… gestures wait · reading…",
-    ),
+    expect(
+      outer.querySelector(':scope > [data-slot="pane-field"] > [data-slot="pane-work"]')
+        ?.textContent,
+    ).toBe("capturing meshes… gestures wait · reading…"),
   );
   expect(container.querySelectorAll('[data-slot="pane-work"]')).toHaveLength(2);
   expect(outer.querySelector('[data-slot="pane-field"]')?.getAttribute("data-working")).toBe(
@@ -52,11 +56,15 @@ it("derives one chip from busy descendants, clears it, and keeps nested panes se
   rerender(
     <Pane title="outer">
       <Pane title="inner">
-        <div aria-busy data-work-label="inner read" />
+        <PaneWork label="inner read" />
       </Pane>
     </Pane>,
   );
-  await waitFor(() => expect(outer.querySelector(':scope > [data-slot="pane-work"]')).toBeNull());
+  await waitFor(() =>
+    expect(
+      outer.querySelector(':scope > [data-slot="pane-field"] > [data-slot="pane-work"]'),
+    ).toBeNull(),
+  );
   expect(container.querySelectorAll('[data-slot="pane-work"]')).toHaveLength(1);
 });
 
@@ -87,7 +95,7 @@ it.each(["onPress", "onClick"] as const)(
     );
     render(
       <Pane>
-        <Button label="capture" aria-busy={false} {...{ [prop]: press }}>
+        <Button label="capture" busy={false} {...{ [prop]: press }}>
           capture
         </Button>
       </Pane>,

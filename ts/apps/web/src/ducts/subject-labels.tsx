@@ -60,7 +60,7 @@ export function layoutCaptions(
     }),
     bounds,
     obstacles,
-  ).flatMap((slot) => (slot ? [{ ...slot.value, x: slot.x + 2, y: slot.y + 10 }] : []));
+  ).map((slot) => ({ ...slot.value, x: slot.x + 2, y: slot.y + 10 }));
 }
 export function SubjectLabels({
   sub,

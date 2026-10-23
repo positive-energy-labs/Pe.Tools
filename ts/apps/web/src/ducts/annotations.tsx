@@ -53,17 +53,24 @@ const GLYPH = 4;
 const PIN = 8;
 /** A footnote chip's diameter: the kit's `.subject-badge` circle. */
 const CHIP = 18;
+const CHIP_BOX = CHIP + 4;
 /** Numbered chips share the kit search with captions and pins, clearing their anchor dots. */
-export function placeChips(
-  anchors: readonly { x: number; y: number; n: number }[],
+export function placeChips<T extends Point>(
+  anchors: readonly T[],
   size: { width: number; height: number },
   obstacles: readonly Box[] = [],
 ) {
   return declutter(
-    anchors.map((a) => ({ x: a.x - 11, y: a.y - 35, width: 22, height: 22 })),
+    anchors.map((a) => ({
+      ...a,
+      x: a.x - CHIP_BOX / 2,
+      y: a.y - CHIP_BOX / 2 - 24,
+      width: CHIP_BOX,
+      height: CHIP_BOX,
+    })),
     { x: 0, y: 0, ...size },
     [...obstacles, ...anchors.map((a) => ({ x: a.x - 4, y: a.y - 4, width: 8, height: 8 }))],
-  ).map((b) => (b ? { x: b.x + 11, y: b.y + 11 } : null));
+  );
 }
 const HIT: React.CSSProperties = { pointerEvents: "auto", cursor: "pointer" };
 
@@ -198,19 +205,17 @@ export function Annotations({
       ];
     }),
     bounds,
-  ).flatMap((box) => (box ? [box] : []));
+  );
   const chips = placeChips(
-    anchored.map(({ ref, at }) => ({ ...at, n: ref.number })),
+    anchored.map((a) => ({ ...a, ...a.at })),
     size,
     pins,
-  ).flatMap((chip, i) => (chip ? [{ ...anchored[i]!, chip }] : []));
-  const chipBoxes = chips.map(({ chip }) => ({
-    x: chip.x - 11,
-    y: chip.y - 11,
-    width: 22,
-    height: 22,
+  ).map((box) => ({
+    ...box,
+    box,
+    chip: { x: box.x + box.width / 2, y: box.y + box.height / 2 },
   }));
-  const obstacles = [...chipBoxes, ...pins];
+  const obstacles = [...chips.map((c) => c.box), ...pins];
 
   return (
     <svg

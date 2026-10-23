@@ -2,8 +2,8 @@ import * as THREE from "three";
 import { inkOf } from "./ink";
 import type { Bounds, IssueState, LayerFrame } from "./types";
 
-export const WHITE = new THREE.Color(1, 1, 1);
-export const BLACK = new THREE.Color(0, 0, 0);
+export const WHITE = Object.freeze(new THREE.Color(1, 1, 1));
+export const BLACK = Object.freeze(new THREE.Color(0, 0, 0));
 export const LIGHT = { sky: 0xfff8ee, floor: 0x403a30, sun: 0xfffaf2 };
 /** Mask colours encode channels, not visible hues. */
 export const OUTLINE_CHANNEL = {

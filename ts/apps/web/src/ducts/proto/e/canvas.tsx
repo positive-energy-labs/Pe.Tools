@@ -21,7 +21,7 @@ import { systemScope } from "@pe/ducts-domain/system-scope";
 import { TooltipHint } from "@pe/kit/lang/tooltip";
 import { SelectionBoxButton } from "#/revit/element-menu";
 import { observedElements } from "#/revit/observation";
-import { Pane } from "@pe/kit/lang/pane";
+import { Pane, PaneWork } from "@pe/kit/lang/pane";
 import { useNativeObservation } from "#/revit/observation";
 import { useScene } from "#/scene/use-scene";
 import { useLiveOrbit } from "@pe/kit/lang/live-orbit";
@@ -761,12 +761,15 @@ function Canvas({
             }
             floaters={floaters}
           >
+            <PaneWork
+              pending={!!holding || identity.refreshing}
+              label={holding ? "capturing meshes… gestures wait" : undefined}
+            />
             <div
               ref={setPictureHost}
               data-proto="E"
               aria-busy={holding || identity.refreshing ? true : undefined}
               data-reading={holding || identity.refreshing ? "pending" : undefined}
-              data-work-label={holding ? "capturing meshes… gestures wait" : undefined}
               className="relative flex size-full min-h-0 flex-col"
               onPointerDownCapture={(e) => {
                 if (holding) {

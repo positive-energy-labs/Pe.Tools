@@ -1,5 +1,5 @@
 // @vitest-environment jsdom
-import { act, cleanup, fireEvent, render } from "@testing-library/react";
+import { act, cleanup, fireEvent, render, waitFor } from "@testing-library/react";
 import { afterEach, expect, test, vi } from "vite-plus/test";
 
 import { Floater, type FloaterSpec } from "@pe/kit/lang/floater";
@@ -55,34 +55,43 @@ test.each([false, true])(
   },
 );
 
-test("a floater avoids the docked readout without a legend", () => {
-  vi.spyOn(HTMLElement.prototype, "getBoundingClientRect").mockImplementation(
-    function (this: HTMLElement) {
-      if (this.dataset.field !== undefined) return new DOMRect(0, 0, 600, 600);
-      if (this.hasAttribute("data-picture-readout")) return new DOMRect(450, 0, 150, 100);
-      if (this.dataset.slot === "floater") return new DOMRect(500, 0, 100, 100);
-      return new DOMRect();
-    },
-  );
-  const view = render(
-    <div data-field="">
-      <div data-picture-readout="selection" />
-      <Floater
-        spec={{
-          key: "dock",
-          label: "dock",
-          place: "tr",
-          size: { width: 100, height: 100 },
-          open: true,
-          onOpenChange: vi.fn(),
-          render: () => "map",
-        }}
-      />
-    </div>,
-  );
-  const floater = view.getByRole("region", { name: "dock" });
-  expect(floater.dataset.place === "tr" && !floater.style.translate).toBe(false);
-});
+test.each(["data-picture-readout", "data-slot"])(
+  "a floater yields when %s furniture arrives",
+  async (attribute) => {
+    vi.spyOn(HTMLElement.prototype, "getBoundingClientRect").mockImplementation(
+      function (this: HTMLElement) {
+        if (this.dataset.field !== undefined) return new DOMRect(0, 0, 600, 600);
+        if (this.hasAttribute("data-picture-readout") || this.dataset.slot === "pane-work")
+          return new DOMRect(450, 0, 150, 100);
+        if (this.dataset.slot === "floater") return new DOMRect(500, 0, 100, 100);
+        return new DOMRect();
+      },
+    );
+    const field = (busy: boolean) => (
+      <div data-field="">
+        {busy && <div {...{ [attribute]: "pane-work" }} />}
+        <Floater
+          spec={{
+            key: "dock",
+            label: "dock",
+            place: "tr",
+            size: { width: 100, height: 100 },
+            open: true,
+            onOpenChange: vi.fn(),
+            render: () => "map",
+          }}
+        />
+      </div>
+    );
+    const view = render(field(false));
+    const floater = view.getByRole("region", { name: "dock" });
+    expect(floater.dataset.place === "tr" && !floater.style.translate).toBe(true);
+    view.rerender(field(true));
+    await waitFor(() =>
+      expect(floater.dataset.place === "tr" && !floater.style.translate).toBe(false),
+    );
+  },
+);
 
 const pointer = (el: Element, type: string, x: number, y: number) =>
   fireEvent(el, new MouseEvent(type, { bubbles: true, button: 0, clientX: x, clientY: y }));

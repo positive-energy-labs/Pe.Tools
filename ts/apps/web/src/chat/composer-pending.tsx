@@ -1,3 +1,4 @@
+import { useWork } from "@pe/kit/lang/pane";
 import { useId, useState } from "react";
 import { ChevronRight, Hand } from "lucide-react";
 import { toolTitle } from "@pe/agent-contracts";
@@ -91,6 +92,7 @@ function ApprovalRequest({
   resolve: (requestId: string, optionId: string) => Promise<void>;
 }) {
   const [busy, setBusy] = useState(false);
+  useWork(busy, "sending decision…");
   const choose = async (optionId: string) => {
     if (busy) return;
     setBusy(true);

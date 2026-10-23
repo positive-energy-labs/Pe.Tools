@@ -175,7 +175,7 @@ function useStageBindings(options: OrbitStage | PlaneStage) {
     return () => options.host?.removeEventListener("dblclick", frame);
   }, [options]);
   return {
-    layers:
+    projection:
       options.kind === "orbit" && !options.axis
         ? createElement(Switcher<NonNullable<OrbitViewport["projection"]>>, {
             ariaLabel: "projection",
@@ -246,7 +246,7 @@ export function PictureStage({
   };
   return createElement(
     PictureContext,
-    { value: { selected: picture.selectedBounds != null, box, layers: bindings.layers } },
+    { value: { selected: picture.selectedBounds != null, box, projection: bindings.projection } },
     createElement(
       StageContext,
       { value: stage },

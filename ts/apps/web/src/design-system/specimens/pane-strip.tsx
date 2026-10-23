@@ -107,17 +107,18 @@ function PaneStripAnatomy() {
           modes={{ value: mode, label: "viewport", options: unbound(MODES), onChange: setMode }}
           floaters={[corner]}
           layers={{ value: ["grid"], options: unbound(LAYERS), onToggle: () => {} }}
-        >
-          <Switcher
-            ariaLabel="projection"
-            value={projection}
-            onChange={setProjection}
-            options={[
-              { value: "perspective", label: "perspective", title: "Perspective depth" },
-              { value: "parallel", label: "parallel", title: "Parallel projection" },
-            ]}
-          />
-        </PaneStrip>
+          projection={
+            <Switcher
+              ariaLabel="projection"
+              value={projection}
+              onChange={setProjection}
+              options={[
+                { value: "perspective", label: "perspective", title: "Perspective depth" },
+                { value: "parallel", label: "parallel", title: "Parallel projection" },
+              ]}
+            />
+          }
+        />
         <div className="relative h-24 w-64" data-surface="support" data-slot="pane-field">
           {open ? <Floater spec={corner} /> : null}
         </div>

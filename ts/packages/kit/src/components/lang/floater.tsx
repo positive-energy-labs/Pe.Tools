@@ -1,4 +1,3 @@
-import { declutter } from "./declutter";
 import { Popover, PopoverTrigger, SubjectPopoverContent } from "./popover";
 /**
  * Floaters yield in DOM order and announce each move; parallel siblings otherwise take one slot.
@@ -17,7 +16,8 @@ import { KeyScope, useScopeKeys, type Chord } from "@pe/kit/keys";
 
 import { useTeach } from "./use-teach";
 
-export const PANE_OBSTACLES = "[data-slot='pane-legend'], [data-picture-readout]";
+export const PANE_OBSTACLES =
+  "[data-slot='pane-legend'], [data-picture-readout], [data-slot='pane-work']";
 
 type Corner = "tl" | "tr" | "bl" | "br";
 
@@ -116,23 +116,35 @@ function useYield(
           value: { corner, dy, folded, ...shown },
         }));
       });
-      const [slot] = declutter(
-        [{ ...candidates[0]!, candidates: candidates.slice(1) }],
-        { x: f.x, y: f.y, width: f.width, height: f.height },
-        others.map((r) => ({ x: r.x, y: r.y, width: r.width, height: r.height })),
+      const slot = candidates.find(
+        (b) =>
+          b.x >= f.x &&
+          b.y >= f.y &&
+          b.x + b.width <= f.right &&
+          b.y + b.height <= f.bottom &&
+          !others.some(
+            (r) =>
+              b.x < r.right && r.left < b.x + b.width && b.y < r.bottom && r.top < b.y + b.height,
+          ),
       );
       settle(slot?.value ?? { corner: place, dy: 0, folded, ...shown });
     };
     run();
     const moved = () => requestAnimationFrame(run);
     field.addEventListener(MOVED, moved);
-    if (typeof ResizeObserver === "undefined") return () => field.removeEventListener(MOVED, moved);
-    const observer = new ResizeObserver(run);
-    observer.observe(field);
-    observer.observe(own);
-    field.querySelectorAll(PANE_OBSTACLES).forEach((el) => observer.observe(el));
+    const observer = typeof ResizeObserver === "undefined" ? null : new ResizeObserver(run);
+    observer?.observe(field);
+    observer?.observe(own);
+    const obstacles = () => {
+      field.querySelectorAll(PANE_OBSTACLES).forEach((el) => observer?.observe(el));
+      run();
+    };
+    const children = new MutationObserver(obstacles);
+    children.observe(field, { childList: true });
+    obstacles();
     return () => {
-      observer.disconnect();
+      children.disconnect();
+      observer?.disconnect();
       field.removeEventListener(MOVED, moved);
     };
   }, [ref, place, preferred?.width, preferred?.height]);

@@ -7,7 +7,7 @@ test("placement uses bounded free alternatives and drops impossible labels", () 
     declutter(
       [
         { ...box, value: "first" },
-        { ...box, value: "second", candidates: [{ ...box, y: 12 }] },
+        { ...box, value: "second" },
         { ...box, value: "dropped" },
       ],
       { ...box, height: 24 },
@@ -15,7 +15,6 @@ test("placement uses bounded free alternatives and drops impossible labels", () 
   ).toEqual([
     expect.objectContaining({ value: "first", y: 0 }),
     expect.objectContaining({ value: "second", y: 12 }),
-    null,
   ]);
-  expect(declutter([{ ...box, x: -1, value: "outside" }], box)).toEqual([null]);
+  expect(declutter([{ ...box, x: -1, value: "outside" }], box)).toEqual([]);
 });
