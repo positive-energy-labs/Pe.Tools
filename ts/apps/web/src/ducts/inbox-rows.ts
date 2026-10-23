@@ -550,7 +550,7 @@ export function triage(input: TriageInput) {
     if (f.kind === "no-rule") {
       // No rule prices this fitting family. It surfaces the way a grille with no catalog drop does
       // (Diagnostics, priced as zero, a verb to state the drop; never holding the ESP back); the rules
-      // popover also lists the family to price as an existing rule.
+      // pane also lists the family to price as an existing rule.
       diagnostics.push({
         ...base,
         group: "diagnostics",
@@ -565,7 +565,7 @@ export function triage(input: TriageInput) {
                   kind: "focus",
                   cell: { segment: "componentDrops", id: f.elementIds[0] },
                   label: "state the drop",
-                  says: "State this fitting's drop, or price its family as a rule in the rules popover",
+                  says: "State this fitting's drop, or price its family as a rule in the rules pane",
                 } satisfies RowVerb,
               ]),
           select(f.elementIds),

@@ -176,8 +176,15 @@ tr/* Landed: a row that becomes selected (a link, a pick) draws a full-ink outli
   outline-offset: -2px;
   animation: pe-land var(--motion-land) ease-out 1;
 }
+/* The same landing mark on any element a link or verb brings the person to (`data-landed`). */
+[data-landed] {
+  outline: 2px solid transparent;
+  outline-offset: -2px;
+  animation: pe-land var(--motion-land) ease-out 1;
+}
 @media (prefers-reduced-motion: reduce) {
-  [data-inbox-group] .dl-row[data-selected] {
+  [data-inbox-group] .dl-row[data-selected],
+  [data-landed] {
     animation: none;
   }
 }

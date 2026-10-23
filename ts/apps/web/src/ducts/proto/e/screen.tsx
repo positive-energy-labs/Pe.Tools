@@ -1,10 +1,11 @@
 /**
- * THROWAWAY (protoui round 3): E2 ("C simplicity, B layout"). LEFT a resizable sidebar of two
- * sections, the system tree over the Inputs (the loss Rules and duct settings live in the chrome Settings); CENTRE C's full-bleed drawing with
+ * THROWAWAY (protoui round 3): E2 ("C simplicity, B layout"). LEFT a resizable double sidebar: a
+ * top pane (all systems | the chosen system, tree over Inputs) over a bottom pane (all-systems
+ * rules | this system's rules), one shared width handle; duct settings live in the chrome Settings; CENTRE C's full-bleed drawing with
  * numbered ruling pins and click popovers; RIGHT the inbox of rows a person has a verb on,
  * collapsed when it holds none. Hovering a row anywhere lights its element set on the drawing.
  */
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState, type ReactNode } from "react";
 import type { RouteStatePatch } from "@pe/agent-contracts";
 import type { DuctsApply } from "@pe/host-contracts/generated";
 import { survey, unitFlowsIn } from "@pe/ducts-domain/survey";
@@ -19,8 +20,6 @@ import { PaneSplit } from "#/components/lang/pane-resize";
 
 import { airflowOptions } from "../../airflow";
 import { elementNamer } from "../../claims";
-import { SelectionBoxButton } from "#/revit/element-menu";
-import { observedElements, useNativeObservation } from "#/revit/observation";
 import {
   annotatedFindings,
   fanVerbs,
@@ -46,12 +45,72 @@ import { ECanvas } from "./canvas";
 import { grilleLabels } from "./labels";
 import { FanButton, Inbox, type FanVerbs } from "./inbox";
 import { InputsPane } from "./inputs-pane";
-import { ruleOfIds } from "./rules-pane";
+import { RulesTree, ruleOfIds } from "./rules-pane";
 import { SystemTree } from "./tree-sidebar";
 import { useGroupEncoding } from "../encoding/use-encoding";
 import { formatQuantity } from "../../encoding";
 
 const NO_GROUPS: readonly string[] = [];
+
+type Side = "left" | "right";
+
+/** Below this the screen is narrow: the inbox is a rail until asked for. Below TIGHT the sidebar is too. */
+const NARROW_PX = 1000;
+const TIGHT_PX = 700;
+
+/** The element's width, measured; 0 until it is (jsdom never measures). */
+function useWidth() {
+  const ref = useRef<HTMLDivElement>(null);
+  const [width, setWidth] = useState(0);
+  useEffect(() => {
+    const el = ref.current;
+    if (!el || typeof ResizeObserver === "undefined") return;
+    const observer = new ResizeObserver(([entry]) => setWidth(entry?.contentRect.width ?? 0));
+    observer.observe(el);
+    return () => observer.disconnect();
+  }, []);
+  return [ref, width] as const;
+}
+
+/**
+ * One pane of the sidebar, split into its all-systems half (left) and its this-system half
+ * (right). One half is open; the other is the shared PaneSplit rail, so a half is never squeezed.
+ * A half with a `refusal` stays a drawn, inert rail: nothing to open until a system is chosen.
+ */
+function Halves({
+  side,
+  onSide,
+  left,
+  right,
+}: {
+  side: Side;
+  onSide: (side: Side) => void;
+  left: { title: string; pane: ReactNode; refusal?: string };
+  right: { title: string; pane: ReactNode; refusal?: string };
+}) {
+  const closed = side === "left" ? right : left;
+  return (
+    <PaneSplit
+      axis="horizontal"
+      start={left.pane}
+      end={right.pane}
+      resize={{
+        target: side === "left" ? "end" : "start",
+        defaultSize: 32,
+        minSize: 32,
+        collapse: {
+          collapsed: true,
+          collapsedSize: 32,
+          title: closed.title,
+          refusal: closed.refusal,
+          onCollapsedChange: (collapsed) => {
+            if (!collapsed && closed.refusal == null) onSide(side === "left" ? "right" : "left");
+          },
+        },
+      }}
+    />
+  );
+}
 
 /** A two-line system row before it is measured, px (two item heights). */
 const LIST_ROW_PX = 48;
@@ -73,7 +132,6 @@ export function EScreen({ props }: { props: ProtoProps }) {
 }
 
 function EScreenBody({ props }: { props: ProtoProps }) {
-  const observation = useNativeObservation();
   const { snapshot, priced, page, setPage } = props;
   const doc = props.work.doc;
   const work = useMemo<LossesWork>(
@@ -290,8 +348,29 @@ function EScreenBody({ props }: { props: ProtoProps }) {
   );
   const toRule = inbox ? inbox.fix.length + inbox.set.length + inbox.check.length : 0;
   // A Set row's verb selects the element and focuses its cell once the tree has drawn it.
-  const [rulesOpen, setRulesOpen] = useState(false);
+  const [sidesFor, setSidesFor] = useState<{ system: string; top: Side; bottom: Side }>({
+    system: "",
+    top: "left",
+    bottom: "left",
+  });
+  // A fitting's drop cell the inbox asked for, in the rules half that holds it.
+  const [landing, setLanding] = useState<{ id: number; half: "all" | "this" } | null>(null);
   const [cellFocus, setCellFocus] = useState<CellRef | null>(null);
+  // The rules pane lands on the cell: scroll it in, focus its control, mark it once (`--motion-land`).
+  useEffect(() => {
+    if (!landing) return;
+    const half = document.querySelector(`[data-e-rules="${landing.half}"]`);
+    const row =
+      half?.querySelector<HTMLElement>(`[data-e-unruled-ids~="${landing.id}"]`) ??
+      half?.querySelector<HTMLElement>(`[data-e-cell="componentDrops:${landing.id}"]`);
+    if (!row) return;
+    row.scrollIntoView?.({ block: "nearest" });
+    row.querySelector<HTMLElement>("input, select")?.focus();
+    row.setAttribute("data-landed", "");
+    const done = window.setTimeout(() => row.removeAttribute("data-landed"), 1600);
+    setLanding(null);
+    return () => window.clearTimeout(done);
+  }, [landing, priced, sidesFor]);
   useEffect(() => {
     if (!cellFocus) return;
     const input = document.querySelector<HTMLElement>(
@@ -301,7 +380,7 @@ function EScreenBody({ props }: { props: ProtoProps }) {
     input.scrollIntoView?.({ block: "nearest" });
     input.focus();
     setCellFocus(null);
-  }, [cellFocus, trees, priced, rulesOpen]);
+  }, [cellFocus, trees, priced]);
   const encoded = useGroupEncoding(snapshot, priced, drawGroups, page.encoding);
   // The tree reads the drawing's quantity; a categorical reading (or none) keeps Pe's fan-to-here loss.
   const reading = encoded.encoding.quantity ? encoded.encoding : null;
@@ -313,7 +392,9 @@ function EScreenBody({ props }: { props: ProtoProps }) {
   useEffect(() => {
     if (page.issue) setInboxOpen(true);
   }, [page.issue]);
-  const [treeCollapsed, setTreeCollapsed] = useState(false);
+  // null = automatic: the sidebar is a rail while the screen is tight.
+  const [treeCollapsed, setTreeCollapsed] = useState<boolean | null>(null);
+  const [rootRef, width] = useWidth();
   // The picture annotates the Fix rows' findings, or the Diagnostics kind picked in its key.
   const annotated = useMemo(
     () => (inbox ? annotatedFindings(inbox, heal, page.diagnostic) : new Set<string>()),
@@ -326,6 +407,14 @@ function EScreenBody({ props }: { props: ProtoProps }) {
 
   if (!snapshot) return <p className="text-ink-2 p-4">{props.empty?.says ?? "reading ducts…"}</p>;
   const tree = trees.length ? trees : null;
+  const chosen = tree != null && scope != null;
+  // One half is open per pane. A system chosen opens the right halves; none chosen opens the left
+  // ones. A person's own pick holds for the system it was made on.
+  const home: Side = chosen ? "right" : "left";
+  const sides =
+    sidesFor.system === page.system ? sidesFor : { system: page.system, top: home, bottom: home };
+  const pick = (patch: Partial<Record<"top" | "bottom", Side>>) =>
+    setSidesFor({ ...sides, ...patch });
 
   const light = (ids: readonly number[] | null) => {
     setLit(new Set(ids ?? []));
@@ -355,9 +444,19 @@ function EScreenBody({ props }: { props: ProtoProps }) {
         ),
       )
     : null;
-  const open = inboxOpen ?? (toRule > 0 || props.staged > 0);
+  // A narrow screen keeps the inbox a rail until it is asked for.
+  const open = inboxOpen ?? ((width === 0 || width >= NARROW_PX) && (toRule > 0 || props.staged > 0));
   // A cell outside the system (a Set row on the whole document) moves the page to its system.
   const focusCell = (cell: CellRef) => {
+    if (cell.segment === "componentDrops") {
+      // A fitting's drop lives in the bottom pane, in the half whose scope holds it. Nothing is
+      // selected and the page does not move: the picture and its orbit stay as they were.
+      const group = (drawn ?? snapshot).nodes.find((n) => n.id === cell.id)?.groupId;
+      const mine = chosen && group != null && groups.includes(group);
+      setSidesFor({ ...sides, bottom: mine ? "right" : "left" });
+      setLanding({ id: cell.id, half: mine ? "this" : "all" });
+      return;
+    }
     const into =
       scope && (scope.members.has(cell.id) || scope.units.has(cell.id))
         ? page.system
@@ -367,8 +466,6 @@ function EScreenBody({ props }: { props: ProtoProps }) {
             return g ? systemOfGroup(drawn ?? snapshot, g) : page.system;
           })();
     setPage({ system: into, selected: String(cell.id), issue: "" });
-    // A fitting's drop cell lives in the rules popover (Settings), not in the tree.
-    if (cell.segment === "componentDrops") setRulesOpen(true);
     setCellFocus(cell);
   };
   // The section whose run leads the system: its fan and TEL head the pane.
@@ -395,101 +492,93 @@ function EScreenBody({ props }: { props: ProtoProps }) {
         : `TEL ${fmtFt(critical.ft ?? groupTel)} ft · ESP ${critical.total.toFixed(3)} in-wg`
     : "not priced yet";
   const runDetail = priced && scope && selected != null ? runOf(priced, groups, selected) : null;
-  // The selected element, wherever it was picked from, offers Revit in plain sight.
-  const shown =
-    selected != null ? (
-      <div
-        className="border-line t-small flex items-center gap-1 border-t px-2 py-1"
-        data-e-selected={selected}
-      >
-        <span className="min-w-0 flex-1 truncate">{nameOf(selected)}</span>
-        <SelectionBoxButton target={observedElements(observation, [selected])} />
-      </div>
-    ) : null;
-
-  const head = page.system ? (
-    <Button
-      label="show every system"
-      onClick={() => setPage({ system: "", selected: "", issue: "" })}
-    >
-      all systems
-    </Button>
-  ) : (
-    <Button label="sort the systems" onClick={() => setByEsp(!byEsp)}>
-      {byEsp ? "by ESP" : "by name"}
-    </Button>
-  );
-  const treePane = (
+  const treePane = tree ? (
     <Pane
       id="e-sidebar"
-      title={tree && scope ? scope.name : "systems"}
-      meta={tree ? pricedWord : `${systems.length} in the document`}
-      actions={head}
+      title={scope ? scope.name : "System"}
+      meta={pricedWord}
+      actions={
+        <Button
+          label="show every system"
+          onClick={() => setPage({ system: "", selected: "", issue: "" })}
+        >
+          all systems
+        </Button>
+      }
       scroll="auto"
       flush
     >
-      {tree ? (
-        <>
-          {reading?.quantity ? (
-            <p
-              className="t-small text-ink-2 border-line border-b px-2 py-1"
-              data-e-legend={reading.key}
-            >
-              bar = {reading.label}, {reading.quantity.unit}, the largest under each row · full
-              width = the system's max{" "}
-              <span className="face-mono">
-                {reading.quantity.max == null
-                  ? "—"
-                  : formatQuantity(reading.quantity, reading.quantity.max)}
-              </span>{" "}
-              at{" "}
-              {reading.quantity.maxId == null
-                ? "no element"
-                : encoded.nameOf(reading.quantity.maxId)}
-            </p>
-          ) : (
-            <>
-              <SplitStrip split={critical?.split ?? tree[0]!.split} scale={scale} light={light} />
-            </>
-          )}
-          {/* A multi-fan group: one row per fan, as staged (`next`), each with its TEL and ESP;
-              each group the system is in carries its own, under its section's name. */}
-          {tree.map((t) => (
-            <FanSections
-              key={t.key}
-              title={tree.length > 1 ? t.name : null}
-              fans={priced?.next.byGroup[t.key]?.fans ?? []}
-              nameOf={nameOf}
-              light={light}
-              select={select}
-            />
-          ))}
-          <div className="flex min-h-0 flex-1 flex-col" onMouseLeave={() => light(null)}>
-            <SystemTree
-              key={scope?.name}
-              ctx={{
-                trees: tree,
-                scale,
-                criticalKey: critical?.key ?? null,
-                grilleName,
-                selected,
-                ruleOf,
-                light,
-                select,
-                jumpToRule: (key: string) => {
-                  setRuleFocus(key);
-                  setRulesOpen(true);
-                },
-                reading,
-                designRate,
-              }}
-            />
-          </div>
-          {runDetail ? (
-            <RunDetail run={runDetail} designRate={designRate} nameOf={nameOf} light={light} />
-          ) : null}
-        </>
+      {reading?.quantity ? (
+        <p
+          className="t-small text-ink-2 border-line border-b px-2 py-1"
+          data-e-legend={reading.key}
+        >
+          bar = {reading.label}, {reading.quantity.unit}, the largest under each row · full
+          width = the system's max{" "}
+          <span className="face-mono">
+            {reading.quantity.max == null
+              ? "—"
+              : formatQuantity(reading.quantity, reading.quantity.max)}
+          </span>{" "}
+          at{" "}
+          {reading.quantity.maxId == null
+            ? "no element"
+            : encoded.nameOf(reading.quantity.maxId)}
+        </p>
       ) : (
+        <SplitStrip split={critical?.split ?? tree[0]!.split} scale={scale} light={light} />
+      )}
+      {/* A multi-fan group: one row per fan, as staged (`next`), each with its TEL and ESP;
+          each group the system is in carries its own, under its section's name. */}
+      {tree.map((t) => (
+        <FanSections
+          key={t.key}
+          title={tree.length > 1 ? t.name : null}
+          fans={priced?.next.byGroup[t.key]?.fans ?? []}
+          nameOf={nameOf}
+          light={light}
+          select={select}
+        />
+      ))}
+      <div className="flex min-h-0 flex-1 flex-col" onMouseLeave={() => light(null)}>
+        <SystemTree
+          key={scope?.name}
+          ctx={{
+            trees: tree,
+            scale,
+            criticalKey: critical?.key ?? null,
+            grilleName,
+            selected,
+            ruleOf,
+            light,
+            select,
+            jumpToRule: (key: string) => {
+              setRuleFocus(key);
+              pick({ bottom: "right" });
+            },
+            reading,
+            designRate,
+          }}
+        />
+      </div>
+      {runDetail ? (
+        <RunDetail run={runDetail} designRate={designRate} nameOf={nameOf} light={light} />
+      ) : null}
+    </Pane>
+  ) : null;
+  const systemsPane = (
+    <Pane
+      id="e-systems"
+      title="Systems"
+      meta={`${systems.length} in the document`}
+      actions={
+        <Button label="sort the systems" onClick={() => setByEsp(!byEsp)}>
+          {byEsp ? "by ESP" : "by name"}
+        </Button>
+      }
+      scroll="auto"
+      flush
+    >
         <VirtualList
           aria-label="systems"
           items={listed}
@@ -511,8 +600,32 @@ function EScreenBody({ props }: { props: ProtoProps }) {
             return <SystemRow system={s} open={open} />;
           }}
         />
+    </Pane>
+  );
+  const rulesPane = (wide: boolean) => (
+    <Pane
+      id={wide ? "e-rules-all" : "e-rules"}
+      title={wide ? "All-systems rules" : "This system's rules"}
+      meta={wide ? "every system" : (scope?.name ?? "")}
+      help="A rule is a fitting type (family : type) plus a geometry condition. Its table is the one choice a person makes; Pe re-looks-up every instance under it. A fitting with a stated drop is an override under its type."
+      scroll="auto"
+      flush
+    >
+      {priced ? (
+        <RulesTree
+          snapshot={drawn ?? snapshot}
+          priced={priced}
+          groups={groups}
+          wide={wide}
+          work={work}
+          focus={ruleFocus}
+          onFocus={setRuleFocus}
+          nameOf={nameOf}
+          light={light}
+        />
+      ) : (
+        <p className="text-ink-2 p-2">rules are read once the tables are in</p>
       )}
-      {shown}
     </Pane>
   );
   const inputsPane =
@@ -538,17 +651,46 @@ function EScreenBody({ props }: { props: ProtoProps }) {
         />
       </Pane>
     ) : null;
-  const left = (
+  const systemPane = (
     <PaneSplit
       axis="vertical"
       start={treePane}
       end={inputsPane}
       resize={{
         target: "end",
-        defaultSize: 300,
-        minSize: 120,
-        minOtherSize: 160,
-        persist: "proto-e-rules",
+        defaultSize: 220,
+        minSize: 100,
+        minOtherSize: 100,
+        persist: "proto-e-system-inputs",
+      }}
+    />
+  );
+  const noSystem = chosen ? undefined : "choose a system first";
+  const left = (
+    <PaneSplit
+      axis="vertical"
+      start={
+        <Halves
+          side={sides.top}
+          onSide={(top) => pick({ top })}
+          left={{ title: "Systems", pane: systemsPane }}
+          right={{ title: "System", pane: systemPane, refusal: noSystem }}
+        />
+      }
+      end={
+        <Halves
+          side={sides.bottom}
+          onSide={(bottom) => pick({ bottom })}
+          left={{ title: "All-systems rules", pane: rulesPane(true) }}
+          right={{ title: "This system's rules", pane: rulesPane(false), refusal: noSystem }}
+        />
+      }
+      resize={{
+        target: "end",
+        defaultSize: 176,
+        minSize: 64,
+        minOtherSize: 200,
+        persist: "proto-e-stack",
       }}
     />
   );
@@ -590,22 +732,12 @@ function EScreenBody({ props }: { props: ProtoProps }) {
   );
 
   return (
-    <div data-proto="E2" className="flex size-full min-h-0">
+    <div ref={rootRef} data-proto="E2" className="flex size-full min-h-0">
       <DuctSettings
         work={work}
         rate={designRate}
         snapshot={snapshot}
         scope={scope}
-        rules={{
-          priced,
-          groups,
-          open: rulesOpen,
-          setOpen: setRulesOpen,
-          focus: ruleFocus,
-          setFocus: setRuleFocus,
-          nameOf,
-          light,
-        }}
       />
       <PaneSplit
         axis="horizontal"
@@ -614,10 +746,11 @@ function EScreenBody({ props }: { props: ProtoProps }) {
           defaultSize: 420,
           minSize: 280,
           maxSize: 760,
-          minOtherSize: 600,
+          // The picture keeps 360 beside the inbox rail; a tight screen starts with the sidebar a rail.
+          minOtherSize: 392,
           persist: "proto-e-sidebar",
           collapse: {
-            collapsed: treeCollapsed,
+            collapsed: treeCollapsed ?? (width > 0 && width < TIGHT_PX),
             onCollapsedChange: setTreeCollapsed,
             collapsedSize: 32,
             collapseBelow: 200,
@@ -651,6 +784,7 @@ function EScreenBody({ props }: { props: ProtoProps }) {
                   issueScope={issueScope}
                   annotated={annotated}
                   scale={encoded}
+                  nameOf={nameOf}
                   groups={drawGroups}
                   lead={leadGroup}
                 />

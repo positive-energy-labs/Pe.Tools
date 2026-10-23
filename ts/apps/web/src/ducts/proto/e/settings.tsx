@@ -1,22 +1,19 @@
 /**
  * The ducts section of the app chrome's Settings popover (the route puts it there through the
  * `settings` route-control slot): everything that is the same everywhere, so it never sits on the
- * page body. The loss Rules are reached from it as one more popover (`RulesPopover`).
+ * page body. The loss Rules are not here: they are the sidebar's bottom pane (`screen.tsx`).
  * The design friction rate is a person-owned Work cell (`designFriction`, in-wg per 100 ft; Pea has
  * no write to it and Revit never receives it). The parameter slots say which Revit parameter each
  * input is read from; the two airflow slots are reassignable here (each candidate with its coverage
  * in the open system, the document when none), the same choice as the inbox's Set row. The other
  * slots are shown, not yet chosen here.
  */
-import { Fragment, useRef, useState } from "react";
+import { Fragment } from "react";
 import { transitionPatches } from "@pe/agent-contracts";
 import { DEFAULT_DESIGN_FRICTION_RATE } from "@pe/ducts-domain/equivalent-length";
-import type { Priced } from "@pe/ducts-domain/pricing";
 import type { SystemScope } from "@pe/ducts-domain/system-scope";
 import type { DuctSnapshot } from "@pe/ducts-domain/types";
-import { Button } from "@pe/kit/lang/button";
 import { cellFromTrichotomy, StateCell } from "@pe/kit/lang/cell";
-import { Popover, PopoverContent, PopoverTrigger } from "@pe/kit/lang/popover";
 import { reviewTransitions, type CellWire } from "#/components/work/band";
 import { PrimaryRouteControls } from "#/navigation/route-controls";
 
@@ -27,7 +24,6 @@ import {
   type AirflowOf,
 } from "../../airflow";
 import type { LossesWork } from "../../work";
-import { RulesTree } from "./rules-pane";
 import { SlotPicker } from "./slot-picker";
 
 const KEY = "designFriction";
@@ -45,30 +41,16 @@ const READ_ONLY = [
   ["fittingCoefficient", "Fitting coefficient"],
 ] as const;
 
-/** What the Rules popover needs from the screen: the priced read, the system, and the tree's jump. */
-export type RulesHandle = {
-  priced: Priced | null;
-  groups: readonly string[];
-  open: boolean;
-  setOpen: (open: boolean) => void;
-  focus: string | null;
-  setFocus: (key: string | null) => void;
-  nameOf: (id: number) => string;
-  light: (ids: readonly number[] | null) => void;
-};
-
 export function DuctSettings({
   work,
   rate,
   snapshot,
   scope,
-  rules,
 }: {
   work: LossesWork;
   rate: number;
   snapshot: DuctSnapshot;
   scope: SlotScope;
-  rules: RulesHandle;
 }) {
   const cell = work.doc?.designFriction ?? {};
   const wire: CellWire = { segment: null, revision: work.revision, write: work.write };
@@ -120,82 +102,8 @@ export function DuctSettings({
             </Fragment>
           ))}
         </div>
-        <RulesPopover rules={rules} snapshot={snapshot} work={work} />
       </section>
     </PrimaryRouteControls>
-  );
-}
-
-/**
- * The loss Rules, as a popover off the Settings section. A rule is a fitting type (family : type)
- * plus a geometry condition; its table is the one choice a person makes and Pe re-looks-up every
- * instance under it. The tree's element rows open it on their rule (`rules.setOpen`), so it falls
- * back to the chrome Settings button as its anchor while the section's own trigger is hidden.
- */
-function RulesPopover({
-  rules,
-  snapshot,
-  work,
-}: {
-  rules: RulesHandle;
-  snapshot: DuctSnapshot;
-  work: LossesWork;
-}) {
-  const trigger = useRef<HTMLSpanElement>(null);
-  const [wide, setWide] = useState(false);
-  const { priced } = rules;
-  return (
-    <Popover open={rules.open && priced != null} onOpenChange={rules.setOpen}>
-      <span ref={trigger} className="border-line border-t pt-2" data-e-rules-trigger="">
-        <PopoverTrigger
-          render={
-            <Button label="loss rules" refusal={priced ? undefined : "Rules appear once the system is priced"}>
-              Loss rules…
-            </Button>
-          }
-        />
-      </span>
-      {priced ? (
-        <PopoverContent
-          side="left"
-          align="start"
-          className="w-[66ch] max-w-(--available-width) p-2"
-          data-e-rules-popover=""
-          anchor={() =>
-            (trigger.current?.getClientRects().length
-              ? trigger.current
-              : document.querySelector("button[data-chrome-settings]")) as Element
-          }
-        >
-          <div className="mb-1 flex items-baseline gap-2">
-            <p className="font-medium">Loss rules</p>
-            <span
-              className="t-small text-ink-2 min-w-0 flex-1 truncate"
-              title="A rule is a fitting type (family : type) plus a geometry condition. Its table is the one choice a person makes; Pe re-looks-up every instance under it. A fitting with a stated drop is an override under its type."
-            >
-              table per fitting type · {wide ? "every system" : "this system"}
-            </span>
-            <Button
-              label={wide ? "rules of this system only" : "rules of every system"}
-              onClick={() => setWide(!wide)}
-            >
-              {wide ? "this system" : "all systems"}
-            </Button>
-          </div>
-          <RulesTree
-            snapshot={snapshot}
-            priced={priced}
-            groups={rules.groups}
-            wide={wide}
-            work={work}
-            focus={rules.focus}
-            onFocus={rules.setFocus}
-            nameOf={rules.nameOf}
-            light={rules.light}
-          />
-        </PopoverContent>
-      ) : null}
-    </Popover>
   );
 }
 

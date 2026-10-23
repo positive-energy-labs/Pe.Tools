@@ -24,6 +24,8 @@ interface PaneCollapseSpec {
   collapsedSize?: number;
   collapseBelow?: number;
   title?: string;
+  /** The rail stays drawn but its expand press is inert, and says why (nothing to open yet). */
+  refusal?: string;
 }
 
 interface PaneSizeSpec {
@@ -326,9 +328,14 @@ export function PaneSplit({ axis, start, end, resize, hide, grow }: PaneSplitPro
             <Button
               label={`Expand ${railTitle}`}
               icon={side === "start" ? ChevronRight : ChevronLeft}
+              refusal={resize?.collapse?.refusal}
               onClick={() => resize?.collapse?.onCollapsedChange?.(false)}
             />
-            <span data-slot="pane-rail-title" className="[writing-mode:vertical-rl]">
+            <span
+              data-slot="pane-rail-title"
+              className="[writing-mode:vertical-rl] data-[disabled]:text-ink-mute"
+              data-disabled={resize?.collapse?.refusal != null || undefined}
+            >
               {railTitle}
             </span>
           </div>

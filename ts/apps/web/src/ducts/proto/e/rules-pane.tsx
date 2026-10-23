@@ -120,7 +120,7 @@ export function RulesTree({
   useEffect(() => {
     if (!focus) return;
     document
-      .querySelector(`[data-e-rules] [data-key="${CSS.escape(focus)}"]`)
+      .querySelector(`[data-e-rules="this"] [data-key="${CSS.escape(focus)}"]`)
       ?.scrollIntoView({ block: "nearest" });
   }, [focus]);
 
@@ -181,7 +181,7 @@ export function RulesTree({
   // Names wrap (never truncate) and the chips wrap (never clip).
   const COLS = "grid grid-cols-[19ch_minmax(0,1fr)] gap-x-3 gap-y-0.5";
   return (
-    <div className="flex flex-col" data-e-rules="" onMouseLeave={() => light(null)}>
+    <div className="flex flex-col" data-e-rules={wide ? "all" : "this"} onMouseLeave={() => light(null)}>
       <ul aria-label="loss rules" className="flex flex-col">
         {roots.length === 0 ? (
           <li className="text-ink-2 t-small py-1">
@@ -249,6 +249,7 @@ export function RulesTree({
                 key={family ?? `#${first}`}
                 className={`${COLS} items-baseline py-0.5`}
                 data-e-unruled-family={family ?? undefined}
+                data-e-unruled-ids={[...ids].join(" ")}
                 onMouseEnter={() => light([...ids])}
               >
                 <p className="min-w-0 break-words">
