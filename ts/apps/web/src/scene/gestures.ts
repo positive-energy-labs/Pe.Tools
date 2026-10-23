@@ -39,13 +39,14 @@ export type WheelLike = {
   deltaY: number;
   deltaMode: number;
   ctrlKey: boolean;
+  metaKey?: boolean;
   timeStamp?: number;
 };
 
 /** A notch of a mouse wheel is ~100 px (120 on some); trackpad scroll arrives in smaller steps. */
 const NOTCH_PX = 40;
 /** A burst keeps its first reading this long: a trackpad flick's momentum tail can exceed a notch. */
-const BURST_MS = 160;
+const BURST_MS = 150;
 
 /**
  * Reads wheel events as pinch (ctrlKey: how browsers deliver a trackpad pinch), two-finger scroll
@@ -55,9 +56,9 @@ const BURST_MS = 160;
 export function createWheelReader() {
   let last: { intent: WheelIntent; at: number } | null = null;
   return (e: WheelLike): WheelIntent => {
-    const at = e.timeStamp ?? 0;
-    if (e.ctrlKey) return (last = { intent: "pinch", at }).intent;
-    const burst = last && last.intent !== "pinch" && at - last.at < BURST_MS ? last.intent : null;
+    const at = e.timeStamp ?? performance.now();
+    if (e.ctrlKey || e.metaKey) return (last = { intent: "pinch", at }).intent;
+    const burst = last && at >= last.at && at - last.at < BURST_MS ? last.intent : null;
     const alone =
       e.deltaMode !== 0
         ? "wheel"
@@ -94,7 +95,8 @@ export function wheelPlane(
 ): PlaneViewport {
   const d = wheelPixels(e);
   if (intent === "scroll") return { ...v, tx: v.tx - d.x, ty: v.ty - d.y };
-  const k = clampZoom(v.scale * Math.exp(-d.y * (intent === "pinch" ? PINCH_ZOOM : WHEEL_ZOOM))) / v.scale;
+  const k =
+    clampZoom(v.scale * Math.exp(-d.y * (intent === "pinch" ? PINCH_ZOOM : WHEEL_ZOOM))) / v.scale;
   return zoomPlane(v, k, x, y);
 }
 

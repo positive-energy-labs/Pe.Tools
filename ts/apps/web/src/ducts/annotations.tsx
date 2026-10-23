@@ -85,6 +85,7 @@ export function Annotations({
   pointOf,
   issue,
   onPick,
+  onFrame,
   onRuling,
   onHover,
 }: {
@@ -107,6 +108,7 @@ export function Annotations({
   /** The selected issue id; its mark draws heavier. */
   issue: string;
   onPick: (id: number, at: Point) => void;
+  onFrame: (id: number) => void;
   onRuling: (r: Ruling, at: Point) => void;
   onHover: (id: number | null) => void;
 }) {
@@ -131,7 +133,10 @@ export function Annotations({
     style: HIT,
     onMouseEnter: () => onHover(id),
     onMouseLeave: () => onHover(null),
-    onClick: (e: React.MouseEvent) => onPick(id, at(e)),
+    onClick: (e: React.MouseEvent) => {
+      if (e.detail < 2) onPick(id, at(e));
+    },
+    onDoubleClick: () => onFrame(id),
   });
   const branchIssue = (branch: NoRunBranch) =>
     issueAt(
@@ -306,6 +311,7 @@ export function Annotations({
                 onMouseEnter={() => onIssueHover?.(target)}
                 onMouseLeave={() => onIssueHover?.(null)}
                 onClick={(e) => onRuling(r, at(e))}
+                onDoubleClick={() => onFrame(r.at)}
               >
                 {r.kind === "claim" ? (
                   <circle r={PIN} fill={ink} stroke={token(on ? "ink" : "page")} />

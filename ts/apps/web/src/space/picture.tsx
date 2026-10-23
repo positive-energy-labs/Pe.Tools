@@ -188,7 +188,7 @@ export function SpacePicture({
     },
   });
 
-  const onPick = (pick: Pick | null, event: PointerEvent) => {
+  const onPick = (pick: Pick | null, event: MouseEvent) => {
     if (pick) return setPage({ selected: pick.instance.key, row: null }, push);
     const rows = page.rows?.response;
     if (rows && on.has("boxes") && framed && host) {

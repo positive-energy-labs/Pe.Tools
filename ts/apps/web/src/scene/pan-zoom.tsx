@@ -34,7 +34,8 @@ export function PanZoom({
   const [host, setHost] = useState<HTMLDivElement | null>(null);
   const [box, setBox] = useState<Viewport2 | null>(null);
   const [own, setOwn] = useState<PlaneViewport | null>(null);
-  const view = own ?? (box ? restingView(content, box) : { kind: "plane" as const, scale: 1, tx: 0, ty: 0 });
+  const view =
+    own ?? (box ? restingView(content, box) : { kind: "plane" as const, scale: 1, tx: 0, ty: 0 });
   const latest = useRef(view);
   latest.current = view;
   const drag = useRef<{ x: number; y: number; view: PlaneViewport } | null>(null);
@@ -62,10 +63,15 @@ export function PanZoom({
       latest.current = next;
       setOwn(next);
     };
+    const preventGesture = (event: Event) => event.preventDefault();
     host.addEventListener("wheel", wheel, { passive: false });
+    host.addEventListener("gesturestart", preventGesture, { passive: false });
+    host.addEventListener("gesturechange", preventGesture, { passive: false });
     return () => {
       observer.disconnect();
       host.removeEventListener("wheel", wheel);
+      host.removeEventListener("gesturestart", preventGesture);
+      host.removeEventListener("gesturechange", preventGesture);
     };
   }, [host]);
 

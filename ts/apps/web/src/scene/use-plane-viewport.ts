@@ -53,12 +53,20 @@ export function usePlaneViewport(
       event.preventDefault();
       const rect = host.getBoundingClientRect();
       const v = pending.current ?? latest.current.view;
-      move(wheelPlane(v, reader(event), event, event.clientX - rect.left, event.clientY - rect.top), "gesture");
+      move(
+        wheelPlane(v, reader(event), event, event.clientX - rect.left, event.clientY - rect.top),
+        "gesture",
+      );
     };
+    const preventGesture = (event: Event) => event.preventDefault();
     host.addEventListener("wheel", wheel, { passive: false });
+    host.addEventListener("gesturestart", preventGesture, { passive: false });
+    host.addEventListener("gesturechange", preventGesture, { passive: false });
     return () => {
       observer.disconnect();
       host.removeEventListener("wheel", wheel);
+      host.removeEventListener("gesturestart", preventGesture);
+      host.removeEventListener("gesturechange", preventGesture);
       cancelAnimationFrame(frame.current);
       frame.current = 0;
       pending.current = null;

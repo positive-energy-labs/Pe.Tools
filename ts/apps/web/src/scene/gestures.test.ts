@@ -2,8 +2,10 @@ import { describe, expect, it } from "vite-plus/test";
 
 import { createWheelReader, pointerIntent, wheelPlane } from "./gestures";
 
-const press = (button: number, mods: Partial<Record<"shiftKey" | "ctrlKey" | "metaKey", boolean>> = {}) =>
-  pointerIntent({ button, shiftKey: false, ctrlKey: false, metaKey: false, ...mods });
+const press = (
+  button: number,
+  mods: Partial<Record<"shiftKey" | "ctrlKey" | "metaKey", boolean>> = {},
+) => pointerIntent({ button, shiftKey: false, ctrlKey: false, metaKey: false, ...mods });
 const wheel = (deltaX: number, deltaY: number, extra = {}) => ({
   deltaX,
   deltaY,
@@ -38,6 +40,34 @@ describe("pointer scheme", () => {
     expect(read(wheel(2, 6, { timeStamp: 0 }))).toBe("scroll");
     expect(read(wheel(0, 120, { timeStamp: 50 }))).toBe("scroll");
     expect(read(wheel(0, 120, { timeStamp: 1000 }))).toBe("wheel");
+  });
+
+  it("keeps the first classification through size and unit changes, and resets at 150 ms idle", () => {
+    for (let repeat = 0; repeat < 3; repeat++) {
+      const read = createWheelReader();
+      expect(read(wheel(0, 6, { timeStamp: 1000 }))).toBe("scroll");
+      expect(read(wheel(0, 120, { timeStamp: 1100 }))).toBe("scroll");
+      expect(read(wheel(0, 3, { deltaMode: 1, timeStamp: 1249 }))).toBe("scroll");
+      expect(read(wheel(0, 3, { deltaMode: 1, timeStamp: 1399 }))).toBe("wheel");
+      expect(read(wheel(0, 0.5, { timeStamp: 1400 }))).toBe("wheel");
+      expect(read(wheel(0, 0.5, { timeStamp: 1550 }))).toBe("scroll");
+    }
+  });
+
+  it("ctrl or meta overrides a scroll stream immediately; its unmodified tail still zooms", () => {
+    for (const modifier of ["ctrlKey", "metaKey"]) {
+      const read = createWheelReader();
+      expect(read(wheel(0, 4, { timeStamp: 0 }))).toBe("scroll");
+      expect(read(wheel(0, 4, { [modifier]: true, timeStamp: 10 }))).toBe("pinch");
+      expect(read(wheel(0, 4, { timeStamp: 20 }))).toBe("pinch");
+      expect(read(wheel(0, 4, { timeStamp: 170 }))).toBe("scroll");
+    }
+  });
+
+  it("does not carry a stream across a backwards clock", () => {
+    const read = createWheelReader();
+    expect(read(wheel(0, 100, { timeStamp: 1000 }))).toBe("wheel");
+    expect(read(wheel(0, 2, { timeStamp: 900 }))).toBe("scroll");
   });
 
   it("on a 2D viewport a scroll pans with the fingers and a pinch zooms about the cursor", () => {

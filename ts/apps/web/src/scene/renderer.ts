@@ -12,10 +12,10 @@
  * context into 2D canvases, only when what they show changed, never per orbit frame.
  */
 import * as THREE from "three";
-import { createWheelReader, wheelPixels, wheelPlane } from "./gestures";
+import { createWheelReader, pointerIntent, wheelPixels, wheelPlane } from "./gestures";
 import { createMeshPicker } from "./picking";
 import { OrbitControls } from "three/addons/controls/OrbitControls.js";
-import { center, fromControls, toCamera, type OrbitViewport } from "./orbit";
+import { center, fromControls, rotateAbout, toCamera, type OrbitViewport } from "./orbit";
 import { fitPlane, frameRect, fromFrame, type PlaneAxis, type PlaneViewport } from "./plane";
 import {
   newCamera,
@@ -71,7 +71,7 @@ const LIT = new THREE.Color(0xf2b544);
 const MEP = /duct|pipe|conduit|tray|mechanical|plumbing|sprinkler|terminal|electrical/i;
 
 /** Throws when WebGL is unavailable; the component says so. */
-export function createRenderer(mount: HTMLElement, meshes: SceneMeshes) {
+export function createRenderer(mount: HTMLElement, meshes: SceneMeshes, wheelHost = mount) {
   const measuring = timing();
   mark("build-start", { instances: meshes.instances.length });
   const renderer = new THREE.WebGLRenderer({ antialias: true });
@@ -105,6 +105,27 @@ export function createRenderer(mount: HTMLElement, meshes: SceneMeshes) {
     RIGHT: THREE.MOUSE.PAN,
   };
   controls.zoomToCursor = true;
+  // One stable picture listener also receives wheels over annotations and legends. OrbitControls'
+  // canvas-only listener otherwise lets those pinches reach the browser's page zoom.
+  const nativeWheel = (controls as unknown as { _onMouseWheel: (e: WheelEvent) => void })
+    ._onMouseWheel;
+  canvas.removeEventListener("wheel", nativeWheel);
+  let orbitPivot: readonly number[] | null = null;
+  let rotating = false;
+  const beforeTurn = camera.quaternion.clone();
+  const turnStart = (event: PointerEvent) => {
+    rotating = pointerIntent(event) === "orbit";
+    beforeTurn.copy(camera.quaternion);
+  };
+  const turnEnd = () => {
+    rotating = false;
+  };
+  canvas.addEventListener("pointerdown", turnStart, true);
+  controls.addEventListener("end", turnEnd);
+  controls.addEventListener("change", () => {
+    if (rotating && orbitPivot) rotateAbout(camera, controls.target, orbitPivot, beforeTurn);
+    beforeTurn.copy(camera.quaternion);
+  });
   // OrbitControls cancels every contextmenu, which would starve the app's element menu (it skips a
   // cancelled press). Scene3D decides instead: a right-drag pan cancels, a right click passes.
   canvas.removeEventListener(
@@ -344,16 +365,14 @@ export function createRenderer(mount: HTMLElement, meshes: SceneMeshes) {
     panning = null;
     moves.dispatchEvent({ type: "end" });
   };
-  const reader = createWheelReader();
   const planeWheel = (event: WheelEvent) => {
     if (!plane) return;
-    event.preventDefault();
     const rect = canvas.getBoundingClientRect();
     plane = {
       ...plane,
       viewport: wheelPlane(
         plane.viewport,
-        reader(event),
+        reading(event),
         event,
         event.clientX - rect.left,
         event.clientY - rect.top,
@@ -367,20 +386,15 @@ export function createRenderer(mount: HTMLElement, meshes: SceneMeshes) {
   canvas.addEventListener("pointerdown", planeDown);
   window.addEventListener("pointermove", planeMove);
   window.addEventListener("pointerup", planeUp);
-  canvas.addEventListener("wheel", planeWheel, { passive: false });
-  // Orbit wheel: OrbitControls zooms every wheel, so a two-finger scroll is told apart in the capture
-  // phase (before its listener) and answered by a pan in the bubble phase (after it, registered later).
   const reading = createWheelReader();
-  let scrolled = false;
-  const scrollGate = (event: WheelEvent) => {
-    scrolled = !plane && reading(event) === "scroll";
-    if (scrolled) controls.enableZoom = false;
-  };
-  const scrollPan = (event: WheelEvent) => {
-    if (!scrolled) return;
-    scrolled = false;
-    controls.enableZoom = true;
+  const wheel = (event: WheelEvent) => {
+    // An inset with its own PanZoom already consumed this event.
+    if (event.defaultPrevented) return;
     event.preventDefault();
+    rotating = false;
+    if (plane) return planeWheel(event);
+    const intent = reading(event);
+    if (intent !== "scroll") return nativeWheel(event);
     const { x, y } = wheelPixels(event);
     // Content follows the fingers: fingers up (deltaY > 0) moves the camera down the screen.
     camera.updateMatrixWorld();
@@ -395,8 +409,10 @@ export function createRenderer(mount: HTMLElement, meshes: SceneMeshes) {
     controls.update();
     moves.dispatchEvent({ type: "end" });
   };
-  canvas.addEventListener("wheel", scrollGate, { capture: true, passive: true });
-  canvas.addEventListener("wheel", scrollPan, { passive: false });
+  const preventGesture = (event: Event) => event.preventDefault();
+  wheelHost.addEventListener("wheel", wheel, { passive: false });
+  wheelHost.addEventListener("gesturestart", preventGesture, { passive: false });
+  wheelHost.addEventListener("gesturechange", preventGesture, { passive: false });
   const observer = new ResizeObserver(resize);
   observer.observe(mount);
   resize();
@@ -466,6 +482,9 @@ export function createRenderer(mount: HTMLElement, meshes: SceneMeshes) {
     },
     render,
     viewport: (): OrbitViewport => fromControls(controls, bounds),
+    setOrbitPivot(pivot: readonly number[] | null) {
+      orbitPivot = pivot;
+    },
     setViewport(v: OrbitViewport) {
       const pose = toCamera(v, bounds);
       camera.position.fromArray(pose.position);
@@ -550,9 +569,10 @@ export function createRenderer(mount: HTMLElement, meshes: SceneMeshes) {
       canvas.removeEventListener("pointerdown", planeDown);
       window.removeEventListener("pointermove", planeMove);
       window.removeEventListener("pointerup", planeUp);
-      canvas.removeEventListener("wheel", planeWheel);
-      canvas.removeEventListener("wheel", scrollGate, true);
-      canvas.removeEventListener("wheel", scrollPan);
+      canvas.removeEventListener("pointerdown", turnStart, true);
+      wheelHost.removeEventListener("wheel", wheel);
+      wheelHost.removeEventListener("gesturestart", preventGesture);
+      wheelHost.removeEventListener("gesturechange", preventGesture);
       batch.dispose();
       scene.remove(batch);
       material.dispose();

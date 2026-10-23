@@ -34,6 +34,10 @@ export type Scene3DProps = {
   meshes: SceneMeshes | null;
   /** Shared live camera; Page is only its committed snapshot. */
   orbit: LiveOrbit;
+  /** Selection's orbit centre, independent of the camera's look target. */
+  orbitPivot?: readonly number[] | null;
+  /** Stable picture including the DOM annotations above the canvas. */
+  wheelHost?: HTMLElement | null;
   /** An axis drawn orthographically instead of the orbit; null or absent = the orbit. */
   plane?: { axis: PlaneAxis; viewport: PlaneViewport } | null;
   onPlane?: (next: PlaneViewport, how: "gesture" | "move") => void;
@@ -48,9 +52,9 @@ export type Scene3DProps = {
   hoveredIssue?: string | null;
   focusedIssue?: string | null;
   onIssueHover?: (target: IssueTarget | null) => void;
-  onIssuePick?: (target: IssueTarget, event: PointerEvent) => void;
+  onIssuePick?: (target: IssueTarget, event: MouseEvent) => void;
   /** A click (a press that stayed within 5 px); null when it met nothing. */
-  onPick?: (pick: Pick | null, event: PointerEvent) => void;
+  onPick?: (pick: Pick | null, event: MouseEvent) => void;
   /** A double-click: the element under it, or null on empty space. The caller frames it. */
   onDoubleClick?: (pick: Pick | null, event: MouseEvent) => void;
   /** False for a hit the caller has cut away; picking and the element menu look past it. */
@@ -114,7 +118,7 @@ export function Scene3D(props: Scene3DProps): ReactNode {
     if (!meshes) return;
     let r: SceneRenderer;
     try {
-      r = createRenderer(host.current!, meshes);
+      r = createRenderer(host.current!, meshes, props.wheelHost ?? host.current!);
     } catch (error) {
       setFailed({ meshes, message: `WebGL unavailable: ${String(error)}` });
       return;
@@ -122,6 +126,7 @@ export function Scene3D(props: Scene3DProps): ReactNode {
     core.current = r;
     r.setOnFrame((project, size, ray) => latest.current.onProject?.(project, size, ray));
     const { canvas, moves } = r;
+    const wheelHost = props.wheelHost ?? host.current!;
     const orbit = props.orbit;
     let token: OrbitGesture | null = null;
     let applying = false;
@@ -182,7 +187,7 @@ export function Scene3D(props: Scene3DProps): ReactNode {
       token = null;
       gesturing.current = false;
     };
-    canvas.addEventListener("wheel", wheel, { capture: true, passive: true });
+    wheelHost.addEventListener("wheel", wheel, { capture: true, passive: true });
     canvas.addEventListener("pointerdown", interruptWheel, true);
     canvas.addEventListener("pointercancel", cancel, true);
     moves.addEventListener("start", start);
@@ -225,7 +230,9 @@ export function Scene3D(props: Scene3DProps): ReactNode {
     const pointerDown = (event: PointerEvent) => {
       down = { x: event.clientX, y: event.clientY, button: event.button };
     };
-    const pointerUp = (event: PointerEvent) => {
+    // Open facts on click, after the document's outside-press capture. Opening on pointerup lets
+    // the trailing click immediately dismiss the new popover as an outside press.
+    const click = (event: MouseEvent) => {
       if (event.button !== 0 || down?.button !== 0 || !isClick(down, event)) return;
       const issue = r.pickIssue(event);
       if (issue && latest.current.onIssuePick) return latest.current.onIssuePick(issue, event);
@@ -243,19 +250,19 @@ export function Scene3D(props: Scene3DProps): ReactNode {
     canvas.addEventListener("pointermove", pointerMove);
     canvas.addEventListener("pointerleave", pointerLeave);
     canvas.addEventListener("pointerdown", pointerDown, true);
-    canvas.addEventListener("pointerup", pointerUp);
+    canvas.addEventListener("click", click);
     canvas.addEventListener("contextmenu", contextMenu);
     canvas.addEventListener("dblclick", doubleClick);
     return () => {
       clearTimeout(wheelEnd);
-      canvas.removeEventListener("wheel", wheel, true);
+      wheelHost.removeEventListener("wheel", wheel, true);
       canvas.removeEventListener("pointerdown", interruptWheel, true);
       canvas.removeEventListener("pointercancel", cancel, true);
       cancelAnimationFrame(hover);
       canvas.removeEventListener("pointermove", pointerMove);
       canvas.removeEventListener("pointerleave", pointerLeave);
       canvas.removeEventListener("pointerdown", pointerDown, true);
-      canvas.removeEventListener("pointerup", pointerUp);
+      canvas.removeEventListener("click", click);
       canvas.removeEventListener("contextmenu", contextMenu);
       canvas.removeEventListener("dblclick", doubleClick);
       unfollow();
@@ -268,7 +275,11 @@ export function Scene3D(props: Scene3DProps): ReactNode {
       publishedPlane.current = null;
       gesturing.current = false;
     };
-  }, [meshes, props.orbit]);
+  }, [meshes, props.orbit, props.wheelHost]);
+
+  useEffect(() => {
+    core.current?.setOrbitPivot(props.orbitPivot ?? null);
+  }, [props.orbitPivot, meshes, props.wheelHost]);
 
   // The plane follows the same rule; a fit (null viewport) is the route's to compute.
   useEffect(() => {
