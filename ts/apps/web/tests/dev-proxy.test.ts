@@ -38,6 +38,10 @@ test("borrowed frontend forwards reads with host origin and refuses mutations be
   const { createServer: createVite } = await import("vite-plus");
   const { createServer } = await import("node:http");
   const { once } = await import("node:events");
+  const { mkdtempSync, rmSync } = await import("node:fs");
+  const { tmpdir } = await import("node:os");
+  const { join } = await import("node:path");
+  const root = mkdtempSync(join(tmpdir(), "pe-borrowed-proxy-"));
   const forwarded: { url?: string; origin?: string; referer?: string; body: string }[] = [];
   const backend = createServer(async (req, res) => {
     let body = "";
@@ -57,6 +61,7 @@ test("borrowed frontend forwards reads with host origin and refuses mutations be
   vi.stubEnv("PE_TOOLS_HOST_BASE_URL", target);
   const vite = await createVite({
     configFile: false,
+    root,
     plugins: [checkoutIngress()],
     server: { host: "127.0.0.1", port: 0 },
     logLevel: "silent",
@@ -93,6 +98,7 @@ test("borrowed frontend forwards reads with host origin and refuses mutations be
   } finally {
     await vite.close();
     backend.close();
+    rmSync(root, { recursive: true, force: true });
     vi.unstubAllEnvs();
   }
 });
