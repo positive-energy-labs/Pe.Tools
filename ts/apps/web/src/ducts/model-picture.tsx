@@ -1,3 +1,4 @@
+import { useWork } from "@pe/kit/lang/pane";
 /** The subject's real meshes and annotations. Camera policy belongs to useStage. */
 import { emptyListSearch } from "@pe/agent-contracts";
 import {
@@ -214,6 +215,7 @@ export function ModelPicture({
         : !meshes
           ? "no meshes: choose a system on a Revit document"
           : null;
+  useWork(read.pending, "capturing meshes… gestures wait");
   return (
     <div
       ref={setHost}
