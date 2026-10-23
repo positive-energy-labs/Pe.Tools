@@ -840,6 +840,16 @@ These rows are byte-for-byte text from `34bd5e17`. The searchable comment preser
 
 ### Guards, proof and housekeeping
 
+- 2026-10-23, kit-raise run (waves 2–8, branch `t3/kit-raise`, run folder `.artifacts/runs/kit-raise-20261023`):
+  - Refresh marks pending 601 ms late (proof/checklist7.md D11): `ts/apps/web/src/readings.ts:607` `acquire(refresh)` starts acquisition without a synchronous pending mark; the kit chip and readout slot are ready and wait on that line. Owner: readings.
+  - Claim titles are full sentences on the working surface (D18): the doctrine's zero-sentence rule needs a ruling on whether claims are the one legitimate sentence surface outside Help; no code change until ruled.
+  - Purge debt: work +335, camera +284, overlay +278, teach +202, capture +136, tips-fix +422, tutorial +110, floater-geometry +113 net lines; the fold slice recovered ~5. One purge pass over kit pane/button/tooltip/teach owners is owed.
+  - Capture rules (Fine retry by bounding-box coverage, nearest-first context, completeness advisory) are compile and synthetic-test proven only; the real-model read (SA 71 flex tubes, context omitted count) waits on the next `pe-revit session hr`.
+  - Scene look (context ground, fog steepness, x-ray reserved for the lit subject) is proven for state, not for taste: one real-model eye pass by kaitpw.
+  - `ts/tests/e2e/route-chaos.test.ts` needs `CHAOS_PRODUCT_ROOT`; not run on this branch. `ts/apps/host/tests/dev-takeover.test.ts` fails with ENOTEMPTY on temp-dir cleanup on main b8905f6e too (environmental; host owner).
+  - Fold the sibling-certified readout carry forward: done in retain-fix (kit readout slots); the route-chaos journey must be replayed once on main.
+  - Worktree residue on disk under `C:/Users/kaitp/.t3/worktrees/Pe.Tools/t3-*` (node_modules locks); git registrations pruned.
+
 - From slice S5, the Rooms pane-level Escape workaround, TableFrame F versus stage-frame collision, and list completion versus row ArrowDown/Enter parity still need kit-owner resolution. The stale floater early-return description is retired: current `useYield` checks earlier floaters and docks; the native sparse-scene visual gap is tracked separately. Delayed enrollment subscriptions are fixed and native Space selection was measured; large-scene shell cost remains unproven. See the [production report](../../../.artifacts/runs/final-20261023/REPORT.md).
 - List-kit browser proof covers the 355-row specimen, chat, and saved Chadds systems, Rulings and tree. Priced Inputs/fans still need browser proof with tables beside the snapshot; directory, Activity, sessions, Work lines, parameter changes and rooms Feedback have deterministic coverage but no individual browser pass. Evidence and baseline check failures: `.artifacts/handoffs/2026-10-22-list-integration.md` (2026-10-22).
 - Remove the retired list-core checkout residue at `C:/Users/kaitp/.t3/worktrees/Pe.Tools/t3-4fac501b`: Git removed its worktree registration, but directory removal failed and automatic approval review blocked the explicit cleanup. No process remains from that child; evidence was copied to the list-kit checkout before retirement (2026-10-22).
