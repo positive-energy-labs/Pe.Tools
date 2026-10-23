@@ -21,6 +21,7 @@ export interface StripOption {
   label: string;
   chord?: Chord;
   says?: string;
+  busy?: boolean;
 }
 
 interface PaneModes {
@@ -142,6 +143,7 @@ export function PaneStrip({ modes, floaters, layers }: PaneStripProps) {
       kind="framed"
       label={o.label}
       reason={o.says}
+      busy={o.busy}
       pressed={layers.value.includes(o.key)}
       onClick={() => layers.onToggle(o.key)}
     >

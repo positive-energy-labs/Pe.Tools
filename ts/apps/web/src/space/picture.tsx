@@ -7,7 +7,7 @@ import { type Chord } from "@pe/kit/keys";
 import { Button } from "@pe/kit/lang/button";
 import type { FloaterSpec } from "@pe/kit/lang/floater";
 import { OrbitMinimap } from "@pe/kit/lang/minimap";
-import { Pane, PaneOverlay } from "@pe/kit/lang/pane";
+import { Pane } from "@pe/kit/lang/pane";
 import type { PageMove } from "#/route/manifest";
 import { PictureStage, stageViewport } from "#/scene/stage-controller";
 import { boundsOfInstances, center, frame, type OrbitViewport } from "#/scene/orbit";
@@ -389,7 +389,14 @@ export function SpacePicture({
             }}
             floaters={meshes ? floaters : undefined}
           >
-            <div ref={setHost} className="relative min-h-0 min-w-0 flex-1" data-space-picture="">
+            <div
+              ref={setHost}
+              className="relative min-h-0 min-w-0 flex-1"
+              data-space-picture=""
+              data-work-label={
+                status ?? (cut?.error ? `cuts clip nothing: ${cut.error}` : undefined)
+              }
+            >
               {meshes && pose && size ? (
                 <Scene3D
                   readout={readout}
@@ -432,13 +439,6 @@ export function SpacePicture({
                 />
               ) : null}
               {!meshes || !pose || !size ? readout : null}
-              {status || cut?.error ? (
-                <PaneOverlay label="space status" place="br">
-                  <p role="status" className="t-small text-ink-2 m-0" data-space-status="">
-                    {status ?? `cuts clip nothing: ${cut!.error}`}
-                  </p>
-                </PaneOverlay>
-              ) : null}
             </div>
           </Pane>
         );

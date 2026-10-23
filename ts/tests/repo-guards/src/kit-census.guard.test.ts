@@ -28,6 +28,14 @@ const allow = (entries: Record<string, string>): Allow[] =>
 // Filenames use the wave-4 final homes: land.ts, revit-target.tsx and go-to.tsx.
 // prettier-ignore
 const RULES: Rule[] = [
+  { id: "work-outside-floaters", doctrine: "N6",
+    pattern: /<(?:PaneOverlay|Floater)\b(?:(?!<\/(?:PaneOverlay|Floater)>)[\s\S])*?\brole=["']status["']/g,
+    roots: [W + "**/*.tsx"], allow: [],
+    cannotSee: "Status components hidden behind imports, aliases, and DOM placement after portals." },
+  { id: "composer-control-local-outcome", doctrine: "L3",
+    pattern: /data-composer-(?:refusal|tools)|<Textarea\b[\s\S]*?\/>\s*(?:\{(?:refusal|tools)\b|<(?!\/)[A-Za-z])/g,
+    roots: [W + "components/lang/conversation.{tsx,css}"], allow: [],
+    cannotSee: "Arbitrary expression aliases between the textarea and controls, and computed grid placement." },
   { id: "css-damage-owner", doctrine: "I2", pattern: /pe-damage-beat|\[data-damage\]/g,
     roots: [W + "**/*.css", K + "**/*.css"],
     allow: [{ glob: K + "components/lang/lang.css", reason: "One shared critical-damage mark owns the pulse and selectors." }],

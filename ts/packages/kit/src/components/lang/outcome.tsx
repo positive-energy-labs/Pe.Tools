@@ -46,7 +46,7 @@ const OUTCOME_ICON: Record<OutcomeKind, LucideIcon> = {
   error: TriangleAlert,
 };
 
-interface OutcomeLineProps {
+export interface OutcomeLineProps {
   kind: OutcomeKind;
   /** What happened, in machine terms — mono, tabular, coloured by kind. */
   label: string;
@@ -58,7 +58,12 @@ export function OutcomeLine({ kind, label, says }: OutcomeLineProps) {
   const Icon = OUTCOME_ICON[kind];
   const slots = outcomeLineRecipe({ state: kind });
   return (
-    <div className={slots.base()} data-kind={kind} data-tone={OUTCOME_TONE[kind]}>
+    <div
+      className={slots.base()}
+      data-kind={kind}
+      data-tone={OUTCOME_TONE[kind]}
+      role={kind === "refused" || kind === "error" ? "alert" : "status"}
+    >
       <Icon className={slots.icon()} />
       <span className={slots.label()}>{label}</span>
       {says != null ? <span className={slots.says()}>{says}</span> : <span />}

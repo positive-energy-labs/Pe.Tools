@@ -11,6 +11,7 @@ import {
 import { X } from "lucide-react";
 import { type ListSearch } from "@pe/agent-contracts";
 import { Button } from "./button";
+import { useWork } from "./pane";
 import { NarrowChip, chipRecipe } from "./chip";
 import { type ListController } from "./collection";
 import { KeyHint } from "./key-hint";
@@ -68,6 +69,7 @@ export function ListSearchBox<T, Sort extends string>({
   // A field pick closes the popup as it picks; the editor it opens keeps it open.
   const advancing = useRef(false);
   const typed = echo.value;
+  useWork(typed !== keywords, `${label}…`);
   // Memoized suggestions keep their actions; actions read the typed text from here, never stale.
   const now = useRef({ typed, token: /\S+$/.exec(typed) });
   now.current = { typed, token: /\S+$/.exec(typed) };

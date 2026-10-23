@@ -108,9 +108,7 @@
   border-color: var(--pe-line-2);
   outline-color: color-mix(in srgb, var(--pe-line-2) 22%, transparent);
 }
-/* The box: work, the draft (it grows to `--composer-lines`, then scrolls), the refusal and the
-   state chips stack full width; every control sits on one bottom row: attach and the pickers'
-   marks on the left, fork then Send on the right. */
+/* Work and the draft stack above the controls. Outcomes stay under Send. */
 .dl-composer-box {
   --composer-pad: calc(var(--gutter) / 2);
   --composer-mark: 18px;
@@ -121,14 +119,9 @@
   grid-template-areas:
     "work work work"
     "text text text"
-    "refusal refusal refusal"
-    "tools tools tools"
     "lead . side";
   padding: var(--composer-pad) calc(var(--gutter) * 1.5);
   row-gap: var(--composer-pad);
-}
-.dl-composer-box > [data-composer-refusal] {
-  grid-area: refusal;
 }
 .dl-composer-box > [data-composer-work] {
   grid-area: work;
@@ -152,18 +145,6 @@
   max-block-size: calc(var(--type-prose-line-height) * var(--composer-lines));
   padding: 0;
   overflow-y: auto;
-}
-.dl-composer-box > [data-composer-tools] {
-  grid-area: tools;
-  display: flex;
-  min-width: 0;
-  flex-wrap: wrap;
-  align-items: center;
-  gap: var(--composer-pad);
-  color: var(--pe-ink-2);
-}
-.dl-composer-box > [data-composer-tools]:empty {
-  display: none;
 }
 .dl-composer-box > [data-composer-cluster],
 .dl-composer-box > [data-composer-lead] {

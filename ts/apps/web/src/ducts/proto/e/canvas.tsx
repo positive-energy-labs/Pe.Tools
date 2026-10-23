@@ -712,7 +712,11 @@ function Canvas({
             }}
             layers={{
               value: page.layers,
-              options: DUCTS_LAYERS.map((key) => ({ key, ...LAYER_WORDS[key] })),
+              options: DUCTS_LAYERS.map((key) => ({
+                key,
+                ...LAYER_WORDS[key],
+                busy: key === "context" && read.pending,
+              })),
               onToggle: (key) =>
                 setPage(
                   {
@@ -739,6 +743,9 @@ function Canvas({
             <div
               ref={setPictureHost}
               data-proto="E"
+              aria-busy={holding ? true : undefined}
+              data-reading={holding ? "pending" : undefined}
+              data-work-label={holding ? "capturing meshes… gestures wait" : undefined}
               className="relative flex size-full min-h-0 flex-col"
               onPointerDownCapture={(e) => {
                 if (holding) {
