@@ -10,6 +10,8 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import { spaceElementKey, type Reading } from "@pe/agent-contracts";
 import { Input } from "@pe/kit/lang/input";
+import { SubjectText, SubjectTextContext } from "@pe/kit/lang/subject-text";
+import { useRevitSubjectProps } from "#/revit/element-menu";
 
 import { Surface } from "#/components/lang/surface";
 import { frozenDemo } from "#/host/demo-client";
@@ -207,6 +209,33 @@ export function SpaceRoute({ url = true }: { url?: boolean } = {}) {
           ? "reading the scene artifact…"
           : null;
   const actions = handle.actions;
+  // The requested ids as named Subjects (I1): each by what the scene says it is, numbered, and a
+  // press selects it and flies there; right-click offers the element menu.
+  const refProps = useRevitSubjectProps();
+  const alias = useRef<((key: string) => void) | null>(null);
+  const hostKeys = useMemo(
+    () =>
+      new Map(
+        (metadata?.elements ?? [])
+          .filter((e) => e.handle.linkInstanceId == null)
+          .map((e) => [
+            e.handle.elementId,
+            { key: spaceElementKey(e.handle), name: pickName(e.handle) },
+          ]),
+      ),
+    [metadata],
+  );
+  const subjects = useMemo(
+    () => ({
+      nameOf: (id: number) => hostKeys.get(id)?.name ?? null,
+      refProps,
+      go: (id: number) => {
+        const key = hostKeys.get(id)?.key;
+        if (key) alias.current?.(key);
+      },
+    }),
+    [hostKeys, refProps],
+  );
   const sentence = (
     <>
       on{" "}
@@ -226,6 +255,11 @@ export function SpaceRoute({ url = true }: { url?: boolean } = {}) {
           onKeyDown={(e) => e.key === "Enter" && commitIds()}
         />
       </span>
+      {metadata && page.ids.length ? (
+        <SubjectTextContext value={subjects}>
+          <SubjectText text={[]} ids={page.ids} />
+        </SubjectTextContext>
+      ) : null}
       {metadata
         ? `; scene ${metadata.phase === "focus" ? "of those alone" : "with its context"}, ${metadata.elements.length} elements`
         : "; no scene"}
@@ -290,6 +324,7 @@ export function SpaceRoute({ url = true }: { url?: boolean } = {}) {
             layers={layers}
             status={status}
             onError={setError}
+            alias={alias}
             readout={
               metadata ? (
                 <PictureReadout

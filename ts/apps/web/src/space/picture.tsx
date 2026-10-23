@@ -80,6 +80,7 @@ export function SpacePicture({
   status,
   onError,
   readout,
+  alias,
 }: {
   lease?: { thread: string; ready: boolean; context: Record<string, unknown> };
   meshes: SceneMeshes | null;
@@ -92,6 +93,8 @@ export function SpacePicture({
   onError: (message: string | null) => void;
   /** The fixed top-left readout: the scene's summary, or the selection's identity and facts. */
   readout?: ReactNode;
+  /** Filled here: the alias-click a Subject named in text calls. It selects and flies (N4). */
+  alias?: { current: ((key: string) => void) | null };
 }) {
   const [host, setHost] = useState<HTMLDivElement | null>(null);
   const size = useSize(host);
@@ -155,9 +158,19 @@ export function SpacePicture({
     if (!bounds) return;
     if (axis) return setPage({ viewport: null }, push);
     if (!target) return flyTo(orbit, frame(bounds), { scene: bounds });
-    const view = subjectPose({ scene: bounds, subject: bounds }, target, orbit.read());
+    const view = subjectPose(
+      { scene: bounds, subject: bounds },
+      target,
+      orbit.read(),
+      size ? size.width / size.height : 1,
+    );
     flyTo(orbit, host ? clearPose(view, target, bounds, host) : view, { scene: bounds });
   };
+  if (alias)
+    alias.current = (key) => {
+      if (key !== page.selected) setPage({ selected: key, row: null }, push);
+      frameOn(meshes ? boundsOfInstances(meshes, (i) => i.key === key) : null);
+    };
   useScopeGestures(ORBIT_GESTURES);
   useScopeKeys([
     {
@@ -342,7 +355,10 @@ export function SpacePicture({
       ),
     [hasPose, orbit, box],
   );
-  const place = { top: "tl", north: "bl", east: "br" } as const;
+  // The key legend holds the bottom left. TODO(S1): a floater whose home corner is free skips the
+  // floaters before it (floater.tsx useYield), so North displaced to "br" sat on East; it stacks
+  // under Top instead until that lands.
+  const place = { top: "tl", north: "tl", east: "br" } as const;
   const floaters: FloaterSpec[] = [
     {
       key: "globe",
