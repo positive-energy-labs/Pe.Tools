@@ -37,8 +37,11 @@ export function createLiveOrbit(
   commit: (v: OrbitViewport, how: Move) => void,
 ) {
   let value = initial;
+  let published = initial;
   let pending: OrbitViewport[] = [];
   const publish = (pose: OrbitViewport, how: Move) => {
+    if (equal(published, pose)) return;
+    published = pose;
     pending.push(pose);
     commit(pose, how);
   };
@@ -102,12 +105,14 @@ export function createLiveOrbit(
       }
       pending = [];
       if (samePage(value, next)) return;
+      published = next;
       if (fly && value && next && !equal(value, next)) return fly(next);
       gesture = null;
       update(next);
     },
     restore(next: OrbitViewport | null) {
       pending = [];
+      published = next;
       gesture = null;
       update(next);
     },
