@@ -1,3 +1,4 @@
+import { GoToPopup } from "@pe/kit/lang/list-popup";
 import { SvgTip } from "@pe/kit/lang/tooltip";
 import { useMemo, type ReactNode } from "react";
 import { useStage } from "#/scene/stage-controller";
@@ -247,7 +248,53 @@ export function LevelPlan({
       if (selectedKey) onSelectZone(null);
     },
   });
-  const pane = { id: "plan", title: "plan", scroll: "clip" as const, flush: true, floaters: [map] };
+  const pane = {
+    id: "plan",
+    title: "plan",
+    scroll: "clip" as const,
+    flush: true,
+    floaters: [map],
+    actions: (
+      <GoToPopup
+        items={() =>
+          drawn.flatMap((zone) => [
+            {
+              key: zone.zone.guid,
+              name: zone.zone.key,
+              id: zone.zone.elementId ?? zone.zone.guid,
+              group: "Zones",
+              zone,
+              room: null as ModelRoom | null,
+            },
+            ...zone.rooms.map((room) => ({
+              key: room.guid,
+              name: room.name,
+              id: room.elementId ?? room.guid,
+              group: "Rooms",
+              zone,
+              room,
+            })),
+          ])
+        }
+        hover={(item) => onHover(item?.key ?? "")}
+        onGo={(item) => {
+          onSelectZone(item.zone);
+          if (item.room) onCursor(item.zone, item.room.guid);
+          const box = item.room?.outer ? loopBounds([item.room.outer]) : item.zone.zone.bounds;
+          if (world) {
+            const to = viewport.frame(
+              boundsOf([
+                world.frame.toViewport([box.minX, box.minY]),
+                world.frame.toViewport([box.maxX, box.maxY]),
+              ]),
+              24,
+            );
+            if (to) move(to, "move");
+          }
+        }}
+      />
+    ),
+  };
   if (!bounds || !world)
     return (
       <Pane {...pane}>

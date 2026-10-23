@@ -13,6 +13,7 @@ import {
   ListChips,
   ListInput,
   ListPopup,
+  GoToPopup,
   ListSegmentInput,
   PopupFrame,
   CommandPalette,
@@ -39,6 +40,12 @@ export function LangListSpecimens() {
   const plain = useList({ ...common, search: (kind) => ({ text: [kind] }) });
   return (
     <>
+      <SpecimenFrame name="GoToPopup" importPath="@pe/kit/lang/list-popup">
+        <GoToPopup
+          items={() => KINDS.map((name, id) => ({ key: name, name, id }))}
+          onGo={() => {}}
+        />
+      </SpecimenFrame>
       <SpecimenFrame name="PlainList" importPath="@pe/kit/lang/list-view">
         <PlainList
           list={plain}
