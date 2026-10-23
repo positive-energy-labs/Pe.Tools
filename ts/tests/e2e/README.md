@@ -2,6 +2,29 @@
 
 ## Seeded route journey (Vitest + chrome-agent)
 
+From an integrated checkout, the owned demo is one command:
+
+```powershell
+vp run --no-cache journey:routes
+```
+
+The launcher starts `src/dev.ts --no-revit` through the checkout's installed Node/jiti runtime,
+an isolated product home and local SDK/app-data roots, the canonical source Vite child, and a
+private visible chrome-agent instance on a dynamically selected port. It reads the host service
+receipt and returned browser identity, then runs Vitest with `refresh,worker` required. It never
+starts Revit or sends a Pea prompt. The integrated navigation fixture must expose its real demo
+Refresh action. `--seed`, `--require` and `--source` override the default seed, requested coverage
+and served source checkout. `custody.json` and `host.log` live under the dated route-launch run.
+The launcher restores online networking through the test, stops only its own Chrome, requests
+token-authenticated shutdown of its own host, disconnects its IPC child and bounds process exit.
+It restores the previous dev-tray receipt only while that receipt still names its own host.
+
+Explicit attached mode borrows the named page/server and leaves their lifecycle to the caller:
+
+```powershell
+vp run --no-cache journey:routes -- --attached --url 'http://127.0.0.1:5173/ducts?demo=navigation' --port 9255 --target 129DC0038D97FA0AEC5ED4E23D8524D3 --require refresh,worker
+```
+
 `vp run --no-cache test:route-chaos` from `ts` runs the opt-in `route-chaos.config.ts` suite.
 Always pass `--no-cache`: a cached task verdict cannot prove a browser journey.
 It borrows one explicitly named page from a Chrome instance launched by `chrome-agent`.
@@ -44,14 +67,21 @@ capability or missing core precondition fails Vitest; there are no skipped tests
 requires a new observed SSE response after the outage. Offline/online alone cannot satisfy it.
 The receipt is `partial` whenever any capability is omitted or unavailable, even if the selected
 Vitest assertions pass. It is `passed` only when every capability is explicitly required and runs.
-The core navigation, search/filter, history, copied-URL, reload and Escape assertions always run.
+The core navigation, search/filter, history, copied-URL, reload, Escape and quiet watchdog dwell
+assertions always run. `CHAOS_REQUIRE=navigation` is an explicitly partial diagnostic subset.
+Omitted disruptions are recorded and do not execute, so an unrelated omitted native scenario
+cannot mutate Work. The quiet dwell requires an accepted lease revision from the observed host
+response for the current URL thread and a world SSE subscription in the network URL. It holds
+still for 36 seconds, crossing the original watchdog interval, under the same sampled continuity
+checks. Missing lease or world subscription is a failed precondition, not quiet proof.
 Escape must clear selection while preserving the pose. History uses the real app Back/Forward
-controls; Alt+Arrows belongs to stage view history and is not used as browser history.
+controls where present, otherwise CDP `Page.navigateToHistoryEntry`; Alt+Arrows belongs to stage
+view history and is not used as browser history.
 
 For `arming`, supply `CHAOS_LANE=host`, `CHAOS_STAGE_SELECTOR` (a visible, enabled input on
 disposable Work), and `CHAOS_STAGE_VALUE`. This step persists a Work edit through trusted input,
 runs native Preview through its real control, and checks that refresh/route return disarms
-Apply. It never presses Apply. Native write consumption and stale native responses still need
+the actual `write N to Revit` control. It never presses Write. Native write consumption and stale native responses still need
 the parent's controlled native receipt loop. Example strict host coverage:
 
 ```powershell
@@ -70,9 +100,10 @@ the JSON receipt. The persistent CDP socket has connection/command timeouts and 
 commands on disconnect. Teardown restores online networking, resumes/detaches a paused worker,
 and closes the socket; it does not close the borrowed Chrome.
 
-Continuity checks hold actual main and canvas/SVG DOM references and poll their connection,
-focus and its scroll parents, pane scroll, URL pose and action arming during untouched
-disruptions. Native CDP layout-shift events cover the full disruption window. Named navigation,
+Continuity checks sample every 100 ms. They hold actual main, canvas/SVG, activeElement and
+scroll-ancestor DOM references and check identity/connection as well as scroll positions,
+pane scroll, URL pose and action arming during untouched disruptions. This is sampled continuity,
+not every-frame proof. Native CDP layout-shift events cover the full disruption window. Named navigation,
 selection, reload and deliberate focus moves have their own assertions. This is browser
 acceptance only after the full requested lane runs; formatting and the missing-precondition
 diagnostic are not acceptance. The parent supplies the deterministic `demo=navigation` fixture

@@ -6,7 +6,10 @@ import { connect, CTRL, type Page } from "./cdp.ts";
 
 const SYSTEMS = '[data-list-view][aria-label="systems"]';
 const PICTURE = "[data-model-picture]";
+const DRAWING =
+  '[data-pane-id="e-picture"] canvas[aria-label^="3D model"], [data-pane-id="e-picture"] svg[aria-label="duct tree"]';
 const SEARCH = `${SYSTEMS} input[aria-label="Search systems"]`;
+const ductWrite = (name: string) => /^write(?: [0-9]+)? to Revit$/i.test(name);
 const visible = `(e) => !!e && e.getClientRects().length > 0 && getComputedStyle(e).visibility !== "hidden"`;
 const sleep = (ms: number) => new Promise((done) => setTimeout(done, ms));
 const literal = JSON.stringify;
@@ -14,7 +17,7 @@ const literal = JSON.stringify;
 /** Read-only locator. All actions below go through CDP Input, Page, Network or Debugger. */
 async function box(page: Page, selector: string, name?: string) {
   return page.read<{ x: number; y: number } | null>(`(() => {
-    const elements = [...document.querySelectorAll(${literal(selector)})].filter(${visible});
+    const elements = [...document.querySelectorAll(${literal(selector)})].filter(${visible}).filter(e => !e.disabled && e.getAttribute('aria-disabled') !== 'true');
     const e = elements.find(e => ${name === undefined ? "true" : `[e.getAttribute('aria-label'), e.innerText?.trim()].includes(${literal(name)})`});
     if (!e || e.disabled || e.getAttribute('aria-disabled') === 'true') return null;
     const r = e.getBoundingClientRect();
@@ -42,6 +45,23 @@ async function click(page: Page, selector: string, name?: string) {
 }
 const button = (page: Page, name: string, root = "") =>
   click(page, `${root} button, ${root} [role=button]`.trim(), name);
+const allSystems = (page: Page) => button(page, "Systems", '[data-pane-id="e-picture"]');
+
+async function history(page: Page, direction: "Back" | "Forward") {
+  const before = await page.url();
+  if (await box(page, "button", direction)) await button(page, direction);
+  else {
+    const history = await page.send("Page.getNavigationHistory");
+    const entry = history.entries[history.currentIndex + (direction === "Back" ? -1 : 1)];
+    if (!entry || new URL(entry.url).origin !== new URL(process.env.E2E_WEB!).origin)
+      throw new Error(`PRECONDITION: ${direction} has no journey-owned history entry`);
+    await page.send("Page.navigateToHistoryEntry", { entryId: entry.id });
+  }
+  await page.until(
+    async () => (await page.url()) !== before,
+    `${direction} changes browser history`,
+  );
+}
 
 async function fill(page: Page, selector: string, value: string) {
   await click(page, selector);
@@ -104,7 +124,7 @@ async function state(page: Page) {
       visibility: document.visibilityState,
       pictureTitle: [...document.querySelectorAll('[data-pane-id="e-picture"] [data-slot="pane-title"]')].find(shown)?.innerText ?? '',
       crumb: [...document.querySelectorAll('[data-e-crumb], [data-picture-readout]')].filter(shown).map(e => e.innerText).join(' | '),
-      selected: [...document.querySelectorAll('[data-e-selected]')].find(shown)?.getAttribute('data-e-selected') ?? null,
+      selected: [...document.querySelectorAll('[data-crumb-segment="selection"][data-revit-ids]')].find(shown)?.getAttribute('data-revit-ids') ?? null,
       focus: { tag: active?.tagName, label: active?.getAttribute('aria-label'), id: active?.id ?? '', value: active?.value ?? null, scroll },
       panes: [...document.querySelectorAll('[data-pane-id]')].filter(shown).map(e => {
         const body = e.querySelector('[data-slot="pane-body"]');
@@ -190,10 +210,16 @@ test("seeded real-user route journey", async () => {
   const capabilities = ["refresh", "reconnect", "worker", "thread", "arming"];
   const required = new Set((process.env.CHAOS_REQUIRE ?? "").split(",").filter(Boolean));
   for (const capability of required)
-    expect(capabilities, `unknown CHAOS_REQUIRE ${capability}`).toContain(capability);
+    expect([...capabilities, "navigation"], `unknown CHAOS_REQUIRE ${capability}`).toContain(
+      capability,
+    );
   const lane = process.env.CHAOS_LANE;
   const root = execFileSync("git", ["rev-parse", "--show-toplevel"], { encoding: "utf8" }).trim();
   const commit = execFileSync("git", ["rev-parse", "HEAD"], { encoding: "utf8" }).trim();
+  const productCheckout = process.env.CHAOS_PRODUCT_ROOT ?? root;
+  const productCommit = execFileSync("git", ["-C", productCheckout, "rev-parse", "HEAD"], {
+    encoding: "utf8",
+  }).trim();
   const dir = resolve(
     root,
     ".artifacts",
@@ -207,10 +233,17 @@ test("seeded real-user route journey", async () => {
     lane,
     commit,
     checkout: root,
+    productCheckout,
+    productCommit,
     started: new Date().toISOString(),
     target: process.env.CDP_TARGET,
     port: process.env.CDP_PORT,
     required: [...required],
+    continuity: {
+      sampleMs: 100,
+      scope:
+        "sampled DOM/focus/scroll continuity; native layout-shift events, not every-frame proof",
+    },
     omitted: capabilities.filter((capability) => !required.has(capability)),
     result: "running",
     steps: [] as {
@@ -222,7 +255,16 @@ test("seeded real-user route journey", async () => {
       error?: string;
     }[],
     coverage: {} as Record<string, string>,
-    network: [] as { method: string; url?: string; status?: number; stream?: boolean }[],
+    network: [] as {
+      method: string;
+      url?: string;
+      status?: number;
+      stream?: boolean;
+      requestId?: string;
+      requestMethod?: string;
+      leaseThread?: string;
+      loaderId?: string;
+    }[],
   };
   const save = () => writeFileSync(join(dir, "receipt.json"), JSON.stringify(receipt, null, 2));
   let page: Page | undefined;
@@ -230,6 +272,8 @@ test("seeded real-user route journey", async () => {
   let workerSession: string | undefined;
   const workers = new Map<string, string>();
   const paused = new Set<string>();
+  const requests = new Map<string, { method: string; leaseThread?: string }>();
+  const finishedRequests = new Set<string>();
   let shifts: number[] = [];
   const checkPage = () => {
     if (!page) throw new Error("CDP page not connected");
@@ -241,6 +285,12 @@ test("seeded real-user route journey", async () => {
     if (!present && required.has(capability))
       throw new Error(`PRECONDITION: ${capability}: ${reason}`);
     return present;
+  };
+  const requested = (capability: string) => {
+    if (required.has(capability)) return true;
+    receipt.coverage[capability] = "UNPROVEN: omitted from CHAOS_REQUIRE; not executed";
+    if (receipt.steps.length) receipt.steps.at(-1)!.status = "omitted";
+    return false;
   };
   async function step(name: string, run: () => Promise<void>) {
     const item = {
@@ -272,10 +322,28 @@ test("seeded real-user route journey", async () => {
     const before = await state(p);
     shifts = [];
     const main = await hold(p, '[data-proto="E2"]');
-    const picture = await hold(
-      p,
-      `${PICTURE} canvas[aria-label^="3D model"], ${PICTURE} svg[aria-label="duct tree"]`,
-    );
+    const picture = await hold(p, DRAWING);
+    const active = (
+      await p.send("Runtime.evaluate", {
+        expression: "document.activeElement",
+        returnByValue: false,
+      })
+    ).result.objectId as string;
+    const ancestorArray = (
+      await p.send("Runtime.callFunctionOn", {
+        objectId: active,
+        returnByValue: false,
+        functionDeclaration:
+          "function(){const out=[];for(let e=this;e;e=e.parentElement)if(e.scrollHeight>e.clientHeight||e.scrollWidth>e.clientWidth)out.push(e);return out;}",
+      })
+    ).result.objectId as string;
+    const properties = await p.send("Runtime.getProperties", {
+      objectId: ancestorArray,
+      ownProperties: true,
+    });
+    const ancestors = properties.result
+      .filter((property: { name: string }) => /^[0-9]+$/.test(property.name))
+      .map((property: { value: { objectId: string } }) => property.value.objectId) as string[];
     let stopped = false;
     let failure: unknown;
     const monitor = (async () => {
@@ -283,6 +351,23 @@ test("seeded real-user route journey", async () => {
         try {
           expect(await retained(p, main), "main DOM continuity").toBe(true);
           expect(await retained(p, picture), "canvas/SVG continuity").toBe(true);
+          const focusIdentity = await p.send("Runtime.callFunctionOn", {
+            objectId: active,
+            returnByValue: true,
+            functionDeclaration:
+              "function(){return this.isConnected && this === document.activeElement;}",
+          });
+          expect(focusIdentity.result.value, "same activeElement DOM object").toBe(true);
+          for (const [index, objectId] of ancestors.entries()) {
+            const identity = await p.send("Runtime.callFunctionOn", {
+              objectId,
+              returnByValue: true,
+              arguments: [{ value: index }],
+              functionDeclaration:
+                "function(index){const out=[];for(let e=document.activeElement;e;e=e.parentElement)if(e.scrollHeight>e.clientHeight||e.scrollWidth>e.clientWidth)out.push(e);return this.isConnected && this === out[index];}",
+            });
+            expect(identity.result.value, `same scroll ancestor DOM object ${index}`).toBe(true);
+          }
           const after = await state(p);
           expect(after.visibility, "measured tab stays visible").toBe("visible");
           expect(after.focus, "untouched focus and its scroll parents").toEqual(before.focus);
@@ -308,8 +393,11 @@ test("seeded real-user route journey", async () => {
       stopped = true;
       await monitor;
       receipt.coverage[`layout-shifts-step-${current}`] = JSON.stringify(shifts);
-      await p.send("Runtime.releaseObject", { objectId: main });
-      await p.send("Runtime.releaseObject", { objectId: picture });
+      await Promise.allSettled(
+        [...new Set([main, picture, active, ancestorArray, ...ancestors])].map((objectId) =>
+          p.send("Runtime.releaseObject", { objectId }),
+        ),
+      );
     }
     if (failure) throw failure;
     expect(
@@ -342,6 +430,20 @@ test("seeded real-user route journey", async () => {
         );
       page = await connect();
       page.onEvent((event) => {
+        if (event.method === "Network.requestWillBeSent") {
+          const request = event.params.request;
+          let leaseThread: string | undefined;
+          if (new URL(request.url).pathname === "/pe/route-view/ducts" && request.postData) {
+            try {
+              leaseThread = JSON.parse(request.postData).thread;
+            } catch {
+              /* Not a lease publication. */
+            }
+          }
+          requests.set(event.params.requestId, { method: request.method, leaseThread });
+        }
+        if (event.method === "Network.loadingFinished")
+          finishedRequests.add(event.params.requestId);
         if (
           event.method === "PerformanceTimeline.timelineEventAdded" &&
           event.params?.event?.type === "layout-shift"
@@ -361,6 +463,10 @@ test("seeded real-user route journey", async () => {
             url: event.params.response.url,
             status: event.params.response.status,
             stream: event.params.response.mimeType === "text/event-stream",
+            requestId: event.params.requestId,
+            requestMethod: requests.get(event.params.requestId)?.method,
+            leaseThread: requests.get(event.params.requestId)?.leaseThread,
+            loaderId: event.params.loaderId,
           });
         if (event.method === "Network.webSocketCreated")
           receipt.network.push({ method: event.method, url: event.params.url });
@@ -385,7 +491,7 @@ test("seeded real-user route journey", async () => {
     let a = "";
     let b = "";
     await step("discover at least two actual system controls", async () => {
-      if (await box(p, "button", "show every system")) await button(p, "show every system");
+      if (await box(p, '[data-pane-id="e-picture"] button', "Systems")) await allSystems(p);
       const options = await rows(p);
       if (options.length < 2)
         throw new Error(
@@ -398,11 +504,18 @@ test("seeded real-user route journey", async () => {
     });
     await step("search, filter, Escape and clear through real list controls", async () => {
       await fill(p, SEARCH, "chaos-no-such-system-" + seed);
-      await p.press("Escape");
       await p.until(
         async () => (await rows(p)).length === 0,
         "search transition excludes all rows",
       );
+      await p.press("Escape");
+      await p.until(
+        async () => (await rows(p)).some((row) => row.key === a),
+        "Escape clears query and restores rows",
+      );
+      expect(await fieldValue(p, SEARCH), "Escape clears the typed query").toBe("");
+      await fill(p, SEARCH, "chaos-no-such-system-" + seed);
+      await p.until(async () => (await rows(p)).length === 0, "second query excludes all rows");
       await button(p, "Clear search", SYSTEMS);
       await p.until(
         async () => (await rows(p)).some((row) => row.key === a),
@@ -430,20 +543,22 @@ test("seeded real-user route journey", async () => {
     };
     await step("all → A; Back → all; Forward → A", async () => {
       await pickSystem(a);
-      await button(p, "Back");
+      await history(p, "Back");
       await subject(p, "");
-      await button(p, "Forward");
+      await history(p, "Forward");
       await subject(p, a);
     });
     await step("open Systems pane; A → B; B → all", async () => {
       // The pane rail reveals the same list without changing the named system.
       await button(p, "Expand Systems");
       await pickSystem(b);
-      await button(p, "show every system");
+      await allSystems(p);
       await subject(p, "");
     });
     await step("select a real tree row and retain copied URL through reload", async () => {
       await pickSystem(a);
+      if (!(await box(p, '[data-pane-id="e-sidebar"] [role=treeitem]')))
+        await button(p, `Expand ${a}`);
       await click(p, '[data-pane-id="e-sidebar"] [role=treeitem][aria-level="2"][data-key]');
       await p.until(
         async () => !!new URL(await p.url()).searchParams.get("selected"),
@@ -462,7 +577,7 @@ test("seeded real-user route journey", async () => {
       expect((await state(p)).crumb).toBe(before.crumb);
       expect(new URL(await p.url()).searchParams.get("system")).toBe(a);
       // Focus the selected subject through its real control; Escape alone must preserve its pose.
-      await click(p, "[data-e-selected]");
+      await click(p, '[data-crumb-segment="selection"][data-revit-ids]');
       expect(
         new URL(await p.url()).searchParams.get("selected"),
         "selection is armed before Escape",
@@ -480,9 +595,66 @@ test("seeded real-user route journey", async () => {
       );
     });
 
+    await step("quiet 36s watchdog dwell with accepted route lease and world SSE", async () => {
+      await settled(p);
+      const thread = new URL(await p.url()).searchParams.get("thread");
+      const loaderId = (await p.send("Page.getFrameTree")).frameTree.frame.loaderId;
+      if (!thread) throw new Error("PRECONDITION: quiet watchdog needs an addressed URL thread");
+      const lease = await p.until(
+        async () =>
+          [...receipt.network]
+            .reverse()
+            .find(
+              (event) =>
+                event.url &&
+                new URL(event.url).pathname === "/pe/route-view/ducts" &&
+                event.leaseThread === thread &&
+                event.loaderId === loaderId &&
+                event.status === 200 &&
+                event.requestId &&
+                finishedRequests.has(event.requestId),
+            ),
+        "accepted Ducts lease response for this thread",
+        15_000,
+      );
+      const body = await p.send("Network.getResponseBody", { requestId: lease.requestId });
+      const accepted = JSON.parse(
+        body.base64Encoded ? Buffer.from(body.body, "base64").toString("utf8") : body.body,
+      );
+      if (typeof accepted.revision !== "number")
+        throw new Error("PRECONDITION: route lease response has no accepted revision");
+      const world = await p.until(
+        async () =>
+          receipt.network.find((event) => {
+            if (!event.stream || !event.url || event.loaderId !== loaderId) return false;
+            try {
+              return JSON.parse(new URL(event.url).searchParams.get("keys") ?? "[]").some(
+                (key: { kind?: string }) => key.kind === "world",
+              );
+            } catch {
+              return false;
+            }
+          }),
+        "observed world SSE subscription URL",
+        15_000,
+      );
+      receipt.coverage.watchdog = JSON.stringify({
+        dwellMs: 36_000,
+        leaseUrl: lease.url,
+        revision: accepted.revision,
+        worldStreamUrl: world.url,
+        sampledEveryMs: 100,
+      });
+      await untouched(async () => {
+        await sleep(36_000);
+        await settled(p);
+      });
+    });
+
     const disruptions = rng() < 0.5 ? ["refresh", "reconnect"] : ["reconnect", "refresh"];
     for (const disruption of disruptions)
       await step(`untouched ${disruption}`, async () => {
+        if (!requested(disruption)) return;
         if (disruption === "reconnect") {
           const streams = receipt.network.filter((event) => event.stream).length;
           await untouched(async () => {
@@ -554,8 +726,15 @@ test("seeded real-user route journey", async () => {
     await step(
       "worker paused in flight; old completion cannot replace current system",
       async () => {
+        if (!requested("worker")) return;
         const worker = [...workers].find(([, url]) => /pricing\.worker/.test(url));
-        if (!available("worker", !!worker, "pricing worker not discoverable on this target"))
+        if (
+          !available(
+            "worker",
+            !!worker && !!(await box(p, "button", "refresh")),
+            "pricing worker and enabled refresh are required on this target",
+          )
+        )
           return;
         workerSession = worker![0];
         await p.send("Debugger.enable", {}, workerSession);
@@ -572,7 +751,7 @@ test("seeded real-user route journey", async () => {
             await stageWork(p, process.env.CHAOS_STAGE_SELECTOR, process.env.CHAOS_STAGE_VALUE);
             receipt.coverage.workerWork = "changed a real Work editor while old pricing was paused";
           }
-          await button(p, "show every system");
+          await allSystems(p);
           await subject(p, "", true);
           await pickSystem(b, true);
         } finally {
@@ -602,11 +781,16 @@ test("seeded real-user route journey", async () => {
       const threads = await p.read<string[]>(
         `[...document.querySelectorAll('[data-list-view][aria-label="threads"] [role=option][data-key]')].filter(${visible}).map(e => e.getAttribute('data-key'))`,
       );
-      const canSwitch = available(
-        "thread",
-        threads.length >= 2,
-        "two existing visible disposable threads are required for thread identity proof",
-      );
+      const canSwitch =
+        required.has("thread") &&
+        available(
+          "thread",
+          threads.length >= 2,
+          "two existing visible disposable threads are required for thread identity proof",
+        );
+      if (!required.has("thread"))
+        receipt.coverage.thread =
+          "UNPROVEN: omitted from CHAOS_REQUIRE; existing-thread switches not executed";
       const pickThread = async (id: string) => {
         await click(
           p,
@@ -637,13 +821,13 @@ test("seeded real-user route journey", async () => {
       }
       const pea = await p.url();
       await button(p, "Home / tool directory");
-      await button(p, "Back");
+      await history(p, "Back");
       await p.until(() => box(p, composer), "composer on return");
       expect(await p.url()).toBe(pea);
       expect(await fieldValue(p, composer)).toBe(marker);
       await fill(p, composer, "");
       for (let back = 0; back < 6 && new URL(await p.url()).pathname !== "/ducts"; back++) {
-        await button(p, "Back");
+        await history(p, "Back");
         await sleep(150);
       }
       await settled(p);
@@ -656,6 +840,7 @@ test("seeded real-user route journey", async () => {
           "A→B→A keeps distinct draft and transcript; route leave/return keeps A's draft";
     });
     await step("staged Work preview loses authority after refresh and route return", async () => {
+      if (!requested("arming")) return;
       const editor = process.env.CHAOS_STAGE_SELECTOR;
       const stageValue = process.env.CHAOS_STAGE_VALUE;
       if (
@@ -680,26 +865,26 @@ test("seeded real-user route journey", async () => {
       );
       await button(p, preview);
       await p.until(
-        async () => (await state(p)).armed.some((name) => /^apply\b/i.test(name)),
-        "real preview arms Apply",
+        async () => (await state(p)).armed.some(ductWrite),
+        "native Preview arms the Ducts Write control",
         60_000,
       );
       await p.press("Escape");
       await button(p, "refresh");
       await settled(p);
       await p.until(
-        async () => !(await state(p)).armed.some((name) => /^apply\b/i.test(name)),
-        "refresh disarms stale Apply",
+        async () => !(await state(p)).armed.some(ductWrite),
+        "refresh disarms stale Ducts Write",
       );
       await button(p, "Open Pea");
-      await button(p, "Back");
+      await history(p, "Back");
       await settled(p);
       expect(
-        (await state(p)).armed.filter((name) => /^apply\b/i.test(name)),
-        "route return cannot rearm stale Apply",
+        (await state(p)).armed.filter(ductWrite),
+        "route return cannot rearm stale Ducts Write",
       ).toEqual([]);
       receipt.coverage.arming =
-        "persisted a real Work cell via UI; native preview armed Apply; refresh and route return disarmed it. Native write consumption remains UNPROVEN";
+        "persisted a real Work cell via UI; native Preview armed Write; refresh and route return disarmed Write. Native write consumption remains UNPROVEN";
     });
     expect(p.errors, "no uncaught browser exceptions").toEqual([]);
     receipt.result =
