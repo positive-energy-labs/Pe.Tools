@@ -78,14 +78,15 @@ export function useThreadStream(options: {
 
   // The readings connection faulted or the tab woke: this tail may be a dead socket that never
   // errors. Mark the view stale, re-read the body (a new cursor), and reopen the follow.
-  useEffect(
-    () =>
-      readings.onResync(() => {
-        setLive((previous) => ({ ...previous, stale: true, epoch: previous.epoch + 1 }));
-        invalidate();
-      }),
-    [invalidate, readings],
-  );
+  useEffect(() => {
+    // Null is the caller's explicit browser-draft identity, not an empty host transcript.
+    // It has no body to re-read; durable threads, including empty ones, still resync below.
+    if (threadId === null) return;
+    return readings.onResync(() => {
+      setLive((previous) => ({ ...previous, stale: true, epoch: previous.epoch + 1 }));
+      invalidate();
+    });
+  }, [invalidate, readings, threadId]);
 
   const stored: ThreadBody | undefined = body._tag === "Success" ? body.value : undefined;
   // Only a body the host answered after the resync clears the mark.
