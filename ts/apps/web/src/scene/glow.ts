@@ -37,7 +37,7 @@ varying vec2 vUv;
 void main() {
   // Outside the source only (mostly): the element's own skin keeps its form under the halo.
   vec4 m = texture2D(mask, vUv);
-  vec3 c = max(texture2D(map, vUv).rgb - m.rgb * 0.6, 0.0) * strength;
+  vec3 c = max(texture2D(map, vUv).rgb - m.rgb, 0.0) * strength;
   float a = clamp(max(c.r, max(c.g, c.b)), 0.0, 1.0);
   gl_FragColor = vec4(c / max(a, 1e-3), a);
 }`;

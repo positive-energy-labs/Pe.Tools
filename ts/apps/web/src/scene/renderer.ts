@@ -327,6 +327,7 @@ export function createRenderer(mount: HTMLElement, meshes: SceneMeshes, wheelHos
             reducedMotion: motion.matches,
             state,
             landed: state === "focus" ? seconds - focusedAt : Infinity,
+            selected: !!layer.targets?.some((t) => selectedIds.has(t.elementId)),
           }) || animate;
       }
       if (thumbsStale) drawThumbs();
@@ -548,6 +549,8 @@ export function createRenderer(mount: HTMLElement, meshes: SceneMeshes, wheelHos
   outlined.position.copy(origin);
   scene.add(outlined);
   const marked = new Map<number, Mark>();
+  /** Revit ids of the selected elements, for marks standing on them. */
+  const selectedIds = new Set<number>();
   let hoveredElement: string | null = null;
   type Paint = [
     selected: ReadonlySet<string> | undefined,
@@ -575,7 +578,12 @@ export function createRenderer(mount: HTMLElement, meshes: SceneMeshes, wheelHos
         batch.setColorAt(id, mark ? colors[id]!.clone().lerp(ink, FILL[mark]) : colors[id]!);
     });
     marked.clear();
-    for (const [id, mark] of next) marked.set(id, mark);
+    selectedIds.clear();
+    for (const [id, mark] of next) {
+      marked.set(id, mark);
+      const revitId = byId[id]!.revitId;
+      if (mark === "selected" && revitId != null) selectedIds.add(revitId);
+    }
     for (const child of [...outlined.children]) {
       outlined.remove(child);
       disposeTree(child);

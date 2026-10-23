@@ -97,5 +97,7 @@ export function subjectDocument(
     parts.push(seen.size ? ", " : " · ");
     reference(id);
   }
-  return { parts, references };
+  // Only what the parts name: a caller's numbering keeps numbers shared across texts, but a
+  // number the reader cannot see in this text is never lit on the stage.
+  return { parts, references: references.filter((r) => seen.has(r.id)) };
 }

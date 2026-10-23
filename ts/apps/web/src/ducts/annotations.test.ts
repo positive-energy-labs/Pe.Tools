@@ -1,5 +1,5 @@
 import { expect, it } from "vite-plus/test";
-import { placeChips } from "./annotations";
+import { placeChips, placeLabels } from "./annotations";
 
 it("footnote chips sit above their anchors, clear each other and the anchors, and stay in the picture", () => {
   const size = { width: 400, height: 300 };
@@ -20,4 +20,20 @@ it("footnote chips sit above their anchors, clear each other and the anchors, an
   // An anchor at the top edge puts its chip below or beside, never off the picture.
   const [top] = placeChips([{ x: 200, y: 4, n: 12 }], size);
   expect(top!.y).toBeGreaterThan(4);
+});
+
+it("loss labels: the same words at one place draw once; different words step down", () => {
+  const project = (p: readonly number[]) => [p[0]!, p[1]!] as [number, number];
+  const placed = placeLabels(
+    [
+      { key: "leg", at: [10, 10, 0], text: "Σ 121 eq ft", priced: true },
+      { key: "path", at: [11, 10, 0], text: "Σ 121 eq ft", priced: true },
+      { key: "other", at: [10, 10, 0], text: "Σ 45 eq ft", priced: true },
+    ],
+    project as never,
+  );
+  expect(placed.map((p) => [p.key, p.y])).toEqual([
+    ["leg", 24],
+    ["other", 36],
+  ]);
 });

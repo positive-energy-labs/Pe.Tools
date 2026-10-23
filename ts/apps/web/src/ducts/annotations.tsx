@@ -118,6 +118,7 @@ export function Annotations({
   selected,
   hovered,
   labels,
+  meshed,
   issues = [],
   onIssueHover,
   rulings,
@@ -136,6 +137,9 @@ export function Annotations({
   selected: ReadonlySet<number>;
   hovered: number | null;
   labels: readonly Label[];
+  /** Element ids drawn as meshes right now; a footnote on any other element draws its centreline
+   * as a ghost, or no badge when the picture does not hold the element at all. */
+  meshed?: ReadonlySet<number>;
   issues?: readonly StageIssue[];
   onIssueHover?: (target: IssueTarget | null) => void;
   rulings: readonly Ruling[];
@@ -184,11 +188,19 @@ export function Annotations({
         : null;
   const sub = scene.subject;
   const taken = new Map<number, number>();
-  // Footnote chips are placed together so each can clear the others.
+  // Footnote chips are placed together so each can clear the others. A badge sits on a drawn
+  // subject: its mesh, else its centreline drawn as a ghost; never on empty space.
+  const sceneSegments = new Map(scene.segments.map((f) => [f.segment.id, f.segment.polyline]));
+  const sceneNodes = new Set(scene.nodes.map((f) => f.node.id));
   const anchored = lighting.references.flatMap((ref) => {
+    const drawn = meshed?.has(ref.id) || layers.has("centrelines");
+    const ghost = drawn ? null : sceneSegments.get(ref.id);
+    if (!drawn && !ghost && !sceneNodes.has(ref.id)) return [];
     const p = pointOf(ref.id);
     const xy = p && project(p);
-    return xy ? [{ ref, at: { x: xy[0], y: xy[1] } }] : [];
+    return xy
+      ? [{ ref, at: { x: xy[0], y: xy[1] }, ghost: ghost ? pathOf(ghost, project) : null, drawn }]
+      : [];
   });
   const chips = placeChips(
     anchored.map(({ ref, at }) => ({ ...at, n: ref.number })),
@@ -226,7 +238,8 @@ export function Annotations({
                   d={d}
                   fill="none"
                   stroke={stroke.ink}
-                  strokeWidth={stroke.width}
+                  // The only geometry an element has (no mesh drawn) must read, not be a hairline.
+                  strokeWidth={meshed?.has(id) ? stroke.width : Math.max(stroke.width, 3)}
                   strokeLinecap="round"
                   className={stroke.dash ? DASH_CLASS[stroke.dash] : undefined}
                 />
@@ -264,16 +277,13 @@ export function Annotations({
       })}
       {layers.has("labels") && sub ? <SubjectLabels sub={sub} project={project} /> : null}
       {layers.has("labels")
-        ? labels.map(({ key, at: p, text, priced }) => {
-            const xy = project(p);
-            return xy ? (
-              <g key={key} transform={`translate(${xy[0]} ${xy[1]})`} data-loss-label={text}>
-                <Caption x={8} y={14} ink={priced ? token("ink") : token("ink-2")}>
-                  {text}
-                </Caption>
-              </g>
-            ) : null;
-          })
+        ? placeLabels(labels, project).map(({ key, x, y, text, priced }) => (
+            <g key={key} data-loss-label={text}>
+              <Caption x={x} y={y} ink={priced ? token("ink") : token("ink-2")}>
+                {text}
+              </Caption>
+            </g>
+          ))
         : null}
       {layers.has("findings")
         ? rulings.map((r) => {
@@ -352,7 +362,14 @@ export function Annotations({
                 className={DASH_CLASS.reference}
               />
             ) : !drawn ? (
-              <circle cx={at.x} cy={at.y} r={6} fill="none" stroke={token("ink-2")} strokeWidth={2} />
+              <circle
+                cx={at.x}
+                cy={at.y}
+                r={6}
+                fill="none"
+                stroke={token("ink-2")}
+                strokeWidth={2}
+              />
             ) : null}
             {/* The leader: a cased ink line from the chip to a dot on the element. */}
             <line
@@ -364,8 +381,22 @@ export function Annotations({
               strokeOpacity={0.75}
               strokeWidth={3.5}
             />
-            <line x1={chip.x} y1={chip.y} x2={at.x} y2={at.y} stroke={token("ink")} strokeWidth={1.25} />
-            <circle cx={at.x} cy={at.y} r={2.75} fill={token("ink")} stroke={token("page")} strokeWidth={1.5} />
+            <line
+              x1={chip.x}
+              y1={chip.y}
+              x2={at.x}
+              y2={at.y}
+              stroke={token("ink")}
+              strokeWidth={1.25}
+            />
+            <circle
+              cx={at.x}
+              cy={at.y}
+              r={2.75}
+              fill={token("ink")}
+              stroke={token("page")}
+              strokeWidth={1.5}
+            />
             {/* The kit's subject mark: the same chip the text draws after the name, lit together.
                 Hover lights its token in the text; a press goes to the subject, as the token does. */}
             <g
@@ -374,7 +405,10 @@ export function Annotations({
               transform={`translate(${chip.x} ${chip.y})`}
               style={HIT}
               onMouseEnter={() => subjects?.light(lighting.references, ref.id, lighting.owner)}
-              onMouseLeave={() => subjects?.light(lighting.references, null, lighting.owner)}
+              onMouseLeave={() => {
+                subjects?.light(lighting.references, null, lighting.owner);
+                if (lighting.owner) subjects?.clear(lighting.owner);
+              }}
               onClick={() => subjects?.go(ref.id)}
             >
               <title>{`${ref.name}: go to it`}</title>
@@ -388,4 +422,22 @@ export function Annotations({
       })}
     </svg>
   );
+}
+
+/** Loss labels in screen px: the same words at the same place draw once (a leg total and a path
+ * total can coincide), and a label that would overprint another steps down a line. */
+export function placeLabels(labels: readonly Label[], project: Project) {
+  const placed: { key: string; x: number; y: number; text: string; priced: boolean }[] = [];
+  for (const { key, at, text, priced } of labels) {
+    const xy = project(at);
+    if (!xy) continue;
+    const x = xy[0] + 8;
+    let y = xy[1] + 14;
+    const near = (p: { x: number; y: number }) =>
+      Math.abs(p.x - x) < 6 * text.length && Math.abs(p.y - y) < 12;
+    if (placed.some((p) => p.text === text && near(p))) continue;
+    while (placed.some(near)) y += 12;
+    placed.push({ key, x, y, text, priced });
+  }
+  return placed;
 }

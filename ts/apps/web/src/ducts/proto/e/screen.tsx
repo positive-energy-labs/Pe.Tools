@@ -488,20 +488,38 @@ function EScreenBody({ props }: { props: ProtoProps }) {
     () => reach.set((state) => ({ ...state, lighting: NO_LIGHTING })),
     [reach, snapshot, page.system, page.picture],
   );
+  // A short grace before lit Subjects go dark, so the pointer can travel from a text to its badge
+  // in the picture (the badge re-lights and cancels it). Any light cancels a pending clear.
+  const clearing = useRef<ReturnType<typeof setTimeout>>(undefined);
+  useEffect(() => () => clearTimeout(clearing.current), []);
   const clearSubjects = useCallback(
-    (owner: string) =>
-      reach.set((state) =>
-        state.lighting.owner === owner ? { ...state, lighting: NO_LIGHTING } : state,
-      ),
+    (owner: string) => {
+      clearTimeout(clearing.current);
+      clearing.current = setTimeout(
+        () =>
+          reach.set((state) =>
+            state.lighting.owner === owner ? { ...state, lighting: NO_LIGHTING } : state,
+          ),
+        300,
+      );
+    },
     [reach],
   );
   const lightSubjects = useCallback(
-    (references: readonly SubjectReference[], focus: number | null, owner?: string) =>
+    (
+      references: readonly SubjectReference[],
+      focus: number | null,
+      owner?: string,
+      ids: readonly number[] = [],
+    ) => {
+      clearTimeout(clearing.current);
+      const tinted = new Set(focus == null ? [...ids, ...references.map((r) => r.id)] : [focus]);
       reach.set((state) => {
         const current = state.lighting;
         const same =
           current.owner === owner &&
           current.focus === focus &&
+          current.ids.size === tinted.size &&
           current.references.length === references.length &&
           current.references.every(
             (r, i) => r.id === references[i]?.id && r.number === references[i]?.number,
@@ -511,16 +529,10 @@ function EScreenBody({ props }: { props: ProtoProps }) {
           : {
               ...state,
               hovered: null,
-              lighting: same
-                ? current
-                : {
-                    ids: new Set(focus == null ? references.map((r) => r.id) : [focus]),
-                    references,
-                    focus,
-                    owner,
-                  },
+              lighting: same ? current : { ids: tinted, references, focus, owner },
             };
-      }),
+      });
+    },
     [reach],
   );
   const setHovered = useCallback(

@@ -189,15 +189,26 @@ const pendingOf = (ctx: DuctsCtx) =>
 
 /**
  * The `revit.detail.space-scene` request for the picture: every element of every group the chosen
- * system is in, with what is around it when the `context` layer is on; null with no system. One
- * capture per subject, never per render (the call keys on this request).
+ * system is in, plus every element of the groups the picture draws (`drawn`: the priced survey can
+ * merge a system with groups it shares, and the tree and centrelines draw those too; RA 52's raw
+ * scope was 6 elements under a 193-part tree), with what is around it when the `context` layer is
+ * on; null with no system. One capture per subject, never per render (the call keys on this request).
  */
 export const sceneRequestOf = (
   snapshot: DuctSnapshot | null,
   page: Pick<DuctsPage, "system" | "layers">,
+  drawn: readonly string[] = [],
 ) => {
   if (!snapshot || !page.system) return null;
-  const ids = [...systemScope(snapshot, page.system).members].filter((id) => id > 0);
+  const groups = new Set(drawn);
+  const ids = [
+    ...new Set([
+      ...systemScope(snapshot, page.system).members,
+      ...[...snapshot.nodes, ...snapshot.segments]
+        .filter((e) => e.groupId && groups.has(e.groupId))
+        .map((e) => e.id),
+    ]),
+  ].filter((id) => id > 0);
   if (!ids.length) return null;
   return sceneRequest(
     ids.sort((a, b) => a - b),
@@ -456,7 +467,8 @@ export const manifest = defineRoute<
       groupOf: (key) => [key],
       nouns: ["fitting family"],
       noun: "fitting families priced as a rule",
-      show: (value) => (ruleByKey((value as { rule: string }).rule)?.family ?? (value as { rule: string }).rule),
+      show: (value) =>
+        ruleByKey((value as { rule: string }).rule)?.family ?? (value as { rule: string }).rule,
     },
     {
       segment: "terminalDrops",
@@ -589,7 +601,9 @@ export const manifest = defineRoute<
         // A held ESP stays staged: it was not in the request.
         const applied = stagedCells(ctx.work.doc).filter(
           (cell) =>
-            cell.segment !== "catalogs" && cell.segment !== "ruleAssignments" && !(held && cell.segment === "esp"),
+            cell.segment !== "catalogs" &&
+            cell.segment !== "ruleAssignments" &&
+            !(held && cell.segment === "esp"),
         );
         const rulings = pendingRulings(
           ctx.work.doc,

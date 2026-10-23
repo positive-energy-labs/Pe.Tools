@@ -65,6 +65,8 @@ export type LayerFrame = {
   state: IssueState;
   /** Seconds since this mark's issue became the focus; Infinity when it is not the focus. */
   landed: number;
+  /** An element this mark stands on is selected: the mark yields its interior to the selection. */
+  selected?: boolean;
 };
 export type Layer3D = {
   key: string;

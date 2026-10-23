@@ -26,6 +26,7 @@ import { Scene3D } from "#/scene/scene3d";
 import type { SceneRead } from "#/scene/use-scene";
 import type { Bounds, Layer3D, SceneMeshes } from "#/scene/types";
 
+import { CaptionBounds } from "./subject-labels";
 import { Annotations, type Label, type Ruling } from "./annotations";
 import type { Encoding } from "./encoding";
 import type { DuctsPage } from "./manifest";
@@ -272,6 +273,15 @@ export function ModelPicture({
   const selectedKeys = useMemo(() => keys(selected), [selected, keysOf]); // eslint-disable-line react-hooks/exhaustive-deps
   const litKeys = useMemo(() => keys(lit), [lit, keysOf]); // eslint-disable-line react-hooks/exhaustive-deps
   const isolated = layers.has("meshes") ? null : NONE;
+  const meshed = useMemo(
+    () =>
+      new Set(
+        layers.has("meshes")
+          ? (meshes?.instances.flatMap((i) => (i.revitId == null ? [] : [i.revitId])) ?? [])
+          : [],
+      ),
+    [meshes, layers.has("meshes")], // eslint-disable-line react-hooks/exhaustive-deps
+  );
 
   const move = (viewport: OrbitViewport | null) => {
     if (viewport) return flyTo(orbit, viewport, { scene: bounds?.scene });
@@ -408,24 +418,28 @@ export function ModelPicture({
           ref={fade}
           className="pointer-events-none absolute inset-0 transition-opacity duration-150 data-flying:opacity-0"
         >
-        <Annotations
-          {...overlay}
-          scene={scene}
-          layers={layers}
-          encoding={encoding}
-          selected={selected}
-          hovered={hovered}
-          labels={labels}
-          issues={issues}
-          onIssueHover={hoverIssue}
-          rulings={rulings}
-          pointOf={pointOf}
-          issue={issue}
-          onPick={onPick}
-          onFrame={(id) => frameAt(meshes?.instances.find((i) => i.revitId === id)?.key ?? null)}
-          onRuling={onRuling}
-          onHover={onHover}
-        />
+          {/* Captions stay inside the picture: a label at the bottom edge is lifted, not clipped. */}
+          <CaptionBounds.Provider value={overlay.size}>
+            <Annotations
+              {...overlay}
+              scene={scene}
+              layers={layers}
+              encoding={encoding}
+              selected={selected}
+              hovered={hovered}
+              labels={labels}
+              meshed={meshed}
+              issues={issues}
+              onIssueHover={hoverIssue}
+              rulings={rulings}
+              pointOf={pointOf}
+              issue={issue}
+              onPick={onPick}
+              onFrame={(id) => frameAt(meshes?.instances.find((i) => i.revitId === id)?.key ?? null)}
+              onRuling={onRuling}
+              onHover={onHover}
+            />
+          </CaptionBounds.Provider>
         </div>
       ) : null}
       {status ? (

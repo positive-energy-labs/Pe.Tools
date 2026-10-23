@@ -203,8 +203,8 @@ function Canvas({
   );
   const native = observation.scope?.source === "native" ? observation.scope.document : null;
   const request = useMemo(
-    () => sceneRequestOf(snapshot, page),
-    [snapshot, page.system, page.layers],
+    () => sceneRequestOf(snapshot, page, groups),
+    [snapshot, page.system, page.layers, groups],
   ); // eslint-disable-line react-hooks/exhaustive-deps
   const read = useScene(request, native, page.epoch);
   const bounds = usePictureBounds(read.meshes, scene);

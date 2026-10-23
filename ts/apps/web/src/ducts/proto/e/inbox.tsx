@@ -333,12 +333,13 @@ export function Inbox({
       meta: <span data-tone={item.tone}>{compactStatus(item.status)}</span>,
       actions: () => verbsOf(item, false),
       onMouseEnter: () => {
-        if (subjects) subjects.light(description.references, null, item.key);
+        // The collapsed row shows its heading: badge what the heading names, tint all it stands for.
+        if (subjects) subjects.light(heading.references, null, item.key, item.ids);
         else light(item.ids);
         onIssueHover?.(item.key);
       },
       onMouseLeave: () => (subjects ? subjects.clear(item.key) : light(null)),
-      onMouseMove: () => subjects?.light(description.references, null, item.key),
+      onMouseMove: () => subjects?.light(heading.references, null, item.key, item.ids),
       revitIds: target.ids,
       revitRefs: target.refs,
       lit: (selected != null && item.ids.includes(selected)) || item.key === focused,
@@ -393,7 +394,13 @@ export function Inbox({
           onIssueHover?.(null);
         }}
       >
-        <RulingsList rows={rows} focused={focused} hoveredIssue={hoveredIssue} address={address} onPick={onPick} />
+        <RulingsList
+          rows={rows}
+          focused={focused}
+          hoveredIssue={hoveredIssue}
+          address={address}
+          onPick={onPick}
+        />
       </div>
       {nativeResult ? (
         <div role="status" className="px-2 py-1">

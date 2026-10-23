@@ -1,6 +1,6 @@
 /** The subject's own words over the model picture (gaps, inferred joins, omissions, legs, places),
  * and the caption every annotation label wears. */
-import type { ReactNode } from "react";
+import { createContext, useContext, type ReactNode } from "react";
 
 import { token } from "@pe/kit/lib/token";
 import type { Project } from "#/scene/projection";
@@ -12,7 +12,12 @@ const GLYPH = 4;
 /** A leg shorter than this carries no caption (its endpoints' names say enough). */
 const LABEL_LEG_FT = 2;
 
-/** A caption on a page-coloured halo, so it reads over any mesh. */
+/** The picture a caption must stay inside (the annotation layer's size); none = unclamped. */
+export const CaptionBounds = createContext<{ width: number; height: number } | null>(null);
+/** The 10 px mono face's advance, a little generous so the halo fits too. */
+const CHAR_PX = 6.3;
+
+/** A caption on a page-coloured halo, so it reads over any mesh; kept wholly inside the picture. */
 export function Caption({
   x,
   y,
@@ -26,6 +31,14 @@ export function Caption({
   anchor?: "start" | "middle";
   ink?: string;
 }) {
+  const bounds = useContext(CaptionBounds);
+  if (bounds) {
+    const width = children.length * CHAR_PX;
+    const left = anchor === "middle" ? x - width / 2 : x;
+    const right = bounds.width - 3 - (left + width);
+    x += left < 3 ? 3 - left : Math.min(0, right);
+    y = Math.min(Math.max(y, 11), bounds.height - 4);
+  }
   return (
     <text
       x={x}

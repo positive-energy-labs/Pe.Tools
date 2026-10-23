@@ -158,9 +158,15 @@ export function damageLayer(
       // Pointing at it heats the rim toward white: the same hue, hotter.
       const heat =
         at.state === "hover" || at.state === "focus" ? 0.45 : at.state === "reach" ? 0.2 : 0;
-      for (const skin of [xray, face]) {
+      for (const [skin, alpha] of [
+        [xray, 0.45],
+        [face, 0.85],
+      ] as const) {
         const u = skin.material.uniforms as Uniforms;
         u.energy.value = energy;
+        // Selected: the skin thins to its rim so the selection's fill and outline read through;
+        // the halo and heartbeat stay (selection never hides damage, and is never red itself).
+        u.alpha.value = at.selected ? alpha * 0.4 : alpha;
         u.rim.value.copy(RIM).lerp(HOT, Math.min(1, heat + strike * 0.7));
       }
       // The glow mask is half-float: a source above 1 spreads a stronger halo.
