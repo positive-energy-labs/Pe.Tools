@@ -79,6 +79,13 @@ beforeAll(async () => {
   await browserVite.listen();
   baseUrl = browserVite.resolvedUrls!.local[0]!.replace(/\/$/, "");
   Effect.runSync(Deferred.succeed(webUrl, baseUrl));
+  // As in route-chaos-launch, a bound port precedes the first SSR document compilation.
+  // Leave Accept unset: text/html asks ingress for a browser-only human-session mint.
+  const bootstrap = await fetch(baseUrl);
+  const html = await bootstrap.text();
+  expect(bootstrap.status).toBe(200);
+  expect(bootstrap.headers.get("content-type")).toContain("text/html");
+  expect(html).toMatch(/<html\b/i);
   const { chromium } = await import("playwright-core");
   const executablePath = [
     "C:/Program Files/Google/Chrome/Application/chrome.exe",
