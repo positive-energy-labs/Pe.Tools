@@ -24,7 +24,9 @@ it("keeps motion local, publishes on release and accepts external camera moves",
   const moves = new EventTarget();
   const initial: OrbitViewport = { kind: "orbit", yaw: 30, elev: 30, zoom: 1, pivot: [0, 0, 0] };
   let pose = initial;
-  const setViewport = vi.fn();
+  const setViewport = vi.fn((next: OrbitViewport) => {
+    pose = next;
+  });
   renderer.current = {
     canvas: document.createElement("canvas"),
     moves,
@@ -33,6 +35,7 @@ it("keeps motion local, publishes on release and accepts external camera moves",
     setViewport,
     setOrbitPivot: vi.fn(),
     setOnFrame: vi.fn(),
+    reportFrame: vi.fn(),
     setPlane: vi.fn(),
     setThumbs: vi.fn(),
     paint: vi.fn(),

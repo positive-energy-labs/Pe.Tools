@@ -17,6 +17,7 @@
  */
 import { useEffect, useRef, useState, type ReactNode } from "react";
 import { revitTarget } from "@pe/kit/lang/row";
+import { viewportCodec } from "@pe/agent-contracts";
 import { revitScope, type ElementTarget } from "#/revit/element-target";
 import {
   observedElements,
@@ -62,7 +63,7 @@ export type Scene3DProps = {
   /** The shader side of the caller's cuts, packed relative to the bounds centre. */
   clipVolume?: ClipVolume | null;
   /** After each rendered frame whose camera or size moved: world feet to canvas px. */
-  onProject?: (project: Project, size: Size, ray: Ray) => void;
+  onProject?: (project: Project, size: Size, ray: Ray, moving: boolean) => void;
   className?: string;
   children?: ReactNode;
 };
@@ -124,7 +125,9 @@ export function Scene3D(props: Scene3DProps): ReactNode {
       return;
     }
     core.current = r;
-    r.setOnFrame((project, size, ray) => latest.current.onProject?.(project, size, ray));
+    r.setOnFrame((project, size, ray) =>
+      latest.current.onProject?.(project, size, ray, gesturing.current),
+    );
     const { canvas, moves } = r;
     const wheelHost = props.wheelHost ?? host.current!;
     const orbit = props.orbit;
@@ -134,6 +137,7 @@ export function Scene3D(props: Scene3DProps): ReactNode {
       if (orbit.owns(token)) return;
       const pose = orbit.read();
       if (!pose) return;
+      if (viewportCodec.encode(r.viewport()) === viewportCodec.encode(pose)) return;
       applying = true;
       r.setViewport(pose);
       applying = false;
@@ -165,8 +169,11 @@ export function Scene3D(props: Scene3DProps): ReactNode {
     // LiveOrbit shares motion with the globe; onProject keeps annotations current without Page.
     const end = () => {
       if (wheelEnd !== undefined) return;
+      if (!gesturing.current) return;
       gesturing.current = false;
       publish();
+      orbit.notify();
+      r.reportFrame();
     };
     // Wheel events have no release: OrbitControls ends each tick. Save the burst after quiet,
     // not each tick; drawing still runs immediately on every controls change.

@@ -331,6 +331,9 @@ export function createRenderer(mount: HTMLElement, meshes: SceneMeshes, wheelHos
             selected: !!layer.targets?.some((t) => selectedIds.has(t.elementId)),
           }) || animate;
       }
+      // Geometry is unchanged between the main, thumbnail, glow and outline passes.
+      // Update transforms once, including any frame callback's changes, before all passes.
+      scene.updateMatrixWorld();
       if (thumbsStale) drawThumbs();
       renderer.render(scene, active());
       if (glowing) glow.render(scene, active());
@@ -456,6 +459,7 @@ export function createRenderer(mount: HTMLElement, meshes: SceneMeshes, wheelHos
   resize();
 
   const layers = new Map<string, { layer: Layer3D; group: THREE.Group }>();
+  scene.matrixWorldAutoUpdate = false;
   let litIssue: string | null = null;
   let focusedIssue: string | null = null;
   let reachedIssue: string | null = null;
@@ -739,6 +743,10 @@ export function createRenderer(mount: HTMLElement, meshes: SceneMeshes, wheelHos
       onFrame = next;
       framed = "";
       render();
+    },
+    reportFrame() {
+      framed = "";
+      tell();
     },
     paint(...args: Paint) {
       // The thumbnails are each axis's overview: they redraw when what is shown changes, never for

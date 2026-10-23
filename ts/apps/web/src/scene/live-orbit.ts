@@ -41,6 +41,7 @@ export function createLiveOrbit(
   };
   return {
     read: () => value,
+    moving: () => gesture !== null,
     subscribe: (notify: () => void) => {
       listeners.add(notify);
       return () => {

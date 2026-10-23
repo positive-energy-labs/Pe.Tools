@@ -21,7 +21,7 @@ import {
 import { clearPose, subjectPose, type PictureBounds } from "#/scene/framing";
 import { viewportProject, type Project, type Size } from "#/scene/projection";
 import { ORBIT_GESTURES } from "#/scene/gestures";
-import { flyTo, glideLook, isFlying, type LiveOrbit } from "#/scene/live-orbit";
+import { flyTo, glideLook, type LiveOrbit } from "#/scene/live-orbit";
 import { Scene3D } from "#/scene/scene3d";
 import type { SceneRead } from "#/scene/use-scene";
 import type { Bounds, Layer3D, SceneMeshes } from "#/scene/types";
@@ -142,18 +142,18 @@ export function ModelPicture({
   };
   // Subscribe inside the picture, never in the route: even the centreline-only preview follows
   // the live camera while native meshes are loading, without waking pricing or the inbox.
-  // A flight holds the last pose: the meshes fly (the renderer follows the orbit itself) while the
-  // DOM layer fades and re-projects once at the landing, never a React render per frame.
+  // Camera motion holds the last pose: the native renderer moves while the DOM layer fades and
+  // re-projects once at release or landing, never a React render per gesture frame.
   // Without meshes the layer IS the picture, so it follows every frame.
   const held = useRef<OrbitViewport | null>(null);
   const pose = useSyncExternalStore(orbit.subscribe, () =>
-    meshes && held.current && isFlying(orbit) ? held.current : (held.current = orbit.read()),
+    meshes && held.current && orbit.moving() ? held.current : (held.current = orbit.read()),
   );
   const fade = useRef<HTMLDivElement | null>(null);
   useEffect(() => {
     if (!meshes) return;
     return orbit.subscribe(() => {
-      const flying = isFlying(orbit);
+      const flying = orbit.moving();
       if (fade.current && (fade.current.dataset.flying === "") !== flying)
         if (flying) fade.current.dataset.flying = "";
         else delete fade.current.dataset.flying;
@@ -176,7 +176,7 @@ export function ModelPicture({
   const [framed, setFramed] = useState<{ project: Project; size: Size } | null>(null);
   const lastFrame = useRef(framed);
   useEffect(() => {
-    if (lastFrame.current !== framed && !isFlying(orbit)) setFramed(lastFrame.current);
+    if (lastFrame.current !== framed && !orbit.moving()) setFramed(lastFrame.current);
   }, [pose]); // eslint-disable-line react-hooks/exhaustive-deps
   const overlay = meshes
     ? framed
@@ -306,9 +306,9 @@ export function ModelPicture({
           focusedIssue={issue}
           onIssueHover={hoverIssue}
           onIssuePick={pickIssue}
-          onProject={(project, at) => {
+          onProject={(project, at, _ray, moving) => {
             lastFrame.current = { project, size: at };
-            if (!isFlying(orbit)) setFramed(lastFrame.current);
+            if (!moving && !orbit.moving()) setFramed(lastFrame.current);
           }}
           onDoubleClick={(pick) => frameAt(pick?.instance.key ?? null)}
           onPick={(pick, event) => {

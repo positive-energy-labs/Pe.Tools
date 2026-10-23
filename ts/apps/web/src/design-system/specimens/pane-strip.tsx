@@ -17,7 +17,6 @@ import {
   type PlaneViewport,
   type ScrollViewport,
 } from "#/components/lang/minimap";
-import { tokenRef } from "@pe/kit/lib/token";
 
 import { SpecimenFrame } from "./recipe-grid";
 
@@ -60,24 +59,6 @@ const SEGMENTS: readonly (readonly (readonly number[])[])[] = [
     [-0.6, 0.4, 0],
   ],
 ];
-
-const paintSegments = (project: (p: readonly number[]) => [number, number]) =>
-  SEGMENTS.map((line, i) => (
-    <path
-      key={i}
-      d={line
-        .map(
-          (p, j) =>
-            `${j ? "L" : "M"}${project(p)
-              .map((v) => v.toFixed(1))
-              .join(" ")}`,
-        )
-        .join("")}
-      fill="none"
-      stroke={tokenRef("ink-2")}
-      strokeWidth={1.5}
-    />
-  ));
 
 const MODES = [
   { key: "plane", label: "plane", says: "Pan and zoom the field; the minimap writes tx/ty." },
@@ -253,7 +234,7 @@ export function PaneStripSpecimen() {
                 place: "tr",
                 open: globeOpen,
                 onOpenChange: setGlobeOpen,
-                render: () => <OrbitMinimap orbit={camera} paint={paintSegments} />,
+                render: () => <OrbitMinimap orbit={camera} lines={SEGMENTS} />,
               },
             ]}
           >

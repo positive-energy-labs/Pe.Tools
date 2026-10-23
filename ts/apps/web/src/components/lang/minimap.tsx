@@ -4,14 +4,7 @@
  * Two pictures, one contract: `PlaneMinimap` for a scrolled or panned plane (the families pivot
  * minimap, generalised) and `OrbitMinimap` for an orbit camera (the ducts globe, ported).
  */
-import {
-  useEffect,
-  useMemo,
-  useRef,
-  useSyncExternalStore,
-  type MouseEvent,
-  type ReactNode,
-} from "react";
+import { useEffect, useRef, useState, type MouseEvent, type ReactNode } from "react";
 
 import { tokenRef } from "@pe/kit/lib/token";
 
@@ -210,23 +203,62 @@ const stopTitle = (v: Vec, elev: number) =>
 /**
  * The globe: a wire sphere whose three great circles (plan, N-S and E-W) carry 6 poles and 12
  * mid-arc stops; a click on a stop writes that orientation, a drag turns the globe. Far-side wire
- * and stops draw dim, behind the picture; stops below the floor are drawn and refused. `paint` draws
- * the picture inside the sphere through the globe's own projection (unit-sphere space, z up).
+ * and stops draw dim, behind the picture; stops below the floor are drawn and refused. `lines` draw
+ * the picture in unit-sphere space, z up, without React work while the camera moves.
  */
+function globeBody(yaw: number, elev: number) {
+  const at = globeProjection(yaw, elev);
+  const eye = towards(yaw, elev);
+  const circles = [
+    (t: number): Vec => [Math.cos(t), Math.sin(t), 0],
+    ...[0, 90].map((rel) => {
+      const u = towards(rel, 0);
+      return (t: number): Vec => [u[0] * Math.cos(t), u[1] * Math.cos(t), Math.sin(t)];
+    }),
+  ];
+  // Each circle splits into the near half (solid) and the far half (faint).
+  let near = "";
+  let far = "";
+  for (const circle of circles)
+    for (let i = 0; i < ARC_STEPS; i++) {
+      const a = circle((i / ARC_STEPS) * 2 * Math.PI);
+      const b = circle(((i + 1) / ARC_STEPS) * 2 * Math.PI);
+      const [x1, y1] = at(a);
+      const [x2, y2] = at(b);
+      const piece = `M${x1.toFixed(1)} ${y1.toFixed(1)}L${x2.toFixed(1)} ${y2.toFixed(1)}`;
+      if (dot(a, eye) + dot(b, eye) >= -1e-9) near += piece;
+      else far += piece;
+    }
+  const stops = STOPS.map((stop) => {
+    const v = towards(stop.rel ?? 0, stop.elev);
+    const [x, y] = at(v);
+    return { ...stop, v, x, y, front: dot(v, eye) >= -1e-9 };
+  });
+  // N rides the rim, just outside the wire, at project north (+y).
+  const v: Vec = [0, 1, 0];
+  const [x, y] = at(v);
+  const out = Math.hypot(x - C, y - C);
+  const k = out < 1 ? 0 : (R + 16) / out;
+  const rim = {
+    x: out < 1 ? C : C + (x - C) * k,
+    y: out < 1 ? C - R - 16 : C + (y - C) * k,
+    front: dot(v, eye) >= -1e-9,
+  };
+  return { at, near, far, stops, rim };
+}
+
 export function OrbitMinimap({
   orbit,
-  paint,
+  lines,
 }: {
   orbit: LiveOrbit;
-  paint?: (project: (p: readonly number[]) => [number, number]) => ReactNode;
+  lines?: readonly (readonly (readonly number[])[])[];
   stops?: "globe";
 }) {
-  // Alias flights change pivot and zoom, neither of which changes this orientation picture.
-  const orientation = useSyncExternalStore(orbit.subscribe, () => {
-    const pose = orbit.read();
-    return pose ? `${pose.yaw.toFixed(3)},${pose.elev.toFixed(3)}` : "0,0";
-  });
-  const [yaw = 0, elev = 0] = orientation.split(",").map(Number);
+  const svg = useRef<SVGSVGElement>(null);
+  const live = useRef(orbit);
+  live.current = orbit;
+  const { yaw, elev } = orbit.read() ?? { yaw: 0, elev: 0 };
   const pressed = useRef<{
     x: number;
     y: number;
@@ -240,46 +272,66 @@ export function OrbitMinimap({
     },
     [orbit],
   );
-  const body = useMemo(() => {
-    const at = globeProjection(yaw, elev);
-    const eye = towards(yaw, elev);
-    const circles = [
-      (t: number): Vec => [Math.cos(t), Math.sin(t), 0],
-      ...[0, 90].map((rel) => {
-        const u = towards(rel, 0);
-        return (t: number): Vec => [u[0] * Math.cos(t), u[1] * Math.cos(t), Math.sin(t)];
-      }),
-    ];
-    // Each circle splits into the near half (solid) and the far half (faint).
-    let near = "";
-    let far = "";
-    for (const circle of circles)
-      for (let i = 0; i < ARC_STEPS; i++) {
-        const a = circle((i / ARC_STEPS) * 2 * Math.PI);
-        const b = circle(((i + 1) / ARC_STEPS) * 2 * Math.PI);
-        const [x1, y1] = at(a);
-        const [x2, y2] = at(b);
-        const piece = `M${x1.toFixed(1)} ${y1.toFixed(1)}L${x2.toFixed(1)} ${y2.toFixed(1)}`;
-        if (dot(a, eye) + dot(b, eye) >= -1e-9) near += piece;
-        else far += piece;
+  const body = globeBody(yaw, elev);
+
+  useEffect(() => {
+    const root = svg.current;
+    if (!root) return;
+    let frame = 0;
+    let orientation = "";
+    const draw = () => {
+      frame = 0;
+      const pose = orbit.read() ?? { yaw: 0, elev: 0 };
+      const key = `${pose.yaw.toFixed(3)},${pose.elev.toFixed(3)}`;
+      if (key === orientation) return;
+      orientation = key;
+      const body = globeBody(pose.yaw, pose.elev);
+      for (const side of ["near", "far"] as const)
+        root.querySelector(`[data-orbit-wire="${side}"]`)?.setAttribute("d", body[side]);
+      for (const stop of body.stops) {
+        const node = root.querySelector<SVGGElement>(
+          `[data-orbit-stop="${stop.rel ?? "pole"}/${stop.elev}"]`,
+        )!;
+        node.setAttribute("transform", `translate(${stop.x.toFixed(1)} ${stop.y.toFixed(1)})`);
+        node.setAttribute("opacity", stop.front ? "1" : "0.35");
+        node.toggleAttribute("data-far", !stop.front);
+        root.querySelector(`[data-orbit-stops="${stop.front ? "near" : "far"}"]`)!.append(node);
+        const text = node.querySelector("text");
+        if (text) {
+          const out = Math.hypot(stop.x - C, stop.y - C);
+          text.setAttribute("x", String(out < 4 ? 0 : ((stop.x - C) / out) * 12));
+          text.setAttribute("y", String((out < 4 ? -10 : ((stop.y - C) / out) * 12) + 3.5));
+        }
       }
-    const stops = STOPS.map((stop) => {
-      const v = towards(stop.rel ?? 0, stop.elev);
-      const [x, y] = at(v);
-      return { ...stop, v, x, y, front: dot(v, eye) >= -1e-9 };
-    });
-    // N rides the rim, just outside the wire, at project north (+y).
-    const v: Vec = [0, 1, 0];
-    const [x, y] = at(v);
-    const out = Math.hypot(x - C, y - C);
-    const k = out < 1 ? 0 : (R + 16) / out;
-    const rim = {
-      x: out < 1 ? C : C + (x - C) * k,
-      y: out < 1 ? C - R - 16 : C + (y - C) * k,
-      front: dot(v, eye) >= -1e-9,
+      const rim = root.querySelector('[data-orbit-look="N"]')!;
+      rim.setAttribute("transform", `translate(${body.rim.x.toFixed(1)} ${body.rim.y.toFixed(1)})`);
+      rim.setAttribute("opacity", body.rim.front ? "1" : "0.5");
+      root.querySelector("[data-orbit-mini-lines]")!.setAttribute(
+        "d",
+        (lines ?? [])
+          .map((line) =>
+            line
+              .map(
+                (point, i) =>
+                  `${i ? "L" : "M"}${body
+                    .at(point)
+                    .map((v) => v.toFixed(1))
+                    .join(" ")}`,
+              )
+              .join(""),
+          )
+          .join(""),
+      );
     };
-    return { at, near, far, stops, rim };
-  }, [yaw, elev]);
+    draw();
+    const release = orbit.subscribe(() => {
+      frame ||= requestAnimationFrame(draw);
+    });
+    return () => {
+      cancelAnimationFrame(frame);
+      release();
+    };
+  }, [orbit, lines]);
 
   const dots = (front: boolean): ReactNode =>
     body.stops.map((stop, i) => {
@@ -302,8 +354,9 @@ export function OrbitMinimap({
           opacity={front ? 1 : 0.35}
           onClick={() => {
             if (below || pressed.current?.moved) return;
-            const viewport = orbit.read();
-            if (viewport) orbit.move({ ...viewport, yaw: stop.rel ?? yaw, elev: stop.elev });
+            const viewport = live.current.read();
+            if (viewport)
+              live.current.move({ ...viewport, yaw: stop.rel ?? viewport.yaw, elev: stop.elev });
           }}
         >
           <title>{stopTitle(stop.v, stop.elev)}</title>
@@ -331,8 +384,73 @@ export function OrbitMinimap({
       );
     });
 
+  // React owns this immutable SVG subtree; the camera subscriber owns its projected attributes.
+  const [drawing] = useState(() => (
+    <>
+      <circle
+        cx={C}
+        cy={C}
+        r={R}
+        fill={tokenRef("page")}
+        fillOpacity={0.88}
+        stroke={tokenRef("line")}
+      />
+      <path
+        data-orbit-wire="far"
+        d={body.far}
+        pointerEvents="none"
+        fill="none"
+        stroke={tokenRef("ink-2")}
+        strokeOpacity={0.25}
+        strokeWidth={0.75}
+      />
+      <g data-orbit-stops="far">{dots(false)}</g>
+      <g pointerEvents="none" data-orbit-mini="">
+        <path
+          data-orbit-mini-lines=""
+          fill="none"
+          stroke={tokenRef("ink-2")}
+          strokeOpacity={0.75}
+          strokeWidth={1.5}
+        />
+      </g>
+      <path
+        data-orbit-wire="near"
+        d={body.near}
+        pointerEvents="none"
+        fill="none"
+        stroke={tokenRef("ink-2")}
+        strokeWidth={1}
+      />
+      <g data-orbit-stops="near">{dots(true)}</g>
+      <g
+        data-orbit-look="N"
+        transform={`translate(${body.rim.x.toFixed(1)} ${body.rim.y.toFixed(1)})`}
+        opacity={body.rim.front ? 1 : 0.5}
+        style={{ cursor: "pointer" }}
+        onClick={() => {
+          if (!pressed.current?.moved) glideLook(live.current);
+        }}
+      >
+        <title>Look north: the camera moves to the south</title>
+        <circle r={8} fill={tokenRef("page")} stroke={tokenRef("ink-2")} strokeWidth={1} />
+        <text
+          y={3.5}
+          fontSize={10}
+          textAnchor="middle"
+          className="face-mono"
+          fill={tokenRef("ink")}
+          pointerEvents="none"
+        >
+          N
+        </text>
+      </g>
+    </>
+  ));
+
   return (
     <svg
+      ref={svg}
       width={SIZE}
       height={SIZE}
       viewBox={`0 0 ${SIZE} ${SIZE}`}
@@ -377,6 +495,7 @@ export function OrbitMinimap({
       }}
       onPointerUp={() => {
         if (pressed.current) orbit.end(pressed.current.token);
+        orbit.notify();
         if (pressed.current) pressed.current.ended = true;
         // The click that follows a drag still needs to know it was one.
         const released = pressed.current;
@@ -395,56 +514,7 @@ export function OrbitMinimap({
         }
       }}
     >
-      <circle
-        cx={C}
-        cy={C}
-        r={R}
-        fill={tokenRef("page")}
-        fillOpacity={0.88}
-        stroke={tokenRef("line")}
-      />
-      <path
-        d={body.far}
-        pointerEvents="none"
-        fill="none"
-        stroke={tokenRef("ink-2")}
-        strokeOpacity={0.25}
-        strokeWidth={0.75}
-      />
-      {dots(false)}
-      <g pointerEvents="none" data-orbit-mini="">
-        {paint?.(body.at)}
-      </g>
-      <path
-        d={body.near}
-        pointerEvents="none"
-        fill="none"
-        stroke={tokenRef("ink-2")}
-        strokeWidth={1}
-      />
-      {dots(true)}
-      <g
-        data-orbit-look="N"
-        transform={`translate(${body.rim.x.toFixed(1)} ${body.rim.y.toFixed(1)})`}
-        opacity={body.rim.front ? 1 : 0.5}
-        style={{ cursor: "pointer" }}
-        onClick={() => {
-          if (!pressed.current?.moved) glideLook(orbit);
-        }}
-      >
-        <title>Look north: the camera moves to the south</title>
-        <circle r={8} fill={tokenRef("page")} stroke={tokenRef("ink-2")} strokeWidth={1} />
-        <text
-          y={3.5}
-          fontSize={10}
-          textAnchor="middle"
-          className="face-mono"
-          fill={tokenRef("ink")}
-          pointerEvents="none"
-        >
-          N
-        </text>
-      </g>
+      {drawing}
     </svg>
   );
 }

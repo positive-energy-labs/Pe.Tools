@@ -14,7 +14,6 @@ import { useEffect, useMemo, useRef, useState, type ReactNode } from "react";
 
 import { useScopeGestures, useScopeKeys, type Chord } from "@pe/kit/keys";
 import { Button } from "@pe/kit/lang/button";
-import { tokenRef } from "@pe/kit/lib/token";
 import type { FloaterSpec } from "#/components/lang/floater";
 import { OrbitMinimap } from "#/components/lang/minimap";
 import { Pane } from "#/components/lang/pane";
@@ -328,19 +327,10 @@ export function SpacePicture({
     const corner = (i: number) =>
       [xs[i & 1]!, ys[(i >> 1) & 1]!, zs[(i >> 2) & 1]!].map((v, j) => (v - c[j]!) * k);
     const edges = [0, 1, 2, 3, 4, 5, 6, 7, 0, 2, 1, 3, 4, 6, 5, 7, 0, 4, 1, 5, 2, 6, 3, 7];
-    return (project: (p: readonly number[]) => [number, number]) => (
-      <path
-        d={edges
-          .map((e, i) => {
-            const [x, y] = project(corner(e));
-            return `${i % 2 ? "L" : "M"}${x.toFixed(1)} ${y.toFixed(1)}`;
-          })
-          .join("")}
-        fill="none"
-        stroke={tokenRef("ink-2")}
-        strokeOpacity={0.75}
-      />
-    );
+    return Array.from({ length: edges.length / 2 }, (_, i) => [
+      corner(edges[i * 2]!),
+      corner(edges[i * 2 + 1]!),
+    ]);
   }, [bounds]);
 
   // One element per orbit and box: a selection re-renders the picture, never the globe (it follows
@@ -349,7 +339,7 @@ export function SpacePicture({
   const globe = useMemo(
     () =>
       hasPose ? (
-        <OrbitMinimap orbit={orbit} paint={box} />
+        <OrbitMinimap orbit={orbit} lines={box} />
       ) : (
         <p className="t-small text-ink-2 m-0 p-2">no scene yet</p>
       ),
@@ -463,7 +453,9 @@ export function SpacePicture({
                   : null,
               )
             }
-            onProject={(project, at, ray) => setFramed({ project, size: at, ray })}
+            onProject={(project, at, ray, moving) => {
+              if (!moving && !orbit.moving()) setFramed({ project, size: at, ray });
+            }}
           />
         ) : null}
         {meshes && framed && on.has("cuts") ? (
