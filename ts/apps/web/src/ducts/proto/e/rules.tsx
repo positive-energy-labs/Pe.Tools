@@ -12,7 +12,7 @@ import {
 import { reviewTransitions, type CellWire } from "#/components/work/band";
 import { cellFromTrichotomy, StateCell } from "@pe/kit/lang/cell";
 import { Button } from "@pe/kit/lang/button";
-import { ValueDiff } from "#/components/lang/value-diff";
+import { ValueDiff } from "@pe/kit/lang/value-diff";
 import { LOSS_RULES, ruleByKey } from "@pe/ducts-domain/loss-rules";
 import { tableOf, type Priced } from "@pe/ducts-domain/pricing";
 import type { LossesWork } from "../../work";

@@ -13,7 +13,7 @@ import { Input } from "@pe/kit/lang/input";
 import { SubjectText, SubjectTextContext } from "@pe/kit/lang/subject-text";
 import { useRevitSubjectProps } from "#/revit/element-menu";
 
-import { Surface } from "#/components/lang/surface";
+import { Surface } from "@pe/kit/lang/surface";
 import { frozenDemo } from "#/host/demo-client";
 import { RouteShell, useRoute, useRouteThread } from "#/route";
 import { useChooseTarget } from "#/route/shell";

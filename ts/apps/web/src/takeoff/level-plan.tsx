@@ -8,7 +8,7 @@ import { usePlaneViewport, PLAN_CLICK_PX } from "#/scene/use-plane-viewport";
 import { usePlanMap } from "#/lib/plan-map";
 import { Key } from "#/components/anatomy";
 import { EmptyState } from "@pe/kit/lang/empty";
-import { OutcomeLine } from "#/components/lang/outcome";
+import { OutcomeLine } from "@pe/kit/lang/outcome";
 import { PLAN_REFUSAL, type PlanRefusal } from "#/takeoff/plan-image";
 import { token } from "@pe/kit/lib/token";
 import {

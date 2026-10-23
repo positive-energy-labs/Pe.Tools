@@ -2,9 +2,9 @@ import { FactChip } from "@pe/kit/lang/chip";
 import { StateCell } from "@pe/kit/lang/cell";
 import { Button } from "@pe/kit/lang/button";
 import { Input } from "@pe/kit/lang/input";
-import { Kbd } from "#/components/lang/kbd";
+import { KeyHint } from "@pe/kit/lang/key-hint";
 import { ProviderMark } from "#/components/lang/provider-mark";
-import { Switcher } from "#/components/lang/switcher";
+import { Switcher } from "@pe/kit/lang/switcher";
 import { GitFork, Paperclip, Plus, SendHorizontal } from "lucide-react";
 import { CounterExample, Law } from "#/design-system/exhibit";
 
@@ -97,7 +97,7 @@ export function TypeLaws({ owner }: { owner: (name: string) => string }) {
           <Button icon={Paperclip} label="Attach a file" />
           <Button icon={GitFork} label="Fork" refusal="Nothing to fork yet: the thread is empty" />
           <Button icon={SendHorizontal} label="Send" />
-          <Kbd hotkey="Mod+K" />
+          <KeyHint hotkey="Mod+K" />
         </div>
       </Law>
 

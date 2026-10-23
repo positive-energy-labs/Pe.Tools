@@ -2,11 +2,11 @@
  * The page-chrome unit: a head (the `t-small t-upper` role) and a hairline, never a box. HelpTip may
  * sit beside the title and an optional right-aligned aside carries counts and controls.
  */
-import { tv } from "@pe/kit/lib/tv";
+import { tv } from "../../lib/tv";
 
-import { Rail } from "@pe/kit/lang/rail";
+import { Rail } from "./rail";
 
-import "@pe/kit/lang/lang.css";
+import "./lang.css";
 
 export const sectionRecipe = tv({
   slots: {

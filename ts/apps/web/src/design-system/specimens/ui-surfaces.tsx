@@ -8,8 +8,8 @@ import {
   DialogHeader,
   DialogTitle,
   dialogRecipe,
-} from "#/components/lang/dialog";
-import { ValueDiff, valueDiffRecipe } from "#/components/lang/value-diff";
+} from "@pe/kit/lang/dialog";
+import { ValueDiff, valueDiffRecipe } from "@pe/kit/lang/value-diff";
 import { Rail } from "@pe/kit/lang/rail";
 import { RecipeGrid, SpecimenFrame } from "./recipe-grid";
 
@@ -36,13 +36,13 @@ export function UiSurfaceSpecimens() {
       </SpecimenFrame>
       <RecipeGrid
         name="Dialog"
-        importPath="#/components/lang/dialog"
+        importPath="@pe/kit/lang/dialog"
         recipe={dialogRecipe}
         render={() => <DialogSpecimen />}
       />
       <RecipeGrid
         name="ValueDiff"
-        importPath="#/components/lang/value-diff"
+        importPath="@pe/kit/lang/value-diff"
         recipe={valueDiffRecipe}
         render={() => <ValueDiff from="100 VA" to="150 VA" />}
       />

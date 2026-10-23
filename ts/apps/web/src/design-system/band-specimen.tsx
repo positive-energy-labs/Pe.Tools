@@ -14,7 +14,7 @@ import {
 } from "#/components/work/band";
 import { cellFromTrichotomy, StateCell, type StateCellProps } from "@pe/kit/lang/cell";
 import { ArtifactFrame } from "@pe/kit/lang/artifact-frame";
-import { Section } from "#/components/lang/section";
+import { Section } from "@pe/kit/lang/section";
 import { ReadCell } from "@pe/kit/table/cells";
 import type { Column } from "@pe/kit/table/model";
 import { Gap } from "#/design-system/exhibit";

@@ -18,7 +18,7 @@ import { useList, emptyListState } from "@pe/kit/lang/collection";
 import { ListView } from "@pe/kit/lang/list-view";
 import { Pane } from "#/components/lang/pane";
 import { Button } from "@pe/kit/lang/button";
-import { Switcher } from "#/components/lang/switcher";
+import { Switcher } from "@pe/kit/lang/switcher";
 import { tokenRef } from "@pe/kit/lib/token";
 import { CARD_META, CARD_STATES, type Card, type CardState } from "./cards";
 import type { RoomsPage } from "./manifest";

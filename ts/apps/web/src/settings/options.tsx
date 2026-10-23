@@ -6,8 +6,8 @@ import {
   useSyncExternalStore,
   type ReactNode,
 } from "react";
-import { Switch } from "#/components/lang/switch";
-import { Switcher } from "#/components/lang/switcher";
+import { Switch } from "@pe/kit/lang/switch";
+import { Switcher } from "@pe/kit/lang/switcher";
 import { useIsPrimaryRoute } from "#/navigation/route-controls";
 import { useSurfaceHost } from "#/navigation/surface-host";
 import {

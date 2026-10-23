@@ -1,8 +1,8 @@
 /** One canonical Settings renderer on web, PWA, and tray: every machine group, then appearance. */
 import { useState } from "react";
 import type { AppSurface, Machine, Reading } from "@pe/agent-contracts";
-import { Accordion, type AccordionGroup } from "#/components/lang/accordion";
-import { OutcomeLine } from "#/components/lang/outcome";
+import { Accordion, type AccordionGroup } from "@pe/kit/lang/accordion";
+import { OutcomeLine } from "@pe/kit/lang/outcome";
 import { useDiagnostics, type DiagnosticsState } from "#/host/diagnostics";
 import {
   attention,

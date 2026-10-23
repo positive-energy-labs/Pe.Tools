@@ -16,7 +16,7 @@ import { ArrowUp, GitFork, Paperclip } from "lucide-react";
 import { Ladder } from "#/route/ladder";
 import { ProviderMark } from "#/components/lang/provider-mark";
 import { Button } from "@pe/kit/lang/button";
-import { PaneTabs } from "@pe/kit/lang/pane-tabs";
+import { Switcher } from "@pe/kit/lang/switcher";
 import { SpecimenFrame } from "./recipe-grid";
 
 /** The composer's picker: provider › model › effort › fast, one rung each. */
@@ -58,8 +58,8 @@ function PickerSpecimen() {
 export function LangChatSpecimens() {
   return (
     <>
-      <SpecimenFrame name="PaneTabs" importPath="@pe/kit/lang/pane-tabs">
-        <PaneTabs
+      <SpecimenFrame name="Switcher" importPath="@pe/kit/lang/switcher">
+        <Switcher
           ariaLabel="Pane views"
           value="threads"
           onChange={() => {}}

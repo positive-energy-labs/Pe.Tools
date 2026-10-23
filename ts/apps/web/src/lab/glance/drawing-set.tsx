@@ -1,8 +1,8 @@
 import { useEffect, useMemo, useState } from "react";
 import type { RevitDetailSheets } from "@pe/host-contracts/generated";
 import { EmptyState } from "@pe/kit/lang/empty";
-import { OutcomeLine } from "#/components/lang/outcome";
-import { Provenance, Section } from "#/components/lang/section";
+import { OutcomeLine } from "@pe/kit/lang/outcome";
+import { Provenance, Section } from "@pe/kit/lang/section";
 import { FactChip } from "@pe/kit/lang/chip";
 import { asNumber, asRecord, asRecords, asString } from "#/ops/registry";
 import type { SyntheticOp, SyntheticViewProps } from "#/lab/synthetic";

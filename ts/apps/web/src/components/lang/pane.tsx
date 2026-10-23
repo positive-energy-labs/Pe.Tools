@@ -1,19 +1,18 @@
+import { TooltipHint } from "@pe/kit/lang/tooltip";
 import { Component, Suspense, useRef, type Key, type ReactNode } from "react";
 
 import { reportFault } from "#/host/diagnostics";
 
-import { HelpTip } from "#/components/lang/help";
 import { Floater } from "#/components/lang/floater";
 import { PaneStrip, type PaneStripProps } from "#/components/lang/pane-strip";
 import { KeyScope, useDeclaredGestures } from "@pe/kit/keys";
-import { KeyLegend } from "./kbd";
+import { KeyLegend } from "@pe/kit/lang/key-hint";
 import { POINTER_WORD } from "@pe/kit/lang/gesture-glyph";
 import { Button } from "@pe/kit/lang/button";
 import { tv, type VariantProps } from "@pe/kit/lib/tv";
 
 import { Rail } from "@pe/kit/lang/rail";
 import "@pe/kit/lang/pane.css";
-import { TooltipHint } from "@pe/kit/lang/tooltip";
 
 function PaneGestureLegend({
   host,
@@ -172,7 +171,7 @@ export function Pane({
       )}
       {help != null && (
         <span className="shrink-0 self-center">
-          <HelpTip>{help}</HelpTip>
+          <TooltipHint>{help}</TooltipHint>
         </span>
       )}
     </>

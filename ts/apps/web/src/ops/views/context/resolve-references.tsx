@@ -1,6 +1,6 @@
 import { token } from "@pe/kit/lib/token";
 import { EmptyState } from "@pe/kit/lang/empty";
-import { Provenance } from "#/components/lang/section";
+import { Provenance } from "@pe/kit/lang/section";
 import {
   type OpViewProps,
   UnrecognizedShape,

@@ -10,7 +10,7 @@
 import { useEffect, useLayoutEffect, useMemo, useRef, useState, type ReactNode } from "react";
 import { Dialog as DialogPrimitive } from "@base-ui/react/dialog";
 
-import { Kbd } from "#/components/lang/kbd";
+import { KeyHint } from "@pe/kit/lang/key-hint";
 import { Button } from "@pe/kit/lang/button";
 import { HotkeyCommand } from "#/components/lang/hotkey-command";
 import { startFeedback } from "#/components/feedback-picker";
@@ -119,7 +119,7 @@ function Rows({ keys, flow = false }: { keys: readonly Line[]; flow?: boolean })
             className={flow ? "flex items-center gap-2.5" : "contents"}
           >
             <dt>
-              <Kbd mute={Boolean(k.refusal)} hotkey={k.hotkey} />
+              <KeyHint mute={Boolean(k.refusal)} hotkey={k.hotkey} />
             </dt>
             <TooltipHint content={k.refusal ?? k.description}>
               <dd className={k.refusal ? "text-ink-mute" : "text-ink"}>

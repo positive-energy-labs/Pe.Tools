@@ -29,7 +29,7 @@ import {
 
 import { Button } from "@pe/kit/lang/button";
 import { Input } from "@pe/kit/lang/input";
-import { Kbd } from "#/components/lang/kbd";
+import { KeyHint } from "@pe/kit/lang/key-hint";
 import { List } from "@pe/kit/lang/list-popup";
 import { ProviderMark } from "#/components/lang/provider-mark";
 import { Row } from "@pe/kit/lang/row";
@@ -337,7 +337,7 @@ function PalettePane({
                   {item.state}
                 </span>
                 <span className="inline-flex items-center gap-1 text-ink-mute">
-                  <Kbd mute>Enter</Kbd>
+                  <KeyHint mute>Enter</KeyHint>
                   {item.verb}
                 </span>
               </span>
@@ -349,7 +349,7 @@ function PalettePane({
             <div className="flex min-h-8 items-center justify-between gap-2 px-1 pb-1 t-small text-ink-2">
               <span>{rows.length} fixture commands</span>
               <span className="flex items-center gap-1">
-                <Kbd mute>↑↓</Kbd> move <Kbd mute>Enter</Kbd> run
+                <KeyHint mute>↑↓</KeyHint> move <KeyHint mute>Enter</KeyHint> run
               </span>
             </div>
           ) : (

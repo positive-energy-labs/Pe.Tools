@@ -2,9 +2,9 @@ import type {
   RevitMatrixParameterCoverage,
   RevitMatrixScheduleCoverage,
 } from "@pe/host-contracts/generated";
-import { CoverageBar } from "#/components/lang/coverage-bar";
+import { CoverageBar } from "@pe/kit/lang/coverage-bar";
 import { EmptyState } from "@pe/kit/lang/empty";
-import { Provenance, Section } from "#/components/lang/section";
+import { Provenance, Section } from "@pe/kit/lang/section";
 import { FactChip } from "@pe/kit/lang/chip";
 import { SubjectText, SubjectTextContext } from "@pe/kit/lang/subject-text";
 import { useRevitSubjectProps } from "#/revit/element-menu";

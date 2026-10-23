@@ -6,7 +6,7 @@
 import { Button } from "@pe/kit/lang/button";
 import { FactChip, Tag } from "@pe/kit/lang/chip";
 import { EmptyState } from "@pe/kit/lang/empty";
-import { OutcomeLine } from "#/components/lang/outcome";
+import { OutcomeLine } from "@pe/kit/lang/outcome";
 import type { Column } from "@pe/kit/table/model";
 import { Table } from "@pe/kit/table/table";
 import { cn } from "@pe/kit/lib/utils";

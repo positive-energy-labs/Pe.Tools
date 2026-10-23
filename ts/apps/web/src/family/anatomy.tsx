@@ -1,3 +1,4 @@
+import { TooltipHint } from "@pe/kit/lang/tooltip";
 /**
  * /family — the anatomy triptych: true-scale FRONT / SIDE / PLAN of the profile.
  *
@@ -38,7 +39,7 @@
  */
 import type { TrichotomyCellLike } from "@pe/agent-contracts";
 import { cellFromTrichotomy, StateCell, type CellTransition } from "@pe/kit/lang/cell";
-import { HelpTip } from "#/components/lang/help";
+
 import type { FamilyModel } from "#/family/family-model";
 import { bindingOf, type Draft, type Focus, type FamilyPageModel } from "#/family/model";
 import { boundParam } from "#/family/world";
@@ -46,7 +47,6 @@ import { List } from "@pe/kit/lang/list-popup";
 import { AnatomyViews } from "#/family/anatomy-fixture-views";
 import { ModelViews } from "#/family/anatomy-model-views";
 import { Code, stringify } from "@pe/kit/lang/code";
-import { TooltipHint } from "@pe/kit/lang/tooltip";
 
 export function AnatomyDrawing({
   world,
@@ -109,12 +109,12 @@ export function AnatomyDrawing({
         <div className="hairline-b -mx-2 -mt-2 mb-1.5 px-2 py-1.5" data-surface="recess">
           <p className="t-small t-upper flex items-center gap-1 text-ink-2">
             constituents · {typeName}
-            <HelpTip>
+            <TooltipHint>
               The profile&rsquo;s own constituent list. Hovering one lights both the shape and the
               table rows it drives, because there is only ever ONE thing in focus. Clicking OPENS it
               in the doc pane&rsquo;s lower half, where the half of it no parameter can drive —
               direction, system type, where its frame sits — is edited.
-            </HelpTip>
+            </TooltipHint>
           </p>
         </div>
         {model?.parameters && (

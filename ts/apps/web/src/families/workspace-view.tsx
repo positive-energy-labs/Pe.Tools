@@ -1,7 +1,7 @@
 import { plural } from "#/components/work/band";
 import { useState } from "react";
-import { Surface } from "#/components/lang/surface";
-import { Switcher } from "#/components/lang/switcher";
+import { Surface } from "@pe/kit/lang/surface";
+import { Switcher } from "@pe/kit/lang/switcher";
 import { FamiliesMatrix } from "#/families/matrix";
 import { familiesSpec } from "#/families/manifest";
 import { FAMILIES_STAGES } from "#/families/stage";

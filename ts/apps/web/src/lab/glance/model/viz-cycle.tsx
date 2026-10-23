@@ -1,6 +1,6 @@
 import { token } from "@pe/kit/lib/token";
 import type { ReactNode } from "react";
-import { type CoverageSegment } from "#/components/lang/coverage-bar";
+import { type CoverageSegment } from "@pe/kit/lang/coverage-bar";
 import { type VizIndex } from "#/ops/primitives";
 import { TooltipHint } from "@pe/kit/lang/tooltip";
 

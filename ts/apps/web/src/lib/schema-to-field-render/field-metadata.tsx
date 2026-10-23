@@ -1,8 +1,8 @@
 import { CircleHelp } from "lucide-react";
 import { FactChip, Tag } from "@pe/kit/lang/chip";
 import { Code, stringify } from "@pe/kit/lang/code";
-import { Label } from "#/components/lang/label";
-import { OutcomeLine } from "#/components/lang/outcome";
+import { Label } from "@pe/kit/lang/input";
+import { OutcomeLine } from "@pe/kit/lang/outcome";
 import { HoverCard, HoverCardTrigger, HoverCardContent } from "@pe/kit/lang/hover-card";
 import type { MemberIssue } from "@pe/host-contracts/operation-types";
 import { type FieldOptionState, useFieldChangeSummary } from "./shared";

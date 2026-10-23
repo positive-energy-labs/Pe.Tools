@@ -7,7 +7,7 @@ import { useEffect, useRef } from "react";
 import { useGroundedDoc } from "#/grounded-doc/engine";
 import { PagePane } from "#/grounded-doc/view/page-pane";
 import { ReviewRow, type CellWire } from "#/components/work/band";
-import { Switcher } from "#/components/lang/switcher";
+import { Switcher } from "@pe/kit/lang/switcher";
 
 import type { ProtoProposal, ProtoSpec } from "#/family/world";
 import { Code } from "@pe/kit/lang/code";

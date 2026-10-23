@@ -1,11 +1,12 @@
+import { TooltipHint } from "@pe/kit/lang/tooltip";
 import { useRef, useState } from "react";
 import { settingsFieldPointer, type MeasuredValue } from "@pe/agent-contracts";
 import { parameterText, paramSpec } from "#/family/family-model";
 import { EmptyState } from "@pe/kit/lang/empty";
 import { FactChip, Tag } from "@pe/kit/lang/chip";
-import { HelpTip } from "#/components/lang/help";
+
 import { List } from "@pe/kit/lang/list-popup";
-import { Switcher } from "#/components/lang/switcher";
+import { Switcher } from "@pe/kit/lang/switcher";
 import { Button } from "@pe/kit/lang/button";
 import { Pane } from "#/components/lang/pane";
 import { SpecSheet, SpecText, ProposalCard } from "#/family/doc-pane";
@@ -22,7 +23,6 @@ import { boundParam, type GeomConstituent } from "#/family/world";
 import { useFamilyWorkspace } from "#/family/workspace-context";
 import { FamilyMetaControl } from "#/family/workspace-meta-control";
 import { Code, stringify } from "@pe/kit/lang/code";
-import { TooltipHint } from "@pe/kit/lang/tooltip";
 
 export function FamilyWorkspaceDocPane() {
   const {
@@ -74,12 +74,12 @@ export function FamilyWorkspaceDocPane() {
       <div className="hairline-t mb-2 pt-1.5">
         <p className="t-small t-upper mb-0.5 flex items-center gap-1 text-ink-2">
           bindable dims — represented in the table
-          <HelpTip>
+          <TooltipHint>
             The constituent&rsquo;s bindable numbers, shown here as a STATEMENT OF WHERE EACH ONE
             LIVES rather than as a second place to work. A bound dim names the parameter that
             represents it in the table; an unbound one carries its literal and the very same bind
             verb its ghost row carries.
-          </HelpTip>
+          </TooltipHint>
         </p>
         {part.dims.map((dim) => {
           const bound = boundParam(bindingOf(world, draft, part.slug, dim.property));
@@ -172,12 +172,12 @@ export function FamilyWorkspaceDocPane() {
         <div className="hairline-t mb-2 pt-1.5">
           <p className="t-small t-upper mb-0.5 flex items-center gap-1 text-ink-2">
             family value {isFormula(authored) ? "· formula" : ""}
-            <HelpTip>
+            <TooltipHint>
               THE FAMILY-LEVEL VALUE — what every type inherits unless it overrides. The table shows
               it only as the grey placeholder in each type cell, and a placeholder is not an editor;
               this is where it is actually authored. Type an expression beginning with = to make it
               a formula instead, which locks every type column on the row.
-            </HelpTip>
+            </TooltipHint>
           </p>
           {/* THE FAMILY-LEVEL VALUE CELL, on the editable `StateCell` (R8, families #6): pea's
               open family-level proposal takes the body (fold + wash), your unwritten edit takes

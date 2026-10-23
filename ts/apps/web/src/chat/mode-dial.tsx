@@ -1,4 +1,4 @@
-import { PaneTabs } from "@pe/kit/lang/pane-tabs";
+import { Switcher } from "@pe/kit/lang/switcher";
 import { MODE_HINT, MODES, type Mode } from "#/workbench/depth";
 
 /** Pane views retain URL-owned depth and every choice's explanation. */
@@ -12,7 +12,7 @@ export function ModeDial({
   count?: number | string;
 }) {
   return (
-    <PaneTabs
+    <Switcher
       ariaLabel="View depth"
       value={mode}
       onChange={setMode}

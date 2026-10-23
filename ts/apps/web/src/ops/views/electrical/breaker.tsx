@@ -1,7 +1,7 @@
 import { token } from "@pe/kit/lib/token";
 import type { ReactNode } from "react";
 import { EmptyState } from "@pe/kit/lang/empty";
-import { Provenance, Section } from "#/components/lang/section";
+import { Provenance, Section } from "@pe/kit/lang/section";
 import { type Column } from "@pe/kit/table/model";
 import { Table } from "@pe/kit/table/table";
 import {

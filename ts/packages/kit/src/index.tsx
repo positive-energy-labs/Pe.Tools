@@ -5,7 +5,7 @@ export { React };
 export { createElement as h, useEffect, useReducer, useState } from "react";
 export { createRoot } from "react-dom/client";
 export { ArtifactFrame } from "./components/lang/artifact-frame";
-export { PaneTabs } from "./components/lang/pane-tabs";
+export { Switcher } from "./components/lang/switcher";
 export { Code } from "./components/lang/code";
 export { Button } from "./components/lang/button";
 export { Input } from "./components/lang/input";

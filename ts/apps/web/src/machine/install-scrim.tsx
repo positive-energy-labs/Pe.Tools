@@ -12,8 +12,8 @@ import { useEffect, useState, useSyncExternalStore } from "react";
 import type { Machine, Reading } from "@pe/agent-contracts";
 
 import { Button } from "@pe/kit/lang/button";
-import { Dialog, DialogContent, DialogHeader, DialogTitle } from "#/components/lang/dialog";
-import { OutcomeLine } from "#/components/lang/outcome";
+import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@pe/kit/lang/dialog";
+import { OutcomeLine } from "@pe/kit/lang/outcome";
 import { probeSuccessor, type SuccessorProbe } from "#/host/install";
 
 import { isAccepting, subscribeAccepting } from "./accepting";

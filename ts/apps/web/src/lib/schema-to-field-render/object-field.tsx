@@ -1,7 +1,7 @@
 import { useState } from "react";
 import { Button } from "@pe/kit/lang/button";
 import { Input } from "@pe/kit/lang/input";
-import { OutcomeLine } from "#/components/lang/outcome";
+import { OutcomeLine } from "@pe/kit/lang/outcome";
 import { FieldLegendRow, FieldMessages } from "./field-metadata";
 import { FieldRenderer, recordValueNode } from "./field-renderer";
 import { type ResolvedFieldRendererProps, useSchemaDocument, useSettingsField } from "./shared";

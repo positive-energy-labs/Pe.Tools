@@ -1,6 +1,6 @@
 import type { RevitDetailParameterLinks, RevitDetailSheets } from "@pe/host-contracts/generated";
 import { EmptyState } from "@pe/kit/lang/empty";
-import { Provenance, Section } from "#/components/lang/section";
+import { Provenance, Section } from "@pe/kit/lang/section";
 import { FactChip } from "@pe/kit/lang/chip";
 import { type OpViewProps, UnrecognizedShape, asRecord } from "#/ops/registry";
 import { SheetCanvas, issueLine } from "./schedules";

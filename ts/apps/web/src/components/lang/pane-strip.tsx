@@ -13,7 +13,7 @@ import { Button } from "@pe/kit/lang/button";
 import { Popover, PopoverContent, PopoverTrigger } from "@pe/kit/lang/popover";
 
 import type { FloaterSpec } from "./floater";
-import { Switcher } from "./switcher";
+import { Switcher } from "@pe/kit/lang/switcher";
 
 export interface StripOption {
   key: string;

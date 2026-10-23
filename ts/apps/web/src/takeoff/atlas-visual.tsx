@@ -2,7 +2,7 @@ import { Suspense } from "react";
 import type { PlaneViewport } from "@pe/agent-contracts";
 import { stageViewport } from "#/scene/stage-controller";
 import { Button } from "@pe/kit/lang/button";
-import { Switcher } from "#/components/lang/switcher";
+import { Switcher } from "@pe/kit/lang/switcher";
 import { LevelPlan } from "#/takeoff/level-plan";
 import { LevelTotals } from "#/takeoff/level-totals";
 import { ZoneFacts } from "#/takeoff/zone-facts";

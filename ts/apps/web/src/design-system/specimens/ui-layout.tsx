@@ -1,14 +1,14 @@
 import { Pane, PaneSplit, paneRecipe } from "#/components/lang/pane";
 import { PaneResizeHandle, paneSplitRecipe } from "#/components/lang/pane-resize";
-import { Switch, switchRecipe } from "#/components/lang/switch";
+import { Switch, switchRecipe } from "@pe/kit/lang/switch";
 import { Tooltip, TooltipTrigger, TooltipContent } from "@pe/kit/lang/tooltip";
-import { Surface } from "#/components/lang/surface";
+import { Surface } from "@pe/kit/lang/surface";
 import { RecipeGrid, SpecimenFrame } from "./recipe-grid";
 
 export function UiLayoutSpecimens() {
   return (
     <>
-      <SpecimenFrame name="Surface" importPath="#/components/lang/surface">
+      <SpecimenFrame name="Surface" importPath="@pe/kit/lang/surface">
         <Surface head={<span>scroll-away head</span>}>
           <span>surface body</span>
         </Surface>
@@ -55,7 +55,7 @@ export function UiLayoutSpecimens() {
       </SpecimenFrame>
       <RecipeGrid
         name="Switch"
-        importPath="#/components/lang/switch"
+        importPath="@pe/kit/lang/switch"
         recipe={switchRecipe}
         render={(props) => <Switch size={props.size as "sm" | "default"} />}
       />

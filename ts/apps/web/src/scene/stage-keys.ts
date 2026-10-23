@@ -3,7 +3,7 @@
  * app). A stage's legend and its tutorial read this list, then add only the keys of its own.
  */
 import { POINTER_WORD } from "@pe/kit/lang/gesture-glyph";
-import type { LegendKey } from "#/components/lang/kbd";
+import type { LegendKey } from "@pe/kit/lang/key-hint";
 import { ORBIT_GESTURES } from "./gestures";
 
 export const STAGE_KEYS: readonly LegendKey[] = [

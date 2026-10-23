@@ -30,11 +30,10 @@ import {
 
 import { Button } from "@pe/kit/lang/button";
 import { Input } from "@pe/kit/lang/input";
-import { Kbd } from "#/components/lang/kbd";
+import { KeyHint } from "@pe/kit/lang/key-hint";
 import { List } from "@pe/kit/lang/list-popup";
-import { NavigationGroup, NavigationItem } from "#/components/lang/navigation";
 import { ProviderMark } from "#/components/lang/provider-mark";
-import { Row } from "@pe/kit/lang/row";
+import { Row, RowGroupHead } from "@pe/kit/lang/row";
 
 import type { VariantMeta } from "./lineup";
 
@@ -58,7 +57,7 @@ export type Thread = {
 };
 
 // OWED: the real tray needs an Inbox projection typed from HarnessThreadSummary instead of a
-// second local view model. NavigationItem is real; only these richer review fixtures are local.
+// second local view model. Rows use the kit; these richer review fixtures are local.
 export const THREADS: Thread[] = [
   {
     id: "finished",
@@ -160,41 +159,36 @@ function ThreadRoster({
   const attention = THREADS.filter((thread) => thread.activity !== "running");
   const running = THREADS.filter((thread) => thread.activity === "running");
   const row = (thread: Thread) => (
-    <NavigationItem
+    <Row
+      role="button"
+      tabIndex={0}
+      lines={2}
       key={thread.id}
       id={thread.id}
-      title={thread.title}
-      target={thread.target}
-      time={thread.age}
-      mark={<ProviderMark harness={thread.harness} />}
-      meta={`${thread.harness} · fixture`}
-      state={activityWord[thread.activity]}
-      stateTone={
-        thread.activity === "failed"
-          ? "alarm"
-          : thread.activity === "waiting"
-            ? "caution"
-            : undefined
+      label={thread.title}
+      sub={thread.target}
+      meta={
+        <>
+          {activityWord[thread.activity]} / {thread.age}
+        </>
       }
-      activity={thread.activity === "finished" ? undefined : thread.activity}
-      unread={thread.unread}
       active={selected === thread.id}
-      compact={thread.activity === "finished"}
       actions={null}
-      onPick={() => onSelect(thread.id)}
-      onRename={() => undefined}
-      onMenu={() => undefined}
-      onDrop={() => undefined}
+      onClick={() => onSelect(thread.id)}
+      onDoubleClick={() => undefined}
+      onContextMenu={() => undefined}
     />
   );
   return (
     <nav data-navigation="" aria-label="Inbox threads" className="min-h-0 flex-1 overflow-y-auto">
-      <NavigationGroup label="Needs attention" count={attention.length} stack={{ index: 0, of: 2 }}>
+      <section>
+        <RowGroupHead label="Needs attention" count={attention.length} />
         {attention.map(row)}
-      </NavigationGroup>
-      <NavigationGroup label="Running" count={running.length} stack={{ index: 1, of: 2 }}>
+      </section>
+      <section>
+        <RowGroupHead label="Running" count={running.length} />
         {running.map(row)}
-      </NavigationGroup>
+      </section>
     </nav>
   );
 }
@@ -823,7 +817,8 @@ function WindowPalette({ onClose, onPick }: { onClose: () => void; onPick: (hit:
           }}
           footer={
             <div className="flex items-center justify-end gap-1.5 px-1 pb-1 t-small text-ink-2">
-              <Kbd>↑↓</Kbd> move <Kbd hotkey="Enter" /> choose <Kbd hotkey="Escape" /> close
+              <KeyHint>↑↓</KeyHint> move <KeyHint hotkey="Enter" /> choose{" "}
+              <KeyHint hotkey="Escape" /> close
             </div>
           }
         />
@@ -888,7 +883,7 @@ export default function Variant() {
           >
             <Search aria-hidden className="size-3.5" />
             <span className="min-w-0 flex-1 truncate text-left">{outcome}</span>
-            <Kbd mute>Ctrl K</Kbd>
+            <KeyHint mute>Ctrl K</KeyHint>
           </button>
         </div>
         <div

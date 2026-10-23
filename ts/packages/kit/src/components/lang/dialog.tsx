@@ -3,8 +3,8 @@
 import * as React from "react";
 import { Dialog as DialogPrimitive } from "@base-ui/react/dialog";
 
-import { tv } from "@pe/kit/lib/tv";
-import { Button } from "@pe/kit/lang/button";
+import { tv } from "../../lib/tv";
+import { Button } from "./button";
 import { X as RiCloseLine } from "lucide-react";
 
 // One column with a zero minimum: a row wider than the dialog truncates, never scrolls the dialog sideways.

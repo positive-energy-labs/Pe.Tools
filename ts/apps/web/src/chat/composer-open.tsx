@@ -8,7 +8,7 @@ import { useState } from "react";
 import { Popover } from "@base-ui/react/popover";
 
 import { PopupFrame } from "@pe/kit/lang/list-popup";
-import { Switcher } from "#/components/lang/switcher";
+import { Switcher } from "@pe/kit/lang/switcher";
 import { machineOf } from "#/machine/model";
 import { useMachine } from "#/machine/use-machine";
 import { PatchBay, useBayReadings } from "#/open/bay";
