@@ -83,6 +83,15 @@ const unionOf = (regions: readonly Region[]) => {
 
 /** `flow` wraps the pairs across the line (the route band); default is one column (a card). */
 function Rows({ keys, flow = false }: { keys: readonly Line[]; flow?: boolean }) {
+  const gestures = new Set<string>();
+  // Several lists can declare the same gesture in one scope or in the route band.
+  const rows = keys.filter((line) => {
+    if (!isGesture(line)) return true;
+    const key = JSON.stringify([line.keys, line.pointer, line.label]);
+    if (gestures.has(key)) return false;
+    gestures.add(key);
+    return true;
+  });
   return (
     <dl
       className={
@@ -91,7 +100,7 @@ function Rows({ keys, flow = false }: { keys: readonly Line[]; flow?: boolean })
           : "grid grid-cols-[auto_1fr] items-center gap-x-2.5 gap-y-1 t-small"
       }
     >
-      {keys.map((k) =>
+      {rows.map((k) =>
         isGesture(k) ? (
           <div
             key={`gesture:${k.keys?.join("+") ?? ""}:${k.pointer ?? ""}:${k.label}`}
@@ -317,7 +326,8 @@ function HelpBody({
   const band: Line[] = [];
   const byRegion = new Map<string, Line[]>();
   const place = (line: Line) => {
-    if (drawn.has(line.scope)) byRegion.set(line.scope, [...(byRegion.get(line.scope) ?? []), line]);
+    if (drawn.has(line.scope))
+      byRegion.set(line.scope, [...(byRegion.get(line.scope) ?? []), line]);
     else band.push(line);
   };
   // A pane's pointer gestures read before its chords: they are how the picture is driven.
