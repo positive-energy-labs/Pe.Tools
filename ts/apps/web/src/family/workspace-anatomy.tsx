@@ -28,7 +28,7 @@ export function FamilyWorkspaceAnatomy() {
       help={
         anatomyCollapsed
           ? "The drawing is collapsed. Its header strip stays, so the drawing is one click away and nothing about the page's shape changes."
-          : `Drawn from the ${stageType} type's own numbers in the profile — a reading of the document, not a render of Revit.`
+          : `Drawn from the ${stageType} type's own numbers in the profile — a reading of the document, not a render of Revit. Planes move with labeled and locked dimensions; the rest sit at their captured seeds. Formula labels, nested geometry and non-orthogonal forms require Revit.`
       }
       actions={
         <Button

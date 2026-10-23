@@ -16,6 +16,7 @@ import {
 import type { ParamColumn, TypeRow } from "#/families/matrix-columns";
 import { TypeGrid, type TypeGridEdit } from "#/families/pivot-grid";
 import { usePivotMap } from "#/families/pivot-map";
+import { useLocated } from "#/families/workspace-context";
 import { useFamiliesWorkspace } from "#/families/workspace-context";
 import type { FamilySnapshotRecord } from "#/host/loaded-families-view";
 import type { ParameterMetadataRecord } from "./parameter-metadata";
@@ -247,7 +248,9 @@ export function FamiliesPivot({ empty, above }: { empty?: ReactNode; above?: Rea
     parse,
     overlay,
     chips: scopeChips,
+    locator,
   } = useFamiliesWorkspace();
+  const located = useLocated(locator);
   const { pivotRows, pivotFamilies } = useMemo(() => {
     const pivot = buildPivot(rows, params, families);
     // A parameter the patch creates gets its own row, marked new; the reading has no column for it.
@@ -315,6 +318,16 @@ export function FamiliesPivot({ empty, above }: { empty?: ReactNode; above?: Rea
     [filtered.shownRows, tableState],
   );
   const map = usePivotMap(scroller, mappedRows, types, overlay);
+  // A located cell the query hides cannot land; the chip then moves nothing rather than guessing.
+  const landed = useMemo(() => {
+    if (!located) return null;
+    const at = familyCellAddress(located.key);
+    const row = mappedRows.findIndex((each) => each.name === at.parameter);
+    const col = types.findIndex(
+      (type) => type.familyName === at.familyName && type.typeName === at.typeName,
+    );
+    return row < 0 || col < 0 ? null : { row, col, n: located.n };
+  }, [located, mappedRows, types]);
   return (
     <Pane title="parameters × family types" scroll="clip" flush floaters={[map]}>
       {above}
@@ -337,6 +350,7 @@ export function FamiliesPivot({ empty, above }: { empty?: ReactNode; above?: Rea
           nativeScope={nativeScope}
           edit={edit}
           scroller={scroller}
+          landed={landed}
           empty={mappedRows.length ? undefined : empty}
         />
       </TableFrame>

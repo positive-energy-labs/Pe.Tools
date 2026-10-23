@@ -80,11 +80,14 @@ export function SpecText({
 export function SpecSheet({
   spec,
   litBlocks,
+  reveal = null,
   zoom,
   onZoom,
 }: {
   spec: ProtoSpec | null;
   litBlocks: Set<string>;
+  /** The last explicit locate: the only thing that scrolls the sheet (N1). Hover only lights. */
+  reveal?: { block: string; n: number } | null;
   zoom: number;
   onZoom: (zoom: number) => void;
 }) {
@@ -98,11 +101,13 @@ export function SpecSheet({
   const blockId = [...litBlocks][0] ?? null;
   useEffect(() => {
     engine.hoverBlock(blockId, "external");
-    const node = blockId ? refs.current.get(blockId) : null;
+  }, [blockId, engine.doc, engine.hoverBlock]);
+  useEffect(() => {
+    const node = reveal ? refs.current.get(reveal.block) : null;
     const pane = viewport.current;
     if (node && pane)
       pane.scrollTop += node.getBoundingClientRect().top - pane.getBoundingClientRect().top;
-  }, [blockId, litBlocks, engine.doc, engine.hoverBlock]);
+  }, [reveal, engine.doc]);
   if (!spec)
     return (
       <EmptyState story="scope" exit="attach a cut sheet">

@@ -1,4 +1,4 @@
-import { useMemo } from "react";
+import { useMemo, useState } from "react";
 import { familyCellValueSchema, type FamilyCellState } from "@pe/agent-contracts";
 
 import { runFanOut, type CellWire } from "#/components/work/band";
@@ -19,7 +19,7 @@ import {
   type TypeRow,
 } from "#/families/matrix-columns";
 import type { PlanEntry } from "#/route";
-import { FamiliesWorkspaceProvider } from "#/families/workspace-context";
+import { createLocator, FamiliesWorkspaceProvider } from "#/families/workspace-context";
 import { FamiliesWorkspaceView } from "#/families/workspace-view";
 import { DEMO_FAMILIES } from "#/families/seeds";
 import { familyCellEntries } from "#/families/staged";
@@ -266,9 +266,13 @@ function useFamiliesWorkspaceModel(
     [plan, families, planByName],
   );
 
+  /** The chip-to-cell door, outside the model: a press re-renders the grid, not the workspace. */
+  const [locator] = useState(createLocator);
+
   return {
     store,
     archived,
+    locator,
     /** The saved Work cannot be read: its refusal and start fresh are the only instruction, so
      * every Work-bearing control is inert and no empty-Work instruction is drawn (F-J6-1). */
     workUnreadable: store.handle.work.refusal != null,

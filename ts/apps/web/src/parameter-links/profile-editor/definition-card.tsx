@@ -20,6 +20,7 @@ import {
   RELATIONSHIPS,
   SOURCE_SCOPES,
   addAssignment,
+  definitionName,
   removeAssignment,
   removeDefinition,
   updateAssignment,
@@ -115,6 +116,7 @@ export function DefinitionCard({
     <ArtifactFrame
       head={
         <>
+          <span className="min-w-0 flex-1 truncate">{definitionName(definition)}</span>
           <TooltipHint content="The definition's id — how assignments and receipts refer to it">
             <Input
               value={definition.id}
@@ -337,7 +339,13 @@ export function DefinitionCard({
                     />
                     enabled
                   </label>
-                  <span className="truncate">{assignment.id}</span>
+                  {/* Named by what it binds (I1); the generated id is a fact on hover, not a name. */}
+                  <TooltipHint content={<span className="face-mono">{assignment.id}</span>}>
+                    <span className="truncate">
+                      {assignment.sourceElementUniqueIds.length} source element
+                      {assignment.sourceElementUniqueIds.length === 1 ? "" : "s"}
+                    </span>
+                  </TooltipHint>
                   <Button
                     label="remove"
                     kind="framed"

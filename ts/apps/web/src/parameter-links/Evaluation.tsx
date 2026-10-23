@@ -15,7 +15,8 @@ import { useTableState } from "@pe/kit/table/view";
 type Write = ParameterLinkEvaluation["writes"][number];
 const CELL = "block truncate px-(--item-pad-x)";
 const parameterName = (write: Write) => write.targetParameter.name ?? write.targetParameter.kind;
-const targetName = (write: Write) => String(write.targetElementName ?? write.targetElementId);
+/** A target is named, never numbered (I1): its id answers right-click, it is not its name. */
+const targetName = (write: Write) => write.targetElementName || "unnamed element";
 
 const WRITE_COLUMNS: Column<Write>[] = [
   {
@@ -80,6 +81,7 @@ function WritesTable({ writes }: { writes: Write[] }) {
         label="projected writes"
         state={state}
         onStateChange={setState}
+        revitIds={(write) => [write.targetElementId]}
       />
     </TableFrame>
   );

@@ -1,5 +1,5 @@
 import { token } from "@pe/kit/lib/token";
-import { useState } from "react";
+import { useState, type ReactNode } from "react";
 import { ArtifactFrame } from "@pe/kit/lang/artifact-frame";
 import { fmtNum, StateCell, type StateCellProps } from "@pe/kit/lang/cell";
 import { FactChip } from "@pe/kit/lang/chip";
@@ -34,8 +34,49 @@ import { VariantFomLens } from "./fom-lens";
 import { VariantBodLens } from "./bod-lens";
 import { TooltipHint } from "@pe/kit/lang/tooltip";
 
-export function VariantE() {
-  const [lens, setLens] = useState<Lens>("grid");
+/** The address's lens and its push; a module-level hook, so only its readers re-render (N6). */
+export type UseLens = () => readonly [Lens, (lens: Lens) => void];
+
+function LensSwitcher({ useLens }: { useLens: UseLens }) {
+  const [lens, onLens] = useLens();
+  return (
+    <Switcher<Lens>
+      ariaLabel="Lens"
+      value={lens}
+      onChange={onLens}
+      options={[
+        {
+          value: "grid",
+          label: "Grid",
+          title: "Every fan coil × every attribute — the substrate itself",
+        },
+        {
+          value: "fom",
+          label: "FOM exhibit",
+          title: "The print-shaped FOM HWCH Plant projection — same substrate, 5×11 sheet layout",
+        },
+        {
+          value: "bod",
+          label: "BOD",
+          title: "The M001 Basis of Design projection — label × value over the same authored facts",
+        },
+      ]}
+    />
+  );
+}
+
+/** All three stay mounted: a lens switch toggles visibility, never remounts or re-renders a grid. */
+function LensBody({ useLens, views }: { useLens: UseLens; views: Record<Lens, ReactNode> }) {
+  const [lens] = useLens();
+  // ponytail: display none, not <Activity>: revealing an Activity re-ran every cell's effects (~100 ms).
+  return (Object.keys(views) as Lens[]).map((key) => (
+    <div key={key} style={lens === key ? undefined : { display: "none" }}>
+      {views[key]}
+    </div>
+  ));
+}
+
+export function VariantE({ useLens }: { useLens: UseLens }) {
   const [facts, setFacts] = useState<Facts>(INITIAL_FACTS);
   const [model, setModel] = useState<Model>(initialModel);
   const [outcomes, setOutcomes] = useState<Outcome[]>([]);
@@ -206,9 +247,12 @@ export function VariantE() {
       <Pane title="parameter table" scroll="clip" flush>
         <div className="flex min-h-0 flex-1 flex-col">
           <ArtifactFrame
+            // L3: the frame fills the pane so its foot hugs the bottom edge; only the body scrolls.
+            className="flex min-h-0 flex-1 flex-col"
             head={
-              <span className="flex w-full items-center gap-3">
-                <span>
+              <span className="flex w-full min-w-0 items-center gap-3">
+                {/* L3: the crumb ellipsizes; the lens and the verb never leave the frame. */}
+                <span className="min-w-0 truncate">
                   ProjectA_Clone_Aug_11 <span style={muted}>›</span> Mechanical Equipment{" "}
                   <span style={muted}>›</span> Main House fan coils × PE_* parameters
                 </span>
@@ -219,31 +263,8 @@ export function VariantE() {
                   below is the write path: edit a design fact and its whole linked column stages,
                   grouped by type, because the parameters live at type scope.
                 </HelpTip>
-                <Switcher<Lens>
-                  ariaLabel="Lens"
-                  value={lens}
-                  onChange={setLens}
-                  options={[
-                    {
-                      value: "grid",
-                      label: "Grid",
-                      title: "Every fan coil × every attribute — the substrate itself",
-                    },
-                    {
-                      value: "fom",
-                      label: "FOM exhibit",
-                      title:
-                        "The print-shaped FOM HWCH Plant projection — same substrate, 5×11 sheet layout",
-                    },
-                    {
-                      value: "bod",
-                      label: "BOD",
-                      title:
-                        "The M001 Basis of Design projection — label × value over the same authored facts",
-                    },
-                  ]}
-                />
-                <span className="ml-auto flex items-center gap-2">
+                <LensSwitcher useLens={useLens} />
+                <span className="ml-auto flex shrink-0 items-center gap-2">
                   <FactChip
                     dashed
                     title="prototype fixture lane — pulled from ProjectA_Clone_Aug_11 on 2026-08-17; a live host session would replace this"
@@ -307,16 +328,17 @@ export function VariantE() {
                     <span data-tone="alarm">{driftRows} rows drift</span>
                   </TooltipHint>
                 ) : null}
-                <span className="ml-auto" style={muted}>
-                  lens: {lens}
-                </span>
               </span>
             }
           >
             {/* LANG GAP (3): the authored lane — a pinned band of design facts riding ON the
               machine-operated table — has no primitive; hand-rolled, hairline-separated,
               deliberately on the frame's own ground (border budget: no second enclosure). */}
-            <div className="flex items-start gap-6 px-3 py-2" style={{ borderBottom: hairline }}>
+            {/* L3: facts wrap whole, never inside a label; the last second is a new line. */}
+            <div
+              className="flex flex-wrap items-start gap-x-6 gap-y-1 px-3 py-2 whitespace-nowrap"
+              style={{ borderBottom: hairline }}
+            >
               <span className="pt-0.5" style={secondary}>
                 design facts
               </span>
@@ -341,7 +363,7 @@ export function VariantE() {
               })}
             </div>
             <div className="min-h-0 flex-1 overflow-auto">
-              {lens === "grid" ? gridLens : lens === "fom" ? fomLens : bodLens}
+              <LensBody useLens={useLens} views={{ grid: gridLens, fom: fomLens, bod: bodLens }} />
             </div>
           </ArtifactFrame>
         </div>

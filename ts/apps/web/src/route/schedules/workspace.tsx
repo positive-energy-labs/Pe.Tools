@@ -316,6 +316,18 @@ export function ScheduleGridWorkspace({
                     state={tableState}
                     onStateChange={setTableState}
                     activeKey={locatedRow}
+                    revitIds={(row) => row.subjectIds}
+                    // I2: a row Revit refused, or one moved under a staged value, blocks the push.
+                    damage={(row) => {
+                      const keys = snapshot.columns.map((column) =>
+                        scheduleCellKey(row.rowNumber, column.columnNumber),
+                      );
+                      return keys.some((key) => refused[key])
+                        ? "refused"
+                        : keys.some((key) => stale.some((cell) => cell.key === key))
+                          ? "stale"
+                          : null;
+                    }}
                     cellEdit={cellEdit}
                     gutter={(row) => {
                       const owed = snapshot.columns.filter(

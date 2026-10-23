@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useRef } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { reviewTransitions } from "#/components/work/band";
 import type { FamilyStore } from "#/family/store";
 import {
@@ -98,12 +98,17 @@ export function useFamilyWorkspaceCore(store: FamilyStore) {
     },
   ]);
 
+  /**
+   * The last LOCATE, as a serial: the only thing that moves the sidebar or the sheet (N1). Hover
+   * lights a card and its block but never scrolls, so the view stays where the pointer left it.
+   */
+  const [located, setLocated] = useState<{ id: string; block: string; n: number } | null>(null);
   // Locating scrolls the card into the sidebar. That is the whole payoff of the rail and the
   // corner folds: the table points, the sidebar decides, and nothing covers the table.
   useEffect(() => {
-    if (!focusedProposal || docMode === "sheet") return;
-    cardRefs.current[focusedProposal]?.scrollIntoView({ block: "nearest", behavior: "smooth" });
-  }, [focusedProposal, docMode]);
+    if (!located || docMode === "sheet") return;
+    cardRefs.current[located.id]?.scrollIntoView({ block: "nearest", behavior: "smooth" });
+  }, [located, docMode]);
 
   /** A proposal STANDS until it is cleared. Accepting does not clear it: the reader wants it
    * behind the staged value, because that is the only evidence that the square is pea's ink. */
@@ -137,6 +142,11 @@ export function useFamilyWorkspaceCore(store: FamilyStore) {
   const locate = (proposal: ProtoProposal) => {
     setFocusedProposal(proposal.id);
     setPinnedParam(proposal.param);
+    setLocated((last) => ({
+      id: proposal.id,
+      block: proposal.sourceBlockId,
+      n: (last?.n ?? 0) + 1,
+    }));
   };
 
   /**
@@ -508,6 +518,7 @@ export function useFamilyWorkspaceCore(store: FamilyStore) {
     proposalsOn,
     openProposals,
     locate,
+    located,
     rows,
     consumers,
     ghostCount,

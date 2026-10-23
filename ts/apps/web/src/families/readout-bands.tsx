@@ -129,14 +129,14 @@ export function FamiliesReceipts() {
  * ✕`, MAP ruling 60). Its tab is the route's `lines` field. Plan reads staged cells.
  */
 export function FamiliesProposalsBand() {
-  const { cells, wire, plan, store } = useFamiliesWorkspace();
+  const { cells, wire, plan, store, locator } = useFamiliesWorkspace();
   const patch = store.handle.work.doc?.patch ?? ({} as FamiliesPatchCell);
   const patchSource = (patch.staged ?? patch.proposal)?.value;
   // A plan row with no resolved id (no `hashKey`) is a name the host refused, in its own words.
   const orphans = (plan?.entries ?? []).flatMap((entry) =>
     entry.hashKey === undefined && entry.flag ? [[entry.id, entry.flag] as const] : [],
   );
-  // ponytail: no chip locates its parameter × type cell yet; the pivot grid has no focus door.
+  // Each chip lands on its parameter × type cell in the grid (N4).
   const pending: WorkCell[] = familyCellEntries(cells).flatMap(
     ({ key, cell, parameter, familyName, typeName }) => {
       if (cell.proposal == null && cell.staged == null) return [];
@@ -148,6 +148,7 @@ export function FamiliesProposalsBand() {
           row: `${familyName} · ${typeName}`,
           value,
           look: cellFromTrichotomy(cell, { value }, showFamilyCell),
+          locate: () => locator.locate(key),
         },
       ];
     },

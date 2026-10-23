@@ -13,9 +13,10 @@ import type { Column } from "@pe/kit/table/model";
 import { parseConditionNumber } from "@pe/kit/table/view";
 import type { ScheduleGridSnapshot as Snapshot } from "@pe/agent-contracts";
 import { TooltipHint } from "@pe/kit/lang/tooltip";
-import { revitTarget } from "@pe/kit/lang/row";
 
 type ScheduleRow = Snapshot["rows"][number];
+
+const elementCount = (n: number) => `${n} element${n === 1 ? "" : "s"}`;
 type Binding = ScheduleRow["bindings"][number];
 
 /** Revit's unitless number specs, by TypeId (the version suffix varies): Integer and Number. */
@@ -140,7 +141,7 @@ function scheduleCellState(
       binding?.isTypeParameter ? "type parameter — shared across every row of this type" : null,
       binding?.hasMixedValues ? "mixed values across targets" : null,
       binding
-        ? `param ${binding.parameterName ?? "—"} · ${binding.storageType} · targets [${binding.targetElementIds.join(",")}]`
+        ? `param ${binding.parameterName ?? "—"} · ${binding.storageType} · writes ${elementCount(binding.targetElementIds.length)}`
         : null,
     ]
       .filter(Boolean)
@@ -203,16 +204,15 @@ export function useScheduleGridColumns(
         width: "w-12",
         lock: true,
         // No sort: row-number order is the schedule's own order, which clearing every sort restores.
+        // The whole row answers right-click (the grid's `revitIds`); the hint counts, never lists ids (I1).
         cell: (row) => (
           <TooltipHint
-            content={`row ${row.rowNumber} · ${row.kind}${row.subjectIds.length > 0 ? ` · elements [${row.subjectIds.join(",")}]` : ""}`}
+            content={`row ${row.rowNumber} · ${row.kind}${row.subjectIds.length > 0 ? ` · ${elementCount(row.subjectIds.length)} · right-click to show in Revit` : ""}`}
           >
-            <span {...revitTarget(row.subjectIds)}>
-              <StateCell
-                scale="row"
-                value={`${row.rowNumber}${row.subjectIds.length > 1 ? ` ×${row.subjectIds.length}` : ""}`}
-              />
-            </span>
+            <StateCell
+              scale="row"
+              value={`${row.rowNumber}${row.subjectIds.length > 1 ? ` ×${row.subjectIds.length}` : ""}`}
+            />
           </TooltipHint>
         ),
       },

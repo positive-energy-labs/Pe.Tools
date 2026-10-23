@@ -1,3 +1,4 @@
+import { FactChip } from "@pe/kit/lang/chip";
 import { EmptyState } from "@pe/kit/lang/empty";
 import { routeAddress } from "@pe/agent-contracts";
 import { OutcomeLine } from "#/components/lang/outcome";
@@ -85,12 +86,13 @@ export function FamiliesMatrix() {
       empty={empty}
       above={
         <>
+          {/* I6: a mark plus a word, not a sentence; the why is the chip's hint. */}
           {fixture && (
-            <p className="px-4 py-1 t-small">
-              Fixture review (no Revit capture).{" "}
-              <a href={routeAddress("families").link({ demo: "apply" })}>
-                plan confirmation fixture
-              </a>
+            <p className="flex items-center gap-2 px-4 py-1 t-small">
+              <FactChip dashed title="Fixture review: no Revit capture behind these values">
+                fixture
+              </FactChip>
+              <a href={routeAddress("families").link({ demo: "apply" })}>plan fixture</a>
             </p>
           )}
         </>

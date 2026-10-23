@@ -19,6 +19,7 @@ import { Button } from "@pe/kit/lang/button";
 import { Pane, PaneSplit } from "#/components/lang/pane";
 import { Surface } from "#/components/lang/surface";
 import { EvaluationView, RuntimeStatusBar } from "#/parameter-links/Evaluation";
+import { NativeObservationScope } from "#/revit/observation";
 import { ProfileEditor } from "#/parameter-links/ProfileEditor";
 import { ActivityDisclosure } from "#/components/lang/activity";
 import { useList } from "@pe/kit/lang/collection";
@@ -90,14 +91,19 @@ export function ParameterLinksRouteContent({ thread }: { thread?: string } = {})
    */
   const latest = useMemo(() => {
     const rows = previousOf(route.readings.links as Reading<unknown>);
-    if (!rows) return { reading: null, readingId: null };
+    if (!rows) return { reading: null, readingId: null, document: null };
     const row = familyCaptureSchema
       .array()
       .parse(rows)
       .find((capture) => capture.reading.kind === "parameter-links");
     return row && row.reading.kind === "parameter-links"
-      ? { reading: parameterLinksReadingSchema.parse(row.reading.value), readingId: row.id }
-      : { reading: null, readingId: null };
+      ? {
+          reading: parameterLinksReadingSchema.parse(row.reading.value),
+          readingId: row.id,
+          // The displayed observation's document: the writes' element menu targets it, never the selector.
+          document: row.provenance.kind === "live" ? row.provenance.target : null,
+        }
+      : { reading: null, readingId: null, document: null };
   }, [route.readings]);
   const reading = latest.reading;
   const readingId = reading?.evaluated ? latest.readingId : null;
@@ -401,7 +407,13 @@ export function ParameterLinksRouteContent({ thread }: { thread?: string } = {})
                     says="accept it to stage it, then preview the staged profile before apply"
                   />
                 ) : null}
-                <EvaluationView evaluation={evaluation} />
+                <NativeObservationScope
+                  value={{
+                    scope: latest.document ? { document: latest.document, source: "native" } : null,
+                  }}
+                >
+                  <EvaluationView evaluation={evaluation} />
+                </NativeObservationScope>
               </div>
             </div>
           </Pane>
@@ -419,6 +431,7 @@ function ProfileChanges({ changes }: { changes: ProfileChange[] }) {
     search: (change) => ({
       text: [
         change.kind,
+        change.name,
         change.id,
         change.change,
         ...(change.change === "changed" ? change.fields : []),
@@ -439,7 +452,7 @@ function ProfileChanges({ changes }: { changes: ProfileChange[] }) {
           exit: "Propose a profile change to compare it",
         }}
         row={(change) => ({
-          label: `${change.kind} ${change.id}`,
+          label: change.kind === "definition" ? change.name : `assignment · ${change.name}`,
           meta:
             change.change === "changed" ? `changed: ${change.fields.join(", ")}` : change.change,
         })}

@@ -74,6 +74,7 @@ export const TypeGrid = memo(function TypeGrid({
   nativeScope,
   edit,
   scroller,
+  landed = null,
   empty,
 }: {
   rows: readonly PivotRow[];
@@ -82,6 +83,8 @@ export const TypeGrid = memo(function TypeGrid({
   nativeScope?: RevitObservationScope | null;
   edit: TypeGridEdit;
   scroller: RefObject<HTMLDivElement | null>;
+  /** The cell a Work chip located: revealed, focused and outlined until the next locate (N4). */
+  landed?: { row: number; col: number; n: number } | null;
   empty?: ReactNode;
 }) {
   const [viewport, setViewport] = useState({ top: 0, left: 0, width: 900, height: 500 });
@@ -176,18 +179,9 @@ export const TypeGrid = memo(function TypeGrid({
     pendingFocus.current = null;
   }, [scroller]);
   useLayoutEffect(focusPending, [viewport, focusPending]);
-  const move = useCallback(
-    (direction: CellMove) => {
-      const current = document.activeElement?.closest<HTMLElement>(
-        "[data-grid-row][data-grid-col]",
-      );
-      if (!current) return false;
-      const row =
-        Number(current.dataset.gridRow) + (direction === "down" ? 1 : direction === "up" ? -1 : 0);
-      const col =
-        Number(current.dataset.gridCol) +
-        (direction === "right" ? 1 : direction === "left" ? -1 : 0);
-      if (row < 0 || row >= rows.length || col < 0 || col >= types.length) return false;
+  /** Scroll the least that shows a cell beside the sticky heads, then focus it. */
+  const reveal = useCallback(
+    (row: number, col: number) => {
       pendingFocus.current = { row, col };
       const el = scroller.current;
       if (!el) return false;
@@ -209,8 +203,27 @@ export const TypeGrid = memo(function TypeGrid({
       requestAnimationFrame(focusPending);
       return true;
     },
-    [rows.length, types.length, scroller, focusPending],
+    [scroller, focusPending],
   );
+  const move = useCallback(
+    (direction: CellMove) => {
+      const current = document.activeElement?.closest<HTMLElement>(
+        "[data-grid-row][data-grid-col]",
+      );
+      if (!current) return false;
+      const row =
+        Number(current.dataset.gridRow) + (direction === "down" ? 1 : direction === "up" ? -1 : 0);
+      const col =
+        Number(current.dataset.gridCol) +
+        (direction === "right" ? 1 : direction === "left" ? -1 : 0);
+      if (row < 0 || row >= rows.length || col < 0 || col >= types.length) return false;
+      return reveal(row, col);
+    },
+    [rows.length, types.length, reveal],
+  );
+  useLayoutEffect(() => {
+    if (landed) reveal(landed.row, landed.col);
+  }, [landed, reveal]);
 
   return (
     <CellNavigationProvider move={move}>
@@ -376,12 +389,19 @@ export const TypeGrid = memo(function TypeGrid({
                       data-grid-col={colIndex}
                       tabIndex={-1}
                       className="border-b border-l"
+                      data-landed={
+                        landed?.row === rowIndex && landed.col === colIndex ? "" : undefined
+                      }
                       style={{
                         position: "absolute",
                         left: identityWidth + colIndex * GRID.type,
                         top: 0,
                         width: GRID.type,
                         height: GRID.row,
+                        // The landing mark: full ink inside the cell, so neighbours never move (L3).
+                        ...(landed?.row === rowIndex && landed.col === colIndex
+                          ? { outline: "2px solid var(--pe-ink)", outlineOffset: -2 }
+                          : {}),
                       }}
                     >
                       {projected && !edit.readOnly ? (
