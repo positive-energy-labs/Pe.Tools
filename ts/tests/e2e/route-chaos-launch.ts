@@ -7,6 +7,17 @@ import { resolve, join } from "node:path";
 import { createHash } from "node:crypto";
 
 const exec = promisify(execFile);
+function browserStatus(stdout: string): { name: string; port: number }[] {
+  // chrome-agent 0.6.0 emits this successful empty-registry message before its JSON branch.
+  if (stdout.trim() === "No instances registered. Launch one with: chrome-agent launch") return [];
+  const rows: unknown = JSON.parse(stdout);
+  if (
+    !Array.isArray(rows) ||
+    rows.some((row) => typeof row?.name !== "string" || typeof row?.port !== "number")
+  )
+    throw new Error("Unexpected chrome-agent status shape");
+  return rows;
+}
 const { values } = parseArgs({
   args: process.argv.slice(process.argv[2] === "--" ? 3 : 2),
   options: {
@@ -245,11 +256,9 @@ try {
     receipt.browserPort = port;
     await save();
     existingBrowsers = new Set(
-      (
-        JSON.parse(
-          (await exec("chrome-agent", ["status"], { env, timeout: 15_000, windowsHide: true }))
-            .stdout,
-        ) as { name: string }[]
+      browserStatus(
+        (await exec("chrome-agent", ["status"], { env, timeout: 15_000, windowsHide: true }))
+          .stdout,
       ).map((row) => row.name),
     );
     browserLaunchAttempted = true;
@@ -336,7 +345,7 @@ try {
         windowsHide: true,
       }).catch(() => undefined);
       browser = status
-        ? (JSON.parse(status.stdout) as { name: string; port: number }[]).find(
+        ? browserStatus(status.stdout).find(
             (row) => row.port === receipt.browserPort && !existingBrowsers.has(row.name),
           )
         : undefined;
@@ -368,8 +377,10 @@ try {
           headers: { "x-pe-service-token": token },
           signal: AbortSignal.timeout(10_000),
         }).catch((error) => receipt.cleanup.push(`shutdown request: ${String(error)}`));
-      if (host.connected) host.disconnect();
       await exited(host, 15_000).catch(async () => {
+        receipt.cleanup.push("Host graceful shutdown deadline exceeded; disconnecting owned IPC");
+        if (host!.connected) host!.disconnect();
+        await exited(host!, 5000).catch(() => undefined);
         await stopOwned(host!).catch((error) => {
           receipt.cleanup.push(String(error));
           process.exitCode = 1;
@@ -378,6 +389,10 @@ try {
       receipt.cleanup.push(
         `owned source host ${host.pid} exited=${host.exitCode ?? host.signalCode}`,
       );
+      if (host.exitCode !== 0) {
+        process.exitCode = 1;
+        receipt.result = `failed: owned source host exited=${host.exitCode ?? host.signalCode}`;
+      }
     }
   } catch (error) {
     receipt.cleanup.push(`Host cleanup: ${String(error)}`);
