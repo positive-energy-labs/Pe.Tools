@@ -21,6 +21,8 @@ export type ScrollViewport = { kind: "scroll"; top: number; left: number };
 export type PlaneViewport = { kind: "plane"; scale: number; tx: number; ty: number };
 export type OrbitViewport = {
   kind: "orbit";
+  /** Omitted means perspective; encoded addresses always name the projection. */
+  projection?: "perspective" | "parallel";
   yaw: number;
   elev: number;
   zoom: number;
@@ -38,12 +40,12 @@ const nums = (text: string, count: number): number[] | null => {
     : null;
 };
 
-/** `scroll:1200,0`, `plane:0.8,-120,33`, `orbit:45,30,1.25@120.5,-40,12` (yaw,elev,zoom@pivot). */
+/** Orbit addresses name their projection before yaw,elev,zoom@pivot. */
 export const viewportCodec = {
   encode(v: Viewport): string {
     if (v.kind === "scroll") return `scroll:${[v.top, v.left].map(num).join(",")}`;
     if (v.kind === "plane") return `plane:${[v.scale, v.tx, v.ty].map(num).join(",")}`;
-    return `orbit:${[v.yaw, v.elev, v.zoom].map(num).join(",")}@${v.pivot.map(num).join(",")}`;
+    return `orbit:${v.projection ?? "perspective"}:${[v.yaw, v.elev, v.zoom].map(num).join(",")}@${v.pivot.map(num).join(",")}`;
   },
   /** Null on any malformed input, so the url reader falls to the key's default. */
   decode(s: string): Viewport | null {
@@ -60,11 +62,16 @@ export const viewportCodec = {
       return n ? { kind, scale: n[0]!, tx: n[1]!, ty: n[2]! } : null;
     }
     if (kind === "orbit") {
-      const [camera = "", pivot = "", ...rest] = body.split("@");
+      const parts = body.split(":");
+      const projection = parts.length === 1 ? "perspective" : parts[0];
+      if (parts.length > 2 || (projection !== "perspective" && projection !== "parallel"))
+        return null;
+      const pose = parts.at(-1)!;
+      const [camera = "", pivot = "", ...rest] = pose.split("@");
       const c = nums(camera, 3);
       const p = nums(pivot, 3);
       return c && p && !rest.length
-        ? { kind, yaw: c[0]!, elev: c[1]!, zoom: c[2]!, pivot: [p[0]!, p[1]!, p[2]!] }
+        ? { kind, projection, yaw: c[0]!, elev: c[1]!, zoom: c[2]!, pivot: [p[0]!, p[1]!, p[2]!] }
         : null;
     }
     return null;
@@ -80,6 +87,7 @@ export const planeViewportSchema = z.object({
 });
 export const orbitViewportSchema = z.object({
   kind: z.literal("orbit"),
+  projection: z.enum(["perspective", "parallel"]).optional(),
   yaw: finite,
   elev: finite,
   zoom: finite,

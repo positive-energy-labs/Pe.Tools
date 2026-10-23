@@ -1,5 +1,6 @@
 import { PANE_OBSTACLES } from "@pe/kit/lang/floater";
 import { PictureContext } from "@pe/kit/lang/pane";
+import { Switcher } from "@pe/kit/lang/switcher";
 import {
   createContext,
   createElement,
@@ -9,6 +10,7 @@ import {
   useState,
   useRef,
   useCallback,
+  useSyncExternalStore,
   type ReactNode,
 } from "react";
 import {
@@ -86,6 +88,18 @@ type PlaneStage = Common & {
 /** Selection is input to the pivot only. Only these named verbs may move a stage. */
 function useStageBindings(options: OrbitStage | PlaneStage) {
   const go = useViewHistory(options.onHistoryStep);
+  const readProjection = () =>
+    (options.kind === "orbit" ? options.orbit.read()?.projection : null) ?? "perspective";
+  const projection = useSyncExternalStore(
+    options.kind === "orbit" ? options.orbit.subscribe : () => () => {},
+    readProjection,
+    readProjection,
+  );
+  const setProjection = (next: NonNullable<OrbitViewport["projection"]>) => {
+    if (options.kind !== "orbit" || options.axis) return;
+    const pose = options.orbit.read();
+    if (pose && next !== projection) options.orbit.move({ ...pose, projection: next });
+  };
   const [body, setBody] = useState<HTMLElement | null>(null);
   useEffect(() => setBody(document.body), []);
   const poseOf = (target: Bounds | null) => {
@@ -95,7 +109,7 @@ function useStageBindings(options: OrbitStage | PlaneStage) {
     const aspect = rect?.height ? rect.width / rect.height : 1;
     const view = target
       ? subjectPose(bounds, target, orbit.read(), aspect)
-      : frame(bounds.scene, bounds.subject, undefined, aspect);
+      : frame(bounds.scene, bounds.subject, orbit.read() ?? undefined, aspect);
     return host ? clearPose(view, target ?? bounds.subject, bounds.scene, host) : view;
   };
   const frameOn = (target: Bounds | null) => {
@@ -118,6 +132,13 @@ function useStageBindings(options: OrbitStage | PlaneStage) {
     },
     ...(options.kind === "orbit"
       ? ([
+          {
+            hotkey: "O",
+            label: "perspective or parallel",
+            says: "Switch projection, keeping the look-at and framing",
+            available: () => !options.axis,
+            callback: () => setProjection(projection === "parallel" ? "perspective" : "parallel"),
+          },
           {
             hotkey: "P",
             label: "plan or isometric",
@@ -169,6 +190,19 @@ function useStageBindings(options: OrbitStage | PlaneStage) {
     { keys: ["Alt", "← / →"], label: "back / forward (also mouse buttons 3 / 4)" },
   ];
   return {
+    layers:
+      options.kind === "orbit" && !options.axis
+        ? createElement(Switcher<NonNullable<OrbitViewport["projection"]>>, {
+            ariaLabel: "projection",
+            value: projection,
+            onChange: setProjection,
+            options: (["perspective", "parallel"] as const).map((value) => ({
+              value,
+              label: value,
+              title: `${value} projection · O switches projection`,
+            })),
+          })
+        : null,
     goTo: createElement(
       Fragment,
       null,
@@ -227,7 +261,7 @@ export function PictureStage({
   };
   return createElement(
     PictureContext,
-    { value: { selected: picture.selectedBounds != null, box } },
+    { value: { selected: picture.selectedBounds != null, box, layers: bindings.layers } },
     createElement(
       StageContext,
       { value: stage },

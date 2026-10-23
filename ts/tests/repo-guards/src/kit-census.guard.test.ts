@@ -28,6 +28,10 @@ const allow = (entries: Record<string, string>): Allow[] =>
 // Filenames use the wave-4 final homes: land.ts, revit-target.tsx and go-to.tsx.
 // prettier-ignore
 const RULES: Rule[] = [
+  { id: "orbit-release-deadband", doctrine: "N1", pattern: /if \(how && value && !equal\(value, token.from\)\)/g,
+    roots: [K + "components/lang/live-orbit.ts"], allow: [], cannotSee: "Threshold size, pointer behavior or alternate publication paths; deterministic gesture tests own those." },
+  { id: "orbit-camera-swappable", doctrine: "N5", pattern: /const camera = newCamera\(\);/g,
+    roots: [W + "scene/renderer.ts"], allow: [], cannotSee: "Actual projection matrices, framing or Back restoration; camera and stage tests cover the deterministic parts." },
   { id: "css-damage-owner", doctrine: "I2", pattern: /pe-damage-beat|\[data-damage\]/g,
     roots: [W + "**/*.css", K + "**/*.css"],
     allow: [{ glob: K + "components/lang/lang.css", reason: "One shared critical-damage mark owns the pulse and selectors." }],

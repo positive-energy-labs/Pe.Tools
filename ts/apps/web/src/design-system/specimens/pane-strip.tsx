@@ -6,6 +6,7 @@ import { useLiveOrbit } from "@pe/kit/lang/live-orbit";
  */
 import { useCallback, useState } from "react";
 import { PictureReadout } from "@pe/kit/lang/readout";
+import { Switcher } from "@pe/kit/lang/switcher";
 import { Popover, PopoverTrigger, SubjectPopoverContent } from "@pe/kit/lang/popover";
 
 import { Floater } from "@pe/kit/lang/floater";
@@ -82,6 +83,7 @@ const LAYERS = [
 /** The parts alone, as the pane draws them: the strip in a header's trail, a floater in a body corner. */
 function PaneStripAnatomy() {
   const [mode, setMode] = useState("plane");
+  const [projection, setProjection] = useState("perspective");
   const [open, setOpen] = useState(true);
   const corner = {
     key: "anatomy",
@@ -99,7 +101,17 @@ function PaneStripAnatomy() {
           modes={{ value: mode, label: "viewport", options: unbound(MODES), onChange: setMode }}
           floaters={[corner]}
           layers={{ value: ["grid"], options: unbound(LAYERS), onToggle: () => {} }}
-        />
+        >
+          <Switcher
+            ariaLabel="projection"
+            value={projection}
+            onChange={setProjection}
+            options={[
+              { value: "perspective", label: "perspective", title: "Perspective depth" },
+              { value: "parallel", label: "parallel", title: "Parallel projection" },
+            ]}
+          />
+        </PaneStrip>
         <div className="relative h-24 w-64" data-surface="support">
           {open ? <Floater spec={corner} /> : null}
         </div>

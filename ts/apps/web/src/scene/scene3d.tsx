@@ -177,7 +177,7 @@ export function Scene3D(props: Scene3DProps): ReactNode {
     };
     const start = () => {
       gesturing.current = true;
-      if (!r.plane() && !orbit.owns(token)) token = orbit.begin();
+      if (!r.plane() && !orbit.owns(token)) token = orbit.begin(...r.gestureSize());
     };
     let wheelEnd: ReturnType<typeof setTimeout> | undefined;
     // FOOTGUN: publishing during a drag navigates the route and reruns domain projections.
@@ -205,6 +205,7 @@ export function Scene3D(props: Scene3DProps): ReactNode {
     };
     const cancel = () => {
       interruptWheel();
+      pointers.clear();
       orbit.cancel(token);
       token = null;
       gesturing.current = false;
@@ -240,6 +241,8 @@ export function Scene3D(props: Scene3DProps): ReactNode {
     let hover = 0;
     let over: PointerEvent | null = null;
     let down: { x: number; y: number; button: number } | null = null;
+    const pointers = new Set<number>();
+    let multiPointer = false;
     const pointerMove = (event: PointerEvent) => {
       if (event.buttons) return;
       over = event;
@@ -256,7 +259,15 @@ export function Scene3D(props: Scene3DProps): ReactNode {
       for (const name of ATTRS) canvas.removeAttribute(name);
     };
     const pointerDown = (event: PointerEvent) => {
+      if (!pointers.size) multiPointer = false;
+      pointers.add(event.pointerId);
+      multiPointer ||= pointers.size > 1;
       down = { x: event.clientX, y: event.clientY, button: event.button };
+    };
+    const pointerUp = (event: PointerEvent) => {
+      pointers.delete(event.pointerId);
+      // The same click that picks cannot publish a pose, even around a distant selection pivot.
+      if (!pointers.size && !multiPointer && down && isClick(down, event)) orbit.cancel(token);
     };
     // Open facts on click, after the document's outside-press capture. Opening on pointerup lets
     // the trailing click immediately dismiss the new popover as an outside press.
@@ -278,6 +289,7 @@ export function Scene3D(props: Scene3DProps): ReactNode {
     canvas.addEventListener("pointermove", pointerMove);
     canvas.addEventListener("pointerleave", pointerLeave);
     canvas.addEventListener("pointerdown", pointerDown, true);
+    canvas.addEventListener("pointerup", pointerUp, true);
     canvas.addEventListener("click", click);
     canvas.addEventListener("contextmenu", contextMenu);
     canvas.addEventListener("dblclick", doubleClick);
@@ -290,6 +302,7 @@ export function Scene3D(props: Scene3DProps): ReactNode {
       canvas.removeEventListener("pointermove", pointerMove);
       canvas.removeEventListener("pointerleave", pointerLeave);
       canvas.removeEventListener("pointerdown", pointerDown, true);
+      canvas.removeEventListener("pointerup", pointerUp, true);
       canvas.removeEventListener("click", click);
       canvas.removeEventListener("contextmenu", contextMenu);
       canvas.removeEventListener("dblclick", doubleClick);

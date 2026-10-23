@@ -7,6 +7,8 @@ import { useStageReach } from "./reach";
 import { Row } from "@pe/kit/lang/row";
 import { revitTarget } from "@pe/kit/lang/revit-target";
 import { frame } from "./orbit";
+import { Pane } from "@pe/kit/lang/pane";
+import { viewportCodec } from "@pe/agent-contracts";
 import type { Bounds } from "./types";
 
 vi.mock("./view-history", () => ({ useViewHistory: () => vi.fn() }));
@@ -54,7 +56,10 @@ it("selecting only changes the pivot; F frames at release; Escape clears and kee
   const scene: Bounds = { minX: 0, minY: 0, minZ: 0, maxX: 200, maxY: 200, maxZ: 50 };
   const target: Bounds = { minX: 20, minY: 20, minZ: 10, maxX: 30, maxY: 30, maxZ: 20 };
   const initial = frame(scene);
-  const publish = vi.fn();
+  const url = new URL("https://pe.test/ducts");
+  const publish = vi.fn(({ viewport }) =>
+    url.searchParams.set("viewport", viewportCodec.encode(viewport)),
+  );
   const orbit = createLiveOrbit(initial, stageViewport(publish));
   const frames: FrameRequestCallback[] = [];
   vi.stubGlobal("requestAnimationFrame", (callback: FrameRequestCallback) => frames.push(callback));
@@ -72,13 +77,23 @@ it("selecting only changes the pivot; F frames at release; Escape clears and kee
         clearSelection={clearSelection}
       >
         <StageActions />
+        <button
+          onClick={() => {
+            selectedBounds = target;
+            url.searchParams.set("selected", "42");
+          }}
+        >
+          select
+        </button>
         {children}
       </PictureStage>
     ),
   });
   expect(screen.getByText("go to a subject")).toBeTruthy();
-  selectedBounds = target;
+  fireEvent.click(screen.getByText("select"));
   view.rerender();
+  expect(url.searchParams.get("selected")).toBe("42");
+  expect(url.searchParams.has("viewport")).toBe(false);
   expect(orbit.read()).toEqual(initial);
   expect(publish).not.toHaveBeenCalled();
   expect(view.result.current.orbitPivot).toEqual([25, 25, 15]);
@@ -118,5 +133,38 @@ it("selecting only changes the pivot; F frames at release; Escape clears and kee
     { viewport: { ...initial, yaw: 90 } },
     { history: "replace" },
   );
+  view.unmount();
+});
+
+it("the stage supplies a projection Switcher and O publishes one restorable named move", () => {
+  const pose = frame({ minX: 0, minY: 0, minZ: 0, maxX: 10, maxY: 20, maxZ: 30 });
+  const publish = vi.fn();
+  const orbit = createLiveOrbit(pose, stageViewport(publish));
+  const view = render(
+    <PictureStage
+      kind="orbit"
+      orbit={orbit}
+      host={null}
+      bounds={null}
+      selectedBounds={null}
+      clearSelection={() => {}}
+      goTo={null}
+    >
+      <Pane picture title="picture" legend={null}>
+        <StageActions />
+      </Pane>
+    </PictureStage>,
+  );
+  const parallel = screen.getByRole("button", { name: "parallel" });
+  fireEvent.click(parallel);
+  const next = { ...pose, projection: "parallel" };
+  expect(orbit.read()).toEqual(next);
+  expect(publish).toHaveBeenCalledExactlyOnceWith({ viewport: next }, { history: "push" });
+  expect(parallel.getAttribute("aria-pressed")).toBe("true");
+  act(() => orbit.restore(viewportCodec.decode(viewportCodec.encode(pose)) as typeof pose));
+  expect(parallel.getAttribute("aria-pressed")).toBe("false");
+  fireEvent.keyDown(view.container.querySelector("section")!, { key: "o", code: "KeyO" });
+  expect(orbit.read()).toEqual(next);
+  expect(publish).toHaveBeenCalledTimes(2);
   view.unmount();
 });

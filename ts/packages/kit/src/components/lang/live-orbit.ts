@@ -11,11 +11,16 @@ type Bounds = {
 };
 
 type Move = "gesture" | "move";
-export type OrbitGesture = { readonly from: OrbitViewport };
+export type OrbitGesture = {
+  readonly from: OrbitViewport;
+  readonly height: number;
+  readonly span: number;
+};
 const equal = (a: OrbitViewport | null, b: OrbitViewport | null) =>
   a === b ||
   (!!a &&
     !!b &&
+    (a.projection ?? "perspective") === (b.projection ?? "perspective") &&
     a.yaw === b.yaw &&
     a.elev === b.elev &&
     a.zoom === b.zoom &&
@@ -55,7 +60,8 @@ export function createLiveOrbit(
     },
     /** Wake subscribers without a new pose: a flight has ended, so held views read the live one. */
     notify: () => listeners.forEach((notify) => notify()),
-    begin: (): OrbitGesture | null => (gesture = value ? { from: value } : null),
+    begin: (height = 600, span = 2 / (value?.zoom ?? 1)): OrbitGesture | null =>
+      (gesture = value ? { from: value, height: Math.max(height, 1), span } : null),
     owns: (token: OrbitGesture | null) => token !== null && gesture === token,
     preview(token: OrbitGesture | null, next: OrbitViewport) {
       if (token && gesture === token) update(next);
@@ -64,17 +70,28 @@ export function createLiveOrbit(
     end(token: OrbitGesture | null, how: Move | null = "gesture") {
       if (!token || gesture !== token) return;
       gesture = null;
-      if (how && value && !equal(value, token.from)) publish(value, how);
+      if (!how || !value || equal(value, token.from)) return;
+      const from = token.from;
+      // Three screen pixels or half a percent zoom: a click's controls nudge is not navigation.
+      const moved =
+        Math.max(
+          (Math.abs(((value.yaw - from.yaw + 540) % 360) - 180) * token.height) / 360,
+          (Math.abs(value.elev - from.elev) * token.height) / 360,
+          (Math.hypot(...value.pivot.map((v, i) => v - from.pivot[i]!)) * token.height) /
+            token.span,
+        ) >= 3 || Math.abs(Math.log(value.zoom / from.zoom)) >= 0.005;
+      if (how === "move" || moved || value.projection !== from.projection) publish(value, how);
+      else update(from);
     },
     cancel(token: OrbitGesture | null) {
       if (!token || gesture !== token) return;
       gesture = null;
       update(token.from);
     },
-    move(next: OrbitViewport) {
+    move(next: OrbitViewport, how: Move = "move") {
       gesture = null;
       update(next);
-      publish(next, "move");
+      publish(next, how);
     },
     /** An external Page pose. `fly`, when given and both poses exist, travels there instead of jumping. */
     accept(next: OrbitViewport | null, fly?: (to: OrbitViewport) => void) {
@@ -161,7 +178,7 @@ export function flyTo(orbit: LiveOrbit, to: OrbitViewport, flight: Flight = {}) 
       t === 1
         ? to
         : {
-            kind: "orbit",
+            ...from,
             yaw: from.yaw + yaw * k,
             elev: from.elev + (to.elev - from.elev) * k,
             zoom: Math.exp(z0 + (z1 - z0) * k - rise * Math.sin(Math.PI * k)),
@@ -169,7 +186,8 @@ export function flyTo(orbit: LiveOrbit, to: OrbitViewport, flight: Flight = {}) 
           },
     );
     if (t < 1) return void requestAnimationFrame(step);
-    orbit.end(token, how);
+    orbit.end(token, null);
+    if (how) orbit.move(to, how);
     orbit.notify();
     flight.onLand?.();
   });
