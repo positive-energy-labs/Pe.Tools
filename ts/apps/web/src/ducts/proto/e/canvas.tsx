@@ -5,7 +5,16 @@
  * schematic is the one-line. Element facts open beside its projected box; rulings open at the pointer. A pick, a
  * frame, a look and a gesture each write only their own Page keys.
  */
-import { useCallback, useContext, useEffect, useMemo, useRef, useState } from "react";
+import {
+  createContext,
+  useCallback,
+  useContext,
+  useEffect,
+  useMemo,
+  useRef,
+  useState,
+  type ReactNode,
+} from "react";
 import { flushSync } from "react-dom";
 
 import { DUCTS_LAYERS, emptyListSearch, toggleLayer } from "@pe/agent-contracts";
@@ -40,7 +49,8 @@ import { EncodingPicker } from "../encoding/picker";
 import { ScaleLegend } from "../encoding/scale-legend";
 import type { GroupEncoding } from "../encoding/use-encoding";
 import type { ProtoProps } from "../props";
-import { fmtFt } from "./bar";
+import { BarPopover, fmtFt, SystemMark, systemIssues } from "./bar";
+import type { Split, systemList } from "../b/model";
 import type { StageIssue } from "../../inbox-rows";
 import { damageLayer } from "#/scene/damage";
 import { usePictureFloaters } from "./picture-floaters";
@@ -66,6 +76,20 @@ const LAYER_WORDS: Record<
 };
 const fmt = (n: number | null | undefined, d = 3) => (n == null ? "—" : n.toFixed(d));
 
+/** The system a switch is opening ("" = every system) while the held screen still draws the last. */
+export const OpeningContext = createContext<string | null>(null);
+
+/** The plate's transitional line: the only thing a switch repaints before the new system renders. */
+function OpeningNote() {
+  const opening = useContext(OpeningContext);
+  if (opening == null) return null;
+  return (
+    <span className="truncate text-ink-2" data-e-opening={opening}>
+      {opening ? `opening ${opening}…` : "opening every system…"}
+    </span>
+  );
+}
+
 export interface ECanvasExtra {
   issues: readonly StageIssue[];
   hoveredIssue: string | null;
@@ -87,6 +111,19 @@ export interface ECanvasExtra {
   scale: GroupEncoding;
   /** An element's name the way the sidebar reads it (grille labels first). */
   nameOf: (id: number) => string;
+  /** What the picture is of at a glance: the chosen system's row (identity and state) or the
+   * document's census, the system a switch is opening, and whether the read is refreshing. */
+  identity: {
+    system: (ReturnType<typeof systemList>[number] & { needsFix: boolean }) | null;
+    census: { systems: number; priced: number; fix: number };
+    refreshing: boolean;
+    /** Opens the system's tree, where its issues stand. */
+    open: () => void;
+    /** The critical run's loss groups under the ESP, with the system's fans at its head. */
+    breakdown: { split: Split; scale: number; fans: () => ReactNode } | null;
+    /** The title's root crumb: back to every system. */
+    allSystems: () => void;
+  };
 }
 
 export function ECanvas(props: ProtoProps & ECanvasExtra) {
@@ -120,6 +157,7 @@ function Canvas({
   lead,
   scale,
   nameOf,
+  identity,
   setPage,
   onPose,
 }: ProtoProps & ECanvasExtra & { snapshot: NonNullable<ProtoProps["snapshot"]> }) {
@@ -306,7 +344,7 @@ function Canvas({
       ? ""
       : (byId.segments.get(firstId)?.groupId ?? byId.nodes.get(firstId)?.groupId ?? ""));
   const solved = groupId ? priced?.next.byGroup[groupId] : null;
-  const criticalName = solved?.critical != null ? nameOfId(solved.critical) : null;
+  const criticalName = solved?.critical != null ? nameOf(solved.critical) : null;
 
   const selected = useMemo(() => {
     const id =
@@ -417,45 +455,67 @@ function Canvas({
       }
     : undefined;
 
-  // The title is a breadcrumb: the system (press to clear the selection), then the picked element.
+  // The title is a breadcrumb: the system (press it to clear the selection), then the picked
+  // element. Its state, a switch and a re-read speak in the plate: the header strip leaves the
+  // title too little room for them.
   const pickedId =
     page.selected && /^\d+$/.test(page.selected) && !claims.some((c) => c.id === page.selected)
       ? Number(page.selected)
       : null;
   const pickedName = pickedId == null ? null : nameOf(pickedId);
   const subjects = useContext(SubjectTextContext);
+  const systemState = identity.system ? systemIssues(identity.system) : [];
   const title =
     systemName == null ? (
-      "picture"
-    ) : pickedName == null ? (
-      <span className="block truncate" title={systemName}>
-        {systemName}
+      <span className="flex min-w-0 items-center gap-1.5">
+        <span className="truncate">All systems</span>
       </span>
     ) : (
       <span className="flex min-w-0 items-center gap-0.5" data-e-crumb="">
-        <TooltipHint content={`${systemName} · clear the selection`}>
-          <button
-            type="button"
-            className="veil min-w-0 shrink truncate rounded-control px-1 text-ink-2 hover:text-ink"
-            aria-label={`clear the selection in ${systemName}`}
-            onClick={() => setPage({ selected: "" }, { history: "push" })}
-          >
-            {systemName}
-          </button>
-        </TooltipHint>
+        {/* Priority when the header strip leaves little room: the system never shrinks, the
+            picked element keeps a few letters, the root crumb gives way first. */}
+        <button
+          type="button"
+          className="veil min-w-0 shrink-[8] truncate rounded-control px-1 text-ink-2 hover:text-ink"
+          aria-label="show every system"
+          onClick={identity.allSystems}
+        >
+          Systems
+        </button>
         <ChevronRight aria-hidden className="size-3.5 shrink-0 text-ink-2" />
-        <TooltipHint content={`${pickedName} · go to it`}>
-          {/* The picked element's name is a Subject: pressing it is the same alias-click as in text. */}
-          <button
-            type="button"
-            className="veil min-w-0 truncate rounded-control px-1"
-            data-e-selected={pickedId ?? undefined}
-            aria-label={`go to ${pickedName}`}
-            onClick={() => pickedId != null && subjects?.go(pickedId)}
-          >
-            {pickedName}
-          </button>
-        </TooltipHint>
+        {pickedName == null ? (
+          <span className="shrink-0 px-1" title={systemName}>
+            {systemName}
+          </span>
+        ) : (
+          <TooltipHint content={`${systemName} · clear the selection`}>
+            <button
+              type="button"
+              className="veil shrink-0 rounded-control px-1 text-ink-2 hover:text-ink"
+              aria-label={`clear the selection in ${systemName}`}
+              onClick={() => setPage({ selected: "" }, { history: "push" })}
+            >
+              {systemName}
+            </button>
+          </TooltipHint>
+        )}
+        {pickedName == null || pickedId == null ? null : (
+          <>
+            <ChevronRight aria-hidden className="size-3.5 shrink-0 text-ink-2" />
+            <TooltipHint content={`${pickedName} · go to it`}>
+              {/* The picked element's name is a Subject: pressing it is the same alias-click as in text. */}
+              <button
+                type="button"
+                className="veil min-w-[6ch] truncate rounded-control px-1"
+                data-e-selected={pickedId}
+                aria-label={`go to ${pickedName}`}
+                onClick={() => subjects?.go(pickedId)}
+              >
+                {pickedName}
+              </button>
+            </TooltipHint>
+          </>
+        )}
       </span>
     );
 
@@ -555,35 +615,78 @@ function Canvas({
           schematic("main")
         )}
 
+        {/* The plate: what the picture is of and the state it is in, readable without a hover. */}
         <div
-          className="absolute left-2 top-2 flex flex-col gap-0.5 t-small px-1.5 py-1"
+          className="absolute left-2 top-2 flex max-w-[calc(100%-15rem)] min-w-0 flex-col gap-0.5 t-small px-1.5 py-1"
           data-surface="page"
           data-proto-c-header=""
         >
-          <span>
-            fan static{" "}
-            <span className="face-mono">
-              {solved
-                ? solved.fan == null
-                  ? "needs a fix: implausible loss"
-                  : `${fmt(solved.fan, 4)} in-wg`
-                : "unpriced"}
-            </span>{" "}
-            {solved ? (
-              <ProvisionalNote provisional={solved.provisional} of="the fan static" />
-            ) : null}
-          </span>
-          <span>
-            critical run{" "}
-            {solved?.critical != null ? (
-              <>
-                <span className="face-mono">{fmtFt(solved.criticalTel)} eq ft</span> to{" "}
-                {criticalName}
-              </>
-            ) : (
-              <span className="text-ink-2">unpriced</span>
-            )}
-          </span>
+          <OpeningNote />
+          {identity.refreshing ? (
+            <span className="text-ink-2" data-e-refreshing="">
+              refreshing… the last read stays drawn
+            </span>
+          ) : null}
+          {identity.system == null ? (
+            <>
+              <span className="truncate" data-e-census="">
+                <span className="face-mono">{identity.census.systems}</span> systems
+              </span>
+              <span className="truncate">
+                <span className="face-mono">{identity.census.priced}</span> priced ·{" "}
+                <span className="face-mono">{identity.census.fix}</span> need a fix
+              </span>
+            </>
+          ) : (
+            <>
+              <span data-e-state="">
+                {systemState.length ? (
+                  <>
+                    <SystemMark issues={systemState} open={identity.open} />{" "}
+                  </>
+                ) : null}
+                {solved?.fan == null ? (
+                  <span data-tone={solved ? "alarm" : undefined}>
+                    {solved ? "no ESP: an implausible loss" : "not priced"}
+                  </span>
+                ) : (
+                  <>
+                    {identity.breakdown ? (
+                      <BarPopover
+                        split={identity.breakdown.split}
+                        scale={identity.breakdown.scale}
+                        head={identity.breakdown.fans}
+                        className="inline-flex! underline decoration-dotted decoration-line-2 underline-offset-2"
+                      >
+                        ESP <span className="face-mono">{fmt(solved.fan, 3)} in-wg</span>
+                      </BarPopover>
+                    ) : (
+                      <>
+                        ESP <span className="face-mono">{fmt(solved.fan, 3)} in-wg</span>
+                      </>
+                    )}
+                    {solved.critical != null ? (
+                      <>
+                        {" "}
+                        · TEL <span className="face-mono">{fmtFt(solved.criticalTel)} ft</span> to{" "}
+                        <button
+                          type="button"
+                          className="underline decoration-line-2 underline-offset-2"
+                          onClick={() => pick(solved.critical!)}
+                        >
+                          {criticalName}
+                        </button>
+                      </>
+                    ) : null}{" "}
+                    <ProvisionalNote provisional={solved.provisional} of="the fan static" />
+                  </>
+                )}
+              </span>
+              <span className="truncate text-ink-2" title={identity.system.sub} data-e-identity="">
+                {identity.system.sub}
+              </span>
+            </>
+          )}
         </div>
 
         <div

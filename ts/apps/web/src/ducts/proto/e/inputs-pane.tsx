@@ -15,6 +15,7 @@ import { ListView } from "@pe/kit/lang/list-view";
 import { observedElements, useNativeObservation } from "#/revit/observation";
 
 import { EquipmentCells, TerminalCells, type InputsCtx } from "./input-cells";
+import { fanFacts } from "./fan-sections";
 import type { ReactNode } from "react";
 import type { LossesWork } from "../../work";
 
@@ -65,6 +66,11 @@ export function InputsPane(props: InputsPaneProps) {
   const { snapshot, priced, work, scope, nameOf, selected, select, light } = props;
   const { units, terminals } = useMemo(() => inputRowsOf(snapshot, scope), [snapshot, scope]);
   const ctx: InputsCtx | null = priced ? { snapshot, priced, work, groups: scope.groups } : null;
+  // A unit that is a fan reads as one, with its own section's TEL and ESP beside its cells.
+  const fans = useMemo(
+    () => new Map(fanFacts(priced, scope.groups, nameOf).map((f) => [f.unit, f])),
+    [priced, scope.groups, nameOf],
+  );
   const items = useMemo(
     () => [
       ...units.map((id) => ({ id, kind: "unit" as const })),
@@ -132,12 +138,13 @@ export function InputsPane(props: InputsPaneProps) {
         }}
         row={({ id, kind }) => {
           const target = observedElements(observation, [id]);
+          const fan = kind === "unit" ? fans.get(id) : undefined;
           return {
             lines: 2,
             wrap: true,
             label: nameOf(id),
-            title: nameOf(id),
-            aside: kind,
+            title: fan ? `${nameOf(id)} · ${fan.role}: ${fan.says}` : nameOf(id),
+            aside: fan?.role ?? kind,
             sub: (
               <span
                 className="flex min-w-0 flex-col gap-0.5"
@@ -147,6 +154,11 @@ export function InputsPane(props: InputsPaneProps) {
                 {kind === "unit" ? (
                   <>
                     <EquipmentCells ctx={ctx} id={id} />
+                    {fan ? (
+                      <span className="face-mono t-small text-ink-2" data-e-fan-facts={id}>
+                        {fan.says}
+                      </span>
+                    ) : null}
                     {props.fanVerbs?.(id) ?? null}
                   </>
                 ) : (

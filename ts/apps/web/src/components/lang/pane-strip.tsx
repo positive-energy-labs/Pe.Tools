@@ -54,9 +54,15 @@ function crowded(strip: HTMLElement) {
     ?.querySelector<HTMLElement>("[data-slot='pane-title']");
   const floor =
     title && parseFloat(getComputedStyle(title).getPropertyValue("--control-h")) * TITLE_FLOOR;
+  // A title whose parts truncate on their own (a breadcrumb) is cut even when the heading is not.
+  const cut =
+    title != null &&
+    [title, ...title.querySelectorAll<HTMLElement>("*")].some(
+      (part) => part.scrollWidth > part.clientWidth,
+    );
   return (
     (trail != null && trail.scrollWidth > trail.clientWidth) ||
-    (title != null && title.scrollWidth > title.clientWidth && title.clientWidth < (floor || 0))
+    (cut && title!.clientWidth < (floor || 0))
   );
 }
 

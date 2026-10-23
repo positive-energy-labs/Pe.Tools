@@ -10,7 +10,7 @@ import {
   type ReactNode,
 } from "react";
 
-import { ChevronLeft, ChevronRight } from "lucide-react";
+import { ChevronDown, ChevronLeft, ChevronRight, ChevronUp } from "lucide-react";
 
 import { Button } from "@pe/kit/lang/button";
 import { tv } from "@pe/kit/lib/tv";
@@ -324,18 +324,31 @@ export function PaneSplit({ axis, start, end, resize, hide, grow, secondary }: P
         {rail && (
           <div
             data-slot="pane-rail"
-            className="flex min-h-0 flex-col items-center gap-2 py-2"
+            // A rail lies along its split: upright beside a column, flat under a row.
+            className={
+              horizontal
+                ? "flex min-h-0 flex-col items-center gap-2 py-2"
+                : "flex min-w-0 items-center gap-2 px-2"
+            }
             style={style}
           >
             <Button
               label={`Expand ${railTitle}`}
-              icon={side === "start" ? ChevronRight : ChevronLeft}
+              icon={
+                horizontal
+                  ? side === "start"
+                    ? ChevronRight
+                    : ChevronLeft
+                  : side === "start"
+                    ? ChevronDown
+                    : ChevronUp
+              }
               refusal={resize?.collapse?.refusal}
               onClick={() => resize?.collapse?.onCollapsedChange?.(false)}
             />
             <span
               data-slot="pane-rail-title"
-              className="[writing-mode:vertical-rl] data-[disabled]:text-ink-mute"
+              className={`${horizontal ? "[writing-mode:vertical-rl]" : "min-w-0 truncate"} data-[disabled]:text-ink-mute`}
               data-disabled={resize?.collapse?.refusal != null || undefined}
             >
               {railTitle}

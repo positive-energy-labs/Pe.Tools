@@ -50,8 +50,9 @@ export interface ProtoProps {
   /** The bound document (session/openId), or null. Unread: element targets come from the
    * displayed observation (`useNativeObservation`); goes when `route.tsx` stops passing it. */
   doc: { session: string; openId: string } | null;
-  /** Loading state of the host reads. */
-  reading: { pending: boolean; error: string | null };
+  /** Loading state of the host reads. `refreshing`: a re-read is in flight or pricing, and the
+   * screen draws the last priced read until it lands. */
+  reading: { pending: boolean; error: string | null; refreshing: boolean };
   /** The route's preview and apply as the handle arms or refuses them; the Write group draws both. */
   actions: {
     preview: ActionHandle;

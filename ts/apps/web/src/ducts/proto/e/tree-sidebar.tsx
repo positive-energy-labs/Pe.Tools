@@ -240,7 +240,21 @@ export function SystemTree({
               <span>run · stretch · part</span>
             </TooltipHint>
           ),
-          meta: ctx.reading?.quantity ? undefined : <MetaHeader />,
+          // A quantity reading labels its bars here, where the header block's legend used to sit.
+          meta: ctx.reading?.quantity ? (
+            <TooltipHint content="bar = the largest under each row; full width = the system's max">
+              <span data-e-legend={ctx.reading.key}>
+                {ctx.reading.label}, {ctx.reading.quantity.unit} · max{" "}
+                <span className="face-mono">
+                  {ctx.reading.quantity.max == null
+                    ? "—"
+                    : formatQuantity(ctx.reading.quantity, ctx.reading.quantity.max)}
+                </span>
+              </span>
+            </TooltipHint>
+          ) : (
+            <MetaHeader />
+          ),
         }}
         row={(n) => {
           const target = observedElements(observation, idsOf(n));

@@ -1,82 +1,69 @@
 /**
- * A multi-fan system's sections (ducts-domain `fan-sections.ts`): one row per fan, largest design
- * flow first, each with its own TEL and ESP and where it ends. The largest fan owns the trunk; a
- * smaller fan owns its port to the junction where its air meets a larger fan's. Hovering a row
- * lights the elements that fan owns; pressing it selects its critical grille.
+ * A system's fans (ducts-domain `fan-sections.ts`), in words: one line per fan, largest design flow
+ * first, each with its own TEL and ESP and where it ends. The largest fan owns the trunk; a smaller
+ * fan owns its port to the junction where its air meets a larger fan's. The sidebar no longer
+ * carries them as cards (kaitpw 2026-10-23: "only takes up space"): they read in the system row's
+ * breakdown popover and on each unit's Inputs row.
  */
+import type { Priced } from "@pe/ducts-domain/pricing";
 import type { FanResult } from "@pe/ducts-domain/losses";
-import { useList } from "@pe/kit/lang/collection";
-import { ListView } from "@pe/kit/lang/list-view";
-import { observedElements, useNativeObservation } from "#/revit/observation";
 
 import { fmtFt } from "./bar";
 
-export function FanSections({
-  title = null,
-  fans,
-  nameOf,
-  light,
-  select,
-}: {
-  /** The section these fans root, when the system has several ("SA 19 · FC-17"). */
-  title?: string | null;
-  fans: readonly FanResult[];
-  nameOf: (id: number) => string;
-  light: (ids: readonly number[] | null) => void;
-  select: (id: number | null) => void;
-}) {
-  const observation = useNativeObservation();
-  const list = useList({
-    items: fans,
-    keyOf: (fan) => `fan:${fan.unit}`,
-    search: (fan) => ({ text: [nameOf(fan.unit)], ids: [fan.unit] }),
-    select: "single",
-    onPick: (fan) => select(fan.critical),
+export interface FanFact {
+  unit: number;
+  /** "largest fan" with several fans in its group, else "fan". */
+  role: string;
+  says: string;
+}
+
+/** Every fan of these groups, in each group's largest-first order. */
+export function fanFacts(
+  priced: Priced | null,
+  groups: readonly string[],
+  nameOf: (id: number) => string,
+): FanFact[] {
+  return groups.flatMap((g) => {
+    const fans: readonly FanResult[] = priced?.next.byGroup[g]?.fans ?? [];
+    return fans.map((f, k) => {
+      const where =
+        fans.length < 2
+          ? ""
+          : k === 0
+            ? " · owns the trunk"
+            : f.junction == null
+              ? " · meets no larger fan"
+              : ` · to ${nameOf(f.junction)}${f.viaJunction ? ", then the trunk" : ""}`;
+      return {
+        unit: f.unit,
+        role: fans.length > 1 && k === 0 ? "largest fan" : "fan",
+        says: `${f.cfm ?? "no"} cfm · TEL ${fmtFt(f.tel)} ft · ESP ${f.esp.toFixed(3)} in-wg${where}`,
+      };
+    });
   });
-  if (fans.length < 2) return null;
+}
+
+/** The fans as a small table: the head of a system's breakdown popover. */
+export function FanFacts({
+  facts,
+  nameOf,
+}: {
+  facts: readonly FanFact[];
+  nameOf: (id: number) => string;
+}) {
+  if (!facts.length) return null;
   return (
-    <div
-      aria-label={title ? `fan sections of ${title}` : "fan sections"}
-      className="hairline-b"
-      data-e-fans
-      onMouseLeave={() => light(null)}
-    >
-      {title ? <p className="t-small text-ink-2 px-(--item-mark-pad-x) py-1">{title}</p> : null}
-      <ListView
-        list={list}
-        aria-label={title ? `fan sections of ${title}` : "fan sections"}
-        bar={false}
-        empty={{ message: "no fan sections", exit: "Choose a system with several fans" }}
-        row={(f) => {
-          const k = fans.indexOf(f);
-          const target = observedElements(observation, f.owned);
-          const where =
-            k === 0
-              ? "owns the trunk"
-              : f.junction == null
-                ? "meets no larger fan"
-                : `to ${nameOf(f.junction)}${f.viaJunction ? ", then the trunk" : ""}`;
-          const sub = `${f.cfm ?? "no"} cfm · TEL ${fmtFt(f.tel)} ft · ESP ${f.esp.toFixed(3)} in-wg · ${where}`;
-          return {
-            lines: 2,
-            wrap: true,
-            label: nameOf(f.unit),
-            title: `${nameOf(f.unit)}: ${sub}`,
-            aside: k === 0 ? "largest fan" : "fan",
-            sub: (
-              <span className="flex flex-wrap gap-x-2">
-                <span className="whitespace-nowrap">{f.cfm ?? "no"} cfm</span>
-                <span className="whitespace-nowrap">TEL {fmtFt(f.tel)} ft</span>
-                <span className="whitespace-nowrap">ESP {f.esp.toFixed(3)} in-wg</span>
-                <span>{where}</span>
-              </span>
-            ),
-            onMouseEnter: () => light(f.owned),
-            revitIds: target.ids,
-            revitRefs: target.refs,
-          };
-        }}
-      />
-    </div>
+    <table className="mb-2 w-full text-left" aria-label="fans" data-e-fans="">
+      <tbody className="hairline-rows">
+        {facts.map((f) => (
+          <tr key={f.unit}>
+            <th scope="row" className="py-0.5 pr-2 font-normal whitespace-nowrap">
+              {nameOf(f.unit)} <span className="text-ink-2">{f.role}</span>
+            </th>
+            <td className="face-mono py-0.5">{f.says}</td>
+          </tr>
+        ))}
+      </tbody>
+    </table>
   );
 }
