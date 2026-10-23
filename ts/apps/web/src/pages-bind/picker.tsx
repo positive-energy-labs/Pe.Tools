@@ -15,6 +15,7 @@ import {
 import { Button } from "@pe/kit/lang/button";
 import { EmptyState } from "@pe/kit/lang/empty";
 import { Row } from "@pe/kit/lang/row";
+import { TooltipHint } from "@pe/kit/lang/tooltip";
 import { emptyListState, useList } from "@pe/kit/lang/collection";
 import { ListView } from "@pe/kit/lang/list-view";
 import { Section } from "#/components/lang/section";
@@ -181,16 +182,15 @@ export function BindPicker({
                 label: choice.thread.title || "untitled thread",
                 aside: targetsLabel(choice.thread.head.targets) ?? "no target",
                 meta: (
-                  <span
-                    className="face-mono"
-                    title={
+                  <TooltipHint
+                    content={
                       writes(choice.thread)
                         ? "The Page targets the thread's document and may write it: a person added it to the thread."
                         : "The Page targets the thread's document read-only: no person added it to the thread."
                     }
                   >
-                    {writes(choice.thread) ? "thread" : "read"}
-                  </span>
+                    <span className="face-mono">{writes(choice.thread) ? "thread" : "read"}</span>
+                  </TooltipHint>
                 ),
               }
             : {

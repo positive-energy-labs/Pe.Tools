@@ -4,6 +4,7 @@ import { useState } from "react";
 import { useList, emptyListState } from "@pe/kit/lang/collection";
 import { ListView, type ListRowParts } from "@pe/kit/lang/list-view";
 import { TOOLS } from "./catalogue";
+import { TooltipHint } from "@pe/kit/lang/tooltip";
 import type { PodRouteDescriptor } from "@pe/agent-contracts";
 import { TASKS, routeKey, friendlyObservation, resumeRefusal } from "./model";
 import { useDestination, useNavigation } from "./state";
@@ -75,13 +76,15 @@ function NavigationStatus() {
   return (
     <div className="flex flex-wrap items-center gap-2 text-ink-2">
       {/* I6: a word and its value; the reason rides the tooltip. */}
-      <span title={error ?? undefined}>
-        {loading
-          ? "reading…"
-          : error
-            ? `unavailable${snapshot ? ` · cached ${at(snapshot.observedAt)} · resume paused` : ""}`
-            : `inventory · ${snapshot ? at(snapshot.observedAt) : "never"}`}
-      </span>
+      <TooltipHint content={error ?? undefined}>
+        <span>
+          {loading
+            ? "reading…"
+            : error
+              ? `unavailable${snapshot ? ` · cached ${at(snapshot.observedAt)} · resume paused` : ""}`
+              : `inventory · ${snapshot ? at(snapshot.observedAt) : "never"}`}
+        </span>
+      </TooltipHint>
       <Button
         label="Refresh navigation inventory"
         icon={RefreshCw}
@@ -91,7 +94,9 @@ function NavigationStatus() {
         Refresh
       </Button>
       {snapshot?.truncated && (
-        <span title="The inventory is bounded; some records are not shown.">bounded</span>
+        <TooltipHint content="The inventory is bounded; some records are not shown.">
+          <span>bounded</span>
+        </TooltipHint>
       )}
       {snapshot?.observations.map((observation) => (
         <p key={observation} className="w-full">
