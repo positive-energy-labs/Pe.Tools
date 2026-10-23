@@ -1,3 +1,4 @@
+import { SvgTip } from "@pe/kit/lang/tooltip";
 /**
  * The model picture's annotation layer: real DOM over the meshes, re-projected every frame the
  * camera moves (`Scene3D.onProject`, or a fit with no meshes). Labels, numbered finding marks, the
@@ -411,7 +412,7 @@ export function Annotations({
               }}
               onClick={() => subjects?.go?.(ref.id)}
             >
-              <title>{`${ref.name}: go to it`}</title>
+              <SvgTip content={"? go"} />
               <circle r={CHIP / 2} />
               <text y={3.5} textAnchor="middle">
                 {ref.number}

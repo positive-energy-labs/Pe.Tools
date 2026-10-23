@@ -1,3 +1,4 @@
+import { SvgTip } from "@pe/kit/lang/tooltip";
 /**
  * The plan's feedback layer (V6 calm): a tools bar with two marks and a note, the drawn marks,
  * one count badge per region with cards, and the card projected beside its room. A draft is
@@ -218,7 +219,7 @@ export function RoomsSketch({
                 const n = list.filter((c) => c.state === state).length;
                 const cell = (
                   <g key={state}>
-                    <title>{CARD_META[state].says}</title>
+                    <SvgTip content={state} />
                     <rect x={x} y={y} width={BADGE.w} height={BADGE.h} fill={ink(state)} />
                     <text
                       x={x + BADGE.w / 2}

@@ -27,7 +27,7 @@ import { assignFamilyRule } from "./rule-assignment";
 import { barRows, ruleConditions, selectedBarRow, type BarRow } from "./bar-model";
 import { fanLoad } from "@pe/ducts-domain/fan-headroom";
 import type { Provisional } from "@pe/ducts-domain/losses";
-import { Popover, PopoverContent, PopoverTrigger } from "@pe/kit/lang/popover";
+import { Popover, PopoverContent, PopoverTrigger, usePopoverSide } from "@pe/kit/lang/popover";
 import { revitTarget } from "@pe/kit/lang/row";
 import type { ListRowParts } from "@pe/kit/lang/list-view";
 import { tokenRef } from "@pe/kit/lib/token";
@@ -253,8 +253,8 @@ export function SystemMark({ issues, open }: { issues: readonly SystemIssue[]; o
           {issues.length > 1 ? ` +${issues.length - 1}` : ""}
         </span>
       </PopoverTrigger>
-      <PopoverContent side="bottom" align="end" className="w-72">
-        <ul className="flex flex-col gap-1" data-e-issues="">
+      <PopoverContent facing className="w-72">
+        <ul className="flex flex-col gap-1" data-e-issues="" data-facing-rows>
           {issues.map((issue) => (
             <li key={issue.says}>
               <button
@@ -361,7 +361,7 @@ function BreakdownList({
   const context = useContext(RuleContext);
   const root = useRef<HTMLDivElement>(null);
   const bar = useRef<HTMLSpanElement>(null);
-  const [side, setSide] = useState("bottom");
+  const side = usePopoverSide();
   const [expanded, setExpanded] = useState(false);
   const [selected, setSelected] = useState<{ key: string; ids: readonly number[] } | null>(null);
   const [leaders, setLeaders] = useState<{ key: string; d: string }[]>([]);
@@ -400,15 +400,6 @@ function BreakdownList({
   const rows = flip ? [...bare, ...ordered] : [...ordered, ...bare];
   const barCol = Math.min(144, Math.max(96, barW));
 
-  useLayoutEffect(() => {
-    const popup = root.current?.closest("[data-side]");
-    if (!popup) return;
-    const read = () => setSide(popup.getAttribute("data-side") ?? "bottom");
-    read();
-    const watch = new MutationObserver(read);
-    watch.observe(popup, { attributes: true, attributeFilter: ["data-side"] });
-    return () => watch.disconnect();
-  }, []);
   useLayoutEffect(() => {
     const box = root.current;
     if (!box) return;
@@ -796,8 +787,7 @@ export function BarPopover({
         {children}
       </PopoverTrigger>
       <PopoverContent
-        side="bottom"
-        align="start"
+        facing
         className="w-[min(74rem,var(--available-width))] p-2"
         onClick={(event) => event.stopPropagation()}
       >

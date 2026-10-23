@@ -1045,3 +1045,14 @@ tr.dl-row[data-damage]:not([data-selected], [data-active]) > td {
 .subject-badge[data-lit] > text {
   fill: var(--subject-mark-lit-ink);
 }
+
+/* The first row stays nearest the anchor when its popup opens above it. */
+[data-facing][data-side="top"] [data-facing-rows] {
+  display: flex;
+  flex-direction: column-reverse;
+}
+
+/* Hints retain a hit surface even inside a pointer-transparent SVG decoration layer. */
+[data-svg-tip] {
+  pointer-events: visiblePainted;
+}

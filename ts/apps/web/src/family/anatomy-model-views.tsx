@@ -1,3 +1,4 @@
+import { SvgTip } from "@pe/kit/lang/tooltip";
 import { useMemo } from "react";
 import { token } from "@pe/kit/lib/token";
 import { EmptyState } from "@pe/kit/lang/empty";
@@ -111,7 +112,6 @@ export function ModelViews({
               conn={conn}
               view={view}
               focusedParts={focusedParts}
-              world={world}
               X={X}
               Y={Y}
               scale={scale}
@@ -129,7 +129,7 @@ export function ModelViews({
               role="img"
               aria-label={`family ${view.key} view`}
             >
-              <title>{`${view.label} — true scale, resolved as the ${typeName} type through the document's own bindings. The other types are the thin outlines behind it.`}</title>
+              <SvgTip content={view.label} />
 
               {/* datum: elevations get a ground line, the plan gets the origin crosshair */}
               {view.v === "z" ? (
@@ -194,14 +194,7 @@ export function ModelViews({
 
               {sheet.solids.map((geo) => {
                 const active = focusedParts.has(geo.slug);
-                const prose = world.source.profile.solids[geo.slug] ?? geo.kind;
-                const title = (
-                  <title>
-                    {geo.isVoid
-                      ? `${geo.slug} — ${prose}. Dashed because it is a SUBTRACTION: declared volume with no material behind it.`
-                      : `${geo.slug} — ${prose}. Drawn true to the ${typeName} type's numbers; hovering it lights the parameters it consumes in the table.`}
-                  </title>
-                );
+                const title = <SvgTip content={geo.isVoid ? "void" : "solid"} />;
                 /* THE ONE LEGAL DASH AMONG PARTS: a void must never read as material. */
                 const shared = {
                   ...hover(geo.slug),
@@ -255,11 +248,7 @@ export function ModelViews({
                     onMouseEnter={param ? () => onFocus({ kind: "param", id: param }) : undefined}
                     onMouseLeave={param ? () => onFocus(null) : undefined}
                   >
-                    <title>
-                      {param
-                        ? `plane ${plane.slug} — a reference plane sitting ${plane.text} off its datum, driven by ${param}. It is a dim the processor will create; hovering lights that parameter's row in the table.`
-                        : `plane ${plane.slug} — a reference plane sitting ${plane.text} off its datum. This is the authored position; dimension constraints may change it in Revit.`}
-                    </title>
+                    <SvgTip content={"plane"} />
                     <line {...line} stroke="transparent" strokeWidth={7} />
                     <line {...line} stroke={stroke} strokeWidth={lit ? 1.2 : 0.6} />
                     <text

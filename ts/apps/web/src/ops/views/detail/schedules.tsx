@@ -1,3 +1,4 @@
+import { SvgTip } from "@pe/kit/lang/tooltip";
 import { token } from "@pe/kit/lib/token";
 import type { ReactNode } from "react";
 import type { RevitDetailSchedules, RevitDetailSheets } from "@pe/host-contracts/generated";
@@ -181,9 +182,7 @@ export function SheetCanvas({ entry }: { entry: RevitDetailSheets.Res.SheetDetai
               strokeWidth={0.5}
               vectorEffect="non-scaling-stroke"
             >
-              <title>
-                {anchor.kind}: {anchor.label}
-              </title>
+              <SvgTip content={anchor.kind} />
             </rect>
             <text
               x={x + bw * 0.03}

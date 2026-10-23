@@ -1,3 +1,4 @@
+import { SvgTip } from "@pe/kit/lang/tooltip";
 /** The subject's own words over the model picture (gaps, inferred joins, omissions, legs, places),
  * and the caption every annotation label wears. */
 import { createContext, useContext, type ReactNode } from "react";
@@ -92,7 +93,7 @@ export function SubjectLabels({
         const s = span(gap.from, gap.to);
         return s ? (
           <g key={`${gap.after}-${gap.before}`} data-gap={`${gap.after}-${gap.before}`}>
-            <title>{`gap: ${gap.after} and ${gap.before} share no connector`}</title>
+            <SvgTip content={"gap"} />
             <line {...s} stroke={token("ink-2")} strokeWidth={1.5} className="dash-void" />
             <Caption x={s.mx} y={s.my - 8} anchor="middle">
               gap

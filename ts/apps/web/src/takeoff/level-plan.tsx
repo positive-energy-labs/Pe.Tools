@@ -1,3 +1,4 @@
+import { SvgTip } from "@pe/kit/lang/tooltip";
 import { useMemo, type ReactNode } from "react";
 import { useScopeGestures, useScopeKeys } from "@pe/kit/keys";
 import { PLANE_GESTURES } from "#/scene/gestures";
@@ -329,7 +330,7 @@ export function LevelPlan({
             transformOrigin: "0 0",
           }}
         >
-          <title>Level plan — declared zones, detected rooms, held residue</title>
+          <SvgTip content={"level plan"} />
 
           {plan ? <PlanImageLayer plan={plan} frame={frame} /> : null}
 
@@ -401,7 +402,7 @@ export function LevelPlan({
                         vectorEffect="non-scaling-stroke"
                         onClick={click}
                       >
-                        <title>{`${room.name} — ${room.sqft} sf · ${STATE_META[state].label} (no detected boundary)`}</title>
+                        <SvgTip content={STATE_META[state].label} />
                       </circle>
                     );
                   return (
@@ -420,7 +421,7 @@ export function LevelPlan({
                         strokeWidth={isCursor ? 2.5 : 1}
                         vectorEffect="non-scaling-stroke"
                       >
-                        <title>{`${room.name} — ${room.sqft} sf · ${STATE_META[state].label}`}</title>
+                        <SvgTip content={STATE_META[state].label} />
                       </path>
                       {on && room.sqft > 40 && (
                         <text
