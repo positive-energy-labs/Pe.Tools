@@ -1,6 +1,10 @@
 /** The Situation's marks: a sentence slot and its choice (dotted = operable, dashed = empty). */
 import type { ReactNode } from "react";
-import { Popover, PopoverContent, PopoverTrigger } from "@pe/kit/lang/popover";
+import {
+  Popover,
+  SubjectPopoverContent as PopoverContent,
+  PopoverTrigger,
+} from "@pe/kit/lang/popover";
 import { HotkeyCommand } from "#/components/lang/hotkey-command";
 import { useScopeKeys } from "@pe/kit/keys";
 

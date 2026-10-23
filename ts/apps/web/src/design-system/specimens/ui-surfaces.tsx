@@ -1,4 +1,9 @@
-import { Popover, PopoverContent, PopoverTrigger, SubjectBox } from "@pe/kit/lang/popover";
+import {
+  Popover,
+  SubjectPopoverContent as PopoverContent,
+  PopoverTrigger,
+  SubjectBox,
+} from "@pe/kit/lang/popover";
 import { useRef } from "react";
 import { Button } from "@pe/kit/lang/button";
 import { useState } from "react";

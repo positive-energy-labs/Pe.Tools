@@ -1,5 +1,9 @@
 import { useRef, useState } from "react";
-import { Popover, PopoverContent, PopoverTrigger } from "@pe/kit/lang/popover";
+import {
+  Popover,
+  SubjectPopoverContent as PopoverContent,
+  PopoverTrigger,
+} from "@pe/kit/lang/popover";
 import { useRouterState } from "@tanstack/react-router";
 import { Settings2 } from "lucide-react";
 import { appRouteByPath } from "@pe/agent-contracts";
@@ -54,7 +58,6 @@ export function ChromeSettings({ word = false }: { word?: boolean }) {
       />
       <PopoverContent
         keepMounted
-        align="end"
         ref={popup}
         data-surface="page"
         className="w-auto min-w-48 p-1"

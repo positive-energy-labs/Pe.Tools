@@ -13,7 +13,7 @@ import type { IssueKind } from "@pe/ducts-domain/issues";
  * The layout is a tidy tree: each vertex's first child continues its row (the longest run first,
  * so it reads straight along the top) and later children hang below.
  */
-import { useMemo } from "react";
+import { useMemo, type ReactNode } from "react";
 
 import { tokenRef } from "@pe/kit/lib/token";
 import {
@@ -109,6 +109,7 @@ const fmt = (value: number, digits = 0) => value.toFixed(digits);
 const clip = (text: string, n: number) => (text.length > n ? `${text.slice(0, n - 1)}…` : text);
 
 export interface SchematicProps {
+  readout: ReactNode;
   index: DuctIndex;
   /** The group to draw; empty draws the invitation to choose one. */
   group: string;
@@ -127,6 +128,7 @@ export interface SchematicProps {
 const SELECT_WIDTH = 8;
 
 export function Schematic({
+  readout,
   index,
   group,
   encoding,
@@ -160,9 +162,12 @@ export function Schematic({
 
   if (!tree || !layout)
     return (
-      <p className="text-ink-2 t-small p-3" data-schematic="empty">
-        {group ? "this network has no tree to draw" : "choose a system to see its schematic"}
-      </p>
+      <>
+        {readout}
+        <p className="text-ink-2 t-small p-3" data-schematic="empty">
+          {group ? "this network has no tree to draw" : "choose a system to see its schematic"}
+        </p>
+      </>
     );
 
   const pick = (id: number) => onSelect(selected.has(id) ? null : id);
@@ -308,7 +313,9 @@ export function Schematic({
     </div>
   ) : (
     <div className="size-full min-h-0" data-schematic-slot="main">
-      <PanZoom content={{ width: layout.width, height: layout.height }}>{svg}</PanZoom>
+      <PanZoom readout={readout} content={{ width: layout.width, height: layout.height }}>
+        {svg}
+      </PanZoom>
     </div>
   );
 }

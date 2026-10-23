@@ -1,7 +1,11 @@
 import { ButtonGroup } from "@pe/kit/lang/button-group";
 /** The Situation's verb row: each verb button with its flag, and the board that stands them up. */
 import { createContext, useContext, useEffect, useState, type ReactNode } from "react";
-import { Popover, PopoverContent, PopoverTrigger } from "@pe/kit/lang/popover";
+import {
+  Popover,
+  SubjectPopoverContent as PopoverContent,
+  PopoverTrigger,
+} from "@pe/kit/lang/popover";
 import type { LucideIcon } from "lucide-react";
 import { FactChip } from "@pe/kit/lang/chip";
 import { KeyHint } from "@pe/kit/lang/key-hint";

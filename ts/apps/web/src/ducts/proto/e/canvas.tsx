@@ -3,6 +3,7 @@ import { ButtonGroup } from "@pe/kit/lang/button-group";
 /** The model/schematic pane, its fixed readout and floaters. Camera policy belongs to useStage. */
 import { nameOrFallback } from "@pe/kit/lang/subject-text";
 import {
+  cloneElement,
   createContext,
   useContext,
   useEffect,
@@ -35,7 +36,7 @@ import { labelOfNode, legsOf } from "../../legs";
 import { sceneRequestOf } from "../../manifest";
 import { findingLayers, findingShapes, noRunLayers } from "../../finding-layers";
 import { boundsOfIds, ModelPicture, poseOf, usePictureBounds } from "../../model-picture";
-import { PictureStage, stageViewport } from "#/scene/stage-controller";
+import { PictureStage, useStage, stageViewport } from "#/scene/stage-controller";
 import { GoToSubject } from "./go-to";
 import { PictureReadout } from "@pe/kit/lang/readout";
 import { PaneCrumb } from "@pe/kit/lang/pane-crumb";
@@ -196,7 +197,7 @@ function Canvas({
   const lastPicture = useRef<{
     key: string;
     system: string;
-    view: ReactNode;
+    view: ReturnType<typeof ModelPicture>;
     orbit: ReturnType<typeof useLiveOrbit>;
   } | null>(null);
   const holding =
@@ -443,7 +444,7 @@ function Canvas({
     );
     setOpenRuling(r.n);
   };
-  const schematic = (size: "main" | "inset") => (
+  const schematic = (size: "main" | "inset", readout: ReactNode = null) => (
     <Schematic
       index={index}
       group={lead}
@@ -453,6 +454,7 @@ function Canvas({
       onSelect={(id) => pick(id)}
       onHover={onHover}
       size={size}
+      readout={readout}
     />
   );
 
@@ -514,8 +516,55 @@ function Canvas({
     />
   );
 
+  const viewOf = (stage: ReturnType<typeof useStage>, ids: ReadonlySet<number>) =>
+    picture === "model" ? stage.poseOf(boundsOfIds(read.meshes, scene, ids)) : null;
+  const markLanding = (ids: ReadonlySet<number>, back: string) => () => {
+    const host = pictureHost?.getBoundingClientRect();
+    const box = onScreen(boundsOfIds(read.meshes, scene, ids));
+    setLanded({
+      back,
+      n: performance.now(),
+      box:
+        box && host
+          ? DOMRect.fromRect({
+              x: box.x - host.left,
+              y: box.y - host.top,
+              width: box.width,
+              height: box.height,
+            })
+          : null,
+    });
+  };
+  const backWord = () =>
+    /^\d+$/.test(page.selected) ? nameOf(Number(page.selected)) : "the previous view";
+  const jumpTo = (stage: ReturnType<typeof useStage>, id: number) => {
+    const ids = selectionOf(id);
+    const view = viewOf(stage, ids);
+    const same = String(id) === page.selected;
+    setLanded(null);
+    if (!view) return same ? undefined : onSelect(id);
+    landing.current = markLanding(ids, same ? "the previous view" : backWord());
+    setPage(same ? { viewport: view } : { selected: String(id), issue: "", viewport: view }, {
+      history: "push",
+    });
+  };
+
   return (
     <PictureStage
+      goTo={(stage) => (
+        <GoToSubject
+          snapshot={snapshot}
+          system={page.system}
+          nameOf={nameOf}
+          onHover={onHover}
+          onGo={({ system, id }) => {
+            if (id == null) return setPage({ system, selected: "" }, { history: "push" });
+            if (system !== page.system)
+              return setPage({ system, selected: String(id) }, { history: "push" });
+            jumpTo(stage, id);
+          }}
+        />
+      )}
       {...{
         kind: "orbit",
         orbit,
@@ -529,43 +578,166 @@ function Canvas({
       }}
     >
       {(stage) => {
-        const viewOf = (ids: ReadonlySet<number>) =>
-          picture === "model" ? stage.poseOf(boundsOfIds(read.meshes, scene, ids)) : null;
-        const markLanding = (ids: ReadonlySet<number>, back: string) => () => {
-          const host = pictureHost?.getBoundingClientRect();
-          const box = onScreen(boundsOfIds(read.meshes, scene, ids));
-          setLanded({
-            back,
-            n: performance.now(),
-            box:
-              box && host
-                ? DOMRect.fromRect({
-                    x: box.x - host.left,
-                    y: box.y - host.top,
-                    width: box.width,
-                    height: box.height,
-                  })
-                : null,
-          });
-        };
-        const backWord = () =>
-          /^\d+$/.test(page.selected) ? nameOf(Number(page.selected)) : "the previous view";
-        const jumpTo = (id: number) => {
-          const ids = selectionOf(id);
-          const view = viewOf(ids);
-          const same = String(id) === page.selected;
-          setLanded(null);
-          if (!view) return same ? undefined : onSelect(id);
-          landing.current = markLanding(ids, same ? "the previous view" : backWord());
-          setPage(same ? { viewport: view } : { selected: String(id), issue: "", viewport: view }, {
-            history: "push",
-          });
-        };
-        if (jump) jump.current = jumpTo;
+        if (jump) jump.current = (id) => jumpTo(stage, id);
         const goBack = () => stage.go("back");
 
+        // The picture and a held picture share the current selection readout.
+        const readout = (
+          <PictureReadout
+            title={readId == null ? undefined : nameOrFallback(nameOf(readId))}
+            onClear={readId == null ? undefined : () => pick(null)}
+            foot={
+              landed ? (
+                <Button
+                  kind="nav"
+                  direction="back"
+                  label={`Back to ${landed.back}`}
+                  reason={`Back to ${landed.back} · Alt+← or the mouse's back button`}
+                  onClick={goBack}
+                >
+                  back to {landed.back}
+                </Button>
+              ) : null
+            }
+          >
+            <OpeningNote />
+            {holding ? (
+              <span className="text-ink-2" role="status" data-e-capturing="">
+                opening {page.system}… showing {holding.system}
+              </span>
+            ) : null}
+            {identity.refreshing ? (
+              <span className="text-ink-2" data-e-refreshing="">
+                refreshing… the last read stays drawn
+              </span>
+            ) : null}
+            {readId != null ? (
+              <>
+                {ruled && ruled.at === readId ? (
+                  <RulingBody
+                    r={ruled}
+                    nameOfId={nameOfId}
+                    onVerdict={onVerdict}
+                    onHover={onHover}
+                    onPick={pick}
+                  />
+                ) : null}
+                {run ? (
+                  <RunDetail
+                    run={run}
+                    designRate={priced?.staged.designFriction ?? DEFAULT_DESIGN_FRICTION_RATE}
+                    nameOf={nameOf}
+                    light={(ids) => onHover(ids?.[0] ?? null)}
+                  />
+                ) : null}
+                {noRuns.has(readId) ? (
+                  <p>
+                    No run:{" "}
+                    <SubjectText
+                      text={noRunParts(noRuns.get(readId)!, snapshot)}
+                      revit={[readId]}
+                    />
+                  </p>
+                ) : null}
+                {segFacts ? (
+                  <SegmentFactsView {...segFacts} />
+                ) : nodeFacts ? (
+                  <NodeFactsView {...nodeFacts} />
+                ) : (
+                  <p className="text-ink-2">
+                    element {nameOfId(readId) ?? readId} is not drawn here
+                  </p>
+                )}
+                <p data-pe-loss={readId}>
+                  Pe loss <span className="face-mono">{fmt(index.loss.get(readId), 4)}</span> in-wg
+                  · from fan <span className="face-mono">{fmtFt(cumulative.get(readId))}</span> eq
+                  ft
+                  {priced ? null : (
+                    <span className="text-ink-2"> (unpriced: no ASHRAE tables read)</span>
+                  )}
+                </p>
+                {sub?.legOf.get(readId) ? <p>on leg {sub.legOf.get(readId)!.name}</p> : null}
+              </>
+            ) : identity.system == null ? (
+              <>
+                <span className="truncate" data-e-census="">
+                  <span className="face-mono">{identity.census.systems}</span> systems
+                </span>
+                <span className="truncate">
+                  <span className="face-mono">{identity.census.priced}</span> priced ·{" "}
+                  <span className="face-mono">{identity.census.fix}</span> need a fix
+                </span>
+              </>
+            ) : (
+              <>
+                <span data-e-state="">
+                  {systemState.length ? (
+                    <>
+                      <SystemMark issues={systemState} open={identity.open} />{" "}
+                    </>
+                  ) : null}
+                  {solved?.fan == null ? (
+                    <span data-tone={solved ? "alarm" : undefined}>
+                      {solved ? "no ESP: an implausible loss" : "not priced"}
+                    </span>
+                  ) : flowless.length ? (
+                    // A terminal with no design flow is priced at 0 cfm, so the sum would read as a
+                    // confident 0.000: missing reads as missing (house law 2), never as a number.
+                    <span className="text-ink-2" data-readout-missing="">
+                      no ESP: {flowless.length} of {terminals} grille
+                      {terminals === 1 ? "" : "s"} {flowless.length === 1 ? "has" : "have"} no
+                      design flow
+                    </span>
+                  ) : (
+                    <>
+                      {identity.breakdown ? (
+                        <BarPopover
+                          split={identity.breakdown.split}
+                          scale={identity.breakdown.scale}
+                          head={identity.breakdown.fans}
+                          className="inline-flex! underline decoration-dotted decoration-line-2 underline-offset-2"
+                        >
+                          ESP <span className="face-mono">{fmt(solved.fan, 3)} in-wg</span>
+                        </BarPopover>
+                      ) : (
+                        <>
+                          ESP <span className="face-mono">{fmt(solved.fan, 3)} in-wg</span>
+                        </>
+                      )}
+                      {solved.critical != null ? (
+                        <>
+                          {" "}
+                          · TEL <span className="face-mono">
+                            {fmtFt(solved.criticalTel)} ft
+                          </span> to{" "}
+                          {/* A name in text: the alias-click, which brings it into view. */}
+                          <button
+                            type="button"
+                            className="underline decoration-line-2 underline-offset-2"
+                            onClick={() =>
+                              subjects?.go ? subjects.go(solved.critical!) : pick(solved.critical!)
+                            }
+                          >
+                            {criticalName}
+                          </button>
+                        </>
+                      ) : null}{" "}
+                      <ProvisionalNote provisional={solved.provisional} of="the fan static" />
+                    </>
+                  )}
+                </span>
+                <TooltipHint content={identity.system.sub}>
+                  <span className="truncate text-ink-2" data-e-identity="">
+                    {identity.system.sub}
+                  </span>
+                </TooltipHint>
+              </>
+            )}
+          </PictureReadout>
+        );
         const model = (
           <ModelPicture
+            readout={readout}
             read={read}
             bounds={bounds}
             orbit={orbit}
@@ -595,6 +767,7 @@ function Canvas({
 
         return (
           <Pane
+            picture
             id="e-picture"
             title={title}
             scroll="clip"
@@ -604,18 +777,7 @@ function Canvas({
                 {pickedId != null ? (
                   <SelectionBoxButton target={observedElements(observation, [pickedId])} />
                 ) : null}
-                <GoToSubject
-                  snapshot={snapshot}
-                  system={page.system}
-                  nameOf={nameOf}
-                  onHover={onHover}
-                  onGo={({ system, id }) => {
-                    if (id == null) return setPage({ system, selected: "" }, { history: "push" });
-                    if (system !== page.system)
-                      return setPage({ system, selected: String(id) }, { history: "push" });
-                    jumpTo(id);
-                  }}
-                />
+                {stage.goTo}
                 <EncodingPicker
                   value={scale.encoding.key}
                   onPick={(key) => setPage({ encoding: key })}
@@ -691,10 +853,10 @@ function Canvas({
                   inert={holding ? true : undefined}
                   data-held-picture={holding?.system}
                 >
-                  {holding?.view ?? model}
+                  {holding ? cloneElement(holding.view, { readout }) : model}
                 </div>
               ) : (
-                schematic("main")
+                schematic("main", readout)
               )}
 
               {landed?.box ? (
@@ -712,160 +874,6 @@ function Canvas({
                 />
               ) : null}
 
-              {/* The plate: what the picture is of and the state it is in, readable without a hover;
-            with an element selected, that element (kaitpw 2026-10-23: selection info lives here). */}
-              <PictureReadout
-                title={readId == null ? undefined : nameOrFallback(nameOf(readId))}
-                onClear={readId == null ? undefined : () => pick(null)}
-                foot={
-                  landed ? (
-                    <Button
-                      kind="nav"
-                      direction="back"
-                      label={`Back to ${landed.back}`}
-                      reason={`Back to ${landed.back} · Alt+← or the mouse's back button`}
-                      onClick={goBack}
-                    >
-                      back to {landed.back}
-                    </Button>
-                  ) : null
-                }
-              >
-                <OpeningNote />
-                {holding ? (
-                  <span className="text-ink-2" role="status" data-e-capturing="">
-                    opening {page.system}… showing {holding.system}
-                  </span>
-                ) : null}
-                {identity.refreshing ? (
-                  <span className="text-ink-2" data-e-refreshing="">
-                    refreshing… the last read stays drawn
-                  </span>
-                ) : null}
-                {readId != null ? (
-                  <>
-                    {ruled && ruled.at === readId ? (
-                      <RulingBody
-                        r={ruled}
-                        nameOfId={nameOfId}
-                        onVerdict={onVerdict}
-                        onHover={onHover}
-                        onPick={pick}
-                      />
-                    ) : null}
-                    {run ? (
-                      <RunDetail
-                        run={run}
-                        designRate={priced?.staged.designFriction ?? DEFAULT_DESIGN_FRICTION_RATE}
-                        nameOf={nameOf}
-                        light={(ids) => onHover(ids?.[0] ?? null)}
-                      />
-                    ) : null}
-                    {noRuns.has(readId) ? (
-                      <p>
-                        No run:{" "}
-                        <SubjectText
-                          text={noRunParts(noRuns.get(readId)!, snapshot)}
-                          revit={[readId]}
-                        />
-                      </p>
-                    ) : null}
-                    {segFacts ? (
-                      <SegmentFactsView {...segFacts} />
-                    ) : nodeFacts ? (
-                      <NodeFactsView {...nodeFacts} />
-                    ) : (
-                      <p className="text-ink-2">
-                        element {nameOfId(readId) ?? readId} is not drawn here
-                      </p>
-                    )}
-                    <p data-pe-loss={readId}>
-                      Pe loss <span className="face-mono">{fmt(index.loss.get(readId), 4)}</span>{" "}
-                      in-wg · from fan{" "}
-                      <span className="face-mono">{fmtFt(cumulative.get(readId))}</span> eq ft
-                      {priced ? null : (
-                        <span className="text-ink-2"> (unpriced: no ASHRAE tables read)</span>
-                      )}
-                    </p>
-                    {sub?.legOf.get(readId) ? <p>on leg {sub.legOf.get(readId)!.name}</p> : null}
-                  </>
-                ) : identity.system == null ? (
-                  <>
-                    <span className="truncate" data-e-census="">
-                      <span className="face-mono">{identity.census.systems}</span> systems
-                    </span>
-                    <span className="truncate">
-                      <span className="face-mono">{identity.census.priced}</span> priced ·{" "}
-                      <span className="face-mono">{identity.census.fix}</span> need a fix
-                    </span>
-                  </>
-                ) : (
-                  <>
-                    <span data-e-state="">
-                      {systemState.length ? (
-                        <>
-                          <SystemMark issues={systemState} open={identity.open} />{" "}
-                        </>
-                      ) : null}
-                      {solved?.fan == null ? (
-                        <span data-tone={solved ? "alarm" : undefined}>
-                          {solved ? "no ESP: an implausible loss" : "not priced"}
-                        </span>
-                      ) : flowless.length ? (
-                        // A terminal with no design flow is priced at 0 cfm, so the sum would read as a
-                        // confident 0.000: missing reads as missing (house law 2), never as a number.
-                        <span className="text-ink-2" data-readout-missing="">
-                          no ESP: {flowless.length} of {terminals} grille
-                          {terminals === 1 ? "" : "s"} {flowless.length === 1 ? "has" : "have"} no
-                          design flow
-                        </span>
-                      ) : (
-                        <>
-                          {identity.breakdown ? (
-                            <BarPopover
-                              split={identity.breakdown.split}
-                              scale={identity.breakdown.scale}
-                              head={identity.breakdown.fans}
-                              className="inline-flex! underline decoration-dotted decoration-line-2 underline-offset-2"
-                            >
-                              ESP <span className="face-mono">{fmt(solved.fan, 3)} in-wg</span>
-                            </BarPopover>
-                          ) : (
-                            <>
-                              ESP <span className="face-mono">{fmt(solved.fan, 3)} in-wg</span>
-                            </>
-                          )}
-                          {solved.critical != null ? (
-                            <>
-                              {" "}
-                              · TEL{" "}
-                              <span className="face-mono">{fmtFt(solved.criticalTel)} ft</span> to{" "}
-                              {/* A name in text: the alias-click, which brings it into view. */}
-                              <button
-                                type="button"
-                                className="underline decoration-line-2 underline-offset-2"
-                                onClick={() =>
-                                  subjects?.go
-                                    ? subjects.go(solved.critical!)
-                                    : pick(solved.critical!)
-                                }
-                              >
-                                {criticalName}
-                              </button>
-                            </>
-                          ) : null}{" "}
-                          <ProvisionalNote provisional={solved.provisional} of="the fan static" />
-                        </>
-                      )}
-                    </span>
-                    <TooltipHint content={identity.system.sub}>
-                      <span className="truncate text-ink-2" data-e-identity="">
-                        {identity.system.sub}
-                      </span>
-                    </TooltipHint>
-                  </>
-                )}
-              </PictureReadout>
             </div>
           </Pane>
         );

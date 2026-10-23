@@ -45,7 +45,7 @@ export {
 export {
   Popover,
   PopoverTrigger,
-  PopoverContent,
+  SubjectPopoverContent,
   PopoverTitle,
   PopoverDescription,
   PopoverClose,

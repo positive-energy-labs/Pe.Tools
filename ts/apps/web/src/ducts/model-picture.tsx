@@ -1,7 +1,15 @@
 import { PaneOverlay } from "@pe/kit/lang/pane";
 /** The subject's real meshes and annotations. Camera policy belongs to useStage. */
 import { emptyListSearch } from "@pe/agent-contracts";
-import { useContext, useEffect, useMemo, useRef, useState, useSyncExternalStore } from "react";
+import {
+  useContext,
+  useEffect,
+  useMemo,
+  useRef,
+  useState,
+  useSyncExternalStore,
+  type ReactNode,
+} from "react";
 
 import type { PageMove } from "#/route/manifest";
 import { boundsOfInstances, boundsOfPoints, frame, type OrbitViewport } from "#/scene/orbit";
@@ -67,6 +75,7 @@ export const poseOf = (
       : null;
 
 export function ModelPicture({
+  readout,
   read,
   bounds,
   orbit,
@@ -90,6 +99,7 @@ export function ModelPicture({
   onRuling,
   onHover,
 }: {
+  readout: ReactNode;
   read: SceneRead;
   bounds: PictureBounds | null;
   orbit: LiveOrbit;
@@ -214,6 +224,7 @@ export function ModelPicture({
     >
       {meshes && pose ? (
         <Scene3D
+          readout={readout}
           className="size-full"
           meshes={meshes}
           orbit={orbit}
@@ -240,7 +251,9 @@ export function ModelPicture({
             onPick(pick.instance.revitId, { x: event.clientX, y: event.clientY });
           }}
         />
-      ) : null}
+      ) : (
+        readout
+      )}
       {overlay ? (
         <div
           ref={fade}

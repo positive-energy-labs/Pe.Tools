@@ -103,7 +103,13 @@ export function usePictureFloaters({
             {picture === "model" ? (
               small()
             ) : meshes && pose ? (
-              <Scene3D className="size-full" meshes={meshes} orbit={orbit} lit={lit} />
+              <Scene3D
+                readout={null}
+                className="size-full"
+                meshes={meshes}
+                orbit={orbit}
+                lit={lit}
+              />
             ) : (
               <span className="t-small text-ink-2 m-auto">model</span>
             )}

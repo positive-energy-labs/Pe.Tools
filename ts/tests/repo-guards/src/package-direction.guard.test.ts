@@ -17,7 +17,7 @@ const imports = (source: string) =>
 describe("contracts <- runtime <- surface adapters", () => {
   it("keeps lower packages independent of MCP and app adapters", () => {
     const violations: string[] = [];
-    for (const name of ["host-contracts", "agent-contracts", "runtime"]) {
+    for (const name of ["host-contracts", "agent-contracts", "runtime", "kit"]) {
       const directory = join(ts, "packages", name);
       const manifest = JSON.parse(readFileSync(join(directory, "package.json"), "utf8")) as {
         dependencies?: Record<string, string>;
@@ -28,7 +28,9 @@ describe("contracts <- runtime <- surface adapters", () => {
         /^@pe\/(?:mcps|host|web)(?:\/|$)/.test(specifier) ||
         /(?:^|\/)apps\/(?:host|web)(?:\/|$)/.test(specifier) ||
         /(?:^|\/)mcps(?:\/|$)/.test(specifier) ||
+        (name === "kit" && /^#\/(?:host|route|scene)(?:\/|$)/.test(specifier)) ||
         (name !== "runtime" &&
+          name !== "kit" &&
           (/^@pe\/runtime(?:\/|$)/.test(specifier) || /(?:^|\/)runtime(?:\/|$)/.test(specifier)));
       for (const dependency of Object.keys({
         ...manifest.dependencies,

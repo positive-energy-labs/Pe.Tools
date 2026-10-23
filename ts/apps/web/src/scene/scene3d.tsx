@@ -33,6 +33,8 @@ import { createRenderer, type ClipVolume, type SceneRenderer } from "./renderer"
 import type { IssueTarget, Layer3D, Pick, SceneInstance, SceneMeshes } from "./types";
 
 export type Scene3DProps = {
+  /** Fixed picture state; null explicitly shares a parent readout in an inset. */
+  readout: ReactNode;
   meshes: SceneMeshes | null;
   /** Shared live camera; Page is only its committed snapshot. */
   orbit: LiveOrbit;
@@ -324,6 +326,7 @@ export function Scene3D(props: Scene3DProps): ReactNode {
       <div ref={host} className={`relative min-h-0 overflow-hidden ${props.className ?? ""}`}>
         {failure ? <p className="t-small text-ink-2 p-2">{failure}</p> : null}
         {props.children}
+        {props.readout}
       </div>
     </RevitTarget>
   );

@@ -73,8 +73,8 @@ export function SpacePicture({
   status: string | null;
   onError: (message: string | null) => void;
   /** The fixed top-left readout: the scene's summary, or the selection's identity and facts. */
-  readout?: ReactNode;
-  legend?: ReactNode;
+  readout: ReactNode;
+  legend: ReactNode;
   /** Filled here: the alias-click a Subject named in text calls. It selects and flies (N4). */
   alias?: { current: ((key: string) => void) | null };
 }) {
@@ -304,6 +304,28 @@ export function SpacePicture({
 
   return (
     <PictureStage
+      goTo={(stage) => (
+        <GoToPopup
+          hover={(item) => setGoHover(item?.key ?? null)}
+          items={() =>
+            (metadata?.elements ?? []).map((element) => ({
+              key: spaceElementKey(element.handle),
+              name:
+                (!element.handle.linkInstanceId && subjects?.nameOf(element.handle.elementId)) ||
+                pickName(element.handle),
+              id: element.handle.elementId,
+              revit: element.handle.linkInstanceId ? [] : [element.handle.elementId],
+              detail: element.handle.uniqueId,
+            }))
+          }
+          onGo={(item) => {
+            setPage({ selected: item.key, row: null }, push);
+            stage.frameOn(
+              meshes ? boundsOfInstances(meshes, (instance) => instance.key === item.key) : null,
+            );
+          }}
+        />
+      )}
       {...{
         kind: "orbit",
         orbit,
@@ -333,6 +355,7 @@ export function SpacePicture({
 
         return (
           <Pane
+            picture
             id="space-picture"
             legend={legend}
             title="Space"
@@ -341,31 +364,7 @@ export function SpacePicture({
                 ? `${metadata.triangles.toLocaleString()} triangles · ${metadata.elements.length} elements`
                 : undefined
             }
-            actions={
-              <GoToPopup
-                hover={(item) => setGoHover(item?.key ?? null)}
-                items={() =>
-                  (metadata?.elements ?? []).map((element) => ({
-                    key: spaceElementKey(element.handle),
-                    name:
-                      (!element.handle.linkInstanceId &&
-                        subjects?.nameOf(element.handle.elementId)) ||
-                      pickName(element.handle),
-                    id: element.handle.elementId,
-                    revit: element.handle.linkInstanceId ? [] : [element.handle.elementId],
-                    detail: element.handle.uniqueId,
-                  }))
-                }
-                onGo={(item) => {
-                  setPage({ selected: item.key, row: null }, push);
-                  frameOn(
-                    meshes
-                      ? boundsOfInstances(meshes, (instance) => instance.key === item.key)
-                      : null,
-                  );
-                }}
-              />
-            }
+            actions={stage.goTo}
             flush
             scroll="clip"
             modes={{
@@ -393,6 +392,7 @@ export function SpacePicture({
             <div ref={setHost} className="relative min-h-0 min-w-0 flex-1" data-space-picture="">
               {meshes && pose && size ? (
                 <Scene3D
+                  readout={readout}
                   className="size-full"
                   meshes={meshes}
                   orbit={orbit}
@@ -431,7 +431,7 @@ export function SpacePicture({
                   onError={onError}
                 />
               ) : null}
-              {readout}
+              {!meshes || !pose || !size ? readout : null}
               {status || cut?.error ? (
                 <PaneOverlay label="space status" place="br">
                   <p role="status" className="t-small text-ink-2 m-0" data-space-status="">

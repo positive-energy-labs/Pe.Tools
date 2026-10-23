@@ -12,7 +12,7 @@ import {
 } from "react";
 import { Tooltip as Primitive } from "@base-ui/react/tooltip";
 import { cn } from "../../lib/utils";
-import { floatingSurface, useSubjectPosition, type FloatingPosition } from "./popover";
+import { floatingSurface, useSubjectPosition, type FloatingPosition } from "./popover-internal";
 
 const Description = createContext<{ id: string; open: boolean; anchor: Element | null } | null>(
   null,

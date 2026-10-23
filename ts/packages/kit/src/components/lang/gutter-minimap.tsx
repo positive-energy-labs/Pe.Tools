@@ -1,7 +1,7 @@
 import { MinimapViewport } from "./minimap-viewport";
 import { memo, useId, useLayoutEffect, useState, type PointerEvent } from "react";
 import { createPortal } from "react-dom";
-import { useScopeGestures } from "../../keys";
+import { ScopeGestures } from "../../keys";
 import "./lang.css";
 
 // M1: 200 is the first useful scale for a gutter overview; recalibrate on real collections.
@@ -86,7 +86,6 @@ export function Minimap({
   const map = useMinimap({ count, range, onJump });
   const id = useId();
   const [host, setHost] = useState<HTMLElement | null>(null);
-  useScopeGestures(map.visible ? [{ pointer: "drag", label: "jump to a row" }] : [], host);
   useLayoutEffect(() => {
     if (!map.visible || !scroller) return;
     const ownsId = !scroller.id;
@@ -107,6 +106,7 @@ export function Minimap({
   if (!map.visible || !host) return null;
   return createPortal(
     <div data-minimap="" aria-controls={scroller?.id || id} {...map.controls} style={{ height }}>
+      <ScopeGestures gestures={[{ pointer: "drag", label: "jump to a row" }]} host={host} />
       <MinimapViewport style={map.viewport} />
       <MinimapMarks marks={marks} count={count} />
     </div>,

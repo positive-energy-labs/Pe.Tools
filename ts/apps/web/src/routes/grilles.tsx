@@ -161,6 +161,7 @@ function GrillesRoute() {
 
   const chart = (
     <Pane
+      picture
       flush
       title="field"
       meta={`${field.length} buildable`}

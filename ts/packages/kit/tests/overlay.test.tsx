@@ -3,7 +3,7 @@ import { act, cleanup, fireEvent, render, screen, waitFor } from "@testing-libra
 import { afterEach, expect, test, vi } from "vite-plus/test";
 import {
   Popover,
-  PopoverContent,
+  SubjectPopoverContent as PopoverContent,
   PopoverTrigger,
   SubjectBox,
   sideAwayFrom,

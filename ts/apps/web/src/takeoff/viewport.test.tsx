@@ -51,6 +51,7 @@ test("takeoffs plane gestures replace the address, minimap moves push, and Back 
     const [page, setPage] = handle.page;
     return (
       <LevelPlan
+        readout={null}
         viewport={page.viewport}
         onViewport={(viewport, how) =>
           setPage({ viewport }, { history: how === "move" ? "push" : "replace" })

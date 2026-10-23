@@ -11,7 +11,7 @@ import {
   type ComponentProps,
   type ReactNode,
 } from "react";
-import { Popover, PopoverTrigger, PopoverContent } from "./popover";
+import { Popover, PopoverTrigger, PopoverContent } from "./popover-internal";
 import { ChevronDown, Ellipsis } from "lucide-react";
 import { SearchControl } from "./search-control";
 import { OutcomeLine } from "./outcome";

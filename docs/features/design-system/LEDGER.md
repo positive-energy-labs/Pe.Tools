@@ -8,14 +8,32 @@ The one-system design cluster: the design LANGUAGE (raw values in `apps/web/src/
 
 ## Decided
 
+- 2026-10-23, P1: `Pane picture` requires a legend; `Scene3D` and plane hosts require a readout slot; `PictureStage` requires the go-to slot; zero-argument `useStage` reads its node and verbs from that context. Kit keeps `useScopeGestures` private; the existing `ScopeGestures` component declares scoped gestures with these rendered slots.
+
+- 2026-10-23, I2, `kit-census.guard.test.ts` / `css-damage-owner`: Damage selectors and pulse have one kit CSS owner.
+- 2026-10-23, I1, `kit-census.guard.test.ts` / `subject-fallback-ids`: Subject fallbacks cannot interpolate raw element or region ids.
+- 2026-10-23, L2, `kit-census.guard.test.ts` / `picture-furniture-floater`: Corner furniture uses Floater; registered picture marks use class selectors, independent of token order.
+- 2026-10-23, L4, `kit-census.guard.test.ts` / `surface-plane-inferred`: Supporting planes are inferred; detached native portals state why their plane is explicit.
+- 2026-10-23, L3, `kit-census.guard.test.ts` / `kit-hover-layout`: Hover and focus CSS cannot change layout dimensions.
+- 2026-10-23, N7, `kit-census.guard.test.ts` / `web-hover-handler`: Pointer handlers require domain or timing ownership; five SVG geometry paths share one reason.
+- 2026-10-23, N7, `kit-census.guard.test.ts` / `kit-reach-block`: One kit CSS reach block declares rest, reach, hover and focus.
+- 2026-10-23, I6, `kit-census.guard.test.ts` / `t-prose-ratchet`: Each reviewed prose exception has a per-file ceiling dated 2026-10-23.
+- 2026-10-23, N3, `kit-census.guard.test.ts` / `nav-list-kit`: Navigation lists use kit; static messages and tutorial keys state their exceptions.
+- 2026-10-23, N4, `kit-census.guard.test.ts` / `list-owner`: Kit owns landing attributes and list-search persistence.
+- 2026-10-23, N3, `kit-census.guard.test.ts` / `slash-owner`: ListView arbitrates slash; composer slash remains text editing and skill selection.
+- 2026-10-23, I5, `kit-census.guard.test.ts` / `native-title-hint`: SVG hints use kit instead of native title elements.
+- 2026-10-23, I4, `kit-census.guard.test.ts` / `crumb-handbuilt`: PaneCrumb owns scope and selection breadcrumbs.
+- 2026-10-23, N2, `kit-census.guard.test.ts` / `scene-keys`: Scene owns frame, gesture-history and history-key policy.
+- 2026-10-23, N4, `kit-census.guard.test.ts` / `revit-target-attr`: Kit owns Revit target declarations, including transparent boundaries.
+
 - 2026-10-23, `LeaderDiagram` owns monotone segment-to-label leaders, including composed Table rows; ducts imports it for fan facts and loss breakdowns (house laws 4 and 10).
-- 2026-10-23, N7 reach uses kit `reach.ts` and `[data-reach="rest|reach|hover|focus"]`. The reach block in kit `lang.css` owns hover paint. Rows, subject text and the web scene adapter share the existing scoped channel.
+- 2026-10-23, N7 reach uses kit `reach.ts` and `[data-reach="rest|reach|hover|focus"]`. The reach block in kit `lang.css` owns hover paint. Rows, subject text and the web scene adapter share the existing scoped channel; `ReachStore` stays private to kit.
 
 - 2026-10-23, kit-raise N8 and CSS ownership, requested by kaitpw: `useMinimap` at `@pe/kit/lang/minimap` gives `ListView` and `MasterTableBody` one gutter overview at 200 shown rows. The threshold is provisional under M1. Virtual ranges drive the viewport; section/tree heads and `data-damage` drive marks. Pointer and keyboard jumps use `list.reveal()` or the table virtualizer plus `land()`. The 1000-row specimen lives in `lang-list.tsx`. `design-guard.test.ts` checks authored class ownership across its complete CSS entry/import graph. Contextual overrides of shared classes require a file/class reason and stale exceptions fail. Column-header rest rules belong to `button.css`; their interaction paint stays in the single reach block. `REACH_STATE_OVERRIDES` permits only `dl-button`, `dl-cell`, and `dl-verdict` state rules inside that block without assigning another class owner. `lens.css` alone owns `chat-tail-floater`.
 
-- 2026-10-23, kit-raise N4: kit `RevitTarget` requires the displayed observation scope and owns layout-transparent target boundaries. `Row revitIds`, `FactChip revit`, and `SubjectText` tokens inherit that scope through portals. The web root retains the one Selection Box / Select menu; null and non-native scopes still refuse native actions. The specimen is `lang-list.tsx`; `kit-raise.revit-target.guard.test.ts` rejects hand-authored scopes outside the menu/parser.
+- 2026-10-23, kit-raise N4: kit `RevitTarget` requires the displayed observation scope and owns layout-transparent target boundaries. `Row revit`, `FactChip revit`, and `SubjectText` tokens inherit that scope through portals. The web root retains the one Selection Box / Select menu; null and non-native scopes still refuse native actions. The specimen is `lang-list.tsx`; `kit-census.guard.test.ts` rejects hand-authored target attributes; the scope helper is private to the native menu.
 
-- 2026-10-23, I5: the subject owns overlay geometry through kit `SubjectBox`; Popover and HoverCard share one open slot, and Escape stays inside that slot (or its active editor). `facing` projects actual placement to row order. SVG marks use kit `SvgTip` with a short word instead of a native title. Consumers include ducts bars, schematics, family views, rooms and takeoff; placement and legibility still require the browser pass.
+- 2026-10-23, I5: the subject owns overlay geometry through kit `SubjectBox`; public `SubjectPopoverContent` omits `side` and `align`, while kit keeps placement internals private. Popover and HoverCard share one open slot, and Escape stays inside that slot (or its active editor). `facing` projects actual placement to row order. SVG marks use kit `SvgTip` with a short word instead of a native title. Consumers include ducts bars, schematics, family views, rooms and takeoff; placement and legibility still require the browser pass.
 
 - 2026-10-23, kaitpw leaves Space Escape-to-3D pending a personal ruling. The production pass preserves that behavior; no navigation fix in this pass changes its meaning.
 
@@ -605,7 +623,7 @@ These rows are byte-for-byte text from `34bd5e17`. The searchable comment preser
 
 ### Panes and surfaces
 
-- 2026-10-23, every spatial picture speaks the /ducts stage language (propagation slice S5: `/space`, `/takeoffs`, `/rooms`). A click selects and never moves the view; a click on empty ground keeps the selection and Esc clears it; F (and double-click in 3D) is the only frame; the selection is the 3D orbit pivot; Alt+Left/Right step view history. Selection facts and the at-rest summary live in `scene/readout.tsx` (top left, hairline edge); the key legend docks bottom left as `pane-legend`. Every fit lands clear of both: `scene/framing.ts` `clearPose` in 3D, `usePlaneViewport` (below or beside the readout, whichever is larger) in 2D. The shared keys are `scene/stage-keys.ts`; the history chords are `scene/view-history.ts`. SVG damage is `scene/damage.css` (the kit Row/Table burn's 2D twin, same beat). The `/space` axis Esc still returns to 3D, pending kaitpw.
+- 2026-10-23, every spatial picture speaks the /ducts stage language (propagation slice S5: `/space`, `/takeoffs`, `/rooms`). A click selects and never moves the view; a click on empty ground keeps the selection and Esc clears it; F (and double-click in 3D) is the only frame; the selection is the 3D orbit pivot; Alt+Left/Right step view history. Selection facts and the at-rest summary live in `@pe/kit/lang/readout` (top left, hairline edge); the key legend docks bottom left as `pane-legend`. Every fit lands clear of both: private `clearPose` in `scene/stage-controller.ts` in 3D, `usePlaneViewport` (below or beside the readout, whichever is larger) in 2D. The shared keys are `scene/stage-controller.ts`; the history chords are `scene/view-history.ts`. SVG damage uses kit `lang.css` `[data-damage]` (the kit Row/Table burn's 2D twin, same beat). The `/space` axis Esc still returns to 3D, pending kaitpw.
 - 2026-09-17, the closed grammar is `Surface` -> `PaneSplit` -> `Pane` -> artifact. `Surface` owns the viewport, 8px perimeter and optional scroll-away head; `PaneSplit` owns recessed 8px gutters and resizing; `Pane` owns the 24px rail, focus/help outline and 8px body inset (`flush` for edge-owning artifacts). A repo guard pins workspace slots to these. No competing workspace composer.
 - 2026-09-16, `Rail` is the one head band (24px); `--gutter` and `--rail-h` own spacing. Active `Pane` focus is a thin outline in the gutter (stronger with help open) that paints above the gutter on every edge. `Pane` has a `flank` kind, owns suspension and render failure recovery (`boundaryKey`), and renders its rail unless `headerless`. `MasterTable` owns one rail plus an optional filter row.
 - 2026-09-16, narrow tutorials keep the spatial pane map with horizontal scroll. The scroll-away route head stays. The composer has its own halo and keyboard-help region.
@@ -674,6 +692,8 @@ These rows are byte-for-byte text from `34bd5e17`. The searchable comment preser
 - 2026-10-08, react-grab `freeze()` during feedback picking (halts the note popover); `.pick-mark` in `--pe-line-2` (vanishes); rasterizing `document.body` (drops `<html>` styles, 10px crop error; rasterize `document.documentElement`).
 
 ## Owed
+
+- 2026-10-23, kit-raise guards browser pass: verify subject popover alignment, picture legend/readout docks, held-picture readout freshness, and gesture legends after the wave-4 integration. Compile and source census do not prove geometry or camera feel.
 
 - 2026-10-23, kit-raise minimap browser pass: verify gutter placement, visible damage/head ticks, keyboard/drag landings, and long grouped/tree lists with external scrollers. The implementation slice is restricted to compile and deterministic lanes by WAVE3/WAVE2; no visual or frame-budget claim is made.
 

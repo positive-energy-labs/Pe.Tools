@@ -1,3 +1,4 @@
+import { REACH_BLOCK } from "./reach-pattern.ts";
 import { readdirSync, readFileSync } from "node:fs";
 import { createRequire } from "node:module";
 import { dirname, join, posix, relative, resolve } from "node:path";
@@ -312,7 +313,7 @@ const authoredOwners = (files: Entry[]) => {
     const stateOnlyOwners: string[] = [];
     const ownershipSource =
       file.rel === "components/lang/lang.css"
-        ? file.text.replace(/\/\* REACH START[\s\S]*?\/\* REACH END \*\//g, (block) => {
+        ? file.text.replace(REACH_BLOCK, (block) => {
             const stateOwners = [
               ...new Set(
                 selectors(block)
@@ -323,9 +324,7 @@ const authoredOwners = (files: Entry[]) => {
             expect(stateOwners.filter((name) => REACH_STATE_OVERRIDES[name]).sort()).toEqual(
               Object.keys(REACH_STATE_OVERRIDES).sort(),
             );
-            stateOnlyOwners.push(
-              ...stateOwners.filter((name) => !REACH_STATE_OVERRIDES[name]),
-            );
+            stateOnlyOwners.push(...stateOwners.filter((name) => !REACH_STATE_OVERRIDES[name]));
             return "";
           })
         : file.text;
@@ -334,7 +333,9 @@ const authoredOwners = (files: Entry[]) => {
       ...selectors(ownershipSource)
         .map(isOwnSelector)
         .filter((name): name is string => !!name),
-      ...[...stripComments(ownershipSource).matchAll(/@utility\s+([\w-]+)/g)].map((match) => match[1]),
+      ...[...stripComments(ownershipSource).matchAll(/@utility\s+([\w-]+)/g)].map(
+        (match) => match[1],
+      ),
     ]);
     for (const name of names) owners.set(name, [...(owners.get(name) ?? []), file.rel]);
   }

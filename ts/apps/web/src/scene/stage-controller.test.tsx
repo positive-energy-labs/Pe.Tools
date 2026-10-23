@@ -1,5 +1,5 @@
 // @vitest-environment jsdom
-import { act, fireEvent, renderHook } from "@testing-library/react";
+import { act, fireEvent, renderHook, screen } from "@testing-library/react";
 import { afterEach, expect, it, vi } from "vite-plus/test";
 import { createLiveOrbit } from "@pe/kit/lang/live-orbit";
 import { PictureStage, useStage, stageViewport } from "./stage-controller";
@@ -8,6 +8,10 @@ import type { Bounds } from "./types";
 
 vi.mock("./view-history", () => ({ useViewHistory: () => vi.fn() }));
 afterEach(() => vi.unstubAllGlobals());
+
+function StageActions() {
+  return useStage().goTo;
+}
 
 it("selecting only changes the pivot; F frames at release; Escape clears and keeps the pose", () => {
   const scene: Bounds = { minX: 0, minY: 0, minZ: 0, maxX: 200, maxY: 200, maxZ: 50 };
@@ -22,6 +26,7 @@ it("selecting only changes the pivot; F frames at release; Escape clears and kee
   const view = renderHook(() => useStage(), {
     wrapper: ({ children }) => (
       <PictureStage
+        goTo={<span>go to a subject</span>}
         kind="orbit"
         orbit={orbit}
         bounds={{ scene, subject: scene }}
@@ -29,10 +34,12 @@ it("selecting only changes the pivot; F frames at release; Escape clears and kee
         selectedBounds={selectedBounds}
         clearSelection={clearSelection}
       >
+        <StageActions />
         {children}
       </PictureStage>
     ),
   });
+  expect(screen.getByText("go to a subject")).toBeTruthy();
   selectedBounds = target;
   view.rerender();
   expect(orbit.read()).toEqual(initial);
