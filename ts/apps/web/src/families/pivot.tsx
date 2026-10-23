@@ -16,6 +16,7 @@ import {
 import type { ParamColumn, TypeRow } from "#/families/matrix-columns";
 import { TypeGrid, type TypeGridEdit } from "#/families/pivot-grid";
 import { usePivotMap } from "#/families/pivot-map";
+import { useLocated } from "#/families/workspace-context";
 import { useFamiliesWorkspace } from "#/families/workspace-context";
 import type { FamilySnapshotRecord } from "#/host/loaded-families-view";
 import type { ParameterMetadataRecord } from "./parameter-metadata";
@@ -247,8 +248,9 @@ export function FamiliesPivot({ empty, above }: { empty?: ReactNode; above?: Rea
     parse,
     overlay,
     chips: scopeChips,
-    located,
+    locator,
   } = useFamiliesWorkspace();
+  const located = useLocated(locator);
   const { pivotRows, pivotFamilies } = useMemo(() => {
     const pivot = buildPivot(rows, params, families);
     // A parameter the patch creates gets its own row, marked new; the reading has no column for it.

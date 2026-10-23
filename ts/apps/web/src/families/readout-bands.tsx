@@ -129,7 +129,7 @@ export function FamiliesReceipts() {
  * ✕`, MAP ruling 60). Its tab is the route's `lines` field. Plan reads staged cells.
  */
 export function FamiliesProposalsBand() {
-  const { cells, wire, plan, store, locateCell } = useFamiliesWorkspace();
+  const { cells, wire, plan, store, locator } = useFamiliesWorkspace();
   const patch = store.handle.work.doc?.patch ?? ({} as FamiliesPatchCell);
   const patchSource = (patch.staged ?? patch.proposal)?.value;
   // A plan row with no resolved id (no `hashKey`) is a name the host refused, in its own words.
@@ -148,7 +148,7 @@ export function FamiliesProposalsBand() {
           row: `${familyName} · ${typeName}`,
           value,
           look: cellFromTrichotomy(cell, { value }, showFamilyCell),
-          locate: () => locateCell(key),
+          locate: () => locator.locate(key),
         },
       ];
     },
