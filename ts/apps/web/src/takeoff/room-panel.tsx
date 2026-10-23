@@ -166,7 +166,6 @@ function RoomPanel({
                 label: flag,
                 revit: room.elementId == null ? [] : [room.elementId],
                 lines: 2,
-                wrap: true,
                 sub: (
                   <div>
                     <p className="text-ink-2">{FLAG_MEANING[flag] ?? "no blurb"}</p>

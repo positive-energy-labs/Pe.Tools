@@ -1,15 +1,9 @@
 import { TooltipHint } from "@pe/kit/lang/tooltip";
-/**
- * THROWAWAY (protoui round 3, E2 "tree sidebar"): B's topology (system → runs → legs → elements) as
- * the composable list tree. Each row's trailing slot: the fan-to-here total as a bar, then its own (self) loss.
- * An element a rule prices carries one verb: jump to its type's rule in the Rules section. There is
- * no per-row rule editor: a rule is global (family:type plus condition), never one fitting's.
- */
 import { useCallback } from "react";
 import { ListTree } from "lucide-react";
 import { Button } from "@pe/kit/lang/button";
 import { useList, type ListPersist } from "@pe/kit/lang/collection";
-import { ListView, type ListRowParts } from "@pe/kit/lang/list-view";
+import { ListView, listColumns, type ListRowParts } from "@pe/kit/lang/list-view";
 import { tokenRef } from "@pe/kit/lib/token";
 import { observedElements, useNativeObservation } from "#/revit/observation";
 
@@ -61,6 +55,12 @@ const inkOf = (encoding: Encoding, q: Quantity, value: number) => {
   return encoding.bins[`b${i === -1 ? q.edges.length : i}`]?.stroke.ink ?? tokenRef("ink-2");
 };
 
+const QUANTITY = listColumns({
+  bar: { kind: "bar", priority: 1 },
+  value: { kind: "number", priority: 0 },
+  mark: { kind: "number", priority: 2 },
+});
+
 /** A row's quantity: a bar against the group's max in the value's own ramp ink, and the number. */
 function QuantityBar({ encoding, ids }: { encoding: Encoding; ids: readonly number[] }) {
   const q = encoding.quantity!;
@@ -75,7 +75,7 @@ function QuantityBar({ encoding, ids }: { encoding: Encoding; ids: readonly numb
         data-e-quantity={peak ? peak.value : ""}
         data-e-peak={peak?.id ?? ""}
       >
-        <span className="relative inline-block h-1.5 w-16 @max-[300px]:hidden" aria-hidden>
+        <span {...QUANTITY.bar} className="relative h-1.5" aria-hidden>
           {share != null ? (
             <>
               <span className="absolute inset-0" style={{ backgroundColor: tokenRef("line") }} />
@@ -89,15 +89,17 @@ function QuantityBar({ encoding, ids }: { encoding: Encoding; ids: readonly numb
             </>
           ) : null}
         </span>
-        <span className="face-mono w-12 text-right">
+        <span {...QUANTITY.value} className="face-mono">
           {peak ? formatQuantity(q, peak.value) : "—"}
         </span>
         {peak && peak.id === q.maxId ? (
           <TooltipHint content={`the system's max ${encoding.label}`}>
-            <span className="w-6 text-ink-2">max</span>
+            <span {...QUANTITY.mark} className="text-ink-2">
+              max
+            </span>
           </TooltipHint>
         ) : (
-          <span className="w-6" />
+          <span {...QUANTITY.mark} />
         )}
       </span>
     </TooltipHint>
@@ -193,7 +195,6 @@ export function SystemTree({ ctx, address }: { ctx: TreeCtx; address?: ListPersi
       const stand = n.critical === "longest" && n.key !== ctx.criticalKey;
       const ruleKey = n.kind === "element" && n.id != null ? ctx.ruleOf.get(n.id) : undefined;
       return {
-        wrap: true,
         lead: critical ? (
           <TooltipHint
             content={stand ? "longest developed run: stand-in until priced" : "critical run"}
@@ -224,9 +225,6 @@ export function SystemTree({ ctx, address }: { ctx: TreeCtx; address?: ListPersi
             {label}
           </span>
         ),
-        // Always a title: the kit Row wraps itself in a Tooltip only once it measures a cut
-        // title, and that late wrap re-renders the row and drops the chevron's first press.
-        title: label,
         meta: ctx.reading?.quantity ? (
           <QuantityBar encoding={ctx.reading} ids={idsOf(n)} />
         ) : (

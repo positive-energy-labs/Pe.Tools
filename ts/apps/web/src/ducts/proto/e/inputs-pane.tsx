@@ -97,7 +97,6 @@ export function InputsPane(props: InputsPaneProps) {
       const fan = kind === "unit" ? fans.get(id) : undefined;
       return {
         lines: 2,
-        wrap: true,
         label: nameOf(id),
         title: fan ? `${nameOf(id)} · ${fan.role}: ${fan.says}` : nameOf(id),
         aside: fan?.role ?? kind,
