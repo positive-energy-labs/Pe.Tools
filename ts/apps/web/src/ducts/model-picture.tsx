@@ -19,7 +19,7 @@ import {
   type OrbitViewport,
 } from "#/scene/orbit";
 import { viewportProject, type Project, type Size } from "#/scene/projection";
-import { glideLook, looking, type LiveOrbit } from "#/scene/live-orbit";
+import { glideLook, type LiveOrbit } from "#/scene/live-orbit";
 import { Scene3D } from "#/scene/scene3d";
 import type { SceneRead } from "#/scene/use-scene";
 import type { Bounds, Layer3D, SceneMeshes } from "#/scene/types";
@@ -219,12 +219,12 @@ export function ModelPicture({
     },
     {
       hotkey: "N",
-      label: "look north or south",
-      says: "Glide to look north; again to look south. Elevation, zoom and pivot stay",
+      label: "look north",
+      says: "Glide to look north. Elevation, zoom and pivot stay",
       callback: () => {
         const now = orbit.read();
         if (!now) return setSaid("no pose yet: the picture has nothing to look at");
-        glideLook(orbit, looking(now) === "N" ? "S" : "N");
+        glideLook(orbit);
       },
     },
     {

@@ -79,26 +79,19 @@ export function createLiveOrbit(
 }
 export type LiveOrbit = ReturnType<typeof createLiveOrbit>;
 
-export type Look = "N" | "S";
-// Camera yaw looking toward `Look`: the eye sits on the opposite side of the pivot (yaw 0 = eye on +X,
+// Camera yaw looking north: the eye sits on the opposite side of the pivot (yaw 0 = eye on +X,
 // 90 = eye on +Y), so looking north is the eye at 270.
 // ponytail: north is project north (+Y). No true-north or project-north angle reaches the web scene
-// (the capture's SceneMeshes carry bounds and instances only); when one does, rotate both yaws by it here.
-const LOOK_YAW: Record<Look, number> = { N: 270, S: 90 };
-export const looking = (v: { yaw: number }): Look | null =>
-  Math.abs(((v.yaw - LOOK_YAW.N + 540) % 360) - 180) < 1
-    ? "N"
-    : Math.abs(((v.yaw - LOOK_YAW.S + 540) % 360) - 180) < 1
-      ? "S"
-      : null;
+// (the capture's SceneMeshes carry bounds and instances only); when one does, rotate the yaw by it here.
+const NORTH_YAW = 270;
 
-/** Glide the yaw to look `look` (elevation, zoom and pivot kept) like the selection re-centre, then
+/** Glide the yaw to look north (elevation, zoom and pivot kept) like the selection re-centre, then
  * release as a gesture so Page's viewport is replaced. A newer gesture or move takes the orbit and ends it. */
-export function glideLook(orbit: LiveOrbit, look: Look, ms = 350) {
+export function glideLook(orbit: LiveOrbit, ms = 350) {
   const now = orbit.read();
   const token = orbit.begin();
   if (!now || !token) return;
-  const to = LOOK_YAW[look];
+  const to = NORTH_YAW;
   const delta = ((to - now.yaw + 540) % 360) - 180;
   const t0 = performance.now();
   requestAnimationFrame(function step() {
