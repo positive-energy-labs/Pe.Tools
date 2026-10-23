@@ -108,6 +108,8 @@ export function SituationAction({
           }
         />
         <PopoverContent
+          // N1: an automatic status/refusal flag reports the action without taking focus.
+          initialFocus={false}
           data-tone={outcome?.refusal ? "caution" : undefined}
           className="w-auto max-w-[60ch] px-3 py-1.5 t-prose"
         >

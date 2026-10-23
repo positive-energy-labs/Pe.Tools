@@ -961,6 +961,29 @@ test("seeded real-user route journey", async () => {
             return;
           // Deliberate focus move happens before the untouched observation window.
           const point = await p.until(() => box(p, "button", "refresh"), "refresh control");
+          const trigger = (
+            await p.send("Runtime.evaluate", {
+              expression: `document.elementFromPoint(${point.x}, ${point.y})?.closest('button')`,
+              returnByValue: false,
+            })
+          ).result.objectId as string;
+          const focusCensus: unknown[] = [];
+          const census = async (phase: string) => {
+            const evidence = await p.send("Runtime.callFunctionOn", {
+              objectId: trigger,
+              returnByValue: true,
+              functionDeclaration: `function(){
+                const active=document.activeElement;
+                const scroll=[];
+                for(let e=active;e;e=e.parentElement)if(e.scrollHeight>e.clientHeight||e.scrollWidth>e.clientWidth)scroll.push({tag:e.tagName,id:e.id,slot:e.getAttribute('data-slot'),top:e.scrollTop,left:e.scrollLeft});
+                return {triggerConnected:this.isConnected,triggerActive:this===active,triggerDisabled:this.disabled,triggerAriaDisabled:this.getAttribute('aria-disabled'),trigger:this.outerHTML,active:active?.outerHTML.slice(0,1600),scroll};
+              }`,
+            });
+            focusCensus.push({ phase, ...evidence.result.value });
+            receipt.coverage.refreshFocus = JSON.stringify(focusCensus);
+            save();
+          };
+          await census("before trusted press");
           await p.send("Input.dispatchMouseEvent", { type: "mouseMoved", ...point });
           await p.send("Input.dispatchMouseEvent", {
             type: "mousePressed",
@@ -968,17 +991,32 @@ test("seeded real-user route journey", async () => {
             button: "left",
             clickCount: 1,
           });
+          await census("after trusted press, before release");
           // Mousedown puts focus on the control. Observe before mouseup admits the refresh.
-          await untouched(async () => {
-            await p.send("Input.dispatchMouseEvent", {
-              type: "mouseReleased",
-              ...point,
-              button: "left",
-              clickCount: 1,
+          try {
+            await untouched(async () => {
+              await p.send("Input.dispatchMouseEvent", {
+                type: "mouseReleased",
+                ...point,
+                button: "left",
+                clickCount: 1,
+              });
+              await census("after trusted release");
+              await sleep(350);
+              await settled(p);
+              await census("after re-read settled");
+              await p.until(
+                () =>
+                  p.read<boolean>(
+                    `![...document.querySelectorAll('[data-slot="popover-content"]')].some(e => e.getClientRects().length && e.textContent.includes('refresh · ran'))`,
+                  ),
+                "Refresh status flag naturally faded",
+              );
+              await census("after automatic status fade");
             });
-            await sleep(350);
-            await settled(p);
-          });
+          } finally {
+            await p.send("Runtime.releaseObject", { objectId: trigger });
+          }
           receipt.coverage.refresh =
             "refresh control + DOM continuity; host freshness requires native receipt in parent run";
         }
