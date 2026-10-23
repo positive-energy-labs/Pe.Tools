@@ -1,7 +1,7 @@
 /**
  * Typegen: emit one TypeScript file with per-op request/response types, a
- * runtime key list, and a key→types map. The emitted file is CHECKED IN — it
- * is the compile-time contract artifact, committed like a lockfile.
+ * runtime catalog, key list, and a key→types map. The emitted file is CHECKED IN —
+ * it is the contract artifact, committed like a lockfile.
  *
  * Two catalog sources (VerbCatalog pattern — offline single source of truth,
  * live host as a verification pass):
@@ -114,14 +114,20 @@ if (catalogPath) {
     operations: CatalogEntry[];
     constants?: CatalogConstants;
     bridgeSessionId?: string;
+    bridgeCatalogError?: string;
   };
+  if (catalog.bridgeCatalogError) {
+    console.error(
+      `GET ${url} could not acquire a live bridge catalog: ${catalog.bridgeCatalogError}`,
+    );
+    process.exit(1);
+  }
   constants = catalog.constants ?? {};
   operations = [...catalog.operations]
     .filter((op) => op.origin !== "host-local") // types are hand-authored, not generated from /ops
     .sort((a, b) => a.key.localeCompare(b.key));
 
-  // No bridge ops means no live Revit session (the host still lists its host-local ops, which we
-  // filtered out). That can't verify anything — hard fail; the offline lane is the generator.
+  // Discovery may return generated rows without Revit; only an acquired bridge catalog verifies.
   if (operations.length === 0) {
     console.error(`GET ${url} returned no bridge operations (no live Revit session).`);
     process.exit(1);
@@ -188,10 +194,13 @@ chunks.push(
   ...mapEntries,
   "}",
   "",
-  "/** Runtime key list matching HostOps — powers key guards without a metadata catalog. */",
+  "/** Runtime key list matching HostOps. */",
   "export const hostOpKeys = [",
   ...operations.map((op) => `  "${op.key}",`),
   "] as const satisfies readonly (keyof HostOps)[];",
+  "",
+  "/** C# catalog metadata for discovery. Runtime availability is reported separately by the host. */",
+  `export const hostOpCatalog = ${JSON.stringify(operations, null, 2)} as const;`,
   "",
   "/** C# operation safety metadata. Unknown operations never inherit read permission. */",
   "export const hostOpSafety = {",

@@ -12,15 +12,9 @@ import {
   tsOnlyOperationCatalog,
 } from "@pe/host-contracts/operation-types";
 import { NoRevitSession, RevitBridge } from "./bridge.ts";
-// Runtime operation catalog for browsers/typegen: proxies host.ops.catalog to the
-// connected Revit session (the standard selector header targets one; ?session is the raw query form)
-// op keys + request/response JSON Schemas as plain JSON. The host-local (TS-only) ops
-// are appended so discovery (host_operation_search, pea `operations`, the web ops page)
-// sees both surfaces from one catalog; host-typegen skips them by their origin marker.
-// A disconnected bridge still lists the local ops (they need no Revit session) with a
-// bridgeCatalogError explains unavailable native metadata while host operations remain usable.
-// works with the host up and Revit closed. (host-typegen treats a bridge-op-less catalog
-// as "no session" and does not regenerate off the local ops alone.)
+import { hostOpCatalog } from "@pe/host-contracts/generated";
+// A selected bridge supplies its current catalog. Without one, C#-generated metadata keeps the
+// vocabulary discoverable; bridgeCatalogError reports availability, never permission to execute.
 /** A browser navigation (Accept: text/html) to an API path belongs to the SPA, not the JSON. */
 export type SpaFallback = (
   req: HttpServerRequest.HttpServerRequest,
@@ -62,13 +56,14 @@ export const opsCatalogRoute = (spa: SpaFallback, sdk?: SdkReceiptReader) =>
         }),
       );
       // A host-local op is canonical; its bridge namesake (pod.member.compose) is listed once.
-      const bridgeOps =
+      const nativeOps =
         result._tag === "Success" &&
         Array.isArray((result.success.value as { operations?: unknown }).operations)
-          ? (result.success.value as { operations: { key?: unknown }[] }).operations.filter(
-              (op) => !isTsOnlyOperationKey(String(op.key)),
-            )
-          : [];
+          ? (result.success.value as { operations: { key?: unknown }[] }).operations
+          : result._tag === "Failure"
+            ? hostOpCatalog
+            : [];
+      const bridgeOps = nativeOps.filter((op) => !isTsOnlyOperationKey(String(op.key)));
       const body: {
         operations: unknown[];
         constants?: unknown;
