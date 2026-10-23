@@ -4,11 +4,46 @@ import { afterEach, expect, test, vi } from "vite-plus/test";
 
 import { KeyScope, readKeyMeta, readRegistrations } from "@pe/kit/keys";
 
-import { Pane } from "@pe/kit/lang/pane";
+import { Pane, PictureContext } from "@pe/kit/lang/pane";
+import { PictureReadout } from "@pe/kit/lang/readout";
+import { Popover, PopoverTrigger, SubjectPopoverContent } from "@pe/kit/lang/popover";
 
 afterEach(() => {
   cleanup();
   vi.restoreAllMocks();
+});
+
+test("a picture pane derives its crumb and supplies away-side geometry to a sibling popup", async () => {
+  const box = () => new DOMRect(100, 100, 200, 200);
+  const content = (selected: boolean) => (
+    <>
+      <PictureContext value={{ selected, box }}>
+        <Pane picture title="Systems" legend={null}>
+          <PictureReadout subject="Supply air" title={selected ? "Room A" : undefined}>
+            facts
+          </PictureReadout>
+        </Pane>
+      </PictureContext>
+      <Pane title="list">
+        <Popover>
+          <PopoverTrigger>open facts</PopoverTrigger>
+          <SubjectPopoverContent>subject facts</SubjectPopoverContent>
+        </Popover>
+      </Pane>
+    </>
+  );
+  const view = render(content(true));
+  const crumb = screen.getByRole("group", { name: "scope and selection" });
+  expect(crumb.textContent).toBe("SystemsSupply airRoom A");
+  const trigger = screen.getByRole("button", { name: "open facts" });
+  vi.spyOn(trigger, "getBoundingClientRect").mockReturnValue(new DOMRect(50, 150, 20, 20));
+  fireEvent.click(trigger);
+  const popup = await screen.findByText("subject facts");
+  expect(popup.closest("[data-slot='popover-content']")?.getAttribute("data-side")).toBe("left");
+  view.rerender(content(false));
+  expect(crumb.textContent).toBe("SystemsSupply air");
+  view.unmount();
+  expect(document.querySelector("[data-slot='popover-content']")).toBeNull();
 });
 
 const modes = (onChange = vi.fn()) => ({

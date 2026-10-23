@@ -6,7 +6,17 @@ const search = (keywords = "", pills: Record<string, string> = {}) =>
   });
 // @vitest-environment jsdom
 import { useState } from "react";
-import { act, cleanup, fireEvent, render, screen, waitFor, within } from "@testing-library/react";
+import {
+  act,
+  cleanup,
+  fireEvent,
+  render,
+  renderHook,
+  screen,
+  waitFor,
+  within,
+} from "@testing-library/react";
+import { useReachChannel } from "@pe/kit/lang/reach";
 import { afterEach, expect, test, vi } from "vite-plus/test";
 import type { FanResult } from "@pe/ducts-domain/losses";
 import type { Priced } from "@pe/ducts-domain/pricing";
@@ -190,11 +200,11 @@ const inputs = (over: Partial<InputsPaneProps> = {}): InputsPaneProps => ({
   nameOf: (id) => `Name ${id}`,
   selected: null,
   select: vi.fn(),
-  light: vi.fn(),
   ...over,
 });
 
 test("inputs preserve scoped order and selection, while editing and fan verbs stay isolated from list activation", () => {
+  const reach = renderHook(() => useReachChannel()).result.current;
   const verb = vi.fn();
   const props = inputs({ selected: 20, fanVerbs: () => <button onClick={verb}>make fan</button> });
   render(<InputsPane {...props} />);
@@ -224,9 +234,9 @@ test("inputs preserve scoped order and selection, while editing and fan verbs st
   fireEvent.click(within(keyed("unit:1")).getByText("Name 1"));
   expect(props.select).toHaveBeenCalledWith(1);
   fireEvent.mouseEnter(keyed("grille:10"));
-  expect(props.light).toHaveBeenLastCalledWith([10]);
+  expect(reach.get().hovered).toBe(10);
   fireEvent.mouseLeave(keyed("grille:10"));
-  expect(props.light).toHaveBeenLastCalledWith(null);
+  expect(reach.get().hovered).toBeNull();
 });
 
 test("inputs use address grammar/name order and retain the unpriced waiting state", async () => {

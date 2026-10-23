@@ -1,4 +1,5 @@
 import { PANE_OBSTACLES } from "@pe/kit/lang/floater";
+import { PictureContext } from "@pe/kit/lang/pane";
 import {
   createContext,
   createElement,
@@ -6,6 +7,8 @@ import {
   useContext,
   useEffect,
   useState,
+  useRef,
+  useCallback,
   type ReactNode,
 } from "react";
 import {
@@ -17,7 +20,7 @@ import {
 } from "@pe/kit/keys";
 import type { PlaneViewport } from "@pe/agent-contracts";
 import type { PictureBounds } from "./framing";
-import { viewportProject } from "./projection";
+import { viewportProject, type Project } from "./projection";
 import { ORBIT_GESTURES } from "./gestures";
 import { flyTo, glideLook, type LiveOrbit } from "@pe/kit/lang/live-orbit";
 import { applyLook, center, frame, shiftOnScreen, type OrbitViewport } from "./orbit";
@@ -25,8 +28,33 @@ import type { Bounds } from "./types";
 import { useViewHistory } from "./view-history";
 import type { Bounds2 } from "#/lib/affine-frame";
 import type { usePlaneViewport } from "./use-plane-viewport";
+import { useStageReach } from "./reach";
 
 type HistoryMove = { history: "push" | "replace" };
+/** World bounds in client pixels, shared by placement, framing and landing marks. */
+export function projectBounds(
+  bounds: Bounds,
+  project: Project,
+  rect: Pick<DOMRect, "left" | "top">,
+): DOMRect | null {
+  const points = [bounds.minX, bounds.maxX].flatMap((x) =>
+    [bounds.minY, bounds.maxY].flatMap((y) =>
+      [bounds.minZ, bounds.maxZ].flatMap((z) => {
+        const p = project([x, y, z]);
+        return p ? [p] : [];
+      }),
+    ),
+  );
+  if (!points.length) return null;
+  const xs = points.map((p) => p[0] + rect.left),
+    ys = points.map((p) => p[1] + rect.top);
+  return new DOMRect(
+    Math.min(...xs),
+    Math.min(...ys),
+    Math.max(...xs) - Math.min(...xs),
+    Math.max(...ys) - Math.min(...ys),
+  );
+}
 /** The only translation from a released camera move to address history. */
 export const stageViewport =
   <V extends OrbitViewport | PlaneViewport>(
@@ -166,6 +194,28 @@ export function PictureStage({
   children: ReactNode | ((stage: NonNullable<ReturnType<typeof useStage>>) => ReactNode);
 }) {
   const bindings = useStageBindings(picture);
+  useStageReach(picture.kind === "plane" ? picture.host : null);
+  const latest = useRef(picture);
+  latest.current = picture;
+  const box = useCallback(() => {
+    const p = latest.current;
+    const rect = p.host?.getBoundingClientRect();
+    const b = p.selectedBounds;
+    if (!rect || !b || (p.kind === "orbit" && p.axis)) return null;
+    if (p.kind === "plane") {
+      const { scale, tx, ty } = p.viewport.view;
+      return new DOMRect(
+        rect.left + b.minX * scale + tx,
+        rect.top + b.minY * scale + ty,
+        (b.maxX - b.minX) * scale,
+        (b.maxY - b.minY) * scale,
+      );
+    }
+    const pose = p.orbit.read();
+    return pose && p.bounds
+      ? projectBounds(p.selectedBounds!, viewportProject(pose, p.bounds.scene, rect), rect)
+      : null;
+  }, []);
   const stage = {
     ...bindings,
     goTo: createElement(
@@ -176,9 +226,13 @@ export function PictureStage({
     ),
   };
   return createElement(
-    StageContext,
-    { value: stage },
-    typeof children === "function" ? children(stage) : children,
+    PictureContext,
+    { value: { selected: picture.selectedBounds != null, box } },
+    createElement(
+      StageContext,
+      { value: stage },
+      typeof children === "function" ? children(stage) : children,
+    ),
   );
 }
 
@@ -247,23 +301,10 @@ function clearPose(
     ...field.querySelectorAll(`${PANE_OBSTACLES}, :scope > [data-slot='floater']`),
   ].map((el) => el.getBoundingClientRect());
   if (!blocks.length) return view;
-  const project = viewportProject(view, scene, at);
-  const points = [target.minX, target.maxX].flatMap((x) =>
-    [target.minY, target.maxY].flatMap((y) =>
-      [target.minZ, target.maxZ].flatMap((z) => {
-        const p = project([x, y, z]);
-        return p ? [p] : [];
-      }),
-    ),
-  );
-  if (!points.length) return view;
-  const xs = points.map((p) => p[0]),
-    ys = points.map((p) => p[1]);
-  const [w, h] = [Math.max(...xs) - Math.min(...xs), Math.max(...ys) - Math.min(...ys)];
-  const [cx, cy] = [
-    (Math.max(...xs) + Math.min(...xs)) / 2,
-    (Math.max(...ys) + Math.min(...ys)) / 2,
-  ];
+  const projected = projectBounds(target, viewportProject(view, scene, at), at);
+  if (!projected) return view;
+  const { width: w, height: h } = projected;
+  const [cx, cy] = [projected.x - at.left + w / 2, projected.y - at.top + h / 2];
   const best = ANCHORS.flatMap((fx) => ANCHORS.map((fy) => [fx * at.width, fy * at.height]))
     .map(([x, y]) => {
       const box = new DOMRect(at.left + x! - w / 2, at.top + y! - h / 2, w, h);

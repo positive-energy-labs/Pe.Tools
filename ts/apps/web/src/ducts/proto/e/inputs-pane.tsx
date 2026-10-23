@@ -27,7 +27,6 @@ export interface InputsPaneProps {
   nameOf: (id: number) => string;
   selected: number | null;
   select: (id: number | null) => void;
-  light: (ids: readonly number[] | null) => void;
   /** A unit's make-the-fan verbs and last outcome, or null when none is owed (`fansOwedBase`). */
   fanVerbs?: (id: number) => ReactNode;
   address?: ListPersist<"name">;
@@ -56,7 +55,7 @@ const INPUT_KEYS: readonly ScopeGesture[] = [
 
 export function InputsPane(props: InputsPaneProps) {
   const observation = useNativeObservation();
-  const { snapshot, priced, work, scope, nameOf, selected, select, light } = props;
+  const { snapshot, priced, work, scope, nameOf, selected, select } = props;
   const { units, terminals } = useMemo(() => inputRowsOf(snapshot, scope), [snapshot, scope]);
   const ctx = useMemo<InputsCtx | null>(
     () => (priced ? { snapshot, priced, work, groups: scope.groups } : null),
@@ -123,13 +122,11 @@ export function InputsPane(props: InputsPaneProps) {
             )}
           </span>
         ),
-        onMouseEnter: () => light([id]),
-        onMouseLeave: () => light(null),
         revit: target.ids,
         revitRefs: target.refs,
       };
     },
-    [ctx, observation, fans, nameOf, props.fanVerbs, light],
+    [ctx, observation, fans, nameOf, props.fanVerbs],
   );
   if (!units.length && !terminals.length)
     return <p className="t-small text-ink-2 p-2">no unit or grille in this system</p>;

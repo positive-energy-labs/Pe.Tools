@@ -7,6 +7,8 @@ import {
   createContext,
   isValidElement,
   useContext,
+  useEffect,
+  useCallback,
   useRef,
   useState,
   type Key,
@@ -25,7 +27,20 @@ import { Button } from "./button";
 import { tv, type VariantProps } from "../../lib/tv";
 
 import { Rail } from "./rail";
+import { PaneCrumb } from "./pane-crumb";
+import { useReachChannel } from "./reach";
+import { SubjectBox } from "./popover";
 import "./pane.css";
+
+/** The renderer supplies geometry; the pane never knows a camera or a domain identity. */
+export const PictureContext = createContext<{
+  selected: boolean;
+  box: () => DOMRect | null;
+} | null>(null);
+type ReadoutIdentity = { subject?: ReactNode; title?: ReactNode; onClear?: () => void };
+export const PictureReadoutContext = createContext<
+  ((identity: ReadoutIdentity) => () => void) | null
+>(null);
 
 const PaneFaultContext = createContext<((error: unknown) => void) | undefined>(undefined);
 /** The application supplies its diagnostics sink once; kit has no host dependency. */
@@ -208,6 +223,43 @@ export function Pane({
 }: PicturePaneProps) {
   const { root, body } = paneRecipe({ scroll, flush });
   const rootRef = useRef<HTMLElement>(null);
+  const stage = useContext(PictureContext);
+  const reach = useReachChannel();
+  const [identity, setIdentity] = useState<ReadoutIdentity>({});
+  const register = useCallback((next: ReadoutIdentity) => {
+    setIdentity(next);
+    return () => setIdentity((was) => (was === next ? {} : was));
+  }, []);
+  const stageRef = useRef(stage);
+  stageRef.current = stage;
+  const pictureBox = useCallback(
+    () => stageRef.current?.box() ?? rootRef.current?.getBoundingClientRect() ?? null,
+    [],
+  );
+  // The channel also reaches sibling panes, whose popovers must clear this picture.
+  useEffect(() => {
+    if (!picture) return;
+    reach.set((state) => ({ ...state, picture: pictureBox }));
+    return () =>
+      reach.set((state) =>
+        state.picture === pictureBox ? { ...state, picture: null, hovered: null } : state,
+      );
+  }, [picture, reach, pictureBox]);
+  const crumb = picture ? (
+    <PaneCrumb
+      segments={[
+        ...(hasContent(title) ? [{ label: title }] : []),
+        ...(hasContent(identity.subject)
+          ? [{ label: identity.subject, onPress: identity.onClear }]
+          : []),
+        ...((stage?.selected ?? true) && hasContent(identity.title)
+          ? [{ label: identity.title }]
+          : []),
+      ]}
+    />
+  ) : (
+    title
+  );
   const [field, setField] = useState<HTMLDivElement | null>(null);
   const strip =
     (modes?.options.length ?? 0) > 0 ||
@@ -221,7 +273,7 @@ export function Pane({
         tabs
       ) : hasContent(title) ? (
         <h2 data-slot="pane-title" data-heading={name ? "name" : undefined}>
-          {title}
+          {crumb}
         </h2>
       ) : null}
       {!hasContent(tabs) && hasContent(meta) && (
@@ -256,64 +308,70 @@ export function Pane({
     </div>
   );
   return (
-    <KeyScope id={id ?? "pane"} element={rootRef}>
-      <section
-        ref={rootRef}
-        data-slot="pane"
-        data-picture={picture || undefined}
-        data-pane-id={id}
-        data-surface={ground}
-        aria-label={typeof title === "string" ? title : undefined}
-        tabIndex={-1}
-        // A click on inert content focuses the pane, so its scope's keys bind.
-        onPointerDownCapture={(event) => {
-          const focusable = (event.target as HTMLElement).closest<HTMLElement>(
-            "a,button,input,select,textarea,[contenteditable='true'],[tabindex]",
-          );
-          if (!focusable || focusable === event.currentTarget)
-            event.currentTarget.focus({ preventScroll: true });
-        }}
-        className={root()}
-      >
-        {[title, meta, actions, leadingActions, tabs, help, strip].some(hasContent) && (
-          <div data-slot="pane-header" data-title-align={titleAlign} className="shrink-0">
-            <Rail
-              lead={
-                <>
-                  {leadingActions}
-                  {titleAlign === "start" ? heading : null}
-                </>
-              }
-              center={titleAlign === "center" ? heading : undefined}
-              trail={
-                hasContent(actions) || strip != null ? (
-                  <div data-slot="pane-actions" className="flex shrink-0 items-center">
-                    {hasContent(actions) && <ButtonGroup>{actions}</ButtonGroup>}
-                    {strip}
-                  </div>
-                ) : undefined
-              }
-            />
-          </div>
-        )}
-        <PaneOverlayContext value={field}>
-          <div
-            ref={setField}
-            data-slot="pane-field"
-            className="relative flex min-h-0 min-w-0 flex-1 flex-col"
+    <PictureReadoutContext value={picture ? register : null}>
+      <SubjectBox box={picture ? pictureBox : null}>
+        <KeyScope id={id ?? "pane"} element={rootRef}>
+          <section
+            ref={rootRef}
+            data-slot="pane"
+            data-picture={picture || undefined}
+            data-pane-id={id}
+            data-surface={ground}
+            aria-label={typeof title === "string" ? title : undefined}
+            tabIndex={-1}
+            // A click on inert content focuses the pane, so its scope's keys bind.
+            onPointerDownCapture={(event) => {
+              const focusable = (event.target as HTMLElement).closest<HTMLElement>(
+                "a,button,input,select,textarea,[contenteditable='true'],[tabindex]",
+              );
+              if (!focusable || focusable === event.currentTarget)
+                event.currentTarget.focus({ preventScroll: true });
+            }}
+            className={root()}
           >
-            {paneBody}
-            {hasContent(overlay) ? (
-              <PaneOverlay label="pane overlay" place="tr">
-                {overlay}
-              </PaneOverlay>
-            ) : null}
-            {floaters?.map((spec) => (spec.open ? <Floater key={spec.key} spec={spec} /> : null))}
-            <PaneGestureLegend host={rootRef}>{legend}</PaneGestureLegend>
-          </div>
-        </PaneOverlayContext>
-      </section>
-    </KeyScope>
+            {[title, meta, actions, leadingActions, tabs, help, strip].some(hasContent) && (
+              <div data-slot="pane-header" data-title-align={titleAlign} className="shrink-0">
+                <Rail
+                  lead={
+                    <>
+                      {leadingActions}
+                      {titleAlign === "start" ? heading : null}
+                    </>
+                  }
+                  center={titleAlign === "center" ? heading : undefined}
+                  trail={
+                    hasContent(actions) || strip != null ? (
+                      <div data-slot="pane-actions" className="flex shrink-0 items-center">
+                        {hasContent(actions) && <ButtonGroup>{actions}</ButtonGroup>}
+                        {strip}
+                      </div>
+                    ) : undefined
+                  }
+                />
+              </div>
+            )}
+            <PaneOverlayContext value={field}>
+              <div
+                ref={setField}
+                data-slot="pane-field"
+                className="relative flex min-h-0 min-w-0 flex-1 flex-col"
+              >
+                {paneBody}
+                {hasContent(overlay) ? (
+                  <PaneOverlay label="pane overlay" place="tr">
+                    {overlay}
+                  </PaneOverlay>
+                ) : null}
+                {floaters?.map((spec) =>
+                  spec.open ? <Floater key={spec.key} spec={spec} /> : null,
+                )}
+                <PaneGestureLegend host={rootRef}>{legend}</PaneGestureLegend>
+              </div>
+            </PaneOverlayContext>
+          </section>
+        </KeyScope>
+      </SubjectBox>
+    </PictureReadoutContext>
   );
 }
 

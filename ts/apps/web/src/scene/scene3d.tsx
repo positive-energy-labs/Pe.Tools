@@ -16,7 +16,8 @@ import { RevitTarget } from "@pe/kit/lang/revit-target";
  * then the 3D pose kept under it, which the shown axis's thumbnail draws. `thumbs` names 2D
  * canvases this canvas paints each axis into.
  */
-import { useEffect, useRef, useState, type ReactNode } from "react";
+import { useEffect, useMemo, useRef, useState, type ReactNode } from "react";
+import { useSceneReach } from "./reach";
 import { revitTarget } from "@pe/kit/lang/revit-target";
 import { viewportCodec } from "@pe/agent-contracts";
 import { type ElementTarget } from "#/revit/element-target";
@@ -107,10 +108,21 @@ const ATTRS = Object.keys(revitTarget([0], [{ elementId: 0 }])) as (keyof Return
 >)[];
 
 export function Scene3D(props: Scene3DProps): ReactNode {
+  const { hovered, onHover } = useSceneReach();
+  const lit = useMemo(
+    () =>
+      new Set([
+        ...(props.lit ?? []),
+        ...(props.meshes?.instances
+          .filter((instance) => instance.revitId === hovered)
+          .map((instance) => instance.key) ?? []),
+      ]),
+    [props.lit, props.meshes, hovered],
+  );
   const host = useRef<HTMLDivElement>(null);
   const observation = useNativeObservation();
-  const latest = useRef({ ...props, observation });
-  latest.current = { ...props, observation };
+  const latest = useRef({ ...props, observation, onHover });
+  latest.current = { ...props, observation, onHover };
   const core = useRef<SceneRenderer | null>(null);
   const publishedPlane = useRef<PlaneViewport | null>(null);
   const gesturing = useRef(false);
@@ -213,6 +225,7 @@ export function Scene3D(props: Scene3DProps): ReactNode {
       canvas.style.cursor = issue ? "pointer" : "";
       r.reach(issue ? null : at);
       const instance = pickAt(r, at, latest.current.clip)?.instance;
+      latest.current.onHover(issue?.elementId ?? instance?.revitId ?? null);
       r.hoverElement(issue ? null : (instance?.key ?? null));
       const target = instance ? sceneTarget(latest.current.observation, instance) : null;
       const attributes: Partial<Record<(typeof ATTRS)[number], string>> = target
@@ -234,6 +247,7 @@ export function Scene3D(props: Scene3DProps): ReactNode {
     };
     const pointerLeave = () => {
       over = null;
+      latest.current.onHover(null);
       latest.current.onIssueHover?.(null);
       delete canvas.dataset.issue;
       canvas.style.cursor = "";
@@ -280,6 +294,7 @@ export function Scene3D(props: Scene3DProps): ReactNode {
       canvas.removeEventListener("contextmenu", contextMenu);
       canvas.removeEventListener("dblclick", doubleClick);
       unfollow();
+      if (over) latest.current.onHover(null);
       orbit.cancel(token);
       moves.removeEventListener("start", start);
       moves.removeEventListener("change", change);
@@ -309,8 +324,8 @@ export function Scene3D(props: Scene3DProps): ReactNode {
     core.current?.setThumbs(props.thumbs ?? {});
   }, [props.thumbs, meshes]);
   useEffect(() => {
-    core.current?.paint(props.selected, props.hidden, props.isolated, props.lit);
-  }, [props.selected, props.hidden, props.isolated, props.lit, meshes]);
+    core.current?.paint(props.selected, props.hidden, props.isolated, lit);
+  }, [props.selected, props.hidden, props.isolated, lit, meshes]);
   useEffect(() => {
     core.current?.setLayers(props.layers);
   }, [props.layers, meshes]);

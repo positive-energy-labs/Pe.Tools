@@ -1,6 +1,3 @@
-import { ButtonGroup } from "@pe/kit/lang/button-group";
-import { Button } from "@pe/kit/lang/button";
-import { Crosshair, X } from "lucide-react";
 import { useLiveOrbit } from "@pe/kit/lang/live-orbit";
 /**
  * The pane strip specimen (ledger 2026-10-21): one pane with two modes, two floaters (a plane
@@ -9,7 +6,7 @@ import { useLiveOrbit } from "@pe/kit/lang/live-orbit";
  */
 import { useCallback, useState } from "react";
 import { PictureReadout } from "@pe/kit/lang/readout";
-import { PaneCrumb } from "@pe/kit/lang/pane-crumb";
+import { Popover, PopoverTrigger, SubjectPopoverContent } from "@pe/kit/lang/popover";
 
 import { Floater } from "@pe/kit/lang/floater";
 import { Pane, PaneOverlay } from "@pe/kit/lang/pane";
@@ -111,67 +108,17 @@ function PaneStripAnatomy() {
   );
 }
 
-/** The same strip at 400 px and full width: narrow, layers and floaters fold into popovers and the
- * mode labels shorten; the title stays. The corner floater gives way to the legend. */
+/** Only the scope is named on the Pane; the readout supplies subject and selection at both widths. */
 function PaneStripWidths() {
   const [selected, setSelected] = useState<string | undefined>();
-  const [mode, setMode] = useState("plane");
-  const [layers, setLayers] = useState<readonly string[]>(["grid", "rooms"]);
-  const [open, setOpen] = useState(true);
   const strip = (id: string) => (
-    <Pane
-      id={id}
-      title={
-        <PaneCrumb
-          segments={[
-            { label: "Systems", onPress: () => setSelected(undefined) },
-            { label: "supply air, level 2" },
-            ...(selected ? [{ label: selected }] : []),
-          ]}
-        />
-      }
-      overlay={
-        <ButtonGroup>
-          <Button icon={Crosshair} label="Select room" onClick={() => setSelected("Room A")}>
-            Select room
-          </Button>
-          <Button icon={X} label="Clear selection" onClick={() => setSelected(undefined)}>
-            Clear selection
-          </Button>
-        </ButtonGroup>
-      }
-      flush
-      scroll="clip"
-      modes={{ value: mode, label: "viewport", options: unbound(MODES), onChange: setMode }}
-      layers={{
-        value: layers,
-        options: unbound(LAYERS),
-        onToggle: (key) =>
-          setLayers((on) => (on.includes(key) ? on.filter((k) => k !== key) : [...on, key])),
-      }}
-      floaters={[
-        {
-          key: "corner",
-          label: "corner",
-          says: "A stand-in corner surface; it moves off the legend when the pane is narrow.",
-          place: "br",
-          size: { width: 160, height: 72 },
-          open,
-          onOpenChange: setOpen,
-          render: () => "corner",
-        },
-        {
-          key: "globe",
-          label: "globe",
-          place: "tr",
-          open: false,
-          onOpenChange: () => {},
-          render: () => null,
-        },
-      ]}
-    >
+    <Pane picture legend={null} id={id} title="Systems" flush scroll="clip">
       <div className="relative size-full">
-        <PictureReadout title={selected} onClear={() => setSelected(undefined)}>
+        <PictureReadout
+          subject="supply air, level 2"
+          title={selected}
+          onClear={() => setSelected(undefined)}
+        >
           {selected ? "stand-in selection facts" : "stand-in system summary"}
           <button
             type="button"
@@ -181,10 +128,11 @@ function PaneStripWidths() {
             select another room
           </button>
         </PictureReadout>
-        <PaneOverlay label="stand-in legend" place="bl">
-          <span className="whitespace-nowrap t-small text-ink-2">
-            stand-in legend, wide enough to meet the corner at 400 px
-          </span>
+        <PaneOverlay label="subject facts" place="tr">
+          <Popover>
+            <PopoverTrigger>facts</PopoverTrigger>
+            <SubjectPopoverContent>stand-in facts, away from the picture</SubjectPopoverContent>
+          </Popover>
         </PaneOverlay>
       </div>
     </Pane>

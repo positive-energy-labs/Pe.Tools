@@ -158,7 +158,6 @@ export function RunDetail({
               aside: part.stated ? "stated" : undefined,
               title: part.desc,
               revit: [part.id],
-              onMouseEnter: () => light([part.id]),
               meta: `${fmtFt(part.eqFt)} · ${fmt(part.dp, 4)}`,
             })}
           />

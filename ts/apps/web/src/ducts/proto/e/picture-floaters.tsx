@@ -40,17 +40,6 @@ export function usePictureFloaters({
   small: () => ReactNode;
 }): FloaterSpec[] {
   const { hovered } = useSceneReach();
-  const lit = useMemo(
-    () =>
-      new Set(
-        hovered == null
-          ? []
-          : (meshes?.instances
-              .filter((instance) => instance.revitId === hovered)
-              .map((instance) => instance.key) ?? []),
-      ),
-    [hovered, meshes],
-  );
   const [globe, setGlobe] = useState(true);
   const [corner, setCorner] = useState(true);
   // The globe draws the subject's centrelines in unit-sphere space, scaled from its own radius.
@@ -103,13 +92,7 @@ export function usePictureFloaters({
             {picture === "model" ? (
               small()
             ) : meshes && pose ? (
-              <Scene3D
-                readout={null}
-                className="size-full"
-                meshes={meshes}
-                orbit={orbit}
-                lit={lit}
-              />
+              <Scene3D readout={null} className="size-full" meshes={meshes} orbit={orbit} />
             ) : (
               <span className="t-small text-ink-2 m-auto">model</span>
             )}
