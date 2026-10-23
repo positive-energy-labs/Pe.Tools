@@ -53,6 +53,22 @@
   padding: 0 0.125rem 0.125rem;
   flex-shrink: 0;
 }
+.dl-readout-line {
+  position: relative;
+  min-block-size: var(--control-h);
+  min-inline-size: 0;
+  overflow: hidden;
+  white-space: nowrap;
+}
+.dl-readout-line[data-pending] > div {
+  visibility: hidden;
+}
+.dl-readout-line > span {
+  position: absolute;
+  inset: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
 .dl-pane-crumb {
   display: flex;
   min-width: 0;

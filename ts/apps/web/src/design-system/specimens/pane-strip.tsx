@@ -6,6 +6,7 @@ import { useLiveOrbit } from "@pe/kit/lang/live-orbit";
  */
 import { useCallback, useState } from "react";
 import { PictureReadout } from "@pe/kit/lang/readout";
+import { Button } from "@pe/kit/lang/button";
 import { Switcher } from "@pe/kit/lang/switcher";
 import { Popover, PopoverTrigger, SubjectPopoverContent } from "@pe/kit/lang/popover";
 
@@ -130,15 +131,22 @@ function PaneStripAnatomy() {
 /** Only the scope is named on the Pane; the readout supplies subject and selection at both widths. */
 function PaneStripWidths() {
   const [selected, setSelected] = useState<string | undefined>();
+  const [pending, setPending] = useState(false);
   const strip = (id: string) => (
     <Pane picture legend={null} id={id} title="Systems" flush scroll="clip">
       <div className="relative size-full">
         <PictureReadout
           subject="supply air, level 2"
           title={selected}
+          summary="stand-in system summary"
+          pending={pending ? "refreshing" : undefined}
+          retained={pending ? "showing the last read" : undefined}
           onClear={() => setSelected(undefined)}
         >
-          {selected ? "stand-in selection facts" : "stand-in system summary"}
+          {selected ? "stand-in selection facts" : "stand-in system facts"}
+          <Button label="Toggle re-read" onClick={() => setPending(!pending)}>
+            toggle re-read
+          </Button>
           <button
             type="button"
             className="veil"

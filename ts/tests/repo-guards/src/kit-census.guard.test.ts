@@ -28,6 +28,9 @@ const allow = (entries: Record<string, string>): Allow[] =>
 // Filenames use the wave-4 final homes: land.ts, revit-target.tsx and go-to.tsx.
 // prettier-ignore
 const RULES: Rule[] = [
+  { id: "readout-notice-slot", doctrine: "N6", pattern: /\breadoutLine\b|data-e-(?:capturing|refreshing|opening)/g,
+    roots: [W + "ducts/proto/e/canvas.tsx"], allow: [],
+    cannotSee: "Rendered geometry or pending timing; kit readout tests cover stable slot and fact nodes." },
   { id: "list-head-meta-yields-at-360", doctrine: "L3",
     pattern: /^(?![\s\S]*@container list \(max-width: 360px\)\s*\{\s*\.dl-row-colhead-meta,[^{}]*\{\s*display: none;)[\s\S]/g,
     roots: [K + "components/lang/lang.css"], allow: [], cannotSee: "Rendered label width, ellipsis and tooltip layout; LN360 needs browser measurement." },

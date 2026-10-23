@@ -7,6 +7,29 @@ import { PaneCrumb } from "../src/components/lang/pane-crumb";
 
 afterEach(cleanup);
 
+it.each([undefined, "selected duct"])("swaps notices in the reserved lines for %s", (title) => {
+  const view = (pending?: string, retained?: string) => (
+    <PictureReadout title={title} summary="system summary" pending={pending} retained={retained}>
+      <p>retained facts</p>
+    </PictureReadout>
+  );
+  const { container, rerender } = render(view());
+  const lines = [...container.querySelectorAll(".dl-readout-line")];
+  const facts = screen.getByText("retained facts");
+  expect(lines).toHaveLength(2);
+  for (const pending of ["refreshing", "opening another system", undefined]) {
+    rerender(view(pending, pending ? "showing the last read" : undefined));
+    expect([...container.querySelectorAll(".dl-readout-line")]).toEqual(lines);
+    expect(screen.getByText("retained facts")).toBe(facts);
+    expect(facts.parentElement?.children).toHaveLength(2);
+    expect(screen.getByText("system summary").getAttribute("aria-hidden")).toBe(
+      pending ? "true" : null,
+    );
+    for (const status of screen.queryAllByRole("status"))
+      expect(status.closest(".dl-readout-line")).not.toBeNull();
+  }
+});
+
 it("claims wheel events and clears by button without binding Escape", () => {
   const clear = vi.fn();
   const view = (title?: string, hidden = false) => (
