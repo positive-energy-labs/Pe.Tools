@@ -357,16 +357,13 @@ tr.dl-row[data-active] {
   background-color: var(--pe-select);
   --pe-on: var(--pe-select);
 }
-/* Landed: a row that becomes selected (a link, a pick) draws a full-ink outline once, then settles
-   to the plain selected fill. Fill and ink only; reduced motion keeps just the settled state. */
+/* Landing draws an outline over the existing ground; it never fills the picture's focus box. */
 @keyframes pe-land {
   from {
     outline-color: var(--pe-ink);
-    background-color: color-mix(in srgb, var(--pe-ink) 22%, var(--pe-select));
   }
   to {
     outline-color: transparent;
-    background-color: var(--pe-select);
   }
 }
 
@@ -388,7 +385,6 @@ tr.dl-row[data-active] {
   [data-landed] {
     animation: none;
     outline-color: var(--pe-ink);
-    background-color: var(--pe-select);
   }
 }
 
@@ -1038,7 +1034,7 @@ svg [data-damage] {
    a link by its rule, not by a hue: full ink over a solid underline at a fixed offset. The number is
    one mark drawn in two places, the chip after the name here and the numbered badge over the element
    in the picture (`.subject-badge`), so a reader matches them at a glance. At rest the chip is a
-   ring; lit (its own token hovered or focused, or `data-lit`) it fills with ink. Hovering
+   ring; contact strengthens its edge through the same reach ladder. Hovering
    the prose block that holds them (or `data-lit` on it) draws every rule at full weight; the picture lights the
    same subjects. Geometry is fixed: no state changes a size, so nothing reflows. */
 .subject-ref {
@@ -1052,6 +1048,7 @@ svg [data-damage] {
   text-decoration-color: var(--pe-line-2);
   text-underline-offset: 3px;
   cursor: pointer;
+  outline: none;
 }
 /* The hit box grows past the glyphs by a hairline gutter, never the line box (no reflow). */
 .subject-ref::before {
@@ -1060,9 +1057,6 @@ svg [data-damage] {
   inset: -2px -2px;
 }
 
-.subject-ref:active {
-  background-image: var(--fill-press);
-}
 .subject-mark {
   display: inline-grid;
   place-items: center;
@@ -1172,15 +1166,15 @@ svg [data-damage] {
 [data-reach="rest"] {
   transition: outline-color var(--motion-control);
 }
-[data-reach]:not(:disabled, [aria-disabled="true"]):is([data-reach="reach"]) {
+[data-reach]:not(:disabled, [aria-disabled="true"], .subject-ref):is([data-reach="reach"]) {
   background-image: var(--fill-veil);
   --dl-cell-ring: inset 0 0 0 1px var(--pe-line-2);
 }
-[data-reach]:not(:disabled, [aria-disabled="true"]):is([data-reach="hover"], :hover) {
+[data-reach]:not(:disabled, [aria-disabled="true"], .subject-ref):is([data-reach="hover"], :hover) {
   background-image: var(--fill-press);
   --dl-cell-ring: inset 0 0 0 1px var(--pe-ink-2);
 }
-[data-reach]:not(:disabled, [aria-disabled="true"]):is(
+[data-reach]:not(:disabled, [aria-disabled="true"], .subject-ref):is(
     [data-reach="focus"],
     :focus-visible,
     :focus-within
@@ -1297,18 +1291,14 @@ svg [data-damage] {
 [data-subject-text]:is(:hover, [data-lit]) .subject-ref {
   text-decoration-color: var(--pe-ink-2);
 }
-.subject-ref:is(:hover, :focus-visible, [data-lit]) {
-  background-image: var(--fill-veil);
+.subject-ref:is(:hover, :focus-visible, [data-reach="hover"], [data-reach="focus"]) {
   text-decoration-color: var(--pe-ink);
 }
 [data-subject-text]:is(:hover, [data-lit]) .subject-mark {
   border-color: var(--pe-ink);
 }
-.subject-ref:is(:hover, :focus-visible, [data-lit]) .subject-mark,
-.subject-mark[data-lit] {
-  border-color: var(--subject-mark-lit-ground);
-  background: var(--subject-mark-lit-ground);
-  color: var(--subject-mark-lit-ink);
+.subject-ref:is(:hover, :focus-visible, [data-reach="hover"], [data-reach="focus"]) .subject-mark {
+  border-color: var(--pe-ink);
 }
 [data-list-trigger="icon"]:is(:hover, [data-reach="hover"]),
 [data-reach][aria-label="What is this?"]:is(:hover, [data-reach="hover"]) {
@@ -1317,7 +1307,7 @@ svg [data-damage] {
 .dl-control:focus-within:not(:disabled, :has(input:disabled)) {
   border-color: var(--pe-ink-2);
 }
-[data-reach]:active:not(:disabled, [aria-disabled="true"]),
+[data-reach]:active:not(:disabled, [aria-disabled="true"], .subject-ref),
 [data-pe] .veil:active {
   background-image: var(--fill-press);
 }

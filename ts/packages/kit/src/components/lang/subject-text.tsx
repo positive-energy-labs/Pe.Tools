@@ -5,9 +5,10 @@ import {
   type SubjectTextScope,
   type SubjectReference,
 } from "./reach";
-import { useContext, useEffect, useId, type ReactNode } from "react";
+import { useContext, useEffect, useId, useRef, type ReactNode } from "react";
 import { useRevitTarget } from "./revit-target";
-import { TooltipHint } from "./tooltip";
+import { Tooltip, TooltipTrigger, TooltipContent } from "./tooltip";
+import { focusQuiet } from "../../lib/utils";
 import "./lang.css";
 
 /** One word for a subject whose snapshot supplies no human name. */
@@ -69,6 +70,17 @@ export function subjectDocument(
 export const useSubjectLighting = () =>
   useReachState(useContext(SubjectTextContext)?.reach, (state) => state.lighting);
 
+function hasContact(element: HTMLElement | null) {
+  if (!element) return false;
+  if (element.matches(":hover, :focus-within")) return true;
+  return [element, ...element.querySelectorAll(".subject-ref")].some((reference) =>
+    reference
+      .getAttribute("aria-describedby")
+      ?.split(/\s+/)
+      .some((id) => reference.ownerDocument.getElementById(id)?.matches(":hover, :focus-within")),
+  );
+}
+
 /** Prose with each Subject as a numbered token; hover lights it in the picture, press goes to it. */
 export function SubjectText({
   text,
@@ -84,6 +96,7 @@ export function SubjectText({
   const target = useRevitTarget(revit);
   const context = useContext(SubjectTextContext);
   const localOwner = useId();
+  const block = useRef<HTMLSpanElement>(null);
   const owner = blockOwner ?? localOwner;
   const clear = context?.clear;
   useEffect(() => () => clear?.(owner), [clear, owner]);
@@ -100,16 +113,19 @@ export function SubjectText({
     return revit?.length ? <span {...target}>{plain}</span> : <>{plain}</>;
   }
   const light = (id: number | null) => context.light?.(doc.references, id, owner);
+  const dismiss = () => {
+    if (!hasContact(block.current)) context.clear?.(owner);
+  };
   return (
     <span
+      ref={block}
       {...target}
-      {...reachProps()}
       data-subject-text=""
       onMouseEnter={() => light(null)}
       onMouseMove={(e) => e.stopPropagation()}
-      onMouseLeave={() => context.clear?.(owner)}
+      onMouseLeave={dismiss}
       onBlur={(e) => {
-        if (!e.currentTarget.contains(e.relatedTarget)) context.clear?.(owner);
+        if (!e.currentTarget.contains(e.relatedTarget)) dismiss();
       }}
     >
       {doc.parts.map(
@@ -122,6 +138,7 @@ export function SubjectText({
               part={part}
               scope={context}
               onHover={(on) => light(on ? part.id : null)}
+              onLeave={() => context.clear?.(owner)}
             />
           ),
       )}
@@ -134,50 +151,93 @@ function SubjectRef({
   part,
   scope,
   onHover,
+  onLeave,
 }: {
   part: SubjectReference & { connector?: number };
   scope: SubjectTextScope;
   onHover: (on: boolean) => void;
+  onLeave: () => void;
 }) {
   const target = useRevitTarget([part.id]);
+  const reference = useRef<HTMLButtonElement>(null);
+  const popup = useRef<HTMLDivElement>(null);
   const lit = useReachState(scope.reach, (state) => state.lighting.focus === part.id);
   const port = part.connector != null ? ` port ${part.connector}` : "";
   const go = scope.go;
+  const contact = reachProps(
+    lit
+      ? reference.current?.matches(":focus-within") || popup.current?.matches(":focus-within")
+        ? "focus"
+        : "hover"
+      : "rest",
+  );
+  const leave = () => {
+    if (
+      !reference.current?.matches(":hover, :focus-within") &&
+      !popup.current?.matches(":focus-within")
+    )
+      onLeave();
+  };
   return (
-    <TooltipHint
-      content={
-        <>
-          {part.name}
-          {port} <span className="face-mono">{part.id}</span>
-          {go ? ": go to it" : ""}
-        </>
-      }
-    >
-      <button
-        type="button"
-        {...reachProps(lit ? "reach" : "rest")}
-        className="subject-ref"
-        data-claim-element={part.id}
-        data-lit={lit ? "" : undefined}
-        {...target}
-        {...scope.refProps?.(part.id)}
-        aria-label={`${go ? "go to " : ""}${part.name}${port}, reference ${part.number}`}
-        aria-disabled={go ? undefined : true}
+    <Tooltip>
+      <TooltipTrigger
+        className=""
+        closeOnClick={false}
+        render={
+          <button
+            ref={reference}
+            type="button"
+            {...contact}
+            className="subject-ref"
+            data-claim-element={part.id}
+            {...target}
+            {...scope.refProps?.(part.id)}
+            aria-label={`${go ? "go to " : ""}${part.name}${port}, reference ${part.number}`}
+            aria-disabled={go ? undefined : true}
+            onMouseEnter={() => onHover(true)}
+            onMouseLeave={(e) => {
+              if (!e.currentTarget.matches(":focus-within")) onHover(false);
+            }}
+            onFocus={(e) => {
+              contact.onFocus(e);
+              onHover(true);
+            }}
+            onBlur={(e) => {
+              contact.onBlur(e);
+              if (!hasContact(e.currentTarget) && !popup.current?.contains(e.relatedTarget))
+                onHover(false);
+            }}
+            onClick={(e) => {
+              e.stopPropagation();
+              focusQuiet(e.currentTarget);
+              onHover(true);
+              go?.(part.id);
+            }}
+          >
+            {part.name}
+            {port}
+            <span className="subject-mark" data-subject-footnote={part.number} aria-hidden>
+              {part.number}
+            </span>
+          </button>
+        }
+      />
+      <TooltipContent
+        ref={popup}
         onMouseEnter={() => onHover(true)}
-        onMouseLeave={() => onHover(false)}
-        onFocus={() => onHover(true)}
-        onBlur={() => onHover(false)}
-        onClick={(e) => {
-          e.stopPropagation();
-          go?.(part.id);
+        onMouseLeave={leave}
+        onFocusCapture={() => {
+          reference.current?.setAttribute("data-reach", "focus");
+          onHover(true);
+        }}
+        onBlurCapture={(e) => {
+          if (!e.currentTarget.contains(e.relatedTarget)) leave();
         }}
       >
         {part.name}
-        {port}
-        <span className="subject-mark" data-subject-footnote={part.number} aria-hidden>
-          {part.number}
-        </span>
-      </button>
-    </TooltipHint>
+        {port} <span className="face-mono">{part.id}</span>
+        {go ? ": go to it" : ""}
+      </TooltipContent>
+    </Tooltip>
   );
 }

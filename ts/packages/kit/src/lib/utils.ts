@@ -8,6 +8,6 @@ export function cn(...inputs: ClassValue[]) {
 
 /** Focus without the browser's scroll-into-view (N1): focus moves, the view stays. A caller that
  *  answers a key the person pressed scrolls explicitly. */
-export function focusQuiet(element: HTMLElement | null | undefined) {
+export function focusQuiet(element: HTMLElement | SVGElement | null | undefined) {
   element?.focus({ preventScroll: true });
 }
