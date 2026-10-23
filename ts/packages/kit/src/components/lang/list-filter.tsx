@@ -29,7 +29,8 @@ export function matches(query: string, row: Searchable): boolean {
   const text = row.text.filter((t) => t != null).map((t) => String(t).toLowerCase());
   return words.every(
     (word) =>
-      text.some((t) => t.includes(word)) || (/^\d+$/.test(word) && !!row.ids?.includes(Number(word))),
+      text.some((t) => t.includes(word)) ||
+      (/^\d+$/.test(word) && !!row.ids?.includes(Number(word))),
   );
 }
 

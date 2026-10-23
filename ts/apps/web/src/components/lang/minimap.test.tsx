@@ -92,3 +92,16 @@ test("a globe stop click writes that stop's yaw and elevation as a move; below t
   expect(onViewport).not.toHaveBeenCalled();
   expect(stop("0/-45").hasAttribute("data-refused")).toBe(true);
 });
+
+test("the rim N and S glide the yaw to look north (eye at 270) and south (eye at 90), keeping elevation and zoom", async () => {
+  const onViewport = vi.fn();
+  const viewport: OrbitViewport = { kind: "orbit", yaw: 30, elev: 30, zoom: 2, pivot: [1, 2, 3] };
+  const orbit = createLiveOrbit(viewport, onViewport);
+  const view = render(<OrbitMinimap orbit={orbit} />);
+  fireEvent.click(view.container.querySelector('[data-orbit-look="N"]')!);
+  await vi.waitFor(() => expect(onViewport).toHaveBeenCalledTimes(1));
+  expect(onViewport).toHaveBeenLastCalledWith({ ...viewport, yaw: 270 }, "gesture");
+  fireEvent.click(view.container.querySelector('[data-orbit-look="S"]')!);
+  await vi.waitFor(() => expect(onViewport).toHaveBeenCalledTimes(2));
+  expect(onViewport).toHaveBeenLastCalledWith({ ...viewport, yaw: 90 }, "gesture");
+});

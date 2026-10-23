@@ -79,8 +79,7 @@ export function Inbox<K extends string>({
   const drawn = order.flatMap((key) => {
     const group = groups[key];
     if (!group) return [];
-    if (!narrowed)
-      return group.rows.length || group.always ? [[key, group] as const] : [];
+    if (!narrowed) return group.rows.length || group.always ? [[key, group] as const] : [];
     const rows = group.rows.filter((row) =>
       matches(query, row.search ?? { text: [row.titleText] }),
     );
@@ -138,93 +137,95 @@ export function Inbox<K extends string>({
   return (
     <>
       {header}
-    <div
-      ref={host}
-      className="flex flex-col"
-      aria-label={rest["aria-label"]}
-      onMouseLeave={onMouseLeave}
-    >
-      {drawn.map(([key, group]) => {
-        const collapsed = folded.get(key) ?? group.defaultCollapsed ?? false;
-        const toggle = () => setFolded(new Map(folded).set(key, !collapsed));
-        const head = <RowGroupHead label={group.label} count={group.rows.length} />;
-        return (
-          <section key={key} data-inbox-group={key} data-collapsed={collapsed ? "" : undefined}>
-            {group.collapsible ? (
-              <div
-                role="button"
-                tabIndex={0}
-                aria-expanded={!collapsed}
-                className="cursor-default"
-                onClick={toggle}
-                onKeyDown={(event: KeyboardEvent) => {
-                  if (event.key === "Enter" || event.key === " ") {
-                    event.preventDefault();
-                    toggle();
-                  }
-                }}
-              >
-                {head}
-              </div>
-            ) : (
-              head
-            )}
-            {group.legend ? (
-              <div
-                data-inbox-legend={key}
-                className="flex flex-wrap gap-1 px-2 pb-1"
-                onClickCapture={() => setFolded(new Map(folded).set(key, false))}
-              >
-                {group.legend}
-              </div>
-            ) : null}
-            {collapsed
-              ? null
-              : group.rows.map((row) => {
-                  const active = open.has(row.key);
-                  const flip = () =>
-                    setOpen(
-                      active ? new Set([...open].filter((k) => k !== row.key)) : new Set([row.key]),
+      <div
+        ref={host}
+        className="flex flex-col"
+        aria-label={rest["aria-label"]}
+        onMouseLeave={onMouseLeave}
+      >
+        {drawn.map(([key, group]) => {
+          const collapsed = folded.get(key) ?? group.defaultCollapsed ?? false;
+          const toggle = () => setFolded(new Map(folded).set(key, !collapsed));
+          const head = <RowGroupHead label={group.label} count={group.rows.length} />;
+          return (
+            <section key={key} data-inbox-group={key} data-collapsed={collapsed ? "" : undefined}>
+              {group.collapsible ? (
+                <div
+                  role="button"
+                  tabIndex={0}
+                  aria-expanded={!collapsed}
+                  className="cursor-default"
+                  onClick={toggle}
+                  onKeyDown={(event: KeyboardEvent) => {
+                    if (event.key === "Enter" || event.key === " ") {
+                      event.preventDefault();
+                      toggle();
+                    }
+                  }}
+                >
+                  {head}
+                </div>
+              ) : (
+                head
+              )}
+              {group.legend ? (
+                <div
+                  data-inbox-legend={key}
+                  className="flex flex-wrap gap-1 px-2 pb-1"
+                  onClickCapture={() => setFolded(new Map(folded).set(key, false))}
+                >
+                  {group.legend}
+                </div>
+              ) : null}
+              {collapsed
+                ? null
+                : group.rows.map((row) => {
+                    const active = open.has(row.key);
+                    const flip = () =>
+                      setOpen(
+                        active
+                          ? new Set([...open].filter((k) => k !== row.key))
+                          : new Set([row.key]),
+                      );
+                    const pick = () => {
+                      if (row.detail != null) flip();
+                      row.onClick?.();
+                    };
+                    return (
+                      <Fragment key={row.key}>
+                        <Row
+                          data-key={row.key}
+                          active={active}
+                          selected={row.lit || undefined}
+                          {...(row.detail != null ? { depth: 0, expanded: active } : {})}
+                          onToggle={flip}
+                          title={row.titleText ?? (typeof row.title === "string" ? row.title : "")}
+                          label={<span data-inbox-row={row["data-kind"]}>{row.title}</span>}
+                          meta={row.status}
+                          actions={row.verbs}
+                          onMouseEnter={row.onMouseEnter}
+                          revitIds={row.revitIds}
+                          revitRefs={row.revitRefs}
+                          onClick={pick}
+                        />
+                        {active && row.detail != null ? (
+                          <div
+                            className="dl-row items-start! py-1 select-text!"
+                            data-depth={1}
+                            style={{ "--depth": 1 } as CSSProperties}
+                            data-inbox-detail={row.key}
+                          >
+                            <span className="dl-row-twist" aria-hidden />
+                            <div className="flex min-w-0 flex-1 flex-col gap-1.5">{row.detail}</div>
+                          </div>
+                        ) : null}
+                      </Fragment>
                     );
-                  const pick = () => {
-                    if (row.detail != null) flip();
-                    row.onClick?.();
-                  };
-                  return (
-                    <Fragment key={row.key}>
-                      <Row
-                        data-key={row.key}
-                        active={active}
-                        selected={row.lit || undefined}
-                        {...(row.detail != null ? { depth: 0, expanded: active } : {})}
-                        onToggle={flip}
-                        title={row.titleText ?? (typeof row.title === "string" ? row.title : "")}
-                        label={<span data-inbox-row={row["data-kind"]}>{row.title}</span>}
-                        meta={row.status}
-                        actions={row.verbs}
-                        onMouseEnter={row.onMouseEnter}
-                        revitIds={row.revitIds}
-                        revitRefs={row.revitRefs}
-                        onClick={pick}
-                      />
-                      {active && row.detail != null ? (
-                        <div
-                          className="dl-row items-start! py-1 select-text!"
-                          data-depth={1}
-                          style={{ "--depth": 1 } as CSSProperties}
-                          data-inbox-detail={row.key}
-                        >
-                          <span className="dl-row-twist" aria-hidden />
-                          <div className="flex min-w-0 flex-1 flex-col gap-1.5">{row.detail}</div>
-                        </div>
-                      ) : null}
-                    </Fragment>
-                  );
-                })}
-          </section>
-        );
-      })}
-    </div>
+                  })}
+            </section>
+          );
+        })}
+      </div>
     </>
   );
 }

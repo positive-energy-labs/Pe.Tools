@@ -38,6 +38,7 @@ export const PICTURE_KEYS: readonly LegendKey[] = [
   { keys: ["B", "X"], does: "Selection Box under the pointer" },
   { keys: ["F"], does: "frame the selection; nothing selected fits the system" },
   { keys: ["P"], does: "plan or isometric, keeping the pivot and zoom" },
+  { keys: ["N"], does: "look north, again to look south (also N and S on the globe's rim)" },
   { keys: ["S"], does: "swap the model and the schematic" },
   { keys: ["G"], does: "show or hide the globe" },
   { keys: ["M"], does: "meshes on or off" },

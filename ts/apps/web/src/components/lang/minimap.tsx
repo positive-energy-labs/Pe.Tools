@@ -18,7 +18,7 @@ import { tokenRef } from "@pe/kit/lib/token";
 import type { OrbitViewport, PlaneViewport, ScrollViewport } from "@pe/agent-contracts";
 export type { OrbitViewport, PlaneViewport, ScrollViewport };
 
-import type { LiveOrbit, OrbitGesture } from "#/scene/live-orbit";
+import { glideLook, type LiveOrbit, type OrbitGesture } from "#/scene/live-orbit";
 
 type ViewportHow = "gesture" | "move";
 
@@ -264,7 +264,15 @@ export function OrbitMinimap({
       const [x, y] = at(v);
       return { ...stop, v, x, y, front: dot(v, eye) >= -1e-9 };
     });
-    return { at, near, far, stops };
+    // N and S ride the rim, just outside the wire, at project north and south (+y, -y).
+    const rim = (["N", "S"] as const).map((look) => {
+      const v: Vec = [0, look === "N" ? 1 : -1, 0];
+      const [x, y] = at(v);
+      const out = Math.hypot(x - C, y - C);
+      const k = out < 1 ? 0 : (R + 16) / out;
+      return { look, x: out < 1 ? C : C + (x - C) * k, y: out < 1 ? C - R - 16 : C + (y - C) * k, front: dot(v, eye) >= -1e-9 };
+    });
+    return { at, near, far, stops, rim };
   }, [yaw, elev]);
 
   const dots = (front: boolean): ReactNode =>
@@ -404,6 +412,24 @@ export function OrbitMinimap({
         strokeWidth={1}
       />
       {dots(true)}
+      {body.rim.map((m) => (
+        <g
+          key={m.look}
+          data-orbit-look={m.look}
+          transform={`translate(${m.x.toFixed(1)} ${m.y.toFixed(1)})`}
+          opacity={m.front ? 1 : 0.5}
+          style={{ cursor: "pointer" }}
+          onClick={() => {
+            if (!pressed.current?.moved) glideLook(orbit, m.look);
+          }}
+        >
+          <title>{m.look === "N" ? "Look north: the camera moves to the south" : "Look south: the camera moves to the north"}</title>
+          <circle r={8} fill={tokenRef("page")} stroke={tokenRef("ink-2")} strokeWidth={1} />
+          <text y={3.5} fontSize={10} textAnchor="middle" className="face-mono" fill={tokenRef("ink")} pointerEvents="none">
+            {m.look}
+          </text>
+        </g>
+      ))}
     </svg>
   );
 }

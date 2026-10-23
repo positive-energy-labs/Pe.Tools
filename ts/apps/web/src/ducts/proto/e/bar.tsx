@@ -167,7 +167,7 @@ export function systemStatus(s: {
   if (s.blocked)
     return {
       tone: "alarm",
-      says: "needs a fix: a loss on its runs is implausible, so its static is not shown as a number to trust",
+      says: "needs a fix: implausible loss",
     };
   if (s.total == null)
     return { tone: "caution", says: "not priced: no run from a fan to a terminal was found" };

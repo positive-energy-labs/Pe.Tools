@@ -286,6 +286,19 @@ export function StateCell(props: StateCellProps) {
           className={slots.base()}
           data-scale="row"
           data-unit={props.unit != null ? "" : undefined}
+          // The whole box is the input's: a press on the unit or padding focuses it, caret last.
+          onMouseDown={
+            editable
+              ? (event) => {
+                  const input = event.currentTarget.querySelector("input");
+                  if (input == null || event.target === input) return;
+                  if ((event.target as HTMLElement).closest("button") != null) return;
+                  event.preventDefault();
+                  input.focus();
+                  input.setSelectionRange(input.value.length, input.value.length);
+                }
+              : undefined
+          }
           data-focus={focusHost != null ? "" : undefined}
           aria-busy={pending || undefined}
           onClick={locate}

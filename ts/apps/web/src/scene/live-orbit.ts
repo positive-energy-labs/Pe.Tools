@@ -79,6 +79,37 @@ export function createLiveOrbit(
 }
 export type LiveOrbit = ReturnType<typeof createLiveOrbit>;
 
+export type Look = "N" | "S";
+// Camera yaw looking toward `Look`: the eye sits on the opposite side of the pivot (yaw 0 = eye on +X,
+// 90 = eye on +Y), so looking north is the eye at 270.
+// ponytail: north is project north (+Y). No true-north or project-north angle reaches the web scene
+// (the capture's SceneMeshes carry bounds and instances only); when one does, rotate both yaws by it here.
+const LOOK_YAW: Record<Look, number> = { N: 270, S: 90 };
+export const looking = (v: { yaw: number }): Look | null =>
+  Math.abs(((v.yaw - LOOK_YAW.N + 540) % 360) - 180) < 1
+    ? "N"
+    : Math.abs(((v.yaw - LOOK_YAW.S + 540) % 360) - 180) < 1
+      ? "S"
+      : null;
+
+/** Glide the yaw to look `look` (elevation, zoom and pivot kept) like the selection re-centre, then
+ * release as a gesture so Page's viewport is replaced. A newer gesture or move takes the orbit and ends it. */
+export function glideLook(orbit: LiveOrbit, look: Look, ms = 350) {
+  const now = orbit.read();
+  const token = orbit.begin();
+  if (!now || !token) return;
+  const to = LOOK_YAW[look];
+  const delta = ((to - now.yaw + 540) % 360) - 180;
+  const t0 = performance.now();
+  requestAnimationFrame(function step() {
+    const k = Math.min((performance.now() - t0) / ms, 1);
+    const e = 1 - (1 - k) ** 3;
+    orbit.preview(token, { ...now, yaw: k < 1 ? now.yaw + delta * e : to });
+    if (k < 1) requestAnimationFrame(step);
+    else orbit.end(token);
+  });
+}
+
 /** Scope changes (system, document, view mode) cancel gestures even if the saved pose is equal.
  * pageValue is the actual Page key, distinct from a derived fit. Its identity detects explicit
  * external moves even to the same saved pose; rebuilding an equal fit is not such a move.
