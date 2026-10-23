@@ -52,6 +52,7 @@ import {
   documentRequestSchema,
   resolveCallTarget,
   addressSchema,
+  sameAddress,
   findCapabilities,
   mentionOf,
   message,
@@ -209,19 +210,38 @@ const targetQuery = (target: Target): string => {
  * Resolve route Work like the browser: Address when saved, exact open lifetime when unsaved.
  * Carry the lifetime beside an Address for Save As migration; a closed lifetime refuses (E2E-J1).
  */
-async function routeWorkScope(target: Target): Promise<{ query: string; target: ResolvedTarget }> {
+async function routeWorkScope(
+  target: Target,
+  allowed?: readonly DocumentRequest[],
+): Promise<{ query: string; target: ResolvedTarget }> {
   if (target?.kind !== "open") return { query: targetQuery(target), target: namedTarget(target) };
   const { sessions } = await new HostRpcCaller({ hostBaseUrl: base(), timeoutMs: 30_000 }).call(
     "bridge.sessions.list",
   );
-  const document = sessions
-    .find((session) => session.sessionId === target.ref.session)
-    ?.openDocuments?.find((doc) => doc.openId === target.ref.openId);
+  const session = sessions.find((session) => session.sessionId === target.ref.session);
+  if (session && !session.connected)
+    throw Error(
+      "The document's session is disconnected; its open document inventory is unavailable.",
+    );
+  const document = session?.openDocuments?.find((doc) => doc.openId === target.ref.openId);
   if (!document)
     throw Error(
       "The Chat's document is no longer open in its session; ask the person to pick an open document again.",
     );
   const address = addressSchema.safeParse(document.address).data ?? null;
+  if (
+    allowed &&
+    !allowed.some((held) =>
+      held.kind === "open"
+        ? held.ref.session === target.ref.session && held.ref.openId === target.ref.openId
+        : held.session === target.ref.session &&
+          address !== null &&
+          sameAddress(held.address, address),
+    )
+  )
+    throw Error(
+      "Route Work target must be one of this thread's documents; add it in the composer first.",
+    );
   const query = new URLSearchParams({ open: `${target.ref.session}/${target.ref.openId}` });
   if (address) query.set("target", address);
   return {
@@ -270,7 +290,7 @@ export const peFind = createTool({
         source: peSourceTree(),
         diagnostics: catalog.diagnostics,
         map: capabilityMap(offered),
-        hint: "Query pe_find for rows. pe_read runs a row that does not mutate; pe_do runs authorized actions through the host's write admission. Reads need only a target: pe_read may name any open document by exact target, and a ReadOnly scripting.execute needs a target and nothing more. Writes follow the user's access setting: under Full, Pea writes any open document; under Guarded, Pea writes its own documents and the documents the user added to this thread in the composer. targets lists this thread's documents; with exactly one, calls use it (defaultDocument); with several, a call names one by exact per-call target. Any script refuses while another open document in its Revit is one Pea may not write. External MCP clients write only Pea's own documents in this release. targets is read live per call. Op target overrides affect one call only. Session work accepts SDK id-or-pid selection; host work needs no document. target_set adds or removes only Pea's own documents.",
+        hint: "Query pe_find for rows. pe_read runs a row that does not mutate; pe_do runs authorized actions through the host's write admission. Reads need only a target: pe_read may name any open document by exact target, and Pea's ReadOnly scripting.execute needs read consent for its exact target. Writes follow the user's access setting: under Full, Pea writes any open document; under Guarded, Pea writes its own documents and the documents the user added to this thread in the composer. targets lists this thread's documents; with exactly one, calls use it (defaultDocument); with several, a call names one by exact per-call target. Any script, including ReadOnly, refuses while another open document in its Revit is one the caller may not write. Unpaired external MCP clients cannot run scripts; paired external clients still need write authority on the target. targets is read live per call. Op target overrides affect one call only. Session work accepts SDK id-or-pid selection; host work needs no document. target_set adds or removes only Pea's own documents.",
       };
     const rows = findCapabilities(offered, input);
     return {
@@ -308,7 +328,7 @@ const runInputSchema = z.object({
     .union([sdkSessionSelectionSchema, documentRequestSchema.options[0]])
     .optional()
     .describe(
-      "Op calls only: SDK selection {id: name} or {pid: number} for session work, or {kind: open, ref: {session, openId}} for an exact product document. Overrides only this call; omission uses the thread's one target and refuses when it has several. Reads (non-mutating ops and ReadOnly scripts) may name any open document; writes follow the user's access setting (Full: any open document; Guarded: Pea's own documents and the ones the user added to this thread).",
+      "Op calls take SDK selection {id: name} or {pid: number} for session work, or {kind: open, ref: {session, openId}} for an exact product document. Document-owned route Work also accepts an exact open target from this thread's documents. Overrides only this call; omission uses the thread's one target and refuses when it has several. Reads (non-mutating ops and Pea ReadOnly scripts) may name any open document; writes follow the user's access setting (Full: any open document; Guarded: Pea's own documents and the ones the user added to this thread).",
     ),
   expectedRevision: z
     .number()
@@ -360,7 +380,7 @@ export const peRead = createTool({
 export const peDo = createTool({
   id: "pe_do",
   description:
-    "Publish an authored HTML Page directly with {kind: 'page', slug, title, html, width?}; no target or discovery call is needed. Returns its canonical Page key, absolute openUrl and a real PNG image. HTML must be a valid document with a doctype; inline JavaScript is validated and preview errors preserve the prior Page. pe.js and pe.kit are optional. For corrections or updates, resubmit complete HTML through this same Page arm with the same slug; do not edit Page files through terminal tools. Or do one authorized capability by key from pe_find. Writes follow the user's access setting: under Full, Pea writes any open document; under Guarded, Pea writes its own documents and the documents the user added to this thread in the composer. A thread may target several documents; a write names one with an exact per-call target unless the thread has exactly one. op:scripting.execute with permissionMode ReadOnly is a read: it needs an exact target and nothing more, and refuses while another open document in that Revit is one Pea may not write. External MCP clients can read any document and write Pea's own in this release. Use pe_read for rows that do not mutate. Human-only rows refuse. Op calls accept an exact per-call target override; omission uses the thread's one target. The result separately names Scope revision and actual target. For Takeoffs actions, retain input.actionId from the first result to recover the same attempt; never mint another ID after an uncertain outcome.",
+    "Publish an authored HTML Page directly with {kind: 'page', slug, title, html, width?}; no target or discovery call is needed. Returns its canonical Page key, absolute openUrl and a real PNG image. HTML must be a valid document with a doctype; inline JavaScript is validated and preview errors preserve the prior Page. pe.js and pe.kit are optional. For corrections or updates, resubmit complete HTML through this same Page arm with the same slug; do not edit Page files through terminal tools. Or do one authorized capability by key from pe_find. Writes follow the user's access setting: under Full, Pea writes any open document; under Guarded, Pea writes its own documents and the documents the user added to this thread in the composer. A thread may target several documents; a write names one with an exact per-call target unless the thread has exactly one. For Pea, op:scripting.execute with permissionMode ReadOnly needs read consent for its exact target; every sibling open document still needs write authority. Unpaired external MCP clients cannot run scripts, including ReadOnly. Paired external clients still need write authority on the target. External MCP clients can read documents with non-script read operations. Use pe_read for rows that do not mutate. Human-only rows refuse. Op calls accept an exact per-call target override; omission uses the thread's one target. The result separately names Scope revision and actual target. For Takeoffs actions, retain input.actionId from the first result to recover the same attempt; never mint another ID after an uncertain outcome.",
   inputSchema: peDoInputSchema,
   toModelOutput: (output) => {
     const parsed = pagePublicationResultSchema.safeParse(output);
@@ -524,7 +544,7 @@ async function executeTool(
       defaultTarget,
       revision,
       principal === "external-mcp"
-        ? "grant.context-cannot-hold: external MCP is read-only until human pairing exists."
+        ? "grant.context-cannot-hold: external MCP cannot run this capability until human pairing exists, including ReadOnly scripts."
         : `'${row.key}' is human-only. Ask the user to press it in the ${row.title.split(":")[0]} workspace.`,
     );
   if (row.kind === "page" && !replayOperations && input.input)
@@ -544,12 +564,17 @@ async function executeTool(
       revision,
       "family.temporary.acquire has no turn-owned release on the harness lane.",
     );
-  if (input.target !== undefined && row.kind !== "op" && row.kind !== "script")
+  if (
+    input.target !== undefined &&
+    row.kind !== "op" &&
+    row.kind !== "script" &&
+    !documentWork(row)
+  )
     return refuse(
       row.key,
       defaultTarget,
       revision,
-      "Target overrides are supported by op: capabilities only.",
+      "Target overrides are supported by op: capabilities and document-owned route Work only.",
     );
   try {
     const outcome = await dispatch(
@@ -880,6 +905,10 @@ async function dispatch(
         if (view[2] === "view") response = await read(payload.instance);
         else {
           let { instance, revision, ...rest } = payload;
+          if ((instance === undefined) !== (revision === undefined))
+            throw Error(
+              "Pass both instance and revision for a mounted view, or omit both to open the tool.",
+            );
           if (instance === undefined) {
             // set-view is also the open: with no mounted view, Pea puts the tool's tab in this thread
             // and waits for the browser to mount it, then moves it like any other view.
@@ -965,13 +994,28 @@ async function dispatch(
       )
         throw new Error("workspaceId targets Pods or Schedules Work only.");
       const workspaceId = input.workspaceId;
+      let workTarget = defaultTarget;
+      if (documentWork(row)) {
+        if (input.target !== undefined) {
+          if (!("kind" in input.target))
+            throw Error(
+              "Route Work requires an exact open document target, not an SDK session selector.",
+            );
+          await routeWorkScope(input.target, targets);
+          workTarget = input.target;
+        } else if (targets.length > 1) {
+          throw Error(
+            "Target choose: several-targets. Name one of this thread's documents with an exact per-call target {kind: open, ref: {session, openId}}.",
+          );
+        }
+      }
       if (parsed.member === undefined) {
         const scope = workspaceId
           ? {
               query: new URLSearchParams({ work: workspaceId }).toString(),
               target: { session: null, document: null },
             }
-          : await routeWorkScope(defaultTarget);
+          : await routeWorkScope(workTarget);
         const result = await routeFetch(parsed.route, scope.query);
         if (parsed.route === familiesRouteState.route && !("isError" in result))
           result.hint =
@@ -992,7 +1036,7 @@ async function dispatch(
             (candidate) => candidate.key === "op:revit.catalog.loaded-families",
           );
           if (!catalogRow) throw Error("Loaded-families catalog capability unavailable.");
-          const target = await operationTarget(catalogRow, undefined, targets);
+          const target = await operationTarget(catalogRow, input.target, targets);
           const catalogResult = await new HostRpcCaller({
             hostBaseUrl: base(),
             ...target,
@@ -1023,7 +1067,7 @@ async function dispatch(
         if (input.expectedRevision === undefined)
           throw new Error(`Read route:${parsed.route} first and pass its expectedRevision.`);
         // Ducts Work is keyed by document: an unbound write lands in Work no page reads (wave 3, 2026-10-19).
-        if (parsed.route === "ducts" && !workspaceId && !defaultTarget)
+        if (parsed.route === "ducts" && !workspaceId && !workTarget)
           throw new Error(
             "route:ducts.propose needs this thread's one document, and none (or several) is targeted: Ducts Work belongs to one document, so this proposal would land where no page reads it. Ask the person to add the open document to this thread in the composer, or target_set one of your own open documents; then read route:ducts again and propose.",
           );
@@ -1043,7 +1087,7 @@ async function dispatch(
         return routeWrite(
           parsed.route,
           "apply",
-          defaultTarget,
+          workTarget,
           input.expectedRevision,
           {
             patches: [...(Array.isArray(payload.patches) ? payload.patches : []), ...loads],
@@ -1064,6 +1108,18 @@ async function dispatch(
       );
     }
   }
+}
+
+/** Workspace Work and browser leases keep their own addressing contracts. */
+function documentWork(row: Capability): boolean {
+  const route = parseRouteKey(row.key);
+  return (
+    row.kind === "route-doc" &&
+    row.source === "route registry" &&
+    !!route &&
+    route.route !== settingsRouteState.route &&
+    route.route !== scheduleGridRouteState.route
+  );
 }
 
 async function contributionRead(row: Capability) {

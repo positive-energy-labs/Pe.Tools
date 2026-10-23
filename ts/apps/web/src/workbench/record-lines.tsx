@@ -75,13 +75,10 @@ export function ActionLine({ call }: { call: ActionCall }) {
             {state}
           </span>
         </span>
-        {route ? (
+        {place?.ok ? (
           <Button
             label="open ›"
-            refusal={place?.ok ? null : place?.refusal}
-            onClick={() =>
-              place?.ok && void store.actions.openTab(place.route, place.page, place.carry)
-            }
+            onClick={() => void store.actions.openTab(place.route, place.page, place.carry)}
           >
             open ›
           </Button>
