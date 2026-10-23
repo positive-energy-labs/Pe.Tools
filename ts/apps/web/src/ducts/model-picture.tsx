@@ -1,4 +1,3 @@
-import { OutcomeLine } from "@pe/kit/lang/outcome";
 import { useWork } from "@pe/kit/lang/pane";
 /** The subject's real meshes and annotations. Camera policy belongs to useStage. */
 import { emptyListSearch } from "@pe/agent-contracts";
