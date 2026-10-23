@@ -1,3 +1,6 @@
+import { Row } from "@pe/kit/lang/row";
+import { StateCell } from "@pe/kit/lang/cell";
+import { REACH_RUNGS } from "@pe/kit/lang/reach";
 import { Fragment, useState } from "react";
 import { RefreshCw, Save, Upload } from "lucide-react";
 
@@ -81,6 +84,27 @@ function PreviewActionSpecimen() {
 export function LangPressSpecimens() {
   return (
     <>
+      <SpecimenFrame name="Reach ? rest / reach / hover / focus" importPath="@pe/kit/lang/reach">
+        <div className="grid grid-cols-4 gap-3">
+          {REACH_RUNGS.map((rung) => (
+            <div
+              key={rung}
+              ref={(el) => {
+                el?.querySelectorAll("[data-reach]").forEach((target) =>
+                  target.setAttribute("data-reach", rung),
+                );
+              }}
+            >
+              <span className="t-small">{rung}</span>
+              <Row label="Supply duct" onClick={noop} />
+              <StateCell scale="row" value="420" unit={{ label: "cfm" }} onCommit={noop} />
+              <Button label="Frame duct" onClick={noop}>
+                Frame duct
+              </Button>
+            </div>
+          ))}
+        </div>
+      </SpecimenFrame>
       <SpecimenFrame name="Select and Selection Box" importPath="@pe/kit/lang/gesture-glyph">
         <div className="flex items-center gap-3">
           <SelectInRevitIcon aria-label="Select" />

@@ -1,3 +1,7 @@
+import { reachStore } from "@pe/kit/lang/reach";
+import { SubjectTextContext } from "@pe/kit/lang/subject-text";
+import { Row } from "@pe/kit/lang/row";
+import { useSceneReach } from "#/scene/reach";
 import { createLiveOrbit } from "#/scene/live-orbit";
 // @vitest-environment jsdom
 import { act, cleanup, fireEvent, render } from "@testing-library/react";
@@ -155,4 +159,36 @@ test("the rim N always glides north (eye at 270), keeping elevation, zoom and pi
   await vi.waitFor(() => expect(end).toHaveBeenCalledTimes(2));
   expect(orbit.read()).toEqual({ ...viewport, yaw: 270 });
   expect(onViewport).toHaveBeenCalledTimes(1);
+});
+
+test("the kit row channel lights the globe through the one scene adapter without moving the camera", () => {
+  const channel = reachStore();
+  const viewport: OrbitViewport = { kind: "orbit", yaw: 30, elev: 30, zoom: 1, pivot: [0, 0, 0] };
+  const commit = vi.fn();
+  const orbit = createLiveOrbit(viewport, commit);
+  const line = [
+    [
+      [0, 0, 0],
+      [0.5, 0.5, 0.5],
+    ],
+  ];
+  function Picture() {
+    const { hovered } = useSceneReach();
+    return <OrbitMinimap orbit={orbit} lines={line} litLines={hovered === 42 ? line : []} />;
+  }
+  const view = render(
+    <SubjectTextContext value={{ nameOf: () => "duct", reach: channel }}>
+      <Row label="duct" revitIds={[42]} />
+      <Picture />
+    </SubjectTextContext>,
+  );
+  const path = view.container.querySelector("[data-orbit-mini-reach]")!;
+  expect(path.getAttribute("d")).toBe("");
+  fireEvent.mouseEnter(view.container.querySelector(".dl-row")!);
+  expect(path.getAttribute("d")).toContain("L");
+  expect(channel.get().hovered).toBe(42);
+  fireEvent.mouseLeave(view.container.querySelector(".dl-row")!);
+  expect(path.getAttribute("d")).toBe("");
+  expect(orbit.read()).toEqual(viewport);
+  expect(commit).not.toHaveBeenCalled();
 });

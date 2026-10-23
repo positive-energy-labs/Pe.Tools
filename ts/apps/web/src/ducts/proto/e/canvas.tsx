@@ -1,3 +1,4 @@
+import { useSceneReach } from "#/scene/reach";
 /** The model/schematic pane, its fixed readout and floaters. Camera policy belongs to useStage. */
 import { nameOrFallback } from "@pe/kit/lang/subject-text";
 import {
@@ -156,8 +157,8 @@ function Canvas({
   claims,
   onVerdict,
   work,
-  hovered,
-  onHover,
+  hovered: fallbackHovered,
+  onHover: fallbackOnHover,
   lit,
   issueScope,
   annotated,
@@ -174,6 +175,10 @@ function Canvas({
   onSelect,
   onPose,
 }: ProtoProps & ECanvasExtra & { snapshot: NonNullable<ProtoProps["snapshot"]> }) {
+  const { hovered, onHover } = useSceneReach({
+    hovered: fallbackHovered,
+    onHover: fallbackOnHover,
+  });
   const observation = useNativeObservation();
   const index = useMemo(() => indexOf(snapshot, priced), [snapshot, priced]);
   const labelOf = useMemo(() => labelOfNode(snapshot), [snapshot]);

@@ -33,14 +33,8 @@ import { airflowOptions } from "../../airflow";
 import { noRunParts, subjectNamer } from "../../subject-text";
 import { useRevitSubjectProps } from "#/revit/element-menu";
 import { noRunBranches } from "@pe/ducts-domain/no-runs";
-import {
-  NO_LIGHTING,
-  reachStore,
-  SubjectTextContext,
-  useReach,
-  type ReachStore,
-  type SubjectReference,
-} from "@pe/kit/lang/subject-text";
+import { SubjectTextContext, type SubjectReference } from "@pe/kit/lang/subject-text";
+import { NO_LIGHTING, reachStore, useReachState } from "@pe/kit/lang/reach";
 import {
   annotatedFindings,
   stageIssues,
@@ -1321,9 +1315,9 @@ function ReachCanvas({
   reach,
   ...props
 }: Omit<ComponentProps<typeof ECanvas>, "lit" | "hovered" | "hoveredIssue"> & {
-  reach: ReachStore;
+  reach: ReturnType<typeof reachStore>;
 }) {
-  const state = useReach(reach, (s) => s);
+  const state = useReachState(reach, (s) => s);
   return (
     <ECanvas
       {...props}
@@ -1338,7 +1332,7 @@ function ReachCanvas({
 function ReachInbox({
   reach,
   ...props
-}: Omit<ComponentProps<typeof Inbox>, "hoveredIssue"> & { reach: ReachStore }) {
-  const issue = useReach(reach, (s) => s.issue);
+}: Omit<ComponentProps<typeof Inbox>, "hoveredIssue"> & { reach: ReturnType<typeof reachStore> }) {
+  const issue = useReachState(reach, (s) => s.issue);
   return <Inbox {...props} hoveredIssue={issue} />;
 }

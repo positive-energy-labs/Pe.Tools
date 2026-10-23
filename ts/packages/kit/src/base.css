@@ -137,7 +137,6 @@
   --item-pad-x: 6px;
   --control-pad-x: 4px;
 }
-
 @layer base {
   [data-pe],
   [data-pe] * {
@@ -167,10 +166,6 @@
   :where([data-pe], [data-pe] *) {
     scrollbar-width: thin;
     scrollbar-color: transparent transparent;
-  }
-
-  [data-pe] :hover {
-    scrollbar-color: color-mix(in srgb, var(--pe-ink) 22%, transparent) transparent;
   }
 
   [data-pe].dark {
@@ -220,10 +215,6 @@
   [data-pe] a {
     color: var(--pe-nav);
     text-underline-offset: 2px;
-  }
-
-  [data-pe] a:hover {
-    text-decoration: underline;
   }
 
   [data-pe] code {
@@ -289,13 +280,6 @@
   --pe-on: var(--pe-recess);
 }
 
-[data-pe] .veil:hover {
-  background-image: var(--fill-veil);
-}
-[data-pe] .veil:active {
-  background-image: var(--fill-press);
-}
-
 [data-pe] .hairline {
   outline: 1px solid var(--pe-line-2);
   outline-offset: 0;
@@ -333,6 +317,7 @@
     transform: rotate(360deg);
   }
 }
+
 /* Broken lines — three roles, one authority. No second dash authority exists; a drawing
    serialized without a stylesheet reads these same values through `lib/token.ts`.
      seam       declared, with nothing real behind it. The one UI broken edge.
@@ -480,16 +465,7 @@
 /* A column head's trigger: a plain label at rest, the control frame only when touched. The border
    is reserved transparent and the padding fixed, so the label never moves; the pad less the
    border puts the label on the body cells' inset. */
-[data-pe] .dl-button[data-colhead-trigger] {
-  height: var(--item-h);
-  padding: 0 calc(var(--item-pad-x) - 1px);
-  border-color: transparent;
-  background-color: transparent;
-}
-[data-pe] .dl-button[data-colhead-trigger]:is(:hover, :focus-visible, [data-popup-open]) {
-  border-color: var(--pe-line-2);
-  background-color: color-mix(in srgb, var(--pe-line) 20%, transparent);
-}
+
 [data-pe] .face-mono {
   font-family: var(--font-mono);
   font-variant-numeric: tabular-nums;

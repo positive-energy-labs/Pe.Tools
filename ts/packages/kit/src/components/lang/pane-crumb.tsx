@@ -1,3 +1,4 @@
+import { reachProps } from "./reach";
 import { Fragment } from "react";
 import { ChevronRight } from "lucide-react";
 import { revitTarget } from "./row";
@@ -21,6 +22,7 @@ export function PaneCrumb({
                 type="button"
                 className="veil"
                 onClick={segment.onPress}
+                {...reachProps()}
                 {...revitTarget(segment.revitIds)}
                 data-crumb-segment={
                   index === segments.length - 1 ? "selection" : index === 0 ? "scope" : "subject"
@@ -30,6 +32,7 @@ export function PaneCrumb({
               </button>
             ) : (
               <span
+                {...reachProps()}
                 {...revitTarget(segment.revitIds)}
                 data-crumb-segment={
                   index === segments.length - 1 ? "selection" : index === 0 ? "scope" : "subject"

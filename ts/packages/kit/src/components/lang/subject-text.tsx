@@ -1,15 +1,9 @@
+import { useReachState, reachProps, type ReachStore } from "./reach";
 /** Subject prose names elements with the picture's shared footnote marks. Hovering the block
  * lights all its Subjects; focus narrows to one; pressing calls the route's alias-click (`go`).
  * The route supplies `nameOf`; `refProps` binds each token to its Revit element menu.
  */
-import {
-  createContext,
-  useContext,
-  useEffect,
-  useId,
-  useSyncExternalStore,
-  type ReactNode,
-} from "react";
+import { createContext, useContext, useEffect, useId, type ReactNode } from "react";
 import { useRevitTarget } from "./row";
 import { TooltipHint } from "./tooltip";
 import "./lang.css";
@@ -70,53 +64,9 @@ export function subjectDocument(
   return { parts, references: references.filter((r) => seen.has(r.id)) };
 }
 
-export type SubjectLighting = {
-  ids: ReadonlySet<number>;
-  references: readonly SubjectReference[];
-  focus: number | null;
-  owner?: string;
-};
-export const NO_LIGHTING: SubjectLighting = { ids: new Set(), references: [], focus: null };
-
-/**
- * What the pointer is reaching for, outside React state: the lit Subjects, the hovered element and
- * the hovered issue. A hover writes here and only the marks that draw it re-render; a route-level
- * setState re-rendered every pane per pointer crossing, 170 to 550 ms each on Chadds SA 44 (ducts
- * reach audit, 2026-10-23).
- */
-export type Reach = {
-  lighting: SubjectLighting;
-  hovered: number | null;
-  issue: string | null;
-};
-export function reachStore() {
-  let state: Reach = { lighting: NO_LIGHTING, hovered: null, issue: null };
-  const listeners = new Set<() => void>();
-  return {
-    get: () => state,
-    /** `next` returns the same state to change nothing (no listener runs). */
-    set(next: (state: Reach) => Reach) {
-      const value = next(state);
-      if (value === state) return;
-      state = value;
-      for (const listener of listeners) listener();
-    },
-    subscribe(listener: () => void) {
-      listeners.add(listener);
-      return () => void listeners.delete(listener);
-    },
-  };
-}
-export type ReachStore = ReturnType<typeof reachStore>;
-const IDLE = reachStore();
-/** One slice of the reach state; `pick` must return a stable value (a field or a primitive). */
-export function useReach<T>(store: ReachStore | null | undefined, pick: (state: Reach) => T): T {
-  const s = store ?? IDLE;
-  return useSyncExternalStore(s.subscribe, () => pick(s.get()));
-}
 /** The lit Subjects under the route's text context; nothing lit outside it. */
 export const useSubjectLighting = () =>
-  useReach(useContext(SubjectTextContext)?.reach, (state) => state.lighting);
+  useReachState(useContext(SubjectTextContext)?.reach, (state) => state.lighting);
 
 export type SubjectTextScope = {
   nameOf: (id: number) => string | null;
@@ -179,6 +129,7 @@ export function SubjectText({
   return (
     <span
       {...target}
+      {...reachProps()}
       data-subject-text=""
       onMouseEnter={() => light(null)}
       onMouseMove={(e) => e.stopPropagation()}
@@ -215,7 +166,7 @@ function SubjectRef({
   onHover: (on: boolean) => void;
 }) {
   const target = useRevitTarget([part.id]);
-  const lit = useReach(scope.reach, (state) => state.lighting.focus === part.id);
+  const lit = useReachState(scope.reach, (state) => state.lighting.focus === part.id);
   const port = part.connector != null ? ` port ${part.connector}` : "";
   const go = scope.go;
   return (
@@ -230,6 +181,7 @@ function SubjectRef({
     >
       <button
         type="button"
+        {...reachProps(lit ? "reach" : "rest")}
         className="subject-ref"
         data-claim-element={part.id}
         data-lit={lit ? "" : undefined}

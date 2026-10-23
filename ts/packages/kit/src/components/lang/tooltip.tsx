@@ -1,3 +1,4 @@
+import { reachProps } from "./reach";
 import {
   createContext,
   isValidElement,
@@ -47,8 +48,9 @@ export function TooltipHint(props: {
       <Tooltip>
         <TooltipTrigger
           type="button"
+          {...reachProps()}
           aria-label="What is this?"
-          className="veil grid size-5 cursor-help place-items-center rounded-control t-small face-mono text-ink-2 hover:text-ink"
+          className="veil grid size-5 cursor-help place-items-center rounded-control t-small face-mono text-ink-2"
         >
           ?
         </TooltipTrigger>
@@ -182,15 +184,25 @@ export function SvgTip({ content }: { content: string }) {
     if (!mark) return;
     let timer: ReturnType<typeof setTimeout>;
     const enter = () => {
+      mark.setAttribute("data-reach", mark.matches(":focus") ? "focus" : "hover");
       timer = setTimeout(() => setOpen(true), 350);
     };
     const leave = () => {
       clearTimeout(timer);
       setOpen(false);
+      mark.setAttribute(
+        "data-reach",
+        mark.matches(":focus") ? "focus" : mark.matches(":hover") ? "hover" : "rest",
+      );
     };
-    const focus = () => setOpen(true);
+    const focus = () => {
+      mark.setAttribute("data-reach", "focus");
+      setOpen(true);
+    };
     const tab = mark.getAttribute("tabindex");
     mark.setAttribute("data-svg-tip", "");
+    const reach = mark.getAttribute("data-reach");
+    mark.setAttribute("data-reach", "rest");
     const description = mark.getAttribute("aria-description");
     if (tab == null) mark.setAttribute("tabindex", "0");
     mark.setAttribute("aria-description", content);
@@ -202,6 +214,8 @@ export function SvgTip({ content }: { content: string }) {
     return () => {
       leave();
       mark.removeAttribute("data-svg-tip");
+      if (reach == null) mark.removeAttribute("data-reach");
+      else mark.setAttribute("data-reach", reach);
       if (tab == null) mark.removeAttribute("tabindex");
       if (description == null) mark.removeAttribute("aria-description");
       else mark.setAttribute("aria-description", description);
