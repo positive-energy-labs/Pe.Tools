@@ -277,6 +277,48 @@ test("a faulted stream goes stale, reconnects with backoff, and only fresh data 
   readings.close();
 });
 
+test.each([false, true])("world acquisition=%s controls the shared watchdog", async (acquired) => {
+  vi.useFakeTimers();
+  const { readings, sources } = owner();
+  const registry = AtomRegistry.make();
+  const atom = readingAtom(head, readings);
+  const release = registry.subscribe(atom, () => {}, { immediate: true });
+  const world = { kind: "world" } as const;
+  const worldKey = readingKey(world);
+  const worldFrames: unknown[] = [];
+  const releaseWorld = readings.subscribe(world, (frame) => worldFrames.push(frame));
+  try {
+    await vi.advanceTimersByTimeAsync(0);
+    const source = sources[0]!;
+    source.onopen!();
+    source.onmessage!(snapshot({ revision: 1 }));
+    const send = (frame: unknown) =>
+      source.onmessage!({ data: JSON.stringify(readingFrameSchema.parse(frame)) });
+    send({ kind: "gap", key: worldKey, dropped: null });
+    send({ kind: "event", key: worldKey, value: { kind: "connected", sessionId: "s1" } });
+    if (acquired) send({ kind: "snapshot", key: worldKey, value: null });
+    worldFrames.length = 0;
+
+    await vi.advanceTimersByTimeAsync(30_001);
+    expect(source.closed).toBe(!acquired);
+    expect(registry.get(atom).state).toBe(acquired ? "ready" : "stale");
+    if (acquired) {
+      await vi.advanceTimersByTimeAsync(30_000);
+      expect(sources).toHaveLength(1);
+      expect(worldFrames).toEqual([]);
+      expect(registry.get(atom)).toEqual({ state: "ready", observation: { revision: 1 } });
+      send({ kind: "event", key: worldKey, value: { kind: "disconnected", sessionId: "s1" } });
+      expect(worldFrames).toEqual([
+        { kind: "event", key: worldKey, value: { kind: "disconnected", sessionId: "s1" } },
+      ]);
+    }
+  } finally {
+    releaseWorld();
+    release();
+    readings.close();
+  }
+});
+
 test("a tab shown after sleeping resyncs once, and the thread re-reads its body and tail", async () => {
   const { readings, sources } = owner();
   const registry = AtomRegistry.make();
