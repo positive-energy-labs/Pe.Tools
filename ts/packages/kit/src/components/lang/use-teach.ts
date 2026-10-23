@@ -50,23 +50,27 @@ export function useTeach(
     let previous = "";
     let withdraw: (() => void) | undefined;
     const measure = () => {
-      const visible = nodes.every((node) => {
-        const rect = node.getBoundingClientRect();
-        return node.isConnected && rect.width > 0 && rect.height > 0;
-      });
-      const label =
-        fact.kind === "region"
-          ? pane?.querySelector('[data-slot="pane-title"]')?.textContent?.trim() ||
-            pane?.querySelector("[data-list-view][aria-label]")?.getAttribute("aria-label") ||
-            fact.label
-          : undefined;
-      const next = visible
-        ? JSON.stringify({ ...fact, ...(label ? { label } : {}), id, region: owner })
+      const next = { ...fact, id, region: owner };
+      if (next.kind === "region" && pane) {
+        next.label =
+          pane.querySelector('[data-slot="pane-title"]')?.textContent?.trim() ||
+          pane.querySelector("[data-list-view][aria-label]")?.getAttribute("aria-label") ||
+          next.label;
+        const { left, top, width, height } = pane.getBoundingClientRect();
+        next.rect = { left, top, width, height };
+      }
+      const stamp = nodes.every(
+        (node) =>
+          node.isConnected &&
+          node.getBoundingClientRect().width > 0 &&
+          node.getBoundingClientRect().height > 0,
+      )
+        ? JSON.stringify(next)
         : "";
-      if (next === previous) return;
-      previous = next;
+      if (stamp === previous) return;
+      previous = stamp;
       withdraw?.();
-      withdraw = next ? registerTeaching(JSON.parse(next)) : undefined;
+      withdraw = stamp ? registerTeaching(next) : undefined;
     };
     measure();
     const resize = typeof ResizeObserver === "undefined" ? null : new ResizeObserver(measure);
