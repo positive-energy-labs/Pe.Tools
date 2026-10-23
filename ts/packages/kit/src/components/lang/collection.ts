@@ -6,6 +6,10 @@
 import { useEffect, useId, useMemo, useState } from "react";
 
 import { useScopeKeys, type ScopeKey } from "../../keys";
+import { conditionValues, passes, readQuery, queryWords, wordMatches, type QueryRead } from "../master-table/view";
+import { clauseText } from "../master-table/view";
+import { setQueryFilter } from "../master-table/query-filters";
+import type { RowState } from "./row";
 
 type FilterMode = "none" | "substring" | "fuzzy" | "words";
 type SelectMode = "none" | "single" | "multi";
@@ -46,6 +50,8 @@ export interface CollectionOptions<T> {
   groupCap?: number;
   filter?: FilterMode;
   select?: SelectMode;
+  /** Long navigation lists activate on Enter/plain click; popup multi lists keep toggling. */
+  multiAction?: "toggle" | "activate";
   /** Controlled selection by key. */
   selected?: readonly string[];
   onSelectedChange?: (keys: string[]) => void;
@@ -78,6 +84,8 @@ export interface CollectionOptions<T> {
   initialQuery?: string;
   /** The element the keys listen on: the list itself, or the input that owns it. */
   target: HTMLElement | null;
+  /** Virtual renderers mount and scroll the cursor themselves. */
+  scrollCursor?: boolean;
 }
 
 export type VisibleRow<T> =
@@ -121,31 +129,10 @@ export function filterItems<T>(
 ): T[] {
   const q = query.trim();
   if (mode === "none" || !q) return [...items];
-  if (mode === "substring") {
-    const lower = q.toLowerCase();
-    return items.filter((item) => labelOf(item).toLowerCase().includes(lower));
-  }
-  if (mode === "words") {
-    // Each query word starts a word of the label, sits in the label, or starts a word of the
-    // detail, best first. "duct" finds "Duct Loss", never "Identity and instruction" or "product".
-    const parts = (text: string) => text.toLowerCase().split(/[\s\-_./›()]+/);
-    return items
-      .map((item, index) => {
-        const label = labelOf(item).toLowerCase();
-        const labelWords = parts(label);
-        const detailWords = detailOf ? parts(detailOf(item)) : [];
-        let score = 0;
-        for (const word of q.toLowerCase().split(/\s+/)) {
-          if (labelWords.some((part) => part.startsWith(word))) score += 3;
-          else if (label.includes(word)) score += 2;
-          else if (detailWords.some((part) => part.startsWith(word))) score += 1;
-          else return null;
-        }
-        return { item, index, score };
-      })
-      .filter((hit) => hit !== null)
-      .sort((a, b) => b.score - a.score || a.index - b.index)
-      .map((hit) => hit.item);
+  if (mode === "substring" || mode === "words") {
+    const clauses = readQuery(q);
+    return items.filter((item) => passes(item, clauses, new Map(), (row, word) =>
+      wordMatches(labelOf(row), word) || !!detailOf && wordMatches(detailOf(row), word)));
   }
   return items
     .map((item, index) => ({ item, index, score: fuzzyScore(labelOf(item), q) }))
@@ -276,7 +263,7 @@ export function useCollection<T>(options: CollectionOptions<T>) {
     leadingGroups.join("|"),
   ]);
 
-  const pickable = visible.filter((row) => row.kind !== "head");
+  const pickable = visible.filter((row) => row.kind !== "head" && (row.kind !== "item" || !options.refusalOf?.(row.item)));
   const cursor =
     pickable.find((row) => row.key === cursorKey) ??
     // An owned query (a menu on a text input) opens with its top row cursored: Enter picks it.
@@ -309,14 +296,14 @@ export function useCollection<T>(options: CollectionOptions<T>) {
   /** Shift-range over the VISIBLE order, from the anchor to this row. */
   const range = (key: string) => {
     const keys = pickable.filter((row) => row.kind === "item").map((row) => row.key);
-    const from = keys.indexOf(anchor ?? key);
+    const from = keys.indexOf(anchor ?? cursor?.key ?? key);
     const to = keys.indexOf(key);
     if (from < 0 || to < 0) return setSelected([key]);
     const span = keys.slice(Math.min(from, to), Math.max(from, to) + 1);
     setSelected([...new Set([...selectedKeys, ...span])]);
   };
 
-  const pick = (row: VisibleRow<T> | undefined, shift = false) => {
+  const pick = (row: VisibleRow<T> | undefined, shift = false, toggling = false) => {
     if (!row || row.kind === "head") return;
     if (row.kind === "create") return createOf?.(row.text);
     if (row.kind === "more") {
@@ -326,12 +313,12 @@ export function useCollection<T>(options: CollectionOptions<T>) {
     setCursorKey(row.key);
     if (options.refusalOf?.(row.item)) return;
     if (select === "multi") {
-      if (shift) range(row.key);
-      else {
+      if (shift) { range(row.key); return; }
+      if (toggling || options.multiAction !== "activate") {
         toggle(row.key);
         setAnchor(row.key);
+        return;
       }
-      return;
     }
     if (select === "single") setSelected([row.key]);
     const rung = levels?.[row.level];
@@ -416,7 +403,7 @@ export function useCollection<T>(options: CollectionOptions<T>) {
         ? [
             {
               hotkey: "Space" as const,
-              callback: () => pick(cursor),
+              callback: () => pick(cursor, false, true),
               label: "toggle",
               says: "add or remove the row",
             },
@@ -456,8 +443,8 @@ export function useCollection<T>(options: CollectionOptions<T>) {
   // The cursored row stays in view as the keys move it.
   const cursorId = cursor ? optionId(cursor.key) : null;
   useEffect(() => {
-    if (cursorId) document.getElementById(cursorId)?.scrollIntoView?.({ block: "nearest" });
-  }, [cursorId]);
+    if (cursorId && options.scrollCursor !== false) document.getElementById(cursorId)?.scrollIntoView?.({ block: "nearest" });
+  }, [cursorId, options.scrollCursor]);
   return {
     query,
     /** Typing resets the cursor to the top hit. */
@@ -468,6 +455,7 @@ export function useCollection<T>(options: CollectionOptions<T>) {
     visible,
     status,
     cursor: cursor?.key ?? null,
+    setCursor: setCursorKey,
     selected: selectedKeys,
     path,
     level,
@@ -479,10 +467,11 @@ export function useCollection<T>(options: CollectionOptions<T>) {
       setQuery("");
       setCursorKey(null);
     },
-    pick: (key: string, shift = false) =>
+    pick: (key: string, shift = false, toggling = false) =>
       pick(
         visible.find((row) => row.key === key),
         shift,
+        toggling,
       ),
     /** The list element's props: a listbox, multi when selecting many. */
     listProps: {
@@ -505,13 +494,225 @@ export function useCollection<T>(options: CollectionOptions<T>) {
       cursor: key === cursor?.key,
       selected: select === "none" ? undefined : selectedKeys.includes(key),
       onMouseMove: () => setCursorKey(key),
-      onClick: (event: { shiftKey: boolean }) =>
+      onClick: (event: { shiftKey: boolean; ctrlKey?: boolean; metaKey?: boolean }) =>
         pick(
           visible.find((row) => row.key === key),
           event.shiftKey,
+          event.ctrlKey || event.metaKey,
         ),
     }),
   };
 }
 
 export type Collection<T> = ReturnType<typeof useCollection<T>>;
+
+/** All persisted list state is data; routes may own it in their address. */
+export interface ListState<Sort extends string = string> {
+  query: string;
+  sort: Sort | "";
+  closed: readonly string[];
+  /** Expanded tree nodes and inline details, keyed by data identity. */
+  open: readonly string[];
+  selected: readonly string[];
+}
+
+export const emptyListState = <Sort extends string = string>(): ListState<Sort> => ({
+  query: "", sort: "", closed: [], open: [], selected: [],
+});
+
+export interface ListOptions<T, Sort extends string = string> {
+  items: readonly T[];
+  keyOf: (item: T) => string;
+  search: (item: T) => { text: readonly (string | number | null | undefined)[]; ids?: readonly number[] };
+  fields?: Readonly<Record<string, QueryRead<T>>>;
+  sorts?: Readonly<Record<Sort, (item: T) => string | number | undefined>>;
+  groups?: {
+    of: (item: T) => string;
+    order?: readonly string[];
+    collapsible?: readonly string[];
+    defaultClosed?: readonly string[];
+  };
+  tree?: { childrenOf: (item: T) => readonly T[] };
+  stageOf?: (item: T) => RowState["stage"];
+  select?: SelectMode;
+  state?: ListState<Sort>;
+  initialState?: Partial<ListState<Sort>>;
+  onState?: (state: ListState<Sort>) => void;
+  onPick?: (item: T) => void;
+  refusalOf?: (item: T) => string | null | undefined;
+}
+
+export interface ListItem<T> {
+  key: string;
+  item: T;
+  depth: number;
+  ancestors: readonly string[];
+  section: string;
+  branch: boolean;
+}
+
+export interface ListSearch {
+  text: readonly (string | number | null | undefined)[];
+  ids?: readonly number[];
+}
+
+export function listWordMatches(searchable: ListSearch, word: string): boolean {
+  return (/^\d+$/.test(word) && !!searchable.ids?.includes(Number(word))) ||
+    searchable.text.some((value) => value != null && wordMatches(String(value), word));
+}
+
+/** Temporary draft consumers use this same matcher until they adopt useList. */
+export const matchesListQuery = (query: string, searchable: ListSearch) =>
+  passes(searchable, readQuery(query), new Map(), listWordMatches);
+
+export const hasListFacet = (query: string, field: string, value: string) => readQuery(query).some((clause) =>
+  clause.kind === "field" && !clause.not && clause.op === "=" && clause.label.toLowerCase() === field.toLowerCase() &&
+  clause.value.toLowerCase() === value.toLowerCase());
+
+/** Query, sorting, sections and tree order share one data projection, independent of mounted rows. */
+export function listModel<T, Sort extends string>(options: ListOptions<T, Sort>, state: ListState<Sort>) {
+  const all: ListItem<T>[] = [];
+  const visit = (items: readonly T[], ancestors: readonly string[], section?: string) => {
+    for (const item of items) {
+      const key = options.keyOf(item);
+      const children = options.tree?.childrenOf(item) ?? [];
+      const group = section ?? options.groups?.of(item) ?? "";
+      all.push({ key, item, depth: ancestors.length, ancestors, section: group, branch: children.length > 0 });
+      visit(children, [...ancestors, key], group);
+    }
+  };
+  visit(options.items, []);
+  const fields = new Map(Object.entries(options.fields ?? {}).map(([key, read]) => [key.toLowerCase(), read]));
+  if (options.stageOf) fields.set("change", {
+    kind: "text", read: (item) => options.stageOf!(item) ?? "clean", values: ["clean", "proposed", "staged"],
+  });
+  const words = queryWords(state.query);
+  const typedSort = [...words].reverse().find((word) => word.startsWith("sort:"))?.slice(5);
+  const sortKey = typedSort && options.sorts && typedSort in options.sorts ? typedSort as Sort : state.sort;
+  const clauses = readQuery(words.filter((word) => !word.startsWith("sort:")).join(" "));
+  const word = (item: T, text: string) => {
+    const searchable = options.search(item);
+    return listWordMatches(searchable, text);
+  };
+  const matching = all.filter((row) => passes(row.item, clauses, fields, word));
+  const included = new Set(matching.flatMap((row) => [row.key, ...row.ancestors]));
+  const filtering = clauses.length > 0;
+  const sort = sortKey ? options.sorts?.[sortKey] : undefined;
+  const ordered = all.filter((row) => included.has(row.key)).sort((a, b) => {
+    // Sorting siblings retains the tree's parent-before-child order below.
+    if (!sort) return 0;
+    const x = sort(a.item), y = sort(b.item);
+    return x === y ? 0 : x === undefined ? -1 : y === undefined ? 1 :
+      typeof x === "number" && typeof y === "number" ? x - y : String(x).localeCompare(String(y));
+  });
+  const sectionKeys = [...new Set([...options.groups?.order ?? [], ...ordered.map((row) => row.section)])];
+  const bySection = new Map<string, ListItem<T>[]>();
+  for (const row of ordered) {
+    const members = bySection.get(row.section) ?? [];
+    members.push(row);
+    bySection.set(row.section, members);
+  }
+  const sections = sectionKeys.map((key) => {
+    const members = bySection.get(key) ?? [];
+    const children = new Map<string | undefined, ListItem<T>[]>();
+    for (const row of members) {
+      const parent = row.ancestors.at(-1);
+      const siblings = children.get(parent) ?? [];
+      siblings.push(row);
+      children.set(parent, siblings);
+    }
+    const rows: ListItem<T>[] = [];
+    const append = (parent: string | undefined) => {
+      for (const row of children.get(parent) ?? []) {
+        rows.push(row);
+        if (filtering || state.open.includes(row.key)) append(row.key);
+      }
+    };
+    append(undefined);
+    return {
+      key, label: key, count: members.length,
+      staged: members.filter((row) => options.stageOf?.(row.item) === "staged").length,
+      collapsible: !!options.groups && (!options.groups.collapsible || options.groups.collapsible.includes(key)),
+      closed: state.closed.includes(key), rows,
+    };
+  }).filter((section) => section.count > 0);
+  const facets = [...fields].map(([key, field]) => ({
+    key,
+    values: conditionValues(all.filter((row) => passes(row.item, clauses.filter((clause) =>
+      clause.kind !== "field" || clause.label.toLowerCase() !== key), fields, word)).map((row) => row.item), field),
+  }));
+  return { all, sections, facets, sort: sortKey, filtering, total: all.length, shown: matching.length };
+}
+
+/** The long-list API grows the collection key owner; popups and ladders keep their existing API. */
+export function useList<T, Sort extends string = string>(options: ListOptions<T, Sort>) {
+  const [ownState, setOwnState] = useState<ListState<Sort>>(() => ({
+    ...emptyListState<Sort>(), closed: options.groups?.defaultClosed ?? [], ...options.initialState,
+  }));
+  const state = options.state ?? ownState;
+  const setState = (next: ListState<Sort>) => {
+    if (!options.state) setOwnState(next);
+    options.onState?.(next);
+  };
+  const model = useMemo(() => listModel(options, state), [options, state]);
+  const [target, setTarget] = useState<HTMLElement | null>(null);
+  const rows = model.sections.flatMap((section) => section.closed ? [] : section.rows);
+  const collection = useCollection({
+    items: rows, keyOf: (row) => row.key, labelOf: (row) => String(options.search(row.item).text[0] ?? row.key),
+    query: state.query, filter: "none", select: options.select ?? "single", selected: state.selected,
+    multiAction: "activate",
+    onSelectedChange: (selected) => setState({ ...state, selected }),
+    refusalOf: (row) => options.refusalOf?.(row.item), onPick: (row) => options.onPick?.(row.item),
+    onEscape: () => setState({ ...state, ...(state.query ? { query: "" } : { selected: [] }) }),
+    target, scrollCursor: false,
+  });
+  const toggleOpen = (key: string) => setState({ ...state, open: state.open.includes(key)
+    ? state.open.filter((each) => each !== key) : [...state.open, key] });
+  const cursor = rows.find((row) => row.key === collection.cursor);
+  useScopeKeys([
+    { hotkey: "ArrowRight", label: "Open row", says: "Open the tree node or move into its children", callback: () => {
+      if (!cursor) return;
+      if (cursor.branch && !state.open.includes(cursor.key)) toggleOpen(cursor.key);
+      else {
+        const child = rows.find((row) => row.ancestors.at(-1) === cursor.key);
+        if (child) collection.setCursor(child.key);
+      }
+    }, options: { ignoreInputs: false } },
+    { hotkey: "ArrowLeft", label: "Close row", says: "Close the tree node or move to its parent", callback: () => {
+      if (!cursor) return;
+      if (state.open.includes(cursor.key)) toggleOpen(cursor.key);
+      else if (cursor.ancestors.length) collection.setCursor(cursor.ancestors.at(-1)!);
+      else if (options.groups) setState({ ...state, closed: [...new Set([...state.closed, cursor.section])] });
+    }, options: { ignoreInputs: false } },
+  ], target);
+  const [revealRequest, setRevealRequest] = useState<{ key: string; serial: number } | null>(null);
+  return {
+    ...model, state, setState, collection, setTarget, rows, revealRequest,
+    setQuery: (query: string) => { setState({ ...state, query }); collection.setCursor(null); },
+    setSort: (sort: Sort | "") => setState({ ...state, sort, query: queryWords(state.query).filter((word) => !word.startsWith("sort:")).join(" ") }),
+    sorts: Object.keys(options.sorts ?? {}) as Sort[],
+    toggleOpen,
+    toggleSection: (key: string) => setState({ ...state, closed: state.closed.includes(key)
+      ? state.closed.filter((each) => each !== key) : [...state.closed, key] }),
+    toggleFacet: (field: string, value: string) => {
+      const clause = clauseText(false, field, "=", value);
+      const query = readQuery(state.query).filter((each) => each.kind !== "field" || each.not ||
+        each.op !== "=" || each.label.toLowerCase() !== field.toLowerCase()).map((each) => each.text).join(" ");
+      setState({ ...state, query: setQueryFilter(query, { clause, label: value, description: value }, !hasListFacet(state.query, field, value)) });
+    },
+    reveal: (key: string) => {
+      const row = model.all.find((each) => each.key === key);
+      if (!row) return;
+      setState({ ...state, query: rows.some((each) => each.key === key) ? state.query : "",
+        closed: state.closed.filter((each) => each !== row.section), open: [...new Set([...state.open, ...row.ancestors])] });
+      collection.setCursor(key);
+      setRevealRequest((previous) => ({ key, serial: (previous?.serial ?? 0) + 1 }));
+    },
+    tree: !!options.tree,
+    grouped: !!options.groups,
+    stageOf: options.stageOf,
+    refusalOf: options.refusalOf,
+  };
+}
+
+export type ListController<T, Sort extends string = string> = ReturnType<typeof useList<T, Sort>>;

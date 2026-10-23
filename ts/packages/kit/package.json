@@ -27,6 +27,7 @@
     "./lang/list-filter": "./src/components/lang/list-filter.tsx",
     "./lang/legend": "./src/components/lang/legend.tsx",
     "./lang/list-popup": "./src/components/lang/list-popup.tsx",
+    "./lang/list-view": "./src/components/lang/list-view.tsx",
     "./lang/pane-tabs": "./src/components/lang/pane-tabs.tsx",
     "./lang/pane.css": "./src/components/lang/pane.css",
     "./lang/rail": "./src/components/lang/rail.tsx",

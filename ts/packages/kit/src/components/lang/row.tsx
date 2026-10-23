@@ -16,6 +16,7 @@ import { ChevronRight } from "lucide-react";
 
 import { tv } from "../../lib/tv";
 import { TooltipHint } from "./tooltip";
+import type { StateCellProps } from "./cell-state";
 
 import "./lang.css";
 
@@ -35,6 +36,8 @@ export const rowRecipe = tv({
 });
 
 export interface RowState {
+  stage?: StateCellProps["stage"];
+  stagedBy?: StateCellProps["stagedBy"];
   /** Where the keyboard is. Not the selection. */
   cursor?: boolean;
   /** In the selected set. */
@@ -70,7 +73,7 @@ export const revitTarget = (
   "data-revit-refs": refs?.length ? JSON.stringify(refs) : undefined,
 });
 
-type RowProps = RowState & {
+export type RowProps = RowState & {
   id?: string;
   role?: string;
   title?: string;
@@ -80,6 +83,9 @@ type RowProps = RowState & {
   onContextMenu?: React.MouseEventHandler<HTMLElement>;
   draggable?: boolean;
   onDragStart?: React.DragEventHandler<HTMLElement>;
+  onDragEnd?: React.DragEventHandler<HTMLElement>;
+  onDragEnter?: React.DragEventHandler<HTMLElement>;
+  onDragLeave?: React.DragEventHandler<HTMLElement>;
   onDragOver?: React.DragEventHandler<HTMLElement>;
   onDrop?: React.DragEventHandler<HTMLElement>;
   onClick?: (event: React.MouseEvent<HTMLElement>) => void;
@@ -106,6 +112,8 @@ type RowProps = RowState & {
         /** Row verbs (usually one menu): they take the meta slot in place on hover, keyboard
          *  focus or an open menu; without hover, a tap on the slot opens them. Never the pick. */
         actions?: ReactNode;
+        /** A measure below the row, inside its measured virtual extent. */
+        band?: ReactNode;
         /** A tree row (row.tsx `Tree`): its nesting level from 0. The row indents one step per level and
          *  draws its ancestors' guide lines (lang.css); it is the only indent a list may draw. */
         depth?: number;
@@ -125,6 +133,8 @@ type RowProps = RowState & {
 
 /** The states as attributes: the one place a row's state becomes DOM. */
 const rowStateProps = (state: RowState) => ({
+  "data-stage": state.stage,
+  "data-staged-by": state.stage && state.stage !== "clean" ? state.stagedBy ?? "pea" : undefined,
   "data-cursor": state.cursor ? "" : undefined,
   "data-selected": state.selected ? "" : undefined,
   "data-active": state.active ? "" : undefined,
@@ -153,6 +163,8 @@ export function Row(props: RowProps) {
     onMouseMove,
   } = props;
   const states = rowStateProps({
+    stage: props.stage,
+    stagedBy: props.stagedBy,
     cursor,
     selected,
     checked,
@@ -177,6 +189,9 @@ export function Row(props: RowProps) {
     onContextMenu: props.onContextMenu,
     draggable: props.draggable,
     onDragStart: props.onDragStart,
+    onDragEnd: props.onDragEnd,
+    onDragEnter: props.onDragEnter,
+    onDragLeave: props.onDragLeave,
     onDragOver: props.onDragOver,
     onDrop: props.onDrop,
     ...states,
@@ -196,7 +211,8 @@ export function Row(props: RowProps) {
       </TooltipHint>
     );
   }
-  return <ListRow {...props} shared={shared} />;
+  const row = <ListRow {...props} shared={shared} />;
+  return props.band != null ? <div data-list-row-band="">{row}{props.band}</div> : row;
 }
 
 /** The div row. A title or fact the row cuts short is its own hint: measured on pointer entry, the
