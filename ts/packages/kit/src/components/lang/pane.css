@@ -77,6 +77,19 @@
 [data-slot="pane-header"]:not([data-title-align="center"]) [data-slot="rail-lead"] {
   min-width: min(calc(var(--control-h) * 2), 50%);
 }
+/* The strip's last fold (pane-strip.tsx): its trail drops under the title onto a second line. */
+[data-slot="pane-header"]:has([data-slot="pane-strip"][data-fold="4"]) [data-slot="rail"] {
+  flex-wrap: wrap;
+  height: auto;
+  min-height: var(--rail-h);
+}
+[data-slot="pane-header"]:has([data-slot="pane-strip"][data-fold="4"]) [data-slot="rail-lead"] {
+  flex-basis: 100%;
+  min-height: var(--rail-h);
+}
+[data-slot="pane-header"]:has([data-slot="pane-strip"][data-fold="4"]) [data-slot="pane-actions"] {
+  margin-inline-start: auto;
+}
 [data-slot="pane-header"][data-title-align="center"] [data-slot="rail-lead"] {
   align-items: center;
   padding-bottom: 0;

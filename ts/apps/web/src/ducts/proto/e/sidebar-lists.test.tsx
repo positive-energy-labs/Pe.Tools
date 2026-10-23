@@ -16,7 +16,7 @@ import { NativeObservationScope } from "#/revit/observation";
 import type { TreeNode } from "../b/model";
 import { SystemTree, type TreeCtx } from "./tree-sidebar";
 import { InputsPane, type InputsPaneProps } from "./inputs-pane";
-import { FanSections } from "./fan-sections";
+import { fanFacts } from "./fan-sections";
 
 // Cell fixtures exercise the sidebar's event boundary; the Work cell implementations stay unchanged.
 vi.mock("./input-cells", () => ({
@@ -267,34 +267,17 @@ const fan = (unit: number, critical: number | null, cfm: number): FanResult => (
   path: [],
   rows: [],
 });
-test("fan rows keep supplied largest-first order, critical picks, owned hover and native identities without a bar", () => {
-  const select = vi.fn();
-  const light = vi.fn();
-  const fans = [fan(1, 20, 400), fan(2, null, 200)];
-  const view = render(
-    <FanSections
-      title="SA"
-      fans={fans}
-      nameOf={(id) => `Unit ${id}`}
-      select={select}
-      light={light}
-    />,
-  );
-  expect(screen.queryByRole("textbox")).toBeNull();
-  expect(screen.getAllByRole("option").map((row) => row.getAttribute("data-key"))).toEqual([
-    "fan:1",
-    "fan:2",
+test("fan facts keep largest-first order, name the trunk owner and where a smaller fan ends", () => {
+  const priced = {
+    next: { byGroup: { g: { fans: [fan(1, 20, 400), { ...fan(2, null, 200), junction: 9 }] } } },
+  } as unknown as Priced;
+  const facts = fanFacts(priced, ["g"], (id) => `E${id}`);
+  expect(facts.map((f) => [f.unit, f.role])).toEqual([
+    [1, "largest fan"],
+    [2, "fan"],
   ]);
-  expect(within(keyed("fan:1")).getByText("largest fan")).toBeTruthy();
-  expect(keyed("fan:1").getAttribute("data-revit-ids")).toBe("1,2");
-  fireEvent.mouseEnter(keyed("fan:1"));
-  expect(light).toHaveBeenLastCalledWith([1, 2]);
-  fireEvent.click(keyed("fan:1"));
-  expect(select).toHaveBeenLastCalledWith(20);
-  fireEvent.click(keyed("fan:2"));
-  expect(select).toHaveBeenLastCalledWith(null);
-  fireEvent.mouseLeave(document.querySelector("[data-e-fans]")!);
-  expect(light).toHaveBeenLastCalledWith(null);
-  view.rerender(<FanSections fans={[fans[0]!]} nameOf={String} select={select} light={light} />);
-  expect(screen.queryByRole("listbox")).toBeNull();
+  expect(facts[0]!.says).toBe("400 cfm · TEL 12 ft · ESP 0.125 in-wg · owns the trunk");
+  expect(facts[1]!.says).toMatch(/ · to E9$/);
+  // A lone fan carries no section words.
+  expect(fanFacts(priced, [], String)).toEqual([]);
 });

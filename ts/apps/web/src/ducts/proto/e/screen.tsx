@@ -6,6 +6,7 @@
  * collapsed when it holds none. Hovering a row anywhere lights its element set on the drawing.
  */
 import {
+  memo,
   useCallback,
   useEffect,
   useMemo,
@@ -28,7 +29,6 @@ import { PaneSplit } from "#/components/lang/pane-resize";
 
 import { airflowOptions } from "../../airflow";
 import { systemsNeedingFix } from "../../system-list-search";
-import { elementNamer } from "../../claims";
 import { noRunParts, subjectNamer, type SubjectReference } from "../../subject-text";
 import { noRunBranches } from "@pe/ducts-domain/no-runs";
 import {
@@ -45,6 +45,7 @@ import {
   healRunView,
   focusRow,
   inboxRows,
+  holding,
   type CellRef,
   type InboxItem,
 } from "../../inbox-rows";
@@ -57,20 +58,20 @@ import { reviewLines, writePreview } from "../../write-review";
 import { buildTree, systemList, type TreeNode } from "../b/model";
 import type { ProtoProps } from "../props";
 import { DEFAULT_DESIGN_FRICTION_RATE } from "@pe/ducts-domain/equivalent-length";
-import { BarRules, fmtFt, SplitStrip, systemRowParts } from "./bar";
+import { BarRules, systemIssues, systemRowParts } from "./bar";
 import { DuctSettings } from "./settings";
-import { FanSections } from "./fan-sections";
-import { RunDetail, runOf } from "./run-detail";
-import { ECanvas } from "./canvas";
+import { FanFacts, fanFacts, type FanFact } from "./fan-sections";
+import { ECanvas, OpeningContext } from "./canvas";
 import { grilleLabels } from "./labels";
 import { FanButton, Inbox, type FanVerbs } from "./inbox";
 import { InputsPane } from "./inputs-pane";
 import { RulesTree, ruleOfIds } from "./rules-pane";
 import { SystemTree } from "./tree-sidebar";
 import { useGroupEncoding } from "../encoding/use-encoding";
-import { formatQuantity } from "../../encoding";
 
 const NO_GROUPS: readonly string[] = [];
+
+const plural = (n: number, word: string) => `${n} ${word}${n === 1 ? "" : "s"}`;
 
 type Side = "left" | "right";
 
@@ -140,16 +141,45 @@ const LIST_ROW_PX = 48;
  * screen says so instead of holding the first paint.
  */
 export function EScreen({ props }: { props: ProtoProps }) {
+  // A system switch re-renders every pane for about a second. The body is held at its last props
+  // until a frame has painted the picture plate's "opening …" line (`OpeningContext`), then renders
+  // the new system. `useDeferredValue` was tried: React ran the deferred pass before the paint.
+  const [system, setSystem] = useState(props.page.system);
+  const opening = system === props.page.system ? null : props.page.system;
+  useEffect(() => {
+    if (opening == null) return;
+    let timer = 0;
+    const frame = requestAnimationFrame(() => {
+      timer = window.setTimeout(() => setSystem(props.page.system), 0);
+    });
+    return () => {
+      cancelAnimationFrame(frame);
+      clearTimeout(timer);
+    };
+  }, [opening, props.page.system]);
+  const shown = useRef(props);
+  if (opening == null) shown.current = props;
   if (!props.snapshot)
-    return <p className="text-ink-2 p-4">{props.empty?.says ?? "reading ducts…"}</p>;
+    return (
+      <p className="text-ink-2 p-4" data-e-loading="">
+        {props.empty?.says ?? "reading ducts…"}
+      </p>
+    );
   if (props.pricing)
     return (
       <p className="text-ink-2 p-4" data-e-pricing>
-        pricing…
+        read {props.snapshot.document.title} ({props.snapshot.systems.length} systems) · pricing every
+        run…
       </p>
     );
-  return <EScreenBody props={props} />;
+  return (
+    <OpeningContext value={opening}>
+      <HeldBody props={shown.current.snapshot ? shown.current : props} />
+    </OpeningContext>
+  );
 }
+
+const HeldBody = memo(EScreenBody);
 
 function EScreenBody({ props }: { props: ProtoProps }) {
   const { snapshot, priced, page, setPage } = props;
@@ -221,10 +251,13 @@ function EScreenBody({ props }: { props: ProtoProps }) {
         : new Map<number, string>(),
     [drawn, trees],
   );
-  const nameOf = useMemo(() => {
-    const n = snapshot ? elementNamer(snapshot, null) : () => null;
-    return (id: number) => labels.get(id) ?? n(id) ?? "element not in snapshot";
-  }, [snapshot, labels]);
+  const subjectName = useMemo(() => (snapshot ? subjectNamer(snapshot) : () => null), [snapshot]);
+  // One namer: a grille by its disambiguated label (the tree has no footnotes to tell twins apart),
+  // everything else as Subject text names it, so a title, a row and a sentence agree.
+  const nameOf = useCallback(
+    (id: number) => labels.get(id) ?? subjectName(id) ?? "element not in snapshot",
+    [labels, subjectName],
+  );
   // A row names a group the way the system reads it, else by its systems and units; never its id.
   const names = useMemo(() => (drawn ? groupLabels(drawn) : new Map<string, string>()), [drawn]);
   const groupLabel = useCallback(
@@ -244,6 +277,19 @@ function EScreenBody({ props }: { props: ProtoProps }) {
     () => (surveyed ? systemsNeedingFix(surveyed, doc, heal) : new Set<string>()),
     [surveyed, doc, heal],
   );
+  // The document at a glance: how many systems price clean, and how many a person must fix first.
+  const census = useMemo(() => {
+    const issues = systems.map((s) => systemIssues({ ...s, needsFix: needsFix.has(s.key) }));
+    return {
+      systems: systems.length,
+      priced: systems.filter((s) => s.total != null).length,
+      fix: issues.filter((i) => i.some((x) => x.tone === "alarm")).length,
+    };
+  }, [systems]);
+  const chosenRow = useMemo(() => {
+    const row = systems.find((s) => s.key === page.system);
+    return row ? { ...row, needsFix: needsFix.has(row.key) } : null;
+  }, [systems, page.system, needsFix]);
   const healRun = useMemo(
     () =>
       page.heal && surveyed
@@ -407,6 +453,7 @@ function EScreenBody({ props }: { props: ProtoProps }) {
   // A fitting's drop cell the inbox asked for, in the rules half that holds it.
   const [landing, setLanding] = useState<{ id: number; half: "all" | "this" } | null>(null);
   const [cellFocus, setCellFocus] = useState<CellRef | null>(null);
+  const [inputsOpen, setInputsOpen] = useState(false);
   // The rules pane lands on the cell: scroll it in, focus its control, mark it once (`--motion-land`).
   useEffect(() => {
     if (!landing) return;
@@ -437,7 +484,6 @@ function EScreenBody({ props }: { props: ProtoProps }) {
   const reading = encoded.encoding.quantity ? encoded.encoding : null;
   // Hover never sets screen state: the reach store re-renders only what draws it.
   const [reach] = useState(reachStore);
-  const subjectName = useMemo(() => (snapshot ? subjectNamer(snapshot) : () => null), [snapshot]);
   useEffect(
     () => reach.set((state) => ({ ...state, lighting: NO_LIGHTING })),
     [reach, snapshot, page.system, page.picture],
@@ -574,6 +620,7 @@ function EScreenBody({ props }: { props: ProtoProps }) {
           })();
     setPage({ system: into, selected: String(cell.id), issue: "" });
     setSideFor({ system: into, side: "right" });
+    setInputsOpen(true);
     setCellFocus(cell);
   };
   // The section whose run leads the system: its fan and TEL head the pane.
@@ -582,70 +629,19 @@ function EScreenBody({ props }: { props: ProtoProps }) {
     groups.find((g) => scope?.pricing.has(g)) ??
     groups[0] ??
     "";
-  const groupFan = leadGroup ? priced?.next.byGroup[leadGroup]?.fan : undefined;
   // Any group of the system with an implausible row: its ESP is a partial sum, so none is shown.
   const blockedLoss = groups.some((g) => (priced?.next.byGroup[g]?.implausible.length ?? 0) > 0);
   const grilleName = (n: TreeNode) => {
     const id = n.kind === "run" ? n.terminal : n.id;
     return (id != null ? labels.get(id) : undefined) ?? n.name;
   };
-  // The path header: the critical path's total effective length in feet, and the ESP in in-wg.
   const designRate = priced?.staged.designFriction ?? DEFAULT_DESIGN_FRICTION_RATE;
-  const groupTel = leadGroup ? priced?.next.byGroup[leadGroup]?.criticalTel : undefined;
-  const pricedWord = priced
-    ? blockedLoss
-      ? "needs a fix: implausible loss"
-      : groupFan == null || critical?.total == null
-        ? "this system is not priced"
-        : `TEL ${fmtFt(critical.ft ?? groupTel)} ft · ESP ${critical.total.toFixed(3)} in-wg`
-    : "not priced yet";
-  const runDetail = priced && scope && selected != null ? runOf(priced, groups, selected) : null;
+  // The tree is the whole pane (kaitpw 2026-10-23: the header block "only takes up space", the
+  // selected row's footer "obscures the tree"): the system's name and way back live in the picture
+  // title, its state in the plate, its fans in the breakdown popover and on Inputs' unit rows, and
+  // the selection's facts in the picture.
   const treePane = tree ? (
-    <Pane
-      id="e-sidebar"
-      title={scope ? scope.name : "System"}
-      actions={
-        <Button
-          label="show every system"
-          onClick={() => setPage({ system: "", selected: "", issue: "" })}
-        >
-          all systems
-        </Button>
-      }
-      scroll="auto"
-      flush
-    >
-      <p className="face-mono t-small text-ink-2 px-(--item-mark-pad-x) py-1">{pricedWord}</p>
-      {reading?.quantity ? (
-        <p
-          className="t-small text-ink-2 border-line border-b px-2 py-1"
-          data-e-legend={reading.key}
-        >
-          bar = {reading.label}, {reading.quantity.unit}, the largest under each row · full width =
-          the system's max{" "}
-          <span className="face-mono">
-            {reading.quantity.max == null
-              ? "—"
-              : formatQuantity(reading.quantity, reading.quantity.max)}
-          </span>{" "}
-          at{" "}
-          {reading.quantity.maxId == null ? "no element" : encoded.nameOf(reading.quantity.maxId)}
-        </p>
-      ) : (
-        <SplitStrip split={critical?.split ?? tree[0]!.split} scale={scale} light={light} />
-      )}
-      {/* A multi-fan group: one row per fan, as staged (`next`), each with its TEL and ESP;
-          each group the system is in carries its own, under its section's name. */}
-      {tree.map((t) => (
-        <FanSections
-          key={t.key}
-          title={tree.length > 1 ? t.name : null}
-          fans={priced?.next.byGroup[t.key]?.fans ?? []}
-          nameOf={nameOf}
-          light={light}
-          select={select}
-        />
-      ))}
+    <Pane id="e-sidebar" scroll="auto" flush>
       <div className="min-w-0 shrink-0" onMouseLeave={() => light(null)}>
         <SystemTree
           key={scope?.name}
@@ -674,21 +670,20 @@ function EScreenBody({ props }: { props: ProtoProps }) {
           }}
         />
       </div>
-      {runDetail ? (
-        <RunDetail run={runDetail} designRate={designRate} nameOf={nameOf} light={light} />
-      ) : null}
     </Pane>
   ) : null;
   const systemsPane = (
     <Pane
       id="e-systems"
       title="Systems"
-      meta={`${systems.length} in the document`}
+      meta={`${census.systems} · ${census.priced} priced · ${census.fix} need a fix`}
       scroll="auto"
       flush
     >
       <SystemsList
         systems={systems}
+        fansOf={(system) => fanFacts(priced, system.groups, nameOf)}
+        nameOf={nameOf}
         needsFix={needsFix}
         drawn={drawn}
         page={page}
@@ -722,11 +717,15 @@ function EScreenBody({ props }: { props: ProtoProps }) {
       )}
     </Pane>
   );
+  const inputsCount = scope
+    ? `${plural(scope.units.size, "unit")} · ${plural(scope.terminals.size, "grille")}`
+    : "";
   const inputsPane =
     tree && scope ? (
       <Pane
         id="e-inputs"
         title="Inputs"
+        meta={inputsCount}
         help="Each unit and grille of this system, named, with the cells you can type into. A typed value stages as an override and reprices."
         scroll="auto"
         flush
@@ -763,6 +762,14 @@ function EScreenBody({ props }: { props: ProtoProps }) {
         minSize: 100,
         minOtherSize: 100,
         persist: "proto-e-system-inputs",
+        // A rail until asked for, so the tree keeps the sidebar's height; a Set row's cell opens it.
+        collapse: {
+          collapsed: !inputsOpen,
+          onCollapsedChange: (collapsed) => setInputsOpen(!collapsed),
+          collapsedSize: 32,
+          collapseBelow: 80,
+          title: `Inputs · ${inputsCount}`,
+        },
       }}
     />
   );
@@ -775,7 +782,7 @@ function EScreenBody({ props }: { props: ProtoProps }) {
           side={side}
           onSide={pick}
           left={{ title: "Systems", pane: systemsPane }}
-          right={{ title: "System", pane: systemPane, refusal: noSystem }}
+          right={{ title: scope?.name ?? "System", pane: systemPane, refusal: noSystem }}
         />
       }
       end={
@@ -796,11 +803,27 @@ function EScreenBody({ props }: { props: ProtoProps }) {
     />
   );
 
+  // The inbox header says what holds the system's ESP back, not only how many rows wait.
+  const held = inbox ? holding(inbox.fix) + inbox.set.length : 0;
+  const rulingsWord = !chosen
+    ? `${toRule} to rule on · every system`
+    : blockedLoss
+      ? "no ESP: an implausible loss"
+      : held
+        ? `ESP held by ${[
+            inbox && holding(inbox.fix) ? `${holding(inbox.fix)} fix` : "",
+            inbox?.set.length ? `${inbox.set.length} set` : "",
+          ]
+            .filter(Boolean)
+            .join(" · ")}${inbox?.check.length ? ` · ${inbox.check.length} to check` : ""}`
+        : inbox?.check.length
+          ? `${inbox.check.length} to check · nothing holds the ESP`
+          : "nothing holds the ESP";
   const inboxPane = (
     <Pane
       id="e-inbox"
       title="Rulings"
-      meta={`${toRule} to rule on`}
+      meta={rulingsWord}
       actions={
         <Button label="hide rulings" onClick={() => setInboxOpen(false)}>
           hide
@@ -876,7 +899,7 @@ function EScreenBody({ props }: { props: ProtoProps }) {
               onCollapsedChange: setTreeCollapsed,
               collapsedSize: 32,
               collapseBelow: 200,
-              title: "systems",
+              title: scope?.name ?? "systems",
             },
           }}
           start={left}
@@ -912,6 +935,26 @@ function EScreenBody({ props }: { props: ProtoProps }) {
                     nameOf={nameOf}
                     groups={drawGroups}
                     lead={leadGroup}
+                    identity={{
+                      system: chosenRow,
+                      census,
+                      refreshing: props.reading.refreshing,
+                      open: () => pick("right"),
+                      breakdown:
+                        (critical?.split ?? tree?.[0]?.split) && scale
+                          ? {
+                              split: (critical?.split ?? tree?.[0]?.split)!,
+                              scale,
+                              fans: () => (
+                                <FanFacts
+                                  facts={fanFacts(priced, groups, nameOf)}
+                                  nameOf={nameOf}
+                                />
+                              ),
+                            }
+                          : null,
+                      allSystems: () => setPage({ system: "", selected: "", issue: "" }),
+                    }}
                   />
                 </div>
               }
@@ -928,12 +971,17 @@ function EScreenBody({ props }: { props: ProtoProps }) {
 /** Keep query renders below the model, drawing and ruling builders. */
 function SystemsList({
   systems,
+  fansOf,
+  nameOf,
   needsFix,
   drawn,
   page,
   setPage,
 }: {
   systems: ReturnType<typeof systemList>;
+  /** The system's fans: its hover hint and the head of its breakdown popover. */
+  fansOf: (system: ReturnType<typeof systemList>[number]) => FanFact[];
+  nameOf: (id: number) => string;
   needsFix: ReadonlySet<string>;
   drawn: ProtoProps["snapshot"];
   page: ProtoProps["page"];
@@ -1017,9 +1065,16 @@ function SystemsList({
       list={systemListView}
       primary
       estimate={LIST_ROW_PX}
-      row={(system) =>
-        systemRowParts(system, () => setPage({ system: system.key, selected: "", issue: "" }))
-      }
+      row={(system) => {
+        const fans = fansOf(system);
+        return systemRowParts(
+          system,
+          () => setPage({ system: system.key, selected: "", issue: "" }),
+          needsFix.has(system.key),
+          fans.map((f) => `${nameOf(f.unit)} ${f.role}: ${f.says}`),
+          () => <FanFacts facts={fans} nameOf={nameOf} />,
+        );
+      }}
       empty={{
         message: "No duct systems in this scope",
         exit: "Read a model containing duct systems",

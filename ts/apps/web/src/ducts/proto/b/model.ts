@@ -349,6 +349,8 @@ export function systemList(
 ): (TreeNode & {
   fanless: boolean;
   blocked: boolean;
+  /** The groups the system is in (its fans are theirs). */
+  groups: readonly string[];
   classification: string | null;
   sub: string;
   rating: number | null;
@@ -385,14 +387,17 @@ export function systemList(
       kind: "system",
       name: system.name,
       classification: system.classification,
+      // Identity at a glance: the air (in words, never Revit's enum), what moves it, how much it feeds.
       sub: [
-        system.classification,
+        system.classification?.replace(/Air$/, ""),
+        `${system.terminals} terminal${system.terminals === 1 ? "" : "s"}`,
         system.units.join(", ") || "no fan",
         system.groups.length > 1 ? `${system.groups.length} networks` : "",
       ]
         .filter(Boolean)
         .join(" · "),
       blocked,
+      groups: system.groups,
       fanless: !!priced && solved.length > 0 && solved.every((s) => !s.hasAirMover),
       rating: rated ?? null,
       id: first?.rootIds[0] ?? null,

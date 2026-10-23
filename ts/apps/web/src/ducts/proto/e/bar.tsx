@@ -162,9 +162,11 @@ function SplitFill({
   );
 }
 
-/** One thing wrong or unsure about a system: its tone and its sentence. */
-interface SystemIssue {
+/** One thing wrong or unsure about a system: its tone, its one-word mark and its sentence. */
+export interface SystemIssue {
   tone: "alarm" | "caution";
+  /** The mark's word: what a glance must read without hovering. */
+  word: string;
   says: string;
 }
 
@@ -172,61 +174,90 @@ interface SystemIssue {
  * Everything a system's row has to say beyond its number, worst first, so a dash is never bare.
  * Empty is a priced system in range, with a stated rating, resting on no unruled join.
  */
-function systemIssues(s: {
+export function systemIssues(s: {
   total: number | null;
   rating: number | null;
   fanless: boolean;
   blocked: boolean;
   provisional: Provisional;
+  /** A Fix row holds the system's ESP (`systemsNeedingFix`, the inbox's own rule). */
+  needsFix?: boolean;
 }): SystemIssue[] {
   const load = fanLoad(s.total, s.rating);
   return [
-    s.fanless && { tone: "alarm", says: "needs a fix: no fan" },
-    s.blocked && { tone: "alarm", says: "needs a fix: implausible loss" },
+    s.fanless && { tone: "alarm", word: "no fan", says: "needs a fix: no fan" },
+    s.blocked && { tone: "alarm", word: "blocked", says: "needs a fix: implausible loss" },
+    s.needsFix &&
+      !s.fanless &&
+      !s.blocked && {
+        tone: "alarm",
+        word: "fix",
+        says: "needs a fix: a Fix row holds its ESP back",
+      },
     s.total == null &&
       !s.fanless &&
       !s.blocked && {
         tone: "caution",
+        word: "no run",
         says: "not priced: no run from a fan to a terminal was found",
       },
     load.state === "rated" &&
       load.over && {
         tone: "alarm",
+        word: "over",
         says: `${load.required.toFixed(3)} required against ${load.available.toFixed(2)} rated`,
       },
     load.state === "unrated" &&
       s.total != null && {
         tone: "caution",
+        word: "unrated",
         says: "rating unknown: the unit states no rated external static",
       },
     s.provisional && {
       tone: "caution",
+      word: `~${s.provisional.count} join${s.provisional.count === 1 ? "" : "s"}`,
       says: `provisional: rests on ${s.provisional.count} unruled inferred join(s), worst ${s.provisional.worst}`,
     },
   ].filter((issue): issue is SystemIssue => !!issue);
 }
 
 /**
- * The row's corner marker: a badge in the worst issue's tone, with a count when there are several.
- * Its popover lists the issues and mounts only while open (closed children do not render), so
- * hundreds of rows hold no popover content. Each line opens the system, where its inbox rows are.
+ * A system's state mark: the worst issue's word (and "+n" for the rest), read without hovering.
+ * Shape carries severity as well as tone: an alarm is a filled block, a caution an outlined one.
+ * Its popover lists the issues and mounts only while open, so hundreds of rows hold no popover
+ * content. Each line opens the system, where its inbox rows are. The picture's plate wears the same mark.
  */
-function SystemMarker({ issues, open }: { issues: SystemIssue[]; open: () => void }) {
-  const tone = issues.some((i) => i.tone === "alarm") ? "alarm" : "caution";
+export function SystemMark({
+  issues,
+  open,
+}: {
+  issues: readonly SystemIssue[];
+  open: () => void;
+}) {
+  const worst = issues.find((i) => i.tone === "alarm") ?? issues[0];
+  if (!worst) return null;
   return (
     <Popover>
       <PopoverTrigger
         openOnHover
         delay={150}
         aria-label={issues.map((i) => i.says).join("; ")}
-        data-tone={tone}
-        data-e-marker={tone}
-        // A 16 px dot with a 24 px reach (the ::before), ringed in ink while hovered or open.
-        className="absolute top-0.5 right-1 z-[1] flex size-4 items-center justify-center rounded-full p-0! min-h-0! before:absolute before:-inset-1 before:rounded-full before:content-[''] hover:outline hover:outline-offset-1 hover:outline-ink data-popup-open:outline data-popup-open:outline-offset-1 data-popup-open:outline-ink"
-        style={{ backgroundColor: tokenRef(tone), color: tokenRef(tone) }}
+        data-tone={worst.tone}
+        data-e-marker={worst.tone}
+        // A 16 px mark with a 24 px reach (the ::before), ringed in ink while hovered or open.
+        className="face-mono t-small relative inline-flex h-4 shrink-0 items-center rounded-sm border leading-none whitespace-nowrap p-0! min-h-0! before:absolute before:-inset-1 before:content-[''] hover:outline hover:outline-offset-1 hover:outline-ink data-popup-open:outline data-popup-open:outline-offset-1 data-popup-open:outline-ink"
+        // The trigger's own button ground would win over a tone attribute: the fill is stated here.
+        style={{
+          borderColor: tokenRef(worst.tone),
+          backgroundColor: worst.tone === "alarm" ? tokenRef(worst.tone) : "transparent",
+        }}
       >
-        <span className="t-small leading-none" style={{ color: tokenRef("page") }}>
-          {issues.length > 1 ? issues.length : "!"}
+        <span
+          className="px-1"
+          style={{ color: worst.tone === "alarm" ? tokenRef("page") : tokenRef(worst.tone) }}
+        >
+          {worst.word}
+          {issues.length > 1 ? ` +${issues.length - 1}` : ""}
         </span>
       </PopoverTrigger>
       <PopoverContent side="bottom" align="end" className="w-72">
@@ -255,14 +286,19 @@ function SystemMarker({ issues, open }: { issues: SystemIssue[]; open: () => voi
  * ESP Pe computes (over the unit's rating when it states one). The bar is on the system's own scale
  * with the same groups and inks as the strip; with a rating it is required over available, ringed
  * in the alarm tone when over. Unpriced draws no track: an empty bar would read as zero. The
- * corner marker carries the issues. The bar draws no tooltips of its own; hovering or clicking it opens the shared
+ * state mark after the number carries the issues. The bar draws no tooltips of its own; hovering or clicking it opens the shared
  * breakdown popover (`BarPopover`), whose content mounts only while open.
  */
 export function systemRowParts(
   s: ReturnType<typeof systemList>[number],
   open: () => void,
+  needsFix = false,
+  /** The system's fans in words: the row's hover hint carries them. */
+  fans: readonly string[] = [],
+  /** The popover's head (the same fans as a table), built only while it is open. */
+  head?: () => ReactNode,
 ): ListRowParts {
-  const issues = systemIssues(s);
+  const issues = systemIssues({ ...s, needsFix });
   const load = fanLoad(s.total, s.rating);
   const over = load.state === "rated" && load.over;
   const scale = load.state === "rated" ? load.available : s.total;
@@ -271,6 +307,7 @@ export function systemRowParts(
     s.total == null
       ? null
       : `fan static Pe computes ${s.total.toFixed(3)} in-wg${s.rating != null ? ` of the unit's rated ${s.rating.toFixed(2)}` : ""}`,
+    ...fans,
   ]
     .filter(Boolean)
     .join("\n");
@@ -283,12 +320,9 @@ export function systemRowParts(
     title: hint,
     meta: (
       <>
-        <span
-          className={`flex w-full items-center gap-2 ${issues.length ? "pr-5" : ""}`}
-          data-e-fact=""
-        >
+        <span className="flex w-full items-center gap-2" data-e-fact="">
           {s.total != null && scale && s.split ? (
-            <BarPopover split={s.split} scale={scale} className="h-3 min-w-8 flex-1">
+            <BarPopover split={s.split} scale={scale} head={head} className="h-3 min-w-8 flex-1">
               <span
                 className="relative block h-1.5 w-full"
                 data-e-minibar=""
@@ -306,8 +340,8 @@ export function systemRowParts(
             {fmt(s.total)}
             {load.state === "rated" ? ` / ${fmt(load.available, 2)}` : ""}
           </span>
+          <SystemMark issues={issues} open={open} />
         </span>
-        {issues.length ? <SystemMarker issues={issues} open={open} /> : null}
       </>
     ),
   };
@@ -732,11 +766,12 @@ function RulePick({ row, work, priced }: { row: BarRow; work: LossesWork; priced
  * one wherever the viewport allows. Single-system strip and every all-systems row use this; the
  * content mounts only while open (Portal owns lazy mounting), so 355 rows hold 355 closed roots.
  */
-function BarPopover({
+export function BarPopover({
   split,
   scale,
   light,
   back,
+  head,
   className,
   children,
 }: {
@@ -744,6 +779,8 @@ function BarPopover({
   scale: number;
   light?: Light;
   back?: readonly number[];
+  /** Drawn above the breakdown, built only while the popover is open. */
+  head?: () => ReactNode;
   className?: string;
   children: ReactNode;
 }) {
@@ -772,32 +809,10 @@ function BarPopover({
         className="w-[min(74rem,var(--available-width))] p-2"
         onClick={(event) => event.stopPropagation()}
       >
+        {head?.()}
         <BreakdownList split={split} scale={scale} light={light} back={back} barW={barW} />
       </PopoverContent>
     </Popover>
-  );
-}
-
-/** The critical run's split, wide, under the path header: just the bar; its breakdown is the popover. */
-export function SplitStrip({
-  split,
-  scale,
-  light,
-}: {
-  split: Split | null;
-  scale: number | null;
-  light: Light;
-}) {
-  if (!split || !scale) return null;
-  return (
-    <div className="border-line border-b px-2 py-1.5 t-small" data-e-split-strip="">
-      <BarPopover split={split} scale={scale} light={light} className="h-4 w-full">
-        <span className="relative block h-2.5 w-full" style={{ backgroundColor: tokenRef("line") }}>
-          {/* Highlight from the open table: entering the trigger must not rebuild the whole scene. */}
-          <SplitFill split={split} scale={scale} hint={false} />
-        </span>
-      </BarPopover>
-    </div>
   );
 }
 

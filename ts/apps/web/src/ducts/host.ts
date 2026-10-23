@@ -21,16 +21,17 @@ export const SAVED: string | undefined = import.meta.env.DEV
   : undefined;
 
 function useSaved(epoch: number) {
-  const [state, setState] = useState<{ data?: DuctSnapshot; error?: string }>({});
+  // `at` is the epoch the data answers: a refresh keeps the last data and reads as pending.
+  const [state, setState] = useState<{ data?: DuctSnapshot; error?: string; at?: number }>({});
   useEffect(() => {
     if (!SAVED) return;
     let live = true;
     fetch(SAVED)
       .then((response) => (response.ok ? response.json() : Promise.reject(`${response.status}`)))
       .then(
-        (data: DuctSnapshot) => live && setState({ data }),
+        (data: DuctSnapshot) => live && setState({ data, at: epoch }),
         (error: unknown) =>
-          live && setState({ error: `saved snapshot ${SAVED}: ${String(error)}` }),
+          live && setState({ error: `saved snapshot ${SAVED}: ${String(error)}`, at: epoch }),
       );
     return () => {
       live = false;
@@ -39,7 +40,7 @@ function useSaved(epoch: number) {
   return {
     snapshot: state.data ?? null,
     error: state.error ?? null,
-    pending: !state.data && !state.error,
+    pending: state.at !== epoch,
     nativeObservation: undefined,
     version: undefined,
   };

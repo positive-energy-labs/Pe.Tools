@@ -11,6 +11,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { stagedDucts, type DuctClaim, type TrichotomyCellLike } from "@pe/agent-contracts";
 import type { Reading } from "@pe/agent-contracts";
+import type { DuctSnapshot } from "@pe/ducts-domain/types";
 
 import { Surface } from "#/components/lang/surface";
 import { frozenDemo } from "#/host/demo-client";
@@ -178,7 +179,17 @@ export function DuctsRoute({ url = true }: { url?: boolean } = {}) {
         : null,
     [snapshot, tables.grids, painted, handle.work.doc, catalogs.tables],
   );
-  const pricing = !!snapshot && !!tables.grids && !priced;
+  // A re-read prices its new snapshot behind the last priced one: the screen keeps drawing what it
+  // has, marked refreshing, instead of blanking to "pricing…". Never across documents.
+  const lastPriced = useRef<{ snapshot: DuctSnapshot; priced: NonNullable<typeof priced> } | null>(
+    null,
+  );
+  if (snapshot && priced) lastPriced.current = { snapshot, priced };
+  const held =
+    snapshot && !priced && lastPriced.current?.snapshot.document.title === snapshot.document.title
+      ? lastPriced.current
+      : null;
+  const pricing = !!snapshot && !!tables.grids && !priced && !held;
   // The Work every pane reads: the model's stored rulings under the person's pending ones.
   const seen = useMemo(
     () => withStoredRulings(handle.work.doc, snapshot?.store),
@@ -346,8 +357,8 @@ export function DuctsRoute({ url = true }: { url?: boolean } = {}) {
           : null;
 
   const shell: ProtoProps = {
-    snapshot,
-    priced,
+    snapshot: held?.snapshot ?? snapshot,
+    priced: held?.priced ?? priced,
     pricing,
     findings: catalogs.findings,
     ready,
@@ -363,7 +374,7 @@ export function DuctsRoute({ url = true }: { url?: boolean } = {}) {
     work,
     empty,
     doc,
-    reading: { pending, error: error ?? null },
+    reading: { pending, error: error ?? null, refreshing: !!held || (pending && !!snapshot) },
     actions: {
       preview: handle.actions.preview,
       apply: handle.actions.apply,
