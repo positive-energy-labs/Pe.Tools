@@ -542,8 +542,6 @@ function LoadedScreenBody({
     [reach],
   );
   const grace = useHoverGrace(closeSubjects);
-  const clearSubjects = grace.leave;
-  const holdSubjects = grace.hold;
   const lightSubjects = useCallback(
     (
       references: readonly SubjectReference[],
@@ -1060,12 +1058,12 @@ function LoadedScreenBody({
       nameOf: subjectName,
       reach,
       light: lightSubjects,
-      clear: clearSubjects,
-      hold: holdSubjects,
+      clear: grace.leave,
+      hold: grace.hold,
       go: (id: number) => select(id),
       refProps: subjectProps,
     }),
-    [subjectName, reach, lightSubjects, clearSubjects, holdSubjects, select, subjectProps],
+    [subjectName, reach, lightSubjects, grace, select, subjectProps],
   );
 
   return (

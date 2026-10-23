@@ -1,4 +1,3 @@
-import { declutter } from "./declutter";
 import { Popover, PopoverTrigger, SubjectPopoverContent } from "./popover";
 /**
  * Floaters yield in DOM order and announce each move; parallel siblings otherwise take one slot.
@@ -115,10 +114,16 @@ function useYield(
           value: { corner, dy, folded, ...shown },
         }));
       });
-      const [slot] = declutter(
-        [{ ...candidates[0]!, candidates: candidates.slice(1) }],
-        { x: f.x, y: f.y, width: f.width, height: f.height },
-        others.map((r) => ({ x: r.x, y: r.y, width: r.width, height: r.height })),
+      const slot = candidates.find(
+        (b) =>
+          b.x >= f.x &&
+          b.y >= f.y &&
+          b.x + b.width <= f.right &&
+          b.y + b.height <= f.bottom &&
+          !others.some(
+            (r) =>
+              b.x < r.right && r.left < b.x + b.width && b.y < r.bottom && r.top < b.y + b.height,
+          ),
       );
       settle(slot?.value ?? { corner: place, dy: 0, folded, ...shown });
     };

@@ -3,14 +3,14 @@
  * camera and an overlay without one are built by `newCamera`, so the two never disagree.
  */
 import * as THREE from "three";
-import { ORBIT_FOV, toCamera, type OrbitViewport } from "./orbit";
+import { HALF_FOV_TAN, ORBIT_FOV, toCamera, type OrbitViewport } from "./orbit";
 import type { Bounds } from "./types";
 
 export type Size = { width: number; height: number };
 /** A world point to px from the canvas's top-left; null behind the camera. */
 export type Project = (point: readonly number[]) => [number, number] | null;
 
-export type OrbitCamera = THREE.PerspectiveCamera | THREE.OrthographicCamera;
+type OrbitCamera = THREE.PerspectiveCamera | THREE.OrthographicCamera;
 export function newCamera(
   aspect = 1,
   projection: OrbitViewport["projection"] = "perspective",
@@ -44,9 +44,7 @@ export function placeCamera(
   camera.lookAt(...pose.target);
   if (camera instanceof THREE.OrthographicCamera) {
     camera.zoom = 1;
-    camera.top =
-      camera.position.distanceTo(new THREE.Vector3(...pose.target)) *
-      Math.tan(THREE.MathUtils.degToRad(ORBIT_FOV / 2));
+    camera.top = camera.position.distanceTo(new THREE.Vector3(...pose.target)) * HALF_FOV_TAN;
     camera.bottom = -camera.top;
   }
   resizeCamera(camera, aspect);
@@ -55,7 +53,7 @@ export function placeCamera(
 export const viewHeight = (camera: OrbitCamera, target: THREE.Vector3) =>
   camera instanceof THREE.OrthographicCamera
     ? (camera.top - camera.bottom) / camera.zoom
-    : 2 * camera.position.distanceTo(target) * Math.tan(THREE.MathUtils.degToRad(ORBIT_FOV / 2));
+    : 2 * camera.position.distanceTo(target) * HALF_FOV_TAN;
 
 /** The camera as it is now, frozen into a projection over a canvas of `size`. */
 export function projectThrough(camera: THREE.Camera, size: Size): Project {

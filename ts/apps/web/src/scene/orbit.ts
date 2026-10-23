@@ -31,6 +31,7 @@ export function rotateAbout(
 /** Vertical field of view of the one perspective camera, in degrees. */
 export const ORBIT_FOV = 45;
 const RAD = Math.PI / 180;
+export const HALF_FOV_TAN = Math.tan((ORBIT_FOV / 2) * RAD);
 // three's lookAt with z up degenerates looking straight down; plan stops just short and reads back as 90.
 const ELEV_LIMIT = 89.9;
 
@@ -43,7 +44,7 @@ export const center = (b: Bounds): Vec3 => [
 /** Fit the bounds' sphere inside the smaller field of view, including portrait panes. */
 export function fitDistance(b: Bounds, aspect = 1) {
   const radius = Math.max(Math.hypot(b.maxX - b.minX, b.maxY - b.minY, b.maxZ - b.minZ) / 2, 0.5);
-  const half = Math.atan(Math.tan((ORBIT_FOV / 2) * RAD) * Math.min(1, Math.max(aspect, 0.001)));
+  const half = Math.atan(HALF_FOV_TAN * Math.min(1, Math.max(aspect, 0.001)));
   return radius / Math.sin(half);
 }
 
@@ -129,8 +130,7 @@ export function shiftOnScreen(
   dx: number,
   dy: number,
 ): OrbitViewport {
-  const feetPerPx =
-    (2 * (fitDistance(scene) / v.zoom) * Math.tan((ORBIT_FOV / 2) * RAD)) / heightPx;
+  const feetPerPx = (2 * (fitDistance(scene) / v.zoom) * HALF_FOV_TAN) / heightPx;
   const yaw = v.yaw * RAD,
     elev = Math.min(Math.max(v.elev, -ELEV_LIMIT), ELEV_LIMIT) * RAD;
   const right = [-Math.sin(yaw), Math.cos(yaw), 0];

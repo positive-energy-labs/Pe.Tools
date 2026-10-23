@@ -6,13 +6,10 @@ it("footnote chips sit above their anchors, clear each other and the anchors, an
   const size = { width: 400, height: 300 };
   // Five anchors within a few pixels: close connectors on one fitting.
   const anchors = [0, 1, 2, 3, 4].map((i) => ({ x: 200 + i * 3, y: 150 + (i % 2) * 2, n: i + 1 }));
-  const chips = placeChips(anchors, size).filter((chip) => chip !== null);
+  const chips = placeChips(anchors, size);
   expect(chips).toHaveLength(anchors.length);
-  expect(chips[0]).toEqual({ x: 200, y: 126 });
-  const boxes = chips.map((c, i) => {
-    const w = 9 + 7 * String(anchors[i]!.n).length;
-    return { x0: c.x - w / 2, x1: c.x + w / 2, y0: c.y - 8, y1: c.y + 8 };
-  });
+  expect(chips[0]).toEqual({ x: 189, y: 115, width: 22, height: 22, n: 1 });
+  const boxes = chips.map((c) => ({ x0: c.x, x1: c.x + c.width, y0: c.y, y1: c.y + c.height }));
   for (const [i, a] of boxes.entries()) {
     expect(a.x0).toBeGreaterThanOrEqual(0);
     expect(a.y1).toBeLessThanOrEqual(size.height);

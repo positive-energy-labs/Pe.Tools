@@ -1,5 +1,5 @@
 export type Box = { x: number; y: number; width: number; height: number };
-export const overlaps = (a: Box, b: Box) =>
+const overlaps = (a: Box, b: Box) =>
   a.x < b.x + b.width && b.x < a.x + a.width && a.y < b.y + b.height && b.y < a.y + a.height;
 const DIRECTIONS = [
   [0, 1],
@@ -12,24 +12,21 @@ const DIRECTIONS = [
   [-1, -1],
 ] as const;
 
-/** Ordered boxes take a bounded free slot; null means reveal on subject hover instead.
- * The kit owns the search. Edge furniture can supply its legal edge slots. */
+/** Ordered boxes take a bounded free slot; unplaced labels reveal on subject hover instead. */
 export function declutter<T extends Box>(
-  boxes: readonly (T & { candidates?: readonly Box[] })[],
+  boxes: readonly T[],
   bounds: Box,
   obstacles: readonly Box[] = [],
-): (T | null)[] {
+): T[] {
   const taken = [...obstacles];
-  return boxes.map((box) => {
-    const candidates =
-      box.candidates ??
-      [1, 2, 3].flatMap((ring) =>
-        DIRECTIONS.map(([dx, dy]) => ({
-          ...box,
-          x: box.x + dx * ring * box.width,
-          y: box.y + dy * ring * box.height,
-        })),
-      );
+  return boxes.flatMap((box) => {
+    const candidates = [1, 2, 3].flatMap((ring) =>
+      DIRECTIONS.map(([dx, dy]) => ({
+        ...box,
+        x: box.x + dx * ring * box.width,
+        y: box.y + dy * ring * box.height,
+      })),
+    );
     const slot = [box, ...candidates].find(
       (b) =>
         b.x >= bounds.x &&
@@ -38,8 +35,8 @@ export function declutter<T extends Box>(
         b.y + b.height <= bounds.y + bounds.height &&
         !taken.some((t) => overlaps(b, t)),
     );
-    if (!slot) return null;
+    if (!slot) return [];
     taken.push(slot);
-    return { ...box, ...slot };
+    return [{ ...box, ...slot }];
   });
 }

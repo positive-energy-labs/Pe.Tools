@@ -95,7 +95,7 @@ it.each(["onPress", "onClick"] as const)(
     );
     render(
       <Pane>
-        <Button label="capture" aria-busy={false} {...{ [prop]: press }}>
+        <Button label="capture" busy={false} {...{ [prop]: press }}>
           capture
         </Button>
       </Pane>,
