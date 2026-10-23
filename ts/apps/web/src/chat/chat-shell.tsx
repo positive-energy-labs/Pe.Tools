@@ -447,7 +447,8 @@ function ChatSurface({ target, docked = false }: ChatShellProps) {
       {narrow && sideOpen ? (
         <Dialog open onOpenChange={(open) => store.actions.setSideOpen(open)}>
           <DialogContent>
-            <DialogTitle>Threads</DialogTitle>
+            {/* The mode dial's "Threads 145" names the dialog visibly. */}
+            <DialogTitle hidden>Threads</DialogTitle>
             <div className="flex items-center justify-between gap-1">
               <ModeDial mode={mode} setMode={setMode} count={rosterRead ? threads.length : "…"} />
               <span className="flex shrink-0 items-center gap-1">
