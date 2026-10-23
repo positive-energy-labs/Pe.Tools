@@ -61,6 +61,7 @@ function useBodyAction(action: ActionHandle): ActionHandle {
 }
 
 const fmt = (n: number | null | undefined) => (n == null ? "—" : n.toFixed(4));
+const NO_NATIVE_OBSERVATION: NativeObservation = { scope: null };
 
 /** Revit's critical path as a word, whatever the engine flag: a system with no path reads "no path". */
 const revitSays = (inWg: number | null | undefined) => (inWg == null ? "no path" : fmt(inWg));
@@ -100,6 +101,7 @@ export function DuctsRoute({ url = true }: { url?: boolean } = {}) {
     staged.labelParameter,
   );
   const snapshot = demo?.snapshot ?? read.snapshot;
+  const snapshotCurrent = demo !== null || read.current;
   // useDuctSnapshot fences responses by the exact request generation before exposing data.
   const nativeObservation = useMemo<NativeObservation>(
     () => ({
@@ -168,7 +170,7 @@ export function DuctsRoute({ url = true }: { url?: boolean } = {}) {
   );
   const pricingInput = useMemo<PricingInput | null>(
     () =>
-      snapshot && tables.grids && !pending
+      snapshot && snapshotCurrent && tables.grids && !pending && !error
         ? {
             snapshot,
             grids: tables.grids,
@@ -181,9 +183,11 @@ export function DuctsRoute({ url = true }: { url?: boolean } = {}) {
         : null,
     [
       snapshot,
+      snapshotCurrent,
       tables.grids,
       catalogs.tables,
       pending,
+      error,
       handle.work.doc,
       handle.work.revision,
       page.epoch,
@@ -198,13 +202,30 @@ export function DuctsRoute({ url = true }: { url?: boolean } = {}) {
         ? { state: "ready", observation: pricingState.observation }
         : { state: "absent" },
       catalogs: { state: "ready", observation: catalogs.tables },
-      ducts: snapshot ? { state: "ready", observation: snapshot } : { state: "absent" },
+      ducts: snapshot
+        ? snapshotCurrent
+          ? { state: "ready", observation: snapshot }
+          : error
+            ? { state: "failed", previous: snapshot, message: error }
+            : { state: "stale", previous: snapshot, reason: read.staleReason }
+        : { state: "absent" },
       tables: tables.grids ? { state: "ready", observation: tables.grids } : { state: "absent" },
     });
-  }, [snapshot, tables.grids, catalogs.tables, pricingState.observation]);
+  }, [
+    snapshot,
+    snapshotCurrent,
+    error,
+    read.staleReason,
+    tables.grids,
+    catalogs.tables,
+    pricingState.observation,
+  ]);
   const reading = useMemo<LoadedDuctsReading | null>(
-    () => (snapshot ? { snapshot, drawn: priced?.snapshot ?? null, claims: claimCells } : null),
-    [snapshot, priced?.snapshot, claimCells],
+    () =>
+      snapshot && snapshotCurrent
+        ? { snapshot, drawn: priced?.snapshot ?? null, claims: claimCells }
+        : null,
+    [snapshot, snapshotCurrent, priced?.snapshot, claimCells],
   );
   loadedReading.current = reading;
   // A camera write cannot change system membership; do not rebuild its evidence for each pose.
@@ -226,7 +247,6 @@ export function DuctsRoute({ url = true }: { url?: boolean } = {}) {
     key: string | null;
     snapshot: DuctSnapshot;
     priced: NonNullable<typeof priced>;
-    observation: NativeObservation;
     analysis: NonNullable<typeof pricingState.observation>["result"]["analysis"];
   } | null>(null);
   if (snapshot && priced)
@@ -234,7 +254,6 @@ export function DuctsRoute({ url = true }: { url?: boolean } = {}) {
       key: documentKey,
       snapshot,
       priced,
-      observation: nativeObservation,
       analysis: pricingState.observation!.result.analysis,
     };
   const held =
@@ -403,7 +422,7 @@ export function DuctsRoute({ url = true }: { url?: boolean } = {}) {
   const empty =
     !doc && !SAVED && !demo
       ? { says: "no document bound", exit: "choose a document in the sentence" }
-      : error
+      : error && !snapshot
         ? { says: `ducts.snapshot failed: ${error}`, exit: "refresh once the host answers" }
         : !snapshot
           ? { says: "reading ducts…", exit: "wait for the snapshot" }
@@ -457,7 +476,7 @@ export function DuctsRoute({ url = true }: { url?: boolean } = {}) {
     reading: {
       pending,
       error: error ?? pricingState.error ?? null,
-      refreshing: !!held || (pending && !!snapshot),
+      refreshing: !!held || (!snapshotCurrent && !!snapshot),
     },
     actions,
     staged: pendingCount(handle.work.doc, snapshot?.store),
@@ -508,8 +527,12 @@ export function DuctsRoute({ url = true }: { url?: boolean } = {}) {
         />
       }
     >
-      <NativeObservationScope value={held?.observation ?? nativeObservation}>
-        <EScreen props={shell} />
+      <NativeObservationScope
+        value={snapshotCurrent && !held ? nativeObservation : NO_NATIVE_OBSERVATION}
+      >
+        <div className="contents" aria-busy={!!snapshot && (!snapshotCurrent || !!held)}>
+          <EScreen props={shell} />
+        </div>
       </NativeObservationScope>
     </Surface>
   );

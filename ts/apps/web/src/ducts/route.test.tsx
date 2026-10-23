@@ -30,20 +30,26 @@ import { act, cleanup, fireEvent, render, screen, waitFor } from "@testing-libra
 import { afterEach, beforeEach, expect, test, vi } from "vite-plus/test";
 import { machineFixture } from "../../../../packages/agent-contracts/tests/machine-fixture";
 import type { ProtoProps } from "./proto/props";
+import { useNativeObservation } from "#/revit/observation";
 
 const drawing = vi.hoisted(() => ({ lightweight: false }));
 vi.mock("./proto/e/screen", async (original) => {
   const { EScreen } = await original<typeof import("./proto/e/screen")>();
   return {
-    EScreen: ({ props }: { props: ProtoProps }) =>
-      drawing.lightweight ? (
-        <div data-proto={props.snapshot ? "E2" : undefined}>
+    EScreen: ({ props }: { props: ProtoProps }) => {
+      const observation = useNativeObservation();
+      return drawing.lightweight ? (
+        <div
+          data-proto={props.snapshot ? "E2" : undefined}
+          data-native={observation.scope !== null}
+        >
           {props.snapshot ? props.snapshot.document.elapsedMs : "reading ducts…"}
           {props.reading.refreshing ? "refreshing…" : ""}
         </div>
       ) : (
         <EScreen props={props} />
-      ),
+      );
+    },
   };
 });
 
@@ -399,6 +405,8 @@ test("a changed document fences a pending read after changing targets and return
   );
   const mounted = await mount("&system=SA", false, target, "");
   await waitFor(() => expect(document.querySelector('[data-proto="E2"]')).not.toBeNull());
+  const picture = document.querySelector('[data-proto="E2"]');
+  expect(picture?.getAttribute("data-native")).toBe("true");
   let release: (value: Response) => void = () => {};
   reply = () =>
     new Promise((resolve) => {
@@ -407,6 +415,10 @@ test("a changed document fences a pending read after changing targets and return
   fireEvent.click(screen.getByRole("button", { name: /^refresh/, hidden: true }));
   expect(document.querySelector('[data-proto="E2"]')).not.toBeNull();
   await waitFor(() => expect(requests.length).toBe(2));
+  expect(document.querySelector('[data-proto="E2"]')).toBe(picture);
+  expect(picture?.closest('[aria-busy="true"]')).not.toBeNull();
+  expect(picture?.textContent).toContain("refreshing");
+  expect(picture?.getAttribute("data-native")).toBe("false");
   const old = response();
   reply = async () => Response.json(response());
   const pick = async (title: string) => {

@@ -31,7 +31,12 @@ function useSaved(epoch: number) {
       .then(
         (data: DuctSnapshot) => live && setState({ data, at: epoch }),
         (error: unknown) =>
-          live && setState({ error: `saved snapshot ${SAVED}: ${String(error)}`, at: epoch }),
+          live &&
+          setState((previous) => ({
+            ...previous,
+            error: `saved snapshot ${SAVED}: ${String(error)}`,
+            at: epoch,
+          })),
       );
     return () => {
       live = false;
@@ -41,6 +46,8 @@ function useSaved(epoch: number) {
     snapshot: state.data ?? null,
     error: state.error ?? null,
     pending: state.at !== epoch,
+    current: state.at === epoch && state.data !== undefined && !state.error,
+    staleReason: "dirtied" as const,
     nativeObservation: undefined,
     version: undefined,
   };
@@ -77,9 +84,11 @@ export function useDuctSnapshot(
   const saved = useSaved(epoch);
   if (SAVED) return saved;
   return {
-    snapshot: call.data ?? null,
+    snapshot: call.data ?? call.previous ?? null,
     error: call.error?.message ?? null,
     pending: call.pending,
+    current: call.data !== undefined && !call.error,
+    staleReason: call.staleReason,
     nativeObservation: call.nativeObservation,
     version: call.version,
   };

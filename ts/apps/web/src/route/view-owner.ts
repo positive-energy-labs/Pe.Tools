@@ -6,7 +6,7 @@ import type { PageMove, PageTransition, PageTransitionOrigin } from "./manifest"
 import type { createRouteOwner } from "./route-owner";
 import { causeRefusal, refuse, type Refusal } from "./refusal";
 
-type Origin = "initial" | "url" | PageTransitionOrigin;
+type Origin = PageTransitionOrigin;
 export interface PageSnapshot<P> {
   readonly page: P;
   readonly revision: number;
@@ -102,24 +102,22 @@ export function createViewOwner<P>(
     }
     const source = intent ? "pea" : origin;
     let patch = next;
-    if (source !== "url" && source !== "initial") {
-      try {
-        const normalized = rules.transition?.(before.page, next, source) ?? { patch: next };
-        if ("refusal" in normalized) return reject(normalized.refusal);
-        patch = normalized.patch;
-        if (rules.address) {
-          // `rules.address` is any `RouteKey`, untied from P: the manifest's Page extends its
-          // address's schema by construction (`urlPage` checks the keys at load), not by type.
-          const moved = routeAddress(rules.address).transition(
-            before.page as never,
-            patch as never,
-          );
-          if (!moved.ok) return reject(refuse("not-ready", moved.error));
-          patch = moved.patch as Partial<P>;
-        }
-      } catch (cause) {
-        return reject(causeRefusal(cause));
+    try {
+      const normalized = rules.transition?.(before.page, next, source) ?? { patch: next };
+      if ("refusal" in normalized) return reject(normalized.refusal);
+      patch =
+        source === "url" || source === "initial"
+          ? { ...normalized.patch, ...next }
+          : normalized.patch;
+      if (rules.address) {
+        // `rules.address` is any `RouteKey`, untied from P: the manifest's Page extends its
+        // address's schema by construction (`urlPage` checks the keys at load), not by type.
+        const moved = routeAddress(rules.address).transition(before.page as never, patch as never);
+        if (!moved.ok) return reject(refuse("not-ready", moved.error));
+        patch = moved.patch as Partial<P>;
       }
+    } catch (cause) {
+      return reject(causeRefusal(cause));
     }
     const candidate = { ...before.page, ...patch };
     const parsed = schema?.safeParse(candidate);

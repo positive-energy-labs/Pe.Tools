@@ -46,13 +46,16 @@ export function OpenPage() {
   const threads = useThreadSummaries(!fixture, fixture ? BAY_THREADS : null);
   useWorldLog(handle, fixture);
   const loading =
-    handle.readings.machine.state === "loading" || handle.readings.machine.state === "absent";
+    machine === null &&
+    (handle.readings.machine.state === "loading" || handle.readings.machine.state === "absent");
+  const current = handle.readings.machine.state === "ready";
   return (
     <Surface head={<RouteShell manifest={openManifest} handle={handle} />}>
       <div
         ref={container}
         className="flex min-h-0 min-w-0 flex-1 flex-col gap-2 overflow-y-auto"
         data-testid="open-route"
+        aria-busy={!current && handle.readings.machine.state !== "failed"}
       >
         <p className="m-0 text-ink-2">
           {layout === "stack"
@@ -63,6 +66,7 @@ export function OpenPage() {
         <PatchBay
           machine={machine as Machine | null}
           loading={loading}
+          refusal={current ? null : "Refresh the machine reading before changing Revit"}
           rows={rows}
           threads={threads}
           fixture={fixture}

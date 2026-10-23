@@ -406,7 +406,18 @@ export function entityRoute<W, const R extends string, P extends object, const A
       ReadingSpec<P & EntityPage>
     >,
     page: z.intersection(audit.page, entityPage) as z.ZodType<P & EntityPage>,
-    transition: audit.transition,
+    transition: (current, patch, origin) => {
+      const normalized = audit.transition?.(current, patch, origin) ?? { patch };
+      if ("refusal" in normalized) return normalized;
+      const identityChanged = (["stage", "pod", "path"] as const).some(
+        (key) => Object.hasOwn(normalized.patch, key) && normalized.patch[key] !== current[key],
+      );
+      return {
+        patch: identityChanged
+          ? { ...normalized.patch, confirming: false, sheet: null }
+          : normalized.patch,
+      };
+    },
     // Stage, pod and path are the contract's entity fields, so `/pods` deep-links a spec.
     address: audit.address,
     actions: {

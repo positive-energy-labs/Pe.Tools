@@ -155,6 +155,7 @@ export function bindDuctsManifest(read: () => LoadedDuctsReading | null): typeof
     transition: (current, patch, origin) => {
       const normalized = manifest.transition?.(current, patch, origin) ?? { patch };
       if ("refusal" in normalized) return normalized;
+      if (origin === "url" || origin === "initial") return normalized;
       const candidate = { ...current, ...normalized.patch };
       const reading = read();
       if (!reading) {

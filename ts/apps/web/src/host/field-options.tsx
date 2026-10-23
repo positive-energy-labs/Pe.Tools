@@ -40,7 +40,7 @@ export type FieldOptionStatus = "ready" | "pending" | "failed";
 export function pickerOptions(reading: Reading<FieldOptionsData>) {
   const items: FieldOption[] = previousOf(reading)?.items ?? [];
   const status: FieldOptionStatus =
-    reading.state === "loading" ? "pending" : reading.state === "failed" ? "failed" : "ready";
+    reading.state === "ready" ? "ready" : reading.state === "failed" ? "failed" : "pending";
   return { items, status };
 }
 
