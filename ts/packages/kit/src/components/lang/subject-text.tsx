@@ -170,12 +170,11 @@ export function SubjectText({
       context?.nameOf ?? (() => null),
       ids,
     );
-  if (!context)
-    return (
-      <span {...target}>
-        {doc.parts.map((p) => (typeof p === "string" ? p : p.name)).join("")}
-      </span>
-    );
+  // Plain text stays plain: a span appears only when there is a Revit target to carry.
+  if (!context) {
+    const plain = doc.parts.map((p) => (typeof p === "string" ? p : p.name)).join("");
+    return (revit ?? ids)?.length ? <span {...target}>{plain}</span> : <>{plain}</>;
+  }
   const light = (id: number | null) => context.light?.(doc.references, id, owner);
   return (
     <span

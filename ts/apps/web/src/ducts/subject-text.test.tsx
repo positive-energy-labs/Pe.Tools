@@ -49,9 +49,9 @@ test("unknown ids, dimensions, decimals and embedded keys stay honest; row ids s
   const doc = subjectDocument([prose], nameOf, [12317607, 12317607]);
   expect(doc.parts[0]).toBe(prose);
   expect(doc.references.map((r) => r.id)).toEqual([12317607]);
-  expect(subjectDocument([{ id: 99999999 }], nameOf).parts).toEqual([
-    "element 99999999 (not in snapshot)",
-  ]);
+  // An id the snapshot does not know is still a Subject: the kit fallback name, never the digits.
+  const [unknown] = subjectDocument([{ id: 99999999 }], nameOf).parts;
+  expect(typeof unknown === "string" ? unknown : unknown?.name).toBe("unnamed element");
 });
 
 test("names use a grille's mark, fitting size and part, then type, without inventing unknown subjects", () => {
