@@ -210,6 +210,19 @@ function Canvas({
     [snapshot, page.system, page.layers, groups],
   ); // eslint-disable-line react-hooks/exhaustive-deps
   const read = useScene(request, native, page.epoch);
+  // N6: a new capture keeps the last picture, with its own pose and marks, until it can draw.
+  // Never carry a picture across document custody. The held view is inert and names its source.
+  const pictureKey = native ? `${native.session}/${native.openId}` : null;
+  const lastPicture = useRef<{
+    key: string;
+    system: string;
+    view: ReactNode;
+    orbit: ReturnType<typeof useLiveOrbit>;
+  } | null>(null);
+  const holding =
+    !read.meshes && read.pending && pictureKey && lastPicture.current?.key === pictureKey
+      ? lastPicture.current
+      : null;
   const bounds = usePictureBounds(read.meshes, scene);
   const [pictureHost, setPictureHost] = useState<HTMLDivElement | null>(null);
   const [pictureSize, setPictureSize] = useState<{ width: number; height: number } | null>(null);
@@ -229,8 +242,8 @@ function Canvas({
     return () => observer.disconnect();
   }, [pictureHost]);
   const committedPose = useMemo(
-    () => poseOf(page.viewport, bounds, pictureSize),
-    [page.viewport, bounds, pictureSize],
+    () => holding?.orbit.read() ?? poseOf(page.viewport, bounds, pictureSize),
+    [page.viewport, bounds, pictureSize, holding],
   );
   const pose = committedPose;
   // Marks the landing of the next flight `useLiveOrbit` makes to a Page pose (an alias jump).
@@ -448,8 +461,8 @@ function Canvas({
   };
   // A pick made on the picture (an element, a pin, an issue, the schematic) keeps the camera
   // still (kaitpw 2026-10-23); `quiet` tells the alias flight below that this selection is one.
-  const quiet = useRef<{ id: string; at: number } | null>(null);
-  const hush = (id: string) => (quiet.current = { id, at: performance.now() });
+  const quiet = useRef<{ id: string } | null>(null);
+  const hush = (id: string) => (quiet.current = { id });
   // Showing the pick is local and urgent. Updating the address also renders the tree and rules;
   // let that work follow the readout's first paint. Two RAFs can run only 3 ms apart in headless
   // Chrome, before a visible paint, so the publish waits a frame and then 50 ms.
@@ -584,6 +597,16 @@ function Canvas({
   useEffect(() => setBody(document.body), []);
   useScopeKeys(
     [
+      {
+        hotkey: "Escape",
+        label: "clear the selection",
+        says: "Clear the selection without moving either picture",
+        refusal: page.selected ? null : "nothing is selected",
+        callback: () => {
+          if (page.selected) pick(null);
+        },
+        options: { conflictBehavior: "allow" },
+      },
       {
         hotkey: "Alt+ArrowLeft",
         label: "back",
@@ -723,6 +746,39 @@ function Canvas({
       </span>
     );
 
+  const model = (
+    <ModelPicture
+      read={read}
+      bounds={bounds}
+      orbit={orbit}
+      wheelHost={pictureHost?.closest<HTMLElement>("[data-slot='pane-field']")}
+      scene={scene}
+      layers={layers}
+      encoding={scale.encoding}
+      selected={selected}
+      lit={litAll}
+      hovered={hovered}
+      labels={labels}
+      rulings={marks}
+      findings3d={stageLayers}
+      issues={issues}
+      hoveredIssue={hoveredIssue}
+      onIssueHover={onIssueHover}
+      pointOf={pointOf}
+      issue={page.issue}
+      setPage={(next, move) => {
+        // An issue picked in 3D is a picture pick: the camera stays.
+        if (next.selected) hush(next.selected);
+        setPage(next, move);
+      }}
+      onPick={pick}
+      onRuling={ruling}
+      onHover={onHover}
+    />
+  );
+  if (read.meshes && pictureKey)
+    lastPicture.current = { key: pictureKey, system: page.system, view: model, orbit };
+
   return (
     <Pane
       id="e-picture"
@@ -785,11 +841,21 @@ function Canvas({
           go(e.button === 3 ? "back" : "forward");
         }}
         onPointerDownCapture={(e) => {
+          if (holding) {
+            e.preventDefault();
+            e.stopPropagation();
+            return;
+          }
           pointer.current = { x: e.clientX, y: e.clientY };
           // A gesture is the eye moving on: the landing marks and the way back go.
           if (landed && !(e.target as Element).closest("[data-picture-readout]")) setLanded(null);
         }}
         onWheelCapture={(e) => {
+          if (holding) {
+            e.nativeEvent.preventDefault();
+            e.stopPropagation();
+            return;
+          }
           if (landed && !(e.target as Element).closest("[data-picture-readout]")) setLanded(null);
         }}
         onDoubleClickCapture={() => {
@@ -803,34 +869,13 @@ function Canvas({
         }}
       >
         {picture === "model" ? (
-          <ModelPicture
-            read={read}
-            bounds={bounds}
-            orbit={orbit}
-            wheelHost={pictureHost?.closest<HTMLElement>("[data-slot='pane-field']")}
-            scene={scene}
-            layers={layers}
-            encoding={scale.encoding}
-            selected={selected}
-            lit={litAll}
-            hovered={hovered}
-            labels={labels}
-            rulings={marks}
-            findings3d={stageLayers}
-            issues={issues}
-            hoveredIssue={hoveredIssue}
-            onIssueHover={onIssueHover}
-            pointOf={pointOf}
-            issue={page.issue}
-            setPage={(next, move) => {
-              // An issue picked in 3D is a picture pick: the camera stays.
-              if (next.selected) hush(next.selected);
-              setPage(next, move);
-            }}
-            onPick={pick}
-            onRuling={ruling}
-            onHover={onHover}
-          />
+          <div
+            className="flex min-h-0 flex-1"
+            inert={holding ? true : undefined}
+            data-held-picture={holding?.system}
+          >
+            {holding?.view ?? model}
+          </div>
         ) : (
           schematic("main")
         )}
@@ -871,6 +916,11 @@ function Canvas({
           }
         >
           <OpeningNote />
+          {holding ? (
+            <span className="text-ink-2" role="status" data-e-capturing="">
+              opening {page.system}… showing {holding.system}
+            </span>
+          ) : null}
           {identity.refreshing ? (
             <span className="text-ink-2" data-e-refreshing="">
               refreshing… the last read stays drawn

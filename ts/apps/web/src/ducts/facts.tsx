@@ -65,8 +65,7 @@ export function SegmentFactsView({
   return (
     <div className="flex flex-col gap-2" data-facts={segment.id}>
       <p>
-        <SubjectText text={[{ id: segment.id }]} /> {segment.kind} · {segment.type ?? "no type"} ·{" "}
-        {segment.systemName ?? "no system"}
+        {segment.kind} · {segment.type ?? "no type"} · {segment.systemName ?? "no system"}
       </p>
       <Rows
         rows={[
@@ -88,7 +87,7 @@ export function NodeFactsView({ node, issues }: { node: DuctNode; issues: readon
   return (
     <div className="flex flex-col gap-2" data-facts={node.id}>
       <p>
-        <SubjectText text={[{ id: node.id }]} /> {node.kind} · {node.family ?? node.category}
+        {node.kind} · {node.family ?? node.category}
         {node.type ? ` · ${node.type}` : ""} · {node.systemName ?? "no system"}
       </p>
       <Rows

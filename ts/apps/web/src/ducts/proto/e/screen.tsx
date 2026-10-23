@@ -152,7 +152,7 @@ export function EScreen({ props }: { props: ProtoProps }) {
   const opening = requested ?? (system === props.page.system ? null : props.page.system);
   const latest = useRef(props);
   latest.current = props;
-  const flight = useRef<{ frame?: number; timer?: number }>({});
+  const flight = useRef<{ frame?: number; timer?: number; pending?: boolean }>({});
   useEffect(
     () => () => {
       cancelAnimationFrame(flight.current.frame ?? 0);
@@ -161,9 +161,10 @@ export function EScreen({ props }: { props: ProtoProps }) {
     [],
   );
   const move = useCallback<ProtoProps["setPage"]>((next, how) => {
-    if (next.system === undefined || next.system === latest.current.page.system)
-      return latest.current.setPage(next, how);
-    if (flight.current.frame || flight.current.timer) return;
+    if (next.system === undefined) return latest.current.setPage(next, how);
+    if (flight.current.pending) return;
+    if (next.system === latest.current.page.system) return latest.current.setPage(next, how);
+    flight.current.pending = true;
     // Paint acknowledgement before the route/router compute the next system. Refuse repeat picks.
     flushSync(() => setRequested(next.system!));
     flight.current.frame = requestAnimationFrame(() => {
@@ -181,6 +182,7 @@ export function EScreen({ props }: { props: ProtoProps }) {
       timer = window.setTimeout(() => {
         setSystem(props.page.system);
         setRequested(null);
+        flight.current.pending = false;
       }, 0);
     });
     return () => {

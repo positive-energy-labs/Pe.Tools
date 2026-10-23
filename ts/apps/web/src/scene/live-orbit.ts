@@ -1,3 +1,4 @@
+import { viewportCodec } from "@pe/agent-contracts";
 import { useLayoutEffect, useRef, useState } from "react";
 import { fitDistance, ORBIT_FOV, type OrbitViewport } from "./orbit";
 import type { Bounds } from "./types";
@@ -12,6 +13,11 @@ const equal = (a: OrbitViewport | null, b: OrbitViewport | null) =>
     a.elev === b.elev &&
     a.zoom === b.zoom &&
     a.pivot.every((v, i) => v === b.pivot[i]));
+
+// Page's URL echo is rounded by the public codec. It acknowledges the same move; it must not
+// start another flight or cancel input that began after publication. Live previews stay exact.
+const samePage = (a: OrbitViewport | null, b: OrbitViewport | null) =>
+  equal(a, b) || (!!a && !!b && viewportCodec.encode(a) === viewportCodec.encode(b));
 
 /** One live pose shared by the canvas and its controls. Page persists only the released pose:
  * publishing each frame through Page previously reran the whole route (918 ms orbit gaps).
@@ -66,12 +72,13 @@ export function createLiveOrbit(
     },
     /** An external Page pose. `fly`, when given and both poses exist, travels there instead of jumping. */
     accept(next: OrbitViewport | null, fly?: (to: OrbitViewport) => void) {
-      const echo = pending.findIndex((pose) => equal(pose, next));
+      const echo = pending.findIndex((pose) => samePage(pose, next));
       if (echo >= 0) {
         pending.splice(0, echo + 1);
         return;
       }
       pending = [];
+      if (samePage(value, next)) return;
       if (fly && value && next && !equal(value, next)) return fly(next);
       gesture = null;
       update(next);
@@ -121,12 +128,17 @@ export function flyTo(orbit: LiveOrbit, to: OrbitViewport, flight: Flight = {}) 
   // midpoint; 0.65 keeps a margin. Never wider than the whole scene unless an end already is.
   const z0 = Math.log(from.zoom),
     z1 = Math.log(to.zoom);
-  const radius = flight.scene ? fitDistance(flight.scene) * Math.sin((ORBIT_FOV / 2) * (Math.PI / 180)) : 0;
+  const radius = flight.scene
+    ? fitDistance(flight.scene) * Math.sin((ORBIT_FOV / 2) * (Math.PI / 180))
+    : 0;
   const reach = radius && travel ? Math.log(radius / (0.65 * travel)) : Infinity;
   const rise = Math.max(0, (z0 + z1) / 2 - Math.max(reach, Math.min(0, z0, z1)));
   const ms = 380 + Math.min(140, rise * 90) + Math.min(60, Math.abs(yaw) / 2);
   const ease = retarget ? easeOut : easeInOut;
-  const how = flight.history === undefined ? "move" : flight.history && (flight.history === "push" ? "move" : "gesture");
+  const how =
+    flight.history === undefined
+      ? "move"
+      : flight.history && (flight.history === "push" ? "move" : "gesture");
   // Time advances at most two frames per frame: a main-thread stall delays the flight, never
   // skips it, so the eye still sees the travel that tells it where it went.
   let elapsed = 0;

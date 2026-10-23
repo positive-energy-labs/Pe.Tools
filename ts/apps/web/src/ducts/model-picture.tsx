@@ -369,28 +369,6 @@ export function ModelPicture({
       },
     },
   ]);
-  // Escape binds on the document, not the pane element: a pick from the tree or the inputs leaves
-  // focus there, and the selection must still clear. Pane keys with focus in a field are not taken
-  // (ignoreInputs), and a floater's own Escape (close globe) sits deeper and wins.
-  const [body, setBody] = useState<HTMLElement | null>(null);
-  useEffect(() => setBody(document.body), []);
-  useScopeKeys(
-    [
-      {
-        hotkey: "Escape",
-        label: "clear the selection",
-        says: "Clear the selection; the next orbit uses the view centre, without moving the camera",
-        // Listed always (help is a snapshot, so an `available` gate hid it whenever nothing was
-        // picked); it refuses in words while nothing is, and does nothing.
-        refusal: selected.size ? null : "nothing is selected",
-        callback: () => {
-          if (selected.size) setPage({ selected: "" }, { history: "push" });
-        },
-        options: { conflictBehavior: "allow" },
-      },
-    ],
-    body,
-  );
 
   const status = said
     ? said

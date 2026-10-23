@@ -1,5 +1,6 @@
 import { expect, test, vi } from "vite-plus/test";
 import { createLiveOrbit, flyTo } from "./live-orbit";
+import { viewportCodec } from "@pe/agent-contracts";
 import type { OrbitViewport } from "./orbit";
 
 const initial: OrbitViewport = { kind: "orbit", yaw: 0, elev: 30, zoom: 1, pivot: [0, 0, 0] };
@@ -165,4 +166,36 @@ test("a second flight retargets from mid-air and only the last lands", () => {
   } finally {
     vi.unstubAllGlobals();
   }
+});
+
+test("a codec-rounded Page echo does not fly or cancel a newer gesture", () => {
+  const orbit = createLiveOrbit(initial, vi.fn());
+  const saved = {
+    ...initial,
+    yaw: 12.123456,
+    zoom: 0.502800733,
+    pivot: [381.352081, 674.761963, -6.421773] as [number, number, number],
+  };
+  const first = orbit.begin();
+  orbit.preview(first, saved);
+  orbit.end(first);
+  const newer = orbit.begin();
+  const live = { ...saved, yaw: 25 };
+  orbit.preview(newer, live);
+  const fly = vi.fn();
+  orbit.accept(viewportCodec.decode(viewportCodec.encode(saved)) as OrbitViewport, fly);
+  expect(fly).not.toHaveBeenCalled();
+  expect(orbit.read()).toBe(live);
+  expect(orbit.owns(newer)).toBe(true);
+});
+
+test("a rounded URL projection after the exact Page acknowledgement stays still", () => {
+  const orbit = createLiveOrbit(initial, vi.fn());
+  const saved = { ...initial, yaw: 12.123456, zoom: 0.502800733 };
+  orbit.move(saved);
+  orbit.accept(saved);
+  const fly = vi.fn();
+  orbit.accept(viewportCodec.decode(viewportCodec.encode(saved)) as OrbitViewport, fly);
+  expect(fly).not.toHaveBeenCalled();
+  expect(orbit.read()).toBe(saved);
 });
