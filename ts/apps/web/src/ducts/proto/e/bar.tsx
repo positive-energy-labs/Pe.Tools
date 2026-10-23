@@ -8,11 +8,12 @@ import { TooltipHint } from "@pe/kit/lang/tooltip";
 import { Fragment, type ComponentProps } from "react";
 import { fanLoad } from "@pe/ducts-domain/fan-headroom";
 import type { Provisional } from "@pe/ducts-domain/losses";
-import { revitTarget } from "@pe/kit/lang/row";
+import { Popover, PopoverContent, PopoverTrigger } from "@pe/kit/lang/popover";
+import { Row, revitTarget } from "@pe/kit/lang/row";
 import { tokenRef } from "@pe/kit/lib/token";
 import { observedElements, useNativeObservation } from "#/revit/observation";
 
-import type { Split, SplitPart } from "../b/model";
+import type { Split, SplitPart, systemList } from "../b/model";
 
 export const fmt = (n: number | null | undefined, d = 3) => (n == null ? "—" : n.toFixed(d));
 
@@ -142,120 +143,166 @@ function SplitFill({
   );
 }
 
-/** What a system's row says about itself beyond its number: one marker, its tone and its sentence. */
-export interface SystemStatus {
+/** One thing wrong or unsure about a system: its tone and its sentence. */
+export interface SystemIssue {
   tone: "alarm" | "caution";
   says: string;
 }
 
 /**
- * The all-systems row's status, worst first: a dash is never bare. `null` is a priced system with a
- * rating, in range, that rests on no unruled join: it says nothing.
+ * Everything a system's row has to say beyond its number, worst first, so a dash is never bare.
+ * Empty is a priced system in range, with a stated rating, resting on no unruled join.
  */
-export function systemStatus(s: {
+export function systemIssues(s: {
   total: number | null;
   rating: number | null;
   fanless: boolean;
   blocked: boolean;
   provisional: Provisional;
-}): SystemStatus | null {
-  if (s.fanless)
-    return {
-      tone: "alarm",
-      says: "needs a fix: no unit in this system moves air, so nothing is priced",
-    };
-  if (s.blocked)
-    return {
-      tone: "alarm",
-      says: "needs a fix: implausible loss",
-    };
-  if (s.total == null)
-    return { tone: "caution", says: "not priced: no run from a fan to a terminal was found" };
+}): SystemIssue[] {
   const load = fanLoad(s.total, s.rating);
-  if (load.state === "rated" && load.over)
-    return {
-      tone: "alarm",
-      says: `over rating: needs ${s.total.toFixed(3)} in-wg, the unit is rated ${load.available.toFixed(2)}`,
-    };
-  if (load.state === "unrated")
-    return {
-      tone: "caution",
-      says: "rating unknown: the unit states no rated external static, so the bar fills against its own total",
-    };
-  if (s.provisional)
-    return {
+  return [
+    s.fanless && { tone: "alarm", says: "needs a fix: no fan" },
+    s.blocked && { tone: "alarm", says: "needs a fix: implausible loss" },
+    s.total == null &&
+      !s.fanless &&
+      !s.blocked && {
+        tone: "caution",
+        says: "not priced: no run from a fan to a terminal was found",
+      },
+    load.state === "rated" &&
+      load.over && {
+        tone: "alarm",
+        says: `${load.required.toFixed(3)} required against ${load.available.toFixed(2)} rated`,
+      },
+    load.state === "unrated" &&
+      s.total != null && {
+        tone: "caution",
+        says: "rating unknown: the unit states no rated external static",
+      },
+    s.provisional && {
       tone: "caution",
       says: `provisional: rests on ${s.provisional.count} unruled inferred join(s), worst ${s.provisional.worst}`,
-    };
-  return null;
+    },
+  ].filter((issue): issue is SystemIssue => !!issue);
 }
 
-/** The row's trailing fact: the ESP Pe computes, over the unit's rating when it states one, and the marker. */
-export function SystemFact({
-  value,
-  rating,
-  status,
-}: {
-  value: number | null;
-  rating: number | null;
-  status: SystemStatus | null;
-}) {
-  const load = fanLoad(value, rating);
+/**
+ * The row's corner marker: a badge in the worst issue's tone, with a count when there are several.
+ * Its popover lists the issues and mounts only while open (closed children do not render), so
+ * hundreds of rows hold no popover content. Each line opens the system, where its inbox rows are.
+ */
+function SystemMarker({ issues, open }: { issues: SystemIssue[]; open: () => void }) {
+  const tone = issues.some((i) => i.tone === "alarm") ? "alarm" : "caution";
   return (
-    <span className="inline-flex items-center gap-1.5" data-e-fact="">
-      <span
-        className="face-mono"
-        data-tone={status?.tone === "alarm" && value != null ? "alarm" : undefined}
+    <Popover>
+      <PopoverTrigger
+        openOnHover
+        delay={150}
+        aria-label={issues.map((i) => i.says).join("; ")}
+        data-tone={tone}
+        data-e-marker={tone}
+        className="absolute top-0.5 right-1 z-[1] flex size-4 items-center justify-center rounded-full p-0! min-h-0!"
+        style={{ backgroundColor: tokenRef(tone), color: tokenRef(tone) }}
       >
-        {fmt(value)}
-        {load.state === "rated" ? ` / ${fmt(load.available, 2)}` : ""}
-      </span>
-      {status ? (
-        <span
-          className="inline-block size-1.5 shrink-0 rounded-full bg-current"
-          data-tone={status.tone}
-          data-e-marker={status.tone}
-          role="img"
-          aria-label={status.says}
-          title={status.says}
-        />
-      ) : null}
-    </span>
+        <span className="t-small leading-none" style={{ color: tokenRef("page") }}>
+          {issues.length > 1 ? issues.length : "!"}
+        </span>
+      </PopoverTrigger>
+      <PopoverContent side="bottom" align="end" className="w-72">
+        <ul className="flex flex-col gap-1" data-e-issues="">
+          {issues.map((issue) => (
+            <li key={issue.says}>
+              <button
+                type="button"
+                className="flex w-full items-baseline gap-1.5 text-left"
+                data-tone={issue.tone}
+                onClick={open}
+              >
+                <span className="mt-1 inline-block size-1.5 shrink-0 rounded-full bg-current" />
+                <span className="text-ink">{issue.says}</span>
+              </button>
+            </li>
+          ))}
+        </ul>
+      </PopoverContent>
+    </Popover>
   );
 }
 
 /**
- * The all-systems row's minibar: a thin line the full width of the row, on the system's own scale,
- * the same groups and inks as the strip, minified. With the unit's rated external static (`rating`,
- * in-wg) it is required over available, a fill against the fan's own limit, ringed in the alarm
- * tone when over; the breakdown inks stay inside the fill. Without a rating it fills its track to
- * read the make-up alone. Unpriced draws no track: an empty bar would read as zero. It draws no
- * tooltips: the row's title carries the hint (hundreds of rows would draw hundreds).
+ * The all-systems row: the system name, then a minibar filling the rest of the first line, then the
+ * ESP Pe computes (over the unit's rating when it states one). The bar is on the system's own scale
+ * with the same groups and inks as the strip; with a rating it is required over available, ringed
+ * in the alarm tone when over. Unpriced draws no track: an empty bar would read as zero. The
+ * corner marker carries the issues. The bar draws no tooltips of its own: hundreds of rows would
+ * draw hundreds.
  */
-export function SystemLine({
-  value,
-  split,
-  rating,
+export function SystemRow({
+  system: s,
+  open,
 }: {
-  value: number | null;
-  split: Split | null;
-  rating: number | null;
+  system: ReturnType<typeof systemList>[number];
+  open: () => void;
 }) {
-  const load = fanLoad(value, rating);
+  const issues = systemIssues(s);
+  const load = fanLoad(s.total, s.rating);
   const over = load.state === "rated" && load.over;
-  const scale = load.state === "rated" ? load.available : value;
-  if (value == null || !scale || !split) return null;
+  const scale = load.state === "rated" ? load.available : s.total;
+  const hint = [
+    `${s.name} · ${s.sub}`,
+    s.total == null
+      ? null
+      : `fan static Pe computes ${s.total.toFixed(3)} in-wg${s.rating != null ? ` of the unit's rated ${s.rating.toFixed(2)}` : ""}`,
+  ]
+    .filter(Boolean)
+    .join("\n");
   return (
-    <span
-      className="pointer-events-none absolute inset-x-0 bottom-0 block h-[3px]"
-      aria-hidden
-      data-e-minibar=""
-      data-e-load={load.state === "rated" ? load.ratio.toFixed(3) : ""}
-      style={over ? { boxShadow: `0 0 0 1px ${tokenRef("alarm")}` } : undefined}
+    // The first line's grid gives the trailing slot all the room the name leaves, so the bar fills it.
+    <div
+      className="relative [&_.dl-row-fact]:w-full! [&_.dl-row-line]:grid-cols-[max-content_minmax(0,1fr)]! [&_.dl-row-line]:gap-2 [&_.dl-row-meta]:w-full!"
+      data-e-system={s.key}
     >
-      <span className="absolute inset-0" style={{ backgroundColor: tokenRef("line") }} />
-      <SplitFill split={split} scale={scale} hint={false} />
-    </span>
+      <Row
+        role="listitem"
+        tabIndex={0}
+        lines={2}
+        label={s.name}
+        sub={s.sub}
+        title={hint}
+        meta={
+          <span
+            className={`flex w-full items-center gap-2 ${issues.length ? "pr-5" : ""}`}
+            data-e-fact=""
+          >
+            <span className="relative block h-1.5 min-w-8 flex-1" aria-hidden data-e-minibar="">
+              {s.total != null && scale && s.split ? (
+                <span
+                  className="absolute inset-0 block"
+                  data-e-load={load.state === "rated" ? load.ratio.toFixed(3) : ""}
+                  style={over ? { boxShadow: `0 0 0 1px ${tokenRef("alarm")}` } : undefined}
+                >
+                  <span
+                    className="absolute inset-0"
+                    style={{ backgroundColor: tokenRef("line") }}
+                  />
+                  <SplitFill split={s.split} scale={scale} hint={false} />
+                </span>
+              ) : null}
+            </span>
+            <span className="face-mono shrink-0" data-tone={over ? "alarm" : undefined}>
+              {fmt(s.total)}
+              {load.state === "rated" ? ` / ${fmt(load.available, 2)}` : ""}
+            </span>
+          </span>
+        }
+        onClick={open}
+        onKeyDown={(event) => {
+          if (event.key === "Enter") open();
+        }}
+      />
+      {issues.length ? <SystemMarker issues={issues} open={open} /> : null}
+    </div>
   );
 }
 

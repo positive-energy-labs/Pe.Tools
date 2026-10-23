@@ -12,7 +12,6 @@ import { fansOwedBase, type OwedBase } from "@pe/ducts-domain/fan-assignment";
 import { healPlan } from "@pe/ducts-domain/heal";
 import { sectionNames, systemOfGroup, systemScope } from "@pe/ducts-domain/system-scope";
 import { Button } from "@pe/kit/lang/button";
-import { Row } from "@pe/kit/lang/row";
 import { systemSearch } from "@pe/ducts-domain/system-search";
 import { VirtualList } from "@pe/kit/lang/virtual-list";
 import { Pane } from "#/components/lang/pane";
@@ -39,15 +38,7 @@ import { reviewLines } from "../../write-review";
 import { buildTree, systemList, type TreeNode } from "../b/model";
 import type { ProtoProps } from "../props";
 import { DEFAULT_DESIGN_FRICTION_RATE } from "@pe/ducts-domain/equivalent-length";
-import {
-  BarLegend,
-  fmtFt,
-  SplitStrip,
-  SystemFact,
-  SystemLine,
-  systemStatus,
-  type SystemStatus,
-} from "./bar";
+import { BarLegend, fmtFt, SplitStrip, SystemRow } from "./bar";
 import { DuctSettings } from "./settings";
 import { FanSections } from "./fan-sections";
 import { RunDetail, runOf } from "./run-detail";
@@ -64,18 +55,6 @@ const NO_GROUPS: readonly string[] = [];
 
 /** A two-line system row before it is measured, px (two item heights). */
 const LIST_ROW_PX = 48;
-
-/** The row's one hint: what the bar and its numbers mean, so the bar draws no tooltip of its own. */
-const systemHint = (s: ReturnType<typeof systemList>[number], status: SystemStatus | null) =>
-  [
-    `${s.name} · ${s.sub}`,
-    s.total == null
-      ? null
-      : `fan static Pe computes ${s.total.toFixed(3)} in-wg${s.rating != null ? ` of the unit's rated ${s.rating.toFixed(2)}` : ""}`,
-    status?.says ?? null,
-  ]
-    .filter(Boolean)
-    .join("\n");
 
 /**
  * The read snapshot is priced once the tables are in (2-3 s on a large model): until then the
@@ -530,26 +509,7 @@ function EScreenBody({ props }: { props: ProtoProps }) {
           }}
           row={(s) => {
             const open = () => setPage({ system: s.key, selected: "", issue: "" });
-            // A system none of whose groups has an air mover prices nothing: its marker says it needs a fix.
-            const status = systemStatus(s);
-            return (
-              <div className="relative">
-                <Row
-                  role="listitem"
-                  tabIndex={0}
-                  lines={2}
-                  label={s.name}
-                  sub={s.sub}
-                  title={systemHint(s, status)}
-                  meta={<SystemFact value={s.total} rating={s.rating} status={status} />}
-                  onClick={open}
-                  onKeyDown={(event) => {
-                    if (event.key === "Enter") open();
-                  }}
-                />
-                <SystemLine value={s.total} split={s.split} rating={s.rating} />
-              </div>
-            );
+            return <SystemRow system={s} open={open} />;
           }}
         />
       )}
