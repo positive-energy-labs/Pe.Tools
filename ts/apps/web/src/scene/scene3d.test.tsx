@@ -25,10 +25,8 @@ vi.mock("./renderer", () => ({
 vi.mock("#/revit/observation", () => ({ useNativeObservation: () => ({ scope: null }) }));
 
 it("keeps motion local, publishes on release and accepts external camera moves", () => {
-  vi.stubGlobal("requestAnimationFrame", (frame: FrameRequestCallback) => {
-    frame(0);
-    return 1;
-  });
+  const frames: FrameRequestCallback[] = [];
+  vi.stubGlobal("requestAnimationFrame", (frame: FrameRequestCallback) => frames.push(frame));
   const moves = new EventTarget();
   const initial: OrbitViewport = { kind: "orbit", yaw: 30, elev: 30, zoom: 1, pivot: [0, 0, 0] };
   let pose = initial;
@@ -40,6 +38,7 @@ it("keeps motion local, publishes on release and accepts external camera moves",
     moves,
     plane: () => null,
     viewport: () => pose,
+    gestureSize: () => [600, 2],
     setViewport,
     setOrbitPivot: vi.fn(),
     setOnFrame: vi.fn(),
@@ -97,6 +96,7 @@ it("keeps motion local, publishes on release and accepts external camera moves",
   expect(renderer.current.paint.mock.lastCall[3]).toEqual(new Set());
   picking.current = { instance: meshes.instances[0]!, point: [0, 0, 0] };
   fireEvent.pointerMove(renderer.current.canvas);
+  act(() => frames.splice(0).forEach((frame) => frame(0)));
   expect(row.getAttribute("data-reach")).toBe("hover");
   fireEvent.pointerLeave(renderer.current.canvas);
   expect(row.getAttribute("data-reach")).toBe("rest");
@@ -109,6 +109,7 @@ it("keeps motion local, publishes on release and accepts external camera moves",
       pose = { ...initial, yaw };
       moves.dispatchEvent(new Event("change"));
     }
+    frames.splice(0).forEach((frame) => frame(0));
   });
   expect(onViewport).not.toHaveBeenCalled();
   expect(orbit.read()).toEqual(pose);
@@ -174,10 +175,37 @@ it("keeps motion local, publishes on release and accepts external camera moves",
   expect(setViewport).not.toHaveBeenCalled();
   const canvas = renderer.current.canvas;
   fireEvent(canvas, new MouseEvent("pointerdown", { button: 0, clientX: 10, clientY: 10 }));
+  onViewport.mockClear();
+  act(() => {
+    moves.dispatchEvent(new Event("start"));
+    pose = { ...orbit.read()!, yaw: orbit.read()!.yaw + 4 };
+    moves.dispatchEvent(new Event("change"));
+    fireEvent(canvas, new MouseEvent("pointerup", { button: 0, clientX: 14, clientY: 10 }));
+    moves.dispatchEvent(new Event("end"));
+  });
+  expect(onViewport).not.toHaveBeenCalled();
+  expect(orbit.read()).toBe(beforeSelection);
+  fireEvent(canvas, new MouseEvent("pointerdown", { button: 0, clientX: 10, clientY: 10 }));
   fireEvent(canvas, new MouseEvent("pointerup", { button: 0, clientX: 10, clientY: 10 }));
   expect(onPick).not.toHaveBeenCalled();
   fireEvent.click(canvas, { button: 0, clientX: 10, clientY: 10 });
   expect(onPick).toHaveBeenCalledExactlyOnceWith(null, expect.any(MouseEvent));
+  const touch = (type: string, pointerId: number, clientX: number) =>
+    fireEvent(
+      canvas,
+      Object.assign(new MouseEvent(type, { button: 0, clientX, clientY: 10 }), { pointerId }),
+    );
+  act(() => {
+    touch("pointerdown", 1, 10);
+    touch("pointerdown", 2, 14);
+    moves.dispatchEvent(new Event("start"));
+    pose = { ...orbit.read()!, zoom: orbit.read()!.zoom * 2 };
+    moves.dispatchEvent(new Event("change"));
+    touch("pointerup", 2, 14);
+    touch("pointerup", 1, 10);
+    moves.dispatchEvent(new Event("end"));
+  });
+  expect(onViewport).toHaveBeenCalledExactlyOnceWith(pose, "gesture");
   view.unmount();
   vi.useRealTimers();
   vi.unstubAllGlobals();

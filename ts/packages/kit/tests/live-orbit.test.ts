@@ -1,9 +1,30 @@
 import { expect, test, vi } from "vite-plus/test";
 import { createLiveOrbit, flyTo } from "@pe/kit/lang/live-orbit";
 import { viewportCodec } from "@pe/agent-contracts";
-import type { OrbitViewport } from "./orbit";
+import type { OrbitViewport } from "@pe/agent-contracts";
 
 const initial: OrbitViewport = { kind: "orbit", yaw: 0, elev: 30, zoom: 1, pivot: [0, 0, 0] };
+test("a click nudge publishes nothing; a released drag beyond three pixels publishes once", () => {
+  const commit = vi.fn();
+  const orbit = createLiveOrbit(initial, commit);
+  for (const delta of [
+    { yaw: 0.1 },
+    { zoom: 1.001 },
+    { pivot: [0.1, 0, 0] as [number, number, number] },
+  ]) {
+    const token = orbit.begin(600, 100);
+    orbit.preview(token, { ...initial, ...delta });
+    orbit.end(token);
+    expect(commit).not.toHaveBeenCalled();
+    expect(orbit.read()).toEqual(initial);
+  }
+  const token = orbit.begin(600, 100);
+  const pose = { ...initial, pivot: [1, 0, 0] as [number, number, number] };
+  orbit.preview(token, pose);
+  orbit.end(token);
+  orbit.end(token);
+  expect(commit).toHaveBeenCalledExactlyOnceWith(pose, "gesture");
+});
 test("all subscribers see motion; releasing and acknowledging never replay a camera pose", () => {
   const commit = vi.fn();
   const orbit = createLiveOrbit(initial, commit);
@@ -141,6 +162,21 @@ test("a main-thread stall delays a flight instead of skipping it", () => {
     expect(orbit.read()!.pivot[0]).toBeLessThan(5);
     run(1000);
     expect(orbit.read()).toEqual(to);
+  } finally {
+    vi.unstubAllGlobals();
+  }
+});
+
+test("an intentional small flight replaces history without the gesture dead-band", () => {
+  const { run } = frames();
+  try {
+    const commit = vi.fn();
+    const orbit = createLiveOrbit({ ...initial, projection: "parallel" }, commit);
+    const to = { ...initial, yaw: 0.1, projection: "parallel" as const };
+    flyTo(orbit, to, { history: "replace" });
+    run(1000);
+    expect(orbit.read()).toEqual(to);
+    expect(commit).toHaveBeenCalledExactlyOnceWith(to, "gesture");
   } finally {
     vi.unstubAllGlobals();
   }

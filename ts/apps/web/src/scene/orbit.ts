@@ -64,7 +64,10 @@ export function toCamera(v: OrbitViewport, bounds: Bounds): { position: Vec3; ta
 
 /** Read the viewport back from OrbitControls (or anything shaped like it), in world coordinates. */
 export function fromControls(
-  controls: { object: { position: XYZ }; target: XYZ },
+  controls: {
+    object: { position: XYZ; zoom?: number; isOrthographicCamera?: boolean };
+    target: XYZ;
+  },
   bounds: Bounds,
 ): OrbitViewport {
   const { target: t } = controls,
@@ -76,9 +79,12 @@ export function fromControls(
   const elev = Math.asin(Math.min(Math.max(dz / d, -1), 1)) / RAD;
   return {
     kind: "orbit",
+    projection: controls.object.isOrthographicCamera ? "parallel" : "perspective",
     yaw: Math.atan2(dy, dx) / RAD,
     elev: Math.abs(elev) >= ELEV_LIMIT - 1e-6 ? Math.sign(elev) * 90 : elev,
-    zoom: fitDistance(bounds) / d,
+    zoom:
+      (fitDistance(bounds) / d) *
+      (controls.object.isOrthographicCamera ? (controls.object.zoom ?? 1) : 1),
     pivot: [t.x, t.y, t.z],
   };
 }
@@ -99,11 +105,12 @@ const FIT_FROM = { yaw: -45, elev: orbitLooks.iso.elev };
 export function frame(
   scene: Bounds,
   target: Bounds = scene,
-  from: Pick<OrbitViewport, "yaw" | "elev"> = FIT_FROM,
+  from: Pick<OrbitViewport, "yaw" | "elev" | "projection"> = FIT_FROM,
   aspect = 1,
 ): OrbitViewport {
   return {
     kind: "orbit",
+    projection: from.projection,
     yaw: from.yaw,
     elev: from.elev,
     zoom: fitDistance(scene) / fitDistance(target, aspect),
@@ -184,15 +191,4 @@ export function boundsOfInstances(
     }
   }
   return Number.isFinite(b.minX) ? b : null;
-}
-
-/** Same pose within what a page key keeps; a decoded echo of our own publish is not a move. */
-export function samePose(a: OrbitViewport, b: OrbitViewport, bounds: Bounds) {
-  const feet = fitDistance(bounds) * 1e-4;
-  return (
-    Math.abs(((a.yaw - b.yaw + 540) % 360) - 180) < 0.05 &&
-    Math.abs(a.elev - b.elev) < 0.05 &&
-    Math.abs(a.zoom / b.zoom - 1) < 1e-3 &&
-    a.pivot.every((x, i) => Math.abs(x - b.pivot[i]!) < feet)
-  );
 }

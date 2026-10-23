@@ -1,6 +1,8 @@
 /** Scene3D's imperative renderer. Batch vertices are bounds-centred to preserve float32 fidelity;
- * camera poses, layers and picks stay in world feet. Thumbnails reuse this context only when stale.
- * Space owns cut geometry; only packed polygons cross into the material shader. */
+ * camera poses, layers and picks stay in world feet. One swappable orbit camera (perspective or
+ * parallel) drives OrbitControls; an axis picture swaps in an orthographic camera that only pans
+ * and zooms. Thumbnails reuse this context only when stale. Space owns cut geometry; only packed
+ * polygons cross into the material shader. */
 import * as THREE from "three";
 import { LineMaterial } from "three/addons/lines/LineMaterial.js";
 import { LineSegments2 } from "three/addons/lines/LineSegments2.js";
@@ -28,6 +30,9 @@ import { center, fromControls, rotateAbout, toCamera, type OrbitViewport } from 
 import { fitPlane, frameRect, fromFrame, type PlaneAxis, type PlaneViewport } from "./plane";
 import {
   newCamera,
+  placeCamera,
+  resizeCamera,
+  viewHeight,
   projectThrough,
   rayThrough,
   type Project,
@@ -125,7 +130,7 @@ export function createRenderer(mount: HTMLElement, meshes: SceneMeshes, wheelHos
   const sun = new THREE.DirectionalLight(LIGHT.sun, 1.55);
   sun.position.set(1, -1, 3);
   scene.add(sun);
-  const camera = newCamera();
+  let camera = newCamera();
   const controls = createOrbitControls(camera, canvas);
   controls.enableDamping = false;
   controls.screenSpacePanning = true;
@@ -279,11 +284,9 @@ export function createRenderer(mount: HTMLElement, meshes: SceneMeshes, wheelHos
       paper.height = Math.round(at.height * ratio);
       renderer.setViewport(0, 0, at.width, at.height);
       if (plane?.axis === axis) {
-        camera.aspect = at.width / at.height;
-        camera.updateProjectionMatrix();
+        resizeCamera(camera, at.width / at.height);
         renderer.render(scene, camera);
-        camera.aspect = size.width / size.height;
-        camera.updateProjectionMatrix();
+        resizeCamera(camera, size.width / size.height);
       } else {
         place(axis, fitPlane(axis, bounds, at), at);
         renderer.render(scene, ortho);
@@ -369,8 +372,7 @@ export function createRenderer(mount: HTMLElement, meshes: SceneMeshes, wheelHos
     glow.setSize(size.width, size.height);
     outline.setSize(size.width, size.height);
     fitLines(scene);
-    camera.aspect = size.width / size.height;
-    camera.updateProjectionMatrix();
+    resizeCamera(camera, size.width / size.height);
     if (plane) place(plane.axis, plane.viewport, size);
     thumbsStale = true;
     render();
@@ -439,8 +441,7 @@ export function createRenderer(mount: HTMLElement, meshes: SceneMeshes, wheelHos
     camera.updateMatrixWorld();
     const right = new THREE.Vector3().setFromMatrixColumn(camera.matrix, 0);
     const up = new THREE.Vector3().setFromMatrixColumn(camera.matrix, 1);
-    const reach = camera.position.distanceTo(controls.target);
-    const perPx = (2 * reach * Math.tan((camera.fov / 2) * (Math.PI / 180))) / size.height;
+    const perPx = viewHeight(camera, controls.target) / size.height;
     const move = right.multiplyScalar(x * perPx).add(up.multiplyScalar(-y * perPx));
     moves.dispatchEvent({ type: "start" });
     camera.position.add(move);
@@ -635,7 +636,7 @@ export function createRenderer(mount: HTMLElement, meshes: SceneMeshes, wheelHos
 
   return {
     canvas,
-    camera,
+    gestureSize: () => [size.height, viewHeight(camera, controls.target)] as const,
     controls,
     moves,
     /** The camera the picture shows now: the orbit's, or the plane's. */
@@ -652,10 +653,9 @@ export function createRenderer(mount: HTMLElement, meshes: SceneMeshes, wheelHos
         active(),
       );
       // A seven-pixel hit allowance keeps short join bars usable at a system-wide fit.
-      const distance = active().position.distanceTo(controls.target);
       issueRay.params.Line!.threshold = plane
         ? ((ortho.top - ortho.bottom) / rect.height) * 7
-        : ((2 * distance * Math.tan(THREE.MathUtils.degToRad(camera.fov / 2))) / rect.height) * 7;
+        : (viewHeight(camera, controls.target) / rect.height) * 7;
       // Pixel lines: their own width plus this many px across.
       issueRay.params.Line2 = { threshold: 12 };
       let nearest = Infinity;
@@ -705,8 +705,12 @@ export function createRenderer(mount: HTMLElement, meshes: SceneMeshes, wheelHos
       orbitPivot = pivot;
     },
     setViewport(v: OrbitViewport) {
+      if ((v.projection === "parallel") !== camera instanceof THREE.OrthographicCamera) {
+        camera = newCamera(size.width / size.height, v.projection);
+        controls.object = camera;
+      }
+      placeCamera(camera, v, bounds, size.width / size.height);
       const pose = toCamera(v, bounds);
-      camera.position.fromArray(pose.position);
       controls.target.fromArray(pose.target);
       controls.update();
       if (plane) thumbsStale = true;

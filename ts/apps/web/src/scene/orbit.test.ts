@@ -9,7 +9,6 @@ import {
   frame,
   fromControls,
   rotateAbout,
-  samePose,
   toCamera,
   type OrbitViewport,
 } from "./orbit";
@@ -126,13 +125,6 @@ describe("frame and looks", () => {
     expect(applyLook("iso", shown).elev).toBeCloseTo(35.264, 3);
     expect(applyLook("north", shown)).toEqual({ ...shown, yaw: 90, elev: 0 });
     expectPose(roundTrip(applyLook("plan", shown)), { ...shown, elev: 90 });
-  });
-  it("a decoded echo is the same pose; a real move is not", () => {
-    const v = frame(bounds);
-    expect(samePose(v, { ...v, yaw: v.yaw + 360.01 }, bounds)).toBe(true);
-    expect(samePose(v, { ...v, zoom: 1.0001 }, bounds)).toBe(true);
-    expect(samePose(v, { ...v, yaw: v.yaw + 1 }, bounds)).toBe(false);
-    expect(samePose(v, { ...v, pivot: [121, 215, 6] }, bounds)).toBe(false);
   });
 });
 

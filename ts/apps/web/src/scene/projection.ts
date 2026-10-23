@@ -10,12 +10,52 @@ export type Size = { width: number; height: number };
 /** A world point to px from the canvas's top-left; null behind the camera. */
 export type Project = (point: readonly number[]) => [number, number] | null;
 
-/** The one perspective camera: z up, the orbit's field of view. */
-export function newCamera(aspect = 1) {
-  const camera = new THREE.PerspectiveCamera(ORBIT_FOV, aspect, 0.05, 100000);
+export type OrbitCamera = THREE.PerspectiveCamera | THREE.OrthographicCamera;
+export function newCamera(
+  aspect = 1,
+  projection: OrbitViewport["projection"] = "perspective",
+): OrbitCamera {
+  const camera =
+    projection === "parallel"
+      ? new THREE.OrthographicCamera(-aspect, aspect, 1, -1, 0.05, 100000)
+      : new THREE.PerspectiveCamera(ORBIT_FOV, aspect, 0.05, 100000);
   camera.up.set(0, 0, 1);
   return camera;
 }
+
+export function resizeCamera(camera: OrbitCamera, aspect: number) {
+  if (camera instanceof THREE.PerspectiveCamera) camera.aspect = aspect;
+  else {
+    camera.left = -camera.top * aspect;
+    camera.right = camera.top * aspect;
+  }
+  camera.updateProjectionMatrix();
+}
+
+/** Parallel framing matches the perspective picture at its look-at plane. */
+export function placeCamera(
+  camera: OrbitCamera,
+  viewport: OrbitViewport,
+  bounds: Bounds,
+  aspect: number,
+) {
+  const pose = toCamera(viewport, bounds);
+  camera.position.fromArray(pose.position);
+  camera.lookAt(...pose.target);
+  if (camera instanceof THREE.OrthographicCamera) {
+    camera.zoom = 1;
+    camera.top =
+      camera.position.distanceTo(new THREE.Vector3(...pose.target)) *
+      Math.tan(THREE.MathUtils.degToRad(ORBIT_FOV / 2));
+    camera.bottom = -camera.top;
+  }
+  resizeCamera(camera, aspect);
+}
+
+export const viewHeight = (camera: OrbitCamera, target: THREE.Vector3) =>
+  camera instanceof THREE.OrthographicCamera
+    ? (camera.top - camera.bottom) / camera.zoom
+    : 2 * camera.position.distanceTo(target) * Math.tan(THREE.MathUtils.degToRad(ORBIT_FOV / 2));
 
 /** The camera as it is now, frozen into a projection over a canvas of `size`. */
 export function projectThrough(camera: THREE.Camera, size: Size): Project {
@@ -48,9 +88,7 @@ export function rayThrough(camera: THREE.Camera, size: Size): Ray {
 
 /** The projection a `Scene3D` over `bounds` draws `viewport` with, with no renderer at all. */
 export function viewportProject(viewport: OrbitViewport, bounds: Bounds, size: Size): Project {
-  const camera = newCamera(size.width / size.height);
-  const pose = toCamera(viewport, bounds);
-  camera.position.fromArray(pose.position);
-  camera.lookAt(...pose.target);
+  const camera = newCamera(size.width / size.height, viewport.projection);
+  placeCamera(camera, viewport, bounds, size.width / size.height);
   return projectThrough(camera, size);
 }

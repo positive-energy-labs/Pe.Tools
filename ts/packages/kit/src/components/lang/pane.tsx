@@ -84,6 +84,7 @@ function usePaneWork(host: React.RefObject<HTMLElement | null>) {
 export const PictureContext = createContext<{
   selected: boolean;
   box: () => DOMRect | null;
+  layers?: ReactNode;
 } | null>(null);
 type ReadoutIdentity = { subject?: ReactNode; title?: ReactNode; onClear?: () => void };
 export const PictureReadoutContext = createContext<
@@ -325,8 +326,11 @@ export function Pane({
   const strip =
     (modes?.options.length ?? 0) > 0 ||
     (floaters?.length ?? 0) > 0 ||
-    (layers?.options.length ?? 0) > 0 ? (
-      <PaneStrip modes={modes} floaters={floaters} layers={layers} />
+    (layers?.options.length ?? 0) > 0 ||
+    (picture && stage?.layers) ? (
+      <PaneStrip modes={modes} floaters={floaters} layers={layers}>
+        {picture && stage?.layers}
+      </PaneStrip>
     ) : null;
   const heading = (
     <>

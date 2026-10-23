@@ -22,6 +22,7 @@ export const STAGE_KEYS: readonly LegendKey[] = [
   { keys: ["Alt", "→"], does: "forward again" },
   { keys: ["F"], does: "frame the selection; nothing selected fits the whole" },
   { keys: ["P"], does: "plan or isometric, keeping the pivot and zoom" },
+  { keys: ["O"], does: "perspective or parallel, keeping the look-at and framing" },
   { keys: ["N"], does: "look north (also N on the globe's rim)" },
   { keys: ["G"], does: "show or hide the globe" },
   { keys: ["Esc"], does: "clear the selection" },

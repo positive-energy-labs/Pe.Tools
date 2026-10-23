@@ -159,7 +159,7 @@ function resolveDucts(input: Record<string, unknown>, facts: Record<string, unkn
       return {
         ok: false as const,
         error:
-          "the Ducts picture has published no orbit pose, so a look has no pivot to turn about; set viewport as orbit:yaw,elev,zoom@x,y,z, or empty to fit",
+          "the Ducts picture has published no orbit pose, so a look has no pivot to turn about; set viewport as orbit:projection:yaw,elev,zoom@x,y,z (projection is perspective or parallel), or empty to fit",
       };
     delete patch.look;
     patch.viewport = viewportCodec.encode({ ...shown, ...look });
@@ -176,7 +176,7 @@ export const ductsAddress = {
   agent: {
     finds: [...DUCTS_FINDS, "system", "level"],
     policy:
-      "Move the Ducts page in the person's open browser. Its subject: system (a Revit system name such as SA 19, as the person said it; it resolves against the view's system names), level and selected element id; an empty string clears the key. The page shows every duct network the system is in. Set the system only when the person named it, and never pick a system they did not name. Its picture: encoding, layers (comma separated: meshes, context, centrelines, no-run, labels, findings; no-run highlights branches on no fan-to-terminal run and is on by default; empty = none), picture (model or schematic), and either look (plan, iso, north, south, east or west: the shown picture turned about its pivot) or viewport (orbit:yaw,elev,zoom@x,y,z in feet; empty fits the subject). issue selects one finding by id. Each set is one step the person can go Back from. No Work or Revit read.",
+      "Move the Ducts page in the person's open browser. Its subject: system (a Revit system name such as SA 19, as the person said it; it resolves against the view's system names), level and selected element id; an empty string clears the key. The page shows every duct network the system is in. Set the system only when the person named it, and never pick a system they did not name. Its picture: encoding, layers (comma separated: meshes, context, centrelines, no-run, labels, findings; no-run highlights branches on no fan-to-terminal run and is on by default; empty = none), picture (model or schematic), and either look (plan, iso, north, south, east or west: the shown picture turned about its pivot) or viewport (orbit:projection:yaw,elev,zoom@x,y,z (projection is perspective or parallel) in feet; empty fits the subject). issue selects one finding by id. Each set is one step the person can go Back from. No Work or Revit read.",
     words: ductsWords,
     resolve: resolveDucts,
   },
