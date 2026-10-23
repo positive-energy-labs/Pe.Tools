@@ -5,7 +5,7 @@
  * SVG lets the pointer through to the canvas; only its hit targets take it. Every hit target that
  * stands for an element declares the displayed observation's member, so right-click and BX answer.
  */
-import { useMemo } from "react";
+import { useContext, useMemo } from "react";
 
 import { revitTarget } from "@pe/kit/lang/row";
 import { token } from "@pe/kit/lib/token";
@@ -27,6 +27,8 @@ import {
 import type { Claim } from "./legs";
 import type { Scene } from "./scene";
 import { Caption, pathOf, SubjectLabels } from "./subject-labels";
+import { SubjectTextContext } from "./subject-text-view";
+import { subjectDocument } from "./subject-text";
 
 export type Ruling =
   | { kind: "claim"; n: number; at: number; claim: Claim }
@@ -99,6 +101,16 @@ export function Annotations({
   onHover: (id: number | null) => void;
 }) {
   const observation = useNativeObservation();
+  const subjects = useContext(SubjectTextContext);
+  const noRunWords = (branch: NoRunBranch) =>
+    subjectDocument(
+      [branch.reasons.map((r) => r.text).join("; ")],
+      subjects?.nameOf ?? (() => null),
+    )
+      .parts.map((p) =>
+        typeof p === "string" ? p : `${p.name}${p.connector == null ? "" : ` port ${p.connector}`}`,
+      )
+      .join("");
   const target = (id: number) => {
     const t = observedElements(observation, [id]);
     return revitTarget(t.ids, t.refs);
@@ -122,9 +134,14 @@ export function Annotations({
     [scene, project, encoding],
   );
   const halo = (id: number) =>
-    selected.has(id) ? token("select") : id === hovered ? token("veil") : null;
+    selected.has(id)
+      ? token("select")
+      : id === hovered || subjects?.lighting.ids.has(id)
+        ? token("veil")
+        : null;
   const sub = scene.subject;
   const taken = new Map<number, number>();
+  const footnotes: { x: number; y: number }[] = [];
 
   return (
     <svg
@@ -151,7 +168,7 @@ export function Annotations({
                 strokeLinecap="round"
                 {...element(id)}
               >
-                <title>No run: {noRun.reasons.map((r) => r.text).join("; ")}</title>
+                <title>No run: {noRunWords(noRun)}</title>
               </path>
             ) : null}
             {back ? (
@@ -200,7 +217,7 @@ export function Annotations({
             {back ? <circle r={GLYPH * 2.5} fill={back} fillOpacity={0.7} /> : null}
             {noRun ? (
               <g {...element(id)}>
-                <title>No run: {noRun.reasons.map((r) => r.text).join("; ")}</title>
+                <title>No run: {noRunWords(noRun)}</title>
                 <circle r={GLYPH} fill={token("viz-3")} />
               </g>
             ) : null}
@@ -270,6 +287,34 @@ export function Annotations({
             );
           })
         : null}
+      {subjects?.lighting.references.map((ref) => {
+        const p = pointOf(ref.id);
+        const xy = p && project(p);
+        if (!xy) return null;
+        // Close connectors share a screen point. Keep numbers legible, with a leader to each element.
+        let x = xy[0];
+        const y = xy[1] - 14;
+        const direction = x < size.width / 2 ? 1 : -1;
+        while (footnotes.some((p) => Math.hypot(p.x - x, p.y - y) < 22)) x += direction * 22;
+        footnotes.push({ x, y });
+        const active = subjects.lighting.focus == null || subjects.lighting.focus === ref.id;
+        return (
+          <g
+            key={ref.id}
+            data-subject-badge={ref.id}
+            data-footnote={ref.number}
+            data-emphasized={active}
+            opacity={active ? 1 : 0.35}
+            transform={`translate(${x} ${y})`}
+          >
+            <line x1={0} y1={0} x2={xy[0] - x} y2={xy[1] - y} stroke={token("ink-2")} />
+            <circle r={9} fill={token("page")} stroke={token("ink")} strokeWidth={active ? 2 : 1} />
+            <Caption x={0} y={3} anchor="middle" ink={token("ink")}>
+              {String(ref.number)}
+            </Caption>
+          </g>
+        );
+      })}
     </svg>
   );
 }

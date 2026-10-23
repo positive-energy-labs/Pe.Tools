@@ -4,6 +4,7 @@ import { TooltipHint } from "@pe/kit/lang/tooltip";
  * value beside where it came from. A missing value is printed as missing, never left blank.
  */
 import { ISSUE_KINDS } from "./issues";
+import { SubjectText } from "./subject-text-view";
 import type { DuctNode, Issue, Segment } from "./encoding";
 const num = (value: number | null | undefined, unit: string, digits = 0) =>
   value == null ? null : `${value.toFixed(digits)} ${unit}`;
@@ -31,7 +32,12 @@ function Issues({ issues }: { issues: readonly Issue[] }) {
             <span data-tone={ISSUE_KINDS[issue.kind].color.tone}>
               {ISSUE_KINDS[issue.kind].label}
             </span>{" "}
-            <span className="text-ink-2">{issue.note}</span>
+            <span className="text-ink-2">
+              <SubjectText
+                text={issue.note}
+                ids={issue.elementId == null ? [] : [issue.elementId]}
+              />
+            </span>
           </li>
         </TooltipHint>
       ))}
@@ -51,8 +57,8 @@ export function SegmentFactsView({
   return (
     <div className="flex flex-col gap-2" data-facts={segment.id}>
       <p>
-        <span className="face-mono">{segment.id}</span> {segment.kind} · {segment.type ?? "no type"}{" "}
-        · {segment.systemName ?? "no system"}
+        <SubjectText text={[{ id: segment.id }]} /> {segment.kind} · {segment.type ?? "no type"} ·{" "}
+        {segment.systemName ?? "no system"}
       </p>
       <Rows
         rows={[
@@ -74,7 +80,7 @@ export function NodeFactsView({ node, issues }: { node: DuctNode; issues: readon
   return (
     <div className="flex flex-col gap-2" data-facts={node.id}>
       <p>
-        <span className="face-mono">{node.id}</span> {node.kind} · {node.family ?? node.category}
+        <SubjectText text={[{ id: node.id }]} /> {node.kind} · {node.family ?? node.category}
         {node.type ? ` · ${node.type}` : ""} · {node.systemName ?? "no system"}
       </p>
       <Rows

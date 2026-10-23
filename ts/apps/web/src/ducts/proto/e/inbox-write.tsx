@@ -19,6 +19,7 @@ export type RulingRow = Omit<ListRowParts, "actions"> & {
 import type { ActionHandle } from "#/route/handle";
 import type { WriteRow } from "../../inbox-rows";
 import { PreviewLines } from "./preview-lines";
+import { SubjectText } from "../../subject-text-view";
 
 /** The Write group's verbs: the route's own preview and apply, as the handle refuses or arms them. */
 export interface WriteVerbs {
@@ -70,8 +71,16 @@ export function inboxWriteRows(write: WriteVerbs) {
       write.apply.refusal || write.row.held
         ? () => (
             <>
-              {write.apply.refusal ? <p data-inbox-write-says="">{write.apply.refusal}</p> : null}
-              {write.row.held ? <p data-inbox-write-held="">{write.row.held}</p> : null}
+              {write.apply.refusal ? (
+                <p data-inbox-write-says="">
+                  <SubjectText text={write.apply.refusal} />
+                </p>
+              ) : null}
+              {write.row.held ? (
+                <p data-inbox-write-held="">
+                  <SubjectText text={write.row.held} />
+                </p>
+              ) : null}
             </>
           )
         : undefined,

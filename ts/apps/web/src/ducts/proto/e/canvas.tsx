@@ -40,6 +40,8 @@ import type { ProtoProps } from "../props";
 import { fmtFt } from "./bar";
 import { usePictureFloaters } from "./picture-floaters";
 import { RulingBody, useMarks } from "./rulings";
+import { noRunParts } from "../../subject-text";
+import { SubjectText } from "../../subject-text-view";
 
 type Open =
   | { what: "element"; id: number; x: number; y: number }
@@ -430,10 +432,10 @@ function Canvas({
                 {noRuns.has(elementId) ? (
                   <p>
                     No run:{" "}
-                    {noRuns
-                      .get(elementId)!
-                      .reasons.map((r) => r.text)
-                      .join("; ")}
+                    <SubjectText
+                      text={noRunParts(noRuns.get(elementId)!, snapshot)}
+                      ids={[elementId]}
+                    />
                   </p>
                 ) : null}
                 {segFacts ? (
