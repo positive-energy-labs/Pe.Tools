@@ -873,7 +873,6 @@ function Canvas({
                   ref={landPicture}
                 />
               ) : null}
-
             </div>
           </Pane>
         );

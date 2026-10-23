@@ -52,12 +52,15 @@ export function lossGroups(
       ? segment.type?.trim() || segment.kind
       : node
         ? typeLabel(node) || node.kind
-        : row.kind.startsWith("tap") ? "tap fitting" : "element not in snapshot";
+        : row.kind.startsWith("tap")
+          ? "tap fitting"
+          : "element not in snapshot";
     const size = bySize ? (segment?.size ?? node?.connectors[0]?.size ?? "") : "";
     const label = size ? `${base} ${size}` : base;
     const key = `${part}|${element}|${label}`;
     let group = groups.get(key);
-    if (!group) groups.set(key, (group = { key, part, element, label, dp: 0, ids: [], unpriced: 0 }));
+    if (!group)
+      groups.set(key, (group = { key, part, element, label, dp: 0, ids: [], unpriced: 0 }));
     if (row.dp == null || row.error) group.unpriced++;
     group.dp += row.dp ?? 0;
     if (!group.ids.includes(row.id)) group.ids.push(row.id);
