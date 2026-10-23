@@ -1,3 +1,4 @@
+import { ButtonGroup } from "@pe/kit/lang/button-group";
 /**
  * THE SHELL — the one route chrome: the chord bindings, and a head for a route that has not been
  * cut over to a Situation yet (name, verb row). The Situation (`situation.tsx`) is the one head;
@@ -45,11 +46,11 @@ function ShellVerbs<W, R extends string, P, A extends string>({
   ) as [string, RouteHandle<W, R, P, A>["actions"][A]][];
   if (!verbs.length) return null;
   return (
-    <div className="flex flex-wrap items-center gap-x-2 gap-y-1">
+    <ButtonGroup>
       {verbs.map(([name, action]) => (
         <SituationAction key={name} handle={handle} name={name} action={action} />
       ))}
-    </div>
+    </ButtonGroup>
   );
 }
 

@@ -47,8 +47,8 @@ export function Button({
   const tone = toneProp ?? (kind === "commit" && !inert ? "commit" : undefined);
   const Glyph = direction ? NAV_ICON[direction] : icon;
   const iconOnly = children == null || children === false;
-  const tipped = iconOnly || refusal !== undefined || reason != null;
-  const tip = refusal ?? reason ?? (iconOnly ? label : null);
+  const tipped = Glyph != null || iconOnly || refusal !== undefined || reason != null;
+  const tip = refusal ?? reason ?? (Glyph != null || iconOnly ? label : null);
   const named = busy ? `${label}…` : label;
   const button = (
     <button

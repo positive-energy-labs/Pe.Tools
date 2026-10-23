@@ -3,7 +3,7 @@ import { useEffect, useMemo, useRef, useState } from "react";
 import { z } from "zod";
 import { actionAdmissionSchema, routeAddress, type RoutePage } from "@pe/agent-contracts";
 import { EmptyState } from "@pe/kit/lang/empty";
-import { Pane } from "#/components/lang/pane";
+import { Pane } from "@pe/kit/lang/pane";
 import { Surface } from "@pe/kit/lang/surface";
 import { useHostOp } from "#/readings";
 import {

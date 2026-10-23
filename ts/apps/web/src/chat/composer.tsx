@@ -11,7 +11,7 @@ import {
 } from "@pe/agent-contracts";
 import { FirstOpenCard, ProviderRepair } from "#/chat/first-open";
 import { isReady } from "#/workbench/provider/providers";
-import { Pane } from "#/components/lang/pane";
+import { Pane } from "@pe/kit/lang/pane";
 import { ScopeKeys, type ScopeKey } from "@pe/kit/keys";
 import { useWorkbench } from "#/workbench/provider";
 import { EMPTY_CHAT_DRAFT, type ChatDraft } from "#/workbench/prompt";

@@ -9,7 +9,7 @@ import { useRouteSearch } from "#/route/activity";
 import { routeAddress } from "@pe/agent-contracts";
 import { usePublishPagePalette } from "#/navigation/route-controls";
 
-import { Pane, PaneSplit } from "#/components/lang/pane";
+import { Pane, PaneSplit } from "@pe/kit/lang/pane";
 import { Switcher } from "@pe/kit/lang/switcher";
 import { stageChords } from "#/route/keys";
 import { KeysNode } from "@pe/kit/keys";

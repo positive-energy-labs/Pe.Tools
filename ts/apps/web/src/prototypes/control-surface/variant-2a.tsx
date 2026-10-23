@@ -382,7 +382,7 @@ function ThreadDetail({ id, onOutcome }: { id: string; onOutcome: (text: string)
     return (
       <DetailFrame title="Retag supply diffusers" eyebrow="Approval · Tower A · Level 03">
         <p>Pea wants to set the Mark parameter on 214 supply diffusers.</p>
-        <div data-surface="artifact" className="my-3 rounded-sm p-2 face-mono t-small">
+        <div data-surface="document" className="my-3 rounded-sm p-2 face-mono t-small">
           <div className="text-ink-2">host operation</div>
           <div>family.parameters.set</div>
           <div className="mt-2 text-ink-2">arguments</div>

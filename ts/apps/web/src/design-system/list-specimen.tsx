@@ -18,7 +18,7 @@ import { ZoneThumb } from "#/takeoff/zone-plan";
 import { selectSkillCommands } from "@pe/agent-contracts/chat-state";
 import { emptyListState, useList, type ListState } from "@pe/kit/lang/collection";
 import { ListView } from "@pe/kit/lang/list-view";
-import { Pane, PaneSplit } from "#/components/lang/pane";
+import { Pane, PaneSplit } from "@pe/kit/lang/pane";
 
 /* ── fixtures ────────────────────────────────────────────────────────────────────────────── */
 
@@ -579,7 +579,6 @@ export function CoreListPanel({
       <div className="h-[30rem] min-h-0">
         <PaneSplit
           axis="horizontal"
-          secondary="start"
           resize={{ target: "start", defaultSize: 460, minSize: 220, minOtherSize: 220 }}
           start={
             <Pane id="list-specimen-navigation" title="Systems" flush>

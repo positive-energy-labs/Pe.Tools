@@ -108,3 +108,27 @@
   text-overflow: ellipsis;
   white-space: nowrap;
 }
+
+/* One gap and one line; labels yield before glyphs. */
+.dl-button-group {
+  display: flex;
+  align-items: center;
+  min-width: 0;
+  max-width: 100%;
+  gap: var(--space-unit);
+  flex-wrap: nowrap;
+}
+.dl-button-group > * {
+  min-width: 0;
+  flex-shrink: 1;
+}
+.dl-button-group .dl-button {
+  min-height: var(--control-h);
+}
+.dl-button-group .dl-button:has(svg) {
+  flex: 0 1 auto;
+  min-width: var(--control-h);
+}
+.dl-button-group[data-icon-labels] .dl-button:has(svg) .dl-button-label {
+  display: none;
+}

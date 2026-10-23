@@ -56,7 +56,7 @@ export function MessageHead({
 /** What you sent, on the artifact plane: the one enclosed block in the transcript is yours. */
 export function MessageBubble({ children }: { children: ReactNode }) {
   return (
-    <div className="dl-message-bubble" data-surface="artifact">
+    <div className="dl-message-bubble" data-surface="document">
       {children}
     </div>
   );

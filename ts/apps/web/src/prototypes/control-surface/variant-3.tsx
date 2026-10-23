@@ -128,7 +128,7 @@ export default function Variant() {
   const share = machine ? shareState(machine) : { text: "unread" };
 
   return (
-    <div data-surface="artifact" className="flex h-full w-full flex-col text-ink">
+    <div data-surface="document" className="flex h-full w-full flex-col text-ink">
       {/* sockets */}
       <div className="grid grid-cols-3 gap-1 p-2">
         {years.map((y) => {

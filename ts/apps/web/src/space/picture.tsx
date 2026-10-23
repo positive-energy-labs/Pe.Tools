@@ -3,9 +3,9 @@ import { useEffect, useMemo, useRef, useState, type ReactNode } from "react";
 
 import { type Chord } from "@pe/kit/keys";
 import { Button } from "@pe/kit/lang/button";
-import type { FloaterSpec } from "#/components/lang/floater";
+import type { FloaterSpec } from "@pe/kit/lang/floater";
 import { OrbitMinimap } from "#/components/lang/minimap";
-import { Pane } from "#/components/lang/pane";
+import { Pane, PaneOverlay } from "@pe/kit/lang/pane";
 import type { PageMove } from "#/route/manifest";
 import { useStage, stageViewport } from "#/scene/stage-controller";
 import { boundsOfInstances, center, frame, type OrbitViewport } from "#/scene/orbit";
@@ -311,7 +311,7 @@ export function SpacePicture({
           >
             <span className="pointer-events-none relative block" style={THUMB}>
               <canvas ref={thumbRef[a]} className="block size-full" />
-              <span className="absolute left-1 top-1 px-1 t-small" data-surface="page">
+              <span className="block px-1 t-small" data-surface="page">
                 {a === axis ? "3D · Esc" : AXIS_LABEL[a]}
                 {a !== axis && !page.cuts[a].polyline.length ? " · no cut" : ""}
               </span>
@@ -397,13 +397,11 @@ export function SpacePicture({
         ) : null}
         {readout}
         {status || cut?.error ? (
-          <p
-            role="status"
-            className="t-small text-ink-2 absolute bottom-2 left-1/2 m-0 -translate-x-1/2"
-            data-space-status=""
-          >
-            {status ?? `cuts clip nothing: ${cut!.error}`}
-          </p>
+          <PaneOverlay label="space status" place="br">
+            <p role="status" className="t-small text-ink-2 m-0" data-space-status="">
+              {status ?? `cuts clip nothing: ${cut!.error}`}
+            </p>
+          </PaneOverlay>
         ) : null}
       </div>
     </Pane>

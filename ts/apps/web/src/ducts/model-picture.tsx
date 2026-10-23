@@ -1,3 +1,4 @@
+import { PaneOverlay } from "@pe/kit/lang/pane";
 /** The subject's real meshes and annotations. Camera policy belongs to useStage. */
 import { emptyListSearch } from "@pe/agent-contracts";
 import { useContext, useEffect, useMemo, useRef, useState, useSyncExternalStore } from "react";
@@ -273,13 +274,11 @@ export function ModelPicture({
         </div>
       ) : null}
       {status ? (
-        <p
-          role="status"
-          className="t-small text-ink-2 absolute bottom-2 right-2 m-0"
-          data-model-status=""
-        >
-          {status}
-        </p>
+        <PaneOverlay label="model status" place="br">
+          <p role="status" className="t-small text-ink-2 m-0" data-model-status="">
+            {status}
+          </p>
+        </PaneOverlay>
       ) : null}
     </div>
   );

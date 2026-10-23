@@ -2,7 +2,7 @@ import { familyCellAddress } from "@pe/agent-contracts";
 import { useMemo, useRef, type ReactNode } from "react";
 
 import { ReadCell } from "@pe/kit/table/cells";
-import { Pane } from "#/components/lang/pane";
+import { Pane } from "@pe/kit/lang/pane";
 import type { Column, QueryVocabulary } from "@pe/kit/table/model";
 import { TableFrame } from "#/components/master-table/table-frame";
 import {

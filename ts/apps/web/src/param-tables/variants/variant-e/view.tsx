@@ -7,7 +7,7 @@ import { FactChip } from "@pe/kit/lang/chip";
 import { TooltipHint } from "@pe/kit/lang/tooltip";
 import { Switcher } from "@pe/kit/lang/switcher";
 import { Button } from "@pe/kit/lang/button";
-import { Pane } from "#/components/lang/pane";
+import { Pane } from "@pe/kit/lang/pane";
 import { Surface } from "@pe/kit/lang/surface";
 import { FC_UNITS } from "#/param-tables/variants/data";
 import type {

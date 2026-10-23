@@ -1,6 +1,7 @@
-import { useEffect, useRef, type ReactNode } from "react";
+import { useCallback, type ReactNode } from "react";
 import { X } from "lucide-react";
 import { useScopeKeys } from "../../keys";
+import { PaneOverlay } from "./pane";
 import { Button } from "./button";
 import "./lang.css";
 
@@ -17,7 +18,6 @@ export function PictureReadout({
   foot?: ReactNode;
 }) {
   const selected = title != null;
-  const body = useRef<HTMLDivElement>(null);
   useScopeKeys([
     {
       hotkey: "Escape",
@@ -27,34 +27,36 @@ export function PictureReadout({
     },
   ]);
   // Native and non-passive: the picture's wheel listener skips the claimed event.
-  useEffect(() => {
-    const at = body.current?.parentElement;
+  const body = useCallback((node: HTMLDivElement | null) => {
+    const at = node?.parentElement;
     if (!at) return;
     const wheel = (event: WheelEvent) => {
       event.preventDefault();
-      body.current!.scrollTop += event.deltaMode === 1 ? event.deltaY * 16 : event.deltaY;
+      node.scrollTop += event.deltaMode === 1 ? event.deltaY * 16 : event.deltaY;
     };
     at.addEventListener("wheel", wheel, { passive: false });
     return () => at.removeEventListener("wheel", wheel);
   }, []);
   return (
-    <section
-      className="dl-picture-readout hairline t-small"
-      aria-label={selected ? "the selection" : "the system"}
-      data-surface="page"
-      data-slot="pane-dock"
-      data-picture-readout={selected ? "selection" : "system"}
-    >
-      {selected ? (
-        <header className="hairline-b">
-          <span data-readout-title="">{title}</span>
-          {onClear ? <Button label="Clear the selection · Esc" icon={X} onClick={onClear} /> : null}
-        </header>
-      ) : null}
-      <div ref={body} data-readout-body="">
-        {children}
-      </div>
-      {foot ? <footer>{foot}</footer> : null}
-    </section>
+    <PaneOverlay label="picture readout">
+      <section
+        className="dl-picture-readout t-small"
+        aria-label={selected ? "the selection" : "the system"}
+        data-picture-readout={selected ? "selection" : "system"}
+      >
+        {selected ? (
+          <header className="hairline-b">
+            <span data-readout-title="">{title}</span>
+            {onClear ? (
+              <Button label="Clear the selection · Esc" icon={X} onClick={onClear} />
+            ) : null}
+          </header>
+        ) : null}
+        <div ref={body} data-readout-body="">
+          {children}
+        </div>
+        {foot ? <footer>{foot}</footer> : null}
+      </section>
+    </PaneOverlay>
   );
 }

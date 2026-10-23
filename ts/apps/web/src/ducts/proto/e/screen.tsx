@@ -26,8 +26,8 @@ import { Button } from "@pe/kit/lang/button";
 import { systemSearch } from "@pe/ducts-domain/system-search";
 import { useList, emptyListState } from "@pe/kit/lang/collection";
 import { ListView } from "@pe/kit/lang/list-view";
-import { Pane } from "#/components/lang/pane";
-import { PaneSplit } from "#/components/lang/pane-resize";
+import { Pane } from "@pe/kit/lang/pane";
+import { PaneSplit } from "@pe/kit/lang/pane-resize";
 
 import { airflowOptions } from "../../airflow";
 import { noRunParts, subjectNamer } from "../../subject-text";

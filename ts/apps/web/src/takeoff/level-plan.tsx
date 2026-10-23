@@ -2,7 +2,7 @@ import { SvgTip } from "@pe/kit/lang/tooltip";
 import { useMemo, type ReactNode } from "react";
 import { useStage } from "#/scene/stage-controller";
 import type { PlaneViewport } from "@pe/agent-contracts";
-import { Pane } from "#/components/lang/pane";
+import { Pane } from "@pe/kit/lang/pane";
 import { revitTarget } from "@pe/kit/lang/row";
 import { usePlaneViewport, PLAN_CLICK_PX } from "#/scene/use-plane-viewport";
 import { usePlanMap } from "#/lib/plan-map";

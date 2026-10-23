@@ -247,7 +247,7 @@ export const TypeGrid = memo(function TypeGrid({
             <div
               role="row"
               className="z-sticky"
-              data-surface="recess"
+              data-surface="support"
               style={{
                 position: "sticky",
                 top: 0,
@@ -258,7 +258,7 @@ export const TypeGrid = memo(function TypeGrid({
               <div
                 role="columnheader"
                 className="z-popup t-small t-upper border-b px-2"
-                data-surface="recess"
+                data-surface="support"
                 style={{
                   position: "sticky",
                   left: 0,
@@ -283,7 +283,7 @@ export const TypeGrid = memo(function TypeGrid({
                       tabIndex={0}
                       {...revitFamily(group)}
                       className="t-small t-upper truncate border-b border-l px-1"
-                      data-surface="recess"
+                      data-surface="support"
                       style={{
                         position: "absolute",
                         left: Math.max(
@@ -314,7 +314,7 @@ export const TypeGrid = memo(function TypeGrid({
                     aria-colindex={colStart + offset + 2}
                     aria-label={`${type.familyName} · ${type.typeName}`}
                     className="t-small truncate border-b border-l px-1"
-                    data-surface="recess"
+                    data-surface="support"
                     style={{
                       position: "absolute",
                       left: identityWidth + (colStart + offset) * GRID.type,
@@ -347,7 +347,7 @@ export const TypeGrid = memo(function TypeGrid({
                   <div
                     role="rowheader"
                     className="z-raised flex items-center border-b"
-                    data-surface="recess"
+                    data-surface="support"
                     style={{ position: "sticky", left: 0, width: identityWidth, height: GRID.row }}
                   >
                     <div className="min-w-0 flex-1">

@@ -65,7 +65,12 @@
     "./lang/accordion": "./src/components/lang/accordion.tsx",
     "./lang/activity": "./src/components/lang/activity.tsx",
     "./lang/coverage-bar": "./src/components/lang/coverage-bar.tsx",
-    "./lang/arming-strip": "./src/components/lang/arming-strip.tsx"
+    "./lang/arming-strip": "./src/components/lang/arming-strip.tsx",
+    "./lang/pane": "./src/components/lang/pane.tsx",
+    "./lang/pane-resize": "./src/components/lang/pane-resize.tsx",
+    "./lang/pane-strip": "./src/components/lang/pane-strip.tsx",
+    "./lang/floater": "./src/components/lang/floater.tsx",
+    "./lang/button-group": "./src/components/lang/button-group.tsx"
   },
   "scripts": {
     "build": "vp build && node scripts/page.mjs",

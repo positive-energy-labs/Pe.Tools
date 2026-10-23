@@ -11,7 +11,7 @@ import { FactChip } from "@pe/kit/lang/chip";
 import { StateDot } from "@pe/kit/table/cells";
 import { fmtNum } from "@pe/kit/table/model";
 import { Button } from "@pe/kit/lang/button";
-import { Pane } from "#/components/lang/pane";
+import { Pane } from "@pe/kit/lang/pane";
 import { ScopeKeys, type ScopeKey } from "@pe/kit/keys";
 import { TakeoffEditCell, TakeoffProposalRows } from "#/takeoff/proposals";
 import type { Verdict } from "#/takeoff/atlas";
@@ -257,7 +257,7 @@ function RoomPanel({
 
         <div className="px-2.5 py-2">
           <p className="t-small t-upper mb-1">addressable</p>
-          <p className="face-mono break-all px-1.5 py-1 text-ink-2" data-surface="recess">
+          <p className="face-mono break-all px-1.5 py-1 text-ink-2" data-surface="support">
             {url}
           </p>
         </div>

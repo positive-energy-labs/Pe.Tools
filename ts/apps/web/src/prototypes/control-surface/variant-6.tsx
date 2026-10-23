@@ -166,7 +166,7 @@ export default function Variant() {
       {/* OWED: native draggable title bar and actual always-on-top/minimize/close; local simulation only. */}
       <header
         className="flex shrink-0 items-center gap-2 px-3 py-2 hairline-b"
-        data-surface="artifact"
+        data-surface="document"
       >
         <div
           className="flex min-w-0 flex-1 cursor-move touch-none items-center gap-2"
@@ -294,7 +294,7 @@ export default function Variant() {
                         <Markdown text={item.message} />
                       </ConversationBody>
                       {item.kind === "proposal" && (
-                        <div className="my-3 p-3 hairline-t hairline-b" data-surface="artifact">
+                        <div className="my-3 p-3 hairline-t hairline-b" data-surface="document">
                           <div className="mb-2 flex justify-between t-small">
                             <span>Family proposal</span>
                             <span className="face-mono text-ink-2">3 changes</span>

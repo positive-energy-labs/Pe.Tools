@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useState } from "react";
 import type { PlaneViewport } from "@pe/agent-contracts";
-import type { FloaterSpec } from "#/components/lang/floater";
+import type { FloaterSpec } from "@pe/kit/lang/floater";
 import { PlaneMinimap } from "#/components/lang/minimap";
 import type { AffineFrame, Viewport2 } from "./affine-frame";
 import type { TakeoffPlanImage } from "#/takeoff/level-plan";
