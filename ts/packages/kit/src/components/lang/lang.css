@@ -383,6 +383,67 @@ tr.dl-row[data-active] {
   color: var(--pe-ink-2);
   font-style: italic;
 }
+/* DAMAGE (I2): the 2D burn. An alarm edge that beats like the 3D burn (scene/damage.ts: lub-dub,
+   1.5 s), a resting wash so a still screenshot still reads it, and the flame + word beside the
+   title (row.tsx). Shape and word, never hue alone; reduced motion holds the edge steady. */
+@keyframes pe-burn {
+  0%,
+  40%,
+  100% {
+    opacity: 0.55;
+  }
+  10%,
+  27% {
+    opacity: 1;
+  }
+  18% {
+    opacity: 0.7;
+  }
+}
+.dl-row[data-damage]:not([data-selected], [aria-selected="true"]) {
+  background-color: color-mix(in srgb, var(--pe-alarm) 9%, var(--pe-on));
+}
+.dl-row[data-damage]::after,
+tr.dl-row[data-damage] > td:first-child::after {
+  content: "";
+  position: absolute;
+  top: 0;
+  bottom: 0;
+  left: 0;
+  width: 3px;
+  background: var(--pe-alarm);
+  animation: pe-burn 1.5s ease-in-out infinite;
+  pointer-events: none;
+}
+tr.dl-row[data-damage]:not([data-selected], [data-active]) > td {
+  background-color: color-mix(in srgb, var(--pe-alarm) 9%, var(--pe-on));
+}
+@media (prefers-reduced-motion: reduce) {
+  .dl-row[data-damage]::after,
+  tr.dl-row[data-damage] > td:first-child::after {
+    animation: none;
+  }
+}
+.dl-row-burn {
+  display: flex;
+  min-width: 0;
+  align-items: center;
+}
+.dl-row-damage {
+  display: inline-flex;
+  flex-shrink: 0;
+  align-items: center;
+  gap: 2px;
+  margin-left: 6px;
+  color: var(--pe-alarm);
+  font-family: var(--font-sans);
+  font-weight: var(--weight-strong);
+  white-space: nowrap;
+}
+.dl-row-damage > svg {
+  width: 1.1em;
+  height: 1.1em;
+}
 .dl-row[data-failed] .dl-row-title {
   text-decoration: underline wavy var(--pe-caution);
   text-underline-offset: 3px;
@@ -562,14 +623,23 @@ tr.dl-row[data-active] {
 .dl-row-actions .dl-button:focus-visible {
   outline-offset: -1px;
 }
+/* L3: hovering the row leaves its facts alone; the verbs take the slot only when the pointer
+   reaches the slot itself, keyboard focus is on the row, or the keys hold the list cursor there. */
 @media (hover: hover) {
-  .dl-row:is(:hover, :focus-visible, :has(:focus-visible), [data-cursor]) .dl-row-actions,
+  .dl-row:is(:focus-visible, :has(:focus-visible)) .dl-row-actions,
+  [data-list-view]:focus-visible .dl-row[data-cursor] .dl-row-actions,
+  .dl-row-meta:hover > .dl-row-actions,
   .dl-row-actions:has([aria-expanded="true"]) {
     visibility: visible;
   }
-  .dl-row:is(:hover, :focus-visible, :has(:focus-visible), [data-cursor])
+  .dl-row:is(:focus-visible, :has(:focus-visible))
     .dl-row-meta:has(> .dl-row-actions)
     > .dl-row-fact,
+  [data-list-view]:focus-visible
+    .dl-row[data-cursor]
+    .dl-row-meta:has(> .dl-row-actions)
+    > .dl-row-fact,
+  .dl-row-meta:hover:has(> .dl-row-actions) > .dl-row-fact,
   .dl-row-meta:has([aria-expanded="true"]) > .dl-row-fact {
     visibility: hidden;
   }

@@ -1,6 +1,6 @@
 /** The Situation's marks: a sentence slot and its choice (dotted = operable, dashed = empty). */
 import type { ReactNode } from "react";
-import { Popover } from "@base-ui/react/popover";
+import { Popover, PopoverContent, PopoverTrigger } from "@pe/kit/lang/popover";
 import { HotkeyCommand } from "#/components/lang/hotkey-command";
 import { useScopeKeys } from "@pe/kit/keys";
 
@@ -30,7 +30,9 @@ export function SituationCell({
   );
 }
 
-const slotTrigger = "cursor-pointer border-b border-dotted border-current";
+// The kit trigger brings the reach language (veil, ring); the slot keeps only its dotted underline.
+const slotTrigger =
+  "rounded-none border-x-0 border-t-0 border-b border-dotted border-current text-inherit";
 /** An empty slot has nothing real behind it: the named seam role, never a raw dash. */
 const slotTriggerEmpty = `${slotTrigger} seam-border text-ink-2`;
 
@@ -45,24 +47,15 @@ export function SituationChoice({
   children: ReactNode;
 }) {
   return (
-    <Popover.Root>
-      <Popover.Trigger
+    <Popover>
+      <PopoverTrigger
         className={empty ? slotTriggerEmpty : slotTrigger}
         data-empty={empty || undefined}
       >
         {label}
-      </Popover.Trigger>
-      <Popover.Portal>
-        <Popover.Positioner side="bottom" align="start" sideOffset={6} className="isolate z-popup">
-          <Popover.Popup
-            data-surface="artifact"
-            className="max-h-96 w-80 max-w-(--available-width) overflow-auto p-2 t-prose text-ink float-surface"
-          >
-            {children}
-          </Popover.Popup>
-        </Popover.Positioner>
-      </Popover.Portal>
-    </Popover.Root>
+      </PopoverTrigger>
+      <PopoverContent className="max-h-96 p-2 t-prose">{children}</PopoverContent>
+    </Popover>
   );
 }
 

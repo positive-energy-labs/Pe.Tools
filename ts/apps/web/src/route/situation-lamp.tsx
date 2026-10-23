@@ -1,6 +1,6 @@
 /** The Situation's cluster: the chain lamp and the state gauge on the name line. */
 import { useContext, type ReactNode } from "react";
-import { Popover } from "@base-ui/react/popover";
+import { Popover, PopoverContent, PopoverTrigger } from "@pe/kit/lang/popover";
 import { Gauge } from "lucide-react";
 import { Button } from "@pe/kit/lang/button";
 import { StateDot } from "@pe/kit/table/cells";
@@ -130,8 +130,8 @@ function StateGauge({
 }) {
   if (!import.meta.env.DEV && children == null) return null;
   return (
-    <Popover.Root>
-      <Popover.Trigger
+    <Popover>
+      <PopoverTrigger
         render={
           <Button
             label={word ?? "Route state"}
@@ -142,19 +142,12 @@ function StateGauge({
           </Button>
         }
       />
-      <Popover.Portal>
-        <Popover.Positioner side="bottom" align="end" sideOffset={6} className="isolate z-popup">
-          <Popover.Popup
-            data-surface="artifact"
-            className="flex max-h-(--available-height) w-[44rem] max-w-(--available-width) flex-col gap-3 overflow-auto p-3 t-prose text-ink float-surface"
-          >
-            {children}
-            <FlowMatrix handle={handle} />
-            <RouteInspector handle={handle} />
-          </Popover.Popup>
-        </Popover.Positioner>
-      </Popover.Portal>
-    </Popover.Root>
+      <PopoverContent align="end" className="flex w-[44rem] flex-col gap-3 t-prose">
+        {children}
+        <FlowMatrix handle={handle} />
+        <RouteInspector handle={handle} />
+      </PopoverContent>
+    </Popover>
   );
 }
 

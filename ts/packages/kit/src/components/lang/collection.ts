@@ -873,6 +873,9 @@ export function useList<T, Sort extends string = string>(options: ListOptions<T,
     keyOf: (row) => row.key,
     labelOf: (row) => String(searchIndex.get(row.item)?.text[0] ?? row.key),
     query: "",
+    // I4: no phantom cursor on the first row; the cursor appears with the pointer or the keys, so
+    // it never reads as the open or selected item.
+    autoCursor: false,
     filter: "none",
     select: options.select ?? "single",
     selected: state.selected,

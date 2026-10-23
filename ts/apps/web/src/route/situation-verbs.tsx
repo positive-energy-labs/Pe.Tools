@@ -1,6 +1,6 @@
 /** The Situation's verb row: each verb button with its flag, and the board that stands them up. */
 import { createContext, useContext, useEffect, useState, type ReactNode } from "react";
-import { Popover } from "@base-ui/react/popover";
+import { Popover, PopoverContent, PopoverTrigger } from "@pe/kit/lang/popover";
 import type { LucideIcon } from "lucide-react";
 import { FactChip } from "@pe/kit/lang/chip";
 import { Kbd } from "#/components/lang/kbd";
@@ -73,11 +73,11 @@ export function SituationAction({
   const tone = refusedNow || stale ? "caution" : standing;
   return (
     <span className="relative inline-flex">
-      <Popover.Root
+      <Popover
         open={shown && presented}
         onOpenChange={(o) => !o && presented && outcome && setDismissed(outcome.at)}
       >
-        <Popover.Trigger
+        <PopoverTrigger
           render={
             Icon ? (
               // One glyph (kaitpw, 2026-10-12): the label is its name and its tooltip.
@@ -106,55 +106,45 @@ export function SituationAction({
             )
           }
         />
-        <Popover.Portal>
-          <Popover.Positioner
-            side="bottom"
-            align="start"
-            sideOffset={6}
-            className="isolate z-popup"
-          >
-            <Popover.Popup
-              data-surface="artifact"
-              data-tone={outcome?.refusal ? "caution" : undefined}
-              className="max-w-[60ch] px-3 py-1.5 t-prose float-surface"
-            >
-              {busy ? (
-                <span className="flex items-baseline gap-3">
-                  <span>
-                    running <span className="face-mono">{busy.seconds} s</span>
-                  </span>
-                  <Button
-                    kind="framed"
-                    label="stop"
-                    reason="Signal the running operation. It stops at its next checkpoint; what it already wrote stands."
-                    onClick={handle.stop}
-                  >
-                    stop
-                  </Button>
-                </span>
-              ) : outcome?.refusal ? (
-                <span>
-                  {outcome.refusal.message}
-                  {outcome.refusal.detail ? (
-                    <details className="t-small text-ink-2">
-                      <summary>detail</summary>
-                      <span>{outcome.refusal.detail}</span>
-                    </details>
-                  ) : null}
-                  {flag}
-                </span>
-              ) : flag !== undefined ? (
-                flag
-              ) : outcome?.stopped ? (
-                <span className="text-ink-2">{action.label} · stopped waiting; see the log</span>
-              ) : (
-                <span className="text-ink-2">{action.label} · ran</span>
-              )}
-              {!busy ? <span className="ml-3 face-mono text-ink-mute">Esc</span> : null}
-            </Popover.Popup>
-          </Popover.Positioner>
-        </Popover.Portal>
-      </Popover.Root>
+        <PopoverContent
+          data-tone={outcome?.refusal ? "caution" : undefined}
+          className="w-auto max-w-[60ch] px-3 py-1.5 t-prose"
+        >
+          {busy ? (
+            <span className="flex items-baseline gap-3">
+              <span>
+                running <span className="face-mono">{busy.seconds} s</span>
+              </span>
+              <Button
+                kind="framed"
+                label="stop"
+                reason="Signal the running operation. It stops at its next checkpoint; what it already wrote stands."
+                onClick={handle.stop}
+              >
+                stop
+              </Button>
+            </span>
+          ) : outcome?.refusal ? (
+            <span>
+              {outcome.refusal.message}
+              {outcome.refusal.detail ? (
+                <details className="t-small text-ink-2">
+                  <summary>detail</summary>
+                  <span>{outcome.refusal.detail}</span>
+                </details>
+              ) : null}
+              {flag}
+            </span>
+          ) : flag !== undefined ? (
+            flag
+          ) : outcome?.stopped ? (
+            <span className="text-ink-2">{action.label} · stopped waiting; see the log</span>
+          ) : (
+            <span className="text-ink-2">{action.label} · ran</span>
+          )}
+          {!busy ? <span className="ml-3 face-mono text-ink-mute">Esc</span> : null}
+        </PopoverContent>
+      </Popover>
     </span>
   );
 }

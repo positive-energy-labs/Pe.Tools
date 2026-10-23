@@ -5,7 +5,7 @@
  * Painted in lang.css. A Row with `depth` is a tree node; ListView nests them.
  */
 import { useState, type CSSProperties, type ReactNode } from "react";
-import { ChevronRight } from "lucide-react";
+import { ChevronRight, Flame } from "lucide-react";
 
 import { tv } from "../../lib/tv";
 import { TooltipHint } from "./tooltip";
@@ -40,6 +40,11 @@ export interface RowState {
   active?: boolean;
   pending?: boolean;
   failed?: boolean;
+  /** Critical damage (I2): the row blocks the result (a price, a write) until the person fixes it.
+   *  The word says what it blocks ("no price", "no airflow"). It burns on the row itself: an alarm
+   *  edge with the 3D burn's heartbeat, a faint wash, and the flame mark with the word (a table row
+   *  says the word in its hint). Rare and loud: calm rows never carry it. */
+  damage?: string | null;
   /** Present, the row refuses picks and is greyed; the reason is its tooltip, not drawn text. */
   refusal?: string | null;
   /** The Revit elements the row stands for: right-click or BX shows them in Revit (the app's element menu). */
@@ -138,6 +143,7 @@ const rowStateProps = (state: RowState) => ({
   "data-active": state.active ? "" : undefined,
   "data-pending": state.pending ? "" : undefined,
   "data-failed": state.failed ? "" : undefined,
+  "data-damage": state.damage || undefined,
   "aria-disabled": state.refusal ? true : undefined,
   "aria-selected": state.selected === undefined ? undefined : state.selected,
   "aria-checked": state.checked,
@@ -152,6 +158,7 @@ export function Row(props: RowProps) {
     active,
     pending,
     failed,
+    damage,
     refusal,
     revitIds,
     revitRefs,
@@ -169,6 +176,7 @@ export function Row(props: RowProps) {
     active,
     pending,
     failed,
+    damage,
     refusal,
     revitIds,
     revitRefs,
@@ -198,7 +206,9 @@ export function Row(props: RowProps) {
   if (props.as === "tr") {
     const slots = rowRecipe();
     return (
-      <TooltipHint content={refusal ?? props.title}>
+      <TooltipHint
+        content={[damage, refusal ?? props.title].filter(Boolean).join(" · ") || undefined}
+      >
         <tr
           {...shared}
           ref={props.ref}
@@ -231,6 +241,12 @@ function ListRow({
   const slots = rowRecipe({ lines: props.lines ?? 1 });
   const fact = props.meta != null ? <span className="dl-row-fact">{props.meta}</span> : null;
   const tree = props.depth !== undefined;
+  const title = (
+    <span className="dl-row-title">
+      {props.label}
+      {props.aside != null ? <span className="dl-row-aside">{props.aside}</span> : null}
+    </span>
+  );
   return (
     // Beside the list, never above or below: a row's hint covered its neighbour row.
     <TooltipHint content={props.refusal ?? props.title ?? cut} side="left" keep>
@@ -273,10 +289,18 @@ function ListRow({
           {/* The first line: the title, then one trailing slot where the state and the verbs
             share a cell (lang.css), so a sub line runs the full width under it. */}
           <span className="dl-row-line">
-            <span className="dl-row-title">
-              {props.label}
-              {props.aside != null ? <span className="dl-row-aside">{props.aside}</span> : null}
-            </span>
+            {props.damage ? (
+              // The word never truncates: the title yields beside it.
+              <span className="dl-row-burn">
+                {title}
+                <span className="dl-row-damage">
+                  <Flame aria-hidden />
+                  {props.damage}
+                </span>
+              </span>
+            ) : (
+              title
+            )}
             {fact || props.actions != null ? (
               <span className={slots.meta()}>
                 {fact}

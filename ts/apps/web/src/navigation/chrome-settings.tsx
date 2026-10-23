@@ -1,5 +1,5 @@
 import { useRef, useState } from "react";
-import { Popover } from "@base-ui/react/popover";
+import { Popover, PopoverContent, PopoverTrigger } from "@pe/kit/lang/popover";
 import { useRouterState } from "@tanstack/react-router";
 import { Settings2 } from "lucide-react";
 import { appRouteByPath } from "@pe/agent-contracts";
@@ -39,53 +39,51 @@ export function ChromeSettings({ word = false }: { word?: boolean }) {
       </Button>
     );
   return (
-    <Popover.Root
+    <Popover
       open={open}
       onOpenChange={(next) => {
         if (next || !ownsOpenPopup(popup.current)) setOpen(next);
       }}
     >
-      <Popover.Trigger
+      <PopoverTrigger
         render={
           <Button label="Settings" icon={Settings2} data-chrome-settings>
             {word ? "Settings" : null}
           </Button>
         }
       />
-      <Popover.Portal keepMounted>
-        <Popover.Positioner side="bottom" align="end" sideOffset={6} className="isolate z-popup">
-          <Popover.Popup
-            ref={popup}
-            data-surface="page"
-            className="float-surface min-w-48 p-1"
-            role="dialog"
-            aria-label="Settings menu"
+      <PopoverContent
+        keepMounted
+        align="end"
+        ref={popup}
+        data-surface="page"
+        className="w-auto min-w-48 p-1"
+        role="dialog"
+        aria-label="Settings menu"
+      >
+        <div className="p-1">
+          <SettingsProjection quick subject={subject} />
+        </div>
+        {/* The active route's own section, put here by PrimaryRouteControls slot="settings". */}
+        <RouteControlsOutlet slot="settings" as="div" className="p-1 empty:hidden" />
+        <span className="pe-settings-row">
+          <Button label="All settings" onClick={openSettings}>
+            All settings
+          </Button>
+        </span>
+        <span className="pe-settings-row">
+          <Button
+            label="Providers and agent approvals"
+            onClick={() => {
+              close();
+              go(settingsDestination("pea"));
+            }}
           >
-            <div className="p-1">
-              <SettingsProjection quick subject={subject} />
-            </div>
-            {/* The active route's own section, put here by PrimaryRouteControls slot="settings". */}
-            <RouteControlsOutlet slot="settings" as="div" className="p-1 empty:hidden" />
-            <span className="pe-settings-row">
-              <Button label="All settings" onClick={openSettings}>
-                All settings
-              </Button>
-            </span>
-            <span className="pe-settings-row">
-              <Button
-                label="Providers and agent approvals"
-                onClick={() => {
-                  close();
-                  go(settingsDestination("pea"));
-                }}
-              >
-                Providers and agent approvals
-              </Button>
-            </span>
-            <SettingsActions close={close} />
-          </Popover.Popup>
-        </Popover.Positioner>
-      </Popover.Portal>
-    </Popover.Root>
+            Providers and agent approvals
+          </Button>
+        </span>
+        <SettingsActions close={close} />
+      </PopoverContent>
+    </Popover>
   );
 }
