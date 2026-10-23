@@ -44,7 +44,7 @@ import { PICTURE_KEYS } from "../../docs";
 import { NodeFactsView, SegmentFactsView } from "../../facts";
 import { labelOfNode, legsOf } from "../../legs";
 import { sceneRequestOf } from "../../manifest";
-import { findingLayers, findingShapes } from "../../finding-layers";
+import { findingLayers, findingShapes, noRunLayers } from "../../finding-layers";
 import {
   boundsOfIds,
   clearPose,
@@ -330,7 +330,17 @@ function Canvas({
         : [],
     [read.meshes, issues],
   );
-  const stageLayers = useMemo(() => [...findings3d, ...damage], [findings3d, damage]);
+  // Each stage mark answers its own picture layer: no-runs to `no-run`, findings and damage to `findings`.
+  const noRunsOn = page.layers.includes("no-run");
+  const findingsOn = page.layers.includes("findings");
+  const noRuns3d = useMemo(
+    () => (noRunsOn ? noRunLayers(noRuns, snapshot, issues) : []),
+    [noRunsOn, noRuns, snapshot, issues],
+  );
+  const stageLayers = useMemo(
+    () => [...noRuns3d, ...(findingsOn ? [...findings3d, ...damage] : [])],
+    [noRuns3d, findingsOn, findings3d, damage],
+  );
   const covered = useMemo(
     () => new Set(stageLayers.flatMap((layer) => layer.findings ?? [])),
     [stageLayers],
@@ -784,7 +794,6 @@ function Canvas({
             issues={issues}
             hoveredIssue={hoveredIssue}
             onIssueHover={onIssueHover}
-            noRuns={noRuns}
             pointOf={pointOf}
             issue={page.issue}
             setPage={(next, move) => {

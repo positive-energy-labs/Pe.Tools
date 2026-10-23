@@ -6,7 +6,7 @@
 import { expect, it } from "vite-plus/test";
 
 import type { DuctSnapshot } from "@pe/ducts-domain/types";
-import { findingLayers, findingShapes } from "./finding-layers";
+import { findingLayers, findingShapes, noRunLayers } from "./finding-layers";
 
 const IN = 1 / 12;
 const conn = (index: number, point: number[], facing: number[], connectedTo = null as unknown) => ({
@@ -295,4 +295,19 @@ it("join faces, bars and overhang all carry the same inbox identity", () => {
     expect(layer.targets![0]!.key).toBe("heal:g");
     expect([1, 2]).toContain(layer.targets![0]!.elementId);
   }
+});
+
+it("a no-run branch draws one mark per element, answering the row its reason names first", () => {
+  const layers = noRunLayers(
+    new Map([[1, { elements: [1, 2], reasons: [{ at: 2, text: "flowless terminal" }] as never }]]),
+    snapshot,
+    [
+      { key: "branch", ids: [1, 2], findings: [], blocking: false },
+      { key: "terminal", ids: [2], findings: [], blocking: true },
+    ],
+  );
+  expect(layers).toHaveLength(1);
+  expect(layers[0]!.targets!.map((t) => t.key)).toEqual(["terminal", "branch"]);
+  expect(layers[0]!.targets!.every((t) => t.elementId === 1)).toBe(true);
+  expect(noRunLayers(new Map(), snapshot, [])).toEqual([]);
 });

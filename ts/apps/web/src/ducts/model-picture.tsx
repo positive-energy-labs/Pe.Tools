@@ -174,7 +174,6 @@ export function ModelPicture({
   issues,
   hoveredIssue,
   onIssueHover,
-  noRuns,
   pointOf,
   issue,
   setPage,
@@ -195,12 +194,11 @@ export function ModelPicture({
   hovered: number | null;
   labels: readonly Label[];
   rulings: readonly Ruling[];
-  /** The annotated findings drawn in 3D (`finding-layers.ts`), under the same `findings` layer as the pins. */
+  /** The stage's issue marks in 3D (`finding-layers.ts`, `scene/damage.ts`), each already gated by its own picture layer. */
   findings3d: readonly Layer3D[];
   issues: readonly StageIssue[];
   hoveredIssue: string | null;
   onIssueHover: (key: string | null) => void;
-  noRuns?: Parameters<typeof Annotations>[0]["noRuns"];
   pointOf: (id: number) => readonly number[] | null;
   issue: string;
   setPage: (next: Partial<DuctsPage>, move?: PageMove<DuctsPage>) => void;
@@ -386,7 +384,7 @@ export function ModelPicture({
           selected={selectedKeys}
           lit={litKeys}
           isolated={isolated}
-          layers={layers.has("findings") ? findings3d : undefined}
+          layers={findings3d}
           hoveredIssue={hoveredIssue}
           focusedIssue={issue}
           onIssueHover={hoverIssue}
@@ -418,11 +416,8 @@ export function ModelPicture({
           selected={selected}
           hovered={hovered}
           labels={labels}
-          noRuns={noRuns}
           issues={issues}
-          hoveredIssue={hoveredIssue}
           onIssueHover={hoverIssue}
-          onIssuePick={pickIssue}
           rulings={rulings}
           pointOf={pointOf}
           issue={issue}

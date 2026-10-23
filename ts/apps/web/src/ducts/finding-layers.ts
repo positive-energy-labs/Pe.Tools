@@ -10,7 +10,6 @@
 import * as THREE from "three";
 
 import type { DuctsRouteDocument } from "@pe/agent-contracts";
-import { tokenRef } from "@pe/kit/lib/token";
 import { edgesOf, outlineOf, overhang, type Edge, type Outline } from "@pe/ducts-domain/faces";
 import { healPlan } from "@pe/ducts-domain/heal";
 import {
@@ -23,8 +22,11 @@ import {
 } from "@pe/ducts-domain/proximity";
 import { withStoredRulings } from "@pe/ducts-domain/rulings";
 import type { DuctSnapshot } from "@pe/ducts-domain/types";
+import { inkOf } from "#/scene/ink";
+import { markFrame, markLines, markVolume } from "#/scene/marks";
 import type { Layer3D } from "#/scene/types";
-import type { StageIssue } from "./inbox-rows";
+import type { NoRunBranch } from "@pe/ducts-domain/no-runs";
+import { issueAt, type StageIssue } from "./inbox-rows";
 
 /** The illustrations' inks (the duct cases page): inferred red, open end orange, cap and heal amber. */
 const INK = {
@@ -223,41 +225,13 @@ export function findingShapes(
   return shapes;
 }
 
-/** Line segments over pairs of points, drawn over the meshes: a finding is never hidden inside a duct. */
+/** Line marks over pairs of points, drawn over the meshes: a finding is never hidden inside a duct.
+ * Dash sizes are feet: a 0.7 in dash reads across a half-inch near miss and a 2 in stub gap. */
 function lines(edges: readonly Edge[], ink: Ink, dashed: boolean) {
-  const geometry = new THREE.BufferGeometry().setAttribute(
-    "position",
-    new THREE.BufferAttribute(new Float32Array(edges.flatMap(([p, q]) => [...p, ...q])), 3),
-  );
-  const color = ink === "missed" ? advisoryColor() : new THREE.Color(INK[ink]);
-  // Dash sizes are feet: a 0.7 in dash reads across a half-inch near miss and a 2 in stub gap.
-  const material = dashed
-    ? new THREE.LineDashedMaterial({
-        color,
-        dashSize: ink === "missed" ? 0.015 : 0.06,
-        gapSize: 0.04,
-        depthTest: false,
-      })
-    : new THREE.LineBasicMaterial({ color, depthTest: false });
-  const segments = new THREE.LineSegments(geometry, material);
-  segments.renderOrder = 10;
-  if (dashed) segments.computeLineDistances();
-  return segments;
-}
-
-/** Resolve the existing viz token through the browser, including light-dark and OKLCH, to sRGB. */
-function advisoryColor(): THREE.Color {
-  const canvas = document.createElement("canvas");
-  canvas.width = canvas.height = 1;
-  canvas.style.color = tokenRef(INK.missed);
-  document.documentElement.append(canvas);
-  const css = getComputedStyle(canvas).color;
-  canvas.remove();
-  const ctx = canvas.getContext("2d")!;
-  ctx.fillStyle = css;
-  ctx.fillRect(0, 0, 1, 1);
-  const [r, g, b] = ctx.getImageData(0, 0, 1, 1).data;
-  return new THREE.Color().setRGB(r! / 255, g! / 255, b! / 255, THREE.SRGBColorSpace);
+  const color = ink === "missed" ? inkOf(INK.missed) : new THREE.Color(INK[ink]);
+  return markLines(edges, color, {
+    dash: dashed ? { size: ink === "missed" ? 0.015 : 0.06, gap: 0.04 } : undefined,
+  });
 }
 
 /** The drawing as `Layer3D`s; each key carries a hash of its geometry so an unchanged one is not rebuilt. */
@@ -283,6 +257,7 @@ export function findingLayers(shapes: FindingShapes, issues?: readonly StageIssu
     };
     return geometryLayers(own).map((layer) => ({
       ...layer,
+      frame: markFrame,
       key: `${layer.key}:${finding}:${elementId}`,
       findings: [finding],
       targets: issue ? [{ key: issue.key, elementId }] : [],
@@ -332,22 +307,60 @@ function geometryLayers(shapes: FindingShapes): Layer3D[] {
                   Math.PI / 2,
                 )
               : new THREE.BoxGeometry(b.half[0] * 2, b.half[1] * 2, b.half[2] * 2);
-          const mesh = new THREE.Mesh(
-            geometry,
-            new THREE.MeshBasicMaterial({
-              color: INK.cap,
-              transparent: true,
-              opacity: 0.35,
-              depthWrite: false,
-            }),
-          );
+          const volume = markVolume(geometry, new THREE.Color(INK.cap));
           const [x, y, z] = b.axes.map((a) => new THREE.Vector3(a[0], a[1], a[2]));
-          mesh.setRotationFromMatrix(new THREE.Matrix4().makeBasis(x!, y!, z!));
-          mesh.position.set(b.center[0]!, b.center[1]!, b.center[2]!);
-          mesh.renderOrder = 9;
-          group.add(mesh);
+          volume.setRotationFromMatrix(new THREE.Matrix4().makeBasis(x!, y!, z!));
+          volume.position.set(b.center[0]!, b.center[1]!, b.center[2]!);
+          group.add(volume);
         }
       },
     });
   return out;
+}
+
+/** Half the arms of the cross a fitting or terminal with no run draws, in feet. */
+const CROSS = 0.25;
+
+/** Branches no fan-to-terminal run reaches: a heavy line along each duct's centreline and a cross
+ * at each fitting or terminal, one layer per element so each answers its own issue row (the row
+ * naming the reason's element first, as the inbox orders it). */
+export function noRunLayers(
+  noRuns: ReadonlyMap<number, NoRunBranch>,
+  snapshot: DuctSnapshot,
+  issues: readonly StageIssue[],
+): Layer3D[] {
+  if (!noRuns.size) return [];
+  // Resolved on first build (the DOM's), once for every element.
+  let color: THREE.Color | undefined;
+  const segments = new Map(snapshot.segments.map((s) => [s.id, s.polyline]));
+  const nodes = new Map(snapshot.nodes.map((n) => [n.id, n.point]));
+  return [...noRuns].flatMap(([id, branch]): Layer3D[] => {
+    const line = segments.get(id);
+    const point = nodes.get(id);
+    const edges: Edge[] = line
+      ? line.slice(1).map((q, i) => [line[i]!, q])
+      : point
+        ? [0, 1, 2].map((axis) => [
+            point.map((v, k) => (k === axis ? v - CROSS : v)),
+            point.map((v, k) => (k === axis ? v + CROSS : v)),
+          ])
+        : [];
+    if (!edges.length) return [];
+    const ats = branch.reasons.map((r) => r.at);
+    const touching = (ids: readonly number[]) =>
+      issues.filter((issue) => issue.ids.some((x) => ids.includes(x)));
+    const primary = issueAt(issues, ats) ?? issueAt(issues, branch.elements);
+    const rows = [...new Set([primary, ...touching(ats), ...touching(branch.elements)])];
+    const targets = rows.flatMap((row) => (row ? [{ key: row.key, elementId: id }] : []));
+    return [
+      {
+        key: `no-run:${id}:${targets.map((t) => t.key).join(",")}`,
+        targets,
+        findings: [],
+        build: (group) =>
+          void group.add(markLines(edges, (color ??= inkOf("viz-3")), { weight: 1.8 })),
+        frame: markFrame,
+      },
+    ];
+  });
 }

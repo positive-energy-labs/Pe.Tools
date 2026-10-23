@@ -201,7 +201,9 @@ export function Scene3D(props: Scene3DProps): ReactNode {
       if (issue) canvas.dataset.issue = issue.key;
       else delete canvas.dataset.issue;
       canvas.style.cursor = issue ? "pointer" : "";
+      r.reach(issue ? null : at);
       const instance = pickAt(r, at, latest.current.clip)?.instance;
+      r.hoverElement(issue ? null : (instance?.key ?? null));
       const target = instance ? sceneTarget(latest.current.observation, instance) : null;
       const attributes: Partial<Record<(typeof ATTRS)[number], string>> = target
         ? revitTarget(target.ids, target.refs)
@@ -225,6 +227,8 @@ export function Scene3D(props: Scene3DProps): ReactNode {
       latest.current.onIssueHover?.(null);
       delete canvas.dataset.issue;
       canvas.style.cursor = "";
+      r.reach(null);
+      r.hoverElement(null);
       for (const name of ATTRS) canvas.removeAttribute(name);
     };
     const pointerDown = (event: PointerEvent) => {

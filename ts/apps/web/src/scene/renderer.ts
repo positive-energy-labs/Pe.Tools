@@ -12,6 +12,10 @@
  * context into 2D canvases, only when what they show changed, never per orbit frame.
  */
 import * as THREE from "three";
+import { LineMaterial } from "three/addons/lines/LineMaterial.js";
+import { LineSegments2 } from "three/addons/lines/LineSegments2.js";
+import { BEACON_LAYER, createGlow, GLOW_LAYER } from "./glow";
+import { createOutline, OUTLINE_CHANNEL, OUTLINE_LAYER } from "./outline";
 import { createWheelReader, pointerIntent, wheelPixels, wheelPlane } from "./gestures";
 import { createMeshPicker } from "./picking";
 import { OrbitControls } from "three/addons/controls/OrbitControls.js";
@@ -25,7 +29,8 @@ import {
   type Ray,
   type Size,
 } from "./projection";
-import type { IssueTarget, Layer3D, SceneInstance, SceneMeshes } from "./types";
+import { inkOf } from "./ink";
+import type { IssueState, IssueTarget, Layer3D, SceneInstance, SceneMeshes } from "./types";
 
 /** Opt-in timing marks (`?scenePerf`), including GPU completion rather than a bare RAF tick. */
 const timing = () =>
@@ -66,9 +71,29 @@ void sceneClip() {
   }
 }`;
 
-/** A lit element (a hovered row elsewhere on the page) goes nearly this, brightened: it must read in a 300 px floater. */
-const LIT = new THREE.Color(0xf2b544);
 const MEP = /duct|pipe|conduit|tray|mechanical|plumbing|sprinkler|terminal|electrical/i;
+/** The pointer within this many px of an issue mark is reaching for it (a pre-hover cue). */
+const REACH_PX = 24;
+/** Outlines are drawn for at most this many elements per mark; past it the fill alone carries it. */
+const OUTLINED = 120;
+const BOX_EDGES = [
+  [0, 1],
+  [2, 3],
+  [4, 5],
+  [6, 7],
+  [0, 2],
+  [1, 3],
+  [4, 6],
+  [5, 7],
+  [0, 4],
+  [1, 5],
+  [2, 6],
+  [3, 7],
+] as const;
+/** Element states, strongest last. Selection, hover and a lit row are fills and outlines in the
+ * page's ink, never a hue (house law 5): the stage's one hue is damage. */
+type Mark = "hover" | "lit" | "selected";
+const FILL: Record<Mark, number> = { hover: 0.22, lit: 0.4, selected: 0.6 };
 
 /** Throws when WebGL is unavailable; the component says so. */
 export function createRenderer(mount: HTMLElement, meshes: SceneMeshes, wheelHost = mount) {
@@ -76,7 +101,15 @@ export function createRenderer(mount: HTMLElement, meshes: SceneMeshes, wheelHos
   mark("build-start", { instances: meshes.instances.length });
   const renderer = new THREE.WebGLRenderer({ antialias: true });
   renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
-  renderer.setClearColor(0x202427);
+  // The Pe palette, from the page's own tokens: the picture sits on the artifact ground, focus
+  // elements are a warm mid grey between the muted and secondary inks, context recedes toward the
+  // ground. Mid-tone on purpose: selection and hover lift toward the ink and stay visible, and the
+  // stage's only saturated colour is damage. Read once; a theme flip remounts the picture.
+  const ground = inkOf("artifact", mount);
+  const ink = inkOf("ink", mount);
+  const focusTint = inkOf("ink-mute", mount).lerp(inkOf("ink-2", mount), 0.55);
+  const contextTint = inkOf("ink-mute", mount).lerp(ground, 0.5);
+  renderer.setClearColor(ground);
   const canvas = renderer.domElement;
   canvas.setAttribute(
     "aria-label",
@@ -85,12 +118,16 @@ export function createRenderer(mount: HTMLElement, meshes: SceneMeshes, wheelHos
   canvas.tabIndex = 0;
   canvas.className = "block size-full";
   mount.prepend(canvas);
+  const glow = createGlow(renderer);
+  const outline = createOutline(renderer, ink, ground);
 
   const bounds = meshes.bounds;
   const origin = new THREE.Vector3(...center(bounds));
   const scene = new THREE.Scene();
-  scene.add(new THREE.HemisphereLight(0xffffff, 0x69717b, 2.1));
-  const sun = new THREE.DirectionalLight(0xffffff, 2.4);
+  // Kept under clipping: a lit face of a resting element stays below white, so a lifted (selected,
+  // hovered) element is visibly lighter rather than both saturating.
+  scene.add(new THREE.HemisphereLight(0xfff8ee, 0x403a30, 1.15));
+  const sun = new THREE.DirectionalLight(0xfffaf2, 1.55);
   sun.position.set(1, -1, 3);
   scene.add(sun);
   const camera = newCamera();
@@ -188,9 +225,7 @@ export function createRenderer(mount: HTMLElement, meshes: SceneMeshes, wheelHos
     geometry.computeBoundingSphere();
     geometry.computeBoundingBox();
     const id = batch.addInstance(batch.addGeometry(geometry));
-    const color = new THREE.Color(
-      instance.focus || MEP.test(instance.category) ? 0xb5c9d2 : 0x747c81,
-    );
+    const color = (instance.focus || MEP.test(instance.category) ? focusTint : contextTint).clone();
     batch.setColorAt(id, color);
     byId[id] = instance;
     colors[id] = color;
@@ -282,24 +317,22 @@ export function createRenderer(mount: HTMLElement, meshes: SceneMeshes, wheelHos
         renderer.info.reset();
       }
       let animate = false;
+      const seconds = started / 1000;
       for (const { layer, group } of layers.values()) {
-        const lit =
-          layer.targets?.some((t) => t.key === litIssue || t.key === focusedIssue) ?? false;
-        if (layer.frame)
-          animate = layer.frame(group, started / 1000, motion.matches, lit) || animate;
-        else
-          group.traverse((object) => {
-            if (!(object instanceof THREE.Mesh || object instanceof THREE.Line)) return;
-            for (const material of [object.material].flat()) {
-              if (!("color" in material)) continue;
-              const paint = material as THREE.MeshBasicMaterial;
-              paint.userData.rest ??= paint.color.clone();
-              paint.color.copy(paint.userData.rest).multiplyScalar(lit ? 2 : 1);
-            }
-          });
+        if (!layer.frame) continue;
+        const state = stateOf(layer);
+        animate =
+          layer.frame(group, {
+            seconds,
+            reducedMotion: motion.matches,
+            state,
+            landed: state === "focus" ? seconds - focusedAt : Infinity,
+          }) || animate;
       }
       if (thumbsStale) drawThumbs();
       renderer.render(scene, active());
+      if (glowing) glow.render(scene, active());
+      if (outlined.children.length) outline.render(scene, active());
       if (measuring) fence(started);
       tell();
       if (animate) render();
@@ -330,6 +363,9 @@ export function createRenderer(mount: HTMLElement, meshes: SceneMeshes, wheelHos
     if (mount.clientWidth === 0 || mount.clientHeight === 0) return;
     size = { width: mount.clientWidth, height: mount.clientHeight };
     renderer.setSize(size.width, size.height, false);
+    glow.setSize(size.width, size.height);
+    outline.setSize(size.width, size.height);
+    fitLines(scene);
     camera.aspect = size.width / size.height;
     camera.updateProjectionMatrix();
     if (plane) place(plane.axis, plane.viewport, size);
@@ -420,6 +456,21 @@ export function createRenderer(mount: HTMLElement, meshes: SceneMeshes, wheelHos
   const layers = new Map<string, { layer: Layer3D; group: THREE.Group }>();
   let litIssue: string | null = null;
   let focusedIssue: string | null = null;
+  let reachedIssue: string | null = null;
+  /** When the focused issue became the focus (seconds, `performance.now` clock). */
+  let focusedAt = -Infinity;
+  const stateOf = (layer: Layer3D): IssueState => {
+    const has = (key: string | null) => key !== null && !!layer.targets?.some((t) => t.key === key);
+    return has(focusedIssue)
+      ? "focus"
+      : has(litIssue)
+        ? "hover"
+        : has(reachedIssue)
+          ? "reach"
+          : "rest";
+  };
+  /** True while any layer draws into the glow pass; the pass costs nothing otherwise. */
+  let glowing = false;
   const motion = window.matchMedia("(prefers-reduced-motion: reduce)");
   motion.addEventListener("change", render);
   const issueRay = new THREE.Raycaster();
@@ -434,6 +485,131 @@ export function createRenderer(mount: HTMLElement, meshes: SceneMeshes, wheelHos
         for (const m of [object.material].flat() as THREE.Material[]) m.dispose();
       }
     });
+  /** Pixel-width lines take the canvas size in CSS px. */
+  function fitLines(root: THREE.Object3D) {
+    root.traverse((object) => {
+      if (object instanceof LineSegments2)
+        (object.material as LineMaterial).resolution.set(size.width, size.height);
+    });
+  }
+  /** Each layer's marks as world segments, for the reach test (lines exactly, volumes by box). */
+  const reachOf = new Map<string, Float32Array>();
+  /** World segments of a layer's marks: its pixel lines exactly, anything else by its box edges. */
+  const segmentsOf = (group: THREE.Group) => {
+    group.updateMatrixWorld(true);
+    const out: number[] = [];
+    const p = new THREE.Vector3();
+    const box = new THREE.Box3();
+    group.traverse((object) => {
+      if (object instanceof LineSegments2) {
+        if (object.userData.casing) return;
+        const start = object.geometry.getAttribute("instanceStart");
+        const end = object.geometry.getAttribute("instanceEnd");
+        for (let i = 0; i < start.count; i++)
+          for (const a of [start, end])
+            out.push(...p.fromBufferAttribute(a, i).applyMatrix4(object.matrixWorld).toArray());
+      } else if (object instanceof THREE.Mesh && object.layers.isEnabled(0)) {
+        box.setFromObject(object);
+        const { min, max } = box;
+        const corner = (i: number) => [
+          i & 1 ? max.x : min.x,
+          i & 2 ? max.y : min.y,
+          i & 4 ? max.z : min.z,
+        ];
+        for (const [i, j] of BOX_EDGES) out.push(...corner(i), ...corner(j));
+      }
+    });
+    return new Float32Array(out);
+  };
+  /** Screen distance (CSS px) from a point to the nearest projected segment; Infinity off-screen. */
+  const distanceTo = (segments: Float32Array, x: number, y: number, camera: THREE.Camera) => {
+    const a = new THREE.Vector3();
+    const b = new THREE.Vector3();
+    let best = Infinity;
+    for (let i = 0; i < segments.length; i += 6) {
+      a.set(segments[i]!, segments[i + 1]!, segments[i + 2]!).project(camera);
+      b.set(segments[i + 3]!, segments[i + 4]!, segments[i + 5]!).project(camera);
+      if (a.z > 1 || b.z > 1) continue;
+      const ax = ((a.x + 1) / 2) * size.width,
+        ay = ((1 - a.y) / 2) * size.height;
+      const dx = ((b.x + 1) / 2) * size.width - ax,
+        dy = ((1 - b.y) / 2) * size.height - ay;
+      const t = Math.max(
+        0,
+        Math.min(1, ((x - ax) * dx + (y - ay) * dy) / (dx * dx + dy * dy || 1)),
+      );
+      best = Math.min(best, Math.hypot(x - ax - t * dx, y - ay - t * dy));
+    }
+    return best;
+  };
+
+  // Element outlines: each marked element's triangles, drawn only into the outline mask.
+  const outlined = new THREE.Group();
+  outlined.position.copy(origin);
+  scene.add(outlined);
+  const marked = new Map<number, Mark>();
+  let hoveredElement: string | null = null;
+  type Paint = [
+    selected: ReadonlySet<string> | undefined,
+    hidden: ReadonlySet<string> | undefined,
+    isolated: ReadonlySet<string> | null | undefined,
+    lit: ReadonlySet<string> | undefined,
+  ];
+  let painted: Paint = [undefined, undefined, undefined, undefined];
+  const paintNow = (...[selected, hidden, isolated, lit]: Paint) => {
+    const next = new Map<number, Mark>();
+    byId.forEach(({ key }, id) => {
+      const shown = !hidden?.has(key) && (!isolated || isolated.has(key));
+      batch.setVisibleAt(id, shown);
+      const mark: Mark | null = !shown
+        ? null
+        : selected?.has(key)
+          ? "selected"
+          : lit?.has(key)
+            ? "lit"
+            : key === hoveredElement
+              ? "hover"
+              : null;
+      if (mark) next.set(id, mark);
+      if (mark !== (marked.get(id) ?? null))
+        batch.setColorAt(id, mark ? colors[id]!.clone().lerp(ink, FILL[mark]) : colors[id]!);
+    });
+    marked.clear();
+    for (const [id, mark] of next) marked.set(id, mark);
+    for (const child of [...outlined.children]) {
+      outlined.remove(child);
+      disposeTree(child);
+    }
+    for (const mark of ["selected", "lit", "hover"] as const) {
+      const ids = [...marked].filter(([, m]) => m === mark).slice(0, OUTLINED);
+      if (!ids.length) continue;
+      const positions = new Float32Array(ids.reduce((n, [id]) => n + byId[id]!.vertexCount * 3, 0));
+      let at = 0;
+      for (const [id] of ids) {
+        const { firstVertex, vertexCount } = byId[id]!;
+        for (let i = firstVertex * 3; i < (firstVertex + vertexCount) * 3; i++)
+          positions[at++] = meshes.positions[i]! - origin.getComponent(i % 3);
+      }
+      const mesh = new THREE.Mesh(
+        new THREE.BufferGeometry().setAttribute(
+          "position",
+          new THREE.BufferAttribute(positions, 3),
+        ),
+        new THREE.MeshBasicMaterial({
+          color: OUTLINE_CHANNEL[mark],
+          blending: THREE.AdditiveBlending,
+          depthTest: false,
+          depthWrite: false,
+          side: THREE.DoubleSide,
+        }),
+      );
+      mesh.layers.set(OUTLINE_LAYER);
+      mesh.frustumCulled = false;
+      outlined.add(mesh);
+    }
+    thumbsStale = true;
+    render();
+  };
 
   return {
     canvas,
@@ -461,6 +637,8 @@ export function createRenderer(mount: HTMLElement, meshes: SceneMeshes, wheelHos
       issueRay.params.Line!.threshold = plane
         ? ((ortho.top - ortho.bottom) / rect.height) * 7
         : ((2 * distance * Math.tan(THREE.MathUtils.degToRad(camera.fov / 2))) / rect.height) * 7;
+      // Pixel lines: their own width plus this many px across.
+      issueRay.params.Line2 = { threshold: 12 };
       let nearest = Infinity;
       let picked: IssueTarget | null = null;
       for (const { layer, group } of layers.values()) {
@@ -476,8 +654,30 @@ export function createRenderer(mount: HTMLElement, meshes: SceneMeshes, wheelHos
       return picked;
     },
     lightIssue(hovered: string | null, focused: string | null) {
+      if (focused !== focusedIssue && focused !== null) focusedAt = performance.now() / 1000;
       litIssue = hovered;
       focusedIssue = focused;
+      render();
+    },
+    /** The pointer approaching marks: the nearest issue within `REACH_PX` takes the reach rung. */
+    reach(at: { clientX: number; clientY: number } | null) {
+      let next: string | null = null;
+      if (at) {
+        const rect = canvas.getBoundingClientRect();
+        const x = at.clientX - rect.left,
+          y = at.clientY - rect.top;
+        let nearest = REACH_PX;
+        for (const { layer } of layers.values()) {
+          const segments = reachOf.get(layer.key);
+          if (!segments || !layer.targets?.length) continue;
+          const d = distanceTo(segments, x, y, active());
+          if (d > nearest) continue;
+          nearest = d;
+          next = layer.targets[0]!.key;
+        }
+      }
+      if (next === reachedIssue) return;
+      reachedIssue = next;
       render();
     },
     render,
@@ -513,25 +713,15 @@ export function createRenderer(mount: HTMLElement, meshes: SceneMeshes, wheelHos
       framed = "";
       render();
     },
-    paint(
-      selected: ReadonlySet<string> | undefined,
-      hidden: ReadonlySet<string> | undefined,
-      isolated: ReadonlySet<string> | null | undefined,
-      lit: ReadonlySet<string> | undefined,
-    ) {
-      byId.forEach(({ key }, id) => {
-        batch.setVisibleAt(id, !hidden?.has(key) && (!isolated || isolated.has(key)));
-        batch.setColorAt(
-          id,
-          selected?.has(key)
-            ? colors[id]!.clone().multiplyScalar(1.6)
-            : lit?.has(key)
-              ? colors[id]!.clone().lerp(LIT, 0.95).multiplyScalar(1.5)
-              : colors[id]!,
-        );
-      });
-      thumbsStale = true;
-      render();
+    paint(...args: Paint) {
+      painted = args;
+      paintNow(...args);
+    },
+    /** The element under the pointer: a lighter fill and a thin outline. Null when none. */
+    hoverElement(key: string | null) {
+      if (key === hoveredElement) return;
+      hoveredElement = key;
+      paintNow(...painted);
     },
     setClip(volume: ClipVolume | null | undefined) {
       uniforms.clipPolygon.value = volume?.data ?? new Float32Array(3 * CLIP_POINTS * 2);
@@ -547,6 +737,7 @@ export function createRenderer(mount: HTMLElement, meshes: SceneMeshes, wheelHos
         scene.remove(held.group);
         disposeTree(held.group);
         layers.delete(key);
+        reachOf.delete(key);
       }
       for (const layer of next) {
         if (layers.has(layer.key)) continue;
@@ -555,7 +746,16 @@ export function createRenderer(mount: HTMLElement, meshes: SceneMeshes, wheelHos
         layer.build(group);
         scene.add(group);
         layers.set(layer.key, { layer, group });
+        if (layer.targets?.length) reachOf.set(layer.key, segmentsOf(group));
       }
+      glowing = false;
+      for (const { group } of layers.values())
+        group.traverse(
+          (object) =>
+            void (glowing ||=
+              object.layers.isEnabled(GLOW_LAYER) || object.layers.isEnabled(BEACON_LAYER)),
+        );
+      fitLines(scene);
       thumbsStale = true;
       render();
     },
@@ -577,6 +777,8 @@ export function createRenderer(mount: HTMLElement, meshes: SceneMeshes, wheelHos
       scene.remove(batch);
       material.dispose();
       disposeTree(scene);
+      glow.dispose();
+      outline.dispose();
       renderer.dispose();
       renderer.forceContextLoss();
       canvas.remove();
