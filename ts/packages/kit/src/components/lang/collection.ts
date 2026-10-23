@@ -102,6 +102,33 @@ export type VisibleRow<T> =
   /** A capped group's tail: `count` rows hidden; a pick shows them and cursors `next`. */
   | { kind: "more"; key: string; group: string; count: number; next: string };
 
+/** A row control owns its native keys; an external query/combobox input still owns this list. */
+function collectionKey(definition: ScopeKey, region: HTMLElement | null): ScopeKey {
+  return {
+    ...definition,
+    callback: (event, context) => {
+      const control =
+        event.target instanceof Element
+          ? event.target.closest(
+              'input,textarea,select,button,a[href],[contenteditable="true"],[role="textbox"],[role="combobox"],.dl-cell',
+            )
+          : null;
+      const row = control?.closest(".dl-row");
+      if (row && region?.contains(row)) return;
+      if (definition.options?.preventDefault !== false) event.preventDefault();
+      if (definition.options?.stopPropagation !== false) event.stopPropagation();
+      definition.callback(event, context);
+    },
+    // Admission must precede native prevention; the hotkey manager otherwise cancels cell edits.
+    options: {
+      ...definition.options,
+      ignoreInputs: false,
+      preventDefault: false,
+      stopPropagation: false,
+    },
+  };
+}
+
 /* ── ranking ─────────────────────────────────────────────────────────────────────────────── */
 
 /**
@@ -447,15 +474,7 @@ export function useCollection<T>(options: CollectionOptions<T>) {
           ]
         : []),
     ] satisfies ScopeKey[]
-  ).map(
-    (definition): ScopeKey => ({
-      ...definition,
-      options: {
-        // The list's own input owns typing; these keys still reach the list from it.
-        ignoreInputs: false,
-      },
-    }),
-  );
+  ).map((definition) => collectionKey(definition, options.target));
   useScopeKeys(keys, options.target);
 
   const optionId = (key: string) => `${listId}-${key.replace(/[^\w-]/g, "_")}`;
@@ -778,35 +797,37 @@ export function useList<T, Sort extends string = string>(options: ListOptions<T,
     });
   const cursor = rows.find((row) => row.key === collection.cursor);
   useScopeKeys(
-    [
-      {
-        hotkey: "ArrowRight",
-        label: "Open row",
-        says: "Open the tree node or move into its children",
-        callback: () => {
-          if (!cursor) return;
-          if (cursor.branch && !state.open.includes(cursor.key)) toggleOpen(cursor.key);
-          else {
-            const child = rows.find((row) => row.ancestors.at(-1) === cursor.key);
-            if (child) collection.setCursor(child.key);
-          }
+    (
+      [
+        {
+          hotkey: "ArrowRight",
+          label: "Open row",
+          says: "Open the tree node or move into its children",
+          callback: () => {
+            if (!cursor) return;
+            if (cursor.branch && !state.open.includes(cursor.key)) toggleOpen(cursor.key);
+            else {
+              const child = rows.find((row) => row.ancestors.at(-1) === cursor.key);
+              if (child) collection.setCursor(child.key);
+            }
+          },
+          options: { ignoreInputs: false },
         },
-        options: { ignoreInputs: false },
-      },
-      {
-        hotkey: "ArrowLeft",
-        label: "Close row",
-        says: "Close the tree node or move to its parent",
-        callback: () => {
-          if (!cursor) return;
-          if (state.open.includes(cursor.key)) toggleOpen(cursor.key);
-          else if (cursor.ancestors.length) collection.setCursor(cursor.ancestors.at(-1)!);
-          else if (options.groups)
-            setState({ ...state, closed: [...new Set([...state.closed, cursor.section])] });
+        {
+          hotkey: "ArrowLeft",
+          label: "Close row",
+          says: "Close the tree node or move to its parent",
+          callback: () => {
+            if (!cursor) return;
+            if (state.open.includes(cursor.key)) toggleOpen(cursor.key);
+            else if (cursor.ancestors.length) collection.setCursor(cursor.ancestors.at(-1)!);
+            else if (options.groups)
+              setState({ ...state, closed: [...new Set([...state.closed, cursor.section])] });
+          },
+          options: { ignoreInputs: false },
         },
-        options: { ignoreInputs: false },
-      },
-    ],
+      ] satisfies ScopeKey[]
+    ).map((definition) => collectionKey(definition, target)),
     target,
   );
   const [revealRequest, setRevealRequest] = useState<{ key: string; serial: number } | null>(null);

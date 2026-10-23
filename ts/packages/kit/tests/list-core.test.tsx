@@ -334,3 +334,96 @@ test("renderer mounts a bounded viewport, exposes drop targets and distinguishes
   fireEvent.click(screen.getByRole("button", { name: "Clear search" }));
   expect(container.querySelector('[data-story="filter"]')).toBeNull();
 });
+
+test("row editors and controls keep native keys without moving, expanding, picking or clearing the list", () => {
+  const region = document.createElement("div");
+  const row = document.createElement("div");
+  row.className = "dl-row";
+  const input = document.createElement("input");
+  row.append(input);
+  region.append(row);
+  document.body.append(region);
+  const picked = vi.fn();
+  const root = { ...items[0]!, children: [items[1]!] };
+  const { result, unmount } = renderHook(() =>
+    useList({
+      ...options,
+      items: [root],
+      tree: { childrenOf: (item) => item.children },
+      onPick: picked,
+      initialState: { query: "System" },
+    }),
+  );
+  act(() => {
+    result.current.setTarget(region);
+    result.current.collection.setCursor(root.id);
+  });
+  input.focus();
+  const before = result.current.state;
+  for (const key of [
+    "ArrowDown",
+    "ArrowUp",
+    "Home",
+    "End",
+    "ArrowLeft",
+    "ArrowRight",
+    "Enter",
+    "Escape",
+    " ",
+  ]) {
+    expect(fireEvent.keyDown(input, { key, code: key === " " ? "Space" : key })).toBe(true);
+    expect(result.current.collection.cursor).toBe(root.id);
+    expect(result.current.state).toEqual(before);
+  }
+  expect(picked).not.toHaveBeenCalled();
+  const button = document.createElement("button");
+  row.append(button);
+  button.focus();
+  expect(fireEvent.keyDown(button, { key: "Enter" })).toBe(true);
+  expect(picked).not.toHaveBeenCalled();
+  unmount();
+  region.remove();
+});
+
+test("an external combobox inside another row retains collection keys and ListBar search retains list keys", () => {
+  const host = document.createElement("div");
+  host.className = "dl-row";
+  const input = document.createElement("input");
+  host.append(input);
+  document.body.append(host);
+  const picked = vi.fn();
+  const { result, unmount } = renderHook(() =>
+    useCollection({
+      items: items.slice(0, 2),
+      keyOf: (item) => item.id,
+      labelOf: (item) => item.name,
+      target: input,
+      onPick: picked,
+    }),
+  );
+  input.focus();
+  expect(fireEvent.keyDown(input, { key: "ArrowDown" })).toBe(false);
+  expect(result.current.cursor).toBe(items[0]!.id);
+  fireEvent.keyDown(input, { key: "Enter" });
+  expect(picked).toHaveBeenCalledWith(items[0], []);
+  unmount();
+  host.remove();
+  const pick = vi.fn();
+  function Harness() {
+    const list = useList({ ...options, items: items.slice(0, 2), onPick: pick });
+    return (
+      <ListView
+        list={list}
+        aria-label="query keys"
+        row={(item) => ({ label: item.name })}
+        empty={{ message: "No rows", exit: "Read rows" }}
+      />
+    );
+  }
+  render(<Harness />);
+  const query = screen.getByRole("textbox", { name: "Search query keys" });
+  query.focus();
+  fireEvent.keyDown(query, { key: "ArrowDown" });
+  fireEvent.keyDown(query, { key: "Enter" });
+  expect(pick).toHaveBeenCalledWith(items[1]);
+});

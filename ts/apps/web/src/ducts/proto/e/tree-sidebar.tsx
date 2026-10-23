@@ -1,14 +1,15 @@
 import { TooltipHint } from "@pe/kit/lang/tooltip";
 /**
  * THROWAWAY (protoui round 3, E2 "tree sidebar"): B's topology (system → runs → legs → elements) as
- * a kit `Tree`. Each row's trailing slot: the fan-to-here total as a bar, then its own (self) loss.
+ * the composable list tree. Each row's trailing slot: the fan-to-here total as a bar, then its own (self) loss.
  * An element a rule prices carries one verb: jump to its type's rule in the Rules section. There is
  * no per-row rule editor: a rule is global (family:type plus condition), never one fitting's.
  */
-import { useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { ListTree } from "lucide-react";
 import { Button } from "@pe/kit/lang/button";
-import { Tree } from "@pe/kit/lang/row";
+import { emptyListState, useList, type ListState } from "@pe/kit/lang/collection";
+import { ListView } from "@pe/kit/lang/list-view";
 import { tokenRef } from "@pe/kit/lib/token";
 import { observedElements, useNativeObservation } from "#/revit/observation";
 
@@ -115,115 +116,192 @@ const idsOf = (node: TreeNode): number[] => {
   return [...out];
 };
 
-export function SystemTree({ ctx }: { ctx: TreeCtx }) {
+export function SystemTree({
+  ctx,
+  address,
+}: {
+  ctx: TreeCtx;
+  address?: {
+    query: string;
+    sort: "" | "name";
+    onChange: (query: string, sort: "" | "name") => void;
+  };
+}) {
   const observation = useNativeObservation();
   // Every section opens; the critical run opens under the section that holds it (else the first's).
   const crit =
     ctx.trees.flatMap((t) => t.children).find((r) => r.key === ctx.criticalKey) ??
     ctx.trees[0]?.children[0];
-  // Controlled: the kit Tree's own state is fine too; kept here so a jump could open a run later.
-  const [open, setOpen] = useState<ReadonlySet<string>>(
-    () => new Set([...ctx.trees.map((t) => t.key), ...(crit ? [crit.key] : [])]),
-  );
+  const [state, setState] = useState<ListState<"name">>(() => ({
+    ...emptyListState<"name">(),
+    open: [...ctx.trees.map((tree) => tree.key), ...(crit ? [crit.key] : [])],
+  }));
   // A run is the path from the unit to one grille: "FC-17 → Price LBP15A Supply 12 X 6, Level 2".
   const runName = (n: TreeNode) =>
     `${n.name.split(" → ")[0]} → ${ctx.grilleName(n)}${n.level ? `, ${n.level}` : ""}`;
+  const labelOf = (node: TreeNode) =>
+    node.kind === "run"
+      ? runName(node)
+      : node.kind === "element"
+        ? ctx.grilleName(node)
+        : node.name;
+  const idOf = (node: TreeNode) => (node.kind === "run" ? node.terminal : node.id);
+  const list = useList<TreeNode, "name">({
+    items: ctx.trees,
+    keyOf: (node) => node.key,
+    tree: { childrenOf: (node) => node.children },
+    search: (node) => ({
+      text: [labelOf(node), node.kind, node.level],
+      ids: idOf(node) == null ? [] : [idOf(node)!],
+    }),
+    fields: {
+      kind: {
+        kind: "text",
+        read: (node) => node.kind,
+        values: ["system", "run", "leg", "element"],
+      },
+    },
+    sorts: { name: labelOf },
+    select: "single",
+    state: { ...state, query: address?.query ?? state.query, sort: address?.sort ?? state.sort },
+    onState: (next) => {
+      setState(next);
+      if (address && (next.query !== address.query || next.sort !== address.sort))
+        address.onChange(next.query, next.sort);
+    },
+    onPick: (node) => ctx.select(idOf(node)),
+  });
+  const pendingReveal = useRef<string | null>(null);
+  const roots = ctx.trees.map((tree) => tree.key).join("|");
+  const context = useRef("");
+  useEffect(() => {
+    const candidates = list.all.filter(
+      ({ item }) => item.kind !== "system" && ctx.selected != null && idOf(item) === ctx.selected,
+    );
+    const selected =
+      candidates.find((row) => row.key === list.state.selected[0]) ??
+      candidates.find(({ item }) => item.kind === "element") ??
+      candidates[0];
+    pendingReveal.current = selected?.key ?? null;
+    const nextContext = `${roots}:${ctx.criticalKey ?? ""}`;
+    const changedContext = context.current !== nextContext;
+    context.current = nextContext;
+    const critical = changedContext
+      ? list.all.find((row) => row.key === ctx.criticalKey)
+      : undefined;
+    list.setState({
+      ...list.state,
+      selected: selected ? [selected.key] : [],
+      open: [
+        ...new Set([
+          ...list.state.open,
+          ...(changedContext ? ctx.trees.map((tree) => tree.key) : []),
+          ...(critical ? [...critical.ancestors, critical.key] : []),
+          ...(selected?.ancestors ?? []),
+        ]),
+      ],
+    });
+    // A route selection or a new system opens context once; manual collapse remains the list's.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [ctx.selected, roots, ctx.criticalKey]);
+  useEffect(() => {
+    const key = pendingReveal.current;
+    // Core reveal clears excluded queries. Wait until its own filtered rows include the selection.
+    if (key && list.state.selected.includes(key) && list.rows.some((row) => row.key === key)) {
+      pendingReveal.current = null;
+      list.reveal(key);
+    }
+  });
   return (
-    <Tree<TreeNode>
-      aria-label="system tree"
-      roots={ctx.trees}
-      keyOf={(n) => n.key}
-      childrenOf={(n) => n.children}
-      open={open}
-      onOpenChange={setOpen}
-      onPick={(n) => ctx.select(n.kind === "run" ? n.terminal : n.id)}
-      empty="no run in this system"
-      columns={{
-        label: (
-          <TooltipHint content="run = the path from the unit to one grille · stretch = the part between two places · part = one duct, fitting or accessory">
-            <span>run · stretch · part</span>
-          </TooltipHint>
-        ),
-        meta: ctx.reading?.quantity ? undefined : <MetaHeader />,
-      }}
-      row={(n) => {
-        const target = observedElements(observation, idsOf(n));
-        const label =
-          n.kind === "run" ? runName(n) : n.kind === "element" ? ctx.grilleName(n) : n.name;
-        const critical = n.kind === "run" && (n.key === ctx.criticalKey || n.critical != null);
-        const over = n.rate != null && n.rate > ctx.designRate;
-        const stand = n.critical === "longest" && n.key !== ctx.criticalKey;
-        const ruleKey = n.kind === "element" && n.id != null ? ctx.ruleOf.get(n.id) : undefined;
-        return {
-          lead: critical ? (
-            <TooltipHint
-              content={stand ? "longest developed run: stand-in until priced" : "critical run"}
-            >
-              <span>{stand ? "◇" : "◆"}</span>
-            </TooltipHint>
-          ) : over ? (
-            <TooltipHint
-              content={`friction ${n.rate!.toFixed(3)} in-wg per 100 ft is over the design rate ${ctx.designRate} (a diagnostic, not a blocker)`}
-            >
-              <span className="text-ink-2" data-e-over={n.id ?? ""}>
-                ▴
-              </span>
-            </TooltipHint>
-          ) : undefined,
-          // Kinds read apart by weight and ink: run (a path to one grille) strong, stretch plain, part quiet.
+    <div className="min-h-0 flex-1 overflow-y-auto" onMouseLeave={() => ctx.light(null)}>
+      <ListView
+        list={list}
+        aria-label="system tree"
+        estimate={20}
+        empty={{ message: "no run in this system", exit: "Choose a system with a run" }}
+        columns={{
           label: (
-            <span
-              className={
-                n.kind === "system" || n.kind === "run"
-                  ? "font-medium"
-                  : n.kind === "element"
-                    ? "text-ink-2"
-                    : undefined
-              }
-              data-e-kind={n.kind}
-            >
-              {label}
-            </span>
+            <TooltipHint content="run = the path from the unit to one grille · stretch = the part between two places · part = one duct, fitting or accessory">
+              <span>run · stretch · part</span>
+            </TooltipHint>
           ),
-          // Always a title: the kit Row wraps itself in a Tooltip only once it measures a cut
-          // title, and that late wrap re-renders the row and drops the chevron's first press.
-          title: label,
-          meta: ctx.reading?.quantity ? (
-            <QuantityBar encoding={ctx.reading} ids={idsOf(n)} />
-          ) : (
-            <MetaBar
-              value={n.total}
-              ft={n.ft}
-              selfFt={n.kind === "leg" || n.kind === "element" ? n.selfFt : undefined}
-              scale={ctx.scale}
-              provisional={n.provisional}
-              self={n.kind === "leg" || n.kind === "element" ? n.self : ""}
-              unpriced={n.unpriced}
-              split={n.split}
-              light={ctx.light}
-              rowIds={idsOf(n)}
-            />
-          ),
-          actions: ruleKey ? (
-            <Button
-              icon={ListTree}
-              label="jump to its type's rule"
-              data-e-jump={ruleKey}
-              onClick={(e) => {
-                e.stopPropagation();
-                ctx.jumpToRule(ruleKey);
-              }}
-            />
-          ) : undefined,
-          selected:
-            ctx.selected != null &&
-            n.kind !== "system" &&
-            (n.kind === "run" ? n.terminal : n.id) === ctx.selected,
-          onMouseEnter: () => ctx.light(idsOf(n)),
-          revitIds: target.ids,
-          revitRefs: target.refs,
-        };
-      }}
-    />
+          meta: ctx.reading?.quantity ? undefined : <MetaHeader />,
+        }}
+        row={(n) => {
+          const target = observedElements(observation, idsOf(n));
+          const label =
+            n.kind === "run" ? runName(n) : n.kind === "element" ? ctx.grilleName(n) : n.name;
+          const critical = n.kind === "run" && (n.key === ctx.criticalKey || n.critical != null);
+          const over = n.rate != null && n.rate > ctx.designRate;
+          const stand = n.critical === "longest" && n.key !== ctx.criticalKey;
+          const ruleKey = n.kind === "element" && n.id != null ? ctx.ruleOf.get(n.id) : undefined;
+          return {
+            lead: critical ? (
+              <TooltipHint
+                content={stand ? "longest developed run: stand-in until priced" : "critical run"}
+              >
+                <span>{stand ? "◇" : "◆"}</span>
+              </TooltipHint>
+            ) : over ? (
+              <TooltipHint
+                content={`friction ${n.rate!.toFixed(3)} in-wg per 100 ft is over the design rate ${ctx.designRate} (a diagnostic, not a blocker)`}
+              >
+                <span className="text-ink-2" data-e-over={n.id ?? ""}>
+                  ▴
+                </span>
+              </TooltipHint>
+            ) : undefined,
+            // Kinds read apart by weight and ink: run (a path to one grille) strong, stretch plain, part quiet.
+            label: (
+              <span
+                className={
+                  n.kind === "system" || n.kind === "run"
+                    ? "font-medium"
+                    : n.kind === "element"
+                      ? "text-ink-2"
+                      : undefined
+                }
+                data-e-kind={n.kind}
+              >
+                {label}
+              </span>
+            ),
+            // Always a title: the kit Row wraps itself in a Tooltip only once it measures a cut
+            // title, and that late wrap re-renders the row and drops the chevron's first press.
+            title: label,
+            meta: ctx.reading?.quantity ? (
+              <QuantityBar encoding={ctx.reading} ids={idsOf(n)} />
+            ) : (
+              <MetaBar
+                value={n.total}
+                ft={n.ft}
+                selfFt={n.kind === "leg" || n.kind === "element" ? n.selfFt : undefined}
+                scale={ctx.scale}
+                provisional={n.provisional}
+                self={n.kind === "leg" || n.kind === "element" ? n.self : ""}
+                unpriced={n.unpriced}
+                split={n.split}
+                light={ctx.light}
+                rowIds={idsOf(n)}
+              />
+            ),
+            actions: ruleKey ? (
+              <Button
+                icon={ListTree}
+                label="jump to its type's rule"
+                data-e-jump={ruleKey}
+                onClick={(e) => {
+                  e.stopPropagation();
+                  ctx.jumpToRule(ruleKey);
+                }}
+              />
+            ) : undefined,
+            onMouseEnter: () => ctx.light(idsOf(n)),
+            revitIds: target.ids,
+            revitRefs: target.refs,
+          };
+        }}
+      />
+    </div>
   );
 }

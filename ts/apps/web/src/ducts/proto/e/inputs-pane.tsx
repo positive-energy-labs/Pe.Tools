@@ -7,7 +7,9 @@
 import type { Priced } from "@pe/ducts-domain/pricing";
 import type { SystemScope } from "@pe/ducts-domain/system-scope";
 import type { DuctSnapshot } from "@pe/ducts-domain/types";
-import { Row } from "@pe/kit/lang/row";
+import { useEffect, useState } from "react";
+import { emptyListState, useList } from "@pe/kit/lang/collection";
+import { ListView } from "@pe/kit/lang/list-view";
 import { observedElements, useNativeObservation } from "#/revit/observation";
 
 import { EquipmentCells, TerminalCells, type InputsCtx } from "./input-cells";
@@ -26,6 +28,11 @@ export interface InputsPaneProps {
   light: (ids: readonly number[] | null) => void;
   /** A unit's make-the-fan verbs and last outcome, or null when none is owed (`fansOwedBase`). */
   fanVerbs?: (id: number) => ReactNode;
+  address?: {
+    query: string;
+    sort: "" | "name";
+    onChange: (query: string, sort: "" | "name") => void;
+  };
 }
 
 type InputsScope = Pick<SystemScope, "groups" | "terminals" | "units">;
@@ -44,6 +51,41 @@ export function InputsPane(props: InputsPaneProps) {
   const { snapshot, priced, work, scope, nameOf, selected, select, light } = props;
   const { units, terminals } = inputRowsOf(snapshot, scope);
   const ctx: InputsCtx | null = priced ? { snapshot, priced, work, groups: scope.groups } : null;
+  const items = [
+    ...units.map((id) => ({ id, kind: "unit" as const })),
+    ...terminals.map((id) => ({ id, kind: "grille" as const })),
+  ];
+  const [state, setState] = useState(emptyListState<"name">);
+  const list = useList({
+    items,
+    keyOf: (item) => `${item.kind}:${item.id}`,
+    search: (item) => ({ text: [nameOf(item.id), item.kind], ids: [item.id] }),
+    fields: {
+      kind: { kind: "text" as const, read: (item) => item.kind, values: ["unit", "grille"] },
+    },
+    sorts: { name: (item) => nameOf(item.id) },
+    select: "single",
+    state: {
+      ...state,
+      query: props.address?.query ?? state.query,
+      sort: props.address?.sort ?? state.sort,
+      selected: items
+        .filter((item) => item.id === selected)
+        .map((item) => `${item.kind}:${item.id}`),
+    },
+    onState: (next) => {
+      setState(next);
+      if (props.address && (next.query !== props.address.query || next.sort !== props.address.sort))
+        props.address.onChange(next.query, next.sort);
+    },
+    onPick: (item) => select(item.id),
+  });
+  useEffect(() => {
+    const row = list.rows.find((row) => row.item.id === selected);
+    if (row) list.reveal(row.key);
+    // Reveal through the core only when its filtered rows include the route's selection.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [selected, list.state.query, list.state.sort]);
   if (!units.length && !terminals.length)
     return <p className="t-small text-ink-2 p-2">no unit or grille in this system</p>;
   if (!ctx)
@@ -52,39 +94,46 @@ export function InputsPane(props: InputsPaneProps) {
         flow, ESP and role cells open once the loss tables are read
       </p>
     );
-  const row = (id: number, cells: React.ReactNode, kind: "unit" | "grille") => {
-    const target = observedElements(observation, [id]);
-    return (
-      <Row
-        key={`${kind}:${id}`}
-        role="listitem"
-        lines={2}
-        label={nameOf(id)}
-        title={nameOf(id)}
-        aside={kind}
-        sub={cells}
-        selected={selected === id}
-        onClick={() => select(id)}
-        onMouseEnter={() => light([id])}
-        revitIds={target.ids}
-        revitRefs={target.refs}
-        data-key={`${kind}:${id}`}
-      />
-    );
-  };
   return (
-    <div role="list" aria-label="inputs" data-e-inputs>
-      {units.map((id) =>
-        row(
-          id,
-          <>
-            <EquipmentCells ctx={ctx} id={id} />
-            {props.fanVerbs?.(id) ?? null}
-          </>,
-          "unit",
-        ),
-      )}
-      {terminals.map((id) => row(id, <TerminalCells ctx={ctx} id={id} />, "grille"))}
+    <div aria-label="inputs" data-e-inputs>
+      <ListView
+        list={list}
+        aria-label="inputs"
+        estimate={40}
+        bar={items.length >= 20 || !!list.state.query || !!list.state.sort}
+        empty={{
+          message: "no unit or grille in this system",
+          exit: "Choose a system with a unit or grille",
+        }}
+        row={({ id, kind }) => {
+          const target = observedElements(observation, [id]);
+          return {
+            lines: 2,
+            label: nameOf(id),
+            title: nameOf(id),
+            aside: kind,
+            sub: (
+              <span
+                onClick={(event) => event.stopPropagation()}
+                onKeyDown={(event) => event.stopPropagation()}
+              >
+                {kind === "unit" ? (
+                  <>
+                    <EquipmentCells ctx={ctx} id={id} />
+                    {props.fanVerbs?.(id) ?? null}
+                  </>
+                ) : (
+                  <TerminalCells ctx={ctx} id={id} />
+                )}
+              </span>
+            ),
+            onMouseEnter: () => light([id]),
+            onMouseLeave: () => light(null),
+            revitIds: target.ids,
+            revitRefs: target.refs,
+          };
+        }}
+      />
     </div>
   );
 }
