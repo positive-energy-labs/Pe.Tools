@@ -3,12 +3,7 @@ import { useEffect } from "react";
 import { useAtomValue } from "@effect/atom-react";
 import type { ContextBreakdown, ContextItem } from "@pe/agent-contracts/chat-state";
 import { useCurrentThreadView } from "../thread-view";
-import {
-  computeCacheView,
-  signatureMap,
-  type CacheState,
-  type CacheView,
-} from "../world-cache";
+import { computeCacheView, signatureMap, type CacheState, type CacheView } from "../world-cache";
 import { TooltipHint } from "@pe/kit/lang/tooltip";
 
 export const PLAIN_CAP: Record<string, string> = {
