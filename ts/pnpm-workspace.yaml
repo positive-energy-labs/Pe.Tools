@@ -53,5 +53,5 @@ allowBuilds:
 minimumReleaseAgeExclude:
   - lucide-react@1.21.0
   - "@agentclientprotocol/codex-acp@2.1.0"
-  - '@tanstack/react-virtual@3.14.22'
-  - '@tanstack/virtual-core@3.19.7'
+  - "@tanstack/react-virtual@3.14.22"
+  - "@tanstack/virtual-core@3.19.7"

@@ -839,7 +839,9 @@ function pathRows(
       });
       return;
     }
-    const assigned = facts.family ? ruleByKey(overrides.ruleAssignment?.[facts.family] ?? "") : undefined;
+    const assigned = facts.family
+      ? ruleByKey(overrides.ruleAssignment?.[facts.family] ?? "")
+      : undefined;
     const rule = assigned ?? LOSS_RULES.find((r) => r.when(facts, flows));
     if (!rule) {
       if (facts.takeoff) return; // a tap with no branch flow loses nothing here

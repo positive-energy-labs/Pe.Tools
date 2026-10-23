@@ -1,5 +1,6 @@
 using Pe.Revit.Extensions.FamDocument;
 using Pe.Revit.Rfa;
+using Pe.Shared.Product;
 using Serilog;
 
 namespace Pe.Revit.Global.Lib;
@@ -35,7 +36,7 @@ public static class FamilyLabels {
         if (!family.IsEditable)
             return new InvalidOperationException($"'{family.Name}' is not editable (in-place or system family).");
 
-        var directory = Path.Combine(Path.GetTempPath(), "pe-rfa-labels", Guid.NewGuid().ToString("N"));
+        var directory = Path.Combine(ProductRuntimeLayout.ForCurrentUser().ScratchPath, "pe-rfa-labels", Guid.NewGuid().ToString("N"));
         var path = Path.Combine(directory, "family.rfa");
         var watch = Stopwatch.StartNew();
         try {
