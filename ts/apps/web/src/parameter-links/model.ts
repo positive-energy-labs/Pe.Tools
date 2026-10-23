@@ -144,9 +144,17 @@ export function removeAssignment(profile: ParameterLinkProfile, id: string): Par
   return { ...profile, assignments: profile.assignments.filter((asn) => asn.id !== id) };
 }
 
+/** A definition by what it links (I1): its id is a key, not a name. */
+export const definitionName = (definition: ParameterLinkDefinition | undefined): string =>
+  definition
+    ? `${definition.sourceParameter.name || "source"} → ${definition.targetParameter.name || "target"}`
+    : "unknown definition";
+
 export interface ProfileChange {
   kind: "definition" | "assignment";
   id: string;
+  /** The definition it links, by its parameters; an assignment takes its definition's name. */
+  name: string;
   change: "added" | "removed" | "changed";
   /** The fields that differ, for `changed`. */
   fields: string[];
@@ -157,14 +165,23 @@ export function profileDiff(
   staged: ParameterLinkProfile | null | undefined,
   proposed: ParameterLinkProfile | null | undefined,
 ): ProfileChange[] {
-  const side = <T extends { id: string }>(kind: ProfileChange["kind"], from: T[], to: T[]) => {
+  const definitions = new Map(
+    [...(staged?.definitions ?? []), ...(proposed?.definitions ?? [])].map((d) => [d.id, d]),
+  );
+  const nameOf = (item: { id: string; definitionId?: string }) =>
+    definitionName(definitions.get(item.definitionId ?? item.id));
+  const side = <T extends { id: string; definitionId?: string }>(
+    kind: ProfileChange["kind"],
+    from: T[],
+    to: T[],
+  ) => {
     const before = new Map(from.map((item) => [item.id, item]));
     const after = new Map(to.map((item) => [item.id, item]));
     const changes: ProfileChange[] = [];
     for (const [id, item] of after) {
       const was = before.get(id);
       if (!was) {
-        changes.push({ kind, id, change: "added", fields: [] });
+        changes.push({ kind, id, name: nameOf(item), change: "added", fields: [] });
         continue;
       }
       const fields = [...new Set([...Object.keys(was), ...Object.keys(item)])].filter(
@@ -172,10 +189,11 @@ export function profileDiff(
           canonicalRouteInput((was as Record<string, unknown>)[field] ?? null) !==
           canonicalRouteInput((item as Record<string, unknown>)[field] ?? null),
       );
-      if (fields.length) changes.push({ kind, id, change: "changed", fields });
+      if (fields.length) changes.push({ kind, id, name: nameOf(item), change: "changed", fields });
     }
-    for (const id of before.keys())
-      if (!after.has(id)) changes.push({ kind, id, change: "removed", fields: [] });
+    for (const [id, was] of before)
+      if (!after.has(id))
+        changes.push({ kind, id, name: nameOf(was), change: "removed", fields: [] });
     return changes;
   };
   return [

@@ -316,6 +316,7 @@ export function ScheduleGridWorkspace({
                     state={tableState}
                     onStateChange={setTableState}
                     activeKey={locatedRow}
+                    revitIds={(row) => row.subjectIds}
                     cellEdit={cellEdit}
                     gutter={(row) => {
                       const owed = snapshot.columns.filter(

@@ -46,6 +46,7 @@ export function FamilyWorkspaceDocPane() {
     proposalsAt,
     openProposals,
     locate,
+    located,
     rows,
     consumers,
     say,
@@ -441,7 +442,13 @@ export function FamilyWorkspaceDocPane() {
           {docMode === "text" ? (
             <SpecText spec={world.spec} litBlocks={litBlocks} />
           ) : (
-            <SpecSheet spec={world.spec} litBlocks={litBlocks} zoom={docZoom} onZoom={setDocZoom} />
+            <SpecSheet
+              spec={world.spec}
+              litBlocks={litBlocks}
+              reveal={located}
+              zoom={docZoom}
+              onZoom={setDocZoom}
+            />
           )}
         </div>
       </div>
