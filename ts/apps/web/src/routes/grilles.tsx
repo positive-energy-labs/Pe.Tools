@@ -19,6 +19,8 @@ import { token } from "@pe/kit/lib/token";
  * Rows live in memory for the page view (persistence is Owed in the feature ledger).
  */
 import { createFileRoute } from "@tanstack/react-router";
+import { urlPage } from "#/route";
+import { routeSearch } from "#/route/route-owner";
 import { useMemo, type SetStateAction } from "react";
 
 import { FactChip } from "@pe/kit/lang/chip";
@@ -33,21 +35,40 @@ import { SpecDrawing } from "#/grilles/spec-drawing";
 
 import { grillesManifest as manifest } from "#/route/surface-manifests";
 import { TooltipHint } from "@pe/kit/lang/tooltip";
+import { KeyLegend, type LegendKey } from "#/components/lang/kbd";
 
-export const Route = createFileRoute("/grilles")({ component: GrillesRoute });
+const url = urlPage(manifest)!;
+
+/** The active row and the export sheet ride the address (N5): a pasted link opens the same place,
+ * and Back undoes a row pick or the sheet. */
+/** The field chart's moves, as marks and words (I6): no sentence under the chart. */
+const FIELD_KEYS: readonly LegendKey[] = [
+  { pointer: "click", does: "pick" },
+  { keys: ["←", "→"], does: "qty" },
+  { keys: ["↑", "↓"], does: "opening width" },
+];
+
+export const Route = createFileRoute("/grilles")({
+  validateSearch: (search: Record<string, unknown>) => ({
+    ...routeSearch(search),
+    ...url.read(search),
+  }),
+  search: { middlewares: [...url.middlewares] },
+  component: GrillesRoute,
+});
 
 function GrillesRoute() {
   const handle = useRoute(manifest, { target: null });
   const [page, setPage] = handle.page;
-  const { rows, activeId, drawingCollapsed, exporting, project } = page;
+  const { rows, row: activeId, drawingCollapsed, sheet: exporting, project } = page;
   const picked = new Set(page.picked);
   const setRows = (next: SetStateAction<SheetRow[]>) =>
     setPage({ rows: typeof next === "function" ? next(rows) : next });
-  const setActiveId = (activeId: string) => setPage({ activeId });
+  const setActiveId = (row: string) => setPage({ row });
   const setPicked = (picked: ReadonlySet<string>) => setPage({ picked: [...picked] });
   const setDrawingCollapsed = (next: SetStateAction<boolean>) =>
     setPage({ drawingCollapsed: typeof next === "function" ? next(drawingCollapsed) : next });
-  const setExporting = (exporting: boolean) => setPage({ exporting });
+  const setExporting = (sheet: boolean) => setPage({ sheet });
   const setProject = (project: string) => setPage({ project });
   const active = rows.find((r) => r.id === activeId) ?? rows[0];
 
@@ -76,11 +97,7 @@ function GrillesRoute() {
       scroll="clip"
       flush
       title="drawing"
-      meta={
-        drawingCollapsed
-          ? "collapsed — the header strip stays so the drawing is one click away"
-          : "plan + section A-A of the active profile · type on any dimension to set it for every row; rib auto-spaces"
-      }
+      meta={drawingCollapsed ? "collapsed" : "active profile · a dimension edits every row"}
       actions={
         <Button
           label={drawingCollapsed ? "show" : "hide"}
@@ -108,7 +125,7 @@ function GrillesRoute() {
     <Pane
       flush
       title="profiles"
-      meta={`${rows.length} candidate profiles · ${picked.size} on the export sheet`}
+      meta={`${rows.length} profiles · ${picked.size} to export`}
       actions={
         <>
           <Button
@@ -143,11 +160,7 @@ function GrillesRoute() {
   );
 
   const chart = (
-    <Pane
-      flush
-      title="field"
-      meta={`free % vs qty, per opening width · ${field.length} buildable profiles for this stock`}
-    >
+    <Pane flush title="field" meta={`${field.length} buildable`}>
       {active && (
         <TooltipHint content="Focus, then arrow keys: left/right walk qty, up/down walk opening width">
           <div
@@ -161,9 +174,7 @@ function GrillesRoute() {
             }}
           >
             <FieldChart field={field} active={active} onPick={(p) => set(active.id, p)} />
-            <p className="px-2">
-              click a point, or focus and use arrow keys: ←→ qty · ↑↓ opening width
-            </p>
+            <KeyLegend keys={FIELD_KEYS} lead={FIELD_KEYS.length} bind={false} className="mx-1" />
           </div>
         </TooltipHint>
       )}
@@ -177,8 +188,6 @@ function GrillesRoute() {
           className="flex flex-wrap items-baseline gap-2 px-3 py-2"
           style={{ borderColor: token("line") }}
         >
-          <span>wood floor grille</span>
-          <span>free area calculator</span>
           <FactChip
             tone="caution"
             dashed

@@ -226,12 +226,6 @@ function DuctLossRoute() {
               <pre className="hairline face-mono t-prose rounded-md p-3 whitespace-pre-wrap text-ink">
                 {formula}
               </pre>
-              <p className="t-prose text-ink-2">
-                ASHRAE Fundamentals, Duct Design: Darcy friction with the Altshul-Tsal factor. L in
-                ft, D in inches, ε in ft, ρ in lb/ft³. The wheel reads the friction-chart power law
-                0.109136·Q^1.9/D^5.02 for galvanized duct and standard air, as the SMACNA Ductulator
-                does; it runs up to a tenth above the Altshul-Tsal figure.
-              </p>
             </section>
           </div>
         </div>

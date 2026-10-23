@@ -13,6 +13,7 @@ import { opsAddress } from "./ops.ts";
 import { peaAddress } from "./pea.ts";
 import { homeAddress } from "./home.ts";
 import { ductLossAddress } from "./duct-loss.ts";
+import { grillesAddress } from "./grilles.ts";
 import { parameterLinksAddress } from "./parameter-links.ts";
 import { capturesAddress } from "./captures.ts";
 import { dataTablesAddress } from "./data-tables.ts";
@@ -40,6 +41,7 @@ export const routeAddresses = {
   pea: peaAddress,
   home: homeAddress,
   "duct-loss": ductLossAddress,
+  grilles: grillesAddress,
   "parameter-links": parameterLinksAddress,
   captures: capturesAddress,
   "data-tables": dataTablesAddress,

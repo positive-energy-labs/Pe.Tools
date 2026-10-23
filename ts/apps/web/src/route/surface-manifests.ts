@@ -6,7 +6,8 @@ import { SHEET_ROWS, solve } from "#/grilles/math";
 export const ductLossManifest = defineRoute({
   key: "duct-loss",
   name: "Duct Loss",
-  docs: "Calculate duct friction from dimensions and airflow. The wheel, charts and formula use the same inputs. All calculation runs in this browser.",
+  // The formula's provenance lives here, the route's tutorial (I6), not under the formula.
+  docs: "Calculate duct friction from dimensions and airflow. The wheel, charts and formula use the same inputs. All calculation runs in this browser. The formula is ASHRAE Fundamentals, Duct Design: Darcy friction with the Altshul-Tsal factor (L in ft, D in inches, roughness in ft, density in lb/ft3). The wheel reads the friction-chart power law 0.109136·Q^1.9/D^5.02 for galvanized duct and standard air, as the SMACNA Ductulator does; it runs up to a tenth above the Altshul-Tsal figure.",
   address: "duct-loss",
   page: routeAddress("duct-loss").schema,
 });
@@ -28,14 +29,14 @@ export const grillesManifest = defineRoute({
   key: "grilles",
   name: "Grilles",
   docs: "Edit candidate wood floor grille profiles. The drawing changes shared dimensions, the chart selects a buildable profile, and checked rows form the printable export. Edits stay in this page.",
-  page: z.object({
+  address: "grilles",
+  // The address's keys (the active row, the sheet) plus the page-only edits the URL never carries.
+  page: routeAddress("grilles").schema.extend({
     rows: z
       .array(grilleInput)
       .default(() => SHEET_ROWS.map((input, i) => ({ ...solve(input), id: `row${i + 7}` }))),
-    activeId: z.string().default("row7"),
     picked: z.array(z.string()).default(["row7"]),
     drawingCollapsed: z.boolean().default(false),
-    exporting: z.boolean().default(false),
     project: z.string().default(""),
   }),
 });
