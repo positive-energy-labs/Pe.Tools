@@ -182,6 +182,30 @@ test("an intentional small flight replaces history without the gesture dead-band
   }
 });
 
+test.each(["push", "replace"] as const)(
+  "a small named flight publishes the same pose only once (%s)",
+  (history) => {
+    const { run } = frames();
+    try {
+      const commit = vi.fn();
+      const orbit = createLiveOrbit(initial, commit);
+      const to = { ...initial, yaw: 0.1 };
+      flyTo(orbit, to, { history });
+      run(1000);
+      orbit.accept(to);
+      flyTo(orbit, { ...to, pivot: [...to.pivot] }, { history });
+      run(1000);
+      expect(commit).toHaveBeenCalledExactlyOnceWith(to, history === "push" ? "move" : "gesture");
+      orbit.restore(initial);
+      flyTo(orbit, to, { history });
+      run(1000);
+      expect(commit).toHaveBeenCalledTimes(2);
+    } finally {
+      vi.unstubAllGlobals();
+    }
+  },
+);
+
 test("a second flight retargets from mid-air and only the last lands", () => {
   const { run } = frames();
   try {
