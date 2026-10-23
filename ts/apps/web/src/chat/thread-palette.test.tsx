@@ -165,3 +165,86 @@ test("drag reorder and shelf drops keep their lifecycle requests", () => {
     order: expect.any(Number),
   });
 });
+
+test("changing the current thread reveals an offscreen row among 355 without replacing an addressed filter", async () => {
+  vi.spyOn(HTMLElement.prototype, "scrollHeight", "get").mockReturnValue(355 * 400);
+  const base = threads().find((thread) => thread.id === "fixture-local")!;
+  const roster = Array.from({ length: 355 }, (_, index) => ({
+    ...base,
+    id: `thread-${index}`,
+    title: `Thread ${index}`,
+    providerId: index === 354 ? "other" : "codex",
+    lifecycle: { ...base.lifecycle, order: index },
+  }));
+  const onAddressChange = vi.fn();
+  const props = {
+    threads: roster as never,
+    providers: [],
+    onSelect: vi.fn(),
+    onNew: vi.fn(),
+    onSearch: vi.fn(),
+    onFork: vi.fn(),
+    onRename: vi.fn(),
+    onDelete: vi.fn(),
+    onUpdate: vi.fn(async () => true),
+    onNewTarget: vi.fn(),
+  };
+  const address = { query: "scope=all", sort: "" as const, onChange: onAddressChange };
+  const { rerender } = render(
+    <ThreadsSidebar {...props} currentThreadId="thread-0" address={address} />,
+  );
+  expect(screen.getAllByRole("option").length).toBeLessThan(355);
+  expect(screen.queryByText("Thread 354")).toBeNull();
+  const scroll = vi.mocked(HTMLElement.prototype.scrollTo);
+  const scrolledDown = () =>
+    scroll.mock.calls.some(([value]) => {
+      const options = value as number | ScrollToOptions;
+      return typeof options === "object" && (options.top ?? 0) > 0;
+    });
+  scroll.mockClear();
+  rerender(<ThreadsSidebar {...props} currentThreadId="thread-354" address={address} />);
+  await waitFor(() => expect(scrolledDown()).toBe(true));
+  expect(
+    screen.getByRole("listbox", { name: "threads" }).getAttribute("aria-activedescendant"),
+  ).toContain("thread-354");
+  expect(onAddressChange).not.toHaveBeenCalled();
+
+  const filtered = { ...address, query: "provider=codex" };
+  rerender(<ThreadsSidebar {...props} currentThreadId="thread-0" address={filtered} />);
+  scroll.mockClear();
+  rerender(<ThreadsSidebar {...props} currentThreadId="thread-354" address={filtered} />);
+  expect(screen.getByRole("textbox", { name: "Search threads" }).getAttribute("value")).toBe(
+    "provider=codex",
+  );
+  expect(screen.queryByText("Thread 354")).toBeNull();
+  expect(onAddressChange).not.toHaveBeenCalled();
+  expect(scrolledDown()).toBe(false);
+
+  rerender(<ThreadsSidebar {...props} currentThreadId="thread-0" address={address} />);
+  const settled = roster.map((thread, index) =>
+    index === 354
+      ? {
+          ...thread,
+          lifecycle: { ...thread.lifecycle, status: "settled" as const },
+        }
+      : thread,
+  );
+  rerender(
+    <ThreadsSidebar
+      {...props}
+      threads={settled as never}
+      currentThreadId="thread-354"
+      address={address}
+    />,
+  );
+  expect(
+    screen
+      .getByRole("region", { name: "Settled" })
+      .querySelector("button")
+      ?.getAttribute("aria-expanded"),
+  ).toBe("true");
+  expect(
+    screen.getByRole("listbox", { name: "threads" }).getAttribute("aria-activedescendant"),
+  ).toContain("thread-354");
+  expect(onAddressChange).not.toHaveBeenCalled();
+});

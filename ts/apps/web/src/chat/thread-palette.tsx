@@ -809,6 +809,16 @@ export function ThreadsSidebar({
       onSelect(thread.id);
     },
   });
+  const currentListed = list.rows.some((row) => row.key === currentThreadId);
+  const currentReveal = useRef({ thread: currentThreadId, complete: false });
+  useEffect(() => {
+    if (currentReveal.current.thread !== currentThreadId)
+      currentReveal.current = { thread: currentThreadId, complete: false };
+    // A shelf may need to open first. Reveal only a matching row so the core keeps authored filters.
+    if (currentReveal.current.complete || !currentListed) return;
+    currentReveal.current.complete = true;
+    list.reveal(currentThreadId);
+  }, [currentThreadId, currentListed, list.reveal]);
   const clearSelection = () => list.setState({ ...list.state, selected: [] });
   const selectedThreads = threads.filter((thread) => list.state.selected.includes(thread.id));
   const bulk = async (
