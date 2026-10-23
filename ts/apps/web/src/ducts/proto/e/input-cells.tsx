@@ -96,7 +96,7 @@ function InputCell({
   const word = cell.staged ? "override" : cell.proposal ? "Pea proposes" : resolved.word;
   return (
     <span
-      className="inline-flex items-baseline gap-1 whitespace-nowrap"
+      className="inline-flex items-baseline gap-1 whitespace-nowrap [&_.dl-cell]:min-w-[4.5rem]"
       data-e-cell={`${spec.segment}:${id}`}
       aria-label={label}
       onClick={(event) => event.stopPropagation()}
@@ -164,7 +164,7 @@ function RoleCell({
           : resolved.word;
   return (
     <span
-      className="inline-flex items-baseline gap-1 whitespace-nowrap"
+      className="inline-flex items-baseline gap-1 whitespace-nowrap [&_.dl-cell]:min-w-[4.5rem]"
       data-e-cell={`roles:${id}`}
       aria-label={`role of ${id}`}
       onClick={(event) => event.stopPropagation()}

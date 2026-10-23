@@ -4,9 +4,11 @@
  * bind only while focus is inside it. Esc inside it closes it and hands focus back to the pane.
  * A floater whose corner would cover the body's `pane-legend` moves to the nearest place that covers
  * neither the legend nor another floater: a corner, else stacked past the floater holding one;
- * none free, it keeps its own.
+ * none free, it keeps its own. The person slides it along the edge it sits on by its top grip and,
+ * when it has a `size`, resizes it from the inner corner within responsive caps (the smallest is our
+ * way of hiding it). A floater may overlap the neighbouring panes' edges; that is wanted.
  */
-import { useLayoutEffect, useRef, useState, type ReactNode, type RefObject } from "react";
+import { useLayoutEffect, useRef, useState, type PointerEvent as ReactPointerEvent, type ReactNode, type RefObject } from "react";
 
 import { KeyScope, useScopeKeys, type Chord } from "@pe/kit/keys";
 
@@ -101,9 +103,64 @@ function useYield(ref: RefObject<HTMLDivElement | null>, place: Corner) {
   return at;
 }
 
+const MIN = { width: 64, height: 40 };
+/** Responsive caps: a share of the field the floater sits in, never below its default size. */
+const CAP = { width: 0.6, height: 0.7 };
+const clamp = (v: number, lo: number, hi: number) => Math.max(lo, Math.min(hi, v));
+const CURSOR = { tl: "nwse", br: "nwse", tr: "nesw", bl: "nesw" } as const;
+const HANDLE = {
+  tl: "bottom-0 right-0",
+  tr: "bottom-0 left-0",
+  bl: "top-0 right-0",
+  br: "top-0 left-0",
+} as const;
+
+/** Drag from a handle: `move(dx, dy)` against where the press began, with the pane and floater rects then. */
+function drag(
+  event: ReactPointerEvent<HTMLElement>,
+  own: HTMLElement,
+  move: (dx: number, dy: number, field: DOMRect, rect: DOMRect) => void,
+) {
+  const field = own.parentElement!.getBoundingClientRect();
+  const rect = own.getBoundingClientRect();
+  const [x, y] = [event.clientX, event.clientY];
+  const target = event.currentTarget;
+  target.setPointerCapture(event.pointerId);
+  const onMove = (e: PointerEvent) => move(e.clientX - x, e.clientY - y, field, rect);
+  const stop = () => {
+    target.removeEventListener("pointermove", onMove);
+    target.removeEventListener("pointerup", stop);
+    target.removeEventListener("pointercancel", stop);
+  };
+  target.addEventListener("pointermove", onMove);
+  target.addEventListener("pointerup", stop);
+  target.addEventListener("pointercancel", stop);
+  event.preventDefault();
+}
+
 export function Floater({ spec }: { spec: FloaterSpec }) {
   const ref = useRef<HTMLDivElement>(null);
   const at = useYield(ref, spec.place);
+  const [slide, setSlide] = useState(0);
+  const [box, setBox] = useState(spec.size);
+  const gutter = () => parseFloat(getComputedStyle(ref.current!).getPropertyValue("--gutter")) || 0;
+  const startSlide = useRef(0);
+  const sliding = (e: ReactPointerEvent<HTMLElement>) => {
+    startSlide.current = slide;
+    drag(e, ref.current!, (_dx, dy, f, r) => {
+      const g = gutter();
+      setSlide(startSlide.current + clamp(dy, f.top + g - r.top, f.bottom - g - r.bottom));
+    });
+  };
+  const resizing = (e: ReactPointerEvent<HTMLElement>) => {
+    const [h, v] = [at.corner[1] === "r" ? -1 : 1, at.corner[0] === "t" ? 1 : -1];
+    drag(e, ref.current!, (dx, dy, f, r) =>
+      setBox({
+        width: clamp(r.width + h * dx, MIN.width, Math.max(spec.size!.width, f.width * CAP.width)),
+        height: clamp(r.height + v * dy, MIN.height, Math.max(spec.size!.height, f.height * CAP.height)),
+      }),
+    );
+  };
   return (
     <KeyScope id={`floater:${spec.key}`} element={ref}>
       <div
@@ -116,10 +173,30 @@ export function Floater({ spec }: { spec: FloaterSpec }) {
         data-place={at.corner}
         data-surface="artifact"
         className={`absolute z-popup shadow-float p-1 ${PLACE[at.corner]}`}
-        style={{ ...spec.size, translate: at.dy ? `0 ${at.dy}px` : undefined }}
+        style={{
+          ...box,
+          ["--floater-w" as string]: box && `${box.width}px`,
+          ["--floater-h" as string]: box && `${box.height}px`,
+          translate: at.dy + slide ? `0 ${at.dy + slide}px` : undefined,
+        }}
       >
         <FloaterKeys spec={spec} element={ref} />
         {spec.render()}
+        <div
+          data-slot="floater-grip"
+          aria-label={`move ${spec.label}`}
+          className="absolute inset-x-0 top-0 z-10 h-1.5 cursor-grab touch-none"
+          onPointerDown={sliding}
+        />
+        {box ? (
+          <div
+            data-slot="floater-resize"
+            aria-label={`resize ${spec.label}`}
+            className={`absolute z-10 size-2.5 touch-none ${HANDLE[at.corner]}`}
+            style={{ cursor: `${CURSOR[at.corner]}-resize` }}
+            onPointerDown={resizing}
+          />
+        ) : null}
       </div>
     </KeyScope>
   );

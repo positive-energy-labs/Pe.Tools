@@ -139,7 +139,7 @@ export function PaneStrip({ modes, floaters, layers }: PaneStripProps) {
       ref={ref}
       data-slot="pane-strip"
       data-fold={fold}
-      className="flex shrink-0 items-center gap-1"
+      className="flex shrink-0 items-center"
     >
       {modes && (
         <Switcher

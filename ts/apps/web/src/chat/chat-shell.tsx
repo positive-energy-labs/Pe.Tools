@@ -332,7 +332,7 @@ function ChatSurface({ target, docked = false }: ChatShellProps) {
                     collapse: {
                       collapsed: !sideOpen,
                       onCollapsedChange: (collapsed) => store.actions.setSideOpen(!collapsed),
-                      collapsedSize: 40,
+                      collapsedSize: 32,
                       title: "threads",
                     },
                   }

@@ -5,7 +5,7 @@
  * it once, and F with nothing selected clears to fit. With no meshes yet the annotations still draw
  * over the fit of the subject's centrelines; the camera then turns by the globe only.
  */
-import { useEffect, useMemo, useState, useSyncExternalStore } from "react";
+import { useEffect, useMemo, useRef, useState, useSyncExternalStore } from "react";
 
 import { useScopeKeys } from "@pe/kit/keys";
 import type { PageMove } from "#/route/manifest";
@@ -13,7 +13,9 @@ import {
   applyLook,
   boundsOfInstances,
   boundsOfPoints,
+  center,
   frame,
+  samePose,
   type OrbitViewport,
 } from "#/scene/orbit";
 import { viewportProject, type Project, type Size } from "#/scene/projection";
@@ -32,7 +34,8 @@ export type PictureBounds = { scene: Bounds; subject: Bounds };
 
 /** A framed selection is never smaller than this many feet across, so one fitting is not 400x. */
 const FRAME_MIN_FT = 12;
-const NONE: ReadonlySet<string> = new Set();
+const GLIDE_MS = 350;
+const NONE:ReadonlySet<string> = new Set();
 
 const centrelinePoints = (scene: Scene, ids?: ReadonlySet<number>) => [
   ...scene.segments.flatMap((f) => (!ids || ids.has(f.segment.id) ? f.segment.polyline : [])),
@@ -153,6 +156,39 @@ export function ModelPicture({
     orbit.restore(poseOf(null, bounds));
     setPage({ viewport: null }, { history: "push" });
   };
+  // The selection is the orbit's centre: glide the pivot to the picked element (yaw, elevation and
+  // distance kept, so no zoom jump). A saved viewport in the address is left alone on first load;
+  // a user gesture takes the orbit and ends the glide. Released through the gesture, so Page's
+  // viewport is replaced (the pick already pushed history).
+  const primary = selected.values().next().value;
+  const seen = useRef(false);
+  useEffect(() => {
+    const first = !seen.current;
+    const now = orbit.read();
+    if (primary === undefined || !meshes || !bounds || !now) return;
+    seen.current = true;
+    if (first && !samePose(now, poseOf(null, bounds)!, bounds.scene)) return;
+    const target = boundsOfInstances(meshes, (i) => i.revitId === primary);
+    const token = target && orbit.begin();
+    if (!target || !token) return;
+    const [from, to] = [now.pivot, center(target)];
+    const t0 = performance.now();
+    let frameId = requestAnimationFrame(function step(at) {
+      const k = Math.min((at - t0) / GLIDE_MS, 1);
+      const e = 1 - (1 - k) ** 3;
+      orbit.preview(token, {
+        ...now,
+        pivot: [0, 1, 2].map((i) => from[i]! + (to[i]! - from[i]!) * e) as OrbitViewport["pivot"],
+      });
+      if (k < 1) frameId = requestAnimationFrame(step);
+      else orbit.end(token);
+    });
+    return () => {
+      cancelAnimationFrame(frameId);
+      orbit.end(token);
+    };
+  }, [primary, meshes, bounds, orbit]);
+
   useScopeKeys([
     {
       hotkey: "F",

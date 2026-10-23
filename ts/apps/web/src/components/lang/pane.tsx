@@ -188,8 +188,12 @@ export function Pane({
               center={titleAlign === "center" ? heading : undefined}
               trail={
                 actions != null || strip != null ? (
-                  <div data-slot="pane-actions" className="flex shrink-0 items-center gap-1">
-                    {actions}
+                  <div data-slot="pane-actions" className="flex shrink-0 items-center">
+                    {actions != null && (
+                      <span data-slot="pane-action-group" className="flex items-center gap-1">
+                        {actions}
+                      </span>
+                    )}
                     {strip}
                   </div>
                 ) : undefined

@@ -18,8 +18,6 @@ import type { PictureBounds } from "../../model-picture";
 import type { Scene } from "../../scene";
 
 const CORNER = { width: 300, height: 176 } as const;
-/** The corner less the floater's own padding. */
-const INNER = { width: CORNER.width - 8, height: CORNER.height - 8 } as const;
 
 export function usePictureFloaters({
   picture,
@@ -98,7 +96,8 @@ export function usePictureFloaters({
           data-picture-corner={picture === "model" ? "schematic" : "model"}
           onClick={swap}
         >
-          <span className="pointer-events-none flex min-h-0 flex-col overflow-hidden" style={INNER}>
+          {/* The floater's current size (`--floater-*`, set as the person resizes it) less its padding. */}
+          <span className="pointer-events-none flex h-[calc(var(--floater-h)-8px)] w-[calc(var(--floater-w)-8px)] min-h-0 flex-col overflow-hidden">
             {picture === "model" ? (
               small()
             ) : meshes && pose ? (

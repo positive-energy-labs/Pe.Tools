@@ -27,6 +27,12 @@
 .dl-button[data-kind="nav"]:hover:not(:disabled, [aria-disabled="true"]) {
   text-decoration: underline 1px;
 }
+/* Pressed is the house selection fill. It must out-rank the resting grounds above (`.dl-control`
+   and the transparent unframed ground), which the zero-specificity selection rule in lang.css loses to. */
+.dl-button[aria-pressed="true"] {
+  background-color: var(--pe-select);
+  border-color: var(--pe-line-2);
+}
 /* A washed tone (Stop's alarm, a stale verb's caution) draws its ink and wash over the frame. */
 .dl-button[data-tone][data-wash] {
   border-color: color-mix(in srgb, var(--tone) 55%, transparent);

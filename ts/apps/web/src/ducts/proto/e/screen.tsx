@@ -1,6 +1,6 @@
 /**
  * THROWAWAY (protoui round 3): E2 ("C simplicity, B layout"). LEFT a resizable sidebar of two
- * sections, the system tree over the document's loss Rules; CENTRE C's full-bleed drawing with
+ * sections, the system tree over the Inputs (the loss Rules and duct settings live in the chrome Settings); CENTRE C's full-bleed drawing with
  * numbered ruling pins and click popovers; RIGHT the inbox of rows a person has a verb on,
  * collapsed when it holds none. Hovering a row anywhere lights its element set on the drawing.
  */
@@ -37,20 +37,27 @@ import { reviewLines } from "../../write-review";
 import { buildTree, systemList, type TreeNode } from "../b/model";
 import type { ProtoProps } from "../props";
 import { DEFAULT_DESIGN_FRICTION_RATE } from "@pe/ducts-domain/equivalent-length";
-import { BarLegend, fmtFt, LossBar, SplitStrip } from "./bar";
-import { DesignFrictionSettings } from "./design-friction";
+import { BarLegend, fmtFt, SplitStrip, SystemBar } from "./bar";
+import { DuctSettings } from "./settings";
 import { FanSections } from "./fan-sections";
 import { RunDetail, runOf } from "./run-detail";
 import { ECanvas } from "./canvas";
 import { grilleLabels } from "./labels";
 import { FanButton, Inbox, type FanVerbs } from "./inbox";
 import { InputsPane } from "./inputs-pane";
-import { RulesTree, ruleOfIds } from "./rules-pane";
+import { ruleOfIds } from "./rules-pane";
 import { GoTo, SystemTree } from "./tree-sidebar";
 import { useGroupEncoding } from "../encoding/use-encoding";
 import { formatQuantity } from "../../encoding";
 
 const NO_GROUPS: readonly string[] = [];
+
+/**
+ * What the all-systems minibars are drawn against. "shared": one scale (the largest system's fan) so
+ * the worst system fills its track and outliers stand out; "own": each system against its own fan, so
+ * every bar fills and only its make-up reads. Pricing is per system, so the strip is always "own".
+ */
+const LIST_SCALE: "shared" | "own" = "shared";
 
 /**
  * The read snapshot is priced once the tables are in (2-3 s on a large model): until then the
@@ -104,6 +111,10 @@ function EScreenBody({ props }: { props: ProtoProps }) {
     return raw.every((g) => groups.includes(g)) ? groups : [...new Set([...groups, ...raw])];
   }, [snapshot, page.system, groups]);
   const systems = useMemo(() => (drawn ? systemList(drawn, priced) : []), [drawn, priced]);
+  const listMax = useMemo(
+    () => systems.reduce((max, s) => (s.fanless ? max : Math.max(max, s.total ?? 0)), 0) || null,
+    [systems],
+  );
   // Each group the system is in is its own section, named by the system and its units; a group
   // that carries other systems says so, and shows whole.
   const sections = useMemo(
@@ -291,9 +302,10 @@ function EScreenBody({ props }: { props: ProtoProps }) {
   const reading = encoded.encoding.quantity ? encoded.encoding : null;
   const [lit, setLit] = useState<ReadonlySet<number>>(new Set());
   const [ruleFocus, setRuleFocus] = useState<string | null>(null);
-  const [wideRules, setWideRules] = useState(false);
+  const [rulesOpen, setRulesOpen] = useState(false);
   // null = automatic: open when the inbox holds a row, collapsed when it holds none.
   const [inboxOpen, setInboxOpen] = useState<boolean | null>(null);
+  const [treeCollapsed, setTreeCollapsed] = useState(false);
   // The picture annotates the Fix rows' findings, or the Diagnostics kind picked in its key.
   const annotated = useMemo(
     () => (inbox ? annotatedFindings(inbox, heal, page.diagnostic) : new Set<string>()),
@@ -380,19 +392,14 @@ function EScreenBody({ props }: { props: ProtoProps }) {
       </div>
     ) : null;
 
-  const head = (
-    <span className="inline-flex gap-1">
-      <DesignFrictionSettings work={work} rate={designRate} />
-      {page.system ? (
-        <Button
-          label="show every system"
-          onClick={() => setPage({ system: "", selected: "", issue: "" })}
-        >
-          all systems
-        </Button>
-      ) : null}
-    </span>
-  );
+  const head = page.system ? (
+    <Button
+      label="show every system"
+      onClick={() => setPage({ system: "", selected: "", issue: "" })}
+    >
+      all systems
+    </Button>
+  ) : null;
   const treePane = (
     <Pane
       id="e-sidebar"
@@ -452,7 +459,10 @@ function EScreenBody({ props }: { props: ProtoProps }) {
                 ruleOf,
                 light,
                 select,
-                jumpToRule: setRuleFocus,
+                jumpToRule: (key: string) => {
+                  setRuleFocus(key);
+                  setRulesOpen(true);
+                },
                 reading,
                 designRate,
               }}
@@ -483,9 +493,10 @@ function EScreenBody({ props }: { props: ProtoProps }) {
                       needs a fix: no fan
                     </span>
                   ) : (
-                    <LossBar
+                    <SystemBar
                       value={s.total}
-                      scale={null}
+                      split={s.split}
+                      scale={LIST_SCALE === "shared" ? listMax : s.total}
                       provisional={s.provisional}
                       label="fan static Pe computes, in-wg"
                     />
@@ -503,37 +514,6 @@ function EScreenBody({ props }: { props: ProtoProps }) {
       {shown}
     </Pane>
   );
-  const rulesPane =
-    tree && priced ? (
-      <Pane
-        id="e-rules"
-        title="Rules"
-        meta={wideRules ? "every system" : "this system"}
-        help="A rule is a fitting type (family : type) plus a geometry condition. Its table is the one choice a person makes; Pe re-looks-up every instance under it. A fitting with a stated drop is an override under its type."
-        actions={
-          <Button
-            label={wideRules ? "rules of this system only" : "rules of every system"}
-            onClick={() => setWideRules(!wideRules)}
-          >
-            {wideRules ? "this system" : "all systems"}
-          </Button>
-        }
-        scroll="clip"
-        flush
-      >
-        <RulesTree
-          snapshot={drawn ?? snapshot}
-          priced={priced}
-          groups={groups}
-          wide={wideRules}
-          work={work}
-          focus={ruleFocus}
-          onFocus={setRuleFocus}
-          nameOf={nameOf}
-          light={light}
-        />
-      </Pane>
-    ) : null;
   const inputsPane =
     tree && scope ? (
       <Pane
@@ -557,26 +537,11 @@ function EScreenBody({ props }: { props: ProtoProps }) {
         />
       </Pane>
     ) : null;
-  const lower =
-    !inputsPane && !rulesPane ? null : (
-      <PaneSplit
-        axis="vertical"
-        start={inputsPane}
-        end={rulesPane}
-        resize={{
-          target: "end",
-          defaultSize: 220,
-          minSize: 100,
-          minOtherSize: 100,
-          persist: "proto-e-inputs",
-        }}
-      />
-    );
   const left = (
     <PaneSplit
       axis="vertical"
       start={treePane}
-      end={lower}
+      end={inputsPane}
       resize={{
         target: "end",
         defaultSize: 300,
@@ -587,54 +552,59 @@ function EScreenBody({ props }: { props: ProtoProps }) {
     />
   );
 
-  const right = open ? (
-    <div className="border-line flex w-[340px] shrink-0 flex-col border-l">
-      <Pane
-        id="e-inbox"
-        title="Inbox"
-        meta={`${toRule} to rule on`}
-        actions={
-          <Button label="hide the inbox" onClick={() => setInboxOpen(false)}>
-            hide
-          </Button>
-        }
-        flush
-      >
-        {inbox ? (
-          <Inbox
-            groups={inbox}
-            work={inboxWork}
-            nameOf={nameOf}
-            onVerdict={props.onVerdict}
-            light={light}
-            onSelect={select}
-            onFocusCell={focusCell}
-            write={{ ...props.actions, row: inbox.write, review }}
-            heal={{
-              preview: props.actions.healPreview,
-              apply: props.actions.heal,
-              busy: props.actions.busy,
-            }}
-            fan={fanHandles}
-            selected={selected}
-            diagnostic={diagnostic}
-          />
-        ) : null}
-      </Pane>
-    </div>
-  ) : (
-    <div
-      data-e-inbox-rail={toRule}
-      className="border-line flex shrink-0 justify-center border-l py-1 [writing-mode:vertical-rl]"
+  const inboxPane = (
+    <Pane
+      id="e-inbox"
+      title="Inbox"
+      meta={`${toRule} to rule on`}
+      actions={
+        <Button label="hide the inbox" onClick={() => setInboxOpen(false)}>
+          hide
+        </Button>
+      }
+      flush
     >
-      <Button label="show the inbox" onClick={() => setInboxOpen(true)}>
-        Inbox · {toRule}
-      </Button>
-    </div>
+      {inbox ? (
+        <Inbox
+          groups={inbox}
+          work={inboxWork}
+          nameOf={nameOf}
+          onVerdict={props.onVerdict}
+          light={light}
+          onSelect={select}
+          onFocusCell={focusCell}
+          write={{ ...props.actions, row: inbox.write, review }}
+          heal={{
+            preview: props.actions.healPreview,
+            apply: props.actions.heal,
+            busy: props.actions.busy,
+          }}
+          fan={fanHandles}
+          selected={selected}
+          diagnostic={diagnostic}
+        />
+      ) : null}
+    </Pane>
   );
 
   return (
     <div data-proto="E2" className="flex size-full min-h-0">
+      <DuctSettings
+        work={work}
+        rate={designRate}
+        snapshot={snapshot}
+        scope={scope}
+        rules={{
+          priced,
+          groups,
+          open: rulesOpen,
+          setOpen: setRulesOpen,
+          focus: ruleFocus,
+          setFocus: setRuleFocus,
+          nameOf,
+          light,
+        }}
+      />
       <PaneSplit
         axis="horizontal"
         resize={{
@@ -644,23 +614,48 @@ function EScreenBody({ props }: { props: ProtoProps }) {
           maxSize: 760,
           minOtherSize: 600,
           persist: "proto-e-sidebar",
+          collapse: {
+            collapsed: treeCollapsed,
+            onCollapsedChange: setTreeCollapsed,
+            collapsedSize: 32,
+            collapseBelow: 200,
+            title: "systems",
+          },
         }}
         start={left}
         end={
-          <div className="flex size-full min-h-0">
-            <div className="relative min-w-0 flex-1">
-              <ECanvas
-                {...props}
-                lit={lit}
-                issueScope={issueScope}
-                annotated={annotated}
-                scale={encoded}
-                groups={drawGroups}
-                lead={leadGroup}
-              />
-            </div>
-            {right}
-          </div>
+          <PaneSplit
+            axis="horizontal"
+            resize={{
+              target: "end",
+              defaultSize: 340,
+              minSize: 260,
+              maxSize: 520,
+              minOtherSize: 360,
+              persist: "proto-e-inbox",
+              collapse: {
+                collapsed: !open,
+                onCollapsedChange: (collapsed) => setInboxOpen(!collapsed),
+                collapsedSize: 32,
+                collapseBelow: 200,
+                title: `Inbox · ${toRule}`,
+              },
+            }}
+            start={
+              <div className="relative size-full min-w-0">
+                <ECanvas
+                  {...props}
+                  lit={lit}
+                  issueScope={issueScope}
+                  annotated={annotated}
+                  scale={encoded}
+                  groups={drawGroups}
+                  lead={leadGroup}
+                />
+              </div>
+            }
+            end={inboxPane}
+          />
         }
       />
     </div>

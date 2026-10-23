@@ -36,6 +36,17 @@
   font-size: var(--type-title-size);
   letter-spacing: -0.01em;
 }
+/* A collapsed pane's rail label (pane-resize.tsx) matches the chat thread title (workbench
+   lens.css: body face, title size), not the display face a bare name takes. */
+[data-slot="pane-rail-title"] {
+  font-family: var(--font-body);
+  font-size: var(--type-title-size);
+  font-weight: var(--weight-strong);
+  letter-spacing: -0.01em;
+  line-height: var(--type-title-line-height);
+  white-space: nowrap;
+  color: var(--pe-ink);
+}
 /* Side-by-side pane heads share one baseline whatever the title's size or face: each lead sets its
    trimmed baseline a fixed distance above the rail's foot (centring each measured 1.6px apart). */
 [data-slot="pane-header"] [data-slot="rail-lead"] {
@@ -102,4 +113,16 @@
 [data-slot="pane-header"] [data-slot="rail-lead"] > .dl-pane-tabs {
   padding-bottom: 0;
   text-box: normal;
+}
+
+/* Header controls come in groups (a pane's own actions, then modes, floaters, layers): a gap inside
+   a group, a hairline between groups, so a row of toggles never runs into the verbs beside it. */
+[data-slot="pane-actions"],
+[data-slot="pane-strip"] {
+  gap: calc(var(--space-unit) * 2);
+}
+[data-slot="pane-actions"] > * + *,
+[data-slot="pane-strip"] > * + * {
+  border-left: 1px solid var(--pe-line);
+  padding-left: calc(var(--space-unit) * 2);
 }

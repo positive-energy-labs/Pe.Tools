@@ -18,49 +18,6 @@ export const fmt = (n: number | null | undefined, d = 3) => (n == null ? "—" :
 export const fmtFt = (ft: number | null | undefined) =>
   ft == null ? "—" : Math.abs(ft) < 10 ? ft.toFixed(1) : Math.round(ft).toLocaleString("en-US");
 
-export function LossBar({
-  value,
-  scale,
-  provisional = null,
-  label,
-}: {
-  value: number | null;
-  scale: number | null;
-  provisional?: Provisional;
-  label: string;
-}) {
-  const share = value != null && scale ? Math.min(1, value / scale) : null;
-  return (
-    <TooltipHint content={label}>
-      <span className="flex min-w-0 flex-1 items-center gap-2">
-        <span className="relative block h-1.5 min-w-8 flex-1" aria-hidden>
-          {share != null ? (
-            <>
-              <span className="absolute inset-0" style={{ backgroundColor: tokenRef("line") }} />
-              <span
-                className="absolute inset-y-0 left-0"
-                style={{ width: `${share * 100}%`, backgroundColor: tokenRef("ink-2") }}
-              />
-            </>
-          ) : null}
-        </span>
-        <span className="face-mono w-12 shrink-0 text-right">{fmt(value)}</span>
-        <TooltipHint
-          content={
-            provisional
-              ? `provisional: rests on ${provisional.count} unruled inferred join(s), worst ${provisional.worst}`
-              : undefined
-          }
-        >
-          <span className="w-2 shrink-0" data-tone={provisional ? "caution" : undefined}>
-            {provisional ? "~" : ""}
-          </span>
-        </TooltipHint>
-      </span>
-    </TooltipHint>
-  );
-}
-
 export function BarLegend({
   scale,
   criticalName,
@@ -77,7 +34,7 @@ export function BarLegend({
           eq ft = effective length from the fan to the row's far end, each fitting as equivalent
           feet at its duct's own friction rate (small number: in-wg) · bar = in-wg, full width = the
           critical run ◆ {criticalName ?? "—"} <span className="face-mono">{fmt(scale)}</span>; a
-          run's bar splits into unit end, ducts &amp; fittings, and grille
+          run's bar splits per element group, inked by part: unit end, ducts &amp; fittings, grille
         </>
       )}
     </p>
@@ -104,8 +61,9 @@ const PARTS = [
 type Light = (ids: readonly number[] | null) => void;
 
 /**
- * A run's loss as three abutting segments against `scale` (the fan): each segment's width is its
- * in-wg share, and hovering one lights the elements that pay it; leaving gives the row's set back.
+ * A run's loss as abutting segments against `scale`: one per element group (a duct type, a fitting
+ * family type, ...), each inked by its part and set off by a hairline of the ground. A segment's
+ * width is its in-wg share; hovering one lights the elements that pay it, leaving gives the row's set back.
  */
 function SplitFill({
   split,
@@ -124,11 +82,37 @@ function SplitFill({
     <>
       {PARTS.map(({ key, word, ink }) => {
         const part: SplitPart = split[key];
-        const target = observedElements(observation, part.ids);
-        const left = at;
-        at += part.dp / scale;
+        const segments = split.groups
+          .filter((g) => g.part === key && g.dp > 0)
+          .map((group) => {
+            const target = observedElements(observation, group.ids);
+            const left = at;
+            at += group.dp / scale;
+            return (
+              <TooltipHint
+                key={group.key}
+                content={`${group.label} ${fmt(group.dp, LOSS_PLACES)} in-wg (${Math.round((group.dp / scale) * 100)}% of the fan)`}
+              >
+                <span
+                  className="absolute inset-y-0"
+                  data-e-split={key}
+                  data-e-group={group.label}
+                  {...revitTarget(target.ids, target.refs)}
+                  style={{
+                    left: `${left * 100}%`,
+                    width: `${Math.min(1 - left, group.dp / scale) * 100}%`,
+                    backgroundColor: tokenRef(ink),
+                    boxShadow: `inset -1px 0 0 ${tokenRef("page")}`,
+                  }}
+                  onMouseEnter={light ? () => light(group.ids) : undefined}
+                  onMouseLeave={light ? () => light(back ?? null) : undefined}
+                />
+              </TooltipHint>
+            );
+          });
         // Unknown is drawn, never blank: a dashed stub past any known share. Ducts skip it: an unpriced
         // fitting already says so on its own row, and its stub would sit on the grille's.
+        const target = observedElements(observation, part.ids);
         const stub =
           part.unpriced > 0 && key !== "duct" ? (
             <TooltipHint
@@ -145,35 +129,62 @@ function SplitFill({
               />
             </TooltipHint>
           ) : null;
-        if (part.dp <= 0) return stub;
-        return [
-          stub,
-          <TooltipHint
-            key={key}
-            content={`${word} ${fmt(part.dp, LOSS_PLACES)} in-wg (${Math.round((part.dp / scale) * 100)}% of the fan)`}
-          >
-            <span
-              className="absolute inset-y-0"
-              data-e-split={key}
-              {...revitTarget(target.ids, target.refs)}
-              style={{
-                left: `${left * 100}%`,
-                width: `${Math.min(1 - left, part.dp / scale) * 100}%`,
-                backgroundColor: tokenRef(ink),
-              }}
-              onMouseEnter={light ? () => light(part.ids) : undefined}
-              onMouseLeave={light ? () => light(back ?? null) : undefined}
-            />
-          </TooltipHint>,
-        ];
+        return [...segments, stub];
       })}
     </>
   );
 }
 
 /**
+ * The all-systems row's minibar: the same groups and inks as the strip, minified, against `scale`.
+ * Pass one shared scale across rows to compare systems (the worst fills its track); pass the row's
+ * own total to read each system's make-up alone. Unpriced draws no track: an empty bar would read as zero.
+ */
+export function SystemBar({
+  value,
+  split,
+  scale,
+  provisional = null,
+  label,
+}: {
+  value: number | null;
+  split: Split | null;
+  scale: number | null;
+  provisional?: Provisional;
+  label: string;
+}) {
+  const drawn = value != null && scale ? split : null;
+  return (
+    <TooltipHint content={label}>
+      <span className="flex min-w-0 flex-1 items-center gap-2" data-e-minibar="">
+        <span className="relative block h-1.5 min-w-8 flex-1" aria-hidden>
+          {drawn && scale ? (
+            <>
+              <span className="absolute inset-0" style={{ backgroundColor: tokenRef("line") }} />
+              <SplitFill split={drawn} scale={scale} />
+            </>
+          ) : null}
+        </span>
+        <span className="face-mono w-12 shrink-0 text-right">{fmt(value)}</span>
+        <TooltipHint
+          content={
+            provisional
+              ? `provisional: rests on ${provisional.count} unruled inferred join(s), worst ${provisional.worst}`
+              : undefined
+          }
+        >
+          <span className="w-2 shrink-0" data-tone={provisional ? "caution" : undefined}>
+            {provisional ? "~" : ""}
+          </span>
+        </TooltipHint>
+      </span>
+    </TooltipHint>
+  );
+}
+
+/**
  * The critical run's split, wide, under the path header: where the fan's static goes, unit end to
- * grille, with each part's in-wg and share. Hovering a part lights its elements everywhere.
+ * grille, one entry per element group with its in-wg and share. Hovering one lights its elements everywhere.
  */
 export function SplitStrip({
   split,
@@ -199,36 +210,40 @@ export function SplitStrip({
         <SplitFill split={split} scale={scale} light={light} />
       </span>
       <span className="flex flex-wrap gap-x-3 text-ink-2">
-        {PARTS.filter(({ key }) => split[key].dp > 0 || split[key].unpriced > 0).map(
-          ({ key, word, says, ink }) => (
-            <TooltipHint key={key} content={says}>
-              <span
-                className="inline-flex items-center gap-1"
-                {...declaration(split[key].ids)}
-                onMouseEnter={() => light(split[key].ids)}
-                onMouseLeave={() => light(null)}
-              >
+        {split.groups
+          .filter((g) => g.dp > 0 || g.unpriced > 0)
+          .map((group) => {
+            const part = PARTS.find((p) => p.key === group.part)!;
+            return (
+              <TooltipHint key={group.key} content={`${part.word}: ${part.says}`}>
                 <span
-                  className="inline-block size-2"
-                  style={{ backgroundColor: tokenRef(ink) }}
-                  aria-hidden
-                />
-                {word}{" "}
-                {split[key].dp > 0 ? (
-                  <>
-                    <span className="face-mono text-ink">{fmt(split[key].dp, 3)}</span>
-                    <span className="face-mono">{Math.round((split[key].dp / scale) * 100)}%</span>
-                  </>
-                ) : null}
-                {split[key].unpriced > 0 ? (
-                  <span data-tone="caution">
-                    {split[key].dp > 0 ? `+ ${split[key].unpriced} unpriced` : "no drop: unknown"}
-                  </span>
-                ) : null}
-              </span>
-            </TooltipHint>
-          ),
-        )}
+                  className="inline-flex items-center gap-1"
+                  data-e-group-key={group.label}
+                  {...declaration(group.ids)}
+                  onMouseEnter={() => light(group.ids)}
+                  onMouseLeave={() => light(null)}
+                >
+                  <span
+                    className="inline-block size-2"
+                    style={{ backgroundColor: tokenRef(part.ink) }}
+                    aria-hidden
+                  />
+                  {group.label}{" "}
+                  {group.dp > 0 ? (
+                    <>
+                      <span className="face-mono text-ink">{fmt(group.dp, 3)}</span>
+                      <span className="face-mono">{Math.round((group.dp / scale) * 100)}%</span>
+                    </>
+                  ) : null}
+                  {group.unpriced > 0 ? (
+                    <span data-tone="caution">
+                      {group.dp > 0 ? `+ ${group.unpriced} unpriced` : "no drop: unknown"}
+                    </span>
+                  ) : null}
+                </span>
+              </TooltipHint>
+            );
+          })}
       </span>
     </div>
   );

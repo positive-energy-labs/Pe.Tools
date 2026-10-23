@@ -12,7 +12,6 @@ import {
 import { reviewTransitions, type CellWire } from "#/components/work/band";
 import { cellFromTrichotomy, StateCell } from "@pe/kit/lang/cell";
 import { Button } from "@pe/kit/lang/button";
-import { Switcher } from "#/components/lang/switcher";
 import { ValueDiff } from "#/components/lang/value-diff";
 import { LOSS_RULES, ruleByKey } from "@pe/ducts-domain/loss-rules";
 import { tableOf, type Priced } from "@pe/ducts-domain/pricing";
@@ -97,29 +96,36 @@ export function Chips({
   const rule = ruleByKey(ruleKey)!;
   const staged = priced.staged.rules[ruleKey]?.table.toUpperCase();
   if (rule.options.length === 1) return <span className="face-mono">{rule.options[0]}</span>;
-  // The fill is the table every instance is looked up under now; a staged one also wears caution.
-  // Picking the staged table again takes it back (`tablePatches`).
+  // The pressed chip is the table every instance is looked up under now; a staged one also wears
+  // caution. Picking the staged table again takes it back (`tablePatches`). Chips wrap, never clip.
   return (
-    <Switcher
-      ariaLabel={`${rule.family} : ${rule.type} table`}
-      value={tableOf(priced, ruleKey)}
-      onChange={(table) => void work.write(tablePatches(work.doc, ruleKey, table))}
-      options={rule.options.map((table) => ({
-        value: table,
-        label:
-          staged === table ? (
-            <span data-tone="caution" data-staged-table={table}>
-              {table}
-            </span>
-          ) : (
-            table
-          ),
-        title:
-          staged === table
-            ? `${table} is staged for every ${rule.family} : ${rule.type}; pick it again to take it back`
-            : `Stage ${table} for every ${rule.family} : ${rule.type}${rule.cond ? ` (${rule.cond})` : ""}`,
-      }))}
-    />
+    <span role="group" aria-label={`${rule.family} : ${rule.type} table`} className="flex flex-wrap gap-1">
+      {rule.options.map((table) => {
+        const isStaged = staged === table.toUpperCase();
+        return (
+          <Button
+            key={table}
+            kind="framed"
+            label={table}
+            reason={
+              isStaged
+                ? `${table} is staged for every ${rule.family} : ${rule.type}; pick it again to take it back`
+                : `Stage ${table} for every ${rule.family} : ${rule.type}${rule.cond ? ` (${rule.cond})` : ""}`
+            }
+            pressed={table.toUpperCase() === tableOf(priced, ruleKey).toUpperCase()}
+            onClick={() => void work.write(tablePatches(work.doc, ruleKey, table))}
+          >
+            {isStaged ? (
+              <span data-tone="caution" data-staged-table={table}>
+                {table}
+              </span>
+            ) : (
+              table
+            )}
+          </Button>
+        );
+      })}
+    </span>
   );
 }
 /**

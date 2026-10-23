@@ -8,6 +8,7 @@
  * number is null (never a stand-in figure).
  */
 import type { DuctsRouteDocument } from "@pe/agent-contracts";
+import { criticalRows, lossGroups, type LossGroup } from "@pe/ducts-domain/loss-breakdown";
 import type { Priced } from "@pe/ducts-domain/pricing";
 import type { FanResult, Provisional, Row } from "@pe/ducts-domain/losses";
 import { systemsOf } from "@pe/ducts-domain/system-scope";
@@ -36,12 +37,22 @@ export interface Split {
   unit: SplitPart;
   duct: SplitPart;
   terminal: SplitPart;
+  /** The same loss per element group (duct type, fitting family type, ...), in bar order. */
+  groups: LossGroup[];
 }
 
-/** A path's rows dealt to the three parts by what each row prices. */
-function splitOf(rows: readonly Row[], equipment: ReadonlySet<number>): Split {
+/** Whether a breakdown group is also split by size. A choice, off: 12" and 8" of one duct type share a group. */
+export const BREAKDOWN_BY_SIZE = false;
+
+/** A path's rows dealt to the three parts by what each row prices, and to groups by what each row is. */
+function splitOf(snapshot: DuctSnapshot, rows: readonly Row[], equipment: ReadonlySet<number>): Split {
   const part = (): SplitPart => ({ dp: 0, ids: [], unpriced: 0 });
-  const split: Split = { unit: part(), duct: part(), terminal: part() };
+  const split: Split = {
+    unit: part(),
+    duct: part(),
+    terminal: part(),
+    groups: lossGroups(snapshot, rows, { bySize: BREAKDOWN_BY_SIZE }),
+  };
   for (const row of rows) {
     const to =
       row.kind === "terminal" ? split.terminal : equipment.has(row.id) ? split.unit : split.duct;
@@ -257,7 +268,7 @@ export function buildTree(
         selfFt: null,
         rate: null,
         unpriced: null,
-        split: path ? splitOf(path.rows, equipment) : null,
+        split: path ? splitOf(snapshot, path.rows, equipment) : null,
         scale: fan,
         critical,
         provisional: path?.provisional ?? null,
@@ -329,8 +340,14 @@ export function systemList(
   snapshot: DuctSnapshot,
   priced: Priced | null,
 ): (TreeNode & { fanless: boolean; sub: string })[] {
+  const equipment = new Set(snapshot.nodes.filter((n) => n.kind === "equipment").map((n) => n.id));
   return systemsOf(snapshot).map((system) => {
     const solved = system.groups.flatMap((g) => priced?.next.byGroup[g] ?? []);
+    // The minibar's breakdown: the system's worst group's critical run, as its tree would split it.
+    const worst = system.groups
+      .filter((g) => priced?.next.byGroup[g]?.critical != null)
+      .sort((a, b) => priced!.next.byGroup[b]!.fan - priced!.next.byGroup[a]!.fan)[0];
+    const rows = priced && worst ? criticalRows(priced.next, worst) : null;
     const totals = solved.filter((s) => s.critical != null).map((s) => s.fan);
     const first = snapshot.groups.find((g) => g.id === system.groups[0]);
     return {
@@ -352,7 +369,7 @@ export function systemList(
       selfFt: null,
       rate: null,
       unpriced: null,
-      split: null,
+      split: rows ? splitOf(snapshot, rows, equipment) : null,
       level: null,
       scale: null,
       critical: null,

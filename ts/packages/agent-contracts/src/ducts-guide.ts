@@ -51,7 +51,7 @@ export const DUCTS_WALK: readonly DuctsWalkStep[] = [
   {
     step: "Point at the airflow",
     who: "Engineer",
-    body: "Choose which parameter holds each grille's design airflow on this project (a firm parameter, the family's own Flow, or whatever the drafter used). The tool lists every grille's value and its source. A grille with no value becomes a Set row. A fan's flow is the sum of its grilles. Only a side-stream unit such as a dehumidifier needs a typed flow.",
+    body: "In the Settings popover in the top bar, under Ducts (or from the Set row that asks), choose which parameter holds each grille's and each unit's design airflow on this project (a firm parameter, the family's own Flow, or whatever the drafter used). The tool lists every grille's value and its source. A grille with no value becomes a Set row. A fan's flow is the sum of its grilles. Only a side-stream unit such as a dehumidifier needs a typed flow.",
   },
   {
     step: "Price",
@@ -145,7 +145,7 @@ export const DUCTS_RESIDENCY: readonly DuctsResidency[] = [
   },
   {
     value: "Design friction rate (changes only the feet shown, never a pressure or the ESP)",
-    livesIn: "Tool settings (the duct settings popover)",
+    livesIn: "Tool settings (the top bar Settings popover, Ducts section)",
     survivesSave: "Yes, in local settings",
     whoSees: "Only this computer",
     whoWrites: "The engineer",

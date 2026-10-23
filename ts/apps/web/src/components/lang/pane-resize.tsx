@@ -328,7 +328,9 @@ export function PaneSplit({ axis, start, end, resize, hide, grow }: PaneSplitPro
               icon={side === "start" ? ChevronRight : ChevronLeft}
               onClick={() => resize?.collapse?.onCollapsedChange?.(false)}
             />
-            <span className="t-small t-upper [writing-mode:vertical-rl]">{railTitle}</span>
+            <span data-slot="pane-rail-title" className="[writing-mode:vertical-rl]">
+              {railTitle}
+            </span>
           </div>
         )}
         {/* A collapsed side under a rail stays mounted, so its pane keeps its state. */}

@@ -6,6 +6,7 @@ import { appRouteByPath } from "@pe/agent-contracts";
 import { Button } from "@pe/kit/lang/button";
 import { SettingsProjection } from "#/settings/options";
 import { SettingsActions } from "#/settings/options-actions";
+import { RouteControlsOutlet } from "./route-controls";
 import { useSurfaceHost } from "./surface-host";
 import { useDestination } from "./state";
 import { settingsDestination } from "#/machine/model";
@@ -63,6 +64,8 @@ export function ChromeSettings({ word = false }: { word?: boolean }) {
             <div className="p-1">
               <SettingsProjection quick subject={subject} />
             </div>
+            {/* The active route's own section, put here by PrimaryRouteControls slot="settings". */}
+            <RouteControlsOutlet slot="settings" as="div" className="p-1 empty:hidden" />
             <span className="pe-settings-row">
               <Button label="All settings" onClick={openSettings}>
                 All settings

@@ -72,7 +72,7 @@ void sceneClip() {
   }
 }`;
 
-/** A lit element (a hovered row elsewhere on the page) leans to this. */
+/** A lit element (a hovered row elsewhere on the page) goes nearly this, brightened: it must read in a 300 px floater. */
 const LIT = new THREE.Color(0xf2b544);
 const MEP = /duct|pipe|conduit|tray|mechanical|plumbing|sprinkler|terminal|electrical/i;
 
@@ -413,7 +413,7 @@ export function createRenderer(mount: HTMLElement, meshes: SceneMeshes) {
           selected?.has(key)
             ? colors[id]!.clone().multiplyScalar(1.6)
             : lit?.has(key)
-              ? colors[id]!.clone().lerp(LIT, 0.55)
+              ? colors[id]!.clone().lerp(LIT, 0.95).multiplyScalar(1.5)
               : colors[id]!,
         );
       });

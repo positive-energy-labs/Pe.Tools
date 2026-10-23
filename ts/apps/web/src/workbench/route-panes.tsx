@@ -35,6 +35,7 @@ export function RouteDock({
     if (plan && plan.route !== tabs.route) store.actions.cancelPlan();
   }, [plan, tabs.route, store]);
   const [narrow, setNarrow] = useState(false);
+  const [chatCollapsed, setChatCollapsed] = useState(false);
   useEffect(() => {
     const media = window.matchMedia("(max-width: 960px)");
     const sync = () => setNarrow(media.matches);
@@ -69,6 +70,16 @@ export function RouteDock({
             defaultSize: narrow ? 280 : 400,
             minSize: narrow ? 180 : 300,
             minOtherSize: narrow ? 200 : 360,
+            // The rail is horizontal-only; a stacked (narrow) dock keeps its full height.
+            collapse: narrow
+              ? undefined
+              : {
+                  collapsed: chatCollapsed,
+                  onCollapsedChange: setChatCollapsed,
+                  collapsedSize: 32,
+                  collapseBelow: 240,
+                  title: "thread",
+                },
           }}
           start={<RouteRetention {...tabs} renderRoute={renderRoute} />}
           end={tabs.route ? <ChatShell docked target={tabs.target} /> : children}
