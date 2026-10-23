@@ -795,7 +795,7 @@ export function BarPopover({
       <PopoverTrigger
         ref={trigger}
         openOnHover
-        delay={0}
+        delay={300}
         aria-label="loss breakdown by element group"
         data-e-bar-trigger=""
         className={`relative flex items-center p-0! min-h-0! border-0 before:absolute before:inset-x-0 before:-inset-y-1 before:content-[''] ${className ?? ""}`}

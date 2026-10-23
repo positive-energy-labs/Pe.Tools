@@ -29,6 +29,20 @@ import {
 import { act, cleanup, fireEvent, render, screen, waitFor } from "@testing-library/react";
 import { afterEach, beforeEach, expect, test, vi } from "vite-plus/test";
 import { machineFixture } from "../../../../packages/agent-contracts/tests/machine-fixture";
+import type { ProtoProps } from "./proto/props";
+
+const drawing = vi.hoisted(() => ({ lightweight: false }));
+vi.mock("./proto/e/screen", async (original) => {
+  const { EScreen } = await original<typeof import("./proto/e/screen")>();
+  return {
+    EScreen: ({ props }: { props: ProtoProps }) => drawing.lightweight ? (
+      <div data-proto={props.snapshot ? "E2" : undefined}>
+        {props.snapshot ? props.snapshot.document.elapsedMs : "reading ducts…"}
+        {props.reading.refreshing ? "refreshing…" : ""}
+      </div>
+    ) : <EScreen props={props} />,
+  };
+});
 
 let work = ductsRouteState.schema.parse({ assumptions: {} });
 let revision = 0;
@@ -176,6 +190,7 @@ const inventory = {
 };
 
 beforeEach(() => {
+  drawing.lightweight = false;
   work = ductsRouteState.schema.parse({ assumptions: {} });
   revision = 0;
   requests.length = 0;
@@ -368,6 +383,8 @@ async function mount(search = "&system=SA", hosted = false, target = "slice", th
 }
 
 test("a changed document fences a pending read after changing targets and returning to that exact open document", async () => {
+  // Exercise the real route, target and read owners. Tree/layout work cannot falsify this race.
+  drawing.lightweight = true;
   inventory.sessions[0]!.openDocuments.push({
     openId: "doc2",
     title: "Second document",
@@ -378,18 +395,20 @@ test("a changed document fences a pending read after changing targets and return
     JSON.stringify({ kind: "open", ref: { session: "slice", openId: "doc" } }),
   );
   const mounted = await mount("&system=SA", false, target, "");
+  await waitFor(() => expect(document.querySelector('[data-proto="E2"]')).not.toBeNull());
   let release: (value: Response) => void = () => {};
   reply = () =>
     new Promise((resolve) => {
       release = resolve;
     });
-  fireEvent.click(screen.getByRole("button", { name: /^refresh/ }));
+  fireEvent.click(screen.getByRole("button", { name: /^refresh/, hidden: true }));
+  expect(document.querySelector('[data-proto="E2"]')).not.toBeNull();
   await waitFor(() => expect(requests.length).toBe(2));
   const old = response();
   reply = async () => Response.json(response());
   const pick = async (title: string) => {
-    fireEvent.click(screen.getByRole("button", { name: "Choose document" }));
-    fireEvent.click(await screen.findByRole("option", { name: new RegExp(title) }));
+    fireEvent.click(screen.getByRole("button", { name: "Choose document", hidden: true }));
+    fireEvent.click(await screen.findByRole("option", { name: new RegExp(title), hidden: true }));
   };
   await pick("Second document");
   await waitFor(() => expect(requests.at(-1)?.openId).toBe("doc2"), {
@@ -402,7 +421,7 @@ test("a changed document fences a pending read after changing targets and return
   await act(async () =>
     release(Response.json({ ...old, document: { ...old.document, elapsedMs: 999999 } })),
   );
-  expect(screen.getByRole("region", { name: "Ducts route" }).textContent).not.toContain("999999");
+  expect(screen.getByRole("region", { name: "Ducts route", hidden: true }).textContent).not.toContain("999999");
 });
 
 test("a staged subject, claims and labelParameter render the subject scene; a verdict press stages the claim", async () => {

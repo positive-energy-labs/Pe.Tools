@@ -120,6 +120,7 @@ function useYield(ref: RefObject<HTMLDivElement | null>, place: Corner) {
     if (typeof ResizeObserver === "undefined") return () => field.removeEventListener(MOVED, moved);
     const observer = new ResizeObserver(run);
     observer.observe(field);
+    observer.observe(own);
     observer.observe(legend);
     field.querySelectorAll("[data-slot='pane-dock']").forEach((el) => observer.observe(el));
     return () => {
@@ -131,7 +132,7 @@ function useYield(ref: RefObject<HTMLDivElement | null>, place: Corner) {
 }
 
 const MIN = { width: 64, height: 40 };
-/** Responsive caps: a share of the field the floater sits in, never below its default size. */
+/** Responsive caps: a share of the field, including when its pane shrinks after a resize. */
 const CAP = { width: 0.6, height: 0.7 };
 const clamp = (v: number, lo: number, hi: number) => Math.max(lo, Math.min(hi, v));
 const CURSOR = { tl: "nwse", br: "nwse", tr: "nesw", bl: "nesw" } as const;
@@ -177,6 +178,27 @@ export function Floater({ spec }: { spec: FloaterSpec }) {
   const [slide, setSlide] = useState(0);
   const [box, setBox] = useState(spec.size);
   const defaultSize = useRef(spec.size);
+  const [fieldSize, setFieldSize] = useState({ width: 0, height: 0 });
+  useLayoutEffect(() => {
+    const own = ref.current;
+    const field = own?.parentElement;
+    if (!own || !field) return;
+    defaultSize.current ??= own.getBoundingClientRect();
+    const measure = () => {
+      const { width, height } = field.getBoundingClientRect();
+      setFieldSize((before) => before.width === width && before.height === height ? before : { width, height });
+    };
+    measure();
+    if (typeof ResizeObserver === "undefined") return;
+    const observer = new ResizeObserver(measure);
+    observer.observe(field);
+    return () => observer.disconnect();
+  }, []);
+  const preferred = box ?? defaultSize.current;
+  const ratio = preferred && fieldSize.width > 0 && fieldSize.height > 0
+    ? Math.min(1, Math.max(MIN.width, fieldSize.width * CAP.width) / preferred.width, Math.max(MIN.height, fieldSize.height * CAP.height) / preferred.height)
+    : 1;
+  const shown = preferred && { width: preferred.width * ratio, height: preferred.height * ratio };
   const gutter = () => parseFloat(getComputedStyle(ref.current!).getPropertyValue("--gutter")) || 0;
   const startSlide = useRef(0);
   const sliding = (e: ReactPointerEvent<HTMLElement>) => {
@@ -215,11 +237,11 @@ export function Floater({ spec }: { spec: FloaterSpec }) {
         data-surface="artifact"
         className={`absolute z-popup shadow-float p-1 ${PLACE[at.corner]}`}
         style={{
-          ...box,
-          ["--floater-w" as string]: box && `${box.width}px`,
-          ["--floater-h" as string]: box && `${box.height}px`,
-          ["--floater-content-w" as string]: box && "100%",
-          ["--floater-content-h" as string]: box && "100%",
+          ...shown,
+          ["--floater-w" as string]: shown && `${shown.width}px`,
+          ["--floater-h" as string]: shown && `${shown.height}px`,
+          ["--floater-content-w" as string]: shown && "100%",
+          ["--floater-content-h" as string]: shown && "100%",
           translate: at.dy + slide ? `0 ${at.dy + slide}px` : undefined,
         }}
       >

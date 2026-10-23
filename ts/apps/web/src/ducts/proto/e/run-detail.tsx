@@ -110,10 +110,6 @@ export function RunDetail({
       aria-label="run detail"
       onMouseEnter={() => light([run.ductId])}
     >
-      <p className="font-medium">
-        {nameOf(run.ductId)}
-        {run.size ? <span className="text-ink-2 font-normal"> · {run.size}</span> : null}
-      </p>
       <dl className="grid grid-cols-[auto_1fr_auto] gap-x-3">
         <dt className="text-ink-2">length</dt>
         <dd className="face-mono">{run.lengthFt.toFixed(1)} ft</dd>
@@ -127,7 +123,7 @@ export function RunDetail({
         </dd>
         <dd className="text-ink-mute">{over ? "over the design rate" : ""}</dd>
         <dt className="text-ink-2">roughness</dt>
-        <dd className="face-mono">{run.roughnessFt == null ? "—" : `${run.roughnessFt} ft`}</dd>
+        <dd className="face-mono">{run.roughnessFt == null ? "—" : `${run.roughnessFt.toFixed(4)} ft`}</dd>
         <dd className="text-ink-mute">{run.roughness ?? ""}</dd>
         <dt className="text-ink-2">friction loss</dt>
         <dd className="face-mono">{fmt(run.frictionDp, 4)} in-wg</dd>

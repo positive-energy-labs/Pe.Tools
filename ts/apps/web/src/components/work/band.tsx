@@ -355,7 +355,7 @@ export function UnstageAll({
     const lapse = setTimeout(() => setArmed(false), CONFIRM_MS);
     return () => clearTimeout(lapse);
   }, [armed]);
-  useScopeKeys([
+  useScopeKeys(armed ? [
     {
       hotkey: "Escape",
       callback: () => setArmed(false),
@@ -363,7 +363,7 @@ export function UnstageAll({
       says: "cancel the armed unstage-all before it writes",
       options: { enabled: armed },
     },
-  ]);
+  ] : []);
   if (!staged) return null;
   const title = armed
     ? `Press again to clear your ${staged} staged values in one write; Escape cancels`
@@ -398,7 +398,7 @@ export function UnstageAll({
  */
 function StartFresh({ run, aside }: { run: () => void; aside?: ReactNode }) {
   const [armed, setArmed] = useState(false);
-  useScopeKeys([
+  useScopeKeys(armed ? [
     {
       hotkey: "Escape",
       callback: () => setArmed(false),
@@ -406,7 +406,7 @@ function StartFresh({ run, aside }: { run: () => void; aside?: ReactNode }) {
       says: "keep the saved Work; nothing is set aside",
       options: { enabled: armed },
     },
-  ]);
+  ] : []);
   return (
     <span className="flex flex-col gap-1">
       <span className="flex items-baseline gap-2">

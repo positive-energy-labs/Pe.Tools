@@ -8,6 +8,10 @@ import { SubjectText } from "./subject-text-view";
 import type { DuctNode, Issue, Segment } from "./encoding";
 const num = (value: number | null | undefined, unit: string, digits = 0) =>
   value == null ? null : `${value.toFixed(digits)} ${unit}`;
+
+/** Precision belongs to the measured unit, not the binary float's string representation. */
+export const factNumber = (value: number, unit: string) =>
+  `${value.toFixed(({ cfm: 0, fpm: 0, deg: 1, in: 2, ft: 2, "in-wg": 4 } as Record<string, number>)[unit] ?? 3)} ${unit}`.trim();
 type Row = [label: string, value: string | null, source: string];
 function Rows({ rows }: { rows: readonly Row[] }) {
   return (
@@ -93,7 +97,7 @@ export function NodeFactsView({ node, issues }: { node: DuctNode; issues: readon
           ...node.facts.map(
             (fact): Row => [
               fact.key,
-              fact.value != null ? `${fact.value} ${fact.unit}` : (fact.text ?? null),
+              fact.value != null ? factNumber(fact.value, fact.unit) : (fact.text ?? null),
               fact.provenance,
             ],
           ),

@@ -104,10 +104,11 @@ export function createRenderer(mount: HTMLElement, meshes: SceneMeshes, wheelHos
   // The Pe palette, from the page's own tokens: the picture sits on the artifact ground, focus
   // elements are a warm mid grey between the muted and secondary inks, context recedes toward the
   // ground. Mid-tone on purpose: selection and hover lift toward the ink and stay visible, and the
-  // stage's only saturated colour is damage. Read once; a theme flip remounts the picture.
+  // stage's only saturated colour is damage. A theme change repaints the same scene and camera.
   const ground = inkOf("artifact", mount);
   const ink = inkOf("ink", mount);
   const focusTint = inkOf("ink-mute", mount).lerp(inkOf("ink-2", mount), 0.55);
+  if (ground.getHSL({ h: 0, s: 0, l: 0 }).l > 0.5) focusTint.lerp(ground, 0.35);
   const contextTint = inkOf("ink-mute", mount).lerp(ground, 0.5);
   renderer.setClearColor(ground);
   const canvas = renderer.domElement;
@@ -474,6 +475,23 @@ export function createRenderer(mount: HTMLElement, meshes: SceneMeshes, wheelHos
   let glowing = false;
   const motion = window.matchMedia("(prefers-reduced-motion: reduce)");
   motion.addEventListener("change", render);
+  const theme = new MutationObserver(() => {
+    ground.copy(inkOf("artifact", mount));
+    ink.copy(inkOf("ink", mount));
+    focusTint.copy(inkOf("ink-mute", mount)).lerp(inkOf("ink-2", mount), 0.55);
+    if (ground.getHSL({ h: 0, s: 0, l: 0 }).l > 0.5) focusTint.lerp(ground, 0.35);
+    contextTint.copy(inkOf("ink-mute", mount)).lerp(ground, 0.5);
+    renderer.setClearColor(ground);
+    byId.forEach((instance, id) =>
+      colors[id]!.copy(instance.focus || MEP.test(instance.category) ? focusTint : contextTint),
+    );
+    thumbsStale = true;
+    paintNow(...painted);
+  });
+  theme.observe(document.documentElement, {
+    attributes: true,
+    attributeFilter: ["class", "style", "data-theme"],
+  });
   const issueRay = new THREE.Raycaster();
   const disposeTree = (root: THREE.Object3D) =>
     root.traverse((object) => {
@@ -772,6 +790,7 @@ export function createRenderer(mount: HTMLElement, meshes: SceneMeshes, wheelHos
       onFrame = null;
       cancelAnimationFrame(frame);
       motion.removeEventListener("change", render);
+      theme.disconnect();
       observer.disconnect();
       controls.dispose();
       canvas.removeEventListener("pointerdown", planeDown);

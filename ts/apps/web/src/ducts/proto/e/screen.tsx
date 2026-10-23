@@ -16,6 +16,7 @@ import {
   type ReactNode,
 } from "react";
 import type { DuctsApply } from "@pe/host-contracts/generated";
+import { flushSync } from "react-dom";
 import { survey, unitFlowsIn } from "@pe/ducts-domain/survey";
 import { fansOwedBase, type OwedBase } from "@pe/ducts-domain/fan-assignment";
 import { healPlan } from "@pe/ducts-domain/heal";
@@ -145,20 +146,45 @@ export function EScreen({ props }: { props: ProtoProps }) {
   // until a frame has painted the picture plate's "opening …" line (`OpeningContext`), then renders
   // the new system. `useDeferredValue` was tried: React ran the deferred pass before the paint.
   const [system, setSystem] = useState(props.page.system);
-  const opening = system === props.page.system ? null : props.page.system;
+  const [requested, setRequested] = useState<string | null>(null);
+  const opening = requested ?? (system === props.page.system ? null : props.page.system);
+  const latest = useRef(props);
+  latest.current = props;
+  const flight = useRef<{ frame?: number; timer?: number }>({});
+  useEffect(() => () => {
+    cancelAnimationFrame(flight.current.frame ?? 0);
+    clearTimeout(flight.current.timer);
+  }, []);
+  const move = useCallback<ProtoProps["setPage"]>((next, how) => {
+    if (next.system === undefined || next.system === latest.current.page.system)
+      return latest.current.setPage(next, how);
+    if (flight.current.frame || flight.current.timer) return;
+    // Paint acknowledgement before the route/router compute the next system. Refuse repeat picks.
+    flushSync(() => setRequested(next.system!));
+    flight.current.frame = requestAnimationFrame(() => {
+      flight.current.frame = undefined;
+      flight.current.timer = window.setTimeout(() => {
+        flight.current.timer = undefined;
+        latest.current.setPage(next, how);
+      }, 0);
+    });
+  }, []);
   useEffect(() => {
-    if (opening == null) return;
+    if (opening == null || (requested != null && props.page.system !== requested)) return;
     let timer = 0;
     const frame = requestAnimationFrame(() => {
-      timer = window.setTimeout(() => setSystem(props.page.system), 0);
+      timer = window.setTimeout(() => {
+        setSystem(props.page.system);
+        setRequested(null);
+      }, 0);
     });
     return () => {
       cancelAnimationFrame(frame);
       clearTimeout(timer);
     };
-  }, [opening, props.page.system]);
+  }, [opening, props.page.system, requested]);
   const shown = useRef(props);
-  if (opening == null) shown.current = props;
+  if (opening == null) shown.current = { ...props, setPage: move };
   if (!props.snapshot)
     return (
       <p className="text-ink-2 p-4" data-e-loading="">
@@ -383,11 +409,11 @@ function EScreenBody({ props }: { props: ProtoProps }) {
     [baseInbox, noRunRows],
   );
   // A unit whose role is fan while no Revit system names it base equipment offers to make it one.
-  const fanHandles: FanVerbs = {
+  const fanHandles = useMemo<FanVerbs>(() => ({
     preview: props.actions.fanPreview,
     apply: props.actions.fan,
     busy: props.actions.busy,
-  };
+  }), [props.actions.fanPreview, props.actions.fan, props.actions.busy]);
   const owedBase = useMemo(
     () =>
       snapshot && surveyed
@@ -399,7 +425,7 @@ function EScreenBody({ props }: { props: ProtoProps }) {
         : (new Map() as OwedBase),
     [snapshot, surveyed, priced],
   );
-  const fanVerbsOf = (id: number) => {
+  const fanVerbsOf = useCallback((id: number) => {
     // Only the open system is offered: the system comes from the page, the unit from the row.
     const verbs = (owedBase.get(id) ?? [])
       .filter((a) => !scope || a.system === scope.name)
@@ -435,7 +461,7 @@ function EScreenBody({ props }: { props: ProtoProps }) {
         ) : null}
       </span>
     );
-  };
+  }, [owedBase, scope, nameOf, page.fan, page.epoch, fanHandles]);
   // The Write popover holds only a preview that still describes this Work and snapshot.
   const writeHeld = useMemo(
     () =>
@@ -584,6 +610,7 @@ function EScreenBody({ props }: { props: ProtoProps }) {
   }, [page.issue]);
   // null = automatic: the sidebar is a rail while the screen is tight.
   const [treeCollapsed, setTreeCollapsed] = useState<boolean | null>(null);
+  const [panePriority, setPanePriority] = useState<"sidebar" | "inbox">("sidebar");
   const [rootRef, width] = useWidth();
   // The picture annotates the Fix rows' findings, or the Diagnostics kind picked in its key.
   const kindClause = page.rulingSearch.pills.find(
@@ -601,10 +628,10 @@ function EScreenBody({ props }: { props: ProtoProps }) {
   // Both panes project one choice, including programmatic landings and system changes.
   const home: Side = chosen ? "right" : "left";
   const side = chosen && sideFor.system === page.system ? sideFor.side : home;
-  const pick = (side: Side) => setSideFor({ system: page.system, side });
+  const pick = useCallback((side: Side) => setSideFor({ system: page.system, side }), [page.system]);
 
-  const select = (id: number | null) =>
-    id != null && jump.current ? jump.current(id) : props.onSelect(id);
+  const select = useCallback((id: number | null) =>
+    id != null && jump.current ? jump.current(id) : props.onSelect(id), [props.onSelect]);
   // The critical run is the largest priced total over every section: the worst fan's run (B's
   // model marks Pe's only when the group solve names one; a provisional solve can leave it
   // unnamed, so the largest total stands in). Only the runs that price the system count: a shared
@@ -631,8 +658,13 @@ function EScreenBody({ props }: { props: ProtoProps }) {
   // A narrow screen keeps the inbox a rail until it is asked for.
   const open =
     inboxOpen ?? ((width === 0 || width >= NARROW_PX) && (toRule > 0 || props.staged > 0));
+  // Admit the last requested support pane when both would consume the picture's navigation field.
+  const sidebarWanted = !(treeCollapsed ?? (width > 0 && width < TIGHT_PX));
+  const cramped = width > 0 && width < 280 + 260 + 360 + 16;
+  const sidebarCollapsed = !sidebarWanted || (cramped && open && panePriority === "inbox");
+  const inboxShown = open && !(cramped && sidebarWanted && panePriority === "sidebar");
   // A cell outside the system (a Set row on the whole document) moves the page to its system.
-  const focusCell = (cell: CellRef) => {
+  const focusCell = useCallback((cell: CellRef) => {
     if (cell.segment === "componentDrops") {
       // A fitting's drop lives in the bottom pane, in the half whose scope holds it. Nothing is
       // selected and the page does not move: the picture and its orbit stay as they were.
@@ -655,7 +687,7 @@ function EScreenBody({ props }: { props: ProtoProps }) {
     setSideFor({ system: into, side: "right" });
     setInputsOpen(true);
     setCellFocus(cell);
-  };
+  }, [drawn, snapshot, chosen, groups, scope, page.system, pick, setPage]);
   // The section whose run leads the system: its fan and TEL head the pane.
   const leadGroup =
     tree?.find((t) => critical && t.children.includes(critical))?.key ??
@@ -664,16 +696,21 @@ function EScreenBody({ props }: { props: ProtoProps }) {
     "";
   // Any group of the system with an implausible row: its ESP is a partial sum, so none is shown.
   const blockedLoss = groups.some((g) => (priced?.next.byGroup[g]?.implausible.length ?? 0) > 0);
-  const grilleName = (n: TreeNode) => {
+  const grilleName = useCallback((n: TreeNode) => {
     const id = n.kind === "run" ? n.terminal : n.id;
     return (id != null ? labels.get(id) : undefined) ?? n.name;
-  };
+  }, [labels]);
+  const jumpToRule = useCallback((key: string) => {
+    setRuleFocus(key);
+    pick("right");
+  }, [pick]);
+  const fansOf = useCallback((system: ReturnType<typeof systemList>[number]) => fanFacts(priced, system.groups, nameOf), [priced, nameOf]);
   const designRate = priced?.staged.designFriction ?? DEFAULT_DESIGN_FRICTION_RATE;
   // The tree is the whole pane (kaitpw 2026-10-23: the header block "only takes up space", the
   // selected row's footer "obscures the tree"): the system's name and way back live in the picture
   // title, its state in the plate, its fans in the breakdown popover and on Inputs' unit rows, and
   // the selection's facts in the picture.
-  const treePane = tree ? (
+  const treePane = useMemo(() => tree ? (
     <Pane id="e-sidebar" scroll="auto" flush>
       <div className="min-w-0 shrink-0" onMouseLeave={() => light(null)}>
         <SystemTree
@@ -694,17 +731,14 @@ function EScreenBody({ props }: { props: ProtoProps }) {
             ruleOf,
             light,
             select,
-            jumpToRule: (key: string) => {
-              setRuleFocus(key);
-              pick("right");
-            },
+            jumpToRule,
             reading,
             designRate,
           }}
         />
       </div>
     </Pane>
-  ) : null;
+  ) : null, [tree, scope?.name, page.system, page.epoch, page.treeSearch, page.treeSort, setPage, scale, critical?.key, grilleName, selected, ruleOf, light, select, jumpToRule, reading, designRate]);
   const systemsPane = (
     <Pane
       id="e-systems"
@@ -715,7 +749,7 @@ function EScreenBody({ props }: { props: ProtoProps }) {
     >
       <SystemsList
         systems={systems}
-        fansOf={(system) => fanFacts(priced, system.groups, nameOf)}
+        fansOf={fansOf}
         nameOf={nameOf}
         needsFix={needsFix}
         drawn={drawn}
@@ -753,7 +787,7 @@ function EScreenBody({ props }: { props: ProtoProps }) {
   const inputsCount = scope
     ? `${plural(scope.units.size, "unit")} · ${plural(scope.terminals.size, "grille")}`
     : "";
-  const inputsPane =
+  const inputsPane = useMemo(() =>
     tree && scope ? (
       <Pane
         id="e-inputs"
@@ -783,7 +817,7 @@ function EScreenBody({ props }: { props: ProtoProps }) {
           light={light}
         />
       </Pane>
-    ) : null;
+    ) : null, [tree, scope, inputsCount, page.system, page.epoch, page.inputSearch, page.inputSort, setPage, fanVerbsOf, drawn, snapshot, priced, work, nameOf, selected, select, light]);
   const systemPane = (
     <PaneSplit
       axis="vertical"
@@ -852,7 +886,7 @@ function EScreenBody({ props }: { props: ProtoProps }) {
         : inbox?.check.length
           ? `${inbox.check.length} to check · nothing holds the ESP`
           : "nothing holds the ESP";
-  const inboxPane = (
+  const inboxPane = useMemo(() => (
     <Pane
       id="e-inbox"
       title="Rulings"
@@ -900,19 +934,16 @@ function EScreenBody({ props }: { props: ProtoProps }) {
         />
       ) : null}
     </Pane>
-  );
+  ), [rulingsWord, inbox, inboxWork, nameOf, props.onVerdict, light, select, focusCell, props.actions, writeHeld, page.evaluation, fanHandles, selected, focusKey, reach, setHoveredIssue, setPage, page.system, page.epoch, page.rulingSearch, page.rulingSort]);
+
+  const subjectContext = useMemo(() => ({
+    nameOf: subjectName, reach, light: lightSubjects, clear: clearSubjects, hold: holdSubjects,
+    go: (id: number) => select(id),
+  }), [subjectName, reach, lightSubjects, clearSubjects, holdSubjects, select]);
 
   return (
     <SubjectTextContext.Provider
-      value={{
-        nameOf: subjectName,
-        reach,
-        light: lightSubjects,
-        clear: clearSubjects,
-        hold: holdSubjects,
-        // The one alias-click: select the subject and fly the picture to it (`jump`, canvas.tsx).
-        go: (id) => select(id),
-      }}
+      value={subjectContext}
     >
       <div ref={rootRef} data-proto="E2" className="flex size-full min-h-0">
         <BarRules snapshot={drawn!} work={work} priced={priced}>
@@ -928,8 +959,11 @@ function EScreenBody({ props }: { props: ProtoProps }) {
             minOtherSize: 392,
             persist: "proto-e-sidebar",
             collapse: {
-              collapsed: treeCollapsed ?? (width > 0 && width < TIGHT_PX),
-              onCollapsedChange: setTreeCollapsed,
+              collapsed: sidebarCollapsed,
+              onCollapsedChange: (collapsed) => {
+                if (!collapsed) setPanePriority("sidebar");
+                setTreeCollapsed(collapsed);
+              },
               collapsedSize: 32,
               collapseBelow: 200,
               title: scope?.name ?? "systems",
@@ -944,11 +978,14 @@ function EScreenBody({ props }: { props: ProtoProps }) {
                 defaultSize: 340,
                 minSize: 260,
                 maxSize: 520,
-                minOtherSize: 360,
+                minOtherSize: width > 0 && width < TIGHT_PX ? 240 : 360,
                 persist: "proto-e-inbox",
                 collapse: {
-                  collapsed: !open,
-                  onCollapsedChange: (collapsed) => setInboxOpen(!collapsed),
+                  collapsed: !inboxShown,
+                  onCollapsedChange: (collapsed) => {
+                    if (!collapsed) setPanePriority("inbox");
+                    setInboxOpen(!collapsed);
+                  },
                   collapsedSize: 32,
                   collapseBelow: 200,
                   title: `Rulings · ${toRule}`,

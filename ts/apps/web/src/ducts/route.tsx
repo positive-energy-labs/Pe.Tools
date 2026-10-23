@@ -37,6 +37,18 @@ import type { ProtoProps } from "./proto/props";
 import { EScreen } from "./proto/e/screen";
 import { useDuctsViewBridge } from "./view-bridge";
 import { NativeObservationScope, type NativeObservation } from "#/revit/observation";
+import type { ActionHandle } from "#/route/handle";
+
+/** Panes read action state; an invocation always uses the route's latest admitted snapshot. */
+function useBodyAction(action: ActionHandle): ActionHandle {
+  const latest = useRef(action);
+  latest.current = action;
+  const { label, says, needs, actor, chord, refusal, stage, count } = action;
+  return useMemo(
+    () => ({ label, says, needs, actor, chord, refusal, stage, count, run: (input) => latest.current.run(input) }),
+    [label, says, needs, actor, chord, refusal, stage, count],
+  );
+}
 
 const fmt = (n: number | null | undefined) => (n == null ? "—" : n.toFixed(4));
 
@@ -68,6 +80,7 @@ export function DuctsRoute({ url = true }: { url?: boolean } = {}) {
     handle.resolution.kind === "resolved" && handle.resolution.target.kind === "document"
       ? handle.resolution.target.ref
       : null;
+  const documentKey = doc ? `${doc.session}/${doc.openId}` : null;
   const staged = useMemo(() => stagedDucts(handle.work.doc), [handle.work.doc]);
   const read = useDuctSnapshot(
     demo ? null : doc,
@@ -181,12 +194,12 @@ export function DuctsRoute({ url = true }: { url?: boolean } = {}) {
   );
   // A re-read prices its new snapshot behind the last priced one: the screen keeps drawing what it
   // has, marked refreshing, instead of blanking to "pricing…". Never across documents.
-  const lastPriced = useRef<{ snapshot: DuctSnapshot; priced: NonNullable<typeof priced> } | null>(
+  const lastPriced = useRef<{ key: string | null; snapshot: DuctSnapshot; priced: NonNullable<typeof priced>; observation: NativeObservation } | null>(
     null,
   );
-  if (snapshot && priced) lastPriced.current = { snapshot, priced };
+  if (snapshot && priced) lastPriced.current = { key: documentKey, snapshot, priced, observation: nativeObservation };
   const held =
-    snapshot && !priced && lastPriced.current?.snapshot.document.title === snapshot.document.title
+    !priced && lastPriced.current?.key === documentKey && (pending || !!snapshot)
       ? lastPriced.current
       : null;
   const pricing = !!snapshot && !!tables.grids && !priced && !held;
@@ -356,6 +369,15 @@ export function DuctsRoute({ url = true }: { url?: boolean } = {}) {
           ? { says: "reading ducts…", exit: "wait for the snapshot" }
           : null;
 
+  const onSelect = useCallback((id: number | null) => setPage({ selected: id == null ? "" : String(id), issue: "" }), [setPage]);
+  const onSelectClaim = useCallback((claim: Claim) => setPage({ selected: claim.id, issue: "" }), [setPage]);
+  const previewAction = useBodyAction(handle.actions.preview);
+  const applyAction = useBodyAction(handle.actions.apply);
+  const healPreviewAction = useBodyAction(handle.actions["heal-preview"]);
+  const healAction = useBodyAction(handle.actions.heal);
+  const fanPreviewAction = useBodyAction(handle.actions["fan-preview"]);
+  const fanAction = useBodyAction(handle.actions.fan);
+  const actions = useMemo(() => ({ preview: previewAction, apply: applyAction, healPreview: healPreviewAction, heal: healAction, fanPreview: fanPreviewAction, fan: fanAction, busy }), [previewAction, applyAction, healPreviewAction, healAction, fanPreviewAction, fanAction, busy]);
   const shell: ProtoProps = {
     snapshot: held?.snapshot ?? snapshot,
     priced: held?.priced ?? priced,
@@ -369,21 +391,13 @@ export function DuctsRoute({ url = true }: { url?: boolean } = {}) {
     page,
     setPage,
     onPose,
-    onSelect: (id) => setPage({ selected: id == null ? "" : String(id), issue: "" }),
-    onSelectClaim: (claim) => setPage({ selected: claim.id, issue: "" }),
+    onSelect,
+    onSelectClaim,
     work,
     empty,
     doc,
     reading: { pending, error: error ?? null, refreshing: !!held || (pending && !!snapshot) },
-    actions: {
-      preview: handle.actions.preview,
-      apply: handle.actions.apply,
-      healPreview: handle.actions["heal-preview"],
-      heal: handle.actions.heal,
-      fanPreview: handle.actions["fan-preview"],
-      fan: handle.actions.fan,
-      busy,
-    },
+    actions,
     staged: pendingCount(handle.work.doc, snapshot?.store),
   };
 
@@ -432,7 +446,7 @@ export function DuctsRoute({ url = true }: { url?: boolean } = {}) {
         />
       }
     >
-      <NativeObservationScope value={nativeObservation}>
+      <NativeObservationScope value={held?.observation ?? nativeObservation}>
         <EScreen props={shell} />
       </NativeObservationScope>
     </Surface>
