@@ -345,7 +345,6 @@ export function DuctsRoute({ url = true }: { url?: boolean } = {}) {
           ? { says: "reading ducts…", exit: "wait for the snapshot" }
           : null;
 
-  const [hovered, setHovered] = useState<number | null>(null);
   const shell: ProtoProps = {
     snapshot,
     priced,
@@ -361,8 +360,6 @@ export function DuctsRoute({ url = true }: { url?: boolean } = {}) {
     onPose,
     onSelect: (id) => setPage({ selected: id == null ? "" : String(id), issue: "" }),
     onSelectClaim: (claim) => setPage({ selected: claim.id, issue: "" }),
-    onHover: setHovered,
-    hovered,
     work,
     empty,
     doc,

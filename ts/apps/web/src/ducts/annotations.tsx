@@ -29,7 +29,7 @@ import {
 import type { Claim } from "./legs";
 import type { Scene } from "./scene";
 import { Caption, pathOf, SubjectLabels } from "./subject-labels";
-import { SubjectTextContext } from "./subject-text-view";
+import { SubjectTextContext, useSubjectLighting } from "./subject-text-view";
 import { subjectDocument } from "./subject-text";
 
 export type Ruling =
@@ -114,6 +114,7 @@ export function Annotations({
 }) {
   const observation = useNativeObservation();
   const subjects = useContext(SubjectTextContext);
+  const lighting = useSubjectLighting();
   const noRunWords = (branch: NoRunBranch) =>
     subjectDocument(
       [branch.reasons.map((r) => r.text).join("; ")],
@@ -169,7 +170,7 @@ export function Annotations({
   const halo = (id: number) =>
     selected.has(id)
       ? token("select")
-      : id === hovered || subjects?.lighting.ids.has(id)
+      : id === hovered || lighting.ids.has(id)
         ? token("veil")
         : null;
   const sub = scene.subject;
@@ -333,7 +334,7 @@ export function Annotations({
             );
           })
         : null}
-      {subjects?.lighting.references.map((ref) => {
+      {lighting.references.map((ref) => {
         const p = pointOf(ref.id);
         const xy = p && project(p);
         if (!xy) return null;
@@ -343,7 +344,7 @@ export function Annotations({
         const direction = x < size.width / 2 ? 1 : -1;
         while (footnotes.some((p) => Math.hypot(p.x - x, p.y - y) < 22)) x += direction * 22;
         footnotes.push({ x, y });
-        const active = subjects.lighting.focus == null || subjects.lighting.focus === ref.id;
+        const active = lighting.focus == null || lighting.focus === ref.id;
         return (
           <g
             key={ref.id}
@@ -352,7 +353,7 @@ export function Annotations({
             data-emphasized={active}
             // The kit's subject mark: the same chip the text draws after the name, lit together.
             className="subject-badge"
-            data-lit={subjects.lighting.focus === ref.id ? "" : undefined}
+            data-lit={lighting.focus === ref.id ? "" : undefined}
             opacity={active ? 1 : 0.35}
             transform={`translate(${x} ${y})`}
           >

@@ -72,6 +72,9 @@ export interface ECanvasExtra {
   onIssueHover: (key: string | null) => void;
   /** The element set a sidebar row lights; empty lights nothing. */
   lit: ReadonlySet<number>;
+  /** The element under the pointer, here or in a pane (the screen's reach store). */
+  hovered: number | null;
+  onHover: (id: number | null) => void;
   /** The system's groups (stable, `systemScope`); the picture draws every one. */
   groups: readonly string[];
   /** The group whose fan the header reads: the system's largest; the schematic draws it. */

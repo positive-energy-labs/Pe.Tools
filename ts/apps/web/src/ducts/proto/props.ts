@@ -38,8 +38,6 @@ export interface ProtoProps {
   /** Selection / hover callbacks over element ids and claims. */
   onSelect: (id: number | null) => void;
   onSelectClaim: (claim: Claim) => void;
-  onHover: (id: number | null) => void;
-  hovered: number | null;
   /** Work doc and its writer, as the views get them (`preview` is the last evaluation response). */
   work: {
     doc: DuctsRouteDocument | null;

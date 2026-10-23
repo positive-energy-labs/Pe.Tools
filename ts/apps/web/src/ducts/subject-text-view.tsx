@@ -1,4 +1,11 @@
-import { createContext, useContext, useEffect, useId, type ReactNode } from "react";
+import {
+  createContext,
+  useContext,
+  useEffect,
+  useId,
+  useSyncExternalStore,
+  type ReactNode,
+} from "react";
 import { TooltipHint } from "@pe/kit/lang/tooltip";
 import { revitTarget } from "@pe/kit/lang/row";
 import { observedElements, useNativeObservation } from "#/revit/observation";
@@ -16,9 +23,51 @@ export type SubjectLighting = {
   focus: number | null;
   owner?: string;
 };
+export const NO_LIGHTING: SubjectLighting = { ids: new Set(), references: [], focus: null };
+
+/**
+ * What the pointer is reaching for, outside React state: the lit Subjects, the hovered element and
+ * the hovered issue. A hover writes here and only the marks that draw it (the picture, a token's
+ * chip, the inbox rail) re-render; a route- or screen-level setState re-rendered every pane per
+ * pointer crossing, 170 to 550 ms each on Chadds SA 44 (reach audit, 2026-10-23).
+ */
+export type Reach = {
+  lighting: SubjectLighting;
+  hovered: number | null;
+  issue: string | null;
+};
+export function reachStore() {
+  let state: Reach = { lighting: NO_LIGHTING, hovered: null, issue: null };
+  const listeners = new Set<() => void>();
+  return {
+    get: () => state,
+    /** `next` returns the same state to change nothing (no listener runs). */
+    set(next: (state: Reach) => Reach) {
+      const value = next(state);
+      if (value === state) return;
+      state = value;
+      for (const listener of listeners) listener();
+    },
+    subscribe(listener: () => void) {
+      listeners.add(listener);
+      return () => void listeners.delete(listener);
+    },
+  };
+}
+export type ReachStore = ReturnType<typeof reachStore>;
+const IDLE = reachStore();
+/** One slice of the reach state; `pick` must return a stable value (a field or a primitive). */
+export function useReach<T>(store: ReachStore | null | undefined, pick: (state: Reach) => T): T {
+  const s = store ?? IDLE;
+  return useSyncExternalStore(s.subscribe, () => pick(s.get()));
+}
+/** The lit Subjects under the screen's text context; nothing lit outside it. */
+export const useSubjectLighting = () =>
+  useReach(useContext(SubjectTextContext)?.reach, (state) => state.lighting);
+
 export const SubjectTextContext = createContext<{
   nameOf: (id: number) => string | null;
-  lighting: SubjectLighting;
+  reach: ReachStore;
   light: (references: readonly SubjectReference[], focus: number | null, owner?: string) => void;
   clear: (owner: string) => void;
   /**
@@ -78,7 +127,7 @@ export function SubjectText({
             <SubjectRef
               key={i}
               part={part}
-              lit={context.lighting.focus === part.id}
+              reach={context.reach}
               onHover={(on) => light(on ? part.id : null)}
               onGo={() => context.go(part.id)}
             />
@@ -91,15 +140,16 @@ export function SubjectText({
 /** One Subject in prose: its name as a link-like token, then its footnote number as the shared mark. */
 function SubjectRef({
   part,
-  lit,
+  reach,
   onHover,
   onGo,
 }: {
   part: SubjectReference & { connector?: number };
-  lit: boolean;
+  reach: ReachStore;
   onHover: (on: boolean) => void;
   onGo: () => void;
 }) {
+  const lit = useReach(reach, (state) => state.lighting.focus === part.id);
   const observation = useNativeObservation();
   const target = observedElements(observation, [part.id]);
   const port = part.connector != null ? ` port ${part.connector}` : "";
