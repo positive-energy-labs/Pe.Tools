@@ -1,4 +1,3 @@
-import { type ListSearch } from "@pe/agent-contracts";
 import {
   useCallback,
   useContext,
@@ -15,7 +14,7 @@ import type { DuctSnapshot } from "@pe/ducts-domain/types";
 import { Button } from "@pe/kit/lang/button";
 import { HelpTip } from "#/components/lang/help";
 import { FactChip } from "@pe/kit/lang/chip";
-import { useList, emptyListState, type ListState } from "@pe/kit/lang/collection";
+import { useList, emptyListState, type ListState, type ListPersist } from "@pe/kit/lang/collection";
 import { ListView, type ListRowParts } from "@pe/kit/lang/list-view";
 import { PreviewAction } from "@pe/kit/lang/preview-action";
 import { reviewTransitions, type CellWire } from "#/components/work/band";
@@ -161,12 +160,7 @@ export function Inbox({
   onPick?: () => void;
   hoveredIssue?: string | null;
   onIssueHover?: (key: string | null) => void;
-  address?: {
-    scope?: string;
-    search: ListSearch;
-    sort: "" | "name" | "status";
-    onChange: (search: ListSearch, sort: "" | "name" | "status") => void;
-  };
+  address?: ListPersist<"name" | "status">;
 }) {
   const observation = useNativeObservation();
   const subjects = useContext(SubjectTextContext);
@@ -504,19 +498,14 @@ function RulingsList({
   rows: RulingRow[];
   focused: string | null;
   onPick?: () => void;
-  address?: {
-    scope?: string;
-    search: ListSearch;
-    sort: "" | "name" | "status";
-    onChange: (search: ListSearch, sort: "" | "name" | "status") => void;
-  };
+  address?: ListPersist<"name" | "status">;
 }) {
   const [view, setView] = useState<ListState<"name" | "status">>(() => ({
     ...emptyListState(),
     closed: [INBOX_LABELS.diagnostics],
   }));
   const list = useList({
-    scope: address?.scope,
+    persist: address,
     items: rows,
     keyOf: (row) => row.key,
     search: rulingSearch,
@@ -531,11 +520,9 @@ function RulingsList({
       order: INBOX_ORDER.map((key) => INBOX_LABELS[key]),
       collapsible: INBOX_ORDER.map((key) => INBOX_LABELS[key]),
     },
-    state: { ...view, search: address?.search ?? view.search, sort: address?.sort ?? view.sort },
+    state: view,
     onState: (next) => {
       setView(next);
-      if (address && (next.search !== address.search || next.sort !== address.sort))
-        address.onChange(next.search, next.sort);
     },
     stageOf: (row) => row.stage ?? "clean",
     onPick: (row) => {

@@ -338,6 +338,10 @@ tr.dl-row[data-active] {
   [data-landed] {
     animation: none;
   }
+  [data-landed] {
+    outline-color: var(--pe-ink);
+    background-color: var(--pe-select);
+  }
 }
 .dl-row:not(tr)[data-active]::before {
   content: none;
