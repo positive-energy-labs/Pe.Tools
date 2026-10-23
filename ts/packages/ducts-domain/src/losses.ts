@@ -100,6 +100,36 @@ export interface Row {
   desc: string;
   notes?: string[];
   error?: string;
+  /** Set on a fitting row the plausibility guard stopped: it carries `error` and prices nothing, so its path reads unpriced. */
+  implausible?: ImplausibleLoss;
+}
+
+/** Why a fitting row is not trusted: the lookup, the velocity and the flow behind it. */
+export interface ImplausibleLoss {
+  coefficient: number;
+  res: "Co" | "Cb" | "Cs";
+  fpm: number;
+  cfm: number;
+  reasons: ("coefficient" | "velocity")[];
+}
+
+/**
+ * First guesses to recalibrate (kaitpw 2026-10-22: "we can always recalibrate"). A Co or Cb above
+ * this reads a lookup that fell off its table's plausible range (SD5-9 gives 670 at a small Ab/Ac).
+ */
+export const IMPLAUSIBLE_COEFFICIENT = 20;
+/** Residential sanity bound on a fitting's velocity, fpm; a first guess to recalibrate. */
+export const IMPLAUSIBLE_FPM = 4000;
+
+/** A terminal's flow stopped at an element whose air classification differs from the terminal's. */
+export interface CrossClassFlow {
+  /** The element the flow would have entered (the first one of the other classification). */
+  id: number;
+  /** The element below it that carried the terminal's air. */
+  from: number;
+  classification: string;
+  fromClassification: string;
+  cfm: number;
 }
 
 interface LossError {
@@ -182,6 +212,8 @@ export interface LossResult {
       revitCritical: number | null;
       /** Whether the group has an air mover (a root that is not staged passive); without one nothing is priced. */
       hasAirMover: boolean;
+      /** Element ids of the implausible fitting rows on this group's priced runs; any makes the group's fan a partial sum, not a price. */
+      implausible: number[];
       /** The fan's standing: provisional when any path in the group is. */
       provisional: Provisional;
       /** One entry per fan when several fans root the group, largest design flow first; else empty. */
@@ -190,6 +222,8 @@ export interface LossResult {
   >;
   byRule: Record<string, RuleLoss>;
   errors: LossError[];
+  /** Terminal flow kept out of another air classification's path (`flowBelow`); each is a `mixed-classification` finding on `id`. */
+  crossClass: CrossClassFlow[];
 }
 
 /** One fan's section of a multi-fan group and what it prices to (`fan-sections.ts`). */
@@ -399,6 +433,7 @@ export function computeLosses(
     byGroup: {},
     byRule: {},
     errors: [],
+    crossClass: [],
   } as Omit<LossResult, "design">;
   const seen = new Set<string>();
   const priced = new Map<string, Set<number>>();
@@ -409,6 +444,14 @@ export function computeLosses(
       result.errors.push(e);
     }
     return e.message;
+  };
+
+  const crossSeen = new Set<string>();
+  const noteCross = (c: CrossClassFlow) => {
+    const key = `${c.id}|${c.from}`;
+    if (crossSeen.has(key)) return;
+    crossSeen.add(key);
+    result.crossClass.push(c);
   };
 
   const everywhere: string[] = [];
@@ -428,7 +471,7 @@ export function computeLosses(
     // Several units: walk from the largest fan's port, never from a passive unit's.
     const lead = group.rootIds.length > 1 ? fans[0]?.unit : undefined;
     const tree = groupTree(snapshot, group.id, lead);
-    const below = flowBelow(tree, overrides);
+    const below = flowBelow(tree, overrides, noteCross);
     const sections = fans.length > 1 ? fanSections(tree, fans) : [];
     const others = new Set(sections.slice(1).flatMap((s) => s.owned));
     const runPaths = new Map<number, number[]>();
@@ -480,7 +523,7 @@ export function computeLosses(
       }
       const own = groupTree(snapshot, group.id, section.unit);
       const stretch = stretchOf(tree, section);
-      const ownBelow = flowBelow(own, overrides);
+      const ownBelow = flowBelow(own, overrides, noteCross);
       for (const id of stretch) ownBelow.set(id, section.cfm ?? 0);
       const price = (path: number[]) =>
         pathRows(own, path, ownBelow, grids, choices, overrides, fail, catalogs);
@@ -577,6 +620,14 @@ export function computeLosses(
         (groupCritical == null ? null : systemFor(snapshot, groupCritical)?.criticalPathLossInWg) ??
         null,
       hasAirMover,
+      implausible: [
+        ...new Set(
+          [
+            ...Object.values(result.paths).filter((p) => p.groupId === group.id),
+            ...fanResults.map((f) => ({ rows: [...f.stretch, ...f.rows] })),
+          ].flatMap((p) => p.rows.flatMap((r) => (r.implausible ? [r.id] : []))),
+        ),
+      ],
       provisional: provisionalOf(under),
     };
     everywhere.push(...under);
@@ -616,14 +667,37 @@ export function computeLosses(
   return { ...result, design };
 }
 
-/** Terminal design flow summed over every element subtree, cfm. */
-function flowBelow(tree: GroupTree, overrides: Overrides): Map<number, number> {
+const classOf = (part: { node: Node | null; segment: Segment | null } | undefined) =>
+  part?.node?.classification ?? part?.segment?.classification ?? "";
+const sameClass = (a: string, b: string) =>
+  !a || !b || a.replaceAll(" ", "") === b.replaceAll(" ", "");
+
+/**
+ * Terminal design flow summed over every element subtree, cfm. A subtree's flow stops where the
+ * air classification changes: a louver network welded onto a supply tree by an inferred join must
+ * not ride the supply collar (Chadds: 1533 cfm on a 7 in collar). An element with no classification
+ * passes flow through. Each stopped flow goes to `onCross`.
+ */
+function flowBelow(
+  tree: GroupTree,
+  overrides: Overrides,
+  onCross: (c: CrossClassFlow) => void,
+): Map<number, number> {
   const below = new Map<number, number>();
   const visit = (id: number): number => {
-    const node = tree.parts.get(id)!.node;
+    const part = tree.parts.get(id)!;
+    const node = part.node;
     const own =
       node?.kind === "terminal" ? (overrides.terminalCfm?.[id] ?? terminalCfm(node) ?? 0) : 0;
-    const sum = tree.children.get(id)!.reduce((a, c) => a + visit(c), own);
+    const cls = classOf(part);
+    const sum = tree.children.get(id)!.reduce((a, c) => {
+      const flow = visit(c);
+      const childCls = classOf(tree.parts.get(c));
+      if (sameClass(cls, childCls)) return a + flow;
+      if (flow > 0)
+        onCross({ id, from: c, classification: cls, fromClassification: childCls, cfm: flow });
+      return a;
+    }, own);
     below.set(id, sum);
     return sum;
   };
@@ -676,12 +750,38 @@ function pathRows(
     const basis = rule.basisOf(facts, flows, leg);
     if (!basis.section) return bad("no cross-section for the velocity pressure");
     const f = friction(basis.section, basis.cfm, 0);
+    // An implausible lookup never prices silently: the row carries an error (its path reads
+    // unpriced, as for a table not loaded) and `implausibleFindings` names why.
+    const reasons: ImplausibleLoss["reasons"] = [];
+    if (input.res !== "Cs" && found.value > IMPLAUSIBLE_COEFFICIENT) reasons.push("coefficient");
+    if (f.fpm > IMPLAUSIBLE_FPM) reasons.push("velocity");
+    let implausible: { implausible: ImplausibleLoss; error: string } | null = null;
+    if (reasons.length) {
+      const why = reasons.map((r) =>
+        r === "coefficient"
+          ? `${input.res} over ${IMPLAUSIBLE_COEFFICIENT}`
+          : `velocity over ${IMPLAUSIBLE_FPM} fpm`,
+      );
+      const error = `implausible loss at ${rule.family} ${node.id}, rule ${rule.key}, table ${table}: ${input.res} ${round4(found.value)}, ${Math.round(f.fpm)} fpm, ${Math.round(basis.cfm)} cfm (${why.join(", ")})`;
+      fail({ id: node.id, rule: rule.key, table, message: error });
+      implausible = {
+        error,
+        implausible: {
+          coefficient: found.value,
+          res: input.res as ImplausibleLoss["res"],
+          fpm: f.fpm,
+          cfm: basis.cfm,
+          reasons,
+        },
+      };
+    }
     return {
       ...base,
       c: found.value,
       pv: f.pv,
       fpm: f.fpm,
-      dp: found.value * f.pv,
+      dp: implausible ? 0 : found.value * f.pv,
+      ...implausible,
       inputs: {
         res: input.res as RowInputs["res"],
         x: input.x,

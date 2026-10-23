@@ -5,7 +5,7 @@ import type {
   DuctsRouteDocument,
 } from "@pe/agent-contracts";
 import { transitionGeometry } from "./geometry.ts";
-import { proposedStatic, unitOf, type Priced } from "./pricing.ts";
+import { guardFindings, proposedStatic, unitOf, type Priced } from "./pricing.ts";
 import { groupTree } from "./topology.ts";
 import type { GroupReadiness } from "./readiness.ts";
 import { survey } from "./survey.ts";
@@ -51,6 +51,7 @@ export function assessDucts(
           : [],
       ),
     ),
+    ...guardFindings(next),
     ...(solved.catalogFindings ?? []).map((note, i) => ({
       id: `catalog-file:${i}`,
       kind: "catalog-file",

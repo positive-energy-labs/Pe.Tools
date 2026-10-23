@@ -101,6 +101,42 @@ export function catalogFindings(result: LossResult): DuctFinding[] {
   return [...found.values()];
 }
 
+/**
+ * The findings the plausibility guards raise. `implausible-loss`: a fitting row whose coefficient or
+ * velocity is past the limits (`IMPLAUSIBLE_*` in losses.ts); it blocks (`bins.ts`) and its path
+ * prices nothing. `mixed-classification`: an element a terminal of another air classification
+ * was kept off (`flowBelow`); a diagnostic that names the element.
+ */
+export function guardFindings(result: LossResult): DuctFinding[] {
+  const rows = [
+    ...Object.values(result.paths).flatMap((p) => p.rows),
+    ...Object.values(result.byGroup).flatMap((g) =>
+      g.fans.flatMap((f) => [...f.stretch, ...f.rows]),
+    ),
+  ];
+  const found = new Map<string, DuctFinding>();
+  for (const row of rows)
+    if (row.implausible)
+      found.set(`implausible:${row.id}`, {
+        id: `implausible:${row.id}`,
+        kind: "implausible-loss",
+        elementIds: [row.id],
+        note: row.error!,
+        assumed: null,
+        clearer: "person",
+      });
+  for (const c of result.crossClass)
+    found.set(`mixed-classification:el:${c.id}:${c.from}`, {
+      id: `mixed-classification:el:${c.id}:${c.from}`,
+      kind: "mixed-classification",
+      elementIds: [c.id, c.from],
+      note: `${Math.round(c.cfm)} cfm of ${c.fromClassification} air below ${c.from} is kept off ${c.classification} element ${c.id}`,
+      assumed: null,
+      clearer: "person",
+    });
+  return [...found.values()];
+}
+
 /** The solves run on the surveyed snapshot; `snapshot`, `flows` and `findings` are its survey (findings also carry the solve's catalog findings). */
 export interface Priced extends Survey {
   applied: Choices;
@@ -220,7 +256,7 @@ export function price(
       );
   const priced: Priced = {
     ...surveyed,
-    findings: [...surveyed.findings, ...catalogFindings(next)],
+    findings: [...surveyed.findings, ...catalogFindings(next), ...guardFindings(next)],
     catalogs,
     applied,
     choices,

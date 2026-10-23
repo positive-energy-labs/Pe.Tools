@@ -848,6 +848,7 @@ const KIND_TITLE: Record<string, string> = {
   "loop-by-inference": "Loop through an inferred join",
   "no-root": "No root",
   "multi-root": "Several roots",
+  "implausible-loss": "Implausible fitting loss, not priced",
 };
 
 const ELEMENT_WORD: Record<string, string> = {
