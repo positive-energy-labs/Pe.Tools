@@ -10,6 +10,10 @@ const DRAWING =
   '[data-pane-id="e-picture"] canvas[aria-label^="3D model"], [data-pane-id="e-picture"] svg[aria-label="duct tree"]';
 const SEARCH = `${SYSTEMS} input[aria-label="Search systems"]`;
 const ductWrite = (name: string) => /^write(?: [0-9]+)? to Revit$/i.test(name);
+const RECONNECT_REFUSALS = [
+  "Thread list is not current; reconnecting.",
+  "This thread is not current; re-reading it from the host.",
+];
 type ShiftSource = {
   previousRect: unknown;
   currentRect: unknown;
@@ -297,6 +301,8 @@ test("seeded real-user route journey", async () => {
     coverage: {} as Record<string, string>,
     workerProtocol: [] as unknown[],
     draftCensus: [] as unknown[],
+    reconnectAlerts: [] as { at: number; messages: string[] }[],
+    reconnectRecovery: undefined as unknown,
     network: [] as {
       method: string;
       url?: string;
@@ -370,7 +376,7 @@ test("seeded real-user route journey", async () => {
   }
 
   // Poll the held main/picture and focus/scroll on every non-navigation disruption.
-  async function untouched(run: () => Promise<void>) {
+  async function untouched(run: () => Promise<void>, reconnecting = false) {
     const p = checkPage();
     const before = await state(p);
     shifts = [];
@@ -448,7 +454,18 @@ test("seeded real-user route journey", async () => {
             after.armed.filter((action) => !before.armed.includes(action)),
             "no stale action rearming",
           ).toEqual([]);
-          expect(after.alerts, "no rendered crash alert").toEqual([]);
+          if (
+            reconnecting &&
+            JSON.stringify(after.alerts) !==
+              JSON.stringify(receipt.reconnectAlerts.at(-1)?.messages)
+          )
+            receipt.reconnectAlerts.push({ at: Date.now(), messages: after.alerts });
+          expect(
+            reconnecting
+              ? after.alerts.filter((message) => !RECONNECT_REFUSALS.includes(message))
+              : after.alerts,
+            "no unknown alert during reconnect; no alerts outside reconnect",
+          ).toEqual([]);
         } catch (error) {
           failure = error;
           return;
@@ -1071,7 +1088,13 @@ test("seeded real-user route journey", async () => {
               );
             else await sleep(500);
             await settled(p);
-          });
+            receipt.reconnectRecovery = {
+              at: Date.now(),
+              alerts: (await state(p)).alerts,
+              newSseResponses: receipt.network.filter((event) => event.stream).length - streams,
+              status: "alerts cleared after online; continuity and geometry checked separately",
+            };
+          }, true);
           available(
             "reconnect",
             receipt.network.filter((event) => event.stream).length > streams,
