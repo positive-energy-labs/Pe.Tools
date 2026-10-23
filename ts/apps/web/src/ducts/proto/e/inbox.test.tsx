@@ -415,7 +415,9 @@ test("missed-join diagnostics retain their label, status, selection action and i
   });
   const row = document.querySelector<HTMLElement>('[data-key="missed:10:20"]')!;
   expect(within(row).getByText("Open ends 4.0 inches apart: 10 and 20")).toBeTruthy();
-  expect(within(row).getByText("possible missed join")).toBeTruthy();
+  // The closed row carries the compact status; the open row heads with the full one.
+  expect(within(row).getByText("missed join?")).toBeTruthy();
+  expect(screen.getByText("possible missed join")).toBeTruthy();
   expect(row.getAttribute("data-revit-ids")).toBe("10,20");
   expect(within(row).getByRole("button", { name: /select/i })).toBeTruthy();
   expect(screen.getByText("Facing open ends need inspection in Revit.")).toBeTruthy();

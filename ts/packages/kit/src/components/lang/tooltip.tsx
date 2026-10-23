@@ -3,6 +3,7 @@ import {
   useContext,
   useId,
   useState,
+  type ComponentProps,
   type ReactElement,
   type ReactNode,
 } from "react";
@@ -31,13 +32,20 @@ if (typeof window !== "undefined") {
 export function TooltipHint({
   content,
   children,
+  side,
+  keep = false,
 }: {
   content: ReactNode;
   children: ReactElement<{ id?: string; tabIndex?: number }>;
+  side?: ComponentProps<typeof TooltipContent>["side"];
+  /** Keep the tooltip mounted (closed) while `content` is empty, so content that arrives on
+   *  pointer entry (a row's measured cut) opens it instead of remounting the element. */
+  keep?: boolean;
 }) {
-  if (content == null || content === "" || content === false) return children;
+  const empty = content == null || content === "" || content === false;
+  if (empty && !keep) return children;
   return (
-    <Tooltip>
+    <Tooltip open={empty ? false : undefined}>
       <TooltipTrigger
         render={children}
         className=""
@@ -47,7 +55,7 @@ export function TooltipHint({
         // hook a test locates a row by.
         aria-description={typeof content === "string" ? content : undefined}
       />
-      <TooltipContent>{content}</TooltipContent>
+      {empty ? null : <TooltipContent side={side}>{content}</TooltipContent>}
     </Tooltip>
   );
 }

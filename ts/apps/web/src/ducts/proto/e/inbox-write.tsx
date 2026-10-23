@@ -2,7 +2,7 @@ import { PreviewAction } from "@pe/kit/lang/preview-action";
 import type { ReactNode } from "react";
 import type { ListRowParts } from "@pe/kit/lang/list-view";
 import type { ListSearchable } from "@pe/kit/lang/collection";
-import { STALE_WORDS, type InboxGroup, type PreviewState } from "../../inbox-rows";
+import { compactStatus, STALE_WORDS, type InboxGroup, type PreviewState } from "../../inbox-rows";
 
 export type RulingRow = Omit<ListRowParts, "actions"> & {
   key: string;
@@ -43,11 +43,12 @@ export function inboxWriteRows(write: WriteVerbs) {
     label: write.row.title,
     title: write.row.title,
     meta: (
+      // One line: the status, then the verb at the text's height (never the row's full 24 px).
       <span
-        className="inline-flex max-w-full min-w-0 flex-wrap items-center gap-1"
+        className="inline-flex max-w-full min-w-0 items-center gap-1.5 whitespace-nowrap [&_.dl-button]:h-5! [&_.dl-button]:min-h-0!"
         data-inbox-write=""
       >
-        <span>{write.row.status}</span>
+        <span className="truncate">{compactStatus(write.row.status)}</span>
         {/* The handle's own words, so the button reads as the Situation's does. */}
         <PreviewAction
           label={write.preview.label}

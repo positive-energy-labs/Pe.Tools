@@ -946,9 +946,11 @@ tr.dl-row[data-active] {
   font-size: 10px;
   font-weight: var(--weight-strong);
 }
+/* Lit, it keeps a ring in the page colour: the 3D stage stays dark in the light theme, where an
+   ink-filled disc alone sank into it (live Chadds EX 19, 2026-10-23). */
 .subject-badge[data-lit] > circle {
   fill: var(--subject-mark-lit-ground);
-  stroke: var(--subject-mark-lit-ground);
+  stroke: var(--subject-mark-lit-ink);
 }
 .subject-badge[data-lit] > text {
   fill: var(--subject-mark-lit-ink);

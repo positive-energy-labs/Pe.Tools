@@ -228,7 +228,8 @@ function ListRow({
   const fact = props.meta != null ? <span className="dl-row-fact">{props.meta}</span> : null;
   const tree = props.depth !== undefined;
   return (
-    <TooltipHint content={props.refusal ?? props.title ?? cut}>
+    // Beside the list, never above or below: a row's hint covered its neighbour row.
+    <TooltipHint content={props.refusal ?? props.title ?? cut} side="left" keep>
       <div
         {...shared}
         className={slots.base()}

@@ -8,7 +8,7 @@ import {
   type HTMLAttributes,
   type RefObject,
 } from "react";
-import { ChevronRight } from "lucide-react";
+import { ChevronDown, ChevronRight, ChevronUp } from "lucide-react";
 
 import { Button } from "./button";
 import { type ListController, type ListItem } from "./collection";
@@ -290,12 +290,12 @@ function ListItemView<T, Sort extends string>({
           content != null ? (
             <>
               {parts.actions}
+              {/* A glyph square like the row's other verbs: a worded verb was clipped to "D…". */}
               <Button
                 label={`${expanded ? "Close" : "Open"} details`}
+                icon={expanded ? ChevronUp : ChevronDown}
                 onClick={() => list.toggleOpen(item.key)}
-              >
-                {expanded ? "Close" : "Details"}
-              </Button>
+              />
             </>
           ) : (
             parts.actions
