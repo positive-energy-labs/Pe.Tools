@@ -6,7 +6,7 @@
  * over the fit of the subject's centrelines; the camera then turns by the globe only.
  */
 import { emptyListSearch } from "@pe/agent-contracts";
-import { useEffect, useMemo, useRef, useState, useSyncExternalStore } from "react";
+import { useContext, useEffect, useMemo, useRef, useState, useSyncExternalStore } from "react";
 
 import { useScopeGestures, useScopeKeys } from "@pe/kit/keys";
 import type { PageMove } from "#/route/manifest";
@@ -27,6 +27,7 @@ import type { SceneRead } from "#/scene/use-scene";
 import type { Bounds, Layer3D, SceneMeshes } from "#/scene/types";
 
 import { CaptionBounds } from "./subject-labels";
+import { SubjectTextContext } from "./subject-text-view";
 import { Annotations, type Label, type Ruling } from "./annotations";
 import type { Encoding } from "./encoding";
 import type { DuctsPage } from "./manifest";
@@ -208,6 +209,7 @@ export function ModelPicture({
   onHover: (id: number | null) => void;
 }) {
   const meshes = read.meshes;
+  const subjects = useContext(SubjectTextContext);
   const pickIssue = (target: IssueTarget) => {
     setPage(
       { selected: String(target.elementId), issue: target.key, rulingSearch: emptyListSearch() },
@@ -383,7 +385,12 @@ export function ModelPicture({
           ? "no meshes: choose a system on a Revit document"
           : null;
   return (
-    <div ref={setHost} data-model-picture="" className="relative min-h-0 flex-1 overflow-hidden">
+    <div
+      ref={setHost}
+      data-model-picture=""
+      className="relative min-h-0 flex-1 overflow-hidden"
+      onPointerMove={subjects?.hold}
+    >
       {meshes && pose ? (
         <Scene3D
           className="size-full"

@@ -488,23 +488,30 @@ function EScreenBody({ props }: { props: ProtoProps }) {
     () => reach.set((state) => ({ ...state, lighting: NO_LIGHTING })),
     [reach, snapshot, page.system, page.picture],
   );
-  // A short grace before lit Subjects go dark, so the pointer can travel from a text to its badge
-  // in the picture (the badge re-lights and cancels it). Any light cancels a pending clear.
-  const clearing = useRef<ReturnType<typeof setTimeout>>(undefined);
-  useEffect(() => () => clearTimeout(clearing.current), []);
+  // Lit Subjects carried out of a text stay lit while the pointer keeps moving over the picture
+  // (`hold`), so it can reach their badges (about 500 px from the inbox on Chadds EX 19); they go
+  // dark 700 ms after it stops or leaves. Any light cancels a pending clear.
+  const clearing = useRef<{ timer?: ReturnType<typeof setTimeout>; owner?: string }>({});
+  useEffect(() => () => clearTimeout(clearing.current.timer), []);
   const clearSubjects = useCallback(
     (owner: string) => {
-      clearTimeout(clearing.current);
-      clearing.current = setTimeout(
-        () =>
+      clearTimeout(clearing.current.timer);
+      clearing.current = {
+        owner,
+        timer: setTimeout(() => {
+          clearing.current = {};
           reach.set((state) =>
             state.lighting.owner === owner ? { ...state, lighting: NO_LIGHTING } : state,
-          ),
-        300,
-      );
+          );
+        }, 700),
+      };
     },
     [reach],
   );
+  const holdSubjects = useCallback(() => {
+    const { owner } = clearing.current;
+    if (owner) clearSubjects(owner);
+  }, [clearSubjects]);
   const lightSubjects = useCallback(
     (
       references: readonly SubjectReference[],
@@ -512,7 +519,8 @@ function EScreenBody({ props }: { props: ProtoProps }) {
       owner?: string,
       ids: readonly number[] = [],
     ) => {
-      clearTimeout(clearing.current);
+      clearTimeout(clearing.current.timer);
+      clearing.current = {};
       const tinted = new Set(focus == null ? [...ids, ...references.map((r) => r.id)] : [focus]);
       reach.set((state) => {
         const current = state.lighting;
@@ -901,6 +909,7 @@ function EScreenBody({ props }: { props: ProtoProps }) {
         reach,
         light: lightSubjects,
         clear: clearSubjects,
+        hold: holdSubjects,
         // The one alias-click: select the subject and fly the picture to it (`jump`, canvas.tsx).
         go: (id) => select(id),
       }}

@@ -163,6 +163,10 @@ export function Inbox({
   const observation = useNativeObservation();
   const subjects = useContext(SubjectTextContext);
   const [nativeResult, setNativeResult] = useState<ShowElementsResult | null>(null);
+  // Hover intent: a row lights only after the pointer dwells on it, so a pointer passing over rows
+  // on its way out (to a badge in the picture) does not replace what it carries.
+  const intent = useRef<{ key: string; timer?: ReturnType<typeof setTimeout> } | null>(null);
+  useEffect(() => () => clearTimeout(intent.current?.timer), []);
   const [selecting, setSelecting] = useState(false);
   const cellOf = (segment: string, key: string) =>
     (work.doc as unknown as Record<string, Record<string, object> | undefined> | null)?.[segment]?.[
@@ -319,6 +323,17 @@ export function Inbox({
       [],
       description.references,
     );
+    // The row badges what its heading names; what its own text lit since (a token, the open
+    // description) stays while the pointer is in the row, and a pending clear is cancelled.
+    const relight = () => {
+      const lit = subjects!.reach.get().lighting;
+      subjects!.light(
+        lit.owner === item.key ? lit.references : heading.references,
+        null,
+        item.key,
+        item.ids,
+      );
+    };
     return {
       key: item.key,
       search: { text: [title, item.status, item.kind, item.note], ids: item.ids },
@@ -334,12 +349,29 @@ export function Inbox({
       actions: () => verbsOf(item, false),
       onMouseEnter: () => {
         // The collapsed row shows its heading: badge what the heading names, tint all it stands for.
-        if (subjects) subjects.light(heading.references, null, item.key, item.ids);
-        else light(item.ids);
-        onIssueHover?.(item.key);
+        const enter = () => {
+          if (subjects) relight();
+          else light(item.ids);
+          onIssueHover?.(item.key);
+        };
+        clearTimeout(intent.current?.timer);
+        intent.current = {
+          key: item.key,
+          timer: setTimeout(() => ((intent.current = { key: item.key }), enter()), 90),
+        };
       },
-      onMouseLeave: () => (subjects ? subjects.clear(item.key) : light(null)),
-      onMouseMove: () => subjects?.light(heading.references, null, item.key, item.ids),
+      onMouseLeave: () => {
+        if (intent.current?.key === item.key) {
+          clearTimeout(intent.current.timer);
+          intent.current = null;
+        }
+        if (subjects) subjects.clear(item.key);
+        else light(null);
+      },
+      onMouseMove: () => {
+        // Re-light (after a token's own hover) only once the row holds the pointer.
+        if (intent.current?.key === item.key && !intent.current.timer) relight();
+      },
       revitIds: target.ids,
       revitRefs: target.refs,
       lit: (selected != null && item.ids.includes(selected)) || item.key === focused,
@@ -353,7 +385,14 @@ export function Inbox({
             </p>
           ) : null}
           {subjects ? (
-            <p>
+            // The open row shows its description: anywhere over it badges what it names (the row
+            // itself badges only its heading's), so the pointer keeps the badges on its way out.
+            <p
+              onMouseMove={(e) => {
+                e.stopPropagation();
+                subjects.light(description.references, null, item.key, item.ids);
+              }}
+            >
               <SubjectText document={description} owner={item.key} />
             </p>
           ) : claim?.kind === "claim" ? (
@@ -390,7 +429,9 @@ export function Inbox({
     <>
       <div
         onMouseLeave={() => {
-          light(null);
+          // With Subjects, each row's own clear (with its grace) ends the lighting, so the pointer
+          // can carry it out to the picture's badges; an immediate wipe here would beat it.
+          if (!subjects) light(null);
           onIssueHover?.(null);
         }}
       >

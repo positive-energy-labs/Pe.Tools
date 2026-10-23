@@ -76,6 +76,8 @@ export const SubjectTextContext = createContext<{
     ids?: readonly number[],
   ) => void;
   clear: (owner: string) => void;
+  /** The pointer is still travelling over the picture: a pending clear waits for it. */
+  hold?: () => void;
   /**
    * The one alias-click: a Subject named in text was pressed. Every Subject token on the route
    * calls this and nothing else, so the screen's "go to subject" (select it and bring it into
