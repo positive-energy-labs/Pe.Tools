@@ -148,11 +148,12 @@
   user-select: none;
 }
 /* Lists share the cell staging vocabulary: square = unsaved, bold = unsaved title. */
-.dl-row:is([data-stage="proposed"], [data-stage="staged"])::before {
+.dl-row[data-stage]:is([data-stage="proposed"], [data-stage="staged"])::before {
   content: "";
   position: absolute;
   left: 2px;
   top: calc(var(--item-h) / 2 - 2px);
+  bottom: auto;
   width: 4px;
   height: 4px;
   background: var(--pe-pea-ink);

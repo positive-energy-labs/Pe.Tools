@@ -1,10 +1,10 @@
 // @vitest-environment jsdom
-import { act, cleanup, fireEvent, render, renderHook, screen } from "@testing-library/react";
+import { act, cleanup, fireEvent, render, renderHook, screen, waitFor } from "@testing-library/react";
 import { afterEach, expect, test, vi } from "vite-plus/test";
 import { emptyListState, filterItems, listModel, useCollection, useList, type ListOptions } from "../src/components/lang/collection";
 import { ListView } from "../src/components/lang/list-view";
 
-afterEach(() => { cleanup(); vi.restoreAllMocks(); vi.unstubAllGlobals(); });
+afterEach(() => { cleanup(); vi.restoreAllMocks(); vi.unstubAllGlobals(); Reflect.deleteProperty(HTMLElement.prototype, "scrollTo"); });
 
 interface Item { id: string; name: string; kind: string; loss: number; stage: "clean" | "staged"; children: Item[] }
 const items: Item[] = Array.from({ length: 355 }, (_, i) => ({
@@ -95,13 +95,14 @@ test("facet choices replace positive equality alternatives and retain authored c
   expect(result.current.state.query).toBe("System loss>=4 !kind=Other");
 });
 
-test("renderer mounts a bounded viewport, exposes drop targets and distinguishes filtered empty", () => {
+test("renderer mounts a bounded viewport, exposes drop targets and distinguishes filtered empty", async () => {
   vi.stubGlobal("ResizeObserver", class { observe() {} unobserve() {} disconnect() {} });
   vi.spyOn(HTMLElement.prototype, "offsetHeight", "get").mockReturnValue(120);
   vi.spyOn(HTMLElement.prototype, "offsetWidth", "get").mockReturnValue(400);
   vi.spyOn(HTMLElement.prototype, "clientHeight", "get").mockReturnValue(120);
   vi.spyOn(HTMLElement.prototype, "clientWidth", "get").mockReturnValue(400);
-  vi.spyOn(HTMLElement.prototype, "scrollTo").mockImplementation(() => {});
+  const scroll = vi.fn();
+  Object.defineProperty(HTMLElement.prototype, "scrollTo", { configurable: true, value: scroll });
   vi.spyOn(HTMLElement.prototype, "getBoundingClientRect").mockReturnValue({ x: 0, y: 0, top: 0, left: 0, bottom: 120, right: 400, width: 400, height: 120, toJSON() {} });
   const drop = vi.fn();
   function Harness() {
@@ -115,6 +116,13 @@ test("renderer mounts a bounded viewport, exposes drop targets and distinguishes
   expect(drawn.length).toBeLessThan(355);
   fireEvent.drop(container.querySelector("[data-list-section]")!);
   expect(drop).toHaveBeenCalledTimes(1);
+  const head = container.querySelector<HTMLButtonElement>("[data-list-section-head]")!;
+  Object.defineProperty(head, "getBoundingClientRect", { configurable: true,
+    value: () => ({ x: 0, y: 20, top: 20, left: 0, bottom: 40, right: 400, width: 400, height: 20, toJSON() {} }) });
+  scroll.mockClear();
+  fireEvent.click(head);
+  expect(head.getAttribute("aria-expanded")).toBe("true");
+  await waitFor(() => expect(scroll).toHaveBeenCalled());
   fireEvent.change(screen.getByRole("textbox", { name: "Search test systems" }), { target: { value: "no-such-system" } });
   expect(container.querySelector('[data-story="filter"]')).not.toBeNull();
   fireEvent.click(screen.getByRole("button", { name: "Clear search" }));
