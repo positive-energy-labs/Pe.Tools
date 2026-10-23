@@ -119,7 +119,21 @@ test("a stacked split returns to columns on resize without remounting its conten
       unobserve() {}
     },
   );
-}
+  const { container } = render(
+    <PaneSplit
+      axis="horizontal"
+      start={<input aria-label="filter" defaultValue="kept" />}
+      end="drawing"
+      resize={{ target: "end", defaultSize: 340, minSize: 260, minOtherSize: 560 }}
+    />,
+  );
+  const filter = screen.getByRole("textbox", { name: "filter" });
+  expect(container.firstElementChild?.getAttribute("data-axis")).toBe("vertical");
+  act(() => resized([{ contentRect: { width: 1200, height: 600 } }]));
+  expect(container.firstElementChild?.getAttribute("data-axis")).toBe("horizontal");
+  expect(screen.getByRole("textbox", { name: "filter" })).toBe(filter);
+  expect(screen.getByRole("separator")).toBeTruthy();
+});
 
 test("20 drag steps preview geometry without React commits, then commit once without remounting", () => {
   measure(900);
