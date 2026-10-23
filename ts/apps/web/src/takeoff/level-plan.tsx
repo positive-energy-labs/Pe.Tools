@@ -127,7 +127,7 @@ export function LevelPlan({
   onViewport: (next: PlaneViewport, how: "gesture" | "move") => void;
   above?: ReactNode;
   /** The fixed top-left readout over the plan: the level's totals, or the selected zone. */
-  readout?: ReactNode;
+  readout: ReactNode;
   /** Absent until a plan image reaches the route; the zones draw alone. */
   plan?: TakeoffPlanImage | null;
   /** The host's named reason the view has no registered image; said, never drawn as nothing. */
@@ -169,7 +169,7 @@ export function LevelPlan({
       : { minX: 0, minY: 0, maxX: viewport.width, maxY: viewport.height };
     return { ...viewport, frame, fit };
   }, [bounds, plan]);
-  const viewport = usePlaneViewport(pageViewport, world?.fit ?? null, onViewport);
+  const viewport = usePlaneViewport(pageViewport, world?.fit ?? null, onViewport, readout);
   const { setHost, host, size, view, move, handlers, dragDistance, dragging } = viewport;
   // No lease: nothing to publish (`visible` is false), so an empty Page stands in.
   useRouteLease<"takeoffs", Partial<TakeoffPage>>("takeoffs", lease?.page ?? [{}, () => {}], {
@@ -232,29 +232,8 @@ export function LevelPlan({
   const map = usePlanMap(view, move, world, size, shapes, plan ?? null);
   const selectedZone = drawn.find((z) => z.zone.guid === selectedKey) ?? null;
   const selectedBox = selectedZone?.zone.bounds;
-  useStage({
-    kind: "plane",
-    host,
-    viewport,
-    bounds: world?.fit ?? null,
-    selectedBounds:
-      selectedBox && world
-        ? boundsOf([
-            world.frame.toViewport([selectedBox.minX, selectedBox.minY]),
-            world.frame.toViewport([selectedBox.maxX, selectedBox.maxY]),
-          ])
-        : null,
-    clearSelection: () => {
-      if (selectedKey) onSelectZone(null);
-    },
-  });
-  const pane = {
-    id: "plan",
-    title: "plan",
-    scroll: "clip" as const,
-    flush: true,
-    floaters: [map],
-    actions: (
+  const stage = useStage({
+    goTo: (
       <GoToPopup
         items={() =>
           drawn.flatMap((zone) => [
@@ -294,10 +273,32 @@ export function LevelPlan({
         }}
       />
     ),
+    kind: "plane",
+    host,
+    viewport,
+    bounds: world?.fit ?? null,
+    selectedBounds:
+      selectedBox && world
+        ? boundsOf([
+            world.frame.toViewport([selectedBox.minX, selectedBox.minY]),
+            world.frame.toViewport([selectedBox.maxX, selectedBox.maxY]),
+          ])
+        : null,
+    clearSelection: () => {
+      if (selectedKey) onSelectZone(null);
+    },
+  });
+  const pane = {
+    id: "plan",
+    title: "plan",
+    scroll: "clip" as const,
+    flush: true,
+    floaters: [map],
+    actions: stage.goTo,
   };
   if (!bounds || !world)
     return (
-      <Pane {...pane}>
+      <Pane picture {...pane} legend={null}>
         {above}
         <div className="flex size-full items-center justify-center px-4">
           {zones.length > 0 ? (
@@ -322,6 +323,7 @@ export function LevelPlan({
   const frame = world.frame;
   return (
     <Pane
+      picture
       {...pane}
       legend={
         <Legend
@@ -538,7 +540,7 @@ export function LevelPlan({
         </svg>
         {/* Surfaces over the plan claim their own pointer: a press on them never pans or clears. */}
         <div onPointerDown={(e) => e.stopPropagation()} onClick={(e) => e.stopPropagation()}>
-          {readout}
+          {viewport.readout}
         </div>
       </div>
     </Pane>

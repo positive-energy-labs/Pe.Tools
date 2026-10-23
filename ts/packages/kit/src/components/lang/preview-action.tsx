@@ -12,7 +12,7 @@ import { Popover } from "@base-ui/react/popover";
 import type { LucideIcon } from "lucide-react";
 
 import { Button } from "./button";
-import { PopoverContent } from "./popover";
+import { PopoverContent } from "./popover-internal";
 
 /** What a run left behind: a sentence when it was refused or failed, null when it went through. */
 export type PreviewRun = Promise<{ readonly message: string } | null>;

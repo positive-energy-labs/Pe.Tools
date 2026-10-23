@@ -118,7 +118,6 @@ export const paneRecipe = tv({
 });
 
 interface PaneProps extends VariantProps<typeof paneRecipe>, PaneStripProps {
-  legend?: ReactNode;
   /** Corner furniture shares drag, shrink and yield with the pane floaters. */
   overlay?: ReactNode;
   id?: string;
@@ -140,6 +139,9 @@ interface PaneProps extends VariantProps<typeof paneRecipe>, PaneStripProps {
   onRetry?: () => void;
   children: ReactNode;
 }
+
+type PicturePaneProps = PaneProps &
+  ({ picture: true; legend: ReactNode } | { picture?: false; legend?: never });
 
 export class PaneErrorBoundary extends Component<
   { children: ReactNode; what?: ReactNode; onRetry?: () => void },
@@ -198,11 +200,12 @@ export function Pane({
   onRetry,
   modes,
   floaters,
+  picture,
   legend,
   overlay,
   layers,
   children,
-}: PaneProps) {
+}: PicturePaneProps) {
   const { root, body } = paneRecipe({ scroll, flush });
   const rootRef = useRef<HTMLElement>(null);
   const [field, setField] = useState<HTMLDivElement | null>(null);
@@ -257,6 +260,7 @@ export function Pane({
       <section
         ref={rootRef}
         data-slot="pane"
+        data-picture={picture || undefined}
         data-pane-id={id}
         data-surface={ground}
         aria-label={typeof title === "string" ? title : undefined}

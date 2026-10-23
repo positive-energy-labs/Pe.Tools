@@ -47,7 +47,7 @@ export function reachStore() {
     },
   };
 }
-export type ReachStore = ReturnType<typeof reachStore>;
+type ReachStore = ReturnType<typeof reachStore>;
 const IDLE = reachStore();
 /** One slice of the reach state; `pick` must return a stable value (a field or a primitive). */
 export function useReachState<T>(

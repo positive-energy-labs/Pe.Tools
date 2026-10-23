@@ -247,10 +247,7 @@ export const useDeclaredGestures = () =>
 export const readGestures = (): DeclaredGesture[] => [...declared.values()].flat();
 
 /** Declare gestures on the innermost scope node; a hidden node declares none. */
-export function useScopeGestures(
-  gestures: readonly ScopeGesture[],
-  host?: HTMLElement | null,
-): void {
+function useScopeGestures(gestures: readonly ScopeGesture[], host?: HTMLElement | null): void {
   const node = use(ScopeContext);
   const spelled = JSON.stringify(gestures);
   useEffect(() => {
@@ -273,8 +270,14 @@ export function useScopeGestures(
   }, [node.id, node.depth, node.live, node.element, spelled, host]);
 }
 
-export function ScopeGestures({ gestures }: { gestures: readonly ScopeGesture[] }) {
-  useScopeGestures(gestures);
+export function ScopeGestures({
+  gestures,
+  host,
+}: {
+  gestures: readonly ScopeGesture[];
+  host?: HTMLElement | null;
+}) {
+  useScopeGestures(gestures, host);
   return null;
 }
 

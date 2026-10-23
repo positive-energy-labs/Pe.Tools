@@ -1,7 +1,16 @@
-import { useCallback, useEffect, useRef, useState, type PointerEvent } from "react";
+import {
+  createElement,
+  Fragment,
+  useCallback,
+  useEffect,
+  useRef,
+  useState,
+  type PointerEvent,
+  type ReactNode,
+} from "react";
 import type { PlaneViewport } from "@pe/agent-contracts";
 import type { Bounds2, Viewport2 } from "#/lib/affine-frame";
-import { useScopeGestures } from "@pe/kit/keys";
+import { ScopeGestures } from "@pe/kit/keys";
 import { captureGestures, createWheelReader, PLANE_GESTURES, wheelPlane } from "./gestures";
 import { fitView } from "./plane";
 
@@ -38,10 +47,10 @@ export function usePlaneViewport(
   viewport: PlaneViewport | null,
   fit: Bounds2 | null,
   onViewport: (next: PlaneViewport, how: "gesture" | "move") => void,
+  readout: ReactNode,
   rest?: (size: Viewport2) => PlaneViewport,
 ) {
   const [host, setHost] = useState<HTMLDivElement | null>(null);
-  useScopeGestures(PLANE_GESTURES, host);
   const [size, setSize] = useState<Viewport2 | null>(null);
   const [inset, setInset] = useState<Inset>({ top: 0, bottom: 0, left: 0 });
   const clearFit = (box: Bounds2, at: Viewport2, pad = 0): PlaneViewport => {
@@ -133,6 +142,12 @@ export function usePlaneViewport(
     };
   }, [host, move]);
   return {
+    readout: createElement(
+      Fragment,
+      null,
+      createElement(ScopeGestures, { gestures: PLANE_GESTURES, host }),
+      readout,
+    ),
     setHost,
     host,
     size,

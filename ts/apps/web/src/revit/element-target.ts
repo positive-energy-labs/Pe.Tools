@@ -26,10 +26,6 @@ export type ElementTarget = {
   scope: RevitObservationScope | DocumentRef | null;
 };
 
-/** Null and legacy scope declarations form a boundary too: they never inherit a parent scope. */
-export const revitScope = (scope: ElementTarget["scope"] | undefined) => ({
-  "data-revit-scope": JSON.stringify(scope ?? null),
-});
 export const revitReferences = (refs: readonly RevitElementReference[]) => revitTarget(null, refs);
 export const revitFamily = (family: FamilyPlacementTarget) => ({
   "data-revit-family": JSON.stringify({

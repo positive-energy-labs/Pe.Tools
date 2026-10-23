@@ -62,10 +62,11 @@ it("keeps motion local, publishes on release and accepts external camera moves",
   const orbit = createLiveOrbit(initial, onViewport);
   const view = render(
     <>
-      <Scene3D meshes={meshes} orbit={orbit} onPick={onPick} />
+      <Scene3D readout={<span>picture state</span>} meshes={meshes} orbit={orbit} onPick={onPick} />
       <OrbitMinimap orbit={orbit} />
     </>,
   );
+  expect(view.getByText("picture state")).toBeTruthy();
   const globe = view.getByRole("group", { name: "orbit globe" });
   const initialGlobe = globe.innerHTML;
   act(() => {
@@ -124,7 +125,13 @@ it("keeps motion local, publishes on release and accepts external camera moves",
   setViewport.mockClear();
   view.rerender(
     <>
-      <Scene3D meshes={meshes} orbit={orbit} onPick={onPick} orbitPivot={[10, 20, 30]} />
+      <Scene3D
+        readout={null}
+        meshes={meshes}
+        orbit={orbit}
+        onPick={onPick}
+        orbitPivot={[10, 20, 30]}
+      />
       <OrbitMinimap orbit={orbit} />
     </>,
   );

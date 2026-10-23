@@ -17,11 +17,15 @@ import {
   prepareElements,
   prepareFamilyPlacements,
   showElementsMessage,
-  revitScope,
   type ElementTarget as Target,
   type ShowElementsResult,
 } from "./element-target";
 import { observedElements, readFamilyPlacements, useNativeObservation } from "./observation";
+/** Null and legacy scope declarations form a boundary too: they never inherit a parent scope. */
+const revitScope = (scope: Target["scope"] | undefined) => ({
+  "data-revit-scope": JSON.stringify(scope ?? null),
+});
+
 export type { ShowElementsResult } from "./element-target";
 
 /**

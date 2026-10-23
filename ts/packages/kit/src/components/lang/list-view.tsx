@@ -19,7 +19,7 @@ import { Minimap, MINIMAP_FROM, type MinimapRange, type MinimapMark } from "./gu
 import { Button } from "./button";
 import { type ListController, type ListItem } from "./collection";
 import { EmptyState } from "./empty";
-import { useScopeGestures, useScopeKeys, useScopeLive } from "../../keys";
+import { ScopeGestures, useScopeKeys, useScopeLive } from "../../keys";
 import { OutcomeLine } from "./outcome";
 import { ListPopup, StatusLine } from "./list-popup";
 import { ListSearchBox } from "./list-search";
@@ -140,10 +140,6 @@ export function PlainList<T, Sort extends string = string>(
 }
 
 function ListRenderer<T, Sort extends string>(props: ListViewProps<T, Sort> & { plain?: boolean }) {
-  useScopeGestures([
-    { pointer: "click", label: "select the row" },
-    { pointer: "hover", label: "move the cursor" },
-  ]);
   const { list, row, empty, maxHeight, estimate = 40, overscan = 6, detail } = props;
   const [root, setRoot] = useState<HTMLDivElement | null>(null);
   const [scroller, setScroller] = useState<HTMLElement | null>(null);
@@ -225,6 +221,12 @@ function ListRenderer<T, Sort extends string>(props: ListViewProps<T, Sort> & { 
       className={`relative min-h-0 min-w-0 w-full${maxHeight ? "" : " shrink-0"}`}
       style={maxHeight ? { maxHeight, overflowY: "auto" } : undefined}
     >
+      <ScopeGestures
+        gestures={[
+          { pointer: "click", label: "select the row" },
+          { pointer: "hover", label: "move the cursor" },
+        ]}
+      />
       {!props.plain && (
         <Minimap
           count={overview.rows.length}

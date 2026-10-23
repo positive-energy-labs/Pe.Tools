@@ -1,6 +1,10 @@
 /** The Situation's cluster: the chain lamp and the state gauge on the name line. */
 import { useContext, type ReactNode } from "react";
-import { Popover, PopoverContent, PopoverTrigger } from "@pe/kit/lang/popover";
+import {
+  Popover,
+  SubjectPopoverContent as PopoverContent,
+  PopoverTrigger,
+} from "@pe/kit/lang/popover";
 import { Gauge } from "lucide-react";
 import { Button } from "@pe/kit/lang/button";
 import { StateDot } from "@pe/kit/table/cells";
@@ -142,7 +146,7 @@ function StateGauge({
           </Button>
         }
       />
-      <PopoverContent align="end" className="flex w-[44rem] flex-col gap-3 t-prose">
+      <PopoverContent className="flex w-[44rem] flex-col gap-3 t-prose">
         {children}
         <FlowMatrix handle={handle} />
         <RouteInspector handle={handle} />

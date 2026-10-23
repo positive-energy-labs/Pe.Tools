@@ -1,0 +1,219 @@
+// Source census only. Each row names its blind spot; types own prop and export contracts.
+import { existsSync, readdirSync, readFileSync } from "node:fs";
+import { dirname, join, matchesGlob, resolve } from "node:path";
+import { fileURLToPath } from "node:url";
+import { expect, it } from "vite-plus/test";
+import { REACH_BLOCK } from "./reach-pattern.ts";
+
+const ROOT = resolve(dirname(fileURLToPath(import.meta.url)), "../../..");
+const W = "apps/web/src/";
+const K = "packages/kit/src/";
+type Allow = { glob: string; reason: string; selector?: string };
+type Rule = {
+  id: string;
+  doctrine: `${"N" | "I" | "L" | "P"}${number}`;
+  pattern: RegExp;
+  roots: string[];
+  allow: Allow[];
+  max?: Record<string, number>;
+  asOf?: string;
+  select?: "classes" | "hover-css" | "reach";
+  exclude?: string[];
+  cannotSee: string;
+};
+const allow = (entries: Record<string, string>): Allow[] =>
+  Object.entries(entries).map(([glob, reason]) => ({ glob: W + glob, reason }));
+
+// Filenames use the wave-4 final homes: land.ts, revit-target.tsx and go-to.tsx.
+// prettier-ignore
+const RULES: Rule[] = [
+  { id: "css-damage-owner", doctrine: "I2", pattern: /pe-damage-beat|\[data-damage\]/g,
+    roots: [W + "**/*.css", K + "**/*.css"],
+    allow: [{ glob: K + "components/lang/lang.css", reason: "One shared critical-damage mark owns the pulse and selectors." }],
+    cannotSee: "Computed appearance and animation." },
+  { id: "subject-fallback-ids", doctrine: "I1", pattern: /(?:element|region) \$\{/g,
+    roots: [W + "**/*.tsx"], allow: [], cannotSee: "Other raw-id spellings and runtime names." },
+  { id: "picture-furniture-floater", doctrine: "L2",
+    pattern: /^(?![\s\S]*\binset-[xy]-)(?=[\s\S]*\babsolute\b)(?=[\s\S]*(?:^|\s)(?:left|right|top|bottom)-\d)[\s\S]+$/g,
+    roots: [W + "**/*.tsx"], select: "classes",
+    allow: [
+      { glob: W + "ducts/annotations.tsx", selector: ".absolute.left-0.top-0", reason: "SVG marks stay registered to the picture origin." },
+      { glob: W + "rooms/sketch.tsx", selector: ".absolute.left-0.top-0", reason: "SVG sketch shares the picture origin." },
+      { glob: W + "grounded-doc/view/block-markdown.tsx", selector: ".absolute.left-2.top-1/2", reason: "Link glyph marks its own text block." },
+      { glob: W + "grounded-doc/view/page-pane.tsx", selector: ".absolute.left-0.5.top-0.5", reason: "Block-kind glyph marks its document rectangle." },
+    ], cannotSee: "Computed classes or browser geometry." },
+  { id: "surface-plane-inferred", doctrine: "L4", pattern: /data-surface=["'](?:recess|artifact)["']/g,
+    roots: [W + "**/*.tsx"], allow: allow({
+      "revit/element-menu.tsx": "Native action portal has no pane ancestor from which to infer its plane.",
+      "machine/notice.tsx": "Detached notification portal has no pane ancestor.",
+      "machine/notice-preview.tsx": "Notification specimen renders the same detached plane.",
+    }), cannotSee: "Runtime-set surfaces and computed contrast." },
+  { id: "kit-hover-layout", doctrine: "L3",
+    pattern: /(?:^|;)\s*(?:(?:min-|max-)?(?:width|height)|margin(?:-[\w-]+)?|padding(?:-[\w-]+)?|border(?:-[\w-]+)?-width)\s*:/g,
+    roots: [K + "**/*.css"], select: "hover-css", allow: [], cannotSee: "Nested CSS, inherited dimensions and media-query interactions." },
+  { id: "web-hover-handler", doctrine: "N7", pattern: /onMouseEnter|onPointerEnter|onMouseOver/g,
+    roots: [W + "**/*.tsx"], allow: [
+      { glob: W + "{ducts/schematic,family/anatomy-model-views,space/cuts,rooms/plan,takeoff/level-plan}.tsx", reason: "SVG hit-testing projects geometry to domain identity; it does not paint hover locally." },
+      ...allow({
+        "ducts/annotations.tsx": "Segment/issue proxies synchronize subject badges.",
+        "ducts/claims.tsx": "Claim geometry lights its underlying part.",
+        "ducts/proto/e/bar.tsx": "Aggregate bars light multiple domain elements.",
+        "ducts/proto/e/inbox.tsx": "Issue dwell and subject-numbering ownership include expanded detail.",
+        "ducts/proto/e/inputs-pane.tsx": "Input sources light their domain element.",
+        "ducts/proto/e/tree-sidebar.tsx": "Ancestors light every descendant element.",
+        "ducts/proto/e/rules-pane.tsx": "Rules light their governed set.",
+        "ducts/proto/e/run-detail.tsx": "Run and fitting rows light underlying elements.",
+        "family/anatomy.tsx": "Part geometry focus differs from native element identity.",
+        "family/doc-pane.tsx": "Evidence engine owns document hover.",
+        "grounded-doc/view/page-pane.tsx": "Page geometry synchronizes evidence blocks.",
+        "grounded-doc/view/images-pane.tsx": "Markdown images synchronize evidence blocks.",
+        "machine/notice.tsx": "Reading a notice pauses expiry.",
+        "open/bay.tsx": "Pointer chooses the file preview.",
+        "workbench/lens/peek.tsx": "Travel funnel and linger timing keep the popover reachable.",
+        "rooms/inbox.tsx": "Room GUID identity is not a numeric Revit id.",
+      }),
+    ], cannotSee: "Event aliases, hit-test correctness and computed paint." },
+  { id: "kit-reach-block", doctrine: "N7", pattern: /:hover/g,
+    roots: [K + "**/*.css"], select: "reach", allow: [], cannotSee: "Cascade precedence and runtime reach transitions." },
+  { id: "t-prose-ratchet", doctrine: "I6", pattern: /\bt-prose\b/g,
+    roots: [W + "**/*.{ts,tsx}"], asOf: "2026-10-23",
+    exclude: [W + "{doc,docs,guide,tutorial,help,chat}/**"],
+    allow: allow({
+      "routes/duct-loss.tsx": "Input labels, measured values, headings and equations name the calculation.",
+      "duct/charts.tsx": "Caption labels the plotted law.",
+      "components/work/band.tsx": "Recovery receipts, write conflicts and staged tallies support a decision.",
+      "route/situation-verbs.tsx": "Outcomes and refusals disclose effects before a write.",
+      "route/situation-grids.tsx": "Ledger values and log labels name machine state.",
+      "route/schedules/stale-resolve.tsx": "Readback failure explains recovery before overwrite.",
+      "workbench/moments.tsx": "Reader opens reasoning or a chat rendering failure.",
+      "workbench/world/lane.tsx": "Reader explicitly expands a tool-result payload.",
+      "route/help.tsx": "Tutorial body explains the route.",
+      "route/flow.tsx": "Reader opens runtime relation inspection.",
+      "route/situation-lamp.tsx": "Reader opens state inspection.",
+      "route/situation-marks.tsx": "Reader opens state details.",
+    }), max: {
+      [W + "routes/duct-loss.tsx"]: 7,
+      [W + "duct/charts.tsx"]: 1,
+      [W + "components/work/band.tsx"]: 3,
+      [W + "route/situation-verbs.tsx"]: 2,
+      [W + "route/situation-grids.tsx"]: 1,
+      [W + "route/schedules/stale-resolve.tsx"]: 2,
+      [W + "workbench/moments.tsx"]: 2,
+      [W + "workbench/world/lane.tsx"]: 1,
+      [W + "route/help.tsx"]: 1,
+      [W + "route/flow.tsx"]: 1,
+      [W + "route/situation-lamp.tsx"]: 1,
+      [W + "route/situation-marks.tsx"]: 1,
+    }, cannotSee: "Unclassed prose and whether a sentence belongs in Tutorial." },
+  { id: "nav-list-kit", doctrine: "N3", pattern: /<ul\b|<li\b|role=["']list["']/g,
+    roots: [W + "**/*.tsx"], allow: allow({
+      "components/lang/leg-strip.tsx": "Fixed receipt-stage chips have no picks or navigation.",
+      "ducts/docs.tsx": "Tutorial prose has no row navigation.",
+      "ducts/proto/e/preview-lines.tsx": "Static proposed-change and refusal text has no picks.",
+      "lib/schema-to-field-render/field-metadata.tsx": "Static validation messages have no picks.",
+      "space/manifest.tsx": "Fixed tutorial keys describe layers and encodings.",
+    }), cannotSee: "Rows built by helpers; ListReading is the wave-4 kit reading name." },
+  { id: "list-owner", doctrine: "N4",
+    pattern: /(?:setAttribute|removeAttribute)\(\s*["']data-landed["']|onChange:\s*\(search:\s*ListSearch/g,
+    roots: [W + "**/*.{ts,tsx}"], allow: [], cannotSee: "Computed attributes; kit lang/land.ts owns arrival." },
+  { id: "slash-owner", doctrine: "N3", pattern: /hotkey:\s*["']\/["']|bindings:\s*\[\s*["']\/["']\s*\]/g,
+    roots: ["{apps,packages}/*/src/**/*.{ts,tsx}"], allow: [
+      { glob: K + "components/lang/list-view.tsx", reason: "The list/search arbiter owns slash." },
+      { glob: W + "chat/composer.tsx", reason: "Slash edits text and starts a skill menu inside the composer." },
+    ], cannotSee: "Computed bindings and key aliases; lang/go-to.tsx uses the list arbiter." },
+  { id: "native-title-hint", doctrine: "I5", pattern: /<title\b/g,
+    roots: [W + "**/*.tsx"], allow: [], cannotSee: "SVG generated by helpers or inside kit." },
+  { id: "crumb-handbuilt", doctrine: "I4", pattern: /data-e-crumb|^(?=[\s\S]*<ChevronRight\b)(?=[\s\S]*\b(?:crumb|breadcrumb)\b)/g,
+    roots: [W + "**/*.{ts,tsx}"], allow: [], cannotSee: "Other glyphs and computed breadcrumbs." },
+  { id: "scene-keys", doctrine: "N2",
+    pattern: /hotkey:\s*["']F["']|how === "gesture" \? "replace" : "push"|navigateNativeHistory|hotkey:\s*["']Alt\+Arrow/g,
+    roots: [W + "**/*.{ts,tsx}"], exclude: [W + "scene/**", W + "navigation/**"], allow: [],
+    cannotSee: "Key aliases, callback-hidden navigation and actual camera/history behavior." },
+  { id: "revit-target-attr", doctrine: "N4",
+    pattern: /\bdata-revit-ids\s*=|<[^>]*className="contents"[^>]*\{\.\.\.revit|<[^>]*\{\.\.\.revit[^>]*className="contents"/gs,
+    roots: ["{apps,packages}/*/src/**/*.{ts,tsx}"], exclude: [K + "**"],
+    allow: [], cannotSee: "Spread-built props and scope correctness; kit lang/revit-target.tsx owns declarations." },
+];
+
+const walk = (dir: string, rel = ""): string[] =>
+  readdirSync(dir, { withFileTypes: true }).flatMap((entry) => {
+    const path = rel ? `${rel}/${entry.name}` : entry.name;
+    if (entry.isDirectory())
+      return ["node_modules", ".git", ".artifacts", "dist", "dist-installed", ".output"].includes(
+        entry.name,
+      )
+        ? []
+        : walk(join(dir, entry.name), path);
+    return /\.(?:tsx?|css)$/.test(path) && !/\.test\./.test(path) ? [path] : [];
+  });
+const sources = ["apps", "packages"]
+  .flatMap((kind) =>
+    readdirSync(join(ROOT, kind)).flatMap((name) => {
+      const src = `${kind}/${name}/src`;
+      return existsSync(join(ROOT, src)) ? walk(join(ROOT, src), src) : [];
+    }),
+  )
+  .filter(
+    (path) =>
+      !/\/(?:prototypes|lab|design-system)\//.test(path) &&
+      !path.startsWith(W + "routes/design-system"),
+  );
+const bytes = new Map(sources.map((path) => [path, readFileSync(join(ROOT, path), "latin1")]));
+const matches = (path: string, globs: string[]) => globs.some((glob) => matchesGlob(path, glob));
+const selectorMatches = (classes: string, selector: string) =>
+  selector
+    .slice(1)
+    .split(/\.(?!\d)/)
+    .every((token) => classes.split(/\s+/).includes(token));
+
+it.each(RULES)("$id ($doctrine)", (rule) => {
+  const used = new Set<Allow>();
+  const violations: string[] = [];
+  let reachBlocks = 0;
+  for (const path of sources.filter(
+    (path) => matches(path, rule.roots) && !matches(path, rule.exclude ?? []),
+  )) {
+    let source = bytes.get(path)!;
+    if (rule.select === "reach") {
+      const blocks = source.match(REACH_BLOCK) ?? [];
+      reachBlocks += blocks.length;
+      if (blocks.length) {
+        expect(path).toBe(K + "components/lang/lang.css");
+        expect(blocks).toHaveLength(1);
+        for (const rung of ["rest", "reach", "hover", "focus"])
+          expect(blocks[0]).toContain(`data-reach="${rung}"`);
+      }
+      source = source.replace(REACH_BLOCK, "");
+    }
+    if (rule.select === "hover-css") source = source.replace(/\/\*[\s\S]*?\*\//g, "");
+    const values =
+      rule.select === "classes"
+        ? [...source.matchAll(/\bclassName=["']([^"']*)["']/g)].map((m) => m[1]!)
+        : rule.select === "hover-css"
+          ? [...source.matchAll(/([^{}]+)\{([^{}]*)\}/g)]
+              .filter((m) => /:(?:hover|focus(?:-visible|-within)?)/.test(m[1]!))
+              .map((m) => m[2]!)
+          : [source];
+    const hits = values.flatMap((value) => [...value.matchAll(rule.pattern)].map(() => value));
+    let allowed = 0;
+    for (const hit of hits) {
+      const entry = rule.allow.find(
+        (entry) =>
+          matchesGlob(path, entry.glob) &&
+          (!entry.selector || selectorMatches(hit, entry.selector)),
+      );
+      if (entry) {
+        used.add(entry);
+        allowed++;
+      } else violations.push(path);
+    }
+    if (rule.max?.[path] !== undefined && allowed > rule.max[path]!)
+      violations.push(`${path}: ${allowed} > ${rule.max[path]} (${rule.asOf})`);
+  }
+  if (rule.select === "reach") expect(reachBlocks).toBe(1);
+  const stale = rule.allow.filter((entry) => !used.has(entry)).map((entry) => entry.glob);
+  expect(
+    { violations, stale },
+    `${rule.id} / ${rule.doctrine}: cannot see ${rule.cannotSee}`,
+  ).toEqual({ violations: [], stale: [] });
+});

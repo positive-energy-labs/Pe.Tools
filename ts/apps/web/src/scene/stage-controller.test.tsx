@@ -21,6 +21,7 @@ it("selecting only changes the pivot; F frames at release; Escape clears and kee
   const view = renderHook(
     ({ selectedBounds }: { selectedBounds: Bounds | null }) =>
       useStage({
+        goTo: null,
         kind: "orbit",
         orbit,
         bounds: { scene, subject: scene },

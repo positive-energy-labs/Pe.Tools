@@ -11,7 +11,7 @@ import { useLayoutEffect, useRef, useState, type ReactNode } from "react";
 import { useScopeKeys, useScopeLive, type Chord, type ScopeKey } from "@pe/kit/keys";
 import { Button } from "@pe/kit/lang/button";
 import { ButtonGroup } from "./button-group";
-import { Popover, PopoverContent, PopoverTrigger } from "@pe/kit/lang/popover";
+import { Popover, PopoverContent, PopoverTrigger } from "./popover-internal";
 
 import type { FloaterSpec } from "./floater";
 import { Switcher } from "@pe/kit/lang/switcher";

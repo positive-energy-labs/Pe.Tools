@@ -240,10 +240,36 @@ export function RoomsPlan({
     return { frame, width, height, shapes, fit, pxPerFt: Math.abs(fx - ox) };
   }, [bounds, rows, plan]);
 
+  const picked = world?.shapes.filter((shape) => selected.has(shape.region.guid)) ?? [];
+  const readout = picked.length ? (
+    <PictureReadout
+      title={
+        picked.length === 1
+          ? [
+              picked[0]!.label,
+              picked[0]!.region.name && picked[0]!.region.name !== picked[0]!.label
+                ? picked[0]!.region.name
+                : null,
+              picked[0]!.region.type,
+            ]
+              .filter(Boolean)
+              .join(" · ")
+          : `${picked.length} regions`
+      }
+      onClear={() => onSelect(null, false)}
+    >
+      <span className="face-mono whitespace-nowrap" data-rooms-readout="">
+        {picked.length === 1
+          ? `${picked[0]!.state} · ${picked[0]!.region.role} · ${picked[0]!.region.sqft.toFixed(0)} sf`
+          : `${picked.map((shape) => shape.label).join(", ")} · ${picked.reduce((sf, shape) => sf + shape.region.sqft, 0).toFixed(0)} sf`}
+      </span>
+    </PictureReadout>
+  ) : null;
   const viewport = usePlaneViewport(
     page.viewport,
     world?.fit ?? null,
     stageViewport<PlaneViewport>(setPage),
+    readout,
   );
   const {
     setHost,
@@ -264,9 +290,15 @@ export function RoomsPlan({
     [world],
   );
   const map = usePlanMap(view, move, world, size, mapShapes, plan);
-  const pane = {
-    title: "plan",
-    actions: (
+  const selectedPoints =
+    world?.shapes
+      .filter((shape) => selected.has(shape.region.guid))
+      .flatMap((shape) => [
+        [shape.box.minX, shape.box.minY] as const,
+        [shape.box.maxX, shape.box.maxY] as const,
+      ]) ?? [];
+  const stage = useStage({
+    goTo: (
       <GoToPopup
         items={() =>
           rows.map((row) => ({
@@ -287,6 +319,19 @@ export function RoomsPlan({
         }}
       />
     ),
+    kind: "plane",
+    host,
+    viewport,
+    bounds: world?.fit ?? null,
+    selectedBounds: selectedPoints.length ? boundsOf(selectedPoints) : null,
+    clearSelection: () => {
+      if (selected.size) onSelect(null, false);
+    },
+  });
+
+  const pane = {
+    title: "plan",
+    actions: stage.goTo,
     meta:
       [page.view, fixture ? "fixture · no Revit capture" : null].filter(Boolean).join(" · ") ||
       undefined,
@@ -324,25 +369,6 @@ export function RoomsPlan({
     zoomed.current = zoomKey;
     move(to, "move");
   }, [world, size, zoomKey, zoomTo, move]); // eslint-disable-line react-hooks/exhaustive-deps
-
-  const selectedPoints =
-    world?.shapes
-      .filter((shape) => selected.has(shape.region.guid))
-      .flatMap((shape) => [
-        [shape.box.minX, shape.box.minY] as const,
-        [shape.box.maxX, shape.box.maxY] as const,
-      ]) ?? [];
-  useStage({
-    kind: "plane",
-    host,
-    viewport,
-    bounds: world?.fit ?? null,
-    selectedBounds: selectedPoints.length ? boundsOf(selectedPoints) : null,
-    clearSelection: () => {
-      if (selected.size) onSelect(null, false);
-    },
-  });
-  const picked = world?.shapes.filter((shape) => selected.has(shape.region.guid)) ?? [];
 
   // The lease's one key is the viewport (`roomsAddress.agent`); the rest stays the person's.
   useRouteLease("rooms", [page, setPage], {
@@ -466,7 +492,7 @@ export function RoomsPlan({
 
   if (empty || !world)
     return (
-      <Pane {...pane} legend={legend}>
+      <Pane picture {...pane} legend={legend}>
         {notice}
         <div className="flex flex-1 items-center justify-center px-4">
           <EmptyState
@@ -492,7 +518,7 @@ export function RoomsPlan({
   const font = CALLOUT_FONT_PX;
 
   return (
-    <Pane {...pane} legend={legend}>
+    <Pane picture {...pane} legend={legend}>
       {notice}
       <div
         ref={setHost}
@@ -648,32 +674,7 @@ export function RoomsPlan({
         ) : null}
         {geo && overlay ? overlay(geo) : null}
         {/* Surfaces over the plan claim their own pointer: a press on them never pans. */}
-        <div onPointerDown={(e) => e.stopPropagation()}>
-          {picked.length ? (
-            <PictureReadout
-              title={
-                picked.length === 1
-                  ? [
-                      picked[0]!.label,
-                      picked[0]!.region.name && picked[0]!.region.name !== picked[0]!.label
-                        ? picked[0]!.region.name
-                        : null,
-                      picked[0]!.region.type,
-                    ]
-                      .filter(Boolean)
-                      .join(" · ")
-                  : `${picked.length} regions`
-              }
-              onClear={() => onSelect(null, false)}
-            >
-              <span className="face-mono whitespace-nowrap" data-rooms-readout="">
-                {picked.length === 1
-                  ? `${picked[0]!.state} · ${picked[0]!.region.role} · ${picked[0]!.region.sqft.toFixed(0)} sf`
-                  : `${picked.map((shape) => shape.label).join(", ")} · ${picked.reduce((sf, shape) => sf + shape.region.sqft, 0).toFixed(0)} sf`}
-              </span>
-            </PictureReadout>
-          ) : null}
-        </div>
+        <div onPointerDown={(e) => e.stopPropagation()}>{viewport.readout}</div>
       </div>
     </Pane>
   );

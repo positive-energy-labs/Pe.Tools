@@ -5,7 +5,7 @@ import { Tooltip, TooltipTrigger, TooltipContent } from "@pe/kit/lang/tooltip";
 import {
   Popover,
   PopoverTrigger,
-  PopoverContent,
+  SubjectPopoverContent as PopoverContent,
   PopoverTitle,
   PopoverDescription,
   PopoverClose,

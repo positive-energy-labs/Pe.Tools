@@ -1,4 +1,4 @@
-import { useReachState, reachProps, type ReachStore } from "./reach";
+import { useReachState, reachProps, type reachStore } from "./reach";
 /** Subject prose names elements with the picture's shared footnote marks. Hovering the block
  * lights all its Subjects; focus narrows to one; pressing calls the route's alias-click (`go`).
  * The route supplies `nameOf`; `refProps` binds each token to its Revit element menu.
@@ -71,7 +71,7 @@ export const useSubjectLighting = () =>
 export type SubjectTextScope = {
   nameOf: (id: number) => string | null;
   /** Omit on a route with no picture: nothing lights, tokens still name and number. */
-  reach?: ReachStore;
+  reach?: ReturnType<typeof reachStore>;
   /** Badges for `references`; `ids` tints further elements the text stands for but does not name. */
   light?: (
     references: readonly SubjectReference[],

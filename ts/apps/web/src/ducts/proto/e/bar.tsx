@@ -30,7 +30,12 @@ import { assignFamilyRule } from "./rule-assignment";
 import { barRows, ruleConditions, selectedBarRow, type BarRow } from "./bar-model";
 import { fanLoad } from "@pe/ducts-domain/fan-headroom";
 import type { Provisional } from "@pe/ducts-domain/losses";
-import { Popover, PopoverContent, PopoverTrigger, usePopoverSide } from "@pe/kit/lang/popover";
+import {
+  Popover,
+  SubjectPopoverContent as PopoverContent,
+  PopoverTrigger,
+  usePopoverSide,
+} from "@pe/kit/lang/popover";
 import { revitTarget } from "@pe/kit/lang/row";
 import type { ListRowParts } from "@pe/kit/lang/list-view";
 import { tokenRef } from "@pe/kit/lib/token";

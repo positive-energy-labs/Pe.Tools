@@ -1,6 +1,11 @@
 import { useRef } from "react";
 import { Popover as Primitive } from "@base-ui/react/popover";
-import { Popover, PopoverTrigger, PopoverContent, type PopoverContentProps } from "./popover";
+import {
+  Popover,
+  PopoverTrigger,
+  PopoverContent,
+  type PopoverContentProps,
+} from "./popover-internal";
 
 // PreviewCard intentionally hides its body from keyboard and assistive technology.
 // Interactive previews use Popover's hover path and retain its click/keyboard path.

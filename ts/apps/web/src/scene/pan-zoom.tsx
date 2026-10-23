@@ -12,22 +12,26 @@ export function restingView(content: Viewport2, box: Viewport2): PlaneViewport {
 }
 
 export function PanZoom({
+  readout,
   content,
   children,
   className = "",
 }: {
   /** The content's own size in px. */
+  readout: ReactNode;
   content: Viewport2;
   children: ReactNode;
   className?: string;
 }) {
   const [own, setOwn] = useState<PlaneViewport | null>(null);
-  const { setHost, view, handlers, dragging, dragDistance } = usePlaneViewport(
-    own,
-    null,
-    setOwn,
-    (size) => restingView(content, size),
-  );
+  const {
+    setHost,
+    view,
+    handlers,
+    dragging,
+    dragDistance,
+    readout: dock,
+  } = usePlaneViewport(own, null, setOwn, readout, (size) => restingView(content, size));
   return (
     <div
       ref={setHost}
@@ -51,6 +55,7 @@ export function PanZoom({
       >
         {children}
       </div>
+      {dock}
     </div>
   );
 }
