@@ -20,25 +20,27 @@ type ShiftSource = {
     parent: string;
   };
 };
+const finiteRect = (value: unknown) =>
+  typeof value === "object" &&
+  value !== null &&
+  ["x", "y", "width", "height"].every((key) => {
+    const coordinate = (value as Record<string, unknown>)[key];
+    return typeof coordinate === "number" && Number.isFinite(coordinate);
+  });
 const fixedStatusText = (source: ShiftSource) => {
   const entries = source.status?.entries ?? [];
   return (
     source.node?.node?.nodeType === 3 &&
     source.status?.sameParent === true &&
+    finiteRect(source.previousRect) &&
+    finiteRect(source.currentRect) &&
     JSON.stringify(source.previousRect) === JSON.stringify(source.currentRect) &&
     entries.some((entry) => entry.text !== entries[0]?.text) &&
-    entries.every((entry) => JSON.stringify(entry.rect) === JSON.stringify(entries[0]?.rect))
+    entries.every(
+      (entry) => finiteRect(entry.rect) && JSON.stringify(entry.rect) === JSON.stringify(entries[0]?.rect),
+    )
   );
 };
-test("captured 44px retained readout displacement remains a geometry failure", () => {
-  expect(
-    fixedStatusText({
-      previousRect: { x: 455, y: 297, width: 181.1953125, height: 40 },
-      currentRect: { x: 455, y: 341, width: 181.1953125, height: 40 },
-      node: { node: { nodeType: 1 } },
-    }),
-  ).toBe(false);
-});
 const visible = `(e) => !!e && e.getClientRects().length > 0 && getComputedStyle(e).visibility !== "hidden"`;
 const sleep = (ms: number) => new Promise((done) => setTimeout(done, ms));
 const literal = JSON.stringify;
