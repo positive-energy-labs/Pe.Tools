@@ -209,7 +209,9 @@ export function MasterTableBody<Row extends RowData>({
   // with spacer rows holding the scroll extent so the native table layout keeps its column widths.
   // The focused and active rows stay drawn when scrolled away, so focus and keys never fall to the
   // page. ponytail: 60 is ListView's cut; a short grid draws every row and measures nothing.
-  const virtualized = visibleRows.length >= VIRTUAL_FROM && scroller != null;
+  // Virtual from the first render: drawing every row until the scroller is known laid out the
+  // whole grid once (374 ms for 2000 rows, production bundle).
+  const virtualized = visibleRows.length >= VIRTUAL_FROM;
   const [margin, setMargin] = useState(0);
   const [headroom, setHeadroom] = useState(0);
   useLayoutEffect(() => {
@@ -276,11 +278,16 @@ export function MasterTableBody<Row extends RowData>({
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [activeKey]);
 
-  // One stable select for every row: an arrow per row per render broke the row memo, and a
-  // virtual body renders on every scroll frame.
-  const selectRef = useRef(onSelect);
-  selectRef.current = onSelect;
-  const select = useCallback((key: string, range: boolean) => selectRef.current?.(key, range), []);
+  // Stable handlers for every row: a caller's inline arrow (or a per-row one) broke the row memo,
+  // so one click redrew every drawn row, and a virtual body renders on every scroll frame.
+  const handlers = useRef({ onSelect, onRowClick, onRowHover });
+  handlers.current = { onSelect, onRowClick, onRowHover };
+  const select = useCallback(
+    (key: string, range: boolean) => handlers.current.onSelect?.(key, range),
+    [],
+  );
+  const rowClick = useCallback((row: Row) => handlers.current.onRowClick?.(row), []);
+  const rowHover = useCallback((row: Row | null) => handlers.current.onRowHover?.(row), []);
   // Memoized rows keep the first `moveFrom` they were drawn with, so it reads today's grid here.
   const grid = useRef({ tbody, count: visibleRows.length, virtualized, virtual });
   grid.current = { tbody, count: visibleRows.length, virtualized, virtual };
@@ -445,9 +452,9 @@ export function MasterTableBody<Row extends RowData>({
               refusal={refusalOf?.(key)}
               activeRowRef={activeRowRef}
               className={cn("veil h-(--item-h) scroll-mt-12", rowClassName?.(tableRow.original))}
-              onRowClick={onRowClick}
+              onRowClick={onRowClick ? rowClick : undefined}
               onSelect={onSelect ? select : undefined}
-              onRowHover={onRowHover}
+              onRowHover={onRowHover ? rowHover : undefined}
               columns={columnByKey}
               draft={draft}
               entry={at === 0}
