@@ -60,7 +60,7 @@ import type { ProtoProps } from "../props";
 import { DEFAULT_DESIGN_FRICTION_RATE } from "@pe/ducts-domain/equivalent-length";
 import { BarRules, systemIssues, systemRowParts } from "./bar";
 import { DuctSettings } from "./settings";
-import { FanFacts, fanFacts } from "./fan-sections";
+import { FanFacts, fanFacts, type FanFact } from "./fan-sections";
 import { ECanvas, OpeningContext } from "./canvas";
 import { grilleLabels } from "./labels";
 import { FanButton, Inbox, type FanVerbs } from "./inbox";
@@ -682,9 +682,8 @@ function EScreenBody({ props }: { props: ProtoProps }) {
     >
       <SystemsList
         systems={systems}
-        fansOf={(system) => (
-          <FanFacts facts={fanFacts(priced, system.groups, nameOf)} nameOf={nameOf} />
-        )}
+        fansOf={(system) => fanFacts(priced, system.groups, nameOf)}
+        nameOf={nameOf}
         needsFix={needsFix}
         drawn={drawn}
         page={page}
@@ -973,14 +972,16 @@ function EScreenBody({ props }: { props: ProtoProps }) {
 function SystemsList({
   systems,
   fansOf,
+  nameOf,
   needsFix,
   drawn,
   page,
   setPage,
 }: {
   systems: ReturnType<typeof systemList>;
-  /** The system's fans, the head of its breakdown popover. */
-  fansOf: (system: ReturnType<typeof systemList>[number]) => ReactNode;
+  /** The system's fans: its hover hint and the head of its breakdown popover. */
+  fansOf: (system: ReturnType<typeof systemList>[number]) => FanFact[];
+  nameOf: (id: number) => string;
   needsFix: ReadonlySet<string>;
   drawn: ProtoProps["snapshot"];
   page: ProtoProps["page"];
@@ -1064,14 +1065,16 @@ function SystemsList({
       list={systemListView}
       primary
       estimate={LIST_ROW_PX}
-      row={(system) =>
-        systemRowParts(
+      row={(system) => {
+        const fans = fansOf(system);
+        return systemRowParts(
           system,
           () => setPage({ system: system.key, selected: "", issue: "" }),
           needsFix.has(system.key),
-          () => fansOf(system),
-        )
-      }
+          fans.map((f) => `${nameOf(f.unit)} ${f.role}: ${f.says}`),
+          () => <FanFacts facts={fans} nameOf={nameOf} />,
+        );
+      }}
       empty={{
         message: "No duct systems in this scope",
         exit: "Read a model containing duct systems",

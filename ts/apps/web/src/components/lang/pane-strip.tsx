@@ -3,7 +3,8 @@
  * toggle buttons that show open or closed, layers as toggle chips. Every option's chord binds
  * through `useScopeKeys` on the pane's own scope node, so Help lists it; a hidden pane binds none.
  * When the header's trail overflows, the strip folds: layers into one popover, then floaters into
- * one, then mode labels to their first letter. Chords bind the same folded or not.
+ * one, then mode labels to their first letter, and last the trail drops under the title (pane.css),
+ * so a breadcrumb title is never cut to a letter. Chords bind the same folded or not.
  */
 import { useLayoutEffect, useRef, useState, type ReactNode } from "react";
 
@@ -40,29 +41,28 @@ export interface PaneStripProps {
   layers?: PaneLayers;
 }
 
-/** 0 whole; 1 layers folded; 2 floaters folded too; 3 mode labels shortened too. */
-const FOLDS = 3;
+/** 0 whole; 1 layers folded; 2 floaters folded too; 3 mode labels shortened too; 4 on its own line. */
+const FOLDS = 4;
 
-/** A title cut shorter than this many controls' heights folds the strip another step. */
-const TITLE_FLOOR = 4;
+/** The title lane must keep this many controls' heights (about a three-part breadcrumb). */
+const TITLE_ROOM = 7;
 
-/** True while the trail overflows, or the title is cut short of both its text and its floor. */
+/**
+ * True while the trail overflows, or the title's lane is narrower than its room. The lane is the
+ * rail's flexible lead, so the test reads the pane's width and never the title's text: picking an
+ * element with a long name cannot refold the header under the person's pointer.
+ */
 function crowded(strip: HTMLElement) {
   const trail = strip.closest<HTMLElement>("[data-slot='rail-actions']") ?? strip.parentElement;
-  const title = strip
-    .closest("[data-slot='rail']")
-    ?.querySelector<HTMLElement>("[data-slot='pane-title']");
-  const floor =
-    title && parseFloat(getComputedStyle(title).getPropertyValue("--control-h")) * TITLE_FLOOR;
-  // A title whose parts truncate on their own (a breadcrumb) is cut even when the heading is not.
-  const cut =
-    title != null &&
-    [title, ...title.querySelectorAll<HTMLElement>("*")].some(
-      (part) => part.scrollWidth > part.clientWidth,
-    );
+  const rail = strip.closest<HTMLElement>("[data-slot='rail']");
+  const lane = rail?.querySelector<HTMLElement>("[data-slot='rail-lead']");
+  const title = lane?.querySelector<HTMLElement>("[data-slot='pane-title']");
+  const room = title
+    ? parseFloat(getComputedStyle(title).getPropertyValue("--control-h")) * TITLE_ROOM
+    : 0;
   return (
     (trail != null && trail.scrollWidth > trail.clientWidth) ||
-    (cut && title!.clientWidth < (floor || 0))
+    (lane != null && lane.clientWidth < room)
   );
 }
 
@@ -70,14 +70,20 @@ function crowded(strip: HTMLElement) {
 function useFold() {
   const ref = useRef<HTMLDivElement>(null);
   const [fold, setFold] = useState(0);
-  // ponytail: content changes (a longer title) only fold further; unfolding waits for a resize.
+  // Folding reads widths only (`crowded`), so a new title never refolds; a width change starts over.
   useLayoutEffect(() => {
     if (ref.current && fold < FOLDS && crowded(ref.current)) setFold(fold + 1);
   });
   useLayoutEffect(() => {
     const rail = ref.current?.closest("[data-slot='rail']");
     if (!rail || typeof ResizeObserver === "undefined") return;
-    const observer = new ResizeObserver(() => setFold(0));
+    // Width only: the last fold changes the rail's height, which must not unfold it again.
+    let width = rail.clientWidth;
+    const observer = new ResizeObserver(() => {
+      if (rail.clientWidth === width) return;
+      width = rail.clientWidth;
+      setFold(0);
+    });
     observer.observe(rail);
     return () => observer.disconnect();
   }, []);

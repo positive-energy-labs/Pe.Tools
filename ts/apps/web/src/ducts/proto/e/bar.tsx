@@ -293,7 +293,9 @@ export function systemRowParts(
   s: ReturnType<typeof systemList>[number],
   open: () => void,
   needsFix = false,
-  /** The popover's head (the system's fans), built only while it is open. */
+  /** The system's fans in words: the row's hover hint carries them. */
+  fans: readonly string[] = [],
+  /** The popover's head (the same fans as a table), built only while it is open. */
   head?: () => ReactNode,
 ): ListRowParts {
   const issues = systemIssues({ ...s, needsFix });
@@ -305,6 +307,7 @@ export function systemRowParts(
     s.total == null
       ? null
       : `fan static Pe computes ${s.total.toFixed(3)} in-wg${s.rating != null ? ` of the unit's rated ${s.rating.toFixed(2)}` : ""}`,
+    ...fans,
   ]
     .filter(Boolean)
     .join("\n");

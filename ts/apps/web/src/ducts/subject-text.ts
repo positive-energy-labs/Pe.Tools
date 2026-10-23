@@ -39,7 +39,8 @@ export function subjectNamer(snapshot: DuctSnapshot) {
     if (!node) return fallback(id);
     const mark = node.label || node.facts.find((f) => f.key === "mark")?.text;
     const kind = node.kind === "terminal" ? "grille" : node.partType?.toLowerCase() || node.kind;
-    if (mark) return `${mark} ${kind}`;
+    // A unit's tag already says what it is (FC-15); a tagged part still says its kind (RV-6 grille).
+    if (mark) return node.kind === "equipment" ? mark : `${mark} ${kind}`;
     const port = node.connectors[0];
     const inches = (n: number) => Math.round(n * 100) / 100;
     const size =
