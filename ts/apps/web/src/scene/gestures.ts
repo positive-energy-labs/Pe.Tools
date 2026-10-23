@@ -16,7 +16,7 @@
  * Revit itself is Shift+middle-drag to orbit; here middle-drag pans and left-drag orbits, matching
  * Autodesk Viewer, Fusion 360 (orbit on the primary drag, pan on a modifier) and every web viewer.
  */
-import type { PointerKind, ScopeGesture } from "@pe/kit/keys";
+import type { ScopeGesture } from "@pe/kit/keys";
 import type { PlaneViewport } from "./plane";
 import { clampZoom, zoomPlane } from "./plane";
 
@@ -124,8 +124,6 @@ export const PLANE_GESTURES: readonly ScopeGesture[] = [
   { pointer: "double-click", label: "fit the picture" },
   SELECT,
 ];
-
-export type { PointerKind };
 
 /** A spatial surface owns wheel, browser pinch and touch; none escape to the page. */
 export function captureGestures(

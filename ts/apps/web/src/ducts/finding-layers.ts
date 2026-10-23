@@ -42,7 +42,7 @@ type Element = DuctSnapshot["nodes"][number] | DuctSnapshot["segments"][number];
 type Connector = Element["connectors"][number];
 
 /** An oriented box or cylinder: unit axes and half sizes along each (a cylinder's third axis is its run, the first two its radius). */
-export interface OrientedBox {
+interface OrientedBox {
   finding: string;
   elementId: number;
   shape: "box" | "cylinder";

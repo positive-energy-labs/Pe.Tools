@@ -25,7 +25,7 @@ export interface Split {
 }
 
 /** Whether a breakdown group is also split by size. A choice, off: 12" and 8" of one duct type share a group. */
-export const BREAKDOWN_BY_SIZE = false;
+const BREAKDOWN_BY_SIZE = false;
 
 /** A path's rows dealt to the three parts by what each row prices, and to groups by what each row is. */
 export function splitOf(

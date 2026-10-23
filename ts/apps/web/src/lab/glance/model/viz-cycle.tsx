@@ -6,7 +6,7 @@ import { TooltipHint } from "@pe/kit/lang/tooltip";
 
 const VIZ_CYCLE: VizIndex[] = [1, 2, 3, 4, 5, 6];
 
-export function categoryViz(name: string, index: number): VizIndex {
+function categoryViz(name: string, index: number): VizIndex {
   const n = name.toLowerCase();
   if (/mechanical|duct|air|hvac|flex/.test(n)) return 2;
   if (

@@ -14,7 +14,7 @@ export type PictureBounds = { scene: Bounds; subject: Bounds };
  * subject itself fills at most about half the frame, so one fitting is never a 400x close-up. */
 const CONTEXT_FT = 18;
 const CONTEXT_GROW = 2;
-export const inContext = (b: Bounds): Bounds => {
+const inContext = (b: Bounds): Bounds => {
   const grow = (lo: number, hi: number) =>
     (Math.max(CONTEXT_FT, (hi - lo) * CONTEXT_GROW) - (hi - lo)) / 2;
   const [x, y, z] = [grow(b.minX, b.maxX), grow(b.minY, b.maxY), grow(b.minZ, b.maxZ)];

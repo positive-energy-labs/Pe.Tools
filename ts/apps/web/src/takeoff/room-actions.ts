@@ -24,12 +24,5 @@ export const decideReason = (live: boolean, room: ModelRoom, verb: Verdict, flag
     : (decisionRefusal(room, flag) ??
       `Records the ${verb} in this document's authored Takeoffs Work`);
 
-export const hostReason = (
-  live: boolean,
-  busy: string | null,
-  does: string,
-  onFixture: string,
-): string => (!live ? onFixture : busy !== null ? `${busy} is in flight` : does);
-
 export const PLAN_MIN_SQFT = 60;
 export const onPlan = (zone: ModelZone) => zone.zone.declaredSqft >= PLAN_MIN_SQFT;

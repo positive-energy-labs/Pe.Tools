@@ -96,7 +96,7 @@ export type LiveOrbit = ReturnType<typeof createLiveOrbit>;
 const flights = new WeakMap<LiveOrbit, OrbitGesture>();
 /** True while a flight owns the camera. Views that cost a React render per frame (the DOM
  * annotation layer) hold their last pose until `notify` at the landing or interruption. */
-export const isFlying = (orbit: LiveOrbit) => orbit.owns(flights.get(orbit) ?? null);
+const isFlying = (orbit: LiveOrbit) => orbit.owns(flights.get(orbit) ?? null);
 const easeInOut = (t: number) => (t < 0.5 ? 4 * t ** 3 : 1 - (-2 * t + 2) ** 3 / 2);
 const easeOut = (t: number) => 1 - (1 - t) ** 3;
 const turn = (from: number, to: number) => ((to - from + 540) % 360) - 180;
