@@ -1,18 +1,106 @@
 import * as THREE from "three";
-import type { IssueTarget, Layer3D, SceneInstance, SceneMeshes } from "./types";
+import { BEACON_LAYER, GLOW_LAYER } from "./glow";
+import { landing } from "./marks";
+import type {
+  IssueState,
+  IssueTarget,
+  Layer3D,
+  LayerFrame,
+  SceneInstance,
+  SceneMeshes,
+} from "./types";
 
-/** A blocking issue on real mesh geometry. No route or equipment-kind knowledge belongs here. */
+/** The one critical-damage hue: the only saturated colour on the stage, so it never needs a key. */
+const CORE = new THREE.Color(0xb3140a);
+const RIM = new THREE.Color(0xff5a36);
+const HOT = new THREE.Color(0xffd9c9);
+/** Seconds per heartbeat. */
+const PERIOD = 1.5;
+
+/** A lub-dub: two eased beats then rest, 0..1. Gaussian bumps, so every edge is smooth. */
+export function heartbeat(seconds: number) {
+  const p = (((seconds % PERIOD) + PERIOD) % PERIOD) / PERIOD;
+  const bump = (at: number, width: number) => Math.exp(-(((p - at) / width) ** 2));
+  return Math.min(1, bump(0.1, 0.055) + 0.55 * bump(0.27, 0.06));
+}
+
+/** Energy per rung: a resting floor that never goes dark, and how much of the beat rides on it. */
+const FLOOR: Record<IssueState, number> = { rest: 0.45, reach: 0.65, hover: 1, focus: 1.05 };
+const BEAT: Record<IssueState, number> = { rest: 0.55, reach: 0.55, hover: 0.35, focus: 0.35 };
+/** Reduced motion holds the beat at this phase. */
+const STEADY = 0.5;
+
+/** When each damage first appeared on this page: the hit flash plays once, not per rebuild. */
+const born = new Map<string, number>();
+/** The hit flash: a bright strike easing out over about half a second. */
+const flash = (age: number) => (age >= 0 && age < 0.9 ? Math.exp(-age / 0.16) : 0);
+
+const vertexShader = /* glsl */ `
+varying vec3 vNormal;
+varying vec3 vView;
+void main() {
+  vec4 mv = modelViewMatrix * vec4(position, 1.0);
+  vNormal = normalize(normalMatrix * normal);
+  vView = isOrthographic ? vec3(0.0, 0.0, 1.0) : normalize(-mv.xyz);
+  gl_Position = projectionMatrix * mv;
+}`;
+const fragmentShader = /* glsl */ `
+uniform vec3 core;
+uniform vec3 rim;
+uniform float energy;
+uniform float alpha;
+varying vec3 vNormal;
+varying vec3 vView;
+void main() {
+  // Fresnel: grazing faces (the silhouette) burn brightest, so the form reads, not a flat decal.
+  float f = pow(1.0 - abs(dot(normalize(vNormal), normalize(vView))), 2.0);
+  vec3 color = mix(core, rim, f) * (0.55 + energy * 0.75);
+  gl_FragColor = vec4(color, alpha * (0.42 + 0.58 * f));
+}`;
+
+type Uniforms = {
+  core: { value: THREE.Color };
+  rim: { value: THREE.Color };
+  energy: { value: number };
+  alpha: { value: number };
+};
+const skin = (alpha: number, xray: boolean) =>
+  new THREE.ShaderMaterial({
+    uniforms: {
+      core: { value: CORE.clone() },
+      rim: { value: RIM.clone() },
+      energy: { value: 0 },
+      alpha: { value: alpha },
+    } satisfies Uniforms,
+    vertexShader,
+    fragmentShader,
+    transparent: true,
+    depthWrite: false,
+    // The visible pass sits on the element's own faces; the x-ray pass shows it through others.
+    depthTest: !xray,
+    polygonOffset: !xray,
+    polygonOffsetFactor: -1,
+    polygonOffsetUnits: -4,
+    toneMapped: false,
+    side: THREE.DoubleSide,
+  });
+
+/** A blocking issue on real mesh geometry: a burning skin, a screen-space halo (the renderer's
+ * glow pass), a heartbeat, and a hit flash when it first appears. Steady under reduced motion. No
+ * route or equipment-kind knowledge belongs here. */
 export function damageLayer(
   meshes: SceneMeshes,
   instance: SceneInstance,
   targets: readonly IssueTarget[],
   findings: readonly string[],
 ): Layer3D {
+  const key = `damage:${instance.key}`;
   return {
-    key: `damage:${instance.key}`,
+    key,
     targets,
     findings,
     build(group) {
+      if (!born.has(key)) born.set(key, performance.now() / 1000);
       const positions = meshes.positions.slice(
         instance.firstVertex * 3,
         (instance.firstVertex + instance.vertexCount) * 3,
@@ -26,48 +114,66 @@ export function damageLayer(
       geometry.translate(-origin.x, -origin.y, -origin.z);
       geometry.computeVertexNormals();
       group.position.copy(origin);
-      const mesh = new THREE.Mesh(
+      const xray = new THREE.Mesh(geometry, skin(0.45, true));
+      xray.renderOrder = 7;
+      const face = new THREE.Mesh(geometry, skin(0.85, false));
+      face.renderOrder = 8;
+      // The halo's source: drawn only into the glow pass, never into the picture itself. Its edges
+      // ride along so a sub-pixel element at a system-wide fit still lights its halo.
+      const halo = new THREE.Mesh(
         geometry,
-        new THREE.MeshStandardMaterial({
-          color: 0x990600,
-          emissive: 0xff0800,
-          emissiveIntensity: 1,
-          transparent: true,
-          opacity: 0.4,
-          depthTest: false,
-          depthWrite: false,
-          toneMapped: false,
-          side: THREE.DoubleSide,
-        }),
+        new THREE.MeshBasicMaterial({ color: RIM, depthTest: false, side: THREE.DoubleSide }),
       );
-      mesh.renderOrder = 8;
-      const outline = new THREE.LineSegments(
+      const rim = new THREE.LineSegments(
         new THREE.EdgesGeometry(geometry, 35),
-        new THREE.LineBasicMaterial({
-          color: 0xff291a,
-          transparent: true,
-          depthTest: false,
-          depthWrite: false,
-          toneMapped: false,
-        }),
+        new THREE.LineBasicMaterial({ color: RIM, depthTest: false }),
       );
-      outline.renderOrder = 9;
-      group.add(mesh, outline);
+      // A fixed-pixel beacon at the centre: at a system-wide fit the element is a few pixels, and
+      // the halo must still be found at a glance.
+      const beacon = new THREE.Points(
+        new THREE.BufferGeometry().setAttribute(
+          "position",
+          new THREE.Float32BufferAttribute([0, 0, 0], 3),
+        ),
+        new THREE.PointsMaterial({ color: RIM, size: 9, sizeAttenuation: false, depthTest: false }),
+      );
+      for (const glow of [halo, rim]) glow.layers.set(GLOW_LAYER);
+      beacon.layers.set(BEACON_LAYER);
+      group.add(xray, face, halo, rim, beacon);
     },
-    frame(group, seconds, reducedMotion, lit) {
-      const pulse = reducedMotion ? 0.7 : (1 - Math.cos(seconds * Math.PI * 2)) / 2;
-      const mesh = group.children[0] as THREE.Mesh<
-        THREE.BufferGeometry,
-        THREE.MeshStandardMaterial
-      >;
-      const outline = group.children[1] as THREE.LineSegments<
-        THREE.BufferGeometry,
-        THREE.LineBasicMaterial
-      >;
-      mesh.material.opacity = (lit ? 0.42 : 0.18) + pulse * 0.32;
-      mesh.material.emissiveIntensity = (lit ? 1.8 : 1) + pulse;
-      outline.material.opacity = (lit ? 0.75 : 0.4) + pulse * 0.25;
-      return !reducedMotion;
+    frame(group, at: LayerFrame) {
+      const [xray, face, halo, rim, beacon] = group.children as [
+        THREE.Mesh<THREE.BufferGeometry, THREE.ShaderMaterial>,
+        THREE.Mesh<THREE.BufferGeometry, THREE.ShaderMaterial>,
+        THREE.Mesh<THREE.BufferGeometry, THREE.MeshBasicMaterial>,
+        THREE.LineSegments<THREE.BufferGeometry, THREE.LineBasicMaterial>,
+        THREE.Points<THREE.BufferGeometry, THREE.PointsMaterial>,
+      ];
+      const still = at.reducedMotion;
+      const age = at.seconds - (born.get(key) ?? -Infinity);
+      const strike = still ? 0 : flash(age);
+      const swell = still ? 0 : landing(at.landed);
+      const beat = still ? STEADY : heartbeat(at.seconds);
+      const energy = FLOOR[at.state] + BEAT[at.state] * beat + 1.6 * strike + 0.8 * swell;
+      // Pointing at it heats the rim toward white: the same hue, hotter.
+      const heat =
+        at.state === "hover" || at.state === "focus" ? 0.45 : at.state === "reach" ? 0.2 : 0;
+      for (const [skin, alpha] of [
+        [xray, 0.45],
+        [face, 0.85],
+      ] as const) {
+        const u = skin.material.uniforms as Uniforms;
+        u.energy.value = energy;
+        // Selected: the skin thins to its rim so the selection's fill and outline read through;
+        // the halo and heartbeat stay (selection never hides damage, and is never red itself).
+        u.alpha.value = at.selected ? alpha * 0.4 : alpha;
+        u.rim.value.copy(RIM).lerp(HOT, Math.min(1, heat + strike * 0.7));
+      }
+      // The glow mask is half-float: a source above 1 spreads a stronger halo.
+      halo.material.color.copy(RIM).multiplyScalar(0.5 + 0.9 * energy);
+      rim.material.color.copy(halo.material.color);
+      beacon.material.color.copy(RIM).multiplyScalar(1.2 + 1.6 * energy);
+      return !still;
     },
   };
 }

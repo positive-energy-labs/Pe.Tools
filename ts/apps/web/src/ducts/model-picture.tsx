@@ -6,7 +6,7 @@
  * over the fit of the subject's centrelines; the camera then turns by the globe only.
  */
 import { emptyListSearch } from "@pe/agent-contracts";
-import { useEffect, useMemo, useRef, useState, useSyncExternalStore } from "react";
+import { useContext, useEffect, useMemo, useRef, useState, useSyncExternalStore } from "react";
 
 import { useScopeGestures, useScopeKeys } from "@pe/kit/keys";
 import type { PageMove } from "#/route/manifest";
@@ -26,6 +26,8 @@ import { Scene3D } from "#/scene/scene3d";
 import type { SceneRead } from "#/scene/use-scene";
 import type { Bounds, Layer3D, SceneMeshes } from "#/scene/types";
 
+import { CaptionBounds } from "./subject-labels";
+import { SubjectTextContext } from "./subject-text-view";
 import { Annotations, type Label, type Ruling } from "./annotations";
 import type { Encoding } from "./encoding";
 import type { DuctsPage } from "./manifest";
@@ -174,7 +176,6 @@ export function ModelPicture({
   issues,
   hoveredIssue,
   onIssueHover,
-  noRuns,
   pointOf,
   issue,
   setPage,
@@ -195,12 +196,11 @@ export function ModelPicture({
   hovered: number | null;
   labels: readonly Label[];
   rulings: readonly Ruling[];
-  /** The annotated findings drawn in 3D (`finding-layers.ts`), under the same `findings` layer as the pins. */
+  /** The stage's issue marks in 3D (`finding-layers.ts`, `scene/damage.ts`), each already gated by its own picture layer. */
   findings3d: readonly Layer3D[];
   issues: readonly StageIssue[];
   hoveredIssue: string | null;
   onIssueHover: (key: string | null) => void;
-  noRuns?: Parameters<typeof Annotations>[0]["noRuns"];
   pointOf: (id: number) => readonly number[] | null;
   issue: string;
   setPage: (next: Partial<DuctsPage>, move?: PageMove<DuctsPage>) => void;
@@ -209,6 +209,7 @@ export function ModelPicture({
   onHover: (id: number | null) => void;
 }) {
   const meshes = read.meshes;
+  const subjects = useContext(SubjectTextContext);
   const pickIssue = (target: IssueTarget) => {
     setPage(
       { selected: String(target.elementId), issue: target.key, rulingSearch: emptyListSearch() },
@@ -274,6 +275,15 @@ export function ModelPicture({
   const selectedKeys = useMemo(() => keys(selected), [selected, keysOf]); // eslint-disable-line react-hooks/exhaustive-deps
   const litKeys = useMemo(() => keys(lit), [lit, keysOf]); // eslint-disable-line react-hooks/exhaustive-deps
   const isolated = layers.has("meshes") ? null : NONE;
+  const meshed = useMemo(
+    () =>
+      new Set(
+        layers.has("meshes")
+          ? (meshes?.instances.flatMap((i) => (i.revitId == null ? [] : [i.revitId])) ?? [])
+          : [],
+      ),
+    [meshes, layers.has("meshes")], // eslint-disable-line react-hooks/exhaustive-deps
+  );
 
   const move = (viewport: OrbitViewport | null) => {
     if (viewport) return flyTo(orbit, viewport, { scene: bounds?.scene });
@@ -375,7 +385,12 @@ export function ModelPicture({
           ? "no meshes: choose a system on a Revit document"
           : null;
   return (
-    <div ref={setHost} data-model-picture="" className="relative min-h-0 flex-1 overflow-hidden">
+    <div
+      ref={setHost}
+      data-model-picture=""
+      className="relative min-h-0 flex-1 overflow-hidden"
+      onPointerMove={subjects?.hold}
+    >
       {meshes && pose ? (
         <Scene3D
           className="size-full"
@@ -386,7 +401,7 @@ export function ModelPicture({
           selected={selectedKeys}
           lit={litKeys}
           isolated={isolated}
-          layers={layers.has("findings") ? findings3d : undefined}
+          layers={findings3d}
           hoveredIssue={hoveredIssue}
           focusedIssue={issue}
           onIssueHover={hoverIssue}
@@ -410,27 +425,28 @@ export function ModelPicture({
           ref={fade}
           className="pointer-events-none absolute inset-0 transition-opacity duration-150 data-flying:opacity-0"
         >
-        <Annotations
-          {...overlay}
-          scene={scene}
-          layers={layers}
-          encoding={encoding}
-          selected={selected}
-          hovered={hovered}
-          labels={labels}
-          noRuns={noRuns}
-          issues={issues}
-          hoveredIssue={hoveredIssue}
-          onIssueHover={hoverIssue}
-          onIssuePick={pickIssue}
-          rulings={rulings}
-          pointOf={pointOf}
-          issue={issue}
-          onPick={onPick}
-          onFrame={(id) => frameAt(meshes?.instances.find((i) => i.revitId === id)?.key ?? null)}
-          onRuling={onRuling}
-          onHover={onHover}
-        />
+          {/* Captions stay inside the picture: a label at the bottom edge is lifted, not clipped. */}
+          <CaptionBounds.Provider value={overlay.size}>
+            <Annotations
+              {...overlay}
+              scene={scene}
+              layers={layers}
+              encoding={encoding}
+              selected={selected}
+              hovered={hovered}
+              labels={labels}
+              meshed={meshed}
+              issues={issues}
+              onIssueHover={hoverIssue}
+              rulings={rulings}
+              pointOf={pointOf}
+              issue={issue}
+              onPick={onPick}
+              onFrame={(id) => frameAt(meshes?.instances.find((i) => i.revitId === id)?.key ?? null)}
+              onRuling={onRuling}
+              onHover={onHover}
+            />
+          </CaptionBounds.Provider>
         </div>
       ) : null}
       {status ? (

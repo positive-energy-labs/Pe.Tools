@@ -56,13 +56,25 @@ export class SceneMeshes {
  * `build` draws in world coordinates (host feet); the group is disposed when the key leaves or
  * the layer object is replaced. */
 export type IssueTarget = { key: string; elementId: number };
+/** Where an issue mark stands, weakest first: the pointer within reach (about 24 px), over it, or
+ * the issue open (picked here or in the inbox). */
+export type IssueState = "rest" | "reach" | "hover" | "focus";
+export type LayerFrame = {
+  seconds: number;
+  reducedMotion: boolean;
+  state: IssueState;
+  /** Seconds since this mark's issue became the focus; Infinity when it is not the focus. */
+  landed: number;
+  /** An element this mark stands on is selected: the mark yields its interior to the selection. */
+  selected?: boolean;
+};
 export type Layer3D = {
   key: string;
   build(group: THREE.Group): void;
   targets?: readonly IssueTarget[];
   findings?: readonly string[];
-  /** Update imperative materials; true requests another frame. */
-  frame?: (group: THREE.Group, seconds: number, reducedMotion: boolean, lit: boolean) => boolean;
+  /** Update imperative materials (uniforms only, never React); true requests another frame. */
+  frame?: (group: THREE.Group, at: LayerFrame) => boolean;
 };
 
 /** What the pointer is over: one element, and the world point the ray met it at. */

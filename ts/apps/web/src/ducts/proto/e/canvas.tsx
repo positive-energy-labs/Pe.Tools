@@ -44,7 +44,7 @@ import { PICTURE_KEYS } from "../../docs";
 import { NodeFactsView, SegmentFactsView } from "../../facts";
 import { labelOfNode, legsOf } from "../../legs";
 import { sceneRequestOf } from "../../manifest";
-import { findingLayers, findingShapes } from "../../finding-layers";
+import { findingLayers, findingShapes, noRunLayers } from "../../finding-layers";
 import {
   boundsOfIds,
   clearPose,
@@ -68,6 +68,7 @@ import { BarPopover, fmtFt, SystemMark, systemIssues } from "./bar";
 import type { Split, systemList } from "../b/model";
 import type { StageIssue } from "../../inbox-rows";
 import { damageLayer } from "#/scene/damage";
+import { LAND, LAND_EASING } from "#/scene/marks";
 import { usePictureFloaters } from "./picture-floaters";
 import { RulingBody, useMarks } from "./rulings";
 import { noRunParts } from "../../subject-text";
@@ -139,14 +140,16 @@ export interface ECanvasExtra {
 }
 
 /** The landing mark: drawn once per landing (keyed), scales in and fades while the camera is still. */
+// The alias-jump landing lands like every stage mark (`scene/marks.ts`): one ease and length, at
+// the selection outline's weight, then fades so the silhouette selection carries on.
 const flash = (node: HTMLDivElement | null) => {
   node?.animate(
     [
-      { opacity: 0.9, transform: "scale(1.35)" },
-      { opacity: 0.9, transform: "scale(1)", offset: 0.3 },
+      { opacity: 1, transform: "scale(1.35)", easing: LAND_EASING },
+      { opacity: 1, transform: "scale(1)", offset: 0.6 },
       { opacity: 0, transform: "scale(1)" },
     ],
-    { duration: 900, easing: "ease-out", fill: "forwards" },
+    { duration: (LAND * 1000) / 0.6, fill: "forwards" },
   );
 };
 
@@ -203,8 +206,8 @@ function Canvas({
   );
   const native = observation.scope?.source === "native" ? observation.scope.document : null;
   const request = useMemo(
-    () => sceneRequestOf(snapshot, page),
-    [snapshot, page.system, page.layers],
+    () => sceneRequestOf(snapshot, page, groups),
+    [snapshot, page.system, page.layers, groups],
   ); // eslint-disable-line react-hooks/exhaustive-deps
   const read = useScene(request, native, page.epoch);
   const bounds = usePictureBounds(read.meshes, scene);
@@ -330,7 +333,17 @@ function Canvas({
         : [],
     [read.meshes, issues],
   );
-  const stageLayers = useMemo(() => [...findings3d, ...damage], [findings3d, damage]);
+  // Each stage mark answers its own picture layer: no-runs to `no-run`, findings and damage to `findings`.
+  const noRunsOn = page.layers.includes("no-run");
+  const findingsOn = page.layers.includes("findings");
+  const noRuns3d = useMemo(
+    () => (noRunsOn ? noRunLayers(noRuns, snapshot, issues) : []),
+    [noRunsOn, noRuns, snapshot, issues],
+  );
+  const stageLayers = useMemo(
+    () => [...noRuns3d, ...(findingsOn ? [...findings3d, ...damage] : [])],
+    [noRuns3d, findingsOn, findings3d, damage],
+  );
   const covered = useMemo(
     () => new Set(stageLayers.flatMap((layer) => layer.findings ?? [])),
     [stageLayers],
@@ -784,7 +797,6 @@ function Canvas({
             issues={issues}
             hoveredIssue={hoveredIssue}
             onIssueHover={onIssueHover}
-            noRuns={noRuns}
             pointOf={pointOf}
             issue={page.issue}
             setPage={(next, move) => {
@@ -804,7 +816,7 @@ function Canvas({
           <div
             aria-hidden
             data-e-landed=""
-            className="pointer-events-none absolute text-ink outline outline-1 outline-current"
+            className="pointer-events-none absolute text-ink outline outline-2 outline-current"
             style={{
               left: landed.box.x - 6,
               top: landed.box.y - 6,

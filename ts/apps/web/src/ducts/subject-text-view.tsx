@@ -68,8 +68,16 @@ export const useSubjectLighting = () =>
 export const SubjectTextContext = createContext<{
   nameOf: (id: number) => string | null;
   reach: ReachStore;
-  light: (references: readonly SubjectReference[], focus: number | null, owner?: string) => void;
+  /** Badges for `references`; `ids` tints further elements the text stands for but does not name. */
+  light: (
+    references: readonly SubjectReference[],
+    focus: number | null,
+    owner?: string,
+    ids?: readonly number[],
+  ) => void;
   clear: (owner: string) => void;
+  /** The pointer is still travelling over the picture: a pending clear waits for it. */
+  hold?: () => void;
   /**
    * The one alias-click: a Subject named in text was pressed. Every Subject token on the route
    * calls this and nothing else, so the screen's "go to subject" (select it and bring it into

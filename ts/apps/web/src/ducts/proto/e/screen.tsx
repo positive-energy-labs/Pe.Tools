@@ -488,20 +488,46 @@ function EScreenBody({ props }: { props: ProtoProps }) {
     () => reach.set((state) => ({ ...state, lighting: NO_LIGHTING })),
     [reach, snapshot, page.system, page.picture],
   );
+  // Lit Subjects carried out of a text stay lit while the pointer keeps moving over the picture
+  // (`hold`), so it can reach their badges (about 500 px from the inbox on Chadds EX 19); they go
+  // dark 700 ms after it stops or leaves. Any light cancels a pending clear.
+  const clearing = useRef<{ timer?: ReturnType<typeof setTimeout>; owner?: string }>({});
+  useEffect(() => () => clearTimeout(clearing.current.timer), []);
   const clearSubjects = useCallback(
-    (owner: string) =>
-      reach.set((state) =>
-        state.lighting.owner === owner ? { ...state, lighting: NO_LIGHTING } : state,
-      ),
+    (owner: string) => {
+      clearTimeout(clearing.current.timer);
+      clearing.current = {
+        owner,
+        timer: setTimeout(() => {
+          clearing.current = {};
+          reach.set((state) =>
+            state.lighting.owner === owner ? { ...state, lighting: NO_LIGHTING } : state,
+          );
+        }, 700),
+      };
+    },
     [reach],
   );
+  const holdSubjects = useCallback(() => {
+    const { owner } = clearing.current;
+    if (owner) clearSubjects(owner);
+  }, [clearSubjects]);
   const lightSubjects = useCallback(
-    (references: readonly SubjectReference[], focus: number | null, owner?: string) =>
+    (
+      references: readonly SubjectReference[],
+      focus: number | null,
+      owner?: string,
+      ids: readonly number[] = [],
+    ) => {
+      clearTimeout(clearing.current.timer);
+      clearing.current = {};
+      const tinted = new Set(focus == null ? [...ids, ...references.map((r) => r.id)] : [focus]);
       reach.set((state) => {
         const current = state.lighting;
         const same =
           current.owner === owner &&
           current.focus === focus &&
+          current.ids.size === tinted.size &&
           current.references.length === references.length &&
           current.references.every(
             (r, i) => r.id === references[i]?.id && r.number === references[i]?.number,
@@ -511,16 +537,10 @@ function EScreenBody({ props }: { props: ProtoProps }) {
           : {
               ...state,
               hovered: null,
-              lighting: same
-                ? current
-                : {
-                    ids: new Set(focus == null ? references.map((r) => r.id) : [focus]),
-                    references,
-                    focus,
-                    owner,
-                  },
+              lighting: same ? current : { ids: tinted, references, focus, owner },
             };
-      }),
+      });
+    },
     [reach],
   );
   const setHovered = useCallback(
@@ -889,6 +909,7 @@ function EScreenBody({ props }: { props: ProtoProps }) {
         reach,
         light: lightSubjects,
         clear: clearSubjects,
+        hold: holdSubjects,
         // The one alias-click: select the subject and fly the picture to it (`jump`, canvas.tsx).
         go: (id) => select(id),
       }}

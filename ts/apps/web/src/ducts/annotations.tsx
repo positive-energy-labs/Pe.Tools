@@ -10,10 +10,9 @@ import { useContext, useMemo } from "react";
 import { revitTarget } from "@pe/kit/lang/row";
 import { token } from "@pe/kit/lib/token";
 import type { DuctFinding } from "@pe/agent-contracts";
-import type { NoRunBranch } from "@pe/ducts-domain/no-runs";
 import { observedElements, useNativeObservation } from "#/revit/observation";
 import type { IssueTarget } from "#/scene/types";
-import { issueAt, type StageIssue } from "./inbox-rows";
+import type { StageIssue } from "./inbox-rows";
 import type { Project, Size } from "#/scene/projection";
 
 import {
@@ -30,7 +29,6 @@ import type { Claim } from "./legs";
 import type { Scene } from "./scene";
 import { Caption, pathOf, SubjectLabels } from "./subject-labels";
 import { SubjectTextContext, useSubjectLighting } from "./subject-text-view";
-import { subjectDocument } from "./subject-text";
 
 export type Ruling =
   | { kind: "claim"; n: number; at: number; claim: Claim }
@@ -44,6 +42,50 @@ type Point = { x: number; y: number };
 
 const GLYPH = 4;
 const PIN = 8;
+/** A footnote chip's diameter: the kit's `.subject-badge` circle. */
+const CHIP = 18;
+/** Where a chip may sit around its element, nearest and most legible first: above, the upper
+ * diagonals, the sides, then below; then the same ring further out. */
+const RING = [
+  [0, -1],
+  [0.72, -0.72],
+  [-0.72, -0.72],
+  [1, 0],
+  [-1, 0],
+  [0.72, 0.72],
+  [-0.72, 0.72],
+  [0, 1],
+] as const;
+
+/** Chip centres for numbered anchors: each takes the first ring slot that stays inside the picture
+ * and clears every chip already placed and every anchor dot, so close connectors keep legible
+ * numbers with a leader each. Order is the anchors' order (footnote order). */
+export function placeChips(
+  anchors: readonly { x: number; y: number; n: number }[],
+  size: { width: number; height: number },
+): { x: number; y: number }[] {
+  type Box = { x0: number; y0: number; x1: number; y1: number };
+  const taken: Box[] = anchors.map((a) => ({ x0: a.x - 4, y0: a.y - 4, x1: a.x + 4, y1: a.y + 4 }));
+  const clear = (b: Box) =>
+    !taken.some((t) => b.x0 < t.x1 && t.x0 < b.x1 && b.y0 < t.y1 && t.y0 < b.y1);
+  return anchors.map((a) => {
+    const w = CHIP + 4;
+    const h = CHIP + 4;
+    let first: { x: number; y: number } | null = null;
+    for (const r of [24, 40, 58])
+      for (const [dx, dy] of RING) {
+        const x = a.x + dx * (r + (dx ? w / 2 - h / 2 : 0));
+        const y = a.y + dy * r;
+        const box = { x0: x - w / 2, y0: y - h / 2, x1: x + w / 2, y1: y + h / 2 };
+        if (box.x0 < 0 || box.y0 < 0 || box.x1 > size.width || box.y1 > size.height) continue;
+        first ??= { x, y };
+        if (!clear(box)) continue;
+        taken.push(box);
+        return { x, y };
+      }
+    return first ?? { x: a.x, y: a.y - 24 };
+  });
+}
 const HIT: React.CSSProperties = { pointerEvents: "auto", cursor: "pointer" };
 
 /** Each node kind's glyph, centred on 0,0 in screen px. */
@@ -76,11 +118,9 @@ export function Annotations({
   selected,
   hovered,
   labels,
-  noRuns,
+  meshed,
   issues = [],
-  hoveredIssue,
   onIssueHover,
-  onIssuePick,
   rulings,
   pointOf,
   issue,
@@ -97,11 +137,11 @@ export function Annotations({
   selected: ReadonlySet<number>;
   hovered: number | null;
   labels: readonly Label[];
-  noRuns?: ReadonlyMap<number, NoRunBranch>;
+  /** Element ids drawn as meshes right now; a footnote on any other element draws its centreline
+   * as a ghost, or no badge when the picture does not hold the element at all. */
+  meshed?: ReadonlySet<number>;
   issues?: readonly StageIssue[];
-  hoveredIssue?: string | null;
   onIssueHover?: (target: IssueTarget | null) => void;
-  onIssuePick?: (target: IssueTarget) => void;
   rulings: readonly Ruling[];
   /** A model point for an element: a node's point, or a segment's middle vertex. */
   pointOf: (id: number) => readonly number[] | null;
@@ -115,15 +155,6 @@ export function Annotations({
   const observation = useNativeObservation();
   const subjects = useContext(SubjectTextContext);
   const lighting = useSubjectLighting();
-  const noRunWords = (branch: NoRunBranch) =>
-    subjectDocument(
-      [branch.reasons.map((r) => r.text).join("; ")],
-      subjects?.nameOf ?? (() => null),
-    )
-      .parts.map((p) =>
-        typeof p === "string" ? p : `${p.name}${p.connector == null ? "" : ` port ${p.connector}`}`,
-      )
-      .join("");
   const target = (id: number) => {
     const t = observedElements(observation, [id]);
     return revitTarget(t.ids, t.refs);
@@ -139,24 +170,6 @@ export function Annotations({
     },
     onDoubleClick: () => onFrame(id),
   });
-  const branchIssue = (branch: NoRunBranch) =>
-    issueAt(
-      issues,
-      branch.reasons.map((r) => r.at),
-      hoveredIssue ?? issue,
-    ) ?? issueAt(issues, branch.elements, hoveredIssue ?? issue);
-  const noRunTarget = (id: number, branch: NoRunBranch) => {
-    const row = branchIssue(branch);
-    if (!row) return element(id);
-    const target = { key: row.key, elementId: id };
-    return {
-      ...element(id),
-      "data-stage-issue": row.key,
-      onMouseEnter: () => onIssueHover?.(target),
-      onMouseLeave: () => onIssueHover?.(null),
-      onClick: () => onIssuePick?.(target),
-    };
-  };
   // The heavy strings rebuild per projection, never per hover.
   const lines = useMemo(
     () =>
@@ -175,7 +188,24 @@ export function Annotations({
         : null;
   const sub = scene.subject;
   const taken = new Map<number, number>();
-  const footnotes: { x: number; y: number }[] = [];
+  // Footnote chips are placed together so each can clear the others. A badge sits on a drawn
+  // subject: its mesh, else its centreline drawn as a ghost; never on empty space.
+  const sceneSegments = new Map(scene.segments.map((f) => [f.segment.id, f.segment.polyline]));
+  const sceneNodes = new Set(scene.nodes.map((f) => f.node.id));
+  const anchored = lighting.references.flatMap((ref) => {
+    const drawn = meshed?.has(ref.id) || layers.has("centrelines");
+    const ghost = drawn ? null : sceneSegments.get(ref.id);
+    if (!drawn && !ghost && !sceneNodes.has(ref.id)) return [];
+    const p = pointOf(ref.id);
+    const xy = p && project(p);
+    return xy
+      ? [{ ref, at: { x: xy[0], y: xy[1] }, ghost: ghost ? pathOf(ghost, project) : null, drawn }]
+      : [];
+  });
+  const chips = placeChips(
+    anchored.map(({ ref, at }) => ({ ...at, n: ref.number })),
+    size,
+  ).map((chip, i) => ({ ...anchored[i]!, chip }));
 
   return (
     <svg
@@ -189,22 +219,9 @@ export function Annotations({
       {lines.map(({ facts, d, stroke }) => {
         const id = facts.segment.id;
         const back = halo(id);
-        const noRun = layers.has("no-run") ? noRuns?.get(id) : null;
-        if (!d || (!back && !noRun && !layers.has("centrelines"))) return null;
+        if (!d || (!back && !layers.has("centrelines"))) return null;
         return (
           <g key={id} data-segment={id} data-selected={selected.has(id) ? "" : undefined}>
-            {noRun ? (
-              <path
-                d={d}
-                fill="none"
-                stroke={token("viz-3")}
-                strokeWidth={branchIssue(noRun)?.key === hoveredIssue ? 8 : 5}
-                strokeLinecap="round"
-                {...noRunTarget(id, noRun)}
-              >
-                <title>No run: {noRunWords(noRun)}</title>
-              </path>
-            ) : null}
             {back ? (
               <path
                 d={d}
@@ -221,7 +238,8 @@ export function Annotations({
                   d={d}
                   fill="none"
                   stroke={stroke.ink}
-                  strokeWidth={stroke.width}
+                  // The only geometry an element has (no mesh drawn) must read, not be a hairline.
+                  strokeWidth={meshed?.has(id) ? stroke.width : Math.max(stroke.width, 3)}
                   strokeLinecap="round"
                   className={stroke.dash ? DASH_CLASS[stroke.dash] : undefined}
                 />
@@ -235,8 +253,7 @@ export function Annotations({
         const id = facts.node.id;
         const back = halo(id);
         const xy = project(facts.node.point);
-        const noRun = layers.has("no-run") ? noRuns?.get(id) : null;
-        if (!xy || (!back && !noRun && !layers.has("centrelines"))) return null;
+        if (!xy || (!back && !layers.has("centrelines"))) return null;
         const ink = encoding.nodes
           ? strokeOf(encoding, facts).ink
           : nodeInk(encoding, facts.issues);
@@ -249,12 +266,6 @@ export function Annotations({
             transform={`translate(${xy[0]} ${xy[1]})`}
           >
             {back ? <circle r={GLYPH * 2.5} fill={back} fillOpacity={0.7} /> : null}
-            {noRun ? (
-              <g {...noRunTarget(id, noRun)}>
-                <title>No run: {noRunWords(noRun)}</title>
-                <circle r={GLYPH} fill={token("viz-3")} />
-              </g>
-            ) : null}
             {layers.has("centrelines") ? (
               <g {...element(id)}>
                 <circle r={GLYPH * 2.5} fill="transparent" />
@@ -266,16 +277,13 @@ export function Annotations({
       })}
       {layers.has("labels") && sub ? <SubjectLabels sub={sub} project={project} /> : null}
       {layers.has("labels")
-        ? labels.map(({ key, at: p, text, priced }) => {
-            const xy = project(p);
-            return xy ? (
-              <g key={key} transform={`translate(${xy[0]} ${xy[1]})`} data-loss-label={text}>
-                <Caption x={8} y={14} ink={priced ? token("ink") : token("ink-2")}>
-                  {text}
-                </Caption>
-              </g>
-            ) : null;
-          })
+        ? placeLabels(labels, project).map(({ key, x, y, text, priced }) => (
+            <g key={key} data-loss-label={text}>
+              <Caption x={x} y={y} ink={priced ? token("ink") : token("ink-2")}>
+                {text}
+              </Caption>
+            </g>
+          ))
         : null}
       {layers.has("findings")
         ? rulings.map((r) => {
@@ -334,16 +342,7 @@ export function Annotations({
             );
           })
         : null}
-      {lighting.references.map((ref) => {
-        const p = pointOf(ref.id);
-        const xy = p && project(p);
-        if (!xy) return null;
-        // Close connectors share a screen point. Keep numbers legible, with a leader to each element.
-        let x = xy[0];
-        const y = xy[1] - 14;
-        const direction = x < size.width / 2 ? 1 : -1;
-        while (footnotes.some((p) => Math.hypot(p.x - x, p.y - y) < 22)) x += direction * 22;
-        footnotes.push({ x, y });
+      {chips.map(({ ref, at, chip, ghost, drawn }) => {
         const active = lighting.focus == null || lighting.focus === ref.id;
         return (
           <g
@@ -351,20 +350,94 @@ export function Annotations({
             data-subject-badge={ref.id}
             data-footnote={ref.number}
             data-emphasized={active}
-            // The kit's subject mark: the same chip the text draws after the name, lit together.
-            className="subject-badge"
-            data-lit={lighting.focus === ref.id ? "" : undefined}
             opacity={active ? 1 : 0.35}
-            transform={`translate(${x} ${y})`}
           >
-            <line x1={0} y1={0} x2={xy[0] - x} y2={xy[1] - y} stroke={token("ink-2")} />
-            <circle r={9} />
-            <text y={3.5} textAnchor="middle">
-              {ref.number}
-            </text>
+            {ghost ? (
+              <path
+                d={ghost}
+                fill="none"
+                stroke={token("ink-2")}
+                strokeWidth={3}
+                strokeLinecap="round"
+                className={DASH_CLASS.reference}
+              />
+            ) : !drawn ? (
+              <circle
+                cx={at.x}
+                cy={at.y}
+                r={6}
+                fill="none"
+                stroke={token("ink-2")}
+                strokeWidth={2}
+              />
+            ) : null}
+            {/* The leader: a cased ink line from the chip to a dot on the element. */}
+            <line
+              x1={chip.x}
+              y1={chip.y}
+              x2={at.x}
+              y2={at.y}
+              stroke={token("page")}
+              strokeOpacity={0.75}
+              strokeWidth={3.5}
+            />
+            <line
+              x1={chip.x}
+              y1={chip.y}
+              x2={at.x}
+              y2={at.y}
+              stroke={token("ink")}
+              strokeWidth={1.25}
+            />
+            <circle
+              cx={at.x}
+              cy={at.y}
+              r={2.75}
+              fill={token("ink")}
+              stroke={token("page")}
+              strokeWidth={1.5}
+            />
+            {/* The kit's subject mark: the same chip the text draws after the name, lit together.
+                Hover lights its token in the text; a press goes to the subject, as the token does. */}
+            <g
+              className="subject-badge"
+              data-lit={lighting.focus === ref.id ? "" : undefined}
+              transform={`translate(${chip.x} ${chip.y})`}
+              style={HIT}
+              onMouseEnter={() => subjects?.light(lighting.references, ref.id, lighting.owner)}
+              onMouseLeave={() => {
+                subjects?.light(lighting.references, null, lighting.owner);
+                if (lighting.owner) subjects?.clear(lighting.owner);
+              }}
+              onClick={() => subjects?.go(ref.id)}
+            >
+              <title>{`${ref.name}: go to it`}</title>
+              <circle r={CHIP / 2} />
+              <text y={3.5} textAnchor="middle">
+                {ref.number}
+              </text>
+            </g>
           </g>
         );
       })}
     </svg>
   );
+}
+
+/** Loss labels in screen px: the same words at the same place draw once (a leg total and a path
+ * total can coincide), and a label that would overprint another steps down a line. */
+export function placeLabels(labels: readonly Label[], project: Project) {
+  const placed: { key: string; x: number; y: number; text: string; priced: boolean }[] = [];
+  for (const { key, at, text, priced } of labels) {
+    const xy = project(at);
+    if (!xy) continue;
+    const x = xy[0] + 8;
+    let y = xy[1] + 14;
+    const near = (p: { x: number; y: number }) =>
+      Math.abs(p.x - x) < 6 * text.length && Math.abs(p.y - y) < 12;
+    if (placed.some((p) => p.text === text && near(p))) continue;
+    while (placed.some(near)) y += 12;
+    placed.push({ key, x, y, text, priced });
+  }
+  return placed;
 }
