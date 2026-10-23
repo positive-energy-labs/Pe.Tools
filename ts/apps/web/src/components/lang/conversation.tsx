@@ -167,11 +167,10 @@ export function Composer({
             }
           }}
         />
-        {refusal ? (
-          <div data-composer-refusal="" data-tone="caution" role="alert">
-            {refusal}
-          </div>
-        ) : null}
+        {/* Interim: reserve the existing row until control-owned Send status replaces it. */}
+        <div data-composer-refusal="" data-tone="caution" role={refusal ? "alert" : undefined}>
+          {refusal}
+        </div>
         {tools ? <div data-composer-tools="">{tools}</div> : null}
         {/* Bottom left: attach, then the pickers' marks. */}
         {attach || pickers ? (

@@ -129,6 +129,7 @@
 }
 .dl-composer-box > [data-composer-refusal] {
   grid-area: refusal;
+  min-block-size: var(--type-small-line-height);
 }
 .dl-composer-box > [data-composer-work] {
   grid-area: work;
