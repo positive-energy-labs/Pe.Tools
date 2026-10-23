@@ -11,6 +11,10 @@ import { DUCTS_LAYERS, toggleLayer } from "@pe/agent-contracts";
 import { snapshotById } from "@pe/ducts-domain/readiness";
 import { systemScope } from "@pe/ducts-domain/system-scope";
 import { Popover, PopoverContent } from "@pe/kit/lang/popover";
+import { TooltipHint } from "@pe/kit/lang/tooltip";
+import { ChevronRight } from "lucide-react";
+import { SelectionBoxButton } from "#/revit/element-menu";
+import { observedElements } from "#/revit/observation";
 import { KeyLegend } from "#/components/lang/kbd";
 import { Pane } from "#/components/lang/pane";
 import { useNativeObservation } from "#/revit/observation";
@@ -66,6 +70,8 @@ export interface ECanvasExtra {
   annotated: ReadonlySet<string>;
   /** The group's encoding: the screen owns it so the tree reads the same numbers. */
   scale: GroupEncoding;
+  /** An element's name the way the sidebar reads it (grille labels first). */
+  nameOf: (id: number) => string;
 }
 
 export function ECanvas(props: ProtoProps & ECanvasExtra) {
@@ -95,6 +101,7 @@ function Canvas({
   groups,
   lead,
   scale,
+  nameOf,
   setPage,
   onPose,
 }: ProtoProps & ECanvasExtra & { snapshot: NonNullable<ProtoProps["snapshot"]> }) {
@@ -244,14 +251,55 @@ function Canvas({
       }
     : undefined;
 
+  // The title is a breadcrumb: the system (press to clear the selection), then the picked element.
+  const pickedId =
+    page.selected && /^\d+$/.test(page.selected) && !claims.some((c) => c.id === page.selected)
+      ? Number(page.selected)
+      : null;
+  const pickedName = pickedId == null ? null : nameOf(pickedId);
+  const title =
+    systemName == null ? (
+      "picture"
+    ) : pickedName == null ? (
+      <span className="block truncate" title={systemName}>
+        {systemName}
+      </span>
+    ) : (
+      <span className="flex min-w-0 items-center gap-0.5" data-e-crumb="">
+        <TooltipHint content={`${systemName} · clear the selection`}>
+          <button
+            type="button"
+            className="min-w-0 shrink truncate"
+            aria-label={`clear the selection in ${systemName}`}
+            onClick={() => setPage({ selected: "" }, { history: "push" })}
+          >
+            {systemName}
+          </button>
+        </TooltipHint>
+        <ChevronRight aria-hidden className="size-3.5 shrink-0 text-ink-2" />
+        <span
+          className="min-w-0 truncate"
+          title={pickedName}
+          data-e-selected={pickedId ?? undefined}
+        >
+          {pickedName}
+        </span>
+      </span>
+    );
+
   return (
     <Pane
       id="e-picture"
-      title={systemName ?? "picture"}
+      title={title}
       scroll="clip"
       flush
       actions={
-        <EncodingPicker value={scale.encoding.key} onPick={(key) => setPage({ encoding: key })} />
+        <span className="inline-flex items-center gap-1">
+          {pickedId != null ? (
+            <SelectionBoxButton target={observedElements(observation, [pickedId])} />
+          ) : null}
+          <EncodingPicker value={scale.encoding.key} onPick={(key) => setPage({ encoding: key })} />
+        </span>
       }
       modes={{
         label: "picture",
