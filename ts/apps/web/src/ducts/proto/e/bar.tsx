@@ -344,8 +344,9 @@ function entriesOf(split: Split, scale: number): Entry[] {
 
 /**
  * The breakdown of one bar: the bar drawn large, every segment on a thin leader to its label
- * (group name, in-wg, share). Labels sit in a column left of the bar in bar order, and each leader
- * drops from its segment then runs left at its label's height, so no two leaders cross. Segments
+ * (group name, in-wg, share). The bar and its numbers sit on the trigger's side, the names fan away
+ * from it, and each leader drops from its segment then runs outward at its label's height; the row
+ * order follows the side so no two leaders cross. Segments
  * under 3% roll up into one "other (N)" entry whose leaders gather on its row. Tabular numerals
  * align the numbers. Hovering an entry lights its elements.
  */
@@ -360,41 +361,59 @@ function BreakdownList({
   scale: number;
   light?: Light;
   back?: readonly number[];
-  /** The hovered bar's width, px: the large bar takes it (within limits) and sits under its right edge. */
+  /** The hovered bar's width, px: the large bar takes it (within limits) and sits on the trigger's side. */
   barW: number;
 }) {
   const entries = entriesOf(split, scale);
   const rows = entries.length;
   const leader = tokenRef("ink-2");
-  // The popover's resolved side decides where the bar sits: nearest the hovered bar, so below it the
-  // bar is on top and, flipped above it, at the bottom (the labels fan away from it either way).
+  // The popover's resolved side puts the large bar on the side nearest the hovered one, its labels
+  // fanning away: top (popover above) = bar at the bottom; right of the trigger, or above/below it
+  // (left edges aligned), = bar at the left; left of the trigger = bar at the right. Row order
+  // follows the side so no two leaders cross.
   const root = useRef<HTMLDivElement>(null);
-  const [flip, setFlip] = useState(false);
+  const [side, setSide] = useState("bottom");
   useEffect(() => {
     const popup = root.current?.closest("[data-side]");
     if (!popup) return;
-    const read = () => setFlip(popup.getAttribute("data-side") === "top");
+    const read = () => setSide(popup.getAttribute("data-side") ?? "bottom");
     read();
     const watch = new MutationObserver(read);
     watch.observe(popup, { attributes: true, attributeFilter: ["data-side"] });
     return () => watch.disconnect();
   }, []);
-  const rowOf = (i: number) => (flip ? rows - 1 - i : i);
+  const flip = side === "top";
+  const barLeft = side !== "left";
+  const reversed = barLeft !== flip;
+  // Entries with a segment take the rows nearest the bar, in the order that keeps leaders apart;
+  // the ones with none (no drop: unknown) go to the far end, where no leader has to pass them.
+  const led = entries.filter((e) => e.at.length).length;
+  const bare = rows - led;
+  const rowOf = (i: number) => {
+    const e = entries[i]!;
+    if (!e.at.length) return flip ? i - led : led + (i - led);
+    const r = reversed ? led - 1 - i : i;
+    return flip ? bare + r : r;
+  };
   const edge = flip ? rows * ROW_H + 4 : -4;
-  const ordered = flip ? [...entries].reverse() : entries;
   const caption = (
     <p className="t-small text-ink-2">
       full width = <span className="face-mono text-ink">{fmt(scale)}</span> in-wg
     </p>
   );
   const barCol = Math.min(224, Math.max(128, barW));
+  const first = flip ? 1 : 2;
+  // Columns: the bar zone and its numbers sit together on the trigger's side, the names beyond.
+  const col = barLeft ? { zone: 1, wg: 2, pct: 3, name: 4 } : { name: 1, wg: 2, pct: 3, zone: 4 };
   return (
-    <div className="flex flex-col gap-1" data-e-breakdown="" data-e-flip={flip || undefined} ref={root}>
+    <div className="flex flex-col gap-1" data-e-breakdown="" data-e-side={side} data-e-flip={flip || undefined} ref={root}>
       {flip ? null : caption}
       <div
         className="grid items-center gap-x-2"
         style={{
-          gridTemplateColumns: `minmax(0,1fr) auto auto ${barCol}px`,
+          gridTemplateColumns: barLeft
+            ? `${barCol}px auto auto minmax(0,1fr)`
+            : `minmax(0,1fr) auto auto ${barCol}px`,
           gridTemplateRows: flip
             ? `repeat(${rows}, ${ROW_H}px) ${BAR_H + 4}px`
             : `${BAR_H + 4}px repeat(${rows}, ${ROW_H}px)`,
@@ -404,7 +423,7 @@ function BreakdownList({
         <span
           className="relative block"
           style={{
-            gridColumn: 4,
+            gridColumn: col.zone,
             gridRow: flip ? rows + 1 : 1,
             height: BAR_H,
             backgroundColor: tokenRef("line"),
@@ -413,34 +432,47 @@ function BreakdownList({
         >
           <SplitFill split={split} scale={scale} light={light} back={back} hint={false} />
         </span>
-        {ordered.map((e) => (
-          <div
-            key={e.key}
-            className="contents"
-            data-e-group-key={e.label}
-            title={e.title}
-            onMouseEnter={light ? () => light(e.ids) : undefined}
-            onMouseLeave={light ? () => light(back ?? null) : undefined}
-          >
-            <span className="flex min-w-0 items-baseline gap-1.5" title={e.title ?? e.label}>
-              <span className="truncate">{e.label}</span>
-              {e.unpriced > 0 ? (
-                <span className="shrink-0" data-tone="caution">
-                  {e.dp > 0 ? `+ ${e.unpriced} unpriced` : "no drop: unknown"}
-                </span>
-              ) : null}
-            </span>
-            <span className="face-mono text-ink text-right tabular-nums">
-              {e.dp > 0 ? fmt(e.dp, LOSS_PLACES) : ""}
-            </span>
-            <span className="face-mono text-ink-2 w-[4ch] text-right tabular-nums">
-              {e.dp > 0 ? `${Math.round((e.dp / scale) * 100)}%` : ""}
-            </span>
-          </div>
-        ))}
+        {entries.map((e, i) => {
+          const gridRow = first + rowOf(i);
+          return (
+            <div
+              key={e.key}
+              className="contents"
+              data-e-group-key={e.label}
+              title={e.title}
+              onMouseEnter={light ? () => light(e.ids) : undefined}
+              onMouseLeave={light ? () => light(back ?? null) : undefined}
+            >
+              <span
+                className="flex min-w-0 items-baseline gap-1.5"
+                style={{ gridColumn: col.name, gridRow }}
+                title={e.title ?? e.label}
+              >
+                <span className="truncate">{e.label}</span>
+                {e.unpriced > 0 ? (
+                  <span className="shrink-0" data-tone="caution">
+                    {e.dp > 0 ? `+ ${e.unpriced} unpriced` : "no drop: unknown"}
+                  </span>
+                ) : null}
+              </span>
+              <span
+                className="face-mono text-ink text-right tabular-nums"
+                style={{ gridColumn: col.wg, gridRow }}
+              >
+                {e.dp > 0 ? fmt(e.dp, LOSS_PLACES) : ""}
+              </span>
+              <span
+                className="face-mono text-ink-2 w-[4ch] text-right tabular-nums"
+                style={{ gridColumn: col.pct, gridRow }}
+              >
+                {e.dp > 0 ? `${Math.round((e.dp / scale) * 100)}%` : ""}
+              </span>
+            </div>
+          );
+        })}
         <svg
           className="h-full w-full overflow-visible"
-          style={{ gridColumn: 4, gridRow: `${flip ? 1 : 2} / span ${Math.max(1, rows)}` }}
+          style={{ gridColumn: col.zone, gridRow: `${first} / span ${Math.max(1, rows)}` }}
           viewBox={`0 0 100 ${Math.max(1, rows) * ROW_H}`}
           preserveAspectRatio="none"
           aria-hidden
@@ -453,7 +485,9 @@ function BreakdownList({
                 key={e.key}
                 d={[
                   ...e.at.map((x) => `M${x * 100} ${edge} V${y}`),
-                  `M${Math.max(...e.at) * 100} ${y} H0`,
+                  barLeft
+                    ? `M${Math.min(...e.at) * 100} ${y} H100`
+                    : `M${Math.max(...e.at) * 100} ${y} H0`,
                 ].join(" ")}
                 fill="none"
                 stroke={leader}
@@ -472,7 +506,7 @@ function BreakdownList({
 
 /**
  * The one breakdown popover: the bar is its trigger (hover or click), the per-group list its
- * content, aligned to the trigger's right edge so the large bar sits under (or over) the hovered
+ * content, aligned to the trigger's left edge so the large bar sits under (or over) the hovered
  * one wherever the viewport allows. Single-system strip and every all-systems row use this; the
  * content mounts only while open (Portal owns lazy mounting), so 355 rows hold 355 closed roots.
  */
@@ -512,7 +546,7 @@ export function BarPopover({
       </PopoverTrigger>
       <PopoverContent
         side="bottom"
-        align="end"
+        align="start"
         className="w-[min(36rem,var(--available-width))] p-2"
       >
         <BreakdownList split={split} scale={scale} light={light} back={back} barW={barW} />
