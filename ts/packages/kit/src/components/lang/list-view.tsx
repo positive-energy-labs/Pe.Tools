@@ -73,6 +73,7 @@ export function ListBar<T, Sort extends string>({
         label={`Search ${label}`}
         placeholder="Words, field=value, sort:name"
         primary={primary}
+        region={list.target}
       />
       <div className="flex flex-wrap items-center gap-1 px-(--item-pad-x) py-1">
         {list.facets.map((facet) => (
@@ -424,8 +425,11 @@ function pick(): Target | null {
   const all = [...targets].filter((t) => t.input());
   const active = document.activeElement;
   return (
-    all.find((t) => active && t.region()?.contains(active)) ??
-    all.find((t) => t.region()?.matches(":hover")) ??
+    all.find((t) => active && (t.region()?.contains(active) || t.input() === active)) ??
+    all.find(
+      (t) =>
+        t.region()?.matches(":hover") || t.input()?.closest("[data-list-bar]")?.matches(":hover"),
+    ) ??
     all.find((t) => t.primary) ??
     null
   );
@@ -439,6 +443,7 @@ export function ListFilter({
   label,
   placeholder,
   primary = false,
+  region,
   onEnter,
 }: {
   value: string;
@@ -451,6 +456,8 @@ export function ListFilter({
   placeholder?: string;
   /** The list `/` falls back to when the pointer and focus are over none. */
   primary?: boolean;
+  /** The list body can be separate from its filter bar. */
+  region?: HTMLElement | null;
   /** Enter in the filter. */
   onEnter?: () => void;
 }) {
@@ -458,11 +465,14 @@ export function ListFilter({
   const self = useRef<Target | null>(null);
   self.current ??= {
     input: () => input.current,
-    region: () =>
-      input.current?.closest<HTMLElement>("[data-list-view]") ?? scrollParent(input.current),
+    region: () => null,
     primary,
   };
   self.current.primary = primary;
+  self.current.region = () =>
+    region ??
+    input.current?.closest<HTMLElement>("[data-list-view]") ??
+    scrollParent(input.current);
   useEffect(() => {
     const target = self.current!;
     targets.add(target);
@@ -476,7 +486,7 @@ export function ListFilter({
       {
         hotkey: "/",
         label: "Filter the list",
-        says: "Focuses the filter of the list under the pointer, else the one with focus, else the systems list.",
+        says: "Focuses the filter of the focused list, else the list under the pointer, else the primary list.",
         callback: (event) => {
           if (pick() !== self.current) return;
           event.preventDefault();

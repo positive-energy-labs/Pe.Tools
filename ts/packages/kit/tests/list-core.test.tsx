@@ -17,7 +17,30 @@ import {
   useList,
   type ListOptions,
 } from "../src/components/lang/collection";
-import { ListView } from "../src/components/lang/list-view";
+import { ListBar, ListView } from "../src/components/lang/list-view";
+
+test("slash targets a separate filter bar from its focused list body", () => {
+  function Fixture() {
+    const list = useList({ ...options, items: items.slice(0, 2) });
+    return (
+      <>
+        <ListBar list={list} label="separate" />
+        <ListView
+          list={list}
+          bar={false}
+          aria-label="separate"
+          row={(item) => ({ label: item.name })}
+          empty={{ message: "Empty", exit: "Add a row" }}
+        />
+      </>
+    );
+  }
+  render(<Fixture />);
+  const body = screen.getByRole("listbox", { name: "separate" });
+  body.focus();
+  fireEvent.keyDown(body, { key: "/", code: "Slash" });
+  expect(document.activeElement).toBe(screen.getByRole("textbox", { name: "Search separate" }));
+});
 
 afterEach(() => {
   cleanup();
