@@ -17,7 +17,7 @@ import { ChevronDown, ChevronRight, ChevronUp } from "lucide-react";
 
 import { Minimap, MINIMAP_FROM, type MinimapRange, type MinimapMark } from "./gutter-minimap";
 import { Button } from "./button";
-import { type ListController, type ListItem } from "./collection";
+import { VIRTUAL_FROM, type ListController, type ListItem } from "./collection";
 import { EmptyState } from "./empty";
 import { useScopeGestures, useScopeKeys, useScopeLive } from "../../keys";
 import { OutcomeLine } from "./outcome";
@@ -159,14 +159,16 @@ function ListRenderer<T, Sort extends string>(props: ListViewProps<T, Sort> & { 
   const landed = useRef(0);
   useLayoutEffect(() => landRequest(list, landed));
   useLayoutEffect(() => {
-    if ((!props.plain && list.total >= 60) || served.current === request || !list.collection.cursor)
+    if (
+      (!props.plain && list.total >= VIRTUAL_FROM) ||
+      served.current === request ||
+      !list.collection.cursor
+    )
       return;
     const revealing = served.current.split(":")[1] !== request.split(":")[1];
     served.current = request;
     if (revealing) return;
-    document
-      .getElementById(list.collection.rowProps(list.collection.cursor).id)
-      ?.scrollIntoView?.({ block: "nearest" });
+    land(document.getElementById(list.collection.rowProps(list.collection.cursor).id));
   }, [request]);
   const overview = useMemo(() => {
     const rows: ListItem<T>[] = [];
@@ -347,7 +349,7 @@ type SectionBodyProps<T, Sort extends string> = {
 };
 
 function SectionBody<T, Sort extends string>(props: SectionBodyProps<T, Sort>) {
-  if (!props.plain && props.list.total >= 60) return <VirtualSectionBody {...props} />;
+  if (!props.plain && props.list.total >= VIRTUAL_FROM) return <VirtualSectionBody {...props} />;
   return (
     <div data-list-body="" role="presentation">
       {props.rows.map((item) => (

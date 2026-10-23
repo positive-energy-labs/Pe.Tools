@@ -3,8 +3,8 @@ import { act, fireEvent, render } from "@testing-library/react";
 import { expect, it, vi } from "vite-plus/test";
 import { SceneMeshes } from "./types";
 import type { OrbitViewport } from "./orbit";
-import { createLiveOrbit } from "./live-orbit";
-import { OrbitMinimap } from "#/components/lang/minimap";
+import { createLiveOrbit } from "@pe/kit/lang/live-orbit";
+import { OrbitMinimap } from "@pe/kit/lang/minimap";
 import { Scene3D } from "./scene3d";
 
 const renderer = vi.hoisted(() => ({ current: null as any }));

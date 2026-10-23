@@ -1,3 +1,4 @@
+import { MinimapViewport } from "./minimap-viewport";
 import { memo, useId, useLayoutEffect, useState, type PointerEvent } from "react";
 import { createPortal } from "react-dom";
 import { useScopeGestures } from "../../keys";
@@ -106,7 +107,7 @@ export function Minimap({
   if (!map.visible || !host) return null;
   return createPortal(
     <div data-minimap="" aria-controls={scroller?.id || id} {...map.controls} style={{ height }}>
-      <span aria-hidden data-minimap-viewport="" style={map.viewport} />
+      <MinimapViewport style={map.viewport} />
       <MinimapMarks marks={marks} count={count} />
     </div>,
     host,

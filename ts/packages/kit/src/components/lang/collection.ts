@@ -1,8 +1,6 @@
-/**
- * useCollection: the one headless list behaviour and the one key owner for every list. It knows
- * no pixels: it turns items into visible rows, holds cursor, selection and query, and binds keys
- * on the scope node (`useScopeKeys`). Identity is by key, never by object.
- */
+import { land } from "./row";
+
+export const VIRTUAL_FROM = 60;
 import { startTransition, useEffect, useId, useMemo, useRef, useState } from "react";
 
 import { useScopeKeys, type ScopeKey } from "../../keys";
@@ -24,9 +22,9 @@ import type { RowState } from "./row";
 type FilterMode = "none" | "substring" | "fuzzy" | "words";
 type SelectMode = "none" | "single" | "multi";
 /** Provenance supplied by the reading owner, never inferred from retained items. */
-export type Reading = "ready" | "pending" | "failed";
+export type ListReading = "ready" | "pending" | "failed";
 export interface ReadingContext {
-  reading: Reading;
+  reading: ListReading;
 }
 
 /** Empty (nothing in scope) is not no-match (the query hid everything): two exits. */
@@ -84,7 +82,7 @@ export interface CollectionOptions<T> {
   /** The rung a ladder opens on (the first one still unbound). */
   startLevel?: number;
   /** Remote options: pending and failed are states of the list, not rows. */
-  status?: Reading;
+  status?: ListReading;
   /** A row that refuses picks, and why: keys and clicks both skip it. */
   refusalOf?: (item: T) => string | null | undefined;
   /** Escape with nothing to clear: the popup's close. */
@@ -220,10 +218,8 @@ export function useCollection<T>(options: CollectionOptions<T>) {
   // N1: a cursor the keys moved is followed into view; one the pointer moved never scrolls.
   // `steer` counts key moves, so a virtual renderer scrolls on a key and on nothing else.
   const [steer, setSteer] = useState(0);
-  const hovered = useRef<string | null>(null);
   const setCursorKey = (key: string | null, steered = false) => {
     if (steered) {
-      hovered.current = null;
       setSteer((serial) => serial + 1);
     }
     if (key === cursorKey) return;
@@ -500,13 +496,12 @@ export function useCollection<T>(options: CollectionOptions<T>) {
   useScopeKeys(keys, options.target);
 
   const optionId = (key: string) => `${listId}-${key.replace(/[^\w-]/g, "_")}`;
-  // The cursored row stays in view as the keys move it; a row the pointer cursored is already
-  // where the person looks, so following it would scroll the list under the pointer (N1).
   const cursorId = cursor ? optionId(cursor.key) : null;
   useEffect(() => {
-    if (cursorId && options.scrollCursor !== false && cursor?.key !== hovered.current)
-      document.getElementById(cursorId)?.scrollIntoView?.({ block: "nearest" });
-  }, [cursorId, options.scrollCursor]);
+    land(cursorId ? document.getElementById(cursorId) : null, {
+      requested: steer > 0 && options.scrollCursor !== false,
+    });
+  }, [steer]);
   return {
     query,
     /** Typing resets the cursor to the top hit. */
@@ -562,10 +557,7 @@ export function useCollection<T>(options: CollectionOptions<T>) {
       "data-key": key,
       cursor: key === cursor?.key,
       selected: select === "none" ? undefined : selectedKeys.includes(key),
-      onMouseMove: () => {
-        hovered.current = key;
-        setCursorKey(key);
-      },
+      onMouseMove: () => setCursorKey(key),
       onClick: (event: { shiftKey: boolean; ctrlKey?: boolean; metaKey?: boolean }) =>
         pick(
           visible.find((row) => row.key === key),
@@ -640,7 +632,7 @@ export interface ListOptions<T, Sort extends string = string> {
   initialState?: Partial<ListState<Sort>>;
   /** Typing publishes after 250 ms idle; explicit selection, sort and facet changes publish immediately. */
   onState?: (state: ListState<Sort>, context: ReadingContext) => void;
-  status?: Reading;
+  status?: ListReading;
   failure?: string;
   onPick?: (item: T, context: ReadingContext) => void;
   refusalOf?: (item: T) => string | null | undefined;

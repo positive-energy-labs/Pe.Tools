@@ -3,7 +3,7 @@ import { chordLabel, useScopeGestures, useScopeKeys, type ScopeKey } from "@pe/k
 import type { PlaneViewport } from "@pe/agent-contracts";
 import { clearPose, subjectPose, type PictureBounds } from "./framing";
 import { ORBIT_GESTURES } from "./gestures";
-import { flyTo, glideLook, type LiveOrbit } from "./live-orbit";
+import { flyTo, glideLook, type LiveOrbit } from "@pe/kit/lang/live-orbit";
 import { applyLook, center, frame, type OrbitViewport } from "./orbit";
 import type { Bounds } from "./types";
 import { useViewHistory } from "./view-history";

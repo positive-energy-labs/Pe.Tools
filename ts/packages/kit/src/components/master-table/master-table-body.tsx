@@ -1,3 +1,4 @@
+import { VIRTUAL_FROM } from "../lang/collection";
 import type { Tone } from "../../lib/token";
 import {
   createRef,
@@ -301,11 +302,13 @@ export function MasterTableBody<Row extends RowData>({
   // address, another pane). A press on the row itself keeps the view where the person put it.
   const pressedKey = useRef<string | null>(null);
   useLayoutEffect(() => {
-    if (!activeKey || pressedKey.current === activeKey) return;
+    if (!activeKey) return;
     const index = indexOf.get(activeKey);
     if (index === undefined) return;
-    if (virtualized) virtual.scrollToIndex(index, { align: "auto" });
-    else activeRowRef.current?.scrollIntoView?.({ block: "nearest" });
+    land(activeRowRef.current, {
+      requested: pressedKey.current !== activeKey,
+      scroll: virtualized ? () => virtual.scrollToIndex(index, { align: "auto" }) : undefined,
+    });
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [activeKey]);
 
@@ -345,21 +348,21 @@ export function MasterTableBody<Row extends RowData>({
         } else return false;
       }
       if (goal < 0 || goal >= count) return false;
-      const land = () => {
+      const arrive = () => {
         let target = rowAt(goal)?.children[column] as HTMLElement | undefined;
         if (target?.hasAttribute("data-master-gutter"))
           target = target.nextElementSibling as HTMLElement | undefined;
         if (!target) return false;
         // A key the person pressed: focus quietly, then bring exactly that cell into view.
         focusQuiet(target);
-        target.scrollIntoView?.({ block: "nearest", inline: "nearest" });
+        land(target);
         return true;
       };
-      if (rowAt(goal)) return land();
+      if (rowAt(goal)) return arrive();
       if (!virtualized) return false;
       // The row is not drawn yet: scroll it in, then land once the virtualizer has drawn it.
       virtual.scrollToIndex(goal, { align: "auto" });
-      requestAnimationFrame(() => requestAnimationFrame(land));
+      requestAnimationFrame(() => requestAnimationFrame(arrive));
       return true;
     },
     [],
@@ -666,7 +669,6 @@ export function MasterTableBody<Row extends RowData>({
   );
 }
 
-const VIRTUAL_FROM = 60;
 /** The `--item-h` row; measuring corrects any taller row. */
 const ROW_ESTIMATE = 24;
 

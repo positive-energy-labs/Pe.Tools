@@ -1,14 +1,6 @@
 /**
- * A floater is a corner surface over a pane's body (ledger 2026-10-21): the pane's strip toggles it,
- * the pane draws it over the body's corner, and it is a key scope of its own, so a minimap's keys
- * bind only while focus is inside it. Esc inside it closes it and hands focus back to the pane.
- * A floater whose corner would cover the body's `pane-legend` or a docked surface (`pane-dock`, the
- * picture's readout) moves to the nearest place that covers none of them nor another floater: a
- * corner, else stacked past the floater or dock holding one; none free, it keeps its own.
- * Floaters yield in DOM order: each avoids the ones before it, and a move is announced so the
- * ones after it look again once it has painted (siblings solving in parallel took one slot). The person slides it along the edge it sits on by its top grip and
- * resizes it from the inner corner within responsive caps (the smallest is our
- * way of hiding it). A floater may overlap the neighbouring panes' edges; that is wanted.
+ * Floaters yield in DOM order and announce each move; parallel siblings otherwise take one slot.
+ * They may overlap neighbouring panes, but avoid the field's legends, readouts and earlier floaters.
  */
 import {
   useLayoutEffect,
@@ -20,6 +12,8 @@ import {
 } from "react";
 
 import { KeyScope, useScopeKeys, type Chord } from "@pe/kit/keys";
+
+export const PANE_OBSTACLES = "[data-slot='pane-legend'], [data-picture-readout]";
 
 type Corner = "tl" | "tr" | "bl" | "br";
 
@@ -81,9 +75,7 @@ function useYield(ref: RefObject<HTMLDivElement | null>, place: Corner) {
       const f = field.getBoundingClientRect();
       const o = own.getBoundingClientRect();
       const gutter = parseFloat(getComputedStyle(own).getPropertyValue("--gutter")) || 0;
-      const fixed = [
-        ...field.querySelectorAll("[data-slot='pane-legend'], [data-slot='pane-dock']"),
-      ]
+      const fixed = [...field.querySelectorAll(PANE_OBSTACLES)]
         .filter((el) => !el.closest("[data-slot='floater']"))
         .map((el) => el.getBoundingClientRect());
       const others = [...field.querySelectorAll(":scope > [data-slot='floater']")]
@@ -114,9 +106,7 @@ function useYield(ref: RefObject<HTMLDivElement | null>, place: Corner) {
     const observer = new ResizeObserver(run);
     observer.observe(field);
     observer.observe(own);
-    field
-      .querySelectorAll("[data-slot='pane-legend'], [data-slot='pane-dock']")
-      .forEach((el) => observer.observe(el));
+    field.querySelectorAll(PANE_OBSTACLES).forEach((el) => observer.observe(el));
     return () => {
       observer.disconnect();
       field.removeEventListener(MOVED, moved);

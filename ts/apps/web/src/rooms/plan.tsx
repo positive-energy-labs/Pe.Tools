@@ -1,4 +1,4 @@
-import { GoToPopup } from "@pe/kit/lang/list-popup";
+import { GoToPopup } from "@pe/kit/lang/go-to";
 /** Revit's registered picture under selectable room regions, paired with the table. */
 import { SvgTip } from "@pe/kit/lang/tooltip";
 import { type CSSProperties, type ReactNode, useEffect, useMemo, useRef } from "react";

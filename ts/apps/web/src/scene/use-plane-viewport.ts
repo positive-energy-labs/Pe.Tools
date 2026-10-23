@@ -1,3 +1,4 @@
+import { PANE_OBSTACLES } from "@pe/kit/lang/floater";
 import { useCallback, useEffect, useRef, useState, type PointerEvent } from "react";
 import type { PlaneViewport } from "@pe/agent-contracts";
 import type { Bounds2, Viewport2 } from "#/lib/affine-frame";
@@ -10,7 +11,6 @@ export const PLAN_CLICK_PX = 5;
 /** What docked surfaces take: a band at the top and the bottom (the readout, the key legend), and
  * the right edge of a top-left one (the readout), which a fit may clear sideways instead. */
 type Inset = { top: number; bottom: number; left: number };
-const DOCKED = "[data-slot='pane-dock'], [data-slot='pane-legend']";
 
 /** What surfaces docked over the field cover, as a top and a bottom band: a fit stays clear of them. */
 function measureInset(host: HTMLElement): Inset {
@@ -18,7 +18,9 @@ function measureInset(host: HTMLElement): Inset {
   let top = 0,
     bottom = 0,
     left = 0;
-  for (const el of (host.closest("[data-slot='pane-field']") ?? host).querySelectorAll(DOCKED)) {
+  for (const el of (host.closest("[data-slot='pane-field']") ?? host).querySelectorAll(
+    PANE_OBSTACLES,
+  )) {
     const r = el.getBoundingClientRect();
     if (!r.height) continue;
     if (r.top - h.top < h.height / 2) {
@@ -103,7 +105,7 @@ export function usePlaneViewport(
     const docks = new ResizeObserver(inset);
     const field = host.closest("[data-slot='pane-field']") ?? host;
     const observeDocks = () => {
-      field.querySelectorAll(DOCKED).forEach((el) => docks.observe(el));
+      field.querySelectorAll(PANE_OBSTACLES).forEach((el) => docks.observe(el));
       inset();
     };
     observeDocks();

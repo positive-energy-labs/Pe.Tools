@@ -1,7 +1,7 @@
 // @vitest-environment jsdom
 import { act, fireEvent, renderHook } from "@testing-library/react";
 import { afterEach, expect, it, vi } from "vite-plus/test";
-import { createLiveOrbit } from "./live-orbit";
+import { createLiveOrbit } from "@pe/kit/lang/live-orbit";
 import { useStage, stageViewport } from "./stage-controller";
 import { frame } from "./orbit";
 import type { Bounds } from "./types";

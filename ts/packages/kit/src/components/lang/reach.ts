@@ -72,12 +72,13 @@ export function useReach(id?: number): ReachRung {
             : "rest",
   );
 }
-export function useReachSetter() {
-  const store = useContext(SubjectTextContext)?.reach;
+export function useReachSetter<K extends "hovered" | "issue">(field: K, channel?: ReachStore) {
+  const context = useContext(SubjectTextContext);
+  const store = channel ?? context?.reach;
   return useCallback(
-    (hovered: number | null) =>
-      store?.set((state) => (state.hovered === hovered ? state : { ...state, hovered })),
-    [store],
+    (value: Reach[K]) =>
+      store?.set((state) => (state[field] === value ? state : { ...state, [field]: value })),
+    [store, field],
   );
 }
 

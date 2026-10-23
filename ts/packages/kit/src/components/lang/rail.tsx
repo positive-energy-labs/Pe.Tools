@@ -1,3 +1,4 @@
+import { land } from "./row";
 import type { ReactNode } from "react";
 
 import "./lang.css";
@@ -49,9 +50,7 @@ export function Rail({
       <div
         data-slot="rail-lead"
         className={`no-scrollbar flex min-w-0 items-baseline gap-2 overflow-x-auto overflow-y-hidden whitespace-nowrap ${wrap ? "max-w-full shrink-0" : "flex-1"}`}
-        onFocusCapture={({ target }) =>
-          (target as HTMLElement).scrollIntoView({ block: "nearest", inline: "nearest" })
-        }
+        onFocusCapture={({ target }) => land(target as HTMLElement)}
       >
         {lead}
       </div>
@@ -67,9 +66,7 @@ export function Rail({
         <div
           data-slot="rail-actions"
           className={`flex min-w-0 max-w-full items-center gap-1 ${wrap ? "ml-auto flex-[1_1_20rem] flex-wrap justify-end" : "no-scrollbar flex-[0_1_auto] overflow-x-auto overflow-y-hidden whitespace-nowrap"} ${center != null ? "justify-end" : ""}`}
-          onFocusCapture={({ target }) =>
-            (target as HTMLElement).scrollIntoView({ block: "nearest", inline: "nearest" })
-          }
+          onFocusCapture={({ target }) => land(target as HTMLElement)}
         >
           {trail}
         </div>

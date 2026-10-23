@@ -7,7 +7,7 @@
  * (grilles, units); any other element answers its typed id (the list's create row). Listing all
  * eleven thousand elements of a large model cost a 200 ms open (Chadds, 2026-10-23).
  */
-import { GoToPopup } from "@pe/kit/lang/list-popup";
+import { GoToPopup } from "@pe/kit/lang/go-to";
 import { NO_SYSTEM, systemScope, systemsOf } from "@pe/ducts-domain/system-scope";
 import type { DuctSnapshot } from "@pe/ducts-domain/types";
 

@@ -7,13 +7,13 @@ import { ListView, PlainList } from "@pe/kit/lang/list-view";
  */
 import { useState } from "react";
 
+import { GoToPopup } from "@pe/kit/lang/go-to";
 import {
   CellListSelect,
   List,
   ListChips,
   ListInput,
   ListPopup,
-  GoToPopup,
   ListSegmentInput,
   PopupFrame,
   CommandPalette,
@@ -50,7 +50,7 @@ export function LangListSpecimens() {
   const plain = useList({ ...common, search: (kind) => ({ text: [kind] }) });
   return (
     <>
-      <SpecimenFrame name="ListView - 1000 rows - minimap" importPath="@pe/kit/lang/minimap">
+      <SpecimenFrame name="ListView - 1000 rows - minimap" importPath="@pe/kit/lang/list-view">
         <ListView
           list={vast}
           aria-label="1000 rows"
@@ -62,7 +62,7 @@ export function LangListSpecimens() {
           empty={{ message: "No rows", exit: "Clear search" }}
         />
       </SpecimenFrame>
-      <SpecimenFrame name="GoToPopup" importPath="@pe/kit/lang/list-popup">
+      <SpecimenFrame name="GoToPopup" importPath="@pe/kit/lang/go-to">
         <GoToPopup
           items={() => KINDS.map((name, id) => ({ key: name, name, id }))}
           onGo={() => {}}

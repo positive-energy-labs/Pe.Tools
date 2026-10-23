@@ -34,7 +34,7 @@ import { noRunParts, subjectNamer } from "../../subject-text";
 import { useRevitSubjectProps } from "#/revit/element-menu";
 import { noRunBranches } from "@pe/ducts-domain/no-runs";
 import { SubjectTextContext, type SubjectReference } from "@pe/kit/lang/subject-text";
-import { NO_LIGHTING, reachStore, useReachState } from "@pe/kit/lang/reach";
+import { NO_LIGHTING, reachStore, useReachState, useReachSetter } from "@pe/kit/lang/reach";
 import {
   annotatedFindings,
   stageIssues,
@@ -591,16 +591,8 @@ function LoadedScreenBody({
     },
     [reach],
   );
-  const setHovered = useCallback(
-    (hovered: number | null) =>
-      reach.set((state) => (state.hovered === hovered ? state : { ...state, hovered })),
-    [reach],
-  );
-  const setHoveredIssue = useCallback(
-    (issue: string | null) =>
-      reach.set((state) => (state.issue === issue ? state : { ...state, issue })),
-    [reach],
-  );
+  const setHovered = useReachSetter("hovered", reach);
+  const setHoveredIssue = useReachSetter("issue", reach);
   const issues = useMemo(() => (inbox ? stageIssues(inbox) : []), [inbox]);
   // The picture's alias jump: selection and the view that shows it, one Page write.
   const jump = useRef<((id: number) => void) | null>(null);

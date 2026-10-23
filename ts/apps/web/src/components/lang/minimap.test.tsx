@@ -3,13 +3,13 @@ import { reachStore } from "@pe/kit/lang/reach";
 import { SubjectTextContext } from "@pe/kit/lang/subject-text";
 import { Row } from "@pe/kit/lang/row";
 import { useSceneReach } from "#/scene/reach";
-import { createLiveOrbit } from "#/scene/live-orbit";
+import { createLiveOrbit } from "@pe/kit/lang/live-orbit";
 // @vitest-environment jsdom
 import { act, cleanup, fireEvent, render } from "@testing-library/react";
 import { Profiler } from "react";
 import { afterEach, expect, test, vi } from "vite-plus/test";
 
-import { OrbitMinimap, PlaneMinimap, type OrbitViewport } from "./minimap";
+import { OrbitMinimap, PlaneMinimap, type OrbitViewport } from "@pe/kit/lang/minimap";
 
 afterEach(() => {
   cleanup();

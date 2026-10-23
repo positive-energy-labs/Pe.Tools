@@ -1,4 +1,4 @@
-import { GoToPopup } from "@pe/kit/lang/list-popup";
+import { GoToPopup } from "@pe/kit/lang/go-to";
 /** Space's model, axis cuts and thumbnails; an axis remembers the 3D pose it left. */
 import { useContext, useEffect, useMemo, useRef, useState, type ReactNode } from "react";
 import { SubjectTextContext } from "@pe/kit/lang/subject-text";
@@ -6,7 +6,7 @@ import { SubjectTextContext } from "@pe/kit/lang/subject-text";
 import { type Chord } from "@pe/kit/keys";
 import { Button } from "@pe/kit/lang/button";
 import type { FloaterSpec } from "@pe/kit/lang/floater";
-import { OrbitMinimap } from "#/components/lang/minimap";
+import { OrbitMinimap } from "@pe/kit/lang/minimap";
 import { Pane, PaneOverlay } from "@pe/kit/lang/pane";
 import type { PageMove } from "#/route/manifest";
 import { useStage, stageViewport } from "#/scene/stage-controller";
@@ -19,7 +19,7 @@ import {
   type PlaneViewport,
 } from "#/scene/plane";
 import type { Psc1Metadata } from "#/scene/psc1";
-import { useLiveOrbit } from "#/scene/live-orbit";
+import { useLiveOrbit } from "@pe/kit/lang/live-orbit";
 import { Scene3D } from "#/scene/scene3d";
 import type { Layer3D, Pick, SceneMeshes } from "#/scene/types";
 
