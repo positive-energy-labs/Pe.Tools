@@ -37,7 +37,8 @@ import type { DuctsApply, DuctsAssignFan, DuctsHeal } from "@pe/host-contracts/g
 import { EMPTY_CATALOGS, type Catalogs } from "@pe/ducts-domain/catalog";
 import type { Grids } from "@pe/ducts-domain/loss-grid";
 import { ruleByKey, ruleWords } from "@pe/ducts-domain/loss-rules";
-import { applyRequest, price } from "@pe/ducts-domain/pricing";
+import { applyRequest, rememberPrice } from "@pe/ducts-domain/pricing";
+import type { PricingObservation } from "./pricing-job";
 import { cellFocus } from "./inbox-rows";
 import { pendingRulings, withStoredRulings } from "@pe/ducts-domain/rulings";
 import type { DuctSnapshot } from "@pe/ducts-domain/types";
@@ -186,12 +187,37 @@ export function bindDuctsManifest(read: () => LoadedDuctsReading | null): typeof
   };
 }
 
-export type DuctsReading = "ducts" | "tables" | "catalogs";
+export type DuctsReading = "ducts" | "tables" | "catalogs" | "pricing";
 type DuctsCtx = Ctx<DuctsRouteDocument, DuctsReading, DuctsPage>;
 
 const observed = <T>(ctx: DuctsCtx, key: DuctsReading) => {
   const reading = ctx.readings[key];
   return reading?.state === "ready" ? (reading.observation as T) : null;
+};
+
+/** No action may borrow the last visible solve or solve synchronously during readiness. */
+const currentPricing = (ctx: DuctsCtx) => {
+  const answer = observed<PricingObservation>(ctx, "pricing");
+  const snapshot = observed<DuctSnapshot>(ctx, "ducts");
+  const grids = observed<Grids>(ctx, "tables");
+  const catalogs = observed<Catalogs>(ctx, "catalogs") ?? EMPTY_CATALOGS;
+  const input = answer?.input;
+  const documentKey =
+    ctx.target.kind === "document" ? `${ctx.target.ref.session}/${ctx.target.ref.openId}` : null;
+  if (
+    !input ||
+    input.snapshot !== snapshot ||
+    input.grids !== grids ||
+    input.catalogs !== catalogs ||
+    input.doc !== ctx.work.doc ||
+    input.revision !== ctx.work.revision ||
+    input.epoch !== ctx.page.epoch ||
+    input.documentKey !== documentKey
+  )
+    throw Error("Pricing is refreshing; wait for this Work revision before writing");
+  // Shared domain action helpers can read this exact result without repeating survey or losses.
+  rememberPrice(input.snapshot, input.grids, input.doc, input.catalogs, answer.result.priced);
+  return answer.result.priced;
 };
 
 const pendingOf = (ctx: DuctsCtx) =>
@@ -235,12 +261,7 @@ const standing = (ctx: DuctsCtx) => {
   const snapshot = observed<DuctSnapshot>(ctx, "ducts");
   const grids = observed<Grids>(ctx, "tables");
   if (!snapshot || !grids) return null;
-  const priced = price(
-    snapshot,
-    grids,
-    ctx.work.doc,
-    observed<Catalogs>(ctx, "catalogs") ?? EMPTY_CATALOGS,
-  );
+  const priced = currentPricing(ctx);
   // The survey may merge or bridge groups: the scope is read over the snapshot that was priced.
   const scope = scopeOf(priced.snapshot, ctx.page.system);
   const { fix, set } = triage({
@@ -276,12 +297,7 @@ const built = (ctx: DuctsCtx) => {
   if (ctx.work.revision === null) throw Error("The Work is not read yet");
   if (snapshot.storeError)
     throw Error(`Pe's provenance store in this model is unreadable: ${snapshot.storeError}`);
-  const priced = price(
-    snapshot,
-    grids,
-    ctx.work.doc,
-    observed<Catalogs>(ctx, "catalogs") ?? EMPTY_CATALOGS,
-  );
+  const priced = currentPricing(ctx);
   // Write scope is the system: every group it is in, as the raw snapshot numbers them.
   const groups = ctx.page.system ? systemScope(snapshot, ctx.page.system).groups : [];
   if (ctx.page.system && !groups.length)
@@ -354,6 +370,7 @@ const pairOf = (input: unknown) => {
 
 /** The fan the chosen system is offered (`offeredFan`), over what the route read. */
 const offeredFanOf = (ctx: DuctsCtx) => {
+  currentPricing(ctx);
   const snapshot = snapshotOf(ctx);
   return offeredFan(
     snapshot,
@@ -398,6 +415,24 @@ const attempt = <T>(run: () => T): { ok: T } | { no: string } => {
 const why = (run: () => unknown) => {
   const tried = attempt(run);
   return "no" in tried ? tried.no : null;
+};
+
+const requestReadiness = new WeakMap<
+  ReturnType<typeof currentPricing>,
+  Map<string, string | null>
+>();
+/** Page-only renders cannot repeatedly rebuild the global write request. */
+const requestReady = (ctx: DuctsCtx) => {
+  const tried = attempt(() => currentPricing(ctx));
+  if ("no" in tried) return tried.no;
+  let bySystem = requestReadiness.get(tried.ok);
+  if (!bySystem) requestReadiness.set(tried.ok, (bySystem = new Map()));
+  if (!bySystem.has(ctx.page.system))
+    bySystem.set(
+      ctx.page.system,
+      why(() => requestOf(ctx)),
+    );
+  return bySystem.get(ctx.page.system)!;
 };
 
 /**
@@ -532,7 +567,7 @@ export const manifest = defineRoute<
   ]),
   // Both are host reads the route owns (`host.ts`) and provides to the verbs: the snapshot keyed on
   // target, subject, slots and epoch; the tables on the session.
-  readings: { ducts: () => null, tables: () => null, catalogs: () => null },
+  readings: { ducts: () => null, tables: () => null, catalogs: () => null, pricing: () => null },
   page: ductsPageSchema,
   transition: (current, patch) => {
     const systemChanged = Object.hasOwn(patch, "system") && (patch.system ?? "") !== current.system;
@@ -570,7 +605,7 @@ export const manifest = defineRoute<
       waitSeconds: NATIVE_APPLY_WAIT_S,
       requires: { work: true },
       count: (ctx) => pendingOf(ctx) || null,
-      ready: (ctx) => (pendingOf(ctx) ? why(() => requestOf(ctx)) : "Nothing staged"),
+      ready: (ctx) => (pendingOf(ctx) ? requestReady(ctx) : "Nothing staged"),
       run: async (ctx) => {
         const response = await dispatch(ctx, "ducts.preview-losses", requestOf(ctx));
         ctx.setPage({
@@ -598,6 +633,8 @@ export const manifest = defineRoute<
       ready: (ctx) => {
         const pending = pendingOf(ctx);
         if (!pending) return "Nothing staged";
+        const pricing = why(() => currentPricing(ctx));
+        if (pricing) return pricing;
         const held = espHeld(ctx);
         if (held && pending === stagedEsp(ctx.work.doc)) return `Only the ESP is staged: ${held}`;
         return ctx.page.evaluation === null
@@ -640,11 +677,22 @@ export const manifest = defineRoute<
       dirties: [],
       waitSeconds: NATIVE_APPLY_WAIT_S,
       ready: (ctx, input) =>
-        why(() => healOf(snapshotOf(ctx), ctx.work.doc, healTargetOf(ctx, input))),
+        why(() => {
+          currentPricing(ctx);
+          return healOf(snapshotOf(ctx), ctx.work.doc, healTargetOf(ctx, input));
+        }),
       run: async (ctx, input) => {
         const group = healTargetOf(ctx, input);
         const snapshot = snapshotOf(ctx);
         const found = healOf(snapshot, ctx.work.doc, group);
+        currentPricing(ctx);
+        const before = espBefore(
+          snapshot,
+          ctx.work.doc,
+          observed<Grids>(ctx, "tables"),
+          observed<Catalogs>(ctx, "catalogs"),
+          group,
+        );
         const response = await dispatch<DuctsHeal.Res.Response>(ctx, "ducts.preview-heal", {
           groups: [healRequestGroup(found)],
         });
@@ -654,13 +702,7 @@ export const manifest = defineRoute<
             mode: "preview",
             epoch: ctx.page.epoch,
             response,
-            before: espBefore(
-              snapshot,
-              ctx.work.doc,
-              observed<Grids>(ctx, "tables"),
-              observed<Catalogs>(ctx, "catalogs"),
-              group,
-            ),
+            before,
           },
         });
         ctx.note(

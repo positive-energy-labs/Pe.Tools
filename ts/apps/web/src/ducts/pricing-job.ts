@@ -1,0 +1,61 @@
+import type { DuctsRouteDocument } from "@pe/agent-contracts";
+import type { Catalogs } from "@pe/ducts-domain/catalog";
+import type { Grids } from "@pe/ducts-domain/loss-grid";
+import { price, type Priced } from "@pe/ducts-domain/pricing";
+import { readiness } from "@pe/ducts-domain/readiness";
+import type { DuctSnapshot } from "@pe/ducts-domain/types";
+import type { PricingDelta } from "./pricing-delta";
+
+export interface PricingBase {
+  snapshot: DuctSnapshot;
+  grids: Grids;
+  catalogs: Catalogs;
+}
+export interface PricingInput extends PricingBase {
+  doc: DuctsRouteDocument | null;
+  revision: number | null;
+  epoch: number;
+  documentKey: string | null;
+}
+export interface PricingResult {
+  priced: Priced;
+  ready: ReturnType<typeof readiness>;
+}
+export interface PricingObservation {
+  input: PricingInput;
+  result: PricingResult;
+}
+export interface PricingRequest {
+  id: number;
+  base?: PricingBase;
+  doc: DuctsRouteDocument | null;
+}
+export type PricingResponse = { id: number } & (
+  | { result: PricingResult }
+  | { error: string }
+  | { delta: PricingDelta | null }
+);
+
+/** Retain base identities inside the worker so the domain's survey/solve caches survive Work edits. */
+export function pricingJob() {
+  let base: PricingBase | undefined;
+  return (request: PricingRequest): PricingResponse => {
+    try {
+      if (request.base) base = request.base;
+      if (!base) throw Error("Pricing has no snapshot or tables");
+      const priced = price(base.snapshot, base.grids, request.doc, base.catalogs);
+      return { id: request.id, result: { priced, ready: readiness(base.snapshot, request.doc) } };
+    } catch (error) {
+      return { id: request.id, error: error instanceof Error ? error.message : String(error) };
+    }
+  };
+}
+
+export const samePricingInput = (a: PricingInput, b: PricingInput) =>
+  a.snapshot === b.snapshot &&
+  a.grids === b.grids &&
+  a.catalogs === b.catalogs &&
+  a.doc === b.doc &&
+  a.revision === b.revision &&
+  a.epoch === b.epoch &&
+  a.documentKey === b.documentKey;

@@ -173,6 +173,27 @@ export interface Priced extends Survey {
   staged: ReturnType<typeof stagedDucts>;
 }
 
+const completed = new WeakMap<
+  DuctSnapshot,
+  {
+    grids: Grids;
+    catalogs: Catalogs;
+    doc: DuctsRouteDocument | null;
+    priced: Priced;
+  }
+>();
+
+/** Admit an exact worker answer for synchronous consumers; callers fence its input generation first. */
+export function rememberPrice(
+  raw: DuctSnapshot,
+  grids: Grids,
+  doc: DuctsRouteDocument | null,
+  catalogs: Catalogs,
+  priced: Priced,
+) {
+  completed.set(raw, { grids, doc, catalogs, priced });
+}
+
 /**
  * What depends on (snapshot, grids) alone, kept so a Work change re-solves only `next`: the
  * applied solve, the last priced Work, and each staged rule's fanout.
@@ -220,6 +241,8 @@ export function price(
   doc: DuctsRouteDocument | null,
   catalogs: Catalogs = EMPTY_CATALOGS,
 ): Priced {
+  const hit = completed.get(raw);
+  if (hit?.grids === grids && hit.catalogs === catalogs && hit.doc === doc) return hit.priced;
   const surveyed = survey(raw, doc);
   const { snapshot } = surveyed;
   const units = appliedUnits(raw);
@@ -292,6 +315,7 @@ export function price(
     staged,
   };
   entry.last = { doc, priced };
+  rememberPrice(raw, grids, doc, catalogs, priced);
   return priced;
 }
 const hasDrops = (staged: Priced["staged"]) =>
