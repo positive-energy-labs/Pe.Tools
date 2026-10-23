@@ -273,6 +273,10 @@
 }
 /* The filter bar sits on artifact ground, darker than its pane: its hairlines take the dimmed step. */
 [data-list-bar] {
+  position: sticky;
+  top: 0;
+  z-index: 2;
+  background: var(--pe-artifact);
   --pe-line: var(--pe-line-dim);
   --pe-line-2: var(--pe-line-2-dim);
 }
@@ -620,6 +624,9 @@ svg [data-damage] {
   gap: 6px;
 }
 /* Column cells stay on the title line. Less important measures yield before the label. */
+[data-list-view] .dl-row {
+  scroll-margin-top: var(--list-headroom);
+}
 [data-list-view] {
   container: list / inline-size;
 }

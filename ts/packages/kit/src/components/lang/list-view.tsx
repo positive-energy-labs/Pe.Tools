@@ -2,15 +2,14 @@ import type { Tone } from "../../lib/token";
 import { useVirtualizer } from "@tanstack/react-virtual";
 import {
   memo,
-  useEffect,
   useCallback,
   useMemo,
   useLayoutEffect,
   useRef,
   useState,
-  useSyncExternalStore,
   type ReactNode,
   type HTMLAttributes,
+  type CSSProperties,
   type RefObject,
 } from "react";
 import { ChevronDown, ChevronRight, ChevronUp } from "lucide-react";
@@ -19,15 +18,14 @@ import { Minimap, MINIMAP_FROM, type MinimapRange, type MinimapMark } from "./gu
 import { Button } from "./button";
 import { VIRTUAL_FROM, type ListController, type ListItem } from "./collection";
 import { EmptyState } from "./empty";
-import { ScopeGestures, useScopeKeys, useScopeLive } from "../../keys";
+import { ScopeGestures } from "../../keys";
 import { OutcomeLine } from "./outcome";
-import { ListPopup, StatusLine } from "./list-popup";
-import { ListSearchBox } from "./list-search";
+import { StatusLine } from "./list-popup";
+import { ListBar, scrollParent } from "./list-search";
+export { ListBar, useSearchKey, scrollParent, type SearchKeyOwner } from "./list-search";
 import { land } from "./land";
 import { Row, type RowProps } from "./row";
 import "./lang.css";
-import { focusQuiet } from "../../lib/utils";
-import { useTeach } from "./use-teach";
 
 export type ListRowParts = Omit<
   Extract<RowProps, { as?: "div" }>,
@@ -68,53 +66,6 @@ function pressSection(
         behavior: "smooth",
       }),
     );
-}
-
-/** Search, facets and sort are views of the same query and state, with no private predicates. */
-export function ListBar<T, Sort extends string>({
-  list,
-  label,
-  compact = false,
-}: {
-  list: ListController<T, Sort>;
-  label: string;
-  /** Keep narrow-pane controls on one horizontally scrollable line. */
-  compact?: boolean;
-}) {
-  const input = useRef<HTMLInputElement>(null);
-  useListSearchFocus(input, list.target);
-  const defaultOrder = list.grouped ? "Shelf order" : "Input order";
-  const sortItems = [
-    { key: "", label: defaultOrder },
-    ...list.sorts.map((key) => ({ key, label: key })),
-  ];
-  return (
-    <div data-list-bar="" data-surface="artifact">
-      <ListSearchBox list={list} label={label} input={input} />
-      {list.collection.reading === "pending" && list.total ? (
-        <OutcomeLine kind="busy" label="reading…" />
-      ) : null}
-      <div
-        className={`flex items-center gap-1 ${compact ? "overflow-x-auto *:shrink-0" : "flex-wrap px-(--item-pad-x)"}`}
-      >
-        {list.sorts.length ? (
-          <ListPopup
-            aria-label={`Sort ${label}`}
-            anchor="trigger"
-            trigger={<span>Sort: {list.sort || defaultOrder}</span>}
-            items={sortItems}
-            keyOf={(item) => item.key}
-            labelOf={(item) => item.label}
-            select="single"
-            selected={[list.sort]}
-            empty="No sorts"
-            onPick={(item) => list.setSort(item.key as Sort | "")}
-            row={(item) => ({ label: item.label })}
-          />
-        ) : null}
-      </div>
-    </div>
-  );
 }
 
 export interface ListViewProps<T, Sort extends string = string> {
@@ -228,7 +179,12 @@ function ListRenderer<T, Sort extends string>(props: ListViewProps<T, Sort> & { 
       data-list-view=""
       data-columns={props.columns ? "" : undefined}
       className={`relative min-h-0 min-w-0 w-full${maxHeight ? "" : " shrink-0"}`}
-      style={maxHeight ? { maxHeight, overflowY: "auto" } : undefined}
+      style={
+        {
+          "--list-headroom": `calc(var(--list-search-height, 0px) + var(--item-h) * ${list.sections.filter((section) => section.label).length})`,
+          ...(maxHeight ? { maxHeight, overflowY: "auto" } : {}),
+        } as CSSProperties
+      }
     >
       <ScopeGestures
         gestures={[
@@ -304,7 +260,7 @@ function ListRenderer<T, Sort extends string>(props: ListViewProps<T, Sort> & { 
                   );
               }}
               style={{
-                top: `calc(var(--item-h) * ${index})`,
+                top: `calc(var(--list-search-height, 0px) + var(--item-h) * ${index})`,
                 bottom: `calc(var(--item-h) * ${list.sections.length - index - 1})`,
               }}
             >
@@ -500,22 +456,19 @@ function VirtualSectionBody<T, Sort extends string>({
   const [margin, setMargin] = useState<number | null>(null);
   const [headroom, setHeadroom] = useState(0);
   useLayoutEffect(() => {
-    if (!body.current || !scroller) return;
+    const element = body.current;
+    if (!element || !scroller) return;
     const measure = () => {
-      if (body.current) {
-        setMargin(
-          body.current.getBoundingClientRect().top -
-            scroller.getBoundingClientRect().top -
-            scroller.clientTop +
-            scroller.scrollTop,
-        );
-        const heads = body.current
-          .closest("[data-list-view]")
-          ?.querySelectorAll<HTMLElement>("[data-list-section-head]");
-        setHeadroom(
-          Array.from(heads ?? []).reduce((height, head) => height + head.offsetHeight, 0),
-        );
-      }
+      setMargin(
+        element.getBoundingClientRect().top -
+          scroller.getBoundingClientRect().top -
+          scroller.clientTop +
+          scroller.scrollTop,
+      );
+      const heads = list.target?.querySelectorAll<HTMLElement>(
+        "[data-list-bar], [data-list-section-head]",
+      );
+      setHeadroom(Array.from(heads ?? []).reduce((height, head) => height + head.offsetHeight, 0));
     };
     measure();
     const observer = new ResizeObserver(measure);
@@ -602,112 +555,4 @@ function landRequest<T, Sort extends string>(
   if (!el) return;
   landed.current = request.serial;
   land(el);
-}
-
-export interface SearchKeyOwner {
-  region: () => HTMLElement | null;
-  focus: () => void;
-  available?: () => boolean;
-}
-const targets = new Set<SearchKeyOwner>();
-const listeners = new Set<() => void>();
-const subscribe = (listener: () => void) => {
-  listeners.add(listener);
-  return () => {
-    listeners.delete(listener);
-  };
-};
-const leader = () => targets.values().next().value ?? null;
-const noLeader = () => null;
-
-/** The nearest ancestor that scrolls vertically (the pane body a list lives in). */
-export function scrollParent(el: HTMLElement | null): HTMLElement | null {
-  for (let p = el?.parentElement ?? null; p; p = p.parentElement) {
-    const overflow = getComputedStyle(p).overflowY;
-    if (overflow === "auto" || overflow === "scroll") return p;
-  }
-  return null;
-}
-
-/** The filter `/` goes to: the one with focus in its region, then the one under the pointer, then the first live list. */
-function pick(): SearchKeyOwner | null {
-  const all = [...targets].filter((t) => t.available?.() !== false);
-  const active = document.activeElement;
-  return (
-    all.find((t) => active && t.region()?.contains(active)) ??
-    all.find((t) => t.region()?.matches(":hover")) ??
-    all[0] ??
-    null
-  );
-}
-
-/** Register search intent; the first mounted registration owns the sole body binding. */
-export function useSearchKey(owner: SearchKeyOwner) {
-  const live = useScopeLive();
-  useTeach(
-    { kind: "search", label: "Search", fields: [], syntax: ["/ focuses this search"] },
-    owner.available?.() !== false,
-  );
-  const latest = useRef(owner);
-  latest.current = owner;
-  const [self] = useState<SearchKeyOwner>(() => ({
-    region: () => latest.current.region(),
-    focus: () => latest.current.focus(),
-    available: () => latest.current.available?.() !== false,
-  }));
-  useEffect(() => {
-    if (!live) return;
-    targets.add(self);
-    listeners.forEach((notify) => notify());
-    return () => {
-      targets.delete(self);
-      listeners.forEach((notify) => notify());
-    };
-  }, [self, live]);
-  const bindingOwner = useSyncExternalStore(subscribe, leader, noLeader);
-  const [body, setBody] = useState<HTMLElement | null>(null);
-  useEffect(() => setBody(document.body), []);
-  useScopeKeys(
-    bindingOwner === self
-      ? [
-          {
-            hotkey: "/",
-            label: "Search",
-            says: "Search the focused region, then the region under the pointer, then the first live list.",
-            callback: (event) => {
-              // The composer owns slash commands while its text field has focus.
-              if (
-                (document.activeElement as HTMLElement | null)?.closest(
-                  "input, textarea, select, [contenteditable=true]",
-                )
-              )
-                return;
-              const target = pick();
-              if (!target) return;
-              event.preventDefault();
-              target.focus();
-            },
-            options: { preventDefault: false },
-          },
-        ]
-      : [],
-    body,
-  );
-}
-
-function useListSearchFocus(
-  input: RefObject<HTMLInputElement | null>,
-  region: HTMLElement | null | undefined,
-) {
-  useSearchKey({
-    region: () =>
-      region ??
-      input.current?.closest<HTMLElement>("[data-list-view]") ??
-      scrollParent(input.current),
-    available: () => !!input.current,
-    focus: () => {
-      focusQuiet(input.current);
-      input.current?.select();
-    },
-  });
 }

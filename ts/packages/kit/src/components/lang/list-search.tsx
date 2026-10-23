@@ -1,16 +1,18 @@
 import {
   useEffect,
+  useLayoutEffect,
+  useSyncExternalStore,
   useMemo,
   useRef,
   useState,
   startTransition,
   type CSSProperties,
   type ReactNode,
-  type RefObject,
 } from "react";
 import { X } from "lucide-react";
 import { type ListSearch } from "@pe/agent-contracts";
 import { Button } from "./button";
+import { OutcomeLine } from "./outcome";
 import { useWork } from "./pane";
 import { NarrowChip, chipRecipe } from "./chip";
 import { type ListController } from "./collection";
@@ -19,6 +21,7 @@ import { ListPopup } from "./list-popup";
 import { CompletionGhost, Matched, SearchControl } from "./search-control";
 import { focusQuiet } from "../../lib/utils";
 import { useTeach } from "./use-teach";
+import { useScopeKeys, useScopeLive } from "../../keys";
 
 /** One suggestion: a keyword kept as typed, a value that becomes a pill, or a field to pick from. */
 type Pick = {
@@ -41,22 +44,38 @@ const rank = (label: string, needle: string) => {
   return at === 0 ? 0 : at > 0 && /\W/.test(label[at - 1]!) ? 1 : 2;
 };
 
-/**
- * The list's search, on the same caret-anchored `ListPopup` as the table's query: typed words stay
- * keywords (Enter keeps them, the cursored top row says so), a matching value or field completes
- * as a ghost (Tab or → takes it), and only an explicit pick makes a pill. Pills sit in the box;
- * Backspace on an empty box reopens the last one for editing. Completion is a transaction: a
- * cancelled pick leaves text and pills as they were.
- */
-export function ListSearchBox<T, Sort extends string>({
+/** Keywords stay typed; an explicit facet pick makes a pill. Escape cancels the pick. */
+export function ListBar<T, Sort extends string>({
   list,
   label,
-  input,
 }: {
   list: ListController<T, Sort>;
   label: string;
-  input: RefObject<HTMLInputElement | null>;
 }) {
+  const input = useRef<HTMLInputElement>(null);
+  useSearchKey({
+    region: () => list.target ?? scrollParent(input.current),
+    available: () => !!input.current,
+    focus: () => {
+      focusQuiet(input.current);
+      input.current?.select();
+    },
+  });
+  const root = useRef<HTMLDivElement>(null);
+  useLayoutEffect(() => {
+    const bar = root.current;
+    const region = list.target ?? bar?.parentElement;
+    if (!bar || !region) return;
+    const measure = () => region.style.setProperty("--list-search-height", `${bar.offsetHeight}px`);
+    measure();
+    const observer = typeof ResizeObserver === "undefined" ? null : new ResizeObserver(measure);
+    observer?.observe(bar);
+    return () => {
+      observer?.disconnect();
+      region.style.removeProperty("--list-search-height");
+    };
+  }, [list.target]);
+  const defaultOrder = list.grouped ? "Shelf order" : "Input order";
   useTeach({
     kind: "search",
     label: `Search ${label}`,
@@ -81,15 +100,11 @@ export function ListSearchBox<T, Sort extends string>({
   const [editor, setEditor] = useState<Editor | null>(null);
   const [cursor, setCursor] = useState<string | null>(null);
   const composing = useRef(false);
-  // A field pick closes the popup as it picks; the editor it opens keeps it open.
   const advancing = useRef(false);
   const typed = echo.value;
   useWork(typed !== keywords, `${label}…`);
-  // Memoized suggestions keep their actions; actions read the typed text from here, never stale.
   const now = useRef({ typed, token: /\S+$/.exec(typed) });
   now.current = { typed, token: /\S+$/.exec(typed) };
-  // Suggestions read the keywords the list's filter transition publishes, so the echo alone is
-  // urgent and the popup renders with the filter; the ghost draws only once they caught up.
   const seen = keywords;
   const seenToken = /\S+$/.exec(seen);
   const facet = (key: string) => list.facets.find((each) => each.key === key);
@@ -146,8 +161,6 @@ export function ListSearchBox<T, Sort extends string>({
     else list.flush();
   };
 
-  // The urgent keystroke render redraws only the input: suggestions and the popup change with
-  // the list (its filter transition), the editor, the cursor or the menu state.
   const suggest = useMemo(() => {
     const fieldPick = (each: (typeof list.facets)[number], consume: boolean, needle = ""): Pick => {
       const values = list.valuesFor(each.key).filter((value) => value.count > 0);
@@ -231,7 +244,6 @@ export function ListSearchBox<T, Sort extends string>({
             each.label.toLowerCase().includes(needle) || each.key.toLowerCase().startsWith(needle),
         )
         .map((each) => fieldPick(each, true, needle));
-      // The typed words are row one with their count, so Enter keeps them (the table's MAP ruling 47).
       if (values.length || fields.length)
         picks = [
           {
@@ -261,7 +273,6 @@ export function ListSearchBox<T, Sort extends string>({
             each.complete.toLowerCase().startsWith(word.toLowerCase()),
         )
       : undefined;
-    // Tab takes a deliberate cursor, else what the ghost shows, else the first completion.
     const tabPick =
       (cursored && cursored !== "search" ? enabled.find((each) => each.key === cursored) : null) ??
       ghostPick ??
@@ -359,7 +370,7 @@ export function ListSearchBox<T, Sort extends string>({
     [suggest, expanded, field, editor, seen],
   );
   return (
-    <div data-list-search="">
+    <div ref={root} data-list-search="" data-list-bar="" data-surface="artifact">
       <SearchControl
         face="bar"
         data-list-filter=""
@@ -390,6 +401,24 @@ export function ListSearchBox<T, Sort extends string>({
         }
         trail={
           <>
+            {list.sorts.length ? (
+              <ListPopup
+                aria-label={`Sort ${label}`}
+                anchor="trigger"
+                trigger={<span>Sort: {list.sort || defaultOrder}</span>}
+                items={[
+                  { key: "", label: defaultOrder },
+                  ...list.sorts.map((key) => ({ key, label: key })),
+                ]}
+                keyOf={(item) => item.key}
+                labelOf={(item) => item.label}
+                select="single"
+                selected={[list.sort]}
+                empty="No sorts"
+                onPick={(item) => list.setSort(item.key as Sort | "")}
+                row={(item) => ({ label: item.label })}
+              />
+            ) : null}
             {list.filtering ? <Button icon={X} label="Clear search" onClick={clear} /> : null}
             {list.facets.length ? (
               <Button
@@ -512,11 +541,105 @@ export function ListSearchBox<T, Sort extends string>({
           {list.filtering || typed ? `${list.shown} of ${list.total}` : list.total}
         </span>
       </SearchControl>
+      {list.collection.reading === "pending" && list.total ? (
+        <OutcomeLine kind="busy" label="reading…" />
+      ) : null}
       {list.refusal ? <p role="alert">{list.refusal}</p> : null}
       <span className="sr-only" role="status" aria-live="polite">
         {announcement}
       </span>
       {popup}
     </div>
+  );
+}
+
+export interface SearchKeyOwner {
+  region: () => HTMLElement | null;
+  focus: () => void;
+  available?: () => boolean;
+}
+const targets = new Set<SearchKeyOwner>();
+const listeners = new Set<() => void>();
+const subscribe = (listener: () => void) => {
+  listeners.add(listener);
+  return () => {
+    listeners.delete(listener);
+  };
+};
+const leader = () => targets.values().next().value ?? null;
+const noLeader = () => null;
+
+/** The nearest ancestor that scrolls vertically (the pane body a list lives in). */
+export function scrollParent(el: HTMLElement | null): HTMLElement | null {
+  for (let p = el?.parentElement ?? null; p; p = p.parentElement) {
+    const overflow = getComputedStyle(p).overflowY;
+    if (overflow === "auto" || overflow === "scroll") return p;
+  }
+  return null;
+}
+
+/** The filter `/` goes to: the one with focus in its region, then the one under the pointer, then the first live list. */
+function pick(): SearchKeyOwner | null {
+  const all = [...targets].filter((t) => t.available?.() !== false);
+  const active = document.activeElement;
+  return (
+    all.find((t) => active && t.region()?.contains(active)) ??
+    all.find((t) => t.region()?.matches(":hover")) ??
+    all[0] ??
+    null
+  );
+}
+
+/** Register search intent; the first mounted registration owns the sole body binding. */
+export function useSearchKey(owner: SearchKeyOwner) {
+  const live = useScopeLive();
+  useTeach(
+    { kind: "search", label: "Search", fields: [], syntax: ["/ focuses this search"] },
+    owner.available?.() !== false,
+  );
+  const latest = useRef(owner);
+  latest.current = owner;
+  const [self] = useState<SearchKeyOwner>(() => ({
+    region: () => latest.current.region(),
+    focus: () => latest.current.focus(),
+    available: () => latest.current.available?.() !== false,
+  }));
+  useEffect(() => {
+    if (!live) return;
+    targets.add(self);
+    listeners.forEach((notify) => notify());
+    return () => {
+      targets.delete(self);
+      listeners.forEach((notify) => notify());
+    };
+  }, [self, live]);
+  const bindingOwner = useSyncExternalStore(subscribe, leader, noLeader);
+  const [body, setBody] = useState<HTMLElement | null>(null);
+  useEffect(() => setBody(document.body), []);
+  useScopeKeys(
+    bindingOwner === self
+      ? [
+          {
+            hotkey: "/",
+            label: "Search",
+            says: "Search the focused region, then the region under the pointer, then the first live list.",
+            callback: (event) => {
+              // The composer owns slash commands while its text field has focus.
+              if (
+                (document.activeElement as HTMLElement | null)?.closest(
+                  "input, textarea, select, [contenteditable=true]",
+                )
+              )
+                return;
+              const target = pick();
+              if (!target) return;
+              event.preventDefault();
+              target.focus();
+            },
+            options: { preventDefault: false },
+          },
+        ]
+      : [],
+    body,
   );
 }
