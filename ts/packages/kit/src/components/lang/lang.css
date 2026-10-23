@@ -148,7 +148,7 @@
   user-select: none;
 }
 /* Lists share the cell staging vocabulary: square = unsaved, bold = unsaved title. */
-.dl-row[data-stage]:is([data-stage="proposed"], [data-stage="staged"])::before {
+.dl-row:not(tr)[data-stage]:is([data-stage="proposed"], [data-stage="staged"])::before {
   content: "";
   position: absolute;
   left: 2px;
@@ -158,7 +158,7 @@
   height: 4px;
   background: var(--pe-pea-ink);
 }
-.dl-row:is([data-stage="proposed"], [data-stage="staged"])[data-staged-by="you"]::before {
+.dl-row:not(tr):is([data-stage="proposed"], [data-stage="staged"])[data-staged-by="you"]::before {
   background: var(--pe-caution);
 }
 .dl-row:is([data-stage="proposed"], [data-stage="staged"]) .dl-row-title {
@@ -265,7 +265,7 @@ tr.dl-row[data-active] {
     animation: none;
   }
 }
-.dl-row[data-active]::before {
+.dl-row:not(tr)[data-active]::before {
   content: none;
 }
 .dl-row[data-lines="2"] {
@@ -370,7 +370,7 @@ tr.dl-row[data-active] {
 .dl-row:focus-visible {
   outline-offset: -2px;
 }
-.dl-row[data-active]::before {
+.dl-row:not(tr)[data-active]::before {
   content: "";
   position: absolute;
   top: 2px;
@@ -383,6 +383,8 @@ tr.dl-row[data-active] {
   color: var(--pe-ink-2);
   font-style: italic;
 }
+/* Row pseudo-elements draw on div rows only: on a `tr` a ::before or ::after is an anonymous table
+   cell, which pushed the active (rail) table row one column right. */
 /* DAMAGE (I2): the 2D burn. An alarm edge that beats like the 3D burn (scene/damage.ts: lub-dub,
    1.5 s), a resting wash so a still screenshot still reads it, and the flame + word beside the
    title (row.tsx). Shape and word, never hue alone; reduced motion holds the edge steady. */
@@ -403,7 +405,7 @@ tr.dl-row[data-active] {
 .dl-row[data-damage]:not([data-selected], [aria-selected="true"]) {
   background-color: color-mix(in srgb, var(--pe-alarm) 9%, var(--pe-on));
 }
-.dl-row[data-damage]::after,
+.dl-row:not(tr)[data-damage]::after,
 tr.dl-row[data-damage] > td:first-child::after {
   content: "";
   position: absolute;
@@ -419,7 +421,7 @@ tr.dl-row[data-damage]:not([data-selected], [data-active]) > td {
   background-color: color-mix(in srgb, var(--pe-alarm) 9%, var(--pe-on));
 }
 @media (prefers-reduced-motion: reduce) {
-  .dl-row[data-damage]::after,
+  .dl-row:not(tr)[data-damage]::after,
   tr.dl-row[data-damage] > td:first-child::after {
     animation: none;
   }
@@ -464,7 +466,7 @@ tr.dl-row[data-damage]:not([data-selected], [data-active]) > td {
   --tree-step: calc(var(--item-h) * 2 / 3);
   padding-left: calc(var(--item-mark-pad-x) + var(--depth) * var(--tree-step));
 }
-.dl-row[data-depth]::after {
+.dl-row:not(tr)[data-depth]::after {
   content: "";
   position: absolute;
   inset-block: 0;

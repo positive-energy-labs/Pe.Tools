@@ -88,6 +88,8 @@ export interface TableProps<Row extends RowData> {
   rowClassName?: (row: Row) => string | undefined;
   /** The Revit elements represented by each row, served by the root element menu. */
   revitIds?: (row: Row) => readonly number[];
+  /** The word for a row's critical damage (I2: kit `Row` damage), or nothing for a calm row. */
+  damage?: (row: Row) => string | null | undefined;
   gutter?: (row: Row) => { count: number; title: string; tone?: "alarm" | "caution" } | null;
   /** Nothing in scope (a filtered-to-nothing table says its own, different story). */
   empty?: ReactNode;
@@ -115,6 +117,7 @@ export function Table<Row extends RowData>({
   onRowHover,
   rowClassName,
   revitIds,
+  damage,
   gutter,
   empty,
   maxHeight,
@@ -245,6 +248,7 @@ export function Table<Row extends RowData>({
             activeKey={activeKey}
             rowClassName={rowClassName}
             revitIds={revitIds}
+            damage={damage}
             onRowClick={onRowClick}
             selectedKeys={selection?.selected}
             refusalOf={selection?.refusal}
