@@ -1,3 +1,4 @@
+import { PaneCrumb } from "@pe/kit/lang/pane-crumb";
 import { token } from "@pe/kit/lib/token";
 import { useState, type ReactNode } from "react";
 import { ArtifactFrame } from "@pe/kit/lang/artifact-frame";
@@ -251,11 +252,13 @@ export function VariantE({ useLens }: { useLens: UseLens }) {
             className="flex min-h-0 flex-1 flex-col"
             head={
               <span className="flex w-full min-w-0 items-center gap-3">
-                {/* L3: the crumb ellipsizes; the lens and the verb never leave the frame. */}
-                <span className="min-w-0 truncate">
-                  ProjectA_Clone_Aug_11 <span style={muted}>›</span> Mechanical Equipment{" "}
-                  <span style={muted}>›</span> Main House fan coils × PE_* parameters
-                </span>
+                <PaneCrumb
+                  segments={[
+                    { label: "ProjectA_Clone_Aug_11" },
+                    { label: "Mechanical Equipment" },
+                    { label: "Main House fan coils ? PE_* parameters" },
+                  ]}
+                />
                 <HelpTip>
                   One substrate, three lenses. The grid is every fan coil × every attribute; the FOM
                   exhibit and the BOD list are saved projections of the same rows and the same

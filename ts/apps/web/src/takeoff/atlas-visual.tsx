@@ -4,7 +4,7 @@ import { Switcher } from "#/components/lang/switcher";
 import { LevelPlan } from "#/takeoff/level-plan";
 import { LevelTotals } from "#/takeoff/level-totals";
 import { ZoneFacts } from "#/takeoff/zone-facts";
-import { PictureReadout } from "#/scene/readout";
+import { PictureReadout } from "@pe/kit/lang/readout";
 import { useAtlasWorkspace } from "#/takeoff/atlas-context";
 import { ScopeKeys } from "@pe/kit/keys";
 import { levelsOf } from "#/takeoff/plan-image";
@@ -127,7 +127,6 @@ export function AtlasVisual() {
         onCursor={focusRoom}
         readout={
           <PictureReadout
-            hug
             title={selected ? `${selected.zone.key} ${selected.name}` : undefined}
             onClear={selected ? () => selectZone(null) : undefined}
           >

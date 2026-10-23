@@ -5,6 +5,8 @@ import { useLiveOrbit } from "#/scene/live-orbit";
  * layers. Every chord is the pane's (S, M, G, 1-3) and Help (Alt+/) lists them; no key card here.
  */
 import { useCallback, useState } from "react";
+import { PictureReadout } from "@pe/kit/lang/readout";
+import { PaneCrumb } from "@pe/kit/lang/pane-crumb";
 
 import { Floater } from "#/components/lang/floater";
 import { Pane } from "#/components/lang/pane";
@@ -109,13 +111,22 @@ function PaneStripAnatomy() {
 /** The same strip at 400 px and full width: narrow, layers and floaters fold into popovers and the
  * mode labels shorten; the title stays. The corner floater gives way to the legend. */
 function PaneStripWidths() {
+  const [selected, setSelected] = useState<string | undefined>();
   const [mode, setMode] = useState("plane");
   const [layers, setLayers] = useState<readonly string[]>(["grid", "rooms"]);
   const [open, setOpen] = useState(true);
   const strip = (id: string) => (
     <Pane
       id={id}
-      title="supply air, level 2"
+      title={
+        <PaneCrumb
+          segments={[
+            { label: "Systems", onPress: () => setSelected(undefined) },
+            { label: "supply air, level 2" },
+            ...(selected ? [{ label: selected }] : []),
+          ]}
+        />
+      }
       flush
       scroll="clip"
       modes={{ value: mode, label: "viewport", options: unbound(MODES), onChange: setMode }}
@@ -147,6 +158,16 @@ function PaneStripWidths() {
       ]}
     >
       <div className="relative size-full">
+        <PictureReadout title={selected} onClear={() => setSelected(undefined)}>
+          {selected ? "stand-in selection facts" : "stand-in system summary"}
+          <button
+            type="button"
+            className="veil"
+            onClick={() => setSelected(selected === "Room A" ? "Room B, a longer name" : "Room A")}
+          >
+            select another room
+          </button>
+        </PictureReadout>
         <span
           data-slot="pane-legend"
           className="absolute bottom-2 left-2 whitespace-nowrap t-small text-ink-2"

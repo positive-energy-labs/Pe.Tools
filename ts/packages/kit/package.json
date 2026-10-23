@@ -28,6 +28,8 @@
     "./lang/list-popup": "./src/components/lang/list-popup.tsx",
     "./lang/list-view": "./src/components/lang/list-view.tsx",
     "./lang/pane-tabs": "./src/components/lang/pane-tabs.tsx",
+    "./lang/pane-crumb": "./src/components/lang/pane-crumb.tsx",
+    "./lang/readout": "./src/components/lang/readout.tsx",
     "./lang/pane.css": "./src/components/lang/pane.css",
     "./lang/rail": "./src/components/lang/rail.tsx",
     "./lang/row": "./src/components/lang/row.tsx",
