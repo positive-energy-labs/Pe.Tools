@@ -276,6 +276,7 @@ export function systemRowParts(
   return {
     metaFill: true,
     lines: 2,
+    wrap: true,
     label: s.name,
     sub: s.sub,
     title: hint,
@@ -814,11 +815,15 @@ export function MetaHeader() {
     <span className="inline-flex items-center gap-1.5" data-e-columns="">
       <span className={COL.bar} aria-hidden />
       <TooltipHint content="effective length from the fan to this row's far end, in equivalent feet at each duct's own friction rate; the small number beside it is the loss in in-wg">
-        <span className={`${COL.ft} text-right`}>to here, eq ft</span>
+        <span className={`${COL.ft} text-right whitespace-normal`}>
+          to here<span className="block">eq ft</span>
+        </span>
       </TooltipHint>
       <span className={COL.wg} aria-hidden />
       <TooltipHint content="this row's own effective length, in equivalent feet; the small number beside it is its own loss in in-wg">
-        <span className={`${COL.ft} border-line border-l pl-1.5 text-right`}>own, eq ft</span>
+        <span className={`${COL.ft} border-line border-l pl-1.5 text-right whitespace-normal`}>
+          own<span className="block">eq ft</span>
+        </span>
       </TooltipHint>
       <span className={COL.wg} aria-hidden />
       <span className={COL.mark} aria-hidden />

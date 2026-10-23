@@ -404,13 +404,15 @@
   display: inline-flex;
   align-items: baseline;
   gap: 4px;
-  flex: 1 1 0;
-  min-width: 3.75rem;
+  flex: 0 1 auto;
+  min-width: 0;
+  max-width: 100%;
   white-space: nowrap;
 }
 .dl-cells-item > .dl-cell {
-  flex: 1 1 auto;
-  min-width: 3.25rem;
+  flex: 0 0 6rem;
+  width: 6rem;
+  min-width: 0;
 }
 .dl-cells-note {
   flex: 0 1 auto;

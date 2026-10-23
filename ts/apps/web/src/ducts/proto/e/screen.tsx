@@ -387,10 +387,9 @@ function EScreenBody({ props }: { props: ProtoProps }) {
   );
   const toRule = inbox ? inbox.fix.length + inbox.set.length + inbox.check.length : 0;
   // A Set row's verb selects the element and focuses its cell once the tree has drawn it.
-  const [sidesFor, setSidesFor] = useState<{ system: string; top: Side; bottom: Side }>({
+  const [sideFor, setSideFor] = useState<{ system: string; side: Side }>({
     system: "",
-    top: "left",
-    bottom: "left",
+    side: "left",
   });
   // A fitting's drop cell the inbox asked for, in the rules half that holds it.
   const [landing, setLanding] = useState<{ id: number; half: "all" | "this" } | null>(null);
@@ -409,7 +408,7 @@ function EScreenBody({ props }: { props: ProtoProps }) {
     const done = window.setTimeout(() => row.removeAttribute("data-landed"), 1600);
     setLanding(null);
     return () => window.clearTimeout(done);
-  }, [landing, priced, sidesFor]);
+  }, [landing, priced, sideFor]);
   useEffect(() => {
     if (!cellFocus) return;
     const input = document.querySelector<HTMLElement>(
@@ -485,13 +484,10 @@ function EScreenBody({ props }: { props: ProtoProps }) {
   if (!snapshot) return <p className="text-ink-2 p-4">{props.empty?.says ?? "reading ducts…"}</p>;
   const tree = trees.length ? trees : null;
   const chosen = tree != null && scope != null;
-  // One half is open per pane. A system chosen opens the right halves; none chosen opens the left
-  // ones. A person's own pick holds for the system it was made on.
+  // Both panes project one choice, including programmatic landings and system changes.
   const home: Side = chosen ? "right" : "left";
-  const sides =
-    sidesFor.system === page.system ? sidesFor : { system: page.system, top: home, bottom: home };
-  const pick = (patch: Partial<Record<"top" | "bottom", Side>>) =>
-    setSidesFor({ ...sides, ...patch });
+  const side = chosen && sideFor.system === page.system ? sideFor.side : home;
+  const pick = (side: Side) => setSideFor({ system: page.system, side });
 
   const light = (ids: readonly number[] | null) => {
     setLit({ ids: new Set(ids ?? []), references: [], focus: null });
@@ -531,7 +527,7 @@ function EScreenBody({ props }: { props: ProtoProps }) {
       // selected and the page does not move: the picture and its orbit stay as they were.
       const group = (drawn ?? snapshot).nodes.find((n) => n.id === cell.id)?.groupId;
       const mine = chosen && group != null && groups.includes(group);
-      setSidesFor({ ...sides, bottom: mine ? "right" : "left" });
+      pick(mine ? "right" : "left");
       setLanding({ id: cell.id, half: mine ? "this" : "all" });
       return;
     }
@@ -544,6 +540,7 @@ function EScreenBody({ props }: { props: ProtoProps }) {
             return g ? systemOfGroup(drawn ?? snapshot, g) : page.system;
           })();
     setPage({ system: into, selected: String(cell.id), issue: "" });
+    setSideFor({ system: into, side: "right" });
     setCellFocus(cell);
   };
   // The section whose run leads the system: its fan and TEL head the pane.
@@ -574,7 +571,6 @@ function EScreenBody({ props }: { props: ProtoProps }) {
     <Pane
       id="e-sidebar"
       title={scope ? scope.name : "System"}
-      meta={pricedWord}
       actions={
         <Button
           label="show every system"
@@ -586,6 +582,7 @@ function EScreenBody({ props }: { props: ProtoProps }) {
       scroll="auto"
       flush
     >
+      <p className="face-mono t-small text-ink-2 px-(--item-mark-pad-x) py-1">{pricedWord}</p>
       {reading?.quantity ? (
         <p
           className="t-small text-ink-2 border-line border-b px-2 py-1"
@@ -616,7 +613,7 @@ function EScreenBody({ props }: { props: ProtoProps }) {
           select={select}
         />
       ))}
-      <div className="flex min-h-0 flex-1 flex-col" onMouseLeave={() => light(null)}>
+      <div className="min-w-0 shrink-0" onMouseLeave={() => light(null)}>
         <SystemTree
           key={scope?.name}
           address={{
@@ -637,7 +634,7 @@ function EScreenBody({ props }: { props: ProtoProps }) {
             select,
             jumpToRule: (key: string) => {
               setRuleFocus(key);
-              pick({ bottom: "right" });
+              pick("right");
             },
             reading,
             designRate,
@@ -697,11 +694,11 @@ function EScreenBody({ props }: { props: ProtoProps }) {
       <Pane
         id="e-inputs"
         title="Inputs"
-        meta="flow · ESP · role · drop"
         help="Each unit and grille of this system, named, with the cells you can type into. A typed value stages as an override and reprices."
         scroll="auto"
         flush
       >
+        <p className="t-small text-ink-2 px-(--item-mark-pad-x) py-1">flow · ESP · role · drop</p>
         <InputsPane
           address={{
             scope: `${page.system}:${page.epoch}`,
@@ -742,16 +739,16 @@ function EScreenBody({ props }: { props: ProtoProps }) {
       axis="vertical"
       start={
         <Halves
-          side={sides.top}
-          onSide={(top) => pick({ top })}
+          side={side}
+          onSide={pick}
           left={{ title: "Systems", pane: systemsPane }}
           right={{ title: "System", pane: systemPane, refusal: noSystem }}
         />
       }
       end={
         <Halves
-          side={sides.bottom}
-          onSide={(bottom) => pick({ bottom })}
+          side={side}
+          onSide={pick}
           left={{ title: "All-systems rules", pane: rulesPane(true) }}
           right={{ title: "This system's rules", pane: rulesPane(false), refusal: noSystem }}
         />

@@ -97,6 +97,8 @@ export type RowProps = RowState & {
         /** A second line: only with `lines={2}`, which is two item heights. */
         sub?: ReactNode;
         lines?: 1 | 2 | 3;
+        /** Let titles and secondary content reflow; the row grows only as much as it needs. */
+        wrap?: boolean;
         /** Target and time above a navigation item's title; three lines reserve one item height each. */
         eyebrow?: ReactNode;
         /** A short fact (count, type, state, shortcut, time): the trailing slot of the first line.
@@ -233,6 +235,7 @@ function ListRow({
         {...shared}
         className={slots.base()}
         data-meta-fill={props.metaFill ? "" : undefined}
+        data-wrap={props.wrap ? "" : undefined}
         data-lines={props.lines !== 1 ? props.lines : undefined}
         data-depth={tree ? props.depth : undefined}
         aria-level={tree ? props.depth! + 1 : undefined}
