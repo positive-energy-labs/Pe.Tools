@@ -28,6 +28,14 @@ const allow = (entries: Record<string, string>): Allow[] =>
 // Filenames use the wave-4 final homes: land.ts, revit-target.tsx and go-to.tsx.
 // prettier-ignore
 const RULES: Rule[] = [
+  { id: "selection-never-jumps", doctrine: "N1",
+    pattern: /const select = useCallback\([\s\S]*?jump\.current[\s\S]*?\);|if \(into === page\.system && jump\.current\)/g,
+    roots: [W + "ducts/proto/e/screen.tsx"], allow: [],
+    cannotSee: "Aliased callbacks or renderer gestures; the route test checks the selected address and committed pose." },
+  { id: "ruling-selects-row", doctrine: "N4",
+    pattern: /pick:\s*\(\)\s*=>\s*onSelect\(item\.ids\[0\]/g,
+    roots: [W + "ducts/proto/e/inbox.tsx"], allow: [],
+    cannotSee: "Other first-subject spellings or visual selection; the route test checks both subjects through the picture." },
   { id: "scene-completeness-forwarded", doctrine: "N6",
     pattern: /return \{(?![^}]*\bomittedElements:)(?=[^}]*meshes: artifact\.meshes)[^}]*\}/g,
     roots: [W + "scene/use-scene.ts"], allow: [],

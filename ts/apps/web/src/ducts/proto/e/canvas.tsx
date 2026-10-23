@@ -343,10 +343,11 @@ function Canvas({
   const selected = useMemo(() => {
     const id =
       page.selected && !claims.some((c) => c.id === page.selected) ? Number(page.selected) : null;
-    if (id == null || !Number.isFinite(id)) return new Set<number>();
+    if (id == null || !Number.isFinite(id))
+      return new Set(issues.find((row) => row.key === page.issue)?.ids ?? []);
     const leg = sub?.legOf.get(id);
     return new Set(leg ? [id, ...leg.ids] : [id]);
-  }, [page.selected, claims, sub]);
+  }, [page.selected, page.issue, issues, claims, sub]);
   const litAll = useMemo(
     () => new Set([...lit, ...(hovered == null ? [] : [hovered])]),
     [lit, hovered],
@@ -361,7 +362,7 @@ function Canvas({
   };
   const pick = (id: number | null) => {
     setOpenRuling(null);
-    setPage({ selected: id == null ? "" : String(id) }, { history: "push" });
+    setPage({ selected: id == null ? "" : String(id), issue: "" }, { history: "push" });
   };
   useEffect(() => {
     if (!page.selected) setOpenRuling(null);
@@ -501,7 +502,7 @@ function Canvas({
         host: pictureHost,
         selectedBounds: boundsOfIds(read.meshes, scene, selected),
         clearSelection: () => {
-          if (page.selected) pick(null);
+          if (page.selected || page.issue) pick(null);
         },
         onHistoryStep: () => setLanded(null),
       }}

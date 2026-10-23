@@ -26,12 +26,25 @@ import {
   createRoute,
   createRouter,
 } from "@tanstack/react-router";
-import { act, cleanup, fireEvent, render, screen, waitFor } from "@testing-library/react";
+import { act, cleanup, fireEvent, render, screen, waitFor, within } from "@testing-library/react";
 import { afterEach, beforeEach, expect, test, vi } from "vite-plus/test";
 import { machineFixture } from "../../../../packages/agent-contracts/tests/machine-fixture";
 import type { ProtoProps } from "./proto/props";
 import { useNativeObservation } from "#/revit/observation";
 import { pricingJob, type PricingRequest, type PricingResponse } from "./pricing-job";
+import type { ModelPicture } from "./model-picture";
+
+const picture = vi.hoisted(() => ({ current: null as Parameters<typeof ModelPicture>[0] | null }));
+vi.mock("./model-picture", async (original) => {
+  const module = await original<typeof import("./model-picture")>();
+  return {
+    ...module,
+    ModelPicture: (props: Parameters<typeof ModelPicture>[0]) => {
+      picture.current = props;
+      return <module.ModelPicture {...props} />;
+    },
+  };
+});
 
 const drawing = vi.hoisted(() => ({ lightweight: false, latest: null as ProtoProps | null }));
 vi.mock("./proto/e/screen", async (original) => {
@@ -205,6 +218,7 @@ const inventory = {
 beforeEach(() => {
   drawing.lightweight = false;
   drawing.latest = null;
+  picture.current = null;
   work = ductsRouteState.schema.parse({ assumptions: {} });
   revision = 0;
   requests.length = 0;
@@ -498,11 +512,38 @@ test("a changed document fences a pending read after changing targets and return
   // Two document-picker transitions and a fenced read exceed 15 s on a busy test machine.
 }, 30_000);
 
-test("a staged subject, claims and labelParameter render the subject scene; a verdict press stages the claim", async () => {
+test("a native tree selection keeps the camera and address pose; F frames and Escape keeps it", async () => {
+  const view = await mount();
+  const stretch = view.container.querySelector('[data-e-kind="leg"]')!.closest("[data-key]")!;
+  fireEvent.click(stretch.querySelector(".dl-row-twist")!);
+  const part = await waitFor(() => {
+    const label = view.container.querySelector('[data-e-kind="element"]');
+    expect(label).not.toBeNull();
+    return label!;
+  });
+  const id = "1";
+  await waitFor(() => expect(picture.current!.orbit.read()).not.toBeNull());
+  const pose = picture.current!.orbit.read();
+  const viewport = drawing.latest!.page.viewport;
+  fireEvent.click(part);
+  await waitFor(() => expect(drawing.latest!.page.selected).toBe(id));
+  expect(picture.current!.orbit.read()).toEqual(pose);
+  expect(drawing.latest!.page.viewport).toEqual(viewport);
+  expect(new URLSearchParams(view.router.state.location.searchStr).get("viewport")).toBe("null");
+  fireEvent.keyDown(document.body, { key: "f", code: "KeyF" });
+  await waitFor(() => expect(drawing.latest!.page.viewport).not.toBeNull());
+  expect(picture.current!.orbit.read()).not.toEqual(pose);
+  const framed = picture.current!.orbit.read();
+  fireEvent.keyDown(document.body, { key: "Escape", code: "Escape" });
+  await waitFor(() => expect(drawing.latest!.page.selected).toBe(""));
+  expect(picture.current!.orbit.read()).toEqual(framed);
+});
+
+test("a staged subject and plural claim select the whole row without framing; a verdict stages the claim", async () => {
   work = ductsRouteState.schema.parse({
     subject: { g1: { staged: { value: [100, 1, 2, 3, 4] } } },
     claims: {
-      c1: { staged: { value: { text: "The unit is AHU-9.", ids: [100], state: "assumed" } } },
+      c1: { staged: { value: { text: "Open ends at 1 and 3.", ids: [1, 3], state: "assumed" } } },
     },
     labelParameter: { staged: { value: "Unit Tag" } },
   });
@@ -511,18 +552,30 @@ test("a staged subject, claims and labelParameter render the subject scene; a ve
       ...response(),
       nodes: snapshot.nodes.map((node) => (node.id === 100 ? { ...node, label: "AHU-9" } : node)),
     });
-  // No group chosen: the inbox holds every claim, and a row opens on a press.
-  await mount("");
+  await mount();
   // The staged labelParameter rides the snapshot request.
   await waitFor(() => expect(requests.at(-1)?.request).toEqual({ labelParameter: "Unit Tag" }));
   const inbox = await screen.findByText("Check");
   expect(inbox).toBeTruthy();
-  fireEvent.click(await screen.findByText(/The unit is/));
+  const prefix = await waitFor(() => {
+    const row = document.querySelector<HTMLElement>('[data-key="claim:c1"]');
+    expect(row, document.querySelector("#e-inbox")?.textContent ?? "no inbox").not.toBeNull();
+    return row!;
+  });
+  const pose = picture.current!.orbit.read();
+  fireEvent.click(within(prefix).getByText(/Open ends at/));
+  await waitFor(() => expect([...picture.current!.selected]).toEqual([1, 3]));
+  expect(picture.current!.orbit.read()).toEqual(pose);
+  expect(drawing.latest!.page.viewport).toBeNull();
+  expect(drawing.latest!.page).toMatchObject({ selected: "", issue: "claim:c1" });
+  fireEvent.click(document.querySelector('[data-key="claim:c1"] [data-claim-element="1"]')!);
+  await waitFor(() => expect(drawing.latest!.page.viewport).not.toBeNull());
+  expect(drawing.latest!.page.selected).toBe("1");
   fireEvent.click(await screen.findByRole("button", { name: "yes" }));
   await waitFor(() => expect(work.claims.c1?.staged?.value?.verdict).toBe("yes"));
   expect(work.claims.c1?.staged?.value).toMatchObject({
-    text: "The unit is AHU-9.",
-    ids: [100],
+    text: "Open ends at 1 and 3.",
+    ids: [1, 3],
     verdictBy: "person",
   });
   expect(Date.parse(work.claims.c1!.staged!.value!.verdictAt!)).not.toBeNaN();

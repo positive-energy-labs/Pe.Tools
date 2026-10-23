@@ -364,7 +364,9 @@ describe("healing replaces the capped and connect verdicts", () => {
   it("stage identities land on the exact row, including Heal folding and direct terminal input", () => {
     const rows = inboxRows({ ...base, heal });
     const issues = stageIssues(rows);
-    const keys = new Set([...rows.fix, ...rows.set, ...rows.diagnostics].map((r) => r.key));
+    const keys = new Set(
+      [...rows.fix, ...rows.set, ...rows.check, ...rows.diagnostics].map((r) => r.key),
+    );
     for (const issue of issues) expect(focusRow(issue.key, keys)).toBe(issue.key);
     expect(issues.find((i) => i.key === "heal:g1")?.findings).toEqual(
       expect.arrayContaining(["open-end:g1:2:1", "proximity:5:0|6:0"]),
