@@ -22,6 +22,9 @@ import { PaneSplit } from "#/components/lang/pane-resize";
 
 import { airflowOptions } from "../../airflow";
 import { elementNamer } from "../../claims";
+import { noRunParts, subjectNamer, type SubjectReference } from "../../subject-text";
+import { noRunBranches } from "@pe/ducts-domain/no-runs";
+import { SubjectTextContext, type SubjectLighting } from "../../subject-text-view";
 import {
   annotatedFindings,
   fanVerbs,
@@ -29,6 +32,7 @@ import {
   focusRow,
   inboxRows,
   type CellRef,
+  type InboxItem,
 } from "../../inbox-rows";
 import { groupLabels } from "@pe/ducts-domain/words";
 import { scopeOf } from "@pe/ducts-domain/system-scope";
@@ -234,8 +238,36 @@ function EScreenBody({ props }: { props: ProtoProps }) {
         : null,
     [page.heal, page.epoch, surveyed, priced],
   );
+  const noRunRows = useMemo<InboxItem[]>(() => {
+    if (!priced || !scope) return [];
+    return [
+      ...new Set(noRunBranches(priced.snapshot, priced.next, scope, priced.flows).values()),
+    ].map((branch) => ({
+      key: `no-run:${branch.elements[0]}`,
+      group: "diagnostics",
+      kind: "no-run",
+      title: "Branch with no run",
+      status: "outside priced paths",
+      ids: branch.elements,
+      note: branch.reasons.map((r) => r.text).join("; "),
+      parts: [
+        "Branch ",
+        { id: branch.elements[0]! },
+        " has no run. ",
+        ...noRunParts(branch, priced.snapshot),
+        ...priced.findings
+          .filter(
+            (f) =>
+              f.kind === "missed-join" &&
+              f.elementIds.some((id) => branch.reasons.some((r) => r.at === id)),
+          )
+          .flatMap((f) => [". ", f.note]),
+      ],
+      verbs: [{ kind: "select", ids: branch.elements }],
+    }));
+  }, [priced, scope]);
   // The subject is a system name, so a heal that renumbers its groups leaves the page where it was.
-  const inbox = useMemo(
+  const baseInbox = useMemo(
     () =>
       surveyed
         ? inboxRows({
@@ -281,6 +313,10 @@ function EScreenBody({ props }: { props: ProtoProps }) {
       props.work.revision,
       preview,
     ],
+  );
+  const inbox = useMemo(
+    () => baseInbox && { ...baseInbox, diagnostics: [...baseInbox.diagnostics, ...noRunRows] },
+    [baseInbox, noRunRows],
   );
   // A unit whose role is fan while no Revit system names it base equipment offers to make it one.
   const fanHandles: FanVerbs = {
@@ -382,7 +418,43 @@ function EScreenBody({ props }: { props: ProtoProps }) {
   const encoded = useGroupEncoding(snapshot, priced, drawGroups, page.encoding);
   // The tree reads the drawing's quantity; a categorical reading (or none) keeps Pe's fan-to-here loss.
   const reading = encoded.encoding.quantity ? encoded.encoding : null;
-  const [lit, setLit] = useState<ReadonlySet<number>>(new Set());
+  const [lighting, setLit] = useState<SubjectLighting>({
+    ids: new Set(),
+    references: [],
+    focus: null,
+  });
+  const subjectName = useMemo(() => (snapshot ? subjectNamer(snapshot) : () => null), [snapshot]);
+  useEffect(
+    () => setLit({ ids: new Set(), references: [], focus: null }),
+    [snapshot, page.system, page.picture],
+  );
+  const clearSubjects = useCallback((owner: string) => {
+    setLit((current) =>
+      current.owner === owner ? { ids: new Set(), references: [], focus: null } : current,
+    );
+  }, []);
+  const lightSubjects = (
+    references: readonly SubjectReference[],
+    focus: number | null,
+    owner?: string,
+  ) => {
+    setLit((current) =>
+      current.owner === owner &&
+      current.focus === focus &&
+      current.references.length === references.length &&
+      current.references.every(
+        (r, i) => r.id === references[i]?.id && r.number === references[i]?.number,
+      )
+        ? current
+        : {
+            ids: new Set(focus == null ? references.map((r) => r.id) : [focus]),
+            references,
+            focus,
+            owner,
+          },
+    );
+    props.onHover(null);
+  };
   const [ruleFocus, setRuleFocus] = useState<string | null>(null);
   // null = automatic: open when the inbox holds a row, collapsed when it holds none.
   const [inboxOpen, setInboxOpen] = useState<boolean | null>(null);
@@ -416,7 +488,7 @@ function EScreenBody({ props }: { props: ProtoProps }) {
     setSidesFor({ ...sides, ...patch });
 
   const light = (ids: readonly number[] | null) => {
-    setLit(new Set(ids ?? []));
+    setLit({ ids: new Set(ids ?? []), references: [], focus: null });
     props.onHover(ids?.[0] ?? null);
   };
   const select = (id: number | null) => props.onSelect(id);
@@ -725,64 +797,74 @@ function EScreenBody({ props }: { props: ProtoProps }) {
   );
 
   return (
-    <div ref={rootRef} data-proto="E2" className="flex size-full min-h-0">
-      <DuctSettings work={work} rate={designRate} snapshot={snapshot} scope={scope} />
-      <PaneSplit
-        axis="horizontal"
-        resize={{
-          target: "start",
-          defaultSize: 420,
-          minSize: 280,
-          maxSize: 760,
-          // The picture keeps 360 beside the inbox rail; a tight screen starts with the sidebar a rail.
-          minOtherSize: 392,
-          persist: "proto-e-sidebar",
-          collapse: {
-            collapsed: treeCollapsed ?? (width > 0 && width < TIGHT_PX),
-            onCollapsedChange: setTreeCollapsed,
-            collapsedSize: 32,
-            collapseBelow: 200,
-            title: "systems",
-          },
-        }}
-        start={left}
-        end={
-          <PaneSplit
-            axis="horizontal"
-            resize={{
-              target: "end",
-              defaultSize: 340,
-              minSize: 260,
-              maxSize: 520,
-              minOtherSize: 360,
-              persist: "proto-e-inbox",
-              collapse: {
-                collapsed: !open,
-                onCollapsedChange: (collapsed) => setInboxOpen(!collapsed),
-                collapsedSize: 32,
-                collapseBelow: 200,
-                title: `Rulings · ${toRule}`,
-              },
-            }}
-            start={
-              <div className="relative size-full min-w-0">
-                <ECanvas
-                  {...props}
-                  lit={lit}
-                  issueScope={issueScope}
-                  annotated={annotated}
-                  scale={encoded}
-                  nameOf={nameOf}
-                  groups={drawGroups}
-                  lead={leadGroup}
-                />
-              </div>
-            }
-            end={inboxPane}
-          />
-        }
-      />
-    </div>
+    <SubjectTextContext.Provider
+      value={{
+        nameOf: subjectName,
+        lighting,
+        light: lightSubjects,
+        clear: clearSubjects,
+        pick: props.onSelect,
+      }}
+    >
+      <div ref={rootRef} data-proto="E2" className="flex size-full min-h-0">
+        <DuctSettings work={work} rate={designRate} snapshot={snapshot} scope={scope} />
+        <PaneSplit
+          axis="horizontal"
+          resize={{
+            target: "start",
+            defaultSize: 420,
+            minSize: 280,
+            maxSize: 760,
+            // The picture keeps 360 beside the inbox rail; a tight screen starts with the sidebar a rail.
+            minOtherSize: 392,
+            persist: "proto-e-sidebar",
+            collapse: {
+              collapsed: treeCollapsed ?? (width > 0 && width < TIGHT_PX),
+              onCollapsedChange: setTreeCollapsed,
+              collapsedSize: 32,
+              collapseBelow: 200,
+              title: "systems",
+            },
+          }}
+          start={left}
+          end={
+            <PaneSplit
+              axis="horizontal"
+              resize={{
+                target: "end",
+                defaultSize: 340,
+                minSize: 260,
+                maxSize: 520,
+                minOtherSize: 360,
+                persist: "proto-e-inbox",
+                collapse: {
+                  collapsed: !open,
+                  onCollapsedChange: (collapsed) => setInboxOpen(!collapsed),
+                  collapsedSize: 32,
+                  collapseBelow: 200,
+                  title: `Rulings · ${toRule}`,
+                },
+              }}
+              start={
+                <div className="relative size-full min-w-0">
+                  <ECanvas
+                    {...props}
+                    lit={lighting.ids}
+                    issueScope={issueScope}
+                    annotated={annotated}
+                    scale={encoded}
+                    nameOf={nameOf}
+                    groups={drawGroups}
+                    lead={leadGroup}
+                  />
+                </div>
+              }
+              end={inboxPane}
+            />
+          }
+        />
+      </div>
+    </SubjectTextContext.Provider>
   );
 }
 

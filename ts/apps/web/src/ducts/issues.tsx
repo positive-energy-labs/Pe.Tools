@@ -9,6 +9,7 @@ import type { DuctFinding } from "@pe/agent-contracts";
 import { ISSUE_BLOCKS, type Blocks, type IssueKind } from "@pe/ducts-domain/issues";
 import { INFERRED_KINDS } from "@pe/ducts-domain/proximity";
 import type { VerdictTone } from "@pe/kit/table/model";
+import { SubjectText } from "./subject-text-view";
 export interface IssueKindInfo {
   /** One to three words. */
   label: string;
@@ -148,7 +149,7 @@ export function FindingsList({ findings }: { findings: readonly DuctFinding[] })
                         {f.grade}
                       </span>
                     ) : null}{" "}
-                    <span className="face-mono">{f.elementIds.join(" ")}</span> {f.note}
+                    <SubjectText text={f.note} ids={f.elementIds} />
                     {f.assumed ? <span className="text-ink-2"> · assumed: {f.assumed}</span> : null}
                   </div>
                 );

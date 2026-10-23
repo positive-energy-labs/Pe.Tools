@@ -3,7 +3,7 @@
  * inferred joins, snapshot issues the inbox points at), the path-total labels, and the popover a
  * ruling opens.
  */
-import { useMemo, useState } from "react";
+import { useContext, useMemo, useState } from "react";
 
 import type { DuctFinding } from "@pe/agent-contracts";
 import { INFERRED_KINDS } from "@pe/ducts-domain/proximity";
@@ -19,6 +19,7 @@ import type { Claim } from "../../legs";
 import type { Scene } from "../../scene";
 import type { ProtoProps } from "../props";
 import { fmtFt } from "./bar";
+import { SubjectText, SubjectTextContext } from "../../subject-text-view";
 
 /** Cumulative effective length from the fan to each element, in equivalent feet, along priced paths. */
 function cumulativeOf(priced: ProtoProps["priced"]): Map<number, number> {
@@ -132,6 +133,7 @@ export function RulingBody({
   onPick: (id: number) => void;
 }) {
   const [said, setSaid] = useState<ShowElementsResult | null>(null);
+  const subjects = useContext(SubjectTextContext);
   if (r.kind === "claim")
     return (
       <div className="flex flex-col gap-2" data-ruling={r.n}>
@@ -139,12 +141,16 @@ export function RulingBody({
           <span className="face-mono">{r.n}</span> Pea claim · {r.claim.state}
         </p>
         <p>
-          <ClaimText
-            parts={claimParts(r.claim.text, nameOfId)}
-            onHover={onHover}
-            onPick={onPick}
-            onShown={setSaid}
-          />
+          {subjects ? (
+            <SubjectText text={r.claim.text} ids={r.claim.at} />
+          ) : (
+            <ClaimText
+              parts={claimParts(r.claim.text, nameOfId)}
+              onHover={onHover}
+              onPick={onPick}
+              onShown={setSaid}
+            />
+          )}
           {said ? <span className="text-ink-2"> · {showElementsMessage(said)}</span> : null}
         </p>
         <span className="flex gap-1" role="group" aria-label="verdict">
@@ -181,7 +187,12 @@ export function RulingBody({
         <span className="face-mono">{r.n}</span> snapshot issue ·{" "}
         <span data-tone={info.color.tone}>{info.label}</span>
       </p>
-      <p>{r.issue.note}</p>
+      <p>
+        <SubjectText
+          text={r.issue.note}
+          ids={r.issue.elementId == null ? [] : [r.issue.elementId]}
+        />
+      </p>
       <p className="text-ink-2">{info.what} No verdict verb exists for a snapshot issue.</p>
     </div>
   );

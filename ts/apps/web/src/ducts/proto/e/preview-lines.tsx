@@ -1,4 +1,5 @@
 import type { PreviewLine } from "../../inbox-rows";
+import { SubjectText } from "../../subject-text-view";
 
 /** The list under a preview's counts: one line per item the verb would change, or refuse and why. */
 export function PreviewLines({ lines }: { lines: readonly PreviewLine[] }) {
@@ -12,9 +13,11 @@ export function PreviewLines({ lines }: { lines: readonly PreviewLine[] }) {
           data-tone={line.state === "refused" ? "alarm" : undefined}
           className="t-small"
         >
-          <span>{line.text}</span>
+          <SubjectText text={line.text} />
           {line.state === "refused" ? (
-            <span className="ml-1.5 text-ink-2">refused: {line.reason ?? "no reason given"}</span>
+            <span className="ml-1.5 text-ink-2">
+              refused: <SubjectText text={line.reason ?? "no reason given"} />
+            </span>
           ) : null}
         </li>
       ))}

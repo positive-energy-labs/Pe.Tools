@@ -139,7 +139,9 @@ export function ClaimElement({
   onHover,
   onPick,
   onShown,
-}: { part: Exclude<ClaimPart, string> } & ClaimHandlers) {
+  footnote,
+  connector,
+}: { part: Exclude<ClaimPart, string>; footnote?: number; connector?: number } & ClaimHandlers) {
   const observation = useNativeObservation();
   const target = observedElements(observation, [part.id]);
   const native = observation.scope?.source === "native" && observation.scope.document !== null;
@@ -158,7 +160,8 @@ export function ClaimElement({
         onMouseLeave={() => onHover(null)}
         onFocus={() => onHover(part.id)}
         onBlur={() => onHover(null)}
-        onClick={() => {
+        onClick={(e) => {
+          e.stopPropagation();
           if (!native) return onPick(part.id);
           void showInRevit(target, true).then(onShown);
         }}
@@ -170,7 +173,11 @@ export function ClaimElement({
             style={{ backgroundColor: tokenRef("ink-2") }}
           />
         ) : (
-          part.name
+          <>
+            {part.name}
+            {connector != null ? ` port ${connector}` : ""}
+            {footnote != null ? <sup data-subject-footnote={footnote}>{footnote}</sup> : null}
+          </>
         )}
       </button>
     </TooltipHint>

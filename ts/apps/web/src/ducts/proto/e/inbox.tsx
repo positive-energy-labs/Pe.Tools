@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState, type ReactNode } from "react";
+import { useContext, useEffect, useRef, useState, type ReactNode } from "react";
 import { Ban, Check, Eye, EyeOff, Fan, Link, Pencil, X, type LucideIcon } from "lucide-react";
 import type { DuctsRouteDocument, RouteStatePatch } from "@pe/agent-contracts";
 import type { DuctSnapshot } from "@pe/ducts-domain/types";
@@ -34,6 +34,8 @@ import { inboxWriteRows, type WriteVerbs, type RulingRow } from "./inbox-write";
 import { PreviewLines } from "./preview-lines";
 import { SlotPicker } from "./slot-picker";
 import { InboxClaim, claimLine } from "./inbox-claim";
+import { subjectDocument } from "../../subject-text";
+import { SubjectText, SubjectTextContext } from "../../subject-text-view";
 
 type InboxWork = {
   doc: DuctsRouteDocument | null;
@@ -147,6 +149,7 @@ export function Inbox({
   };
 }) {
   const observation = useNativeObservation();
+  const subjects = useContext(SubjectTextContext);
   const [nativeResult, setNativeResult] = useState<ShowElementsResult | null>(null);
   const [selecting, setSelecting] = useState(false);
   const cellOf = (segment: string, key: string) =>
@@ -291,26 +294,44 @@ export function Inbox({
     const target = observedElements(observation, item.ids);
     const claim = item.verbs.find((v) => v.kind === "claim");
     const title = claim?.kind === "claim" ? claimLine(claim.claim, nameOf) : item.title;
+    const description = subjectDocument(
+      item.parts ?? [claim?.kind === "claim" ? claim.claim.text : (item.note ?? item.title)],
+      subjects?.nameOf ?? (() => null),
+      item.parts ? [] : item.ids,
+    );
+    const heading = subjectDocument(
+      [title],
+      subjects?.nameOf ?? (() => null),
+      [],
+      description.references,
+    );
     return {
       key: item.key,
       search: { text: [title, item.status, item.kind, item.note], ids: item.ids },
       kind: diagnosticKind(item),
       group: item.group,
       statusText: item.status,
-      label: title,
+      label: <SubjectText document={heading} owner={item.key} />,
       title,
       stage: item.kind === "proposal" ? "proposed" : undefined,
       stagedBy: item.kind === "proposal" ? "pea" : undefined,
       meta: <span data-tone={item.tone}>{item.status}</span>,
       actions: () => verbsOf(item, false),
-      onMouseEnter: () => light(item.ids),
+      onMouseEnter: () =>
+        subjects ? subjects.light(description.references, null, item.key) : light(item.ids),
+      onMouseLeave: () => (subjects ? subjects.clear(item.key) : light(null)),
+      onMouseMove: () => subjects?.light(description.references, null, item.key),
       revitIds: target.ids,
       revitRefs: target.refs,
       lit: (selected != null && item.ids.includes(selected)) || item.key === focused,
       pick: () => onSelect(item.ids[0] ?? null),
       detail: () => (
         <>
-          {claim?.kind === "claim" ? (
+          {subjects ? (
+            <p>
+              <SubjectText document={description} owner={item.key} />
+            </p>
+          ) : claim?.kind === "claim" ? (
             <InboxClaim
               claim={claim.claim}
               nameOf={nameOf}
@@ -442,7 +463,13 @@ function RulingsList({
       })}
       detail={(row) =>
         row.detail ? (
-          <div data-inbox-detail={row.key} className="px-4 py-1 flex flex-col gap-1.5">
+          <div
+            data-inbox-detail={row.key}
+            className="px-4 py-1 flex flex-col gap-1.5"
+            onMouseEnter={row.onMouseEnter}
+            onMouseLeave={row.onMouseLeave}
+            onMouseMove={row.onMouseMove}
+          >
             {list.state.open.includes(row.key) ? row.detail() : null}
           </div>
         ) : null
