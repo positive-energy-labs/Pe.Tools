@@ -57,7 +57,7 @@ The integrated default journey passed all eleven selected steps on seeds `202610
 
 The run found and fixed actual focus theft, a 44 px readout shift, a 20 px composer shift, false draft freshness fencing, and unsent text lost across Home/Back. The test also overclaimed Activity retention across a thread change. Activity retains route DOM within one thread; global Open Pea starts another context. Returning must restore the exact URL, picture, readout, selection and pose, without stale action arming. The corrected test checks that boundary. An independent issued-UUID regression proved the same textarea and text survive Home/Back, with a red control on the old source. Unsent text remains React-owned and does not survive a full reload; revisioned Work has a separate durable owner.
 
-Full `pnpm verify` passed at `c3acd75f` before these final continuity repairs. Final verification of the integrated source is pending; the earlier formatting, cold readiness and obsolete log-locator failures are repaired.
+Full `pnpm verify` passed at `ec9bde30` in 561.5 seconds: workspace checks, Knip, kit build, all package tests, repository guards and isolated Revit 2024 compile. The earlier formatting, cold readiness and obsolete log-locator failures are repaired. [Verification receipt](../../.artifacts/runs/browser-20261023-route-polish/verify-final.json).
 
 Replay from `ts`: `vp run --no-cache journey:routes`. The default requires refresh, reconnect and a paused real pricing worker. `--seed 20261024` reproduces the second sequence. Two-thread identity and native Preview arming need their stated preconditions; omitted coverage makes the receipt `partial` even when every selected step passes. Actual native Apply is proved by the independent A/B crossing above, not by the journey's arming check. [Commands and contracts](../../ts/tests/e2e/README.md).
 
@@ -77,4 +77,6 @@ PROVEN[browser, two selected demo journeys and deliberate SSE disconnect red, cl
 
 FALSIFIED[browser, old source lost issued-thread draft on Home/Back; deliberate disconnect is detected by the final network oracle, 2026-10-23].
 
-UNPROVEN[final integrated repository verification pending; native Pea authority, K9, installed, two-thread switching and native arming in the replay, and actual-agent quality require their own lanes].
+PROVEN[compile + deterministic + browser, canonical pnpm verify from the integration checkout, ec9bde30, 2026-10-23].
+
+UNPROVEN[native Pea authority, K9, installed, two-thread switching and native arming in the replay, and actual-agent quality require their own lanes].
