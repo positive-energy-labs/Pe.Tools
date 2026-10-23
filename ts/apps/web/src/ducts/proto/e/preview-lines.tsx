@@ -1,5 +1,5 @@
 import type { PreviewLine } from "../../inbox-rows";
-import { SubjectText } from "../../subject-text-view";
+import { SubjectText } from "@pe/kit/lang/subject-text";
 
 /** The list under a preview's counts: one line per item the verb would change, or refuse and why. */
 export function PreviewLines({ lines }: { lines: readonly PreviewLine[] }) {

@@ -161,7 +161,7 @@ export interface InboxItem {
   /** Prose for the open row. */
   note: string | null;
   /** Structured subject references when the row owns the wording; notes from the host stay free text. */
-  parts?: readonly import("./subject-text").SubjectPart[];
+  parts?: readonly import("@pe/kit/lang/subject-text").SubjectPart[];
   verbs: readonly RowVerb[];
   /** False on a Fix row that stands in no path (a Heal row covering only bridged joins, a heal result): it does not hold the ESP. */
   blocks?: false;

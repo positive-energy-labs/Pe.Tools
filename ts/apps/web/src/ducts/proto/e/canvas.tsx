@@ -72,7 +72,7 @@ import { LAND, LAND_EASING } from "#/scene/marks";
 import { usePictureFloaters } from "./picture-floaters";
 import { RulingBody, useMarks } from "./rulings";
 import { noRunParts } from "../../subject-text";
-import { SubjectText, SubjectTextContext } from "../../subject-text-view";
+import { SubjectText, SubjectTextContext } from "@pe/kit/lang/subject-text";
 
 const LAYER_WORDS: Record<
   (typeof DUCTS_LAYERS)[number],
@@ -590,7 +590,10 @@ function Canvas({
     const finding =
       r.kind === "claim" ? `claim:${r.claim.id}` : r.kind === "issue" ? r.issue.id : r.finding.id;
     const issue = issues.find((i) => i.findings.includes(finding))?.key ?? finding;
-    setPage({ selected: String(r.at), issue, rulingSearch: emptyListSearch() }, { history: "push" });
+    setPage(
+      { selected: String(r.at), issue, rulingSearch: emptyListSearch() },
+      { history: "push" },
+    );
     setOpenRuling(r.n);
   };
   const schematic = (size: "main" | "inset") => (
@@ -690,7 +693,7 @@ function Canvas({
                 className="veil min-w-[6ch] truncate rounded-control px-1"
                 data-e-selected={pickedId}
                 aria-label={`go to ${pickedName}`}
-                onClick={() => subjects?.go(pickedId)}
+                onClick={() => subjects?.go?.(pickedId)}
               >
                 {pickedName}
               </button>
@@ -883,9 +886,7 @@ function Canvas({
               ) : nodeFacts ? (
                 <NodeFactsView {...nodeFacts} />
               ) : (
-                <p className="text-ink-2">
-                  element {nameOfId(readId) ?? readId} is not drawn here
-                </p>
+                <p className="text-ink-2">element {nameOfId(readId) ?? readId} is not drawn here</p>
               )}
               <p data-pe-loss={readId}>
                 Pe loss <span className="face-mono">{fmt(index.loss.get(readId), 4)}</span> in-wg ·
@@ -950,7 +951,7 @@ function Canvas({
                           type="button"
                           className="underline decoration-line-2 underline-offset-2"
                           onClick={() =>
-                            subjects ? subjects.go(solved.critical!) : pick(solved.critical!)
+                            subjects?.go ? subjects.go(solved.critical!) : pick(solved.critical!)
                           }
                         >
                           {criticalName}
@@ -977,11 +978,10 @@ function Canvas({
             counts={scale.counts}
             nameOf={scale.nameOf}
             // The max's element is named in text: the alias-click, not a picture pick.
-            onSelect={(id) => (subjects ? subjects.go(id) : pick(id))}
+            onSelect={(id) => (subjects?.go ? subjects.go(id) : pick(id))}
           />
           {picture === "model" ? <KeyLegend keys={PICTURE_KEYS} lead={0} /> : null}
         </div>
-
       </div>
     </Pane>
   );

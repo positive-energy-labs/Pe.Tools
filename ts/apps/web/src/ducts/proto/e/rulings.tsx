@@ -19,7 +19,7 @@ import type { Claim } from "../../legs";
 import type { Scene } from "../../scene";
 import type { ProtoProps } from "../props";
 import { fmtFt } from "./bar";
-import { SubjectText, SubjectTextContext } from "../../subject-text-view";
+import { SubjectText, SubjectTextContext } from "@pe/kit/lang/subject-text";
 
 /** Cumulative effective length from the fan to each element, in equivalent feet, along priced paths. */
 function cumulativeOf(priced: ProtoProps["priced"]): Map<number, number> {

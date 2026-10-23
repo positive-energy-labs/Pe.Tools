@@ -1,13 +1,7 @@
 import type { DuctSnapshot } from "@pe/ducts-domain/types";
 import { elementNamer } from "./claims";
 import type { NoRunBranch } from "@pe/ducts-domain/no-runs";
-
-export type SubjectPart = string | { id: number; connector?: number };
-export type SubjectReference = { id: number; name: string; number: number };
-export type SubjectDocument = {
-  parts: (string | (SubjectReference & { connector?: number }))[];
-  references: SubjectReference[];
-};
+import type { SubjectPart } from "@pe/kit/lang/subject-text";
 
 /** No-run reasons already identify their subject; only compound/free explanations need parsing. */
 export function noRunParts(branch: NoRunBranch, snapshot: DuctSnapshot): SubjectPart[] {
@@ -52,52 +46,4 @@ export function subjectNamer(snapshot: DuctSnapshot) {
     if (node.kind === "fitting" || node.kind === "cap") return `${size ? `${size} ` : ""}${kind}`;
     return `${node.type || node.family || node.category || kind}${node.kind === "terminal" ? " grille" : ""}`;
   };
-}
-
-/** Structured references first; numbers in free prose resolve only when the snapshot knows them. */
-export function subjectDocument(
-  source: readonly SubjectPart[],
-  nameOf: (id: number) => string | null,
-  ids: readonly number[] = [],
-  numbering: readonly SubjectReference[] = [],
-): SubjectDocument {
-  const references: SubjectReference[] = [...numbering];
-  const parts: SubjectDocument["parts"] = [];
-  const seen = new Set<number>();
-  const reference = (id: number, connector?: number): boolean => {
-    const name = nameOf(id);
-    if (!name) return false;
-    let ref = references.find((r) => r.id === id);
-    if (!ref) {
-      ref = { id, name, number: references.length + 1 };
-      references.push(ref);
-    }
-    seen.add(id);
-    parts.push({ ...ref, connector });
-    return true;
-  };
-  for (const part of source) {
-    if (typeof part !== "string") {
-      if (!reference(part.id, part.connector)) parts.push(`element ${part.id} (not in snapshot)`);
-      continue;
-    }
-    let at = 0;
-    for (const match of part.matchAll(/(?<![\w.])\d+(?::\d+)?(?!\w|\.\d)/g)) {
-      const [id, connector] = match[0].split(":").map(Number);
-      if (!nameOf(id!)) continue;
-      parts.push(part.slice(at, match.index));
-      reference(id!, connector);
-      at = match.index + match[0].length;
-    }
-    parts.push(part.slice(at));
-  }
-  // Rows know their subjects even when the description contains no id (e.g. "No flow").
-  for (const id of new Set(ids)) {
-    if (seen.has(id) || !nameOf(id)) continue;
-    parts.push(seen.size ? ", " : " · ");
-    reference(id);
-  }
-  // Only what the parts name: a caller's numbering keeps numbers shared across texts, but a
-  // number the reader cannot see in this text is never lit on the stage.
-  return { parts, references: references.filter((r) => seen.has(r.id)) };
 }

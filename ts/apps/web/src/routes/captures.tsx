@@ -92,16 +92,18 @@ function CapturesRoute() {
 
   return (
     <Surface head={<RouteShell manifest={manifest} handle={handle} />}>
-      <Pane title="captures" meta={captures ? String(captures.length) : undefined}>
+      <Pane
+        title="captures"
+        meta={captures ? String(captures.length) : failure ? "unread" : "reading…"}
+      >
         {failure ? <OutcomeLine kind="error" label="captures unread" says={failure} /> : null}
+        {/* A re-read keeps the last list (N6); before the first one the head says "reading…". */}
         {captures ? (
           <CapturesList
             captures={captures}
             focus={page.sha}
             open={page.open}
-            onOpen={(sha, open) =>
-              setPage({ open: open ? [...page.open, sha] : page.open.filter((was) => was !== sha) })
-            }
+            onPage={(next) => setPage({ sha: next.sha, open: [...(next.open ?? page.open)] })}
           />
         ) : null}
       </Pane>

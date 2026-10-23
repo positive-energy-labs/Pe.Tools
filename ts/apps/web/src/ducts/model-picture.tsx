@@ -27,7 +27,7 @@ import type { SceneRead } from "#/scene/use-scene";
 import type { Bounds, Layer3D, SceneMeshes } from "#/scene/types";
 
 import { CaptionBounds } from "./subject-labels";
-import { SubjectTextContext } from "./subject-text-view";
+import { SubjectTextContext } from "@pe/kit/lang/subject-text";
 import { Annotations, type Label, type Ruling } from "./annotations";
 import type { Encoding } from "./encoding";
 import type { DuctsPage } from "./manifest";
@@ -86,7 +86,9 @@ export function subjectPose(
   now: OrbitViewport | null,
 ): OrbitViewport {
   const to = frame(bounds.scene, inContext(target), now ?? undefined);
-  return now && now.zoom > to.zoom / 1.6 && now.zoom < to.zoom * 1.6 ? { ...to, zoom: now.zoom } : to;
+  return now && now.zoom > to.zoom / 1.6 && now.zoom < to.zoom * 1.6
+    ? { ...to, zoom: now.zoom }
+    : to;
 }
 
 const overlap = (a: DOMRect, b: DOMRect) =>
@@ -127,13 +129,20 @@ export function clearPose(
   const xs = points.map((p) => p[0]),
     ys = points.map((p) => p[1]);
   const [w, h] = [Math.max(...xs) - Math.min(...xs), Math.max(...ys) - Math.min(...ys)];
-  const [cx, cy] = [(Math.max(...xs) + Math.min(...xs)) / 2, (Math.max(...ys) + Math.min(...ys)) / 2];
+  const [cx, cy] = [
+    (Math.max(...xs) + Math.min(...xs)) / 2,
+    (Math.max(...ys) + Math.min(...ys)) / 2,
+  ];
   const best = ANCHORS.flatMap((fx) => ANCHORS.map((fy) => [fx * at.width, fy * at.height]))
     .map(([x, y]) => {
       const box = new DOMRect(at.left + x! - w / 2, at.top + y! - h / 2, w, h);
       const covered = blocks.reduce((sum, b) => sum + overlap(box, b), 0);
       const outside = w * h - overlap(box, at);
-      return { x: x!, y: y!, cost: (covered + outside) * 1e3 + Math.hypot(x! - at.width / 2, y! - at.height / 2) };
+      return {
+        x: x!,
+        y: y!,
+        cost: (covered + outside) * 1e3 + Math.hypot(x! - at.width / 2, y! - at.height / 2),
+      };
     })
     .reduce((a, b) => (b.cost < a.cost ? b : a));
   return shiftOnScreen(view, scene, at.height, best.x - cx, best.y - cy);
@@ -313,7 +322,9 @@ export function ModelPicture({
     const target = key && meshes ? boundsOfInstances(meshes, (i) => i.key === key) : null;
     if (!target) return move(null);
     const view = subjectPose(bounds, target, orbit.read());
-    flyTo(orbit, host ? clearPose(view, target, bounds.scene, host) : view, { scene: bounds.scene });
+    flyTo(orbit, host ? clearPose(view, target, bounds.scene, host) : view, {
+      scene: bounds.scene,
+    });
   };
 
   useScopeGestures(ORBIT_GESTURES);
@@ -442,7 +453,9 @@ export function ModelPicture({
               pointOf={pointOf}
               issue={issue}
               onPick={onPick}
-              onFrame={(id) => frameAt(meshes?.instances.find((i) => i.revitId === id)?.key ?? null)}
+              onFrame={(id) =>
+                frameAt(meshes?.instances.find((i) => i.revitId === id)?.key ?? null)
+              }
               onRuling={onRuling}
               onHover={onHover}
             />

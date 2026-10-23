@@ -4,7 +4,7 @@ import { TooltipHint } from "@pe/kit/lang/tooltip";
  * value beside where it came from. A missing value is printed as missing, never left blank.
  */
 import { ISSUE_KINDS } from "./issues";
-import { SubjectText } from "./subject-text-view";
+import { SubjectText } from "@pe/kit/lang/subject-text";
 import type { DuctNode, Issue, Segment } from "./encoding";
 const num = (value: number | null | undefined, unit: string, digits = 0) =>
   value == null ? null : `${value.toFixed(digits)} ${unit}`;

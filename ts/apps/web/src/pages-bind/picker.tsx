@@ -15,6 +15,8 @@ import {
 import { Button } from "@pe/kit/lang/button";
 import { EmptyState } from "@pe/kit/lang/empty";
 import { Row } from "@pe/kit/lang/row";
+import { emptyListState, useList } from "@pe/kit/lang/collection";
+import { ListView } from "@pe/kit/lang/list-view";
 import { Section } from "#/components/lang/section";
 import { Surface } from "#/components/lang/surface";
 import { useThreadSummaries } from "#/open/bay";
@@ -40,6 +42,20 @@ const subjectOf = (reading: PageTargetReading) =>
       ? `choose: ${reading.resolution.reason}`
       : reading.resolution.kind;
 
+type Choice = { kind: "thread"; thread: HarnessThreadSummary } | { kind: "doc"; doc: Pinnable };
+const THREADS = "Follow a thread";
+const DOCUMENTS = "Pin a document";
+const keyOf = (choice: Choice) =>
+  choice.kind === "thread"
+    ? `thread:${choice.thread.id}`
+    : `doc:${choice.doc.revit}/${choice.doc.address ?? choice.doc.title}`;
+const search = (choice: Choice) => ({
+  text:
+    choice.kind === "thread"
+      ? [choice.thread.title, targetsLabel(choice.thread.head.targets)]
+      : [choice.doc.title, choice.doc.revit, choice.doc.address],
+});
+
 export function BindPicker({
   slug,
   reading,
@@ -57,6 +73,49 @@ export function BindPicker({
   onBind: (slot: PageChoice) => void;
 }) {
   const binding = reading?.binding ?? null;
+  // Writes only documents a person added to the thread and that are open now.
+  const writes = (thread: HarnessThreadSummary) =>
+    thread.head.targets.some(
+      (target) =>
+        target.admission !== null &&
+        target.request.kind === "open" &&
+        documents?.some(
+          (doc) =>
+            target.request.kind === "open" &&
+            doc.ref.session === target.request.ref.session &&
+            doc.ref.openId === target.request.ref.openId,
+        ),
+    );
+  const items = useMemo<Choice[]>(
+    () => [
+      ...(threads ?? []).map((thread) => ({ kind: "thread" as const, thread })),
+      ...(documents ?? []).map((doc) => ({ kind: "doc" as const, doc })),
+    ],
+    [threads, documents],
+  );
+  const bound = items.find((choice) =>
+    choice.kind === "thread"
+      ? binding?.kind === "thread" && binding.thread === choice.thread.id
+      : binding?.kind === "pinned" &&
+        !!choice.doc.address &&
+        binding.address.toLowerCase() === choice.doc.address.toLowerCase(),
+  );
+  const list = useList({
+    items,
+    keyOf,
+    search,
+    groups: {
+      of: (choice) => (choice.kind === "thread" ? THREADS : DOCUMENTS),
+      order: [THREADS, DOCUMENTS],
+    },
+    state: { ...emptyListState(), selected: bound ? [keyOf(bound)] : [] },
+    refusalOf: (choice) =>
+      choice.kind === "doc" && !choice.doc.address ? "Unsaved: there is no Address to pin." : null,
+    onPick: (choice) =>
+      choice.kind === "thread"
+        ? onBind({ kind: "thread", thread: choice.thread.id })
+        : choice.doc.address && onBind({ kind: "pinned", address: address(choice.doc.address) }),
+  });
   return (
     <div className="flex min-h-0 flex-1 flex-col gap-4" data-testid="pages-bind">
       <Section
@@ -74,8 +133,9 @@ export function BindPicker({
           <Row
             label={subjectOf(reading) || "no document"}
             aside={
+              // I1: the bound thread by its title, never its id.
               binding?.kind === "thread"
-                ? `thread ${binding.thread.slice(0, 8)}`
+                ? (bound?.kind === "thread" && bound.thread.title) || "a thread not listed"
                 : (binding?.kind ?? "")
             }
             meta={<span className="face-mono">{writeMark(reading.write)}</span>}
@@ -99,80 +159,48 @@ export function BindPicker({
           </p>
         ) : null}
       </Section>
-      <Section label="Follow a thread">
-        <p className="m-0 t-small text-ink-2">
-          The Page targets the thread's one document, and writes only documents a person added to
-          that thread.
-        </p>
-        {threads === null ? (
-          <EmptyState story="scope" exit="reading threads">
-            no threads read yet
-          </EmptyState>
-        ) : threads.length === 0 ? (
-          <EmptyState story="scope" exit="start a thread in chat, then bind to it">
-            no threads
-          </EmptyState>
-        ) : (
-          threads.map((thread) => (
-            <Row
-              key={thread.id}
-              label={thread.title || thread.id}
-              aside={targetsLabel(thread.head.targets) ?? "no target"}
-              meta={
-                <span className="face-mono">
-                  {/* Writes only documents a person added to the thread and that are open now. */}
-                  {thread.head.targets.some(
-                    (target) =>
-                      target.admission !== null &&
-                      target.request.kind === "open" &&
-                      documents?.some(
-                        (doc) =>
-                          target.request.kind === "open" &&
-                          doc.ref.session === target.request.ref.session &&
-                          doc.ref.openId === target.request.ref.openId,
-                      ),
-                  )
-                    ? "thread"
-                    : "read"}
-                </span>
+      {/* One list (N3): "/" searches threads and documents together; a pick binds. */}
+      <ListView
+        list={list}
+        aria-label="bind targets"
+        primary
+        empty={
+          threads === null || documents === null
+            ? {
+                message: "reading threads and open documents",
+                exit: "the host answers in a moment",
               }
-              active={binding?.kind === "thread" && binding.thread === thread.id}
-              onClick={() => onBind({ kind: "thread", thread: thread.id })}
-            />
-          ))
-        )}
-      </Section>
-      <Section label="Pin a document">
-        <p className="m-0 t-small text-ink-2">
-          A pin names a saved file, so it survives a reopen. It writes only to Pea's own documents.
-        </p>
-        {documents === null ? (
-          <EmptyState story="scope" exit="reading open documents">
-            no documents read yet
-          </EmptyState>
-        ) : documents.length === 0 ? (
-          <EmptyState story="scope" exit="open a document in Revit, then pin it">
-            no open documents
-          </EmptyState>
-        ) : (
-          documents.map((doc) => (
-            <Row
-              key={`${doc.revit}/${doc.address ?? doc.title}`}
-              label={doc.title}
-              aside={doc.revit}
-              refusal={doc.address ? null : "Unsaved: there is no Address to pin."}
-              active={
-                binding?.kind === "pinned" &&
-                !!doc.address &&
-                binding.address.toLowerCase() === doc.address.toLowerCase()
+            : {
+                message: "no threads or open documents",
+                exit: "start a thread in chat, or open a document in Revit",
               }
-              onClick={() =>
-                doc.address && onBind({ kind: "pinned", address: address(doc.address) })
+        }
+        row={(choice) =>
+          choice.kind === "thread"
+            ? {
+                label: choice.thread.title || "untitled thread",
+                aside: targetsLabel(choice.thread.head.targets) ?? "no target",
+                meta: (
+                  <span
+                    className="face-mono"
+                    title={
+                      writes(choice.thread)
+                        ? "The Page targets the thread's document and may write it: a person added it to the thread."
+                        : "The Page targets the thread's document read-only: no person added it to the thread."
+                    }
+                  >
+                    {writes(choice.thread) ? "thread" : "read"}
+                  </span>
+                ),
               }
-            />
-          ))
-        )}
-      </Section>
+            : {
+                label: choice.doc.title,
+                aside: choice.doc.revit,
+                title:
+                  "A pin names a saved file, so it survives a reopen. It writes only to Pea's own documents.",
+              }
+        }
+      />
     </div>
   );
 }

@@ -2,7 +2,7 @@
 import { cleanup, fireEvent, render } from "@testing-library/react";
 import { afterEach, expect, it, vi } from "vite-plus/test";
 import { Annotations } from "./annotations";
-import { reachStore, SubjectTextContext } from "./subject-text-view";
+import { reachStore, SubjectTextContext } from "@pe/kit/lang/subject-text";
 
 vi.mock("@pe/kit/lib/token", () => ({
   token: () => "currentColor",

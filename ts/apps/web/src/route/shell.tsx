@@ -67,19 +67,26 @@ export interface ShellProps<W, R extends string, P, A extends string> {
   children?: ReactNode;
 }
 
-/** The one `?target` reader/writer every shell and route shares. Grammar lives in `parseTarget`. */
-export function useChooseTarget(): [string | null, (target: string | null) => void] {
+/**
+ * The one `?target` reader/writer every shell and route shares. Grammar lives in `parseTarget`.
+ * A person's pick is a named move and pushes (N5: Back returns to the previous target); only a
+ * pick the page makes for them (auto-binding the one open document) replaces.
+ */
+export function useChooseTarget(): [
+  string | null,
+  (target: string | null, history?: "push" | "replace") => void,
+] {
   const navigate = useRouteNavigate();
   const search = useRouteSearch();
   const choose = useCallback(
-    (target: string | null) =>
+    (target: string | null, history: "push" | "replace" = "push") =>
       void navigate({
         to: ".",
         search: (previous: Record<string, unknown>) => ({
           ...previous,
           target: target || undefined,
         }),
-        replace: true,
+        replace: history === "replace",
       }),
     [navigate],
   );
