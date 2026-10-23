@@ -247,6 +247,7 @@ export function FamiliesPivot({ empty, above }: { empty?: ReactNode; above?: Rea
     parse,
     overlay,
     chips: scopeChips,
+    located,
   } = useFamiliesWorkspace();
   const { pivotRows, pivotFamilies } = useMemo(() => {
     const pivot = buildPivot(rows, params, families);
@@ -315,6 +316,16 @@ export function FamiliesPivot({ empty, above }: { empty?: ReactNode; above?: Rea
     [filtered.shownRows, tableState],
   );
   const map = usePivotMap(scroller, mappedRows, types, overlay);
+  // A located cell the query hides cannot land; the chip then moves nothing rather than guessing.
+  const landed = useMemo(() => {
+    if (!located) return null;
+    const at = familyCellAddress(located.key);
+    const row = mappedRows.findIndex((each) => each.name === at.parameter);
+    const col = types.findIndex(
+      (type) => type.familyName === at.familyName && type.typeName === at.typeName,
+    );
+    return row < 0 || col < 0 ? null : { row, col, n: located.n };
+  }, [located, mappedRows, types]);
   return (
     <Pane title="parameters × family types" scroll="clip" flush floaters={[map]}>
       {above}
@@ -337,6 +348,7 @@ export function FamiliesPivot({ empty, above }: { empty?: ReactNode; above?: Rea
           nativeScope={nativeScope}
           edit={edit}
           scroller={scroller}
+          landed={landed}
           empty={mappedRows.length ? undefined : empty}
         />
       </TableFrame>

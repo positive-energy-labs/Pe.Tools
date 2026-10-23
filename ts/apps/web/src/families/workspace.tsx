@@ -1,4 +1,4 @@
-import { useMemo } from "react";
+import { useMemo, useState } from "react";
 import { familyCellValueSchema, type FamilyCellState } from "@pe/agent-contracts";
 
 import { runFanOut, type CellWire } from "#/components/work/band";
@@ -266,9 +266,15 @@ function useFamiliesWorkspaceModel(
     [plan, families, planByName],
   );
 
+  /** The last chip a person pressed to find its cell: a serial, so pressing it again re-lands. */
+  const [located, setLocated] = useState<{ key: string; n: number } | null>(null);
+  const locateCell = (key: string) => setLocated((last) => ({ key, n: (last?.n ?? 0) + 1 }));
+
   return {
     store,
     archived,
+    located,
+    locateCell,
     /** The saved Work cannot be read: its refusal and start fresh are the only instruction, so
      * every Work-bearing control is inert and no empty-Work instruction is drawn (F-J6-1). */
     workUnreadable: store.handle.work.refusal != null,

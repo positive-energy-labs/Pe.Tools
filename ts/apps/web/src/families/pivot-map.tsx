@@ -14,7 +14,9 @@ export function usePivotMap(
   types: readonly TypeRow[],
   overlay: PatchOverlay,
 ): FloaterSpec {
-  const [open, onOpenChange] = useState(true);
+  /** Null follows the field: the map shows only while the grid overflows its pane (N8 for a vast
+   * field, L2 for a small one, which it would only cover). A toggle is the person's and wins. */
+  const [chosen, onOpenChange] = useState<boolean | null>(null);
   const [field, setField] = useState({
     width: 1,
     height: 1,
@@ -25,7 +27,7 @@ export function usePivotMap(
   });
   useEffect(() => {
     const el = scroller.current;
-    if (!open || !el || typeof ResizeObserver === "undefined") return;
+    if (chosen === false || !el || typeof ResizeObserver === "undefined") return;
     let frame = 0;
     const measure = () => {
       frame = 0;
@@ -51,7 +53,9 @@ export function usePivotMap(
       el.removeEventListener("scroll", schedule);
       cancelAnimationFrame(frame);
     };
-  }, [scroller, open, rows, types]);
+  }, [scroller, chosen, rows, types]);
+  const open =
+    chosen ?? (field.width > field.clientWidth + 1 || field.height > field.clientHeight + 1);
   const paint = useCallback(
     (ctx: CanvasRenderingContext2D, scale: number) => {
       const recess = canvasColor(ctx, "recess");
