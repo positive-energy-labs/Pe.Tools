@@ -296,6 +296,7 @@ test("seeded real-user route journey", async () => {
     }[],
     coverage: {} as Record<string, string>,
     workerProtocol: [] as unknown[],
+    draftCensus: [] as unknown[],
     network: [] as {
       method: string;
       url?: string;
@@ -1259,6 +1260,43 @@ test("seeded real-user route journey", async () => {
       await p.until(async () => new URL(await p.url()).pathname === "/pea", "Pea route");
       const composer = 'textarea[aria-label="Message"]';
       await p.until(() => box(p, composer), "Pea composer", 30_000);
+      expect(
+        await p.read<number>(
+          `[...document.querySelectorAll(${literal(composer)})].filter(${visible}).length`,
+        ),
+        "one visible Pea composer",
+      ).toBe(1);
+      const draftReference = (
+        await p.send("Runtime.evaluate", {
+          expression: `(() => {
+          const node = [...document.querySelectorAll(${literal(composer)})].find(${visible});
+          let scroll = node;
+          while (scroll && scroll.scrollHeight <= scroll.clientHeight && scroll.scrollWidth <= scroll.clientWidth) scroll = scroll.parentElement;
+          return { node, scroll };
+        })()`,
+          returnByValue: false,
+        })
+      ).result.objectId as string;
+      const censusDraft = async (phase: string) => {
+        const result = await p.send("Runtime.callFunctionOn", {
+          objectId: draftReference,
+          returnByValue: true,
+          functionDeclaration: `function() {
+            const shown = ${visible};
+            const nodes = [...document.querySelectorAll(${literal(composer)})].filter(shown);
+            const current = nodes[0];
+            let scroll = current;
+            while (scroll && scroll.scrollHeight <= scroll.clientHeight && scroll.scrollWidth <= scroll.clientWidth) scroll = scroll.parentElement;
+            const describe = node => node ? { value: node.value, aria: node.getAttribute('aria-label'), active: node === document.activeElement, connected: node.isConnected, visible: shown(node), top: node.scrollTop, left: node.scrollLeft, html: node.outerHTML } : null;
+            return { url: location.href, thread: new URL(location.href).searchParams.get('thread'), prompt: new URL(location.href).searchParams.get('prompt'), visibleCount: nodes.length, sameNode: current === this.node, retained: describe(this.node), current: describe(current), sameScrollParent: scroll === this.scroll, retainedScrollParent: describe(this.scroll), scrollParent: describe(scroll), transcriptBusy: [...document.querySelectorAll('[data-chat-transcript]')].filter(shown).map(e => e.getAttribute('aria-busy')), firstOpenVisible: [...document.querySelectorAll('section[aria-label="set up Pea"]')].some(shown), alerts: [...document.querySelectorAll('[role="alert"]')].filter(shown).map(e => e.innerText) };
+          }`,
+        });
+        const evidence = result.result.value;
+        receipt.draftCensus.push({ at: Date.now(), phase, reference: draftReference, ...evidence });
+        save();
+        return evidence;
+      };
+      await censusDraft("initial visible Pea composer; first-open surface observed");
       const threads = await p.read<string[]>(
         `[...document.querySelectorAll('[data-list-view][aria-label="threads"] [role=option][data-key]')].filter(${visible}).map(e => e.getAttribute('data-key'))`,
       );
@@ -1291,6 +1329,11 @@ test("seeded real-user route journey", async () => {
       if (draftBefore)
         throw new Error("PRECONDITION: Pea composer must be empty in disposable browser profile");
       await fill(p, composer, marker);
+      const typed = await censusDraft("immediately after trusted fill");
+      expect(typed.visibleCount, "trusted typing targets one visible composer").toBe(1);
+      expect(typed.current?.value, "trusted typing produced the draft before leaving Pea").toBe(
+        marker,
+      );
       if (canSwitch) {
         await pickThread(threads[1]!);
         expect(await fieldValue(p, composer), "A's draft never appears in B").not.toBe(marker);
@@ -1301,9 +1344,22 @@ test("seeded real-user route journey", async () => {
         );
       }
       const pea = await p.url();
+      await censusDraft("before Home");
       await button(p, "Home / tool directory");
+      await censusDraft("after Home; retained composer may be hidden");
       await history(p, "Back");
+      await censusDraft("after Back before composer/thread settle");
       await p.until(() => box(p, composer), "composer on return");
+      await censusDraft("visible composer on return before URL/thread settle");
+      await p.until(
+        async () =>
+          (await p.url()) === pea &&
+          (await p.read<boolean>(
+            `[...document.querySelectorAll('[data-chat-transcript]')].filter(${visible}).every(e => e.getAttribute('aria-busy') !== 'true')`,
+          )),
+        "returned Pea URL and visible thread settled",
+      );
+      await censusDraft("after URL/thread settle; first-open surface observed");
       expect(await p.url()).toBe(pea);
       expect(await fieldValue(p, composer)).toBe(marker);
       await fill(p, composer, "");
@@ -1315,6 +1371,7 @@ test("seeded real-user route journey", async () => {
       expect(await p.url()).toBe(route);
       expect(await retained(p, main), "Activity retained the Ducts main DOM").toBe(true);
       await p.send("Runtime.releaseObject", { objectId: main });
+      await p.send("Runtime.releaseObject", { objectId: draftReference });
       receipt.coverage.draft = "unsent draft survives route leave/return";
       if (canSwitch)
         receipt.coverage.thread =
