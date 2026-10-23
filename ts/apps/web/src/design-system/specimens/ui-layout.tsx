@@ -1,5 +1,5 @@
 import { Pane, PaneSplit, paneRecipe } from "@pe/kit/lang/pane";
-import { PaneResizeHandle, paneSplitRecipe } from "@pe/kit/lang/pane-resize";
+import { paneSplitRecipe } from "@pe/kit/lang/pane-resize";
 import { Switch, switchRecipe } from "@pe/kit/lang/switch";
 import { Tooltip, TooltipTrigger, TooltipContent } from "@pe/kit/lang/tooltip";
 import { Surface } from "@pe/kit/lang/surface";
@@ -56,16 +56,13 @@ export function UiLayoutSpecimens() {
           </div>
         )}
       />
-      <SpecimenFrame name="PaneResizeHandle" importPath="@pe/kit/lang/pane-resize">
-        <div className="h-20">
-          <PaneResizeHandle
+      <SpecimenFrame name="Pane resize corners" importPath="@pe/kit/lang/pane-resize">
+        <div className="h-32 w-80">
+          <PaneSplit
             axis="horizontal"
-            value={20}
-            min={0}
-            growth={1}
-            containerSize={() => 100}
-            onResize={() => {}}
-            onReset={() => {}}
+            start={<Pane>subject</Pane>}
+            end={<Pane>resize from either corner</Pane>}
+            resize={{ target: "end", defaultSize: 160, minSize: 80 }}
           />
         </div>
       </SpecimenFrame>
