@@ -344,6 +344,7 @@ const groupOf = (input: unknown) => (input as { group?: string } | undefined)?.g
 
 /** The group a heal verb acts on: the one it names (a Heal row), else the chosen system's. */
 const healTargetOf = (ctx: DuctsCtx, input: unknown): string => {
+  currentPricing(ctx);
   const named = groupOf(input);
   if (named) return named;
   const run = ctx.page.heal;

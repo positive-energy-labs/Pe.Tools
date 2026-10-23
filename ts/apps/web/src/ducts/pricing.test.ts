@@ -6,6 +6,8 @@ import { readiness } from "@pe/ducts-domain/readiness";
 import { healPlan } from "@pe/ducts-domain/heal";
 import { systemsNeedingFix } from "./system-list-search";
 import { systemList } from "./system-list";
+import { inferJoints } from "@pe/ducts-domain/proximity";
+import { withStoredRulings } from "@pe/ducts-domain/rulings";
 import { SCENE_FIXTURE } from "./scene.fixture";
 import { pricingClient, type PricingPort } from "./pricing-client";
 import {
@@ -76,6 +78,7 @@ test("worker result has full solve/readiness parity through structured clone, in
       heal,
       needsFix: systemsNeedingFix(expected, doc, heal),
       systems: systemList(expected.snapshot, expected),
+      inference: inferJoints(original.snapshot, 1, withStoredRulings(doc, original.snapshot.store)),
     });
     expect(response.result.priced.flows).toBeInstanceOf(Map);
     expect(response.result.priced.fanFlows).toBeInstanceOf(Map);
@@ -122,6 +125,25 @@ test("deltas preserve untouched identities, Map keys/deletions, arrays, and non-
   const restoredKey = applyPricingDelta({}, pricingDelta({}, authoredKey)!);
   expect(restoredKey).toEqual(authoredKey);
   expect(Object.getPrototypeOf(restoredKey)).toBe(Object.prototype);
+});
+
+test("unit-flow edits reuse topology; staged verdicts invalidate it", () => {
+  const snapshot = SCENE_FIXTURE.snapshot;
+  const before = ductsRouteState.schema.parse({});
+  const after = ductsRouteState.schema.parse({
+    equipmentFlows: { "14107111": { staged: { value: { cfm: 176 } } } },
+  });
+  const inference = inferJoints(snapshot, 1, before);
+  const heal = healPlan(snapshot, before);
+  expect(inferJoints(snapshot, 1, after)).toBe(inference);
+  expect(healPlan(snapshot, after)).toBe(heal);
+  const ruled = ductsRouteState.schema.parse({
+    assumptions: {
+      "proximity:1:0|2:0": { staged: { value: { kind: "verdict", verdict: "ignore" } } },
+    },
+  });
+  expect(inferJoints(snapshot, 1, ruled)).not.toBe(inference);
+  expect(healPlan(snapshot, ruled)).not.toBe(heal);
 });
 
 test("obsolete deltas advance the private base without publishing stale Work", () => {

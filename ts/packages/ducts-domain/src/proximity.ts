@@ -480,7 +480,42 @@ function components(elements: Element[], equipment: ReadonlySet<number>) {
  * Each inference is a finding; one that joins two elements already in one component is also a
  * `loop-by-inference`.
  */
+export const topologyRulingsKey = (work: DuctsRouteDocument | null) =>
+  JSON.stringify(
+    Object.entries(work?.assumptions ?? {})
+      .flatMap(([key, cell]) => {
+        const value = cell.staged?.value;
+        return value?.kind === "verdict" ? [[key, value.verdict]] : [];
+      })
+      .sort(([a], [b]) => a!.localeCompare(b!)),
+  );
+
+const inferences = new WeakMap<DuctSnapshot, { key: string; value: Inference }>();
+
+/** One immutable inference per snapshot, tolerance and staged verdict set; flow edits cannot move it. */
+export function rememberInference(
+  snapshot: DuctSnapshot,
+  tolIn: number,
+  work: DuctsRouteDocument | null,
+  value: Inference,
+) {
+  inferences.set(snapshot, { key: `${tolIn}:${topologyRulingsKey(work)}`, value });
+}
+
 export function inferJoints(
+  snapshot: DuctSnapshot,
+  tolIn = 1,
+  work: DuctsRouteDocument | null = null,
+): Inference {
+  const key = `${tolIn}:${topologyRulingsKey(work)}`;
+  const hit = inferences.get(snapshot);
+  if (hit?.key === key) return hit.value;
+  const value = infer(snapshot, tolIn, work);
+  inferences.set(snapshot, { key, value });
+  return value;
+}
+
+function infer(
   snapshot: DuctSnapshot,
   tolIn = 1,
   work: DuctsRouteDocument | null = null,

@@ -14,7 +14,7 @@
  * model feet, limits inches. Groups are the tolerated snapshot's (the page's) group ids.
  */
 import type { DuctsRouteDocument } from "@pe/agent-contracts";
-import { tolerate, verdictOf } from "./proximity.ts";
+import { tolerate, topologyRulingsKey, verdictOf } from "./proximity.ts";
 import { withStoredRulings } from "./rulings.ts";
 import type { DuctSnapshot } from "./types.ts";
 
@@ -114,14 +114,23 @@ export const proximityId = (a: string, b: string) =>
 
 const FIX = "Fix it in Revit; its own tools enforce the rules its API does not.";
 
-const plans = new WeakMap<DuctSnapshot, { work: DuctsRouteDocument | null; plan: HealPlan }>();
+const plans = new WeakMap<DuctSnapshot, { key: string; plan: HealPlan }>();
 
-/** Cached per snapshot for the last Work. */
+export function rememberHealPlan(
+  snapshot: DuctSnapshot,
+  work: DuctsRouteDocument | null,
+  plan: HealPlan,
+) {
+  plans.set(snapshot, { key: topologyRulingsKey(withStoredRulings(work, snapshot.store)), plan });
+}
+
+/** Only staged topology verdicts affect healing; a unit-flow edit cannot rebuild it. */
 export function healPlan(snapshot: DuctSnapshot, work: DuctsRouteDocument | null = null): HealPlan {
+  const key = topologyRulingsKey(withStoredRulings(work, snapshot.store));
   const hit = plans.get(snapshot);
-  if (hit && hit.work === work) return hit.plan;
+  if (hit?.key === key) return hit.plan;
   const plan = build(snapshot, work);
-  plans.set(snapshot, { work, plan });
+  plans.set(snapshot, { key, plan });
   return plan;
 }
 

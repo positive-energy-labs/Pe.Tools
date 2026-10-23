@@ -5,7 +5,9 @@ import { price, type Priced } from "@pe/ducts-domain/pricing";
 import { readiness } from "@pe/ducts-domain/readiness";
 import type { DuctSnapshot } from "@pe/ducts-domain/types";
 import type { PricingDelta } from "./pricing-delta";
-import { healPlan } from "@pe/ducts-domain/heal";
+import { healPlan, rememberHealPlan } from "@pe/ducts-domain/heal";
+import { inferJoints, rememberInference } from "@pe/ducts-domain/proximity";
+import { withStoredRulings } from "@pe/ducts-domain/rulings";
 import { systemsNeedingFix } from "./system-list-search";
 import { systemList } from "./system-list";
 
@@ -27,6 +29,7 @@ export interface PricingResult {
     heal: ReturnType<typeof healPlan>;
     needsFix: ReadonlySet<string>;
     systems: ReturnType<typeof systemList>;
+    inference: ReturnType<typeof inferJoints>;
   };
 }
 export interface PricingObservation {
@@ -62,6 +65,11 @@ export function pricingJob() {
             heal,
             needsFix: systemsNeedingFix(priced, request.doc, heal),
             systems: systemList(priced.snapshot, priced),
+            inference: inferJoints(
+              base.snapshot,
+              1,
+              withStoredRulings(request.doc, base.snapshot.store),
+            ),
           },
         },
       };
@@ -69,6 +77,17 @@ export function pricingJob() {
       return { id: request.id, error: error instanceof Error ? error.message : String(error) };
     }
   };
+}
+
+/** Install exact worker evidence before React can ask synchronous projection helpers for it. */
+export function rememberAnalysis(input: PricingInput, result: PricingResult) {
+  rememberHealPlan(input.snapshot, input.doc, result.analysis.heal);
+  rememberInference(
+    input.snapshot,
+    1,
+    withStoredRulings(input.doc, input.snapshot.store),
+    result.analysis.inference,
+  );
 }
 
 export const samePricingInput = (a: PricingInput, b: PricingInput) =>
