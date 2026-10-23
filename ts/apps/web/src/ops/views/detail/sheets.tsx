@@ -1,9 +1,9 @@
 import type { RevitDetailParameterLinks, RevitDetailSheets } from "@pe/host-contracts/generated";
 import { EmptyState } from "@pe/kit/lang/empty";
 import { Provenance, Section } from "#/components/lang/section";
-import { VizChip } from "#/ops/primitives";
+import { FactChip } from "@pe/kit/lang/chip";
 import { type OpViewProps, UnrecognizedShape, asRecord } from "#/ops/registry";
-import { ANCHOR_VIZ, SheetCanvas, issueLine } from "./schedules";
+import { SheetCanvas, issueLine } from "./schedules";
 
 export function SheetsView({ data }: OpViewProps) {
   const rec = asRecord(data);
@@ -27,9 +27,11 @@ export function SheetsView({ data }: OpViewProps) {
             label={`${s.sheetNumber} — ${s.sheetName}`}
             aside={
               <>
-                <VizChip viz={1}>{s.viewportCount} views</VizChip>
-                <VizChip viz={2}>{s.scheduleInstanceCount} schedules</VizChip>
-                <VizChip viz={6}>{s.textNoteCount} notes</VizChip>
+                <FactChip title="viewports placed on the sheet">{s.viewportCount} views</FactChip>
+                <FactChip title="schedule instances placed on the sheet">
+                  {s.scheduleInstanceCount} schedules
+                </FactChip>
+                <FactChip title="text notes on the sheet">{s.textNoteCount} notes</FactChip>
               </>
             }
           >
@@ -37,13 +39,9 @@ export function SheetsView({ data }: OpViewProps) {
             {unplaced.length > 0 && (
               <div className="mt-1.5 flex flex-wrap gap-1">
                 {unplaced.map((a, i) => (
-                  <VizChip
-                    key={i}
-                    viz={ANCHOR_VIZ[a.kind] ?? 3}
-                    title={`${a.kind} — no bounding box in response`}
-                  >
+                  <FactChip key={i} title={`${a.kind} — no bounding box in response`}>
                     {a.label}
-                  </VizChip>
+                  </FactChip>
                 ))}
               </div>
             )}

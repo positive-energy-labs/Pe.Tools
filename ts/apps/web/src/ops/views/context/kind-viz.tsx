@@ -2,7 +2,7 @@ import { token } from "@pe/kit/lib/token";
 import { FactChip } from "@pe/kit/lang/chip";
 import { EmptyState } from "@pe/kit/lang/empty";
 import { Provenance, Section } from "#/components/lang/section";
-import { KVGrid, VizChip, type VizIndex } from "#/ops/primitives";
+import { KVGrid } from "#/ops/primitives";
 import {
   type OpViewProps,
   UnrecognizedShape,
@@ -13,20 +13,6 @@ import {
   text,
 } from "#/ops/registry";
 import { TooltipHint } from "@pe/kit/lang/tooltip";
-
-const KIND_VIZ: Record<string, VizIndex> = {
-  Document: 3,
-  View: 1,
-  Sheet: 2,
-  Schedule: 3,
-  Element: 5,
-  Category: 4,
-  Family: 6,
-};
-
-function kindViz(kind: string | undefined): VizIndex {
-  return (kind && KIND_VIZ[kind]) || 3;
-}
 
 export function handleId(handle: Record<string, unknown> | undefined): string {
   if (!handle) return "∅";
@@ -41,11 +27,7 @@ function handleLabel(handle: Record<string, unknown> | undefined): string {
 
 export function HandleChip({ handle }: { handle: Record<string, unknown> }) {
   const kind = asString(handle.kind);
-  return (
-    <VizChip viz={kindViz(kind)} title={`${kind ?? "?"} · ${handleId(handle)}`}>
-      {handleLabel(handle)}
-    </VizChip>
-  );
+  return <FactChip title={`${kind ?? "?"} · ${handleId(handle)}`}>{handleLabel(handle)}</FactChip>;
 }
 
 function truncateMiddle(value: string, max = 64): string {
@@ -145,9 +127,7 @@ export function ContextSummaryView({ data }: OpViewProps) {
         {activeView && (
           <div className="mt-2.5 flex min-w-0 flex-wrap items-baseline gap-x-2 gap-y-0.5 pt-2">
             <span className="">ON STAGE</span>
-            <VizChip viz={activeView.isSheet === true ? 2 : 1} title="view kind">
-              {text(activeView.viewType)}
-            </VizChip>
+            <FactChip title="view kind">{text(activeView.viewType)}</FactChip>
             <TooltipHint content={text(activeView.title)}>
               <span className="min-w-0 truncate">{text(activeView.title)}</span>
             </TooltipHint>
@@ -211,9 +191,9 @@ export function ContextSummaryView({ data }: OpViewProps) {
             {visibleCategories.map((cat, i) => {
               const handle = asRecord(cat.handle);
               return (
-                <VizChip key={i} viz={4} title={handle ? handleId(handle) : undefined}>
+                <FactChip key={i} title={handle ? handleId(handle) : "no handle"}>
                   {handle ? handleLabel(handle) : "?"} {text(cat.elementCount)}
-                </VizChip>
+                </FactChip>
               );
             })}
           </div>

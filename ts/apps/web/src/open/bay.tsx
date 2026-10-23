@@ -194,14 +194,9 @@ export function PatchBay({
       );
       // The line follows the receipt; the page log keeps what the reply said.
       setOutcome({ action: receipt.id });
-      onNote?.(
-        `${planned.key} ${receipt.state}`,
-        `action ${receipt.id}`,
-        receipt.state !== "succeeded",
-        {
-          id: receipt.id,
-        },
-      );
+      onNote?.(`${planned.key} ${receipt.state}`, "receipt", receipt.state !== "succeeded", {
+        id: receipt.id,
+      });
       dirty({ kind: "machine" });
       unplug();
     } catch (caught) {

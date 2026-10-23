@@ -9,7 +9,7 @@ import type { DuctFinding } from "@pe/agent-contracts";
 import { ISSUE_BLOCKS, type Blocks, type IssueKind } from "@pe/ducts-domain/issues";
 import { INFERRED_KINDS } from "@pe/ducts-domain/proximity";
 import type { VerdictTone } from "@pe/kit/table/model";
-import { SubjectText } from "./subject-text-view";
+import { SubjectText } from "@pe/kit/lang/subject-text";
 export interface IssueKindInfo {
   /** One to three words. */
   label: string;

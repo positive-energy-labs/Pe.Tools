@@ -4,6 +4,7 @@ import { useState } from "react";
 import { useList, emptyListState } from "@pe/kit/lang/collection";
 import { ListView, type ListRowParts } from "@pe/kit/lang/list-view";
 import { TOOLS } from "./catalogue";
+import { TooltipHint } from "@pe/kit/lang/tooltip";
 import type { PodRouteDescriptor } from "@pe/agent-contracts";
 import { TASKS, routeKey, friendlyObservation, resumeRefusal } from "./model";
 import { useDestination, useNavigation } from "./state";
@@ -67,17 +68,23 @@ const itemKey = (item: DirectoryItem) =>
 const itemTitle = (item: DirectoryItem) =>
   item.kind === "tool" ? item.tool.title : item.kind === "work" ? item.work.label : item.pod.name;
 
+const AT = new Intl.DateTimeFormat(undefined, { dateStyle: "short", timeStyle: "short" });
+const at = (iso: string) => AT.format(new Date(iso));
+
 function NavigationStatus() {
   const { snapshot, loading, error, refresh } = useNavigation();
   return (
     <div className="flex flex-wrap items-center gap-2 text-ink-2">
-      <span>
-        {loading
-          ? "Reading saved Works and Pea threads…"
-          : error
-            ? `Navigation inventory unavailable: ${error}${snapshot ? `; cached observation ${snapshot.observedAt} retained, Work resume paused` : ""}`
-            : `Saved inventory observed ${snapshot?.observedAt ?? "never"}`}
-      </span>
+      {/* I6: a word and its value; the reason rides the tooltip. */}
+      <TooltipHint content={error ?? undefined}>
+        <span>
+          {loading
+            ? "reading…"
+            : error
+              ? `unavailable${snapshot ? ` · cached ${at(snapshot.observedAt)} · resume paused` : ""}`
+              : `inventory · ${snapshot ? at(snapshot.observedAt) : "never"}`}
+        </span>
+      </TooltipHint>
       <Button
         label="Refresh navigation inventory"
         icon={RefreshCw}
@@ -86,7 +93,11 @@ function NavigationStatus() {
       >
         Refresh
       </Button>
-      {snapshot?.truncated && <span>Inventory is bounded; some records are not shown.</span>}
+      {snapshot?.truncated && (
+        <TooltipHint content="The inventory is bounded; some records are not shown.">
+          <span>bounded</span>
+        </TooltipHint>
+      )}
       {snapshot?.observations.map((observation) => (
         <p key={observation} className="w-full">
           {friendlyObservation(observation)}
@@ -249,10 +260,8 @@ export function Directory({ page: address }: { page: AddressPage<"home"> }) {
           docs="Find a tool by task or description. Main, Preview and Archive are provisional exposure choices, not quality certification. Saved Works stay under the tool that owns them; unavailable destinations explain why they cannot resume. Ctrl Shift K searches tools, saved Works and Pea threads. Search and Home open explicit destinations; route-owned guards retain control of staged changes."
         />
       </PrimaryRouteControls>
-      <h1 className="t-title">Find a tool</h1>
-      <p className="mt-2 mb-5 text-ink-2">
-        Find a tool for engineering design work. Saved Works sit beneath their tools.
-      </p>
+      {/* L1/I6: the why (exposure, saved Works) is the route help above, one press away. */}
+      <h1 className="t-title mb-3">Find a tool</h1>
       <div className="mb-4 flex flex-wrap items-center gap-2">
         <span className="text-ink-2">Exposure proposal:</span>
         {(["All", "Main", "Preview", "Archive"] as const).map((value) => (
@@ -266,10 +275,6 @@ export function Directory({ page: address }: { page: AddressPage<"home"> }) {
           </Button>
         ))}
       </div>
-      <p className="mb-4 text-ink-2">
-        Main, Preview and Archive are provisional exposure choices. No maturity or runtime
-        availability is certified.
-      </p>
       <NavigationStatus />
       <ListView
         list={list}

@@ -147,7 +147,7 @@ export function useDocumentLadder(
       void head.set([{ request: { kind: "open", ref: only } }]).then((ok) => {
         if (!ok) autoBound.current = null;
       });
-    else choose(JSON.stringify({ kind: "open", ref: only }));
+    else choose(JSON.stringify({ kind: "open", ref: only }), "replace");
   }, [only?.session, only?.openId, headReady]);
   const sessionWord = session ? name(session) : null;
   const unloaded = (observed?.revit.sessions ?? []).filter(

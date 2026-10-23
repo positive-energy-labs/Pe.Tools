@@ -30,7 +30,8 @@ import { PaneSplit } from "#/components/lang/pane-resize";
 
 import { airflowOptions } from "../../airflow";
 import { systemsNeedingFix } from "../../system-list-search";
-import { noRunParts, subjectNamer, type SubjectReference } from "../../subject-text";
+import { noRunParts, subjectNamer } from "../../subject-text";
+import { useRevitSubjectProps } from "#/revit/element-menu";
 import { noRunBranches } from "@pe/ducts-domain/no-runs";
 import {
   NO_LIGHTING,
@@ -38,7 +39,8 @@ import {
   SubjectTextContext,
   useReach,
   type ReachStore,
-} from "../../subject-text-view";
+  type SubjectReference,
+} from "@pe/kit/lang/subject-text";
 import {
   annotatedFindings,
   stageIssues,
@@ -534,6 +536,7 @@ function LoadedScreenBody({
   const reading = encoded.encoding.quantity ? encoded.encoding : null;
   // Hover never sets screen state: the reach store re-renders only what draws it.
   const [reach] = useState(reachStore);
+  const subjectProps = useRevitSubjectProps();
   useEffect(
     () => reach.set((state) => ({ ...state, lighting: NO_LIGHTING })),
     [reach, snapshot, page.system, page.picture],
@@ -1054,8 +1057,9 @@ function LoadedScreenBody({
       clear: clearSubjects,
       hold: holdSubjects,
       go: (id: number) => select(id),
+      refProps: subjectProps,
     }),
-    [subjectName, reach, lightSubjects, clearSubjects, holdSubjects, select],
+    [subjectName, reach, lightSubjects, clearSubjects, holdSubjects, select, subjectProps],
   );
 
   return (

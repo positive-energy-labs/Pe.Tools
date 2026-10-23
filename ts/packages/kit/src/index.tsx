@@ -20,6 +20,13 @@ export {
   type ListController,
 } from "./components/lang/collection";
 export { ListView, ListBar, type ListRowParts } from "./components/lang/list-view";
+export {
+  SubjectText,
+  SubjectTextContext,
+  subjectDocument,
+  type SubjectPart,
+  type SubjectTextScope,
+} from "./components/lang/subject-text";
 
 import { Code } from "./components/lang/code";
 

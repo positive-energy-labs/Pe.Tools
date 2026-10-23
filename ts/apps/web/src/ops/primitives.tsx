@@ -1,38 +1,14 @@
 import { token } from "@pe/kit/lib/token";
-import { type ReactNode, useState } from "react";
-import { cn } from "@pe/kit/lib/utils";
+import type { ReactNode } from "react";
+import { useList } from "@pe/kit/lang/collection";
+import { ListView } from "@pe/kit/lang/list-view";
 import { TooltipHint } from "@pe/kit/lang/tooltip";
 
 export type VizIndex = 1 | 2 | 3 | 4 | 5 | 6;
 
+/** A data-series hue (charts and bars only: I3, colour carries a series, never a plain category). */
 export function vizVar(viz: VizIndex): string {
   return token(`viz-${viz}`);
-}
-
-export function VizChip({
-  viz,
-  children,
-  title,
-}: {
-  viz: VizIndex;
-  children: ReactNode;
-  title?: string;
-}) {
-  const c = vizVar(viz);
-  return (
-    <TooltipHint content={title}>
-      <span
-        className="inline-flex items-center gap-1 px-1.5 py-px"
-        style={{
-          color: c,
-          backgroundColor: `color-mix(in srgb, ${c} 12%, transparent)`,
-          borderColor: `color-mix(in srgb, ${c} 25%, transparent)`,
-        }}
-      >
-        {children}
-      </span>
-    </TooltipHint>
-  );
 }
 
 type KVTone = "caution";
@@ -69,59 +45,38 @@ export function KVGrid({
 
 export type TreeNode = {
   id: string;
-  label: ReactNode;
+  label: string;
   meta?: ReactNode;
   children?: TreeNode[];
   defaultOpen?: boolean;
+  /** A leaf that stands for Revit elements answers right-click with Selection Box and Select (N4). */
+  revitIds?: readonly number[];
 };
 
-export function TreeView({ nodes, dense = false }: { nodes: TreeNode[]; dense?: boolean }) {
-  return (
-    <div className="max-h-[32rem] overflow-auto">
-      <ul className="py-1">
-        {nodes.map((node) => (
-          <TreeRow key={node.id} node={node} depth={0} dense={dense} />
-        ))}
-      </ul>
-    </div>
-  );
-}
+const childrenOf = (node: TreeNode) => node.children ?? [];
+const searchOf = (node: TreeNode) => ({ text: [node.label], ids: node.revitIds });
+const opened = (nodes: readonly TreeNode[], depth = 0): string[] =>
+  nodes.flatMap((node) => [
+    ...((node.defaultOpen ?? depth < 1) && node.children?.length ? [node.id] : []),
+    ...opened(node.children ?? [], depth + 1),
+  ]);
 
-function TreeRow({ node, depth, dense }: { node: TreeNode; depth: number; dense: boolean }) {
-  const [open, setOpen] = useState(node.defaultOpen ?? depth < 1);
-  const hasChildren = (node.children?.length ?? 0) > 0;
+/** An op's tree as the one list (N3): keyboard, "/" search, sticky virtual rows. */
+export function TreeView({ nodes, label }: { nodes: TreeNode[]; label: string }) {
+  const list = useList({
+    items: nodes,
+    keyOf: (node) => node.id,
+    search: searchOf,
+    tree: { childrenOf },
+    initialState: { open: opened(nodes) },
+  });
   return (
-    <li>
-      <div
-        role={hasChildren ? "button" : undefined}
-        onClick={hasChildren ? () => setOpen(!open) : undefined}
-        className={cn(
-          "flex min-w-0 items-center gap-1 pr-2",
-          dense ? "py-px" : "py-0.5",
-          hasChildren && "cursor-pointer select-none",
-        )}
-        style={{ paddingLeft: 8 + depth * 14 }}
-      >
-        <span
-          className={cn(
-            "inline-block w-3 shrink-0 text-center transition-transform duration-control",
-            open && hasChildren && "rotate-90",
-          )}
-        >
-          {hasChildren ? "▸" : ""}
-        </span>
-        <TooltipHint content={typeof node.label === "string" ? node.label : undefined}>
-          <span className={cn("min-w-0 truncate", hasChildren && "")}>{node.label}</span>
-        </TooltipHint>
-        {node.meta && <span className="ml-auto shrink-0">{node.meta}</span>}
-      </div>
-      {hasChildren && open && (
-        <ul className="" style={{ marginLeft: 8 + depth * 14 + 5 }}>
-          {node.children?.map((child) => (
-            <TreeRow key={child.id} node={child} depth={depth + 1} dense={dense} />
-          ))}
-        </ul>
-      )}
-    </li>
+    <ListView
+      list={list}
+      aria-label={label}
+      maxHeight="32rem"
+      empty={{ message: `no ${label}`, exit: "run the operation on a richer document" }}
+      row={(node) => ({ label: node.label, meta: node.meta, revitIds: node.revitIds })}
+    />
   );
 }

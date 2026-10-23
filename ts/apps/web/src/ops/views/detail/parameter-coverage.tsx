@@ -5,9 +5,38 @@ import type {
 import { CoverageBar } from "#/components/lang/coverage-bar";
 import { EmptyState } from "@pe/kit/lang/empty";
 import { Provenance, Section } from "#/components/lang/section";
-import { VizChip } from "#/ops/primitives";
+import { FactChip } from "@pe/kit/lang/chip";
+import { SubjectText, SubjectTextContext } from "@pe/kit/lang/subject-text";
+import { useRevitSubjectProps } from "#/revit/element-menu";
 import { type OpViewProps, UnrecognizedShape, asRecord } from "#/ops/registry";
 import { issueLine, pageNote } from "./schedules";
+
+/**
+ * Sample elements as named Subjects (I1): each by its Revit name with a footnote, never its id,
+ * and each answers right-click with Selection Box and Select in the document the op read.
+ */
+function Samples({
+  label,
+  handles,
+}: {
+  label: string;
+  handles: readonly { elementId: number; displayName: string }[];
+}) {
+  const refProps = useRevitSubjectProps();
+  const names = new Map(handles.map((h) => [h.elementId, h.displayName]));
+  return (
+    <SubjectTextContext value={{ nameOf: (id) => names.get(id) ?? null, refProps }}>
+      <Provenance>
+        {label}:{" "}
+        <SubjectText
+          text={handles.flatMap((h, i) =>
+            i ? [", ", { id: h.elementId }] : [{ id: h.elementId }],
+          )}
+        />
+      </Provenance>
+    </SubjectTextContext>
+  );
+}
 
 export function ParameterCoverageView({ data }: OpViewProps) {
   const rec = asRecord(data);
@@ -26,7 +55,7 @@ export function ParameterCoverageView({ data }: OpViewProps) {
         <div key={`${entry.identity.key}:${entry.categoryName ?? ""}`}>
           <div className="mb-1 flex items-baseline gap-2">
             <span className="">{entry.identity.name}</span>
-            {entry.categoryName && <VizChip viz={1}>{entry.categoryName}</VizChip>}
+            {entry.categoryName && <FactChip title="category">{entry.categoryName}</FactChip>}
             <span className="">{entry.elementCount} elements</span>
           </div>
           {entry.elementCount > 0 ? (
@@ -43,11 +72,7 @@ export function ParameterCoverageView({ data }: OpViewProps) {
               nothing to measure
             </EmptyState>
           )}
-          {entry.samples.length > 0 && (
-            <Provenance>
-              samples: {entry.samples.map((s) => `${s.displayName} [${s.elementId}]`).join(", ")}
-            </Provenance>
-          )}
+          {entry.samples.length > 0 && <Samples label="samples" handles={entry.samples} />}
           {entry.missingCount > 0 && (
             <Provenance>
               {entry.missingCount} elements lack the parameter entirely (unaccounted band)
@@ -93,21 +118,18 @@ export function ScheduleCoverageView({ data }: OpViewProps) {
       {(res.roleSummaries?.length ?? 0) > 0 && (
         <div className="flex flex-wrap gap-1">
           {res.roleSummaries?.map((role) => (
-            <VizChip key={role.role} viz={3} title={role.scheduleNames.join(", ")}>
+            <FactChip key={role.role} title={role.scheduleNames.join(", ")}>
               {role.role}: {role.scheduleCount} sched / {role.coveredElementCount} elems
-            </VizChip>
+            </FactChip>
           ))}
         </div>
       )}
       {(res.matchedScheduleNames?.length ?? 0) > 0 && (
         <Provenance>matched schedules: {res.matchedScheduleNames?.join(", ")}</Provenance>
       )}
-      {(res.missingHandles?.length ?? 0) > 0 && (
-        <Provenance>
-          unscheduled samples:{" "}
-          {res.missingHandles?.map((h) => `${h.displayName} [${h.elementId}]`).join(", ")}
-        </Provenance>
-      )}
+      {res.missingHandles?.length ? (
+        <Samples label="unscheduled samples" handles={res.missingHandles} />
+      ) : null}
       {res.issues.map((issue, i) => (
         <div key={i}>{issueLine(issue)}</div>
       ))}

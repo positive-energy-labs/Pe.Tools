@@ -27,7 +27,8 @@ const OUTCOME_OF: Record<ActionReceipt["state"], OutcomeKind> = {
 /** The one projection from a receipt row to the line a surface draws after a verb. */
 const actionOutcome = (row: ActionReceipt): { kind: OutcomeKind; label: string } => ({
   kind: OUTCOME_OF[row.state],
-  label: `${row.key} ${stateWord(row)} · action ${row.id}`,
+  // I1: an action is named by its op and state; its id lives in the receipt, not the line.
+  label: `${row.key} ${stateWord(row)}`,
 });
 
 /** Reads one action's receipt and draws its line; it follows the receipt, not the reply. */
@@ -43,10 +44,8 @@ export function ActionOutcome({
   const row = rows.success ? rows.data.find((candidate) => candidate.id === id) : undefined;
   if (row) return <OutcomeLine {...actionOutcome(row)} />;
   if (receipt.state === "failed")
-    return (
-      <OutcomeLine kind="error" label={`action ${id} receipt read failed: ${receipt.message}`} />
-    );
-  return <OutcomeLine kind="busy" label={`action ${id} · reading receipt`} />;
+    return <OutcomeLine kind="error" label={`receipt read failed: ${receipt.message}`} />;
+  return <OutcomeLine kind="busy" label="reading receipt…" />;
 }
 
 /**

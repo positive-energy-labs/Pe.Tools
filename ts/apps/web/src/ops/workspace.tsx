@@ -25,9 +25,18 @@ import { isMutation, opsManifest, type HostOperationCatalogEntry } from "#/ops/m
 import { outputRenderers } from "#/ops/renderers";
 import { runOp } from "#/ops/run";
 import { Code, stringify } from "@pe/kit/lang/code";
+import type { DocumentRef } from "@pe/agent-contracts";
+import { NativeObservationScope } from "#/revit/observation";
 
 type Catalog = { operations?: HostOperationCatalogEntry[]; bridgeCatalogError?: string };
-type Value = { op: string; request: unknown; value: unknown; elapsedMs: number };
+/** `document` is the target the value was read from: the displayed observation's scope (N4). */
+type Value = {
+  op: string;
+  request: unknown;
+  value: unknown;
+  elapsedMs: number;
+  document: DocumentRef | null;
+};
 
 export function OpsRoute({ page }: { page: AddressPage<"ops"> }) {
   const [{ op, actionId: receipt }, setPage] = page;
@@ -82,10 +91,17 @@ export function OpsRoute({ page }: { page: AddressPage<"ops"> }) {
             call: ctx.call,
             priorActionId: actionId,
           });
-          if (outcome.kind === "value") setValue({ op: selected.key, request, ...outcome });
+          if (outcome.kind === "value")
+            setValue({
+              op: selected.key,
+              request,
+              ...outcome,
+              document: ctx.target.kind === "document" ? ctx.target.ref : null,
+            });
           else {
             setPage({ actionId: outcome.id });
-            if (outcome.state !== "succeeded") throw Error(`${outcome.id}: ${outcome.state}`);
+            // I1: the receipt below names the action; the error says which op, not its id.
+            if (outcome.state !== "succeeded") throw Error(`${selected.key} ${outcome.state}`);
           }
         },
       }),
@@ -196,7 +212,11 @@ export function OpsRoute({ page }: { page: AddressPage<"ops"> }) {
                     Result <span className="t-small face-mono text-ink-2">{value.elapsedMs}ms</span>
                   </h2>
                   {Output ? (
-                    <Output data={value.value} opKey={value.op} request={value.request} />
+                    <NativeObservationScope
+                      value={{ scope: { document: value.document, source: "native" } }}
+                    >
+                      <Output data={value.value} opKey={value.op} request={value.request} />
+                    </NativeObservationScope>
                   ) : null}
                   <details open={!Output}>
                     <summary className="cursor-pointer">raw response</summary>

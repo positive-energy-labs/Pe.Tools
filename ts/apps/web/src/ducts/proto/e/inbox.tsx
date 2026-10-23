@@ -45,8 +45,7 @@ import { inboxWriteRows, type WriteVerbs, type RulingRow } from "./inbox-write";
 import { PreviewLines } from "./preview-lines";
 import { SlotPicker } from "./slot-picker";
 import { InboxClaim, claimLine } from "./inbox-claim";
-import { subjectDocument } from "../../subject-text";
-import { SubjectText, SubjectTextContext } from "../../subject-text-view";
+import { SubjectText, SubjectTextContext, subjectDocument } from "@pe/kit/lang/subject-text";
 import { RuleAssignment } from "./rule-assignment";
 
 type InboxWork = {
@@ -351,8 +350,8 @@ export function Inbox({
       // The row badges what its heading names; what its own text lit since (a token, the open
       // description) stays while the pointer is in the row, and a pending clear is cancelled.
       const relight = () => {
-        const lit = subjects!.reach.get().lighting;
-        subjects!.light(
+        const lit = subjects!.reach!.get().lighting;
+        subjects!.light?.(
           lit.owner === item.key ? lit.references : heading.references,
           null,
           item.key,
@@ -390,7 +389,7 @@ export function Inbox({
             clearTimeout(intent.current.timer);
             intent.current = null;
           }
-          if (subjects) subjects.clear(item.key);
+          if (subjects) subjects.clear?.(item.key);
           else light(null);
         },
         onMouseMove: () => {
@@ -414,7 +413,7 @@ export function Inbox({
               <p
                 onMouseMove={(e) => {
                   e.stopPropagation();
-                  subjects.light(description.references, null, item.key, item.ids);
+                  subjects.light?.(description.references, null, item.key, item.ids);
                 }}
               >
                 <SubjectText document={description} owner={item.key} />

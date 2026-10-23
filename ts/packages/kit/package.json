@@ -31,6 +31,7 @@
     "./lang/pane.css": "./src/components/lang/pane.css",
     "./lang/rail": "./src/components/lang/rail.tsx",
     "./lang/row": "./src/components/lang/row.tsx",
+    "./lang/subject-text": "./src/components/lang/subject-text.tsx",
     "./lang/theme-toggle": "./src/components/lang/theme-toggle.tsx",
     "./lang/tooltip": "./src/components/lang/tooltip.tsx",
     "./lang/verdict": "./src/components/lang/verdict.tsx",

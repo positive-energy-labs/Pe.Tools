@@ -3,8 +3,13 @@ import { cleanup, fireEvent, render, screen } from "@testing-library/react";
 import { afterEach, expect, test, vi } from "vite-plus/test";
 import type { DuctSnapshot } from "@pe/ducts-domain/types";
 import snapshot from "./fixtures/synthetic-snapshot.json";
-import { subjectDocument, subjectNamer } from "./subject-text";
-import { SubjectText, reachStore, SubjectTextContext } from "./subject-text-view";
+import { subjectNamer } from "./subject-text";
+import {
+  SubjectText,
+  reachStore,
+  SubjectTextContext,
+  subjectDocument,
+} from "@pe/kit/lang/subject-text";
 
 afterEach(cleanup);
 const names = new Map([
@@ -81,9 +86,7 @@ test("block hover lights all references; token hover/focus narrows and exit rest
   const clear = vi.fn();
   const go = vi.fn();
   const { container, unmount } = render(
-    <SubjectTextContext.Provider
-      value={{ nameOf, light, clear, go, reach: reachStore() }}
-    >
+    <SubjectTextContext.Provider value={{ nameOf, light, clear, go, reach: reachStore() }}>
       <SubjectText text="10368760 ends at 12317607:0 facing 12317611:0" />
     </SubjectTextContext.Provider>,
   );

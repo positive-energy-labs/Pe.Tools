@@ -28,7 +28,7 @@ import {
 import type { Claim } from "./legs";
 import type { Scene } from "./scene";
 import { Caption, pathOf, SubjectLabels } from "./subject-labels";
-import { SubjectTextContext, useSubjectLighting } from "./subject-text-view";
+import { SubjectTextContext, useSubjectLighting } from "@pe/kit/lang/subject-text";
 
 export type Ruling =
   | { kind: "claim"; n: number; at: number; claim: Claim }
@@ -404,12 +404,12 @@ export function Annotations({
               data-lit={lighting.focus === ref.id ? "" : undefined}
               transform={`translate(${chip.x} ${chip.y})`}
               style={HIT}
-              onMouseEnter={() => subjects?.light(lighting.references, ref.id, lighting.owner)}
+              onMouseEnter={() => subjects?.light?.(lighting.references, ref.id, lighting.owner)}
               onMouseLeave={() => {
-                subjects?.light(lighting.references, null, lighting.owner);
-                if (lighting.owner) subjects?.clear(lighting.owner);
+                subjects?.light?.(lighting.references, null, lighting.owner);
+                if (lighting.owner) subjects?.clear?.(lighting.owner);
               }}
-              onClick={() => subjects?.go(ref.id)}
+              onClick={() => subjects?.go?.(ref.id)}
             >
               <title>{`${ref.name}: go to it`}</title>
               <circle r={CHIP / 2} />

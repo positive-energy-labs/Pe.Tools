@@ -59,6 +59,8 @@ function Probe({
 test("one session with one document is bound without a pick", () => {
   render(<Probe docs={["a"]} />);
   expect(choose).toHaveBeenCalledTimes(1);
+  // The page picked for the person: it replaces history; only a person's pick pushes (N5).
+  expect(choose.mock.calls[0]![1]).toBe("replace");
   expect(JSON.parse(choose.mock.calls[0]![0])).toMatchObject({
     kind: "open",
     ref: { openId: "a" },

@@ -27,7 +27,7 @@ import type { SceneRead } from "#/scene/use-scene";
 import type { Bounds, Layer3D, SceneMeshes } from "#/scene/types";
 
 import { CaptionBounds } from "./subject-labels";
-import { SubjectTextContext } from "./subject-text-view";
+import { SubjectTextContext } from "@pe/kit/lang/subject-text";
 import { Annotations, type Label, type Ruling } from "./annotations";
 import type { Encoding } from "./encoding";
 import type { DuctsPage } from "./manifest";
