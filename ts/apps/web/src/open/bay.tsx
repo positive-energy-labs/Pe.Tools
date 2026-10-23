@@ -32,7 +32,9 @@ import { Connectors, type Connection } from "#/components/lang/connector";
 import { EmptyState } from "@pe/kit/lang/empty";
 import { OutcomeLine } from "#/components/lang/outcome";
 import { Row } from "@pe/kit/lang/row";
-import { docKey, HeldRow, SessionCard, type SessionDocument } from "#/components/lang/session";
+import { useList } from "@pe/kit/lang/collection";
+import { ListView } from "@pe/kit/lang/list-view";
+import { docKey, heldRowParts, SessionCard, type SessionDocument } from "#/components/lang/session";
 import { Switcher } from "#/components/lang/switcher";
 import type { QueryCommand } from "@pe/kit/table/model";
 import { queryWords, readClause, useTableState, visibleRows } from "@pe/kit/table/view";
@@ -796,14 +798,11 @@ function Socket({
           {strip}
         </>
       }
-      documentRow={(document) => (
-        <CableRow
-          session={session}
-          document={document}
-          refusal={refusal}
-          held={held === document.openId}
-          onHeld={() => onHeld(held === document.openId ? null : document.openId)}
-        />
+      documentParts={(document) => heldRowParts(document, accessOf(session, document))}
+      selectedDocument={held ? `doc:${held}` : null}
+      onDocumentPick={(document) => onHeld(document?.openId ?? document?.path ?? null)}
+      documentDetail={(document) => (
+        <CableControls session={session} document={document} refusal={refusal} />
       )}
     >
       <FreeSocket
@@ -814,37 +813,50 @@ function Socket({
         onPatch={onPatch}
         onHover={onHover}
       />
-      {jobs.map((job) => (
-        <Row
-          key={job.thread.id}
-          lines={2}
-          label={<span data-tone="pea">{job.thread.title}</span>}
-          meta={
-            <span data-tone={job.thread.activity.state === "failed" ? "alarm" : undefined}>
-              {job.thread.activity.state === "running" ? "working" : job.thread.activity.state}
-            </span>
-          }
-          sub={job.thread.activity.message ?? "no activity reported"}
-          title="Pea's job in this Revit: the thread, its state, its latest activity"
-        />
-      ))}
+      <JobList jobs={jobs} />
     </SessionCard>
   );
 }
 
-/** A held document's row: the cable lands here; pressed, its verbs open (reload, close). */
-function CableRow({
+function JobList({ jobs }: { jobs: readonly PeaJob[] }) {
+  const list = useList({
+    items: jobs,
+    keyOf: (job) => job.thread.id,
+    search: (job) => ({
+      text: [job.thread.title, job.thread.activity.state, job.thread.activity.message],
+    }),
+  });
+  if (!jobs.length) return null;
+  return (
+    <ListView
+      list={list}
+      aria-label="Pea jobs"
+      bar={false}
+      empty={{ message: "No Pea jobs", exit: "Ask Pea to work in this Revit" }}
+      row={(job) => ({
+        lines: 2,
+        label: <span data-tone="pea">{job.thread.title}</span>,
+        meta: (
+          <span data-tone={job.thread.activity.state === "failed" ? "alarm" : undefined}>
+            {job.thread.activity.state === "running" ? "working" : job.thread.activity.state}
+          </span>
+        ),
+        sub: job.thread.activity.message ?? "no activity reported",
+        title: "Pea's job in this Revit: the thread, its state, its latest activity",
+      })}
+    />
+  );
+}
+
+/** A held document's controls, inside its standard list row's detail. */
+function CableControls({
   session,
   document,
   refusal,
-  held,
-  onHeld,
 }: {
   session: MachineSession;
   document: SessionDocument;
   refusal: string | null;
-  held: boolean;
-  onHeld: () => void;
 }) {
   const [armed, setArmed] = useState<"close" | null>(null);
   const [outcome, setOutcome] = useState<Outcome | null>(null);
@@ -895,69 +907,59 @@ function CableRow({
   const gate = (says: string) => ({ reason: blocked ?? says, refusal: blocked });
   const title = document.title ?? document.path ?? "document";
   return (
-    <HeldRow
-      document={document}
-      access={accessOf(session, document)}
-      active={held}
-      onClick={onHeld}
-      verbs={
-        <>
-          {cloud ? (
-            <Button
-              label="reload"
-              kind="framed"
-              busy={busy}
-              {...gate(
-                `pe-revit doc open ${document.openId} --reload: reload the latest central changes into it`,
-              )}
-              onClick={() => action.mutate({ kind: "reload" })}
-            >
-              reload
-            </Button>
-          ) : null}
+    <div className="flex flex-col gap-1">
+      <div className="flex items-center gap-1">
+        {cloud ? (
           <Button
-            label="close"
+            label="reload"
             kind="framed"
-            pressed={armed === "close"}
-            {...gate(`pe-revit doc close ${document.openId}`)}
-            onClick={() => setArmed(armed === "close" ? null : "close")}
+            busy={busy}
+            {...gate(
+              `pe-revit doc open ${document.openId} --reload: reload the latest central changes into it`,
+            )}
+            onClick={() => action.mutate({ kind: "reload" })}
           >
-            close
+            reload
           </Button>
-        </>
-      }
-      strip={
-        <>
-          {armed === "close" ? (
-            <ArmingStrip
-              verb="close, keep work"
-              target={title}
-              icon={Square}
-              says={
-                document.isModified
-                  ? "It has unsaved work: closing saves it first."
-                  : "Nothing is unsaved."
-              }
-              state={{ phase: "arming" }}
-              busy={busy}
-              refusal={blocked}
-              onCommit={() => action.mutate({ kind: "close", unsaved: "keep" })}
-              onCancel={() => setArmed(null)}
-              alternatives={
-                <Button
-                  label="close, discard edits"
-                  kind="framed"
-                  {...gate(`pe-revit doc close ${document.openId} --unsaved discard`)}
-                  onClick={() => action.mutate({ kind: "close", unsaved: "discard" })}
-                >
-                  close, discard edits
-                </Button>
-              }
-            />
-          ) : null}
-          <OutcomeOf outcome={outcome} />
-        </>
-      }
-    />
+        ) : null}
+        <Button
+          label="close"
+          kind="framed"
+          pressed={armed === "close"}
+          {...gate(`pe-revit doc close ${document.openId}`)}
+          onClick={() => setArmed(armed === "close" ? null : "close")}
+        >
+          close
+        </Button>
+      </div>
+      {armed === "close" ? (
+        <ArmingStrip
+          verb="close, keep work"
+          target={title}
+          icon={Square}
+          says={
+            document.isModified
+              ? "It has unsaved work: closing saves it first."
+              : "Nothing is unsaved."
+          }
+          state={{ phase: "arming" }}
+          busy={busy}
+          refusal={blocked}
+          onCommit={() => action.mutate({ kind: "close", unsaved: "keep" })}
+          onCancel={() => setArmed(null)}
+          alternatives={
+            <Button
+              label="close, discard edits"
+              kind="framed"
+              {...gate(`pe-revit doc close ${document.openId} --unsaved discard`)}
+              onClick={() => action.mutate({ kind: "close", unsaved: "discard" })}
+            >
+              close, discard edits
+            </Button>
+          }
+        />
+      ) : null}
+      <OutcomeOf outcome={outcome} />
+    </div>
   );
 }

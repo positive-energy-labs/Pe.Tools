@@ -1,19 +1,12 @@
-/**
- * One Revit, as the SDK census reports it, in two densities over one reading: `SessionRow` for a
- * drawer or a list (a two-line `Row`: year and name, pid and phase, the active document and the
- * shape), `SessionCard` for a desk (an `ArtifactFrame`: the same head, one `Row` per document, the
- * shape in the foot). Both take the verbs and the arming strip as slots (`useLifecycle` in
- * `open/lifecycle.tsx` makes them), so the kit knows nothing of the instances Work. Anchors for a
- * `Connectors` overlay: the card and the row carry `data-key` = `anchor` (the session's key), each
- * document row `doc:<openId>`. A desk adds its own rows (a free socket) through `children`, and may
- * draw each document itself through `documentRow` (a `HeldRow` with verbs and a strip).
- */
-import type { ReactNode } from "react";
+/** SDK session readings at drawer and desk density. Both retain session and document keys
+ * for Connectors. Lifecycle verbs and arming details stay with their owning Work. */
+import { useState, type ReactNode } from "react";
 import type { MachineAccess, MachineAttachmentDocument, MachineSession } from "@pe/agent-contracts";
 
 import { ArtifactFrame } from "@pe/kit/lang/artifact-frame";
 import { FactChip } from "@pe/kit/lang/chip";
-import { EmptyState } from "@pe/kit/lang/empty";
+import { useList, emptyListState } from "@pe/kit/lang/collection";
+import { ListView, type ListRowParts } from "@pe/kit/lang/list-view";
 import { PidChip, ShapeCells } from "./process";
 import { Row } from "@pe/kit/lang/row";
 
@@ -149,51 +142,26 @@ export function SessionRow({ session, facts, anchor, verbs, strip }: SessionView
   );
 }
 
-/** A held document as a desk card's row: the cable lands on it; a desk adds verbs and a strip. */
-export function HeldRow({
-  document,
-  access,
-  active,
-  verbs,
-  strip,
-  onClick,
-}: {
-  document: SessionDocument;
-  /** Whose the host says it is; `pea` and `target` are drawn. */
-  access?: MachineAccess;
-  /** The row a cable was pressed on (not Revit's active document, which is its own mark). */
-  active?: boolean;
-  verbs?: ReactNode;
-  strip?: ReactNode;
-  onClick?: () => void;
-}) {
-  return (
-    <>
-      <Row
-        data-key={docKey(document)}
-        active={document.isActive}
-        selected={active}
-        label={document.title ?? document.path}
-        aside={document.isModified ? "unsaved" : undefined}
-        meta={
-          access && access.kind !== "read" ? (
-            <>
-              <TooltipHint content={accessSays(access)}>
-                <span data-tone="done">{access.kind === "pea" ? "Pea's" : "in a thread"}</span>
-              </TooltipHint>
-              {persistenceOf(document)}
-            </>
-          ) : (
-            persistenceOf(document)
-          )
-        }
-        actions={verbs}
-        title={`${document.path ?? ""}${document.isModified ? " · unsaved work" : ""}`}
-        onClick={onClick}
-      />
-      {strip}
-    </>
-  );
+/** Standard parts for a held document; both the desk and standalone row use this anatomy. */
+export function heldRowParts(document: SessionDocument, access?: MachineAccess): ListRowParts {
+  return {
+    "data-key": docKey(document),
+    active: document.isActive,
+    label: document.title ?? document.path,
+    aside: document.isModified ? "unsaved" : undefined,
+    meta:
+      access && access.kind !== "read" ? (
+        <>
+          <TooltipHint content={accessSays(access)}>
+            <span data-tone="done">{access.kind === "pea" ? "Pea's" : "in a thread"}</span>
+          </TooltipHint>
+          {persistenceOf(document)}
+        </>
+      ) : (
+        persistenceOf(document)
+      ),
+    title: `${document.path ?? ""}${document.isModified ? " \u00b7 unsaved work" : ""}`,
+  };
 }
 
 /** A desk's Revit: the frame is the socket, each document a row the cables land on. */
@@ -203,14 +171,66 @@ export function SessionCard({
   anchor,
   verbs,
   strip,
-  documentRow,
+  documentParts,
+  documentDetail,
+  selectedDocument,
+  onDocumentPick,
   children,
 }: SessionViewProps & {
-  /** Draw one held document (a `HeldRow` with the desk's verbs); absent, the plain row. */
-  documentRow?: (document: SessionDocument) => ReactNode;
+  documentParts?: (document: SessionDocument) => ListRowParts;
+  documentDetail?: (document: SessionDocument) => ReactNode;
+  selectedDocument?: string | null;
+  onDocumentPick?: (document: SessionDocument | null) => void;
   children?: ReactNode;
 }) {
   const documents = session.documents;
+  type Item =
+    | { kind: "document"; document: SessionDocument }
+    | { kind: "target"; target: TargetedDocument };
+  const [state, setState] = useState(emptyListState);
+  const list = useList<Item>({
+    items: [
+      ...(documents ?? []).map((document): Item => ({ kind: "document", document })),
+      ...targetsOf(session).map((target): Item => ({ kind: "target", target })),
+    ],
+    keyOf: (item) =>
+      item.kind === "document"
+        ? docKey(item.document)
+        : `target:${item.target.session}/${item.target.openId}`,
+    search: (item) => ({
+      text:
+        item.kind === "document"
+          ? [item.document.title, item.document.path]
+          : [item.target.title, item.target.access.label],
+    }),
+    state: {
+      ...state,
+      ...(selectedDocument !== undefined
+        ? {
+            selected: selectedDocument ? [selectedDocument] : [],
+            open: selectedDocument ? [selectedDocument] : [],
+          }
+        : {}),
+    },
+    onState: (next) => {
+      setState(next);
+      if (onDocumentPick && next.open.join() !== (selectedDocument ?? ""))
+        onDocumentPick(
+          (documents ?? []).find((document) => docKey(document) === next.open.at(-1)) ?? null,
+        );
+    },
+    onPick: (item) => {
+      if (item.kind === "document") {
+        if (onDocumentPick)
+          onDocumentPick(docKey(item.document) === selectedDocument ? null : item.document);
+        else if (documentDetail)
+          setState((prior) => ({
+            ...prior,
+            open: prior.open.includes(docKey(item.document)) ? [] : [docKey(item.document)],
+          }));
+      }
+    },
+  });
   return (
     <ArtifactFrame
       data-key={anchor}
@@ -235,44 +255,45 @@ export function SessionCard({
       headTrail={verbs}
     >
       <div className="flex flex-col py-1" aria-label="documents">
-        {documents === null ? (
-          <Row
-            label={
-              <EmptyState story="scope" exit="its documents are read once its bridge answers">
-                {session.documentsLeg.error
+        {documents === null && targetsOf(session).length > 0 ? (
+          <p role="status">
+            {session.documentsLeg.error
+              ? `documents unread: ${session.documentsLeg.error}`
+              : "documents unknown"}
+          </p>
+        ) : null}
+        <ListView
+          list={list}
+          aria-label="documents"
+          bar={false}
+          empty={{
+            message:
+              documents === null
+                ? session.documentsLeg.error
                   ? `documents unread: ${session.documentsLeg.error}`
-                  : "documents unknown"}
-              </EmptyState>
-            }
-          />
-        ) : documents.length === 0 ? (
-          <Row
-            label={
-              <EmptyState story="scope" exit="open a document into it from the table">
-                no document open
-              </EmptyState>
-            }
-          />
-        ) : (
-          documents.map((document) =>
-            documentRow ? (
-              <div key={docKey(document)} className="contents">
-                {documentRow(document)}
-              </div>
-            ) : (
-              <HeldRow key={docKey(document)} document={document} />
-            ),
-          )
-        )}
-        {targetsOf(session).map((targeted) => (
-          <Row
-            key={`target:${targeted.session}/${targeted.openId}`}
-            lines={2}
-            label={targeted.title}
-            sub={targeted.access.label}
-            title={accessSays(targeted.access)}
-          />
-        ))}
+                  : "documents unknown"
+                : "no document open",
+            exit:
+              documents === null
+                ? "its documents are read once its bridge answers"
+                : "open a document into it from the table",
+          }}
+          row={(item) =>
+            item.kind === "document"
+              ? (documentParts?.(item.document) ?? heldRowParts(item.document))
+              : {
+                  lines: 2,
+                  label: item.target.title,
+                  sub: item.target.access.label,
+                  title: accessSays(item.target.access),
+                }
+          }
+          detail={
+            documentDetail
+              ? (item) => (item.kind === "document" ? documentDetail(item.document) : null)
+              : undefined
+          }
+        />
         {children}
       </div>
       {/* The machine facts wrap (a desk card is narrow); a rail would clip them. */}

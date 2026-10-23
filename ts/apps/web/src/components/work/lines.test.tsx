@@ -1,6 +1,6 @@
 // @vitest-environment jsdom
-import { afterEach, expect, test, vi } from "vite-plus/test";
-import { cleanup, fireEvent, render, screen } from "@testing-library/react";
+import { beforeEach, afterEach, expect, test, vi } from "vite-plus/test";
+import { cleanup, fireEvent, render, screen, within, waitFor } from "@testing-library/react";
 import {
   scheduleGridCellSchema,
   showCellValue,
@@ -9,7 +9,27 @@ import {
 import { cellFromTrichotomy } from "@pe/kit/lang/cell";
 import { WorkLines, workLines, type WorkCell } from "./lines";
 
-afterEach(cleanup);
+beforeEach(() => {
+  vi.stubGlobal(
+    "ResizeObserver",
+    class {
+      observe() {}
+      unobserve() {}
+      disconnect() {}
+    },
+  );
+  vi.spyOn(HTMLElement.prototype, "offsetHeight", "get").mockReturnValue(600);
+  vi.spyOn(HTMLElement.prototype, "offsetWidth", "get").mockReturnValue(800);
+  vi.spyOn(HTMLElement.prototype, "clientHeight", "get").mockReturnValue(600);
+  vi.spyOn(HTMLElement.prototype, "clientWidth", "get").mockReturnValue(800);
+  HTMLElement.prototype.scrollTo = () => {};
+});
+
+afterEach(() => {
+  cleanup();
+  vi.restoreAllMocks();
+  vi.unstubAllGlobals();
+});
 
 /** A Work cell as the contract admits it, addressed the way a route draws it. */
 const cellOf = (key: string, column: string, row: string, raw: TrichotomyCellLike): WorkCell => {
@@ -85,12 +105,43 @@ test("the tab is the route's field: absent opens Pea's, a pick goes to the owner
     />
   );
   const { rerender } = render(draw());
-  expect(screen.getAllByRole("listitem")).toHaveLength(2);
+  expect(screen.getAllByRole("option")).toHaveLength(2);
+  expect(screen.getAllByRole("option")[0]?.getAttribute("data-stage")).toBe("proposed");
   fireEvent.click(screen.getByText("yours 2"));
   expect(onTab).toHaveBeenCalledWith("yours");
   rerender(draw("yours"));
-  expect(screen.getAllByRole("listitem")).toHaveLength(1);
+  expect(screen.getAllByRole("option")).toHaveLength(1);
+  expect(screen.getAllByRole("option")[0]?.getAttribute("data-stage")).toBe("staged");
   rerender(draw("pea"));
   fireEvent.click(screen.getByRole("button", { name: "FCU-1 · PE_G___Model" }));
   expect(locate).toHaveBeenCalledOnce();
+});
+
+test("a line verdict writes every covered cell once and does not activate the row", async () => {
+  const write = vi.fn(async () => null);
+  const locate = vi.fn();
+  const store = { a: { proposal: { value: "one" } }, b: { proposal: { value: "two" } } };
+  const cells = Object.entries(store).map(([key, cell]) => ({
+    ...cellOf(key, "Model", key, cell),
+    locate,
+  }));
+  render(
+    <WorkLines
+      cells={cells}
+      store={store}
+      wire={{ segment: "cells", write, revision: 7 }}
+      tab="pea"
+      onTab={() => {}}
+    />,
+  );
+  fireEvent.click(within(screen.getByRole("option")).getByRole("button", { name: "accept" }));
+  await waitFor(() => expect(write).toHaveBeenCalledOnce());
+  expect(write).toHaveBeenCalledWith(
+    expect.arrayContaining([
+      expect.objectContaining({ path: ["cells", "a", "staged"] }),
+      expect.objectContaining({ path: ["cells", "b", "staged"] }),
+    ]),
+    7,
+  );
+  expect(locate).not.toHaveBeenCalled();
 });

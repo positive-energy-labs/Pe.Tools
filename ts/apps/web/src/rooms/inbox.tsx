@@ -13,8 +13,8 @@ import {
 import type { RoomsSnapshot } from "@pe/host-contracts/generated";
 
 import type { CellWire } from "#/components/work/band";
-import { EmptyState } from "@pe/kit/lang/empty";
-import { List } from "@pe/kit/lang/list-popup";
+import { useList, emptyListState } from "@pe/kit/lang/collection";
+import { ListView } from "@pe/kit/lang/list-view";
 import { Pane } from "#/components/lang/pane";
 import { Button } from "@pe/kit/lang/button";
 import { Switcher } from "#/components/lang/switcher";
@@ -278,9 +278,17 @@ export function RoomsInbox({
   };
   const count = (state: CardState) => cards.filter((card) => card.state === state).length;
   const shown = filter === "all" ? cards : cards.filter((card) => card.state === filter);
+  const list = useList({
+    items: shown,
+    keyOf: (card) => card.id,
+    search: (card) => ({ text: [cardLine(card, labelOf), card.state] }),
+    state: { ...emptyListState(), selected: pinned ? [pinned] : [] },
+    onPick: (card) => onPin(card.id),
+    select: "single",
+  });
   return (
     <Pane
-      title="inbox"
+      title="Feedback"
       meta={said ?? `${cards.length}`}
       scroll="clip"
       flush
@@ -313,7 +321,7 @@ export function RoomsInbox({
       <div className="flex min-h-0 flex-1 flex-col">
         <div className="px-1 py-1">
           <Switcher<Filter>
-            ariaLabel="filter the inbox by state"
+            ariaLabel="filter Feedback by state"
             value={filter}
             onChange={onShow}
             options={[
@@ -326,39 +334,31 @@ export function RoomsInbox({
             ]}
           />
         </div>
-        <List<Card>
-          aria-label="feedback inbox"
-          items={shown}
-          keyOf={(card) => card.id}
-          labelOf={(card) => cardLine(card, labelOf)}
-          onPick={(card) => onPin(card.id)}
-          select="single"
-          selected={pinned ? [pinned] : []}
-          empty={
-            <EmptyState
-              story="scope"
-              exit={
-                cards.length
-                  ? "choose all in the filter"
-                  : "draw a mark or a note on the plan, or ask Pea"
-              }
-            >
-              {cards.length ? "no card in this state" : "no marks or notes on this view"}
-            </EmptyState>
-          }
-          row={(card) => ({
-            lead: (
-              <span className="flex gap-1">
-                <Glyph state={card.state} />
-                <Tag card={card} />
-              </span>
-            ),
-            label: cardLine(card, labelOf),
-            meta: <Thumb card={card} regions={regions} width={32} />,
-            onMouseEnter: () => onHover(card.guids[0] ?? null),
-            onMouseLeave: () => onHover(null),
-          })}
-        />
+        <div className="min-h-0 flex-1 overflow-auto">
+          <ListView
+            list={list}
+            aria-label="Feedback"
+            bar={false}
+            empty={{
+              message: cards.length ? "No card in this state" : "No marks or notes on this view",
+              exit: cards.length
+                ? "Choose all in the filter"
+                : "Draw a mark or a note on the plan, or ask Pea",
+            }}
+            row={(card) => ({
+              lead: (
+                <span className="flex gap-1">
+                  <Glyph state={card.state} />
+                  <Tag card={card} />
+                </span>
+              ),
+              label: cardLine(card, labelOf),
+              meta: <Thumb card={card} regions={regions} width={32} />,
+              onMouseEnter: () => onHover(card.guids[0] ?? null),
+              onMouseLeave: () => onHover(null),
+            })}
+          />
+        </div>
       </div>
     </Pane>
   );

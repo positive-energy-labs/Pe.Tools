@@ -14,7 +14,7 @@ import {
   createRouter,
 } from "@tanstack/react-router";
 import { cleanup, fireEvent, render, screen, waitFor, within } from "@testing-library/react";
-import { afterEach, describe, expect, test, vi } from "vite-plus/test";
+import { beforeEach, afterEach, describe, expect, test, vi } from "vite-plus/test";
 
 import { runSemanticAction } from "../../../../packages/mcps/src/shared/takeoff-action-client";
 import { PatchBay } from "./bay";
@@ -36,8 +36,25 @@ vi.mock("../../../../packages/mcps/src/shared/takeoff-action-client", () => ({
   runSemanticAction: vi.fn(async () => ({ id: "action-1", state: "succeeded" })),
 }));
 HTMLElement.prototype.scrollIntoView = vi.fn();
+beforeEach(() => {
+  vi.stubGlobal(
+    "ResizeObserver",
+    class {
+      observe() {}
+      unobserve() {}
+      disconnect() {}
+    },
+  );
+  vi.spyOn(HTMLElement.prototype, "offsetHeight", "get").mockReturnValue(600);
+  vi.spyOn(HTMLElement.prototype, "offsetWidth", "get").mockReturnValue(800);
+  vi.spyOn(HTMLElement.prototype, "clientHeight", "get").mockReturnValue(600);
+  vi.spyOn(HTMLElement.prototype, "clientWidth", "get").mockReturnValue(800);
+  HTMLElement.prototype.scrollTo = () => {};
+});
+
 afterEach(() => {
   cleanup();
+  vi.restoreAllMocks();
   vi.clearAllMocks();
   vi.unstubAllGlobals();
 });
@@ -332,6 +349,7 @@ test("Stop keeps work by default; discard is offered only for a checkout session
 
 test("a held document offers close with work kept, and discard beside it", async () => {
   render(<Bay />);
+  fireEvent.click(within(yoursCard()).getAllByRole("button", { name: "Open details" })[0]!);
   fireEvent.click(within(yoursCard()).getAllByRole("button", { name: "close" })[0]!);
   fireEvent.click(screen.getByRole("button", { name: "close, keep work" }));
   await waitFor(() => expect(runSemanticAction).toHaveBeenCalled());
