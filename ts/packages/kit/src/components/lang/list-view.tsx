@@ -1,5 +1,6 @@
 import { useVirtualizer } from "@tanstack/react-virtual";
 import {
+  memo,
   useEffect,
   useLayoutEffect,
   useRef,
@@ -138,6 +139,9 @@ export function ListView<T, Sort extends string = string>(props: ListViewProps<T
     }
   }, [list.total, list.collection.cursor, list.revealRequest?.serial]);
   const label = props["aria-label"];
+  // Rows render through this ref, so a memoized row that skipped a render still acts on today's list.
+  const live = useRef(list);
+  live.current = list;
   return (
     <div
       ref={setRoot}
@@ -209,6 +213,7 @@ export function ListView<T, Sort extends string = string>(props: ListViewProps<T
           {!section.closed ? (
             <SectionBody
               list={list}
+              live={live}
               rows={section.rows}
               row={row}
               scroller={scroller}
@@ -225,6 +230,7 @@ export function ListView<T, Sort extends string = string>(props: ListViewProps<T
 
 type SectionBodyProps<T, Sort extends string> = {
   list: ListController<T, Sort>;
+  live: RefObject<ListController<T, Sort>>;
   rows: readonly ListItem<T>[];
   row: (item: T) => ListRowParts;
   scroller: HTMLElement | null;
@@ -240,7 +246,8 @@ function SectionBody<T, Sort extends string>(props: SectionBodyProps<T, Sort>) {
       {props.rows.map((item) => (
         <ListItemView
           key={item.key}
-          list={props.list}
+          {...rowState(props.list, item)}
+          live={props.live}
           item={item}
           row={props.row}
           detail={props.detail}
@@ -250,21 +257,50 @@ function SectionBody<T, Sort extends string>(props: SectionBodyProps<T, Sort>) {
   );
 }
 
-function ListItemView<T, Sort extends string>({
-  list,
+/** What a row draws from the list besides its item, as values a memoized row can compare. */
+function rowState<T, Sort extends string>(list: ListController<T, Sort>, item: ListItem<T>) {
+  const behavior = list.collection.rowProps(item.key);
+  return {
+    cursor: behavior.cursor,
+    selected: behavior.selected,
+    expanded: list.state.open.includes(item.key),
+    filtering: list.filtering,
+    tree: list.tree,
+    stage: list.stageOf?.(item.item),
+    refusal: list.refusalOf?.(item.item),
+  };
+}
+
+type ListItemViewProps<T, Sort extends string> = Pick<
+  SectionBodyProps<T, Sort>,
+  "live" | "row" | "detail"
+> &
+  ReturnType<typeof rowState<T, Sort>> & { item: ListItem<T> };
+
+function ListItemViewInner<T, Sort extends string>({
+  live,
   item,
   row,
   detail,
-}: Pick<SectionBodyProps<T, Sort>, "list" | "row" | "detail"> & { item: ListItem<T> }) {
+  cursor,
+  selected,
+  expanded,
+  filtering,
+  tree,
+  stage,
+  refusal,
+}: ListItemViewProps<T, Sort>) {
   const parts = row(item.item);
   const content = detail?.(item.item);
-  const behavior = list.collection.rowProps(item.key);
-  const expanded = list.state.open.includes(item.key);
+  const { id } = live.current.collection.rowProps(item.key);
   return (
     <>
       <Row
         {...parts}
-        {...behavior}
+        id={id}
+        data-key={item.key}
+        cursor={cursor}
+        selected={selected}
         onClick={(event) => {
           const target = event.target as Element;
           if (
@@ -274,18 +310,18 @@ function ListItemView<T, Sort extends string>({
             )
           )
             return;
-          behavior.onClick(event);
+          live.current.collection.rowProps(item.key).onClick(event);
         }}
         onMouseMove={() => {
-          behavior.onMouseMove();
+          live.current.collection.rowProps(item.key).onMouseMove();
           parts.onMouseMove?.();
         }}
-        role={list.tree ? "treeitem" : "option"}
-        stage={list.stageOf?.(item.item) ?? parts.stage}
-        refusal={list.refusalOf?.(item.item) ?? parts.refusal}
-        depth={list.tree ? item.depth : content != null ? 0 : undefined}
-        expanded={item.branch ? expanded || list.filtering : content != null ? expanded : undefined}
-        onToggle={() => list.toggleOpen(item.key)}
+        role={tree ? "treeitem" : "option"}
+        stage={stage ?? parts.stage}
+        refusal={refusal ?? parts.refusal}
+        depth={tree ? item.depth : content != null ? 0 : undefined}
+        expanded={item.branch ? expanded || filtering : content != null ? expanded : undefined}
+        onToggle={() => live.current.toggleOpen(item.key)}
         actions={
           content != null ? (
             <>
@@ -294,7 +330,7 @@ function ListItemView<T, Sort extends string>({
               <Button
                 label={`${expanded ? "Close" : "Open"} details`}
                 icon={expanded ? ChevronUp : ChevronDown}
-                onClick={() => list.toggleOpen(item.key)}
+                onClick={() => live.current.toggleOpen(item.key)}
               />
             </>
           ) : (
@@ -307,8 +343,30 @@ function ListItemView<T, Sort extends string>({
   );
 }
 
+/** A row renders again only when its item, its state or the caller's `row`/`detail` changes. A
+ *  caller whose `row` is an inline arrow re-renders every row as before; a `useCallback` row lets a
+ *  selection or cursor move redraw only the rows it touched. */
+const ListItemView = memo(
+  ListItemViewInner,
+  (a, b) =>
+    a.item.key === b.item.key &&
+    a.item.item === b.item.item &&
+    a.item.depth === b.item.depth &&
+    a.item.branch === b.item.branch &&
+    a.row === b.row &&
+    a.detail === b.detail &&
+    a.cursor === b.cursor &&
+    a.selected === b.selected &&
+    a.expanded === b.expanded &&
+    a.filtering === b.filtering &&
+    a.tree === b.tree &&
+    a.stage === b.stage &&
+    a.refusal === b.refusal,
+) as typeof ListItemViewInner;
+
 function VirtualSectionBody<T, Sort extends string>({
   list,
+  live,
   rows,
   row,
   scroller,
@@ -379,7 +437,13 @@ function VirtualSectionBody<T, Sort extends string>({
             className="absolute top-0 left-0 w-full"
             style={{ transform: `translateY(${entry.start - margin}px)` }}
           >
-            <ListItemView list={list} item={item} row={row} detail={detail} />
+            <ListItemView
+              {...rowState(list, item)}
+              live={live}
+              item={item}
+              row={row}
+              detail={detail}
+            />
           </div>
         );
       })}

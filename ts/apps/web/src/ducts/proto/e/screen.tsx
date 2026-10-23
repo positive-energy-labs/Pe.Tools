@@ -622,6 +622,17 @@ function EScreenBody({ props }: { props: ProtoProps }) {
     [inbox, heal, diagnosticKind],
   );
 
+  // Stable, so the tree's memoized rows redraw only where a selection or cursor moved.
+  const grilleName = useCallback(
+    (n: TreeNode) => {
+      const id = n.kind === "run" ? n.terminal : n.id;
+      return (id != null ? labels.get(id) : undefined) ?? n.name;
+    },
+    [labels],
+  );
+  const jumpToRuleNow = useRef<(key: string) => void>(() => {});
+  const jumpToRule = useCallback((key: string) => jumpToRuleNow.current(key), []);
+
   if (!snapshot) return <p className="text-ink-2 p-4">{props.empty?.says ?? "reading ducts…"}</p>;
   const tree = trees.length ? trees : null;
   const chosen = tree != null && scope != null;
@@ -696,15 +707,11 @@ function EScreenBody({ props }: { props: ProtoProps }) {
     "";
   // Any group of the system with an implausible row: its ESP is a partial sum, so none is shown.
   const blockedLoss = groups.some((g) => (priced?.next.byGroup[g]?.implausible.length ?? 0) > 0);
-  const grilleName = useCallback((n: TreeNode) => {
-    const id = n.kind === "run" ? n.terminal : n.id;
-    return (id != null ? labels.get(id) : undefined) ?? n.name;
-  }, [labels]);
-  const jumpToRule = useCallback((key: string) => {
+  const fansOf = useCallback((system: ReturnType<typeof systemList>[number]) => fanFacts(priced, system.groups, nameOf), [priced, nameOf]);
+  jumpToRuleNow.current = (key) => {
     setRuleFocus(key);
     pick("right");
-  }, [pick]);
-  const fansOf = useCallback((system: ReturnType<typeof systemList>[number]) => fanFacts(priced, system.groups, nameOf), [priced, nameOf]);
+  };
   const designRate = priced?.staged.designFriction ?? DEFAULT_DESIGN_FRICTION_RATE;
   // The tree is the whole pane (kaitpw 2026-10-23: the header block "only takes up space", the
   // selected row's footer "obscures the tree"): the system's name and way back live in the picture

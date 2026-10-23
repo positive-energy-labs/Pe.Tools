@@ -310,6 +310,7 @@ test("completion is explicit, cancels losslessly, previews token removal, and re
   }
   render(<Harness />);
   const input = screen.getByRole("combobox", { name: "Search completion" });
+  input.focus();
   fireEvent.change(input, { target: { value: "System kind" } });
   fireEvent.keyDown(input, { key: "Enter" });
   expect(input.getAttribute("value")).toBe("System kind");
@@ -340,6 +341,78 @@ test("completion is explicit, cancels losslessly, previews token removal, and re
   expect(screen.queryByRole("button", { name: /Remove the "Kind/ })).toBeNull();
 });
 
+test("a typed word completes as a ghost, Tab or → takes it, and Backspace reopens the last pill", () => {
+  function Harness() {
+    const list = useList({ ...options, items: items.slice(0, 3) });
+    return (
+      <ListView
+        list={list}
+        aria-label="ghost"
+        row={(item) => ({ label: item.name })}
+        empty={{ message: "Empty", exit: "Read rows" }}
+      />
+    );
+  }
+  render(<Harness />);
+  const input = screen.getByRole("combobox", { name: "Search ghost" });
+  const removeSupply = () =>
+    screen.queryByRole("button", { name: 'Remove the "Kind: Supply" narrowing' });
+  input.focus();
+  fireEvent.change(input, { target: { value: "sup" } });
+  expect(document.querySelector("[data-completion-ghost]")?.textContent).toBe("supply");
+  expect(screen.getByRole("option", { name: /Search “sup”/ })).toBeTruthy();
+  fireEvent.keyDown(input, { key: "Tab" });
+  expect(removeSupply()).toBeTruthy();
+  expect(input.getAttribute("value")).toBe("");
+  // Backspace on the empty box edits the last pill in place; Escape puts it back untouched.
+  fireEvent.keyDown(input, { key: "Backspace" });
+  const editing = screen.getByRole("combobox", { name: "Choose Kind" });
+  expect(editing.getAttribute("value")).toBe("Supply");
+  expect(removeSupply()).toBeNull();
+  expect(document.querySelector("[data-list-draft]")?.textContent).toBe("Kind:");
+  fireEvent.keyDown(editing, { key: "Escape" });
+  expect(removeSupply()).toBeTruthy();
+  // Emptied, a second Backspace removes it.
+  fireEvent.keyDown(input, { key: "Backspace" });
+  fireEvent.change(input, { target: { value: "" } });
+  fireEvent.keyDown(input, { key: "Backspace" });
+  expect(removeSupply()).toBeNull();
+  expect(screen.getByRole("combobox", { name: "Search ghost" })).toBe(input);
+  // → at the end of the word takes the ghost too.
+  fireEvent.change(input, { target: { value: "ret" } });
+  fireEvent.keyDown(input, { key: "ArrowRight" });
+  expect(screen.getByRole("button", { name: 'Remove the "Kind: Return" narrowing' })).toBeTruthy();
+  // Escape walks back: the pill, then out of the box.
+  fireEvent.keyDown(input, { key: "Escape" });
+  expect(screen.queryByRole("button", { name: /Remove the "Kind/ })).toBeNull();
+  fireEvent.keyDown(input, { key: "Escape" });
+  expect(document.activeElement).not.toBe(input);
+});
+
+test("a stable row callback lets a selection redraw only the rows it touched", () => {
+  const drawn: string[] = [];
+  const row = (item: Item) => {
+    drawn.push(item.id);
+    return { label: item.name };
+  };
+  function Harness() {
+    const list = useList({ ...options, items: items.slice(0, 5) });
+    return (
+      <ListView
+        list={list}
+        aria-label="memo"
+        row={row}
+        empty={{ message: "Empty", exit: "Read rows" }}
+      />
+    );
+  }
+  render(<Harness />);
+  fireEvent.click(screen.getByText("System 1"));
+  drawn.length = 0;
+  fireEvent.click(screen.getByText("System 3"));
+  expect([...new Set(drawn)].sort()).toEqual([items[1]!.id, items[3]!.id]);
+});
+
 test("Filter preserves keywords, exposes disabled zero values, and Enter never picks a data row", () => {
   const picked = vi.fn();
   function Harness() {
@@ -361,7 +434,7 @@ test("Filter preserves keywords, exposes disabled zero values, and Enter never p
   expect(input.getAttribute("value")).toBe("");
   fireEvent.change(input, { target: { value: "System 0" } });
   fireEvent.click(screen.getByRole("button", { name: "Filter button search" }));
-  fireEvent.click(screen.getByRole("option", { name: "Filter by Kind" }));
+  fireEvent.click(screen.getByRole("option", { name: /^Filter by Kind/ }));
   const zero = screen.getByRole("option", { name: /Return0/ });
   expect(zero.getAttribute("aria-disabled")).toBe("true");
   fireEvent.click(zero);
