@@ -6,6 +6,31 @@ using Pe.Revit.Space;
 namespace Pe.Partition.Tests;
 
 public sealed class SpaceViewTests {
+    [TestCase(0.16, true)]
+    [TestCase(1.04, false)]
+    [TestCase(2.08, false)]
+    public void Body_coverage_rejects_a_cuff_but_keeps_half_or_more(double extent, bool retry) {
+        foreach (var body in new[] { new Aabb(0, 0, 0, 2.08, .5, .5), new Aabb(0, 0, 0, .5, 2.08, .5), new Aabb(0, 0, 0, .5, .5, 2.08) }) {
+            var drawn = new Aabb(0, 0, 0, Math.Min(body.MaxX, extent), Math.Min(body.MaxY, extent), Math.Min(body.MaxZ, extent));
+            Assert.That(Measure("CoverageBy", body, drawn) < .5, Is.EqualTo(retry));
+        }
+        Assert.That(Measure("CoverageBy", new Aabb(), new Aabb()), Is.EqualTo(1));
+    }
+
+    [Test]
+    public void Context_distance_measures_box_separation_not_centres_or_ids() {
+        var focus = new Aabb(0, 0, 0, 10, 10, 10);
+        var touching = new Aabb(10, 2, 2, 100, 3, 3);
+        var near = new Aabb(12, 2, 2, 13, 3, 3);
+        var far = new Aabb(12, 13, 10, 13, 14, 11);
+        Assert.That(Measure("DistanceSquared", focus, touching), Is.Zero);
+        Assert.That(new[] { far, near, touching }.OrderBy(b => Measure("DistanceSquared", focus, b)), Is.EqualTo(new[] { touching, near, far }));
+        Assert.That(Measure("DistanceSquared", focus, far), Is.EqualTo(13));
+    }
+
+    private static double Measure(string method, Aabb body, Aabb drawn) =>
+        (double)typeof(Aabb).GetMethod(method, BindingFlags.NonPublic | BindingFlags.Instance)!.Invoke(body, [drawn])!;
+
     [Test]
     public void Tree_depth_is_inclusive_and_inner_counts_include_hidden_descendants() {
         var triangles = Enumerable.Range(0, 33).Select(i => new Tri {

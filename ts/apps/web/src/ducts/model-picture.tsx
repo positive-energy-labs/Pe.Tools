@@ -18,6 +18,8 @@ import type { PictureBounds } from "#/scene/framing";
 import { useStage } from "#/scene/stage-controller";
 import { viewportProject, type Project, type Size } from "#/scene/projection";
 import { type LiveOrbit } from "@pe/kit/lang/live-orbit";
+import { PaneOverlay } from "@pe/kit/lang/pane";
+import { OutcomeLine } from "@pe/kit/lang/outcome";
 import { Scene3D } from "#/scene/scene3d";
 import type { SceneRead } from "#/scene/use-scene";
 import type { Bounds, Layer3D, SceneMeshes } from "#/scene/types";
@@ -261,6 +263,21 @@ export function ModelPicture({
       ) : (
         readout
       )}
+      {read.omittedElements || read.unavailableElements ? (
+        <PaneOverlay label="scene completeness" place="br">
+          <OutcomeLine
+            kind="advisory"
+            label={[
+              read.omittedElements
+                ? `context: ${read.omittedElements} elements omitted at the triangle budget`
+                : "",
+              read.unavailableElements ? `${read.unavailableElements} unavailable` : "",
+            ]
+              .filter(Boolean)
+              .join(" / ")}
+          />
+        </PaneOverlay>
+      ) : null}
       {overlay ? (
         <div
           ref={fade}

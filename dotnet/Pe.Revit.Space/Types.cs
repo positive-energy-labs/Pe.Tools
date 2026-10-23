@@ -145,6 +145,21 @@ public readonly record struct Aabb(
         this.MinX - d, this.MinY - d, this.MinZ - d,
         this.MaxX + d, this.MaxY + d, this.MaxZ + d);
 
+    internal double CoverageBy(Aabb drawn) {
+        var spans = new[] { this.MaxX - this.MinX, this.MaxY - this.MinY, this.MaxZ - this.MinZ };
+        var axis = Array.IndexOf(spans, spans.Max());
+        var extent = axis == 0 ? drawn.MaxX - drawn.MinX : axis == 1 ? drawn.MaxY - drawn.MinY : drawn.MaxZ - drawn.MinZ;
+        return spans[axis] > 0 ? extent / spans[axis] : 1;
+    }
+
+    internal double DistanceSquared(Aabb b) {
+        static double Gap(double minA, double maxA, double minB, double maxB) => Math.Max(0, Math.Max(minA - maxB, minB - maxA));
+        var x = Gap(this.MinX, this.MaxX, b.MinX, b.MaxX);
+        var y = Gap(this.MinY, this.MaxY, b.MinY, b.MaxY);
+        var z = Gap(this.MinZ, this.MaxZ, b.MinZ, b.MaxZ);
+        return x * x + y * y + z * z;
+    }
+
     public bool Overlaps(Aabb o) =>
         this.MinX <= o.MaxX && this.MaxX >= o.MinX
         && this.MinY <= o.MaxY && this.MaxY >= o.MinY
