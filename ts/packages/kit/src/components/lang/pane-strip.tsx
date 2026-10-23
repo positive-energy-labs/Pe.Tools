@@ -15,7 +15,7 @@ import { Popover, PopoverContent, PopoverTrigger } from "./popover-internal";
 
 import type { FloaterSpec } from "./floater";
 import { Switcher } from "./switcher";
-import { useTeach } from "./use-teach";
+import { TeachOwner, useTeach } from "./use-teach";
 
 export interface StripOption {
   key: string;
@@ -95,13 +95,19 @@ function useFold() {
 }
 
 function Folded({ label, count, children }: { label: string; count: string; children: ReactNode }) {
+  const owner = useRef<HTMLButtonElement>(null);
   return (
     <Popover>
-      <PopoverTrigger kind="framed" className="t-small">
+      <PopoverTrigger ref={owner} kind="framed" className="t-small">
         {label} <span className="face-mono">{count}</span>
       </PopoverTrigger>
-      <PopoverContent align="end" aria-label={label} className="flex w-auto flex-col gap-1 p-1">
-        {children}
+      <PopoverContent
+        keepMounted
+        align="end"
+        aria-label={label}
+        className="flex w-auto flex-col gap-1 p-1"
+      >
+        <TeachOwner value={owner}>{children}</TeachOwner>
       </PopoverContent>
     </Popover>
   );
