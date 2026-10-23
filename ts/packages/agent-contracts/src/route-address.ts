@@ -335,10 +335,13 @@ function lease(
           key,
           field.codec === textCodec
             ? (inner as z.ZodType<string>)
-            : z.string().refine((text) => {
-                const decoded = field.codec.decode(text);
-                return decoded !== INVALID && field.schema.safeParse(decoded).success;
-              }, `${key} does not read as its codec writes it`),
+            : z
+                .string()
+                .refine((text) => {
+                  const decoded = field.codec.decode(text);
+                  return decoded !== INVALID && field.schema.safeParse(decoded).success;
+                }, `${key} does not read as its codec writes it`)
+                .describe(field.schema.description ?? "Encoded page field"),
         ];
       }),
     ) as Record<string, z.ZodType<string>>,

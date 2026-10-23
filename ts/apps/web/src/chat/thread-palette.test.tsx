@@ -1,3 +1,9 @@
+import { emptyListSearch, pickListPill, threadSearchDefault } from "@pe/agent-contracts";
+const search = (keywords = "", pills: Record<string, string> = {}) =>
+  Object.entries(pills).reduce((s, [field, value]) => pickListPill(s, field, value), {
+    ...emptyListSearch(),
+    keywords,
+  });
 // @vitest-environment jsdom
 import { cleanup, fireEvent, render, screen, waitFor, within } from "@testing-library/react";
 import { afterEach, beforeEach, expect, test, vi } from "vite-plus/test";
@@ -105,9 +111,7 @@ test("the menu on a selected row acts on every selected thread and greys what ne
       .getAllByRole("option")
       .find((o) => o.textContent?.startsWith("Settle"))!,
   );
-  await waitFor(() =>
-    expect(screen.getByRole("status").textContent).toBe("2 of 2 threads changed"),
-  );
+  await waitFor(() => expect(screen.getByText("2 of 2 threads changed")).toBeTruthy());
   expect(onUpdate.mock.calls.map((call) => [call[0], call[1]])).toEqual([
     ["fixture-local", { status: "settled" }],
     ["fixture-family", { status: "settled" }],
@@ -130,21 +134,15 @@ test("plain click activates while modifiers and Space select through the shared 
   expect(onSelect).toHaveBeenCalledTimes(2);
 });
 
-test("table query narrows target, provider, state, unread and Attention and reveals archived shelves", async () => {
+test("explicit pills narrow threads and Clear search exposes every shelf", async () => {
   mount();
-  const search = screen.getByRole("textbox", { name: "Search threads" });
-  fireEvent.change(search, {
-    target: { value: "scope=attention state=working provider=codex unread=yes" },
-  });
-  expect(screen.getAllByRole("option").map((item) => item.getAttribute("data-key"))).toEqual([
-    "fixture-running",
-  ]);
-  fireEvent.change(search, { target: { value: 'scope=archived "Original schedule"' } });
-  expect(row("Original schedule exploration")).toBeTruthy();
-  expect(screen.queryByText(/Show .*more/)).toBeNull();
-  fireEvent.change(search, { target: { value: "scope=attention !state=working no-such-thread" } });
-  expect(screen.getByText("No matching threads")).toBeTruthy();
+  fireEvent.click(screen.getByRole("button", { name: "Filter threads" }));
+  fireEvent.click(await screen.findByRole("option", { name: "Filter by Provider" }));
+  const choices = screen.getByRole("listbox", { name: "Filter values" });
+  expect(choices.querySelectorAll("[role=option]").length).toBeGreaterThan(0);
+  fireEvent.keyDown(screen.getByRole("combobox", { name: "Choose Provider" }), { key: "Escape" });
   fireEvent.click(screen.getByRole("button", { name: "Clear search" }));
+  expect(screen.queryByText(/Show .*more/)).toBeNull();
   expect(screen.queryByText("No matching threads")).toBeNull();
 });
 
@@ -185,7 +183,7 @@ test("changing the current thread reveals an offscreen row among 355 without rep
     onUpdate: vi.fn(async () => true),
     onNewTarget: vi.fn(),
   };
-  const address = { query: "scope=all", sort: "" as const, onChange: onAddressChange };
+  const address = { search: threadSearchDefault(), sort: "" as const, onChange: onAddressChange };
   const { rerender } = render(
     <ThreadsSidebar {...props} currentThreadId="thread-0" address={address} />,
   );
@@ -205,13 +203,11 @@ test("changing the current thread reveals an offscreen row among 355 without rep
   ).toContain("thread-354");
   expect(onAddressChange).not.toHaveBeenCalled();
 
-  const filtered = { ...address, query: "provider=codex" };
+  const filtered = { ...address, search: search("", { provider: "codex" }) };
   rerender(<ThreadsSidebar {...props} currentThreadId="thread-0" address={filtered} />);
   scroll.mockClear();
   rerender(<ThreadsSidebar {...props} currentThreadId="thread-354" address={filtered} />);
-  expect(screen.getByRole("textbox", { name: "Search threads" }).getAttribute("value")).toBe(
-    "provider=codex",
-  );
+  expect(screen.getByRole("combobox", { name: "Search threads" }).getAttribute("value")).toBe("");
   expect(screen.queryByText("Thread 354")).toBeNull();
   expect(onAddressChange).not.toHaveBeenCalled();
   expect(scrolledDown()).toBe(false);

@@ -63,3 +63,5 @@ export * from "./plugin-runtime.ts";
 export * from "./thread-export.ts";
 export * from "./ducts-analysis.ts";
 export * from "./ducts-guide.ts";
+export * from "./list-search.ts";
+export { threadSearchDefault } from "./routes/shared.ts";

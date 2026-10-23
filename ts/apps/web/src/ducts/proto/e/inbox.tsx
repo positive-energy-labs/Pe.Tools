@@ -1,3 +1,4 @@
+import { type ListSearch } from "@pe/agent-contracts";
 import { useEffect, useRef, useState, type ReactNode } from "react";
 import { Ban, Check, Eye, EyeOff, Fan, Link, Pencil, X, type LucideIcon } from "lucide-react";
 import type { DuctsRouteDocument, RouteStatePatch } from "@pe/agent-contracts";
@@ -141,9 +142,10 @@ export function Inbox({
   /** The inbox row a review named (`focusRow`): it opens, wears selected and pulses once. */
   focused: string | null;
   address?: {
-    query: string;
+    scope?: string;
+    search: ListSearch;
     sort: "" | "name" | "status";
-    onChange: (query: string, sort: "" | "name" | "status") => void;
+    onChange: (search: ListSearch, sort: "" | "name" | "status") => void;
   };
 }) {
   const observation = useNativeObservation();
@@ -367,9 +369,10 @@ function RulingsList({
   rows: RulingRow[];
   focused: string | null;
   address?: {
-    query: string;
+    scope?: string;
+    search: ListSearch;
     sort: "" | "name" | "status";
-    onChange: (query: string, sort: "" | "name" | "status") => void;
+    onChange: (search: ListSearch, sort: "" | "name" | "status") => void;
   };
 }) {
   const [view, setView] = useState<ListState<"name" | "status">>(() => ({
@@ -377,6 +380,7 @@ function RulingsList({
     closed: [INBOX_LABELS.diagnostics],
   }));
   const list = useList({
+    scope: address?.scope,
     items: rows,
     keyOf: (row) => row.key,
     search: rulingSearch,
@@ -391,11 +395,11 @@ function RulingsList({
       order: INBOX_ORDER.map((key) => INBOX_LABELS[key]),
       collapsible: INBOX_ORDER.map((key) => INBOX_LABELS[key]),
     },
-    state: { ...view, query: address?.query ?? view.query, sort: address?.sort ?? view.sort },
+    state: { ...view, search: address?.search ?? view.search, sort: address?.sort ?? view.sort },
     onState: (next) => {
       setView(next);
-      if (address && (next.query !== address.query || next.sort !== address.sort))
-        address.onChange(next.query, next.sort);
+      if (address && (next.search !== address.search || next.sort !== address.sort))
+        address.onChange(next.search, next.sort);
     },
     stageOf: (row) => row.stage ?? "clean",
     onPick: (row) => {

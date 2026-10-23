@@ -10,12 +10,15 @@ import {
   conditionValues,
   passes,
   readQuery,
-  queryWords,
   wordMatches,
   type QueryRead,
 } from "../master-table/view";
-import { clauseText } from "../master-table/view";
-import { setQueryFilter } from "../master-table/query-filters";
+import {
+  emptyListSearch,
+  listSearchRefusal,
+  pickListPill,
+  type ListSearch,
+} from "@pe/agent-contracts";
 import type { RowState } from "./row";
 
 type FilterMode = "none" | "substring" | "fuzzy" | "words";
@@ -114,6 +117,7 @@ function collectionKey(definition: ScopeKey, region: HTMLElement | null): ScopeK
             )
           : null;
       const row = control?.closest(".dl-row");
+      if (control?.closest("[data-list-search]") && region?.contains(control)) return;
       if (row && region?.contains(row)) return;
       if (definition.options?.preventDefault !== false) event.preventDefault();
       if (definition.options?.stopPropagation !== false) event.stopPropagation();
@@ -547,7 +551,7 @@ export type Collection<T> = ReturnType<typeof useCollection<T>>;
 
 /** All persisted list state is data; routes may own it in their address. */
 export interface ListState<Sort extends string = string> {
-  query: string;
+  search: ListSearch;
   sort: Sort | "";
   closed: readonly string[];
   /** Expanded tree nodes and inline details, keyed by data identity. */
@@ -556,7 +560,7 @@ export interface ListState<Sort extends string = string> {
 }
 
 export const emptyListState = <Sort extends string = string>(): ListState<Sort> => ({
-  query: "",
+  search: emptyListSearch(),
   sort: "",
   closed: [],
   open: [],
@@ -571,7 +575,9 @@ export interface ListOptions<T, Sort extends string = string> {
     text: readonly (string | number | null | undefined)[];
     ids?: readonly number[];
   };
-  fields?: Readonly<Record<string, QueryRead<T>>>;
+  fields?: Readonly<Record<string, QueryRead<T> & { label?: string }>>;
+  /** Changes cancel pending writes and unfinished completion, even if the search stayed identical. */
+  scope?: string;
   sorts?: Readonly<Record<Sort, (item: T) => string | number | undefined>>;
   groups?: {
     of: (item: T) => string;
@@ -599,12 +605,12 @@ export interface ListItem<T> {
   branch: boolean;
 }
 
-export interface ListSearch {
+export interface ListSearchable {
   text: readonly (string | number | null | undefined)[];
   ids?: readonly number[];
 }
 
-export function listWordMatches(searchable: ListSearch, word: string): boolean {
+export function listWordMatches(searchable: ListSearchable, word: string): boolean {
   return (
     (/^\d+$/.test(word) && !!searchable.ids?.includes(Number(word))) ||
     searchable.text.some((value) => value != null && wordMatches(String(value), word))
@@ -612,24 +618,41 @@ export function listWordMatches(searchable: ListSearch, word: string): boolean {
 }
 
 /** Temporary draft consumers use this same matcher until they adopt useList. */
-export const matchesListQuery = (query: string, searchable: ListSearch) =>
+export const matchesListQuery = (query: string, searchable: ListSearchable) =>
   passes(searchable, readQuery(query), new Map(), listWordMatches);
 
-export const hasListFacet = (query: string, field: string, value: string) =>
-  readQuery(query).some(
-    (clause) =>
-      clause.kind === "field" &&
-      !clause.not &&
-      clause.op === "=" &&
-      clause.label.toLowerCase() === field.toLowerCase() &&
-      clause.value.toLowerCase() === value.toLowerCase(),
+const wordsOf = (keywords: string) => keywords.toLowerCase().match(/\S+/g) ?? [];
+
+/** Typed conditions share the table evaluator, but literal keywords never pass through its parser. */
+function searchPasses<T>(
+  item: T,
+  search: ListSearch,
+  fields: ReadonlyMap<string, QueryRead<T>>,
+  word: (item: T, text: string) => boolean,
+) {
+  return (
+    wordsOf(search.keywords).every((text) => word(item, text)) &&
+    passes(
+      item,
+      search.pills.map((pill) => ({
+        kind: "field" as const,
+        label: pill.field,
+        op: "=" as const,
+        value: pill.value,
+        not: false,
+        text: "",
+      })),
+      fields,
+      word,
+    )
   );
+}
 
 /** Query, sorting, sections and tree order share one data projection, independent of mounted rows. */
 export function listModel<T, Sort extends string>(
   options: ListOptions<T, Sort>,
   state: ListState<Sort>,
-  searchIndex?: ReadonlyMap<T, ListSearch>,
+  searchIndex?: ReadonlyMap<T, ListSearchable>,
 ) {
   const all: ListItem<T>[] = [];
   const visit = (items: readonly T[], ancestors: readonly string[], section?: string) => {
@@ -649,30 +672,25 @@ export function listModel<T, Sort extends string>(
     }
   };
   visit(options.items, []);
-  const fields = new Map(
-    Object.entries(options.fields ?? {}).map(([key, read]) => [key.toLowerCase(), read]),
-  );
+  const fields = new Map(Object.entries(options.fields ?? {}).map(([key, read]) => [key, read]));
   if (options.stageOf)
     fields.set("change", {
       kind: "text",
       read: (item) => options.stageOf!(item) ?? "clean",
       values: ["clean", "proposed", "staged"],
     });
-  const words = queryWords(state.query);
-  const typedSort = [...words]
-    .reverse()
-    .find((word) => word.startsWith("sort:"))
-    ?.slice(5);
-  const sortKey =
-    typedSort && options.sorts && typedSort in options.sorts ? (typedSort as Sort) : state.sort;
-  const clauses = readQuery(words.filter((word) => !word.startsWith("sort:")).join(" "));
+  const sortKey = state.sort;
+  const refusal = listSearchRefusal(state.search, [...fields.keys()]);
   const word = (item: T, text: string) => {
     const searchable = searchIndex?.get(item) ?? options.search(item);
     return listWordMatches(searchable, text);
   };
-  const matching = all.filter((row) => passes(row.item, clauses, fields, word));
+  const lowerFields = new Map([...fields].map(([key, read]) => [key.toLowerCase(), read]));
+  const matching = refusal
+    ? []
+    : all.filter((row) => searchPasses(row.item, state.search, lowerFields, word));
   const included = new Set(matching.flatMap((row) => [row.key, ...row.ancestors]));
-  const filtering = clauses.length > 0;
+  const filtering = !!state.search.keywords.trim() || state.search.pills.length > 0 || !!refusal;
   const sort = sortKey ? options.sorts?.[sortKey] : undefined;
   const ordered = all
     .filter((row) => included.has(row.key))
@@ -733,26 +751,30 @@ export function listModel<T, Sort extends string>(
     .filter((section) => section.count > 0);
   const facets = [...fields].map(([key, field]) => ({
     key,
-    values: conditionValues(
-      all
-        .filter((row) =>
-          passes(
-            row.item,
-            clauses.filter(
-              (clause) => clause.kind !== "field" || clause.label.toLowerCase() !== key,
-            ),
-            fields,
-            word,
-          ),
-        )
-        .map((row) => row.item),
-      field,
-    ),
+    label: options.fields?.[key]?.label ?? key[0]!.toUpperCase() + key.slice(1),
+    labels: field.labels,
   }));
+  // Candidate counts are paid only while a picker is open. The vocabulary is from the full scope,
+  // so narrowing never hides a zero-count choice.
+  const valuesFor = (key: string, candidate = state.search) => {
+    const field = fields.get(key);
+    if (!field) return [];
+    const search = { ...candidate, pills: candidate.pills.filter((pill) => pill.field !== key) };
+    const rows = all.map((row) => row.item);
+    const values = field.values ?? conditionValues(rows, field).map((each) => each.value);
+    return conditionValues(
+      listSearchRefusal(search, [...fields.keys()])
+        ? []
+        : rows.filter((item) => searchPasses(item, search, lowerFields, word)),
+      { ...field, values },
+    );
+  };
   return {
     all,
     sections,
     facets,
+    valuesFor,
+    refusal,
     sort: sortKey,
     filtering,
     total: all.length,
@@ -768,41 +790,53 @@ export function useList<T, Sort extends string = string>(options: ListOptions<T,
     ...options.initialState,
   }));
   const source = options.state ?? ownState;
-  const [query, setQuery] = useState({ source: source.query, value: source.query });
-  const published = useRef<string | undefined>(undefined);
-  // Address navigation wins over an unfinished edit. An acknowledgement of our own idle
-  // write must not replace newer typing that arrived while the router was committing it.
-  let currentQuery = query.value;
-  if (query.source !== source.query) {
-    currentQuery = source.query === published.current ? query.value : source.query;
-    published.current = undefined;
-    setQuery({ source: source.query, value: currentQuery });
-  }
-  const state = { ...source, query: currentQuery };
-  const latest = useRef({ options, state });
-  latest.current = { options, state };
+  const sourceKey = JSON.stringify(source.search);
+  const scope = options.scope ?? "";
+  const [draft, setDraft] = useState({ sourceKey, scope, search: source.search });
+  const published = useRef(new Set<string>());
+  const reset = useRef(0);
   const publication = useRef<ReturnType<typeof setTimeout> | undefined>(undefined);
-  useEffect(() => {
-    if (currentQuery === source.query) return;
-    publication.current = setTimeout(() => {
-      const { options: current, state: next } = latest.current;
-      published.current = next.query;
-      startTransition(() => {
-        if (!current.state) setOwnState(next);
-        current.onState?.(next);
-      });
-    }, 250);
-    return () => clearTimeout(publication.current);
-  }, [currentQuery, source.query]);
-  const setState = (next: ListState<Sort>) => {
+  let currentSearch = draft.search;
+  if (draft.sourceKey !== sourceKey || draft.scope !== scope) {
+    const acknowledged = draft.scope === scope && published.current.delete(sourceKey);
+    currentSearch =
+      acknowledged && JSON.stringify(draft.search) !== sourceKey ? draft.search : source.search;
+    if (!acknowledged) {
+      published.current.clear();
+      reset.current++;
+    }
     clearTimeout(publication.current);
-    setQuery({ source: source.query, value: next.query });
-    published.current = next.query;
-    if (!options.state) setOwnState(next);
-    options.onState?.(next);
+    setDraft({ sourceKey, scope, search: currentSearch });
+  }
+  const state = { ...source, search: currentSearch };
+  const latest = useRef({ options, state, sourceKey, scope });
+  latest.current = { options, state, sourceKey, scope };
+  const publish = (next: ListState<Sort>) => {
+    clearTimeout(publication.current);
+    const { options: current } = latest.current;
+    published.current.add(JSON.stringify(next.search));
+    if (!current.state) setOwnState(next);
+    current.onState?.(next);
   };
+  useEffect(() => {
+    if (
+      JSON.stringify(currentSearch) === sourceKey ||
+      published.current.has(JSON.stringify(currentSearch))
+    )
+      return;
+    publication.current = setTimeout(
+      () => startTransition(() => publish(latest.current.state)),
+      250,
+    );
+    return () => clearTimeout(publication.current);
+  }, [currentSearch, sourceKey, scope]);
+  const setState = (next: ListState<Sort>) => {
+    setDraft({ sourceKey, scope, search: next.search });
+    publish(next);
+  };
+  const setSearch = (search: ListSearch) => setState({ ...state, search });
   const searchIndex = useMemo(() => {
-    const index = new Map<T, ListSearch>();
+    const index = new Map<T, ListSearchable>();
     const visit = (items: readonly T[]) => {
       for (const item of items) {
         index.set(item, options.search(item));
@@ -819,7 +853,7 @@ export function useList<T, Sort extends string = string>(options: ListOptions<T,
     items: rows,
     keyOf: (row) => row.key,
     labelOf: (row) => String(searchIndex.get(row.item)?.text[0] ?? row.key),
-    query: state.query,
+    query: "",
     filter: "none",
     select: options.select ?? "single",
     selected: state.selected,
@@ -827,7 +861,12 @@ export function useList<T, Sort extends string = string>(options: ListOptions<T,
     onSelectedChange: (selected) => setState({ ...state, selected }),
     refusalOf: (row) => options.refusalOf?.(row.item),
     onPick: (row) => options.onPick?.(row.item),
-    onEscape: () => setState({ ...state, ...(state.query ? { query: "" } : { selected: [] }) }),
+    onEscape: () => {
+      if (state.search.keywords) setSearch({ ...state.search, keywords: "" });
+      else if (state.search.pills.length)
+        setSearch({ ...state.search, pills: state.search.pills.slice(0, -1) });
+      else setState({ ...state, selected: [] });
+    },
     target,
     scrollCursor: false,
   });
@@ -883,18 +922,19 @@ export function useList<T, Sort extends string = string>(options: ListOptions<T,
     setTarget,
     rows,
     revealRequest,
-    setQuery: (query: string) => {
-      setQuery({ source: source.query, value: query });
+    setSearch,
+    clearSearch: () => setSearch(emptyListSearch()),
+    scope,
+    reset: reset.current,
+    setKeywords: (keywords: string) => {
+      setDraft({ sourceKey, scope, search: { ...state.search, keywords } });
       collection.setCursor(null);
     },
-    setSort: (sort: Sort | "") =>
-      setState({
-        ...state,
-        sort,
-        query: queryWords(state.query)
-          .filter((word) => !word.startsWith("sort:"))
-          .join(" "),
-      }),
+    flush: () => {
+      if (JSON.stringify(latest.current.state.search) !== latest.current.sourceKey)
+        publish(latest.current.state);
+    },
+    setSort: (sort: Sort | "") => setState({ ...state, sort }),
     sorts: Object.keys(options.sorts ?? {}) as Sort[],
     toggleOpen,
     toggleSection: (key: string) =>
@@ -904,33 +944,19 @@ export function useList<T, Sort extends string = string>(options: ListOptions<T,
           ? state.closed.filter((each) => each !== key)
           : [...state.closed, key],
       }),
-    toggleFacet: (field: string, value: string) => {
-      const clause = clauseText(false, field, "=", value);
-      const query = readQuery(state.query)
-        .filter(
-          (each) =>
-            each.kind !== "field" ||
-            each.not ||
-            each.op !== "=" ||
-            each.label.toLowerCase() !== field.toLowerCase(),
-        )
-        .map((each) => each.text)
-        .join(" ");
-      setState({
-        ...state,
-        query: setQueryFilter(
-          query,
-          { clause, label: value, description: value },
-          !hasListFacet(state.query, field, value),
-        ),
-      });
-    },
+    pickPill: (field: string, value: string, search = state.search) =>
+      setSearch(pickListPill(search, field, value)),
+    removePill: (field: string) =>
+      setSearch({
+        ...state.search,
+        pills: state.search.pills.filter((pill) => pill.field !== field),
+      }),
     reveal: (key: string) => {
       const row = model.all.find((each) => each.key === key);
       if (!row) return;
       setState({
         ...state,
-        query: rows.some((each) => each.key === key) ? state.query : "",
+        search: rows.some((each) => each.key === key) ? state.search : emptyListSearch(),
         closed: state.closed.filter((each) => each !== row.section),
         open: [...new Set([...state.open, ...row.ancestors])],
       });

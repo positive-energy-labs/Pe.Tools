@@ -4,19 +4,18 @@ import {
   useLayoutEffect,
   useRef,
   useState,
-  startTransition,
   type ReactNode,
   type HTMLAttributes,
+  type RefObject,
 } from "react";
 import { ChevronRight } from "lucide-react";
 
 import { Button } from "./button";
-import { NarrowChip } from "./chip";
-import { hasListFacet, type ListController, type ListItem } from "./collection";
+import { type ListController, type ListItem } from "./collection";
 import { EmptyState } from "./empty";
 import { useScopeGestures, useScopeKeys } from "../../keys";
-import { SearchControl } from "./search-control";
 import { ListPopup } from "./list-popup";
+import { ListSearchBox } from "./list-search";
 import { Row, type RowProps } from "./row";
 import "./lang.css";
 
@@ -62,6 +61,8 @@ export function ListBar<T, Sort extends string>({
   /** Keep narrow-pane controls on one horizontally scrollable line. */
   compact?: boolean;
 }) {
+  const input = useRef<HTMLInputElement>(null);
+  useListSearchFocus(input, list.target, primary);
   const defaultOrder = list.grouped ? "Shelf order" : "Input order";
   const sortItems = [
     { key: "", label: defaultOrder },
@@ -69,56 +70,10 @@ export function ListBar<T, Sort extends string>({
   ];
   return (
     <div data-list-bar="" data-surface="artifact">
-      <ListFilter
-        value={list.state.query}
-        onChange={list.setQuery}
-        shown={list.shown}
-        total={list.total}
-        label={`Search ${label}`}
-        placeholder="Words, field=value, sort:name"
-        primary={primary}
-        region={list.target}
-      />
+      <ListSearchBox list={list} label={label} input={input} />
       <div
-        className={`flex items-center gap-1 ${compact ? "overflow-x-auto *:shrink-0" : "flex-wrap px-(--item-pad-x) py-1"}`}
+        className={`flex items-center gap-1 ${compact ? "overflow-x-auto *:shrink-0" : "flex-wrap px-(--item-pad-x)"}`}
       >
-        {list.facets.map((facet) => (
-          <div
-            key={facet.key}
-            role="group"
-            aria-label={facet.key}
-            className={`flex items-center gap-1 ${compact ? "" : "flex-wrap"}`}
-          >
-            <ListPopup
-              anchor="trigger"
-              aria-label={`Filter ${facet.key}`}
-              trigger={<span>{facet.key}</span>}
-              items={facet.values}
-              keyOf={(item) => item.value}
-              labelOf={(item) => item.label ?? item.value}
-              filter="words"
-              searchAbove={8}
-              empty={`No ${facet.key} values`}
-              onPick={(item) => list.toggleFacet(facet.key, item.value)}
-              row={(item) => ({
-                label: item.label ?? item.value,
-                meta: item.count,
-                active: hasListFacet(list.state.query, facet.key, item.value),
-              })}
-            />
-            {facet.values
-              .filter(({ value }) => hasListFacet(list.state.query, facet.key, value))
-              .map(({ value, label: title, count }) => (
-                <NarrowChip
-                  key={value}
-                  label={`${facet.key}: ${title ?? value}`}
-                  count={count}
-                  title={`Filter ${facet.key} by ${title ?? value}`}
-                  onRemove={() => list.toggleFacet(facet.key, value)}
-                />
-              ))}
-          </div>
-        ))}
         {list.sorts.length ? (
           <ListPopup
             aria-label={`Sort ${label}`}
@@ -212,11 +167,8 @@ export function ListView<T, Sort extends string = string>(props: ListViewProps<T
       ) : !list.shown ? (
         <div role="status">
           <EmptyState story="filter" exit="Clear the search to see all rows">
-            No matching {label}
+            {list.refusal ? "Search cannot be applied" : `No matching ${label}`}
           </EmptyState>
-          <Button label="Clear search" onClick={() => list.setQuery("")}>
-            Clear search
-          </Button>
         </div>
       ) : null}
       {list.sections.map((section, index) => (
@@ -467,39 +419,11 @@ function pick(): Target | null {
   );
 }
 
-export function ListFilter({
-  value,
-  onChange,
-  shown,
-  total,
-  label,
-  placeholder,
-  primary = false,
-  region,
-  onEnter,
-}: {
-  value: string;
-  onChange: (value: string) => void;
-  /** Rows the query leaves, and rows there are. */
-  shown: number;
-  total: number;
-  /** The input's accessible name. */
-  label: string;
-  placeholder?: string;
-  /** The list `/` falls back to when the pointer and focus are over none. */
-  primary?: boolean;
-  /** The list body can be separate from its filter bar. */
-  region?: HTMLElement | null;
-  /** Enter in the filter. */
-  onEnter?: () => void;
-}) {
-  const [draft, setDraft] = useState({ source: value, value });
-  if (draft.source !== value) setDraft({ source: value, value });
-  const change = (next: string) => {
-    setDraft({ source: value, value: next });
-    startTransition(() => onChange(next));
-  };
-  const input = useRef<HTMLInputElement>(null);
+function useListSearchFocus(
+  input: RefObject<HTMLInputElement | null>,
+  region: HTMLElement | null | undefined,
+  primary: boolean,
+) {
   const self = useRef<Target | null>(null);
   self.current ??= {
     input: () => input.current,
@@ -535,28 +459,5 @@ export function ListFilter({
       },
     ],
     body,
-  );
-  const narrowed = draft.value.trim() !== "";
-  return (
-    <SearchControl face="bar" data-list-filter="">
-      <input
-        ref={input}
-        value={draft.value}
-        aria-label={label}
-        placeholder={placeholder}
-        className="min-w-0 flex-1 bg-transparent outline-none"
-        onChange={(event) => change(event.currentTarget.value)}
-        onKeyDown={(event) => {
-          if (event.key === "Escape") {
-            event.stopPropagation();
-            change("");
-            event.currentTarget.blur();
-          } else if (event.key === "Enter") onEnter?.();
-        }}
-      />
-      <span className="t-small text-ink-2 face-mono shrink-0 pr-1" data-list-filter-count="">
-        {narrowed ? `${shown} of ${total}` : total}
-      </span>
-    </SearchControl>
   );
 }

@@ -343,7 +343,13 @@ export function buildTree(
 export function systemList(
   snapshot: DuctSnapshot,
   priced: Priced | null,
-): (TreeNode & { fanless: boolean; blocked: boolean; sub: string; rating: number | null })[] {
+): (TreeNode & {
+  fanless: boolean;
+  blocked: boolean;
+  classification: string | null;
+  sub: string;
+  rating: number | null;
+})[] {
   const nodes = new Map(snapshot.nodes.map((n) => [n.id, n]));
   const equipment = new Set(snapshot.nodes.filter((n) => n.kind === "equipment").map((n) => n.id));
   return systemsOf(snapshot).map((system) => {
@@ -375,6 +381,7 @@ export function systemList(
       key: system.name,
       kind: "system",
       name: system.name,
+      classification: system.classification,
       sub: [
         system.classification,
         system.units.join(", ") || "no fan",

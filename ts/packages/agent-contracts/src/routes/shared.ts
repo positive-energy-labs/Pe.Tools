@@ -1,3 +1,4 @@
+import { listSearchKey, listSearchCodec, emptyListSearch, pickListPill } from "../list-search.ts";
 import {
   fitViewportCodec,
   planeViewportSchema,
@@ -8,8 +9,17 @@ import { field, text } from "../route-field.ts";
 import { z } from "zod";
 
 /** Chat's sidebar can accompany any route; its list view has one shareable address. */
+export const threadSearchDefault = () => pickListPill(emptyListSearch(), "scope", "all");
 export const threadListFields = {
-  threadQuery: field(z.string().max(4000).default("scope=all"), { url: "replace", agent: "set" }),
+  threadSearch: field(
+    listSearchKey()
+      .default(threadSearchDefault)
+      .describe(
+        "JSON {v:1,keywords:string,pills:[{field,op:'=',value}]}. Literal keywords and equality pills. Fields: target, provider, state, unread, scope. Scope values: attention, all, archived.",
+      ),
+    { url: "replace", agent: "set" },
+    listSearchCodec,
+  ),
   threadSort: field(z.enum(["", "recent", "title"]).default(""), { url: "replace", agent: "set" }),
 };
 

@@ -1,4 +1,11 @@
 import { describe, expect, test } from "vite-plus/test";
+import {
+  emptyListSearch,
+  pickListPill,
+  listSearchCodec,
+  listSearchRefusal,
+} from "./list-search.ts";
+import { threadSearchDefault } from "./routes/shared.ts";
 import type { OrbitViewport } from "./page-keys.ts";
 import { routeAddress, routeAt, routeOf } from "./route-address.ts";
 
@@ -35,20 +42,29 @@ describe("the route address", () => {
   test("the thread sidebar query and sort round-trip on Pea and a docked route", () => {
     for (const key of ["pea", "ducts"] as const) {
       const at = routeAddress(key);
-      const query = 'scope=attention state!=idle "supply air"';
-      const link = at.link({ threadQuery: query, threadSort: "recent" });
+      const query = pickListPill(
+        { ...emptyListSearch(), keywords: '"supply air"' },
+        "scope",
+        "attention",
+      );
+      const link = at.link({ threadSearch: query, threadSort: "recent" });
       const params = Object.fromEntries(new URL(link, "https://pe.test").searchParams);
-      expect(at.read(params).page).toMatchObject({ threadQuery: query, threadSort: "recent" });
-      expect(at.write({ threadQuery: "scope=all", threadSort: "" })).toMatchObject({
-        threadQuery: undefined,
+      expect(at.read(params).page).toMatchObject({ threadSearch: query, threadSort: "recent" });
+      expect(at.write({ threadSearch: threadSearchDefault(), threadSort: "" })).toMatchObject({
+        threadSearch: undefined,
         threadSort: undefined,
       });
-      expect(at.write({ threadQuery: "" }).threadQuery).toBe("");
+      expect(at.write({ threadSearch: emptyListSearch() }).threadSearch).toBe(
+        JSON.stringify(emptyListSearch()),
+      );
       expect(at.read({ threadSort: "invalid" }).page.threadSort).toBe("");
     }
     const ducts = routeAddress("ducts");
     expect(
-      ducts.agent.patch.safeParse({ threadQuery: "scope=archived", threadSort: "title" }).success,
+      ducts.agent.patch.safeParse({
+        threadSearch: JSON.stringify(pickListPill(emptyListSearch(), "scope", "archived")),
+        threadSort: "title",
+      }).success,
     ).toBe(true);
   });
 
@@ -56,18 +72,41 @@ describe("the route address", () => {
     const ducts = routeAddress("ducts");
     const facts = { systems: [{ name: "SA 19" }, { name: "RA 12" }] };
     const resolve = ducts.agent.resolve!;
-    expect(resolve({ threadQuery: "scope=archived", threadSort: "title" }, facts)).toEqual({
+    expect(
+      resolve(
+        {
+          threadSearch: JSON.stringify(pickListPill(emptyListSearch(), "scope", "archived")),
+          threadSort: "title",
+        },
+        facts,
+      ),
+    ).toEqual({
       ok: true,
-      patch: { threadQuery: "scope=archived", threadSort: "title" },
+      patch: {
+        threadSearch: JSON.stringify(pickListPill(emptyListSearch(), "scope", "archived")),
+        threadSort: "title",
+      },
     });
-    const mixed = resolve({ threadQuery: "scope=attention", system: "sa 19" }, facts);
-    expect(mixed).toEqual({ ok: true, patch: { threadQuery: "scope=attention", system: "SA 19" } });
+    const mixed = resolve(
+      {
+        threadSearch: JSON.stringify(pickListPill(emptyListSearch(), "scope", "attention")),
+        system: "sa 19",
+      },
+      facts,
+    );
+    expect(mixed).toEqual({
+      ok: true,
+      patch: {
+        threadSearch: JSON.stringify(pickListPill(emptyListSearch(), "scope", "attention")),
+        system: "SA 19",
+      },
+    });
     if (mixed.ok) {
       expect(ducts.agent.patch.safeParse(mixed.patch).success).toBe(true);
       expect(ducts.agent.settle(ducts.agent.write(ducts.defaults), mixed.patch)).toEqual(mixed);
     }
-    expect(resolve({ threadQuery: "x", system: "unknown" }, facts).ok).toBe(false);
-    expect(resolve({ threadQuery: "x", bogus: "unknown" }, facts).ok).toBe(false);
+    expect(resolve({ threadSearch: "x", system: "unknown" }, facts).ok).toBe(false);
+    expect(resolve({ threadSearch: "x", bogus: "unknown" }, facts).ok).toBe(false);
     expect(resolve({ threadSort: "invalid", system: "SA 19" }, facts).ok).toBe(false);
     expect(resolve({}, facts).ok).toBe(false);
   });
@@ -149,19 +188,19 @@ describe("the thin routes adopt the contract", () => {
   test("ducts list queries and sorts round-trip through links and the agent lease", () => {
     const ducts = routeAddress("ducts");
     const patch = {
-      systemQuery: "status=priced sort:loss",
+      systemSearch: pickListPill({ ...emptyListSearch(), keywords: "" }, "status", "priced"),
       systemSort: "loss" as const,
-      rulingQuery: "kind=heal",
+      rulingSearch: pickListPill({ ...emptyListSearch(), keywords: "" }, "kind", "heal"),
       rulingSort: "status" as const,
-      treeQuery: "12345",
+      treeSearch: { ...emptyListSearch(), keywords: "12345" },
       treeSort: "name" as const,
-      inputQuery: "fan",
+      inputSearch: { ...emptyListSearch(), keywords: "fan" },
       inputSort: "name" as const,
     };
     const params = Object.fromEntries(new URL(ducts.link(patch), "https://pe.test").searchParams);
     expect(ducts.read(params).page).toMatchObject(patch);
-    expect(ducts.agent.patch.safeParse(patch).success).toBe(true);
-    expect(ducts.agent.resolve!(patch, {}).ok).toBe(true);
+    expect(ducts.agent.patch.safeParse(ducts.write(patch)).success).toBe(true);
+    expect(ducts.agent.resolve!(ducts.write(patch), {}).ok).toBe(true);
     expect(ducts.history(ducts.defaults, patch)).toBe("replace");
     expect(ducts.keys).not.toContain("diagnostic");
   });
@@ -171,7 +210,7 @@ describe("the thin routes adopt the contract", () => {
     expect(captures.read({ open: "ab,cd" }).page).toEqual({
       sha: undefined,
       open: ["ab", "cd"],
-      threadQuery: "scope=all",
+      threadSearch: threadSearchDefault(),
       threadSort: "",
     });
     const home = routeAddress("home");
@@ -186,7 +225,7 @@ describe("the thin routes adopt the contract", () => {
   });
 
   test("a route that declared a key nothing renders no longer carries it", () => {
-    expect(routeAddress("parameter-links").keys).toEqual(["threadQuery", "threadSort", "rail"]);
+    expect(routeAddress("parameter-links").keys).toEqual(["threadSearch", "threadSort", "rail"]);
   });
 
   test("history: a pick pushes, a typed or receipt move replaces", () => {
@@ -212,4 +251,21 @@ describe("the thin routes adopt the contract", () => {
     // Ops is the admin door: Pea runs an operation through pe_do, not a second path to it.
     expect(routeAddress("ops").agent).toBeUndefined();
   });
+});
+
+test("list search restores refused input visibly, and retires grammar URL keys", () => {
+  const at = routeAddress("ducts");
+  for (const raw of [
+    "broken json",
+    "x".repeat(5000),
+    JSON.stringify({ ...emptyListSearch(), v: 9 }),
+    JSON.stringify(pickListPill(emptyListSearch(), "missing", "x")),
+  ]) {
+    const restored = at.read({ systemSearch: raw }).page.systemSearch;
+    expect(listSearchRefusal(restored, ["airType", "status", "needsFix"])).toBeTruthy();
+    expect(listSearchCodec.encode(restored)).toContain(restored.keywords);
+  }
+  for (const key of ["systemQuery", "rulingQuery", "treeQuery", "inputQuery", "threadQuery"])
+    expect(at.keys).not.toContain(key);
+  expect(at.write({ systemSearch: emptyListSearch() })).toEqual({ systemSearch: undefined });
 });

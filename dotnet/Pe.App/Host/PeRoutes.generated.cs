@@ -11,18 +11,18 @@ internal static class PeRoutes {
         public const string Path = "/ducts";
         /// <summary>The URL keys a link may carry.</summary>
         internal static class Keys {
-            public const string ThreadQuery = "threadQuery";
+            public const string ThreadSearch = "threadSearch";
             public const string ThreadSort = "threadSort";
             public const string System = "system";
             public const string Level = "level";
             public const string Selected = "selected";
-            public const string SystemQuery = "systemQuery";
+            public const string SystemSearch = "systemSearch";
             public const string SystemSort = "systemSort";
-            public const string RulingQuery = "rulingQuery";
+            public const string RulingSearch = "rulingSearch";
             public const string RulingSort = "rulingSort";
-            public const string TreeQuery = "treeQuery";
+            public const string TreeSearch = "treeSearch";
             public const string TreeSort = "treeSort";
-            public const string InputQuery = "inputQuery";
+            public const string InputSearch = "inputSearch";
             public const string InputSort = "inputSort";
             public const string Encoding = "encoding";
             public const string Layers = "layers";
@@ -37,7 +37,7 @@ internal static class PeRoutes {
         public const string Path = "/families";
         /// <summary>The URL keys a link may carry.</summary>
         internal static class Keys {
-            public const string ThreadQuery = "threadQuery";
+            public const string ThreadSearch = "threadSearch";
             public const string ThreadSort = "threadSort";
             public const string Stage = "stage";
             public const string Pod = "pod";
@@ -56,7 +56,7 @@ internal static class PeRoutes {
         public const string Path = "/family";
         /// <summary>The URL keys a link may carry.</summary>
         internal static class Keys {
-            public const string ThreadQuery = "threadQuery";
+            public const string ThreadSearch = "threadSearch";
             public const string ThreadSort = "threadSort";
             public const string Stage = "stage";
             public const string Pod = "pod";
@@ -77,7 +77,7 @@ internal static class PeRoutes {
         public const string Path = "/schedules";
         /// <summary>The URL keys a link may carry.</summary>
         internal static class Keys {
-            public const string ThreadQuery = "threadQuery";
+            public const string ThreadSearch = "threadSearch";
             public const string ThreadSort = "threadSort";
             public const string Stage = "stage";
             public const string Pod = "pod";
@@ -97,7 +97,7 @@ internal static class PeRoutes {
         public const string Path = "/rooms";
         /// <summary>The URL keys a link may carry.</summary>
         internal static class Keys {
-            public const string ThreadQuery = "threadQuery";
+            public const string ThreadSearch = "threadSearch";
             public const string ThreadSort = "threadSort";
             public const string Stage = "stage";
             public const string View = "view";
@@ -115,7 +115,7 @@ internal static class PeRoutes {
         public const string Path = "/takeoffs";
         /// <summary>The URL keys a link may carry.</summary>
         internal static class Keys {
-            public const string ThreadQuery = "threadQuery";
+            public const string ThreadSearch = "threadSearch";
             public const string ThreadSort = "threadSort";
             public const string Level = "level";
             public const string Zone = "zone";
@@ -130,7 +130,7 @@ internal static class PeRoutes {
         public const string Path = "/space";
         /// <summary>The URL keys a link may carry.</summary>
         internal static class Keys {
-            public const string ThreadQuery = "threadQuery";
+            public const string ThreadSearch = "threadSearch";
             public const string ThreadSort = "threadSort";
             public const string Scene = "scene";
             public const string Ids = "ids";
@@ -150,7 +150,7 @@ internal static class PeRoutes {
         public const string Path = "/pods";
         /// <summary>The URL keys a link may carry.</summary>
         internal static class Keys {
-            public const string ThreadQuery = "threadQuery";
+            public const string ThreadSearch = "threadSearch";
             public const string ThreadSort = "threadSort";
             public const string Pod = "pod";
             public const string Path = "path";
@@ -164,7 +164,7 @@ internal static class PeRoutes {
         public const string Path = "/bind";
         /// <summary>The URL keys a link may carry.</summary>
         internal static class Keys {
-            public const string ThreadQuery = "threadQuery";
+            public const string ThreadSearch = "threadSearch";
             public const string ThreadSort = "threadSort";
             public const string Page = "page";
             public const string View = "view";
@@ -176,7 +176,7 @@ internal static class PeRoutes {
         public const string Path = "/settings";
         /// <summary>The URL keys a link may carry.</summary>
         internal static class Keys {
-            public const string ThreadQuery = "threadQuery";
+            public const string ThreadSearch = "threadSearch";
             public const string ThreadSort = "threadSort";
             public const string Section = "section";
             public const string Session = "session";
@@ -188,7 +188,7 @@ internal static class PeRoutes {
         public const string Path = "/ops";
         /// <summary>The URL keys a link may carry.</summary>
         internal static class Keys {
-            public const string ThreadQuery = "threadQuery";
+            public const string ThreadSearch = "threadSearch";
             public const string ThreadSort = "threadSort";
             public const string Op = "op";
             public const string ActionId = "actionId";
@@ -200,7 +200,7 @@ internal static class PeRoutes {
         public const string Path = "/pea";
         /// <summary>The URL keys a link may carry.</summary>
         internal static class Keys {
-            public const string ThreadQuery = "threadQuery";
+            public const string ThreadSearch = "threadSearch";
             public const string ThreadSort = "threadSort";
             public const string Mode = "mode";
             public const string Turn = "turn";
@@ -212,7 +212,7 @@ internal static class PeRoutes {
         public const string Path = "/";
         /// <summary>The URL keys a link may carry.</summary>
         internal static class Keys {
-            public const string ThreadQuery = "threadQuery";
+            public const string ThreadSearch = "threadSearch";
             public const string ThreadSort = "threadSort";
             public const string Query = "query";
             public const string Exposure = "exposure";
@@ -226,7 +226,7 @@ internal static class PeRoutes {
         public const string Path = "/duct-loss";
         /// <summary>The URL keys a link may carry.</summary>
         internal static class Keys {
-            public const string ThreadQuery = "threadQuery";
+            public const string ThreadSearch = "threadSearch";
             public const string ThreadSort = "threadSort";
             public const string Shape = "shape";
             public const string A = "a";
@@ -244,7 +244,7 @@ internal static class PeRoutes {
         public const string Path = "/parameter-links";
         /// <summary>The URL keys a link may carry.</summary>
         internal static class Keys {
-            public const string ThreadQuery = "threadQuery";
+            public const string ThreadSearch = "threadSearch";
             public const string ThreadSort = "threadSort";
             public const string Rail = "rail";
         }
@@ -255,7 +255,7 @@ internal static class PeRoutes {
         public const string Path = "/captures";
         /// <summary>The URL keys a link may carry.</summary>
         internal static class Keys {
-            public const string ThreadQuery = "threadQuery";
+            public const string ThreadSearch = "threadSearch";
             public const string ThreadSort = "threadSort";
             public const string Sha = "sha";
             public const string Open = "open";
@@ -267,7 +267,7 @@ internal static class PeRoutes {
         public const string Path = "/data-tables";
         /// <summary>The URL keys a link may carry.</summary>
         internal static class Keys {
-            public const string ThreadQuery = "threadQuery";
+            public const string ThreadSearch = "threadSearch";
             public const string ThreadSort = "threadSort";
             public const string Table = "table";
         }

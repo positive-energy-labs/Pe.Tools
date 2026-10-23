@@ -1,3 +1,4 @@
+import { threadSearchDefault, type ListSearch } from "@pe/agent-contracts";
 import { memo, useEffect, useMemo, useRef, useState } from "react";
 import {
   AlarmClock,
@@ -40,7 +41,6 @@ import { CommandPalette } from "#/components/lang/command-palette";
 import { Input } from "@pe/kit/lang/input";
 import { useList, type ListState } from "@pe/kit/lang/collection";
 import { ListBar, ListView, type ListRowParts } from "@pe/kit/lang/list-view";
-import { clauseText, readQuery } from "@pe/kit/table/view";
 import { Kbd } from "#/components/lang/kbd";
 import { Button } from "@pe/kit/lang/button";
 import { ProviderMark } from "#/components/lang/provider-mark";
@@ -592,9 +592,10 @@ function CompactThreadTrail({ thread, now }: { thread: RosterThread; now: number
 
 export type ThreadSort = "recent" | "title";
 export interface ThreadListAddress {
-  query: string;
+  scope?: string;
+  search: ListSearch;
   sort: ThreadSort | "";
-  onChange: (query: string, sort: ThreadSort | "") => void;
+  onChange: (search: ListSearch, sort: ThreadSort | "") => void;
 }
 
 function initialShelfState(current: RosterThread | undefined): ListState<ThreadSort> {
@@ -608,7 +609,7 @@ function initialShelfState(current: RosterThread | undefined): ListState<ThreadS
     }
     return shelf === "snoozed" || shelf === "settled" || shelf === "archived";
   }).map((shelf) => SHELF_WORD[shelf]);
-  return { query: "scope=all", sort: "", closed, open: [], selected: [] };
+  return { search: threadSearchDefault(), sort: "", closed, open: [], selected: [] };
 }
 
 function ThreadActivityMark({
@@ -731,6 +732,7 @@ export function ThreadsSidebar({
   );
   const list = useList<RosterThread, ThreadSort>({
     items: orderedThreads,
+    scope: address?.scope,
     keyOf: (thread) => thread.id,
     search: searchThread,
     fields: {
@@ -784,11 +786,11 @@ export function ThreadsSidebar({
       order: SHELF_ORDER.map((key) => SHELF_WORD[key]),
     },
     select: "multi",
-    state: { ...view, ...(address ? { query: address.query, sort: address.sort } : {}) },
+    state: { ...view, ...(address ? { search: address.search, sort: address.sort } : {}) },
     onState: (next) => {
       setView(next);
-      if (address && (next.query !== address.query || next.sort !== address.sort))
-        address.onChange(next.query, next.sort);
+      if (address && (next.search !== address.search || next.sort !== address.sort))
+        address.onChange(next.search, next.sort);
       if (next.closed !== view.closed)
         for (const shelf of SHELF_ORDER) {
           try {
@@ -807,9 +809,9 @@ export function ThreadsSidebar({
     },
   });
   useEffect(() => {
-    if (list.state.query !== "scope=all")
+    if (JSON.stringify(list.state.search) !== JSON.stringify(threadSearchDefault()))
       setView((previous) => (previous.closed.length ? { ...previous, closed: [] } : previous));
-  }, [list.state.query]);
+  }, [list.state.search]);
   const currentListed = list.rows.some((row) => row.key === currentThreadId);
   const currentReveal = useRef({ thread: currentThreadId, complete: false });
   useEffect(() => {
@@ -833,15 +835,7 @@ export function ThreadsSidebar({
     setBulkResult(`${outcomes.filter(Boolean).length} of ${of} threads changed`);
     clearSelection();
   };
-  const filterTarget = (thread: RosterThread) =>
-    list.setQuery(
-      [
-        ...readQuery(list.state.query)
-          .filter((clause) => clause.kind !== "field" || clause.label.toLowerCase() !== "target")
-          .map((clause) => clause.text),
-        clauseText(false, "target", "=", targetFacet(thread)),
-      ].join(" "),
-    );
+  const filterTarget = (thread: RosterThread) => list.pickPill("target", targetFacet(thread));
   const rowParts = (thread: RosterThread): ListRowParts => {
     const shelf = shelfOf(thread, now);
     const reorder = shelf === "active" || shelf === "pinned";

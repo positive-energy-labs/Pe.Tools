@@ -1,7 +1,7 @@
 import { PreviewAction } from "@pe/kit/lang/preview-action";
 import type { ReactNode } from "react";
 import type { ListRowParts } from "@pe/kit/lang/list-view";
-import type { ListSearch } from "@pe/kit/lang/collection";
+import type { ListSearchable } from "@pe/kit/lang/collection";
 import { STALE_WORDS, type InboxGroup, type PreviewState } from "../../inbox-rows";
 
 export type RulingRow = Omit<ListRowParts, "actions"> & {
@@ -10,7 +10,7 @@ export type RulingRow = Omit<ListRowParts, "actions"> & {
   group: InboxGroup;
   kind: string;
   statusText: string;
-  search: ListSearch;
+  search: ListSearchable;
   actions?: () => ReactNode;
   detail?: () => ReactNode;
   lit?: boolean;

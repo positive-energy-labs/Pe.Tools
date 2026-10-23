@@ -1,3 +1,9 @@
+import { emptyListSearch, pickListPill } from "@pe/agent-contracts";
+const search = (keywords = "", pills: Record<string, string> = {}) =>
+  Object.entries(pills).reduce((s, [field, value]) => pickListPill(s, field, value), {
+    ...emptyListSearch(),
+    keywords,
+  });
 // @vitest-environment jsdom
 import { act, cleanup, fireEvent, render, screen, within } from "@testing-library/react";
 import { afterEach, expect, test, vi } from "vite-plus/test";
@@ -362,22 +368,20 @@ test("picking another ruling for the selected element retains that row's details
   );
 });
 
-test("Rulings use counted query facets and stage marks without replacing an excluding address", () => {
+test("Rulings use explicit pills and stage marks without replacing an excluding address", async () => {
   const onChange = vi.fn();
   const { container } = mount({
     focused: "rules:one",
     check: [
       item({ key: "rules:one", group: "check", kind: "proposal", title: "Proposed elbow rule" }),
     ],
-    address: { query: "kind=heal", sort: "name", onChange },
+    address: { search: search("", { kind: "heal" }), sort: "name", onChange },
   });
   expect(screen.queryByText("Proposed elbow rule")).toBeNull();
   expect(container.querySelectorAll('[role="option"]')).toHaveLength(1);
   expect(onChange).not.toHaveBeenCalled();
-  fireEvent.change(screen.getByRole("textbox", { name: "Search rulings" }), {
-    target: { value: "kind=proposal sort:name" },
-  });
-  expect(onChange).toHaveBeenCalledWith("kind=proposal sort:name", "name");
+  fireEvent.click(screen.getByRole("button", { name: "Clear search" }));
+  expect(onChange).toHaveBeenCalledWith(search(), "name");
   cleanup();
   const staged = mount({
     check: [

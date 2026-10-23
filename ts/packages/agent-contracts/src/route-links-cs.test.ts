@@ -13,7 +13,7 @@ describe("the C# route table", () => {
     const text = renderRoutesCs();
     expect(text).toContain('public const string Path = "/pods";');
     expect(text).toContain('public const string Pod = "pod";');
-    for (const key of ["ThreadQuery", "ThreadSort"])
+    for (const key of ["ThreadSearch", "ThreadSort"])
       expect(text.match(new RegExp(`public const string ${key} =`, "g"))).toHaveLength(
         Object.keys(routeAddresses).length,
       );
