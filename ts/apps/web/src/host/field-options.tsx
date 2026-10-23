@@ -100,7 +100,9 @@ export function FieldOptionSelect({
       selected={value ? [value] : []}
       empty="the live document offers no values"
       noMatch="no matching live document values"
-      onPick={onChange}
+      onPick={(option) => {
+        if (status === undefined || status === "ready") onChange(option);
+      }}
       row={optionRow}
     />
   );
@@ -142,7 +144,9 @@ export function FieldOptionPicker({
       status={status}
       select="multi"
       selected={values}
-      onSelectedChange={onChange}
+      onSelectedChange={(next) => {
+        if (status === undefined || status === "ready") onChange(next);
+      }}
       empty="the live document has no elements in the category"
       noMatch="no matching live document elements"
       footer={
