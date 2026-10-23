@@ -6,7 +6,7 @@ import { TooltipHint } from "@pe/kit/lang/tooltip";
 import { Composer } from "./conversation";
 
 afterEach(cleanup);
-it("portals Send's refusal without changing the draft or control row", async () => {
+it("keeps Send's refusal under Send on the overlay plane without changing the draft or control row", async () => {
   const view = (refusal: string | null) => (
     <Composer
       aria-label="Message"
@@ -23,13 +23,17 @@ it("portals Send's refusal without changing the draft or control row", async () 
   const { container, rerender } = render(view(null));
   const draft = screen.getByRole("textbox");
   const send = screen.getByRole("button", { name: "send" });
-  const before = [draft.outerHTML, send.outerHTML];
+  // base-ui stamps a `data-base-ui-inert` marker on the popup's ancestor siblings for outside-press
+  // detection; it is a marker, not inert, so the comparison ignores it.
+  const shape = (el: Element) => el.outerHTML.replace(/ data-base-ui-inert=""/g, "");
+  const before = [shape(draft), shape(send)];
   rerender(view("choose a provider"));
   const alert = await screen.findByRole("alert");
-  expect(container.contains(alert)).toBe(false);
+  // The outcome lives under the control that asked (DOM locality) yet on the overlay plane.
+  expect(alert.closest("[data-composer-send]")).toBeTruthy();
   expect(alert.closest('[data-slot="popover-content"]')).toBeTruthy();
   expect(alert.textContent).toBe("choose a provider");
-  expect([draft.outerHTML, send.outerHTML]).toEqual(before);
+  expect([shape(draft), shape(send)]).toEqual(before);
   for (const child of send.parentElement!.children)
     expect(child === send || (child as HTMLElement).style.position === "fixed").toBe(true);
   rerender(view(null));

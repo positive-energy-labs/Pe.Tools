@@ -64,6 +64,7 @@ export function Button({
   const [outcome, setOutcome] = useState<OutcomeLineProps | null>(null);
   const shownOutcome = useContext(ButtonOutcome) ?? outcome;
   const anchor = useRef<HTMLButtonElement | null>(null);
+  const [host, setHost] = useState<HTMLSpanElement | null>(null);
   const running = useRef(false);
   const busy = suppliedBusy || pending;
   useWork(busy, `${label}…`);
@@ -153,14 +154,17 @@ export function Button({
       {tip == null ? null : <TooltipContent>{tip}</TooltipContent>}
     </Tooltip>
   );
+  // The outcome is a DOM descendant of the control that asked (locators, a11y tree, locality);
+  // it is still positioned on the overlay plane, so it never takes layout.
   return (
-    <>
+    <span className="contents" data-slot="button-host" ref={setHost}>
       {control}
-      {shownOutcome && (
+      {shownOutcome && host && (
         <Popover key={shownOutcome.label} open onOpenChange={(open) => !open && setOutcome(null)}>
           <PopoverContent
             className="dl-button-outcome"
             anchor={anchor}
+            container={host}
             side="bottom"
             initialFocus={false}
           >
@@ -168,7 +172,7 @@ export function Button({
           </PopoverContent>
         </Popover>
       )}
-    </>
+    </span>
   );
 }
 

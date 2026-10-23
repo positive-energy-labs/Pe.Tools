@@ -160,9 +160,11 @@ export function Composer({
         ) : null}
         <div data-composer-cluster="">
           {fork}
-          <ButtonOutcome value={refusal ? { kind: "refused", label: refusal } : null}>
-            {send}
-          </ButtonOutcome>
+          <div data-composer-send="" className="contents">
+            <ButtonOutcome value={refusal ? { kind: "refused", label: refusal } : null}>
+              {send}
+            </ButtonOutcome>
+          </div>
         </div>
       </div>
     </form>

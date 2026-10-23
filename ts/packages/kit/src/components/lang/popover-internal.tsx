@@ -155,6 +155,8 @@ export type PopoverContentProps = Omit<Primitive.Popup.Props, "className"> &
     positionerClassName?: string;
     /** Keep the popup mounted while closed (a menu whose state outlives its opening). */
     keepMounted?: boolean;
+    /** Mount the popup inside this node instead of the body (a control that owns its outcome). */
+    container?: HTMLElement | null;
     /** Reverse a marked row stack above its anchor; children can read usePopoverSide. */
     facing?: boolean;
   };
@@ -210,6 +212,7 @@ export function PopoverContent({
   positionerClassName,
   className,
   keepMounted,
+  container,
   facing,
   onKeyDown,
   ...props
@@ -225,7 +228,7 @@ export function PopoverContent({
   // L2: bounded furniture stays in its own field; subject overlays still clear the picture.
   const away = collisionBoundary ? null : subject;
   return (
-    <Primitive.Portal keepMounted={keepMounted}>
+    <Primitive.Portal keepMounted={keepMounted} container={container ?? undefined}>
       <Primitive.Positioner
         positionMethod="fixed"
         anchor={anchor}
