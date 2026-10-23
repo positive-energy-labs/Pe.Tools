@@ -141,8 +141,17 @@ test("borrowed frontend forwards reads with host origin and refuses mutations be
         body: JSON.stringify({ key: "ducts.snapshot", request: {} }),
       },
     ]);
-    for (const key of ["ducts.apply", "script.execute", "revit.context.show-elements"])
-      expect((await send(key)).status).toBe(403);
+    for (const key of ["ducts.apply", "script.execute", "revit.context.show-elements"]) {
+      const refused = await send(key);
+      expect(refused.status).toBe(403);
+      expect(refused.headers.get("content-type")).toBe("application/json");
+      expect(await refused.json()).toEqual({
+        error: {
+          code: "read-only-frontend",
+          message: "This frontend borrows host reads only. Writes and host lifecycle are disabled.",
+        },
+      });
+    }
     for (const path of ["/admin/shutdown", "/pe/route-state/ducts/apply", "/api/bridge"])
       expect((await fetch(`${origin}${path}`, { method: "POST", headers })).status).toBe(403);
     expect(forwarded).toHaveLength(1);

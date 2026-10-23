@@ -48,7 +48,11 @@ export async function readFamiliesObservation(
     body: JSON.stringify({ work, filter }),
   });
   const body = await response.json();
-  if (!response.ok) throw Error(body.error ?? `Families read failed (${response.status})`);
+  if (!response.ok)
+    throw Error(
+      (typeof body.error === "string" ? body.error : body.error?.message) ??
+        `Families read failed (${response.status})`,
+    );
   return body as FamiliesObservation;
 }
 

@@ -115,6 +115,14 @@ export function equipmentInputs(
   };
 }
 
+type FanOut = { grilles: number; systems: number };
+
+// Captured topology and rule maps are immutable; a refresh or new pricing supplies new identities.
+const fanOutCache = new WeakMap<
+  DuctSnapshot,
+  { groupOf: Map<number, string>; rules: WeakMap<ReadonlyMap<number, string>, Map<string, FanOut>> }
+>();
+
 /**
  * What staging a rule's table would move, before it is staged: the instances the rule prices (from
  * the priced rows, `ruleOf`), the systems they sit in, and every terminal downstream of any one of
@@ -126,10 +134,20 @@ export function ruleFanOut(
   ruleKey: string,
   /** Group trees already built, shared across rules so a pane of rules builds each once. */
   trees: Map<string, GroupTree> = new Map(),
-): { grilles: number; systems: number } {
-  const groupOf = new Map<number, string>();
-  for (const n of snapshot.nodes) if (n.groupId) groupOf.set(n.id, n.groupId);
-  for (const s of snapshot.segments) if (s.groupId) groupOf.set(s.id, s.groupId);
+): FanOut {
+  let cache = fanOutCache.get(snapshot);
+  if (!cache) {
+    const groupOf = new Map<number, string>();
+    for (const n of snapshot.nodes) if (n.groupId) groupOf.set(n.id, n.groupId);
+    for (const s of snapshot.segments) if (s.groupId) groupOf.set(s.id, s.groupId);
+    cache = { groupOf, rules: new WeakMap() };
+    fanOutCache.set(snapshot, cache);
+  }
+  let fanOuts = cache.rules.get(ruleOf);
+  if (!fanOuts) cache.rules.set(ruleOf, (fanOuts = new Map()));
+  const cached = fanOuts.get(ruleKey);
+  if (cached) return cached;
+  const { groupOf } = cache;
   const instances = [...ruleOf].filter(([, key]) => key === ruleKey).map(([id]) => id);
   const systems = new Set<string>();
   const grilles = new Set<number>();
@@ -148,7 +166,9 @@ export function ruleFanOut(
       stack.push(...(tree.children.get(at) ?? []));
     }
   }
-  return { grilles: grilles.size, systems: systems.size };
+  const fanOut = { grilles: grilles.size, systems: systems.size };
+  fanOuts.set(ruleKey, fanOut);
+  return fanOut;
 }
 
 /** The fan-out as the chip says it. */

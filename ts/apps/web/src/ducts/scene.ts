@@ -47,12 +47,17 @@ const push = <K, V>(map: Map<K, V[]>, key: K, value: V) => {
   else map.set(key, [value]);
 };
 
+// Pricing replaces changed results; scopes only read this projection of an immutable result.
+const lossCache = new WeakMap<LossResult, Map<number, number>>();
+
 /**
  * Pe's loss per element from a priced result. Every terminal path repeats the rows it shares, so
  * rows are counted once by (element, kind, leg, desc): a duct's friction intervals add, while a
  * fitting's or terminal's legs are alternatives and show the largest.
  */
 function lossesOf(result: LossResult): Map<number, number> {
+  const cached = lossCache.get(result);
+  if (cached) return cached;
   const unique = new Map<string, LossResult["paths"][number]["rows"][number]>();
   for (const path of Object.values(result.paths))
     for (const row of path.rows)
@@ -63,6 +68,7 @@ function lossesOf(result: LossResult): Map<number, number> {
     const was = losses.get(row.id);
     losses.set(row.id, row.kind === "friction" ? (was ?? 0) + row.dp : Math.max(was ?? 0, row.dp));
   }
+  lossCache.set(result, losses);
   return losses;
 }
 

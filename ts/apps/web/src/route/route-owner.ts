@@ -38,7 +38,12 @@ export function useOwned<A>(
   const last = useRef<A | null>(null);
   const subscribe = useMemo(
     () => (notify: () => void) =>
-      atom && (!activity || activity.current()) ? registry.subscribe(atom, notify) : () => {},
+      // Enrollment changes custody without replacing the scope or re-running subscription setup.
+      atom
+        ? registry.subscribe(atom, () => {
+            if (!activity || activity.current()) notify();
+          })
+        : () => {},
     [registry, atom, activity],
   );
   return useSyncExternalStore(subscribe, () => {

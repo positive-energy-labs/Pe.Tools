@@ -1,6 +1,7 @@
 ﻿# takeoffs ledger
 
 ## Decided
+
 - 2026-09-19, adoption keeps a zoning region that lies outside its view's model crop and flags it: `TakeoffAdopted.OwnerCrop` and `TakeoffRegionFacts.OwnerCrop` (`RevitCropCoverage` Inside, Crossing or Outside, from `RevitViewImageRegistration.Coverage`). Refusal would lose a region the person named; Outside means that view's plan image can never show it (project-a zones C-F, likely copied by Duplicate with Detailing).
 - 2026-09-19, the plan image shows the model crop; annotations outside it are not drawn. `RevitViewImageExporter` hides annotation and datum elements that miss the model crop in a rollback sandbox, because `ExportImage` fits the whole graphics extent (project-a Pool House: 84x84 ft crop -> 1500x2171 px). The image is an underlay registered to model coordinates, not a sheet. PROVEN[attached, `ViewImageRegistrationProofTests` 5/5, d5afa2a].
 - 2026-09-19 (user: "the best policy is to render exactly one of the views of the user (so u get all their settings)"; supersedes the hide line above and the 3d02e36 marker crosses): `RevitViewImageExporter` exports the view unmodified. A plain `ExportImage` (FitToPage) covers `View.Outline` (paper) x `Scale`, which lies in the crop box's own frame, not the crop: PROVEN[session, project-a 4/4 views + 3 fixtures, project-a probe hold] (Guest House outline x 96 == CropBox Min..Max; Lower Level y reaches 170.058 against the crop's 173.485; the far hide had hidden 0 elements there, the extent setters being `Views`/Internal section marks). The crop's pixel rectangle is cut from it arithmetically (`RevitViewImageRegistration.CropPixels`), the export widened so the crop gets the requested width (`ExportWidth`, 8000 px cap); a PNG off the outline's aspect refuses `AspectDisagrees`, a crop outside it `CropOutsideImage`.
@@ -53,6 +54,8 @@
 - 2026-09-07, treating generic IFC proxy geometry as occupancy floor/overhead is not justified by category alone. Honest `no-floor` holds must remain visible until surface provenance is established; count gains do not establish room accuracy.
 
 ## Owed
+
+- 2026-10-23, production room-change/navigation proof remains unproven on native Project A: read-only refresh succeeds, but its read has zero zones/rooms and four missing carrier parameters. Initialize/adopt/partition were not run; use an already materialized model in an authorized native lane for nonempty proof. See the [production report](../../../.artifacts/runs/final-20261023/REPORT.md).
 - 2026-09-22, the test bar sweep deleted 11 SCAFFOLD test files with no surface replacement. Each behavior they asserted needs a surface test (CDP journey, MCP tool call, host HTTP) or a visible readout. Recover the assertions from git: `rhvac/takeoff`, `runs/palette`, `runs/world`, `takeoff/candidates`, `takeoff/level-plan`, `takeoff/nothing-authored`, `takeoff/ownership`, `takeoff/pane`, `takeoff/proposals`, `takeoff/sync-cells`, `takeoff/takeoff`.
 - /takeoffs picks the plan image by each zone's owner view (`zone.lane.view`), not by level label (`planView`), and names each zone whose `ownerCrop` is Outside instead of drawing it on an image that cannot hold it.
 - Add a future `/runs` plan-reference capture publisher. Target 24 px/ft of model width and cap `ImageExportOptions.PixelSize` at 15,000 px; commit `b12172e` claims Revit 2024 accepts 15,000 and rejects 15,001, but this behavior was not reproduced.
@@ -89,5 +92,5 @@
 - Resolve `.r10` identity and template assumptions before broader sync: title-derived `fileIdentity` changes on retitling; seed-room Identifier 1 is a guarded template convention, not a schema guarantee. Current source and `eval/rhvac/template/SYNC-PROOF.md` retain the failure conditions.
 - `docs/features/takeoff-runs/CLEANROOM.md` and `SHIMS.md` name `ZoneBoundedDetectTests` as the `/runs` producer; it was deleted by `25413fa5`. Rewrite when `/runs` is re-sourced from `partition-run.py`.
 - ADR 0011 says nine knobs replace eighty; `Knobs` has eight fields. Correct the count before the ADR leaves `proposed`.
-- `eval/rhvac/edit-check.ps1:10` reads `.privateixtures` and `project-ahvac`: a token rewrite ate `` and ``. The script throws on every default run.
+- `eval/rhvac/edit-check.ps1:10` reads `.privateixtures` and `project-ahvac`: a token rewrite ate `\f` and `\r`. The script throws on every default run.
 - Four suites `skipIf` when `.private/fixtures` is absent and nothing asserts the root exists; a machine without fixtures reports clean green. One deterministic test asserts the resolver default and names the missing root.

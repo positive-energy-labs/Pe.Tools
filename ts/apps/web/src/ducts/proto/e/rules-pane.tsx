@@ -186,11 +186,7 @@ export const RulesTree = memo(function RulesTree({
     >
       <ul aria-label="loss rules" className="flex flex-col">
         {roots.length === 0 ? (
-          <li className="text-ink-2 t-small py-1">
-            {wide
-              ? "no fitting is priced by a rule"
-              : "no fitting in this system is priced by a rule"}
-          </li>
+          <li className="text-ink-2 t-small py-1">No priced fittings</li>
         ) : null}
         {roots.map((n) => {
           if (n.kind === "override") return overrideRow(n);
@@ -241,9 +237,7 @@ export const RulesTree = memo(function RulesTree({
       </ul>
       {unruled.length ? (
         <div className="border-line border-t pt-1" data-e-unruled="">
-          <p className="t-small text-ink-2 pb-1">
-            No rule prices these. State a drop, or price the family as a rule.
-          </p>
+          <p className="t-small text-ink-2 pb-1">Unassigned families</p>
           {unruled.map(({ family, ids }) => {
             const first = [...ids][0];
             const picked = family
