@@ -366,7 +366,7 @@ tr/* Landed: a row that becomes selected (a link, a pick) draws a full-ink outli
   flex-shrink: 0;
   align-items: center;
 }
-/* TREE (row.tsx `Tree`): one indent step per level, and the classic guide: each ancestor's column
+/* TREE (ListView): one indent step per level, and the classic guide: each ancestor's column
    carries a hairline through the chevron's centre, so an open node's line runs down the full
    span of its descendants. One rule on `--depth` (set by Row from `depth`); no call site indents. */
 .dl-row[data-depth] {
@@ -443,6 +443,13 @@ tr/* Landed: a row that becomes selected (a link, a pick) draws a full-ink outli
 }
 [role="tree"][data-columns] :is(.dl-row-line, .dl-row-colhead) {
   grid-template-columns: minmax(0, 1fr) max-content;
+}
+.dl-row[data-meta-fill] .dl-row-line {
+  grid-template-columns: max-content minmax(0, 1fr);
+  gap: calc(var(--space-unit) * 2);
+}
+.dl-row[data-meta-fill] :is(.dl-row-meta, .dl-row-fact) {
+  width: 100%;
 }
 .dl-row-title {
   min-width: 0;

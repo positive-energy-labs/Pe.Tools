@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vite-plus/test";
 
-import { matches } from "../src/components/lang/list-filter.tsx";
+import { matchesListQuery as matches } from "../src/components/lang/collection";
 
 describe("matches", () => {
   const row = { text: ["SA 19", "SupplyAir", "FC-17"], ids: [1234, 77] };

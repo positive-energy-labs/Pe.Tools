@@ -192,7 +192,7 @@ function ListRoute() {
           <Panel title="free text" kind="ListInput · suggestions">
             <FreeTextPanel say={say} />
           </Panel>
-          <Panel title="tree" kind="Tree · depth · guides · cut hint">
+          <Panel title="tree" kind="ListView · depth · guides · cut hint">
             <TreePanel say={say} />
           </Panel>
           <Panel title="table" kind="Row as tr · cell list · multi">

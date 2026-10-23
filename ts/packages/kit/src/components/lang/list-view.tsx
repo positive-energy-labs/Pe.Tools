@@ -144,6 +144,7 @@ export interface ListViewProps<T, Sort extends string = string> {
   overscan?: number;
   primary?: boolean;
   bar?: boolean;
+  columns?: { label: ReactNode; meta?: ReactNode };
   /** Open state is the same data-owned `open` used for tree expansion. */
   detail?: (item: T) => ReactNode;
   sectionProps?: (
@@ -181,10 +182,19 @@ export function ListView<T, Sort extends string = string>(props: ListViewProps<T
       tabIndex={0}
       aria-activedescendant={list.collection.inputProps["aria-activedescendant"]}
       data-list-view=""
+      data-columns={props.columns ? "" : undefined}
       className={`relative min-h-0 min-w-0 w-full${maxHeight ? "" : " shrink-0"}`}
       style={maxHeight ? { maxHeight, overflowY: "auto" } : undefined}
     >
       {props.bar !== false ? <ListBar list={list} label={label} primary={props.primary} /> : null}
+      {props.columns ? (
+        <div className="dl-row-colhead" role="presentation" data-tree-columns="">
+          <span className="dl-row-colhead-label">{props.columns.label}</span>
+          {props.columns.meta != null ? (
+            <span className="dl-row-colhead-meta">{props.columns.meta}</span>
+          ) : null}
+        </div>
+      ) : null}
       {!list.total ? (
         <EmptyState story="scope" exit={empty.exit}>
           {empty.message}
@@ -285,6 +295,7 @@ function ListItemView<T, Sort extends string>({
   detail,
 }: Pick<SectionBodyProps<T, Sort>, "list" | "row" | "detail"> & { item: ListItem<T> }) {
   const parts = row(item.item);
+  const content = detail?.(item.item);
   const behavior = list.collection.rowProps(item.key);
   const expanded = list.state.open.includes(item.key);
   return (
@@ -292,6 +303,17 @@ function ListItemView<T, Sort extends string>({
       <Row
         {...parts}
         {...behavior}
+        onClick={(event) => {
+          const target = event.target as Element;
+          if (
+            !event.currentTarget.contains(target) ||
+            target.closest(
+              "button, a, input, select, textarea, [role=button], [contenteditable=true]",
+            )
+          )
+            return;
+          behavior.onClick(event);
+        }}
         onMouseMove={() => {
           behavior.onMouseMove();
           parts.onMouseMove?.();
@@ -299,11 +321,11 @@ function ListItemView<T, Sort extends string>({
         role={list.tree ? "treeitem" : "option"}
         stage={list.stageOf?.(item.item) ?? parts.stage}
         refusal={list.refusalOf?.(item.item) ?? parts.refusal}
-        depth={list.tree ? item.depth : undefined}
-        expanded={item.branch ? expanded || list.filtering : detail ? expanded : undefined}
+        depth={list.tree ? item.depth : content != null ? 0 : undefined}
+        expanded={item.branch ? expanded || list.filtering : content != null ? expanded : undefined}
         onToggle={() => list.toggleOpen(item.key)}
         actions={
-          detail ? (
+          content != null ? (
             <>
               {parts.actions}
               <Button
@@ -318,7 +340,7 @@ function ListItemView<T, Sort extends string>({
           )
         }
       />
-      {expanded && detail ? <div data-list-detail="">{detail(item.item)}</div> : null}
+      {expanded && content != null ? <div data-list-detail="">{content}</div> : null}
     </>
   );
 }

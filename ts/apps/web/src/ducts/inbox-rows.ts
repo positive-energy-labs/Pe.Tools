@@ -885,13 +885,7 @@ const ELEMENT_WORD: Record<string, string> = {
   terminalDrops: "Drop",
   componentDrops: "Drop",
 };
-const FOCUSABLE = new Set([
-  "flows",
-  "equipmentFlows",
-  "esp",
-  "roles",
-  "terminalDrops",
-]);
+const FOCUSABLE = new Set(["flows", "equipmentFlows", "esp", "roles", "terminalDrops"]);
 
 const valueWord = (segment: string, value: unknown) => {
   const v = value as Record<string, unknown> | undefined;
@@ -1048,14 +1042,6 @@ export const holding = (fix: readonly InboxItem[]) => fix.filter((i) => i.blocks
 
 /** A Diagnostics row's kind in the key: a bridged join by its grade (its status), any other row by its kind. */
 export const diagnosticKind = (item: InboxItem) => (item.kind === "join" ? item.status : item.kind);
-
-/** The Diagnostics key: one entry per row kind with its count, in first-row order. */
-export function diagnosticsKey(rows: readonly InboxItem[]) {
-  const counts = new Map<string, number>();
-  for (const row of rows)
-    counts.set(diagnosticKind(row), (counts.get(diagnosticKind(row)) ?? 0) + 1);
-  return [...counts].map(([kind, count]) => ({ kind, count }));
-}
 
 /**
  * The finding ids the picture annotates: with no kind picked, the Fix rows' (a Heal row stands for

@@ -9,7 +9,8 @@ import { Fragment, useEffect, useRef, useState, type ComponentProps, type ReactN
 import { fanLoad } from "@pe/ducts-domain/fan-headroom";
 import type { Provisional } from "@pe/ducts-domain/losses";
 import { Popover, PopoverContent, PopoverTrigger } from "@pe/kit/lang/popover";
-import { Row, revitTarget } from "@pe/kit/lang/row";
+import { revitTarget } from "@pe/kit/lang/row";
+import type { ListRowParts } from "@pe/kit/lang/list-view";
 import { tokenRef } from "@pe/kit/lib/token";
 import { observedElements, useNativeObservation } from "#/revit/observation";
 
@@ -216,13 +217,10 @@ function SystemMarker({ issues, open }: { issues: SystemIssue[]; open: () => voi
  * corner marker carries the issues. The bar draws no tooltips of its own; hovering or clicking it opens the shared
  * breakdown popover (`BarPopover`), whose content mounts only while open.
  */
-export function SystemRow({
-  system: s,
-  open,
-}: {
-  system: ReturnType<typeof systemList>[number];
-  open: () => void;
-}) {
+export function systemRowParts(
+  s: ReturnType<typeof systemList>[number],
+  open: () => void,
+): ListRowParts {
   const issues = systemIssues(s);
   const load = fanLoad(s.total, s.rating);
   const over = load.state === "rated" && load.over;
@@ -235,56 +233,42 @@ export function SystemRow({
   ]
     .filter(Boolean)
     .join("\n");
-  return (
-    // The first line's grid gives the trailing slot all the room the name leaves, so the bar fills it.
-    <div
-      className="relative [&_.dl-row-fact]:w-full! [&_.dl-row-line]:grid-cols-[max-content_minmax(0,1fr)]! [&_.dl-row-line]:gap-2 [&_.dl-row-meta]:w-full!"
-      data-e-system={s.key}
-    >
-      <Row
-        role="listitem"
-        tabIndex={0}
-        lines={2}
-        label={s.name}
-        sub={s.sub}
-        title={hint}
-        meta={
-          <span
-            className={`flex w-full items-center gap-2 ${issues.length ? "pr-5" : ""}`}
-            data-e-fact=""
-          >
-            {s.total != null && scale && s.split ? (
-              <BarPopover split={s.split} scale={scale} className="h-3 min-w-8 flex-1">
-                <span
-                  className="relative block h-1.5 w-full"
-                  data-e-minibar=""
-                  data-e-load={load.state === "rated" ? load.ratio.toFixed(3) : ""}
-                  style={over ? { boxShadow: `0 0 0 1px ${tokenRef("alarm")}` } : undefined}
-                >
-                  <span
-                    className="absolute inset-0"
-                    style={{ backgroundColor: tokenRef("line") }}
-                  />
-                  <SplitFill split={s.split} scale={scale} hint={false} />
-                </span>
-              </BarPopover>
-            ) : (
-              <span className="relative block h-1.5 min-w-8 flex-1" aria-hidden data-e-minibar="" />
-            )}
-            <span className="face-mono shrink-0" data-tone={over ? "alarm" : undefined}>
-              {fmt(s.total)}
-              {load.state === "rated" ? ` / ${fmt(load.available, 2)}` : ""}
-            </span>
+  return {
+    metaFill: true,
+    lines: 2,
+    label: s.name,
+    sub: s.sub,
+    title: hint,
+    meta: (
+      <>
+        <span
+          className={`flex w-full items-center gap-2 ${issues.length ? "pr-5" : ""}`}
+          data-e-fact=""
+        >
+          {s.total != null && scale && s.split ? (
+            <BarPopover split={s.split} scale={scale} className="h-3 min-w-8 flex-1">
+              <span
+                className="relative block h-1.5 w-full"
+                data-e-minibar=""
+                data-e-load={load.state === "rated" ? load.ratio.toFixed(3) : ""}
+                style={over ? { boxShadow: `0 0 0 1px ${tokenRef("alarm")}` } : undefined}
+              >
+                <span className="absolute inset-0" style={{ backgroundColor: tokenRef("line") }} />
+                <SplitFill split={s.split} scale={scale} hint={false} />
+              </span>
+            </BarPopover>
+          ) : (
+            <span className="relative block h-1.5 min-w-8 flex-1" aria-hidden data-e-minibar="" />
+          )}
+          <span className="face-mono shrink-0" data-tone={over ? "alarm" : undefined}>
+            {fmt(s.total)}
+            {load.state === "rated" ? ` / ${fmt(load.available, 2)}` : ""}
           </span>
-        }
-        onClick={open}
-        onKeyDown={(event) => {
-          if (event.key === "Enter") open();
-        }}
-      />
-      {issues.length ? <SystemMarker issues={issues} open={open} /> : null}
-    </div>
-  );
+        </span>
+        {issues.length ? <SystemMarker issues={issues} open={open} /> : null}
+      </>
+    ),
+  };
 }
 
 /** The loss columns' precision: a short duct really loses ~0.0001 in-wg, and 3 places would read it as 0. */
@@ -332,7 +316,9 @@ function entriesOf(split: Split, scale: number): Entry[] {
             unpriced: small.reduce((a, e) => a + e.unpriced, 0),
             ids: small.flatMap((e) => e.ids),
             at: small.flatMap((e) => e.at),
-            title: small.map((e) => `${e.label}  ${fmt(e.dp, LOSS_PLACES)}`).join(String.fromCharCode(10)),
+            title: small
+              .map((e) => `${e.label}  ${fmt(e.dp, LOSS_PLACES)}`)
+              .join(String.fromCharCode(10)),
           },
         ]
       : [];
@@ -389,7 +375,12 @@ function BreakdownList({
   );
   const barCol = Math.min(224, Math.max(128, barW));
   return (
-    <div className="flex flex-col gap-1" data-e-breakdown="" data-e-flip={flip || undefined} ref={root}>
+    <div
+      className="flex flex-col gap-1"
+      data-e-breakdown=""
+      data-e-flip={flip || undefined}
+      ref={root}
+    >
       {flip ? null : caption}
       <div
         className="grid items-center gap-x-2"
@@ -545,7 +536,7 @@ export function SplitStrip({
 
 /**
  * The loss columns' widths, one recipe for the header and every row so they align. A narrow tree
- * (the kit Tree is the container) drops the small in-wg columns, then the bar, so the names keep
+ * (the kit ListView is the container) drops the small in-wg columns, then the bar, so the names keep
  * room; the in-wg rides the feet cell's hint.
  */
 const COL = {
@@ -556,7 +547,7 @@ const COL = {
 } as const;
 
 /**
- * The header over `MetaBar`'s columns: the Tree's `columns.meta`. Feet are the primary unit (ACCA
+ * The header over `MetaBar`'s columns: ListView's `columns.meta`. Feet are the primary unit (ACCA
  * Manual D reads a fitting as equivalent feet of duct); the small in-wg beside each is the pressure.
  */
 export function MetaHeader() {

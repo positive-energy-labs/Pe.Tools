@@ -145,6 +145,25 @@ describe("the route address", () => {
 });
 
 describe("the thin routes adopt the contract", () => {
+  test("ducts list queries and sorts round-trip through links and the agent lease", () => {
+    const ducts = routeAddress("ducts");
+    const patch = {
+      systemQuery: "status=priced sort:loss",
+      systemSort: "loss" as const,
+      rulingQuery: "kind=heal",
+      rulingSort: "status" as const,
+      treeQuery: "12345",
+      treeSort: "name" as const,
+      inputQuery: "fan",
+      inputSort: "name" as const,
+    };
+    const params = Object.fromEntries(new URL(ducts.link(patch), "https://pe.test").searchParams);
+    expect(ducts.read(params).page).toMatchObject(patch);
+    expect(ducts.agent.patch.safeParse(patch).success).toBe(true);
+    expect(ducts.agent.resolve!(patch, {}).ok).toBe(true);
+    expect(ducts.history(ducts.defaults, patch)).toBe("replace");
+    expect(ducts.keys).not.toContain("diagnostic");
+  });
   test("every navigable key round-trips through its link", () => {
     const captures = routeAddress("captures");
     expect(captures.link({ sha: "ab", open: ["ab", "cd"] })).toBe("/captures?sha=ab&open=ab%2Ccd");

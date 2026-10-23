@@ -16,6 +16,14 @@ internal static class PeRoutes {
             public const string System = "system";
             public const string Level = "level";
             public const string Selected = "selected";
+            public const string SystemQuery = "systemQuery";
+            public const string SystemSort = "systemSort";
+            public const string RulingQuery = "rulingQuery";
+            public const string RulingSort = "rulingSort";
+            public const string TreeQuery = "treeQuery";
+            public const string TreeSort = "treeSort";
+            public const string InputQuery = "inputQuery";
+            public const string InputSort = "inputSort";
             public const string Encoding = "encoding";
             public const string Layers = "layers";
             public const string Picture = "picture";

@@ -14,7 +14,9 @@ import { healPlan } from "@pe/ducts-domain/heal";
 import { sectionNames, systemOfGroup, systemScope } from "@pe/ducts-domain/system-scope";
 import { Button } from "@pe/kit/lang/button";
 import { systemSearch } from "@pe/ducts-domain/system-search";
-import { VirtualList } from "@pe/kit/lang/virtual-list";
+import { useList, emptyListState } from "@pe/kit/lang/collection";
+import { ListView } from "@pe/kit/lang/list-view";
+import { readQuery } from "@pe/kit/table/view";
 import { Pane } from "#/components/lang/pane";
 import { PaneSplit } from "#/components/lang/pane-resize";
 
@@ -37,7 +39,7 @@ import { reviewLines } from "../../write-review";
 import { buildTree, systemList, type TreeNode } from "../b/model";
 import type { ProtoProps } from "../props";
 import { DEFAULT_DESIGN_FRICTION_RATE } from "@pe/ducts-domain/equivalent-length";
-import { fmtFt, SplitStrip, SystemRow } from "./bar";
+import { fmtFt, SplitStrip, systemRowParts } from "./bar";
 import { DuctSettings } from "./settings";
 import { FanSections } from "./fan-sections";
 import { RunDetail, runOf } from "./run-detail";
@@ -166,17 +168,36 @@ function EScreenBody({ props }: { props: ProtoProps }) {
     return raw.every((g) => groups.includes(g)) ? groups : [...new Set([...groups, ...raw])];
   }, [snapshot, page.system, groups]);
   const systems = useMemo(() => (drawn ? systemList(drawn, priced) : []), [drawn, priced]);
-  // The all-systems list reads by name, or by the ESP each system's fan must deliver, largest first.
-  const [byEsp, setByEsp] = useState(false);
-  // What the list's filter reads per system: its words, and every element id it holds.
   const searchable = useMemo(() => (drawn ? systemSearch(drawn) : null), [drawn]);
-  const listed = useMemo(
-    () =>
-      byEsp
-        ? [...systems].sort((a, b) => (b.total ?? -Infinity) - (a.total ?? -Infinity))
-        : systems,
-    [systems, byEsp],
-  );
+  const systemListView = useList({
+    items: systems,
+    keyOf: (system) => system.key,
+    search: (system) => ({
+      text: [system.name, system.sub, ...(searchable?.get(system.key)?.text ?? [])],
+      ids: searchable?.get(system.key)?.ids,
+    }),
+    fields: {
+      status: { kind: "text", read: (system) => (system.total == null ? "unpriced" : "priced") },
+    },
+    sorts: { name: (system) => system.name, loss: (system) => -(system.total ?? -Infinity) },
+    state: {
+      ...emptyListState<"name" | "loss">(),
+      query: page.systemQuery,
+      sort: page.systemSort,
+      selected: page.system ? [page.system] : [],
+    },
+    onState: (next) => {
+      if (next.query !== page.systemQuery || next.sort !== page.systemSort)
+        setPage({ systemQuery: next.query, systemSort: next.sort });
+    },
+    onPick: (system) => setPage({ system: system.key, selected: "", issue: "" }),
+  });
+  useEffect(() => {
+    if (systemListView.target && systemListView.rows.some((row) => row.key === page.system))
+      systemListView.reveal(page.system);
+    // The selected system is revealed when its pane mounts; filtering never replaces the query.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [page.system, systemListView.target]);
   // Each group the system is in is its own section, named by the system and its units; a group
   // that carries other systems says so, and shows whole.
   const sections = useMemo(
@@ -396,13 +417,14 @@ function EScreenBody({ props }: { props: ProtoProps }) {
   const [treeCollapsed, setTreeCollapsed] = useState<boolean | null>(null);
   const [rootRef, width] = useWidth();
   // The picture annotates the Fix rows' findings, or the Diagnostics kind picked in its key.
-  const annotated = useMemo(
-    () => (inbox ? annotatedFindings(inbox, heal, page.diagnostic) : new Set<string>()),
-    [inbox, heal, page.diagnostic],
+  const kindClause = readQuery(page.rulingQuery).find(
+    (clause) =>
+      clause.kind === "field" && clause.label === "kind" && clause.op === "=" && !clause.not,
   );
-  const diagnostic = useMemo(
-    () => ({ kind: page.diagnostic, pick: (kind: string) => setPage({ diagnostic: kind }) }),
-    [page.diagnostic, setPage],
+  const diagnosticKind = kindClause?.kind === "field" ? kindClause.value : "";
+  const annotated = useMemo(
+    () => (inbox ? annotatedFindings(inbox, heal, diagnosticKind) : new Set<string>()),
+    [inbox, heal, diagnosticKind],
   );
 
   if (!snapshot) return <p className="text-ink-2 p-4">{props.empty?.says ?? "reading ducts…"}</p>;
@@ -445,7 +467,8 @@ function EScreenBody({ props }: { props: ProtoProps }) {
       )
     : null;
   // A narrow screen keeps the inbox a rail until it is asked for.
-  const open = inboxOpen ?? ((width === 0 || width >= NARROW_PX) && (toRule > 0 || props.staged > 0));
+  const open =
+    inboxOpen ?? ((width === 0 || width >= NARROW_PX) && (toRule > 0 || props.staged > 0));
   // A cell outside the system (a Set row on the whole document) moves the page to its system.
   const focusCell = (cell: CellRef) => {
     if (cell.segment === "componentDrops") {
@@ -513,17 +536,15 @@ function EScreenBody({ props }: { props: ProtoProps }) {
           className="t-small text-ink-2 border-line border-b px-2 py-1"
           data-e-legend={reading.key}
         >
-          bar = {reading.label}, {reading.quantity.unit}, the largest under each row · full
-          width = the system's max{" "}
+          bar = {reading.label}, {reading.quantity.unit}, the largest under each row · full width =
+          the system's max{" "}
           <span className="face-mono">
             {reading.quantity.max == null
               ? "—"
               : formatQuantity(reading.quantity, reading.quantity.max)}
           </span>{" "}
           at{" "}
-          {reading.quantity.maxId == null
-            ? "no element"
-            : encoded.nameOf(reading.quantity.maxId)}
+          {reading.quantity.maxId == null ? "no element" : encoded.nameOf(reading.quantity.maxId)}
         </p>
       ) : (
         <SplitStrip split={critical?.split ?? tree[0]!.split} scale={scale} light={light} />
@@ -543,6 +564,11 @@ function EScreenBody({ props }: { props: ProtoProps }) {
       <div className="flex min-h-0 flex-1 flex-col" onMouseLeave={() => light(null)}>
         <SystemTree
           key={scope?.name}
+          address={{
+            query: page.treeQuery,
+            sort: page.treeSort,
+            onChange: (treeQuery, treeSort) => setPage({ treeQuery, treeSort }),
+          }}
           ctx={{
             trees: tree,
             scale,
@@ -571,35 +597,22 @@ function EScreenBody({ props }: { props: ProtoProps }) {
       id="e-systems"
       title="Systems"
       meta={`${systems.length} in the document`}
-      actions={
-        <Button label="sort the systems" onClick={() => setByEsp(!byEsp)}>
-          {byEsp ? "by ESP" : "by name"}
-        </Button>
-      }
       scroll="auto"
       flush
     >
-        <VirtualList
-          aria-label="systems"
-          items={listed}
-          keyOf={(s) => s.key}
-          estimate={LIST_ROW_PX}
-          filter={{
-            label: "filter the systems",
-            placeholder: "system, unit tag, classification or element id  ( / )",
-            noun: "systems",
-            primary: true,
-            searchOf: (s) => ({
-              text: [s.name, s.sub, ...(searchable?.get(s.key)?.text ?? [])],
-              ids: searchable?.get(s.key)?.ids,
-            }),
-            onSole: (s) => setPage({ system: s.key, selected: "", issue: "" }),
-          }}
-          row={(s) => {
-            const open = () => setPage({ system: s.key, selected: "", issue: "" });
-            return <SystemRow system={s} open={open} />;
-          }}
-        />
+      <ListView
+        aria-label="systems"
+        list={systemListView}
+        primary
+        estimate={LIST_ROW_PX}
+        row={(system) =>
+          systemRowParts(system, () => setPage({ system: system.key, selected: "", issue: "" }))
+        }
+        empty={{
+          message: "No duct systems in this scope",
+          exit: "Read a model containing duct systems",
+        }}
+      />
     </Pane>
   );
   const rulesPane = (wide: boolean) => (
@@ -639,6 +652,11 @@ function EScreenBody({ props }: { props: ProtoProps }) {
         flush
       >
         <InputsPane
+          address={{
+            query: page.inputQuery,
+            sort: page.inputSort,
+            onChange: (inputQuery, inputSort) => setPage({ inputQuery, inputSort }),
+          }}
           fanVerbs={fanVerbsOf}
           snapshot={drawn ?? snapshot}
           priced={priced}
@@ -698,10 +716,10 @@ function EScreenBody({ props }: { props: ProtoProps }) {
   const inboxPane = (
     <Pane
       id="e-inbox"
-      title="Inbox"
+      title="Rulings"
       meta={`${toRule} to rule on`}
       actions={
-        <Button label="hide the inbox" onClick={() => setInboxOpen(false)}>
+        <Button label="hide rulings" onClick={() => setInboxOpen(false)}>
           hide
         </Button>
       }
@@ -725,7 +743,11 @@ function EScreenBody({ props }: { props: ProtoProps }) {
           fan={fanHandles}
           selected={selected}
           focused={focusKey}
-          diagnostic={diagnostic}
+          address={{
+            query: page.rulingQuery,
+            sort: page.rulingSort,
+            onChange: (rulingQuery, rulingSort) => setPage({ rulingQuery, rulingSort }),
+          }}
         />
       ) : null}
     </Pane>
@@ -733,12 +755,7 @@ function EScreenBody({ props }: { props: ProtoProps }) {
 
   return (
     <div ref={rootRef} data-proto="E2" className="flex size-full min-h-0">
-      <DuctSettings
-        work={work}
-        rate={designRate}
-        snapshot={snapshot}
-        scope={scope}
-      />
+      <DuctSettings work={work} rate={designRate} snapshot={snapshot} scope={scope} />
       <PaneSplit
         axis="horizontal"
         resize={{
@@ -773,7 +790,7 @@ function EScreenBody({ props }: { props: ProtoProps }) {
                 onCollapsedChange: (collapsed) => setInboxOpen(!collapsed),
                 collapsedSize: 32,
                 collapseBelow: 200,
-                title: `Inbox · ${toRule}`,
+                title: `Rulings · ${toRule}`,
               },
             }}
             start={
