@@ -10,6 +10,7 @@ The one-system design cluster: the design LANGUAGE (raw values in `apps/web/src/
 
 - 2026-10-23, L3: List labels truncate with full text on reach; `listColumns` declares measure priorities once, kit container queries own widths and yielding, and visual tree indentation caps at four levels (Systems tree and quantity readings).
 - 2026-10-23, I1: `subjectName` uses names and kinds instead of identities; `healFindings` folds a repair into one row with all subjects and covered finding keys. Inbox titles use structured subjects, and picture pins share the repair number.
+- 2026-10-23, N6/L3: `Pane` derives one fixed work chip from `useWork`, `aria-busy` and `data-reading=pending`; promise-returning `Button` presses own busy state and local `OutcomeLine` receipts, refusals and errors. Composer refusals stay under Send; `PictureReadout` reserves its title row. `kit-census.guard.test.ts` rejects status text in floaters and composer interstitials. Browser placement remains unproven.
 
 - 2026-10-23, I4: A picture `Pane` derives its crumb from its scope title, `PictureReadout` subject and selection, and `PictureStage` selection state. `PaneCrumb.segments` remains only for a scope the picture cannot know.
 - 2026-10-23, I5: A picture `Pane` supplies its projected selection box, or pane rectangle, through the reach channel. `SubjectPopoverContent` uses it across sibling panes; routes do not provide `SubjectBox`.

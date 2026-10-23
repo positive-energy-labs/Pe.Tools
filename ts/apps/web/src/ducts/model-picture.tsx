@@ -1,4 +1,3 @@
-import { PaneOverlay } from "@pe/kit/lang/pane";
 /** The subject's real meshes and annotations. Camera policy belongs to useStage. */
 import { emptyListSearch } from "@pe/agent-contracts";
 import {
@@ -211,7 +210,7 @@ export function ModelPicture({
     : read.error
       ? `scene: ${read.error}`
       : read.pending
-        ? "capturing the system's meshes…"
+        ? "capturing meshes… gestures wait"
         : !meshes
           ? "no meshes: choose a system on a Revit document"
           : null;
@@ -219,6 +218,9 @@ export function ModelPicture({
     <div
       ref={setHost}
       data-model-picture=""
+      data-work-label={status ?? undefined}
+      aria-busy={read.pending || undefined}
+      data-reading={read.pending ? "pending" : undefined}
       className="relative min-h-0 flex-1 overflow-hidden"
       onPointerMove={subjects?.hold}
     >
@@ -284,13 +286,6 @@ export function ModelPicture({
             />
           </CaptionBounds.Provider>
         </div>
-      ) : null}
-      {status ? (
-        <PaneOverlay label="model status" place="br">
-          <p role="status" className="t-small text-ink-2 m-0" data-model-status="">
-            {status}
-          </p>
-        </PaneOverlay>
       ) : null}
     </div>
   );

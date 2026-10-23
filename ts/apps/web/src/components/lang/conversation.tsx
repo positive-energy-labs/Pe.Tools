@@ -4,6 +4,7 @@ import { TooltipHint } from "@pe/kit/lang/tooltip";
  *  conversation.css. */
 import { type ComponentProps, type KeyboardEvent, type ReactNode } from "react";
 import { Textarea } from "@pe/kit/lang/input";
+import { OutcomeLine } from "@pe/kit/lang/outcome";
 import { ProviderMark } from "./provider-mark";
 import "@pe/kit/lang/lang.css";
 import "./conversation.css";
@@ -95,8 +96,8 @@ export function ComposerFrame({ children }: { children: ReactNode }) {
 }
 
 /**
- * The one box you write in: work, the draft (it grows to a cap, then scrolls), the refusal and any
- * state chips, then one bottom row of controls: attach and the pickers' marks left, fork and
+ * The one box you write in: work, the draft (it grows to a cap, then scrolls), then the controls:
+ * attach, state and the pickers' marks left, fork and
  * Send/Stop right. `variant="reply"` is the notice card's: the draft and the Send/Stop slot alone. Enter sends
  * unless `onKey` takes the key.
  */
@@ -126,7 +127,7 @@ export function Composer({
   menus?: ReactNode;
   /** The box's top section: asks, chips, refusals. */
   work?: ReactNode;
-  /** The one refusal line, directly below the draft. */
+  /** Send owns its refusal, below the control that asked. */
   refusal?: string | null;
   /** The marks after the attach control, bottom left; each opens its picker. */
   pickers?: ReactNode;
@@ -134,7 +135,7 @@ export function Composer({
   attach?: ReactNode;
   /** Just left of Send, bottom right. */
   fork?: ReactNode;
-  /** State chips; a row under the draft only when present. */
+  /** State chips beside the controls. */
   tools?: ReactNode;
   /** The one Send/Stop slot. */
   send: ReactNode;
@@ -167,23 +168,21 @@ export function Composer({
             }
           }}
         />
-        {refusal ? (
-          <div data-composer-refusal="" data-tone="caution" role="alert">
-            {refusal}
-          </div>
-        ) : null}
-        {tools ? <div data-composer-tools="">{tools}</div> : null}
         {/* Bottom left: attach, then the pickers' marks. */}
-        {attach || pickers ? (
+        {attach || pickers || tools ? (
           <div data-composer-lead="">
             {attach}
             {pickers}
+            {tools}
           </div>
         ) : null}
         {/* Bottom right: fork, then the one Send slot (Stop replaces Send while a turn runs). */}
         <div data-composer-cluster="">
           {fork}
-          <div data-composer-send="">{send}</div>
+          <div data-composer-send="">
+            {send}
+            {refusal ? <OutcomeLine kind="refused" label={refusal} /> : null}
+          </div>
         </div>
       </div>
     </form>

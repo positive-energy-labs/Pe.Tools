@@ -1,4 +1,5 @@
 import { reachProps } from "./reach";
+import { useWork } from "./pane";
 /**
  * The cell: one grammar for a value at any scale (table td, card line, key specimen).
  * Body fill is only a pea proposal or locked; bold is only unsaved; one squiggle wins; icons
@@ -158,6 +159,7 @@ export function StateCell(props: StateCellProps) {
   // A transition in flight inerts every verb on the cell; its refusal rides the same note.
   const refusalNote = refusal ?? (props.refused != null ? { message: props.refused } : null);
   const [pending, startRun] = useTransition();
+  useWork(pending, "applying cell change…");
   const transitions = props.transitions ?? [];
   const fire = (t: CellTransition) => {
     if (pending) return;

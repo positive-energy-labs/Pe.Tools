@@ -40,14 +40,12 @@ export function PictureReadout({
         aria-label={selected ? "the selection" : "the picture"}
         data-picture-readout={selected ? "selection" : "picture"}
       >
-        {selected ? (
-          <header className="hairline-b">
-            <span data-readout-title="">{title}</span>
-            {onClear ? (
-              <Button label="Clear the selection · Esc" icon={X} onClick={onClear} />
-            ) : null}
-          </header>
-        ) : null}
+        <header className={selected ? "hairline-b" : undefined}>
+          <span data-readout-title="">{title}</span>
+          {selected && onClear ? (
+            <Button label="Clear the selection · Esc" icon={X} onClick={onClear} />
+          ) : null}
+        </header>
         <div ref={body} data-readout-body="">
           {children}
         </div>

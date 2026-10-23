@@ -2,10 +2,20 @@ import { reachProps } from "./reach";
 import type { Tone } from "../../lib/token";
 /** Every control that acts. `label` is its name (and its tooltip when it draws only a glyph);
  *  `refusal` keeps it focusable, inert, and says why. No children draws an icon-only square. */
-import { isValidElement, type ComponentProps, type ReactElement, type ReactNode } from "react";
+import {
+  isValidElement,
+  useRef,
+  useState,
+  type ComponentProps,
+  type ReactElement,
+  type ReactNode,
+} from "react";
 import { ArrowLeft, ArrowRight, ExternalLink, type LucideIcon } from "lucide-react";
 
 import { Tooltip, TooltipTrigger, TooltipContent } from "./tooltip";
+import { Popover, PopoverContent } from "./popover-internal";
+import { OutcomeLine, type OutcomeLineProps } from "./outcome";
+import { useWork } from "./pane";
 
 import "./button.css";
 
@@ -22,6 +32,7 @@ export type ButtonProps = Omit<
     label: string;
     refusal?: string | null;
     busy?: boolean;
+    onPress?: () => void | Promise<OutcomeLineProps | { message: string } | null | void>;
     reason?: string;
     pressed?: boolean;
     icon?: LucideIcon | ReactElement;
@@ -31,7 +42,8 @@ export type ButtonProps = Omit<
 export function Button({
   label,
   refusal,
-  busy,
+  busy: suppliedBusy,
+  onPress,
   reason,
   pressed,
   icon,
@@ -41,10 +53,50 @@ export function Button({
   type,
   onClick,
   id,
+  "aria-busy": declaredBusy,
   "data-tone": toneProp,
   ...props
 }: ButtonProps) {
+  const [pending, setPending] = useState(false);
+  const [outcome, setOutcome] = useState<OutcomeLineProps | null>(null);
+  const anchor = useRef<HTMLButtonElement | null>(null);
+  const running = useRef(false);
+  const busy = suppliedBusy || pending || declaredBusy === true || declaredBusy === "true";
+  useWork(busy, `${label}…`);
   const inert = refusal != null || busy === true;
+  const press: ComponentProps<"button">["onClick"] = (event) => {
+    if (inert || running.current) return;
+    setOutcome(null);
+    try {
+      const clicked = onClick?.(event);
+      const result = onPress && !event.defaultPrevented ? onPress() : clicked;
+      if (!result || typeof result.then !== "function") return;
+      running.current = true;
+      setPending(true);
+      void result
+        .then(
+          (value) =>
+            setOutcome(
+              value && typeof value === "object" && "message" in value
+                ? { kind: "refused", label: value.message }
+                : value && typeof value === "object" && "kind" in value && "label" in value
+                  ? value
+                  : { kind: "receipt", label: `${label} complete` },
+            ),
+          (error: unknown) =>
+            setOutcome({
+              kind: "error",
+              label: error instanceof Error ? error.message : String(error),
+            }),
+        )
+        .finally(() => {
+          running.current = false;
+          setPending(false);
+        });
+    } catch (error) {
+      setOutcome({ kind: "error", label: error instanceof Error ? error.message : String(error) });
+    }
+  };
   const tone = toneProp ?? (kind === "commit" && !inert ? "commit" : undefined);
   const Glyph = direction ? NAV_ICON[direction] : icon;
   const iconOnly = children == null || children === false;
@@ -69,9 +121,14 @@ export function Button({
       aria-pressed={pressed}
       aria-disabled={inert || undefined}
       aria-busy={busy || undefined}
-      onClick={inert ? undefined : onClick}
+      onClick={press}
       {...(!tipped && id ? { id } : {})}
       {...props}
+      ref={(node) => {
+        anchor.current = node;
+        if (typeof props.ref === "function") return props.ref(node);
+        if (props.ref) props.ref.current = node;
+      }}
     >
       {Glyph == null ? null : isValidElement(Glyph) ? (
         Glyph
@@ -87,14 +144,32 @@ export function Button({
       )}
     </button>
   );
-  if (!tipped) return button;
-  return (
+  const control = !tipped ? (
+    button
+  ) : (
     <Tooltip>
       {/* A composing trigger's id (a Popover's) is the tooltip trigger's id too: Base UI finds
           its hovered trigger by id, so two ids on one button silently kill the tooltip. */}
       <TooltipTrigger render={button} id={id} />
       {tip == null ? null : <TooltipContent>{tip}</TooltipContent>}
     </Tooltip>
+  );
+  return (
+    <>
+      {control}
+      {outcome && (
+        <Popover
+          open
+          onOpenChange={(open) => {
+            if (!open) setOutcome(null);
+          }}
+        >
+          <PopoverContent anchor={anchor} side="bottom" initialFocus={false}>
+            <OutcomeLine {...outcome} />
+          </PopoverContent>
+        </Popover>
+      )}
+    </>
   );
 }
 

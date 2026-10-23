@@ -3,6 +3,7 @@ import { PaneResizeHandle, paneSplitRecipe } from "@pe/kit/lang/pane-resize";
 import { Switch, switchRecipe } from "@pe/kit/lang/switch";
 import { Tooltip, TooltipTrigger, TooltipContent } from "@pe/kit/lang/tooltip";
 import { Surface } from "@pe/kit/lang/surface";
+import { Button } from "@pe/kit/lang/button";
 import { RecipeGrid, SpecimenFrame } from "./recipe-grid";
 
 export function UiLayoutSpecimens() {
@@ -25,6 +26,21 @@ export function UiLayoutSpecimens() {
           </div>
         )}
       />
+      <SpecimenFrame name="Pane work and local outcomes" importPath="@pe/kit/lang/pane">
+        <div className="h-32 w-80">
+          <Pane title="capture">
+            <Button
+              label="capture meshes"
+              onPress={async () => {
+                await new Promise((resolve) => setTimeout(resolve, 1200));
+                return { kind: "receipt", label: "meshes captured" };
+              }}
+            >
+              capture meshes
+            </Button>
+          </Pane>
+        </div>
+      </SpecimenFrame>
       <RecipeGrid
         name="PaneSplit"
         importPath="@pe/kit/lang/pane-resize"

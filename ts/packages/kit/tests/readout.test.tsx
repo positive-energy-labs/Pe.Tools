@@ -37,6 +37,8 @@ it("claims wheel events and clears by button without binding Escape", () => {
   fireEvent.keyDown(document, { key: "Escape" });
   expect(clear).toHaveBeenCalledTimes(1);
   rerender(view(undefined));
+  expect(dock.querySelector("header [data-readout-title]")).toBeTruthy();
+  expect(dock.querySelector("header")?.textContent).toBe("");
   fireEvent.keyDown(document, { key: "Escape" });
   rerender(view("hidden selection", true));
   fireEvent.keyDown(document, { key: "Escape" });
