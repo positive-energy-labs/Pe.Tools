@@ -1,4 +1,4 @@
-import { land } from "./row";
+import { land } from "./land";
 import type { ReactNode } from "react";
 
 import "./lang.css";

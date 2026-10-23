@@ -1,4 +1,4 @@
-import { land } from "./row";
+import { land } from "./land";
 
 export const VIRTUAL_FROM = 60;
 import { startTransition, useEffect, useId, useMemo, useRef, useState } from "react";

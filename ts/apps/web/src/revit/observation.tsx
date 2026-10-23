@@ -1,6 +1,6 @@
-import { RevitTarget } from "@pe/kit/lang/row";
+import { RevitTarget } from "@pe/kit/lang/revit-target";
 import { createContext, useContext, type ReactNode } from "react";
-import type { RevitElementReference } from "@pe/kit/lang/row";
+import type { RevitElementReference } from "@pe/kit/lang/revit-target";
 import { type ElementTarget, type RevitObservationScope } from "./element-target";
 import { documentRefSchema, type DocumentRef } from "@pe/agent-contracts";
 import { createPeClient } from "@pe/agent-contracts/pe-api";

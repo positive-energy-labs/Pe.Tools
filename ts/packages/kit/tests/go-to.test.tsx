@@ -2,7 +2,7 @@
 import { cleanup, fireEvent, render, screen, waitFor } from "@testing-library/react";
 import { afterEach, expect, test, vi } from "vite-plus/test";
 import { GoToPopup } from "../src/components/lang/go-to";
-import { SubjectTextContext } from "../src/components/lang/subject-text";
+import { SubjectTextContext } from "../src/components/lang/reach";
 import { reachStore } from "../src/components/lang/reach";
 
 afterEach(cleanup);

@@ -6,11 +6,8 @@ import { ListView } from "../src/components/lang/list-view";
 import { sideAwayFrom } from "../src/components/lang/popover";
 import { Row } from "../src/components/lang/row";
 import { StateCell } from "../src/components/lang/cell";
-import {
-  SubjectTextContext,
-  nameOrFallback,
-  subjectDocument,
-} from "../src/components/lang/subject-text";
+import { SubjectTextContext } from "../src/components/lang/reach";
+import { nameOrFallback, subjectDocument } from "../src/components/lang/subject-text";
 
 import { Button } from "../src/components/lang/button";
 import { FactChip } from "../src/components/lang/chip";
@@ -121,7 +118,7 @@ test("rows and picture subscribers share reach without updating the route", () =
     route();
     return (
       <SubjectTextContext value={{ nameOf: () => "duct", reach }}>
-        <Row label="duct" revitIds={[42]} />
+        <Row label="duct" revit={[42]} />
         <Mirror />
       </SubjectTextContext>
     );

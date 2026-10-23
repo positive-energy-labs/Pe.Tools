@@ -42,7 +42,6 @@ export function AtlasNavigation() {
           <ListView
             list={list}
             aria-label="zones"
-            primary
             empty={{
               message: "No zones declared",
               exit: "Adopt zones from a zoning-plan view in the Adopt stage",
@@ -52,7 +51,7 @@ export function AtlasNavigation() {
               const calls = states.filter((s) => s === "call").length;
               const off = !onPlan(z);
               return {
-                revitIds: z.zone.elementId == null ? [] : [z.zone.elementId],
+                revit: z.zone.elementId == null ? [] : [z.zone.elementId],
                 lead: <ZoneThumb zone={z.zone} className="size-5" />,
                 label: (
                   <span className="truncate">

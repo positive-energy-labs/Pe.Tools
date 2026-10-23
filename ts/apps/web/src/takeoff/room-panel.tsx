@@ -1,6 +1,6 @@
 import { useList } from "@pe/kit/lang/collection";
 import { PlainList } from "@pe/kit/lang/list-view";
-import { revitTarget } from "@pe/kit/lang/row";
+import { revitTarget } from "@pe/kit/lang/revit-target";
 import {
   takeoffDecisionAddress,
   takeoffDecisionKey,
@@ -164,7 +164,7 @@ function RoomPanel({
               empty={{ message: "No open flags", exit: "Choose another room" }}
               row={(flag) => ({
                 label: flag,
-                revitIds: room.elementId == null ? [] : [room.elementId],
+                revit: room.elementId == null ? [] : [room.elementId],
                 lines: 2,
                 wrap: true,
                 sub: (
@@ -259,7 +259,7 @@ function RoomPanel({
               row={(d) => ({
                 label: `${d.verb} ${d.flag}`,
                 meta: "this session",
-                revitIds: room.elementId == null ? [] : [room.elementId],
+                revit: room.elementId == null ? [] : [room.elementId],
               })}
             />
           )}

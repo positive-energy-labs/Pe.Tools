@@ -1,4 +1,4 @@
-import { land } from "@pe/kit/lang/row";
+import { land } from "@pe/kit/lang/land";
 import { SubjectBox } from "@pe/kit/lang/popover";
 /**
  * THROWAWAY (protoui round 3): E2 ("C simplicity, B layout"). LEFT a resizable double sidebar: a
@@ -33,7 +33,7 @@ import { airflowOptions } from "../../airflow";
 import { noRunParts, subjectNamer } from "../../subject-text";
 import { useRevitSubjectProps } from "#/revit/element-menu";
 import { noRunBranches } from "@pe/ducts-domain/no-runs";
-import { SubjectTextContext, type SubjectReference } from "@pe/kit/lang/subject-text";
+import { SubjectTextContext, type SubjectReference } from "@pe/kit/lang/reach";
 import { NO_LIGHTING, reachStore, useReachState, useReachSetter } from "@pe/kit/lang/reach";
 import {
   annotatedFindings,
@@ -133,9 +133,6 @@ function Halves({
     />
   );
 }
-
-/** A two-line system row before it is measured, px (two item heights). */
-const LIST_ROW_PX = 48;
 
 /**
  * The read snapshot is priced once the tables are in (2-3 s on a large model): until then the
@@ -1282,8 +1279,6 @@ const SystemsList = memo(function SystemsList({
     <ListView
       aria-label="systems"
       list={systemListView}
-      primary
-      estimate={LIST_ROW_PX}
       row={(system) => {
         const fans = fansOf(system);
         return systemRowParts(

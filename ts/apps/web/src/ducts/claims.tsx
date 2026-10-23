@@ -13,7 +13,7 @@ import {
 } from "@pe/agent-contracts";
 
 import { TooltipHint } from "@pe/kit/lang/tooltip";
-import { RevitTarget } from "@pe/kit/lang/row";
+import { RevitTarget } from "@pe/kit/lang/revit-target";
 import { showInRevit } from "#/revit/element-menu";
 import type { ShowElementsResult } from "#/revit/element-target";
 import { observedElements, useNativeObservation } from "#/revit/observation";

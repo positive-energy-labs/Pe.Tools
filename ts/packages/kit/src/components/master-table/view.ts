@@ -37,7 +37,7 @@ export type QueryClause = { text: string; not: boolean } & (
 
 const CLAUSE = /^(!?)(?:"([^"]*)"|([^\s"~=<>!]+))(~|!=|>=|<=|=|>|<)(?:"([^"]*)"?|(\S*))$/;
 
-/** The query's words: whitespace splits them, except inside quotes ("Room Name"=Office). */
+/** The query's words: whitespace splits them, except inside quotes ("Item Name"=Office). */
 export const queryWords = (text: string): string[] => text.match(/(?:"[^"]*"?|[^\s"])+/g) ?? [];
 
 /** A label or value as the query writes it: quoted when it holds a space or an operator. */

@@ -164,7 +164,6 @@ export function BindPicker({
       <ListView
         list={list}
         aria-label="bind targets"
-        primary
         empty={
           threads === null || documents === null
             ? {

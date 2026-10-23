@@ -116,9 +116,7 @@ function TreePanel({ say }: { say: (text: string) => void }) {
   return (
     <ListView
       list={list}
-      bar={false}
       maxHeight="16rem"
-      estimate={20}
       aria-label="system call tree"
       empty={{ message: "No systems in this document", exit: "Read a model" }}
       row={(n) => ({ label: n.name, meta: n.loss })}

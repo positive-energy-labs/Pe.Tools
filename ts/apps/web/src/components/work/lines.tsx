@@ -158,8 +158,6 @@ export function WorkLines({
       <ListView
         list={list}
         aria-label="pending cells"
-        bar={false}
-        estimate={60}
         empty={{
           message: "No pending cells in this tab",
           exit: "Choose another tab or edit a cell",

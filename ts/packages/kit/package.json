@@ -69,7 +69,9 @@
     "./lang/floater": "./src/components/lang/floater.tsx",
     "./lang/button-group": "./src/components/lang/button-group.tsx",
     "./lang/live-orbit": "./src/components/lang/live-orbit.ts",
-    "./lang/go-to": "./src/components/lang/go-to.tsx"
+    "./lang/go-to": "./src/components/lang/go-to.tsx",
+    "./lang/land": "./src/components/lang/land.ts",
+    "./lang/revit-target": "./src/components/lang/revit-target.tsx"
   },
   "scripts": {
     "build": "vp build && node scripts/page.mjs",

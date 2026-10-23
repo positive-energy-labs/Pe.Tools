@@ -164,7 +164,7 @@ function GrillesRoute() {
       flush
       title="field"
       meta={`${field.length} buildable`}
-      legend={<KeyLegend keys={FIELD_KEYS} lead={FIELD_KEYS.length} bind={false} />}
+      legend={<KeyLegend keys={FIELD_KEYS} lead={FIELD_KEYS.length} />}
     >
       {active && (
         <TooltipHint content="Focus, then arrow keys: left/right walk qty, up/down walk opening width">

@@ -38,7 +38,8 @@ import { inboxWriteRows, type WriteVerbs, type RulingRow } from "./inbox-write";
 import { PreviewLines } from "./preview-lines";
 import { SlotPicker } from "./slot-picker";
 import { InboxClaim, claimLine } from "./inbox-claim";
-import { SubjectText, SubjectTextContext, subjectDocument } from "@pe/kit/lang/subject-text";
+import { SubjectText, subjectDocument } from "@pe/kit/lang/subject-text";
+import { SubjectTextContext } from "@pe/kit/lang/reach";
 import { RuleAssignment } from "./rule-assignment";
 
 type InboxWork = {
@@ -370,7 +371,7 @@ export function Inbox({
         onMouseMove: () => {
           if (subjects) relight();
         },
-        revitIds: target.ids,
+        revit: target.ids,
         revitRefs: target.refs,
         // A person's own row click selects and releases the landing address (`onPick`); only a stage click lands on `issue`.
         pick: () => onSelect(item.ids[0] ?? null),

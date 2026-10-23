@@ -150,7 +150,7 @@ export function FindingsList({ findings }: { findings: readonly DuctFinding[] })
                         {f.grade}
                       </span>
                     ) : null}{" "}
-                    <SubjectText text={f.note} ids={f.elementIds} />
+                    <SubjectText text={f.note} revit={f.elementIds} />
                     {f.assumed ? <span className="text-ink-2"> · assumed: {f.assumed}</span> : null}
                   </div>
                 );

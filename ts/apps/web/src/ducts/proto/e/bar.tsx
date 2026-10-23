@@ -31,7 +31,7 @@ import { barRows, ruleConditions, selectedBarRow, type BarRow } from "./bar-mode
 import { fanLoad } from "@pe/ducts-domain/fan-headroom";
 import type { Provisional } from "@pe/ducts-domain/losses";
 import { Popover, PopoverContent, PopoverTrigger, usePopoverSide } from "@pe/kit/lang/popover";
-import { revitTarget } from "@pe/kit/lang/row";
+import { revitTarget } from "@pe/kit/lang/revit-target";
 import type { ListRowParts } from "@pe/kit/lang/list-view";
 import { tokenRef } from "@pe/kit/lib/token";
 import { observedElements, useNativeObservation } from "#/revit/observation";
@@ -510,7 +510,12 @@ function BreakdownList({
           items={rows.map((row) => ({ key: row.key, at: row.at, dashed: row.key === "other" }))}
         >
           <Table
-            rows={rows}
+            rows={rows.map((row) => ({
+              ...row,
+              damage: split.rows.some((loss) => row.ids.includes(loss.id) && loss.error)
+                ? "blocked loss"
+                : null,
+            }))}
             columns={columns}
             rowKey={(row) => row.key}
             label="Loss groups and pricing rules"
@@ -518,13 +523,8 @@ function BreakdownList({
             activeKey={current?.key}
             onRowClick={choose}
             onRowHover={light ? (row) => light(row?.ids ?? back ?? null) : undefined}
-            revitIds={(row) => row.ids}
+            revit={(row) => row.ids}
             keep={() => true}
-            damage={(row) =>
-              split.rows.some((loss) => row.ids.includes(loss.id) && loss.error)
-                ? "blocked loss"
-                : undefined
-            }
             caption={
               <>
                 <span className="face-mono">{fmt(scale)}</span> in-wg

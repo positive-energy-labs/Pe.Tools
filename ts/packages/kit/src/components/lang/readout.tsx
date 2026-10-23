@@ -1,6 +1,5 @@
 import { useCallback, type ReactNode } from "react";
 import { X } from "lucide-react";
-import { useScopeKeys } from "../../keys";
 import { PaneOverlay } from "./pane";
 import { Button } from "./button";
 import "./lang.css";
@@ -18,14 +17,6 @@ export function PictureReadout({
   foot?: ReactNode;
 }) {
   const selected = title != null;
-  useScopeKeys([
-    {
-      hotkey: "Escape",
-      label: "clear the selection",
-      available: () => selected && onClear != null,
-      callback: () => onClear?.(),
-    },
-  ]);
   // Native and non-passive: the picture's wheel listener skips the claimed event.
   const body = useCallback((node: HTMLDivElement | null) => {
     const at = node?.parentElement;
@@ -41,8 +32,8 @@ export function PictureReadout({
     <PaneOverlay label="picture readout">
       <section
         className="dl-picture-readout t-small"
-        aria-label={selected ? "the selection" : "the system"}
-        data-picture-readout={selected ? "selection" : "system"}
+        aria-label={selected ? "the selection" : "the picture"}
+        data-picture-readout={selected ? "selection" : "picture"}
       >
         {selected ? (
           <header className="hairline-b">

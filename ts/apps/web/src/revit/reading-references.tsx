@@ -1,4 +1,4 @@
-import { RevitTarget } from "@pe/kit/lang/row";
+import { RevitTarget } from "@pe/kit/lang/revit-target";
 import { nameOrFallback } from "@pe/kit/lang/subject-text";
 import {
   actionReceiptSchema,
@@ -8,7 +8,7 @@ import {
 } from "@pe/agent-contracts";
 import { readRecord } from "@pe/agent-contracts/chat-state";
 import { FactChip } from "@pe/kit/lang/chip";
-import type { RevitElementReference } from "@pe/kit/lang/row";
+import type { RevitElementReference } from "@pe/kit/lang/revit-target";
 import { useRouteDemo } from "#/route/activity";
 import { prepareElements, revitReferences, type RevitObservationScope } from "./element-target";
 

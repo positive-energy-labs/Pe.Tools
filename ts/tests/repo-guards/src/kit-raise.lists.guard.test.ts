@@ -36,7 +36,7 @@ it("every picture controller has a go-to subject picker", () => {
   const missing = sources
     .filter((path) => {
       const text = readFileSync(path, "latin1");
-      return /\buseStage\s*\(/.test(text) && !/<GoTo(?:Popup|Subject)\b/.test(text);
+      return /<PictureStage\b/.test(text) && !/<GoTo(?:Popup|Subject)\b/.test(text);
     })
     .map((path) => relative(root, path));
   expect(missing).toEqual([]);

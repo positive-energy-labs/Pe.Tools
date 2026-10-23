@@ -106,7 +106,7 @@ export function AtlasTable() {
                 columns={columns}
                 rowKey={rowKey}
                 label="rooms in scope"
-                revitIds={(row) => (row.room.elementId == null ? [] : [row.room.elementId])}
+                revit={(row) => (row.room.elementId == null ? [] : [row.room.elementId])}
                 state={tableState}
                 onStateChange={setTableState}
                 activeKey={cursor}
@@ -114,7 +114,6 @@ export function AtlasTable() {
                 onRowClick={selectTableRow}
                 onRowHover={hoverTableRow}
                 // A call blocks sync and export until a person decides (I2): the kit burn.
-                damage={(row) => (row.state === "call" ? "needs a call" : null)}
                 gutter={gutter}
                 empty={
                   rows.length > 0 ? (

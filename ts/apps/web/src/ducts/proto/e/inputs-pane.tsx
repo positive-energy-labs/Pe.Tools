@@ -125,7 +125,7 @@ export function InputsPane(props: InputsPaneProps) {
         ),
         onMouseEnter: () => light([id]),
         onMouseLeave: () => light(null),
-        revitIds: target.ids,
+        revit: target.ids,
         revitRefs: target.refs,
       };
     },
@@ -145,8 +145,6 @@ export function InputsPane(props: InputsPaneProps) {
       <ListView
         list={list}
         aria-label="inputs"
-        estimate={40}
-        bar={items.length >= 20 || list.filtering || !!list.state.sort}
         empty={{
           message: "no unit or grille in this system",
           exit: "Choose a system with a unit or grille",

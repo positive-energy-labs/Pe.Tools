@@ -1,10 +1,12 @@
-import { useReachState, reachProps, type ReachStore } from "./reach";
-/** Subject prose names elements with the picture's shared footnote marks. Hovering the block
- * lights all its Subjects; focus narrows to one; pressing calls the route's alias-click (`go`).
- * The route supplies `nameOf`; `refProps` binds each token to its Revit element menu.
- */
-import { createContext, useContext, useEffect, useId, type ReactNode } from "react";
-import { useRevitTarget } from "./row";
+import {
+  useReachState,
+  reachProps,
+  SubjectTextContext,
+  type SubjectTextScope,
+  type SubjectReference,
+} from "./reach";
+import { useContext, useEffect, useId, type ReactNode } from "react";
+import { useRevitTarget } from "./revit-target";
 import { TooltipHint } from "./tooltip";
 import "./lang.css";
 
@@ -12,7 +14,6 @@ import "./lang.css";
 export const nameOrFallback = (name?: string | null): string => name?.trim() || "unnamed element";
 
 export type SubjectPart = string | { id: number; connector?: number };
-export type SubjectReference = { id: number; name: string; number: number };
 export type SubjectDocument = {
   parts: (string | (SubjectReference & { connector?: number }))[];
   references: SubjectReference[];
@@ -68,46 +69,19 @@ export function subjectDocument(
 export const useSubjectLighting = () =>
   useReachState(useContext(SubjectTextContext)?.reach, (state) => state.lighting);
 
-export type SubjectTextScope = {
-  nameOf: (id: number) => string | null;
-  /** Omit on a route with no picture: nothing lights, tokens still name and number. */
-  reach?: ReachStore;
-  /** Badges for `references`; `ids` tints further elements the text stands for but does not name. */
-  light?: (
-    references: readonly SubjectReference[],
-    focus: number | null,
-    owner?: string,
-    ids?: readonly number[],
-  ) => void;
-  clear?: (owner: string) => void;
-  /** The pointer is still travelling over the picture: a pending clear waits for it. */
-  hold?: () => void;
-  /**
-   * The one alias-click: a Subject named in text was pressed. Every Subject token on the route
-   * calls this and nothing else, so "go to subject" applies the same way from any row, popover or
-   * caption. Omitted, a token names without pressing.
-   */
-  go?: (id: number) => void;
-  /** Attributes for a token, e.g. the Revit element target so right-click offers Selection Box. */
-  refProps?: (id: number) => Record<string, string | undefined>;
-};
-export const SubjectTextContext = createContext<SubjectTextScope | null>(null);
-
 /** Prose with each Subject as a numbered token; hover lights it in the picture, press goes to it. */
 export function SubjectText({
   text,
-  ids = [],
-  revit,
+  revit = [],
   document,
   owner: blockOwner,
 }: {
   text?: string | readonly SubjectPart[];
-  ids?: readonly number[];
   revit?: readonly number[];
   document?: SubjectDocument;
   owner?: string;
 }) {
-  const target = useRevitTarget(revit ?? ids);
+  const target = useRevitTarget(revit);
   const context = useContext(SubjectTextContext);
   const localOwner = useId();
   const owner = blockOwner ?? localOwner;
@@ -118,12 +92,12 @@ export function SubjectText({
     subjectDocument(
       typeof text === "string" ? [text] : (text ?? []),
       context?.nameOf ?? (() => null),
-      ids,
+      revit,
     );
   // Plain text stays plain: a span appears only when there is a Revit target to carry.
   if (!context) {
     const plain = doc.parts.map((p) => (typeof p === "string" ? p : p.name)).join("");
-    return (revit ?? ids)?.length ? <span {...target}>{plain}</span> : <>{plain}</>;
+    return revit?.length ? <span {...target}>{plain}</span> : <>{plain}</>;
   }
   const light = (id: number | null) => context.light?.(doc.references, id, owner);
   return (

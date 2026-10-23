@@ -20,7 +20,8 @@ import { defaultRangeExtractor, useVirtualizer, type Range } from "@tanstack/rea
 
 import { Minimap, type MinimapMark } from "../lang/gutter-minimap";
 import { CellHost } from "../lang/cell";
-import { land, Row } from "../lang/row";
+import { land } from "../lang/land";
+import { Row } from "../lang/row";
 import { CellNavigationProvider, type CellMove } from "./cell-navigation";
 import type { ResolvedColumn } from "./master-table-columns";
 import { CELL_EDITOR, editCell, isInteractive, isTypingKey } from "./master-table-state";
@@ -42,7 +43,7 @@ type Gutter<Row> = (row: Row) => {
 
 interface MasterRowProps<Row extends RowData> {
   row: Row;
-  revitIds?: readonly number[];
+  revit?: readonly number[];
   /** The row's key, as `data-key`: a `Connectors` anchor and a test handle. */
   rowKey: string;
   /** The row's place in the shown order: the virtualizer's measure handle and the keys' address. */
@@ -74,7 +75,7 @@ function MasterRowView<Row extends RowData>({
   rowKey,
   index,
   measure,
-  revitIds,
+  revit,
   active,
   selected,
   refusal,
@@ -100,7 +101,7 @@ function MasterRowView<Row extends RowData>({
       ref={ref}
       data-key={rowKey}
       data-index={index}
-      revitIds={revitIds}
+      revit={revit}
       active={active}
       selected={selected}
       refusal={refusal}
@@ -127,7 +128,7 @@ const MasterRow = memo(
     previous.rowKey === next.rowKey &&
     previous.index === next.index &&
     previous.measure === next.measure &&
-    previous.revitIds?.join(",") === next.revitIds?.join(",") &&
+    previous.revit?.join(",") === next.revit?.join(",") &&
     previous.active === next.active &&
     previous.selected === next.selected &&
     previous.refusal === next.refusal &&
@@ -149,8 +150,7 @@ export function MasterTableBody<Row extends RowData>({
   columnByKey,
   activeKey,
   rowClassName,
-  revitIds,
-  damage,
+  revit,
   keep,
   onRowClick,
   selectedKeys,
@@ -169,8 +169,7 @@ export function MasterTableBody<Row extends RowData>({
   columnByKey: ReadonlyMap<string, ResolvedColumn<Row>>;
   activeKey?: string | null;
   rowClassName?: (row: Row) => string | undefined;
-  revitIds?: (row: Row) => readonly number[];
-  damage?: (row: Row) => string | null | undefined;
+  revit?: (row: Row) => readonly number[];
   keep?: (row: Row) => boolean;
   onRowClick?: (row: Row) => void;
   selectedKeys?: ReadonlySet<string>;
@@ -279,13 +278,20 @@ export function MasterTableBody<Row extends RowData>({
         end: item.end - margin,
       }))
     : visibleRows.map((_, index) => ({ index, start: 0, end: 0 }));
-  const minimapMarks = useMemo(
-    () =>
-      visibleRows.flatMap((row, index): MinimapMark[] => {
-        const reason = damage?.(row.original);
-        return reason ? [{ index, damage: reason }] : [];
-      }),
-    [visibleRows, damage],
+  const damageOf = (row: Row) => {
+    const own = "damage" in row ? row.damage : null;
+    if (typeof own === "string" && own) return own;
+    for (const column of columnByKey.values()) {
+      const state = column.readState?.(row);
+      if (state?.damage) return state.damage;
+      const verdict = column.readVerdict?.(row);
+      if (verdict?.tone === "alarm") return verdict.word;
+    }
+    return null;
+  };
+  const damages = visibleRows.map((row) => damageOf(row.original));
+  const minimapMarks = damages.flatMap((damage, index): MinimapMark[] =>
+    damage ? [{ index, damage }] : [],
   );
   const landing = useRef<number | null>(null);
   useLayoutEffect(() => {
@@ -499,7 +505,7 @@ export function MasterTableBody<Row extends RowData>({
           <Fragment key={key}>
             {gap > 0 && <Spacer height={gap} />}
             <MasterRow
-              revitIds={revitIds?.(tableRow.original)}
+              revit={revit?.(tableRow.original)}
               row={tableRow.original}
               rowKey={key}
               index={rowIndex}
@@ -507,7 +513,7 @@ export function MasterTableBody<Row extends RowData>({
               active={activeKey === key}
               selected={selectedKeys ? selectedKeys.has(key) : undefined}
               refusal={refusalOf?.(key)}
-              damage={damage?.(tableRow.original)}
+              damage={damages[rowIndex]}
               activeRowRef={activeRowRef}
               className={cn("veil h-(--item-h) scroll-mt-12", rowClassName?.(tableRow.original))}
               onRowClick={onRowClick ? rowClick : undefined}

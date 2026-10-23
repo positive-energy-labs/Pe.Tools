@@ -26,7 +26,7 @@ export function EmptyState({
    * surface's own (rows exist; the narrowing hid them). They have different exits. */
   story: "scope" | "filter";
   /** REQUIRED: the way out — what would fill it ("run capture on this level") or how to widen
-   * back out ("clear the room filter"). One sentence, no period needed. */
+   * back out ("clear the category filter"). One sentence, no period needed. */
   exit: string;
   /** What is empty, in the surface's own words — "no zones on this level". */
   children: React.ReactNode;

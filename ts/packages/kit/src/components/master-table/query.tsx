@@ -448,7 +448,7 @@ export function QueryBox({
               if (armed) return onDraft(value);
               if (command && ARROW.test(value)) return arm(value);
               const quoting = value.split('"').length % 2 === 0;
-              // "Room Na" is still naming a field across its space: it stays one draft.
+              // "Item Na" is still naming a field across its space: it stays one draft.
               if (quoting || !/\s/.test(value) || (!/[~=<>]/.test(value) && naming(value)))
                 return type(value);
               const parts = queryWords(value);

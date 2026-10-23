@@ -446,7 +446,6 @@ function ProfileChanges({ changes }: { changes: ProfileChange[] }) {
       <ListView
         list={list}
         aria-label="changes against staged"
-        bar={false}
         empty={{
           message: "No changes against staged",
           exit: "Propose a profile change to compare it",

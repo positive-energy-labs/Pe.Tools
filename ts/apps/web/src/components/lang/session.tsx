@@ -265,7 +265,6 @@ export function SessionCard({
         <ListView
           list={list}
           aria-label="documents"
-          bar={false}
           empty={{
             message:
               documents === null

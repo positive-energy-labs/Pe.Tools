@@ -12,7 +12,6 @@ import {
   type ReactNode,
   type RefObject,
 } from "react";
-import { land } from "@pe/kit/lang/row";
 
 import { DUCTS_LAYERS, emptyListSearch, toggleLayer } from "@pe/agent-contracts";
 import { snapshotById } from "@pe/ducts-domain/readiness";
@@ -36,7 +35,7 @@ import { labelOfNode, legsOf } from "../../legs";
 import { sceneRequestOf } from "../../manifest";
 import { findingLayers, findingShapes, noRunLayers } from "../../finding-layers";
 import { boundsOfIds, ModelPicture, poseOf, usePictureBounds } from "../../model-picture";
-import { useStage, stageViewport } from "#/scene/stage-controller";
+import { PictureStage, stageViewport } from "#/scene/stage-controller";
 import { GoToSubject } from "./go-to";
 import { PictureReadout } from "@pe/kit/lang/readout";
 import { PaneCrumb } from "@pe/kit/lang/pane-crumb";
@@ -54,10 +53,12 @@ import type { Split } from "../../loss-split";
 import type { systemList } from "../../system-list";
 import type { StageIssue } from "../../inbox-rows";
 import { damageLayer } from "#/scene/damage";
+import { land } from "@pe/kit/lang/land";
 import { usePictureFloaters } from "./picture-floaters";
 import { RulingBody, useMarks } from "./rulings";
 import { noRunParts } from "../../subject-text";
-import { SubjectText, SubjectTextContext } from "@pe/kit/lang/subject-text";
+import { SubjectText } from "@pe/kit/lang/subject-text";
+import { SubjectTextContext } from "@pe/kit/lang/reach";
 
 const LAYER_WORDS: Record<
   (typeof DUCTS_LAYERS)[number],
@@ -432,52 +433,6 @@ function Canvas({
     const leg = sub?.legOf.get(id);
     return new Set(leg ? [id, ...leg.ids] : [id]);
   };
-  const stage = useStage({
-    kind: "orbit",
-    orbit,
-    bounds,
-    host: pictureHost,
-    selectedBounds: boundsOfIds(read.meshes, scene, selected),
-    clearSelection: () => {
-      if (page.selected) pick(null);
-    },
-    onHistoryStep: () => setLanded(null),
-  });
-  const viewOf = (ids: ReadonlySet<number>) =>
-    picture === "model" ? stage.poseOf(boundsOfIds(read.meshes, scene, ids)) : null;
-  const markLanding = (ids: ReadonlySet<number>, back: string) => () => {
-    const host = pictureHost?.getBoundingClientRect();
-    const box = onScreen(boundsOfIds(read.meshes, scene, ids));
-    setLanded({
-      back,
-      n: performance.now(),
-      box:
-        box && host
-          ? DOMRect.fromRect({
-              x: box.x - host.left,
-              y: box.y - host.top,
-              width: box.width,
-              height: box.height,
-            })
-          : null,
-    });
-  };
-  const backWord = () =>
-    /^\d+$/.test(page.selected) ? nameOf(Number(page.selected)) : "the previous view";
-  const jumpTo = (id: number) => {
-    const ids = selectionOf(id);
-    const view = viewOf(ids);
-    const same = String(id) === page.selected;
-    setLanded(null);
-    if (!view) return same ? undefined : onSelect(id);
-    landing.current = markLanding(ids, same ? "the previous view" : backWord());
-    setPage(same ? { viewport: view } : { selected: String(id), issue: "", viewport: view }, {
-      history: "push",
-    });
-  };
-  if (jump) jump.current = jumpTo;
-  const goBack = () => stage.go("back");
-
   const ruling = (r: Ruling) => {
     const finding =
       r.kind === "claim" ? `claim:${r.claim.id}` : r.kind === "issue" ? r.issue.id : r.finding.id;
@@ -551,7 +506,7 @@ function Canvas({
                     {
                       label: pickedName,
                       onPress: () => subjects?.go?.(pickedId),
-                      revitIds: [pickedId],
+                      revit: [pickedId],
                     },
                   ]),
             ]
@@ -559,288 +514,362 @@ function Canvas({
     />
   );
 
-  const model = (
-    <ModelPicture
-      read={read}
-      bounds={bounds}
-      orbit={orbit}
-      stage={stage}
-      wheelHost={pictureHost?.closest<HTMLElement>("[data-slot='pane-field']")}
-      scene={scene}
-      layers={layers}
-      encoding={scale.encoding}
-      selected={selected}
-      lit={litAll}
-      hovered={hovered}
-      labels={labels}
-      rulings={marks}
-      findings3d={stageLayers}
-      issues={issues}
-      hoveredIssue={hoveredIssue}
-      onIssueHover={onIssueHover}
-      pointOf={pointOf}
-      issue={page.issue}
-      setPage={setPage}
-      onPick={pick}
-      onRuling={ruling}
-      onHover={onHover}
-    />
-  );
-  if (read.meshes && pictureKey)
-    lastPicture.current = { key: pictureKey, system: page.system, view: model, orbit };
-
   return (
-    <Pane
-      id="e-picture"
-      title={title}
-      scroll="clip"
-      flush
-      actions={
-        <ButtonGroup>
-          {pickedId != null ? (
-            <SelectionBoxButton target={observedElements(observation, [pickedId])} />
-          ) : null}
-          <GoToSubject
-            snapshot={snapshot}
-            system={page.system}
-            nameOf={nameOf}
-            onHover={onHover}
-            onGo={({ system, id }) => {
-              if (id == null) return setPage({ system, selected: "" }, { history: "push" });
-              if (system !== page.system)
-                return setPage({ system, selected: String(id) }, { history: "push" });
-              jumpTo(id);
-            }}
-          />
-          <EncodingPicker value={scale.encoding.key} onPick={(key) => setPage({ encoding: key })} />
-        </ButtonGroup>
-      }
-      modes={{
-        label: "picture",
-        value: picture,
-        onChange: (key) => setPage({ picture: key as typeof picture }, { history: "push" }),
-        // `S` sits on the other picture, so the one chord always swaps.
-        options: (["model", "schematic"] as const).map((key) => ({
-          key,
-          label: key,
-          chord: key === picture ? undefined : "S",
-          says: `The ${key} large, the other in the corner`,
-        })),
+    <PictureStage
+      {...{
+        kind: "orbit",
+        orbit,
+        bounds,
+        host: pictureHost,
+        selectedBounds: boundsOfIds(read.meshes, scene, selected),
+        clearSelection: () => {
+          if (page.selected) pick(null);
+        },
+        onHistoryStep: () => setLanded(null),
       }}
-      layers={{
-        value: page.layers,
-        options: DUCTS_LAYERS.map((key) => ({ key, ...LAYER_WORDS[key] })),
-        onToggle: (key) =>
-          setPage(
-            {
-              layers: toggleLayer(DUCTS_LAYERS, page.layers, key as (typeof DUCTS_LAYERS)[number]),
-            },
-            { history: "push" },
-          ),
-      }}
-      legend={
-        <ScaleLegend
-          encoding={scale.encoding}
-          counts={scale.counts}
-          nameOf={scale.nameOf}
-          // The max's element is named in text: the alias-click, not a picture pick.
-          onSelect={(id) => (subjects?.go ? subjects.go(id) : pick(id))}
-        />
-      }
-      floaters={floaters}
     >
-      <div
-        ref={setPictureHost}
-        data-proto="E"
-        className="relative flex size-full min-h-0 flex-col"
-        onPointerDownCapture={(e) => {
-          if (holding) {
-            e.preventDefault();
-            e.stopPropagation();
-            return;
-          }
-          pointer.current = { x: e.clientX, y: e.clientY };
-        }}
-        onWheelCapture={(e) => {
-          if (holding) {
-            e.nativeEvent.preventDefault();
-            e.stopPropagation();
-            return;
-          }
-        }}
-      >
-        {picture === "model" ? (
-          <div
-            className="flex min-h-0 flex-1"
-            inert={holding ? true : undefined}
-            data-held-picture={holding?.system}
-          >
-            {holding?.view ?? model}
-          </div>
-        ) : (
-          schematic("main")
-        )}
+      {(stage) => {
+        const viewOf = (ids: ReadonlySet<number>) =>
+          picture === "model" ? stage.poseOf(boundsOfIds(read.meshes, scene, ids)) : null;
+        const markLanding = (ids: ReadonlySet<number>, back: string) => () => {
+          const host = pictureHost?.getBoundingClientRect();
+          const box = onScreen(boundsOfIds(read.meshes, scene, ids));
+          setLanded({
+            back,
+            n: performance.now(),
+            box:
+              box && host
+                ? DOMRect.fromRect({
+                    x: box.x - host.left,
+                    y: box.y - host.top,
+                    width: box.width,
+                    height: box.height,
+                  })
+                : null,
+          });
+        };
+        const backWord = () =>
+          /^\d+$/.test(page.selected) ? nameOf(Number(page.selected)) : "the previous view";
+        const jumpTo = (id: number) => {
+          const ids = selectionOf(id);
+          const view = viewOf(ids);
+          const same = String(id) === page.selected;
+          setLanded(null);
+          if (!view) return same ? undefined : onSelect(id);
+          landing.current = markLanding(ids, same ? "the previous view" : backWord());
+          setPage(same ? { viewport: view } : { selected: String(id), issue: "", viewport: view }, {
+            history: "push",
+          });
+        };
+        if (jump) jump.current = jumpTo;
+        const goBack = () => stage.go("back");
 
-        {landed?.box ? (
-          <div
-            aria-hidden
-            className="pointer-events-none absolute"
-            style={{
-              left: landed.box.x - 6,
-              top: landed.box.y - 6,
-              width: landed.box.width + 12,
-              height: landed.box.height + 12,
-            }}
-            key={landed.n}
-            ref={landPicture}
+        const model = (
+          <ModelPicture
+            read={read}
+            bounds={bounds}
+            orbit={orbit}
+            wheelHost={pictureHost?.closest<HTMLElement>("[data-slot='pane-field']")}
+            scene={scene}
+            layers={layers}
+            encoding={scale.encoding}
+            selected={selected}
+            lit={litAll}
+            hovered={hovered}
+            labels={labels}
+            rulings={marks}
+            findings3d={stageLayers}
+            issues={issues}
+            hoveredIssue={hoveredIssue}
+            onIssueHover={onIssueHover}
+            pointOf={pointOf}
+            issue={page.issue}
+            setPage={setPage}
+            onPick={pick}
+            onRuling={ruling}
+            onHover={onHover}
           />
-        ) : null}
+        );
+        if (read.meshes && pictureKey)
+          lastPicture.current = { key: pictureKey, system: page.system, view: model, orbit };
 
-        {/* The plate: what the picture is of and the state it is in, readable without a hover;
-            with an element selected, that element (kaitpw 2026-10-23: selection info lives here). */}
-        <PictureReadout
-          title={readId == null ? undefined : nameOrFallback(nameOf(readId))}
-          onClear={readId == null ? undefined : () => pick(null)}
-          foot={
-            landed ? (
-              <Button
-                kind="nav"
-                direction="back"
-                label={`Back to ${landed.back}`}
-                reason={`Back to ${landed.back} · Alt+← or the mouse's back button`}
-                onClick={goBack}
-              >
-                back to {landed.back}
-              </Button>
-            ) : null
-          }
-        >
-          <OpeningNote />
-          {holding ? (
-            <span className="text-ink-2" role="status" data-e-capturing="">
-              opening {page.system}… showing {holding.system}
-            </span>
-          ) : null}
-          {identity.refreshing ? (
-            <span className="text-ink-2" data-e-refreshing="">
-              refreshing… the last read stays drawn
-            </span>
-          ) : null}
-          {readId != null ? (
-            <>
-              {ruled && ruled.at === readId ? (
-                <RulingBody
-                  r={ruled}
-                  nameOfId={nameOfId}
-                  onVerdict={onVerdict}
-                  onHover={onHover}
-                  onPick={pick}
-                />
-              ) : null}
-              {run ? (
-                <RunDetail
-                  run={run}
-                  designRate={priced?.staged.designFriction ?? DEFAULT_DESIGN_FRICTION_RATE}
-                  nameOf={nameOf}
-                  light={(ids) => onHover(ids?.[0] ?? null)}
-                />
-              ) : null}
-              {noRuns.has(readId) ? (
-                <p>
-                  No run:{" "}
-                  <SubjectText text={noRunParts(noRuns.get(readId)!, snapshot)} ids={[readId]} />
-                </p>
-              ) : null}
-              {segFacts ? (
-                <SegmentFactsView {...segFacts} />
-              ) : nodeFacts ? (
-                <NodeFactsView {...nodeFacts} />
-              ) : (
-                <p className="text-ink-2">element {nameOfId(readId) ?? readId} is not drawn here</p>
-              )}
-              <p data-pe-loss={readId}>
-                Pe loss <span className="face-mono">{fmt(index.loss.get(readId), 4)}</span> in-wg ·
-                from fan <span className="face-mono">{fmtFt(cumulative.get(readId))}</span> eq ft
-                {priced ? null : (
-                  <span className="text-ink-2"> (unpriced: no ASHRAE tables read)</span>
-                )}
-              </p>
-              {sub?.legOf.get(readId) ? <p>on leg {sub.legOf.get(readId)!.name}</p> : null}
-            </>
-          ) : identity.system == null ? (
-            <>
-              <span className="truncate" data-e-census="">
-                <span className="face-mono">{identity.census.systems}</span> systems
-              </span>
-              <span className="truncate">
-                <span className="face-mono">{identity.census.priced}</span> priced ·{" "}
-                <span className="face-mono">{identity.census.fix}</span> need a fix
-              </span>
-            </>
-          ) : (
-            <>
-              <span data-e-state="">
-                {systemState.length ? (
-                  <>
-                    <SystemMark issues={systemState} open={identity.open} />{" "}
-                  </>
+        return (
+          <Pane
+            id="e-picture"
+            title={title}
+            scroll="clip"
+            flush
+            actions={
+              <ButtonGroup>
+                {pickedId != null ? (
+                  <SelectionBoxButton target={observedElements(observation, [pickedId])} />
                 ) : null}
-                {solved?.fan == null ? (
-                  <span data-tone={solved ? "alarm" : undefined}>
-                    {solved ? "no ESP: an implausible loss" : "not priced"}
+                <GoToSubject
+                  snapshot={snapshot}
+                  system={page.system}
+                  nameOf={nameOf}
+                  onHover={onHover}
+                  onGo={({ system, id }) => {
+                    if (id == null) return setPage({ system, selected: "" }, { history: "push" });
+                    if (system !== page.system)
+                      return setPage({ system, selected: String(id) }, { history: "push" });
+                    jumpTo(id);
+                  }}
+                />
+                <EncodingPicker
+                  value={scale.encoding.key}
+                  onPick={(key) => setPage({ encoding: key })}
+                />
+              </ButtonGroup>
+            }
+            modes={{
+              label: "picture",
+              value: picture,
+              onChange: (key) => setPage({ picture: key as typeof picture }, { history: "push" }),
+              // `S` sits on the other picture, so the one chord always swaps.
+              options: (["model", "schematic"] as const).map((key) => ({
+                key,
+                label: key,
+                chord: key === picture ? undefined : "S",
+                says: `The ${key} large, the other in the corner`,
+              })),
+            }}
+            layers={{
+              value: page.layers,
+              options: DUCTS_LAYERS.map((key) => ({ key, ...LAYER_WORDS[key] })),
+              onToggle: (key) =>
+                setPage(
+                  {
+                    layers: toggleLayer(
+                      DUCTS_LAYERS,
+                      page.layers,
+                      key as (typeof DUCTS_LAYERS)[number],
+                    ),
+                  },
+                  { history: "push" },
+                ),
+            }}
+            legend={
+              <ScaleLegend
+                encoding={scale.encoding}
+                counts={scale.counts}
+                nameOf={scale.nameOf}
+                // The max's element is named in text: the alias-click, not a picture pick.
+                onSelect={(id) => (subjects?.go ? subjects.go(id) : pick(id))}
+              />
+            }
+            floaters={floaters}
+          >
+            <div
+              ref={setPictureHost}
+              data-proto="E"
+              className="relative flex size-full min-h-0 flex-col"
+              onPointerDownCapture={(e) => {
+                if (holding) {
+                  e.preventDefault();
+                  e.stopPropagation();
+                  return;
+                }
+                pointer.current = { x: e.clientX, y: e.clientY };
+                // A gesture is the eye moving on: the landing marks and the way back go.
+                if (landed && !(e.target as Element).closest("[data-picture-readout]"))
+                  setLanded(null);
+              }}
+              onWheelCapture={(e) => {
+                if (holding) {
+                  e.nativeEvent.preventDefault();
+                  e.stopPropagation();
+                  return;
+                }
+                if (landed && !(e.target as Element).closest("[data-picture-readout]"))
+                  setLanded(null);
+              }}
+            >
+              {picture === "model" ? (
+                <div
+                  className="flex min-h-0 flex-1"
+                  inert={holding ? true : undefined}
+                  data-held-picture={holding?.system}
+                >
+                  {holding?.view ?? model}
+                </div>
+              ) : (
+                schematic("main")
+              )}
+
+              {landed?.box ? (
+                <div
+                  aria-hidden
+                  className="pointer-events-none absolute"
+                  style={{
+                    left: landed.box.x - 6,
+                    top: landed.box.y - 6,
+                    width: landed.box.width + 12,
+                    height: landed.box.height + 12,
+                  }}
+                  key={landed.n}
+                  ref={landPicture}
+                />
+              ) : null}
+
+              {/* The plate: what the picture is of and the state it is in, readable without a hover;
+            with an element selected, that element (kaitpw 2026-10-23: selection info lives here). */}
+              <PictureReadout
+                title={readId == null ? undefined : nameOrFallback(nameOf(readId))}
+                onClear={readId == null ? undefined : () => pick(null)}
+                foot={
+                  landed ? (
+                    <Button
+                      kind="nav"
+                      direction="back"
+                      label={`Back to ${landed.back}`}
+                      reason={`Back to ${landed.back} · Alt+← or the mouse's back button`}
+                      onClick={goBack}
+                    >
+                      back to {landed.back}
+                    </Button>
+                  ) : null
+                }
+              >
+                <OpeningNote />
+                {holding ? (
+                  <span className="text-ink-2" role="status" data-e-capturing="">
+                    opening {page.system}… showing {holding.system}
                   </span>
-                ) : flowless.length ? (
-                  // A terminal with no design flow is priced at 0 cfm, so the sum would read as a
-                  // confident 0.000: missing reads as missing (house law 2), never as a number.
-                  <span className="text-ink-2" data-readout-missing="">
-                    no ESP: {flowless.length} of {terminals} grille{terminals === 1 ? "" : "s"}{" "}
-                    {flowless.length === 1 ? "has" : "have"} no design flow
+                ) : null}
+                {identity.refreshing ? (
+                  <span className="text-ink-2" data-e-refreshing="">
+                    refreshing… the last read stays drawn
                   </span>
+                ) : null}
+                {readId != null ? (
+                  <>
+                    {ruled && ruled.at === readId ? (
+                      <RulingBody
+                        r={ruled}
+                        nameOfId={nameOfId}
+                        onVerdict={onVerdict}
+                        onHover={onHover}
+                        onPick={pick}
+                      />
+                    ) : null}
+                    {run ? (
+                      <RunDetail
+                        run={run}
+                        designRate={priced?.staged.designFriction ?? DEFAULT_DESIGN_FRICTION_RATE}
+                        nameOf={nameOf}
+                        light={(ids) => onHover(ids?.[0] ?? null)}
+                      />
+                    ) : null}
+                    {noRuns.has(readId) ? (
+                      <p>
+                        No run:{" "}
+                        <SubjectText
+                          text={noRunParts(noRuns.get(readId)!, snapshot)}
+                          revit={[readId]}
+                        />
+                      </p>
+                    ) : null}
+                    {segFacts ? (
+                      <SegmentFactsView {...segFacts} />
+                    ) : nodeFacts ? (
+                      <NodeFactsView {...nodeFacts} />
+                    ) : (
+                      <p className="text-ink-2">
+                        element {nameOfId(readId) ?? readId} is not drawn here
+                      </p>
+                    )}
+                    <p data-pe-loss={readId}>
+                      Pe loss <span className="face-mono">{fmt(index.loss.get(readId), 4)}</span>{" "}
+                      in-wg · from fan{" "}
+                      <span className="face-mono">{fmtFt(cumulative.get(readId))}</span> eq ft
+                      {priced ? null : (
+                        <span className="text-ink-2"> (unpriced: no ASHRAE tables read)</span>
+                      )}
+                    </p>
+                    {sub?.legOf.get(readId) ? <p>on leg {sub.legOf.get(readId)!.name}</p> : null}
+                  </>
+                ) : identity.system == null ? (
+                  <>
+                    <span className="truncate" data-e-census="">
+                      <span className="face-mono">{identity.census.systems}</span> systems
+                    </span>
+                    <span className="truncate">
+                      <span className="face-mono">{identity.census.priced}</span> priced ·{" "}
+                      <span className="face-mono">{identity.census.fix}</span> need a fix
+                    </span>
+                  </>
                 ) : (
                   <>
-                    {identity.breakdown ? (
-                      <BarPopover
-                        split={identity.breakdown.split}
-                        scale={identity.breakdown.scale}
-                        head={identity.breakdown.fans}
-                        className="inline-flex! underline decoration-dotted decoration-line-2 underline-offset-2"
-                      >
-                        ESP <span className="face-mono">{fmt(solved.fan, 3)} in-wg</span>
-                      </BarPopover>
-                    ) : (
-                      <>
-                        ESP <span className="face-mono">{fmt(solved.fan, 3)} in-wg</span>
-                      </>
-                    )}
-                    {solved.critical != null ? (
-                      <>
-                        {" "}
-                        · TEL <span className="face-mono">{fmtFt(solved.criticalTel)} ft</span> to{" "}
-                        {/* A name in text: the alias-click, which brings it into view. */}
-                        <button
-                          type="button"
-                          className="underline decoration-line-2 underline-offset-2"
-                          onClick={() =>
-                            subjects?.go ? subjects.go(solved.critical!) : pick(solved.critical!)
-                          }
-                        >
-                          {criticalName}
-                        </button>
-                      </>
-                    ) : null}{" "}
-                    <ProvisionalNote provisional={solved.provisional} of="the fan static" />
+                    <span data-e-state="">
+                      {systemState.length ? (
+                        <>
+                          <SystemMark issues={systemState} open={identity.open} />{" "}
+                        </>
+                      ) : null}
+                      {solved?.fan == null ? (
+                        <span data-tone={solved ? "alarm" : undefined}>
+                          {solved ? "no ESP: an implausible loss" : "not priced"}
+                        </span>
+                      ) : flowless.length ? (
+                        // A terminal with no design flow is priced at 0 cfm, so the sum would read as a
+                        // confident 0.000: missing reads as missing (house law 2), never as a number.
+                        <span className="text-ink-2" data-readout-missing="">
+                          no ESP: {flowless.length} of {terminals} grille
+                          {terminals === 1 ? "" : "s"} {flowless.length === 1 ? "has" : "have"} no
+                          design flow
+                        </span>
+                      ) : (
+                        <>
+                          {identity.breakdown ? (
+                            <BarPopover
+                              split={identity.breakdown.split}
+                              scale={identity.breakdown.scale}
+                              head={identity.breakdown.fans}
+                              className="inline-flex! underline decoration-dotted decoration-line-2 underline-offset-2"
+                            >
+                              ESP <span className="face-mono">{fmt(solved.fan, 3)} in-wg</span>
+                            </BarPopover>
+                          ) : (
+                            <>
+                              ESP <span className="face-mono">{fmt(solved.fan, 3)} in-wg</span>
+                            </>
+                          )}
+                          {solved.critical != null ? (
+                            <>
+                              {" "}
+                              · TEL{" "}
+                              <span className="face-mono">{fmtFt(solved.criticalTel)} ft</span> to{" "}
+                              {/* A name in text: the alias-click, which brings it into view. */}
+                              <button
+                                type="button"
+                                className="underline decoration-line-2 underline-offset-2"
+                                onClick={() =>
+                                  subjects?.go
+                                    ? subjects.go(solved.critical!)
+                                    : pick(solved.critical!)
+                                }
+                              >
+                                {criticalName}
+                              </button>
+                            </>
+                          ) : null}{" "}
+                          <ProvisionalNote provisional={solved.provisional} of="the fan static" />
+                        </>
+                      )}
+                    </span>
+                    <TooltipHint content={identity.system.sub}>
+                      <span className="truncate text-ink-2" data-e-identity="">
+                        {identity.system.sub}
+                      </span>
+                    </TooltipHint>
                   </>
                 )}
-              </span>
-              <TooltipHint content={identity.system.sub}>
-                <span className="truncate text-ink-2" data-e-identity="">
-                  {identity.system.sub}
-                </span>
-              </TooltipHint>
-            </>
-          )}
-        </PictureReadout>
-      </div>
-    </Pane>
+              </PictureReadout>
+            </div>
+          </Pane>
+        );
+      }}
+    </PictureStage>
   );
 }

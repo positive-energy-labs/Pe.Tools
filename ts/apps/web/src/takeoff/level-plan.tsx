@@ -1,10 +1,10 @@
 import { GoToPopup } from "@pe/kit/lang/go-to";
 import { SvgTip } from "@pe/kit/lang/tooltip";
 import { useMemo, type ReactNode } from "react";
-import { useStage } from "#/scene/stage-controller";
+import { PictureStage } from "#/scene/stage-controller";
 import type { PlaneViewport } from "@pe/agent-contracts";
 import { Pane } from "@pe/kit/lang/pane";
-import { revitTarget } from "@pe/kit/lang/row";
+import { revitTarget } from "@pe/kit/lang/revit-target";
 import { usePlaneViewport, PLAN_CLICK_PX } from "#/scene/use-plane-viewport";
 import { usePlanMap } from "#/lib/plan-map";
 import { Legend, legendWord, type LegendRow } from "@pe/kit/lang/legend";
@@ -232,22 +232,7 @@ export function LevelPlan({
   const map = usePlanMap(view, move, world, size, shapes, plan ?? null);
   const selectedZone = drawn.find((z) => z.zone.guid === selectedKey) ?? null;
   const selectedBox = selectedZone?.zone.bounds;
-  useStage({
-    kind: "plane",
-    host,
-    viewport,
-    bounds: world?.fit ?? null,
-    selectedBounds:
-      selectedBox && world
-        ? boundsOf([
-            world.frame.toViewport([selectedBox.minX, selectedBox.minY]),
-            world.frame.toViewport([selectedBox.maxX, selectedBox.maxY]),
-          ])
-        : null,
-    clearSelection: () => {
-      if (selectedKey) onSelectZone(null);
-    },
-  });
+
   const pane = {
     id: "plan",
     title: "plan",
@@ -295,252 +280,272 @@ export function LevelPlan({
       />
     ),
   };
+  const pictureStage = {
+    kind: "plane" as const,
+    host,
+    viewport,
+    bounds: world?.fit ?? null,
+    selectedBounds:
+      selectedBox && world
+        ? boundsOf([
+            world.frame.toViewport([selectedBox.minX, selectedBox.minY]),
+            world.frame.toViewport([selectedBox.maxX, selectedBox.maxY]),
+          ])
+        : null,
+    clearSelection: () => {
+      if (selectedKey) onSelectZone(null);
+    },
+  };
   if (!bounds || !world)
     return (
-      <Pane {...pane}>
-        {above}
-        <div className="flex size-full items-center justify-center px-4">
-          {zones.length > 0 ? (
-            <EmptyState story="filter" exit="see the rail — they stay listed there, marked">
-              all {zones.length} zone{zones.length === 1 ? "" : "s"} on this level are sub-
-              {PLAN_MIN_SQFT} sf scribbles, drawn far from the cluster
-            </EmptyState>
-          ) : (
-            <EmptyState
-              story="scope"
-              exit="adopt zones from a zoning-plan view, or pick another level above"
-            >
-              nothing has been adopted on this level yet
-            </EmptyState>
-          )}
-        </div>
-      </Pane>
+      <PictureStage {...pictureStage}>
+        <Pane {...pane}>
+          {above}
+          <div className="flex size-full items-center justify-center px-4">
+            {zones.length > 0 ? (
+              <EmptyState story="filter" exit="see the rail — they stay listed there, marked">
+                all {zones.length} zone{zones.length === 1 ? "" : "s"} on this level are sub-
+                {PLAN_MIN_SQFT} sf scribbles, drawn far from the cluster
+              </EmptyState>
+            ) : (
+              <EmptyState
+                story="scope"
+                exit="adopt zones from a zoning-plan view, or pick another level above"
+              >
+                nothing has been adopted on this level yet
+              </EmptyState>
+            )}
+          </div>
+        </Pane>
+      </PictureStage>
     );
 
   const span = Math.max(bounds.maxX - bounds.minX, bounds.maxY - bounds.minY, 1e-6);
   const font = span / 95;
   const frame = world.frame;
   return (
-    <Pane
-      {...pane}
-      legend={
-        <Legend
-          label="rooms"
-          rows={[
-            ...ROOM_STATES.map(
-              (s): LegendRow => ({
-                key: s,
-                word: legendWord(STATE_META[s].label),
-                says: STATE_META[s].note,
-                stroke: {
-                  ink: stateInk(s),
-                  width: 1,
-                  shape: "box",
-                  fill: `color-mix(in srgb, ${stateInk(s)} 16%, transparent)`,
-                },
-              }),
-            ),
-            {
-              key: "held",
-              word: legendWord("held residue"),
-              stroke: { ink: ABSENT_INK, width: 1, shape: "box", className: "dash-void" },
-            },
-            {
-              key: "cursor",
-              word: legendWord("cursor"),
-              stroke: { ink: CURSOR_INK, width: 1, shape: "box" },
-            },
-            ...(skipped > 0
-              ? [
-                  {
-                    key: "off-plan",
-                    word: legendWord("off-plan"),
-                    count: skipped,
-                    stroke: {
-                      ink: ABSENT_INK,
-                      width: 1,
-                      shape: "box" as const,
-                      className: "dash-void",
-                    },
+    <PictureStage {...pictureStage}>
+      <Pane
+        {...pane}
+        legend={
+          <Legend
+            label="rooms"
+            rows={[
+              ...ROOM_STATES.map(
+                (s): LegendRow => ({
+                  key: s,
+                  word: legendWord(STATE_META[s].label),
+                  says: STATE_META[s].note,
+                  stroke: {
+                    ink: stateInk(s),
+                    width: 1,
+                    shape: "box",
+                    fill: `color-mix(in srgb, ${stateInk(s)} 16%, transparent)`,
                   },
-                ]
-              : []),
-          ]}
-        />
-      }
-    >
-      {above}
-      {planRefusal ? (
-        <OutcomeLine
-          kind="refused"
-          label={`no plan image · ${planRefusal}`}
-          says={PLAN_REFUSAL[planRefusal]}
-        />
-      ) : planError ? (
-        <OutcomeLine kind="error" label="plan image unread" says={planError} />
-      ) : planNote ? (
-        <OutcomeLine kind="advisory" label="no plan image" says={planNote} />
-      ) : null}
-      <div
-        ref={setHost}
-        data-takeoff-plan=""
-        className="relative min-h-0 flex-1 overflow-hidden"
-        style={{ cursor: dragging ? "grabbing" : "grab" }}
-        {...handlers}
-        onClickCapture={(event) => {
-          if (dragDistance.current >= PLAN_CLICK_PX) {
-            event.stopPropagation();
-            event.preventDefault();
-          }
-        }}
+                }),
+              ),
+              {
+                key: "held",
+                word: legendWord("held residue"),
+                stroke: { ink: ABSENT_INK, width: 1, shape: "box", className: "dash-void" },
+              },
+              {
+                key: "cursor",
+                word: legendWord("cursor"),
+                stroke: { ink: CURSOR_INK, width: 1, shape: "box" },
+              },
+              ...(skipped > 0
+                ? [
+                    {
+                      key: "off-plan",
+                      word: legendWord("off-plan"),
+                      count: skipped,
+                      stroke: {
+                        ink: ABSENT_INK,
+                        width: 1,
+                        shape: "box" as const,
+                        className: "dash-void",
+                      },
+                    },
+                  ]
+                : []),
+            ]}
+          />
+        }
       >
-        <svg
-          width={world.width}
-          height={world.height}
-          viewBox={`0 0 ${world.width} ${world.height}`}
-          style={{
-            position: "absolute",
-            left: 0,
-            top: 0,
-            transform: `translate(${view.tx}px, ${view.ty}px) scale(${view.scale})`,
-            transformOrigin: "0 0",
+        {above}
+        {planRefusal ? (
+          <OutcomeLine
+            kind="refused"
+            label={`no plan image · ${planRefusal}`}
+            says={PLAN_REFUSAL[planRefusal]}
+          />
+        ) : planError ? (
+          <OutcomeLine kind="error" label="plan image unread" says={planError} />
+        ) : planNote ? (
+          <OutcomeLine kind="advisory" label="no plan image" says={planNote} />
+        ) : null}
+        <div
+          ref={setHost}
+          data-takeoff-plan=""
+          className="relative min-h-0 flex-1 overflow-hidden"
+          style={{ cursor: dragging ? "grabbing" : "grab" }}
+          {...handlers}
+          onClickCapture={(event) => {
+            if (dragDistance.current >= PLAN_CLICK_PX) {
+              event.stopPropagation();
+              event.preventDefault();
+            }
           }}
         >
-          <SvgTip content={"level plan"} />
+          <svg
+            width={world.width}
+            height={world.height}
+            viewBox={`0 0 ${world.width} ${world.height}`}
+            style={{
+              position: "absolute",
+              left: 0,
+              top: 0,
+              transform: `translate(${view.tx}px, ${view.ty}px) scale(${view.scale})`,
+              transformOrigin: "0 0",
+            }}
+          >
+            <SvgTip content={"level plan"} />
 
-          {plan ? <PlanImageLayer plan={plan} frame={frame} /> : null}
+            {plan ? <PlanImageLayer plan={plan} frame={frame} /> : null}
 
-          {drawn.map((z) => {
-            const dimmed = shown !== null && !shown.has(z.zone.guid);
-            const on = z.zone.guid === selectedKey;
-            // Monotone (I3): a zone's Revit colour names nothing the label does not; ink only.
-            const ink = token("ink");
-            const [zoneLabelX, zoneLabelY] = frame.toViewport([
-              (z.zone.bounds.minX + z.zone.bounds.maxX) / 2,
-              (z.zone.bounds.minY + z.zone.bounds.maxY) / 2,
-            ]);
-            return (
-              <g
-                key={z.zone.key}
-                opacity={dimmed ? 0.15 : 1}
-                onMouseEnter={() => onHover(z.zone.guid)}
-                onMouseLeave={() => onHover("")}
-              >
-                <path
-                  {...revitTarget(z.zone.elementId == null ? [] : [z.zone.elementId])}
-                  d={pathD(z.zone.loops, frame)}
-                  fillRule="evenodd"
-                  fill={on ? `color-mix(in srgb, ${ink} 6%, transparent)` : "transparent"}
-                  stroke={ink}
-                  strokeWidth={on ? 2 : 1}
-                  strokeOpacity={on ? 0.9 : 0.4}
-                  vectorEffect="non-scaling-stroke"
-                  onClick={(e) => {
-                    e.stopPropagation();
-                    if (!dimmed) onSelectZone(z);
-                  }}
-                />
-
-                {z.residues.map((s) => (
+            {drawn.map((z) => {
+              const dimmed = shown !== null && !shown.has(z.zone.guid);
+              const on = z.zone.guid === selectedKey;
+              // Monotone (I3): a zone's Revit colour names nothing the label does not; ink only.
+              const ink = token("ink");
+              const [zoneLabelX, zoneLabelY] = frame.toViewport([
+                (z.zone.bounds.minX + z.zone.bounds.maxX) / 2,
+                (z.zone.bounds.minY + z.zone.bounds.maxY) / 2,
+              ]);
+              return (
+                <g
+                  key={z.zone.key}
+                  opacity={dimmed ? 0.15 : 1}
+                  onMouseEnter={() => onHover(z.zone.guid)}
+                  onMouseLeave={() => onHover("")}
+                >
                   <path
-                    key={s.id}
-                    d={pathD([s.outer, ...s.holes], frame)}
+                    {...revitTarget(z.zone.elementId == null ? [] : [z.zone.elementId])}
+                    d={pathD(z.zone.loops, frame)}
                     fillRule="evenodd"
-                    fill={`color-mix(in srgb, ${ABSENT_INK} 12%, transparent)`}
-                    stroke={ABSENT_INK}
-                    strokeOpacity={0.35}
-                    strokeWidth={1}
+                    fill={on ? `color-mix(in srgb, ${ink} 6%, transparent)` : "transparent"}
+                    stroke={ink}
+                    strokeWidth={on ? 2 : 1}
+                    strokeOpacity={on ? 0.9 : 0.4}
                     vectorEffect="non-scaling-stroke"
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      if (!dimmed) onSelectZone(z);
+                    }}
                   />
-                ))}
 
-                {z.rooms.map((room) => {
-                  const state = stateOf(room);
-                  const isCursor = room.guid === cursor;
-                  const tone = isCursor ? CURSOR_INK : stateInk(state);
-                  const [labelX, labelY] = frame.toViewport(room.label);
-                  const click = (e: React.MouseEvent) => {
-                    e.stopPropagation();
-                    if (!dimmed) onCursor(z, room.guid);
-                  };
-                  if (!room.outer)
+                  {z.residues.map((s) => (
+                    <path
+                      key={s.id}
+                      d={pathD([s.outer, ...s.holes], frame)}
+                      fillRule="evenodd"
+                      fill={`color-mix(in srgb, ${ABSENT_INK} 12%, transparent)`}
+                      stroke={ABSENT_INK}
+                      strokeOpacity={0.35}
+                      strokeWidth={1}
+                      vectorEffect="non-scaling-stroke"
+                    />
+                  ))}
+
+                  {z.rooms.map((room) => {
+                    const state = stateOf(room);
+                    const isCursor = room.guid === cursor;
+                    const tone = isCursor ? CURSOR_INK : stateInk(state);
+                    const [labelX, labelY] = frame.toViewport(room.label);
+                    const click = (e: React.MouseEvent) => {
+                      e.stopPropagation();
+                      if (!dimmed) onCursor(z, room.guid);
+                    };
+                    if (!room.outer)
+                      return (
+                        <circle
+                          key={room.guid}
+                          {...revitTarget(room.elementId == null ? [] : [room.elementId])}
+                          data-damage={state === "call" && !isCursor ? "" : undefined}
+                          cx={labelX}
+                          cy={labelY}
+                          r={span / 260}
+                          fill={`color-mix(in srgb, ${tone} 45%, transparent)`}
+                          stroke={tone}
+                          strokeWidth={isCursor ? 2 : 1}
+                          vectorEffect="non-scaling-stroke"
+                          onClick={click}
+                        >
+                          <SvgTip content={STATE_META[state].label} />
+                        </circle>
+                      );
                     return (
-                      <circle
+                      <g
                         key={room.guid}
                         {...revitTarget(room.elementId == null ? [] : [room.elementId])}
-                        data-damage={state === "call" && !isCursor ? "" : undefined}
-                        cx={labelX}
-                        cy={labelY}
-                        r={span / 260}
-                        fill={`color-mix(in srgb, ${tone} 45%, transparent)`}
-                        stroke={tone}
-                        strokeWidth={isCursor ? 2 : 1}
-                        vectorEffect="non-scaling-stroke"
                         onClick={click}
                       >
-                        <SvgTip content={STATE_META[state].label} />
-                      </circle>
-                    );
-                  return (
-                    <g
-                      key={room.guid}
-                      {...revitTarget(room.elementId == null ? [] : [room.elementId])}
-                      onClick={click}
-                    >
-                      <path
-                        data-damage={state === "call" && !isCursor ? "" : undefined}
-                        d={pathD([room.outer, ...room.holes], frame)}
-                        fillRule="evenodd"
-                        fill={`color-mix(in srgb, ${tone} ${isCursor ? 34 : state === "unreviewed" ? 7 : 13}%, transparent)`}
-                        stroke={tone}
-                        strokeOpacity={0.85}
-                        strokeWidth={isCursor ? 2.5 : 1}
-                        vectorEffect="non-scaling-stroke"
-                      >
-                        <SvgTip content={STATE_META[state].label} />
-                      </path>
-                      {on && room.sqft > 40 && (
-                        <text
-                          x={labelX}
-                          y={labelY}
-                          textAnchor="middle"
-                          fontSize={font}
-                          fill={token("ink")}
+                        <path
+                          data-damage={state === "call" && !isCursor ? "" : undefined}
+                          d={pathD([room.outer, ...room.holes], frame)}
+                          fillRule="evenodd"
+                          fill={`color-mix(in srgb, ${tone} ${isCursor ? 34 : state === "unreviewed" ? 7 : 13}%, transparent)`}
+                          stroke={tone}
+                          strokeOpacity={0.85}
+                          strokeWidth={isCursor ? 2.5 : 1}
+                          vectorEffect="non-scaling-stroke"
                         >
-                          <tspan x={labelX} fontWeight="var(--weight-strong)">
-                            {room.name}
-                          </tspan>
-                          <tspan x={labelX} dy={font * 1.15} fillOpacity={0.65}>
-                            {room.sqft} sf
-                          </tspan>
-                        </text>
-                      )}
-                    </g>
-                  );
-                })}
+                          <SvgTip content={STATE_META[state].label} />
+                        </path>
+                        {on && room.sqft > 40 && (
+                          <text
+                            x={labelX}
+                            y={labelY}
+                            textAnchor="middle"
+                            fontSize={font}
+                            fill={token("ink")}
+                          >
+                            <tspan x={labelX} fontWeight="var(--weight-strong)">
+                              {room.name}
+                            </tspan>
+                            <tspan x={labelX} dy={font * 1.15} fillOpacity={0.65}>
+                              {room.sqft} sf
+                            </tspan>
+                          </text>
+                        )}
+                      </g>
+                    );
+                  })}
 
-                {!on && (
-                  <text
-                    {...revitTarget(z.zone.elementId == null ? [] : [z.zone.elementId])}
-                    x={zoneLabelX}
-                    y={zoneLabelY}
-                    textAnchor="middle"
-                    fontSize={font * 0.95}
-                    fill={token("ink")}
-                    fillOpacity={0.55}
-                  >
-                    {z.zone.key}
-                  </text>
-                )}
-              </g>
-            );
-          })}
-        </svg>
-        {/* Surfaces over the plan claim their own pointer: a press on them never pans or clears. */}
-        <div onPointerDown={(e) => e.stopPropagation()} onClick={(e) => e.stopPropagation()}>
-          {readout}
+                  {!on && (
+                    <text
+                      {...revitTarget(z.zone.elementId == null ? [] : [z.zone.elementId])}
+                      x={zoneLabelX}
+                      y={zoneLabelY}
+                      textAnchor="middle"
+                      fontSize={font * 0.95}
+                      fill={token("ink")}
+                      fillOpacity={0.55}
+                    >
+                      {z.zone.key}
+                    </text>
+                  )}
+                </g>
+              );
+            })}
+          </svg>
+          {/* Surfaces over the plan claim their own pointer: a press on them never pans or clears. */}
+          <div onPointerDown={(e) => e.stopPropagation()} onClick={(e) => e.stopPropagation()}>
+            {readout}
+          </div>
         </div>
-      </div>
-    </Pane>
+      </Pane>
+    </PictureStage>
   );
 }

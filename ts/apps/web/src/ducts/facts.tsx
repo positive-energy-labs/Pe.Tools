@@ -44,11 +44,11 @@ function Issues({ issues: all }: { issues: readonly Issue[] }) {
       empty={{ message: "no issue names it", exit: "Select another element" }}
       row={(issue) => ({
         label: (
-          <SubjectText text={issue.note} ids={issue.elementId == null ? [] : [issue.elementId]} />
+          <SubjectText text={issue.note} revit={issue.elementId == null ? [] : [issue.elementId]} />
         ),
         meta: ISSUE_KINDS[issue.kind].label,
         title: ISSUE_KINDS[issue.kind].what,
-        revitIds: issue.elementId == null ? [] : [issue.elementId],
+        revit: issue.elementId == null ? [] : [issue.elementId],
         wrap: true,
       })}
     />

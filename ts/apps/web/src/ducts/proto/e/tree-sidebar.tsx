@@ -255,7 +255,7 @@ export function SystemTree({ ctx, address }: { ctx: TreeCtx; address?: ListPersi
           />
         ) : undefined,
         onMouseEnter: () => ctx.light(idsOf(n)),
-        revitIds: target.ids,
+        revit: target.ids,
         revitRefs: target.refs,
       };
     },
@@ -277,7 +277,6 @@ export function SystemTree({ ctx, address }: { ctx: TreeCtx; address?: ListPersi
       <ListView
         list={list}
         aria-label="system tree"
-        estimate={20}
         empty={{ message: "no run in this system", exit: "Choose a system with a run" }}
         columns={{
           label: (

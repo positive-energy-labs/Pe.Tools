@@ -1,7 +1,7 @@
 import { GoToPopup } from "@pe/kit/lang/go-to";
 /** Space's model, axis cuts and thumbnails; an axis remembers the 3D pose it left. */
 import { useContext, useEffect, useMemo, useRef, useState, type ReactNode } from "react";
-import { SubjectTextContext } from "@pe/kit/lang/subject-text";
+import { SubjectTextContext } from "@pe/kit/lang/reach";
 
 import { type Chord } from "@pe/kit/keys";
 import { Button } from "@pe/kit/lang/button";
@@ -9,7 +9,7 @@ import type { FloaterSpec } from "@pe/kit/lang/floater";
 import { OrbitMinimap } from "@pe/kit/lang/minimap";
 import { Pane, PaneOverlay } from "@pe/kit/lang/pane";
 import type { PageMove } from "#/route/manifest";
-import { useStage, stageViewport } from "#/scene/stage-controller";
+import { PictureStage, stageViewport } from "#/scene/stage-controller";
 import { boundsOfInstances, center, frame, type OrbitViewport } from "#/scene/orbit";
 import {
   AXIS_LABEL,
@@ -132,31 +132,6 @@ export function SpacePicture({
       meshes && page.selected ? boundsOfInstances(meshes, (i) => i.key === page.selected) : null,
     [meshes, page.selected],
   );
-  const stage = useStage({
-    kind: "orbit",
-    orbit,
-    host,
-    bounds: bounds && { scene: bounds, subject: bounds },
-    selectedBounds,
-    clearSelection: () => {
-      if (page.selected || page.row !== null) setPage({ selected: null, row: null }, push);
-    },
-    // Pending N1 ruling: preserve Space's axis Escape-to-3D behavior explicitly.
-    spaceAxisException: axis
-      ? {
-          label: "return to 3D",
-          escape: () => toMode("3d"),
-          frame: () => setPage({ viewport: null }, push),
-        }
-      : null,
-  });
-  const { frameOn, orbitPivot } = stage;
-  if (alias)
-    alias.current = (key) => {
-      if (key !== page.selected) setPage({ selected: key, row: null }, push);
-      frameOn(meshes ? boundsOfInstances(meshes, (i) => i.key === key) : null);
-    };
-
   // The cuts, validated together; a URL can carry one that crosses itself, which clips nothing.
   const cut = useMemo((): { polygons: Polygons; error: string | null } | null => {
     if (!bounds) return null;
@@ -328,111 +303,146 @@ export function SpacePicture({
   ];
 
   return (
-    <Pane
-      id="space-picture"
-      legend={legend}
-      title="Space"
-      meta={
-        metadata
-          ? `${metadata.triangles.toLocaleString()} triangles · ${metadata.elements.length} elements`
-          : undefined
-      }
-      actions={
-        <GoToPopup
-          hover={(item) => setGoHover(item?.key ?? null)}
-          items={() =>
-            (metadata?.elements ?? []).map((element) => ({
-              key: spaceElementKey(element.handle),
-              name:
-                (!element.handle.linkInstanceId && subjects?.nameOf(element.handle.elementId)) ||
-                pickName(element.handle),
-              id: element.handle.elementId,
-              revitIds: element.handle.linkInstanceId ? [] : [element.handle.elementId],
-              detail: element.handle.uniqueId,
-            }))
-          }
-          onGo={(item) => {
-            setPage({ selected: item.key, row: null }, push);
-            frameOn(
-              meshes ? boundsOfInstances(meshes, (instance) => instance.key === item.key) : null,
-            );
-          }}
-        />
-      }
-      flush
-      scroll="clip"
-      modes={{
-        label: "picture mode",
-        value: page.mode,
-        onChange: (next) => toMode(next as SpacePage["mode"]),
-        options: (["3d", "top", "north", "east"] as const).map((m, i) => ({
-          key: m,
-          label: MODE_LABEL[m],
-          chord: String(i + 1) as Chord,
-          says:
-            m === "3d"
-              ? "Orbit the scene"
-              : `Look at the ${MODE_LABEL[m]} axis orthographically and edit its cut`,
-        })),
-      }}
-      layers={{
-        value: page.layers,
-        options: SPACE_LAYERS.map((l) => ({ key: l, label: l, says: LAYER_SAYS[l] })),
-        onToggle: (l) =>
-          setPage({ layers: toggleLayer(SPACE_LAYERS, page.layers, l as SpaceLayer) }),
-      }}
-      floaters={meshes ? floaters : undefined}
-    >
-      <div ref={setHost} className="relative min-h-0 min-w-0 flex-1" data-space-picture="">
-        {meshes && pose && size ? (
-          <Scene3D
-            className="size-full"
-            meshes={meshes}
-            orbit={orbit}
-            orbitPivot={orbitPivot}
-            wheelHost={host}
-            plane={plane}
-            onPlane={stageViewport(setPage)}
-            thumbs={thumbs}
-            selected={selected}
-            lit={lit}
-            hidden={hidden}
-            isolated={isolated}
-            layers={layers}
-            clipVolume={clipVolume}
-            clip={clip}
-            onPick={onPick}
-            onDoubleClick={(pick) =>
-              frameOn(
-                pick && meshes
-                  ? boundsOfInstances(meshes, (i) => i.key === pick.instance.key)
-                  : null,
-              )
+    <PictureStage
+      {...{
+        kind: "orbit",
+        orbit,
+        host,
+        bounds: bounds && { scene: bounds, subject: bounds },
+        selectedBounds,
+        clearSelection: () => {
+          if (page.selected || page.row !== null) setPage({ selected: null, row: null }, push);
+        },
+        // Pending N1 ruling: preserve Space's axis Escape-to-3D behavior explicitly.
+        axis: axis
+          ? {
+              label: "return to 3D",
+              escape: () => toMode("3d"),
+              frame: () => setPage({ viewport: null }, push),
             }
-            onProject={(project, at, ray, moving) => {
-              if (!moving && !orbit.moving()) setFramed({ project, size: at, ray });
+          : null,
+      }}
+    >
+      {(stage) => {
+        const { frameOn, orbitPivot } = stage;
+        if (alias)
+          alias.current = (key) => {
+            if (key !== page.selected) setPage({ selected: key, row: null }, push);
+            frameOn(meshes ? boundsOfInstances(meshes, (i) => i.key === key) : null);
+          };
+
+        return (
+          <Pane
+            id="space-picture"
+            legend={legend}
+            title="Space"
+            meta={
+              metadata
+                ? `${metadata.triangles.toLocaleString()} triangles · ${metadata.elements.length} elements`
+                : undefined
+            }
+            actions={
+              <GoToPopup
+                hover={(item) => setGoHover(item?.key ?? null)}
+                items={() =>
+                  (metadata?.elements ?? []).map((element) => ({
+                    key: spaceElementKey(element.handle),
+                    name:
+                      (!element.handle.linkInstanceId &&
+                        subjects?.nameOf(element.handle.elementId)) ||
+                      pickName(element.handle),
+                    id: element.handle.elementId,
+                    revit: element.handle.linkInstanceId ? [] : [element.handle.elementId],
+                    detail: element.handle.uniqueId,
+                  }))
+                }
+                onGo={(item) => {
+                  setPage({ selected: item.key, row: null }, push);
+                  frameOn(
+                    meshes
+                      ? boundsOfInstances(meshes, (instance) => instance.key === item.key)
+                      : null,
+                  );
+                }}
+              />
+            }
+            flush
+            scroll="clip"
+            modes={{
+              label: "picture mode",
+              value: page.mode,
+              onChange: (next) => toMode(next as SpacePage["mode"]),
+              options: (["3d", "top", "north", "east"] as const).map((m, i) => ({
+                key: m,
+                label: MODE_LABEL[m],
+                chord: String(i + 1) as Chord,
+                says:
+                  m === "3d"
+                    ? "Orbit the scene"
+                    : `Look at the ${MODE_LABEL[m]} axis orthographically and edit its cut`,
+              })),
             }}
-          />
-        ) : null}
-        {meshes && framed && on.has("cuts") ? (
-          <CutOverlay
-            framed={framed}
-            bounds={meshes.bounds}
-            cuts={page.cuts}
-            editing={axis}
-            onCuts={onCuts}
-            onError={onError}
-          />
-        ) : null}
-        {readout}
-        {status || cut?.error ? (
-          <PaneOverlay label="space status" place="br">
-            <p role="status" className="t-small text-ink-2 m-0" data-space-status="">
-              {status ?? `cuts clip nothing: ${cut!.error}`}
-            </p>
-          </PaneOverlay>
-        ) : null}
-      </div>
-    </Pane>
+            layers={{
+              value: page.layers,
+              options: SPACE_LAYERS.map((l) => ({ key: l, label: l, says: LAYER_SAYS[l] })),
+              onToggle: (l) =>
+                setPage({ layers: toggleLayer(SPACE_LAYERS, page.layers, l as SpaceLayer) }),
+            }}
+            floaters={meshes ? floaters : undefined}
+          >
+            <div ref={setHost} className="relative min-h-0 min-w-0 flex-1" data-space-picture="">
+              {meshes && pose && size ? (
+                <Scene3D
+                  className="size-full"
+                  meshes={meshes}
+                  orbit={orbit}
+                  orbitPivot={orbitPivot}
+                  wheelHost={host}
+                  plane={plane}
+                  onPlane={stageViewport(setPage)}
+                  thumbs={thumbs}
+                  selected={selected}
+                  lit={lit}
+                  hidden={hidden}
+                  isolated={isolated}
+                  layers={layers}
+                  clipVolume={clipVolume}
+                  clip={clip}
+                  onPick={onPick}
+                  onDoubleClick={(pick) =>
+                    frameOn(
+                      pick && meshes
+                        ? boundsOfInstances(meshes, (i) => i.key === pick.instance.key)
+                        : null,
+                    )
+                  }
+                  onProject={(project, at, ray, moving) => {
+                    if (!moving && !orbit.moving()) setFramed({ project, size: at, ray });
+                  }}
+                />
+              ) : null}
+              {meshes && framed && on.has("cuts") ? (
+                <CutOverlay
+                  framed={framed}
+                  bounds={meshes.bounds}
+                  cuts={page.cuts}
+                  editing={axis}
+                  onCuts={onCuts}
+                  onError={onError}
+                />
+              ) : null}
+              {readout}
+              {status || cut?.error ? (
+                <PaneOverlay label="space status" place="br">
+                  <p role="status" className="t-small text-ink-2 m-0" data-space-status="">
+                    {status ?? `cuts clip nothing: ${cut!.error}`}
+                  </p>
+                </PaneOverlay>
+              ) : null}
+            </div>
+          </Pane>
+        );
+      }}
+    </PictureStage>
   );
 }

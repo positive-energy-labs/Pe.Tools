@@ -75,8 +75,8 @@ import { focusQuiet } from "../../lib/utils";
 
 /** Each kind's glyph, key and plain sentence. The caller's `reason` overrides the sentence. */
 const TRANSITION: Record<CellTransitionKind, { key: string; says: string }> = {
-  accept: { key: "a", says: "Stage Pea's proposal" },
-  deny: { key: "d", says: "Clear Pea's proposal" },
+  accept: { key: "a", says: "Stage the agent's proposal" },
+  deny: { key: "d", says: "Clear the agent's proposal" },
   unstage: { key: "u", says: "Clear the staged value" },
 };
 
@@ -381,7 +381,7 @@ export function StateCell(props: StateCellProps) {
           ) : null}
           {/* A contest on the row's one line: a title alone hides it from keyboard, touch and no-hover readers. */}
           {read.contested ? (
-            <span className={slots.counter()}>pea proposes {props.counterValue}</span>
+            <span className={slots.counter()}>agent proposes {props.counterValue}</span>
           ) : null}
           {hasTransitions ? (
             <span className={slots.acts()}>
@@ -428,7 +428,7 @@ export function StateCell(props: StateCellProps) {
   if (capReason != null) facts.push(capReason);
   // SPECIMEN: /design-system/band. A counter fold without its value makes accept/deny illegible
   // in hoverless compact heads.
-  if (counterValue != null) facts.push(`pea proposes ${counterValue}`);
+  if (counterValue != null) facts.push(`agent proposes ${counterValue}`);
   if (props.stage === "proposed" && props.currentValue != null)
     facts.push(`currently ${props.currentValue}`);
   if (note != null) facts.push(confidence != null ? `${confidence} confidence — ${note}` : note);
@@ -551,7 +551,7 @@ const AXES: readonly KeyAxis[] = [
     asks: "who is holding an unsaved change?",
     items: [
       {
-        label: "pea proposes — fold + green square",
+        label: "agent proposes — fold + green square",
         specimen: <StateCell value="2 hr" stage="proposed" />,
       },
       {
