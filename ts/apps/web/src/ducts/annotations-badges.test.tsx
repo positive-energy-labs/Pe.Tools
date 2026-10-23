@@ -1,6 +1,12 @@
 // @vitest-environment jsdom
-import { cleanup, fireEvent, render } from "@testing-library/react";
+import { cleanup, fireEvent, render, renderHook } from "@testing-library/react";
 import { afterEach, expect, it, vi } from "vite-plus/test";
+import type { DuctFinding } from "@pe/agent-contracts";
+import type { DuctSnapshot } from "@pe/ducts-domain/types";
+import { healPlan } from "@pe/ducts-domain/heal";
+import { subjectDocument } from "@pe/kit/lang/subject-text";
+import { inboxRows, annotatedFindings } from "./inbox-rows";
+import { useMarks } from "./proto/e/rulings";
 import { Annotations } from "./annotations";
 import { SubjectTextContext } from "@pe/kit/lang/reach";
 import { reachStore } from "@pe/kit/lang/reach";
@@ -64,4 +70,100 @@ it("a footnote badge sits on a drawn subject (mesh, else ghosted centreline, els
   expect(light).toHaveBeenLastCalledWith(references, 2, "row");
   fireEvent.click(mark);
   expect(go).toHaveBeenCalledWith(2);
+});
+
+it("one gap repair has one row, two named subjects, two pins and one evidence sentence", () => {
+  const segments = [10, 11].map((id, i) => ({
+    id,
+    kind: "duct",
+    groupId: `g${id}`,
+    systemName: "SA 1",
+    classification: "SupplyAir",
+    size: "10x7",
+    polyline: [
+      [i * 11.25, 0, 0],
+      [i * 11.25 + 10, 0, 0],
+    ],
+    connectors: [
+      {
+        index: 0,
+        kind: "end",
+        point: [10 + i * 1.25, 0, 0],
+        shape: "rectangular",
+        widthIn: 10,
+        heightIn: 7,
+        connectedTo: null,
+      },
+    ],
+  }));
+  const issues = segments.map((e) => ({
+    id: `open-end:${e.groupId}:${e.id}:0`,
+    kind: "open-end",
+    elementId: e.id,
+    groupId: e.groupId,
+    point: e.connectors[0]!.point,
+    note: "open",
+  }));
+  const snapshot = {
+    nodes: [],
+    segments,
+    issues,
+    groups: [],
+  } as unknown as DuctSnapshot;
+  const findings = issues.map((i) => ({
+    id: i.id,
+    kind: "open-end",
+    elementIds: [i.elementId],
+    groupId: i.groupId,
+    note: i.note,
+    assumed: null,
+    clearer: "person",
+  })) as DuctFinding[];
+  findings.push({
+    ...findings[0]!,
+    id: "missed-join:10:0|11:0",
+    kind: "missed-join",
+    elementIds: [10, 11],
+  });
+  const heal = healPlan(snapshot);
+  expect(heal.hard.size).toBe(1);
+  const input = {
+    snapshot,
+    scope: null,
+    findings,
+    heal,
+    nameOf: () => "10x7 duct",
+    flows: new Map(),
+    equipmentFlows: new Map(),
+    doc: null,
+    claims: [],
+    write: { staged: 0, hasPreview: false, fresh: false, planned: null, refused: null, esp: 0 },
+  };
+  const rows = inboxRows(input);
+  expect(rows.fix).toHaveLength(1);
+  const row = rows.fix[0]!;
+  expect(row.key).toBe("proximity:10:0|11:0");
+  expect(row.title).toBe("Open ends at 10x7 duct and 10x7 duct");
+  const heading = subjectDocument(row.titleParts!, input.nameOf);
+  expect(heading.references.map((r) => [r.name, r.number])).toEqual([
+    ["10x7 duct", 1],
+    ["10x7 duct", 2],
+  ]);
+  expect(row.note?.match(/15.0 in apart/g)).toHaveLength(1);
+  const { result } = renderHook(() =>
+    useMarks({
+      snapshot,
+      priced: { findings, next: { paths: {} } } as never,
+      scene: { segments: segments.map((segment) => ({ segment })), nodes: [] } as never,
+      claims: [],
+      work: { doc: null } as never,
+      issueScope: null,
+      annotated: annotatedFindings(rows, heal, ""),
+      pointOf: () => null,
+    }),
+  );
+  expect(result.current.rulings.map((r) => [r.at, r.n])).toEqual([
+    [10, 1],
+    [11, 1],
+  ]);
 });

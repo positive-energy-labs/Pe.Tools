@@ -1,29 +1,9 @@
-/**
- * The /ducts inbox in loop order, derived and never stored (modelled on `rooms/cards.ts`):
- * - Fix: one Heal row per group first: the caps and joins `ducts.heal` makes real in Revit
- *   (ducts-domain `heal.ts`), with preview and apply; the open ends and joins it covers make no row
- *   of their own. Then what blocks a path to the fan (`bins.ts` `blocking`): no duct path to a
- *   fan, anomalous joins, open ends a person must fix in Revit (the note says why), loops, no or
- *   several roots. A Heal row blocks Write only when it covers a blocking finding.
- * - Set: an input a person owes: first, while any terminal has no flow, which parameter the airflow
- *   is read from (`airflow.ts`); then a terminal with no flow, a fan with no design flow, flex left
- *   on the rigid roughness. Each Set row deep-links to the cell on the tree row that holds it.
- * - Check: Pea's claims for this group awaiting a verdict, and Pea's proposals awaiting staging.
- * - Write: one row, armed only while Fix and Set are empty and the preview is fresh.
- * - Diagnostics: bridged joins (near miss, stretched); final, collapsed, and the only rows that may
- *   stand without a verb a person owes. "Object" stages the proximity `ignore` verdict, which
- *   withholds the join; the objection is a ruling, so it stays here with its take-back, and only
- *   what the break causes (an open end, a lost path) comes up under Fix.
- * A row exists only with a way to act on it: a verb, a deep link or select in Revit.
- *
- * The scope is a Revit system (`system-scope.ts`): rows come from every group the system is in, but
- * only what prices the system (its runs, its own elements, its units) is Fix or Set. The rest of a
- * shared group is another system's: its rows stand in Diagnostics and never hold the ESP.
- */
+/** Derived inbox in loop order. Off-system findings stay in Diagnostics and never hold the ESP. */
 import type { DuctFinding, DuctsRouteDocument } from "@pe/agent-contracts";
 import { bin } from "@pe/ducts-domain/bins";
 import { fanCandidates, type FanAssignment } from "@pe/ducts-domain/fan-assignment";
-import type { HealGroup, HealItem, HealPlan } from "@pe/ducts-domain/heal";
+import { healFindings, type HealGroup, type HealItem, type HealPlan } from "@pe/ducts-domain/heal";
+import { findingLabel, subjectName } from "@pe/ducts-domain/words";
 import { ruleByKey } from "@pe/ducts-domain/loss-rules";
 import type { SystemScope } from "@pe/ducts-domain/system-scope";
 import type { DuctSnapshot } from "@pe/ducts-domain/types";
@@ -42,7 +22,6 @@ export const INBOX_LABELS: Record<InboxGroup, string> = {
   diagnostics: "Diagnostics",
 };
 
-/** The Work segments whose cell a tree row holds. */
 export type CellSegment =
   | "flows"
   | "terminalDrops"
@@ -55,7 +34,6 @@ export interface CellRef {
   id: number;
 }
 
-/** One preview's result as the popover shows it: the button's armed word, the counts, the items. */
 export interface PreviewState {
   word: string;
   summary: string;
@@ -64,18 +42,12 @@ export interface PreviewState {
 export interface PreviewLine {
   key: string;
   text: string;
-  /** Planned or refused, when the preview ruled on this item; null when it did not. */
   state: "planned" | "refused" | null;
   reason: string | null;
 }
 
-/** The reason a held preview no longer holds. */
 export const STALE_WORDS = "changed since preview";
 
-/**
- * A row's status in the closed inbox row, where the label has the width: the same claim in fewer
- * words. The full status stays the row's search and sort text and heads the open row.
- */
 export function compactStatus(status: string): string {
   const read = /^(\d+) of (\d+) (?:terminals|units) read$/.exec(status);
   if (read) return `${read[1]}/${read[2]} read`;
@@ -106,7 +78,6 @@ const COMPACT: Record<string, string> = {
 
 export type RowVerb =
   | { kind: "price-as"; family: string }
-  /** Stage a verdict on an assumption key; `on` is the staged verdict, pressing it again takes it back. */
   | {
       kind: "verdict";
       key: string;
@@ -116,12 +87,7 @@ export type RowVerb =
       on: boolean;
     }
   | { kind: "role"; id: number; role: "fan" | "passive"; label: string; says: string }
-  /**
-   * A verb that previews before it does (kit `PreviewAction`): one button, its preview held in
-   * `held` while it still describes the snapshot, `stale` naming why a held one no longer does.
-   * `on` is what the route's preview and apply handles run with; `outcome` is the last apply in
-   * words (a fan's), drawn beside the Inputs button.
-   */
+  /** A fresh preview arms commit; stale previews refuse it. */
   | {
       kind: "preview";
       on: { verb: "heal"; group: string } | { verb: "fan"; unitId: number; systemId: number };
@@ -132,10 +98,8 @@ export type RowVerb =
       commit: { label: string; says: string; refusal: string | null };
       outcome: string | null;
     }
-  /** Select the element on the drawing and focus the cell that holds the input. */
   | { kind: "focus"; cell: CellRef; label: string; says: string }
   | { kind: "claim"; claim: Claim }
-  /** Choose the parameter every terminal's (or unit's) airflow is read from: one press per candidate. */
   | { kind: "airflow"; of?: AirflowOf; current: string; options: readonly AirflowOption[] }
   | {
       kind: "stage";
@@ -149,47 +113,37 @@ export type RowVerb =
 
 export interface InboxItem {
   key: string;
-  /** Findings represented by this row, including those folded into a Heal row. */
   findingIds?: readonly string[];
   group: Exclude<InboxGroup, "write">;
   kind: string;
   title: string;
+  titleParts?: readonly import("@pe/kit/lang/subject-text").SubjectPart[];
   status: string;
   tone?: "alarm" | "caution" | "pea";
-  /** The elements it lights and selects. */
   ids: readonly number[];
-  /** Prose for the open row. */
   note: string | null;
-  /** Structured subject references when the row owns the wording; notes from the host stay free text. */
   parts?: readonly import("@pe/kit/lang/subject-text").SubjectPart[];
   verbs: readonly RowVerb[];
   /** False on a Fix row that stands in no path (a Heal row covering only bridged joins, a heal result): it does not hold the ESP. */
   blocks?: false;
 }
 
-/** The last heal run as the inbox shows it, mapped onto the current snapshot's group. */
 export interface HealRunView {
   group: string;
   mode: "preview" | "apply";
-  /** The preview still describes this snapshot: apply arms only then. */
   fresh: boolean;
   planned: number;
   healed: number;
   refused: number;
-  /** Item key to the op's reason, for each refused item. */
   refusals: ReadonlyMap<string, string>;
-  /** Item keys the preview passed: what apply sends. */
   passed: readonly string[];
-  /** The elements the run made or touched, for select in Revit. */
   ids: readonly number[];
-  /** Pe's ESP (largest path total) of the group before and after the apply, in-wg. */
   esp: { before: number | null; after: number | null } | null;
 }
 
 export interface TriageInput {
   snapshot: Pick<DuctSnapshot, "groups" | "nodes" | "segments"> &
     Partial<Pick<DuctSnapshot, "systems">>;
-  /** The chosen system (`systemScope`); null is the whole document. */
   scope: SystemScope | null;
   findings: readonly DuctFinding[];
   flows: ReadonlyMap<number, { cfm: number | null }>;
@@ -197,24 +151,14 @@ export interface TriageInput {
   doc: DuctsRouteDocument | null;
   nameOf?: (id: number) => string;
   groupLabel?: (id: string) => string;
-  /** What heals in Revit (ducts-domain `healPlan` over the raw snapshot); absent, nothing heals. */
   heal?: HealPlan | null;
   healRun?: HealRunView | null;
-  /** The airflow read slot and its candidates in this scope (`airflowOptions`). */
   airflow?: { current: string; options: readonly AirflowOption[] };
-  /** The unit airflow read slot (FanFlow) and its candidates in this scope. */
   unitAirflow?: { current: string; options: readonly AirflowOption[] };
-  /** Every root unit's role with why: ruled, staged, proposed from its flow, or the default (survey). */
   roles?: ReadonlyMap<number, { role: "fan" | "passive"; why: string; reason: string }>;
-  /** The last make-the-fan run and the page epoch it is fresh against. */
   fan?: { run: DuctsFanRun | null; epoch: number };
 }
 
-/**
- * The verb that makes a unit a system's fan in Revit: one preview button (rolled back), whose commit
- * is armed by a passing preview of this pair over this snapshot. Shared by the no-fan row and the
- * Inputs pane.
- */
 export function fanVerbs(
   a: FanAssignment,
   name: (id: number) => string,
@@ -253,11 +197,7 @@ export function fanVerbs(
   ];
 }
 
-/**
- * The page's last heal run over the snapshot now. After an apply Revit has renumbered what it
- * rebuilt and the group id may be new: the group is found again by a root the run measured from,
- * else by an element it held; the ESP after is that group's (`espNow`).
- */
+/** Revit may renumber groups after healing; recover the group by a measured root, else a held element. */
 export function healRunView(
   run: DuctsHealRun,
   snapshot: Pick<DuctSnapshot, "groups" | "nodes" | "segments">,
@@ -295,7 +235,6 @@ export function healRunView(
 const plural = (n: number, word: string) => `${n} ${word}${n === 1 ? "" : "s"}`;
 const inWg = (v: number | null) => (v == null ? "no path" : v.toFixed(3));
 
-/** A heal run's standing in words: what the preview passed, or what the apply healed and its ESP. */
 function healRunWords(run: HealRunView) {
   if (run.mode === "preview")
     return `previewed: ${run.planned} pass · ${run.refused} refused${run.fresh ? "" : " · out of date"}`;
@@ -306,7 +245,6 @@ function healRunWords(run: HealRunView) {
 const HEAL_NOTE =
   "Preview runs each repair and Pe's own check in Revit and rolls it all back; heal commits the group in one transaction, and an item that fails the check is refused and rolled back.";
 
-/** One group's Heal row: its caps and joins, preview and heal, and the last run's standing. */
 function healRow(
   g: HealGroup,
   run: HealRunView | null,
@@ -406,7 +344,6 @@ const verdict = (
   on: verdictOf(doc, key) === which,
 });
 
-/** The element ids a proximity assumption key names: `proximity:12:0|34:1` or `proximity:12:0|34`. */
 const proximityIds = (key: string) =>
   key
     .slice("proximity:".length)
@@ -414,13 +351,12 @@ const proximityIds = (key: string) =>
     .map((part) => Number(part.split(":")[0]))
     .filter((id) => Number.isInteger(id));
 
-/** Fix, Set, Check and Diagnostics, each in its own order. */
 export function triage(input: TriageInput) {
   const { snapshot, scope, findings, flows, equipmentFlows, doc } = input;
   // The role a unit plays now: the survey's (ruled, staged, else proposed), else Work's staged one.
   const roleNow = (id: number) => input.roles?.get(id)?.role ?? roleOf(doc, id);
   const ruled = (id: number) => ["ruled", "staged"].includes(input.roles?.get(id)?.why ?? "");
-  const name = input.nameOf ?? String;
+  const name = (id: number) => subjectName("unnamed element", input.nameOf?.(id));
   const label = input.groupLabel ?? ((id: string) => id);
   const nodes = new Map(snapshot.nodes.map((n) => [n.id, n]));
   const inGroups = new Set(scope?.groups ?? []);
@@ -429,13 +365,11 @@ export function triage(input: TriageInput) {
       inGroups.has(g.id) ? g.issueIds.map((i) => [i, g.id] as const) : [],
     ),
   );
-  /** Shown: the finding sits in a group the system is in. */
   const inScope = (f: DuctFinding) =>
     !scope ||
     (f.groupId != null
       ? inGroups.has(f.groupId)
       : owner.has(f.id) || f.elementIds.some((id) => scope.members.has(id)));
-  /** Blocks: the finding stands on a run that prices the system (else another system's, in Diagnostics). */
   const pricesSystem = (f: DuctFinding) =>
     !scope ||
     (f.groupId != null
@@ -452,6 +386,13 @@ export function triage(input: TriageInput) {
   const set: InboxItem[] = [];
   const diagnostics: InboxItem[] = [];
   const names = (ids: readonly number[]) => [...new Set(ids.map(name))].join(", ");
+  const namedFinding = (singular: string, ids: readonly number[]) => ({
+    title: `${findingLabel(singular, ids.length)} at ${ids.map(name).join(" and ")}`,
+    titleParts: [
+      findingLabel(singular, ids.length) + " at ",
+      ...ids.flatMap((id, i) => (i ? [" and ", { id }] : [{ id }])),
+    ],
+  });
 
   const heal = input.heal ?? null;
   const run = input.healRun ?? null;
@@ -493,14 +434,10 @@ export function triage(input: TriageInput) {
       note: [...run.refusals].map(([key, why]) => `Refused ${key}: ${why}.`).join(" ") || null,
       verbs: [select(run.ids)],
     });
-  /** A person's repair: what heal cannot do and why, then where to do it. */
-  const inRevit = (f: DuctFinding) =>
-    heal?.hard.get(f.id) ?? "Fix it in Revit; its own tools enforce the rules its API does not.";
-
-  for (const f of findings) {
+  for (const f of healFindings(findings, heal)) {
     if (!inScope(f) || f.kind === "no-flow" || f.kind === "no-terminal-flow") continue;
-    if (heal?.covered.has(f.id)) continue;
-    const base = { key: f.id, findingIds: [f.id], ids: f.elementIds, note: f.note };
+    if (f.findingIds.some((id) => heal?.covered.has(id))) continue;
+    const base = { key: f.id, findingIds: f.findingIds, ids: f.elementIds, note: f.note };
     // A Fix or Set row off the system's runs is another system's in a shared group: Diagnostics.
     const off = !pricesSystem(f);
     const offRow = ({ tone: _tone, ...item }: InboxItem): InboxItem => ({
@@ -515,7 +452,7 @@ export function triage(input: TriageInput) {
         ...base,
         group: "diagnostics",
         kind: f.kind,
-        title: `Open ends ${f.gapIn?.toFixed(1) ?? "?"}″ apart: ${f.elementIds.join(" ↔ ")}`,
+        ...namedFinding("Open end", f.elementIds),
         status: "possible missed join",
         verbs: [select(f.elementIds)],
       });
@@ -525,7 +462,6 @@ export function triage(input: TriageInput) {
       // Bridged, so it prices; Revit still has no join here, and the note says whose repair it is.
       diagnostics.push({
         ...base,
-        note: heal?.hard.has(f.id) ? `${f.note}. ${heal.hard.get(f.id)}` : f.note,
         group: "diagnostics",
         kind: "join",
         title: names(f.elementIds) || f.id,
@@ -693,41 +629,39 @@ export function triage(input: TriageInput) {
         break;
       }
       case "open-end": {
-        // A person's ruling answers the end: it leaves Fix for Diagnostics, where it can be taken back.
         const ruled = verdictOf(doc, f.id);
-        if (ruled === "capped" || ruled === "ignore") {
-          diagnostics.push({
-            key: f.id,
-            group: "diagnostics",
-            kind: "open-end-ruled",
-            title: `Open end at ${names(f.elementIds) || f.id}`,
-            status: `ruled: ${ruled}`,
-            ids: f.elementIds,
-            note: "A person ruled on this open end; the ruling lives in this route and writes nothing to Revit.",
-            verbs: [
-              verdict(
-                doc,
-                f.id,
-                ruled,
-                "take back",
-                "Take the ruling back; the end comes up under Fix again",
-              ),
-              select(f.elementIds),
-            ],
-          });
-          break;
-        }
-        // Caps and small joins heal in the Heal row; an end left here is a person's, in Revit.
-        toFix({
+        const answered = ruled === "capped" || ruled === "ignore";
+        const row = {
           ...item,
-          title: `Open end at ${names(f.elementIds) || f.id}`,
-          status: "fix in Revit",
-          note: inRevit(f),
+          ...namedFinding("Open end", f.elementIds),
+          status: answered ? `ruled: ${ruled}` : "fix in Revit",
           verbs: [
             select(f.elementIds),
-            verdict(doc, f.id, "ignore", "ignore", "Ignore: leave this end out of the walk"),
+            ...(answered
+              ? [
+                  verdict(
+                    doc,
+                    f.id,
+                    ruled,
+                    "take back",
+                    "Take the ruling back; the end comes up under Fix again",
+                  ),
+                ]
+              : f.findingIds
+                  .filter((id) => id.startsWith("open-end:"))
+                  .map((id) =>
+                    verdict(doc, id, "ignore", "ignore", "Ignore: leave this end out of the walk"),
+                  )),
           ],
-        });
+        };
+        if (answered)
+          diagnostics.push({
+            ...row,
+            group: "diagnostics",
+            kind: "open-end-ruled",
+            note: "A person ruled on this open end; the ruling lives in this route and writes nothing to Revit.",
+          });
+        else toFix(row);
         break;
       }
       case "loop-by-inference": {
@@ -801,7 +735,6 @@ export function triage(input: TriageInput) {
             ? `Anomalous join at ${names(f.elementIds)}`
             : (KIND_TITLE[f.kind] ?? f.kind),
           status: grade ? "fix in Revit" : "blocks the path",
-          ...(grade ? { note: `${f.note} ${heal?.hard.get(f.id) ?? ""}`.trim() } : {}),
           verbs: [
             select(f.elementIds),
             ...(grade
@@ -989,10 +922,9 @@ const valueWord = (segment: string, value: unknown) => {
   return v.kind === "verdict" ? String(v.verdict) : "a value";
 };
 
-/** Pea's claims awaiting a verdict, then its proposals awaiting staging. */
 function checks(input: TriageInput & { claims: readonly Claim[] }): InboxItem[] {
   const { scope, findings, doc, claims } = input;
-  const name = input.nameOf ?? String;
+  const name = (id: number) => subjectName("unnamed element", input.nameOf?.(id));
   const items: InboxItem[] = claims
     .filter((claim) => !claim.verdict)
     .map((claim) => ({
@@ -1082,22 +1014,16 @@ function checks(input: TriageInput & { claims: readonly Claim[] }): InboxItem[] 
   return items;
 }
 
-/** What the Write row needs from the page: pending changes, and the last preview's standing. */
 export interface WriteState {
-  /** Staged cells and pending rulings: a ruling is a write to the model's store. */
   staged: number;
   hasPreview: boolean;
   fresh: boolean;
   planned: number | null;
   refused: number | null;
-  /** Staged ESP cells: the one write that waits for a clean calc. */
   esp: number;
 }
 
-/**
- * Why the ESP number waits while Fix or Set rows remain (the calc it comes from is not clean);
- * null when none remain. Rulings, slots and flows write any time (kaitpw, 2026-10-21).
- */
+/** Only ESP waits for a clean calc; rulings, slots and flows can write any time. */
 export function espWaits(left: { fix: number; set: number }): string | null {
   if (!left.fix && !left.set) return null;
   const parts = [left.fix ? `${left.fix} to fix` : "", left.set ? `${left.set} to set` : ""];
@@ -1107,7 +1033,6 @@ export function espWaits(left: { fix: number; set: number }): string | null {
 export interface WriteRow {
   title: string;
   status: string;
-  /** The staged ESP this write leaves out, and why; null when none is staged or nothing holds it. Apply's own refusal is the action's. */
   held: string | null;
 }
 
@@ -1128,7 +1053,6 @@ function writeRow(left: { fix: number; set: number }, write: WriteState): WriteR
   };
 }
 
-/** The Fix rows that hold the ESP back: every one but a Heal row standing in no path. */
 export const holding = (fix: readonly InboxItem[]) => fix.filter((i) => i.blocks !== false).length;
 
 export const inboxDamage = (row: InboxItem): string | null =>
@@ -1176,13 +1100,8 @@ export function issueAt(
   );
 }
 
-/** A Diagnostics row's kind in the key: a bridged join by its grade (its status), any other row by its kind. */
 export const diagnosticKind = (item: InboxItem) => (item.kind === "join" ? item.status : item.kind);
 
-/**
- * The finding ids the picture annotates: with no kind picked, the Fix rows' (a Heal row stands for
- * the findings it covers); with one, the Diagnostics rows of that kind.
- */
 export function annotatedFindings(
   rows: { fix: readonly InboxItem[]; diagnostics: readonly InboxItem[] },
   heal: Pick<HealPlan, "groups"> | null,
@@ -1196,7 +1115,6 @@ export function annotatedFindings(
   return new Set(rows.fix.flatMap((r) => covers.get(r.key) ?? [r.key]));
 }
 
-/** The whole inbox: its groups in `INBOX_ORDER`, and the Write row. */
 export function inboxRows(input: TriageInput & { claims: readonly Claim[]; write: WriteState }) {
   const { fix, set, diagnostics } = triage(input);
   return {
@@ -1208,13 +1126,11 @@ export function inboxRows(input: TriageInput & { claims: readonly Claim[]; write
   };
 }
 
-/** A fan run's answer in words: the refusal, else the read back. */
 export const fanWords = (response: DuctsFanRun["response"]) =>
   response.outcome === "refused"
     ? `refused: ${response.reason ?? "refused"}`
     : (response.check ?? response.outcome);
 
-/** Why the fan apply is not armed for this pair, or null when a fresh preview of it passed. */
 export const fanRefusal = (
   page: Pick<DuctsPage, "fan" | "epoch">,
   pair: { unitId: number; systemId: number } | undefined,
@@ -1229,7 +1145,6 @@ export const fanRefusal = (
     : `The preview refused: ${run.response.reason ?? "refused"}`;
 };
 
-/** The Work segments a chat review can name; a `focus` page value is `<segment>:<cell key>`. */
 const FOCUS_SEGMENTS = new Set([
   "assumptions",
   "rules",
@@ -1244,15 +1159,8 @@ const FOCUS_SEGMENTS = new Set([
   "calculation",
 ]);
 
-/** The `issue` page value that lands on a Work cell's own place in the inbox. */
 export const cellFocus = (segment: string, key: string) => `${segment}:${key}`;
 
-/**
- * The inbox row the page's `issue` names: a row by its own key (a Fix row's issue id, a proposal
- * row's `<segment>:<key>`); a staged cell with no row of its own (a rule, a slot, a flow) lands on
- * the Write row, which is where staged cells are counted; a cell whose row is its issue id lands on
- * that row. Null when `issue` names nothing in the inbox.
- */
 export function focusRow(issue: string, rowKeys: ReadonlySet<string>): string | null {
   if (!issue) return null;
   if (rowKeys.has(issue)) return issue;

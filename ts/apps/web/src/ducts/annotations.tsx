@@ -314,7 +314,7 @@ export function Annotations({
             };
             return (
               <g
-                key={r.n}
+                key={`${r.n}:${r.at}`}
                 data-ruling-pin={r.n}
                 data-ruling-kind={r.kind}
                 transform={`translate(${xy[0] + slot * PIN * 2.2} ${xy[1] - PIN * 2.4})`}

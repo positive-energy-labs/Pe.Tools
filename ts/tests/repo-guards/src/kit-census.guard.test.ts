@@ -28,6 +28,9 @@ const allow = (entries: Record<string, string>): Allow[] =>
 // Filenames use the wave-4 final homes: land.ts, revit-target.tsx and go-to.tsx.
 // prettier-ignore
 const RULES: Rule[] = [
+  { id: "subject-kind-id", doctrine: "I1", pattern: /\$\{[^}\n]*\bkind\} \$\{[\w.]+\.id\}/g,
+    roots: [W + "ducts/**/*.{ts,tsx}", "packages/ducts-domain/src/**/*.ts"], allow: [],
+    cannotSee: "Concatenated ids, runtime names and prose received from Revit." },
   { id: "css-damage-owner", doctrine: "I2", pattern: /pe-damage-beat|\[data-damage\]/g,
     roots: [W + "**/*.css", K + "**/*.css"],
     allow: [{ glob: K + "components/lang/lang.css", reason: "One shared critical-damage mark owns the pulse and selectors." }],

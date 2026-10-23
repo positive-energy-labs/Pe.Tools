@@ -115,7 +115,7 @@ describe("the ducts inbox", () => {
     expect(rows.diagnostics).toMatchObject([
       {
         kind: "missed-join",
-        title: "Open ends 2.9″ apart: 12317607 ↔ 12317611",
+        title: "Open ends at unnamed element and unnamed element",
         verbs: [{ kind: "select", ids: [12317607, 12317611] }],
       },
     ]);
@@ -238,7 +238,11 @@ describe("healing replaces the capped and connect verdicts", () => {
     hard: new Map([
       [
         "proximity:7:0|8:0",
-        "duct 7 and duct 8 differ in size: a transition. Fix it in Revit; its own tools enforce the rules its API does not.",
+        {
+          ids: [7, 8],
+          covers: ["proximity:7:0|8:0"],
+          note: "Ducts differ in size: a transition. Fix it in Revit.",
+        },
       ],
     ]),
   };
@@ -304,7 +308,7 @@ describe("healing replaces the capped and connect verdicts", () => {
       commit: { label: "apply heal", refusal: null },
     });
     expect(row.note).toMatch(
-      /Refused connect 5 to 6: post-check failed: the joint is 0\.2 in open\./,
+      /Refused connect unnamed element to unnamed element: post-check failed: the joint is 0\.2 in open\./,
     );
     expect(healRunView(run, snapshot, 5, () => null).fresh).toBe(false);
     // The snapshot moved on: the row's preview disarms with the reason.

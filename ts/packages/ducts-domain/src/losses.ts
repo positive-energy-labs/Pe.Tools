@@ -23,6 +23,7 @@
  *   stretch then the trunk past the junction, so each fan carries its run's `path` and `rows`.
  * Physics in loss-physics.ts, interpolation in loss-grid.ts, rule data in loss-rules.ts.
  */
+import { subjectName } from "./words.ts";
 import {
   catalogLoss,
   EMPTY_CATALOGS,
@@ -823,7 +824,7 @@ function pathRows(
         id: node.id,
         kind: "fitting",
         dp: stated,
-        desc: `${node.partType ?? node.kind} ${node.id}, stated drop`,
+        desc: `${subjectName(node.kind, node.partType)}, stated drop`,
       });
       return;
     }
@@ -847,7 +848,7 @@ function pathRows(
       if (facts.takeoff) return; // a tap with no branch flow loses nothing here
       const message = fail({
         id: node.id,
-        message: `no rule matches ${node.partType ?? node.kind} ${node.id}`,
+        message: `no rule matches ${subjectName(node.kind, node.partType)}`,
       });
       rows.push({
         id: node.id,
@@ -908,7 +909,7 @@ function pathRows(
     if (!section) {
       const message = fail({
         id: duct.id,
-        message: `${duct.kind} ${duct.id} (${duct.size}) has no section Pe can use`,
+        message: `${subjectName(duct.kind)} (${duct.size}) has no section Pe can use`,
       });
       rows.push({ id: duct.id, kind: "friction", dp: 0, desc: message, error: message });
       return;

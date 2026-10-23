@@ -1,9 +1,4 @@
-/**
- * Heal candidates, deterministic: a dangling duct or fitting end is a cap, coincident same-size
- * ends connect, a small collinear gap between two ducts is a union and from a duct to a part an
- * extend; a size change, two systems, a gap past the limit, a terminal off its duct, an ignored
- * end and a takeoff are a person's, with the reason the inbox shows. Points are model feet.
- */
+/** Deterministic heal proposals. Points are model feet. */
 import { expect, it } from "vite-plus/test";
 import { ductsDocumentSchema } from "@pe/agent-contracts";
 
@@ -190,7 +185,7 @@ it("bridges a 2 in collinear gap between two ducts with a union, and from a duct
 it("leaves size changes, two systems, long or skewed gaps and terminals to a person, with the reason", () => {
   const sized = snap([duct(10, [0, 0, 0], [10, 0, 0]), duct(11, [10, 0, 0], [20, 0, 0], {}, 8)]);
   expect(items(sized).some((i) => i.kind === "join")).toBe(false);
-  expect(healPlan(sized).hard.get("open-end:g10:10:1")).toMatch(
+  expect(healPlan(sized).hard.get(proximityId("10:1", "11:0"))?.note).toMatch(
     /differ in size: a transition\. Fix it in Revit/,
   );
 
@@ -198,10 +193,10 @@ it("leaves size changes, two systems, long or skewed gaps and terminals to a per
     duct(10, [0, 0, 0], [10, 0, 0]),
     duct(11, [10, 0, 0], [20, 0, 0], { systemName: "SA 2" }),
   ]);
-  expect(healPlan(systems).hard.get(proximityId("10:1", "11:0"))).toMatch(/merges systems/);
+  expect(healPlan(systems).hard.get(proximityId("10:1", "11:0"))?.note).toMatch(/merges systems/);
 
   const far = snap([duct(10, [0, 0, 0], [10, 0, 0]), duct(11, [10 + 6 * IN, 0, 0], [20, 0, 0])]);
-  expect(healPlan(far).hard.get("open-end:g11:11:0")).toMatch(
+  expect(healPlan(far).hard.get(proximityId("10:1", "11:0"))?.note).toMatch(
     new RegExp(`past the ${HEAL_JOIN_GAP_IN} in heal limit`),
   );
 
@@ -209,12 +204,12 @@ it("leaves size changes, two systems, long or skewed gaps and terminals to a per
     duct(10, [0, 0, 0], [10, 0, 0]),
     duct(11, [10 + 2 * IN, 1 * IN, 0], [20, 1 * IN, 0]),
   ]);
-  expect(healPlan(skew).hard.get("open-end:g10:10:1")).toMatch(/not on one axis/);
+  expect(healPlan(skew).hard.get(proximityId("10:1", "11:0"))?.note).toMatch(/not on one axis/);
 
   const grille = node(40, "terminal", [conn(0, [30, 0, 0], [0, 0, -1])]);
   const lone = snap([], [grille]);
   expect(items(lone)).toEqual([]);
-  expect(healPlan(lone).hard.get("open-end:g40:40:0")).toMatch(/terminal 40 is not connected/);
+  expect(healPlan(lone).hard.get("open-end:g40:40:0")?.note).toMatch(/terminal is not connected/);
 });
 
 it("caps a dangling fitting end, never one a person ignored", () => {

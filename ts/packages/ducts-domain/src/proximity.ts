@@ -31,6 +31,7 @@
  * faces the wrong way (a stand-in family; Project A grilles 10922066, 10922068 in their plenums) joins
  * that end anyway, always `anomalous`, its note naming the reversed connector and the repair.
  */
+import { subjectName } from "./words.ts";
 import type { DuctInferenceGrade, DuctsRouteDocument } from "@pe/agent-contracts";
 import type { DuctSnapshot } from "./types.ts";
 
@@ -628,7 +629,7 @@ function infer(
       id,
       kind: "inline-by-inference",
       elementIds: [n.id, host.owner],
-      note: `${n.kind} ${n.id}${n.family ? ` (${n.family})` : ""} lies inside duct ${host.owner}, ${at.toFixed(2)} ft along it and aligned with it, with neither end connected; counted inline on it`,
+      note: `${subjectName(n.kind)}${n.family ? ` (${n.family})` : ""} lies inside duct ${host.owner}, ${at.toFixed(2)} ft along it and aligned with it, with neither end connected; counted inline on it`,
       grade: "stretched",
     });
     closes(id, n.id, host.owner);
