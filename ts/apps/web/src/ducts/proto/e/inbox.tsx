@@ -20,7 +20,8 @@ import { ListView, type ListRowParts } from "@pe/kit/lang/list-view";
 import { PreviewAction } from "@pe/kit/lang/preview-action";
 import { reviewTransitions, type CellWire } from "#/components/work/band";
 import type { ActionHandle } from "#/route/handle";
-import { SelectInRevitIcon, showInRevit } from "#/revit/element-menu";
+import { showInRevit } from "#/revit/element-menu";
+import { SelectInRevitIcon } from "@pe/kit/lang/gesture-glyph";
 import {
   prepareElements,
   showElementsMessage,

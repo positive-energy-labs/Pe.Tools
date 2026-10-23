@@ -1,7 +1,8 @@
 import { useCallback, useEffect, useRef, useState, type PointerEvent } from "react";
 import type { PlaneViewport } from "@pe/agent-contracts";
 import type { Bounds2, Viewport2 } from "#/lib/affine-frame";
-import { createWheelReader, wheelPlane } from "./gestures";
+import { useScopeGestures } from "@pe/kit/keys";
+import { captureGestures, createWheelReader, PLANE_GESTURES, wheelPlane } from "./gestures";
 import { fitView } from "./plane";
 
 export const PLAN_CLICK_PX = 5;
@@ -17,7 +18,7 @@ function measureInset(host: HTMLElement): Inset {
   let top = 0,
     bottom = 0,
     left = 0;
-  for (const el of host.querySelectorAll(DOCKED)) {
+  for (const el of (host.closest("[data-slot='pane-field']") ?? host).querySelectorAll(DOCKED)) {
     const r = el.getBoundingClientRect();
     if (!r.height) continue;
     if (r.top - h.top < h.height / 2) {
@@ -37,11 +38,12 @@ export function usePlaneViewport(
   viewport: PlaneViewport | null,
   fit: Bounds2 | null,
   onViewport: (next: PlaneViewport, how: "gesture" | "move") => void,
+  rest?: (size: Viewport2) => PlaneViewport,
 ) {
   const [host, setHost] = useState<HTMLDivElement | null>(null);
+  useScopeGestures(PLANE_GESTURES, host);
   const [size, setSize] = useState<Viewport2 | null>(null);
   const [inset, setInset] = useState<Inset>({ top: 0, bottom: 0, left: 0 });
-  /** Fit `box` below the top surfaces, or beside the top-left one: whichever shows it larger. */
   const clearFit = (box: Bounds2, at: Viewport2, pad = 0): PlaneViewport => {
     const fit = (x: number, y: number, width: number, height: number) => {
       const v = fitView(box, { width: Math.max(1, width), height: Math.max(1, height) }, pad);
@@ -54,7 +56,11 @@ export function usePlaneViewport(
   };
   const view =
     viewport ??
-    (fit && size ? clearFit(fit, size) : { kind: "plane" as const, scale: 1, tx: 0, ty: 0 });
+    (size && rest
+      ? rest(size)
+      : fit && size
+        ? clearFit(fit, size)
+        : { kind: "plane" as const, scale: 1, tx: 0, ty: 0 });
   const latest = useRef({ view, onViewport });
   latest.current = { view, onViewport };
   const pending = useRef<PlaneViewport | null>(null);
@@ -95,7 +101,14 @@ export function usePlaneViewport(
     observer.observe(host);
     // The docked surfaces resize on their own (a selection fills the readout): re-measure the bands.
     const docks = new ResizeObserver(inset);
-    host.querySelectorAll(DOCKED).forEach((el) => docks.observe(el));
+    const field = host.closest("[data-slot='pane-field']") ?? host;
+    const observeDocks = () => {
+      field.querySelectorAll(DOCKED).forEach((el) => docks.observe(el));
+      inset();
+    };
+    observeDocks();
+    const children = new MutationObserver(observeDocks);
+    children.observe(field, { childList: true, subtree: true });
     const reader = createWheelReader();
     const wheel = (event: WheelEvent) => {
       // A surface over the picture (the readout) claims its own wheel: it scrolls, the picture stays.
@@ -108,16 +121,12 @@ export function usePlaneViewport(
         "gesture",
       );
     };
-    const preventGesture = (event: Event) => event.preventDefault();
-    host.addEventListener("wheel", wheel, { passive: false });
-    host.addEventListener("gesturestart", preventGesture, { passive: false });
-    host.addEventListener("gesturechange", preventGesture, { passive: false });
+    const releaseGestures = captureGestures(host, wheel);
     return () => {
       observer.disconnect();
       docks.disconnect();
-      host.removeEventListener("wheel", wheel);
-      host.removeEventListener("gesturestart", preventGesture);
-      host.removeEventListener("gesturechange", preventGesture);
+      children.disconnect();
+      releaseGestures();
       cancelAnimationFrame(frame.current);
       frame.current = 0;
       pending.current = null;
@@ -125,6 +134,7 @@ export function usePlaneViewport(
   }, [host, move]);
   return {
     setHost,
+    host,
     size,
     view,
     move,
@@ -134,7 +144,7 @@ export function usePlaneViewport(
     dragDistance,
     handlers: {
       onPointerDown: (event: PointerEvent<HTMLDivElement>) => {
-        if (event.button !== 0) return;
+        if (event.button !== 0 && event.button !== 1) return;
         drag.current = {
           x: event.clientX,
           y: event.clientY,

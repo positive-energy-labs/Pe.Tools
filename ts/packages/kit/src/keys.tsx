@@ -12,7 +12,15 @@
  * `useScopeKeys` is the only door. A file that imports `@tanstack/react-hotkeys` to register a
  * chord is a repo-guard red (`tests/repo-guards/src/route-primitive.guard.test.ts`).
  */
-import { createContext, use, useEffect, useMemo, type ReactNode, type RefObject } from "react";
+import {
+  createContext,
+  use,
+  useEffect,
+  useMemo,
+  useSyncExternalStore,
+  type ReactNode,
+  type RefObject,
+} from "react";
 import {
   formatForDisplay,
   getHotkeyManager,
@@ -212,15 +220,37 @@ export interface ScopeGesture {
 export interface DeclaredGesture extends ScopeGesture {
   scope: string;
   depth: number;
+  host?: HTMLElement | null;
 }
 
 const declared = new Map<symbol, readonly DeclaredGesture[]>();
+const gestureListeners = new Set<() => void>();
+let gestureSnapshot: DeclaredGesture[] = [];
+const gesturesChanged = () => {
+  gestureSnapshot = [...declared.values()].flat();
+  gestureListeners.forEach((notify) => notify());
+};
+const subscribeGestures = (notify: () => void) => {
+  gestureListeners.add(notify);
+  return () => {
+    gestureListeners.delete(notify);
+  };
+};
+export const useDeclaredGestures = () =>
+  useSyncExternalStore(
+    subscribeGestures,
+    () => gestureSnapshot,
+    () => gestureSnapshot,
+  );
 
 /** Every gesture declared by a live scope node now; a snapshot, like `readRegistrations`. */
 export const readGestures = (): DeclaredGesture[] => [...declared.values()].flat();
 
 /** Declare gestures on the innermost scope node; a hidden node declares none. */
-export function useScopeGestures(gestures: readonly ScopeGesture[]): void {
+export function useScopeGestures(
+  gestures: readonly ScopeGesture[],
+  host?: HTMLElement | null,
+): void {
   const node = use(ScopeContext);
   const spelled = JSON.stringify(gestures);
   useEffect(() => {
@@ -232,10 +262,20 @@ export function useScopeGestures(gestures: readonly ScopeGesture[]): void {
         ...g,
         scope: node.id,
         depth: node.depth,
+        host: host === undefined ? node.element?.current : host,
       })),
     );
-    return () => void declared.delete(id);
-  }, [node.id, node.depth, node.live, spelled]);
+    gesturesChanged();
+    return () => {
+      declared.delete(id);
+      gesturesChanged();
+    };
+  }, [node.id, node.depth, node.live, node.element, spelled, host]);
+}
+
+export function ScopeGestures({ gestures }: { gestures: readonly ScopeGesture[] }) {
+  useScopeGestures(gestures);
+  return null;
 }
 
 /* ── The route and stage nodes ─────────────────────────────────────────────── */

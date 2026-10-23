@@ -1,16 +1,9 @@
-/**
- * The rooms plan: Revit's picture of the view (as exported, never redrawn) under one path per
- * zone, room and held region, inked by the region's state, on a pan-zoom canvas. Every room and
- * held region wears a numbered callout whose label is the table's. Click selects, shift-click adds,
- * hover pairs with the table row; a click on empty ground keeps the selection and Esc clears it, as
- * on every stage (SURFACE-PHILOSOPHY N2). The selection's facts sit in the fixed top-left readout;
- * F frames the selection (else fits the view), clear of the readout and the docked legend.
- */
+/** Revit's registered picture under selectable room regions. Hover pairs with the table;
+ * the fixed readout holds selection facts. useStage owns framing and Escape. */
 import { type CSSProperties, type ReactNode, useEffect, useMemo, useRef } from "react";
-import { useScopeGestures, useScopeKeys } from "@pe/kit/keys";
-import { PLANE_GESTURES } from "#/scene/gestures";
+import type { PlaneViewport } from "@pe/agent-contracts";
+import { useStage, stageViewport } from "#/scene/stage-controller";
 import { PictureReadout } from "#/scene/readout";
-import { useViewHistory } from "#/scene/view-history";
 import type { RoomsSnapshot } from "@pe/host-contracts/generated";
 
 import { FactChip } from "@pe/kit/lang/chip";
@@ -246,8 +239,14 @@ export function RoomsPlan({
     return { frame, width, height, shapes, fit, pxPerFt: Math.abs(fx - ox) };
   }, [bounds, rows, plan]);
 
+  const viewport = usePlaneViewport(
+    page.viewport,
+    world?.fit ?? null,
+    stageViewport<PlaneViewport>(setPage),
+  );
   const {
     setHost,
+    host,
     size,
     view,
     move,
@@ -255,9 +254,7 @@ export function RoomsPlan({
     dragging,
     dragDistance: dragDist,
     handlers,
-  } = usePlaneViewport(page.viewport, world?.fit ?? null, (viewport, how) =>
-    setPage({ viewport }, { history: how === "move" ? "push" : "replace" }),
-  );
+  } = viewport;
   const layers = page.layers;
   const mapShapes = useMemo(
     () =>
@@ -306,41 +303,23 @@ export function RoomsPlan({
     move(to, "move");
   }, [world, size, zoomKey, zoomTo, move]); // eslint-disable-line react-hooks/exhaustive-deps
 
-  // The one camera move a person names (N1): F frames the selection, else fits the view.
-  useScopeGestures(PLANE_GESTURES);
-  useScopeKeys([
-    {
-      hotkey: "F",
-      label: "frame",
-      says: "Frame the selection; with nothing selected, fit the view",
-      callback: () => {
-        if (!world) return;
-        const boxes = world.shapes
-          .filter((shape) => selected.has(shape.region.guid))
-          .flatMap((shape) => [
-            [shape.box.minX, shape.box.minY] as const,
-            [shape.box.maxX, shape.box.maxY] as const,
-          ]);
-        const to = boxes.length ? frameBox(boundsOf(boxes), ZOOM_PAD_PX) : frameBox(world.fit);
-        if (to) move(to, "move");
-      },
+  const selectedPoints =
+    world?.shapes
+      .filter((shape) => selected.has(shape.region.guid))
+      .flatMap((shape) => [
+        [shape.box.minX, shape.box.minY] as const,
+        [shape.box.maxX, shape.box.maxY] as const,
+      ]) ?? [];
+  useStage({
+    kind: "plane",
+    host,
+    viewport,
+    bounds: world?.fit ?? null,
+    selectedBounds: selectedPoints.length ? boundsOf(selectedPoints) : null,
+    clearSelection: () => {
+      if (selected.size) onSelect(null, false);
     },
-  ]);
-  useViewHistory();
-  // Esc clears at the plan's scope, where a pick leaves focus. ponytail: a document-bound Esc here
-  // kept a stale callback (it fired with an empty selection); bind it wider when a table pick must
-  // clear too.
-  useScopeKeys([
-    {
-      hotkey: "Escape",
-      label: "clear the selection",
-      says: "Clear the selection, without moving the view",
-      refusal: selected.size ? null : "nothing is selected",
-      callback: () => {
-        if (selected.size) onSelect(null, false);
-      },
-    },
-  ]);
+  });
   const picked = world?.shapes.filter((shape) => selected.has(shape.region.guid)) ?? [];
 
   // The lease's one key is the viewport (`roomsAddress.agent`); the rest stays the person's.
@@ -505,7 +484,7 @@ export function RoomsPlan({
         ref={setHost}
         data-rooms-plan=""
         className="relative min-h-0 flex-1 overflow-hidden"
-        style={{ cursor: dragging ? "grabbing" : "grab", touchAction: "none" }}
+        style={{ cursor: dragging ? "grabbing" : "grab" }}
         {...handlers}
       >
         <div style={worldStyle}>

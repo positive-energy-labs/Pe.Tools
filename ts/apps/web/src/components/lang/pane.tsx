@@ -5,13 +5,49 @@ import { reportFault } from "#/host/diagnostics";
 import { HelpTip } from "#/components/lang/help";
 import { Floater } from "#/components/lang/floater";
 import { PaneStrip, type PaneStripProps } from "#/components/lang/pane-strip";
-import { KeyScope } from "@pe/kit/keys";
+import { KeyScope, useDeclaredGestures } from "@pe/kit/keys";
+import { KeyLegend } from "./kbd";
+import { POINTER_WORD } from "@pe/kit/lang/gesture-glyph";
 import { Button } from "@pe/kit/lang/button";
 import { tv, type VariantProps } from "@pe/kit/lib/tv";
 
 import { Rail } from "@pe/kit/lang/rail";
 import "@pe/kit/lang/pane.css";
 import { TooltipHint } from "@pe/kit/lang/tooltip";
+
+function PaneGestureLegend({
+  host,
+  children,
+}: {
+  host: React.RefObject<HTMLElement | null>;
+  children?: ReactNode;
+}) {
+  const gestures = useDeclaredGestures().filter(
+    (gesture) =>
+      gesture.host &&
+      host.current?.contains(gesture.host) &&
+      gesture.host.closest("[data-slot='pane']") === host.current,
+  );
+  if (!gestures.length && children == null) return null;
+  return (
+    <div
+      data-slot="pane-legend"
+      className="absolute bottom-2 left-2 flex flex-col items-start gap-1"
+    >
+      {children}
+      {gestures.length ? (
+        <KeyLegend
+          lead={0}
+          keys={gestures.map(({ keys, pointer, label }) => ({
+            keys,
+            pointer: pointer && POINTER_WORD[pointer],
+            does: label,
+          }))}
+        />
+      ) : null}
+    </div>
+  );
+}
 
 // A pane is a header, a scrolling body and an error boundary; it is also a key scope, so a child's
 // `useScopeKeys` binds while focus is inside it. No `title` and no `tabs` draws no header.
@@ -36,6 +72,7 @@ export const paneRecipe = tv({
 });
 
 interface PaneProps extends VariantProps<typeof paneRecipe>, PaneStripProps {
+  legend?: ReactNode;
   id?: string;
   title?: ReactNode;
   /** The title is the thing shown (a thread, a schedule), drawn as the page heading. */
@@ -111,6 +148,7 @@ export function Pane({
   onRetry,
   modes,
   floaters,
+  legend,
   layers,
   children,
 }: PaneProps) {
@@ -202,15 +240,11 @@ export function Pane({
             />
           </div>
         )}
-        {floaters == null ? (
-          paneBody
-        ) : (
-          // The floaters' containing block: they sit over the body's corners and never scroll with it.
-          <div data-slot="pane-field" className="relative flex min-h-0 min-w-0 flex-1 flex-col">
-            {paneBody}
-            {floaters.map((spec) => (spec.open ? <Floater key={spec.key} spec={spec} /> : null))}
-          </div>
-        )}
+        <div data-slot="pane-field" className="relative flex min-h-0 min-w-0 flex-1 flex-col">
+          {paneBody}
+          {floaters?.map((spec) => (spec.open ? <Floater key={spec.key} spec={spec} /> : null))}
+          <PaneGestureLegend host={rootRef}>{legend}</PaneGestureLegend>
+        </div>
       </section>
     </KeyScope>
   );

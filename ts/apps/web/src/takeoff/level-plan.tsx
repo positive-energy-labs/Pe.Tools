@@ -1,7 +1,5 @@
 import { useMemo, type ReactNode } from "react";
-import { useScopeGestures, useScopeKeys } from "@pe/kit/keys";
-import { PLANE_GESTURES } from "#/scene/gestures";
-import { useViewHistory } from "#/scene/view-history";
+import { useStage } from "#/scene/stage-controller";
 import "#/scene/damage.css";
 import type { PlaneViewport } from "@pe/agent-contracts";
 import { Pane } from "#/components/lang/pane";
@@ -143,7 +141,7 @@ export function LevelPlan({
   selectedKey: string | null;
   cursor: string | null;
   stateOf: (room: ModelRoom) => RoomState;
-  onSelectZone: (z: ModelZone) => void;
+  onSelectZone: (z: ModelZone | null) => void;
   onHover: (id: string) => void;
   onCursor: (z: ModelZone, guid: string) => void;
 }) {
@@ -170,16 +168,8 @@ export function LevelPlan({
       : { minX: 0, minY: 0, maxX: viewport.width, maxY: viewport.height };
     return { ...viewport, frame, fit };
   }, [bounds, plan]);
-  const {
-    setHost,
-    size,
-    view,
-    move,
-    frame: frameBox,
-    handlers,
-    dragDistance,
-    dragging,
-  } = usePlaneViewport(pageViewport, world?.fit ?? null, onViewport);
+  const viewport = usePlaneViewport(pageViewport, world?.fit ?? null, onViewport);
+  const { setHost, host, size, view, move, handlers, dragDistance, dragging } = viewport;
   // No lease: nothing to publish (`visible` is false), so an empty Page stands in.
   useRouteLease<"takeoffs", Partial<TakeoffPage>>("takeoffs", lease?.page ?? [{}, () => {}], {
     thread: lease?.thread,
@@ -239,31 +229,24 @@ export function LevelPlan({
     [world, drawn, stateOf],
   );
   const map = usePlanMap(view, move, world, size, shapes, plan ?? null);
-  // The one camera move a person names (N1): F frames the selected zone, else fits the level.
   const selectedZone = drawn.find((z) => z.zone.guid === selectedKey) ?? null;
-  useScopeGestures(PLANE_GESTURES);
-  useScopeKeys([
-    {
-      hotkey: "F",
-      label: "frame",
-      says: "Frame the selected zone; with none selected, fit the level",
-      callback: () => {
-        if (!world) return;
-        const b = selectedZone?.zone.bounds;
-        const next = b
-          ? frameBox(
-              boundsOf([
-                world.frame.toViewport([b.minX, b.minY]),
-                world.frame.toViewport([b.maxX, b.maxY]),
-              ]),
-              24,
-            )
-          : frameBox(world.fit);
-        if (next) move(next, "move");
-      },
+  const selectedBox = selectedZone?.zone.bounds;
+  useStage({
+    kind: "plane",
+    host,
+    viewport,
+    bounds: world?.fit ?? null,
+    selectedBounds:
+      selectedBox && world
+        ? boundsOf([
+            world.frame.toViewport([selectedBox.minX, selectedBox.minY]),
+            world.frame.toViewport([selectedBox.maxX, selectedBox.maxY]),
+          ])
+        : null,
+    clearSelection: () => {
+      if (selectedKey) onSelectZone(null);
     },
-  ]);
-  useViewHistory();
+  });
   const pane = { id: "plan", title: "plan", scroll: "clip" as const, flush: true, floaters: [map] };
   if (!bounds || !world)
     return (
@@ -308,7 +291,7 @@ export function LevelPlan({
         ref={setHost}
         data-takeoff-plan=""
         className="relative min-h-0 flex-1 overflow-hidden"
-        style={{ cursor: dragging ? "grabbing" : "grab", touchAction: "none" }}
+        style={{ cursor: dragging ? "grabbing" : "grab" }}
         {...handlers}
         onClickCapture={(event) => {
           if (dragDistance.current >= PLAN_CLICK_PX) {

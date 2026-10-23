@@ -6,9 +6,8 @@
  * Double-click stays free. The nearest displayed-observation scope is mandatory.
  */
 import { useCallback, useEffect, useRef, useState } from "react";
-import { Crosshair } from "lucide-react";
+import { SelectInRevitIcon, SelectionBoxKey } from "@pe/kit/lang/gesture-glyph";
 import { ListPopup } from "@pe/kit/lang/list-popup";
-import { KeyHint } from "@pe/kit/lang/key-hint";
 import { Button } from "@pe/kit/lang/button";
 import { FactChip } from "@pe/kit/lang/chip";
 import { revitTarget } from "@pe/kit/lang/row";
@@ -26,8 +25,6 @@ import { observedElements, readFamilyPlacements, useNativeObservation } from "./
 export { revitScope } from "./element-target";
 export type { ShowElementsResult } from "./element-target";
 
-export const SelectInRevitIcon = Crosshair;
-
 /**
  * `refProps` for kit `SubjectText`: each Subject token answers this menu with its own element and
  * the displayed-observation scope, which it carries itself because a popover portals it out of the
@@ -44,7 +41,6 @@ export function useRevitSubjectProps() {
   );
 }
 const SELECTION_BOX_LABEL = "Selection Box in Revit";
-const SelectionBoxKey = () => <KeyHint>BX</KeyHint>;
 
 /** Box: select and section-box the {3D} view, then zoom to fit. Select: select only. */
 export async function showInRevit(

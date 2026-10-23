@@ -1,5 +1,9 @@
 import { KeyHint } from "./key-hint";
+import { Crosshair } from "lucide-react";
 import type { PointerKind } from "../../keys";
+
+export const SelectInRevitIcon = Crosshair;
+export const SelectionBoxKey = () => <KeyHint>BX</KeyHint>;
 
 /** What help and legends call each pointer action. */
 export const POINTER_WORD: Record<PointerKind, string> = {
