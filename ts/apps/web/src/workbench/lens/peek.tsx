@@ -72,27 +72,30 @@ export function TurnPeek({
       }
       return best;
     };
-    const onMove = (event: PointerEvent) => {
-      if (event.buttons !== 0) return;
-      linger();
+    // N7: a turn's whole band answers the pointer, not only the few pixels around its tick; hover
+    // previews exactly what a click there would open.
+    const turnAt = (event: MouseEvent) => {
       const hit = tickAt(event.clientY);
-      if (!hit) return;
-      scrub.current = null;
-      setPeek((current) =>
-        current?.index === hit.index
-          ? current
-          : {
-              index: hit.index,
-              enter: !current ? "open" : hit.index > current.index ? "down" : "up",
-            },
-      );
-    };
-    const onClick = (event: MouseEvent) => {
-      const hit = tickAt(event.clientY);
+      if (hit) return hit.index;
       const band = (event.target as HTMLElement).closest<HTMLElement>(
         '[data-annotation="dial-band"]',
       );
-      const index = hit?.index ?? (band ? Number(band.dataset.index) : undefined);
+      return band ? Number(band.dataset.index) : undefined;
+    };
+    const onMove = (event: PointerEvent) => {
+      if (event.buttons !== 0) return;
+      linger();
+      const index = turnAt(event);
+      if (index === undefined) return;
+      scrub.current = null;
+      setPeek((current) =>
+        current?.index === index
+          ? current
+          : { index, enter: !current ? "open" : index > current.index ? "down" : "up" },
+      );
+    };
+    const onClick = (event: MouseEvent) => {
+      const index = turnAt(event);
       const turn = index === undefined ? undefined : turnsRef.current[index];
       if (turn) goTo(turn.first);
     };
