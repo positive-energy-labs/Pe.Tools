@@ -90,12 +90,10 @@ export function Tooltip({
   const [anchor, setAnchor] = useState<Element | null>(null);
   const [uncontrolled, setOpen] = useState(defaultOpen);
   const open = controlled ?? uncontrolled;
-  return (
+  const root = (
     <Description.Provider value={{ id, open, anchor }}>
       <Primitive.Root
         {...props}
-        // The shared warm-up group would dismiss this evidence when its footnote opens a hint.
-        disabled={props.disabled || parent?.open}
         open={open}
         onOpenChange={(next, event) => {
           if (next && still && event.reason === "trigger-hover") event.cancel();
@@ -108,6 +106,9 @@ export function Tooltip({
       />
     </Description.Provider>
   );
+  // A hint nested in open evidence (a footnote, a menu item over a hinted row) keeps its own
+  // warm-up group: the shared group would dismiss the evidence the moment the hint opens.
+  return parent ? <Primitive.Provider delay={0}>{root}</Primitive.Provider> : root;
 }
 
 export function TooltipTrigger(props: Primitive.Trigger.Props) {
