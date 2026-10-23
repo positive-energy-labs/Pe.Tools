@@ -341,8 +341,8 @@ export function hostResourceObserver(
             (notify) => (bridge ? bridge.subscribe(() => notify()) : () => {}),
             accept,
           );
-        case "world":
-          return bridge
+        case "world": {
+          const release = bridge
             ? bridge.subscribe((event) =>
                 publish({
                   kind: "event",
@@ -351,6 +351,10 @@ export function hostResourceObserver(
                 }),
               )
             : () => {};
+          // Acquire the event tap even when the world is quiet; a gap alone cannot acquire it.
+          accept({ value: null });
+          return release;
+        }
         default:
           accept({ error: `Host does not own '${request.kind}'` });
           return () => {};
