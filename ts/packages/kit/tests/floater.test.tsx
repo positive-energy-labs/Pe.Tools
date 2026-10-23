@@ -2,9 +2,7 @@
 import { act, cleanup, fireEvent, render } from "@testing-library/react";
 import { afterEach, expect, test, vi } from "vite-plus/test";
 
-import { createLiveOrbit } from "@pe/kit/lang/live-orbit";
 import { Floater, type FloaterSpec } from "@pe/kit/lang/floater";
-import { OrbitMinimap, type OrbitViewport } from "@pe/kit/lang/minimap";
 
 afterEach(() => {
   cleanup();
