@@ -3,6 +3,7 @@
 `/rooms` is the one place to split a project's rooms and manage the metadata on them. It replaces the room management inside `/takeoffs`.
 
 ## Decided
+
 - 2026-09-24, a `/rooms` row is a Room Region, a Revit Filled Region carrying the `_PE_TakeoffGuid` spine and the takeoff carriers. It is not a native Revit Room; native Rooms stay solver proposals.
 - 2026-09-24, partition scope is a level plus an optional bounds polygon, never a zoning region. The chosen plan view of that level is the plan image and the carrier for regions.
 - 2026-09-24, a region the user drew or edited in Revit is locked authority on rerun; the solver fills only uncovered area. User-touched is a geometry hash mismatch against provenance.
@@ -87,6 +88,7 @@
 - 2026-09-24, Astra visual bar: fresh-eye REJECT verdicts (crop geometry, wavy and micro-jog boundaries, obscured ink) may veto an adoption but never rescue a red gate; a candidate with the original Partition gate red is never adopted.
 
 ## Tried & rejected
+
 - 2026-09-26, the white "Controls Plan - Level 2" view image was suspected to be a headless-export defect; falsified: the view holds nothing that draws (section boxes, circuits, a camera, a link contributing one element; template hides ducts, fixtures, grids), and exports are byte-identical headless, windowed, and as the active view zoomed to fit (`docs/research/2026-09-26-headless-documents.md`).
 - 2026-09-25, the claim deck (one question at a time, plan flies to each): kaitpw felt lost in it, with no sense of the world's bounds.
 - 2026-09-25, size-gated opening joins (`JoinBelowSf`, branch `join-gate` `839acea7`, unmerged): Project D's Living, Dining, Kitchen and Nook are one 662 sf face with no rail between them, so no join threshold splits them; thresholds 80 to 400 sf score exactly as off (0.355 / 10.3 ft). Cutting an open plan needs non-wall evidence (island, ceiling change, designer's hand), not a join rule.
@@ -100,6 +102,8 @@
 - 2026-09-24, Astra wave 2, the claim that every editable region preserves its metadata: FALSIFIED[session]. A recreated Held region lost identity and fields on a no-edit rerun before any link move; 7/7 retained-room preservation does not cover it. Chadds door-swing counterfactual: removing the two `A_DOOR_SWING` arcs (import 9234379) and adding the opposed wall-cap span replaced the curved separator but moved an untouched boundary 0.1747 ft; endpoint authority stays unresolved.
 
 ## Owed
+
+- 2026-10-23, production nonempty plan/region acceptance remains unproven: `00 Mechanical Plan - Basement/Crawlspace` is selectable, has no zones or room regions, and read-only preview refuses `revit.context.view-image` because it can transact. No partition ran. See the [production report](../../../.artifacts/runs/final-20261023/REPORT.md).
 - Mileage 2026-09-26 (`.artifacts/runs/mileage/REPORT.md` holds the evidence): kaitpw rules on zone tiling vs architect area (overrule 3) and on `JoinTolFt`; then merge or drop `mileage-solver` and retire the `Pe.Tools-mileage-fix-loop` worktree (kept for review; the other two were swept).
 - A partition step with non-empty `failures` (`FilledRegion.Create` refusing a near-retraced held loop, `Rooms.cs:449`) settles `succeeded` because `takeoff-actions.ts:202-205` never reads `failures`; the route shows nothing. Dedupe retraced vertices before `Create` and settle such a step `incomplete`.
 - A rejected held face keeps its engineering hold (`Judge.cs:33` before `:36`) and the card reads `fail`; ruling owed: rejected wins whatever the hold reason.
