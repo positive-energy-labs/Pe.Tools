@@ -1,17 +1,10 @@
-/**
- * The duct network and the write outcomes in a person's words. Plain data in, a string out: the
- * route's notes and rows, and Pea, say these the same way.
- */
+/** Domain names and write outcomes shared by the route and Pea. */
 import type { DuctsApply, DuctsHeal } from "@pe/host-contracts/generated";
 
 import { markOf } from "./terminal-flows.ts";
 import type { DuctSnapshot } from "./types.ts";
 
-/**
- * Group names that tell groups apart: the system names and the root units' marks (else their
- * family); where two groups would otherwise read alike the later ones are numbered, never named
- * by a group id.
- */
+/** Systems and root marks name groups; ordinal suffixes distinguish twins without group ids. */
 export function groupLabels(snapshot: DuctSnapshot): Map<string, string> {
   const nodes = new Map(snapshot.nodes.map((n) => [n.id, n]));
   const base = snapshot.groups.map((group) => {
@@ -47,3 +40,8 @@ export const healWords = (response: DuctsHeal.Res.Response) =>
 
 export const outcomeWords = (response: DuctsApply.Res.Response) =>
   countsWord(response.counts, "nothing to write");
+
+/** Subject names never contain element identities; targets carry those separately. */
+export const subjectName = (kind: string, name?: string | null) => name?.trim() || kind;
+export const findingLabel = (singular: string, count: number) =>
+  `${singular}${count === 1 ? "" : "s"}`;

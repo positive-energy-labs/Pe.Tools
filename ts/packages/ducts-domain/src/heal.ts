@@ -1,20 +1,7 @@
-/**
- * Model healing (pressure-drop ledger 2026-10-20): verdicts on open ends and inferred joins heal the
- * model instead of living as Pe metadata. `healPlan` sorts every open end of a snapshot into what
- * `ducts.heal` repairs automatically with a person's approval, and what a person fixes in Revit:
- * - cap: a duct or duct-fitting end with no open end of its air classification within
- *   `HEAL_DANGLING_IN` (a dangling end; the spike counted about 84 on Project A).
- * - join: two open ends nearest each other, one shape and size, one classification, one system:
- *   coincident (`connect`), or a gap up to `HEAL_JOIN_GAP_IN` on one axis, bridged by a union
- *   between two straight ducts or by extending the one straight duct (`union`, `extend`).
- * - everything else is a person's (`hard`, keyed by finding id, says why): transitions and size
- *   changes, takeoffs (an end landing on a duct's side), longer gaps, joins that would merge or
- *   split systems, terminals off their duct, equipment. Revit's UI enforces the rules its API does not.
- * The native op re-checks every item and post-checks the result; this only proposes. Points are
- * model feet, limits inches. Groups are the tolerated snapshot's (the page's) group ids.
- */
-import type { DuctsRouteDocument } from "@pe/agent-contracts";
+/** Heal proposals only; the native op re-checks and post-checks. Model feet, limits inches. */
+import type { DuctFinding, DuctsRouteDocument } from "@pe/agent-contracts";
 import { tolerate, topologyRulingsKey, verdictOf } from "./proximity.ts";
+import { subjectName } from "./words.ts";
 import { withStoredRulings } from "./rulings.ts";
 import type { DuctSnapshot } from "./types.ts";
 
@@ -41,7 +28,6 @@ export interface HealItem {
   /** Connector keys `elementId:connectorIndex`, as `ducts.snapshot` names them. */
   end: string;
   other?: string;
-  /** The gap a join closes, inches; 0 for a cap. */
   gapIn: number;
   ids: number[];
   /** The finding ids this item answers: the open-end issues it closes and the proximity join it makes real. */
@@ -55,8 +41,7 @@ export interface HealPlan {
   groups: HealGroup[];
   /** Every finding id a heal item answers; the inbox draws them in the Heal row, not on their own. */
   covered: ReadonlySet<string>;
-  /** Why a finding (an open end, a join) is a person's, in words for the row's note. */
-  hard: ReadonlyMap<string, string>;
+  hard: ReadonlyMap<string, { ids: number[]; covers: string[]; note: string }>;
 }
 
 type Element = DuctSnapshot["nodes"][number] | DuctSnapshot["segments"][number];
@@ -102,7 +87,6 @@ const sizeWord = (c: Connector) =>
   c.shape === "round"
     ? `${c.diameterIn ?? "?"} in round`
     : `${c.widthIn ?? "?"}x${c.heightIn ?? "?"} in`;
-/** The proximity finding id for two ends, as `inferJoints` names it. */
 export const proximityId = (a: string, b: string) =>
   `proximity:${[a, b]
     .sort((x, y) => {
@@ -189,13 +173,13 @@ function build(snapshot: DuctSnapshot, raw: DuctsRouteDocument | null): HealPlan
     }
     return best;
   };
-  const hard = new Map<string, string>();
+  const hard: Map<string, { ids: number[]; covers: string[]; note: string }> = new Map();
   const covered = new Set<string>();
   const items: HealItem[] = [];
   const say = (x: End, why: string) => {
-    if (x.issue) hard.set(x.issue, `${why}. ${FIX}`);
+    if (x.issue) hard.set(x.issue, { ids: [x.e.id], covers: [x.issue], note: `${why}. ${FIX}` });
   };
-  const named = (x: End) => `${x.e.kind} ${x.e.id}`;
+  const named = (x: End) => subjectName(x.e.kind, "label" in x.e ? x.e.label : null);
   const done = new Set<string>();
 
   for (const x of live) {
@@ -221,7 +205,7 @@ function build(snapshot: DuctSnapshot, raw: DuctsRouteDocument | null): HealPlan
         say(
           x,
           x.e.kind === "terminal"
-            ? `terminal ${x.e.id} is not connected to a duct`
+            ? `${named(x)} is not connected to a duct`
             : `${named(x)} ends with nothing within ${HEAL_DANGLING_IN} in, and only a duct or a fitting takes a cap: a missing run or a cap`,
         );
       continue;
@@ -230,9 +214,15 @@ function build(snapshot: DuctSnapshot, raw: DuctsRouteDocument | null): HealPlan
     const back = nearest(y);
     const join = proximityId(x.k, y.k);
     const why = (words: string) => {
-      say(x, words);
-      say(y, words);
-      hard.set(join, `${words}. ${FIX}`);
+      hard.set(join, {
+        ids: [x.e.id, y.e.id],
+        covers: [
+          join,
+          join.replace("proximity:", "missed-join:"),
+          ...[x.issue, y.issue].filter((id): id is string => id != null),
+        ],
+        note: `${words}. ${FIX}`,
+      });
       done.add(x.k).add(y.k);
     };
     if (back?.y !== x || tapped.has(y.k)) {
@@ -323,10 +313,38 @@ function build(snapshot: DuctSnapshot, raw: DuctsRouteDocument | null): HealPlan
   };
 }
 
-/** The native `ducts.heal` group for one plan group: keys, kinds and connector keys only. */
 export const healRequestGroup = (group: HealGroup, only?: ReadonlySet<string>) => ({
   group: group.group,
   items: group.items
     .filter((i) => !only || only.has(i.key))
     .map((i) => ({ key: i.key, kind: i.kind, end: i.end, ...(i.other ? { other: i.other } : {}) })),
 });
+
+/** Fold one repair's ends and join before either the inbox or picture numbers findings. */
+export function healFindings(findings: readonly DuctFinding[], plan: HealPlan | null = null) {
+  const repairs = new Map(
+    [...(plan?.hard ?? [])].flatMap(([id, repair]) =>
+      repair.covers.map((key) => [key, { id, ...repair }] as const),
+    ),
+  );
+  const seen = new Set<string>();
+  return findings.flatMap((f) => {
+    const repair = repairs.get(f.id);
+    const id = repair?.id ?? f.id;
+    if (seen.has(id)) return [];
+    seen.add(id);
+    if (!repair) return [{ ...f, findingIds: [id] }];
+    return [
+      {
+        ...f,
+        id,
+        elementIds: repair.ids,
+        note: repair.note,
+        kind: repair.ids.length > 1 ? "open-end" : f.kind,
+        groupId: null,
+        grade: undefined,
+        findingIds: repair.covers,
+      },
+    ];
+  });
+}

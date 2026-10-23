@@ -1,39 +1,17 @@
-/**
- * The deterministic cut of a scene's subject. A subject is an ORDERED element-id list a person or
- * Pea authored; this folds it into legs between places, so prose and drawing can say "MAU-1 → Attic"
- * instead of eighty-eight ids. Nothing here is stored and nothing here is judged: ambiguity lives in
- * the subject and its claims, never in this builder (pressure-drop ledger, 2026-10-19).
- * - A node (equipment, accessory, terminal, cap) ends the leg and is a place.
- * - A level change between consecutive ducts (the snapshot's `levelId`, never z) ends the leg at
- *   a place of kind `level`, named for the level entered, id the first duct on it.
- * - A subject that starts or ends on a duct or fitting starts or ends at a place of kind `open`.
- * - Two consecutive ids that share no connector are a break, and the leg runs on through it. When
- *   the snapshot joins them through at most `OMISSION_HOPS` connections over elements outside the
- *   subject, the break is an `omission` carrying the skipped ids (the subject left them out).
- *   Else, when the tolerated graph (`tolerated`, Work's proximity verdicts honored, as the builder
- *   reads it) bridges it, the break is `inferred`, carrying the proximity finding: joined by
- *   proximity, a person rules on it. An inferred joint or tap bridges a break when it links the
- *   two sides, each side an element or one the snapshot joins it to (an end cap closing the host
- *   a duct lands on). Otherwise it is a `gap` (the model is not connected there). All are facts, not errors.
- * - Mark is not a concept here (the firm does not use it): a place is named by `labelOf(id)`, else
- *   `family type`, else `kind id`.
- */
-import type { DuctClaim, DuctInferenceGrade } from "@pe/agent-contracts";
-
-import type { DuctsRouteDocument } from "@pe/agent-contracts";
+/** Ordered subject cuts. Snapshot connectivity owns omissions; tolerated connectivity owns inferences. */
+import type { DuctClaim, DuctInferenceGrade, DuctsRouteDocument } from "@pe/agent-contracts";
+import { subjectName } from "@pe/ducts-domain/words";
 import { snapshotById } from "@pe/ducts-domain/readiness";
 import { verdictOf } from "@pe/ducts-domain/proximity";
 import { tolerated } from "@pe/ducts-domain/survey";
 import type { DuctSnapshot } from "@pe/ducts-domain/types";
 
-/** The proximity findings that join; a near miss across classifications joins nothing and stays a gap. */
 const BRIDGES = new Set(["joined-by-proximity", "tap-by-proximity", "inline-by-inference"]);
 
 type Node = DuctSnapshot["nodes"][number];
 type Segment = DuctSnapshot["segments"][number];
 type Element = Node | Segment;
 
-/** A claim as the drawing reads it: a staged `DuctClaim` cell keyed by its id, its `ids` named `at`. */
 export interface Claim {
   id: string;
   state: DuctClaim["state"];
@@ -44,15 +22,12 @@ export interface Claim {
   verdictAt?: string;
 }
 
-/** The claims cells in key order, as the drawing reads them. */
 export const claimsOf = (cells: Readonly<Record<string, DuctClaim>>): Claim[] =>
   Object.entries(cells).map(([id, { ids, ...rest }]) => ({ id, at: ids, ...rest }));
 
-/** The authored half of a subject scene: the ordered ids and the claims over them. */
 export interface Subject {
   ids: readonly number[];
   claims: readonly Claim[];
-  /** A person's verdict on one claim; the route stages it. */
   onVerdict: (claim: Claim, verdict: NonNullable<Claim["verdict"]>) => void;
   /** The Work whose staged ignore verdicts the cut's proximity inferences honor; null honors none. */
   work?: DuctsRouteDocument | null;
@@ -65,31 +40,22 @@ export interface Place {
 }
 
 export interface Leg {
-  /** The elements between `from` and `to`, in subject order; the places themselves are not members. */
   ids: number[];
   from: Place;
   to: Place;
-  /** The level of the leg's ducts; null when it has none. */
   levelId: number | null;
-  /** `${from.name} → ${to.name}` */
   name: string;
-  /** Straight duct only; fittings are counted, not priced. */
   lengthFt: number;
   fittings: number;
-  /** The duct size covering the most length in the leg; null with no duct. */
   size: string | null;
 }
 
 export interface SubjectCut {
   legs: Leg[];
-  /** The element places and open ends, in subject order; level crossings are leg boundaries only. */
   nodes: Place[];
-  /** `after` and `before` are two consecutive subject ids the snapshot does not connect. */
   gaps: { after: number; before: number }[];
-  /** Consecutive ids the snapshot connects only through `skipped`, in path order, none in the subject. */
   omissions: { after: number; before: number; skipped: number[] }[];
   /** Consecutive ids only a proximity inference joins; `findingId` keys the verdict that rules on it. */
-  /** Each with its finding's grade, and whether a person's staged connect confirmed it. */
   inferred: {
     after: number;
     before: number;
@@ -99,7 +65,6 @@ export interface SubjectCut {
   }[];
 }
 
-/** The longest chain of connections a break is searched across before it is called a gap. */
 const OMISSION_HOPS = 12;
 
 const PLACE_KINDS = new Set<Node["kind"]>(["equipment", "accessory", "terminal", "cap"]);
@@ -109,7 +74,6 @@ const reaches = (a: Element, b: Element) =>
   a.connectors.some((c) => c.connectedTo?.elementId === b.id) ||
   b.connectors.some((c) => c.connectedTo?.elementId === a.id);
 
-/** Every element's connected neighbours, read from both ends of each connector. */
 function neighboursOf(snapshot: DuctSnapshot): Map<number, Set<number>> {
   const out = new Map<number, Set<number>>();
   const link = (a: number, b: number) => {
@@ -156,7 +120,6 @@ function skippedBetween(
   return null;
 }
 
-/** `legsOf`'s `labelOf` for a snapshot: the node's `label`, which `ducts.snapshot` fills from the staged labelParameter. */
 export const labelOfNode = (snapshot: DuctSnapshot) => {
   const { nodes } = snapshotById(snapshot);
   return (id: number) => nodes.get(id)?.label ?? null;
@@ -181,17 +144,16 @@ export function legsOf(
     const typed = isNode(element)
       ? `${element.family?.includes("_") && element.type ? "" : (element.family ?? "")} ${element.type ?? ""}`.trim()
       : "";
-    // A bare kind cannot tell two accessories apart, so the fallback carries the id.
     return {
       id: element.id,
       kind,
-      name: label ?? (kind === "open" ? "open" : typed || `${kind} ${element.id}`),
+      name: subjectName(kind, label || typed),
     };
   };
   const levelPlace = (duct: Segment, levelId: number): Place => ({
     id: duct.id,
     kind: "level",
-    name: labelOf(duct.id) ?? levelName.get(levelId) ?? `level ${levelId}`,
+    name: subjectName("level", labelOf(duct.id) ?? levelName.get(levelId)),
   });
 
   const legs: Leg[] = [];

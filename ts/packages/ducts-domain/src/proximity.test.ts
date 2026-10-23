@@ -407,7 +407,7 @@ it("a damper inside a duct's body, aligned with it, neither end connected, is in
         id,
         kind: "inline-by-inference",
         elementIds: [9, 1],
-        note: "accessory 9 (Damper_Volume_Round) lies inside duct 1, 4.00 ft along it and aligned with it, with neither end connected; counted inline on it",
+        note: "accessory (Damper_Volume_Round) lies inside duct 1, 4.00 ft along it and aligned with it, with neither end connected; counted inline on it",
         grade: "stretched",
       },
     ]);

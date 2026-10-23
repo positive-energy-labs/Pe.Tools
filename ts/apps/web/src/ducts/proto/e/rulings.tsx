@@ -1,11 +1,7 @@
-/**
- * What the picture annotates beyond the elements themselves: the numbered rulings (claims,
- * inferred joins, snapshot issues the inbox points at), the path-total labels, and the popover a
- * ruling opens.
- */
+/** Picture findings share domain identity and numbering with the inbox. */
 import { useContext, useMemo, useState } from "react";
 
-import type { DuctFinding } from "@pe/agent-contracts";
+import { healPlan, healFindings } from "@pe/ducts-domain/heal";
 import { INFERRED_KINDS } from "@pe/ducts-domain/proximity";
 import { survey } from "@pe/ducts-domain/survey";
 import type { DuctSnapshot } from "@pe/ducts-domain/types";
@@ -68,25 +64,31 @@ export function useMarks({
     const out: (Ruling extends infer R ? (R extends Ruling ? Omit<R, "n"> : never) : never)[] = [];
     for (const claim of claims)
       if (claim.at[0] != null) out.push({ kind: "claim", at: claim.at[0], claim });
-    const findings: DuctFinding[] = (
-      priced?.findings ?? survey(snapshot, work.doc).findings
+    const findings = healFindings(
+      priced?.findings ?? survey(snapshot, work.doc).findings,
+      healPlan(snapshot, work.doc),
     ).filter(
       (f) =>
-        INFERRED_KINDS.has(f.kind) &&
-        annotated.has(f.id) &&
+        (INFERRED_KINDS.has(f.kind) || f.findingIds.length > 1) &&
+        f.findingIds.some((id) => annotated.has(id)) &&
         f.elementIds.some((id) => drawn.has(id)),
     );
     for (const finding of findings)
       out.push({ kind: "inferred", at: finding.elementIds.find((id) => drawn.has(id))!, finding });
     for (const issue of snapshot.issues)
       if (
+        !findings.some((f) => f.findingIds.includes(issue.id)) &&
         issue.elementId != null &&
         drawn.has(issue.elementId) &&
         annotated.has(issue.id) &&
         (!issueScope || issueScope.has(issue.id))
       )
         out.push({ kind: "issue", at: issue.elementId, issue });
-    return out.map((r, i) => ({ ...r, n: i + 1 }) as Ruling);
+    return out.flatMap((r, i) =>
+      (r.kind === "inferred" ? r.finding.elementIds.filter((id) => drawn.has(id)) : [r.at]).map(
+        (at) => ({ ...r, at, n: i + 1 }) as Ruling,
+      ),
+    );
   }, [claims, priced, snapshot, work.doc, drawn, issueScope, annotated]);
 
   // A subject's legs carry their totals; a group scene has none, so each terminal carries its path's.
@@ -176,7 +178,8 @@ export function RulingBody({
     return (
       <div className="flex flex-col gap-2" data-ruling={r.n}>
         <p>
-          <span className="face-mono">{r.n}</span> inferred join · bridged
+          <span className="face-mono">{r.n}</span>{" "}
+          {r.finding.kind === "open-end" ? "open ends, fix in Revit" : "inferred join, bridged"}
         </p>
         <FindingsList findings={[r.finding]} />
       </div>

@@ -8,6 +8,7 @@
  * meets by proximity, or sits inside a kept one is an `out-of-phase` warning a person rules on.
  * With no working phase, or one the snapshot's `phases.order` does not list, nothing changes.
  */
+import { subjectName } from "./words.ts";
 import { workingPhaseOf, type DuctsRouteDocument } from "@pe/agent-contracts";
 
 import { depth, inferJoints, sidesOf, type ProximityFinding } from "./proximity.ts";
@@ -31,8 +32,7 @@ export function existsIn(e: Element, order: readonly string[], at: number) {
   return created <= at && (demolished < 0 || demolished > at);
 }
 
-const nameOf = (e: Element) =>
-  "polyline" in e ? `${e.kind} ${e.id}` : `${e.kind} ${e.id}${e.family ? ` (${e.family})` : ""}`;
+const nameOf = (e: Element) => subjectName(e.kind, "family" in e ? e.family : null);
 const list = (ids: Set<number>) => [...ids].sort((a, b) => a - b).join(", ");
 
 /** The snapshot as it stands in Work's working phase, and an `out-of-phase` finding per dropped element touching it. */

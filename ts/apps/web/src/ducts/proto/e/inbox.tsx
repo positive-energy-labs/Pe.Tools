@@ -330,7 +330,7 @@ export function Inbox({
         item.parts ? [] : item.ids,
       );
       const heading = subjectDocument(
-        [title],
+        item.titleParts ?? [title],
         subjects?.nameOf ?? (() => null),
         [],
         description.references,
