@@ -11,6 +11,10 @@ export interface Cells<W> {
   /** The head's subject for these cells; absent = the thread's document. */
   noun?: string;
   show?: (value: unknown) => string;
+  /** A group's words for the person when its path key is a machine key (`elbow-1d-le10`). */
+  label?: (group: string) => string;
+  /** The page fields that land a review on this cell's own place in the route (its inbox row). */
+  focus?: (key: string) => Record<string, string>;
   /** The head's commit: `open` the route (default), or `plan` there ("apply", one per Work). */
   commit?: "open" | "plan";
   /** Why the head may not write these patches (only the route can), else null. */

@@ -108,6 +108,7 @@ export function Inbox({
   heal,
   fan,
   selected,
+  focused,
   diagnostic,
 }: {
   groups: Record<Exclude<InboxGroup, "write">, readonly InboxItem[]>;
@@ -123,6 +124,8 @@ export function Inbox({
   fan: FanVerbs;
   /** The page's selected element: every row naming it opens. */
   selected: number | null;
+  /** The inbox row a review named (`focusRow`): it opens, wears selected and pulses once. */
+  focused: string | null;
   /** The Diagnostics kind picked in its key (empty = none), and its press. */
   diagnostic: { kind: string; pick: (kind: string) => void };
 }) {
@@ -289,7 +292,7 @@ export function Inbox({
       onMouseEnter: () => light(item.ids),
       revitIds: target.ids,
       revitRefs: target.refs,
-      lit: selected != null && item.ids.includes(selected),
+      lit: (selected != null && item.ids.includes(selected)) || item.key === focused,
       onClick: () => onSelect(item.ids[0] ?? null),
       detail: (
         <>
@@ -338,7 +341,11 @@ export function Inbox({
         fix: { label: INBOX_LABELS.fix, rows: groups.fix.map(spec) },
         set: { label: INBOX_LABELS.set, rows: groups.set.map(spec) },
         check: { label: INBOX_LABELS.check, rows: groups.check.map(spec) },
-        write: { label: INBOX_LABELS.write, rows: [writeSpec, ...reviewSpecs], always: true },
+        write: {
+          label: INBOX_LABELS.write,
+          rows: [{ ...writeSpec, lit: focused === "write" }, ...reviewSpecs],
+          always: true,
+        },
         diagnostics: {
           label: INBOX_LABELS.diagnostics,
           rows: groups.diagnostics
@@ -368,6 +375,7 @@ export function Inbox({
       fan.busy,
       onVerdict,
       selected,
+      focused,
       diagnostic.kind,
       diagnostic.pick,
     ],

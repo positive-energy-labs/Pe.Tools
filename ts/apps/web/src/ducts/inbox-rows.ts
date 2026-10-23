@@ -1073,3 +1073,36 @@ export const fanRefusal = (
     ? null
     : `The preview refused: ${run.response.reason ?? "refused"}`;
 };
+
+/** The Work segments a chat review can name; a `focus` page value is `<segment>:<cell key>`. */
+const FOCUS_SEGMENTS = new Set([
+  "assumptions",
+  "rules",
+  "catalogs",
+  "terminalDrops",
+  "componentDrops",
+  "flows",
+  "esp",
+  "equipmentFlows",
+  "roles",
+  "parameters",
+  "calculation",
+]);
+
+/** The `issue` page value that lands on a Work cell's own place in the inbox. */
+export const cellFocus = (segment: string, key: string) => `${segment}:${key}`;
+
+/**
+ * The inbox row the page's `issue` names: a row by its own key (a Fix row's issue id, a proposal
+ * row's `<segment>:<key>`); a staged cell with no row of its own (a rule, a slot, a flow) lands on
+ * the Write row, which is where staged cells are counted; a cell whose row is its issue id lands on
+ * that row. Null when `issue` names nothing in the inbox.
+ */
+export function focusRow(issue: string, rowKeys: ReadonlySet<string>): string | null {
+  if (!issue) return null;
+  if (rowKeys.has(issue)) return issue;
+  const at = issue.indexOf(":");
+  if (at < 0 || !FOCUS_SEGMENTS.has(issue.slice(0, at))) return null;
+  const rest = issue.slice(at + 1);
+  return rowKeys.has(rest) ? rest : "write";
+}

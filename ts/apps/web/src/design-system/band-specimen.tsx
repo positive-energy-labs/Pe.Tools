@@ -175,8 +175,7 @@ const matrixHeadWork = (matrix: Matrix, say: (text: string) => void): HeadWork =
     word: "plan",
     run: () => say("SIMULATED · the Families pane opens unscoped and plans"),
   },
-  open: (focus) =>
-    say(`SIMULATED · the Families pane opens${focus ? ` on ${focus.join(" › ")}` : ""}`),
+  open: (cell) => say(`SIMULATED · the Families pane opens${cell ? ` on ${cell}` : ""}`),
 });
 
 export function BandGaps() {

@@ -24,6 +24,7 @@ import {
   annotatedFindings,
   fanVerbs,
   healRunView,
+  focusRow,
   inboxRows,
   type CellRef,
 } from "../../inbox-rows";
@@ -305,6 +306,10 @@ function EScreenBody({ props }: { props: ProtoProps }) {
   const [rulesOpen, setRulesOpen] = useState(false);
   // null = automatic: open when the inbox holds a row, collapsed when it holds none.
   const [inboxOpen, setInboxOpen] = useState<boolean | null>(null);
+  // A review from the chat head names an inbox row in `issue`: a rail-collapsed inbox opens for it.
+  useEffect(() => {
+    if (page.issue) setInboxOpen(true);
+  }, [page.issue]);
   const [treeCollapsed, setTreeCollapsed] = useState(false);
   // The picture annotates the Fix rows' findings, or the Diagnostics kind picked in its key.
   const annotated = useMemo(
@@ -339,6 +344,14 @@ function EScreenBody({ props }: { props: ProtoProps }) {
       ) ?? null;
   const scale = critical?.total ?? null;
   const selected = page.selected && /^\d+$/.test(page.selected) ? Number(page.selected) : null;
+  const focusKey = inbox
+    ? focusRow(
+        page.issue,
+        new Set(
+          [...inbox.fix, ...inbox.set, ...inbox.check, ...inbox.diagnostics].map((i) => i.key),
+        ),
+      )
+    : null;
   const open = inboxOpen ?? (toRule > 0 || props.staged > 0);
   // A cell outside the system (a Set row on the whole document) moves the page to its system.
   const focusCell = (cell: CellRef) => {
@@ -581,6 +594,7 @@ function EScreenBody({ props }: { props: ProtoProps }) {
           }}
           fan={fanHandles}
           selected={selected}
+          focused={focusKey}
           diagnostic={diagnostic}
         />
       ) : null}

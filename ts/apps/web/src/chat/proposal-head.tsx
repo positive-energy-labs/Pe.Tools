@@ -35,8 +35,10 @@ export interface HeadWork {
   reload?: () => void;
   /** The route's commit word ("apply"); pressing it opens the pane unscoped and runs it there. */
   commit: { word: string; run: () => void };
-  /** Open the route in the plugin pane, scoped to a group path or unscoped. */
-  open: (focus?: readonly string[]) => void;
+  /** A group's words when its path key is a machine key (a loss rule's key). */
+  label?: (group: string) => string;
+  /** Open the route in the plugin pane, landing on a cell's own place (its key), else unscoped. */
+  open: (cell?: string) => void;
   /** Works sharing a line are one Work in two segments: one head line, one commit (F-B-4). */
   line?: string;
   /** The head's plan, refused where it ran; said here, where it was pressed (F-B-5). */
@@ -250,6 +252,7 @@ function GroupRow({
 }) {
   const show = work.show ?? showDefault;
   const label = String(group.path[0]);
+  const words = work.label?.(label) ?? label;
   // `{k}` is what the press would cover over these cells, bound to this revision. The dry runs
   // are memoized: they rerun only when the cells, the group's keys or the locks move.
   const { segment, lockOf } = work.wire;
@@ -312,7 +315,9 @@ function GroupRow({
   return (
     <div className="flex flex-col" data-group={label}>
       <div className="grid h-(--item-h) grid-cols-[minmax(6rem,12rem)_minmax(0,1fr)_auto] items-center gap-2">
-        <span className="truncate">{label}</span>
+        <span className="truncate" title={words}>
+          {words}
+        </span>
         <TooltipHint content={[body, ...facts].filter(Boolean).join(" · ")}>
           <span className="truncate face-mono">
             {body}
@@ -345,9 +350,9 @@ function GroupRow({
           <Button
             kind="nav"
             direction="forward"
-            label={`open ${label} in ${work.route}`}
-            reason={`Open ${label} in ${work.route}`}
-            onClick={() => work.open(group.path)}
+            label={`review ${words} in ${work.route}`}
+            reason={`Open ${words} in ${work.route}, on its row`}
+            onClick={() => work.open(keys[0])}
           >
             review
           </Button>

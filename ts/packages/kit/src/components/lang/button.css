@@ -24,8 +24,19 @@
 .dl-button[data-kind="nav"] {
   color: var(--pe-nav);
 }
+/* A nav button is a link: hover and keyboard focus are unmistakable. The select fill (never a hue),
+   ink, and a 2px underline on hover; a full-ink 2px outline on focus (the pick mark's weight). */
 .dl-button[data-kind="nav"]:hover:not(:disabled, [aria-disabled="true"]) {
-  text-decoration: underline 1px;
+  background-color: var(--pe-select);
+  color: var(--pe-ink);
+  text-decoration: underline 2px;
+  text-underline-offset: 3px;
+}
+.dl-button[data-kind="nav"]:focus-visible {
+  background-color: var(--pe-select);
+  color: var(--pe-ink);
+  outline: 2px solid var(--pe-ink);
+  outline-offset: 1px;
 }
 /* Pressed is the house selection fill. It must out-rank the resting grounds above (`.dl-control`
    and the transparent unframed ground), which the zero-specificity selection rule in lang.css loses to. */
