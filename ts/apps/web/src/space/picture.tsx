@@ -1,5 +1,4 @@
-/** Space's model, axis cuts and thumbnails. An axis remembers the 3D pose it left.
- * The labelled stage exception retains Escape-to-3D until the pending N1 ruling. */
+/** Space's model, axis cuts and thumbnails; an axis remembers the 3D pose it left. */
 import { useEffect, useMemo, useRef, useState, type ReactNode } from "react";
 
 import { type Chord } from "@pe/kit/keys";

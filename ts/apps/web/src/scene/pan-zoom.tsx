@@ -1,5 +1,4 @@
-/** A local DOM picture under the shared plane viewport. Drag pans, wheel/pinch zooms,
- * scroll pans and double-click fits. Its pose is local rather than a Page address. */
+/** A local DOM picture under the shared plane viewport; its pose stays outside the Page address. */
 import { useState, type ReactNode } from "react";
 import type { PlaneViewport } from "@pe/agent-contracts";
 import type { Viewport2 } from "#/lib/affine-frame";

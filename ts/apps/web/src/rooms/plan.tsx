@@ -1,5 +1,4 @@
-/** Revit's registered picture under selectable room regions. Hover pairs with the table;
- * the fixed readout holds selection facts. useStage owns framing and Escape. */
+/** Revit's registered picture under selectable room regions, paired with the table. */
 import { type CSSProperties, type ReactNode, useEffect, useMemo, useRef } from "react";
 import type { PlaneViewport } from "@pe/agent-contracts";
 import { useStage, stageViewport } from "#/scene/stage-controller";
@@ -478,7 +477,14 @@ export function RoomsPlan({
   const font = CALLOUT_FONT_PX;
 
   return (
-    <Pane {...pane}>
+    <Pane
+      {...pane}
+      legend={
+        <div data-surface="page" className="max-w-full rounded-sm">
+          {legend}
+        </div>
+      }
+    >
       {notice}
       <div
         ref={setHost}
@@ -660,13 +666,6 @@ export function RoomsPlan({
               </span>
             </PictureReadout>
           ) : null}
-          <div
-            data-slot="pane-legend"
-            data-surface="page"
-            className="absolute bottom-2 left-2 max-w-[calc(100%-1rem)] rounded-sm"
-          >
-            {legend}
-          </div>
         </div>
       </div>
     </Pane>

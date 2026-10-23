@@ -274,7 +274,22 @@ export function LevelPlan({
   const font = span / 95;
   const frame = world.frame;
   return (
-    <Pane {...pane}>
+    <Pane
+      {...pane}
+      legend={
+        <div
+          className="pointer-events-none flex max-w-full flex-wrap items-center gap-x-2 gap-y-0.5 rounded-sm px-2 py-0.5"
+          data-surface="page"
+        >
+          {ROOM_STATES.map((s) => (
+            <Key key={s} tone={stateInk(s)} label={STATE_META[s].label} />
+          ))}
+          <Key tone={ABSENT_INK} label="held residue" seam />
+          <Key tone={CURSOR_INK} label="cursor" />
+          {skipped > 0 && <Key tone={ABSENT_INK} label={`${skipped} off-plan`} seam />}
+        </div>
+      }
+    >
       {above}
       {planRefusal ? (
         <OutcomeLine
@@ -445,18 +460,6 @@ export function LevelPlan({
         {/* Surfaces over the plan claim their own pointer: a press on them never pans or clears. */}
         <div onPointerDown={(e) => e.stopPropagation()} onClick={(e) => e.stopPropagation()}>
           {readout}
-          <div
-            data-slot="pane-legend"
-            className="pointer-events-none absolute bottom-2 left-2 flex max-w-[calc(100%-1rem)] flex-wrap items-center gap-x-2 gap-y-0.5 rounded-sm px-2 py-0.5"
-            data-surface="page"
-          >
-            {ROOM_STATES.map((s) => (
-              <Key key={s} tone={stateInk(s)} label={STATE_META[s].label} />
-            ))}
-            <Key tone={ABSENT_INK} label="held residue" seam />
-            <Key tone={CURSOR_INK} label="cursor" />
-            {skipped > 0 && <Key tone={ABSENT_INK} label={`${skipped} off-plan`} seam />}
-          </div>
         </div>
       </div>
     </Pane>
