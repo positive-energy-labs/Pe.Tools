@@ -78,6 +78,7 @@ it("ducts: Pea proposes rules and drops but never stages them, and never touches
     ["rules", "tap-std", { table: "SD5-10" }],
     ["terminalDrops", "31", { inWg: 0.08, source: "catalog p. 12" }],
     ["componentDrops", "22", { inWg: 0.05 }],
+    ["ruleAssignments", "Flex Connector", { rule: "damper" }],
     ["esp", "40", { inWg: 1.25 }],
     ["equipmentFlows", "40", { cfm: 4200, source: "submittal p. 3" }],
     ["roles", "40", { role: "fan" }],

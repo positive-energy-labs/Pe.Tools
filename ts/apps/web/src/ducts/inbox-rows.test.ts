@@ -90,6 +90,19 @@ const base = {
 };
 
 describe("the ducts inbox", () => {
+  it("a fitting no rule prices is a Diagnostics row with a verb to state its drop, never a holding Fix row", () => {
+    const rows = inboxRows({
+      ...base,
+      findings: [finding({ id: "no-rule:Flex Connector", kind: "no-rule", elementIds: [3] })],
+    });
+    expect(rows.fix).toEqual([]);
+    expect(rows.diagnostics).toMatchObject([
+      {
+        kind: "no-rule",
+        verbs: [{ kind: "focus", cell: { segment: "componentDrops", id: 3 } }, { kind: "select" }],
+      },
+    ]);
+  });
   it("a no-fan row with exactly one unit offers to make it its system's fan, armed by a fresh preview", () => {
     const unit = {
       ...node(7, "equipment", null),

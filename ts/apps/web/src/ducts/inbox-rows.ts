@@ -547,6 +547,32 @@ export function triage(input: TriageInput) {
       });
       continue;
     }
+    if (f.kind === "no-rule") {
+      // No rule prices this fitting family. It surfaces the way a grille with no catalog drop does
+      // (Diagnostics, priced as zero, a verb to state the drop; never holding the ESP back); the rules
+      // popover also lists the family to price as an existing rule.
+      diagnostics.push({
+        ...base,
+        group: "diagnostics",
+        kind: f.kind,
+        title: `No loss rule for ${names(f.elementIds)}`,
+        status: "no drop",
+        verbs: [
+          ...(f.elementIds[0] == null
+            ? []
+            : [
+                {
+                  kind: "focus",
+                  cell: { segment: "componentDrops", id: f.elementIds[0] },
+                  label: "state the drop",
+                  says: "State this fitting's drop, or price its family as a rule in the rules popover",
+                } satisfies RowVerb,
+              ]),
+          select(f.elementIds),
+        ],
+      });
+      continue;
+    }
     if (bin(f) !== "blocking") continue;
     const item = { ...base, group: "fix" as const, kind: f.kind, tone: "alarm" as const };
     switch (f.kind) {
@@ -858,7 +884,13 @@ const ELEMENT_WORD: Record<string, string> = {
   terminalDrops: "Drop",
   componentDrops: "Drop",
 };
-const FOCUSABLE = new Set(["flows", "equipmentFlows", "esp", "roles", "terminalDrops"]);
+const FOCUSABLE = new Set([
+  "flows",
+  "equipmentFlows",
+  "esp",
+  "roles",
+  "terminalDrops",
+]);
 
 const valueWord = (segment: string, value: unknown) => {
   const v = value as Record<string, unknown> | undefined;

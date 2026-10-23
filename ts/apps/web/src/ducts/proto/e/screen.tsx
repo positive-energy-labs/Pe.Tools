@@ -13,6 +13,8 @@ import { healPlan } from "@pe/ducts-domain/heal";
 import { sectionNames, systemOfGroup, systemScope } from "@pe/ducts-domain/system-scope";
 import { Button } from "@pe/kit/lang/button";
 import { Row } from "@pe/kit/lang/row";
+import { systemSearch } from "@pe/ducts-domain/system-search";
+import { VirtualList } from "@pe/kit/lang/virtual-list";
 import { Pane } from "#/components/lang/pane";
 import { PaneSplit } from "#/components/lang/pane-resize";
 
@@ -27,7 +29,6 @@ import {
   inboxRows,
   type CellRef,
 } from "../../inbox-rows";
-import { navigate } from "../../navigate";
 import { groupLabels } from "@pe/ducts-domain/words";
 import { scopeOf } from "@pe/ducts-domain/system-scope";
 import { stagedEsp } from "@pe/ducts-domain/staged";
@@ -46,18 +47,30 @@ import { grilleLabels } from "./labels";
 import { FanButton, Inbox, type FanVerbs } from "./inbox";
 import { InputsPane } from "./inputs-pane";
 import { ruleOfIds } from "./rules-pane";
-import { GoTo, SystemTree } from "./tree-sidebar";
+import { SystemTree } from "./tree-sidebar";
 import { useGroupEncoding } from "../encoding/use-encoding";
 import { formatQuantity } from "../../encoding";
 
 const NO_GROUPS: readonly string[] = [];
 
-/**
- * What the all-systems minibars are drawn against. "shared": one scale (the largest system's fan) so
- * the worst system fills its track and outliers stand out; "own": each system against its own fan, so
- * every bar fills and only its make-up reads. Pricing is per system, so the strip is always "own".
- */
-const LIST_SCALE: "shared" | "own" = "shared";
+/** A two-line system row before it is measured, px (two item heights). */
+const LIST_ROW_PX = 48;
+
+/** The row's one hint: what the bar and its numbers mean, so the bar draws no tooltip of its own. */
+const systemHint = (s: ReturnType<typeof systemList>[number]) =>
+  [
+    `${s.name} · ${s.sub}`,
+    s.total == null
+      ? null
+      : s.rating != null
+        ? `fan static Pe computes ${s.total.toFixed(3)} of the unit's rated ${s.rating.toFixed(2)} in-wg`
+        : `fan static Pe computes ${s.total.toFixed(3)} in-wg; the unit states no rated external static`,
+    s.provisional
+      ? `provisional: rests on ${s.provisional.count} unruled inferred join(s), worst ${s.provisional.worst}`
+      : null,
+  ]
+    .filter(Boolean)
+    .join("\n");
 
 /**
  * The read snapshot is priced once the tables are in (2-3 s on a large model): until then the
@@ -111,9 +124,16 @@ function EScreenBody({ props }: { props: ProtoProps }) {
     return raw.every((g) => groups.includes(g)) ? groups : [...new Set([...groups, ...raw])];
   }, [snapshot, page.system, groups]);
   const systems = useMemo(() => (drawn ? systemList(drawn, priced) : []), [drawn, priced]);
-  const listMax = useMemo(
-    () => systems.reduce((max, s) => (s.fanless ? max : Math.max(max, s.total ?? 0)), 0) || null,
-    [systems],
+  // The all-systems list reads by name, or by the ESP each system's fan must deliver, largest first.
+  const [byEsp, setByEsp] = useState(false);
+  // What the list's filter reads per system: its words, and every element id it holds.
+  const searchable = useMemo(() => (drawn ? systemSearch(drawn) : null), [drawn]);
+  const listed = useMemo(
+    () =>
+      byEsp
+        ? [...systems].sort((a, b) => (b.total ?? -Infinity) - (a.total ?? -Infinity))
+        : systems,
+    [systems, byEsp],
   );
   // Each group the system is in is its own section, named by the system and its units; a group
   // that carries other systems says so, and shows whole.
@@ -286,6 +306,7 @@ function EScreenBody({ props }: { props: ProtoProps }) {
   );
   const toRule = inbox ? inbox.fix.length + inbox.set.length + inbox.check.length : 0;
   // A Set row's verb selects the element and focuses its cell once the tree has drawn it.
+  const [rulesOpen, setRulesOpen] = useState(false);
   const [cellFocus, setCellFocus] = useState<CellRef | null>(null);
   useEffect(() => {
     if (!cellFocus) return;
@@ -296,13 +317,12 @@ function EScreenBody({ props }: { props: ProtoProps }) {
     input.scrollIntoView?.({ block: "nearest" });
     input.focus();
     setCellFocus(null);
-  }, [cellFocus, trees, priced]);
+  }, [cellFocus, trees, priced, rulesOpen]);
   const encoded = useGroupEncoding(snapshot, priced, drawGroups, page.encoding);
   // The tree reads the drawing's quantity; a categorical reading (or none) keeps Pe's fan-to-here loss.
   const reading = encoded.encoding.quantity ? encoded.encoding : null;
   const [lit, setLit] = useState<ReadonlySet<number>>(new Set());
   const [ruleFocus, setRuleFocus] = useState<string | null>(null);
-  const [rulesOpen, setRulesOpen] = useState(false);
   // null = automatic: open when the inbox holds a row, collapsed when it holds none.
   const [inboxOpen, setInboxOpen] = useState<boolean | null>(null);
   const [treeCollapsed, setTreeCollapsed] = useState(false);
@@ -351,6 +371,8 @@ function EScreenBody({ props }: { props: ProtoProps }) {
             return g ? systemOfGroup(drawn ?? snapshot, g) : page.system;
           })();
     setPage({ system: into, selected: String(cell.id), issue: "" });
+    // A fitting's drop cell lives in the rules popover (Settings), not in the tree.
+    if (cell.segment === "componentDrops") setRulesOpen(true);
     setCellFocus(cell);
   };
   // The section whose run leads the system: its fan and TEL head the pane.
@@ -373,13 +395,6 @@ function EScreenBody({ props }: { props: ProtoProps }) {
       : `TEL ${fmtFt(critical.ft ?? groupTel)} ft · ESP ${critical.total.toFixed(3)} in-wg`
     : "not priced yet";
   const runDetail = priced && scope && selected != null ? runOf(priced, groups, selected) : null;
-  // Go to an element, a unit or a system in the snapshot already read: the page moves, the read stays.
-  const go = (query: string) => {
-    const to = navigate(drawn ?? snapshot, query, labels);
-    if (to.system !== null) setPage({ system: to.system, selected: to.selected, issue: "" });
-    return to.says;
-  };
-
   // The selected element, wherever it was picked from, offers Revit in plain sight.
   const shown =
     selected != null ? (
@@ -399,7 +414,11 @@ function EScreenBody({ props }: { props: ProtoProps }) {
     >
       all systems
     </Button>
-  ) : null;
+  ) : (
+    <Button label="sort the systems" onClick={() => setByEsp(!byEsp)}>
+      {byEsp ? "by ESP" : "by name"}
+    </Button>
+  );
   const treePane = (
     <Pane
       id="e-sidebar"
@@ -409,7 +428,6 @@ function EScreenBody({ props }: { props: ProtoProps }) {
       scroll="auto"
       flush
     >
-      <GoTo go={go} />
       {tree ? (
         <>
           {reading?.quantity ? (
@@ -473,22 +491,35 @@ function EScreenBody({ props }: { props: ProtoProps }) {
           ) : null}
         </>
       ) : (
-        <div role="list" aria-label="systems">
-          {systems.map((s) => {
+        <VirtualList
+          aria-label="systems"
+          items={listed}
+          keyOf={(s) => s.key}
+          estimate={LIST_ROW_PX}
+          filter={{
+            label: "filter the systems",
+            placeholder: "system, unit tag, classification or element id  ( / )",
+            noun: "systems",
+            primary: true,
+            searchOf: (s) => ({
+              text: [s.name, s.sub, ...(searchable?.get(s.key)?.text ?? [])],
+              ids: searchable?.get(s.key)?.ids,
+            }),
+            onSole: (s) => setPage({ system: s.key, selected: "", issue: "" }),
+          }}
+          row={(s) => {
             const open = () => setPage({ system: s.key, selected: "", issue: "" });
             // A system none of whose groups has an air mover prices nothing: its row says it needs a fix.
-            const fanless = s.fanless;
             return (
               <Row
-                key={s.key}
                 role="listitem"
                 tabIndex={0}
                 lines={2}
                 label={s.name}
                 sub={s.sub}
-                title={`${s.name} · ${s.sub}`}
+                title={systemHint(s)}
                 meta={
-                  fanless ? (
+                  s.fanless ? (
                     <span data-tone="alarm" data-e-fanless={s.key}>
                       needs a fix: no fan
                     </span>
@@ -496,9 +527,8 @@ function EScreenBody({ props }: { props: ProtoProps }) {
                     <SystemBar
                       value={s.total}
                       split={s.split}
-                      scale={LIST_SCALE === "shared" ? listMax : s.total}
+                      rating={s.rating}
                       provisional={s.provisional}
-                      label="fan static Pe computes, in-wg"
                     />
                   )
                 }
@@ -508,8 +538,8 @@ function EScreenBody({ props }: { props: ProtoProps }) {
                 }}
               />
             );
-          })}
-        </div>
+          }}
+        />
       )}
       {shown}
     </Pane>

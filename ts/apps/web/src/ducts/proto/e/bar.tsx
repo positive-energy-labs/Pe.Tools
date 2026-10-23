@@ -5,6 +5,8 @@ import { TooltipHint } from "@pe/kit/lang/tooltip";
  * fills its track and every other row reads as a share of it. Unpriced draws no track: an empty bar
  * would read as zero loss.
  */
+import { Fragment, type ComponentProps } from "react";
+import { fanLoad } from "@pe/ducts-domain/fan-headroom";
 import type { Provisional } from "@pe/ducts-domain/losses";
 import { revitTarget } from "@pe/kit/lang/row";
 import { tokenRef } from "@pe/kit/lib/token";
@@ -70,13 +72,18 @@ function SplitFill({
   scale,
   light,
   back,
+  hint = true,
 }: {
   split: Split;
   scale: number;
   light?: Light;
   back?: readonly number[];
+  /** Each segment its own tooltip. The all-systems list draws none: its row's title carries the hint. */
+  hint?: boolean;
 }) {
   const observation = useNativeObservation();
+  const tip = (content: string, child: ComponentProps<typeof TooltipHint>["children"]) =>
+    hint ? <TooltipHint content={content}>{child}</TooltipHint> : child;
   let at = 0;
   return (
     <>
@@ -89,25 +96,25 @@ function SplitFill({
             const left = at;
             at += group.dp / scale;
             return (
-              <TooltipHint
-                key={group.key}
-                content={`${group.label} ${fmt(group.dp, LOSS_PLACES)} in-wg (${Math.round((group.dp / scale) * 100)}% of the fan)`}
-              >
-                <span
-                  className="absolute inset-y-0"
-                  data-e-split={key}
-                  data-e-group={group.label}
-                  {...revitTarget(target.ids, target.refs)}
-                  style={{
-                    left: `${left * 100}%`,
-                    width: `${Math.min(1 - left, group.dp / scale) * 100}%`,
-                    backgroundColor: tokenRef(ink),
-                    boxShadow: `inset -1px 0 0 ${tokenRef("page")}`,
-                  }}
-                  onMouseEnter={light ? () => light(group.ids) : undefined}
-                  onMouseLeave={light ? () => light(back ?? null) : undefined}
-                />
-              </TooltipHint>
+              <Fragment key={group.key}>
+                {tip(
+                  `${group.label} ${fmt(group.dp, LOSS_PLACES)} in-wg (${Math.round((group.dp / scale) * 100)}% of the fan)`,
+                  <span
+                    className="absolute inset-y-0"
+                    data-e-split={key}
+                    data-e-group={group.label}
+                    {...revitTarget(target.ids, target.refs)}
+                    style={{
+                      left: `${left * 100}%`,
+                      width: `${Math.min(1 - left, group.dp / scale) * 100}%`,
+                      backgroundColor: tokenRef(ink),
+                      boxShadow: `inset -1px 0 0 ${tokenRef("page")}`,
+                    }}
+                    onMouseEnter={light ? () => light(group.ids) : undefined}
+                    onMouseLeave={light ? () => light(back ?? null) : undefined}
+                  />,
+                )}
+              </Fragment>
             );
           });
         // Unknown is drawn, never blank: a dashed stub past any known share. Ducts skip it: an unpriced
@@ -135,50 +142,111 @@ function SplitFill({
   );
 }
 
+/** What a system's row says about itself beyond its number: one marker, its tone and its sentence. */
+export interface SystemStatus {
+  tone: "alarm" | "caution";
+  says: string;
+}
+
 /**
- * The all-systems row's minibar: the same groups and inks as the strip, minified, against `scale`.
- * Pass one shared scale across rows to compare systems (the worst fills its track); pass the row's
- * own total to read each system's make-up alone. Unpriced draws no track: an empty bar would read as zero.
+ * The all-systems row's status, worst first: a dash is never bare. `null` is a priced system with a
+ * rating, in range, that rests on no unruled join: it says nothing.
  */
-export function SystemBar({
+export function systemStatus(s: {
+  total: number | null;
+  rating: number | null;
+  fanless: boolean;
+  provisional: Provisional;
+}): SystemStatus | null {
+  if (s.fanless)
+    return { tone: "alarm", says: "needs a fix: no unit in this system moves air, so nothing is priced" };
+  if (s.total == null)
+    return { tone: "caution", says: "not priced: no run from a fan to a terminal was found" };
+  const load = fanLoad(s.total, s.rating);
+  if (load.state === "rated" && load.over)
+    return {
+      tone: "alarm",
+      says: `over rating: needs ${s.total.toFixed(3)} in-wg, the unit is rated ${load.available.toFixed(2)}`,
+    };
+  if (load.state === "unrated")
+    return {
+      tone: "caution",
+      says: "rating unknown: the unit states no rated external static, so the bar fills against its own total",
+    };
+  if (s.provisional)
+    return {
+      tone: "caution",
+      says: `provisional: rests on ${s.provisional.count} unruled inferred join(s), worst ${s.provisional.worst}`,
+    };
+  return null;
+}
+
+/** The row's trailing fact: the ESP Pe computes, over the unit's rating when it states one, and the marker. */
+export function SystemFact({
+  value,
+  rating,
+  status,
+}: {
+  value: number | null;
+  rating: number | null;
+  status: SystemStatus | null;
+}) {
+  const load = fanLoad(value, rating);
+  return (
+    <span className="inline-flex items-center gap-1.5" data-e-fact="">
+      <span
+        className="face-mono"
+        data-tone={status?.tone === "alarm" && value != null ? "alarm" : undefined}
+      >
+        {fmt(value)}
+        {load.state === "rated" ? ` / ${fmt(load.available, 2)}` : ""}
+      </span>
+      {status ? (
+        <span
+          className="inline-block size-1.5 shrink-0 rounded-full bg-current"
+          data-tone={status.tone}
+          data-e-marker={status.tone}
+          role="img"
+          aria-label={status.says}
+          title={status.says}
+        />
+      ) : null}
+    </span>
+  );
+}
+
+/**
+ * The all-systems row's minibar: a thin line the full width of the row, on the system's own scale,
+ * the same groups and inks as the strip, minified. With the unit's rated external static (`rating`,
+ * in-wg) it is required over available, a fill against the fan's own limit, ringed in the alarm
+ * tone when over; the breakdown inks stay inside the fill. Without a rating it fills its track to
+ * read the make-up alone. Unpriced draws no track: an empty bar would read as zero. It draws no
+ * tooltips: the row's title carries the hint (hundreds of rows would draw hundreds).
+ */
+export function SystemLine({
   value,
   split,
-  scale,
-  provisional = null,
-  label,
+  rating,
 }: {
   value: number | null;
   split: Split | null;
-  scale: number | null;
-  provisional?: Provisional;
-  label: string;
+  rating: number | null;
 }) {
-  const drawn = value != null && scale ? split : null;
+  const load = fanLoad(value, rating);
+  const over = load.state === "rated" && load.over;
+  const scale = load.state === "rated" ? load.available : value;
+  if (value == null || !scale || !split) return null;
   return (
-    <TooltipHint content={label}>
-      <span className="flex min-w-0 flex-1 items-center gap-2" data-e-minibar="">
-        <span className="relative block h-1.5 min-w-8 flex-1" aria-hidden>
-          {drawn && scale ? (
-            <>
-              <span className="absolute inset-0" style={{ backgroundColor: tokenRef("line") }} />
-              <SplitFill split={drawn} scale={scale} />
-            </>
-          ) : null}
-        </span>
-        <span className="face-mono w-12 shrink-0 text-right">{fmt(value)}</span>
-        <TooltipHint
-          content={
-            provisional
-              ? `provisional: rests on ${provisional.count} unruled inferred join(s), worst ${provisional.worst}`
-              : undefined
-          }
-        >
-          <span className="w-2 shrink-0" data-tone={provisional ? "caution" : undefined}>
-            {provisional ? "~" : ""}
-          </span>
-        </TooltipHint>
-      </span>
-    </TooltipHint>
+    <span
+      className="pointer-events-none absolute inset-x-0 bottom-0 block h-[3px]"
+      aria-hidden
+      data-e-minibar=""
+      data-e-load={load.state === "rated" ? load.ratio.toFixed(3) : ""}
+      style={over ? { boxShadow: `0 0 0 1px ${tokenRef("alarm")}` } : undefined}
+    >
+      <span className="absolute inset-0" style={{ backgroundColor: tokenRef("line") }} />
+      <SplitFill split={split} scale={scale} hint={false} />
+    </span>
   );
 }
 

@@ -87,6 +87,28 @@ const byId = <V>(cells: Record<string, V>, pick: (value: V) => number) =>
  */
 export function catalogFindings(result: LossResult): DuctFinding[] {
   const found = new Map<string, DuctFinding>();
+  // A fitting no rule prices: one finding per family (or per element with no family), its elements
+  // gathered, so the inbox asks once for a drop and the rules popover once for a rule.
+  const unruled = new Map<string, { family: string | null; ids: Set<number> }>();
+  for (const path of Object.values(result.paths))
+    for (const row of path.rows)
+      if (row.finding === "no-rule") {
+        const key = row.family ?? `#${row.id}`;
+        const at = unruled.get(key) ?? { family: row.family ?? null, ids: new Set<number>() };
+        at.ids.add(row.id);
+        unruled.set(key, at);
+      }
+  for (const [key, { family, ids }] of unruled)
+    found.set(`no-rule:${key}`, {
+      id: `no-rule:${key}`,
+      kind: "no-rule",
+      elementIds: [...ids].sort((a, b) => a - b),
+      note: family
+        ? `No loss rule prices the family ${family}; state a drop on one of them, or price the family as a rule.`
+        : "No loss rule prices this fitting; state its drop.",
+      assumed: null,
+      clearer: "person",
+    });
   for (const path of Object.values(result.paths))
     for (const row of path.rows)
       if (row.finding === "catalog-missing-table" || row.finding === "catalog-out-of-range")
@@ -194,6 +216,9 @@ export function price(
       ),
     ),
     catalogLinks: staged.catalogs,
+    ruleAssignment: Object.fromEntries(
+      Object.entries(staged.ruleAssignments).map(([family, { rule }]) => [family, rule]),
+    ),
     terminalPs: byId(staged.terminalDrops, (drop) => drop.inWg),
     componentDrop: byId(staged.componentDrops, (drop) => drop.inWg),
     ...unitOverrides(surveyed.roles, surveyed.equipmentFlows),
@@ -201,6 +226,7 @@ export function price(
   };
   const same =
     Object.keys(staged.catalogs).length === 0 &&
+    Object.keys(staged.ruleAssignments).length === 0 &&
     Object.keys(staged.rules).length === 0 &&
     !hasDrops(staged) &&
     !Object.keys(overrides.terminalCfm!).length &&

@@ -19,7 +19,7 @@ export const WRITTEN = [
 ] as const;
 
 export const stagedCells = (doc: DuctsRouteDocument | null) =>
-  ([...WRITTEN, "catalogs"] as const).flatMap((segment) =>
+  ([...WRITTEN, "catalogs", "ruleAssignments"] as const).flatMap((segment) =>
     Object.entries(doc?.[segment] ?? {}).flatMap(([key, cell]) =>
       cell?.staged ? [{ segment, key, cell }] : [],
     ),

@@ -35,6 +35,7 @@ import {
 import type { DuctsApply, DuctsAssignFan, DuctsHeal } from "@pe/host-contracts/generated";
 import { EMPTY_CATALOGS, type Catalogs } from "@pe/ducts-domain/catalog";
 import type { Grids } from "@pe/ducts-domain/loss-grid";
+import { ruleByKey } from "@pe/ducts-domain/loss-rules";
 import { applyRequest, price } from "@pe/ducts-domain/pricing";
 import { pendingRulings, withStoredRulings } from "@pe/ducts-domain/rulings";
 import type { DuctSnapshot } from "@pe/ducts-domain/types";
@@ -427,6 +428,13 @@ export const manifest = defineRoute<
       show: (value) => (value as { table: string }).table,
     },
     {
+      segment: "ruleAssignments",
+      groupOf: (key) => [key],
+      nouns: ["fitting family"],
+      noun: "fitting families priced as a rule",
+      show: (value) => (ruleByKey((value as { rule: string }).rule)?.family ?? (value as { rule: string }).rule),
+    },
+    {
       segment: "terminalDrops",
       groupOf: (key) => [key],
       nouns: ["terminal"],
@@ -556,7 +564,8 @@ export const manifest = defineRoute<
         const held = espHeld(ctx) !== null;
         // A held ESP stays staged: it was not in the request.
         const applied = stagedCells(ctx.work.doc).filter(
-          (cell) => cell.segment !== "catalogs" && !(held && cell.segment === "esp"),
+          (cell) =>
+            cell.segment !== "catalogs" && cell.segment !== "ruleAssignments" && !(held && cell.segment === "esp"),
         );
         const rulings = pendingRulings(
           ctx.work.doc,

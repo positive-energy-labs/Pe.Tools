@@ -45,7 +45,11 @@ export interface Split {
 export const BREAKDOWN_BY_SIZE = false;
 
 /** A path's rows dealt to the three parts by what each row prices, and to groups by what each row is. */
-function splitOf(snapshot: DuctSnapshot, rows: readonly Row[], equipment: ReadonlySet<number>): Split {
+function splitOf(
+  snapshot: DuctSnapshot,
+  rows: readonly Row[],
+  equipment: ReadonlySet<number>,
+): Split {
   const part = (): SplitPart => ({ dp: 0, ids: [], unpriced: 0 });
   const split: Split = {
     unit: part(),
@@ -339,7 +343,8 @@ export function buildTree(
 export function systemList(
   snapshot: DuctSnapshot,
   priced: Priced | null,
-): (TreeNode & { fanless: boolean; sub: string })[] {
+): (TreeNode & { fanless: boolean; sub: string; rating: number | null })[] {
+  const nodes = new Map(snapshot.nodes.map((n) => [n.id, n]));
   const equipment = new Set(snapshot.nodes.filter((n) => n.kind === "equipment").map((n) => n.id));
   return systemsOf(snapshot).map((system) => {
     const solved = system.groups.flatMap((g) => priced?.next.byGroup[g] ?? []);
@@ -350,6 +355,16 @@ export function systemList(
     const rows = priced && worst ? criticalRows(priced.next, worst) : null;
     const totals = solved.filter((s) => s.critical != null).map((s) => s.fan);
     const first = snapshot.groups.find((g) => g.id === system.groups[0]);
+    // The unit that must deliver the system's fan static: the worst group's largest-static fan
+    // (several fans root a group), else its one root. Its rated ESP is the `externalStatic` fact.
+    const lead = worst
+      ? (priced!.next.byGroup[worst]!.fans.reduce<FanResult | null>(
+          (best, f) => (best == null || f.esp > best.esp ? f : best),
+          null,
+        )?.unit ?? snapshot.groups.find((g) => g.id === worst)?.rootIds[0])
+      : undefined;
+    const rated =
+      lead != null ? nodes.get(lead)?.facts.find((f) => f.key === "externalStatic")?.value : null;
     return {
       key: system.name,
       kind: "system",
@@ -362,6 +377,7 @@ export function systemList(
         .filter(Boolean)
         .join(" · "),
       fanless: !!priced && solved.length > 0 && solved.every((s) => !s.hasAirMover),
+      rating: rated ?? null,
       id: first?.rootIds[0] ?? null,
       total: totals.length ? Math.max(...totals) : null,
       self: null,

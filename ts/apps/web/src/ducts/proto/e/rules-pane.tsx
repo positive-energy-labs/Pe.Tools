@@ -8,7 +8,8 @@
  */
 import { useEffect, useMemo } from "react";
 import type { LossResult } from "@pe/ducts-domain/losses";
-import { ruleByKey } from "@pe/ducts-domain/loss-rules";
+import { transitionPatches } from "@pe/agent-contracts";
+import { LOSS_RULES, ruleByKey } from "@pe/ducts-domain/loss-rules";
 import { unpriced, type Priced } from "@pe/ducts-domain/pricing";
 import type { DuctSnapshot } from "@pe/ducts-domain/types";
 
@@ -128,6 +129,31 @@ export function RulesTree({
       .filter(([id, k]) => k === ruleKey && (wide || groups.includes(groupOf.get(id) ?? "")))
       .map(([id]) => id);
 
+  // Fittings no rule prices, by family, plus the families a person has assigned a rule to.
+  const unruled = useMemo(() => {
+    const own = new Set(groups);
+    const inScope = (id: number) => wide || own.has(groupOf.get(id) ?? "");
+    const byFamily = new Map<string, { family: string | null; ids: Set<number> }>();
+    for (const path of Object.values(priced.next.paths))
+      for (const row of path.rows)
+        if (row.finding === "no-rule" && inScope(row.id)) {
+          const key = row.family ?? `#${row.id}`;
+          const at = byFamily.get(key) ?? { family: row.family ?? null, ids: new Set<number>() };
+          at.ids.add(row.id);
+          byFamily.set(key, at);
+        }
+    for (const family of Object.keys(priced.staged.ruleAssignments))
+      if (!byFamily.has(family)) byFamily.set(family, { family, ids: new Set() });
+    return [...byFamily.values()].sort((a, b) => b.ids.size - a.ids.size);
+  }, [priced, groupOf, groups, wide]);
+  const assign = (family: string, rule: string) => {
+    const cell = work.doc?.ruleAssignments?.[family] ?? {};
+    void work.write(
+      rule
+        ? transitionPatches(["ruleAssignments"], family, cell, { kind: "stage", rung: { value: { rule } } })
+        : transitionPatches(["ruleAssignments"], family, cell, { kind: "unstage" }),
+    );
+  };
   const overrideRow = (n: Extract<RuleNode, { kind: "override" }>, nested = false) => {
     return (
       <div
@@ -183,9 +209,7 @@ export function RulesTree({
                   <p className="break-words" title={rule?.cond ? `${name} · ${rule.cond}` : name}>
                     {name}
                   </p>
-                  {rule?.cond ? (
-                    <p className="t-small text-ink-2 break-words">{rule.cond}</p>
-                  ) : null}
+                  <p className="t-small text-ink-2 break-words">{rule?.cond || "any size"}</p>
                 </div>
                 <div className="flex min-w-0 flex-col gap-0.5">
                   <Chips ruleKey={n.ruleKey} priced={priced} work={work} />
@@ -212,6 +236,58 @@ export function RulesTree({
           );
         })}
       </ul>
+      {unruled.length ? (
+        <div className="border-line border-t pt-1" data-e-unruled="">
+          <p className="t-small text-ink-2 pb-1">
+            No rule prices these. State a drop, or price the family as a rule.
+          </p>
+          {unruled.map(({ family, ids }) => {
+            const first = [...ids][0];
+            const picked = family ? work.doc?.ruleAssignments?.[family]?.staged?.value?.rule : undefined;
+            return (
+              <div
+                key={family ?? `#${first}`}
+                className={`${COLS} items-baseline py-0.5`}
+                data-e-unruled-family={family ?? undefined}
+                onMouseEnter={() => light([...ids])}
+              >
+                <p className="min-w-0 break-words">
+                  {family ?? nameOf(first!)}
+                  {ids.size ? <span className="t-small text-ink-2"> ×{ids.size}</span> : null}
+                </p>
+                <div className="flex min-w-0 flex-wrap items-baseline gap-x-3 gap-y-0.5">
+                  {family ? (
+                    <select
+                      aria-label={`price ${family} as`}
+                      className="dl-control t-small max-w-full"
+                      value={picked ?? ""}
+                      onChange={(event) => assign(family, event.target.value)}
+                    >
+                      <option value="">price as…</option>
+                      {LOSS_RULES.map((rule) => (
+                        <option key={rule.key} value={rule.key}>
+                          {rule.family}
+                          {rule.type ? ` : ${rule.type}` : ""}
+                          {rule.cond ? ` · ${rule.cond}` : ""}
+                        </option>
+                      ))}
+                    </select>
+                  ) : null}
+                  {first != null && !picked ? (
+                    <DropCell
+                      segment="componentDrops"
+                      id={first}
+                      held={snapshot.nodes.find((x) => x.id === first)?.loss?.revitPressureDropInWg}
+                      work={work}
+                      label={`stated drop on ${first}`}
+                    />
+                  ) : null}
+                </div>
+              </div>
+            );
+          })}
+        </div>
+      ) : null}
       <div className="border-line border-t pt-1">
         <StagedRules priced={priced} groups={wide ? [] : groups} work={work} />
       </div>

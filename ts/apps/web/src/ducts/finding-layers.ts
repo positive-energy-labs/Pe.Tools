@@ -29,8 +29,9 @@ type Ink = keyof typeof INK;
 type Element = DuctSnapshot["nodes"][number] | DuctSnapshot["segments"][number];
 type Connector = Element["connectors"][number];
 
-/** An oriented box: unit axes and half sizes along each. */
+/** An oriented box or cylinder: unit axes and half sizes along each (a cylinder's third axis is its run, the first two its radius). */
 export interface OrientedBox {
+  shape: "box" | "cylinder";
   center: number[];
   axes: [number[], number[], number[]];
   half: [number, number, number];
@@ -146,6 +147,7 @@ export function findingShapes(
             : 0;
       if (span <= 0) continue;
       shapes.boxes.push({
+        shape: face.round ? "cylinder" : "box",
         center: add(face.center, n, span / 2),
         axes: [face.x, face.y, n],
         half: [face.w, face.h, span / 2],
@@ -202,8 +204,15 @@ export function findingLayers(shapes: FindingShapes): Layer3D[] {
       key: key("heal", shapes.boxes),
       build(group) {
         for (const b of shapes.boxes) {
+          // A cylinder's axis is Y in three; turn it onto Z so the basis (x, y, normal) carries it.
+          const geometry =
+            b.shape === "cylinder"
+              ? new THREE.CylinderGeometry(b.half[0], b.half[0], b.half[2] * 2, 32).rotateX(
+                  Math.PI / 2,
+                )
+              : new THREE.BoxGeometry(b.half[0] * 2, b.half[1] * 2, b.half[2] * 2);
           const mesh = new THREE.Mesh(
-            new THREE.BoxGeometry(b.half[0] * 2, b.half[1] * 2, b.half[2] * 2),
+            geometry,
             new THREE.MeshBasicMaterial({
               color: INK.cap,
               transparent: true,

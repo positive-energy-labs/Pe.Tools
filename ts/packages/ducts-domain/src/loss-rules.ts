@@ -257,10 +257,16 @@ export const LOSS_RULES: readonly LossRule[] = [
     table: "CD9-1",
     options: ["CD9-1"],
     basis: "Pv of the damper",
-    when: (f) => f.kind === "accessory",
+    // Only a plain damper family is the fully open CD9-1 damper; a fire or smoke damper, a flex
+    // connector or any other accessory has no rule and is stated or assigned by a person.
+    when: (f) => f.kind === "accessory" && isPlainDamper(f.family),
     input: () => ({ res: "Co", x: 0, y: 1 }),
     basisOf: inletBasis,
   },
 ];
+
+/** A damper family that is not a fire, smoke or combination damper (their construction differs from CD9-1). */
+export const isPlainDamper = (family: string | null) =>
+  family != null && /damper/i.test(family) && !/fire|smoke|combination/i.test(family);
 
 export const ruleByKey = (key: string) => LOSS_RULES.find((r) => r.key === key);

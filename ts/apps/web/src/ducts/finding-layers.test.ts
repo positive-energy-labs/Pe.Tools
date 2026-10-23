@@ -99,3 +99,29 @@ it("a join the picture does not annotate draws nothing", () => {
   expect(shapes).toEqual({ outlines: [], bars: [], overhang: [], boxes: [] });
   expect(findingLayers(shapes)).toEqual([]);
 });
+
+it("a heal that caps a round open end draws a cylinder of the duct's diameter", () => {
+  const round = {
+    ...snapshot,
+    segments: [
+      {
+        ...duct(1, [0, 0, 0], [10, 0, 0], [
+          { ...conn(0, [0, 0, 0], [-1, 0, 0], { elementId: 9, connector: 0 }), shape: "round" },
+          { ...conn(1, [10, 0, 0], [1, 0, 0]), shape: "round", widthIn: null, heightIn: null, diameterIn: 12 },
+        ]),
+        shape: "round",
+        size: "12",
+        widthIn: null,
+        heightIn: null,
+        diameterIn: 12,
+      },
+    ],
+    issues: [
+      { id: "open-end:1:1", kind: "open-end", elementId: 1, severity: "warning", message: "" },
+    ],
+  } as unknown as DuctSnapshot;
+  const shapes = findingShapes(round, new Set(["open-end:1:1"]), null);
+  const cyl = shapes.boxes.find((b) => b.shape === "cylinder");
+  expect(cyl).toBeDefined();
+  expect(cyl!.half[0] * 12).toBeCloseTo(6, 3);
+});

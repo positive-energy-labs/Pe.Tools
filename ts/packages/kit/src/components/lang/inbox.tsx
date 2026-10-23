@@ -16,6 +16,7 @@ import {
   type ReactNode,
 } from "react";
 
+import { ListFilter, matches, type Searchable } from "./list-filter";
 import { Row, RowGroupHead } from "./row";
 
 export interface InboxRowSpec {
@@ -36,6 +37,8 @@ export interface InboxRowSpec {
   /** The Revit elements the row stands for (Row `revitIds`). */
   revitIds?: readonly number[];
   revitRefs?: readonly import("./row").RevitElementReference[];
+  /** What the filter reads: the title, the status, the element ids. Absent, only `titleText`. */
+  search?: Searchable;
 }
 
 export interface InboxGroupSpec {
@@ -55,8 +58,11 @@ export function Inbox<K extends string>({
   groups,
   empty,
   onMouseLeave,
+  filter,
   ...rest
 }: {
+  /** Present, the inbox heads itself with a filter (`/` reaches it) over every group's rows. */
+  filter?: { label: string; placeholder?: string };
   /** The fixed order of the group heads. */
   order: readonly K[];
   groups: Partial<Record<K, InboxGroupSpec>>;
@@ -66,10 +72,21 @@ export function Inbox<K extends string>({
 }) {
   const [open, setOpen] = useState<ReadonlySet<string>>(new Set());
   const [folded, setFolded] = useState<ReadonlyMap<string, boolean>>(new Map());
+  const [query, setQuery] = useState("");
+  const narrowed = !!filter && query.trim() !== "";
+  const total = order.reduce((n, key) => n + (groups[key]?.rows.length ?? 0), 0);
+  // A narrowed inbox draws only the groups that still hold a matching row.
   const drawn = order.flatMap((key) => {
     const group = groups[key];
-    return group && (group.rows.length || group.always) ? [[key, group] as const] : [];
+    if (!group) return [];
+    if (!narrowed)
+      return group.rows.length || group.always ? [[key, group] as const] : [];
+    const rows = group.rows.filter((row) =>
+      matches(query, row.search ?? { text: [row.titleText] }),
+    );
+    return rows.length ? [[key, { ...group, rows }] as const] : [];
   });
+  const shown = drawn.reduce((n, [, group]) => n + group.rows.length, 0);
   const lit = drawn.flatMap(([key, group]) =>
     group.rows.filter((row) => row.lit).map((row) => [key, row.key] as const),
   );
@@ -90,8 +107,37 @@ export function Inbox<K extends string>({
     reveal.current = false;
     first.scrollIntoView?.({ block: "nearest" });
   });
-  if (!drawn.length) return <div data-inbox="empty">{empty}</div>;
+  const header = filter ? (
+    <div className="sticky top-0 z-10">
+      <ListFilter
+        value={query}
+        onChange={setQuery}
+        shown={shown}
+        total={total}
+        label={filter.label}
+        placeholder={filter.placeholder}
+      />
+    </div>
+  ) : null;
+  if (!drawn.length)
+    return (
+      <>
+        {header}
+        {narrowed ? (
+          <p className="t-small text-ink-2 px-2 py-2" role="status" data-list-filter-empty="">
+            no row matches &ldquo;{query.trim()}&rdquo; ({total} in all);{" "}
+            <button type="button" className="underline" onClick={() => setQuery("")}>
+              clear the filter
+            </button>
+          </p>
+        ) : (
+          <div data-inbox="empty">{empty}</div>
+        )}
+      </>
+    );
   return (
+    <>
+      {header}
     <div
       ref={host}
       className="flex flex-col"
@@ -179,5 +225,6 @@ export function Inbox<K extends string>({
         );
       })}
     </div>
+    </>
   );
 }

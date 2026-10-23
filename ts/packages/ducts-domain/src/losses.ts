@@ -91,7 +91,9 @@ export interface Row {
   /** Effective length in feet at the rate of the duct this row sits on (`equivalent-length.ts`); null where unpriced. */
   eqFt?: number | null;
   source?: CatalogTable["source"];
-  finding?: CatalogFinding;
+  finding?: CatalogFinding | "no-rule";
+  /** A `no-rule` row: the family no rule prices, the key a person assigns a rule to (`ruleAssignment`). */
+  family?: string;
   staticInWg?: number | null;
   /** The table lookup behind a fitting or tap row, structured so callers never parse `desc`. */
   inputs?: RowInputs;
@@ -120,6 +122,8 @@ export interface Overrides {
   catalogLinks?: Readonly<Record<string, { table: string }>>;
   /** A stated drop per fitting or accessory id, in-wg; replaces the rule lookup (not for taps). */
   componentDrop?: Readonly<Record<number, number>>;
+  /** The rule key a person says a fitting family is priced as (`ruleAssignments`); read before any rule's own `when`. */
+  ruleAssignment?: Readonly<Record<string, string>>;
   /** The role per air mover id (`unit-roles.ts`); a `passive` root is not an air mover. */
   unitRole?: Readonly<Record<number, "fan" | "passive">>;
   /** Design flow per air mover id, cfm (`equipmentFlows`): orders a group's fans, largest first. */
@@ -728,14 +732,23 @@ function pathRows(
       });
       return;
     }
-    const rule = LOSS_RULES.find((r) => r.when(facts, flows));
+    const assigned = facts.family ? ruleByKey(overrides.ruleAssignment?.[facts.family] ?? "") : undefined;
+    const rule = assigned ?? LOSS_RULES.find((r) => r.when(facts, flows));
     if (!rule) {
       if (facts.takeoff) return; // a tap with no branch flow loses nothing here
       const message = fail({
         id: node.id,
         message: `no rule matches ${node.partType ?? node.kind} ${node.id}`,
       });
-      rows.push({ id: node.id, kind: LEG_KIND[leg], dp: 0, desc: message, error: message });
+      rows.push({
+        id: node.id,
+        kind: LEG_KIND[leg],
+        dp: 0,
+        desc: message,
+        error: message,
+        finding: "no-rule",
+        ...(facts.family ? { family: facts.family } : {}),
+      });
       return;
     }
     rows.push(ruleRow(node, rule, facts, flows, leg));

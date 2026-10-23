@@ -8,7 +8,7 @@
  * in the open system, the document when none), the same choice as the inbox's Set row. The other
  * slots are shown, not yet chosen here.
  */
-import { useRef, useState } from "react";
+import { Fragment, useRef, useState } from "react";
 import { transitionPatches } from "@pe/agent-contracts";
 import { DEFAULT_DESIGN_FRICTION_RATE } from "@pe/ducts-domain/equivalent-length";
 import type { Priced } from "@pe/ducts-domain/pricing";
@@ -16,15 +16,25 @@ import type { SystemScope } from "@pe/ducts-domain/system-scope";
 import type { DuctSnapshot } from "@pe/ducts-domain/types";
 import { Button } from "@pe/kit/lang/button";
 import { cellFromTrichotomy, StateCell } from "@pe/kit/lang/cell";
+import { ListPopup } from "@pe/kit/lang/list-popup";
 import { Popover, PopoverContent, PopoverTrigger } from "@pe/kit/lang/popover";
 import { reviewTransitions, type CellWire } from "#/components/work/band";
 import { PrimaryRouteControls } from "#/navigation/route-controls";
 
-import { airflowOptions, airflowPatches, slotWord, type AirflowOf } from "../../airflow";
+import {
+  airflowOptions,
+  airflowPatches,
+  slotWord,
+  type AirflowOf,
+  type AirflowOption,
+} from "../../airflow";
 import type { LossesWork } from "../../work";
 import { RulesTree } from "./rules-pane";
 
 const KEY = "designFriction";
+
+/** The section is one aligned list of label and value lines. */
+const LINES = "t-small grid grid-cols-[auto_minmax(0,1fr)] items-baseline gap-x-3 gap-y-1";
 
 type SlotScope = Pick<SystemScope, "groups" | "terminals" | "units"> | null;
 
@@ -66,54 +76,51 @@ export function DuctSettings({
   return (
     <PrimaryRouteControls route="ducts" slot="settings">
       <section
-        className="hairline-t flex w-[44ch] max-w-full flex-col gap-2 pt-2"
+        className="hairline-t flex w-[40ch] max-w-full flex-col gap-2 pt-2"
         aria-label="Duct settings"
         data-e-settings=""
       >
         <h2 className="t-head">Ducts</h2>
-        <p className="font-medium">Design friction rate</p>
-        <span
-          className="inline-flex items-baseline gap-1 whitespace-nowrap"
-          data-e-cell={KEY}
-          aria-label="design friction rate"
-        >
-          <StateCell
-            {...cellFromTrichotomy(cell, { value: String(rate), cap: "editable" }, String)}
-            scale="row"
-            numeric={{ min: 0, digits: 3 }}
-            placeholder={String(DEFAULT_DESIGN_FRICTION_RATE)}
-            onCommit={(text: string) =>
-              work
-                .write(
-                  transitionPatches([], KEY, cell, {
-                    kind: "stage",
-                    rung: { value: Number(text) },
-                  }),
-                )
-                .then((refusal) => refusal?.message)
-            }
-            transitions={reviewTransitions(wire, KEY, cell)}
-          />
-          <span className="t-small text-ink-2" data-e-source={cell.staged ? "override" : "default"}>
-            in-wg per 100 ft · {cell.staged ? "yours" : "default"}
+        <div className={LINES} data-e-slots>
+          <span className="text-ink-2">Design friction</span>
+          <span
+            className="inline-flex items-baseline gap-1 whitespace-nowrap"
+            data-e-cell={KEY}
+            aria-label="design friction rate"
+            title="The rate Manual D sizes to: available static x 100 / total effective length. A duct whose own friction exceeds it is marked in the tree; a diagnostic, never a blocker. It is not written to Revit."
+          >
+            <StateCell
+              {...cellFromTrichotomy(cell, { value: String(rate), cap: "editable" }, String)}
+              scale="row"
+              numeric={{ min: 0, digits: 3 }}
+              placeholder={String(DEFAULT_DESIGN_FRICTION_RATE)}
+              onCommit={(text: string) =>
+                work
+                  .write(
+                    transitionPatches([], KEY, cell, {
+                      kind: "stage",
+                      rung: { value: Number(text) },
+                    }),
+                  )
+                  .then((refusal) => refusal?.message)
+              }
+              transitions={reviewTransitions(wire, KEY, cell)}
+            />
+            <span className="t-small text-ink-2" data-e-source={cell.staged ? "override" : "default"}>
+              in-wg/100 ft · {cell.staged ? "yours" : "default"}
+            </span>
           </span>
-        </span>
-        <p className="t-small text-ink-2">
-          The rate Manual D sizes to: available static x 100 / total effective length. A duct whose
-          own friction exceeds it is marked in the tree; a diagnostic, never a blocker. It is not
-          written to Revit.
-        </p>
-        <p className="border-line border-t pt-2 font-medium">Parameter slots</p>
-        <AirflowSlot snapshot={snapshot} work={work} scope={scope} of="terminal" />
-        <AirflowSlot snapshot={snapshot} work={work} scope={scope} of="unit" />
-        <dl className="t-small grid grid-cols-[auto_1fr] gap-x-2" data-e-slots>
+          <AirflowSlot snapshot={snapshot} work={work} scope={scope} of="terminal" />
+          <AirflowSlot snapshot={snapshot} work={work} scope={scope} of="unit" />
           {READ_ONLY.map(([key, word]) => (
-            <div key={key} className="contents">
-              <dt className="text-ink-2">{word}</dt>
-              <dd className="face-mono">{slotWord(snapshot.slots?.[key])}</dd>
-            </div>
+            <Fragment key={key}>
+              <span className="text-ink-2">{word}</span>
+              <span className="face-mono" title="Read from this parameter; not chosen here yet">
+                {slotWord(snapshot.slots?.[key])}
+              </span>
+            </Fragment>
           ))}
-        </dl>
+        </div>
         <RulesPopover rules={rules} snapshot={snapshot} work={work} />
       </section>
     </PrimaryRouteControls>
@@ -193,7 +200,7 @@ function RulesPopover({
   );
 }
 
-/** The airflow read slot: the parameter grilles (or units) read their flow from, and every candidate's coverage. */
+/** The airflow read slot as one line: the parameter grilles (or units) read their flow from, a picker over every candidate with its coverage, best first. */
 function AirflowSlot({
   snapshot,
   work,
@@ -208,34 +215,45 @@ function AirflowSlot({
   const { current, options } = airflowOptions(snapshot, scope, of);
   const at = options.find((o) => o.slot === current);
   const noun = of === "unit" ? "units" : "grilles";
-  const where = scope ? "in this system" : "in the document";
+  const word = of === "unit" ? "Unit airflow" : "Grille airflow";
   return (
-    <div
-      data-e-airflow={of === "unit" ? undefined : current}
-      data-e-unit-airflow={of === "unit" ? current : undefined}
-    >
-      <p className="t-small">
-        {of === "unit" ? "Unit airflow from " : "Grille airflow from "}
-        <span className="face-mono">{slotWord(current)}</span>
-        <span className="text-ink-2">
-          {" "}
-          · {at?.have ?? 0} of {at?.of ?? 0} {noun} read
-        </span>
-      </p>
-      <div className="flex flex-wrap gap-1 pt-1">
-        {options.map((o) => (
-          <Button
-            key={o.slot}
-            kind="framed"
-            label={`${o.label} · ${o.have}/${o.of}`}
-            reason={`Read every ${of === "unit" ? "unit" : "grille"}'s airflow from ${o.label}: ${o.have} of ${o.of} ${noun} ${where} hold a value`}
-            pressed={o.slot === current}
-            onClick={() => void work.write(airflowPatches(work.doc, o.slot, of) as never)}
-          >
-            {o.label} · {o.have}/{o.of}
-          </Button>
-        ))}
-      </div>
-    </div>
+    <>
+      <span
+        className="text-ink-2"
+        data-e-airflow={of === "unit" ? undefined : current}
+        data-e-unit-airflow={of === "unit" ? current : undefined}
+      >
+        {word}
+      </span>
+      <span className="flex min-w-0 [&>button]:max-w-full">
+        <ListPopup<AirflowOption>
+          anchor="trigger"
+          face="inline"
+          triggerLabel={word}
+          title={`${word} is read from ${slotWord(current)}: ${at?.have ?? 0} of ${at?.of ?? 0} ${noun} ${scope ? "in this system" : "in the document"} hold a value`}
+          aria-label={`${word} parameter`}
+          items={options}
+          keyOf={(o) => o.slot}
+          labelOf={(o) => o.slot}
+          select="single"
+          selected={[current]}
+          empty="no airflow parameters"
+          onPick={(o) => void work.write(airflowPatches(work.doc, o.slot, of) as never)}
+          row={(o) => ({
+            label: <span className="face-mono">{o.slot}</span>,
+            meta: `${o.have}/${o.of}`,
+            title: o.label,
+          })}
+          trigger={
+            <span className="flex min-w-0 items-baseline gap-1">
+              <span className="face-mono truncate">{slotWord(current)}</span>
+              <span className="shrink-0 text-ink-2">
+                · {at?.have ?? 0}/{at?.of ?? 0}
+              </span>
+            </span>
+          }
+        />
+      </span>
+    </>
   );
 }

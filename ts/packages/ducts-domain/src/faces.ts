@@ -16,6 +16,8 @@ export interface Outline {
   y: number[];
   w: number;
   h: number;
+  /** True for a round section; the corners are then a polygon approximating the circle. */
+  round: boolean;
 }
 export type Edge = [number[], number[]];
 
@@ -70,7 +72,7 @@ export function outlineOf(
         [-1, -1],
         [1, -1],
       ].map(([sx, sy]) => add(add(center, x, sx! * w), y, sy! * h));
-  return { center, normal, points, x, y, w, h };
+  return { center, normal, points, x, y, w, h, round };
 }
 const rectHalves = (s: Sized, band: { outer: number }): [number, number] => {
   const [w, h] = [(s.widthIn ?? 0) / 24, (s.heightIn ?? 0) / 24];

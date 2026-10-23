@@ -281,6 +281,7 @@ export function Inbox({
     const title = claim?.kind === "claim" ? claimLine(claim.claim, nameOf) : item.title;
     return {
       key: item.key,
+      search: { text: [title, item.status, item.kind, item.note], ids: item.ids },
       "data-kind": item.kind,
       title,
       titleText: title,
@@ -376,6 +377,7 @@ export function Inbox({
     <>
       <KitInbox
         aria-label="inbox"
+        filter={{ label: "filter the inbox", placeholder: "title, status or element id  ( / )" }}
         order={INBOX_ORDER}
         groups={specs}
         onMouseLeave={() => light(null)}

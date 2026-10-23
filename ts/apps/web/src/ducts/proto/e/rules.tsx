@@ -51,7 +51,11 @@ export function DropCell({
   const authored = (cell.staged ?? cell.proposal)?.value as DuctDrop | undefined;
   const wire: CellWire = { segment, revision: work.revision, write: work.write };
   return (
-    <span className="inline-flex items-baseline gap-1 whitespace-nowrap" aria-label={label}>
+    <span
+      className="inline-flex items-baseline gap-1 whitespace-nowrap"
+      aria-label={label}
+      data-e-cell={`${segment}:${id}`}
+    >
       <StateCell
         {...cellFromTrichotomy(cell, {
           value: authored ? String(authored.inWg) : held == null ? "" : String(held),

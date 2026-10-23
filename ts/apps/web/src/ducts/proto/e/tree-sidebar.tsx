@@ -8,7 +8,6 @@ import { TooltipHint } from "@pe/kit/lang/tooltip";
 import { useState } from "react";
 import { ListTree } from "lucide-react";
 import { Button } from "@pe/kit/lang/button";
-import { SearchControl } from "@pe/kit/lang/search-control";
 import { Tree } from "@pe/kit/lang/row";
 import { tokenRef } from "@pe/kit/lib/token";
 import { observedElements, useNativeObservation } from "#/revit/observation";
@@ -115,34 +114,6 @@ const idsOf = (node: TreeNode): number[] => {
   walk(node);
   return [...out];
 };
-
-/**
- * Go to an element id, a unit's tag or label, or a system name in the snapshot already read (`navigate`);
- * `go` moves the page and answers where it went, or that the input is not in this snapshot.
- */
-export function GoTo({ go }: { go: (query: string) => string }) {
-  const [says, setSays] = useState<string | null>(null);
-  return (
-    <div className="border-line flex flex-col gap-0.5 border-b px-2 py-1" data-e-goto="">
-      <SearchControl>
-        <input
-          aria-label="go to an element id, a unit tag or a system"
-          placeholder="element id, tag (FC-17) or system"
-          className="min-w-0 flex-1 bg-transparent outline-none"
-          onKeyDown={(event) => {
-            if (event.key !== "Enter") return;
-            setSays(go(event.currentTarget.value));
-          }}
-        />
-      </SearchControl>
-      {says ? (
-        <span className="t-small text-ink-2" data-e-goto-says="">
-          {says}
-        </span>
-      ) : null}
-    </div>
-  );
-}
 
 export function SystemTree({ ctx }: { ctx: TreeCtx }) {
   const observation = useNativeObservation();
