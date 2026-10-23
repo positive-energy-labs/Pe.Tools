@@ -1,5 +1,9 @@
 import { useList } from "@pe/kit/lang/collection";
 import { PlainList, ListView } from "@pe/kit/lang/list-view";
+import { LeaderDiagram } from "@pe/kit/lang/leader-diagram";
+import { Table } from "@pe/kit/table/table";
+import type { Column } from "@pe/kit/table/model";
+import { ReadCell } from "@pe/kit/table/cells";
 import { TooltipHint } from "@pe/kit/lang/tooltip";
 /**
  * THROWAWAY (protoui round 3, E2): the loss bar the tree draws, and its one-line legend.
@@ -11,7 +15,6 @@ import {
   createContext,
   Fragment,
   useContext,
-  useLayoutEffect,
   useMemo,
   useRef,
   useState,
@@ -358,12 +361,9 @@ function BreakdownList({
   barW: number;
 }) {
   const context = useContext(RuleContext);
-  const root = useRef<HTMLDivElement>(null);
-  const bar = useRef<HTMLSpanElement>(null);
   const side = usePopoverSide();
   const [expanded, setExpanded] = useState(false);
   const [selected, setSelected] = useState<{ key: string; ids: readonly number[] } | null>(null);
-  const [leaders, setLeaders] = useState<{ key: string; d: string }[]>([]);
   const entries = useMemo(
     () => barRows(split, scale, context?.nodes ?? new Map()),
     [split, scale, context?.nodes],
@@ -399,52 +399,96 @@ function BreakdownList({
   const rows = flip ? [...bare, ...ordered] : [...ordered, ...bare];
   const barCol = Math.min(144, Math.max(96, barW));
 
-  useLayoutEffect(() => {
-    const box = root.current;
-    if (!box) return;
-    const measure = () => {
-      const origin = box.getBoundingClientRect();
-      const track = bar.current?.getBoundingClientRect();
-      if (!track) return;
-      const y0 = (flip ? track.top : track.bottom) - origin.top;
-      const x0 = track.left - origin.left;
-      setLeaders(
-        rows.flatMap((row) => {
-          const tr = box.querySelector(`[data-loss-row="${CSS.escape(row.key)}"]`);
-          if (!tr || !row.at.length) return [];
-          const rect = tr.getBoundingClientRect();
-          const y = rect.top + rect.height / 2 - origin.top;
-          return [
-            {
-              key: row.key,
-              d: row.at
-                .map(
-                  (at) =>
-                    `M${x0 + at * track.width} ${y0} V${y} H${barLeft ? x0 + track.width : x0}`,
-                )
-                .join(" "),
-            },
-          ];
-        }),
-      );
-    };
-    measure();
-    const watch = new ResizeObserver(measure);
-    watch.observe(box);
-    return () => watch.disconnect();
-  }, [split, scale, side, expanded, barCol, selected]);
-
-  const track = (
-    <span
-      ref={bar}
-      className="relative block h-3 w-full"
-      style={{ backgroundColor: tokenRef("line") }}
-    >
-      <SplitFill split={split} scale={scale} hint={false} />
-    </span>
-  );
-  const number = "face-mono tabular-nums text-right px-1 align-middle";
-  const zone = <td aria-hidden className="p-1" />;
+  const choose = (row: BarRow) =>
+    row.key === "other" ? setExpanded(true) : setSelected({ key: row.key, ids: row.ids });
+  const columns: Column<BarRow>[] = [
+    {
+      key: "loss",
+      label: "in-wg",
+      right: true,
+      width: "w-20",
+      cell: (row) => (
+        <ReadCell
+          value={`${row.dp > 0 || !row.unpriced ? fmt(row.dp, LOSS_PLACES) : "\u2014"}${row.dp > 0 && row.unpriced ? "+?" : ""}`}
+        />
+      ),
+    },
+    {
+      key: "share",
+      label: "%",
+      right: true,
+      width: "w-14",
+      cell: (row) => (
+        <ReadCell value={row.dp > 0 || !row.unpriced ? row.share.toFixed(1) : "\u2014"} />
+      ),
+    },
+    {
+      key: "count",
+      label: "count",
+      right: true,
+      width: "w-12",
+      cell: (row) => <ReadCell value={row.count} />,
+    },
+    {
+      key: "group",
+      label: "loss group",
+      cell: (row) => (
+        <>
+          <Button
+            label={row.key === "other" ? row.label : `Edit rule for ${row.label}`}
+            onClick={() => choose(row)}
+          >
+            <span className="whitespace-normal text-left">{row.label}</span>
+          </Button>
+          {row.unpriced ? (
+            <span className="block" data-tone="caution">
+              {row.unpriced} unpriced
+            </span>
+          ) : null}
+        </>
+      ),
+    },
+    {
+      key: "rule",
+      label: "ASHRAE / rule",
+      cell: (row) => (
+        <>
+          <span className="face-mono">{row.tables.join(", ")}</span>
+          <span className="block">{row.words}</span>
+        </>
+      ),
+    },
+    {
+      key: "conditions",
+      label: "conditions / inputs",
+      cell: (row) => (
+        <>
+          {row.conditions.length ? (
+            row.conditions.map((condition) => (
+              <span
+                key={condition}
+                className={
+                  row.rules.some((rule) => {
+                    const state = ruleConditions(rule, row);
+                    return state.words === condition && state.inactive;
+                  })
+                    ? "block text-ink-2"
+                    : "block"
+                }
+              >
+                {condition}
+              </span>
+            ))
+          ) : (
+            <span className="text-ink-2">not applicable</span>
+          )}
+          {row.rules.some((rule) => ruleConditions(rule, row).inactive) ? (
+            <span className="text-ink-2">geometry condition bypassed</span>
+          ) : null}
+        </>
+      ),
+    },
+  ];
   return (
     <div
       className="flex flex-wrap items-start gap-3"
@@ -453,157 +497,41 @@ function BreakdownList({
       data-e-flip={flip || undefined}
     >
       <div className="min-w-0 flex-1 basis-[760px]">
-        <p className="text-ink-2 mb-1">
-          full width = <span className="face-mono text-ink">{fmt(scale)}</span> in-wg · select a
-          group to edit its rule
-        </p>
-        <div ref={root} className="relative" data-e-groups="">
-          <table
-            aria-label="Loss groups and pricing rules"
-            className="w-full table-fixed text-left"
-          >
-            <colgroup>
-              {barLeft ? <col style={{ width: barCol }} /> : null}
-              <col className="w-[64px]" />
-              <col className="w-[44px]" />
-              <col className="w-[38px]" />
-              <col />
-              <col />
-              <col />
-              {!barLeft ? <col style={{ width: barCol }} /> : null}
-            </colgroup>
-            <thead className="hairline-b text-ink-2">
-              <tr>
-                {barLeft ? (
-                  <th scope="col" className="p-1">
-                    {!flip ? track : <span className="sr-only">Bar leaders</span>}
-                  </th>
-                ) : null}
-                <th scope="col" className="px-1 text-right">
-                  in-wg
-                </th>
-                <th scope="col" className="px-1 text-right">
-                  %
-                </th>
-                <th scope="col" className="px-1 text-right">
-                  count
-                </th>
-                <th scope="col" className="px-2">
-                  loss group
-                </th>
-                <th scope="col" className="px-2">
-                  ASHRAE / rule
-                </th>
-                <th scope="col" className="px-2">
-                  conditions / inputs
-                </th>
-                {!barLeft ? (
-                  <th scope="col" className="p-1">
-                    {!flip ? track : <span className="sr-only">Bar leaders</span>}
-                  </th>
-                ) : null}
-              </tr>
-            </thead>
-            <tbody className="hairline-rows">
-              {rows.map((row) => (
-                <tr
-                  key={row.key}
-                  data-loss-row={row.key}
-                  data-e-group-key={row.label}
-                  data-selected={current?.key === row.key || undefined}
-                  onMouseEnter={light ? () => light(row.ids) : undefined}
-                  onMouseLeave={light ? () => light(back ?? null) : undefined}
-                  onClick={() =>
-                    row.key === "other"
-                      ? setExpanded(true)
-                      : setSelected({ key: row.key, ids: row.ids })
-                  }
-                >
-                  {barLeft ? zone : null}
-                  <td className={number} data-loss-value="">
-                    {row.dp > 0 || !row.unpriced ? fmt(row.dp, LOSS_PLACES) : "—"}
-                    {row.dp > 0 && row.unpriced ? "+?" : ""}
-                  </td>
-                  <td className={number}>
-                    {row.dp > 0 || !row.unpriced ? row.share.toFixed(1) : "—"}
-                  </td>
-                  <td className={number}>{row.count}</td>
-                  <th scope="row" className="px-2 py-1 text-left font-normal break-words">
-                    <Button
-                      label={row.key === "other" ? row.label : `Edit rule for ${row.label}`}
-                      onClick={() =>
-                        row.key === "other"
-                          ? setExpanded(true)
-                          : setSelected({ key: row.key, ids: row.ids })
-                      }
-                    >
-                      <span className="whitespace-normal text-left">{row.label}</span>
-                    </Button>
-                    {row.unpriced ? (
-                      <span className="block" data-tone="caution">
-                        {row.unpriced} unpriced
-                      </span>
-                    ) : null}
-                  </th>
-                  <td className="px-2 py-1 align-middle break-words">
-                    <span className="face-mono">{row.tables.join(", ")}</span>
-                    <span className="block">{row.words}</span>
-                  </td>
-                  <td className="px-2 py-1 align-middle break-words">
-                    {row.conditions.length ? (
-                      row.conditions.map((condition) => (
-                        <span
-                          key={condition}
-                          className={`block ${
-                            row.rules.some((rule) => {
-                              const state = ruleConditions(rule, row);
-                              return state.words === condition && state.inactive;
-                            })
-                              ? "text-ink-2"
-                              : ""
-                          }`}
-                        >
-                          {condition}
-                        </span>
-                      ))
-                    ) : (
-                      <span className="text-ink-2">not applicable</span>
-                    )}
-                    {row.rules.some((rule) => ruleConditions(rule, row).inactive) ? (
-                      <span className="text-ink-2">geometry condition bypassed</span>
-                    ) : null}
-                  </td>
-                  {!barLeft ? zone : null}
-                </tr>
-              ))}
-            </tbody>
-            {flip ? (
-              <tfoot>
-                <tr>
-                  {barLeft ? <td className="p-1">{track}</td> : null}
-                  <td colSpan={6} />
-                  {!barLeft ? <td className="p-1">{track}</td> : null}
-                </tr>
-              </tfoot>
-            ) : null}
-          </table>
-          <svg
-            className="pointer-events-none absolute inset-0 size-full overflow-visible"
-            aria-hidden
-            data-e-leaders=""
-          >
-            {leaders.map((line) => (
-              <path
-                key={line.key}
-                d={line.d}
-                fill="none"
-                stroke={tokenRef("ink-2")}
-                strokeWidth={1}
-                strokeDasharray={line.key === "other" ? "2 2" : undefined}
-              />
-            ))}
-          </svg>
-        </div>
+        <LeaderDiagram
+          label="Loss groups and pricing rules"
+          width={barCol}
+          bottom={flip}
+          right={!barLeft}
+          track={
+            <span className="relative block h-3 w-full">
+              <SplitFill split={split} scale={scale} hint={false} />
+            </span>
+          }
+          items={rows.map((row) => ({ key: row.key, at: row.at, dashed: row.key === "other" }))}
+        >
+          <Table
+            rows={rows}
+            columns={columns}
+            rowKey={(row) => row.key}
+            label="Loss groups and pricing rules"
+            visibleKeys={rows.map((row) => row.key)}
+            activeKey={current?.key}
+            onRowClick={choose}
+            onRowHover={light ? (row) => light(row?.ids ?? back ?? null) : undefined}
+            revitIds={(row) => row.ids}
+            keep={() => true}
+            damage={(row) =>
+              split.rows.some((loss) => row.ids.includes(loss.id) && loss.error)
+                ? "blocked loss"
+                : undefined
+            }
+            caption={
+              <>
+                <span className="face-mono">{fmt(scale)}</span> in-wg
+              </>
+            }
+          />
+        </LeaderDiagram>
         {expanded && small.length > 1 ? (
           <Button
             label="Collapse small loss groups"

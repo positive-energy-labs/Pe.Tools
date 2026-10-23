@@ -1,3 +1,4 @@
+import { LeaderDiagram } from "@pe/kit/lang/leader-diagram";
 import { CellStateKey, cellStateKeyRecipe, StateCell, stateCellRecipe } from "@pe/kit/lang/cell";
 
 import { FactChip, FileChip, MentionChip, NarrowChip, Tag, chipRecipe } from "@pe/kit/lang/chip";
@@ -39,6 +40,13 @@ function UnitCellSpecimen({ width }: { width: number }) {
 export function LangCellSpecimens() {
   return (
     <>
+      <LeaderDiagram
+        label="Leader diagram"
+        items={[
+          { key: "duct", at: [0.25], label: "duct", value: "0.200" },
+          { key: "fitting", at: [0.75], label: "fitting", value: "0.200" },
+        ]}
+      />
       <div className="flex flex-col gap-3 p-2" data-specimen="unit-cell">
         <p className="t-small text-ink-2">StateCell unit (always-on suffix) at 270, 360, 520 px</p>
         {[270, 360, 520].map((w) => (
