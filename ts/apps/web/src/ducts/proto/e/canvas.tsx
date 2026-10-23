@@ -762,7 +762,7 @@ function Canvas({
             floaters={floaters}
           >
             <PaneWork
-              pending={holding || identity.refreshing}
+              pending={!!holding || identity.refreshing}
               label={holding ? "capturing meshes… gestures wait" : undefined}
             />
             <div
