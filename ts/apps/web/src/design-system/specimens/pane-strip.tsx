@@ -22,6 +22,12 @@ import {
 } from "@pe/kit/lang/minimap";
 
 import { SpecimenFrame } from "./recipe-grid";
+import { useTeaching } from "@pe/kit/lang/use-teach";
+import { HelpWorld } from "#/route/help";
+
+function MountedTutorial() {
+  return <HelpWorld facts={useTeaching()} />;
+}
 
 const EXTENT = { width: 4000, height: 3000 };
 const WINDOW = { width: 800, height: 600 };
@@ -251,6 +257,9 @@ export function PaneStripSpecimen() {
       </SpecimenFrame>
       <PaneStripWidths />
       <PaneStripAnatomy />
+      <SpecimenFrame name="Mounted tutorial" importPath="@pe/kit/lang/teach">
+        <MountedTutorial />
+      </SpecimenFrame>
     </>
   );
 }

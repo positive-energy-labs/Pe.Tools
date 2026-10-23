@@ -28,6 +28,8 @@ import {
 import { TooltipHint } from "../lang/tooltip";
 import { focusQuiet } from "../../lib/utils";
 
+import { useTeach } from "../lang/use-teach";
+
 interface Pick {
   key: string;
   label: string;
@@ -119,6 +121,35 @@ export function QueryBox({
   /** A leading picker segment in the same frame (the table's filter workbench). */
   lead?: ReactNode;
 }) {
+  useTeach({
+    kind: "search",
+    label: "table query",
+    fields: vocabulary.fields
+      .filter((f) => f.kind || f.sort)
+      .map((f) => ({
+        label: f.label,
+        operators: [
+          ...(f.kind ? QUERY_OPS[f.kind].map(([, , says]) => says) : []),
+          ...(f.sort ? ["sort ↑", "sort ↓"] : []),
+        ],
+        examples: f.kind
+          ? [
+              clauseText(
+                false,
+                f.label,
+                f.kind === "number" ? ">" : "=",
+                f.kind === "number" ? "1" : "value",
+              ),
+            ]
+          : [],
+      })),
+    syntax: [
+      "Words search every searchable field; ! negates",
+      "Conditions are ANDed; Tab completes",
+      ...vocabulary.rules.map((r) => `${r.word}: ${r.label}`),
+      ...(command ? [command.says] : []),
+    ],
+  });
   const [input, setInput] = useState<HTMLInputElement | null>(null);
   const [open, setOpen] = useState(false);
   const [cursor, setCursor] = useState<string | null>(null);

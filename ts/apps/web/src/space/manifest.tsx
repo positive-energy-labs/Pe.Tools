@@ -19,14 +19,7 @@ import type { Psc1Metadata } from "#/scene/psc1";
 import { refuse } from "#/route/refusal";
 import { cutPolygons } from "./state";
 
-import {
-  ENCODINGS,
-  ENCODING_SAYS,
-  LAYER_SAYS,
-  SPACE_LAYERS,
-  type Encoding,
-  type SpaceLayer,
-} from "./layers";
+import { ENCODINGS } from "./layers";
 
 /** An answer and the request it answered: a layer draws both (the band, the point, the path). */
 export type Answer<K extends OpKey> = { request: OpRequestOf<K>; response: OpResponseOf<K> };
@@ -177,7 +170,7 @@ const read = <
 const xyz = z.tuple([z.number().finite(), z.number().finite(), z.number().finite()]);
 const positive = z.number().finite().positive();
 
-/** The tutorial: what the route is for, then one line per layer and per encoding. */
+/** The tutorial: what the route is for, controls teach their layers and encodings. */
 const docs = (
   <>
     <p>
@@ -190,21 +183,6 @@ const docs = (
       edge folds along its neighbours and collapses to their corner when pushed past it), right
       click an edge to add a node or a node to delete it.
     </p>
-    <ul>
-      {SPACE_LAYERS.map((layer: SpaceLayer) => (
-        <li key={layer}>
-          <b>{layer}</b>: {LAYER_SAYS[layer]}
-        </li>
-      ))}
-    </ul>
-    <p>Row boxes are inked by one encoding:</p>
-    <ul>
-      {ENCODINGS.map((encoding: Encoding) => (
-        <li key={encoding}>
-          <b>{encoding}</b>: {ENCODING_SAYS[encoding]}
-        </li>
-      ))}
-    </ul>
   </>
 );
 

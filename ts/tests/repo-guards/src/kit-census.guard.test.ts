@@ -28,6 +28,10 @@ const allow = (entries: Record<string, string>): Allow[] =>
 // Filenames use the wave-4 final homes: land.ts, revit-target.tsx and go-to.tsx.
 // prettier-ignore
 const RULES: Rule[] = [
+  { id: "tutorial-facts-from-primitives", doctrine: "P1",
+    pattern: /\b\w+_(?:KEYS|MODES|VIEWS)\s*(?::[^=;]+)?=\s*\[|\{(?:SPACE_LAYERS|ENCODINGS)\.map\(/g,
+    roots: [W + "**/*docs*.tsx", W + "**/manifest.tsx"], allow: [],
+    cannotSee: "Aliased or computed lists, prose that repeats a control, hidden DOM and rendered geometry; mounted registry tests cover lifecycle." },
   { id: "subject-kind-id", doctrine: "I1", pattern: /\$\{[^}\n]*\bkind\} \$\{[\w.]+\.id\}/g,
     roots: [W + "ducts/**/*.{ts,tsx}", "packages/ducts-domain/src/**/*.ts"], allow: [],
     cannotSee: "Concatenated ids, runtime names and prose received from Revit." },
@@ -140,7 +144,6 @@ const RULES: Rule[] = [
       "ducts/docs.tsx": "Tutorial prose has no row navigation.",
       "ducts/proto/e/preview-lines.tsx": "Static proposed-change and refusal text has no picks.",
       "lib/schema-to-field-render/field-metadata.tsx": "Static validation messages have no picks.",
-      "space/manifest.tsx": "Fixed tutorial keys describe layers and encodings.",
     }), cannotSee: "Rows built by helpers; ListReading is the wave-4 kit reading name." },
   { id: "list-column-width-owner", doctrine: "L3",
     pattern: /const\s+\w*(?:COL|COLUMNS)\w*\s*=\s*\{[^;]*?\bw-\d|<[^>]*data-list-column[^>]*className=["'][^"']*\bw-\d/g,

@@ -27,6 +27,7 @@ import { land } from "./land";
 import { Row, type RowProps } from "./row";
 import "./lang.css";
 import { focusQuiet } from "../../lib/utils";
+import { useTeach } from "./use-teach";
 
 export type ListRowParts = Omit<
   Extract<RowProps, { as?: "div" }>,
@@ -643,6 +644,10 @@ function pick(): SearchKeyOwner | null {
 /** Register search intent; the first mounted registration owns the sole body binding. */
 export function useSearchKey(owner: SearchKeyOwner) {
   const live = useScopeLive();
+  useTeach(
+    { kind: "search", label: "Search", fields: [], syntax: ["/ focuses this search"] },
+    owner.available?.() !== false,
+  );
   const latest = useRef(owner);
   latest.current = owner;
   const [self] = useState<SearchKeyOwner>(() => ({

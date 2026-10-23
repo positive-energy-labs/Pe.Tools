@@ -7,6 +7,7 @@ The one-system design cluster: the design LANGUAGE (raw values in `apps/web/src/
 **This ledger owns every cross-route design-language and primitive gap.** Route ledgers name their own applications and evidence; they never restate a ruling or a gap that lives here. A rule lives in exactly one home: a type, a check, a swatch specimen, or `.agents/skills/lens.house/SKILL.md`. `docs/design/SURFACE-PHILOSOPHY.md` indexes those homes.
 
 ## Decided
+- 2026-10-23, Tutorial reads mounted kit facts from `lang/teach.ts`; controls own keys, search syntax, modes and alternate views, so help follows page state without route-owned lists.
 
 - 2026-10-23, L3: List labels truncate with full text on reach; `listColumns` declares measure priorities once, kit container queries own widths and yielding, and visual tree indentation caps at four levels (Systems tree and quantity readings).
 - 2026-10-23, I1: `subjectName` uses names and kinds instead of identities; `healFindings` folds a repair into one row with all subjects and covered finding keys. Inbox titles use structured subjects, and picture pins share the repair number.

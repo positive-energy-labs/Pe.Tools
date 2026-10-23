@@ -15,6 +15,8 @@ import {
 
 import { KeyScope, useScopeKeys, type Chord } from "@pe/kit/keys";
 
+import { useTeach } from "./use-teach";
+
 export const PANE_OBSTACLES = "[data-slot='pane-legend'], [data-picture-readout]";
 
 type Corner = "tl" | "tr" | "bl" | "br";
@@ -182,6 +184,13 @@ type FloaterSurfaceSpec = Omit<FloaterSpec, "onOpenChange"> &
   Partial<Pick<FloaterSpec, "onOpenChange">>;
 
 export function Floater({ spec }: { spec: FloaterSurfaceSpec }) {
+  useTeach({
+    kind: "views",
+    label: spec.label,
+    options: [
+      { key: spec.key, label: spec.label, says: spec.says, active: spec.open, place: spec.place },
+    ],
+  });
   const ref = useRef<HTMLDivElement>(null);
   const [slide, setSlide] = useState(0);
   const [box, setBox] = useState(spec.size);
