@@ -1,7 +1,8 @@
-import { Fragment } from "react";
+import { Fragment, useState } from "react";
 import { RefreshCw, Save, Upload } from "lucide-react";
 
 import { ActionGroup, Button } from "@pe/kit/lang/button";
+import { PreviewAction } from "@pe/kit/lang/preview-action";
 import { HotkeyCommand, HotkeyHint } from "#/components/lang/hotkey-command";
 import { Section } from "#/components/lang/section";
 
@@ -29,6 +30,52 @@ const readVerb = {
 } as never;
 
 const KINDS = ["quiet", "framed", "commit"] as const;
+
+/** A preview-then-do verb on a fake route: its preview rests on `input`, and moving it makes it stale. */
+function PreviewActionSpecimen() {
+  const [input, setInput] = useState(1);
+  const [rest, setRest] = useState<number | null>(null);
+  const held = rest === input;
+  return (
+    <div className="flex items-center gap-3">
+      <PreviewAction
+        label="preview heal"
+        says="Preview healing 2 caps in Revit, rolled back"
+        held={
+          held
+            ? {
+                word: "heal · previewed 2",
+                summary: "2 pass · 0 refused",
+                lines: (
+                  <ul className="m-0 list-none p-0 t-small">
+                    <li>cap duct 12 (end 1)</li>
+                    <li>cap duct 18 (end 0)</li>
+                  </ul>
+                ),
+              }
+            : null
+        }
+        stale={rest !== null && !held ? "changed since preview" : null}
+        preview={async () => {
+          setRest(input);
+          return null;
+        }}
+        commit={{
+          label: "apply heal",
+          says: "Heal the items the preview passed, in one transaction",
+          run: async () => {
+            setRest(null);
+            return null;
+          },
+          done: "healed 2",
+        }}
+      />
+      <Button label="change the inputs" onClick={() => setInput((n) => n + 1)}>
+        change the inputs
+      </Button>
+    </div>
+  );
+}
 
 export function LangPressSpecimens() {
   return (
@@ -105,6 +152,12 @@ export function LangPressSpecimens() {
           </Button>
         </ActionGroup>
       </Section>
+      <SpecimenFrame
+        name="PreviewAction · idle, previewing, armed (popover open or closed), stale, committed"
+        importPath="@pe/kit/lang/preview-action"
+      >
+        <PreviewActionSpecimen />
+      </SpecimenFrame>
       <Section label="SituationAction · fresh · stale (caution edge and wash)">
         <span className="inline-flex gap-2">
           <SituationAction handle={handleOf(false)} name="read" action={readVerb} chord="R" />

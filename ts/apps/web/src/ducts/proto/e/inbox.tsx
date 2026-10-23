@@ -1,22 +1,12 @@
 import { useEffect, useRef, useState, type ReactNode } from "react";
-import {
-  Ban,
-  Check,
-  Eye,
-  EyeOff,
-  Fan,
-  Link,
-  Pencil,
-  Wrench,
-  X,
-  type LucideIcon,
-} from "lucide-react";
+import { Ban, Check, Eye, EyeOff, Fan, Link, Pencil, X, type LucideIcon } from "lucide-react";
 import type { DuctsRouteDocument, RouteStatePatch } from "@pe/agent-contracts";
 import type { DuctSnapshot } from "@pe/ducts-domain/types";
 import { Button } from "@pe/kit/lang/button";
 import { FactChip } from "@pe/kit/lang/chip";
 import { useList, emptyListState, type ListState } from "@pe/kit/lang/collection";
 import { ListView } from "@pe/kit/lang/list-view";
+import { PreviewAction } from "@pe/kit/lang/preview-action";
 import { reviewTransitions, type CellWire } from "#/components/work/band";
 import type { ActionHandle } from "#/route/handle";
 import { SelectInRevitIcon, showInRevit } from "#/revit/element-menu";
@@ -41,6 +31,7 @@ import {
 } from "../../inbox-rows";
 import type { Claim } from "../../legs";
 import { inboxWriteRows, type WriteVerbs, type RulingRow } from "./inbox-write";
+import { PreviewLines } from "./preview-lines";
 import { SlotPicker } from "./slot-picker";
 import { InboxClaim, claimLine } from "./inbox-claim";
 
@@ -52,11 +43,54 @@ type InboxWork = {
   store: DuctSnapshot["store"];
 };
 
-/** A fan verb's handles: the route's fan preview and apply, run with the verb's unit and system. */
-export interface FanVerbs {
+/** A preview verb's handles: the route's preview and apply, run with the row's target. */
+interface PreviewHandles {
   preview: ActionHandle;
   apply: ActionHandle;
   busy: boolean;
+}
+
+/** A fan verb's handles: the route's fan preview and apply, run with the verb's unit and system. */
+export type FanVerbs = PreviewHandles;
+
+/** A Heal row's verbs: the route's heal preview and heal, run with the row's group. */
+type HealVerbs = PreviewHandles;
+
+/**
+ * One preview-then-do verb as a kit `PreviewAction`, run with the route's own preview and apply
+ * handles and the row's target. The Heal row's glyph and `FanButton` draw it.
+ */
+function PreviewVerb({
+  verb,
+  pair,
+  icon,
+}: {
+  verb: Extract<RowVerb, { kind: "preview" }>;
+  pair: PreviewHandles;
+  icon?: LucideIcon;
+}) {
+  const input =
+    verb.on.verb === "heal"
+      ? { group: verb.on.group }
+      : { unitId: verb.on.unitId, systemId: verb.on.systemId };
+  return (
+    <PreviewAction
+      label={verb.label}
+      says={verb.says}
+      refusal={pair.preview.refusal}
+      busy={pair.busy}
+      icon={icon}
+      held={verb.held && { ...verb.held, lines: <PreviewLines lines={verb.held.lines} /> }}
+      stale={verb.stale}
+      preview={() => pair.preview.run(input)}
+      commit={{
+        ...verb.commit,
+        refusal: verb.commit.refusal ?? pair.apply.refusal,
+        run: () => pair.apply.run(input),
+        done: verb.on.verb === "heal" ? "healed" : "done: the fan is Revit's now",
+      }}
+    />
+  );
 }
 
 /** One make-the-fan verb as a button; the Inputs pane and the no-fan row draw it the same way. */
@@ -64,29 +98,10 @@ export function FanButton({
   verb,
   fan,
 }: {
-  verb: Extract<RowVerb, { kind: "fan" }>;
+  verb: Extract<RowVerb, { kind: "preview" }>;
   fan: FanVerbs;
 }) {
-  const handle = verb.mode === "preview" ? fan.preview : fan.apply;
-  return (
-    <Button
-      kind={verb.mode === "apply" ? "commit" : "framed"}
-      label={verb.label}
-      reason={verb.says}
-      refusal={verb.refusal ?? handle.refusal}
-      busy={fan.busy}
-      onClick={() => void handle.run({ unitId: verb.unitId, systemId: verb.systemId })}
-    >
-      {verb.label}
-    </Button>
-  );
-}
-
-/** A Heal row's verbs: the route's heal preview and heal, run with the row's group. */
-interface HealVerbs {
-  preview: ActionHandle;
-  apply: ActionHandle;
-  busy: boolean;
+  return <PreviewVerb verb={verb} pair={fan} />;
 }
 
 const VERDICT_ICON: Record<"capped" | "connect" | "ignore", LucideIcon> = {
@@ -206,24 +221,14 @@ export function Inbox({
         ) : null;
       case "focus":
         return make(`f${i}`, Pencil, verb.label, verb.says, () => onFocusCell(verb.cell));
-      case "heal": {
-        const handle = verb.mode === "preview" ? heal.preview : heal.apply;
-        return make(
-          `h${i}${verb.mode}`,
-          verb.mode === "preview" ? Eye : Wrench,
-          verb.label,
-          verb.says,
-          () => void handle.run({ group: verb.group }),
-          {
-            refusal: verb.refusal ?? handle.refusal,
-            busy: heal.busy,
-            commit: verb.mode === "apply",
-          },
-        );
-      }
-      case "fan":
-        // Worded in the open row only: the label names the unit and the system.
-        return worded ? <FanButton key={`n${i}${verb.mode}`} verb={verb} fan={fan} /> : null;
+      case "preview":
+        // A Heal row draws its glyph in the closed row; a fan's label names the unit and the
+        // system, so it draws worded in the open row only.
+        if (verb.on.verb === "heal")
+          return (
+            <PreviewVerb key={`p${i}`} verb={verb} pair={heal} icon={worded ? undefined : Eye} />
+          );
+        return worded ? <FanButton key={`n${i}`} verb={verb} fan={fan} /> : null;
       case "claim":
         return VERDICTS.map((v, j) =>
           make(
@@ -326,14 +331,13 @@ export function Inbox({
     };
   };
 
-  const { writeSpec, reviewSpecs } = inboxWriteRows(write);
+  const { writeSpec } = inboxWriteRows(write);
 
   const rows: RulingRow[] = [
     ...groups.fix.map(spec),
     ...groups.set.map(spec),
     ...groups.check.map(spec),
     { ...writeSpec, lit: focused === "write" },
-    ...reviewSpecs,
     ...groups.diagnostics.map(spec),
   ];
   const [view, setView] = useState<ListState<"name" | "status">>(() => ({

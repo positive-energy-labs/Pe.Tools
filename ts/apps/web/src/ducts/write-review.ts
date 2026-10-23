@@ -7,6 +7,7 @@
 import type { DuctsApply } from "@pe/host-contracts/generated";
 
 import { slotWord } from "./airflow";
+import type { PreviewState } from "./inbox-rows";
 
 export interface ReviewLine {
   key: string;
@@ -65,4 +66,22 @@ export function reviewLines(
       outcome: w.outcome,
       reason: w.reason ?? null,
     }));
+}
+
+/** A fresh preview as the Write row's popover holds it: the counts and one line per change. */
+export function writePreview(
+  response: Pick<DuctsApply.Res.Response, "counts">,
+  lines: readonly ReviewLine[],
+): PreviewState {
+  const { planned, refused } = response.counts;
+  return {
+    word: `previewed ${planned}`,
+    summary: `${planned} planned · ${refused} refused`,
+    lines: lines.map((line) => ({
+      key: line.key,
+      text: `${line.element} · ${line.what}${line.outcome === "refused" ? "" : `: ${line.from} → ${line.to}`}`,
+      state: line.outcome === "refused" ? "refused" : "planned",
+      reason: line.reason,
+    })),
+  };
 }

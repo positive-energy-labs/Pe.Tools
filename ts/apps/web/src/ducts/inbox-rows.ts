@@ -55,6 +55,23 @@ export interface CellRef {
   id: number;
 }
 
+/** One preview's result as the popover shows it: the button's armed word, the counts, the items. */
+export interface PreviewState {
+  word: string;
+  summary: string;
+  lines: readonly PreviewLine[];
+}
+export interface PreviewLine {
+  key: string;
+  text: string;
+  /** Planned or refused, when the preview ruled on this item; null when it did not. */
+  state: "planned" | "refused" | null;
+  reason: string | null;
+}
+
+/** The reason a held preview no longer holds. */
+export const STALE_WORDS = "changed since preview";
+
 export type RowVerb =
   /** Stage a verdict on an assumption key; `on` is the staged verdict, pressing it again takes it back. */
   | {
@@ -66,27 +83,20 @@ export type RowVerb =
       on: boolean;
     }
   | { kind: "role"; id: number; role: "fan" | "passive"; label: string; says: string }
-  /** Preview or apply the group's heal in Revit; `refusal` says why apply is not armed. */
-  | {
-      kind: "heal";
-      group: string;
-      mode: "preview" | "apply";
-      label: string;
-      says: string;
-      refusal: string | null;
-    }
   /**
-   * Preview or apply making a unit a system's base equipment (`ducts.assign-fan`); `refusal` says
-   * why apply is not armed, `outcome` is the last run of this pair in words.
+   * A verb that previews before it does (kit `PreviewAction`): one button, its preview held in
+   * `held` while it still describes the snapshot, `stale` naming why a held one no longer does.
+   * `on` is what the route's preview and apply handles run with; `outcome` is the last apply in
+   * words (a fan's), drawn beside the Inputs button.
    */
   | {
-      kind: "fan";
-      unitId: number;
-      systemId: number;
-      mode: "preview" | "apply";
+      kind: "preview";
+      on: { verb: "heal"; group: string } | { verb: "fan"; unitId: number; systemId: number };
       label: string;
       says: string;
-      refusal: string | null;
+      held: PreviewState | null;
+      stale: string | null;
+      commit: { label: string; says: string; refusal: string | null };
       outcome: string | null;
     }
   /** Select the element on the drawing and focus the cell that holds the input. */
@@ -164,41 +174,44 @@ export interface TriageInput {
 }
 
 /**
- * The two verbs that make a unit a system's fan in Revit: preview (rolled back) and apply, armed by
- * a passing preview of this pair over this snapshot. Shared by the no-fan row and the Inputs pane.
+ * The verb that makes a unit a system's fan in Revit: one preview button (rolled back), whose commit
+ * is armed by a passing preview of this pair over this snapshot. Shared by the no-fan row and the
+ * Inputs pane.
  */
 export function fanVerbs(
   a: FanAssignment,
   name: (id: number) => string,
   fan: { run: DuctsFanRun | null; epoch: number } | undefined,
-): Extract<RowVerb, { kind: "fan" }>[] {
+): Extract<RowVerb, { kind: "preview" }>[] {
   const run = fan?.run;
   const mine = run?.unitId === a.unitId && run.systemId === a.systemId ? run : null;
-  const outcome = mine
-    ? `${mine.mode === "preview" ? "previewed" : "applied"}: ${fanWords(mine.response)}`
-    : null;
   const words = `make ${name(a.unitId)} the fan of ${a.system}`;
+  const previewed = mine?.mode === "preview" ? mine : null;
+  const fresh = previewed !== null && previewed.epoch === (fan?.epoch ?? 0);
   return [
     {
-      kind: "fan",
-      ...a,
-      mode: "preview",
+      kind: "preview",
+      on: { verb: "fan", ...a },
       label: `preview: ${words}`,
       says: `Preview in Revit, rolled back: ${words} (its base equipment, Duct Systems > Select Equipment)`,
-      refusal: null,
-      outcome,
-    },
-    {
-      kind: "fan",
-      ...a,
-      mode: "apply",
-      label: words,
-      says: `${words[0]!.toUpperCase()}${words.slice(1)} in Revit; the system keeps its id, name and type`,
-      refusal: fanRefusal(
-        { fan: run ?? null, epoch: fan?.epoch ?? 0 },
-        { unitId: a.unitId, systemId: a.systemId },
-      ),
-      outcome,
+      held:
+        previewed && fresh
+          ? {
+              word: `${words} · previewed`,
+              summary: fanWords(previewed.response),
+              lines: [],
+            }
+          : null,
+      stale: previewed && !fresh ? STALE_WORDS : null,
+      commit: {
+        label: words,
+        says: `${words[0]!.toUpperCase()}${words.slice(1)} in Revit; the system keeps its id, name and type`,
+        refusal: fanRefusal(
+          { fan: run ?? null, epoch: fan?.epoch ?? 0 },
+          { unitId: a.unitId, systemId: a.systemId },
+        ),
+      },
+      outcome: mine?.mode === "apply" ? `applied: ${fanWords(mine.response)}` : null,
     },
   ];
 }
@@ -298,20 +311,34 @@ function healRow(
     ].join(" "),
     verbs: [
       {
-        kind: "heal",
-        group: g.group,
-        mode: "preview",
+        kind: "preview",
+        on: { verb: "heal", group: g.group },
         label: "preview heal",
         says: `Preview healing ${counts} in Revit, rolled back`,
-        refusal: null,
-      },
-      {
-        kind: "heal",
-        group: g.group,
-        mode: "apply",
-        label: run?.mode === "preview" && run.fresh ? `heal ${run.passed.length}` : "heal",
-        says: "Heal the items the preview passed, in one transaction",
-        refusal: apply,
+        held:
+          run?.mode === "preview" && run.fresh
+            ? {
+                word: `heal · previewed ${run.passed.length}`,
+                summary: `${run.passed.length} pass · ${run.refused} refused`,
+                lines: g.items.map((i) => ({
+                  key: i.key,
+                  text: line(i),
+                  state: run.refusals.has(i.key)
+                    ? ("refused" as const)
+                    : run.passed.includes(i.key)
+                      ? ("planned" as const)
+                      : null,
+                  reason: run.refusals.get(i.key) ?? null,
+                })),
+              }
+            : null,
+        stale: run?.mode === "preview" && !run.fresh ? STALE_WORDS : null,
+        commit: {
+          label: "apply heal",
+          says: "Heal the items the preview passed, in one transaction",
+          refusal: apply,
+        },
+        outcome: null,
       },
       select(g.items.flatMap((i) => i.ids)),
     ],

@@ -1,12 +1,11 @@
 // @vitest-environment jsdom
-import { cleanup, fireEvent, render, screen, within } from "@testing-library/react";
+import { act, cleanup, fireEvent, render, screen, within } from "@testing-library/react";
 import { afterEach, expect, test, vi } from "vite-plus/test";
 
 import type { ActionHandle } from "#/route/handle";
 
 import { focusRow, type CellRef, type InboxItem } from "../../inbox-rows";
 import { manifest } from "../../manifest";
-import type { ReviewLine } from "../../write-review";
 import { Inbox } from "./inbox";
 
 afterEach(cleanup);
@@ -29,7 +28,9 @@ function mount(
     apply?: string | null;
     onFocusCell?: (c: CellRef) => void;
     healRefusal?: string | null;
-    review?: ReviewLine[];
+    previewed?: boolean;
+    healHeld?: boolean;
+    fanHeld?: boolean;
     set?: InboxItem[];
     diagnostics?: InboxItem[];
     store?: Parameters<typeof Inbox>[0]["work"]["store"];
@@ -56,20 +57,24 @@ function mount(
         ids: [10],
         verbs: [
           {
-            kind: "heal",
-            group: "g1",
-            mode: "preview",
+            kind: "preview",
+            on: { verb: "heal", group: "g1" },
             label: "preview heal",
             says: "Preview healing",
-            refusal: null,
-          },
-          {
-            kind: "heal",
-            group: "g1",
-            mode: "apply",
-            label: "heal",
-            says: "Heal what passed",
-            refusal: over.healRefusal === undefined ? "Preview the heal first" : over.healRefusal,
+            held: over.healHeld
+              ? {
+                  word: "heal · previewed 2",
+                  summary: "2 pass · 0 refused",
+                  lines: [{ key: "cap:1", text: "cap 10 (end 1)", state: "planned", reason: null }],
+                }
+              : null,
+            stale: null,
+            commit: {
+              label: "apply heal",
+              says: "Heal what passed",
+              refusal: over.healRefusal === undefined ? null : over.healRefusal,
+            },
+            outcome: null,
           },
         ],
       }),
@@ -79,21 +84,19 @@ function mount(
         title: "No duct path to a fan",
         verbs: [
           {
-            kind: "fan",
-            ...pair,
-            mode: "preview",
+            kind: "preview",
+            on: { verb: "fan", ...pair },
             label: "preview: make FC-17 the fan of SA 19",
             says: "Preview in Revit, rolled back",
-            refusal: null,
-            outcome: null,
-          },
-          {
-            kind: "fan",
-            ...pair,
-            mode: "apply",
-            label: "make FC-17 the fan of SA 19",
-            says: "Make it the fan",
-            refusal: over.fanRefusal === undefined ? "Preview it first" : over.fanRefusal,
+            held: over.fanHeld
+              ? { word: "make FC-17 the fan of SA 19 · previewed", summary: "planned", lines: [] }
+              : null,
+            stale: null,
+            commit: {
+              label: "make FC-17 the fan of SA 19",
+              says: "Make it the fan",
+              refusal: over.fanRefusal === undefined ? null : over.fanRefusal,
+            },
             outcome: null,
           },
         ],
@@ -141,7 +144,17 @@ function mount(
           status: "preview out of date",
           held: over.held ?? null,
         },
-        review: over.review ?? [],
+        held: over.previewed
+          ? {
+              word: "previewed 3",
+              summary: "3 planned · 1 refused",
+              lines: [
+                { key: "a", text: "FC-17 · ESP: 0.5 → 0.9", state: "planned", reason: null },
+                { key: "b", text: "Pe store · slot", state: "refused", reason: "Revit says no" },
+              ],
+            }
+          : null,
+        stale: false,
       }}
       heal={heal}
       fan={fan}
@@ -153,61 +166,87 @@ function mount(
   return { ...utils, apply, heal, fan, write };
 }
 
-test("a Heal row previews with its group, and heals only once a preview armed it", () => {
+test("a Heal row previews with its group, then its popover heals what the preview passed", async () => {
   const first = mount();
   fireEvent.click(screen.getByText("Heal SA 1: 2 caps"));
   const detail = first.container.querySelector('[data-inbox-detail="heal:g1"]') as HTMLElement;
-  fireEvent.click(within(detail).getByRole("button", { name: "preview heal" }));
+  await act(async () =>
+    fireEvent.click(within(detail).getByRole("button", { name: "preview heal" })),
+  );
   expect(first.heal.preview.run).toHaveBeenCalledWith({ group: "g1" });
-  const refused = within(detail).getByRole("button", { name: "heal" });
-  expect(refused.getAttribute("aria-disabled")).toBe("true");
-  fireEvent.click(refused);
   expect(first.heal.apply.run).not.toHaveBeenCalled();
   cleanup();
-  const armed = mount({ healRefusal: null });
+  // A held preview wears the armed word and opens on a press, with its items and the commit.
+  const armed = mount({ healHeld: true });
   fireEvent.click(screen.getByText("Heal SA 1: 2 caps"));
   const open = armed.container.querySelector('[data-inbox-detail="heal:g1"]') as HTMLElement;
-  fireEvent.click(within(open).getByRole("button", { name: "heal" }));
+  await act(async () =>
+    fireEvent.click(within(open).getByRole("button", { name: "heal · previewed 2" })),
+  );
+  expect(screen.getByText("2 pass · 0 refused")).toBeTruthy();
+  expect(screen.getByText("cap 10 (end 1)")).toBeTruthy();
+  await act(async () => fireEvent.click(screen.getByRole("button", { name: "apply heal" })));
   expect(armed.heal.apply.run).toHaveBeenCalledWith({ group: "g1" });
 });
 
-test("a no-fan row previews making its one unit the fan, and applies only once a preview armed it", () => {
+test("a no-fan row previews making its one unit the fan, then commits from the popover", async () => {
   const first = mount();
   fireEvent.click(screen.getByText("No duct path to a fan"));
   const detail = first.container.querySelector('[data-inbox-detail="f1"]') as HTMLElement;
-  fireEvent.click(
-    within(detail).getByRole("button", { name: "preview: make FC-17 the fan of SA 19" }),
+  await act(async () =>
+    fireEvent.click(
+      within(detail).getByRole("button", { name: "preview: make FC-17 the fan of SA 19" }),
+    ),
   );
   expect(first.fan.preview.run).toHaveBeenCalledWith({ unitId: 17, systemId: 19 });
-  const refused = within(detail).getByRole("button", { name: "make FC-17 the fan of SA 19" });
-  expect(refused.getAttribute("aria-disabled")).toBe("true");
-  fireEvent.click(refused);
   expect(first.fan.apply.run).not.toHaveBeenCalled();
   cleanup();
-  const armed = mount({ fanRefusal: null });
+  const armed = mount({ fanHeld: true });
   fireEvent.click(screen.getByText("No duct path to a fan"));
   const open = armed.container.querySelector('[data-inbox-detail="f1"]') as HTMLElement;
-  fireEvent.click(within(open).getByRole("button", { name: "make FC-17 the fan of SA 19" }));
+  await act(async () =>
+    fireEvent.click(
+      within(open).getByRole("button", { name: "make FC-17 the fan of SA 19 · previewed" }),
+    ),
+  );
+  await act(async () =>
+    fireEvent.click(screen.getByRole("button", { name: "make FC-17 the fan of SA 19" })),
+  );
   expect(armed.fan.apply.run).toHaveBeenCalledWith({ unitId: 17, systemId: 19 });
 });
 
-test("the Write row's apply wears the handle's word and refusal, the same button the head draws", () => {
-  const refusedMount = mount({ apply: "Preview first" });
-  const refused = within(
-    refusedMount.container.querySelector('[aria-label="Write"]') as HTMLElement,
-  ).getByRole("button", { name: "write 3 to Revit" });
-  expect(refused.getAttribute("aria-disabled")).toBe("true");
-  fireEvent.click(refused);
-  expect(refusedMount.apply.run).not.toHaveBeenCalled();
+test("the Write row is one preview button; its popover lists the changes and writes", async () => {
+  const idle = mount();
+  const idleGroup = idle.container.querySelector('[aria-label="Write"]') as HTMLElement;
+  // Nothing held: the single idle button is the handle's own word, and the commit is not drawn.
+  expect(within(idleGroup).queryByRole("button", { name: "write 3 to Revit" })).toBeNull();
+  expect(within(idleGroup).getByRole("button", { name: "preview" })).toBeTruthy();
   cleanup();
   // Fix and Set rows standing hold back only the ESP: apply stays armed and the row says what waits.
   const held = "1 staged ESP left out of this write: 1 to fix before the ESP writes";
-  const armed = mount({ held });
+  const armed = mount({ held, previewed: true });
   const group = armed.container.querySelector('[aria-label="Write"]') as HTMLElement;
   fireEvent.click(screen.getByText("Write to Revit"));
-  fireEvent.click(within(group).getByRole("button", { name: "write 3 to Revit" }));
+  await act(async () =>
+    fireEvent.click(within(group).getByRole("button", { name: "previewed 3" })),
+  );
+  expect(screen.getByText("3 planned · 1 refused")).toBeTruthy();
+  expect(screen.getByText("FC-17 · ESP: 0.5 → 0.9")).toBeTruthy();
+  expect(screen.getByText("refused: Revit says no")).toBeTruthy();
+  await act(async () => fireEvent.click(screen.getByRole("button", { name: "write 3 to Revit" })));
   expect(armed.apply.run).toHaveBeenCalledTimes(1);
   expect(armed.container.querySelector("[data-inbox-write-held]")?.textContent).toBe(held);
+  cleanup();
+  // The commit wears the handle's refusal.
+  const refusedMount = mount({ apply: "Preview first", previewed: true });
+  const refusedGroup = refusedMount.container.querySelector('[aria-label="Write"]') as HTMLElement;
+  await act(async () =>
+    fireEvent.click(within(refusedGroup).getByRole("button", { name: "previewed 3" })),
+  );
+  const refused = screen.getByRole("button", { name: "write 3 to Revit" });
+  expect(refused.getAttribute("aria-disabled")).toBe("true");
+  fireEvent.click(refused);
+  expect(refusedMount.apply.run).not.toHaveBeenCalled();
 });
 
 test("taking back a stored ignore stages a delete over it", () => {
@@ -344,24 +383,10 @@ test("Rulings use counted query facets and stage marks without replacing an excl
     check: [
       item({ key: "rules:one", group: "check", kind: "proposal", title: "Proposed elbow rule" }),
     ],
-    review: [
-      {
-        key: "review:one",
-        element: "Elbow 30",
-        what: "loss",
-        from: "1",
-        to: "2",
-        outcome: "would-write",
-        reason: null,
-      },
-    ],
   });
   expect(staged.container.querySelector('[data-key="rules:one"]')?.getAttribute("data-stage")).toBe(
     "proposed",
   );
-  expect(
-    staged.container.querySelector('[data-key="review:one"]')?.getAttribute("data-stage"),
-  ).toBe("staged");
 });
 
 test("missed-join diagnostics retain their label, status, selection action and inline note", () => {

@@ -148,31 +148,51 @@ describe("the ducts inbox", () => {
         nameOf: (id) => (id === 7 ? "FC-17" : String(id)),
       })
         .fix.find((r) => r.kind === "no-fan")!
-        .verbs.filter((v) => v.kind === "fan");
+        .verbs.filter((v) => v.kind === "preview");
+    // One button: idle until a preview is held, its commit refused until then.
     expect(noFan()).toMatchObject([
-      { mode: "preview", unitId: 7, systemId: 19, label: "preview: make FC-17 the fan of SA 19" },
-      { mode: "apply", label: "make FC-17 the fan of SA 19", refusal: "Preview it first" },
+      {
+        on: { verb: "fan", unitId: 7, systemId: 19 },
+        label: "preview: make FC-17 the fan of SA 19",
+        held: null,
+        stale: null,
+        commit: { label: "make FC-17 the fan of SA 19", refusal: "Preview it first" },
+      },
     ]);
     const response = { outcome: "planned", check: "SA 19: base equipment FC-17" } as never;
     const preview = { unitId: 7, systemId: 19, mode: "preview" as const, epoch: 3, response };
-    expect(noFan({ run: preview, epoch: 3 })[1]).toMatchObject({
-      refusal: null,
-      outcome: "previewed: SA 19: base equipment FC-17",
+    expect(noFan({ run: preview, epoch: 3 })[0]).toMatchObject({
+      held: {
+        word: "make FC-17 the fan of SA 19 · previewed",
+        summary: "SA 19: base equipment FC-17",
+      },
+      stale: null,
+      commit: { refusal: null },
     });
-    expect(noFan({ run: preview, epoch: 4 })[1]!.refusal).toMatch(/snapshot changed/);
+    // The snapshot moved on: the held preview is dropped and the reason says so.
+    expect(noFan({ run: preview, epoch: 4 })[0]).toMatchObject({
+      held: null,
+      stale: "changed since preview",
+    });
+    expect(noFan({ run: preview, epoch: 4 })[0]!.commit.refusal).toMatch(/snapshot changed/);
     const refused = {
       ...preview,
       response: { outcome: "refused", reason: "its port is in SA 18" } as never,
     };
-    expect(noFan({ run: refused, epoch: 3 })[1]!.refusal).toBe(
+    expect(noFan({ run: refused, epoch: 3 })[0]!.commit.refusal).toBe(
       "The preview refused: its port is in SA 18",
     );
+    // An applied run is the outcome beside the Inputs button, not a held preview.
+    expect(noFan({ run: { ...preview, mode: "apply" }, epoch: 3 })[0]).toMatchObject({
+      held: null,
+      outcome: "applied: SA 19: base equipment FC-17",
+    });
     // A system that already has base equipment is never offered (the op refuses a swap).
     const based = { ...fanless, systems: [{ ...fanless.systems![0]!, baseEquipmentId: 8 }] };
     expect(
       inboxRows({ ...base, snapshot: based, roles })
         .fix.find((r) => r.kind === "no-fan")!
-        .verbs.filter((v) => v.kind === "fan"),
+        .verbs.filter((v) => v.kind === "preview"),
     ).toEqual([]);
   });
 });
@@ -257,11 +277,35 @@ describe("healing replaces the capped and connect verdicts", () => {
     expect(previewed).toMatchObject({ fresh: true, passed: ["cap:2:1"], esp: null });
     const row = inboxRows({ ...base, heal, healRun: previewed }).fix[0]!;
     expect(row.status).toBe("previewed: 1 pass · 1 refused");
-    expect(row.verbs[1]).toMatchObject({ label: "heal 1", refusal: null });
+    expect(row.verbs[0]).toMatchObject({
+      kind: "preview",
+      label: "preview heal",
+      held: {
+        word: "heal · previewed 1",
+        summary: "1 pass · 1 refused",
+        lines: [
+          { key: "cap:2:1", state: "planned" },
+          {
+            key: "join:5:0|6:0",
+            state: "refused",
+            reason: "post-check failed: the joint is 0.2 in open",
+          },
+        ],
+      },
+      stale: null,
+      commit: { label: "apply heal", refusal: null },
+    });
     expect(row.note).toMatch(
       /Refused connect 5 to 6: post-check failed: the joint is 0\.2 in open\./,
     );
     expect(healRunView(run, snapshot, 5, () => null).fresh).toBe(false);
+    // The snapshot moved on: the row's preview disarms with the reason.
+    const moved = inboxRows({
+      ...base,
+      heal,
+      healRun: healRunView(run, snapshot, 5, () => null),
+    }).fix[0]!;
+    expect(moved.verbs[0]).toMatchObject({ held: null, stale: "changed since preview" });
 
     // Revit renumbered the group: g1 is now g9, still holding root 1.
     const after = {

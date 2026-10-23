@@ -50,6 +50,7 @@
     "./table/view": "./src/components/master-table/view.ts",
     "./theme": "./src/theme.ts",
     "./lang/popover": "./src/components/lang/popover.tsx",
+    "./lang/preview-action": "./src/components/lang/preview-action.tsx",
     "./lang/hover-card": "./src/components/lang/hover-card.tsx"
   },
   "scripts": {

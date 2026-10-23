@@ -35,7 +35,7 @@ import { scopeOf } from "@pe/ducts-domain/system-scope";
 import { stagedEsp } from "@pe/ducts-domain/staged";
 import { previewFresh } from "../../manifest";
 import type { LossesWork } from "../../work";
-import { reviewLines } from "../../write-review";
+import { reviewLines, writePreview } from "../../write-review";
 import { buildTree, systemList, type TreeNode } from "../b/model";
 import type { ProtoProps } from "../props";
 import { DEFAULT_DESIGN_FRICTION_RATE } from "@pe/ducts-domain/equivalent-length";
@@ -352,7 +352,11 @@ function EScreenBody({ props }: { props: ProtoProps }) {
         onClick={(event) => event.stopPropagation()}
       >
         {verbs.map((v) => (
-          <FanButton key={`${v.systemId}:${v.mode}`} verb={v} fan={fanHandles} />
+          <FanButton
+            key={v.on.verb === "fan" ? v.on.systemId : v.label}
+            verb={v}
+            fan={fanHandles}
+          />
         ))}
         {outcome ? (
           <span className="t-small text-ink-2" data-e-fan-outcome="">
@@ -362,9 +366,12 @@ function EScreenBody({ props }: { props: ProtoProps }) {
       </span>
     );
   };
-  // The review lists only a preview that still describes this Work and snapshot.
-  const review = useMemo(
-    () => (preview && previewFresh(page, props.work.revision) ? reviewLines(preview, nameOf) : []),
+  // The Write popover holds only a preview that still describes this Work and snapshot.
+  const writeHeld = useMemo(
+    () =>
+      preview && previewFresh(page, props.work.revision)
+        ? writePreview(preview, reviewLines(preview, nameOf))
+        : null,
     [preview, page, props.work.revision, nameOf],
   );
   const toRule = inbox ? inbox.fix.length + inbox.set.length + inbox.check.length : 0;
@@ -734,7 +741,12 @@ function EScreenBody({ props }: { props: ProtoProps }) {
           light={light}
           onSelect={select}
           onFocusCell={focusCell}
-          write={{ ...props.actions, row: inbox.write, review }}
+          write={{
+            ...props.actions,
+            row: inbox.write,
+            held: writeHeld,
+            stale: page.evaluation !== null && writeHeld === null,
+          }}
           heal={{
             preview: props.actions.healPreview,
             apply: props.actions.heal,
