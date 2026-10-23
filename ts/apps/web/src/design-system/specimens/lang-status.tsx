@@ -51,7 +51,11 @@ export function LangStatusSpecimens() {
         )}
       />
       <SpecimenFrame name="TooltipHint" importPath="@pe/kit/lang/tooltip">
-        <TooltipHint>What this region shows and how to read it.</TooltipHint>
+        <TooltipHint>
+          <TooltipHint content="Return to the swatch">
+            <a href="/design-system/swatch">swatch¹</a>
+          </TooltipHint>
+        </TooltipHint>
       </SpecimenFrame>
       <RecipeGrid
         name="OutcomeLine"

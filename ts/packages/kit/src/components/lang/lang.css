@@ -1356,6 +1356,22 @@ svg [data-damage] {
   box-shadow: inset -1px 0 0 var(--pe-page);
 }
 
+/* Hints keep whole words; placement flips or shifts before the available sliver can clip them. */
+[data-slot="tooltip-content"] {
+  width: max-content;
+  min-width: min-content;
+  max-width: min(24rem, calc(100vw - 16px));
+  padding: 4px 8px;
+}
+[data-floater-popup] {
+  width: max-content;
+  max-width: var(--available-width);
+  padding: 0;
+}
+[data-floater-popup]:not([data-sized]) > [data-slot="floater-content"] {
+  width: auto;
+  height: auto;
+}
 /* The field owns folding, including both dimensions; routes only declare furniture. */
 [data-slot="pane-field"]:has(> [data-slot="floater"]) {
   container: pane-field / size;
