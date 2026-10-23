@@ -41,11 +41,46 @@ export function useTeach(
     const fact = JSON.parse(value) as TeachDescriptor | null;
     if (!live || !fact) return;
     const anchor = host && ("current" in host ? host.current : host);
-    return registerTeaching({
-      ...fact,
-      id,
-      region: region ?? anchor?.closest<HTMLElement>("[data-teach-id]")?.dataset.teachId,
+    const owner = region ?? anchor?.closest<HTMLElement>("[data-teach-id]")?.dataset.teachId;
+    const pane = document.querySelector<HTMLElement>(`[data-teach-id="${owner}"]`);
+    const nodes = [...new Set([anchor, pane])].filter((node) => node != null);
+    let previous = "";
+    let withdraw: (() => void) | undefined;
+    const measure = () => {
+      const visible = nodes.every((node) => {
+        const rect = node.getBoundingClientRect();
+        return node.isConnected && rect.width > 0 && rect.height > 0;
+      });
+      const label =
+        fact.kind === "region"
+          ? pane?.querySelector('[data-slot="pane-title"]')?.textContent?.trim() ||
+            pane?.querySelector("[data-list-view][aria-label]")?.getAttribute("aria-label") ||
+            fact.label
+          : undefined;
+      const next = visible
+        ? JSON.stringify({ ...fact, ...(label ? { label } : {}), id, region: owner })
+        : "";
+      if (next === previous) return;
+      previous = next;
+      withdraw?.();
+      withdraw = next ? registerTeaching(JSON.parse(next)) : undefined;
+    };
+    measure();
+    const resize = typeof ResizeObserver === "undefined" ? null : new ResizeObserver(measure);
+    nodes.forEach((node) => resize?.observe(node));
+    const mutation = new MutationObserver(measure);
+    mutation.observe(document.body, {
+      subtree: true,
+      childList: true,
+      attributes: true,
+      attributeFilter: ["style", "hidden", "class"],
+      characterData: true,
     });
+    return () => {
+      resize?.disconnect();
+      mutation.disconnect();
+      withdraw?.();
+    };
   }, [id, region, live, value, host]);
   return id;
 }
