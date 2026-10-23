@@ -4,12 +4,8 @@ import { afterEach, expect, test, vi } from "vite-plus/test";
 import type { DuctSnapshot } from "@pe/ducts-domain/types";
 import snapshot from "./fixtures/synthetic-snapshot.json";
 import { subjectNamer } from "./subject-text";
-import {
-  SubjectText,
-  reachStore,
-  SubjectTextContext,
-  subjectDocument,
-} from "@pe/kit/lang/subject-text";
+import { SubjectText, SubjectTextContext, subjectDocument } from "@pe/kit/lang/subject-text";
+import { reachStore } from "@pe/kit/lang/reach";
 
 afterEach(cleanup);
 const names = new Map([

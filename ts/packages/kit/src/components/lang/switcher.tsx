@@ -1,3 +1,4 @@
+import { reachProps } from "./reach";
 /**
  * The exclusive mode switch. The active choice is the select fill, never a hue; hover is the one
  * veil. Each option's `title` is required: a mode whose consequence is not stated is a mystery toggle.
@@ -17,7 +18,7 @@ export const switcherRecipe = tv({
     option:
       // Options are words a person picks, so they read in the body face (law 6: mono is what a
       // machine measured); a measured count inside a label brings its own `face-mono`.
-      "veil cursor-pointer border-0 bg-transparent px-(--control-pad-x) t-small text-ink-2 enabled:hover:text-ink",
+      "veil cursor-pointer border-0 bg-transparent px-(--control-pad-x) t-small text-ink-2 ",
   },
   variants: {
     state: {
@@ -50,6 +51,7 @@ export function Switcher<T extends string>({
         return (
           <TooltipHint content={option.title} key={option.value}>
             <button
+              {...reachProps()}
               type="button"
               onClick={() => onChange(option.value)}
               disabled={option.disabled}

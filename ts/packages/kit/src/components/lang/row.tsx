@@ -1,3 +1,4 @@
+import { reachProps, useReach, useReachSetter } from "./reach";
 /**
  * The one list item and table row (`as="tr"`): one height, one type rung, mono only from a column
  * or the meta slot. States are data attributes (cursor, selected, active, pending, failed), never
@@ -215,13 +216,22 @@ const rowStateProps = (state: RowState) => ({
 
 export function Row(props: RowProps) {
   const { damage, refusal } = props;
+  const rung = useReach(props.revitIds?.[0]);
+  const setReach = useReachSetter();
   const shared = {
+    ...reachProps(rung),
     id: props.id,
     role: props.role,
     onClick: refusal ? undefined : props.onClick,
     onMouseMove: props.onMouseMove,
-    onMouseEnter: props.onMouseEnter,
-    onMouseLeave: props.onMouseLeave,
+    onMouseEnter: () => {
+      props.onMouseEnter?.();
+      if (props.revitIds?.length) setReach(props.revitIds[0]!);
+    },
+    onMouseLeave: () => {
+      props.onMouseLeave?.();
+      if (props.revitIds?.length) setReach(null);
+    },
     "data-key": props["data-key"],
     "data-index": props["data-index"],
     tabIndex: props.tabIndex,

@@ -7,6 +7,7 @@ The one-system design cluster: the design LANGUAGE (raw values in `apps/web/src/
 **This ledger owns every cross-route design-language and primitive gap.** Route ledgers name their own applications and evidence; they never restate a ruling or a gap that lives here. A rule lives in exactly one home: a type, a check, a swatch specimen, or `.agents/skills/lens.house/SKILL.md`. `docs/design/SURFACE-PHILOSOPHY.md` indexes those homes.
 
 ## Decided
+- 2026-10-23, N7 reach uses kit `reach.ts` and `[data-reach="rest|reach|hover|focus"]`. The reach block in kit `lang.css` owns hover paint. Rows, subject text and the web scene adapter share the existing scoped channel.
 
 - 2026-10-23, kit-raise N4: kit `RevitTarget` requires the displayed observation scope and owns layout-transparent target boundaries. `Row revitIds`, `FactChip revit`, and `SubjectText` tokens inherit that scope through portals. The web root retains the one Selection Box / Select menu; null and non-native scopes still refuse native actions. The specimen is `lang-list.tsx`; `kit-raise.revit-target.guard.test.ts` rejects hand-authored scopes outside the menu/parser.
 

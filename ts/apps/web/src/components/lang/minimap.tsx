@@ -245,9 +245,11 @@ function globeBody(yaw: number, elev: number) {
 export function OrbitMinimap({
   orbit,
   lines,
+  litLines,
 }: {
   orbit: LiveOrbit;
   lines?: readonly (readonly (readonly number[])[])[];
+  litLines?: readonly (readonly (readonly number[])[])[];
   stops?: "globe";
 }) {
   const svg = useRef<SVGSVGElement>(null);
@@ -301,8 +303,7 @@ export function OrbitMinimap({
       const rim = root.querySelector('[data-orbit-look="N"]')!;
       rim.setAttribute("transform", `translate(${body.rim.x.toFixed(1)} ${body.rim.y.toFixed(1)})`);
       rim.setAttribute("opacity", body.rim.front ? "1" : "0.5");
-      root.querySelector("[data-orbit-mini-lines]")!.setAttribute(
-        "d",
+      const path = (lines: typeof litLines) =>
         (lines ?? [])
           .map((line) =>
             line
@@ -315,8 +316,9 @@ export function OrbitMinimap({
               )
               .join(""),
           )
-          .join(""),
-      );
+          .join("");
+      root.querySelector("[data-orbit-mini-lines]")!.setAttribute("d", path(lines));
+      root.querySelector("[data-orbit-mini-reach]")!.setAttribute("d", path(litLines));
     };
     draw();
     const release = orbit.subscribe(() => {
@@ -326,7 +328,7 @@ export function OrbitMinimap({
       cancelAnimationFrame(frame);
       release();
     };
-  }, [orbit, lines]);
+  }, [orbit, lines, litLines]);
 
   const dots = (front: boolean): ReactNode =>
     body.stops.map((stop, i) => {
@@ -401,6 +403,13 @@ export function OrbitMinimap({
       />
       <g data-orbit-stops="far">{dots(false)}</g>
       <g pointerEvents="none" data-orbit-mini="">
+        <path
+          data-orbit-mini-reach=""
+          data-reach="hover"
+          fill="none"
+          stroke={tokenRef("ink")}
+          strokeWidth={3.5}
+        />
         <path
           data-orbit-mini-lines=""
           fill="none"

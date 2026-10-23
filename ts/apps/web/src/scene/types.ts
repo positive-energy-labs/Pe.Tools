@@ -1,3 +1,4 @@
+import type { ReachRung } from "@pe/kit/lang/reach";
 /**
  * The one 3D renderer's vocabulary: what it draws (`SceneMeshes`), what an answer adds on top
  * (`Layer3D`), and what the pointer is over (`Pick`). Coordinates are host internal feet, z up.
@@ -58,7 +59,7 @@ export class SceneMeshes {
 export type IssueTarget = { key: string; elementId: number };
 /** Where an issue mark stands, weakest first: the pointer within reach (about 24 px), over it, or
  * the issue open (picked here or in the inbox). */
-export type IssueState = "rest" | "reach" | "hover" | "focus";
+export type IssueState = ReachRung;
 export type LayerFrame = {
   seconds: number;
   reducedMotion: boolean;

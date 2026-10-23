@@ -1,3 +1,4 @@
+import { reachProps } from "./reach";
 import type { Tone } from "../../lib/token";
 /**
  * `<List>` is the inline list (pane body, rail, sidebar); `<ListPopup>` is the same list in a Base UI
@@ -369,10 +370,10 @@ const TRIGGER_FACE = {
     "dl-control flex w-full min-w-0 cursor-pointer items-center justify-between gap-1 px-(--control-pad-x) t-small",
   /** The left edge of a `ListSegmentInput`: no frame of its own, a rule between it and the input. */
   segment:
-    "flex shrink-0 cursor-pointer items-center gap-1 border-r border-line px-2 t-small transition-colors outline-none hover:bg-line/30 focus-visible:bg-line/30 data-popup-open:bg-line/40 disabled:cursor-not-allowed",
+    "flex shrink-0 cursor-pointer items-center gap-1 border-r border-line px-2 t-small transition-colors outline-none focus-visible:bg-line/30 data-popup-open:bg-line/40 disabled:cursor-not-allowed",
   /** A glyph alone (a row's "…" menu): item-high square, no frame, no chevron — the glyph is the
    *  verb. Its ink rises on hover and while open; the row's own ground shows through. */
-  icon: "inline-flex size-(--item-h) shrink-0 cursor-pointer items-center justify-center text-ink-2 outline-none hover:text-ink focus-visible:outline focus-visible:outline-line-2 data-popup-open:text-ink [&>svg]:size-[1.2em]",
+  icon: "inline-flex size-(--item-h) shrink-0 cursor-pointer items-center justify-center text-ink-2 outline-none focus-visible:outline focus-visible:outline-line-2 data-popup-open:text-ink [&>svg]:size-[1.2em]",
 } as const;
 
 type TriggerFace = keyof typeof TRIGGER_FACE;
@@ -390,7 +391,12 @@ function PopupTrigger({
   "data-tone"?: Tone;
 }) {
   return (
-    <PopoverTrigger className={TRIGGER_FACE[face]} data-list-trigger={face} {...props}>
+    <PopoverTrigger
+      {...reachProps()}
+      className={TRIGGER_FACE[face]}
+      data-list-trigger={face}
+      {...props}
+    >
       {face === "word" || face === "icon" ? (
         children
       ) : (

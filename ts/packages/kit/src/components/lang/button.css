@@ -16,9 +16,7 @@
   border-color: transparent;
   background-color: transparent;
 }
-.dl-button:is(.dl-control, [data-kind="quiet"]:hover, [aria-pressed="true"]) {
-  color: var(--pe-ink);
-}
+
 .dl-button.dl-control {
   padding: 0 var(--control-pad-x);
 }
@@ -27,12 +25,7 @@
 }
 /* A nav button is a link: hover and keyboard focus are unmistakable. The select fill (never a hue),
    ink, and a 2px underline on hover; a full-ink 2px outline on focus (the pick mark's weight). */
-.dl-button[data-kind="nav"]:hover:not(:disabled, [aria-disabled="true"]) {
-  background-color: var(--pe-select);
-  color: var(--pe-ink);
-  text-decoration: underline 2px;
-  text-underline-offset: 3px;
-}
+
 .dl-button[data-kind="nav"]:focus-visible {
   background-color: var(--pe-select);
   color: var(--pe-ink);
@@ -63,9 +56,7 @@
   background-color: var(--pe-commit);
   color: var(--pe-on-commit);
 }
-.dl-button:hover:not(:disabled, [aria-disabled="true"]) {
-  background-image: var(--fill-veil);
-}
+
 .dl-button:active:not(:disabled, [aria-disabled="true"]) {
   background-image: var(--fill-press);
 }
