@@ -6,7 +6,7 @@
  * over the fit of the subject's centrelines; the camera then turns by the globe only.
  */
 import { emptyListSearch } from "@pe/agent-contracts";
-import { useEffect, useMemo, useState, useSyncExternalStore } from "react";
+import { useEffect, useMemo, useRef, useState, useSyncExternalStore } from "react";
 
 import { useScopeGestures, useScopeKeys } from "@pe/kit/keys";
 import type { PageMove } from "#/route/manifest";
@@ -16,11 +16,12 @@ import {
   boundsOfPoints,
   center,
   frame,
+  shiftOnScreen,
   type OrbitViewport,
 } from "#/scene/orbit";
 import { viewportProject, type Project, type Size } from "#/scene/projection";
 import { ORBIT_GESTURES } from "#/scene/gestures";
-import { glideLook, glideTo, type LiveOrbit } from "#/scene/live-orbit";
+import { flyTo, glideLook, isFlying, type LiveOrbit } from "#/scene/live-orbit";
 import { Scene3D } from "#/scene/scene3d";
 import type { SceneRead } from "#/scene/use-scene";
 import type { Bounds, Layer3D, SceneMeshes } from "#/scene/types";
@@ -35,8 +36,10 @@ import type { IssueTarget } from "#/scene/types";
 /** The bounds the camera is built on (the capture's), and the subject's own inside them. */
 export type PictureBounds = { scene: Bounds; subject: Bounds };
 
-/** A framed selection is never smaller than this many feet across, so one fitting is not 400x. */
-const FRAME_MIN_FT = 12;
+/** A framed subject keeps its neighbours in view: never under this many feet across, and the
+ * subject itself fills at most about half the frame, so one fitting is never a 400x close-up. */
+const CONTEXT_FT = 18;
+const CONTEXT_GROW = 2;
 const NONE: ReadonlySet<string> = new Set();
 
 const centrelinePoints = (scene: Scene, ids?: ReadonlySet<number>) => [
@@ -44,8 +47,9 @@ const centrelinePoints = (scene: Scene, ids?: ReadonlySet<number>) => [
   ...scene.nodes.flatMap((f) => (!ids || ids.has(f.node.id) ? [f.node.point] : [])),
 ];
 
-const padded = (b: Bounds): Bounds => {
-  const grow = (lo: number, hi: number) => Math.max(0, FRAME_MIN_FT - (hi - lo)) / 2;
+const inContext = (b: Bounds): Bounds => {
+  const grow = (lo: number, hi: number) =>
+    (Math.max(CONTEXT_FT, (hi - lo) * CONTEXT_GROW) - (hi - lo)) / 2;
   const [x, y, z] = [grow(b.minX, b.maxX), grow(b.minY, b.maxY), grow(b.minZ, b.maxZ)];
   return {
     minX: b.minX - x,
@@ -56,6 +60,82 @@ const padded = (b: Bounds): Bounds => {
     maxZ: b.maxZ + z,
   };
 };
+
+/** Where elements sit: their meshes', else their centrelines'; null when none is drawn. */
+export function boundsOfIds(
+  meshes: SceneMeshes | null,
+  scene: Scene,
+  ids: ReadonlySet<number>,
+): Bounds | null {
+  return (
+    (meshes && boundsOfInstances(meshes, (i) => i.revitId !== null && ids.has(i.revitId))) ??
+    boundsOfPoints(centrelinePoints(scene, ids))
+  );
+}
+
+/**
+ * The pose that shows `ids` with their neighbours, seen the way the camera already looks (yaw and
+ * elevation kept, so a jump never spins the model). A zoom already within reach of the frame is
+ * kept: hopping between nearby subjects pans rather than pumping in and out.
+ */
+export function subjectPose(
+  bounds: PictureBounds,
+  target: Bounds,
+  now: OrbitViewport | null,
+): OrbitViewport {
+  const to = frame(bounds.scene, inContext(target), now ?? undefined);
+  return now && now.zoom > to.zoom / 1.6 && now.zoom < to.zoom * 1.6 ? { ...to, zoom: now.zoom } : to;
+}
+
+const overlap = (a: DOMRect, b: DOMRect) =>
+  Math.max(0, Math.min(a.right, b.right) - Math.max(a.left, b.left)) *
+  Math.max(0, Math.min(a.bottom, b.bottom) - Math.max(a.top, b.top));
+const ANCHORS = [0.5, 0.4, 0.6, 0.3, 0.7, 0.2, 0.8, 0.12, 0.88];
+
+/**
+ * `view` slid so `target` lands in the most open part of the picture: clear of the readout and
+ * every surface docked over it (`pane-dock`, `pane-legend`, `floater`), the centre preferred. A narrow picture
+ * stacks its floaters down the middle; a subject framed dead centre would land under one.
+ */
+export function clearPose(
+  view: OrbitViewport,
+  target: Bounds,
+  scene: Bounds,
+  picture: Element,
+): OrbitViewport {
+  const at = picture.getBoundingClientRect();
+  const field = picture.closest("[data-slot='pane-field']");
+  if (!field || !at.width || !at.height) return view;
+  const blocks = [
+    ...field.querySelectorAll(
+      "[data-slot='pane-dock'], [data-slot='pane-legend'], :scope > [data-slot='floater']",
+    ),
+  ].map((el) => el.getBoundingClientRect());
+  if (!blocks.length) return view;
+  const project = viewportProject(view, scene, at);
+  const points = [target.minX, target.maxX].flatMap((x) =>
+    [target.minY, target.maxY].flatMap((y) =>
+      [target.minZ, target.maxZ].flatMap((z) => {
+        const p = project([x, y, z]);
+        return p ? [p] : [];
+      }),
+    ),
+  );
+  if (!points.length) return view;
+  const xs = points.map((p) => p[0]),
+    ys = points.map((p) => p[1]);
+  const [w, h] = [Math.max(...xs) - Math.min(...xs), Math.max(...ys) - Math.min(...ys)];
+  const [cx, cy] = [(Math.max(...xs) + Math.min(...xs)) / 2, (Math.max(...ys) + Math.min(...ys)) / 2];
+  const best = ANCHORS.flatMap((fx) => ANCHORS.map((fy) => [fx * at.width, fy * at.height]))
+    .map(([x, y]) => {
+      const box = new DOMRect(at.left + x! - w / 2, at.top + y! - h / 2, w, h);
+      const covered = blocks.reduce((sum, b) => sum + overlap(box, b), 0);
+      const outside = w * h - overlap(box, at);
+      return { x: x!, y: y!, cost: (covered + outside) * 1e3 + Math.hypot(x! - at.width / 2, y! - at.height / 2) };
+    })
+    .reduce((a, b) => (b.cost < a.cost ? b : a));
+  return shiftOnScreen(view, scene, at.height, best.x - cx, best.y - cy);
+}
 
 /** The capture's bounds and its focus meshes', or the subject's centrelines' with no meshes. */
 export function usePictureBounds(meshes: SceneMeshes | null, scene: Scene): PictureBounds | null {
@@ -141,7 +221,23 @@ export function ModelPicture({
   };
   // Subscribe inside the picture, never in the route: even the centreline-only preview follows
   // the live camera while native meshes are loading, without waking pricing or the inbox.
-  const pose = useSyncExternalStore(orbit.subscribe, orbit.read);
+  // A flight holds the last pose: the meshes fly (the renderer follows the orbit itself) while the
+  // DOM layer fades and re-projects once at the landing, never a React render per frame.
+  // Without meshes the layer IS the picture, so it follows every frame.
+  const held = useRef<OrbitViewport | null>(null);
+  const pose = useSyncExternalStore(orbit.subscribe, () =>
+    meshes && held.current && isFlying(orbit) ? held.current : (held.current = orbit.read()),
+  );
+  const fade = useRef<HTMLDivElement | null>(null);
+  useEffect(() => {
+    if (!meshes) return;
+    return orbit.subscribe(() => {
+      const flying = isFlying(orbit);
+      if (fade.current && (fade.current.dataset.flying === "") !== flying)
+        if (flying) fade.current.dataset.flying = "";
+        else delete fade.current.dataset.flying;
+    });
+  }, [orbit, meshes]);
   const [said, setSaid] = useState<string | null>(null);
   // A callback ref: the element can arrive after the first commit (a pane revealed later).
   const [host, setHost] = useState<HTMLDivElement | null>(null);
@@ -157,6 +253,10 @@ export function ModelPicture({
   }, [host]);
   // With meshes the renderer reports every frame's camera; without, the fit is computed here.
   const [framed, setFramed] = useState<{ project: Project; size: Size } | null>(null);
+  const lastFrame = useRef(framed);
+  useEffect(() => {
+    if (lastFrame.current !== framed && !isFlying(orbit)) setFramed(lastFrame.current);
+  }, [pose]); // eslint-disable-line react-hooks/exhaustive-deps
   const overlay = meshes
     ? framed
     : pose && bounds && size
@@ -176,10 +276,16 @@ export function ModelPicture({
   const isolated = layers.has("meshes") ? null : NONE;
 
   const move = (viewport: OrbitViewport | null) => {
-    if (viewport) return orbit.move(viewport);
-    // Fit can already be the saved Page value while a live gesture has moved away from it.
-    orbit.restore(poseOf(null, bounds));
-    setPage({ viewport: null }, { history: "push" });
+    if (viewport) return flyTo(orbit, viewport, { scene: bounds?.scene });
+    // Fit can already be the saved Page value while a live gesture has moved away from it: fly to
+    // it, then Page's fit (null) is the one entry, not the fit's coordinates.
+    const fit = poseOf(null, bounds);
+    if (fit)
+      flyTo(orbit, fit, {
+        history: null,
+        scene: bounds?.scene,
+        onLand: () => setPage({ viewport: null }, { history: "push" }),
+      });
   };
   // Selection changes only the centre of subsequent orbit drags, never the camera's look target.
   const primary = selected.values().next().value;
@@ -195,10 +301,9 @@ export function ModelPicture({
   const frameAt = (key: string | null) => {
     if (!bounds) return;
     const target = key && meshes ? boundsOfInstances(meshes, (i) => i.key === key) : null;
-    glideTo(
-      orbit,
-      frame(bounds.scene, target ? padded(target) : bounds.subject, orbit.read() ?? undefined),
-    );
+    if (!target) return move(null);
+    const view = subjectPose(bounds, target, orbit.read());
+    flyTo(orbit, host ? clearPose(view, target, bounds.scene, host) : view, { scene: bounds.scene });
   };
 
   useScopeGestures(ORBIT_GESTURES);
@@ -209,11 +314,10 @@ export function ModelPicture({
       says: "Frame the selection; with nothing selected, fit the system",
       callback: () => {
         if (!selected.size) return move(null);
-        const target = meshes
-          ? boundsOfInstances(meshes, (i) => selectedKeys.has(i.key))
-          : boundsOfPoints(centrelinePoints(scene, selected));
+        const target = boundsOfIds(meshes, scene, selected);
         if (!bounds || !target) return setSaid("the selection is not in the picture");
-        move(frame(bounds.scene, padded(target), orbit.read() ?? undefined));
+        const view = subjectPose(bounds, target, orbit.read());
+        move(host ? clearPose(view, target, bounds.scene, host) : view);
       },
     },
     {
@@ -287,7 +391,10 @@ export function ModelPicture({
           focusedIssue={issue}
           onIssueHover={hoverIssue}
           onIssuePick={pickIssue}
-          onProject={(project, at) => setFramed({ project, size: at })}
+          onProject={(project, at) => {
+            lastFrame.current = { project, size: at };
+            if (!isFlying(orbit)) setFramed(lastFrame.current);
+          }}
           onDoubleClick={(pick) => frameAt(pick?.instance.key ?? null)}
           onPick={(pick, event) => {
             if (event.detail > 1) return;
@@ -299,6 +406,10 @@ export function ModelPicture({
         />
       ) : null}
       {overlay ? (
+        <div
+          ref={fade}
+          className="pointer-events-none absolute inset-0 transition-opacity duration-150 data-flying:opacity-0"
+        >
         <Annotations
           {...overlay}
           scene={scene}
@@ -320,6 +431,7 @@ export function ModelPicture({
           onRuling={onRuling}
           onHover={onHover}
         />
+        </div>
       ) : null}
       {status ? (
         <p

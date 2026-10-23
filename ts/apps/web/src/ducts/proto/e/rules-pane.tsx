@@ -6,7 +6,7 @@
  * instance count and the table choice inline (the one decision, on the rule's own line). A fitting with a stated drop is an exception:
  * an override row under its type's rule, its drop editable. The tree's element rows jump here.
  */
-import { useEffect, useMemo } from "react";
+import { memo, useEffect, useMemo } from "react";
 import type { LossResult } from "@pe/ducts-domain/losses";
 import { ruleByKey } from "@pe/ducts-domain/loss-rules";
 import { unpriced, type Priced } from "@pe/ducts-domain/pricing";
@@ -35,7 +35,9 @@ export function ruleOfIds(priced: Priced | null): Map<number, string> {
   return out;
 }
 
-export function RulesTree({
+// Memoized: a selection, a hover or a camera move never re-renders the rules (107 ms per selection
+// on Chadds SA 4 before, dev build); only its own inputs do.
+export const RulesTree = memo(function RulesTree({
   snapshot,
   priced,
   groups,
@@ -276,4 +278,4 @@ export function RulesTree({
       </div>
     </div>
   );
-}
+});

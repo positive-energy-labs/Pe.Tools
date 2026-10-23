@@ -534,6 +534,27 @@ function EScreenBody({ props }: { props: ProtoProps }) {
     [reach],
   );
   const issues = useMemo(() => (inbox ? stageIssues(inbox) : []), [inbox]);
+  // The picture's alias jump: selection and the view that shows it, one Page write.
+  const jump = useRef<((id: number) => void) | null>(null);
+  // Stable, so memoized panes that only light (the rules) skip a selection's render.
+  const light = useCallback(
+    (ids: readonly number[] | null) =>
+      reach.set((state) =>
+        !ids?.length && !state.lighting.ids.size && state.hovered === null
+          ? state
+          : {
+              ...state,
+              lighting: { ids: new Set(ids ?? []), references: [], focus: null },
+              hovered: ids?.[0] ?? null,
+            },
+      ),
+    [reach],
+  );
+  const { epoch, system, systemSearch, systemSort } = page;
+  const systemKeys = useMemo(
+    () => ({ epoch, system, systemSearch, systemSort }),
+    [epoch, system, systemSearch, systemSort],
+  );
   const [ruleFocus, setRuleFocus] = useState<string | null>(null);
   // null = automatic: open when the inbox holds a row, collapsed when it holds none.
   const [inboxOpen, setInboxOpen] = useState<boolean | null>(null);
@@ -562,17 +583,8 @@ function EScreenBody({ props }: { props: ProtoProps }) {
   const side = chosen && sideFor.system === page.system ? sideFor.side : home;
   const pick = (side: Side) => setSideFor({ system: page.system, side });
 
-  const light = (ids: readonly number[] | null) =>
-    reach.set((state) =>
-      !ids?.length && !state.lighting.ids.size && state.hovered === null
-        ? state
-        : {
-            ...state,
-            lighting: { ids: new Set(ids ?? []), references: [], focus: null },
-            hovered: ids?.[0] ?? null,
-          },
-    );
-  const select = (id: number | null) => props.onSelect(id);
+  const select = (id: number | null) =>
+    id != null && jump.current ? jump.current(id) : props.onSelect(id);
   // The critical run is the largest priced total over every section: the worst fan's run (B's
   // model marks Pe's only when the group solve names one; a provisional solve can leave it
   // unnamed, so the largest total stands in). Only the runs that price the system count: a shared
@@ -618,7 +630,8 @@ function EScreenBody({ props }: { props: ProtoProps }) {
             const g = node?.groupId ?? snapshot.groups.find((x) => x.rootIds.includes(cell.id))?.id;
             return g ? systemOfGroup(drawn ?? snapshot, g) : page.system;
           })();
-    setPage({ system: into, selected: String(cell.id), issue: "" });
+    if (into === page.system && jump.current) jump.current(cell.id);
+    else setPage({ system: into, selected: String(cell.id), issue: "" });
     setSideFor({ system: into, side: "right" });
     setInputsOpen(true);
     setCellFocus(cell);
@@ -686,7 +699,7 @@ function EScreenBody({ props }: { props: ProtoProps }) {
         nameOf={nameOf}
         needsFix={needsFix}
         drawn={drawn}
-        page={page}
+        page={systemKeys}
         setPage={setPage}
       />
     </Pane>
@@ -876,9 +889,8 @@ function EScreenBody({ props }: { props: ProtoProps }) {
         reach,
         light: lightSubjects,
         clear: clearSubjects,
-        // The one alias-click. Today it selects; the grounding transition (bring the subject into
-        // view) belongs here so every Subject token, row and caption gets it at once.
-        go: (id) => props.onSelect(id),
+        // The one alias-click: select the subject and fly the picture to it (`jump`, canvas.tsx).
+        go: (id) => select(id),
       }}
     >
       <div ref={rootRef} data-proto="E2" className="flex size-full min-h-0">
@@ -933,6 +945,7 @@ function EScreenBody({ props }: { props: ProtoProps }) {
                     onIssueHover={setHoveredIssue}
                     scale={encoded}
                     nameOf={nameOf}
+                    jump={jump}
                     groups={drawGroups}
                     lead={leadGroup}
                     identity={{
@@ -969,7 +982,8 @@ function EScreenBody({ props }: { props: ProtoProps }) {
 }
 
 /** Keep query renders below the model, drawing and ruling builders. */
-function SystemsList({
+// Memoized on the Page keys it reads: a selection or a camera move never re-renders 355 rows.
+const SystemsList = memo(function SystemsList({
   systems,
   fansOf,
   nameOf,
@@ -984,7 +998,7 @@ function SystemsList({
   nameOf: (id: number) => string;
   needsFix: ReadonlySet<string>;
   drawn: ProtoProps["snapshot"];
-  page: ProtoProps["page"];
+  page: Pick<ProtoProps["page"], "epoch" | "system" | "systemSearch" | "systemSort">;
   setPage: ProtoProps["setPage"];
 }) {
   const searchable = useMemo(() => (drawn ? systemSearch(drawn) : null), [drawn]);
@@ -1081,7 +1095,7 @@ function SystemsList({
       }}
     />
   );
-}
+});
 
 /** The picture redraws on every reach (lit rows, hovered element, hovered issue); the screen does not. */
 function ReachCanvas({

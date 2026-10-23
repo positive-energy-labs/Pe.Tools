@@ -22,7 +22,11 @@ function Rows({ rows }: { rows: readonly Row[] }) {
     </dl>
   );
 }
-function Issues({ issues }: { issues: readonly Issue[] }) {
+function Issues({ issues: all }: { issues: readonly Issue[] }) {
+  // One line per finding as a person reads it: a unit in several groups repeats the same issue.
+  const issues = all.filter(
+    (issue, k) => all.findIndex((x) => x.kind === issue.kind && x.note === issue.note) === k,
+  );
   if (!issues.length) return <p className="text-ink-2">no issue names it</p>;
   return (
     <ul>

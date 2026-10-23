@@ -109,6 +109,31 @@ export function frame(
   };
 }
 
+/**
+ * The same view slid in its own screen plane so whatever sat at the centre sits `dx` px right and
+ * `dy` px down of it on a picture `heightPx` tall: orientation and zoom kept, only the target moves.
+ */
+export function shiftOnScreen(
+  v: OrbitViewport,
+  scene: Bounds,
+  heightPx: number,
+  dx: number,
+  dy: number,
+): OrbitViewport {
+  const feetPerPx =
+    (2 * (fitDistance(scene) / v.zoom) * Math.tan((ORBIT_FOV / 2) * RAD)) / heightPx;
+  const yaw = v.yaw * RAD,
+    elev = Math.min(Math.max(v.elev, -ELEV_LIMIT), ELEV_LIMIT) * RAD;
+  const right = [-Math.sin(yaw), Math.cos(yaw), 0];
+  const up = [-Math.sin(elev) * Math.cos(yaw), -Math.sin(elev) * Math.sin(yaw), Math.cos(elev)];
+  return {
+    ...v,
+    pivot: v.pivot.map(
+      (p, i) => p + (-right[i]! * dx + up[i]! * dy) * feetPerPx,
+    ) as OrbitViewport["pivot"],
+  };
+}
+
 /** The box around world points; null for none. */
 export function boundsOfPoints(points: Iterable<readonly number[]>): Bounds | null {
   const b = {

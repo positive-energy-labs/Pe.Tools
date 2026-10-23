@@ -2,26 +2,27 @@
  * The picture pane: one `Pane` whose strip holds the picture mode (model or schematic, `S` swaps),
  * the layers, and two floaters, the orbit globe (`G`) and the other picture small (a click swaps).
  * The model is the subject system's real meshes (`model-picture.tsx`) with its annotations; the
- * schematic is the one-line. Element facts open beside its projected box; rulings open at the pointer. A pick, a
+ * schematic is the one-line. The readout docked top-left (`readout.tsx`) says what is selected: an
+ * element's facts and issues, or a ruling's verdicts, never a popover over the picture. A pick, a
  * frame, a look and a gesture each write only their own Page keys.
  */
 import {
   createContext,
-  useCallback,
   useContext,
   useEffect,
   useMemo,
   useRef,
   useState,
   type ReactNode,
+  type RefObject,
 } from "react";
+import { useRouter } from "@tanstack/react-router";
 import { flushSync } from "react-dom";
 
 import { DUCTS_LAYERS, emptyListSearch, toggleLayer } from "@pe/agent-contracts";
 import { snapshotById } from "@pe/ducts-domain/readiness";
 import { noRunBranches } from "@pe/ducts-domain/no-runs";
 import { systemScope } from "@pe/ducts-domain/system-scope";
-import { Popover, PopoverContent } from "@pe/kit/lang/popover";
 import { TooltipHint } from "@pe/kit/lang/tooltip";
 import { ChevronRight } from "lucide-react";
 import { SelectionBoxButton } from "#/revit/element-menu";
@@ -30,8 +31,11 @@ import { KeyLegend } from "#/components/lang/kbd";
 import { Pane } from "#/components/lang/pane";
 import { useNativeObservation } from "#/revit/observation";
 import { useScene } from "#/scene/use-scene";
-import { useLiveOrbit } from "#/scene/live-orbit";
-import { boundsOfInstances } from "#/scene/orbit";
+import { flyTo, useLiveOrbit } from "#/scene/live-orbit";
+import type { Bounds } from "#/scene/types";
+import { useSurfaceHost } from "#/navigation/surface-host";
+import { Button } from "@pe/kit/lang/button";
+import { useScopeKeys } from "@pe/kit/keys";
 import { viewportProject } from "#/scene/projection";
 
 import type { Ruling } from "../../annotations";
@@ -41,7 +45,18 @@ import { NodeFactsView, SegmentFactsView } from "../../facts";
 import { labelOfNode, legsOf } from "../../legs";
 import { sceneRequestOf } from "../../manifest";
 import { findingLayers, findingShapes } from "../../finding-layers";
-import { ModelPicture, poseOf, usePictureBounds } from "../../model-picture";
+import {
+  boundsOfIds,
+  clearPose,
+  ModelPicture,
+  poseOf,
+  subjectPose,
+  usePictureBounds,
+} from "../../model-picture";
+import { GoToSubject } from "./go-to";
+import { PictureReadout } from "./readout";
+import { RunDetail, runOf } from "./run-detail";
+import { DEFAULT_DESIGN_FRICTION_RATE } from "@pe/ducts-domain/equivalent-length";
 import { ProvisionalNote } from "../../provisional";
 import { indexOf, sceneOf, subjectScene } from "../../scene";
 import { Schematic } from "../../schematic";
@@ -57,11 +72,6 @@ import { usePictureFloaters } from "./picture-floaters";
 import { RulingBody, useMarks } from "./rulings";
 import { noRunParts } from "../../subject-text";
 import { SubjectText, SubjectTextContext } from "../../subject-text-view";
-
-type Open =
-  | { what: "element"; id: number; x: number; y: number; box: DOMRect; side: "left" | "right" }
-  | { what: "ruling"; n: number; x: number; y: number }
-  | null;
 
 const LAYER_WORDS: Record<
   (typeof DUCTS_LAYERS)[number],
@@ -124,7 +134,21 @@ export interface ECanvasExtra {
     /** The title's root crumb: back to every system. */
     allSystems: () => void;
   };
+  /** The screen's alias picks call this when the subject is already the selection: fly again. */
+  jump?: RefObject<((id: number) => void) | null>;
 }
+
+/** The landing mark: drawn once per landing (keyed), scales in and fades while the camera is still. */
+const flash = (node: HTMLDivElement | null) => {
+  node?.animate(
+    [
+      { opacity: 0.9, transform: "scale(1.35)" },
+      { opacity: 0.9, transform: "scale(1)", offset: 0.3 },
+      { opacity: 0, transform: "scale(1)" },
+    ],
+    { duration: 900, easing: "ease-out", fill: "forwards" },
+  );
+};
 
 export function ECanvas(props: ProtoProps & ECanvasExtra) {
   const { snapshot } = props;
@@ -158,7 +182,9 @@ function Canvas({
   scale,
   nameOf,
   identity,
+  jump,
   setPage,
+  onSelect,
   onPose,
 }: ProtoProps & ECanvasExtra & { snapshot: NonNullable<ProtoProps["snapshot"]> }) {
   const observation = useNativeObservation();
@@ -184,11 +210,15 @@ function Canvas({
   const bounds = usePictureBounds(read.meshes, scene);
   const committedPose = useMemo(() => poseOf(page.viewport, bounds), [page.viewport, bounds]);
   const pose = committedPose;
+  // Marks the landing of the next flight `useLiveOrbit` makes to a Page pose (an alias jump).
+  const landing = useRef<(() => void) | null>(null);
   const orbit = useLiveOrbit(
     committedPose,
     (viewport, how) => setPage({ viewport }, { history: how === "gesture" ? "replace" : "push" }),
     `${native?.session}/${native?.openId}/${page.system}/${page.picture}`,
     page.viewport,
+    bounds?.scene,
+    landing,
   );
   // Pea reads the committed pose (`facts.pose`), not the in-progress globe preview.
   useEffect(() => {
@@ -204,7 +234,9 @@ function Canvas({
   const nameOfId = useMemo(() => elementNamer(snapshot, sub), [snapshot, sub]);
   const pointer = useRef({ x: 0, y: 0 });
   const [pictureHost, setPictureHost] = useState<HTMLDivElement | null>(null);
-  const [open, setOpen] = useState<Open>(null);
+  // A pick shows in the readout at once; the route hears of it after that paint (below).
+  const [shown, setShown] = useState<number | null>(null);
+  const [openRuling, setOpenRuling] = useState<number | null>(null);
   const selectionPublish = useRef<ReturnType<typeof setTimeout> | undefined>(undefined);
   const pendingSelection = useRef<number | null>(null);
   useEffect(() => () => clearTimeout(selectionPublish.current), []);
@@ -215,7 +247,7 @@ function Canvas({
       if (event.key !== "Escape" || pendingSelection.current === null) return;
       clearTimeout(selectionPublish.current);
       pendingSelection.current = null;
-      setOpen(null);
+      setShown(null);
       setPage({ selected: "" }, { history: "push" });
       event.preventDefault();
       event.stopPropagation();
@@ -223,21 +255,6 @@ function Canvas({
     document.addEventListener("keydown", escapePending, true);
     return () => document.removeEventListener("keydown", escapePending, true);
   }, [setPage]);
-  const mountFacts = useCallback(
-    (node: HTMLDivElement | null) => {
-      if (!node || open?.what !== "element" || pendingSelection.current !== open.id) return;
-      // Two RAFs can run only 3 ms apart in headless Chrome, before a visible paint. Give the
-      // mounted portal 50 ms before the router expands the sidebar's expensive selection rows.
-      clearTimeout(selectionPublish.current);
-      selectionPublish.current = setTimeout(() => {
-        selectionPublish.current = undefined;
-        if (pendingSelection.current !== open.id) return;
-        pendingSelection.current = null;
-        setPage({ selected: String(open.id) }, { history: "push" });
-      }, 50);
-    },
-    [open, setPage],
-  );
   const pointOf = (id: number): readonly number[] | null => {
     const node = byId.nodes.get(id);
     if (node) return node.point;
@@ -345,6 +362,18 @@ function Canvas({
       : (byId.segments.get(firstId)?.groupId ?? byId.nodes.get(firstId)?.groupId ?? ""));
   const solved = groupId ? priced?.next.byGroup[groupId] : null;
   const criticalName = solved?.critical != null ? nameOf(solved.critical) : null;
+  const scopeTerminals = page.system ? systemScope(snapshot, page.system).terminals : null;
+  const terminals = scopeTerminals?.size ?? 0;
+  const flowless = useMemo(
+    () =>
+      scopeTerminals
+        ? issues
+            .flatMap((i) => i.findings)
+            .flatMap((f) => (f.startsWith("flow:no-flow:") ? [Number(f.slice(13))] : []))
+            .filter((t, k, all) => scopeTerminals.has(t) && all.indexOf(t) === k)
+        : [],
+    [issues, scopeTerminals],
+  );
 
   const selected = useMemo(() => {
     const id =
@@ -358,16 +387,11 @@ function Canvas({
     [lit, hovered],
   );
 
-  // Opening facts is local and urgent. Updating the address also renders the tree and rules;
-  // let that work follow the first paint instead of holding the popover behind it.
-  const pick = (id: number | null, at = pointer.current) => {
-    pendingSelection.current = id;
-    const host = pictureHost?.querySelector("[data-model-picture]");
-    const rect = host?.getBoundingClientRect();
+  // Where a box in the world sits on screen now, from the live camera; null when off the picture.
+  const onScreen = (b: Bounds | null): DOMRect | null => {
+    const rect = pictureHost?.querySelector("[data-model-picture]")?.getBoundingClientRect();
     const now = orbit.read();
-    const b =
-      id != null && read.meshes ? boundsOfInstances(read.meshes, (i) => i.revitId === id) : null;
-    const project = now && bounds && rect ? viewportProject(now, bounds.scene, rect) : null;
+    const project = b && now && bounds && rect ? viewportProject(now, bounds.scene, rect) : null;
     const points =
       b && project
         ? [b.minX, b.maxX].flatMap((x) =>
@@ -381,41 +405,180 @@ function Canvas({
         : [];
     const xs = points.map((p) => p[0] + rect!.left);
     const ys = points.map((p) => p[1] + rect!.top);
-    const box = points.length
+    return points.length
       ? DOMRect.fromRect({
           x: Math.min(...xs),
           y: Math.min(...ys),
           width: Math.max(...xs) - Math.min(...xs),
           height: Math.max(...ys) - Math.min(...ys),
         })
-      : DOMRect.fromRect({ ...at, width: 0, height: 0 });
-    setOpen(
-      id == null
-        ? null
-        : {
-            what: "element",
-            id,
-            ...at,
-            box,
-            side: box.left > window.innerWidth - box.right ? "left" : "right",
-          },
-    );
-    if (id == null) {
-      clearTimeout(selectionPublish.current);
-      setPage({ selected: "" }, { history: "push" });
-    }
+      : null;
+  };
+  // A pick made on the picture (an element, a pin, an issue, the schematic) keeps the camera
+  // still (kaitpw 2026-10-23); `quiet` tells the alias flight below that this selection is one.
+  const quiet = useRef<{ id: string; at: number } | null>(null);
+  const hush = (id: string) => (quiet.current = { id, at: performance.now() });
+  // Showing the pick is local and urgent. Updating the address also renders the tree and rules;
+  // let that work follow the readout's first paint. Two RAFs can run only 3 ms apart in headless
+  // Chrome, before a visible paint, so the publish waits a frame and then 50 ms.
+  const pick = (id: number | null) => {
+    clearTimeout(selectionPublish.current);
+    pendingSelection.current = id;
+    setShown(id);
+    setOpenRuling(null);
+    if (id == null) return setPage({ selected: "" }, { history: "push" });
+    hush(String(id));
+    requestAnimationFrame(() => {
+      if (pendingSelection.current !== id) return;
+      selectionPublish.current = setTimeout(() => {
+        if (pendingSelection.current !== id) return;
+        pendingSelection.current = null;
+        setPage({ selected: String(id) }, { history: "push" });
+      }, 50);
+    });
   };
   useEffect(() => {
-    if (!page.selected) setOpen(null);
+    if (pendingSelection.current === null) setShown(null);
+    if (!page.selected) setOpenRuling(null);
   }, [page.selected]);
-  const ruling = (r: Ruling, at: { x: number; y: number }) => {
+
+  // Every other way a subject becomes the selection (a footnote, an inbox, tree or rules row, a
+  // search result) is an alias jump: ONE Page write of the subject and the view that shows it with
+  // its neighbours, so the route renders once, as it does for any selection. The camera travels
+  // there the way Back and Forward travel (`useLiveOrbit`); the landing outlines the subject and
+  // offers the way back, and Back is one step to where the eye was.
+  const [landed, setLanded] = useState<{ box: DOMRect | null; back: string; n: number } | null>(
+    null,
+  );
+  const aimed = useRef<{ selected: string; view: string } | null>(null);
+  const selectionOf = (id: number) => {
+    const leg = sub?.legOf.get(id);
+    return new Set(leg ? [id, ...leg.ids] : [id]);
+  };
+  const viewOf = (ids: ReadonlySet<number>) => {
+    const target = bounds && picture === "model" ? boundsOfIds(read.meshes, scene, ids) : null;
+    if (!bounds || !target) return null;
+    const view = subjectPose(bounds, target, orbit.read());
+    const at = pictureHost?.querySelector("[data-model-picture]");
+    return at ? clearPose(view, target, bounds.scene, at) : view;
+  };
+  const markLanding = (ids: ReadonlySet<number>, back: string) => () => {
+    const host = pictureHost?.getBoundingClientRect();
+    const box = onScreen(boundsOfIds(read.meshes, scene, ids));
+    setLanded({
+      back,
+      n: performance.now(),
+      box:
+        box && host
+          ? DOMRect.fromRect({
+              x: box.x - host.left,
+              y: box.y - host.top,
+              width: box.width,
+              height: box.height,
+            })
+          : null,
+    });
+  };
+  const backWord = () =>
+    /^\d+$/.test(page.selected) ? nameOf(Number(page.selected)) : "the previous view";
+  const jumpTo = (id: number) => {
+    const ids = selectionOf(id);
+    const view = viewOf(ids);
+    const same = String(id) === page.selected;
+    setLanded(null);
+    if (!view) return same ? undefined : onSelect(id);
+    aimed.current = { selected: String(id), view: JSON.stringify(view) };
+    landing.current = markLanding(ids, same ? "the previous view" : backWord());
+    setPage(same ? { viewport: view } : { selected: String(id), issue: "", viewport: view }, {
+      history: "push",
+    });
+  };
+  if (jump) jump.current = jumpTo;
+  // A flight of our own (history null, Page already moved) for a selection that arrived without its
+  // view: Pea, a cell in another system. Its landing replaces that selection's history entry.
+  const flyToIds = (ids: ReadonlySet<number>, back: string) => {
+    const view = viewOf(ids);
+    if (!view || !bounds) return;
+    flyTo(orbit, view, {
+      history: "replace",
+      scene: bounds.scene,
+      onLand: markLanding(ids, back),
+    });
+  };
+  const seen = useRef({ selected: page.selected, viewport: page.viewport, system: page.system });
+  // A jump into another system waits for that system's picture to finish reading: a pose
+  // committed against the centrelines would be re-read against the meshes' bounds.
+  const owed = useRef<string | null>(null);
+  useEffect(() => {
+    const was = seen.current;
+    seen.current = { selected: page.selected, viewport: page.viewport, system: page.system };
+    const mine = aimed.current;
+    aimed.current = null;
+    if (mine && mine.selected === page.selected && mine.view === JSON.stringify(page.viewport))
+      return; // our own jump: `useLiveOrbit` is flying it and `landing` marks it
+    if (mine) landing.current = null;
+    if (page.selected === was.selected) return;
+    const own = quiet.current;
+    quiet.current = null;
+    owed.current = null;
+    setLanded(null);
+    if (!page.selected) return;
+    if (own?.id === page.selected && performance.now() - own.at < 2000) return;
+    const crossed = page.system !== was.system && page.viewport === null;
+    if (!crossed && page.viewport !== was.viewport) return;
+    const from = /^\d+$/.test(was.selected) ? nameOf(Number(was.selected)) : null;
+    if (crossed) owed.current = from ?? (was.system || "all systems");
+    else flyToIds(selected, from ?? "the previous view");
+  }, [page.selected, page.viewport, page.system]); // eslint-disable-line react-hooks/exhaustive-deps
+  useEffect(() => {
+    if (owed.current === null || read.pending) return;
+    const back = owed.current;
+    owed.current = null;
+    flyToIds(selected, back);
+  }, [read.pending, read.meshes, scene]); // eslint-disable-line react-hooks/exhaustive-deps
+  const router = useRouter();
+  const surface = useSurfaceHost();
+  const go = (way: "back" | "forward") => {
+    setLanded(null);
+    if (surface.native) surface.navigateNativeHistory(way);
+    else router.history[way]();
+  };
+  const goBack = () => go("back");
+  // View history is the page's history: every jump and named move pushes, a gesture replaces.
+  // Bound here as well as by the browser so the native shell and a headless one step the same
+  // history, once (the default is prevented).
+  const [body, setBody] = useState<HTMLElement | null>(null);
+  useEffect(() => setBody(document.body), []);
+  useScopeKeys(
+    [
+      {
+        hotkey: "Alt+ArrowLeft",
+        label: "back",
+        says: "Back to the previous selection and view; the camera travels there",
+        callback: goBack,
+        options: { conflictBehavior: "allow" },
+      },
+      {
+        hotkey: "Alt+ArrowRight",
+        label: "forward",
+        says: "Forward again to the next selection and view",
+        callback: () => go("forward"),
+        options: { conflictBehavior: "allow" },
+      },
+    ],
+    body,
+  );
+
+  const ruling = (r: Ruling) => {
     clearTimeout(selectionPublish.current);
     pendingSelection.current = null;
+    hush(String(r.at));
+    setShown(null);
     const finding =
       r.kind === "claim" ? `claim:${r.claim.id}` : r.kind === "issue" ? r.issue.id : r.finding.id;
     const issue = issues.find((i) => i.findings.includes(finding))?.key ?? finding;
     setPage({ selected: String(r.at), issue, rulingSearch: emptyListSearch() }, { history: "push" });
-    setOpen({ what: "ruling", n: r.n, ...at });
+    setOpenRuling(r.n);
   };
   const schematic = (size: "main" | "inset") => (
     <Schematic
@@ -441,20 +604,8 @@ function Canvas({
     small: () => schematic("inset"),
   });
 
-  const openRuling = open?.what === "ruling" ? rulings.find((r) => r.n === open.n) : null;
-  const elementId = open?.what === "element" ? open.id : null;
-  const segFacts =
-    elementId == null ? null : scene.segments.find((f) => f.segment.id === elementId);
-  const nodeFacts = elementId == null ? null : scene.nodes.find((f) => f.node.id === elementId);
-  const anchor = open
-    ? {
-        getBoundingClientRect: () =>
-          open.what === "element"
-            ? open.box
-            : DOMRect.fromRect({ x: open.x, y: open.y, width: 0, height: 0 }),
-      }
-    : undefined;
-
+  // The readout's subject: the pick being shown, else the Page's selection.
+  const ruled = openRuling == null ? null : (rulings.find((r) => r.n === openRuling) ?? null);
   // The title is a breadcrumb: the system (press it to clear the selection), then the picked
   // element. Its state, a switch and a re-read speak in the plate: the header strip leaves the
   // title too little room for them.
@@ -465,6 +616,14 @@ function Canvas({
   const pickedName = pickedId == null ? null : nameOf(pickedId);
   const subjects = useContext(SubjectTextContext);
   const systemState = identity.system ? systemIssues(identity.system) : [];
+  const readId = shown ?? pickedId;
+  const segFacts = readId == null ? null : scene.segments.find((f) => f.segment.id === readId);
+  const nodeFacts = readId == null ? null : scene.nodes.find((f) => f.node.id === readId);
+  // How Pe prices the selection's run (was the sidebar's run detail; selection lives here now).
+  const run =
+    priced && page.system && readId != null
+      ? runOf(priced, systemScope(snapshot, page.system).groups, readId)
+      : null;
   const title =
     systemName == null ? (
       <span className="flex min-w-0 items-center gap-1.5">
@@ -493,7 +652,16 @@ function Canvas({
               type="button"
               className="veil shrink-0 rounded-control px-1 text-ink-2 hover:text-ink"
               aria-label={`clear the selection in ${systemName}`}
-              onClick={() => setPage({ selected: "" }, { history: "push" })}
+              onClick={() => {
+                setPage({ selected: "" }, { history: "push" });
+                const fit = poseOf(null, bounds);
+                if (fit && picture === "model")
+                  flyTo(orbit, fit, {
+                    history: null,
+                    scene: bounds?.scene,
+                    onLand: () => setPage({ viewport: null }, { history: "replace" }),
+                  });
+              }}
             >
               {systemName}
             </button>
@@ -530,6 +698,18 @@ function Canvas({
           {pickedId != null ? (
             <SelectionBoxButton target={observedElements(observation, [pickedId])} />
           ) : null}
+          <GoToSubject
+            snapshot={snapshot}
+            system={page.system}
+            nameOf={nameOf}
+            onHover={onHover}
+            onGo={({ system, id }) => {
+              if (id == null) return setPage({ system, selected: "" }, { history: "push" });
+              if (system !== page.system)
+                return setPage({ system, selected: String(id) }, { history: "push" });
+              jumpTo(id);
+            }}
+          />
           <EncodingPicker value={scale.encoding.key} onPick={(key) => setPage({ encoding: key })} />
         </span>
       }
@@ -562,17 +742,19 @@ function Canvas({
         ref={setPictureHost}
         data-proto="E"
         className="relative flex size-full min-h-0 flex-col"
-        onPointerDownCapture={(e) => (pointer.current = { x: e.clientX, y: e.clientY })}
-        onPointerMoveCapture={(e) => {
-          if (
-            open &&
-            e.buttons &&
-            Math.hypot(e.clientX - pointer.current.x, e.clientY - pointer.current.y) > 5
-          )
-            setOpen(null);
+        onMouseUp={(e) => {
+          // The mouse's back and forward buttons step the same history as Alt+arrows.
+          if (e.button !== 3 && e.button !== 4) return;
+          e.preventDefault();
+          go(e.button === 3 ? "back" : "forward");
         }}
-        onWheelCapture={() => {
-          if (open) setOpen(null);
+        onPointerDownCapture={(e) => {
+          pointer.current = { x: e.clientX, y: e.clientY };
+          // A gesture is the eye moving on: the landing marks and the way back go.
+          if (landed && !(e.target as Element).closest("[data-picture-readout]")) setLanded(null);
+        }}
+        onWheelCapture={(e) => {
+          if (landed && !(e.target as Element).closest("[data-picture-readout]")) setLanded(null);
         }}
         onDoubleClickCapture={() => {
           const id = pendingSelection.current;
@@ -582,7 +764,6 @@ function Canvas({
             // Finish the selection render before the canvas starts its frame animation.
             flushSync(() => setPage({ selected: String(id) }, { history: "push" }));
           }
-          setOpen(null);
         }}
       >
         {picture === "model" ? (
@@ -606,7 +787,11 @@ function Canvas({
             noRuns={noRuns}
             pointOf={pointOf}
             issue={page.issue}
-            setPage={setPage}
+            setPage={(next, move) => {
+              // An issue picked in 3D is a picture pick: the camera stays.
+              if (next.selected) hush(next.selected);
+              setPage(next, move);
+            }}
             onPick={pick}
             onRuling={ruling}
             onHover={onHover}
@@ -615,11 +800,40 @@ function Canvas({
           schematic("main")
         )}
 
-        {/* The plate: what the picture is of and the state it is in, readable without a hover. */}
-        <div
-          className="absolute left-2 top-2 flex max-w-[calc(100%-15rem)] min-w-0 flex-col gap-0.5 t-small px-1.5 py-1"
-          data-surface="page"
-          data-proto-c-header=""
+        {landed?.box ? (
+          <div
+            aria-hidden
+            data-e-landed=""
+            className="pointer-events-none absolute text-ink outline outline-1 outline-current"
+            style={{
+              left: landed.box.x - 6,
+              top: landed.box.y - 6,
+              width: landed.box.width + 12,
+              height: landed.box.height + 12,
+            }}
+            key={landed.n}
+            ref={flash}
+          />
+        ) : null}
+
+        {/* The plate: what the picture is of and the state it is in, readable without a hover;
+            with an element selected, that element (kaitpw 2026-10-23: selection info lives here). */}
+        <PictureReadout
+          title={readId == null ? undefined : (nameOf(readId) ?? `element ${readId}`)}
+          onClear={readId == null ? undefined : () => pick(null)}
+          foot={
+            landed ? (
+              <Button
+                kind="nav"
+                direction="back"
+                label={`Back to ${landed.back}`}
+                reason={`Back to ${landed.back} · Alt+← or the mouse's back button`}
+                onClick={goBack}
+              >
+                back to {landed.back}
+              </Button>
+            ) : null
+          }
         >
           <OpeningNote />
           {identity.refreshing ? (
@@ -627,7 +841,50 @@ function Canvas({
               refreshing… the last read stays drawn
             </span>
           ) : null}
-          {identity.system == null ? (
+          {readId != null ? (
+            <>
+              {ruled && ruled.at === readId ? (
+                <RulingBody
+                  r={ruled}
+                  nameOfId={nameOfId}
+                  onVerdict={onVerdict}
+                  onHover={onHover}
+                  onPick={pick}
+                />
+              ) : null}
+              {run ? (
+                <RunDetail
+                  run={run}
+                  designRate={priced?.staged.designFriction ?? DEFAULT_DESIGN_FRICTION_RATE}
+                  nameOf={nameOf}
+                  light={(ids) => onHover(ids?.[0] ?? null)}
+                />
+              ) : null}
+              {noRuns.has(readId) ? (
+                <p>
+                  No run:{" "}
+                  <SubjectText text={noRunParts(noRuns.get(readId)!, snapshot)} ids={[readId]} />
+                </p>
+              ) : null}
+              {segFacts ? (
+                <SegmentFactsView {...segFacts} />
+              ) : nodeFacts ? (
+                <NodeFactsView {...nodeFacts} />
+              ) : (
+                <p className="text-ink-2">
+                  element {nameOfId(readId) ?? readId} is not drawn here
+                </p>
+              )}
+              <p data-pe-loss={readId}>
+                Pe loss <span className="face-mono">{fmt(index.loss.get(readId), 4)}</span> in-wg ·
+                from fan <span className="face-mono">{fmtFt(cumulative.get(readId))}</span> eq ft
+                {priced ? null : (
+                  <span className="text-ink-2"> (unpriced: no ASHRAE tables read)</span>
+                )}
+              </p>
+              {sub?.legOf.get(readId) ? <p>on leg {sub.legOf.get(readId)!.name}</p> : null}
+            </>
+          ) : identity.system == null ? (
             <>
               <span className="truncate" data-e-census="">
                 <span className="face-mono">{identity.census.systems}</span> systems
@@ -649,6 +906,13 @@ function Canvas({
                   <span data-tone={solved ? "alarm" : undefined}>
                     {solved ? "no ESP: an implausible loss" : "not priced"}
                   </span>
+                ) : flowless.length ? (
+                  // A terminal with no design flow is priced at 0 cfm, so the sum would read as a
+                  // confident 0.000: missing reads as missing (house law 2), never as a number.
+                  <span className="text-ink-2" data-readout-missing="">
+                    no ESP: {flowless.length} of {terminals} grille{terminals === 1 ? "" : "s"}{" "}
+                    {flowless.length === 1 ? "has" : "have"} no design flow
+                  </span>
                 ) : (
                   <>
                     {identity.breakdown ? (
@@ -669,10 +933,13 @@ function Canvas({
                       <>
                         {" "}
                         · TEL <span className="face-mono">{fmtFt(solved.criticalTel)} ft</span> to{" "}
+                        {/* A name in text: the alias-click, which brings it into view. */}
                         <button
                           type="button"
                           className="underline decoration-line-2 underline-offset-2"
-                          onClick={() => pick(solved.critical!)}
+                          onClick={() =>
+                            subjects ? subjects.go(solved.critical!) : pick(solved.critical!)
+                          }
                         >
                           {criticalName}
                         </button>
@@ -687,7 +954,7 @@ function Canvas({
               </span>
             </>
           )}
-        </div>
+        </PictureReadout>
 
         <div
           data-slot="pane-legend"
@@ -703,68 +970,6 @@ function Canvas({
           {picture === "model" ? <KeyLegend keys={PICTURE_KEYS} lead={0} /> : null}
         </div>
 
-        <Popover
-          open={!!open}
-          onOpenChange={(o, details) => {
-            if (o) return;
-            setOpen(null);
-            if (details.reason === "escape-key") {
-              clearTimeout(selectionPublish.current);
-              pendingSelection.current = null;
-              setPage({ selected: "" }, { history: "push" });
-            }
-          }}
-        >
-          <PopoverContent
-            ref={mountFacts}
-            anchor={anchor}
-            side={open?.what === "element" ? open.side : "bottom"}
-            collisionAvoidance={{ side: "none", align: "shift" }}
-            initialFocus={false}
-            finalFocus={false}
-            data-proto-c-popover={open?.what ?? ""}
-          >
-            {openRuling ? (
-              <RulingBody
-                r={openRuling}
-                nameOfId={nameOfId}
-                onVerdict={onVerdict}
-                onHover={onHover}
-                onPick={pick}
-              />
-            ) : elementId != null ? (
-              <div className="flex flex-col gap-2">
-                {noRuns.has(elementId) ? (
-                  <p>
-                    No run:{" "}
-                    <SubjectText
-                      text={noRunParts(noRuns.get(elementId)!, snapshot)}
-                      ids={[elementId]}
-                    />
-                  </p>
-                ) : null}
-                {segFacts ? (
-                  <SegmentFactsView {...segFacts} />
-                ) : nodeFacts ? (
-                  <NodeFactsView {...nodeFacts} />
-                ) : (
-                  <p className="text-ink-2">
-                    element {nameOfId(elementId) ?? elementId} is not drawn here
-                  </p>
-                )}
-                <p data-pe-loss={elementId}>
-                  Pe loss <span className="face-mono">{fmt(index.loss.get(elementId), 4)}</span>{" "}
-                  in-wg · from fan{" "}
-                  <span className="face-mono">{fmtFt(cumulative.get(elementId))}</span> eq ft
-                  {priced ? null : (
-                    <span className="text-ink-2"> (unpriced: no ASHRAE tables read)</span>
-                  )}
-                </p>
-                {sub?.legOf.get(elementId) ? <p>on leg {sub.legOf.get(elementId)!.name}</p> : null}
-              </div>
-            ) : null}
-          </PopoverContent>
-        </Popover>
       </div>
     </Pane>
   );

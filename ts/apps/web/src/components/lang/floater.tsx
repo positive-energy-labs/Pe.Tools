@@ -2,9 +2,11 @@
  * A floater is a corner surface over a pane's body (ledger 2026-10-21): the pane's strip toggles it,
  * the pane draws it over the body's corner, and it is a key scope of its own, so a minimap's keys
  * bind only while focus is inside it. Esc inside it closes it and hands focus back to the pane.
- * A floater whose corner would cover the body's `pane-legend` moves to the nearest place that covers
- * neither the legend nor another floater: a corner, else stacked past the floater holding one;
- * none free, it keeps its own. The person slides it along the edge it sits on by its top grip and
+ * A floater whose corner would cover the body's `pane-legend` or a docked surface (`pane-dock`, the
+ * picture's readout) moves to the nearest place that covers none of them nor another floater: a
+ * corner, else stacked past the floater or dock holding one; none free, it keeps its own.
+ * Floaters yield in DOM order: each avoids the ones before it, and a move is announced so the
+ * ones after it look again once it has painted (siblings solving in parallel took one slot). The person slides it along the edge it sits on by its top grip and
  * resizes it from the inner corner within responsive caps (the smallest is our
  * way of hiding it). A floater may overlap the neighbouring panes' edges; that is wanted.
  */
@@ -61,6 +63,8 @@ interface At {
   dy: number;
 }
 
+const MOVED = "pe:floater-moved";
+
 function useYield(ref: RefObject<HTMLDivElement | null>, place: Corner) {
   const [at, setAt] = useState<At>({ corner: place, dy: 0 });
   useLayoutEffect(() => {
@@ -68,17 +72,27 @@ function useYield(ref: RefObject<HTMLDivElement | null>, place: Corner) {
     const field = own?.parentElement;
     const legend = field?.querySelector("[data-slot='pane-legend']");
     const settle = (next: At) =>
-      setAt((was) => (was.corner === next.corner && was.dy === next.dy ? was : next));
+      setAt((was) => {
+        if (was.corner === next.corner && was.dy === next.dy) return was;
+        requestAnimationFrame(() => field?.dispatchEvent(new Event(MOVED)));
+        return next;
+      });
     if (!own || !field || !legend) return settle({ corner: place, dy: 0 });
     const run = () => {
       const f = field.getBoundingClientRect();
       const o = own.getBoundingClientRect();
       const l = legend.getBoundingClientRect();
       const gutter = parseFloat(getComputedStyle(own).getPropertyValue("--gutter")) || 0;
-      if (!meets(cornerRect(f, o, gutter, place), l)) return settle({ corner: place, dy: 0 });
+      const docks = [...field.querySelectorAll("[data-slot='pane-dock']")].map((el) =>
+        el.getBoundingClientRect(),
+      );
+      const home = cornerRect(f, o, gutter, place);
+      if (!meets(home, l) && !docks.some((d) => meets(home, d)))
+        return settle({ corner: place, dy: 0 });
       const others = [...field.querySelectorAll(":scope > [data-slot='floater']")]
-        .filter((el) => el !== own)
-        .map((el) => el.getBoundingClientRect());
+        .filter((el) => el.compareDocumentPosition(own) & Node.DOCUMENT_POSITION_FOLLOWING)
+        .map((el) => el.getBoundingClientRect())
+        .concat(docks);
       const free = nearest(place)
         .flatMap((corner) => {
           const r = cornerRect(f, o, gutter, corner);
@@ -101,11 +115,17 @@ function useYield(ref: RefObject<HTMLDivElement | null>, place: Corner) {
       settle(free ? { corner: free.corner, dy: free.dy } : { corner: place, dy: 0 });
     };
     run();
-    if (typeof ResizeObserver === "undefined") return;
+    const moved = () => requestAnimationFrame(run);
+    field.addEventListener(MOVED, moved);
+    if (typeof ResizeObserver === "undefined") return () => field.removeEventListener(MOVED, moved);
     const observer = new ResizeObserver(run);
     observer.observe(field);
     observer.observe(legend);
-    return () => observer.disconnect();
+    field.querySelectorAll("[data-slot='pane-dock']").forEach((el) => observer.observe(el));
+    return () => {
+      observer.disconnect();
+      field.removeEventListener(MOVED, moved);
+    };
   }, [ref, place]);
   return at;
 }
