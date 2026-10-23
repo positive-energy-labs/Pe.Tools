@@ -283,11 +283,12 @@ export function PaneSplit({ axis, start, end, resize, hide, grow }: PaneSplitPro
     : resize == null || stacked
       ? "minmax(0, 1fr) var(--gutter) minmax(0, 1fr)"
       : target === "start"
-        ? `var(--pane-size, ${state.renderedSize}px) var(--gutter) minmax(0, 1fr)`
-        : `minmax(0, 1fr) var(--gutter) var(--pane-size, ${state.renderedSize}px)`;
-  const gridStyle: CSSProperties = horizontal
-    ? { gridTemplateColumns: tracks }
-    : { gridTemplateRows: tracks };
+        ? "var(--pane-size) var(--gutter) minmax(0, 1fr)"
+        : "minmax(0, 1fr) var(--gutter) var(--pane-size)";
+  const gridStyle = {
+    "--pane-size": `${state.renderedSize}px`,
+    [horizontal ? "gridTemplateColumns" : "gridTemplateRows"]: tracks,
+  } as CSSProperties;
 
   const seamSize = () =>
     rootRef.current
@@ -404,15 +405,10 @@ export function PaneSplit({ axis, start, end, resize, hide, grow }: PaneSplitPro
             growth={target === "start" ? 1 : -1}
             containerSize={measuredContainer}
             onResize={(requested, container, commit) => {
-              // Pointer motion belongs to layout; React owns only the released size/collapse.
-              if (commit) {
-                rootRef.current?.style.removeProperty("--pane-size");
-                state.resizeTo(requested, container);
-              } else
-                rootRef.current?.style.setProperty(
-                  "--pane-size",
-                  `${clampSize(requested, resize, container)}px`,
-                );
+              // Motion only paints; restoring on commit also clears a refused/no-op preview.
+              const size = commit ? state.renderedSize : clampSize(requested, resize, container);
+              rootRef.current?.style.setProperty("--pane-size", `${size}px`);
+              if (commit) state.resizeTo(requested, container);
             }}
             onReset={state.reset}
           />
