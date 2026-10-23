@@ -3,6 +3,7 @@ import { act, cleanup, fireEvent, render, screen, within } from "@testing-librar
 import { afterEach, expect, test, vi } from "vite-plus/test";
 
 import type { ActionHandle } from "#/route/handle";
+import { ductsDocumentSchema } from "@pe/agent-contracts";
 
 import { focusRow, type CellRef, type InboxItem } from "../../inbox-rows";
 import { manifest } from "../../manifest";
@@ -37,6 +38,8 @@ function mount(
     fanRefusal?: string | null;
     selected?: number | null;
     focused?: string | null;
+    onPick?: () => void;
+    doc?: Parameters<typeof Inbox>[0]["work"]["doc"];
     check?: InboxItem[];
     address?: Parameters<typeof Inbox>[0]["address"];
   } = {},
@@ -129,7 +132,7 @@ function mount(
   const utils = render(
     <Inbox
       groups={groups}
-      work={{ doc: null, revision: 0, write, store: over.store ?? null }}
+      work={{ doc: over.doc ?? null, revision: 0, write, store: over.store ?? null }}
       nameOf={String}
       onVerdict={null}
       light={() => {}}
@@ -160,6 +163,7 @@ function mount(
       fan={fan}
       selected={over.selected ?? null}
       focused={over.focused ?? null}
+      onPick={over.onPick}
       address={over.address}
     />,
   );
@@ -411,4 +415,73 @@ test("missed-join diagnostics retain their label, status, selection action and i
   expect(row.getAttribute("data-revit-ids")).toBe("10,20");
   expect(within(row).getByRole("button", { name: /select/i })).toBeTruthy();
   expect(screen.getByText("Facing open ends need inspection in Revit.")).toBeTruthy();
+});
+
+test("a person's own row pick releases a review landing, while automatic reveal does not", () => {
+  const onPick = vi.fn();
+  const view = mount({ focused: "flows:30", onPick });
+  expect(onPick).not.toHaveBeenCalled();
+  fireEvent.click(view.container.querySelector('[data-key="flows:30"]')!);
+  expect(onPick).toHaveBeenCalledOnce();
+  fireEvent.click(screen.getByText("Write to Revit"));
+  expect(onPick).toHaveBeenCalledTimes(2);
+});
+
+test("a no-rule row stages a family-wide price-as choice through Work", async () => {
+  const family = "Radius Elbow";
+  const onPick = vi.fn();
+  const view = mount({
+    onPick,
+    focused: "no-rule:radius",
+    diagnostics: [
+      item({
+        key: "no-rule:radius",
+        group: "diagnostics",
+        kind: "no-rule",
+        ids: [10, 20],
+        verbs: [{ kind: "price-as", family }],
+      }),
+    ],
+  });
+  const picker = screen.getByRole("combobox", { name: `price ${family} as` });
+  fireEvent.click(picker);
+  fireEvent.keyDown(picker, { key: "ArrowDown" });
+  expect(onPick).not.toHaveBeenCalled();
+  await act(async () =>
+    fireEvent.change(picker, {
+      target: { value: "elbow-1d-le10" },
+    }),
+  );
+  expect(view.write).toHaveBeenCalledWith(
+    expect.arrayContaining([
+      expect.objectContaining({
+        path: ["ruleAssignments", family, "staged"],
+        value: { value: { rule: "elbow-1d-le10" } },
+      }),
+    ]),
+  );
+});
+
+test("taking back a family assignment clears only its staged rung", async () => {
+  const family = "Radius Elbow";
+  const proposal = { value: { rule: "elbow-mitered-vaned" }, note: "check the vanes" };
+  const doc = ductsDocumentSchema.parse({
+    ruleAssignments: {
+      [family]: { proposal, staged: { value: { rule: "elbow-mitered" } } },
+    },
+  });
+  const view = mount({
+    doc,
+    focused: "family",
+    check: [item({ key: "family", group: "check", verbs: [{ kind: "price-as", family }] })],
+  });
+  await act(async () =>
+    fireEvent.change(screen.getByRole("combobox", { name: `price ${family} as` }), {
+      target: { value: "" },
+    }),
+  );
+  expect(view.write).toHaveBeenCalledWith([
+    { path: ["ruleAssignments", family, "staged"], value: null },
+  ]);
+  expect(doc.ruleAssignments[family]?.proposal).toEqual(proposal);
 });

@@ -73,6 +73,7 @@ export interface PreviewLine {
 export const STALE_WORDS = "changed since preview";
 
 export type RowVerb =
+  | { kind: "price-as"; family: string }
   /** Stage a verdict on an assumption key; `on` is the staged verdict, pressing it again takes it back. */
   | {
       kind: "verdict";
@@ -588,6 +589,14 @@ export function triage(input: TriageInput) {
       continue;
     }
     if (f.kind === "no-rule") {
+      const families = [
+        ...new Set(
+          f.elementIds.flatMap((id) => {
+            const family = nodes.get(id)?.family;
+            return family ? [family] : [];
+          }),
+        ),
+      ];
       // No rule prices this fitting family. It surfaces the way a grille with no catalog drop does
       // (Diagnostics, priced as zero, a verb to state the drop; never holding the ESP back); the rules
       // pane also lists the family to price as an existing rule.
@@ -598,6 +607,7 @@ export function triage(input: TriageInput) {
         title: `No loss rule for ${names(f.elementIds)}`,
         status: "no drop",
         verbs: [
+          ...families.map((family): RowVerb => ({ kind: "price-as", family })),
           ...(f.elementIds[0] == null
             ? []
             : [

@@ -226,7 +226,7 @@ tr.dl-row[data-active] {
   background-color: var(--pe-select);
   --pe-on: var(--pe-select);
 }
-tr/* Landed: a row that becomes selected (a link, a pick) draws a full-ink outline once, then settles
+/* Landed: a row that becomes selected (a link, a pick) draws a full-ink outline once, then settles
    to the plain selected fill. Fill and ink only; reduced motion keeps just the settled state. */
 @keyframes pe-land {
   from {

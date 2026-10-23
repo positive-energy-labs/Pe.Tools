@@ -16,6 +16,7 @@ import { ValueDiff } from "#/components/lang/value-diff";
 import { LOSS_RULES, ruleByKey } from "@pe/ducts-domain/loss-rules";
 import { tableOf, type Priced } from "@pe/ducts-domain/pricing";
 import type { LossesWork } from "../../work";
+import { PressureEquivalent } from "./pressure-equivalent";
 // proto: copied from losses-view.tsx
 const fmt = (n: number | null | undefined) => (n == null ? "" : n.toFixed(4));
 /** Stage a rule's table; staging the table already staged takes it back. */
@@ -63,6 +64,7 @@ export function DropCell({
           note: authored && held != null ? `Revit holds ${held}` : undefined,
         })}
         scale="row"
+        unit={{ label: "in-wg", short: "wg" }}
         numeric={{ min: 0, digits: 4 }}
         placeholder="—"
         onCommit={(text: string) =>
@@ -85,6 +87,7 @@ export function DropCell({
           refusal ? `preview: Revit refuses this drop: ${refusal.reason ?? "no reason"}` : undefined
         }
       />
+      <PressureEquivalent inWg={authored?.inWg ?? held} />
     </span>
   );
 }
@@ -103,7 +106,11 @@ export function Chips({
   // The pressed chip is the table every instance is looked up under now; a staged one also wears
   // caution. Picking the staged table again takes it back (`tablePatches`). Chips wrap, never clip.
   return (
-    <span role="group" aria-label={`${rule.family} : ${rule.type} table`} className="flex flex-wrap gap-1">
+    <span
+      role="group"
+      aria-label={`${rule.family} : ${rule.type} table`}
+      className="flex flex-wrap gap-1"
+    >
       {rule.options.map((table) => {
         const isStaged = staged === table.toUpperCase();
         return (

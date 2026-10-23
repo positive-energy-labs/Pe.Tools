@@ -8,14 +8,14 @@
  */
 import { useEffect, useMemo } from "react";
 import type { LossResult } from "@pe/ducts-domain/losses";
-import { transitionPatches } from "@pe/agent-contracts";
-import { LOSS_RULES, ruleByKey } from "@pe/ducts-domain/loss-rules";
+import { ruleByKey } from "@pe/ducts-domain/loss-rules";
 import { unpriced, type Priced } from "@pe/ducts-domain/pricing";
 import type { DuctSnapshot } from "@pe/ducts-domain/types";
 
 import { fanOutWords, ruleFanOut } from "../../inputs";
 import type { LossesWork } from "../../work";
 import { Chips, DropCell, StagedRules } from "./rules";
+import { RuleAssignment } from "./rule-assignment";
 
 type RuleNode =
   | { kind: "rule"; key: string; ruleKey: string; count: number; children: RuleNode[] }
@@ -146,14 +146,6 @@ export function RulesTree({
       if (!byFamily.has(family)) byFamily.set(family, { family, ids: new Set() });
     return [...byFamily.values()].sort((a, b) => b.ids.size - a.ids.size);
   }, [priced, groupOf, groups, wide]);
-  const assign = (family: string, rule: string) => {
-    const cell = work.doc?.ruleAssignments?.[family] ?? {};
-    void work.write(
-      rule
-        ? transitionPatches(["ruleAssignments"], family, cell, { kind: "stage", rung: { value: { rule } } })
-        : transitionPatches(["ruleAssignments"], family, cell, { kind: "unstage" }),
-    );
-  };
   const overrideRow = (n: Extract<RuleNode, { kind: "override" }>, nested = false) => {
     return (
       <div
@@ -181,7 +173,11 @@ export function RulesTree({
   // Names wrap (never truncate) and the chips wrap (never clip).
   const COLS = "grid grid-cols-[19ch_minmax(0,1fr)] gap-x-3 gap-y-0.5";
   return (
-    <div className="flex flex-col" data-e-rules={wide ? "all" : "this"} onMouseLeave={() => light(null)}>
+    <div
+      className="flex flex-col"
+      data-e-rules={wide ? "all" : "this"}
+      onMouseLeave={() => light(null)}
+    >
       <ul aria-label="loss rules" className="flex flex-col">
         {roots.length === 0 ? (
           <li className="text-ink-2 t-small py-1">
@@ -229,9 +225,9 @@ export function RulesTree({
                   </p>
                 </div>
               </div>
-              {n.children.map((o) => (
-                overrideRow(o as Extract<RuleNode, { kind: "override" }>, true)
-              ))}
+              {n.children.map((o) =>
+                overrideRow(o as Extract<RuleNode, { kind: "override" }>, true),
+              )}
             </li>
           );
         })}
@@ -243,7 +239,9 @@ export function RulesTree({
           </p>
           {unruled.map(({ family, ids }) => {
             const first = [...ids][0];
-            const picked = family ? work.doc?.ruleAssignments?.[family]?.staged?.value?.rule : undefined;
+            const picked = family
+              ? work.doc?.ruleAssignments?.[family]?.staged?.value?.rule
+              : undefined;
             return (
               <div
                 key={family ?? `#${first}`}
@@ -257,23 +255,7 @@ export function RulesTree({
                   {ids.size ? <span className="t-small text-ink-2"> ×{ids.size}</span> : null}
                 </p>
                 <div className="flex min-w-0 flex-wrap items-baseline gap-x-3 gap-y-0.5">
-                  {family ? (
-                    <select
-                      aria-label={`price ${family} as`}
-                      className="dl-control t-small max-w-full"
-                      value={picked ?? ""}
-                      onChange={(event) => assign(family, event.target.value)}
-                    >
-                      <option value="">price as…</option>
-                      {LOSS_RULES.map((rule) => (
-                        <option key={rule.key} value={rule.key}>
-                          {rule.family}
-                          {rule.type ? ` : ${rule.type}` : ""}
-                          {rule.cond ? ` · ${rule.cond}` : ""}
-                        </option>
-                      ))}
-                    </select>
-                  ) : null}
+                  {family ? <RuleAssignment family={family} work={work} /> : null}
                   {first != null && !picked ? (
                     <DropCell
                       segment="componentDrops"
@@ -294,5 +276,4 @@ export function RulesTree({
       </div>
     </div>
   );
-
 }

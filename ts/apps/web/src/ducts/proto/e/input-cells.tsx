@@ -16,6 +16,7 @@ import { rulingPatches } from "../../assumptions";
 import { equipmentInputs, terminalInputs, type Resolved } from "../../inputs";
 import type { CellSegment } from "../../inbox-rows";
 import type { LossesWork } from "../../work";
+import { PressureEquivalent } from "./pressure-equivalent";
 
 type Rung = Record<string, unknown>;
 
@@ -89,6 +90,7 @@ function InputCell({
   const standing = (cell.staged ?? cell.proposal)?.value as Rung | undefined;
   const wire: CellWire = { segment: spec.segment, revision: work.revision, write: work.write };
   const word = cell.staged ? "override" : cell.proposal ? "Pea proposes" : resolved.word;
+  const value = spec.text(standing) ?? (resolved.value == null ? "" : String(resolved.value));
   return (
     <span
       className="dl-cells-item"
@@ -100,7 +102,7 @@ function InputCell({
         {...cellFromTrichotomy(
           cell,
           {
-            value: spec.text(standing) ?? (resolved.value == null ? "" : String(resolved.value)),
+            value,
             cap: "editable",
           },
           (value) => spec.text(value as Rung) ?? "",
@@ -120,6 +122,9 @@ function InputCell({
         }
         transitions={reviewTransitions(wire, key, cell)}
       />
+      {spec.unit.label === "in-wg" && value !== "" ? (
+        <PressureEquivalent inWg={Number(value)} />
+      ) : null}
       <span className="dl-cells-note t-small" data-e-source={word ?? ""}>
         {word}
       </span>
