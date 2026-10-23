@@ -4,7 +4,7 @@ import { fileURLToPath } from "node:url";
 
 const root = resolve(dirname(fileURLToPath(import.meta.url)), "..");
 const web = join(root, "apps/web/src/components/lang");
-export const langImports = {
+export const langImports: Record<string, string> = {
   help: "tooltip",
   label: "input",
   textarea: "input",
@@ -27,17 +27,22 @@ export const langImports = {
 
 // Rewrite quoted module paths, including relative imports left in sibling branches.
 // This deliberately leaves CSS paths alone: navigation.css still belongs to web.
-export function rewrite(source, file) {
-  let next = source.replace(/(["'])([^"'\r\n]+)\1/g, (literal, quote, specifier) => {
-    let name = specifier.startsWith("#/components/lang/")
-      ? specifier.slice("#/components/lang/".length)
-      : undefined;
-    if (specifier.startsWith(".")) {
-      const path = resolve(dirname(file), specifier);
-      if (dirname(path) === web) name = relative(web, path).split(sep).join("/");
-    }
-    return name in langImports ? `${quote}@pe/kit/lang/${langImports[name]}${quote}` : literal;
-  });
+export function rewrite(source: string, file: string): string {
+  let next = source.replace(
+    /(["'])([^"'\r\n]+)\1/g,
+    (literal: string, quote: string, specifier: string) => {
+      let name = specifier.startsWith("#/components/lang/")
+        ? specifier.slice("#/components/lang/".length)
+        : undefined;
+      if (specifier.startsWith(".")) {
+        const path = resolve(dirname(file), specifier);
+        if (dirname(path) === web) name = relative(web, path).split(sep).join("/");
+      }
+      return name !== undefined && name in langImports
+        ? `${quote}@pe/kit/lang/${langImports[name]}${quote}`
+        : literal;
+    },
+  );
   if (/from ["']@pe\/kit\/lang\/key-hint["']/.test(next))
     next = next.replace(/\bKbd\b/g, "KeyHint");
   if (/from ["']@pe\/kit\/lang\/tooltip["']/.test(next))
@@ -72,7 +77,7 @@ export function rewrite(source, file) {
   return next;
 }
 
-function walk(dir) {
+function walk(dir: string): number {
   let changed = 0;
   for (const entry of readdirSync(dir, { withFileTypes: true })) {
     if (["node_modules", "dist", ".vite", ".output"].includes(entry.name)) continue;

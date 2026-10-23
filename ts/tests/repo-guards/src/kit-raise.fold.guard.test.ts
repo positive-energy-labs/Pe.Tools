@@ -3,7 +3,7 @@ import { existsSync, readdirSync, readFileSync } from "node:fs";
 import { dirname, join, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 import { expect, it } from "vite-plus/test";
-import { langImports, rewrite } from "../../../scripts/codemod-lang-imports.mjs";
+import { langImports, rewrite } from "../../../scripts/codemod-lang-imports.ts";
 
 const ROOT = resolve(dirname(fileURLToPath(import.meta.url)), "../../..");
 const WEB = join(ROOT, "apps/web/src/components");
@@ -19,7 +19,7 @@ const files = (dir: string): string[] =>
 
 it("folded primitives have no web imports or second component home", () => {
   const oldImport = new RegExp(
-    `['\"]#/components/lang/(?:${Object.keys(langImports).join("|")})['\"]`,
+    `['"]#/components/lang/(?:${Object.keys(langImports).join("|")})['"]`,
   );
   const imports = files(join(ROOT, "apps/web/src")).filter(
     (file) => /\.[cm]?[jt]sx?$/.test(file) && oldImport.test(readFileSync(file, "latin1")),
