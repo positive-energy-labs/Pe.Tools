@@ -7,7 +7,7 @@
  */
 import { useEffect, useMemo, useRef, useState, useSyncExternalStore } from "react";
 
-import { useScopeKeys } from "@pe/kit/keys";
+import { useScopeGestures, useScopeKeys } from "@pe/kit/keys";
 import type { PageMove } from "#/route/manifest";
 import {
   applyLook,
@@ -19,6 +19,7 @@ import {
   type OrbitViewport,
 } from "#/scene/orbit";
 import { viewportProject, type Project, type Size } from "#/scene/projection";
+import { ORBIT_GESTURES } from "#/scene/gestures";
 import { glideLook, type LiveOrbit } from "#/scene/live-orbit";
 import { Scene3D } from "#/scene/scene3d";
 import type { SceneRead } from "#/scene/use-scene";
@@ -35,6 +36,8 @@ export type PictureBounds = { scene: Bounds; subject: Bounds };
 /** A framed selection is never smaller than this many feet across, so one fitting is not 400x. */
 const FRAME_MIN_FT = 12;
 const GLIDE_MS = 350;
+/** The longest gap between the two clicks of a double-click. */
+const DOUBLE_MS = 400;
 const NONE:ReadonlySet<string> = new Set();
 
 const centrelinePoints = (scene: Scene, ids?: ReadonlySet<number>) => [
@@ -88,6 +91,7 @@ export function ModelPicture({
   labels,
   rulings,
   findings3d,
+  noRuns,
   pointOf,
   issue,
   setPage,
@@ -109,6 +113,7 @@ export function ModelPicture({
   rulings: readonly Ruling[];
   /** The annotated findings drawn in 3D (`finding-layers.ts`), under the same `findings` layer as the pins. */
   findings3d: readonly Layer3D[];
+  noRuns?: Parameters<typeof Annotations>[0]["noRuns"];
   pointOf: (id: number) => readonly number[] | null;
   issue: string;
   setPage: (next: Partial<DuctsPage>, move?: PageMove<DuctsPage>) => void;
@@ -160,21 +165,44 @@ export function ModelPicture({
     setPage({ viewport: null }, { history: "push" });
   };
   // The selection is the orbit's centre: glide the pivot to the picked element (yaw, elevation and
-  // distance kept, so no zoom jump). A saved viewport in the address is left alone on first load;
-  // a user gesture takes the orbit and ends the glide. Released through the gesture, so Page's
-  // viewport is replaced (the pick already pushed history).
+  // distance kept, so no zoom jump). Clearing the selection glides it back to where the view was
+  // looking before the first pick, else the framed centre of the system (the fit's pivot); a pivot
+  // that followed the old element would otherwise stay stuck on it. A saved viewport in the address
+  // is left alone on first load; a user gesture takes the orbit and ends the glide. Released
+  // through the gesture, so Page's viewport is replaced (the pick already pushed history).
   const primary = selected.values().next().value;
   const seen = useRef(false);
+  /** The previous primary, `"initial"` before the first read with meshes. */
+  const was = useRef<number | undefined | "initial">("initial");
+  /** The pivot the view had before the first pick, and the bounds it was taken against. */
+  const rest = useRef<{ pivot: OrbitViewport["pivot"]; scene: Bounds } | null>(null);
   useEffect(() => {
-    const first = !seen.current;
     const now = orbit.read();
-    if (primary === undefined || !meshes || !bounds || !now) return;
-    seen.current = true;
-    if (first && !samePose(now, poseOf(null, bounds)!, bounds.scene)) return;
-    const target = boundsOfInstances(meshes, (i) => i.revitId === primary);
-    const token = target && orbit.begin();
-    if (!target || !token) return;
-    const [from, to] = [now.pivot, center(target)];
+    if (!meshes || !bounds || !now) return;
+    const before = was.current;
+    was.current = primary;
+    const to =
+      primary === undefined
+        ? before !== undefined && before !== "initial"
+          ? rest.current?.scene === bounds.scene
+            ? rest.current.pivot
+            : poseOf(null, bounds)!.pivot
+          : null
+        : (() => {
+            if (before === undefined) rest.current = { pivot: now.pivot, scene: bounds.scene };
+            const target = boundsOfInstances(meshes, (i) => i.revitId === primary);
+            return target ? center(target) : null;
+          })();
+    if (primary === undefined) rest.current = null;
+    if (primary !== undefined) {
+      const first = !seen.current;
+      seen.current = true;
+      if (first && !samePose(now, poseOf(null, bounds)!, bounds.scene)) return;
+    }
+    if (!to || now.pivot.every((v, i) => Math.abs(v - to[i]!) < 1e-6)) return;
+    const token = orbit.begin();
+    if (!token) return;
+    const from = now.pivot;
     const t0 = performance.now();
     let frameId = requestAnimationFrame(function step(at) {
       const k = Math.min((at - t0) / GLIDE_MS, 1);
@@ -192,6 +220,22 @@ export function ModelPicture({
     };
   }, [primary, meshes, bounds, orbit]);
 
+  // Double-click frames the element under the cursor, or the whole system on empty space; yaw and
+  // elevation stay. A move (not a gesture), so Back returns to where the view was.
+  // The first click of a double selects and the glide starts moving the view, so the second click
+  // lands on a different spot: it is swallowed, and the double-click frames the first click's pick.
+  const lastClick = useRef<{ key: string | null; at: number } | null>(null);
+  const withinDouble = () =>
+    lastClick.current !== null && performance.now() - lastClick.current.at < DOUBLE_MS;
+  const frameAt = (key: string | null) => {
+    if (!bounds) return;
+    const target = key && meshes ? boundsOfInstances(meshes, (i) => i.key === key) : null;
+    move(
+      frame(bounds.scene, target ? padded(target) : bounds.subject, orbit.read() ?? undefined),
+    );
+  };
+
+  useScopeGestures(ORBIT_GESTURES);
   useScopeKeys([
     {
       hotkey: "F",
@@ -227,13 +271,29 @@ export function ModelPicture({
         glideLook(orbit);
       },
     },
-    {
-      hotkey: "Escape",
-      label: "clear the selection",
-      available: () => selected.size > 0,
-      callback: () => setPage({ selected: "" }, { history: "push" }),
-    },
   ]);
+  // Escape binds on the document, not the pane element: a pick from the tree or the inputs leaves
+  // focus there, and the selection must still clear. Pane keys with focus in a field are not taken
+  // (ignoreInputs), and a floater's own Escape (close globe) sits deeper and wins.
+  const [body, setBody] = useState<HTMLElement | null>(null);
+  useEffect(() => setBody(document.body), []);
+  useScopeKeys(
+    [
+      {
+        hotkey: "Escape",
+        label: "clear the selection",
+        says: "Clear the selection; the pivot glides back to where the view looked before it",
+        // Listed always (help is a snapshot, so an `available` gate hid it whenever nothing was
+        // picked); it refuses in words while nothing is, and does nothing.
+        refusal: selected.size ? null : "nothing is selected",
+        callback: () => {
+          if (selected.size) setPage({ selected: "" }, { history: "push" });
+        },
+        options: { conflictBehavior: "allow" },
+      },
+    ],
+    body,
+  );
 
   const status = said
     ? said
@@ -256,7 +316,12 @@ export function ModelPicture({
           isolated={isolated}
           layers={layers.has("findings") ? findings3d : undefined}
           onProject={(project, at) => setFramed({ project, size: at })}
+          onDoubleClick={(pick) =>
+            frameAt(withinDouble() ? lastClick.current!.key : (pick?.instance.key ?? null))
+          }
           onPick={(pick, event) => {
+            if (withinDouble()) return;
+            lastClick.current = { key: pick?.instance.key ?? null, at: performance.now() };
             if (!pick) return;
             if (pick.instance.revitId === null) return setSaid("linked element, not selectable");
             setSaid(null);
@@ -273,6 +338,7 @@ export function ModelPicture({
           selected={selected}
           hovered={hovered}
           labels={labels}
+          noRuns={noRuns}
           rulings={rulings}
           pointOf={pointOf}
           issue={issue}

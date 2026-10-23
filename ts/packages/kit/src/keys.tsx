@@ -12,7 +12,7 @@
  * `useScopeKeys` is the only door. A file that imports `@tanstack/react-hotkeys` to register a
  * chord is a repo-guard red (`tests/repo-guards/src/route-primitive.guard.test.ts`).
  */
-import { createContext, use, useMemo, type ReactNode, type RefObject } from "react";
+import { createContext, use, useEffect, useMemo, type ReactNode, type RefObject } from "react";
 import {
   formatForDisplay,
   getHotkeyManager,
@@ -179,6 +179,63 @@ export function useScopeKeys(
     }));
   // A `null` region is one not mounted yet: it binds nothing, never the node's element instead.
   useHotkeys(definitions, { target: region === null ? UNMOUNTED : (region ?? node.element) });
+}
+
+/* ── Gestures ──────────────────────────────────────────────────────────────── */
+
+/** A pointer action, as help spells it. A chord is never one of these: chords are `ScopeKey`s. */
+export type PointerKind =
+  | "drag"
+  | "right-drag"
+  | "wheel"
+  | "pinch"
+  | "scroll"
+  | "click"
+  | "double-click"
+  | "hover";
+
+/**
+ * One thing a pane answers that is not a bound chord: a pointer gesture, held keys with one
+ * (`keys: ["Shift"], pointer: "drag"`), or keys a native widget already handles (a tree's arrows,
+ * a field's Enter). It is documentation of behaviour, never a binding; the surface that handles it
+ * owns the behaviour and declares it here so the help page draws it on the pane's card.
+ */
+export interface ScopeGesture {
+  pointer?: PointerKind;
+  /** Keys held with the pointer, or pressed alone when there is no pointer ("↑", "Enter"). */
+  keys?: readonly string[];
+  label: string;
+  says?: string;
+}
+
+/** A declared gesture with the scope node that declared it, as the help page joins it to a pane. */
+export interface DeclaredGesture extends ScopeGesture {
+  scope: string;
+  depth: number;
+}
+
+const declared = new Map<symbol, readonly DeclaredGesture[]>();
+
+/** Every gesture declared by a live scope node now; a snapshot, like `readRegistrations`. */
+export const readGestures = (): DeclaredGesture[] => [...declared.values()].flat();
+
+/** Declare gestures on the innermost scope node; a hidden node declares none. */
+export function useScopeGestures(gestures: readonly ScopeGesture[]): void {
+  const node = use(ScopeContext);
+  const spelled = JSON.stringify(gestures);
+  useEffect(() => {
+    if (!node.live) return;
+    const id = Symbol(node.id);
+    declared.set(
+      id,
+      (JSON.parse(spelled) as ScopeGesture[]).map((g) => ({
+        ...g,
+        scope: node.id,
+        depth: node.depth,
+      })),
+    );
+    return () => void declared.delete(id);
+  }, [node.id, node.depth, node.live, spelled]);
 }
 
 /* ── The route and stage nodes ─────────────────────────────────────────────── */

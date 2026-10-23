@@ -14,6 +14,7 @@ import {
 } from "react";
 import { ChevronRight } from "lucide-react";
 
+import { useScopeGestures, type ScopeGesture } from "../../keys";
 import { tv } from "../../lib/tv";
 import { TooltipHint } from "./tooltip";
 
@@ -340,8 +341,17 @@ interface Flat<N> {
   branch: boolean;
 }
 
+/** The tree's own cursor keys (its `onKeyDown`), declared so a pane's help card lists them. */
+const TREE_KEYS: readonly ScopeGesture[] = [
+  { keys: ["↑", "↓"], label: "move between rows" },
+  { keys: ["←", "→"], label: "close or open a row" },
+  { keys: ["Enter"], label: "select the row" },
+  { pointer: "click", label: "select the row" },
+];
+
 export function Tree<N>(props: TreeProps<N>) {
   const { keyOf, childrenOf } = props;
+  useScopeGestures(TREE_KEYS);
   const treeId = useId();
   const [ownOpen, setOwnOpen] = useState<ReadonlySet<string>>(() => new Set(props.defaultOpen));
   const open = props.open ?? ownOpen;

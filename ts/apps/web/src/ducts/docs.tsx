@@ -25,15 +25,19 @@ import {
 import { CompareTable } from "./compare-table";
 import { DuctCases } from "./docs-cases";
 import { KeyLegend, type LegendKey } from "#/components/lang/kbd";
+import { POINTER_WORD } from "@pe/kit/lang/gesture-glyph";
+import { ORBIT_GESTURES } from "#/scene/gestures";
 
 const PRESSURE_DROP = mapLink("pressure-drop")!;
 
 /** The picture pane's keys; the pane's own legend and this page read the same list. */
 export const PICTURE_KEYS: readonly LegendKey[] = [
-  { pointer: "drag", does: "orbit" },
-  { pointer: "right drag", does: "pan" },
-  { pointer: "wheel", does: "zoom" },
-  { pointer: "click", does: "select an element" },
+  // The pointer lines are the scheme's own declaration (scene/gestures.ts), the list the keys overlay draws.
+  ...ORBIT_GESTURES.map(({ keys, pointer, label }) => ({
+    keys,
+    pointer: pointer && POINTER_WORD[pointer],
+    does: label,
+  })),
   { pointer: "right click", does: "Select or Selection Box in Revit" },
   { keys: ["B", "X"], does: "Selection Box under the pointer" },
   { keys: ["F"], does: "frame the selection; nothing selected fits the system" },

@@ -73,8 +73,8 @@ export function KeyLegend({
       {bind ? <LegendKeys toggle={() => setPinned((p) => !p)} /> : null}
       {open ? (
         <div className="grid grid-cols-[auto_1fr] items-center gap-x-3">
-          {keys.map((key) => (
-            <Fragment key={key.does}>
+          {keys.map((key, i) => (
+            <Fragment key={`${i}:${key.does}`}>
               <span className="flex h-(--item-h) items-center justify-end">
                 <Press keys={key.keys} pointer={key.pointer} />
               </span>
@@ -90,8 +90,8 @@ export function KeyLegend({
         </div>
       ) : (
         <div className="flex h-(--item-h) items-center gap-3 whitespace-nowrap">
-          {keys.slice(0, lead).map((key) => (
-            <span key={key.does} className="inline-flex items-center gap-1">
+          {keys.slice(0, lead).map((key, i) => (
+            <span key={`${i}:${key.does}`} className="inline-flex items-center gap-1">
               <Press keys={key.keys} pointer={key.pointer} />
               <span>{key.does}</span>
             </span>

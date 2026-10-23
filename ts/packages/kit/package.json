@@ -16,6 +16,7 @@
     "./lang/cell.css": "./src/components/lang/cell.css",
     "./lang/cell-state": "./src/components/lang/cell-state.ts",
     "./lang/chip": "./src/components/lang/chip.tsx",
+    "./lang/gesture-glyph": "./src/components/lang/gesture-glyph.tsx",
     "./lang/code": "./src/components/lang/code.tsx",
     "./lang/collection": "./src/components/lang/collection.ts",
     "./lang/empty": "./src/components/lang/empty.tsx",

@@ -10,6 +10,7 @@
 import { useVirtualizer } from "@tanstack/react-virtual";
 import { useCallback, useLayoutEffect, useMemo, useRef, useState, type ReactNode } from "react";
 
+import { useScopeGestures, type ScopeGesture } from "../../keys";
 import { ListFilter, matches, scrollParent, type Searchable } from "./list-filter";
 
 export interface VirtualListProps<T> {
@@ -40,7 +41,14 @@ export interface VirtualListProps<T> {
   };
 }
 
+/** The list's own cursor keys (its `onKeyDown`), declared so a pane's help card lists them. */
+const LIST_KEYS: readonly ScopeGesture[] = [
+  { keys: ["↑", "↓"], label: "move between rows" },
+  { keys: ["Home", "End"], label: "first or last row" },
+];
+
 export function VirtualList<T>(props: VirtualListProps<T>) {
+  useScopeGestures(LIST_KEYS);
   const { keyOf, row, estimate = 36, overscan = 8, scrollTo = null, filter } = props;
   const [query, setQuery] = useState("");
   const items = useMemo(

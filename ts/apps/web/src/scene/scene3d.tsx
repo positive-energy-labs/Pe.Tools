@@ -6,7 +6,8 @@
  * reports as "gesture" (replace history); named moves push. No second persisted camera exists.
  *
  * The canvas names the Revit element under the pointer in `data-revit-ids`, so the app-root
- * element menu answers right-click and BX here like on any row. Double-click stays free. Named
+ * element menu answers right-click and BX here like on any row. Double-click is the caller's (frame).
+ * Pointer scheme: `gestures.ts`. Named
  * moves (fit, looks) belong to the caller's pane strip and the orbit minimap, not this canvas.
  * `onProject` hands DOM drawn over the canvas the camera of each frame that moved.
  *
@@ -46,6 +47,8 @@ export type Scene3DProps = {
   layers?: readonly Layer3D[];
   /** A click (a press that stayed within 5 px); null when it met nothing. */
   onPick?: (pick: Pick | null, event: PointerEvent) => void;
+  /** A double-click: the element under it, or null on empty space. The caller frames it. */
+  onDoubleClick?: (pick: Pick | null, event: MouseEvent) => void;
   /** False for a hit the caller has cut away; picking and the element menu look past it. */
   clip?: (hit: Pick) => boolean;
   /** The shader side of the caller's cuts, packed relative to the bounds centre. */
@@ -214,6 +217,8 @@ export function Scene3D(props: Scene3DProps): ReactNode {
       if (event.button !== 0 || down?.button !== 0 || !isClick(down, event)) return;
       latest.current.onPick?.(pickAt(r, event, latest.current.clip), event);
     };
+    const doubleClick = (event: MouseEvent) =>
+      latest.current.onDoubleClick?.(pickAt(r, event, latest.current.clip), event);
     // A right-drag was a pan: cancel its menu. A right click passes to the element menu, or is
     // cancelled when nothing Revit can select is under it.
     const contextMenu = (event: MouseEvent) => {
@@ -226,6 +231,7 @@ export function Scene3D(props: Scene3DProps): ReactNode {
     canvas.addEventListener("pointerdown", pointerDown, true);
     canvas.addEventListener("pointerup", pointerUp);
     canvas.addEventListener("contextmenu", contextMenu);
+    canvas.addEventListener("dblclick", doubleClick);
     return () => {
       clearTimeout(wheelEnd);
       canvas.removeEventListener("wheel", wheel, true);
@@ -237,6 +243,7 @@ export function Scene3D(props: Scene3DProps): ReactNode {
       canvas.removeEventListener("pointerdown", pointerDown, true);
       canvas.removeEventListener("pointerup", pointerUp);
       canvas.removeEventListener("contextmenu", contextMenu);
+      canvas.removeEventListener("dblclick", doubleClick);
       unfollow();
       orbit.cancel(token);
       moves.removeEventListener("start", start);

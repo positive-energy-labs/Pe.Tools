@@ -12,6 +12,7 @@
  * context into 2D canvases, only when what they show changed, never per orbit frame.
  */
 import * as THREE from "three";
+import { createWheelReader, wheelPixels, wheelPlane } from "./gestures";
 import { createMeshPicker } from "./picking";
 import { OrbitControls } from "three/addons/controls/OrbitControls.js";
 import { center, fromControls, toCamera, type OrbitViewport } from "./orbit";
@@ -19,7 +20,6 @@ import {
   fitPlane,
   frameRect,
   fromFrame,
-  zoomPlane,
   type PlaneAxis,
   type PlaneViewport,
 } from "./plane";
@@ -86,7 +86,7 @@ export function createRenderer(mount: HTMLElement, meshes: SceneMeshes) {
   const canvas = renderer.domElement;
   canvas.setAttribute(
     "aria-label",
-    "3D model. Left drag orbit, right drag pan, wheel zoom. Click an element to pick it; right click or BX shows it in Revit.",
+    "3D model. Drag orbits; Shift drag, right drag or two-finger scroll pans; wheel or pinch zooms to the cursor; double-click frames. Click an element to pick it; right click or BX shows it in Revit.",
   );
   canvas.tabIndex = 0;
   canvas.className = "block size-full";
@@ -103,6 +103,10 @@ export function createRenderer(mount: HTMLElement, meshes: SceneMeshes) {
   const controls = new OrbitControls(camera, canvas);
   controls.enableDamping = false;
   controls.screenSpacePanning = true;
+  // The scheme (gestures.ts): left orbits, middle and right pan, Shift+left pans (OrbitControls'
+  // own modifier rule), the wheel and a pinch zoom toward the cursor.
+  controls.mouseButtons = { LEFT: THREE.MOUSE.ROTATE, MIDDLE: THREE.MOUSE.PAN, RIGHT: THREE.MOUSE.PAN };
+  controls.zoomToCursor = true;
   // OrbitControls cancels every contextmenu, which would starve the app's element menu (it skips a
   // cancelled press). Scene3D decides instead: a right-drag pan cancels, a right click passes.
   canvas.removeEventListener(
@@ -324,14 +328,20 @@ export function createRenderer(mount: HTMLElement, meshes: SceneMeshes) {
     panning = null;
     moves.dispatchEvent({ type: "end" });
   };
+  const reader = createWheelReader();
   const planeWheel = (event: WheelEvent) => {
     if (!plane) return;
     event.preventDefault();
     const rect = canvas.getBoundingClientRect();
-    const k = Math.exp(-event.deltaY * 0.001);
     plane = {
       ...plane,
-      viewport: zoomPlane(plane.viewport, k, event.clientX - rect.left, event.clientY - rect.top),
+      viewport: wheelPlane(
+        plane.viewport,
+        reader(event),
+        event,
+        event.clientX - rect.left,
+        event.clientY - rect.top,
+      ),
     };
     place(plane.axis, plane.viewport, size);
     render();
@@ -342,6 +352,35 @@ export function createRenderer(mount: HTMLElement, meshes: SceneMeshes) {
   window.addEventListener("pointermove", planeMove);
   window.addEventListener("pointerup", planeUp);
   canvas.addEventListener("wheel", planeWheel, { passive: false });
+  // Orbit wheel: OrbitControls zooms every wheel, so a two-finger scroll is told apart in the capture
+  // phase (before its listener) and answered by a pan in the bubble phase (after it, registered later).
+  const reading = createWheelReader();
+  let scrolled = false;
+  const scrollGate = (event: WheelEvent) => {
+    scrolled = !plane && reading(event) === "scroll";
+    if (scrolled) controls.enableZoom = false;
+  };
+  const scrollPan = (event: WheelEvent) => {
+    if (!scrolled) return;
+    scrolled = false;
+    controls.enableZoom = true;
+    event.preventDefault();
+    const { x, y } = wheelPixels(event);
+    // Content follows the fingers: fingers up (deltaY > 0) moves the camera down the screen.
+    camera.updateMatrixWorld();
+    const right = new THREE.Vector3().setFromMatrixColumn(camera.matrix, 0);
+    const up = new THREE.Vector3().setFromMatrixColumn(camera.matrix, 1);
+    const reach = camera.position.distanceTo(controls.target);
+    const perPx = (2 * reach * Math.tan((camera.fov / 2) * (Math.PI / 180))) / size.height;
+    const move = right.multiplyScalar(x * perPx).add(up.multiplyScalar(-y * perPx));
+    moves.dispatchEvent({ type: "start" });
+    camera.position.add(move);
+    controls.target.add(move);
+    controls.update();
+    moves.dispatchEvent({ type: "end" });
+  };
+  canvas.addEventListener("wheel", scrollGate, { capture: true, passive: true });
+  canvas.addEventListener("wheel", scrollPan, { passive: false });
   const observer = new ResizeObserver(resize);
   observer.observe(mount);
   resize();
@@ -456,6 +495,8 @@ export function createRenderer(mount: HTMLElement, meshes: SceneMeshes) {
       window.removeEventListener("pointermove", planeMove);
       window.removeEventListener("pointerup", planeUp);
       canvas.removeEventListener("wheel", planeWheel);
+      canvas.removeEventListener("wheel", scrollGate, true);
+      canvas.removeEventListener("wheel", scrollPan);
       batch.dispose();
       scene.remove(batch);
       material.dispose();

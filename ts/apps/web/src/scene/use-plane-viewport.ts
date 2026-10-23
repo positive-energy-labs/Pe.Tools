@@ -1,7 +1,8 @@
 import { useCallback, useEffect, useRef, useState, type PointerEvent } from "react";
 import type { PlaneViewport } from "@pe/agent-contracts";
 import type { Bounds2, Viewport2 } from "#/lib/affine-frame";
-import { clampZoom, fitView, zoomPlane } from "./plane";
+import { createWheelReader, wheelPlane } from "./gestures";
+import { fitView } from "./plane";
 
 export const PLAN_CLICK_PX = 5;
 
@@ -47,14 +48,12 @@ export function usePlaneViewport(
       setSize(width > 0 && height > 0 ? { width, height } : null);
     });
     observer.observe(host);
+    const reader = createWheelReader();
     const wheel = (event: WheelEvent) => {
       event.preventDefault();
       const rect = host.getBoundingClientRect();
-      const x = event.clientX - rect.left;
-      const y = event.clientY - rect.top;
       const v = pending.current ?? latest.current.view;
-      const k = clampZoom(v.scale * Math.exp(-event.deltaY * 0.0015)) / v.scale;
-      move(zoomPlane(v, k, x, y), "gesture");
+      move(wheelPlane(v, reader(event), event, event.clientX - rect.left, event.clientY - rect.top), "gesture");
     };
     host.addEventListener("wheel", wheel, { passive: false });
     return () => {

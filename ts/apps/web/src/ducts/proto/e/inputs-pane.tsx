@@ -7,6 +7,7 @@
 import type { Priced } from "@pe/ducts-domain/pricing";
 import type { SystemScope } from "@pe/ducts-domain/system-scope";
 import type { DuctSnapshot } from "@pe/ducts-domain/types";
+import { useScopeGestures, type ScopeGesture } from "@pe/kit/keys";
 import { Row } from "@pe/kit/lang/row";
 import { observedElements, useNativeObservation } from "#/revit/observation";
 
@@ -39,7 +40,18 @@ function inputRowsOf(snapshot: DuctSnapshot, scope: InputsScope) {
   return { units: units.map((n) => n.id), terminals: terminals.map((n) => n.id) };
 }
 
+/** The cells' own keys (`StateCell`'s input handler) and the row's pointer, declared for help. */
+const INPUT_KEYS: readonly ScopeGesture[] = [
+  { keys: ["Enter"], label: "commit, next row" },
+  { keys: ["Tab"], label: "commit, next cell" },
+  { keys: ["↑", "↓"], label: "commit, row up or down" },
+  { keys: ["Esc"], label: "drop the typed value" },
+  { pointer: "click", label: "select in the picture" },
+  { pointer: "hover", label: "light it in the picture" },
+];
+
 export function InputsPane(props: InputsPaneProps) {
+  useScopeGestures(INPUT_KEYS);
   const observation = useNativeObservation();
   const { snapshot, priced, work, scope, nameOf, selected, select, light } = props;
   const { units, terminals } = inputRowsOf(snapshot, scope);

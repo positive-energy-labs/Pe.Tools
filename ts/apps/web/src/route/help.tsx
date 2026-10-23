@@ -17,12 +17,15 @@ import { startFeedback } from "#/components/feedback-picker";
 import { SettingsHelpTrigger } from "#/machine/navigation";
 import {
   chordLabel,
+  readGestures,
   readKeyMeta,
   readRegistrations,
   useScopeKeys,
   type Chord,
+  type DeclaredGesture,
   type KeyMeta,
 } from "@pe/kit/keys";
+import { GestureKey } from "@pe/kit/lang/gesture-glyph";
 import { TooltipHint } from "@pe/kit/lang/tooltip";
 
 interface Region {
@@ -34,6 +37,11 @@ interface Region {
 interface Bound extends KeyMeta {
   hotkey: Chord;
 }
+
+/** A pointer gesture or natively handled key a pane declared; drawn in the same card as chords. */
+type Gestured = DeclaredGesture & { hotkey?: undefined };
+type Line = Bound | Gestured;
+const isGesture = (line: Line): line is Gestured => line.hotkey === undefined;
 
 const CARD_W = 240;
 /** The chord that opens this page; the page does not list it among the keys it explains. */
@@ -74,7 +82,7 @@ const unionOf = (regions: readonly Region[]) => {
 };
 
 /** `flow` wraps the pairs across the line (the route band); default is one column (a card). */
-function Rows({ keys, flow = false }: { keys: readonly Bound[]; flow?: boolean }) {
+function Rows({ keys, flow = false }: { keys: readonly Line[]; flow?: boolean }) {
   return (
     <dl
       className={
@@ -83,35 +91,50 @@ function Rows({ keys, flow = false }: { keys: readonly Bound[]; flow?: boolean }
           : "grid grid-cols-[auto_1fr] items-center gap-x-2.5 gap-y-1 t-small"
       }
     >
-      {keys.map((k) => (
-        <div
-          key={`${chordLabel(k.hotkey)}:${k.name}`}
-          className={flow ? "flex items-center gap-2.5" : "contents"}
-        >
-          <dt>
-            <Kbd mute={Boolean(k.refusal)} hotkey={k.hotkey} />
-          </dt>
-          <TooltipHint content={k.refusal ?? k.description}>
-            <dd className={k.refusal ? "text-ink-mute" : "text-ink"}>
-              {k.name}
-              {k.refusal ? ` — refuses now: ${k.refusal}` : ""}
-            </dd>
-          </TooltipHint>
-        </div>
-      ))}
+      {keys.map((k) =>
+        isGesture(k) ? (
+          <div
+            key={`gesture:${k.keys?.join("+") ?? ""}:${k.pointer ?? ""}:${k.label}`}
+            className={flow ? "flex items-center gap-2.5" : "contents"}
+          >
+            <dt>
+              <GestureKey pointer={k.pointer} keys={k.keys} />
+            </dt>
+            <TooltipHint content={k.says ?? k.label}>
+              <dd className="text-ink">{k.label}</dd>
+            </TooltipHint>
+          </div>
+        ) : (
+          <div
+            key={`${chordLabel(k.hotkey)}:${k.name}`}
+            className={flow ? "flex items-center gap-2.5" : "contents"}
+          >
+            <dt>
+              <Kbd mute={Boolean(k.refusal)} hotkey={k.hotkey} />
+            </dt>
+            <TooltipHint content={k.refusal ?? k.description}>
+              <dd className={k.refusal ? "text-ink-mute" : "text-ink"}>
+                {k.name}
+                {k.refusal ? ` — refuses now: ${k.refusal}` : ""}
+              </dd>
+            </TooltipHint>
+          </div>
+        ),
+      )}
     </dl>
   );
 }
 
-/** Where a card's body ends; `Rows` draws one 22 px line per key under a 30 px head. */
-const cardHeight = (keys: number) => 30 + 17 + keys * 22;
+/** Where a card's body ends; `Rows` draws a 24 px line per chord (three lines when it refuses) and a 28 px one per gesture (its glyph) under a 30 px head. */
+const cardHeight = (keys: readonly Line[]) =>
+  30 + 17 + keys.reduce((sum, k) => sum + (isGesture(k) ? 28 : k.refusal ? 64 : 24), 0);
 
 function Chart({
   regions,
   byRegion,
 }: {
   regions: Region[];
-  byRegion: ReadonlyMap<string, Bound[]>;
+  byRegion: ReadonlyMap<string, Line[]>;
 }) {
   const mid = useRef<HTMLDivElement>(null);
   const [size, setSize] = useState<{ w: number; h: number } | null>(null);
@@ -138,8 +161,8 @@ function Chart({
       regions
         .filter((region) => sideOf(region) === side)
         .reduce((sum, region) => {
-          const keys = byRegion.get(region.id)?.length ?? 0;
-          return keys ? sum + cardHeight(keys) + CARD_GAP : sum;
+          const keys = byRegion.get(region.id) ?? [];
+          return keys.length ? sum + cardHeight(keys) + CARD_GAP : sum;
         }, 8),
     ),
   );
@@ -190,7 +213,7 @@ function Chart({
           .sort((p, q) => p.ay - q.ay)
           .map((card) => {
             const top = Math.max(floor, card.ay - 16);
-            floor = top + cardHeight(card.keys.length) + CARD_GAP;
+            floor = top + cardHeight(card.keys) + CARD_GAP;
             return { ...card, side, top };
           });
         const overflow = Math.max(0, floor - CARD_GAP - (size!.h - 8));
@@ -273,6 +296,7 @@ function HelpBody({
   close: () => void;
 }) {
   const hotkeys = useMemo(readRegistrations, []);
+  const gestures = useMemo(readGestures, []);
   const regions = useMemo(measureRegions, []);
   // A chord bound at several nodes reads once, at the shallowest.
   const bound = new Map<string, Bound>();
@@ -290,11 +314,15 @@ function HelpBody({
   }
   // The chart's cards are the visible panes; every other scope node's keys read as the route's.
   const drawn = new Set(regions.map((region) => region.id));
-  const band: Bound[] = [];
-  const byRegion = new Map<string, Bound[]>();
-  for (const k of bound.values())
-    if (drawn.has(k.scope)) byRegion.set(k.scope, [...(byRegion.get(k.scope) ?? []), k]);
-    else band.push(k);
+  const band: Line[] = [];
+  const byRegion = new Map<string, Line[]>();
+  const place = (line: Line) => {
+    if (drawn.has(line.scope)) byRegion.set(line.scope, [...(byRegion.get(line.scope) ?? []), line]);
+    else band.push(line);
+  };
+  // A pane's pointer gestures read before its chords: they are how the picture is driven.
+  for (const g of gestures) place({ ...g, hotkey: undefined });
+  for (const k of bound.values()) place(k);
 
   return (
     <div className="absolute inset-0 flex flex-col overflow-y-auto">

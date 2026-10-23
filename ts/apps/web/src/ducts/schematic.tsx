@@ -5,7 +5,7 @@ import type { IssueKind } from "@pe/ducts-domain/issues";
  * pass-1 cfm; selecting an edge unfolds it. Edges are inked by the drawing's encoding, so a reading
  * (health, velocity, ...) means the same here as on the model. Selection and the hover-lit set come
  * from the caller, so both pictures light together. One component, two slots: `main` is the whole
- * picture (labelled, scrolls), `inset` is the corner (no labels, fits its box).
+ * picture (labelled, pans and zooms), `inset` is the corner (no labels, fits its box).
  *
  * The layout is a tidy tree: each vertex's first child continues its row (the longest run first,
  * so it reads straight along the top) and later children hang below.
@@ -22,6 +22,7 @@ import {
   type GroupTree,
 } from "@pe/ducts-domain/topology";
 
+import { PanZoom } from "#/scene/pan-zoom";
 import { DASH_CLASS, strokeOf, type Encoding, type EncodingFacts } from "./encoding";
 import { ISSUE_KINDS } from "./issues";
 import { sceneOf, type DuctIndex } from "./scene";
@@ -309,8 +310,8 @@ export function Schematic({
       {svg}
     </div>
   ) : (
-    <div className="size-full min-h-0 overflow-auto" data-schematic-slot="main">
-      {svg}
+    <div className="size-full min-h-0" data-schematic-slot="main">
+      <PanZoom content={{ width: layout.width, height: layout.height }}>{svg}</PanZoom>
     </div>
   );
 }
