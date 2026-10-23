@@ -3,7 +3,7 @@ import { join } from "node:path";
 import { randomUUID } from "node:crypto";
 import { Effect, Fiber, Queue } from "effect";
 import { expect, test } from "vite-plus/test";
-import type { ThreadHead } from "@pe/agent-contracts";
+import { takeoffEditKey, type ThreadHead } from "@pe/agent-contracts";
 import { RevitBridgeLive } from "../src/bridge.ts";
 import { admitCrossing, bindControl } from "../src/control.ts";
 import { hostActionJournal } from "../src/gateway-owner.ts";
@@ -26,6 +26,14 @@ test.each(["guarded", "removed", "unchanged"] as const)(
           const before = yield* Effect.promise(() =>
             fixture.workspace.read(fixture.scope, "takeoffs"),
           );
+          expect(before).toMatchObject({
+            revision: 1,
+            doc: {
+              edits: {
+                [takeoffEditKey("room-1", "name")]: { staged: { value: "Reviewed" } },
+              },
+            },
+          });
           let full = true;
           let head: ThreadHead = {
             revision: 1,
