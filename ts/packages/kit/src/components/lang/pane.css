@@ -7,7 +7,10 @@
   transition: outline-color var(--motion-control);
 }
 /* Supporting navigation recedes as a whole pane, including nested splits and rails. */
-[data-pane-secondary] {
+[data-pane-secondary],
+[data-pane-secondary] [data-slot="pane"] {
+  --pe-surface: light-dark(var(--pe-recess), var(--pe-page));
+  --pe-on: var(--pe-surface);
   background: light-dark(var(--pe-recess), var(--pe-page));
 }
 [data-pane-secondary] [data-slot="pane-split"] {
