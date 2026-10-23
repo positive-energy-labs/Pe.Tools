@@ -5,6 +5,7 @@ import type { Tone } from "../../lib/token";
 import {
   isValidElement,
   createContext,
+  useCallback,
   useContext,
   useRef,
   useState,
@@ -64,6 +65,20 @@ export function Button({
   const [outcome, setOutcome] = useState<OutcomeLineProps | null>(null);
   const shownOutcome = useContext(ButtonOutcome) ?? outcome;
   const anchor = useRef<HTMLButtonElement | null>(null);
+  const outcomeAnchor = useCallback(() => {
+    const control = anchor.current;
+    if (!control) return null;
+    return {
+      contextElement: control,
+      getBoundingClientRect: () => {
+        const rect = control.getBoundingClientRect();
+        const box =
+          control.closest("form, fieldset, [role=group]")?.getBoundingClientRect() ?? rect;
+        // Flipping clears the whole editing box, not just its bottom-row button.
+        return new DOMRect(rect.x, box.y, rect.width, box.height);
+      },
+    };
+  }, []);
   const [host, setHost] = useState<HTMLSpanElement | null>(null);
   const running = useRef(false);
   const busy = suppliedBusy || pending;
@@ -163,9 +178,10 @@ export function Button({
         <Popover key={shownOutcome.label} open onOpenChange={(open) => !open && setOutcome(null)}>
           <PopoverContent
             className="dl-button-outcome"
-            anchor={anchor}
+            anchor={outcomeAnchor}
             container={host}
             side="bottom"
+            collisionAvoidance={{ side: "flip", align: "shift", fallbackAxisSide: "none" }}
             initialFocus={false}
           >
             <OutcomeLine {...shownOutcome} />

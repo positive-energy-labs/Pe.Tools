@@ -1201,6 +1201,7 @@ svg [data-damage] {
 .dl-button-outcome {
   width: max-content;
   max-inline-size: min(20rem, var(--available-width));
+  max-block-size: var(--available-height);
   padding: var(--space-unit);
 }
 .dl-button:is(.dl-control, [data-kind="quiet"]:hover, [aria-pressed="true"]) {
