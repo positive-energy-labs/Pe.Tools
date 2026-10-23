@@ -140,7 +140,7 @@ export function useUrlPage<P>(url: UrlPage<P> | null, owner: ViewOwner<P>) {
   const router = useRouter({ warn: false });
   const activity = useRouteActivity();
   useEffect(() => {
-    if (!router || !url || (activity && !activity.current())) return;
+    if (!router || !url) return;
     const ownsUrl = () => !activity || activity.current();
     const token = crypto.randomUUID();
     const marker = "__pePageMove";
@@ -214,7 +214,9 @@ export function useUrlPage<P>(url: UrlPage<P> | null, owner: ViewOwner<P>) {
     const unpage = owner.subscribe(() => {
       const next = owner.read();
       const history =
-        next.origin === "url" ? null : url.history(previous.page, next.page, next.history);
+        !ownsUrl() || next.origin === "url"
+          ? null
+          : url.history(previous.page, next.page, next.history);
       previous = next;
       if (!history) return;
       pending = history === "push" || pending === "push" ? "push" : history;
