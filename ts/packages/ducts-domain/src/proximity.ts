@@ -163,11 +163,11 @@ export const worse = (a: DuctInferenceGrade, b: DuctInferenceGrade) => (RANK[b] 
  * Revit's default roll (width horizontal), and a vertical one (or an oval) as the round-equivalent
  * band from its half-short-side to its half-diagonal, so any roll lands.
  */
-type Section =
+export type Section =
   | { w: number; h: number; x: number[]; y: number[] }
   | { inner: number; outer: number };
-type Sized = Pick<Segment, "shape" | "widthIn" | "heightIn" | "diameterIn">;
-function sectionOf(s: Sized, u: number[], roll: number[] | null = null): Section | null {
+export type Sized = Pick<Segment, "shape" | "widthIn" | "heightIn" | "diameterIn">;
+export function sectionOf(s: Sized, u: number[], roll: number[] | null = null): Section | null {
   const [w, h] = [(s.widthIn ?? 0) / 24, (s.heightIn ?? 0) / 24];
   if (s.shape === "round" || (!w && !h)) {
     const r = (s.diameterIn ?? 0) / 24;
@@ -196,7 +196,7 @@ function sectionOf(s: Sized, u: number[], roll: number[] | null = null): Section
  * node's point is that port (a transition's insertion), away from its other ports. A one-port node
  * whose port is its insertion point (Project A grilles 10922066, 10922068) derives none.
  */
-function axisOf(e: Element, c: Element["connectors"][number]): number[] | null {
+export function axisOf(e: Element, c: Element["connectors"][number]): number[] | null {
   if (c.kind === "curve" && "polyline" in e) return null;
   const facing = c.facing?.length === 3 ? unit(c.facing) : null;
   if (facing) return facing;
@@ -257,7 +257,7 @@ type Face =
 type Side = Extract<Face, { label: "side" }>;
 
 /** A rectangular segment's roll: the first of its connectors that states a `widthAxis`. */
-const rollOf = (s: Segment) =>
+export const rollOf = (s: Segment) =>
   s.connectors.find((c) => c.widthAxis?.length === 3)?.widthAxis ?? null;
 
 /** Each segment's sides: one per polyline piece, swept by its section. */
@@ -288,13 +288,23 @@ export function sidesOf(segments: readonly Segment[]): Side[] {
   return sides;
 }
 
-/**
- * Every face in the snapshot: each segment's sides, each end an end cap closes (the cap counted
- * as the segment's, its face `CAP_THICKNESS_IN` outboard), and each open connector's mouth.
- */
-function facesOf(snapshot: DuctSnapshot, open: readonly Port[]): Face[] {
-  const faces: Face[] = sidesOf(snapshot.segments);
+/** A capped segment end's face: the cap counted as the segment's, its face `CAP_THICKNESS_IN` outboard of `end`. */
+export interface CapFace {
+  owner: number;
+  segment: Segment;
+  /** The segment's end the cap closes, ft. */
+  end: number[];
+  /** Along the segment's polyline from its first point, ft. */
+  at: number;
+  origin: number[];
+  normal: number[];
+  section: Section;
+}
+
+/** Every end an end cap closes; `facesOf` and the 3D findings drawing share it. */
+export function capFacesOf(snapshot: DuctSnapshot): CapFace[] {
   const byId = new Map(snapshot.segments.map((s) => [s.id, s]));
+  const out: CapFace[] = [];
   for (const cap of snapshot.nodes)
     for (const c of cap.kind === "cap" ? cap.connectors : []) {
       const s = c.connectedTo ? byId.get(c.connectedTo.elementId) : undefined;
@@ -307,16 +317,35 @@ function facesOf(snapshot: DuctSnapshot, open: readonly Port[]): Face[] {
       const section = normal && sectionOf(s, normal, rollOf(s));
       if (!normal || !section) continue;
       const at = first ? 0 : s.polyline.slice(1).reduce((t, q, i) => t + dist(poly[i]!, q), 0);
-      faces.push({
-        label: "capped end",
+      out.push({
         owner: s.id,
-        cls: segmentClass(s),
+        segment: s,
+        end: e,
+        at,
         origin: add(e, normal, CAP_THICKNESS_IN / 12),
         normal,
         section,
-        onto: { segment: s, at, point: e },
       });
     }
+  return out;
+}
+
+/**
+ * Every face in the snapshot: each segment's sides, each end an end cap closes (the cap counted
+ * as the segment's, its face `CAP_THICKNESS_IN` outboard), and each open connector's mouth.
+ */
+function facesOf(snapshot: DuctSnapshot, open: readonly Port[]): Face[] {
+  const faces: Face[] = sidesOf(snapshot.segments);
+  for (const f of capFacesOf(snapshot))
+    faces.push({
+      label: "capped end",
+      owner: f.owner,
+      cls: segmentClass(f.segment),
+      origin: f.origin,
+      normal: f.normal,
+      section: f.section,
+      onto: { segment: f.segment, at: f.at, point: f.end },
+    });
   const elements = new Map<number, Element>(
     [...snapshot.nodes, ...snapshot.segments].map((e) => [e.id, e]),
   );

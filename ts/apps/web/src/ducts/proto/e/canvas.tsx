@@ -22,6 +22,7 @@ import { PICTURE_KEYS } from "../../docs";
 import { NodeFactsView, SegmentFactsView } from "../../facts";
 import { labelOfNode, legsOf } from "../../legs";
 import { sceneRequestOf } from "../../manifest";
+import { findingLayers, findingShapes } from "../../finding-layers";
 import { ModelPicture, poseOf, usePictureBounds } from "../../model-picture";
 import { ProvisionalNote } from "../../provisional";
 import { indexOf, sceneOf, subjectScene } from "../../scene";
@@ -156,6 +157,11 @@ function Canvas({
     pointOf,
   });
 
+  const findings3d = useMemo(
+    () => findingLayers(findingShapes(snapshot, annotated, work.doc)),
+    [snapshot, annotated, work.doc],
+  );
+
   // Header facts: a system name (never a group id), Pe fan static, critical run total.
   const firstId = subject?.ids[0] ?? scene.segments[0]?.segment.id ?? null;
   const systemName =
@@ -281,6 +287,7 @@ function Canvas({
             hovered={hovered}
             labels={labels}
             rulings={rulings}
+            findings3d={findings3d}
             pointOf={pointOf}
             issue={page.issue}
             setPage={setPage}

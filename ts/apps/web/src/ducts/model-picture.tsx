@@ -22,7 +22,7 @@ import { viewportProject, type Project, type Size } from "#/scene/projection";
 import type { LiveOrbit } from "#/scene/live-orbit";
 import { Scene3D } from "#/scene/scene3d";
 import type { SceneRead } from "#/scene/use-scene";
-import type { Bounds, SceneMeshes } from "#/scene/types";
+import type { Bounds, Layer3D, SceneMeshes } from "#/scene/types";
 
 import { Annotations, type Label, type Ruling } from "./annotations";
 import type { Encoding } from "./encoding";
@@ -87,6 +87,7 @@ export function ModelPicture({
   hovered,
   labels,
   rulings,
+  findings3d,
   pointOf,
   issue,
   setPage,
@@ -106,6 +107,8 @@ export function ModelPicture({
   hovered: number | null;
   labels: readonly Label[];
   rulings: readonly Ruling[];
+  /** The annotated findings drawn in 3D (`finding-layers.ts`), under the same `findings` layer as the pins. */
+  findings3d: readonly Layer3D[];
   pointOf: (id: number) => readonly number[] | null;
   issue: string;
   setPage: (next: Partial<DuctsPage>, move?: PageMove<DuctsPage>) => void;
@@ -241,6 +244,7 @@ export function ModelPicture({
           selected={selectedKeys}
           lit={litKeys}
           isolated={isolated}
+          layers={layers.has("findings") ? findings3d : undefined}
           onProject={(project, at) => setFramed({ project, size: at })}
           onPick={(pick, event) => {
             if (!pick) return;
