@@ -2,7 +2,7 @@
 import { revitTarget } from "@pe/kit/lang/row";
 import { cleanup, fireEvent, render, waitFor } from "@testing-library/react";
 import { afterEach, expect, test, vi } from "vite-plus/test";
-import { ElementMenu, showInRevit } from "./element-menu";
+import { ElementMenu, SelectionBoxButton, showInRevit } from "./element-menu";
 import {
   elementTargetOf,
   prepareElements,
@@ -167,10 +167,31 @@ test("right-click Select uses the same exact observation and never invokes a box
     </div>,
   );
   fireEvent.contextMenu(view.getByText("target"), { clientX: 20, clientY: 30 });
-  fireEvent.click(await view.findByText("Select", { exact: true }));
+  const select = await view.findByRole("option", { name: "Select" });
+  expect(select.querySelector("svg.lucide-crosshair")).not.toBeNull();
+  expect(select.querySelector("kbd")).toBeNull();
+  const box = view.getByRole("option", { name: "Selection Box in Revit" });
+  expect(box.querySelector("kbd")?.textContent).toBe("BX");
+  expect(box.getAttribute("aria-description")).toBe("Selection Box in Revit");
+  fireEvent.click(select);
   await waitFor(() => expect(submit).toHaveBeenCalledTimes(1));
   expect(submit.mock.calls[0]?.[0]).toMatchObject({
     destination: { kind: "document", ref: documentRef },
     input: { elementIds: [42], selectOnly: true },
+  });
+});
+
+test("the visible Selection Box door is only the kit BX key and still boxes the captured target", async () => {
+  submit.mockResolvedValue({ id: "action-box", state: "running" });
+  const view = render(<SelectionBoxButton target={{ ids: [42], scope }} />);
+  const box = view.getByRole("button", { name: "Selection Box in Revit" });
+  expect(box.textContent).toBe("BX");
+  expect(box.querySelector("kbd")).not.toBeNull();
+  expect(box.getAttribute("data-kind")).toBe("quiet");
+  fireEvent.click(box);
+  await waitFor(() => expect(submit).toHaveBeenCalledTimes(1));
+  expect(submit.mock.calls[0]?.[0]).toMatchObject({
+    destination: { kind: "document", ref: documentRef },
+    input: { elementIds: [42], selectOnly: false },
   });
 });

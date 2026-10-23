@@ -2,7 +2,6 @@ import { useMemo, useState, type ReactNode } from "react";
 import {
   Ban,
   Check,
-  Crosshair,
   Eye,
   EyeOff,
   Fan,
@@ -20,7 +19,7 @@ import { EmptyState } from "@pe/kit/lang/empty";
 import { Inbox as KitInbox, type InboxRowSpec } from "@pe/kit/lang/inbox";
 import { reviewTransitions, type CellWire } from "#/components/work/band";
 import type { ActionHandle } from "#/route/handle";
-import { showInRevit } from "#/revit/element-menu";
+import { SelectInRevitIcon, showInRevit } from "#/revit/element-menu";
 import {
   prepareElements,
   showElementsMessage,
@@ -150,7 +149,10 @@ export function Inbox({
       <Button
         key={key}
         {...(worded
-          ? { kind: extra.commit ? ("commit" as const) : ("framed" as const) }
+          ? {
+              kind: extra.commit ? ("commit" as const) : ("framed" as const),
+              icon: verb.kind === "select" ? icon : undefined,
+            }
           : { icon })}
         label={worded ? label : says}
         reason={worded ? says : undefined}
@@ -257,9 +259,9 @@ export function Inbox({
         const prepared = prepareElements(target, true);
         return make(
           `x${i}`,
-          Crosshair,
-          "select in Revit",
-          "select in Revit",
+          SelectInRevitIcon,
+          "Select in Revit",
+          "Select in Revit",
           () => {
             setNativeResult(null);
             setSelecting(true);

@@ -6,6 +6,7 @@
  * Double-click stays free. The nearest displayed-observation scope is mandatory.
  */
 import { useEffect, useRef, useState } from "react";
+import { Crosshair } from "lucide-react";
 import { ListPopup } from "@pe/kit/lang/list-popup";
 import { KeyHint } from "@pe/kit/lang/key-hint";
 import { Button } from "@pe/kit/lang/button";
@@ -24,6 +25,10 @@ import {
 import { readFamilyPlacements } from "./observation";
 export { revitScope } from "./element-target";
 export type { ShowElementsResult } from "./element-target";
+
+export const SelectInRevitIcon = Crosshair;
+const SELECTION_BOX_LABEL = "Selection Box in Revit";
+const SelectionBoxKey = () => <KeyHint>BX</KeyHint>;
 
 /** Box: select and section-box the {3D} view, then zoom to fit. Select: select only. */
 export async function showInRevit(
@@ -87,8 +92,8 @@ export async function showInRevit(
 }
 
 const VERBS = [
-  { key: "box", label: "Selection Box", keys: "BX", selectOnly: false },
-  { key: "select", label: "Select", keys: null, selectOnly: true },
+  { key: "box", label: SELECTION_BOX_LABEL, selectOnly: false },
+  { key: "select", label: "Select", selectOnly: true },
 ] as const;
 
 const typing = (el: Element | null) =>
@@ -201,12 +206,22 @@ export function ElementMenu() {
           select="single"
           empty="no verbs"
           row={(verb) => ({
-            label: verb.label,
+            label:
+              verb.key === "box" ? (
+                <span>
+                  <span className="sr-only">{SELECTION_BOX_LABEL}</span>
+                  <span aria-hidden>
+                    <SelectionBoxKey />
+                  </span>
+                </span>
+              ) : (
+                verb.label
+              ),
+            lead: verb.key === "select" ? <SelectInRevitIcon aria-hidden /> : undefined,
             title:
               verb.key === "box"
-                ? `select ${subject}, box the {3D} view around them and zoom to fit; no model element changes`
+                ? SELECTION_BOX_LABEL
                 : `select ${subject} in Revit; the view stays as it is`,
-            meta: verb.keys ? <KeyHint>{verb.keys}</KeyHint> : undefined,
           })}
           onPick={(verb) => {
             setMenu(null);
@@ -231,7 +246,7 @@ export function ElementMenu() {
 
 /**
  * The one visible door, for a surface whose selection must offer Revit in plain sight (the
- * selection strip): Selection Box, its answer beside it, and the BX it teaches.
+ * selection strip): the BX key and its answer beside it.
  */
 export function SelectionBoxButton({ target }: { target: Target }) {
   const [result, setResult] = useState<ShowElementsResult | null>(null);
@@ -244,10 +259,10 @@ export function SelectionBoxButton({ target }: { target: Target }) {
       {...revitTarget(target.ids, target.refs)}
     >
       <Button
-        kind="framed"
         busy={busy}
         refusal={prepared.kind === "refused" ? prepared.message : null}
-        label="Selection Box: box the {3D} view around it in Revit (right-click or BX anywhere)"
+        label={SELECTION_BOX_LABEL}
+        reason={SELECTION_BOX_LABEL}
         onClick={() => {
           setResult(null);
           setBusy(true);
@@ -256,7 +271,7 @@ export function SelectionBoxButton({ target }: { target: Target }) {
             .finally(() => setBusy(false));
         }}
       >
-        Selection Box <KeyHint>BX</KeyHint>
+        <SelectionBoxKey />
       </Button>
       {result ? (
         <FactChip title="what revit.context.show-elements answered">
