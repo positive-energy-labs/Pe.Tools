@@ -216,7 +216,9 @@ test("unsent draft remains current across real offline/online stream recovery", 
     await page.context().setOffline(false);
     await expect.poll(streams, { timeout: 15_000 }).toBeGreaterThan(before);
     await expect
-      .poll(() => page.locator("[data-composer-refusal]").allTextContents(), { timeout: 15_000 })
+      .poll(() => page.locator("[data-composer-refusal][role='alert']").allTextContents(), {
+        timeout: 15_000,
+      })
       .not.toContain("This thread is not current; re-reading it from the host.");
     expect(await composer.inputValue()).toBe(draft);
     expect(new URL(page.url()).searchParams.get("thread")).toBe(thread);
@@ -330,7 +332,9 @@ test("empty persisted thread stays fenced until its real host reread lands", asy
     await page.context().setOffline(false);
     await expect.poll(() => blocked, { timeout: 15_000 }).toBeGreaterThan(0);
     await expect
-      .poll(() => page.locator("[data-composer-refusal]").allTextContents(), { timeout: 15_000 })
+      .poll(() => page.locator("[data-composer-refusal][role='alert']").allTextContents(), {
+        timeout: 15_000,
+      })
       .toContain("This thread is not current; re-reading it from the host.");
     expect(await composer.inputValue()).toBe(draft);
     evidence.held = { head: created.head, blocked, draft: await composer.inputValue() };
@@ -339,7 +343,9 @@ test("empty persisted thread stays fenced until its real host reread lands", asy
     release();
     await expect.poll(bodies, { timeout: 15_000 }).toBeGreaterThan(reads);
     await expect
-      .poll(() => page.locator("[data-composer-refusal]").allTextContents(), { timeout: 15_000 })
+      .poll(() => page.locator("[data-composer-refusal][role='alert']").allTextContents(), {
+        timeout: 15_000,
+      })
       .toEqual([]);
     expect(await composer.inputValue()).toBe(draft);
     const fresh = await page.evaluate(
