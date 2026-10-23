@@ -25,6 +25,7 @@ import type { Layer3D, Pick, SceneMeshes } from "#/scene/types";
 
 import { CutOverlay, type Framed } from "./cuts";
 import { LAYER_SAYS, SPACE_LAYERS, rowUnder, type SpaceLayer } from "./layers";
+import { pickName } from "./facts";
 import type { SpacePage } from "./manifest";
 import { cutPolygons, packPolygons, retained, type Cuts, type Polygons } from "./state";
 import { useRouteLease } from "#/route/view-bridge";
@@ -344,7 +345,7 @@ export function SpacePicture({
               key: spaceElementKey(element.handle),
               name:
                 (!element.handle.linkInstanceId && subjects?.nameOf(element.handle.elementId)) ||
-                element.handle.category,
+                pickName(element.handle),
               id: element.handle.elementId,
               revitIds: element.handle.linkInstanceId ? [] : [element.handle.elementId],
               detail: element.handle.uniqueId,
