@@ -17,8 +17,15 @@ import {
   useList,
   type ListOptions,
 } from "../src/components/lang/collection";
+import { type ListSearch } from "@pe/agent-contracts";
 import { ListBar, ListView } from "../src/components/lang/list-view";
 import { readGestures, readKeyMeta, readRegistrations } from "../src/keys";
+
+const search = (keywords = "", pills: Record<string, string> = {}): ListSearch => ({
+  v: 1,
+  keywords,
+  pills: Object.entries(pills).map(([field, value]) => ({ field, op: "=", value })),
+});
 
 test("slash targets a separate filter bar from its focused list body", () => {
   function Fixture() {
@@ -40,7 +47,7 @@ test("slash targets a separate filter bar from its focused list body", () => {
   const body = screen.getByRole("listbox", { name: "separate" });
   body.focus();
   fireEvent.keyDown(body, { key: "/", code: "Slash" });
-  expect(document.activeElement).toBe(screen.getByRole("textbox", { name: "Search separate" }));
+  expect(document.activeElement).toBe(screen.getByRole("combobox", { name: "Search separate" }));
 });
 
 afterEach(() => {
@@ -64,11 +71,11 @@ test("typing filters locally, publishes once on idle, and indexes search only on
     },
   );
   expect(search).toHaveBeenCalledTimes(355);
-  act(() => hook.result.current.setQuery("System"));
+  act(() => hook.result.current.setKeywords("System"));
   act(() => {
     vi.advanceTimersByTime(150);
   });
-  act(() => hook.result.current.setQuery("System 354"));
+  act(() => hook.result.current.setKeywords("System 354"));
   expect(hook.result.current.shown).toBe(1);
   expect(onState).not.toHaveBeenCalled();
   expect(search).toHaveBeenCalledTimes(355);
@@ -80,7 +87,7 @@ test("typing filters locally, publishes once on idle, and indexes search only on
     vi.advanceTimersByTime(1);
   });
   expect(onState).toHaveBeenCalledTimes(1);
-  expect(onState.mock.lastCall?.[0].query).toBe("System 354");
+  expect(onState.mock.lastCall?.[0].search.keywords).toBe("System 354");
   hook.rerender({ data: items.map((item) => ({ ...item, name: "Changed" })) });
   expect(search).toHaveBeenCalledTimes(710);
   expect(hook.result.current.shown).toBe(0);
@@ -91,27 +98,31 @@ test("address navigation cancels pending typing; an idle acknowledgement preserv
   const onState = vi.fn();
   const hook = renderHook(
     ({ query }) =>
-      useList({ ...options, state: { ...emptyListState<"loss" | "name">(), query }, onState }),
+      useList({
+        ...options,
+        state: { ...emptyListState<"loss" | "name">(), search: search(query) },
+        onState,
+      }),
     {
       initialProps: { query: "" },
     },
   );
-  act(() => hook.result.current.setQuery("System"));
+  act(() => hook.result.current.setKeywords("System"));
   act(() => {
     vi.advanceTimersByTime(250);
   });
-  act(() => hook.result.current.setQuery("System 354"));
+  act(() => hook.result.current.setKeywords("System 354"));
   hook.rerender({ query: "System" });
-  expect(hook.result.current.state.query).toBe("System 354");
+  expect(hook.result.current.state.search.keywords).toBe("System 354");
   hook.rerender({ query: "kind=Return" });
-  expect(hook.result.current.state.query).toBe("kind=Return");
+  expect(hook.result.current.state.search.keywords).toBe("kind=Return");
   hook.rerender({ query: "System" });
-  expect(hook.result.current.state.query).toBe("System");
+  expect(hook.result.current.state.search.keywords).toBe("System");
   act(() => {
     vi.advanceTimersByTime(300);
   });
   expect(onState).toHaveBeenCalledTimes(1);
-  act(() => hook.result.current.setQuery("unfinished"));
+  act(() => hook.result.current.setKeywords("unfinished"));
   hook.unmount();
   act(() => {
     vi.advanceTimersByTime(300);
@@ -151,28 +162,23 @@ const options: ListOptions<Item, "loss" | "name"> = {
   stageOf: (item) => item.stage,
 };
 
-test("table grammar combines words, exact numeric IDs, negation, comparisons, counted facets and typed sort", () => {
+test("literal words AND across fields, IDs are exact, and pills narrow before separate sorting", () => {
   const model = listModel(options, {
     ...emptyListState<"loss" | "name">(),
-    query: "System !kind=Return loss>=200 sort:loss",
+    search: search("sYsTeM", { kind: "Supply" }),
+    sort: "loss",
   });
-  expect(model.shown).toBe(78);
-  expect(model.sections[0]!.rows[0]!.key).toBe("10354");
-  expect(
-    model.facets.find((field) => field.key === "kind")!.values.map((value) => value.count),
-  ).toEqual([78, 77]);
-  expect(model.sections[0]!.staged).toBe(6);
-  expect(
-    listModel(options, { ...emptyListState(), query: "10354" }).sections[0]!.rows.map(
-      (row) => row.key,
-    ),
-  ).toEqual(["10354"]);
-  expect(listModel(options, { ...emptyListState(), query: "1035" }).shown).toBe(0);
-  for (const mode of ["substring", "words"] as const) {
+  expect(model.shown).toBe(178);
+  expect(model.sections[0]!.rows[0]!.key).toBe("10198");
+  expect(model.valuesFor("kind").map((value) => value.count)).toEqual([178, 177]);
+  expect(listModel(options, { ...emptyListState(), search: search("10354") }).shown).toBe(1);
+  expect(listModel(options, { ...emptyListState(), search: search("1035") }).shown).toBe(0);
+  for (const keywords of ["kind=Supply", "air:", "!Return", '"System"', "sort:loss"])
+    expect(listModel(options, { ...emptyListState(), search: search(keywords) }).shown).toBe(0);
+  for (const mode of ["substring", "words"] as const)
     expect(
       filterItems(items, (item) => item.name, mode, '"System 2" !200').map((item) => item.name),
     ).not.toContain("System 200");
-  }
 });
 
 test("tree filtering retains ancestor context and reveal opens a closed section and every ancestor", () => {
@@ -182,12 +188,12 @@ test("tree filtering retains ancestor context and reveal opens a closed section 
       ...options,
       items: [root],
       tree: { childrenOf: (item) => item.children },
-      initialState: { query: "missing", closed: ["Active"], selected: ["10354"] },
+      initialState: { search: search("missing"), closed: ["Active"], selected: ["10354"] },
     }),
   );
   expect(result.current.shown).toBe(0);
   act(() => result.current.reveal("10354"));
-  expect(result.current.state.query).toBe("");
+  expect(result.current.state.search.keywords).toBe("");
   expect(result.current.state.closed).toEqual([]);
   expect(result.current.state.open).toEqual(["10000", "10001"]);
   expect(result.current.rows.map((row) => [row.key, row.depth])).toEqual([
@@ -196,7 +202,7 @@ test("tree filtering retains ancestor context and reveal opens a closed section 
     ["10354", 2],
   ]);
   expect(result.current.collection.cursor).toBe("10354");
-  act(() => result.current.setQuery("10354"));
+  act(() => result.current.setKeywords("10354"));
   expect(result.current.rows).toHaveLength(3);
   expect(result.current.shown).toBe(1);
   expect(JSON.parse(JSON.stringify(result.current.state))).toEqual(result.current.state);
@@ -262,14 +268,139 @@ test("popup multi still toggles on plain pick and ladders still advance", () => 
   expect(ladder.result.current.visible[0]!.key).toBe("10001");
 });
 
-test("facet choices replace positive equality alternatives and retain authored comparisons and negation", () => {
+test("new equality replaces the field in place and candidate counts retain other pills and keywords", () => {
   const { result } = renderHook(() =>
-    useList({ ...options, initialState: { query: "System kind=Supply loss>=4 !kind=Other" } }),
+    useList({
+      ...options,
+      initialState: { search: search("System", { kind: "Supply", change: "staged" }) },
+    }),
   );
-  act(() => result.current.toggleFacet("kind", "Return"));
-  expect(result.current.state.query).toBe("System loss>=4 !kind=Other kind=Return");
-  act(() => result.current.toggleFacet("kind", "Return"));
-  expect(result.current.state.query).toBe("System loss>=4 !kind=Other");
+  act(() => result.current.pickPill("kind", "Return"));
+  expect(result.current.state.search).toEqual(
+    search("System", { kind: "Return", change: "staged" }),
+  );
+  expect(result.current.valuesFor("kind").map((each) => each.count)).toEqual([14, 14]);
+  act(() => result.current.removePill("kind"));
+  expect(result.current.state.search).toEqual(search("System", { change: "staged" }));
+});
+
+test("unknown versions, fields and operators refuse instead of broadening", () => {
+  for (const invalid of [
+    { ...search(), v: 8 },
+    search("", { unknown: "x" }),
+    { ...search(), pills: [{ field: "kind", op: "!=", value: "Supply" }] },
+  ]) {
+    const model = listModel(options, { ...emptyListState(), search: invalid });
+    expect(model.refusal).toBeTruthy();
+    expect(model.shown).toBe(0);
+  }
+});
+
+test("completion is explicit, cancels losslessly, previews token removal, and replaces pills", async () => {
+  function Harness() {
+    const list = useList({ ...options, items: items.slice(0, 3) });
+    return (
+      <ListView
+        list={list}
+        aria-label="completion"
+        row={(item) => ({ label: item.name })}
+        empty={{ message: "Empty", exit: "Read rows" }}
+      />
+    );
+  }
+  render(<Harness />);
+  const input = screen.getByRole("combobox", { name: "Search completion" });
+  fireEvent.change(input, { target: { value: "System kind" } });
+  fireEvent.keyDown(input, { key: "Enter" });
+  expect(input.getAttribute("value")).toBe("System kind");
+  expect(screen.queryByRole("button", { name: /Remove the "Kind/ })).toBeNull();
+  fireEvent.keyDown(input, { key: "ArrowDown" });
+  expect(input.getAttribute("aria-activedescendant")).toBeTruthy();
+  fireEvent.keyDown(input, { key: "Enter" });
+  const picker = screen.getByRole("combobox", { name: "Choose Kind" });
+  expect(screen.getByRole("option", { name: /Supply2/ })).toBeTruthy();
+  fireEvent.keyDown(picker, { key: "Escape" });
+  expect(input.getAttribute("value")).toBe("System kind");
+  fireEvent.keyDown(input, { key: "ArrowDown" });
+  fireEvent.keyDown(input, { key: "Enter" });
+  fireEvent.click(screen.getByRole("option", { name: /Supply2/ }));
+  expect(input.getAttribute("value")).toBe("System");
+  expect(screen.getByRole("button", { name: 'Remove the "Kind: Supply" narrowing' })).toBeTruthy();
+  fireEvent.click(screen.getByRole("button", { name: "Kind: Supply" }));
+  fireEvent.click(screen.getByRole("option", { name: /Return1/ }));
+  expect(screen.queryByRole("button", { name: 'Remove the "Kind: Supply" narrowing' })).toBeNull();
+  expect(screen.getByRole("button", { name: 'Remove the "Kind: Return" narrowing' })).toBeTruthy();
+  fireEvent.keyDown(input, { key: "Escape" });
+  expect(input.getAttribute("value")).toBe("");
+  fireEvent.compositionStart(input);
+  fireEvent.keyDown(input, { key: "Backspace", isComposing: true });
+  expect(screen.getByRole("button", { name: 'Remove the "Kind: Return" narrowing' })).toBeTruthy();
+  fireEvent.compositionEnd(input);
+  fireEvent.keyDown(input, { key: "Escape" });
+  expect(screen.queryByRole("button", { name: /Remove the "Kind/ })).toBeNull();
+});
+
+test("Filter preserves keywords, exposes disabled zero values, and Enter never picks a data row", () => {
+  const picked = vi.fn();
+  function Harness() {
+    const list = useList({ ...options, items: items.slice(0, 3), onPick: picked });
+    return (
+      <ListView
+        list={list}
+        aria-label="button search"
+        row={(item) => ({ label: item.name })}
+        empty={{ message: "Empty", exit: "Read rows" }}
+      />
+    );
+  }
+  render(<Harness />);
+  const input = screen.getByRole("combobox", { name: "Search button search" });
+  fireEvent.change(input, { target: { value: "air:" } });
+  expect(input.getAttribute("aria-expanded")).toBe("false");
+  fireEvent.keyDown(input, { key: "Escape" });
+  expect(input.getAttribute("value")).toBe("");
+  fireEvent.change(input, { target: { value: "System 0" } });
+  fireEvent.click(screen.getByRole("button", { name: "Filter button search" }));
+  fireEvent.click(screen.getByRole("option", { name: "Filter by Kind" }));
+  const zero = screen.getByRole("option", { name: /Return0/ });
+  expect(zero.getAttribute("aria-disabled")).toBe("true");
+  fireEvent.click(zero);
+  expect(screen.queryByRole("button", { name: /Remove the "Kind/ })).toBeNull();
+  fireEvent.click(screen.getByRole("option", { name: /Supply1/ }));
+  expect(input.getAttribute("value")).toBe("System 0");
+  fireEvent.keyDown(input, { key: "Enter" });
+  expect(picked).not.toHaveBeenCalled();
+  fireEvent.click(screen.getByRole("button", { name: "Clear search" }));
+  expect(input.getAttribute("value")).toBe("");
+  expect(screen.queryByRole("button", { name: /Remove the "Kind/ })).toBeNull();
+});
+
+test("a pill publishes immediately once; scope change and unmount cancel delayed search", () => {
+  vi.useFakeTimers();
+  const onState = vi.fn();
+  const state = { ...emptyListState<"name" | "loss">(), search: search() };
+  const hook = renderHook(({ scope }) => useList({ ...options, state, onState, scope }), {
+    initialProps: { scope: "A" },
+  });
+  act(() => hook.result.current.pickPill("kind", "Supply"));
+  expect(onState).toHaveBeenCalledTimes(1);
+  act(() => {
+    vi.advanceTimersByTime(300);
+  });
+  expect(onState).toHaveBeenCalledTimes(1);
+  act(() => hook.result.current.setKeywords("pending"));
+  hook.rerender({ scope: "B" });
+  expect(hook.result.current.state.search).toEqual(search());
+  act(() => {
+    vi.advanceTimersByTime(300);
+  });
+  expect(onState).toHaveBeenCalledTimes(1);
+  act(() => hook.result.current.setKeywords("pending"));
+  hook.unmount();
+  act(() => {
+    vi.advanceTimersByTime(300);
+  });
+  expect(onState).toHaveBeenCalledTimes(1);
 });
 
 test("tiny lists render through the same rows without ResizeObserver or viewport geometry", () => {
@@ -396,7 +527,7 @@ test("renderer mounts a bounded viewport, exposes drop targets and distinguishes
   fireEvent.click(head);
   expect(head.getAttribute("aria-expanded")).toBe("true");
   await waitFor(() => expect(scroll).toHaveBeenCalled());
-  fireEvent.change(screen.getByRole("textbox", { name: "Search test systems" }), {
+  fireEvent.change(screen.getByRole("combobox", { name: "Search test systems" }), {
     target: { value: "no-such-system" },
   });
   expect(container.querySelector('[data-story="filter"]')).not.toBeNull();
@@ -420,7 +551,7 @@ test("row editors and controls keep native keys without moving, expanding, picki
       items: [root],
       tree: { childrenOf: (item) => item.children },
       onPick: picked,
-      initialState: { query: "System" },
+      initialState: { search: search("System") },
     }),
   );
   act(() => {
@@ -490,11 +621,12 @@ test("an external combobox inside another row retains collection keys and ListBa
     );
   }
   render(<Harness />);
-  const query = screen.getByRole("textbox", { name: "Search query keys" });
+  const query = screen.getByRole("combobox", { name: "Search query keys" });
   query.focus();
   fireEvent.keyDown(query, { key: "ArrowDown" });
   fireEvent.keyDown(query, { key: "Enter" });
-  expect(pick).toHaveBeenCalledWith(items[1]);
+  expect(pick).not.toHaveBeenCalled();
+  expect(screen.getByRole("combobox", { name: "Choose Kind" })).toBeTruthy();
 });
 
 test("list help declares pointer behavior and keeps cursor keys registered once", () => {

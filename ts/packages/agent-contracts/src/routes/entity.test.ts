@@ -53,7 +53,7 @@ describe("an entity route's address", () => {
 
   test("/pods: the open member is read-only to Pea; the runs scope is Pea's", () => {
     const pods = routeAddress("pods");
-    expect(Object.keys(pods.agent.fields.shape)).toEqual(["threadQuery", "threadSort", "runs"]);
+    expect(Object.keys(pods.agent.fields.shape)).toEqual(["threadSearch", "threadSort", "runs"]);
     expect(pods.link({ pod: "p", path: "a.json", runs: "pod" })).toBe(
       "/pods?pod=p&path=a.json&runs=pod",
     );

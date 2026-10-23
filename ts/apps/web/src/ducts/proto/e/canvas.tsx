@@ -7,7 +7,7 @@
  */
 import { useEffect, useMemo, useRef, useState } from "react";
 
-import { DUCTS_LAYERS, toggleLayer } from "@pe/agent-contracts";
+import { DUCTS_LAYERS, emptyListSearch, toggleLayer } from "@pe/agent-contracts";
 import { snapshotById } from "@pe/ducts-domain/readiness";
 import { noRunBranches } from "@pe/ducts-domain/no-runs";
 import { systemScope } from "@pe/ducts-domain/system-scope";
@@ -289,7 +289,7 @@ function Canvas({
     const finding =
       r.kind === "claim" ? `claim:${r.claim.id}` : r.kind === "issue" ? r.issue.id : r.finding.id;
     const issue = issues.find((i) => i.findings.includes(finding))?.key ?? finding;
-    setPage({ selected: String(r.at), issue, rulingQuery: "" }, { history: "push" });
+    setPage({ selected: String(r.at), issue, rulingSearch: emptyListSearch() }, { history: "push" });
     setOpen({ what: "ruling", n: r.n, ...at });
   };
   const schematic = (size: "main" | "inset") => (

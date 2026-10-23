@@ -1,3 +1,4 @@
+import type { ListSearch } from "@pe/agent-contracts";
 import { useNavigate, useRouterState } from "@tanstack/react-router";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useAtomRefresh, useAtomValue } from "@effect/atom-react";
@@ -132,16 +133,17 @@ function ChatSurface({ target, docked = false }: ChatShellProps) {
   const sidebarAddress = routeAddress(routeAt(location.pathname) ?? "pea");
   const sidebarPage = sidebarAddress.read(location.search).page;
   const threadListAddress = {
-    query: sidebarPage.threadQuery,
+    scope: location.pathname,
+    search: sidebarPage.threadSearch,
     sort: sidebarPage.threadSort,
-    onChange: (threadQuery: string, threadSort: "recent" | "title" | "") => {
+    onChange: (threadSearch: ListSearch, threadSort: "recent" | "title" | "") => {
       void navigate({
         to: ".",
         replace: true,
         resetScroll: false,
         search: (previous: Record<string, unknown>) => ({
           ...previous,
-          ...sidebarAddress.write({ threadQuery, threadSort }),
+          ...sidebarAddress.write({ threadSearch, threadSort }),
         }),
       });
     },

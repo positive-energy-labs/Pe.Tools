@@ -16,11 +16,11 @@ import { Button } from "@pe/kit/lang/button";
 import { systemSearch } from "@pe/ducts-domain/system-search";
 import { useList, emptyListState } from "@pe/kit/lang/collection";
 import { ListView } from "@pe/kit/lang/list-view";
-import { readQuery } from "@pe/kit/table/view";
 import { Pane } from "#/components/lang/pane";
 import { PaneSplit } from "#/components/lang/pane-resize";
 
 import { airflowOptions } from "../../airflow";
+import { systemsNeedingFix } from "../../system-list-search";
 import { elementNamer } from "../../claims";
 import { noRunParts, subjectNamer, type SubjectReference } from "../../subject-text";
 import { noRunBranches } from "@pe/ducts-domain/no-runs";
@@ -227,6 +227,10 @@ function EScreenBody({ props }: { props: ProtoProps }) {
   const preview = props.work.preview as DuctsApply.Res.Response | null;
   // What heals in Revit is planned over the raw snapshot (the tolerated one has bridged it already).
   const heal = useMemo(() => (snapshot ? healPlan(snapshot, doc) : null), [snapshot, doc]);
+  const needsFix = useMemo(
+    () => (surveyed ? systemsNeedingFix(surveyed, doc, heal) : new Set<string>()),
+    [surveyed, doc, heal],
+  );
   const healRun = useMemo(
     () =>
       page.heal && surveyed
@@ -469,11 +473,10 @@ function EScreenBody({ props }: { props: ProtoProps }) {
   const [treeCollapsed, setTreeCollapsed] = useState<boolean | null>(null);
   const [rootRef, width] = useWidth();
   // The picture annotates the Fix rows' findings, or the Diagnostics kind picked in its key.
-  const kindClause = readQuery(page.rulingQuery).find(
-    (clause) =>
-      clause.kind === "field" && clause.label === "kind" && clause.op === "=" && !clause.not,
+  const kindClause = page.rulingSearch.pills.find(
+    (pill) => pill.field === "kind" && pill.op === "=",
   );
-  const diagnosticKind = kindClause?.kind === "field" ? kindClause.value : "";
+  const diagnosticKind = kindClause?.value ?? "";
   const annotated = useMemo(
     () => (inbox ? annotatedFindings(inbox, heal, diagnosticKind) : new Set<string>()),
     [inbox, heal, diagnosticKind],
@@ -617,9 +620,11 @@ function EScreenBody({ props }: { props: ProtoProps }) {
         <SystemTree
           key={scope?.name}
           address={{
-            query: page.treeQuery,
+            scope: `${page.system}:${page.epoch}`,
+            search: page.treeSearch,
             sort: page.treeSort,
-            onChange: (treeQuery, treeSort) => setPage({ treeQuery, treeSort }),
+            onChange: (treeSearch, treeSort) =>
+              setPage({ treeSearch, treeSort }, { history: "replace" }),
           }}
           ctx={{
             trees: tree,
@@ -652,7 +657,13 @@ function EScreenBody({ props }: { props: ProtoProps }) {
       scroll="auto"
       flush
     >
-      <SystemsList systems={systems} drawn={drawn} page={page} setPage={setPage} />
+      <SystemsList
+        systems={systems}
+        needsFix={needsFix}
+        drawn={drawn}
+        page={page}
+        setPage={setPage}
+      />
     </Pane>
   );
   const rulesPane = (wide: boolean) => (
@@ -693,9 +704,11 @@ function EScreenBody({ props }: { props: ProtoProps }) {
       >
         <InputsPane
           address={{
-            query: page.inputQuery,
+            scope: `${page.system}:${page.epoch}`,
+            search: page.inputSearch,
             sort: page.inputSort,
-            onChange: (inputQuery, inputSort) => setPage({ inputQuery, inputSort }),
+            onChange: (inputSearch, inputSort) =>
+              setPage({ inputSearch, inputSort }, { history: "replace" }),
           }}
           fanVerbs={fanVerbsOf}
           snapshot={drawn ?? snapshot}
@@ -792,10 +805,11 @@ function EScreenBody({ props }: { props: ProtoProps }) {
           onIssueHover={setHoveredIssue}
           onPick={() => setPage({ issue: "" }, { history: "replace" })}
           address={{
-            query: page.rulingQuery,
+            scope: `${page.system}:${page.epoch}`,
+            search: page.rulingSearch,
             sort: page.rulingSort,
-            onChange: (rulingQuery, rulingSort) =>
-              setPage({ rulingQuery, rulingSort }, { history: "replace" }),
+            onChange: (rulingSearch, rulingSort) =>
+              setPage({ rulingSearch, rulingSort }, { history: "replace" }),
           }}
         />
       ) : null}
@@ -882,11 +896,13 @@ function EScreenBody({ props }: { props: ProtoProps }) {
 /** Keep query renders below the model, drawing and ruling builders. */
 function SystemsList({
   systems,
+  needsFix,
   drawn,
   page,
   setPage,
 }: {
   systems: ReturnType<typeof systemList>;
+  needsFix: ReadonlySet<string>;
   drawn: ProtoProps["snapshot"];
   page: ProtoProps["page"];
   setPage: ProtoProps["setPage"];
@@ -900,22 +916,60 @@ function SystemsList({
     [searchable],
   );
   const systemListView = useList({
+    scope: String(page.epoch),
     items: systems,
     keyOf: (system) => system.key,
     search,
     fields: {
-      status: { kind: "text", read: (system) => (system.total == null ? "unpriced" : "priced") },
+      airType: {
+        label: "Air type",
+        kind: "text",
+        read: (system) => system.classification,
+        values: [
+          ...new Set([
+            "SupplyAir",
+            "ReturnAir",
+            "ExhaustAir",
+            ...systems.flatMap((system) => system.classification ?? []),
+          ]),
+        ],
+        labels: new Map([
+          ["SupplyAir", "Supply"],
+          ["ReturnAir", "Return"],
+          ["ExhaustAir", "Exhaust"],
+        ]),
+      },
+      status: {
+        label: "Price status",
+        kind: "text",
+        read: (system) => (system.total == null ? "unpriced" : "priced"),
+        values: ["priced", "unpriced"],
+        labels: new Map([
+          ["priced", "Priced"],
+          ["unpriced", "Unpriced"],
+        ]),
+      },
+      needsFix: {
+        label: "Needs a fix",
+        kind: "text",
+        read: (system) => (needsFix.has(system.key) ? "yes" : "no"),
+        values: ["yes", "no"],
+        labels: new Map([
+          ["yes", "Yes"],
+          ["no", "No"],
+        ]),
+      },
     },
     sorts: { name: (system) => system.name, loss: (system) => -(system.total ?? -Infinity) },
     state: {
       ...emptyListState<"name" | "loss">(),
-      query: page.systemQuery,
+      search: page.systemSearch,
       sort: page.systemSort,
       selected: page.system ? [page.system] : [],
     },
     onState: (next) => {
-      if (next.query !== page.systemQuery || next.sort !== page.systemSort)
-        setPage({ systemQuery: next.query, systemSort: next.sort }, { history: "replace" });
+      if (next.search !== page.systemSearch || next.sort !== page.systemSort)
+        setPage({ systemSearch: next.search, systemSort: next.sort }, { history: "replace" });
     },
     onPick: (system) => setPage({ system: system.key, selected: "", issue: "" }),
   });

@@ -5,6 +5,7 @@
  * it once, and F with nothing selected clears to fit. With no meshes yet the annotations still draw
  * over the fit of the subject's centrelines; the camera then turns by the globe only.
  */
+import { emptyListSearch } from "@pe/agent-contracts";
 import { useEffect, useMemo, useRef, useState, useSyncExternalStore } from "react";
 
 import { useScopeGestures, useScopeKeys } from "@pe/kit/keys";
@@ -132,7 +133,7 @@ export function ModelPicture({
   const meshes = read.meshes;
   const pickIssue = (target: IssueTarget) => {
     setPage(
-      { selected: String(target.elementId), issue: target.key, rulingQuery: "" },
+      { selected: String(target.elementId), issue: target.key, rulingSearch: emptyListSearch() },
       { history: "push" },
     );
   };

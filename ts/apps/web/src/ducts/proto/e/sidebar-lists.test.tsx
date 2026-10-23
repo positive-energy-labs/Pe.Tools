@@ -1,3 +1,9 @@
+import { emptyListSearch, pickListPill } from "@pe/agent-contracts";
+const search = (keywords = "", pills: Record<string, string> = {}) =>
+  Object.entries(pills).reduce((s, [field, value]) => pickListPill(s, field, value), {
+    ...emptyListSearch(),
+    keywords,
+  });
 // @vitest-environment jsdom
 import { useState } from "react";
 import { cleanup, fireEvent, render, screen, waitFor, within } from "@testing-library/react";
@@ -113,13 +119,13 @@ test("manual expansion survives selection elsewhere and the list owns tree keybo
 test("address query and name sort round trip; revealing an excluded selection never clears authored grammar", async () => {
   const changed = vi.fn();
   function AddressTree({ selected = 20 }: { selected?: number }) {
-    const [query, setQuery] = useState("kind=element 10");
+    const [query, setQuery] = useState(search("10", { kind: "element" }));
     const [sort, setSort] = useState<"" | "name">("name");
     return (
       <SystemTree
         ctx={context({ selected })}
         address={{
-          query,
+          search: query,
           sort,
           onChange: (q, s) => {
             changed(q, s);
@@ -131,16 +137,16 @@ test("address query and name sort round trip; revealing an excluded selection ne
     );
   }
   const view = render(<AddressTree />);
-  const input = screen.getByRole("textbox", { name: "Search system tree" });
-  expect(input.getAttribute("value")).toBe("kind=element 10");
+  const input = screen.getByRole("combobox", { name: "Search system tree" });
+  expect(input.getAttribute("value")).toBe("10");
   expect(document.querySelector('[data-key="part20"]')).toBeNull();
   expect(changed).not.toHaveBeenCalled();
   view.rerender(<AddressTree selected={10} />);
   expect(keyed("part10").getAttribute("aria-selected")).toBe("true");
-  expect(input.getAttribute("value")).toBe("kind=element 10");
+  expect(input.getAttribute("value")).toBe("10");
   expect(changed).not.toHaveBeenCalled();
-  fireEvent.change(input, { target: { value: "" } });
-  await waitFor(() => expect(changed).toHaveBeenLastCalledWith("", "name"));
+  fireEvent.click(screen.getByRole("button", { name: "Clear search" }));
+  await waitFor(() => expect(changed).toHaveBeenLastCalledWith(search(), "name"));
   const runs = screen
     .getAllByRole("treeitem")
     .filter((row) => row.querySelector('[data-e-kind="run"]'));
@@ -204,7 +210,7 @@ test("inputs use address grammar/name order and retain the unpriced waiting stat
   const changed = vi.fn();
   const props = inputs({
     selected: 20,
-    address: { query: "kind=grille", sort: "name", onChange: changed },
+    address: { search: search("", { kind: "grille" }), sort: "name", onChange: changed },
   });
   const view = render(<InputsPane {...props} />);
   expect(screen.getAllByRole("option").map((row) => row.getAttribute("data-key"))).toEqual([
@@ -212,10 +218,12 @@ test("inputs use address grammar/name order and retain the unpriced waiting stat
     "grille:20",
   ]);
   expect(changed).not.toHaveBeenCalled();
-  fireEvent.change(screen.getByRole("textbox", { name: "Search inputs" }), {
+  fireEvent.change(screen.getByRole("combobox", { name: "Search inputs" }), {
     target: { value: "10" },
   });
-  await waitFor(() => expect(changed).toHaveBeenCalledWith("10", "name"));
+  await waitFor(() =>
+    expect(changed).toHaveBeenCalledWith(search("10", { kind: "grille" }), "name"),
+  );
   view.rerender(<InputsPane {...inputs({ priced: null })} />);
   expect(
     screen.getByText("flow, ESP and role cells open once the loss tables are read"),

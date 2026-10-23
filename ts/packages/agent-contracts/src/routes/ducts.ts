@@ -1,3 +1,4 @@
+import { listSearchKey, listSearchCodec } from "../list-search.ts";
 import { z } from "zod";
 import {
   fitViewportCodec,
@@ -31,13 +32,37 @@ const ductsFields = {
   level: field(text(), { url: "push", agent: "set" }),
   /** The selected element id; empty = none. */
   selected: field(text(), { url: "push", agent: "set" }),
-  systemQuery: field(z.string().max(4000).default(""), { url: "replace", agent: "set" }),
+  systemSearch: field(
+    listSearchKey().describe(
+      "JSON {v:1,keywords:string,pills:[{field,op:'=',value}]}. Literal AND keywords and equality pills: airType (SupplyAir, ReturnAir, ExhaustAir), status (priced, unpriced), needsFix (yes, no). Needs a fix means at least one scoped Fix row holds the price.",
+    ),
+    { url: "replace", agent: "set" },
+    listSearchCodec,
+  ),
   systemSort: field(z.enum(["", "name", "loss"]).default(""), { url: "replace", agent: "set" }),
-  rulingQuery: field(z.string().max(4000).default(""), { url: "replace", agent: "set" }),
+  rulingSearch: field(
+    listSearchKey().describe(
+      "JSON {v:1,keywords:string,pills:[{field,op:'=',value}]}. Literal AND keywords and equality pills: kind, section, status, change (clean, proposed, staged).",
+    ),
+    { url: "replace", agent: "set" },
+    listSearchCodec,
+  ),
   rulingSort: field(z.enum(["", "name", "status"]).default(""), { url: "replace", agent: "set" }),
-  treeQuery: field(z.string().max(4000).default(""), { url: "replace", agent: "set" }),
+  treeSearch: field(
+    listSearchKey().describe(
+      "JSON {v:1,keywords:string,pills:[{field,op:'=',value}]}. Literal AND keywords and equality pills: kind (system, run, leg, element). Element IDs match exactly; ancestors provide context.",
+    ),
+    { url: "replace", agent: "set" },
+    listSearchCodec,
+  ),
   treeSort: field(z.enum(["", "name"]).default(""), { url: "replace", agent: "set" }),
-  inputQuery: field(z.string().max(4000).default(""), { url: "replace", agent: "set" }),
+  inputSearch: field(
+    listSearchKey().describe(
+      "JSON {v:1,keywords:string,pills:[{field,op:'=',value}]}. Literal AND keywords and equality pills: kind. Element IDs match exactly.",
+    ),
+    { url: "replace", agent: "set" },
+    listSearchCodec,
+  ),
   inputSort: field(z.enum(["", "name"]).default(""), { url: "replace", agent: "set" }),
   /** The picture's encoding, a key of the web's `ENCODINGS`. */
   encoding: field(z.string().max(200).default("health"), { url: "push", agent: "set" }),

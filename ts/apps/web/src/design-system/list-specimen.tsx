@@ -1,3 +1,4 @@
+import { listSearchSchema, emptyListSearch } from "@pe/agent-contracts";
 /**
  * The /design-system/list specimen: every list KIND the app draws, side by side on the one `Row`
  * and the one `useCollection`, over real fixtures (chat seeds, demo pods, three synthetic zones, the
@@ -515,7 +516,7 @@ export function readCoreListState(raw: string | undefined): ListState<SpecimenSo
         ? (input[name] as unknown[]).filter((key): key is string => typeof key === "string")
         : [];
     return {
-      query: typeof input.query === "string" ? input.query : "",
+      search: listSearchSchema.safeParse(input.search).data ?? emptyListSearch(),
       sort: input.sort === "name" || input.sort === "loss" ? input.sort : "",
       closed: keys("closed"),
       open: keys("open"),

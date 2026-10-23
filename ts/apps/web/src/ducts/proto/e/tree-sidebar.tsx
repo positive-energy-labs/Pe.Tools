@@ -1,3 +1,4 @@
+import { type ListSearch } from "@pe/agent-contracts";
 import { TooltipHint } from "@pe/kit/lang/tooltip";
 /**
  * THROWAWAY (protoui round 3, E2 "tree sidebar"): B's topology (system → runs → legs → elements) as
@@ -122,9 +123,10 @@ export function SystemTree({
 }: {
   ctx: TreeCtx;
   address?: {
-    query: string;
+    scope?: string;
+    search: ListSearch;
     sort: "" | "name";
-    onChange: (query: string, sort: "" | "name") => void;
+    onChange: (search: ListSearch, sort: "" | "name") => void;
   };
 }) {
   const observation = useNativeObservation();
@@ -147,6 +149,7 @@ export function SystemTree({
         : node.name;
   const idOf = (node: TreeNode) => (node.kind === "run" ? node.terminal : node.id);
   const list = useList<TreeNode, "name">({
+    scope: address?.scope,
     items: ctx.trees,
     keyOf: (node) => node.key,
     tree: { childrenOf: (node) => node.children },
@@ -163,11 +166,11 @@ export function SystemTree({
     },
     sorts: { name: labelOf },
     select: "single",
-    state: { ...state, query: address?.query ?? state.query, sort: address?.sort ?? state.sort },
+    state: { ...state, search: address?.search ?? state.search, sort: address?.sort ?? state.sort },
     onState: (next) => {
       setState(next);
-      if (address && (next.query !== address.query || next.sort !== address.sort))
-        address.onChange(next.query, next.sort);
+      if (address && (next.search !== address.search || next.sort !== address.sort))
+        address.onChange(next.search, next.sort);
     },
     onPick: (node) => ctx.select(idOf(node)),
   });

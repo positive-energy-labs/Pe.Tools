@@ -149,14 +149,14 @@ export function Directory({ page: address }: { page: AddressPage<"home"> }) {
     tree: { childrenOf: (item) => (item.kind === "tool" ? item.works : []) },
     state: {
       ...local,
-      query,
+      search: { v: 1, keywords: query, pills: [] },
       sort,
       open: tools.filter((tool) => !folded.includes(tool.to)).map((tool) => tool.to),
     },
     onState: (next) => {
       setLocal(next);
       setPage({
-        query: next.query,
+        query: next.search.keywords,
         sort: next.sort || "workflow",
         folded: [
           ...folded.filter((path) => !tools.some((tool) => tool.to === path)),

@@ -66,10 +66,21 @@ function addressPage<P>(key: string, route: RouteKey, page: z.ZodType<P> | undef
   // Every way into the address (a navigate, a Link) writes the URL keys as their codec does.
   const encode: SearchMiddleware<Record<string, unknown>> = ({ search, next }) => {
     const out = { ...next(search) };
-    // The router's search is untyped; the address reads only its own keys from it.
-    for (const [name, text] of Object.entries(write(out as Partial<P>)))
+    // A navigation can supply typed Page values or values already written by the codec.
+    // Read first so an object codec cannot JSON-stringify its own encoded string twice.
+    const normalized = read(out);
+    for (const [name, text] of Object.entries(write(normalized))) {
+      if (!(name in out)) continue;
       if (text === undefined) delete out[name];
-      else out[name] = text;
+      else {
+        const value = (normalized as Record<string, unknown>)[name];
+        // TanStack serializes objects itself; other codecs (orbit poses, comma lists) keep text.
+        out[name] =
+          value !== null && typeof value === "object" && JSON.stringify(value) === text
+            ? value
+            : text;
+      }
+    }
     return out;
   };
   return {
