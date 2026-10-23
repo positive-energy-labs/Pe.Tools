@@ -2,8 +2,8 @@
  * Providers and agent approvals come from the shared Machine reading. Mutations invalidate it.
  */
 import { useCallback, useMemo, useState } from "react";
-import type { AddProviderRequest, Machine, Provider } from "@pe/agent-contracts";
-import { dirty, useReading } from "#/readings";
+import type { AddProviderRequest, Machine, Provider, Reading } from "@pe/agent-contracts";
+import { dirty, useReadingSlice } from "#/readings";
 import { machineOf } from "#/machine/model";
 import { harnessClient } from "./harness-client";
 import { errorMessage } from "./use-workbench";
@@ -67,10 +67,19 @@ export function loginLine(
 
 export function useProviders(origin: string, enabled = true, snapshot?: Machine) {
   const client = useMemo(() => harnessClient(origin), [origin]);
-  const reading = useReading<Machine>(enabled && !snapshot ? { kind: "machine" } : null);
-  const machine = snapshot ?? machineOf(reading);
-  const list = machine?.providers ? [...machine.providers] : undefined;
-  const access = machine?.access ?? undefined;
+  const observed = useReadingSlice(
+    enabled && !snapshot ? { kind: "machine" } : null,
+    (reading: Reading<Machine>) => {
+      const machine = snapshot ?? machineOf(reading);
+      return {
+        list: machine?.providers,
+        access: machine?.access ?? undefined,
+        error: machine?.legs.providers?.error ?? machine?.access?.readError,
+      };
+    },
+  );
+  const list = useMemo(() => (observed.list ? [...observed.list] : undefined), [observed.list]);
+  const access = observed.access;
   const [error, setError] = useState<string>();
   const [login, setLogin] = useState<Record<string, Login>>({});
   const run = useCallback(async (work: () => Promise<unknown>) => {
@@ -87,7 +96,7 @@ export function useProviders(origin: string, enabled = true, snapshot?: Machine)
   return {
     list,
     access,
-    error: error ?? machine?.legs.providers?.error ?? access?.readError,
+    error: error ?? observed.error,
     probe,
     login,
     /** The harness's own login (or installer) in a console on this machine; re-probed on return. */

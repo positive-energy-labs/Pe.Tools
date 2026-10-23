@@ -11,7 +11,9 @@ import { harnessThreadBodySchema, readingFrameSchema, readingKey } from "@pe/age
 import { emptyChatState } from "@pe/agent-contracts/chat-state";
 import { RegistryContext } from "@effect/atom-react";
 
-import { PeReadings, readingAtom, previousOf, useReadingSlice } from "./readings";
+import { PeReadings, peReadings, readingAtom, previousOf, useReadingSlice } from "./readings";
+import { useProviders } from "./workbench/provider/providers";
+import { machineFixture } from "../../../packages/agent-contracts/tests/machine-fixture";
 import { useThreadStream } from "./workbench/provider/thread-stream";
 
 type Fake = {
@@ -183,6 +185,49 @@ afterEach(() => {
   cleanup();
   vi.useRealTimers();
   vi.unstubAllGlobals();
+});
+
+test("the composer provider helper ignores Machine polling metadata but follows its own error", async () => {
+  const { readings, sources } = owner();
+  const subscription = vi
+    .spyOn(peReadings, "subscribe")
+    .mockImplementation((request, accept) => readings.subscribe(request, accept));
+  const registry = AtomRegistry.make();
+  let renders = 0;
+  function Probe() {
+    const providers = useProviders("http://127.0.0.1:5180");
+    renders++;
+    return <output>{providers.error ?? "ready"}</output>;
+  }
+  const view = render(
+    <RegistryContext.Provider value={registry}>
+      <Probe />
+    </RegistryContext.Provider>,
+  );
+  await vi.waitFor(() => expect(sources).toHaveLength(1));
+  const machine = { ...machineFixture(), providers: [] };
+  const send = (value: typeof machine) =>
+    act(() =>
+      sources[0]!.onmessage!({
+        data: JSON.stringify({ kind: "snapshot", key: readingKey({ kind: "machine" }), value }),
+      }),
+    );
+  send(machine);
+  const before = renders;
+  send({ ...machine, observedAtUtc: "2026-10-23T06:00:00Z" });
+  expect(renders).toBe(before);
+  send({
+    ...machine,
+    legs: {
+      ...machine.legs,
+      providers: { observedAtUtc: null, attemptedAtUtc: null, error: "provider unavailable" },
+    },
+  });
+  expect(view.container.textContent).toBe("provider unavailable");
+  view.unmount();
+  registry.dispose();
+  readings.close();
+  subscription.mockRestore();
 });
 
 test("a faulted stream goes stale, reconnects with backoff, and only fresh data clears it", async () => {
