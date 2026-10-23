@@ -1,4 +1,4 @@
-import { useRouteSearch } from "#/route/activity";
+import { useRouteSearchSlice } from "#/route/activity";
 import { createFileRoute } from "@tanstack/react-router";
 import { TakeoffsRoute } from "#/takeoff/route";
 import { urlPage } from "#/route";
@@ -24,6 +24,6 @@ export const Route = createFileRoute("/takeoffs")({
 });
 
 function TakeoffsFileRoute() {
-  const { target, work } = useRouteSearch("takeoffs");
+  const { target, work } = useRouteSearchSlice(({ target, work }) => ({ target, work }));
   return <TakeoffsRoute target={target} work={work} />;
 }

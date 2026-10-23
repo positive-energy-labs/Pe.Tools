@@ -25,10 +25,10 @@ import { LadderPicker, useDocumentLadder } from "#/route/situation-ladder";
 import { bindDuctsManifest, reconcileDuctsMembers, type LoadedDuctsReading } from "./manifest";
 import { pendingCount, WRITTEN } from "@pe/ducts-domain/staged";
 import { withStoredRulings } from "@pe/ducts-domain/rulings";
-import { price } from "@pe/ducts-domain/pricing";
+import { usePricing } from "./use-pricing";
+import type { PricingInput } from "./pricing-job";
 import { worstRun } from "@pe/ducts-domain/losses";
 import { systemScope, systemsOf } from "@pe/ducts-domain/system-scope";
-import { readiness } from "@pe/ducts-domain/readiness";
 import { verdictPatches } from "./claims";
 import { claimsOf, type Claim } from "./legs";
 import { claimsForGroup } from "@pe/ducts-domain/claims";
@@ -77,11 +77,12 @@ export function DuctsRoute({ url = true }: { url?: boolean } = {}) {
   const manifest = useMemo(() => bindDuctsManifest(() => loadedReading.current), []);
   // The snapshot and tables are read below, once the target resolves; the verbs see them here.
   const [provided, setProvided] = useState<
-    Record<"ducts" | "tables" | "catalogs", Reading<unknown>>
+    Record<"ducts" | "tables" | "catalogs" | "pricing", Reading<unknown>>
   >({
     ducts: { state: "absent" },
     tables: { state: "absent" },
     catalogs: { state: "absent" },
+    pricing: { state: "absent" },
   });
   const handle = useRoute(manifest, { target: chosen, thread, provided, url });
   const [page, setPage] = handle.page;
@@ -117,13 +118,6 @@ export function DuctsRoute({ url = true }: { url?: boolean } = {}) {
   const pending = demo ? false : read.pending;
   const catalogs = useDuctCatalogs(page.epoch);
   const tables = useDuctTables(doc?.session ?? null);
-  useEffect(() => {
-    setProvided({
-      catalogs: { state: "ready", observation: catalogs.tables },
-      ducts: snapshot ? { state: "ready", observation: snapshot } : { state: "absent" },
-      tables: tables.grids ? { state: "ready", observation: tables.grids } : { state: "absent" },
-    });
-  }, [snapshot, tables.grids, catalogs.tables]);
   // The system's groups (Work's subject cells and claims key on group ids, never shown).
   const systemGroups = useMemo(
     () => (snapshot && page.system ? systemScope(snapshot, page.system).groups : []),
@@ -172,22 +166,42 @@ export function DuctsRoute({ url = true }: { url?: boolean } = {}) {
         : null,
     [demo, subjectIds, claims, handle.work.doc, onVerdict],
   );
-  // Pricing a large model takes a few seconds: a snapshot is first priced only after a paint that
-  // says "pricing…"; a Work change on a priced snapshot reprices in place (the cache keeps the
-  // snapshot's solve, so only `next` is redone).
-  const [painted, setPainted] = useState<object | null>(null);
-  useEffect(() => {
-    if (!snapshot || !tables.grids || painted === snapshot) return;
-    const timer = setTimeout(() => setPainted(snapshot), 0);
-    return () => clearTimeout(timer);
-  }, [snapshot, tables.grids, painted]);
-  const priced = useMemo(
+  const pricingInput = useMemo<PricingInput | null>(
     () =>
-      snapshot && tables.grids && painted === snapshot
-        ? price(snapshot, tables.grids, handle.work.doc, catalogs.tables)
+      snapshot && tables.grids && !pending
+        ? {
+            snapshot,
+            grids: tables.grids,
+            catalogs: catalogs.tables,
+            doc: handle.work.doc,
+            revision: handle.work.revision,
+            epoch: page.epoch,
+            documentKey,
+          }
         : null,
-    [snapshot, tables.grids, painted, handle.work.doc, catalogs.tables],
+    [
+      snapshot,
+      tables.grids,
+      catalogs.tables,
+      pending,
+      handle.work.doc,
+      handle.work.revision,
+      page.epoch,
+      documentKey,
+    ],
   );
+  const pricingState = usePricing(pricingInput);
+  const priced = pricingState.observation?.result.priced ?? null;
+  useEffect(() => {
+    setProvided({
+      pricing: pricingState.observation
+        ? { state: "ready", observation: pricingState.observation }
+        : { state: "absent" },
+      catalogs: { state: "ready", observation: catalogs.tables },
+      ducts: snapshot ? { state: "ready", observation: snapshot } : { state: "absent" },
+      tables: tables.grids ? { state: "ready", observation: tables.grids } : { state: "absent" },
+    });
+  }, [snapshot, tables.grids, catalogs.tables, pricingState.observation]);
   const reading = useMemo<LoadedDuctsReading | null>(
     () => (snapshot ? { snapshot, drawn: priced?.snapshot ?? null, claims: claimCells } : null),
     [snapshot, priced?.snapshot, claimCells],
@@ -213,24 +227,28 @@ export function DuctsRoute({ url = true }: { url?: boolean } = {}) {
     snapshot: DuctSnapshot;
     priced: NonNullable<typeof priced>;
     observation: NativeObservation;
+    analysis: NonNullable<typeof pricingState.observation>["result"]["analysis"];
   } | null>(null);
   if (snapshot && priced)
-    lastPriced.current = { key: documentKey, snapshot, priced, observation: nativeObservation };
+    lastPriced.current = {
+      key: documentKey,
+      snapshot,
+      priced,
+      observation: nativeObservation,
+      analysis: pricingState.observation!.result.analysis,
+    };
   const held =
     !priced && lastPriced.current?.key === documentKey && (pending || !!snapshot)
       ? lastPriced.current
       : null;
-  const pricing = !!snapshot && !!tables.grids && !priced && !held;
+  const pricing = !!snapshot && !!tables.grids && !priced && !held && !pricingState.error;
   // The Work every pane reads: the model's stored rulings under the person's pending ones.
   const seen = useMemo(
     () => withStoredRulings(handle.work.doc, snapshot?.store),
     [handle.work.doc, snapshot],
   );
 
-  const ready = useMemo(
-    () => (snapshot ? readiness(snapshot, handle.work.doc) : {}),
-    [snapshot, handle.work.doc],
-  );
+  const ready = pricingState.observation?.result.ready ?? {};
   const groups = snapshot?.groups ?? [];
   const levels = snapshot?.levels ?? [];
   const onPose = useDuctsViewBridge({
@@ -278,23 +296,27 @@ export function DuctsRoute({ url = true }: { url?: boolean } = {}) {
   const readingWord = snapshot?.document.networkBasedCalculations
     ? "reading ducts.snapshot (about 30 s with network-based calculations on)"
     : "reading ducts.snapshot";
-  const lossesWord = !snapshot
-    ? readingWord
-    : pending
-      ? `${readingWord}; the bars show the last read`
-      : tables.error
-        ? `ducts.tables failed: ${tables.error}`
-        : !tables.grids
-          ? "reading the ASHRAE tables"
-          : !priced
-            ? "pricing…"
-            : solved?.fanless
-              ? "no air mover; priced from the open end"
-              : solved?.blocked
-                ? "needs a fix: implausible loss (no Pe fan; nothing is written to Revit for it)"
-                : solved
-                  ? `Pe fan ${fmt(solved.fan)} in-wg${provisionalWords(solved.provisional)} (not in Revit until written), Revit ${revitSays(solved.revitCritical)}`
-                  : `largest Pe fan ${fmt(priced.next.fan)} in-wg${provisionalWords(priced.next.provisional)} over ${systems.length} systems`;
+  const lossesWord = pricingState.error
+    ? `pricing failed: ${pricingState.error}`
+    : held
+      ? "refreshing pricing; the bars show the last priced Work revision"
+      : !snapshot
+        ? readingWord
+        : pending
+          ? `${readingWord}; the bars show the last read`
+          : tables.error
+            ? `ducts.tables failed: ${tables.error}`
+            : !tables.grids
+              ? "reading the ASHRAE tables"
+              : !priced
+                ? "pricing…"
+                : solved?.fanless
+                  ? "no air mover; priced from the open end"
+                  : solved?.blocked
+                    ? "needs a fix: implausible loss (no Pe fan; nothing is written to Revit for it)"
+                    : solved
+                      ? `Pe fan ${fmt(solved.fan)} in-wg${provisionalWords(solved.provisional)} (not in Revit until written), Revit ${revitSays(solved.revitCritical)}`
+                      : `largest Pe fan ${fmt(priced.next.fan)} in-wg${provisionalWords(priced.next.provisional)} over ${systems.length} systems`;
   // Every written segment's cells count in the Work sentence.
   const counted = useMemo(
     () =>
@@ -419,6 +441,7 @@ export function DuctsRoute({ url = true }: { url?: boolean } = {}) {
     pricing,
     findings: catalogs.findings,
     ready,
+    analysis: pricingState.observation?.result.analysis ?? held?.analysis ?? null,
     subject,
     claims,
     onVerdict,
@@ -431,7 +454,11 @@ export function DuctsRoute({ url = true }: { url?: boolean } = {}) {
     work,
     empty,
     doc,
-    reading: { pending, error: error ?? null, refreshing: !!held || (pending && !!snapshot) },
+    reading: {
+      pending,
+      error: error ?? pricingState.error ?? null,
+      refreshing: !!held || (pending && !!snapshot),
+    },
     actions,
     staged: pendingCount(handle.work.doc, snapshot?.store),
   };

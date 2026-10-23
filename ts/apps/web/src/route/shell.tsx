@@ -7,7 +7,7 @@
  * state and repair actions live on the canonical Machine route; configuration lives in Settings.
  */
 import { useCallback, useContext, useEffect, useRef, type ReactNode } from "react";
-import { useRouteNavigate, useRouteSearch } from "./activity";
+import { useRouteNavigate, useRouteSearchSlice } from "./activity";
 
 import {
   PrimaryRouteControls,
@@ -77,7 +77,7 @@ export function useChooseTarget(): [
   (target: string | null, history?: "push" | "replace") => void,
 ] {
   const navigate = useRouteNavigate();
-  const search = useRouteSearch();
+  const target = useRouteSearchSlice((search) => search.target);
   const choose = useCallback(
     (target: string | null, history: "push" | "replace" = "push") =>
       void navigate({
@@ -90,7 +90,7 @@ export function useChooseTarget(): [
       }),
     [navigate],
   );
-  return [search.target ?? null, choose];
+  return [target ?? null, choose];
 }
 
 /**
@@ -99,13 +99,13 @@ export function useChooseTarget(): [
  */
 export function useRouteThread(): string {
   const navigate = useRouteNavigate();
-  const search = useRouteSearch();
+  const addressedThread = useRouteSearchSlice((search) => search.thread);
   const minted = useRef<string | null>(null);
-  if (search.thread) minted.current = null;
+  if (addressedThread) minted.current = null;
   else minted.current ??= crypto.randomUUID();
-  const thread = search.thread ?? minted.current!;
+  const thread = addressedThread ?? minted.current!;
   useEffect(() => {
-    if (!search.thread) {
+    if (!addressedThread) {
       // Keep issuance across a target pick or refresh until the host creates the real thread.
       try {
         sessionStorage.setItem(`pe.routeThread.${thread}`, "minted");
@@ -119,7 +119,7 @@ export function useRouteThread(): string {
         replace: true,
       });
     }
-  }, [navigate, search.thread, thread]);
+  }, [navigate, addressedThread, thread]);
   return thread;
 }
 

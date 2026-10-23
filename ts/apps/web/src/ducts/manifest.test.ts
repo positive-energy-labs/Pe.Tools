@@ -4,6 +4,9 @@
  * The host is a fixture: the request each verb sends is captured, parsed by the real contract.
  */
 import { ductsRouteState, type DuctsRouteDocument } from "@pe/agent-contracts";
+import { EMPTY_CATALOGS } from "@pe/ducts-domain/catalog";
+import { price } from "@pe/ducts-domain/pricing";
+import { readiness } from "@pe/ducts-domain/readiness";
 import type { Grids } from "@pe/ducts-domain/loss-grid";
 import type { DuctSnapshot } from "@pe/ducts-domain/types";
 import { beforeEach, expect, test, vi } from "vite-plus/test";
@@ -105,11 +108,27 @@ const snapshot = {
 } as unknown as DuctSnapshot;
 
 let page: Page;
+const grids: Grids = {};
 const ctxOf = (doc: DuctsRouteDocument) => ({
   target: { kind: "document", ref: { session: "s", openId: "d" } },
   readings: {
     ducts: { state: "ready", observation: snapshot },
-    tables: { state: "ready", observation: {} as Grids },
+    tables: { state: "ready", observation: grids },
+    pricing: {
+      state: "ready",
+      observation: {
+        input: {
+          snapshot,
+          grids,
+          catalogs: EMPTY_CATALOGS,
+          doc,
+          revision: 1,
+          epoch: page.epoch,
+          documentKey: "s/d",
+        },
+        result: { priced: price(snapshot, grids, doc), ready: readiness(snapshot, doc) },
+      },
+    },
   },
   work: { doc, revision: 1, write: async () => null },
   page,
@@ -226,4 +245,20 @@ test("selection follows displayed merged networks while foreign claims and unrel
   );
   expect(bound.transition!(page, { selected: "300" }, "page")).toHaveProperty("refusal");
   expect(bound.transition!(page, { selected: "c2" }, "page")).toHaveProperty("refusal");
+});
+
+test("stale pricing refuses readiness and invocation without dispatch", async () => {
+  const doc = ductsRouteState.schema.parse(flow);
+  const ctx = ctxOf(doc);
+  ctx.work.revision = 2;
+  expect(verb("preview").ready(ctx as never)).toMatch(/Pricing is refreshing/);
+  await expect(verb("preview").run(ctx as never)).rejects.toThrow(/Pricing is refreshing/);
+  expect(sent).toEqual([]);
+  ctx.work.revision = 1;
+  ctx.readings.pricing.observation.input.epoch = -1;
+  expect(verb("preview").ready(ctx as never)).toMatch(/Pricing is refreshing/);
+  ctx.readings.pricing.observation.input.epoch = page.epoch;
+  ctx.readings.pricing.observation.input.documentKey = "s/other";
+  expect(verb("preview").ready(ctx as never)).toMatch(/Pricing is refreshing/);
+  expect(verb("fan-preview").ready(ctx as never)).toMatch(/Pricing is refreshing/);
 });

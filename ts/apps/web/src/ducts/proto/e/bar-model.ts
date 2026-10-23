@@ -1,6 +1,6 @@
 import { LOSS_RULES, ruleByKey, ruleWords, type LossRule } from "@pe/ducts-domain/loss-rules";
 import type { DuctSnapshot } from "@pe/ducts-domain/types";
-import type { Split } from "../b/model";
+import type { Split } from "../../loss-split";
 
 type Node = DuctSnapshot["nodes"][number];
 export type BarRow = ReturnType<typeof barRows>[number];

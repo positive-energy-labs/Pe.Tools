@@ -9,8 +9,11 @@ import * as AtomRegistry from "effect/unstable/reactivity/AtomRegistry";
 import { afterEach, beforeEach, expect, test, vi } from "vite-plus/test";
 import { harnessThreadBodySchema, readingFrameSchema, readingKey } from "@pe/agent-contracts";
 import { emptyChatState } from "@pe/agent-contracts/chat-state";
+import { RegistryContext } from "@effect/atom-react";
 
-import { PeReadings, readingAtom } from "./readings";
+import { PeReadings, peReadings, readingAtom, previousOf, useReadingSlice } from "./readings";
+import { useProviders } from "./workbench/provider/providers";
+import { machineFixture } from "../../../packages/agent-contracts/tests/machine-fixture";
 import { useThreadStream } from "./workbench/provider/thread-stream";
 
 type Fake = {
@@ -29,7 +32,12 @@ const snapshot = (value: unknown) => ({
   ),
 });
 
-function owner() {
+function owner(
+  batch: (deliver: () => void) => () => void = (deliver) => {
+    deliver();
+    return () => {};
+  },
+) {
   const sources: Fake[] = [];
   const readings = new PeReadings(
     () => "http://127.0.0.1:5180/readings",
@@ -45,6 +53,7 @@ function owner() {
       sources.push(source);
       return source as unknown as EventSource;
     },
+    batch,
   );
   return { readings, sources };
 }
@@ -84,10 +93,141 @@ beforeEach(() => {
     },
   );
 });
+
+test("one frame publishes each resource's final snapshot only to its own changed subscribers", async () => {
+  let deliver: (() => void) | undefined;
+  const { readings, sources } = owner((next) => {
+    deliver = next;
+    return () => {
+      deliver = undefined;
+    };
+  });
+  const first = vi.fn();
+  const second = vi.fn();
+  const other = { kind: "thread-head", thread: "t2" } as const;
+  const release = readings.subscribe(head, first);
+  const releaseOther = readings.subscribe(other, second);
+  await Promise.resolve();
+  const source = sources[0]!;
+  const send = (request: typeof head | typeof other, value: unknown) =>
+    source.onmessage!({
+      data: JSON.stringify({ kind: "snapshot", key: readingKey(request), value }),
+    });
+  first.mockClear();
+  second.mockClear();
+  send(head, { revision: 1 });
+  send(head, { revision: 2 });
+  expect(first).not.toHaveBeenCalled();
+  deliver!();
+  expect(first).toHaveBeenCalledTimes(1);
+  expect(first.mock.calls[0]![0]).toMatchObject({ value: { revision: 2 } });
+  expect(second).not.toHaveBeenCalled();
+  first.mockClear();
+  send(head, { revision: 2 });
+  send(other, { revision: 1 });
+  deliver!();
+  expect(first).not.toHaveBeenCalled();
+  expect(second).toHaveBeenCalledTimes(1);
+  source.onmessage!({ data: JSON.stringify({ kind: "gap", key: readingKey(head), dropped: 1 }) });
+  deliver!();
+  first.mockClear();
+  send(head, { revision: 2 });
+  deliver!();
+  expect(first).toHaveBeenCalledTimes(1); // Equal evidence still reacquires freshness after a gap.
+  first.mockClear();
+  // A pending fresh frame cannot cross an invalidation fence.
+  send(head, { revision: 3 });
+  readings.dirty(head);
+  expect(deliver).toBeUndefined();
+  expect(first).toHaveBeenCalledWith({ kind: "stale", key: readingKey(head) });
+  release();
+  releaseOther();
+  await Promise.resolve();
+  expect(sources.every((source) => source.closed)).toBe(true);
+  readings.close();
+});
+
+test("a reading selector ignores polling fields and follows a changed selector immediately", async () => {
+  const { readings, sources } = owner();
+  const registry = AtomRegistry.make();
+  let renders = 0;
+  function Probe({ field }: { field: "value" | "poll" }) {
+    const value = useReadingSlice<{ value: number; poll: number }, number>(
+      head,
+      (reading) => previousOf(reading)?.[field] ?? 0,
+      readings,
+    );
+    renders++;
+    return <output>{value}</output>;
+  }
+  const view = render(
+    <RegistryContext.Provider value={registry}>
+      <Probe field="value" />
+    </RegistryContext.Provider>,
+  );
+  await vi.waitFor(() => expect(sources).toHaveLength(1));
+  act(() => sources[0]!.onmessage!(snapshot({ value: 7, poll: 1 })));
+  expect(view.container.textContent).toBe("7");
+  const before = renders;
+  act(() => sources[0]!.onmessage!(snapshot({ value: 7, poll: 2 })));
+  expect(renders).toBe(before);
+  view.rerender(
+    <RegistryContext.Provider value={registry}>
+      <Probe field="poll" />
+    </RegistryContext.Provider>,
+  );
+  expect(view.container.textContent).toBe("2");
+  view.unmount();
+  readings.close();
+  registry.dispose();
+});
 afterEach(() => {
   cleanup();
   vi.useRealTimers();
   vi.unstubAllGlobals();
+});
+
+test("the composer provider helper ignores Machine polling metadata but follows its own error", async () => {
+  const { readings, sources } = owner();
+  const subscription = vi
+    .spyOn(peReadings, "subscribe")
+    .mockImplementation((request, accept) => readings.subscribe(request, accept));
+  const registry = AtomRegistry.make();
+  let renders = 0;
+  function Probe() {
+    const providers = useProviders("http://127.0.0.1:5180");
+    renders++;
+    return <output>{providers.error ?? "ready"}</output>;
+  }
+  const view = render(
+    <RegistryContext.Provider value={registry}>
+      <Probe />
+    </RegistryContext.Provider>,
+  );
+  await vi.waitFor(() => expect(sources).toHaveLength(1));
+  const machine = { ...machineFixture(), providers: [] };
+  const send = (value: typeof machine) =>
+    act(() =>
+      sources[0]!.onmessage!({
+        data: JSON.stringify({ kind: "snapshot", key: readingKey({ kind: "machine" }), value }),
+      }),
+    );
+  send(machine);
+  const before = renders;
+  send({ ...machine, observedAtUtc: "2026-10-23T06:00:00Z" });
+  expect(renders).toBe(before);
+  send({
+    ...machine,
+    legs: {
+      ...machine.legs,
+      providers: { observedAtUtc: null, attemptedAtUtc: null, error: "provider unavailable" },
+    },
+  });
+  expect(view.container.textContent).toBe("provider unavailable");
+  view.unmount();
+  registry.dispose();
+  readings.close();
+  subscription.mockRestore();
 });
 
 test("a faulted stream goes stale, reconnects with backoff, and only fresh data clears it", async () => {

@@ -9,7 +9,7 @@ import type { Machine, Reading } from "@pe/agent-contracts";
 import { frozenDemo } from "#/host/demo-client";
 import { acknowledgeUpdate } from "#/host/install";
 import { BAY_RECENTS, MACHINE_SEEDS, OPEN_SEEDS } from "#/open/seeds";
-import { dirty, useAction, useReading } from "#/readings";
+import { dirty, useAction, useReading, useReadingSlice } from "#/readings";
 
 import { setAccepting } from "./accepting";
 import { machineOf, planWaits } from "./model";
@@ -40,6 +40,14 @@ export function useMachine(): { reading: Reading<Machine>; fixture: boolean } {
   const demo = useSyncExternalStore(still, frozenDemo, () => null);
   const live = useReading<Machine>(demo ? null : { kind: "machine" });
   return demo ? { reading: demoMachine(demo), fixture: true } : { reading: live, fixture: false };
+}
+
+/** Shell consumers select their own machine facts rather than subscribing to its polling metadata. */
+export function useMachineSlice<S>(select: (reading: Reading<Machine>) => S): S {
+  const demo = useSyncExternalStore(still, frozenDemo, () => null);
+  return useReadingSlice<Machine, S>(demo ? null : { kind: "machine" }, (reading) =>
+    select(demo ? demoMachine(demo) : reading),
+  );
 }
 
 /**

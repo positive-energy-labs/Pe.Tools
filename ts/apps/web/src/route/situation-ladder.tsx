@@ -6,7 +6,7 @@ import {
   type Machine,
   type Reading,
 } from "@pe/agent-contracts";
-import { useMachine } from "#/machine/use-machine";
+import { useMachineSlice } from "#/machine/use-machine";
 import { pidOf } from "#/machine/session";
 import { previousOf } from "#/readings";
 import { Ladder } from "./ladder";
@@ -68,19 +68,37 @@ export function useDocumentLadder(
 ) {
   const hosted = useContext(ChatHosted);
   const [, choose] = useChooseTarget();
-  const shared = useMachine();
-  // A route's frozen seed supplies the same Machine contract as the shared host owner.
-  const inventory = (handle.readings.machine as Reading<Machine> | undefined) ?? shared.reading;
-  const observed = previousOf(inventory);
-  const sessions = observed ? machineAttachments(observed) : [];
-  const name = (attachment: MachineAttachment) => {
-    const session = observed?.revit.sessions?.find(
-      (s) => s.attachment?.session === attachment.session,
-    );
-    return session && session.row.case !== "observed-active"
-      ? session.row.id
-      : `Revit · pid ${attachment.pid}`;
-  };
+  const inventory = useMachineSlice((shared) => {
+    const reading = (handle.readings.machine as Reading<Machine> | undefined) ?? shared;
+    const observed = previousOf(reading);
+    return {
+      state: reading.state,
+      message: reading.state === "failed" ? reading.message : undefined,
+      sessions: (observed ? machineAttachments(observed) : []).map((attachment) => {
+        const session = observed?.revit.sessions?.find(
+          (s) => s.attachment?.session === attachment.session,
+        );
+        return {
+          ...attachment,
+          label:
+            session && session.row.case !== "observed-active"
+              ? session.row.id
+              : `Revit · pid ${attachment.pid}`,
+          allowed: session?.row.execution?.allowed === true,
+        };
+      }),
+      unloaded: (observed?.revit.sessions ?? [])
+        .filter(
+          (item) =>
+            (item.row.case === "observed-active" || item.row.case === "controlled-active") &&
+            (item.attachment ? item.attachment.documents === null : item.documents?.length !== 0),
+        )
+        .map((item) => pidOf(item.row)),
+    };
+  });
+  const { sessions, unloaded } = inventory;
+  const name = (attachment: MachineAttachment) =>
+    sessions.find((s) => s.session === attachment.session)!.label;
   const bound = binding
     ? binding.bound
     : handle.resolution.kind === "resolved" && handle.resolution.target.kind === "document"
@@ -150,11 +168,6 @@ export function useDocumentLadder(
     else choose(JSON.stringify({ kind: "open", ref: only }), "replace");
   }, [only?.session, only?.openId, headReady]);
   const sessionWord = session ? name(session) : null;
-  const unloaded = (observed?.revit.sessions ?? []).filter(
-    (item) =>
-      (item.row.case === "observed-active" || item.row.case === "controlled-active") &&
-      (item.attachment ? item.attachment.documents === null : item.documents?.length !== 0),
-  );
   const notLoaded = "Pe.Tools is not loaded in this Revit. Finish the install, then restart Revit.";
   return {
     sessionWord,
@@ -179,19 +192,15 @@ export function useDocumentLadder(
             options: sessions.map((item) => ({
               id: item.session,
               label: name(item),
-              refusal:
-                observed?.revit.sessions?.find((s) => s.attachment?.session === item.session)?.row
-                  .execution?.allowed !== true
-                  ? "Runtime ownership is not verified"
-                  : undefined,
+              refusal: !item.allowed ? "Runtime ownership is not verified" : undefined,
               sub: item.documents === null ? "documents unknown" : `${item.documents.length} open`,
             })),
             note: note ?? "no Revit answers the host",
             extra: unloaded.length ? (
               <div className="grid gap-1 px-2 py-1">
                 {unloaded.map((item) => (
-                  <div key={pidOf(item.row)}>
-                    <div className="face-mono">Revit · pid {pidOf(item.row)}</div>
+                  <div key={item}>
+                    <div className="face-mono">Revit · pid {item}</div>
                     <div aria-disabled="true" data-tone="caution">
                       {notLoaded}
                     </div>

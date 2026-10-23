@@ -41,12 +41,13 @@ function AppDevtools({ pathname, shell }: { pathname: string; shell?: string }) 
 }
 
 export function AppUtilities() {
-  const location = useRouterState({ select: (state) => state.location });
+  const pathname = useRouterState({ select: (state) => state.location.pathname });
+  const shell = useRouterState({ select: (state) => String(state.location.search.shell ?? "") });
   return (
     <>
       <AppChrome />
       <InstallScrim />
-      <AppDevtools pathname={location.pathname} shell={String(location.search.shell ?? "")} />
+      <AppDevtools pathname={pathname} shell={shell} />
     </>
   );
 }

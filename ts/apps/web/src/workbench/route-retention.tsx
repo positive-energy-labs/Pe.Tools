@@ -1,4 +1,12 @@
-import { Activity, Suspense, useEffect, useRef, type ComponentType, type ReactNode } from "react";
+import {
+  Activity,
+  Suspense,
+  memo,
+  useEffect,
+  useRef,
+  type ComponentType,
+  type ReactNode,
+} from "react";
 import { useRouter, useRouterState } from "@tanstack/react-router";
 import { THREAD_TABS_MAX, routeAddress, type RouteKey, type ThreadTab } from "@pe/agent-contracts";
 import { RouteActivity, type RouteActivityScope } from "#/route/activity";
@@ -19,11 +27,13 @@ interface RetainedRoute {
 }
 
 /** This component is outside Activity: hiding disconnects route effects, closing disposes owners. */
-function RetainedPane({
+const RetainedPane = memo(function RetainedPane({
   entry,
+  visible,
   renderRoute,
 }: {
   entry: RetainedRoute;
+  visible: boolean;
   renderRoute: (body: ReactNode) => ReactNode;
 }) {
   const disposal = useRef<ReturnType<typeof setTimeout> | null>(null);
@@ -36,7 +46,7 @@ function RetainedPane({
   const Component = entry.Component;
   return (
     <RouteActivity.Provider value={entry.scope}>
-      <Activity mode={entry.visible ? "visible" : "hidden"}>
+      <Activity mode={visible ? "visible" : "hidden"}>
         <div
           className="size-full min-h-0 min-w-0 overflow-auto"
           data-route-tab={entry.id ?? "enrolling"}
@@ -48,7 +58,7 @@ function RetainedPane({
       </Activity>
     </RouteActivity.Provider>
   );
-}
+});
 
 /** Retain only visited leaf components. A retained Outlet would follow the active router. */
 export function RouteRetention({
@@ -167,6 +177,6 @@ export function RouteRetention({
     entry.scope.search = location.search;
   }
   return retained.current.map((entry) => (
-    <RetainedPane key={entry.key} entry={entry} renderRoute={renderRoute} />
+    <RetainedPane key={entry.key} entry={entry} visible={entry.visible} renderRoute={renderRoute} />
   ));
 }

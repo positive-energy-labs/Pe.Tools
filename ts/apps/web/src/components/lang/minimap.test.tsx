@@ -27,7 +27,32 @@ test("an alias pan/zoom flight does not render the globe, and a stop uses the la
   expect(renderGlobe).not.toHaveBeenCalled();
   fireEvent.click(view.container.querySelector('[data-orbit-stop="90/45"]')!);
   expect(orbit.read()).toEqual({ ...next, yaw: 90, elev: 45 });
-  expect(renderGlobe).toHaveBeenCalledTimes(1);
+  expect(renderGlobe).not.toHaveBeenCalled();
+});
+
+test("orbit orientation previews move the SVG without React commits or Page publication", async () => {
+  const viewport: OrbitViewport = { kind: "orbit", yaw: 30, elev: 30, zoom: 1, pivot: [0, 0, 0] };
+  const commit = vi.fn();
+  const orbit = createLiveOrbit(viewport, commit);
+  const rendered = vi.fn();
+  const view = render(
+    <Profiler id="globe" onRender={rendered}>
+      <OrbitMinimap orbit={orbit} />
+    </Profiler>,
+  );
+  const path = view.container.querySelector('[data-orbit-wire="near"]')!;
+  const original = path.getAttribute("d");
+  rendered.mockClear();
+  const token = orbit.begin();
+  act(() => {
+    for (let i = 0; i < 20; i++) orbit.preview(token, { ...viewport, yaw: 30 + i * 2, elev: 40 });
+  });
+  await vi.waitFor(() => expect(path.getAttribute("d")).not.toBe(original));
+  expect(rendered).not.toHaveBeenCalled();
+  expect(commit).not.toHaveBeenCalled();
+  expect(view.container.querySelectorAll("[data-orbit-stop]")).toHaveLength(18);
+  act(() => orbit.end(token));
+  expect(commit).toHaveBeenCalledTimes(1);
 });
 
 test("globe preview uses total displacement before a prop echo and commits only on release", () => {

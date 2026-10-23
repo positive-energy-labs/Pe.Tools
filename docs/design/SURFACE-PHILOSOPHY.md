@@ -33,7 +33,7 @@ Extreme: a pasted URL puts you in the same place with the same selection. Back u
 
 **N6. Never blank the world and never lag.**
 "the route seems to periodically re-read ducts on its own. which makes it literally impossible to use. since it blanks out the whole page." (2026-10-22). "navigating from single system, back to all systems is slow enough that it feels like it doesn't work at first." (2026-10-23). "the lag when typing in the search bars is untenable." (2026-10-23)
-Explains: retained readings across subscribers; list filtering in a transition; camera commits at release.
+Explains: retained readings across subscribers; list filtering in a transition; camera commits at release. Resource bursts publish per frame, equal values preserve identity, and URL subscribers select the fields they read. Camera motion updates the renderer and globe directly. Work solves and document-wide triage run in a worker; only results for the current inputs can arm actions. Topology caches depend on staged verdicts, not unrelated Work fields. An unchanged scene layer list does not redraw thumbnails.
 Extreme: every input answers in the next frame. The old view stays until the new one is ready, a slow move shows progress and refuses repeat input, and a re-read changes only the values that changed.
 
 **N7. Announce reach before contact.**

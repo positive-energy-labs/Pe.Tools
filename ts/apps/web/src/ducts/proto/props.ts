@@ -9,6 +9,7 @@ import type { PageMove } from "#/route/manifest";
 import type { DuctsPage } from "../manifest";
 import type { Claim } from "../legs";
 import type { Subject } from "../legs";
+import type { PricingResult } from "../pricing-job";
 
 export interface ProtoProps {
   /** Null only while reading or with no document. */
@@ -21,6 +22,8 @@ export interface ProtoProps {
   findings: readonly string[];
   /** Per-group readiness (internal keys). */
   ready: ReturnType<typeof readiness>;
+  /** Document-wide projections share the worker's Work revision; null before the first solve. */
+  analysis: PricingResult["analysis"] | null;
   /** Subject scene (ids + claims + verdict callback); null until a subject exists. */
   subject: Subject | null;
   /** Stages a person's verdict on a claim; present whether or not a subject exists. */

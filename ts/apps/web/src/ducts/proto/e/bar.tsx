@@ -33,7 +33,8 @@ import type { ListRowParts } from "@pe/kit/lang/list-view";
 import { tokenRef } from "@pe/kit/lib/token";
 import { observedElements, useNativeObservation } from "#/revit/observation";
 
-import type { Split, SplitPart, systemList } from "../b/model";
+import type { Split, SplitPart } from "../../loss-split";
+import type { systemList } from "../../system-list";
 
 const RuleContext = createContext<{
   nodes: ReadonlyMap<number, DuctSnapshot["nodes"][number]>;

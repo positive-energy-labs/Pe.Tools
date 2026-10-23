@@ -1,4 +1,4 @@
-import { useRouteSearch } from "#/route/activity";
+import { useRouteSearchSlice } from "#/route/activity";
 import { createFileRoute } from "@tanstack/react-router";
 
 import { FamiliesWorkspace } from "#/families/workspace";
@@ -22,7 +22,7 @@ export const Route = createFileRoute("/families")({
 });
 
 function FamiliesRoute() {
-  const { target } = useRouteSearch("families");
+  const target = useRouteSearchSlice((search) => search.target);
   const thread = useRouteThread();
   return <FamiliesRouteContent target={target} thread={thread} url />;
 }

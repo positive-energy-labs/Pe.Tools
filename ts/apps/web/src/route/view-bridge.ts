@@ -16,7 +16,7 @@ import { peClient } from "#/host/pe-client";
 import { useHostEvents } from "#/readings";
 import { causeRefusal, refuse, type Refusal } from "./refusal";
 import { applyPageIntent, type PageIntent } from "./view-owner";
-import { useRouteCurrent, useRouteSearch } from "./activity";
+import { useRouteCurrent, useRouteSearchSlice } from "./activity";
 
 type Intent = {
   type: "route-view-intent";
@@ -52,10 +52,10 @@ export function useRouteLease<R extends RouteViewRoute, P extends object>(
   } = {},
 ) {
   const url = shown.url ?? true;
-  const search = useRouteSearch();
+  const addressedThread = useRouteSearchSlice((search) => search.thread);
   useRouteViewBridge({
     route,
-    thread: shown.thread ?? (url ? search.thread : undefined),
+    thread: shown.thread ?? (url ? addressedThread : undefined),
     surface: url ? "route" : "chat",
     visible: shown.visible ?? true,
     page: page as Partial<RoutePage<R>>,

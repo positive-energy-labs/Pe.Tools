@@ -5,7 +5,6 @@
 import { useMemo, useState, type ReactNode } from "react";
 
 import { Button } from "@pe/kit/lang/button";
-import { tokenRef } from "@pe/kit/lib/token";
 import type { FloaterSpec } from "#/components/lang/floater";
 import { OrbitMinimap } from "#/components/lang/minimap";
 import type { OrbitViewport } from "#/scene/orbit";
@@ -42,27 +41,13 @@ export function usePictureFloaters({
   const [globe, setGlobe] = useState(true);
   const [corner, setCorner] = useState(true);
   // The globe draws the subject's centrelines in unit-sphere space, scaled from its own radius.
-  const paint = useMemo(() => {
+  const lines = useMemo(() => {
     if (!bounds) return undefined;
     const b = bounds.subject;
     const c = [(b.minX + b.maxX) / 2, (b.minY + b.maxY) / 2, (b.minZ + b.maxZ) / 2];
     const k = 0.8 / Math.max(Math.hypot(b.maxX - b.minX, b.maxY - b.minY, b.maxZ - b.minZ) / 2, 1);
-    return (project: (p: readonly number[]) => [number, number]) => (
-      <path
-        d={scene.segments
-          .map((f) =>
-            f.segment.polyline
-              .map((p, i) => {
-                const [x, y] = project(p.map((v, j) => (v - c[j]!) * k));
-                return `${i ? "L" : "M"}${x.toFixed(1)} ${y.toFixed(1)}`;
-              })
-              .join(""),
-          )
-          .join("")}
-        fill="none"
-        stroke={tokenRef("ink-2")}
-        strokeOpacity={0.75}
-      />
+    return scene.segments.map((f) =>
+      f.segment.polyline.map((p) => p.map((v, j) => (v - c[j]!) * k)),
     );
   }, [bounds, scene]);
   return [
@@ -76,7 +61,7 @@ export function usePictureFloaters({
       onOpenChange: setGlobe,
       render: () =>
         pose ? (
-          <OrbitMinimap orbit={orbit} paint={paint} />
+          <OrbitMinimap orbit={orbit} lines={lines} />
         ) : (
           <p className="t-small text-ink-2 m-0 p-2">no pose yet</p>
         ),
