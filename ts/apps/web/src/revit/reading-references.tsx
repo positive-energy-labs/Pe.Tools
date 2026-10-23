@@ -1,3 +1,4 @@
+import { RevitTarget } from "@pe/kit/lang/row";
 import {
   actionReceiptSchema,
   documentRefSchema,
@@ -8,12 +9,7 @@ import { readRecord } from "@pe/agent-contracts/chat-state";
 import { FactChip } from "@pe/kit/lang/chip";
 import type { RevitElementReference } from "@pe/kit/lang/row";
 import { useRouteDemo } from "#/route/activity";
-import {
-  prepareElements,
-  revitReferences,
-  revitScope,
-  type RevitObservationScope,
-} from "./element-target";
+import { prepareElements, revitReferences, type RevitObservationScope } from "./element-target";
 
 type Reference = RevitElementReference & { label: string };
 const records = (value: unknown): Record<string, unknown>[] =>
@@ -127,22 +123,24 @@ export function NativeReadingReferences({
   if (scope && typeof documentKey === "string") scope = { ...scope, documentKey };
   if (demo !== null) scope = { document: null, source: "fixture" };
   return (
-    <div className="flex flex-wrap items-center gap-1" {...revitScope(scope)}>
-      {references.slice(0, 50).map((reference, index) => {
-        const prepared = prepareElements({ ids: [], refs: [reference], scope }, false);
-        return (
-          <span key={index} tabIndex={0} {...revitReferences([reference])}>
-            <FactChip
-              title={`${reference.kind ?? "Element"} ${reference.elementId ?? "unknown"}: ${prepared.kind === "refused" ? prepared.message : "right-click or BX in the recorded native lifetime"}`}
-            >
-              {reference.label}
-            </FactChip>
-          </span>
-        );
-      })}
-      {references.length > 50 ? (
-        <span>{references.length - 50} more native references in the raw result</span>
-      ) : null}
-    </div>
+    <RevitTarget scope={scope}>
+      <div className="flex flex-wrap items-center gap-1">
+        {references.slice(0, 50).map((reference, index) => {
+          const prepared = prepareElements({ ids: [], refs: [reference], scope }, false);
+          return (
+            <span key={index} tabIndex={0} {...revitReferences([reference])}>
+              <FactChip
+                title={`${reference.kind ?? "Element"} ${reference.elementId ?? "unknown"}: ${prepared.kind === "refused" ? prepared.message : "right-click or BX in the recorded native lifetime"}`}
+              >
+                {reference.label}
+              </FactChip>
+            </span>
+          );
+        })}
+        {references.length > 50 ? (
+          <span>{references.length - 50} more native references in the raw result</span>
+        ) : null}
+      </div>
+    </RevitTarget>
   );
 }

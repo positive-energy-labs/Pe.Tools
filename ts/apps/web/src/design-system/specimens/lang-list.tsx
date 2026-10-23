@@ -18,7 +18,7 @@ import { Popover } from "@base-ui/react/popover";
 import { MoreHorizontal } from "lucide-react";
 import { Button } from "@pe/kit/lang/button";
 import { CommandPalette } from "#/components/lang/command-palette";
-import { Row, RowGroupHead, rowRecipe } from "@pe/kit/lang/row";
+import { RevitTarget, Row, RowGroupHead, rowRecipe } from "@pe/kit/lang/row";
 import { Table } from "@pe/kit/table/table";
 
 import { RecipeGrid, SpecimenFrame } from "./recipe-grid";
@@ -51,6 +51,9 @@ export function LangListSpecimens() {
               wrap
             />
             <Row label="selected" selected />
+            <RevitTarget scope={{ document: null, source: "fixture" }}>
+              <Row label="Revit target (fixture: actions refuse)" revitIds={[42]} />
+            </RevitTarget>
             <Row label="active" active />
             <Row label="pending" pending />
             <Row label="failed" failed />

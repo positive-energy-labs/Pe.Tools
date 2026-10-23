@@ -1,5 +1,5 @@
 // @vitest-environment jsdom
-import { revitTarget } from "@pe/kit/lang/row";
+import { RevitTarget, revitTarget } from "@pe/kit/lang/row";
 import { cleanup, fireEvent, render, waitFor } from "@testing-library/react";
 import { afterEach, expect, test, vi } from "vite-plus/test";
 import { ElementMenu, SelectionBoxButton, showInRevit } from "./element-menu";
@@ -7,7 +7,6 @@ import {
   elementTargetOf,
   prepareElements,
   revitReferences,
-  revitScope,
   showElementsMessage,
 } from "./element-target";
 
@@ -110,13 +109,19 @@ test("native handle document keys must match the displayed observation", () => {
 
 test("nearest observation boundary prevents parent inheritance, malformed IDs are never filtered away", () => {
   const rendered = render(
-    <div {...revitScope(scope)}>
-      <div {...revitScope(null)}>
+    <RevitTarget scope={scope}>
+      <RevitTarget scope={null}>
         <button {...revitTarget([42])}>nested</button>
-      </div>
-      <button data-revit-ids="42,,43">malformed</button>
+      </RevitTarget>
+      <button
+        ref={(el) => {
+          el?.setAttribute("data-revit-ids", "42,,43");
+        }}
+      >
+        malformed
+      </button>
       <button {...revitReferences([{ elementId: 7, uniqueId: "seven" }])}>reference</button>
-    </div>,
+    </RevitTarget>,
   );
   const nested = elementTargetOf(rendered.getByText("nested"))!;
   expect(nested.scope).toBeNull();
@@ -133,11 +138,11 @@ test("nearest observation boundary prevents parent inheritance, malformed IDs ar
 test("BX needs both keys, targets pointer or focus, leaves double-click and typing free", async () => {
   submit.mockResolvedValue({ id: "action-1", state: "running" });
   const view = render(
-    <div {...revitScope(scope)}>
+    <RevitTarget scope={scope}>
       <ElementMenu />
       <button {...revitTarget([42])}>target</button>
       <input aria-label="edit" />
-    </div>,
+    </RevitTarget>,
   );
   const target = view.getByText("target");
   target.focus();
@@ -161,10 +166,10 @@ test("BX needs both keys, targets pointer or focus, leaves double-click and typi
 test("right-click Select uses the same exact observation and never invokes a box", async () => {
   submit.mockResolvedValue({ id: "action-select", state: "running" });
   const view = render(
-    <div {...revitScope(scope)}>
+    <RevitTarget scope={scope}>
       <ElementMenu />
       <button {...revitTarget([42])}>target</button>
-    </div>,
+    </RevitTarget>,
   );
   fireEvent.contextMenu(view.getByText("target"), { clientX: 20, clientY: 30 });
   const select = await view.findByRole("option", { name: "Select" });

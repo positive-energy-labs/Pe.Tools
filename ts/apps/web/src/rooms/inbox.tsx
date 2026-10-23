@@ -1,3 +1,4 @@
+import { revitTarget } from "@pe/kit/lang/row";
 /**
  * The feedback inbox (V6 calm): one row per mark or note on the view, in `CARD_STATES` order. A
  * row points (hover pairs its region, click pins its card on the plan); verbs live on the card,
@@ -204,7 +205,15 @@ export function FeedbackCard({
 }) {
   const [said, setSaid] = useState<string | null>(null);
   return (
-    <div className="flex gap-2 p-1" data-card={card.id}>
+    <div
+      className="flex gap-2 p-1"
+      data-card={card.id}
+      {...revitTarget(
+        regions
+          .filter((region) => card.guids.includes(region.guid))
+          .map((region) => region.elementId),
+      )}
+    >
       <Thumb card={card} regions={regions} width={96} />
       <div className="flex min-w-0 flex-col gap-1">
         <span className="flex gap-1">
@@ -351,6 +360,9 @@ export function RoomsInbox({
                   <Tag card={card} />
                 </span>
               ),
+              revitIds: regions
+                .filter((region) => card.guids.includes(region.guid))
+                .map((region) => region.elementId),
               label: cardLine(card, labelOf),
               meta: <Thumb card={card} regions={regions} width={32} />,
               onMouseEnter: () => onHover(card.guids[0] ?? null),

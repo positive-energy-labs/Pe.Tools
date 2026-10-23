@@ -1045,3 +1045,8 @@ tr.dl-row[data-damage]:not([data-selected], [data-active]) > td {
 .subject-badge[data-lit] > text {
   fill: var(--subject-mark-lit-ink);
 }
+
+/* Observation boundaries do not alter their children's layout. */
+[data-revit-target] {
+  display: contents;
+}

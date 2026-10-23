@@ -23,7 +23,6 @@ import {
   type ShowElementsResult,
 } from "./element-target";
 import { observedElements, readFamilyPlacements, useNativeObservation } from "./observation";
-export { revitScope } from "./element-target";
 export type { ShowElementsResult } from "./element-target";
 
 export const SelectInRevitIcon = Crosshair;

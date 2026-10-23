@@ -8,6 +8,8 @@ The one-system design cluster: the design LANGUAGE (raw values in `apps/web/src/
 
 ## Decided
 
+- 2026-10-23, kit-raise N4: kit `RevitTarget` requires the displayed observation scope and owns layout-transparent target boundaries. `Row revitIds`, `FactChip revit`, and `SubjectText` tokens inherit that scope through portals. The web root retains the one Selection Box / Select menu; null and non-native scopes still refuse native actions. The specimen is `lang-list.tsx`; `kit-raise.revit-target.guard.test.ts` rejects hand-authored scopes outside the menu/parser.
+
 - 2026-10-23, kaitpw leaves Space Escape-to-3D pending a personal ruling. The production pass preserves that behavior; no navigation fix in this pass changes its meaning.
 
 - 2026-10-23, counsel for kaitpw's doctrine (docs/design/SURFACE-PHILOSOPHY.md N1, I2), from propagation slice S1: kit focus never scrolls (`focusQuiet` in `kit/lib/utils.ts`); a list or table scrolls to its cursor only when a key moved it or a reveal named it, never on hover, refresh or resize, and a list starts with no cursor. The 2D counterpart of the stage's critical-damage burn is the kit damage mark: `Row damage="<word>"`, `row: () => ({ damage })` in `useList`, `Table damage={(row) => word ?? null}`: a 3 px alarm edge on the stage's heartbeat (still under reduced motion), a 9% alarm wash under selection, and a flame plus the word that never truncates. Blocking rows only; calm rows stay calm. The master table virtualizes at 60+ rows (`Table keep(row)` holds rows a picture or connector points at); `PopoverContent avoid={rect}` opens away from its subject. PROVEN[browser production harness, 2000 rows, a4c0728e, 2026-10-23]: mount 1192 → 64–91 ms, row click no long task, scroll p95 16.9 ms.

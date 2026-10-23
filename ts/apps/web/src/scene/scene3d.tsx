@@ -1,3 +1,4 @@
+import { RevitTarget } from "@pe/kit/lang/row";
 /**
  * The one 3D renderer in the web app. The route's viewport (a Page key of kind `orbit`) owns the
  * committed pose. The shared LiveOrbit owns motion from either canvas or globe until release.
@@ -18,7 +19,7 @@
 import { useEffect, useRef, useState, type ReactNode } from "react";
 import { revitTarget } from "@pe/kit/lang/row";
 import { viewportCodec } from "@pe/agent-contracts";
-import { revitScope, type ElementTarget } from "#/revit/element-target";
+import { type ElementTarget } from "#/revit/element-target";
 import {
   observedElements,
   useNativeObservation,
@@ -319,13 +320,11 @@ export function Scene3D(props: Scene3DProps): ReactNode {
   }, [props.clipVolume, meshes]);
 
   return (
-    <div
-      ref={host}
-      className={`relative min-h-0 overflow-hidden ${props.className ?? ""}`}
-      {...revitScope(observation.scope)}
-    >
-      {failure ? <p className="t-small text-ink-2 p-2">{failure}</p> : null}
-      {props.children}
-    </div>
+    <RevitTarget scope={observation.scope}>
+      <div ref={host} className={`relative min-h-0 overflow-hidden ${props.className ?? ""}`}>
+        {failure ? <p className="t-small text-ink-2 p-2">{failure}</p> : null}
+        {props.children}
+      </div>
+    </RevitTarget>
   );
 }
