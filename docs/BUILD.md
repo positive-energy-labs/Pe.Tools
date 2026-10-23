@@ -36,13 +36,40 @@ For browser proof, a worktree may explicitly borrow another checkout's host read
 `PE_WEB_READ_HOST_CHECKOUT` to that checkout root and `PE_TOOLS_HOST_BASE_URL` to its receipt's
 loopback origin, then run `vp dev --port <free-port>` from `ts/apps/web`. This starts only Vite.
 The frontend binds its API marker to the named host and rebases admitted reads to that host's
-origin. Its middleware allows declared GET reads and only `ducts.snapshot`, `ducts.tables` and
-`revit.detail.space-scene` on
-`POST /call`; it refuses writes, host lifecycle and bridge sockets. Normal source identity and
+origin. Its middleware admits `POST /call` from generated C# safety metadata: `intent: Read`
+and `usesTransactions: false`. Unknown operations, mutations, transaction previews, cancellation,
+host lifecycle and bridge sockets are refused before forwarding. Read adapters use their canonical
+read contracts; parameter-link apply previews and temporary-placement family matrices remain refused.
+Declared GET reads include captures. Document requests reach the app before API routing, including
+`/family`, `/families`, `/schedules`, `/ops` and `/captures`. Normal source identity and
 host takeover checks remain unchanged. The route's `target` uses the current bridge attachment
 id from the inventory, not the SDK session alias. This proves worktree web behavior against
 the host's loaded payload, not fresh worktree C# or host code. See
 [dev-proxy.ts](../ts/apps/web/dev-proxy.ts) for the enforced boundary.
+
+The same boundary runs in production preview. Build with the borrowed host environment set so the
+bundle retains that host's service identity; an ordinary distributable build still binds `host`.
+From the worktree's `ts/apps/web`, these commands start no host or Revit process:
+
+```powershell
+$env:PE_WEB_READ_HOST_CHECKOUT = 'C:/Users/kaitp/source/repos/Pe.Tools'
+$hostReceipt = Get-Content "$env:LOCALAPPDATA/Positive Energy/Pe.Tools/state/service/host-source-e342bc78d3d4.json" | ConvertFrom-Json
+$env:PE_TOOLS_HOST_BASE_URL = "http://127.0.0.1:$($hostReceipt.port)"
+Remove-Item Env:PE_TOOLS_HOST_SERVICE_NAME -ErrorAction SilentlyContinue
+vp dev --port 5204 --strictPort
+# Stop that frontend before using the same port for preview.
+vp build
+vp preview --port 5204 --strictPort
+```
+
+TanStack's SPA prerender remains enabled: it emits `dist/client/index.html`. Use the default `dist`
+root for preview: TanStack also locates its built server under `dist/server`; overriding `--outDir`
+to `dist/client` breaks that lookup. The pinned toolchain built the shell successfully on 2026-10-23; no prerender
+disable was required. Preview verifies the built browser assets against the borrowed host's loaded
+payload. It does not verify fresh worktree host or C# bytes. Browser page/target publication and Work
+writes are also refused; deep links can inspect existing readings, but this lane cannot certify
+workflows that require those writes. A family editor must already be open for live `family.capture`;
+the project document is not a substitute.
 
 The full PWA entries are **Pe.Tools** and **Pe.Tools Dev**. Their separate compact launchers are
 **Pe.Tools Tray** and **Pe.Tools Dev Tray**. The next MSI authors `Pe.Tools Tray` with

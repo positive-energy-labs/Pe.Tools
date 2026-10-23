@@ -1,5 +1,5 @@
 import { actionControls } from "@pe/agent-contracts";
-import { expect, test } from "vite-plus/test";
+import { expect, test, vi } from "vite-plus/test";
 import { checkoutServiceName, devHostProxy } from "./dev-proxy";
 import config from "./vite.config";
 
@@ -11,6 +11,24 @@ test("served web binds checkout identity while distributable web binds installed
   expect((await read("build")).define["import.meta.env.PE_RUNTIME_SERVICE"]).toBe(
     JSON.stringify("host"),
   );
+});
+
+test("borrowed production bundles retain the explicit host owner for preview", async () => {
+  const { checkoutRoot } = await import("./checkout-paths");
+  try {
+    vi.stubEnv("PE_WEB_READ_HOST_CHECKOUT", checkoutRoot);
+    vi.stubEnv("PE_TOOLS_HOST_BASE_URL", "http://127.0.0.1:12345");
+    const built = await (config as Function)({ command: "build", mode: "production" });
+    expect(built.define["import.meta.env.PE_RUNTIME_SERVICE"]).toBe(
+      JSON.stringify(checkoutServiceName()),
+    );
+    expect(
+      built.plugins.find((plugin: { name?: string }) => plugin?.name === "pe:checkout-ingress")
+        .configurePreviewServer,
+    ).toBeTypeOf("function");
+  } finally {
+    vi.unstubAllEnvs();
+  }
 });
 test("the dev proxy forwards every host action-control route", () => {
   // The host mounts POST /actions/<verb> for each control but action.read (GET /actions).

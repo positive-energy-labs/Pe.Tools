@@ -1,3 +1,4 @@
+import { TooltipHint } from "@pe/kit/lang/tooltip";
 /**
  * The ducts section of the app chrome's Settings popover (the route puts it there through the
  * `settings` route-control slot): everything that is the same everywhere, so it never sits on the
@@ -17,12 +18,7 @@ import { cellFromTrichotomy, StateCell } from "@pe/kit/lang/cell";
 import { reviewTransitions, type CellWire } from "#/components/work/band";
 import { PrimaryRouteControls } from "#/navigation/route-controls";
 
-import {
-  airflowOptions,
-  airflowPatches,
-  slotWord,
-  type AirflowOf,
-} from "../../airflow";
+import { airflowOptions, airflowPatches, slotWord, type AirflowOf } from "../../airflow";
 import type { LossesWork } from "../../work";
 import { SlotPicker } from "./slot-picker";
 
@@ -64,41 +60,45 @@ export function DuctSettings({
         <h2 className="t-head">Ducts</h2>
         <div className={LINES} data-e-slots>
           <span className="text-ink-2">Design friction</span>
-          <span
-            className="inline-flex items-baseline gap-1 whitespace-nowrap"
-            data-e-cell={KEY}
-            aria-label="design friction rate"
-            title="The rate Manual D sizes to: available static x 100 / total effective length. A duct whose own friction exceeds it is marked in the tree; a diagnostic, never a blocker. It is not written to Revit."
-          >
-            <StateCell
-              {...cellFromTrichotomy(cell, { value: String(rate), cap: "editable" }, String)}
-              scale="row"
-              numeric={{ min: 0, digits: 3 }}
-              placeholder={String(DEFAULT_DESIGN_FRICTION_RATE)}
-              onCommit={(text: string) =>
-                work
-                  .write(
-                    transitionPatches([], KEY, cell, {
-                      kind: "stage",
-                      rung: { value: Number(text) },
-                    }),
-                  )
-                  .then((refusal) => refusal?.message)
-              }
-              transitions={reviewTransitions(wire, KEY, cell)}
-            />
-            <span className="t-small text-ink-2" data-e-source={cell.staged ? "override" : "default"}>
-              in-wg/100 ft · {cell.staged ? "yours" : "default"}
+          <TooltipHint content="The rate Manual D sizes to: available static x 100 / total effective length. A duct whose own friction exceeds it is marked in the tree; a diagnostic, never a blocker. It is not written to Revit.">
+            <span
+              className="inline-flex items-baseline gap-1 whitespace-nowrap"
+              data-e-cell={KEY}
+              aria-label="design friction rate"
+            >
+              <StateCell
+                {...cellFromTrichotomy(cell, { value: String(rate), cap: "editable" }, String)}
+                scale="row"
+                numeric={{ min: 0, digits: 3 }}
+                placeholder={String(DEFAULT_DESIGN_FRICTION_RATE)}
+                onCommit={(text: string) =>
+                  work
+                    .write(
+                      transitionPatches([], KEY, cell, {
+                        kind: "stage",
+                        rung: { value: Number(text) },
+                      }),
+                    )
+                    .then((refusal) => refusal?.message)
+                }
+                transitions={reviewTransitions(wire, KEY, cell)}
+              />
+              <span
+                className="t-small text-ink-2"
+                data-e-source={cell.staged ? "override" : "default"}
+              >
+                in-wg/100 ft · {cell.staged ? "yours" : "default"}
+              </span>
             </span>
-          </span>
+          </TooltipHint>
           <AirflowSlot snapshot={snapshot} work={work} scope={scope} of="terminal" />
           <AirflowSlot snapshot={snapshot} work={work} scope={scope} of="unit" />
           {READ_ONLY.map(([key, word]) => (
             <Fragment key={key}>
               <span className="text-ink-2">{word}</span>
-              <span className="face-mono" title="Read from this parameter; not chosen here yet">
-                {slotWord(snapshot.slots?.[key])}
-              </span>
+              <TooltipHint content="Read from this parameter; not chosen here yet">
+                <span className="face-mono">{slotWord(snapshot.slots?.[key])}</span>
+              </TooltipHint>
             </Fragment>
           ))}
         </div>

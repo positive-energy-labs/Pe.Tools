@@ -90,7 +90,8 @@ public sealed record HostOperationDefinition(
     string? DisplayName = null,
     HostOperationAgentMetadata? Metadata = null,
     OpNeeds Needs = OpNeeds.Nothing,
-    OpActor Actor = OpActor.Any
+    OpActor Actor = OpActor.Any,
+    bool UsesTransactions = false
 ) {
     public HostOperationAgentMetadata AgentMetadata => EnrichMetadata(
         this.Key,

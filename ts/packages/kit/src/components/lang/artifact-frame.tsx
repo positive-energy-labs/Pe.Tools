@@ -3,6 +3,7 @@
  * Frame only a machine-operated object that carries state; plain content is never enclosed.
  */
 import { Rail } from "./rail";
+import { cn } from "../../lib/utils";
 
 import "./lang.css";
 
@@ -36,7 +37,7 @@ export function ArtifactFrame({
       data-surface="artifact"
       data-slot="artifact-frame"
       data-key={key}
-      className={className}
+      className={cn("flex min-h-0 min-w-0 flex-1 flex-col", className)}
       role={label ? "group" : undefined}
       aria-label={label}
     >

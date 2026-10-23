@@ -445,7 +445,7 @@ export function QueryWorkbench(props: QueryControl) {
         kind="framed"
         data-table-filter-trigger
         aria-label="Filters"
-        aria-keyshortcuts="F"
+        aria-keyshortcuts="Shift+F"
         className="t-small px-(--control-pad-x)"
       >
         <span className="flex items-center gap-1">

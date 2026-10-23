@@ -49,6 +49,8 @@ public sealed class OpAttribute(string key) : Attribute {
     public string? Example { get; init; }
     public bool IsPublic { get; init; } = true;
     public OpThread Thread { get; init; } = OpThread.Any;
+    /// <summary>Includes rolled-back previews and transactions in disposable documents.</summary>
+    public bool UsesTransactions { get; init; }
     internal OpActor? DeclaredActor { get; private set; }
     public OpActor Actor { get => this.DeclaredActor ?? OpActor.Any; init => this.DeclaredActor = value; }
 }
@@ -223,6 +225,7 @@ public static class OpRegistry {
             Example = Named(nameof(OpAttribute.Example)) as string,
             IsPublic = Named(nameof(OpAttribute.IsPublic)) as bool? ?? true,
             Thread = (OpThread)EnumValue(nameof(OpAttribute.Thread), (int)OpThread.Any),
+            UsesTransactions = Named(nameof(OpAttribute.UsesTransactions)) as bool? ?? false,
             Actor = (OpActor)EnumValue(nameof(OpAttribute.Actor), (int)OpActor.Any)
         };
     }
@@ -302,7 +305,8 @@ public static class OpRegistry {
             attribute.Title,
             metadata,
             needs,
-            attribute.Actor
+            attribute.Actor,
+            attribute.UsesTransactions || attribute.Intent == OpIntent.Mutate
         );
         Validate(definition);
         return definition;
@@ -386,7 +390,8 @@ public sealed record HostOpsCatalogEntry(
     IReadOnlyList<string> CallGuidance,
     string RequestSchemaJson,
     string ResponseSchemaJson,
-    string Actor
+    string Actor,
+    bool UsesTransactions
 ) {
     public static HostOpsCatalogEntry FromOp(Op op) {
         return FromDefinition(op.Definition);
@@ -413,7 +418,8 @@ public sealed record HostOpsCatalogEntry(
             metadata.CallGuidance,
             BridgeOpSchemaGenerator.GetRequestSchemaJson(definition.RequestType),
             BridgeOpSchemaGenerator.GetResponseSchemaJson(definition.ResponseType),
-            definition.Actor.ToString().ToLowerInvariant()
+            definition.Actor.ToString().ToLowerInvariant(),
+            definition.UsesTransactions
         );
     }
 }

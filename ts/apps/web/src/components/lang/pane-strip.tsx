@@ -48,9 +48,8 @@ const FOLDS = 4;
 const TITLE_ROOM = 7;
 
 /**
- * True while the trail overflows, or the title's lane is narrower than its room. The lane is the
- * rail's flexible lead, so the test reads the pane's width and never the title's text: picking an
- * element with a long name cannot refold the header under the person's pointer.
+ * The title takes priority over the trail: fold controls while either lane or the title itself
+ * is clipped. Only a width change unfolds them, so changing selection cannot expand the trail.
  */
 function crowded(strip: HTMLElement) {
   const trail = strip.closest<HTMLElement>("[data-slot='rail-actions']") ?? strip.parentElement;
@@ -62,6 +61,8 @@ function crowded(strip: HTMLElement) {
     : 0;
   return (
     (trail != null && trail.scrollWidth > trail.clientWidth) ||
+    (lane != null && lane.scrollWidth > lane.clientWidth) ||
+    (title != null && title.scrollWidth > title.clientWidth) ||
     (lane != null && lane.clientWidth < room)
   );
 }
@@ -70,7 +71,7 @@ function crowded(strip: HTMLElement) {
 function useFold() {
   const ref = useRef<HTMLDivElement>(null);
   const [fold, setFold] = useState(0);
-  // Folding reads widths only (`crowded`), so a new title never refolds; a width change starts over.
+  // A width change starts over; content changes can only make more room for identity.
   useLayoutEffect(() => {
     if (ref.current && fold < FOLDS && crowded(ref.current)) setFold(fold + 1);
   });
@@ -147,12 +148,7 @@ export function PaneStrip({ modes, floaters, layers }: PaneStripProps) {
     </Button>
   ));
   return (
-    <div
-      ref={ref}
-      data-slot="pane-strip"
-      data-fold={fold}
-      className="flex shrink-0 items-center"
-    >
+    <div ref={ref} data-slot="pane-strip" data-fold={fold} className="flex shrink-0 items-center">
       {modes && (
         <Switcher
           ariaLabel={modes.label ?? "mode"}

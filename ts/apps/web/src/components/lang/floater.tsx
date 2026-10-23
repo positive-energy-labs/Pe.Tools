@@ -70,29 +70,24 @@ function useYield(ref: RefObject<HTMLDivElement | null>, place: Corner) {
   useLayoutEffect(() => {
     const own = ref.current;
     const field = own?.parentElement;
-    const legend = field?.querySelector("[data-slot='pane-legend']");
     const settle = (next: At) =>
       setAt((was) => {
         if (was.corner === next.corner && was.dy === next.dy) return was;
         requestAnimationFrame(() => field?.dispatchEvent(new Event(MOVED)));
         return next;
       });
-    if (!own || !field || !legend) return settle({ corner: place, dy: 0 });
+    if (!own || !field) return settle({ corner: place, dy: 0 });
     const run = () => {
       const f = field.getBoundingClientRect();
       const o = own.getBoundingClientRect();
-      const l = legend.getBoundingClientRect();
       const gutter = parseFloat(getComputedStyle(own).getPropertyValue("--gutter")) || 0;
-      const docks = [...field.querySelectorAll("[data-slot='pane-dock']")].map((el) =>
-        el.getBoundingClientRect(),
-      );
-      const home = cornerRect(f, o, gutter, place);
-      if (!meets(home, l) && !docks.some((d) => meets(home, d)))
-        return settle({ corner: place, dy: 0 });
+      const fixed = [
+        ...field.querySelectorAll("[data-slot='pane-legend'], [data-slot='pane-dock']"),
+      ].map((el) => el.getBoundingClientRect());
       const others = [...field.querySelectorAll(":scope > [data-slot='floater']")]
         .filter((el) => el.compareDocumentPosition(own) & Node.DOCUMENT_POSITION_FOLLOWING)
         .map((el) => el.getBoundingClientRect())
-        .concat(docks);
+        .concat(fixed);
       const free = nearest(place)
         .flatMap((corner) => {
           const r = cornerRect(f, o, gutter, corner);
@@ -106,11 +101,7 @@ function useYield(ref: RefObject<HTMLDivElement | null>, place: Corner) {
           }));
         })
         .find(
-          ({ r }) =>
-            r.top >= f.top &&
-            r.bottom <= f.bottom &&
-            !meets(r, l) &&
-            !others.some((x) => meets(r, x)),
+          ({ r }) => r.top >= f.top && r.bottom <= f.bottom && !others.some((x) => meets(r, x)),
         );
       settle(free ? { corner: free.corner, dy: free.dy } : { corner: place, dy: 0 });
     };
@@ -121,8 +112,9 @@ function useYield(ref: RefObject<HTMLDivElement | null>, place: Corner) {
     const observer = new ResizeObserver(run);
     observer.observe(field);
     observer.observe(own);
-    observer.observe(legend);
-    field.querySelectorAll("[data-slot='pane-dock']").forEach((el) => observer.observe(el));
+    field
+      .querySelectorAll("[data-slot='pane-legend'], [data-slot='pane-dock']")
+      .forEach((el) => observer.observe(el));
     return () => {
       observer.disconnect();
       field.removeEventListener(MOVED, moved);

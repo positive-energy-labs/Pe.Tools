@@ -8,6 +8,7 @@ import { useState, type ReactNode } from "react";
 
 import { Button } from "@pe/kit/lang/button";
 import { Input } from "@pe/kit/lang/input";
+import { TooltipHint } from "@pe/kit/lang/tooltip";
 import { tokenRef } from "@pe/kit/lib/token";
 import { Switcher } from "#/components/lang/switcher";
 import type { ActionHandle } from "#/route/handle";
@@ -98,16 +99,15 @@ export function SceneSummary({
         {missing.length ? (
           <>
             <dt data-tone="caution">no mesh</dt>
-            <dd
-              className="face-mono m-0 min-w-0 truncate"
-              title={missing.map((e) => `${e.elementId} ${e.reason}`).join("\n")}
-            >
-              {missing.length} ·{" "}
-              {missing
-                .map((e) => e.reason)
-                .filter((r, i, all) => all.indexOf(r) === i)
-                .join(", ")}
-            </dd>
+            <TooltipHint content={missing.map((e) => `${e.elementId} ${e.reason}`).join("\n")}>
+              <dd className="face-mono m-0 min-w-0 truncate">
+                {missing.length} ·{" "}
+                {missing
+                  .map((e) => e.reason)
+                  .filter((r, i, all) => all.indexOf(r) === i)
+                  .join(", ")}
+              </dd>
+            </TooltipHint>
           </>
         ) : null}
       </dl>

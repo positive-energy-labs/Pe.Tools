@@ -104,7 +104,7 @@
  *                  Because it reads the saved bytes rather than the table, it is armed rather than
  *                  pressed — the ceremony, its refusals and its receipt live in `#/family/build`.
  */
-import { useEffect, type ReactNode } from "react";
+import { useEffect, useState, type ReactNode } from "react";
 import { useRouteSearch } from "#/route/activity";
 import { routeAddress } from "@pe/agent-contracts";
 
@@ -214,11 +214,23 @@ function useFamilyLog(store: FamilyStore) {
 
 function FamilyAuditPanes() {
   const { anatomyCollapsed, setAnatomyCollapsed } = useFamilyWorkspace();
+  const [docCollapsed, setDocCollapsed] = useState(false);
   return (
     <PaneSplit
       axis="horizontal"
       grow
-      resize={{ target: "end", defaultSize: 340, minSize: 260, minOtherSize: 560 }}
+      resize={{
+        target: "end",
+        defaultSize: 340,
+        minSize: 260,
+        minOtherSize: 560,
+        collapse: {
+          collapsed: docCollapsed,
+          onCollapsedChange: setDocCollapsed,
+          collapsedSize: 32,
+          title: "Doc",
+        },
+      }}
       start={
         <PaneSplit
           axis="vertical"

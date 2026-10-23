@@ -27,6 +27,18 @@ public sealed class OpRegistryTests {
             Assert.That(HostOpsCatalogEntry.FromDefinition(definition).Actor, Is.EqualTo(actor.ToString().ToLowerInvariant()));
         }
     }
+
+    [Test]
+    public void Transaction_metadata_survives_offline_attribute_projection() {
+        var handler = typeof(OpRegistryTests).GetMethod(nameof(Handle), BindingFlags.NonPublic | BindingFlags.Static)!;
+        var attribute = OpRegistry.ReadAttribute(handler.CustomAttributes.Single(data => data.AttributeType == typeof(OpAttribute)));
+        var definition = OpRegistry.Define(attribute, typeof(NoRequest), typeof(SchemaData));
+        var catalog = HostOpsCatalogEntry.FromDefinition(definition);
+        Assert.That(catalog.Intent, Is.EqualTo("Read"));
+        Assert.That(catalog.UsesTransactions, Is.True, "A rolled-back preview is still a transaction.");
+        var read = OpRegistry.Define(new OpAttribute("test.read") { Does = "Read without transactions" }, typeof(NoRequest), typeof(SchemaData));
+        Assert.That(HostOpsCatalogEntry.FromDefinition(read).UsesTransactions, Is.False);
+    }
     private sealed class BrokenAssembly : Assembly {
         public override Type[] GetTypes() =>
             throw new ReflectionTypeLoadException(Array.Empty<Type?>(), Array.Empty<Exception?>());
@@ -36,6 +48,7 @@ public sealed class OpRegistryTests {
         "test.registry.probe",
         Does = "Prove attributed handlers are discovered.",
         Title = "Registry Probe",
+        UsesTransactions = true,
         IsPublic = false
     )]
     private static SchemaData Handle(NoRequest _) => null!;

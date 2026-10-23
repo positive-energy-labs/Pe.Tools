@@ -315,6 +315,9 @@ test("completion is explicit, cancels losslessly, previews token removal, and re
   fireEvent.keyDown(input, { key: "Enter" });
   expect(input.getAttribute("value")).toBe("System kind");
   expect(screen.queryByRole("button", { name: /Remove the "Kind/ })).toBeNull();
+  // Enter commits keywords; a later edit reopens completion explicitly.
+  fireEvent.change(input, { target: { value: "System kin" } });
+  fireEvent.change(input, { target: { value: "System kind" } });
   fireEvent.keyDown(input, { key: "ArrowDown" });
   expect(input.getAttribute("aria-activedescendant")).toBeTruthy();
   fireEvent.keyDown(input, { key: "Enter" });
@@ -322,6 +325,8 @@ test("completion is explicit, cancels losslessly, previews token removal, and re
   expect(screen.getByRole("option", { name: /Supply2/ })).toBeTruthy();
   fireEvent.keyDown(picker, { key: "Escape" });
   expect(input.getAttribute("value")).toBe("System kind");
+  fireEvent.change(input, { target: { value: "System kin" } });
+  fireEvent.change(input, { target: { value: "System kind" } });
   fireEvent.keyDown(input, { key: "ArrowDown" });
   fireEvent.keyDown(input, { key: "Enter" });
   fireEvent.click(screen.getByRole("option", { name: /Supply2/ }));
@@ -697,9 +702,55 @@ test("an external combobox inside another row retains collection keys and ListBa
   const query = screen.getByRole("combobox", { name: "Search query keys" });
   query.focus();
   fireEvent.keyDown(query, { key: "ArrowDown" });
-  fireEvent.keyDown(query, { key: "Enter" });
-  expect(pick).not.toHaveBeenCalled();
-  expect(screen.getByRole("combobox", { name: "Choose Kind" })).toBeTruthy();
+  const rows = screen.getByRole("listbox", { name: "query keys" });
+  expect(document.activeElement).toBe(rows);
+  fireEvent.keyDown(rows, { key: "Enter" });
+  expect(pick).toHaveBeenCalledWith(items[0]);
+});
+
+test("after Enter commits completion, ArrowDown enters filtered rows and Escape keeps its layers", () => {
+  const picked = vi.fn();
+  const data = items.slice(0, 3).map((item) => ({ ...item, name: `${item.kind} ${item.name}` }));
+  function Fixture() {
+    const list = useList({ ...options, items: data, onPick: picked });
+    return (
+      <ListView
+        list={list}
+        aria-label="committed search"
+        row={(item) => ({ label: item.name })}
+        empty={{ message: "Empty", exit: "Read rows" }}
+      />
+    );
+  }
+  render(<Fixture />);
+  const input = screen.getByRole("combobox", { name: "Search committed search" });
+  input.focus();
+  fireEvent.change(input, { target: { value: "System" } });
+  fireEvent.click(screen.getByRole("button", { name: "Filter committed search" }));
+  fireEvent.click(screen.getByRole("option", { name: /^Filter by Kind/ }));
+  fireEvent.click(screen.getByRole("option", { name: /Supply2/ }));
+  fireEvent.change(input, { target: { value: "Sup" } });
+  expect(input.getAttribute("aria-expanded")).toBe("true");
+  fireEvent.keyDown(input, { key: "Enter" });
+  expect(input.getAttribute("aria-expanded")).toBe("false");
+  expect(picked).not.toHaveBeenCalled();
+  fireEvent.keyDown(input, { key: "ArrowDown" });
+  const rows = screen.getByRole("listbox", { name: "committed search" });
+  expect(document.activeElement).toBe(rows);
+  expect(rows.getAttribute("aria-activedescendant")).toContain(data[0]!.id);
+  fireEvent.keyDown(rows, { key: "Enter" });
+  expect(picked).toHaveBeenCalledWith(data[0]);
+  input.focus();
+  fireEvent.change(input, { target: { value: "System kind" } });
+  fireEvent.keyDown(input, { key: "Escape" });
+  expect(input.getAttribute("value")).toBe("System kind");
+  fireEvent.keyDown(input, { key: "Escape" });
+  expect(input.getAttribute("value")).toBe("");
+  expect(screen.getByRole("button", { name: 'Remove the "Kind: Supply" narrowing' })).toBeTruthy();
+  fireEvent.keyDown(input, { key: "Escape" });
+  expect(screen.queryByRole("button", { name: 'Remove the "Kind: Supply" narrowing' })).toBeNull();
+  fireEvent.keyDown(input, { key: "Escape" });
+  expect(document.activeElement).toBe(rows);
 });
 
 test("list help declares pointer behavior and keeps cursor keys registered once", () => {

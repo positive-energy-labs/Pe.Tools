@@ -7,7 +7,10 @@ import { KeyScope, readKeyMeta, readRegistrations } from "@pe/kit/keys";
 import { Pane } from "./pane";
 
 vi.mock("#/host/diagnostics", () => ({ reportFault: vi.fn() }));
-afterEach(cleanup);
+afterEach(() => {
+  cleanup();
+  vi.restoreAllMocks();
+});
 
 const modes = (onChange = vi.fn()) => ({
   value: "plan",
@@ -167,3 +170,25 @@ test("an overflowing trail folds layers and floaters into popovers, shortens mod
       .sort(),
   ).toEqual(["1", "2", "G", "M"]);
 });
+
+test.each(["rail-lead", "pane-title"])(
+  "%s overflow folds the strip even when the actions fit",
+  (slot) => {
+    vi.spyOn(HTMLElement.prototype, "scrollWidth", "get").mockImplementation(
+      function (this: HTMLElement) {
+        return this.getAttribute("data-slot") === slot ? 240 : 100;
+      },
+    );
+    vi.spyOn(HTMLElement.prototype, "clientWidth", "get").mockReturnValue(200);
+    const { container } = render(
+      <Pane id="space" title="Space" meta="a long model reading" modes={modes()}>
+        body
+      </Pane>,
+    );
+    expect(container.querySelector("[data-slot='pane-strip']")?.getAttribute("data-fold")).toBe(
+      "4",
+    );
+    expect(screen.getByRole("heading", { name: "Space" })).toBeTruthy();
+    expect(bound("space").map((key) => key.hotkey)).toEqual(["1", "2"]);
+  },
+);

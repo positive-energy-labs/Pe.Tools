@@ -32,6 +32,8 @@
    write the plain word. */
 [data-slot="pane-title"] {
   min-width: 0;
+  flex-shrink: 0;
+  max-width: 100%;
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
@@ -72,10 +74,10 @@
   text-box: trim-end text alphabetic;
   padding-bottom: 0.3rem;
 }
-/* A last-resort floor: the strip folds while the title is cut short (pane-strip.tsx), and this
-   keeps a sliver of title when even the folded strip cannot fit. */
+/* Identity takes priority over metadata and strip controls. The strip folds before this floor
+   gives way; a narrow pane still reserves its full width for the title at the final fold. */
 [data-slot="pane-header"]:not([data-title-align="center"]) [data-slot="rail-lead"] {
-  min-width: min(calc(var(--control-h) * 2), 50%);
+  min-width: min(calc(var(--control-h) * 7), 100%);
 }
 /* The strip's last fold (pane-strip.tsx): its trail drops under the title onto a second line. */
 [data-slot="pane-header"]:has([data-slot="pane-strip"][data-fold="4"]) [data-slot="rail"] {

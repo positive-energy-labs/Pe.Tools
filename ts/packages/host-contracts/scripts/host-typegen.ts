@@ -27,6 +27,8 @@ type CatalogEntry = {
   key: string;
   displayName?: string | null;
   intent: string;
+  costTier: string;
+  usesTransactions: boolean;
   description: string;
   requestSchemaJson: string;
   responseSchemaJson: string;
@@ -190,6 +192,14 @@ chunks.push(
   "export const hostOpKeys = [",
   ...operations.map((op) => `  "${op.key}",`),
   "] as const satisfies readonly (keyof HostOps)[];",
+  "",
+  "/** C# operation safety metadata. Unknown operations never inherit read permission. */",
+  "export const hostOpSafety = {",
+  ...operations.map(
+    (op) =>
+      `  ${JSON.stringify(op.key)}: ${JSON.stringify({ intent: op.intent, costTier: op.costTier, usesTransactions: op.usesTransactions })},`,
+  ),
+  "} as const satisfies Record<keyof HostOps, { intent: string; costTier: string; usesTransactions: boolean }>;",
   "",
 );
 

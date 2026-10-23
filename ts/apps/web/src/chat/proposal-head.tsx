@@ -315,9 +315,9 @@ function GroupRow({
   return (
     <div className="flex flex-col" data-group={label}>
       <div className="grid h-(--item-h) grid-cols-[minmax(6rem,12rem)_minmax(0,1fr)_auto] items-center gap-2">
-        <span className="truncate" title={words}>
-          {words}
-        </span>
+        <TooltipHint content={words}>
+          <span className="truncate">{words}</span>
+        </TooltipHint>
         <TooltipHint content={[body, ...facts].filter(Boolean).join(" · ")}>
           <span className="truncate face-mono">
             {body}
