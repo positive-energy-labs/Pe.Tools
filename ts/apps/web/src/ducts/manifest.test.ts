@@ -20,7 +20,7 @@ vi.mock("../../../../packages/mcps/src/shared/takeoff-action-client", () => ({
   actionResult: () => answer,
 }));
 
-const { manifest } = await import("./manifest");
+const { manifest, bindDuctsManifest, reconcileDuctsMembers } = await import("./manifest");
 const { stagedEsp } = await import("@pe/ducts-domain/staged");
 type Page = import("./manifest").DuctsPage;
 
@@ -187,4 +187,43 @@ test("run bare, the fan verbs act on the chosen system's offered fan, in the pag
   page = { ...page, system: "" };
   expect(verb("fan").ready(ctxOf(doc) as never)).toBe("Choose a system to make its fan");
   expect(verb("fan").labelNow!(ctxOf(doc) as never)).toBe("make the fan");
+});
+
+test("selection follows displayed merged networks while foreign claims and unrelated elements stay scoped", () => {
+  const foreign = {
+    ...snapshot.nodes[1]!,
+    id: 200,
+    groupId: "g2",
+    systemName: "RA",
+    connectors: [],
+  };
+  const unrelated = { ...foreign, id: 300, groupId: "g3", systemName: "Other" };
+  const raw = {
+    ...snapshot,
+    groups: [
+      ...snapshot.groups,
+      { ...snapshot.groups[0]!, id: "g2", systemNames: ["RA"] },
+      { ...snapshot.groups[0]!, id: "g3", systemNames: ["Other"] },
+    ],
+    nodes: [...snapshot.nodes, foreign, unrelated],
+  } as DuctSnapshot;
+  const drawn = {
+    ...raw,
+    groups: [{ ...raw.groups[0]!, systemNames: ["SA", "RA"] }, raw.groups[2]!],
+    nodes: raw.nodes.map((n) => (n.groupId === "g2" ? { ...n, groupId: "g1" } : n)),
+  };
+  const reading = {
+    snapshot: raw,
+    drawn,
+    claims: { c2: { text: "Other system", ids: [200], state: "assumed" as const } },
+  };
+  const bound = bindDuctsManifest(() => reading);
+  const page = manifest.page!.parse({ system: "SA" });
+  expect(bound.transition!(page, { selected: "200" }, "page")).not.toHaveProperty("refusal");
+  expect(reconcileDuctsMembers({ ...page, selected: "200" }, reading)).toEqual({});
+  expect(reconcileDuctsMembers({ ...page, selected: "200" }, { ...reading, drawn: null })).toEqual(
+    {},
+  );
+  expect(bound.transition!(page, { selected: "300" }, "page")).toHaveProperty("refusal");
+  expect(bound.transition!(page, { selected: "c2" }, "page")).toHaveProperty("refusal");
 });

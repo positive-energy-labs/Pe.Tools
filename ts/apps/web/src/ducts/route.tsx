@@ -160,20 +160,6 @@ export function DuctsRoute({ url = true }: { url?: boolean } = {}) {
           ),
     [demo, demoClaims, handle.work.doc],
   );
-  const reading = useMemo<LoadedDuctsReading | null>(
-    () => (snapshot ? { snapshot, claims: claimCells } : null),
-    [snapshot, claimCells],
-  );
-  loadedReading.current = reading;
-  const reconciled = reconcileDuctsMembers(page, reading);
-  const membersReady = Object.keys(reconciled).length === 0;
-  const reconciledPage = useRef<object | null>(null);
-  useEffect(() => {
-    if (reading && !membersReady && reconciledPage.current !== page) {
-      reconciledPage.current = page;
-      setPage(reconcileDuctsMembers(page, reading), { history: "replace" });
-    }
-  }, [reading, page, membersReady, setPage]);
   const claims = useMemo(() => {
     if (!page.system || !snapshot) return claimsOf(claimCells);
     const members = [...systemScope(snapshot, page.system).members];
@@ -202,6 +188,20 @@ export function DuctsRoute({ url = true }: { url?: boolean } = {}) {
         : null,
     [snapshot, tables.grids, painted, handle.work.doc, catalogs.tables],
   );
+  const reading = useMemo<LoadedDuctsReading | null>(
+    () => (snapshot ? { snapshot, drawn: priced?.snapshot ?? null, claims: claimCells } : null),
+    [snapshot, priced?.snapshot, claimCells],
+  );
+  loadedReading.current = reading;
+  const reconciled = reconcileDuctsMembers(page, reading);
+  const membersReady = reading?.drawn != null && Object.keys(reconciled).length === 0;
+  const reconciledPage = useRef<object | null>(null);
+  useEffect(() => {
+    if (reading && Object.keys(reconciled).length > 0 && reconciledPage.current !== page) {
+      reconciledPage.current = page;
+      setPage(reconcileDuctsMembers(page, reading), { history: "replace" });
+    }
+  }, [reading, page, membersReady, setPage]);
   // A re-read prices its new snapshot behind the last priced one: the screen keeps drawing what it
   // has, marked refreshing, instead of blanking to "pricing…". Never across documents.
   const lastPriced = useRef<{

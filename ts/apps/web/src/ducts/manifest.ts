@@ -104,12 +104,14 @@ export type DuctsPage = z.infer<typeof ductsPageSchema>;
 /** The snapshot and claim cells actually displayed, not the effect-provided Reading mirror. */
 export type LoadedDuctsReading = {
   snapshot: DuctSnapshot;
+  /** The priced topology the tree and capture draw, including merged shared networks. */
+  drawn: DuctSnapshot | null;
   claims: Readonly<Record<string, DuctClaim>>;
 };
 
 function knownSelection(page: DuctsPage, reading: LoadedDuctsReading): boolean {
   if (!page.selected) return true;
-  const { snapshot, claims } = reading;
+  const { snapshot, drawn, claims } = reading;
   const members = page.system
     ? systemScope(snapshot, page.system).members
     : new Set([
@@ -117,10 +119,18 @@ function knownSelection(page: DuctsPage, reading: LoadedDuctsReading): boolean {
         ...snapshot.segments.map((segment) => segment.id),
         ...snapshot.groups.flatMap((group) => group.rootIds),
       ]);
-  const scopedClaims = page.system ? claimsForGroup(claims, members) : claims;
+  // Claims and price blockers stay on the raw system. Selection also admits the neighbouring
+  // elements the priced tree and capture actually draw (RA 52's merged network, for example).
+  const scopedClaims = page.system ? claimsForGroup(claims, [...members]) : claims;
   if (Object.hasOwn(scopedClaims, page.selected)) return true;
   const id = Number(page.selected);
-  return Number.isSafeInteger(id) && String(id) === page.selected && members.has(id);
+  return (
+    Number.isSafeInteger(id) &&
+    id > 0 &&
+    String(id) === page.selected &&
+    (members.has(id) ||
+      (!!page.system && drawn !== null && systemScope(drawn, page.system).members.has(id)))
+  );
 }
 
 /** Forgiving URL/initial restoration waits for evidence; the route replaces the address once. */
@@ -131,6 +141,9 @@ export function reconcileDuctsMembers(
   if (!reading) return {};
   if (page.system && !systemsOf(reading.snapshot).some((system) => system.name === page.system))
     return { system: ductsPageSchema.parse({}).system, selected: "", issue: "", viewport: null };
+  // A deep link can name a shared-network element absent from the raw system. Keep it until the
+  // priced topology is ready to prove membership; clearing here loses a valid copied selection.
+  if (!reading.drawn) return {};
   return knownSelection(page, reading) ? {} : { selected: "", issue: "" };
 }
 

@@ -458,8 +458,12 @@ export function Inbox({
         .map((item) => item.key),
     );
     if (focused) lit.add(focused);
-    return baseRows.map((row) => (lit.has(row.key) ? { ...row, lit: true } : row));
-  }, [baseRows, groups, selected, focused]);
+    return baseRows.map((row) =>
+      lit.has(row.key) || row.key === hoveredIssue
+        ? { ...row, lit: lit.has(row.key), active: row.key === hoveredIssue }
+        : row,
+    );
+  }, [baseRows, groups, selected, focused, hoveredIssue]);
   return (
     <>
       <div
@@ -470,13 +474,7 @@ export function Inbox({
           onIssueHover?.(null);
         }}
       >
-        <RulingsList
-          rows={rows}
-          focused={focused}
-          hoveredIssue={hoveredIssue}
-          address={address}
-          onPick={onPick}
-        />
+        <RulingsList rows={rows} focused={focused} address={address} onPick={onPick} />
       </div>
       {nativeResult ? (
         <div role="status" className="px-2 py-1">
@@ -495,14 +493,12 @@ const rulingSearch = (row: RulingRow) => row.search;
 function RulingsList({
   rows,
   focused,
-  hoveredIssue,
   address,
   onPick,
 }: {
   rows: RulingRow[];
   focused: string | null;
   onPick?: () => void;
-  hoveredIssue?: string | null;
   address?: {
     scope?: string;
     search: ListSearch;
@@ -573,12 +569,17 @@ function RulingsList({
     list.reveal(key);
   });
   const row = useCallback(
-    ({ key, actions, detail: _detail, title: _title, ...parts }: RulingRow): ListRowParts => ({
+    ({
+      key: _key,
+      actions,
+      detail: _detail,
+      title: _title,
+      ...parts
+    }: RulingRow): ListRowParts => ({
       ...parts,
-      active: key === hoveredIssue,
       actions: actions?.(),
     }),
-    [hoveredIssue],
+    [],
   );
   const opened = useRef(list.state.open);
   opened.current = list.state.open;

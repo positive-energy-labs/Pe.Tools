@@ -227,20 +227,12 @@ export function systemIssues(s: {
  * Its popover lists the issues and mounts only while open, so hundreds of rows hold no popover
  * content. Each line opens the system, where its inbox rows are. The picture's plate wears the same mark.
  */
-export function SystemMark({
-  issues,
-  open,
-}: {
-  issues: readonly SystemIssue[];
-  open: () => void;
-}) {
+export function SystemMark({ issues, open }: { issues: readonly SystemIssue[]; open: () => void }) {
   const worst = issues.find((i) => i.tone === "alarm") ?? issues[0];
   if (!worst) return null;
   return (
     <Popover>
       <PopoverTrigger
-        openOnHover
-        delay={150}
         aria-label={issues.map((i) => i.says).join("; ")}
         data-tone={worst.tone}
         data-e-marker={worst.tone}
@@ -286,8 +278,9 @@ export function SystemMark({
  * ESP Pe computes (over the unit's rating when it states one). The bar is on the system's own scale
  * with the same groups and inks as the strip; with a rating it is required over available, ringed
  * in the alarm tone when over. Unpriced draws no track: an empty bar would read as zero. The
- * state mark after the number carries the issues. The bar draws no tooltips of its own; hovering or clicking it opens the shared
- * breakdown popover (`BarPopover`), whose content mounts only while open.
+ * state mark after the number carries the issues. The bar draws no tooltips of its own; clicking it opens the shared
+ * breakdown popover (`BarPopover`), whose content mounts only while open. Passing over rows never
+ * opens an expensive table; the row's own hint still names its fans and state.
  */
 export function systemRowParts(
   s: ReturnType<typeof systemList>[number],
@@ -794,8 +787,6 @@ export function BarPopover({
     >
       <PopoverTrigger
         ref={trigger}
-        openOnHover
-        delay={300}
         aria-label="loss breakdown by element group"
         data-e-bar-trigger=""
         className={`relative flex items-center p-0! min-h-0! border-0 before:absolute before:inset-x-0 before:-inset-y-1 before:content-[''] ${className ?? ""}`}

@@ -67,6 +67,7 @@ import { FanFacts, fanFacts, type FanFact } from "./fan-sections";
 import { ECanvas, OpeningContext } from "./canvas";
 import { grilleLabels } from "./labels";
 import { FanButton, Inbox, type FanVerbs } from "./inbox";
+import type { WriteVerbs } from "./inbox-write";
 import { InputsPane } from "./inputs-pane";
 import { RulesTree, ruleOfIds } from "./rules-pane";
 import { SystemTree } from "./tree-sidebar";
@@ -808,50 +809,68 @@ function LoadedScreenBody({
       designRate,
     ],
   );
-  const systemsPane = (
-    <Pane
-      id="e-systems"
-      title="Systems"
-      meta={`${census.systems} · ${census.priced} priced · ${census.fix} need a fix`}
-      scroll="auto"
-      flush
-    >
-      <SystemsList
-        systems={systems}
-        fansOf={fansOf}
-        nameOf={nameOf}
-        needsFix={needsFix}
-        drawn={drawn}
-        page={systemKeys}
-        setPage={setPage}
-      />
-    </Pane>
-  );
-  const rulesPane = (wide: boolean) => (
-    <Pane
-      id={wide ? "e-rules-all" : "e-rules"}
-      title={wide ? "All-systems rules" : "This system's rules"}
-      meta={wide ? "every system" : (scope?.name ?? "")}
-      help="A rule is a fitting type (family : type) plus a geometry condition. Its table is the one choice a person makes; Pe re-looks-up every instance under it. A fitting with a stated drop is an override under its type."
-      scroll="auto"
-      flush
-    >
-      {priced ? (
-        <RulesTree
-          snapshot={drawn ?? snapshot}
-          priced={priced}
-          groups={groups}
-          wide={wide}
-          work={work}
-          focus={ruleFocus}
-          onFocus={setRuleFocus}
+  const systemsPane = useMemo(
+    () => (
+      <Pane
+        id="e-systems"
+        title="Systems"
+        meta={`${census.systems} · ${census.priced} priced · ${census.fix} need a fix`}
+        scroll="auto"
+        flush
+      >
+        <SystemsList
+          systems={systems}
+          fansOf={fansOf}
           nameOf={nameOf}
-          light={light}
+          needsFix={needsFix}
+          drawn={drawn}
+          page={systemKeys}
+          setPage={setPage}
         />
-      ) : (
-        <p className="text-ink-2 p-2">rules are read once the tables are in</p>
-      )}
-    </Pane>
+      </Pane>
+    ),
+    [
+      census.systems,
+      census.priced,
+      census.fix,
+      systems,
+      fansOf,
+      nameOf,
+      needsFix,
+      drawn,
+      systemKeys,
+      setPage,
+    ],
+  );
+  const rulesPanes = useMemo(
+    () =>
+      [false, true].map((wide) => (
+        <Pane
+          id={wide ? "e-rules-all" : "e-rules"}
+          title={wide ? "All-systems rules" : "This system's rules"}
+          meta={wide ? "every system" : (scope?.name ?? "")}
+          help="A rule is a fitting type (family : type) plus a geometry condition. Its table is the one choice a person makes; Pe re-looks-up every instance under it. A fitting with a stated drop is an override under its type."
+          scroll="auto"
+          flush
+        >
+          {priced ? (
+            <RulesTree
+              snapshot={drawn ?? snapshot}
+              priced={priced}
+              groups={groups}
+              wide={wide}
+              work={work}
+              focus={ruleFocus}
+              onFocus={setRuleFocus}
+              nameOf={nameOf}
+              light={light}
+            />
+          ) : (
+            <p className="text-ink-2 p-2">rules are read once the tables are in</p>
+          )}
+        </Pane>
+      )),
+    [scope?.name, priced, drawn, snapshot, groups, work, ruleFocus, nameOf, light],
   );
   const inputsCount = scope
     ? `${plural(scope.units.size, "unit")} · ${plural(scope.terminals.size, "grille")}`
@@ -946,8 +965,8 @@ function LoadedScreenBody({
         <Halves
           side={side}
           onSide={pick}
-          left={{ title: "All-systems rules", pane: rulesPane(true) }}
-          right={{ title: "This system's rules", pane: rulesPane(false), refusal: noSystem }}
+          left={{ title: "All-systems rules", pane: rulesPanes[1] }}
+          right={{ title: "This system's rules", pane: rulesPanes[0], refusal: noSystem }}
         />
       }
       resize={{
@@ -976,6 +995,36 @@ function LoadedScreenBody({
         : inbox?.check.length
           ? `${inbox.check.length} to check · nothing holds the ESP`
           : "nothing holds the ESP";
+  // Selection does not change these verbs. Stable handles keep every unrelated ruling row intact.
+  const writeVerbs = useMemo<WriteVerbs | null>(
+    () =>
+      inbox
+        ? {
+            preview: props.actions.preview,
+            apply: props.actions.apply,
+            busy: props.actions.busy,
+            row: inbox.write,
+            held: writeHeld,
+            stale: page.evaluation !== null && writeHeld === null,
+          }
+        : null,
+    [
+      inbox?.write,
+      props.actions.preview,
+      props.actions.apply,
+      props.actions.busy,
+      writeHeld,
+      page.evaluation,
+    ],
+  );
+  const healHandles = useMemo<FanVerbs>(
+    () => ({
+      preview: props.actions.healPreview,
+      apply: props.actions.heal,
+      busy: props.actions.busy,
+    }),
+    [props.actions.healPreview, props.actions.heal, props.actions.busy],
+  );
   const inboxPane = useMemo(
     () => (
       <Pane
@@ -998,17 +1047,8 @@ function LoadedScreenBody({
             light={light}
             onSelect={select}
             onFocusCell={focusCell}
-            write={{
-              ...props.actions,
-              row: inbox.write,
-              held: writeHeld,
-              stale: page.evaluation !== null && writeHeld === null,
-            }}
-            heal={{
-              preview: props.actions.healPreview,
-              apply: props.actions.heal,
-              busy: props.actions.busy,
-            }}
+            write={writeVerbs!}
+            heal={healHandles}
             fan={fanHandles}
             selected={selected}
             focused={focusKey}
@@ -1035,9 +1075,8 @@ function LoadedScreenBody({
       light,
       select,
       focusCell,
-      props.actions,
-      writeHeld,
-      page.evaluation,
+      writeVerbs,
+      healHandles,
       fanHandles,
       selected,
       focusKey,
