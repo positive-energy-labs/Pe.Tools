@@ -18,6 +18,7 @@ import {
 import { Popover, PopoverTrigger, PopoverContent } from "./popover";
 import { ChevronDown, Ellipsis } from "lucide-react";
 import { SearchControl } from "./search-control";
+import { OutcomeLine } from "./outcome";
 
 import { CellHost } from "./cell";
 import { Input } from "./input";
@@ -80,8 +81,8 @@ type ListProps<T> = Omit<CollectionOptions<T>, "target"> & {
   groupCounts?: false;
 };
 
-/** The words a list says instead of rows: one per status, never a blank. */
-function StatusLine({ children, tone }: { children: ReactNode; tone?: Tone }) {
+/** The list's state line, beside retained rows or in place of an initial blank. */
+export function StatusLine({ children, tone }: { children: ReactNode; tone?: Tone }) {
   return (
     <div className="dl-row" role="status" data-tone={tone} data-pending={tone ? undefined : ""}>
       <span className="dl-row-label">{children}</span>
@@ -122,6 +123,10 @@ export function List<T>(props: ListProps<T>) {
   }, [collection.level, searchable, inputEl, keyRegion]);
   const cursorRow = visible.find((row) => row.key === collection.cursor);
   const footer = typeof props.footer === "function" ? props.footer(collection.level) : props.footer;
+  const searchTrail =
+    typeof props.searchTrail === "function"
+      ? props.searchTrail(collection.level)
+      : props.searchTrail;
   const description = cursorRow?.kind === "item" ? props.detail?.(cursorRow.item) : null;
   const meta = cursorRow?.kind === "item" ? props.row(cursorRow.item).meta : null;
   const detail =
@@ -198,6 +203,8 @@ export function List<T>(props: ListProps<T>) {
       // An inline list fills a flex rail; in a popup the frame is a block and this is inert.
       className="flex min-h-0 flex-1 flex-col"
       data-list=""
+      aria-busy={collection.listProps["aria-busy"]}
+      data-reading={collection.reading}
       // An input-owned list never takes focus from its owner: a click picks, the caret stays.
       onMouseDown={props.owner !== undefined ? (event) => event.preventDefault() : undefined}
     >
@@ -227,14 +234,24 @@ export function List<T>(props: ListProps<T>) {
         </div>
       ) : null}
       <div ref={setKeyRegion} className="flex min-h-0 flex-1 flex-col">
+        {!searchable && collection.reading === "pending" && collection.hasItems ? (
+          <div data-list-bar="">
+            <OutcomeLine kind="busy" label="reading…" />
+          </div>
+        ) : null}
         {searchable ? (
           // A list's query is a command line across its top edge, on the rows' text edge.
           <SearchControl
             face="bar"
             trail={
-              typeof props.searchTrail === "function"
-                ? props.searchTrail(collection.level)
-                : props.searchTrail
+              collection.reading === "pending" && collection.hasItems ? (
+                <>
+                  <OutcomeLine kind="busy" label="reading…" />
+                  {searchTrail}
+                </>
+              ) : (
+                searchTrail
+              )
             }
           >
             <input
@@ -257,7 +274,7 @@ export function List<T>(props: ListProps<T>) {
         >
           {status === "refused" ? (
             <StatusLine tone="caution">{props.levels?.[collection.level]?.refusal}</StatusLine>
-          ) : status === "pending" ? (
+          ) : status === "pending" && !collection.hasItems ? (
             <StatusLine>reading…</StatusLine>
           ) : status === "failed" ? (
             <StatusLine tone="caution">{props.failure ?? "read failed"}</StatusLine>
@@ -266,9 +283,9 @@ export function List<T>(props: ListProps<T>) {
           ) : status === "no-match" && !visible.length ? (
             <StatusLine>{props.noMatch ?? `nothing matches “${query.trim()}”`}</StatusLine>
           ) : null}
-          {status === "pending" || status === "failed" || status === "refused"
-            ? null
-            : visible.map(render)}
+          {status !== "refused" && (collection.reading === "ready" || collection.hasItems)
+            ? visible.map(render)
+            : null}
         </div>
       </div>
       {hasContent(detail) ? (
@@ -444,6 +461,7 @@ export function ListPopup<T>({
   const [own, setOwn] = useState(false);
   const open = controlled ?? own;
   const setOpen = (next: boolean) => {
+    if (next === open) return;
     setOwn(next);
     onOpenChange?.(next);
   };
@@ -473,8 +491,8 @@ export function ListPopup<T>({
         >
           <List
             {...list}
-            onPick={(item, path) => {
-              list.onPick?.(item, path);
+            onPick={(item, path, context) => {
+              list.onPick?.(item, path, context);
               if (list.select !== "multi") setOpen(false);
             }}
             onEscape={() => {
@@ -653,8 +671,8 @@ export function CellListSelect<T>({
               {...list}
               initialQuery={initial}
               filter={list.filter ?? "substring"}
-              onPick={(item, path) => {
-                list.onPick?.(item, path);
+              onPick={(item, path, context) => {
+                list.onPick?.(item, path, context);
                 close();
               }}
               onEscape={close}
@@ -692,8 +710,8 @@ export function CommandPalette<T>({
     <List<T>
       {...list}
       owner={presentation === "anchored" ? (list.owner ?? anchor ?? undefined) : list.owner}
-      onPick={(item, path) => {
-        list.onPick?.(item, path);
+      onPick={(item, path, context) => {
+        list.onPick?.(item, path, context);
         onOpenChange(false);
       }}
       onEscape={() => {
