@@ -16,13 +16,7 @@ import { createWheelReader, wheelPixels, wheelPlane } from "./gestures";
 import { createMeshPicker } from "./picking";
 import { OrbitControls } from "three/addons/controls/OrbitControls.js";
 import { center, fromControls, toCamera, type OrbitViewport } from "./orbit";
-import {
-  fitPlane,
-  frameRect,
-  fromFrame,
-  type PlaneAxis,
-  type PlaneViewport,
-} from "./plane";
+import { fitPlane, frameRect, fromFrame, type PlaneAxis, type PlaneViewport } from "./plane";
 import {
   newCamera,
   projectThrough,
@@ -31,7 +25,7 @@ import {
   type Ray,
   type Size,
 } from "./projection";
-import type { Layer3D, SceneInstance, SceneMeshes } from "./types";
+import type { IssueTarget, Layer3D, SceneInstance, SceneMeshes } from "./types";
 
 /** Opt-in timing marks (`?scenePerf`), including GPU completion rather than a bare RAF tick. */
 const timing = () =>
@@ -105,7 +99,11 @@ export function createRenderer(mount: HTMLElement, meshes: SceneMeshes) {
   controls.screenSpacePanning = true;
   // The scheme (gestures.ts): left orbits, middle and right pan, Shift+left pans (OrbitControls'
   // own modifier rule), the wheel and a pinch zoom toward the cursor.
-  controls.mouseButtons = { LEFT: THREE.MOUSE.ROTATE, MIDDLE: THREE.MOUSE.PAN, RIGHT: THREE.MOUSE.PAN };
+  controls.mouseButtons = {
+    LEFT: THREE.MOUSE.ROTATE,
+    MIDDLE: THREE.MOUSE.PAN,
+    RIGHT: THREE.MOUSE.PAN,
+  };
   controls.zoomToCursor = true;
   // OrbitControls cancels every contextmenu, which would starve the app's element menu (it skips a
   // cancelled press). Scene3D decides instead: a right-drag pan cancels, a right click passes.
@@ -262,10 +260,28 @@ export function createRenderer(mount: HTMLElement, meshes: SceneMeshes) {
         renderer.info.autoReset = false;
         renderer.info.reset();
       }
+      let animate = false;
+      for (const { layer, group } of layers.values()) {
+        const lit =
+          layer.targets?.some((t) => t.key === litIssue || t.key === focusedIssue) ?? false;
+        if (layer.frame)
+          animate = layer.frame(group, started / 1000, motion.matches, lit) || animate;
+        else
+          group.traverse((object) => {
+            if (!(object instanceof THREE.Mesh || object instanceof THREE.Line)) return;
+            for (const material of [object.material].flat()) {
+              if (!("color" in material)) continue;
+              const paint = material as THREE.MeshBasicMaterial;
+              paint.userData.rest ??= paint.color.clone();
+              paint.color.copy(paint.userData.rest).multiplyScalar(lit ? 2 : 1);
+            }
+          });
+      }
       if (thumbsStale) drawThumbs();
       renderer.render(scene, active());
       if (measuring) fence(started);
       tell();
+      if (animate) render();
     });
   };
   const fence = (started: number) => {
@@ -386,6 +402,11 @@ export function createRenderer(mount: HTMLElement, meshes: SceneMeshes) {
   resize();
 
   const layers = new Map<string, { layer: Layer3D; group: THREE.Group }>();
+  let litIssue: string | null = null;
+  let focusedIssue: string | null = null;
+  const motion = window.matchMedia("(prefers-reduced-motion: reduce)");
+  motion.addEventListener("change", render);
+  const issueRay = new THREE.Raycaster();
   const disposeTree = (root: THREE.Object3D) =>
     root.traverse((object) => {
       if (
@@ -409,6 +430,40 @@ export function createRenderer(mount: HTMLElement, meshes: SceneMeshes) {
     origin,
     byId,
     pick: createMeshPicker(batch, byId),
+    pickIssue(at: { clientX: number; clientY: number }): IssueTarget | null {
+      const rect = canvas.getBoundingClientRect();
+      if (!rect.width || !rect.height) return null;
+      issueRay.setFromCamera(
+        new THREE.Vector2(
+          ((at.clientX - rect.left) / rect.width) * 2 - 1,
+          1 - ((at.clientY - rect.top) / rect.height) * 2,
+        ),
+        active(),
+      );
+      // A seven-pixel hit allowance keeps short join bars usable at a system-wide fit.
+      const distance = active().position.distanceTo(controls.target);
+      issueRay.params.Line!.threshold = plane
+        ? ((ortho.top - ortho.bottom) / rect.height) * 7
+        : ((2 * distance * Math.tan(THREE.MathUtils.degToRad(camera.fov / 2))) / rect.height) * 7;
+      let nearest = Infinity;
+      let picked: IssueTarget | null = null;
+      for (const { layer, group } of layers.values()) {
+        if (!layer.targets?.length) continue;
+        group.updateMatrixWorld(true);
+        const hit = issueRay.intersectObject(group, true)[0];
+        if (!hit || hit.distance >= nearest) continue;
+        nearest = hit.distance;
+        picked =
+          layer.targets.find((t) => t.key === litIssue || t.key === focusedIssue) ??
+          layer.targets[0]!;
+      }
+      return picked;
+    },
+    lightIssue(hovered: string | null, focused: string | null) {
+      litIssue = hovered;
+      focusedIssue = focused;
+      render();
+    },
     render,
     viewport: (): OrbitViewport => fromControls(controls, bounds),
     setViewport(v: OrbitViewport) {
@@ -489,6 +544,7 @@ export function createRenderer(mount: HTMLElement, meshes: SceneMeshes) {
       mark("dispose");
       onFrame = null;
       cancelAnimationFrame(frame);
+      motion.removeEventListener("change", render);
       observer.disconnect();
       controls.dispose();
       canvas.removeEventListener("pointerdown", planeDown);

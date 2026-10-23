@@ -127,6 +127,8 @@ export function Inbox({
   selected,
   focused,
   onPick,
+  hoveredIssue,
+  onIssueHover,
   address,
 }: {
   groups: Record<Exclude<InboxGroup, "write">, readonly InboxItem[]>;
@@ -146,6 +148,8 @@ export function Inbox({
   focused: string | null;
   /** A person's pick releases the review landing address. */
   onPick?: () => void;
+  hoveredIssue?: string | null;
+  onIssueHover?: (key: string | null) => void;
   address?: {
     query: string;
     sort: "" | "name" | "status";
@@ -323,13 +327,17 @@ export function Inbox({
       stagedBy: item.kind === "proposal" ? "pea" : undefined,
       meta: <span data-tone={item.tone}>{item.status}</span>,
       actions: () => verbsOf(item, false),
-      onMouseEnter: () =>
-        subjects ? subjects.light(description.references, null, item.key) : light(item.ids),
+      onMouseEnter: () => {
+        if (subjects) subjects.light(description.references, null, item.key);
+        else light(item.ids);
+        onIssueHover?.(item.key);
+      },
       onMouseLeave: () => (subjects ? subjects.clear(item.key) : light(null)),
       onMouseMove: () => subjects?.light(description.references, null, item.key),
       revitIds: target.ids,
       revitRefs: target.refs,
       lit: (selected != null && item.ids.includes(selected)) || item.key === focused,
+      // A person's own row click selects and releases the landing address (`onPick`); only a stage click lands on `issue`.
       pick: () => onSelect(item.ids[0] ?? null),
       detail: () => (
         <>
@@ -369,8 +377,13 @@ export function Inbox({
   ];
   return (
     <>
-      <div onMouseLeave={() => light(null)}>
-        <RulingsList rows={rows} focused={focused} address={address} onPick={onPick} />
+      <div
+        onMouseLeave={() => {
+          light(null);
+          onIssueHover?.(null);
+        }}
+      >
+        <RulingsList rows={rows} focused={focused} hoveredIssue={hoveredIssue} address={address} onPick={onPick} />
       </div>
       {nativeResult ? (
         <div role="status" className="px-2 py-1">
@@ -389,12 +402,14 @@ const rulingSearch = (row: RulingRow) => row.search;
 function RulingsList({
   rows,
   focused,
+  hoveredIssue,
   address,
   onPick,
 }: {
   rows: RulingRow[];
   focused: string | null;
   onPick?: () => void;
+  hoveredIssue?: string | null;
   address?: {
     query: string;
     sort: "" | "name" | "status";
@@ -466,8 +481,9 @@ function RulingsList({
     <ListView
       aria-label="rulings"
       list={list}
-      row={({ key: _key, actions, detail: _detail, ...parts }) => ({
+      row={({ key, actions, detail: _detail, ...parts }) => ({
         ...parts,
+        active: key === hoveredIssue,
         actions: actions?.(),
       })}
       detail={(row) =>

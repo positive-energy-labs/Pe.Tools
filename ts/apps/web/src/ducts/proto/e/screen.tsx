@@ -27,6 +27,7 @@ import { noRunBranches } from "@pe/ducts-domain/no-runs";
 import { SubjectTextContext, type SubjectLighting } from "../../subject-text-view";
 import {
   annotatedFindings,
+  stageIssues,
   fanVerbs,
   healRunView,
   focusRow,
@@ -455,6 +456,8 @@ function EScreenBody({ props }: { props: ProtoProps }) {
     );
     props.onHover(null);
   };
+  const issues = useMemo(() => (inbox ? stageIssues(inbox) : []), [inbox]);
+  const [hoveredIssue, setHoveredIssue] = useState<string | null>(null);
   const [ruleFocus, setRuleFocus] = useState<string | null>(null);
   // null = automatic: open when the inbox holds a row, collapsed when it holds none.
   const [inboxOpen, setInboxOpen] = useState<boolean | null>(null);
@@ -785,6 +788,8 @@ function EScreenBody({ props }: { props: ProtoProps }) {
           fan={fanHandles}
           selected={selected}
           focused={focusKey}
+          hoveredIssue={hoveredIssue}
+          onIssueHover={setHoveredIssue}
           onPick={() => setPage({ issue: "" }, { history: "replace" })}
           address={{
             query: page.rulingQuery,
@@ -853,6 +858,9 @@ function EScreenBody({ props }: { props: ProtoProps }) {
                     lit={lighting.ids}
                     issueScope={issueScope}
                     annotated={annotated}
+                    issues={issues}
+                    hoveredIssue={hoveredIssue}
+                    onIssueHover={setHoveredIssue}
                     scale={encoded}
                     nameOf={nameOf}
                     groups={drawGroups}

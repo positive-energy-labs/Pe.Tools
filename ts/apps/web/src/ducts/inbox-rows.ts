@@ -117,6 +117,8 @@ export type RowVerb =
 
 export interface InboxItem {
   key: string;
+  /** Findings represented by this row, including those folded into a Heal row. */
+  findingIds?: readonly string[];
   group: Exclude<InboxGroup, "write">;
   kind: string;
   title: string;
@@ -301,6 +303,7 @@ function healRow(
           : null;
   return {
     key: `heal:${g.group}`,
+    findingIds: g.items.flatMap((item) => item.covers),
     group: "fix",
     kind: "heal",
     title: `Heal ${label(g.group)}: ${counts}`,
@@ -465,7 +468,7 @@ export function triage(input: TriageInput) {
   for (const f of findings) {
     if (!inScope(f) || f.kind === "no-flow" || f.kind === "no-terminal-flow") continue;
     if (heal?.covered.has(f.id)) continue;
-    const base = { key: f.id, ids: f.elementIds, note: f.note };
+    const base = { key: f.id, findingIds: [f.id], ids: f.elementIds, note: f.note };
     // A Fix or Set row off the system's runs is another system's in a shared group: Diagnostics.
     const off = !pricesSystem(f);
     const offRow = ({ tone: _tone, ...item }: InboxItem): InboxItem => ({
@@ -819,6 +822,12 @@ export function triage(input: TriageInput) {
     flowless.push(n.id);
     set.push({
       key: `flows:${n.id}`,
+      findingIds: findings
+        .filter(
+          (f) =>
+            (f.kind === "no-flow" || f.kind === "no-terminal-flow") && f.elementIds.includes(n.id),
+        )
+        .map((f) => f.id),
       group: "set",
       kind: "terminal-flow",
       title: name(n.id),
@@ -1089,6 +1098,44 @@ function writeRow(left: { fix: number; set: number }, write: WriteState): WriteR
 
 /** The Fix rows that hold the ESP back: every one but a Heal row standing in no path. */
 export const holding = (fix: readonly InboxItem[]) => fix.filter((i) => i.blocks !== false).length;
+
+export interface StageIssue {
+  key: string;
+  ids: readonly number[];
+  findings: readonly string[];
+  blocking: boolean;
+}
+
+/** The inbox owns identity and severity; the stage only chooses how to draw it. */
+export function stageIssues(
+  rows: Pick<ReturnType<typeof triage>, "fix" | "set" | "diagnostics">,
+): StageIssue[] {
+  return [...rows.fix, ...rows.set, ...rows.diagnostics].map((row) => ({
+    key: row.key,
+    ids: row.ids,
+    findings: row.findingIds ?? [row.key],
+    blocking: (row.group === "fix" && row.blocks !== false) || row.group === "set",
+  }));
+}
+
+/** Prefer an element's own input over a system-wide parameter picker on the same mesh. */
+export function issueAt(
+  issues: readonly StageIssue[],
+  ids: readonly number[],
+  preferred?: string | null,
+) {
+  const candidates = issues.filter((issue) => issue.ids.some((id) => ids.includes(id)));
+  return (
+    candidates.find((issue) => issue.key === preferred) ??
+    candidates.sort(
+      (a, b) =>
+        Number(b.blocking) - Number(a.blocking) ||
+        a.ids.length - b.ids.length ||
+        Number(a.key === "airflow" || a.key === "unit-airflow") -
+          Number(b.key === "airflow" || b.key === "unit-airflow"),
+    )[0]
+  );
+}
 
 /** A Diagnostics row's kind in the key: a bridged join by its grade (its status), any other row by its kind. */
 export const diagnosticKind = (item: InboxItem) => (item.kind === "join" ? item.status : item.kind);

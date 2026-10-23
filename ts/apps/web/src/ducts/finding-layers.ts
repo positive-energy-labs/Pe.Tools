@@ -24,6 +24,7 @@ import {
 import { withStoredRulings } from "@pe/ducts-domain/rulings";
 import type { DuctSnapshot } from "@pe/ducts-domain/types";
 import type { Layer3D } from "#/scene/types";
+import type { StageIssue } from "./inbox-rows";
 
 /** The illustrations' inks (the duct cases page): inferred red, open end orange, cap and heal amber. */
 const INK = {
@@ -40,21 +41,27 @@ type Connector = Element["connectors"][number];
 
 /** An oriented box or cylinder: unit axes and half sizes along each (a cylinder's third axis is its run, the first two its radius). */
 export interface OrientedBox {
+  finding: string;
+  elementId: number;
   shape: "box" | "cylinder";
   center: number[];
   axes: [number[], number[], number[]];
   half: [number, number, number];
 }
 export interface FindingShapes {
-  outlines: { outline: Outline; ink: Ink }[];
+  outlines: { outline: Outline; ink: Ink; finding: string; elementId: number }[];
   /** Dashed bars: the gap of a join, or a tapping end to its landing. */
-  bars: Edge[];
+  bars: FindingEdge[];
   /** Advisory gap bars; never a join in the priced graph. */
-  missedBars: Edge[];
-  overhang: Edge[];
+  missedBars: FindingEdge[];
+  overhang: FindingEdge[];
   /** What a heal adds. */
   boxes: OrientedBox[];
 }
+
+type FindingEdge = Edge & { finding: string; elementId: number };
+const edgeFor = (finding: string, elementId: number, edge: Edge): FindingEdge =>
+  Object.assign(edge, { finding, elementId });
 
 const sub = (p: number[], q: number[]) => p.map((v, k) => v - q[k]!);
 const add = (p: number[], q: number[], by = 1) => p.map((v, k) => v + q[k]! * by);
@@ -123,66 +130,70 @@ export function findingShapes(
     return axis && c.point.length === 3 ? outlineOf(c, c.point, axis, c.widthAxis ?? null) : null;
   };
   const drawn = new Set<string>();
-  const outline = (k: string, ink: Ink) => {
+  const outline = (k: string, ink: Ink, finding: string) => {
     const at = end(k);
     const o = at && faceOf(at.e, at.c);
-    if (o && !drawn.has(`${ink}:${k}`)) {
-      drawn.add(`${ink}:${k}`);
-      shapes.outlines.push({ outline: o, ink });
+    if (o && !drawn.has(`${finding}:${ink}:${k}`)) {
+      drawn.add(`${finding}:${ink}:${k}`);
+      shapes.outlines.push({ outline: o, ink, finding, elementId: at!.e.id });
     }
     return o;
   };
   const caps = capFacesOf(snapshot);
-  const named = new Set<number>();
-  const capOutline = (cap: (typeof caps)[number]) => {
-    const key = `cap:${cap.owner}:${cap.at}`;
+  const named = new Map<number, string>();
+  const capOutline = (cap: (typeof caps)[number], finding: string) => {
+    const key = `cap:${finding}:${cap.owner}:${cap.at}`;
     if (drawn.has(key)) return;
     drawn.add(key);
     const o = outlineOf(cap.segment, cap.origin, cap.normal, rollOf(cap.segment));
-    if (o) shapes.outlines.push({ outline: o, ink: "cap" });
+    if (o) shapes.outlines.push({ outline: o, ink: "cap", finding, elementId: cap.owner });
   };
 
   for (const issue of snapshot.issues)
     if (issue.kind === "open-end" && issue.elementId != null && shown.has(issue.id)) {
-      outline(`${issue.elementId}:${issue.id.split(":").at(-1)}`, "open");
-      named.add(issue.elementId);
+      outline(`${issue.elementId}:${issue.id.split(":").at(-1)}`, "open", issue.id);
+      named.set(issue.elementId, issue.id);
     }
 
   for (const j of inference.joints) {
     if (!shown.has(j.id)) continue;
-    const [a, b] = [outline(j.a, "inferred"), outline(j.b, "inferred")];
+    const [a, b] = [outline(j.a, "inferred", j.id), outline(j.b, "inferred", j.id)];
     if (!a || !b) continue;
-    shapes.bars.push([a.center, b.center]);
-    shapes.overhang.push(...overhang(a, b), ...overhang(b, a));
-    named.add(Number(j.a.split(":")[0])).add(Number(j.b.split(":")[0]));
+    shapes.bars.push(edgeFor(j.id, Number(j.a.split(":")[0]), [a.center, b.center]));
+    shapes.overhang.push(
+      ...overhang(a, b).map((e) => edgeFor(j.id, Number(j.a.split(":")[0]), e)),
+      ...overhang(b, a).map((e) => edgeFor(j.id, Number(j.b.split(":")[0]), e)),
+    );
+    named.set(Number(j.a.split(":")[0]), j.id).set(Number(j.b.split(":")[0]), j.id);
   }
   for (const f of inference.findings) {
     if (f.kind !== "missed-join" || !shown.has(f.id) || !f.connectors) continue;
-    const [a, b] = f.connectors.map((k) => outline(k, "missed"));
-    if (a && b) shapes.missedBars.push([a.center, b.center]);
+    const [a, b] = f.connectors.map((k) => outline(k, "missed", f.id));
+    if (a && b) shapes.missedBars.push(edgeFor(f.id, f.elementIds[0]!, [a.center, b.center]));
   }
   for (const t of inference.taps) {
     if (!shown.has(t.id)) continue;
-    const from = outline(t.a, "inferred");
+    const from = outline(t.a, "inferred", t.id);
     if (!from) continue;
-    named.add(Number(t.a.split(":")[0]));
+    named.set(Number(t.a.split(":")[0]), t.id);
     // Landing on a capped end is the cap's face; on a side, the duct's section at the landing.
     const cap = caps.find(
       (c) => c.owner === t.segment && Math.hypot(...sub(c.end, t.point)) < 0.01,
     );
     if (cap) {
-      capOutline(cap);
-      shapes.bars.push([from.center, cap.origin]);
+      capOutline(cap, t.id);
+      shapes.bars.push(edgeFor(t.id, Number(t.a.split(":")[0]), [from.center, cap.origin]));
       continue;
     }
     const seg = elements.get(t.segment) as DuctSnapshot["segments"][number];
     const run = unit(sub(seg.polyline.at(-1)!, seg.polyline[0]!));
     const land = run && outlineOf(seg, t.point, run, rollOf(seg));
-    if (land) shapes.outlines.push({ outline: land, ink: "inferred" });
-    shapes.bars.push([from.center, t.point]);
+    if (land)
+      shapes.outlines.push({ outline: land, ink: "inferred", finding: t.id, elementId: t.segment });
+    shapes.bars.push(edgeFor(t.id, Number(t.a.split(":")[0]), [from.center, t.point]));
   }
   // A capped end of an element a drawn finding names is drawn amber, as the illustrations do.
-  for (const cap of caps) if (named.has(cap.owner)) capOutline(cap);
+  for (const cap of caps) if (named.has(cap.owner)) capOutline(cap, named.get(cap.owner)!);
 
   for (const group of healPlan(snapshot, work).groups)
     for (const item of group.items) {
@@ -201,6 +212,8 @@ export function findingShapes(
             : 0;
       if (span <= 0) continue;
       shapes.boxes.push({
+        finding: item.covers.find((id) => shown.has(id))!,
+        elementId: at!.e.id,
         shape: face.round ? "cylinder" : "box",
         center: add(face.center, n, span / 2),
         axes: [face.x, face.y, n],
@@ -248,7 +261,36 @@ function advisoryColor(): THREE.Color {
 }
 
 /** The drawing as `Layer3D`s; each key carries a hash of its geometry so an unchanged one is not rebuilt. */
-export function findingLayers(shapes: FindingShapes): Layer3D[] {
+export function findingLayers(shapes: FindingShapes, issues?: readonly StageIssue[]): Layer3D[] {
+  const parts = [
+    ...shapes.outlines,
+    ...shapes.bars,
+    ...shapes.missedBars,
+    ...shapes.overhang,
+    ...shapes.boxes,
+  ];
+  const owners = new Map(parts.map((part) => [`${part.finding}/${part.elementId}`, part]));
+  return [...owners.values()].flatMap(({ finding, elementId }) => {
+    const issue = issues?.find((i) => i.findings.includes(finding));
+    const belongs = (part: { finding: string; elementId: number }) =>
+      part.finding === finding && part.elementId === elementId;
+    const own: FindingShapes = {
+      outlines: shapes.outlines.filter(belongs),
+      bars: shapes.bars.filter(belongs),
+      missedBars: shapes.missedBars.filter(belongs),
+      overhang: shapes.overhang.filter(belongs),
+      boxes: shapes.boxes.filter(belongs),
+    };
+    return geometryLayers(own).map((layer) => ({
+      ...layer,
+      key: `${layer.key}:${finding}:${elementId}`,
+      findings: [finding],
+      targets: issue ? [{ key: issue.key, elementId }] : [],
+    }));
+  });
+}
+
+function geometryLayers(shapes: FindingShapes): Layer3D[] {
   const out: Layer3D[] = [];
   const key = (name: string, geometry: unknown) => {
     let h = 0;

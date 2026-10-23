@@ -28,7 +28,7 @@ import { isClick, pickAt } from "./picking";
 import { samePlane, type PlaneAxis, type PlaneViewport } from "./plane";
 import type { Project, Ray, Size } from "./projection";
 import { createRenderer, type ClipVolume, type SceneRenderer } from "./renderer";
-import type { Layer3D, Pick, SceneInstance, SceneMeshes } from "./types";
+import type { IssueTarget, Layer3D, Pick, SceneInstance, SceneMeshes } from "./types";
 
 export type Scene3DProps = {
   meshes: SceneMeshes | null;
@@ -45,6 +45,10 @@ export type Scene3DProps = {
   hidden?: ReadonlySet<string>;
   isolated?: ReadonlySet<string> | null;
   layers?: readonly Layer3D[];
+  hoveredIssue?: string | null;
+  focusedIssue?: string | null;
+  onIssueHover?: (target: IssueTarget | null) => void;
+  onIssuePick?: (target: IssueTarget, event: PointerEvent) => void;
   /** A click (a press that stayed within 5 px); null when it met nothing. */
   onPick?: (pick: Pick | null, event: PointerEvent) => void;
   /** A double-click: the element under it, or null on empty space. The caller frames it. */
@@ -187,6 +191,11 @@ export function Scene3D(props: Scene3DProps): ReactNode {
 
     // The element under the pointer, declared where the element menu looks (absent when none).
     const aim = (at: PointerEvent | MouseEvent) => {
+      const issue = r.pickIssue(at);
+      latest.current.onIssueHover?.(issue);
+      if (issue) canvas.dataset.issue = issue.key;
+      else delete canvas.dataset.issue;
+      canvas.style.cursor = issue ? "pointer" : "";
       const instance = pickAt(r, at, latest.current.clip)?.instance;
       const target = instance ? sceneTarget(latest.current.observation, instance) : null;
       const attributes: Partial<Record<(typeof ATTRS)[number], string>> = target
@@ -208,6 +217,9 @@ export function Scene3D(props: Scene3DProps): ReactNode {
     };
     const pointerLeave = () => {
       over = null;
+      latest.current.onIssueHover?.(null);
+      delete canvas.dataset.issue;
+      canvas.style.cursor = "";
       for (const name of ATTRS) canvas.removeAttribute(name);
     };
     const pointerDown = (event: PointerEvent) => {
@@ -215,6 +227,8 @@ export function Scene3D(props: Scene3DProps): ReactNode {
     };
     const pointerUp = (event: PointerEvent) => {
       if (event.button !== 0 || down?.button !== 0 || !isClick(down, event)) return;
+      const issue = r.pickIssue(event);
+      if (issue && latest.current.onIssuePick) return latest.current.onIssuePick(issue, event);
       latest.current.onPick?.(pickAt(r, event, latest.current.clip), event);
     };
     const doubleClick = (event: MouseEvent) =>
@@ -275,6 +289,9 @@ export function Scene3D(props: Scene3DProps): ReactNode {
   useEffect(() => {
     core.current?.setLayers(props.layers);
   }, [props.layers, meshes]);
+  useEffect(() => {
+    core.current?.lightIssue(props.hoveredIssue ?? null, props.focusedIssue ?? null);
+  }, [props.hoveredIssue, props.focusedIssue, meshes]);
   useEffect(() => {
     core.current?.setClip(props.clipVolume);
   }, [props.clipVolume, meshes]);

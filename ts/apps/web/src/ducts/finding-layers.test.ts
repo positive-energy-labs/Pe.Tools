@@ -91,6 +91,8 @@ it("an annotated near-miss draws both faces, the gap bar and the overhung edges"
     "inferred",
     "bars",
     "overhang",
+    "inferred",
+    "overhang",
   ]);
 });
 
@@ -109,7 +111,11 @@ it("a possible missed join draws two advisory faces and a separate dotted gap ba
   expect(shapes.bars).toEqual([]);
   expect(shapes.overhang).toEqual([]);
   expect(shapes.missedBars).toHaveLength(1);
-  expect(findingLayers(shapes).map((l) => l.key.split(":")[1])).toEqual(["missed", "missed-bars"]);
+  expect(findingLayers(shapes).map((l) => l.key.split(":")[1])).toEqual([
+    "missed",
+    "missed-bars",
+    "missed",
+  ]);
 });
 
 it("a chosen system draws its findings without annotations and excludes annotations outside it", () => {
@@ -274,4 +280,19 @@ it("a heal that caps a round open end draws a cylinder of the duct's diameter", 
   const cyl = shapes.boxes.find((b) => b.shape === "cylinder");
   expect(cyl).toBeDefined();
   expect(cyl!.half[0] * 12).toBeCloseTo(6, 3);
+});
+
+it("join faces, bars and overhang all carry the same inbox identity", () => {
+  const id = "proximity:1:1|2:0";
+  const shapes = findingShapes(snapshot, new Set([id]), null);
+  const layers = findingLayers(shapes, [
+    { key: "heal:g", ids: [999, 2, 1], findings: [id], blocking: true },
+  ]);
+  expect(layers.length).toBeGreaterThan(0);
+  for (const layer of layers) {
+    expect(layer.findings).toEqual([id]);
+    expect(layer.targets).toHaveLength(1);
+    expect(layer.targets![0]!.key).toBe("heal:g");
+    expect([1, 2]).toContain(layer.targets![0]!.elementId);
+  }
 });

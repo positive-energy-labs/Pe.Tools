@@ -55,7 +55,15 @@ export class SceneMeshes {
 /** An answer drawn over the scene in its own group, keyed so it is cheap to add and remove.
  * `build` draws in world coordinates (host feet); the group is disposed when the key leaves or
  * the layer object is replaced. */
-export type Layer3D = { key: string; build(group: THREE.Group): void };
+export type IssueTarget = { key: string; elementId: number };
+export type Layer3D = {
+  key: string;
+  build(group: THREE.Group): void;
+  targets?: readonly IssueTarget[];
+  findings?: readonly string[];
+  /** Update imperative materials; true requests another frame. */
+  frame?: (group: THREE.Group, seconds: number, reducedMotion: boolean, lit: boolean) => boolean;
+};
 
 /** What the pointer is over: one element, and the world point the ray met it at. */
 export type Pick = {

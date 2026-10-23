@@ -38,6 +38,8 @@ import { ScaleLegend } from "../encoding/scale-legend";
 import type { GroupEncoding } from "../encoding/use-encoding";
 import type { ProtoProps } from "../props";
 import { fmtFt } from "./bar";
+import type { StageIssue } from "../../inbox-rows";
+import { damageLayer } from "#/scene/damage";
 import { usePictureFloaters } from "./picture-floaters";
 import { RulingBody, useMarks } from "./rulings";
 import { noRunParts } from "../../subject-text";
@@ -62,6 +64,9 @@ const LAYER_WORDS: Record<
 const fmt = (n: number | null | undefined, d = 3) => (n == null ? "—" : n.toFixed(d));
 
 export interface ECanvasExtra {
+  issues: readonly StageIssue[];
+  hoveredIssue: string | null;
+  onIssueHover: (key: string | null) => void;
   /** The element set a sidebar row lights; empty lights nothing. */
   lit: ReadonlySet<number>;
   /** The system's groups (stable, `systemScope`); the picture draws every one. */
@@ -102,6 +107,9 @@ function Canvas({
   lit,
   issueScope,
   annotated,
+  issues,
+  hoveredIssue,
+  onIssueHover,
   groups,
   lead,
   scale,
@@ -190,8 +198,58 @@ function Canvas({
           work.doc,
           page.system ? systemScope(snapshot, page.system).members : undefined,
         ),
+        issues,
       ),
-    [snapshot, annotated, work.doc, page.system],
+    [snapshot, annotated, work.doc, page.system, issues],
+  );
+
+  const damage = useMemo(
+    () =>
+      read.meshes
+        ? read.meshes.instances.flatMap((instance) => {
+            if (
+              !instance.vertexCount ||
+              instance.revitId == null ||
+              instance.linkInstanceId != null
+            )
+              return [];
+            const blockers = issues
+              .filter((issue) => issue.blocking && issue.ids.includes(instance.revitId!))
+              .sort(
+                (a, b) =>
+                  a.ids.length - b.ids.length ||
+                  Number(a.key === "airflow" || a.key === "unit-airflow") -
+                    Number(b.key === "airflow" || b.key === "unit-airflow"),
+              );
+            return blockers.length
+              ? [
+                  damageLayer(
+                    read.meshes!,
+                    instance,
+                    blockers.map((issue) => ({ key: issue.key, elementId: instance.revitId! })),
+                    blockers.flatMap((issue) => issue.findings),
+                  ),
+                ]
+              : [];
+          })
+        : [],
+    [read.meshes, issues],
+  );
+  const stageLayers = useMemo(() => [...findings3d, ...damage], [findings3d, damage]);
+  const covered = useMemo(
+    () => new Set(stageLayers.flatMap((layer) => layer.findings ?? [])),
+    [stageLayers],
+  );
+  const marks = rulings.filter(
+    (r) =>
+      !read.meshes ||
+      !covered.has(
+        r.kind === "claim"
+          ? `claim:${r.claim.id}`
+          : r.kind === "inferred"
+            ? r.finding.id
+            : r.issue.id,
+      ),
   );
 
   // Header facts: a system name (never a group id), Pe fan static, critical run total.
@@ -228,7 +286,10 @@ function Canvas({
     setOpen(id == null ? null : { what: "element", id, ...at });
   };
   const ruling = (r: Ruling, at: { x: number; y: number }) => {
-    setPage({ selected: String(r.at) }, { history: "push" });
+    const finding =
+      r.kind === "claim" ? `claim:${r.claim.id}` : r.kind === "issue" ? r.issue.id : r.finding.id;
+    const issue = issues.find((i) => i.findings.includes(finding))?.key ?? finding;
+    setPage({ selected: String(r.at), issue, rulingQuery: "" }, { history: "push" });
     setOpen({ what: "ruling", n: r.n, ...at });
   };
   const schematic = (size: "main" | "inset") => (
@@ -359,8 +420,11 @@ function Canvas({
             lit={litAll}
             hovered={hovered}
             labels={labels}
-            rulings={rulings}
-            findings3d={findings3d}
+            rulings={marks}
+            findings3d={stageLayers}
+            issues={issues}
+            hoveredIssue={hoveredIssue}
+            onIssueHover={onIssueHover}
             noRuns={noRuns}
             pointOf={pointOf}
             issue={page.issue}
