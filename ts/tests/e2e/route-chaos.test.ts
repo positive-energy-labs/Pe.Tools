@@ -37,7 +37,8 @@ const fixedStatusText = (source: ShiftSource) => {
     JSON.stringify(source.previousRect) === JSON.stringify(source.currentRect) &&
     entries.some((entry) => entry.text !== entries[0]?.text) &&
     entries.every(
-      (entry) => finiteRect(entry.rect) && JSON.stringify(entry.rect) === JSON.stringify(entries[0]?.rect),
+      (entry) =>
+        finiteRect(entry.rect) && JSON.stringify(entry.rect) === JSON.stringify(entries[0]?.rect),
     )
   );
 };
@@ -294,6 +295,7 @@ test("seeded real-user route journey", async () => {
       error?: string;
     }[],
     coverage: {} as Record<string, string>,
+    workerProtocol: [] as unknown[],
     network: [] as {
       method: string;
       url?: string;
@@ -612,7 +614,20 @@ test("seeded real-user route journey", async () => {
         )
           workers.set(event.params.sessionId, event.params.targetInfo.url);
         if (event.method === "Target.detachedFromTarget") workers.delete(event.params.sessionId);
-        if (event.method === "Debugger.paused" && event.sessionId) paused.add(event.sessionId);
+        if (event.method === "Debugger.paused" && event.sessionId) {
+          paused.add(event.sessionId);
+          receipt.workerProtocol.push({
+            at: Date.now(),
+            event: event.method,
+            session: event.sessionId,
+            reason: event.params.reason,
+            frames: event.params.callFrames.slice(0, 3).map((frame: any) => ({
+              functionName: frame.functionName,
+              url: frame.url,
+              location: frame.location,
+            })),
+          });
+        }
         if (event.method === "Debugger.resumed" && event.sessionId) paused.delete(event.sessionId);
         if (event.method === "Network.responseReceived")
           receipt.network.push({
@@ -1173,12 +1188,41 @@ test("seeded real-user route journey", async () => {
         )
           return;
         workerSession = worker![0];
+        const oldDrawing = await hold(p, DRAWING);
+        const oldIdentity = await p.read<string>(
+          `[...document.querySelectorAll('[data-e-state], [data-e-identity]')].map(e => e.textContent).join(' | ')`,
+        );
         await p.send("Debugger.enable", {}, workerSession);
         await p.send("Debugger.pause", {}, workerSession);
-        await p.until(async () => paused.has(workerSession!), "pricing worker actually paused");
+        receipt.workerProtocol.push({
+          at: Date.now(),
+          command: "Debugger.pause returned",
+          session: workerSession,
+          workerUrl: worker![1],
+          paused: paused.has(workerSession),
+        });
         try {
+          // An idle worker may not enter JS until the trusted Refresh posts its next job.
           await button(p, "refresh");
+          receipt.workerProtocol.push({ at: Date.now(), command: "trusted Refresh released" });
+          await p.until(async () => paused.has(workerSession!), "pricing worker actually paused");
           await p.until(() => p.count("[data-e-refreshing]"), "held result while worker is paused");
+          expect(
+            await retained(p, oldDrawing),
+            "old drawing remains connected while pricing is paused",
+          ).toBe(true);
+          expect(
+            await p.read<string>(
+              `[...document.querySelectorAll('[data-e-state], [data-e-identity]')].map(e => e.textContent).join(' | ')`,
+            ),
+            "old result identity remains drawn before changing system",
+          ).toBe(oldIdentity);
+          receipt.workerProtocol.push({
+            at: Date.now(),
+            heldOldIdentity: oldIdentity,
+            paused: paused.has(workerSession),
+          });
+          save();
           if (
             lane === "host" &&
             process.env.CHAOS_STAGE_SELECTOR &&
@@ -1192,6 +1236,7 @@ test("seeded real-user route journey", async () => {
           await pickSystem(b, true);
         } finally {
           await p.send("Debugger.resume", {}, workerSession);
+          await p.send("Runtime.releaseObject", { objectId: oldDrawing });
         }
         await settled(p);
         await subject(p, b);

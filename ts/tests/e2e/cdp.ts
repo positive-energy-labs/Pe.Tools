@@ -164,10 +164,15 @@ export async function connect(
     /** Poll until `check` is truthy; the timeout names what never appeared. */
     async until<T>(check: () => Promise<T>, what: string, ms = 15_000): Promise<NonNullable<T>> {
       const end = Date.now() + ms;
+      let lastError: unknown;
       for (;;) {
-        const v = await check().catch(() => undefined);
+        const v = await check().catch((error) => {
+          lastError = error;
+          return undefined;
+        });
         if (v) return v as NonNullable<T>;
-        if (Date.now() > end) throw new Error(`timed out waiting for ${what}`);
+        if (Date.now() > end)
+          throw new Error(`timed out waiting for ${what}`, { cause: lastError });
         await new Promise((r) => setTimeout(r, 200));
       }
     },
