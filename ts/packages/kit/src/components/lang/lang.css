@@ -1372,12 +1372,14 @@ svg [data-damage] {
 }
 [data-floater-popup] {
   width: max-content;
+  height: max-content;
   max-width: var(--available-width);
+  overflow: hidden;
   padding: 0;
 }
-[data-floater-popup]:not([data-sized]) > [data-slot="floater-content"] {
-  width: auto;
-  height: auto;
+[data-floater-popup] svg {
+  max-width: 100%;
+  max-height: 100%;
 }
 /* The field owns folding, including both dimensions; routes only declare furniture. */
 [data-slot="pane-field"]:has(> [data-slot="floater"]) {

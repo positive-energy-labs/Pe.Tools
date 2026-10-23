@@ -12,45 +12,45 @@ afterEach(() => {
 });
 
 function measure(width: number, height = 600) {
-  vi.spyOn(HTMLElement.prototype, "getBoundingClientRect").mockReturnValue({
-    width,
-    height,
-    top: 0,
-    left: 0,
-    right: width,
-    bottom: height,
-    x: 0,
-    y: 0,
-    toJSON: () => ({}),
-  });
-  const original = window.getComputedStyle;
-  vi.spyOn(window, "getComputedStyle").mockImplementation((element) => {
-    const style = original(element);
-    return new Proxy(style, {
-      get(target, property) {
-        if (property === "getPropertyValue")
-          return (name: string) => (name === "--gutter" ? "8px" : target.getPropertyValue(name));
-        const value = Reflect.get(target, property);
-        return typeof value === "function" ? value.bind(target) : value;
-      },
-    });
-  });
+  vi.spyOn(HTMLElement.prototype, "getBoundingClientRect").mockReturnValue(
+    new DOMRect(0, 0, width, height),
+  );
+  render(<style>{"* { --gutter: 8px; }"}</style>);
 }
 
-test("fitting the supporting pane reserves the subject minimum and the seam", () => {
-  measure(900);
-  const { container } = render(
-    <PaneSplit
-      axis="horizontal"
-      start="subject"
-      end="drawing"
-      resize={{ target: "end", defaultSize: 500, minSize: 260, minOtherSize: 560 }}
-    />,
-  );
-  expect((container.firstElementChild as HTMLElement).style.gridTemplateColumns).toBe(
-    "minmax(0, 1fr) var(--gutter) 332px",
-  );
-});
+test.each(["horizontal", "vertical"] as const)(
+  "fitting %s reserves the subject minimum and measures all grips before paint",
+  (axis) => {
+    measure(axis === "horizontal" ? 900 : 600, axis === "horizontal" ? 600 : 900);
+    const { container } = render(
+      <PaneSplit
+        axis={axis}
+        start="subject"
+        end="drawing"
+        resize={{ target: "end", defaultSize: 500, minSize: 260, minOtherSize: 560 }}
+      />,
+    );
+    expect(
+      (container.firstElementChild as HTMLElement).style[
+        axis === "horizontal" ? "gridTemplateColumns" : "gridTemplateRows"
+      ],
+    ).toBe("minmax(0, 1fr) var(--gutter) 332px");
+    const seam = screen.getByRole("separator");
+    const handles = [...seam.querySelectorAll<HTMLElement>("[data-slot='pane-resize-grip']")];
+    expect(handles.map((el) => el.dataset.corner)).toEqual(["center", "tr", "bl"]);
+    expect(handles[0]!.style[axis === "horizontal" ? "top" : "left"]).toBe("300px");
+    expect(handles.every((el) => el.parentElement === seam)).toBe(true);
+    const capture = vi.fn();
+    seam.setPointerCapture = capture;
+    seam.releasePointerCapture = vi.fn();
+    seam.hasPointerCapture = () => true;
+    for (const handle of handles) {
+      fireEvent.pointerDown(handle, { clientX: 0 });
+      fireEvent.pointerUp(handle, { clientX: 0 });
+    }
+    expect(capture).toHaveBeenCalledTimes(3);
+  },
+);
 
 test("a split that cannot fit both minimum widths stacks its mounted panes", () => {
   measure(600);

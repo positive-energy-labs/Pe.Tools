@@ -21,22 +21,66 @@ const spec = (key: string, size?: FloaterSpec["size"]): FloaterSpec => ({
 });
 
 function mockField() {
+  vi.spyOn(document.documentElement, "clientWidth", "get").mockReturnValue(600);
+  vi.spyOn(document.documentElement, "clientHeight", "get").mockReturnValue(600);
+  for (const [property, dimension] of [
+    ["offsetWidth", "width"],
+    ["offsetHeight", "height"],
+    ["clientWidth", "width"],
+    ["clientHeight", "height"],
+  ] as const)
+    vi.spyOn(HTMLElement.prototype, property, "get").mockImplementation(
+      function (this: HTMLElement) {
+        return this.getBoundingClientRect()[dimension];
+      },
+    );
+  vi.spyOn(SVGElement.prototype, "getBoundingClientRect").mockImplementation(
+    function (this: SVGElement) {
+      const panel = this.closest("[data-floater-popup]")?.getBoundingClientRect();
+      return new DOMRect(panel?.x ?? 0, panel?.y ?? 0, 220, 220);
+    },
+  );
   vi.spyOn(HTMLElement.prototype, "getBoundingClientRect").mockImplementation(
     function (this: HTMLElement) {
       if (this.dataset.field !== undefined) return new DOMRect(0, 0, 600, 600);
+      if (this.dataset.slot === "floater-content") return new DOMRect(0, 0, 220, 220);
+      if (this.matches("button") && this.closest("[data-slot='floater']"))
+        return new DOMRect(500, 568, 80, 24);
+      if (this.style.position === "fixed" || this.hasAttribute("data-floater-popup")) {
+        const panel = this.hasAttribute("data-floater-popup")
+          ? this
+          : this.querySelector<HTMLElement>("[data-floater-popup]");
+        const positioner = panel?.parentElement;
+        const xy = positioner?.style.transform.match(/translate\(([-\d.]+)px, ([-\d.]+)px\)/);
+        return new DOMRect(
+          Number(xy?.[1]) || 0,
+          Number(xy?.[2]) || 0,
+          parseFloat(panel?.style.width ?? "") || 0,
+          parseFloat(panel?.style.height ?? "") || 0,
+        );
+      }
       if (
-        this.matches("[data-picture-readout], [data-slot='pane-work'], [data-slot='pane-legend']")
+        this.matches(
+          "[data-picture-readout], [data-slot='pane-work'], [data-slot='pane-legend'], [data-slot='pane-resize-grip']",
+        )
       )
         return new DOMRect(450, 0, 150, 100);
       if (this.dataset.slot !== "floater") return new DOMRect();
       const corner = this.dataset.place!;
       const dy = Number(this.style.translate.split(" ")[1]?.replace("px", "")) || 0;
-      return new DOMRect(corner[1] === "r" ? 500 : 0, (corner[0] === "b" ? 500 : 0) + dy, 100, 100);
+      const width = parseFloat(this.style.width) || 100;
+      const height = parseFloat(this.style.height) || 100;
+      return new DOMRect(
+        corner[1] === "r" ? 600 - width : 0,
+        (corner[0] === "b" ? 600 - height : 0) + dy,
+        width,
+        height,
+      );
     },
   );
 }
 
-test.each(["sibling", "pane-legend", "data-picture-readout", "pane-work"])(
+test.each(["sibling", "pane-legend", "data-picture-readout", "pane-work", "pane-resize-grip"])(
   "floaters yield to arriving %s without losing their preferred home",
   async (kind) => {
     mockField();
@@ -48,7 +92,7 @@ test.each(["sibling", "pane-legend", "data-picture-readout", "pane-work"])(
           ) : (
             <div {...{ [kind === "data-picture-readout" ? kind : "data-slot"]: kind }} />
           ))}
-        <Floater spec={spec("second", { width: 100, height: 100 })} />
+        <Floater spec={spec("second", { width: 160, height: 120 })} />
       </div>
     );
     const view = render(field(false));
@@ -62,6 +106,7 @@ test.each(["sibling", "pane-legend", "data-picture-readout", "pane-work"])(
     const first = view.getByRole("region", { name: "first" }).getBoundingClientRect();
     const rect = second.getBoundingClientRect();
     expect(first.x).toBe(500);
+    expect(rect.right).toBe(first.right);
     expect(rect.bottom <= first.top || rect.top >= first.bottom || rect.right <= first.left).toBe(
       true,
     );
@@ -72,19 +117,21 @@ const pointer = (el: Element, type: string, x: number, y: number) =>
   fireEvent(el, new MouseEvent(type, { bubbles: true, button: 0, clientX: x, clientY: y }));
 
 function setup(size?: FloaterSpec["size"]) {
+  mockField();
   const outerPointer = vi.fn();
   const view = render(
-    <div onPointerDown={outerPointer} onPointerMove={outerPointer} onPointerUp={outerPointer}>
+    <div
+      data-field=""
+      onPointerDown={outerPointer}
+      onPointerMove={outerPointer}
+      onPointerUp={outerPointer}
+    >
       <Floater spec={spec("globe", size)} />
     </div>,
   );
   const floater = view.getByRole("region", { name: "globe" });
-  vi.spyOn(floater.parentElement!, "getBoundingClientRect").mockReturnValue(
-    new DOMRect(0, 0, 600, 600),
-  );
-  const rect = vi
-    .spyOn(floater, "getBoundingClientRect")
-    .mockReturnValue(new DOMRect(360, 10, 230, 230));
+  const rect = vi.fn(() => new DOMRect(360, 10, 230, 230));
+  floater.getBoundingClientRect = rect;
   const grip = view.getByLabelText("move globe");
   const resize = view.getByLabelText("resize globe");
   grip.setPointerCapture = resize.setPointerCapture = vi.fn();
@@ -144,8 +191,24 @@ test.each([undefined, { width: 230, height: 230 }])(
     expect(popup).toBeTruthy();
     expect(popup.parentElement!.style.position).toBe("fixed");
     expect(floater.contains(popup)).toBe(false);
-    expect(popup.style.width).toBe(size ? "230px" : "");
-    expect(popup.style.height).toBe(size ? "230px" : "");
+    expect(popup.style.width).toBe(size ? "230px" : "220px");
+    expect(popup.style.height).toBe(size ? "230px" : "220px");
+    const panel = popup.getBoundingClientRect();
+    const content = svg.getBoundingClientRect();
+    const field = floater.parentElement!.getBoundingClientRect();
+    expect(
+      panel.left <= content.left &&
+        panel.right >= content.right &&
+        panel.top <= content.top &&
+        panel.bottom >= content.bottom,
+    ).toBe(true);
+    expect(
+      panel.left >= field.left &&
+        panel.right <= field.right &&
+        panel.top >= field.top &&
+        panel.bottom <= field.bottom,
+    ).toBe(true);
+    expect(popup.dataset.side).toBe("top");
     await waitFor(() => expect(focus.mock.contexts).toContain(popup));
     expect(focus.mock.calls.every(([options]) => options?.preventScroll)).toBe(true);
   },

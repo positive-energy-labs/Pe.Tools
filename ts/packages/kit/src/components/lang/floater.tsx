@@ -1,9 +1,5 @@
 import { Popover, PopoverTrigger } from "./popover";
 import { PopoverContent } from "./popover-internal";
-/**
- * Floaters yield in DOM order and announce each move; parallel siblings otherwise take one slot.
- * They may overlap neighbouring panes, but avoid the field's legends, readouts and earlier floaters.
- */
 import {
   useLayoutEffect,
   useRef,
@@ -13,12 +9,12 @@ import {
   type RefObject,
 } from "react";
 
-import { KeyScope, useScopeKeys, type Chord } from "@pe/kit/keys";
+import { KeyScope, ScopeKeys, type Chord } from "@pe/kit/keys";
 
 import { useTeach } from "./use-teach";
 
 export const PANE_OBSTACLES =
-  "[data-slot='pane-legend'], [data-picture-readout], [data-slot='pane-work']";
+  "[data-slot='pane-legend'], [data-picture-readout], [data-slot='pane-work'], [data-slot='pane-resize'], [data-slot='pane-resize-grip']";
 
 type Corner = "tl" | "tr" | "bl" | "br";
 
@@ -34,17 +30,12 @@ export interface FloaterSpec {
   render(): ReactNode;
 }
 
-const PLACE = {
-  tl: "top-(--gutter) left-(--gutter)",
-  tr: "top-(--gutter) right-(--gutter)",
-  bl: "bottom-(--gutter) left-(--gutter)",
-  br: "bottom-(--gutter) right-(--gutter)",
-} as const;
+const inset = (corner: Corner, gap: string) => ({
+  [corner[0] === "t" ? "top" : "bottom"]: gap,
+  [corner[1] === "l" ? "left" : "right"]: gap,
+});
 
-/** Nearest first: across, then up or down, then the diagonal. */
-const flip = (c: Corner, v: boolean, h: boolean) =>
-  `${v ? (c[0] === "t" ? "b" : "t") : c[0]}${h ? (c[1] === "l" ? "r" : "l") : c[1]}` as Corner;
-const nearest = (c: Corner) => [c, flip(c, false, true), flip(c, true, false), flip(c, true, true)];
+const opposite = { tl: "br", tr: "bl", bl: "tr", br: "tl" } as const;
 
 function cornerRect(field: DOMRect, own: DOMRect, gutter: number, c: Corner) {
   const x = c[1] === "l" ? field.left + gutter : field.right - gutter - own.width;
@@ -52,7 +43,14 @@ function cornerRect(field: DOMRect, own: DOMRect, gutter: number, c: Corner) {
   return new DOMRect(x, y, own.width, own.height);
 }
 
-type At = { corner: Corner; dy: number; folded: boolean; width?: number; height?: number };
+type At = {
+  corner: Corner;
+  dy: number;
+  folded: boolean;
+  hidden?: true;
+  width?: number;
+  height?: number;
+};
 
 const MOVED = "pe:floater-moved";
 
@@ -60,6 +58,7 @@ function useYield(
   ref: RefObject<HTMLDivElement | null>,
   place: Corner,
   preferred?: FloaterSpec["size"],
+  slide = 0,
 ) {
   const [at, setAt] = useState<At>({ corner: place, dy: 0, folded: false, ...preferred });
   useLayoutEffect(() => {
@@ -67,10 +66,7 @@ function useYield(
     const field = own?.parentElement;
     const settle = (next: At) =>
       setAt((was) => {
-        if (
-          (["corner", "dy", "folded", "width", "height"] as const).every((k) => was[k] === next[k])
-        )
-          return was;
+        if ((Object.keys(next) as (keyof At)[]).every((k) => was[k] === next[k])) return was;
         requestAnimationFrame(() => field?.dispatchEvent(new Event(MOVED)));
         return next;
       });
@@ -91,35 +87,34 @@ function useYield(
         width: preferred.width * ratio,
         height: preferred.height * ratio,
       };
+      const size = shown && !folded ? new DOMRect(0, 0, shown.width, shown.height) : o;
       const gutter = parseFloat(getComputedStyle(own).getPropertyValue("--gutter")) || 0;
-      const fixed = [...field.querySelectorAll(PANE_OBSTACLES)]
+      const furniture = field.closest("[data-slot='pane-split']") ?? field;
+      const fixed = [...furniture.querySelectorAll(PANE_OBSTACLES)]
         .filter((el) => !el.closest("[data-slot='floater']"))
         .map((el) => el.getBoundingClientRect());
       const others = [...field.querySelectorAll(":scope > [data-slot='floater']")]
         .filter((el) => el.compareDocumentPosition(own) & Node.DOCUMENT_POSITION_FOLLOWING)
         .map((el) => el.getBoundingClientRect())
         .concat(fixed);
-      const candidates = (folded ? ["br" as const] : nearest(place)).flatMap((corner) => {
-        const r = cornerRect(f, o, gutter, corner);
-        const past = others.map((x) =>
-          corner[0] === "t" ? x.bottom + gutter - r.top : x.top - gutter - r.bottom,
-        );
-        return [0, ...past].map((dy) => ({
-          rect: new DOMRect(r.x, r.y + dy, r.width, r.height),
-          value: { corner, dy, folded, ...shown },
-        }));
-      });
-      const slot = candidates.find(
-        ({ rect: b }) =>
+      const corner = folded ? "br" : place;
+      const r = cornerRect(f, size, gutter, corner);
+      const offsets = others.map((x) =>
+        corner[0] === "t" ? x.bottom + gutter - r.top : x.top - gutter - r.bottom,
+      );
+      const dy = [slide, 0, ...offsets].find((dy) => {
+        const b = new DOMRect(r.x, r.y + dy, r.width, r.height);
+        return (
           b.left >= f.left &&
           b.top >= f.top &&
           b.right <= f.right &&
           b.bottom <= f.bottom &&
           !others.some(
-            (r) => b.left < r.right && r.left < b.right && b.top < r.bottom && r.top < b.bottom,
-          ),
-      );
-      settle(slot?.value ?? { corner: place, dy: 0, folded, ...shown });
+            (x) => b.left < x.right && x.left < b.right && b.top < x.bottom && x.top < b.bottom,
+          )
+        );
+      });
+      settle({ corner, dy: dy ?? 0, hidden: dy == null ? true : undefined, folded, ...shown });
     };
     const moved = () => requestAnimationFrame(run);
     field.addEventListener(MOVED, moved);
@@ -138,7 +133,7 @@ function useYield(
       observer?.disconnect();
       field.removeEventListener(MOVED, moved);
     };
-  }, [ref, place, preferred?.width, preferred?.height]);
+  }, [ref, place, preferred?.width, preferred?.height, slide]);
   return at;
 }
 
@@ -146,13 +141,6 @@ const MIN = { width: 64, height: 40 };
 const CAP = { width: 0.4, height: 0.7 };
 const clamp = (v: number, lo: number, hi: number) => Math.max(lo, Math.min(hi, v));
 const CURSOR = { tl: "nwse", br: "nwse", tr: "nesw", bl: "nesw" } as const;
-const HANDLE = {
-  tl: "bottom-0 right-0",
-  tr: "bottom-0 left-0",
-  bl: "top-0 right-0",
-  br: "top-0 left-0",
-} as const;
-
 function drag(
   event: ReactPointerEvent<HTMLElement>,
   own: HTMLElement,
@@ -165,19 +153,21 @@ function drag(
   const [x, y] = [event.clientX, event.clientY];
   const target = event.currentTarget;
   target.setPointerCapture(event.pointerId);
-  const onMove = (e: PointerEvent) => {
-    e.stopPropagation();
-    move(e.clientX - x, e.clientY - y, field, rect);
-  };
+  const controller = new AbortController();
   const stop = (e: PointerEvent) => {
     e.stopPropagation();
-    target.removeEventListener("pointermove", onMove);
-    target.removeEventListener("pointerup", stop);
-    target.removeEventListener("pointercancel", stop);
+    controller.abort();
   };
-  target.addEventListener("pointermove", onMove);
-  target.addEventListener("pointerup", stop);
-  target.addEventListener("pointercancel", stop);
+  target.addEventListener(
+    "pointermove",
+    (e: PointerEvent) => {
+      e.stopPropagation();
+      move(e.clientX - x, e.clientY - y, field, rect);
+    },
+    { signal: controller.signal },
+  );
+  target.addEventListener("pointerup", stop, { signal: controller.signal });
+  target.addEventListener("pointercancel", stop, { signal: controller.signal });
   event.preventDefault();
 }
 
@@ -196,16 +186,41 @@ export function Floater({ spec }: { spec: FloaterSurfaceSpec }) {
   const popup = useRef<HTMLDivElement>(null);
   const [slide, setSlide] = useState(0);
   const [box, setBox] = useState(spec.size);
-  const at = useYield(ref, spec.place, box);
+  const at = useYield(ref, spec.place, box, slide);
   const { folded, width, height } = at;
   const shown = box && { width, height };
-  useLayoutEffect(() => {
-    ref.current?.parentElement?.dispatchEvent(new Event(MOVED));
-  }, [slide]);
+  const measurePopup = (node: HTMLDivElement | null) => {
+    popup.current = node;
+    if (!node) return;
+    const field = ref.current!.parentElement!.getBoundingClientRect();
+    const content = node.querySelector<HTMLElement>("[data-slot='floater-content']")!;
+    // Percentage SVG dimensions need the popup box, so measure intrinsic content first.
+    node.style.width = node.style.height = "";
+    for (const key of ["w", "h"]) node.style.removeProperty(`--floater-content-${key}`);
+    const natural = content.getBoundingClientRect();
+    const gutter = parseFloat(getComputedStyle(ref.current!).getPropertyValue("--gutter")) || 0;
+    const size = {
+      width: Math.min(
+        box?.width ?? (content.scrollWidth || natural.width) + node.offsetWidth - node.clientWidth,
+        field.width - 2 * gutter,
+      ),
+      height: Math.min(
+        box?.height ??
+          (content.scrollHeight || natural.height) + node.offsetHeight - node.clientHeight,
+        field.height - 2 * gutter,
+      ),
+    };
+    for (const key of ["width", "height"] as const)
+      if (size[key] > 0) {
+        node.style[key] = `${size[key]}px`;
+        node.style.setProperty(`--floater-${key[0]}`, `${size[key]}px`);
+        node.style.setProperty(`--floater-content-${key[0]}`, "100%");
+      }
+  };
   const sliding = (e: ReactPointerEvent<HTMLElement>) => {
     drag(e, ref.current!, (_dx, dy, f, r) => {
       const g = parseFloat(getComputedStyle(ref.current!).getPropertyValue("--gutter")) || 0;
-      setSlide(slide + clamp(dy, f.top + g - r.top, f.bottom - g - r.bottom));
+      setSlide(at.dy + clamp(dy, f.top + g - r.top, f.bottom - g - r.bottom));
     });
   };
   const resizing = (e: ReactPointerEvent<HTMLElement>) => {
@@ -236,8 +251,9 @@ export function Floater({ spec }: { spec: FloaterSurfaceSpec }) {
         data-place={at.corner}
         data-folded={folded ? "" : undefined}
         data-surface="artifact"
-        className={`absolute z-popup shadow-float p-1 ${PLACE[at.corner]}`}
+        className="absolute z-popup shadow-float p-1"
         style={{
+          ...inset(at.corner, "var(--gutter)"),
           ...shown,
           maxWidth: `max(${MIN.width}px, ${CAP.width * 100}%)`,
           maxHeight: `max(${MIN.height}px, ${CAP.height * 100}%)`,
@@ -245,30 +261,39 @@ export function Floater({ spec }: { spec: FloaterSurfaceSpec }) {
           ["--floater-h" as string]: shown && `${shown.height}px`,
           ["--floater-content-w" as string]: shown && "100%",
           ["--floater-content-h" as string]: shown && "100%",
-          translate: at.dy + slide ? `0 ${at.dy + slide}px` : undefined,
+          visibility: at.hidden ? "hidden" : undefined,
+          translate: at.dy ? `0 ${at.dy}px` : undefined,
         }}
       >
-        {spec.onOpenChange ? <FloaterKeys spec={spec} element={ref} /> : null}
+        {spec.onOpenChange && (
+          <ScopeKeys
+            keys={[
+              {
+                hotkey: "Escape",
+                label: `close ${spec.label}`,
+                says: `Close the ${spec.label} floater and return to the pane.`,
+                callback: () => {
+                  ref.current
+                    ?.closest<HTMLElement>("[data-slot='pane']")
+                    ?.focus({ preventScroll: true });
+                  spec.onOpenChange?.(false);
+                },
+              },
+            ]}
+          />
+        )}
         {folded ? (
           <Popover>
             <PopoverTrigger className="dl-button dl-control" aria-label={spec.label}>
               {spec.label}
             </PopoverTrigger>
             <PopoverContent
-              ref={popup}
+              ref={measurePopup}
               aria-label={spec.label}
               data-floater-popup=""
-              data-sized={box ? "" : undefined}
               collisionBoundary={ref.current?.parentElement ?? undefined}
-              collisionAvoidance={{ side: "shift", align: "shift" }}
+              collisionAvoidance={{ side: "flip", align: "shift" }}
               initialFocus={(type) => (type === "keyboard" ? popup.current : false)}
-              style={{
-                ...box,
-                ["--floater-w" as string]: box && `${box.width}px`,
-                ["--floater-h" as string]: box && `${box.height}px`,
-                ["--floater-content-w" as string]: box && "100%",
-                ["--floater-content-h" as string]: box && "100%",
-              }}
             >
               <div data-slot="floater-content">{spec.render()}</div>
             </PopoverContent>
@@ -287,32 +312,14 @@ export function Floater({ spec }: { spec: FloaterSurfaceSpec }) {
         <div
           data-slot="floater-resize"
           aria-label={`resize ${spec.label}`}
-          className={`absolute z-10 size-2.5 touch-none ${HANDLE[at.corner]}`}
-          style={{ cursor: `${CURSOR[at.corner]}-resize` }}
+          className="absolute z-10 size-2.5 touch-none"
+          style={{
+            ...inset(opposite[at.corner], "0px"),
+            cursor: `${CURSOR[at.corner]}-resize`,
+          }}
           onPointerDown={resizing}
         />
       </div>
     </KeyScope>
   );
-}
-
-function FloaterKeys({
-  spec,
-  element,
-}: {
-  spec: FloaterSurfaceSpec;
-  element: RefObject<HTMLDivElement | null>;
-}) {
-  useScopeKeys([
-    {
-      hotkey: "Escape",
-      label: `close ${spec.label}`,
-      says: `Close the ${spec.label} floater and return to the pane.`,
-      callback: () => {
-        element.current?.closest<HTMLElement>("[data-slot='pane']")?.focus({ preventScroll: true });
-        spec.onOpenChange?.(false);
-      },
-    },
-  ]);
-  return null;
 }
