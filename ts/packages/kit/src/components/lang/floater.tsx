@@ -259,7 +259,7 @@ export function Floater({ spec }: { spec: FloaterSurfaceSpec }) {
               aria-label={spec.label}
               data-floater-popup=""
               data-sized={box ? "" : undefined}
-              collisionBoundary={ref.current?.parentElement}
+              collisionBoundary={ref.current?.parentElement ?? undefined}
               collisionAvoidance={{ side: "shift", align: "shift" }}
               initialFocus={(type) => (type === "keyboard" ? popup.current : false)}
               style={{

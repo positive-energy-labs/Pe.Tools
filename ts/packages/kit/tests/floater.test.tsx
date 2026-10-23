@@ -21,7 +21,7 @@ const spec = (key: string, size?: FloaterSpec["size"]): FloaterSpec => ({
 });
 
 function mockField() {
-  vi.spyOn(HTMLElement.prototype, "getBoundingClientRect").mockImplementation(function () {
+  vi.spyOn(HTMLElement.prototype, "getBoundingClientRect").mockImplementation(function (this: HTMLElement) {
     if (this.dataset.field !== undefined) return new DOMRect(0, 0, 600, 600);
     if (this.matches("[data-picture-readout], [data-slot='pane-work'], [data-slot='pane-legend']"))
       return new DOMRect(450, 0, 150, 100);
