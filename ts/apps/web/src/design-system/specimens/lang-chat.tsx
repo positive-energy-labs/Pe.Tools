@@ -1,8 +1,6 @@
-import { ThreadsSidebar, ThreadSidebarActions } from "#/chat/thread-palette";
-import { ModeDial } from "#/chat/mode-dial";
+import { ThreadsSidebar, ThreadPane } from "#/chat/thread-palette";
 import { demoThreads } from "#/chat/thread-navigation";
 import { emptyChatState } from "@pe/agent-contracts/chat-state";
-import { Pane } from "@pe/kit/lang/pane";
 import {
   Composer,
   ComposerFrame,
@@ -71,14 +69,7 @@ export function LangChatSpecimens() {
       </SpecimenFrame>
       <SpecimenFrame name="Thread list" importPath="@pe/kit/lang/list-view">
         <div className="h-80 w-80">
-          <Pane
-            scroll="clip"
-            flush
-            title="threads"
-            ground="artifact"
-            tabs={<ModeDial mode="threads" setMode={() => {}} />}
-            actions={<ThreadSidebarActions onNew={() => {}} />}
-          >
+          <ThreadPane mode="threads" count={9} setMode={() => {}} onNew={() => {}}>
             <ThreadsSidebar
               threads={
                 demoThreads({
@@ -96,7 +87,7 @@ export function LangChatSpecimens() {
               onUpdate={async () => true}
               onNewTarget={() => {}}
             />
-          </Pane>
+          </ThreadPane>
         </div>
       </SpecimenFrame>
       <SpecimenFrame name="Conversation" importPath="#/components/lang/conversation">
