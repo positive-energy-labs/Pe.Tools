@@ -4,17 +4,24 @@
  * mode. Entering an axis keeps the 3D pose it left in a local record; Esc (or the 3D mode, or the
  * shown axis's thumbnail) restores it in one move. A URL that lands in an axis has no record, so
  * that return fits. The cuts draw over the picture as DOM and clip it in the shader.
+ *
+ * The stage answers like /ducts (SURFACE-PHILOSOPHY N1, N2, I4): a click selects and never moves
+ * the camera; the selection is the orbit pivot; only F and double-click frame; Esc in 3D clears the
+ * selection; Alt+Left / Alt+Right step the view history; the selection's facts live in the fixed
+ * readout at the top left, never in a popover at the pointer.
  */
-import { useEffect, useMemo, useRef, useState } from "react";
+import { useEffect, useMemo, useRef, useState, type ReactNode } from "react";
 
-import { useScopeKeys, type Chord } from "@pe/kit/keys";
+import { useScopeGestures, useScopeKeys, type Chord } from "@pe/kit/keys";
 import { Button } from "@pe/kit/lang/button";
 import { tokenRef } from "@pe/kit/lib/token";
 import type { FloaterSpec } from "#/components/lang/floater";
 import { OrbitMinimap } from "#/components/lang/minimap";
 import { Pane } from "#/components/lang/pane";
 import type { PageMove } from "#/route/manifest";
-import { center, frame, type OrbitViewport } from "#/scene/orbit";
+import { clearPose, subjectPose } from "#/scene/framing";
+import { ORBIT_GESTURES } from "#/scene/gestures";
+import { applyLook, boundsOfInstances, center, frame, type OrbitViewport } from "#/scene/orbit";
 import {
   AXIS_LABEL,
   PLANE_AXES,
@@ -23,7 +30,10 @@ import {
   type PlaneViewport,
 } from "#/scene/plane";
 import type { Psc1Metadata } from "#/scene/psc1";
-import { useLiveOrbit } from "#/scene/live-orbit";
+import { flyTo, glideLook, useLiveOrbit } from "#/scene/live-orbit";
+import { useViewHistory } from "#/scene/view-history";
+import { STAGE_KEYS } from "#/scene/stage-keys";
+import { KeyLegend, type LegendKey } from "#/components/lang/kbd";
 import { Scene3D } from "#/scene/scene3d";
 import type { Layer3D, Pick, SceneMeshes } from "#/scene/types";
 
@@ -38,6 +48,12 @@ type SetPage = (next: Partial<SpacePage>, move?: PageMove<SpacePage>) => void;
 const MODE_LABEL = { "3d": "3D", top: "Top", north: "North", east: "East" } as const;
 const THUMB = { width: 176, height: 112 } as const;
 const push = { history: "push" } as const;
+/** The stage's keys plus this picture's own: the modes, and Esc's other meaning in an axis. */
+const SPACE_KEYS: readonly LegendKey[] = [
+  ...STAGE_KEYS,
+  { keys: ["1"], does: "3D (2 Top, 3 North, 4 East: the axis pictures)" },
+  { keys: ["Esc"], does: "in an axis picture, back to the 3D pose you left" },
+];
 
 /** The pane's own size, measured; null until it has one. */
 function useSize(host: HTMLElement | null) {
@@ -63,6 +79,8 @@ export function SpacePicture({
   layers,
   status,
   onError,
+  readout,
+  alias,
 }: {
   lease?: { thread: string; ready: boolean; context: Record<string, unknown> };
   meshes: SceneMeshes | null;
@@ -73,12 +91,28 @@ export function SpacePicture({
   layers: readonly Layer3D[];
   status: string | null;
   onError: (message: string | null) => void;
+  /** The fixed top-left readout: the scene's summary, or the selection's identity and facts. */
+  readout?: ReactNode;
+  /** Filled here: the alias-click a Subject named in text calls. It selects and flies (N4). */
+  alias?: { current: ((key: string) => void) | null };
 }) {
   const [host, setHost] = useState<HTMLDivElement | null>(null);
   const size = useSize(host);
   const [framed, setFramed] = useState<Framed | null>(null);
   const [open, setOpen] = useState({ globe: true, top: true, north: true, east: true });
   const [thumbs, setThumbs] = useState<Partial<Record<PlaneAxis, HTMLCanvasElement | null>>>({});
+  // Stable per axis: an inline ref is detached and reattached on every commit, and its setState
+  // then re-renders forever (React's update-depth error on the first selection).
+  const thumbRef = useMemo(
+    () =>
+      Object.fromEntries(
+        PLANE_AXES.map((a) => [
+          a,
+          (el: HTMLCanvasElement | null) => setThumbs((t) => (t[a] === el ? t : { ...t, [a]: el })),
+        ]),
+      ) as Record<PlaneAxis, (el: HTMLCanvasElement | null) => void>,
+    [],
+  );
   /** The explicit 3D pose an axis was entered from; null = it was the fit, or no record (a URL entry). */
   const returnPose = useRef<OrbitViewport | null>(null);
   const on = useMemo(() => new Set<SpaceLayer>(page.layers), [page.layers]);
@@ -108,15 +142,84 @@ export function SpacePicture({
     if (next !== "3d") return setPage({ mode: next }, push);
     setPage({ mode: "3d", viewport: returnPose.current }, push);
   };
+  // Selection changes only the centre of later orbit drags, never the camera's look target.
+  const selectedBounds = useMemo(
+    () =>
+      meshes && page.selected ? boundsOfInstances(meshes, (i) => i.key === page.selected) : null,
+    [meshes, page.selected],
+  );
+  const orbitPivot = useMemo(
+    () => (selectedBounds ? center(selectedBounds) : null),
+    [selectedBounds],
+  );
+  /** The camera moves a person names: a subject in context, clear of the readout, else the fit.
+   * ponytail: an axis picture only fits; frame a subject there when someone asks for it. */
+  const frameOn = (target: typeof selectedBounds) => {
+    if (!bounds) return;
+    if (axis) return setPage({ viewport: null }, push);
+    if (!target) return flyTo(orbit, frame(bounds), { scene: bounds });
+    const view = subjectPose(
+      { scene: bounds, subject: bounds },
+      target,
+      orbit.read(),
+      size ? size.width / size.height : 1,
+    );
+    flyTo(orbit, host ? clearPose(view, target, bounds, host) : view, { scene: bounds });
+  };
+  if (alias)
+    alias.current = (key) => {
+      if (key !== page.selected) setPage({ selected: key, row: null }, push);
+      frameOn(meshes ? boundsOfInstances(meshes, (i) => i.key === key) : null);
+    };
+  useScopeGestures(ORBIT_GESTURES);
   useScopeKeys([
     {
-      hotkey: "Escape",
-      label: "return to 3D",
-      says: "Leave the axis picture for the 3D pose you left (a fit when there is none)",
-      available: () => axis !== null,
-      callback: () => toMode("3d"),
+      hotkey: "F",
+      label: "frame",
+      says: "Frame the selection; with nothing selected, fit the scene",
+      callback: () => frameOn(selectedBounds),
+    },
+    {
+      hotkey: "P",
+      label: "plan or isometric",
+      says: "Look straight down (plan), or back to the isometric; the pivot and zoom stay",
+      available: () => axis === null,
+      callback: () => {
+        const now = orbit.read();
+        if (now) flyTo(orbit, applyLook(now.elev >= 89 ? "iso" : "plan", now), { scene: bounds });
+      },
+    },
+    {
+      hotkey: "N",
+      label: "look north",
+      says: "Glide to look north. Elevation, zoom and pivot stay",
+      available: () => axis === null,
+      callback: () => glideLook(orbit),
     },
   ]);
+  useViewHistory();
+  // Esc binds on the document: a pick from the facts leaves focus there and must still clear.
+  // In an axis Esc returns to 3D (the 2026-10-22 ruling; kaitpw's verdict against N1 is pending).
+  const [body, setBody] = useState<HTMLElement | null>(null);
+  useEffect(() => setBody(document.body), []);
+  useScopeKeys(
+    [
+      {
+        hotkey: "Escape",
+        label: axis ? "return to 3D" : "clear the selection",
+        says: axis
+          ? "Leave the axis picture for the 3D pose you left (a fit when there is none)"
+          : "Clear the selection; the next orbit uses the view centre, without moving the camera",
+        refusal: axis || page.selected || page.row !== null ? null : "nothing is selected",
+        callback: () => {
+          if (axis) return toMode("3d");
+          if (page.selected || page.row !== null) setPage({ selected: null, row: null }, push);
+        },
+        options: { conflictBehavior: "allow" },
+      },
+    ],
+    body,
+  );
 
   // The cuts, validated together; a URL can carry one that crosses itself, which clips nothing.
   const cut = useMemo((): { polygons: Polygons; error: string | null } | null => {
@@ -188,16 +291,22 @@ export function SpacePicture({
     },
   });
 
+  // A click selects (a push, so Back undoes it) and never moves the camera; a click on nothing
+  // keeps the selection, as on /ducts (Esc clears it).
   const onPick = (pick: Pick | null, event: MouseEvent) => {
-    if (pick) return setPage({ selected: pick.instance.key, row: null }, push);
+    if (event.detail > 1) return;
+    if (pick) {
+      if (pick.instance.key !== page.selected)
+        setPage({ selected: pick.instance.key, row: null }, push);
+      return;
+    }
     const rows = page.rows?.response;
     if (rows && on.has("boxes") && framed && host) {
       const r = host.getBoundingClientRect();
       const ray = framed.ray(event.clientX - r.left, event.clientY - r.top);
       const row = rowUnder(rows, ray.origin, ray.direction);
-      if (row !== null) return setPage({ row, selected: null }, push);
+      if (row !== null && row !== page.row) setPage({ row, selected: null }, push);
     }
-    if (page.selected || page.row !== null) setPage({ selected: null, row: null }, push);
   };
 
   const box = useMemo(() => {
@@ -234,7 +343,22 @@ export function SpacePicture({
     );
   }, [bounds]);
 
-  const place = { top: "tl", north: "bl", east: "br" } as const;
+  // One element per orbit and box: a selection re-renders the picture, never the globe (it follows
+  // the live orbit itself).
+  const hasPose = !!pose;
+  const globe = useMemo(
+    () =>
+      hasPose ? (
+        <OrbitMinimap orbit={orbit} paint={box} />
+      ) : (
+        <p className="t-small text-ink-2 m-0 p-2">no scene yet</p>
+      ),
+    [hasPose, orbit, box],
+  );
+  // The key legend holds the bottom left. TODO(S1): a floater whose home corner is free skips the
+  // floaters before it (floater.tsx useYield), so North displaced to "br" sat on East; it stacks
+  // under Top instead until that lands.
+  const place = { top: "tl", north: "tl", east: "br" } as const;
   const floaters: FloaterSpec[] = [
     {
       key: "globe",
@@ -244,12 +368,7 @@ export function SpacePicture({
       place: "tr",
       open: open.globe && page.mode === "3d",
       onOpenChange: (globe) => setOpen({ ...open, globe }),
-      render: () =>
-        pose ? (
-          <OrbitMinimap orbit={orbit} paint={box} />
-        ) : (
-          <p className="t-small text-ink-2 m-0 p-2">no scene yet</p>
-        ),
+      render: () => globe,
     },
     ...PLANE_AXES.map(
       (a): FloaterSpec => ({
@@ -272,12 +391,7 @@ export function SpacePicture({
             onClick={() => toMode(a === axis ? "3d" : a)}
           >
             <span className="pointer-events-none relative block" style={THUMB}>
-              <canvas
-                ref={(el) => {
-                  if (thumbs[a] !== el) setThumbs((t) => ({ ...t, [a]: el }));
-                }}
-                className="block size-full"
-              />
+              <canvas ref={thumbRef[a]} className="block size-full" />
               <span className="absolute left-1 top-1 px-1 t-small" data-surface="page">
                 {a === axis ? "3D · Esc" : AXIS_LABEL[a]}
                 {a !== axis && !page.cuts[a].polyline.length ? " · no cut" : ""}
@@ -328,6 +442,8 @@ export function SpacePicture({
             className="size-full"
             meshes={meshes}
             orbit={orbit}
+            orbitPivot={orbitPivot}
+            wheelHost={host}
             plane={plane}
             onPlane={(viewport, how) =>
               setPage({ viewport }, { history: how === "gesture" ? "replace" : "push" })
@@ -340,6 +456,13 @@ export function SpacePicture({
             clipVolume={clipVolume}
             clip={clip}
             onPick={onPick}
+            onDoubleClick={(pick) =>
+              frameOn(
+                pick && meshes
+                  ? boundsOfInstances(meshes, (i) => i.key === pick.instance.key)
+                  : null,
+              )
+            }
             onProject={(project, at, ray) => setFramed({ project, size: at, ray })}
           />
         ) : null}
@@ -352,6 +475,12 @@ export function SpacePicture({
             onCuts={onCuts}
             onError={onError}
           />
+        ) : null}
+        {readout}
+        {meshes ? (
+          <div data-slot="pane-legend" className="absolute bottom-2 left-2">
+            <KeyLegend keys={SPACE_KEYS} lead={0} />
+          </div>
         ) : null}
         {status || cut?.error ? (
           <p

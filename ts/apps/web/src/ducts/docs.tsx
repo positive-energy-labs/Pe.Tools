@@ -25,33 +25,18 @@ import {
 import { CompareTable } from "./compare-table";
 import { DuctCases } from "./docs-cases";
 import { KeyLegend, type LegendKey } from "#/components/lang/kbd";
-import { POINTER_WORD } from "@pe/kit/lang/gesture-glyph";
-import { ORBIT_GESTURES } from "#/scene/gestures";
+import { STAGE_KEYS } from "#/scene/stage-keys";
 
 const PRESSURE_DROP = mapLink("pressure-drop")!;
 
 /** The picture pane's keys; the pane's own legend and this page read the same list. */
 export const PICTURE_KEYS: readonly LegendKey[] = [
-  // The pointer lines are the scheme's own declaration (scene/gestures.ts), the list the keys overlay draws.
-  ...ORBIT_GESTURES.map(({ keys, pointer, label }) => ({
-    keys,
-    pointer: pointer && POINTER_WORD[pointer],
-    does: label,
-  })),
-  { pointer: "right click", does: "Select or Selection Box in Revit" },
-  { keys: ["B", "X"], does: "Selection Box under the pointer" },
+  ...STAGE_KEYS,
   { keys: ["/"], does: "go to a subject: a name, family, size, system or element id" },
-  { keys: ["Alt", "←"], does: "back to the previous selection and view (also the mouse's back button)" },
-  { keys: ["Alt", "→"], does: "forward again" },
-  { keys: ["F"], does: "frame the selection; nothing selected fits the system" },
-  { keys: ["P"], does: "plan or isometric, keeping the pivot and zoom" },
-  { keys: ["N"], does: "look north (also N on the globe's rim)" },
   { keys: ["S"], does: "swap the model and the schematic" },
-  { keys: ["G"], does: "show or hide the globe" },
   { keys: ["M"], does: "meshes on or off" },
   { keys: ["C"], does: "context around the system on or off" },
   { keys: ["L"], does: "centrelines on or off" },
-  { keys: ["Esc"], does: "clear the selection" },
 ];
 
 function DuctsDocs() {

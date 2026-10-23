@@ -11,7 +11,7 @@ export function ZoneThumb({
     elementId?: number | null;
     loops: readonly (readonly (readonly [number, number])[])[];
     bounds: Bounds2;
-    color: string;
+    color?: string;
   };
   className?: string;
 }) {
@@ -29,8 +29,9 @@ export function ZoneThumb({
       <path
         d={pathD(zone.loops, frame)}
         fillRule="evenodd"
-        fill={`color-mix(in srgb, rgb(${zone.color}) 30%, transparent)`}
-        stroke={`rgb(${zone.color})`}
+        // Monotone, as on the plan (SURFACE-PHILOSOPHY I3): the outline is the zone's identity.
+        fill="none"
+        stroke="currentColor"
         strokeWidth={1}
         vectorEffect="non-scaling-stroke"
       />

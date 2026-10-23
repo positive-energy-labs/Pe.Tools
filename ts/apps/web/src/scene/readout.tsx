@@ -17,6 +17,7 @@ export function PictureReadout({
   onClear,
   children,
   foot,
+  hug = false,
 }: {
   /** The selected element's name; absent, the readout is the system summary. */
   title?: ReactNode;
@@ -24,6 +25,8 @@ export function PictureReadout({
   children: ReactNode;
   /** The way back after a jump. */
   foot?: ReactNode;
+  /** Width hugs the content (up to the usual width), for a plan where every pixel covered is plan. */
+  hug?: boolean;
 }) {
   const selected = title != null;
   const body = useRef<HTMLDivElement>(null);
@@ -45,18 +48,18 @@ export function PictureReadout({
       data-surface="page"
       data-slot="pane-dock"
       data-picture-readout={selected ? "selection" : "system"}
-      className={`absolute left-2 top-2 flex w-[min(22rem,calc(100%-1rem))] flex-col t-small ${
-        selected ? "h-[min(16rem,30%)]" : ""
-      }`}
+      // The hairline keeps its edge visible on any ground (SURFACE-PHILOSOPHY L4): a plan's paper is
+      // the page colour too.
+      className={`hairline absolute left-2 top-2 flex flex-col t-small ${
+        hug ? "w-max max-w-[min(22rem,calc(100%-1rem))]" : "w-[min(22rem,calc(100%-1rem))]"
+      } ${selected && !hug ? "h-[min(16rem,30%)]" : ""}`}
     >
       {selected ? (
         <header className="border-line flex min-w-0 items-center gap-1 border-b pl-1.5">
           <span className="min-w-0 flex-1 truncate font-medium" data-readout-title="">
             {title}
           </span>
-          {onClear ? (
-            <Button label="Clear the selection · Esc" icon={X} onClick={onClear} />
-          ) : null}
+          {onClear ? <Button label="Clear the selection · Esc" icon={X} onClick={onClear} /> : null}
         </header>
       ) : null}
       <div ref={body} className="flex min-h-0 flex-1 flex-col gap-1 overflow-y-auto px-1.5 py-1">

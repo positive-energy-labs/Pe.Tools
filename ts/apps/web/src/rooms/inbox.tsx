@@ -338,7 +338,6 @@ export function RoomsInbox({
           <ListView
             list={list}
             aria-label="Feedback"
-            bar={false}
             empty={{
               message: cards.length ? "No card in this state" : "No marks or notes on this view",
               exit: cards.length

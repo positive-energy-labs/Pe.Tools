@@ -15,6 +15,21 @@ import type { ViewOwner } from "./view-owner";
 import { causeRefusal } from "./refusal";
 import { useRouteActivity, useRouteSearch } from "./activity";
 
+type AnyRouter = ReturnType<typeof useRouter>;
+const parsed = new WeakMap<object, ReturnType<AnyRouter["parseLocation"]>>();
+
+/**
+ * The router's current location, parsed once per navigation. History swaps its `location` object
+ * on every change, so the object is the cache key; every route-activity check and Page restore
+ * reads through here instead of re-parsing (and re-decoding every search key) per subscriber.
+ */
+export function currentLocation(router: AnyRouter) {
+  const at = router.history.location;
+  let hit = parsed.get(at);
+  if (!hit) parsed.set(at, (hit = router.parseLocation(at)));
+  return hit;
+}
+
 export interface UrlPage<P> {
   readonly keys: readonly (keyof P & string)[];
   /** Search → the Page fields the URL names, defaults applied; a value the schema refuses falls to its default. */
@@ -135,7 +150,7 @@ export function useUrlPage<P>(url: UrlPage<P> | null, owner: ViewOwner<P>) {
     let writing = false;
     let pending: History | null = null;
     let previous = owner.read();
-    const location = () => router.parseLocation(router.history.location);
+    const location = () => currentLocation(router);
     const pathname = location().pathname;
     const stamp = (state: object) =>
       (state as Record<string, unknown>)[marker] as

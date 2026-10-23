@@ -239,6 +239,18 @@ internal static class PeRoutes {
         }
     }
 
+    /// <summary>Grilles: <c>/grilles</c>.</summary>
+    internal static class Grilles {
+        public const string Path = "/grilles";
+        /// <summary>The URL keys a link may carry.</summary>
+        internal static class Keys {
+            public const string ThreadSearch = "threadSearch";
+            public const string ThreadSort = "threadSort";
+            public const string Row = "row";
+            public const string Sheet = "sheet";
+        }
+    }
+
     /// <summary>Parameter Links: <c>/parameter-links</c>.</summary>
     internal static class ParameterLinks {
         public const string Path = "/parameter-links";

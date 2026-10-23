@@ -271,11 +271,6 @@ export function RoomsRoute({ url = true }: { url?: boolean } = {}) {
           />
         }
       >
-        {demo && (
-          <p className="px-2 py-1 t-small">
-            Fixture review: synthetic rooms and plan, no solver trace. No Revit capture.
-          </p>
-        )}
         {page.stage === "history" ? (
           <RoomsHistory receipts={handle.readings.receipts} />
         ) : (
@@ -329,6 +324,7 @@ function RoomsBody({
   wire: CellWire;
   applyMark: ActionHandle;
 }) {
+  const fixture = useRouteDemo() === "plan";
   const levelNames = useMemo(
     () =>
       [...(snapshot?.levels ?? [])]
@@ -445,6 +441,7 @@ function RoomsBody({
       resize={{ target: "end", defaultSize: 760, minSize: 420, persist: "pe.rooms.tableWidth" }}
       start={
         <RoomsPlan
+          fixture={fixture}
           lease={lease}
           rows={onView}
           plan={image}
@@ -483,6 +480,7 @@ function RoomsBody({
                     hovered={hovered}
                     pinned={pinned}
                     setPinned={setPinned}
+                    onClear={() => setPage({ selected: [] })}
                     card={card}
                     onDrop={onDrop}
                     onNote={onNote}

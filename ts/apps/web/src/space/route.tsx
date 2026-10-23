@@ -10,6 +10,8 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import { spaceElementKey, type Reading } from "@pe/agent-contracts";
 import { Input } from "@pe/kit/lang/input";
+import { SubjectText, SubjectTextContext } from "@pe/kit/lang/subject-text";
+import { useRevitSubjectProps } from "#/revit/element-menu";
 
 import { Surface } from "#/components/lang/surface";
 import { frozenDemo } from "#/host/demo-client";
@@ -19,11 +21,12 @@ import { Situation } from "#/route/situation";
 import { LadderPicker, useDocumentLadder } from "#/route/situation-ladder";
 import { NativeObservationScope, type NativeObservation } from "#/revit/observation";
 import type { Psc1Metadata } from "#/scene/psc1";
+import { PictureReadout } from "#/scene/readout";
 import { useSceneArtifact } from "#/scene/use-scene";
 import type { Layer3D } from "#/scene/types";
 
 import { CutControls } from "./cut-controls";
-import { AnswerForms, EncodingLegend, PickFacts } from "./facts";
+import { AnswerForms, EncodingLegend, PickFacts, SceneSummary, pickName } from "./facts";
 import { FIXTURE_ANSWERS, FIXTURE_SCENE } from "./fixture";
 import {
   boxesLayer,
@@ -42,6 +45,7 @@ import {
   type LoadedSpaceScene,
 } from "./manifest";
 import { SpacePicture } from "./picture";
+import { rowAt } from "./layers";
 import { cutPolygons } from "./state";
 
 const idsText = (ids: readonly number[]) => ids.join(", ");
@@ -185,6 +189,14 @@ export function SpaceRoute({ url = true }: { url?: boolean } = {}) {
       )?.kind ?? null)
     : null;
 
+  // The side holds only the answers' forms, the cut editor and the encoding key; with none of
+  // them it is not drawn, and the picture takes the width (SURFACE-PHILOSOPHY L1).
+  const side =
+    (page.mode !== "3d" && !!meshes) ||
+    (["levels", "boxes", "tree", "slice", "probe", "sweep"] as const).some((l) => on.has(l));
+  const pickedRow = rows && page.row !== null ? rowAt(rows, page.row) : null;
+  const picked = element ? pickName(element.handle) : pickedRow ? pickName(pickedRow) : null;
+
   const status = demo
     ? null
     : !page.scene
@@ -197,6 +209,33 @@ export function SpaceRoute({ url = true }: { url?: boolean } = {}) {
           ? "reading the scene artifact…"
           : null;
   const actions = handle.actions;
+  // The requested ids as named Subjects (I1): each by what the scene says it is, numbered, and a
+  // press selects it and flies there; right-click offers the element menu.
+  const refProps = useRevitSubjectProps();
+  const alias = useRef<((key: string) => void) | null>(null);
+  const hostKeys = useMemo(
+    () =>
+      new Map(
+        (metadata?.elements ?? [])
+          .filter((e) => e.handle.linkInstanceId == null)
+          .map((e) => [
+            e.handle.elementId,
+            { key: spaceElementKey(e.handle), name: pickName(e.handle) },
+          ]),
+      ),
+    [metadata],
+  );
+  const subjects = useMemo(
+    () => ({
+      nameOf: (id: number) => hostKeys.get(id)?.name ?? null,
+      refProps,
+      go: (id: number) => {
+        const key = hostKeys.get(id)?.key;
+        if (key) alias.current?.(key);
+      },
+    }),
+    [hostKeys, refProps],
+  );
   const sentence = (
     <>
       on{" "}
@@ -216,6 +255,11 @@ export function SpaceRoute({ url = true }: { url?: boolean } = {}) {
           onKeyDown={(e) => e.key === "Enter" && commitIds()}
         />
       </span>
+      {metadata && page.ids.length ? (
+        <SubjectTextContext value={subjects}>
+          <SubjectText text={[]} ids={page.ids} />
+        </SubjectTextContext>
+      ) : null}
       {metadata
         ? `; scene ${metadata.phase === "focus" ? "of those alone" : "with its context"}, ${metadata.elements.length} elements`
         : "; no scene"}
@@ -253,20 +297,9 @@ export function SpaceRoute({ url = true }: { url?: boolean } = {}) {
           />
         }
       >
-        {demo && (
-          <p className="px-2 py-1 t-small">
-            Fixture review: a synthetic scene and invented answers. No Revit capture.
-          </p>
-        )}
         {error && (
           <p role="alert" data-tone="alarm" className="px-2 m-0">
             {error}
-          </p>
-        )}
-        {!!metadata?.unavailableElements.length && (
-          <p data-tone="caution" className="px-2 m-0">
-            {metadata.unavailableElements.length} requested elements have no mesh:{" "}
-            {metadata.unavailableElements.map((e) => `${e.elementId} (${e.reason})`).join(", ")}
           </p>
         )}
         <div className="flex min-h-0 flex-1">
@@ -291,43 +324,63 @@ export function SpaceRoute({ url = true }: { url?: boolean } = {}) {
             layers={layers}
             status={status}
             onError={setError}
-          />
-          <aside
-            className="flex w-80 shrink-0 flex-col gap-3 overflow-auto p-2 hairline-l"
-            aria-label="Space facts"
-          >
-            <PickFacts
-              page={page}
-              element={element}
-              instance={instance}
-              partition={partition}
-              actions={actions}
-            />
-            {page.mode !== "3d" && meshes ? (
-              <CutControls
-                axis={page.mode}
-                cuts={page.cuts}
-                bounds={meshes.bounds}
-                onCuts={(cuts, how) => {
-                  try {
-                    cutPolygons(cuts, meshes.bounds);
-                  } catch (e) {
-                    return setError((e as Error).message);
+            alias={alias}
+            readout={
+              metadata ? (
+                <PictureReadout
+                  title={picked ?? undefined}
+                  onClear={
+                    picked
+                      ? () => setPage({ selected: null, row: null }, { history: "push" })
+                      : undefined
                   }
-                  setError(null);
-                  setPage({ cuts }, { history: how });
-                }}
-              />
-            ) : null}
-            {on.has("boxes") && rows ? (
-              <EncodingLegend
-                encoding={page.encoding}
-                legend={legend}
-                onEncoding={(encoding) => setPage({ encoding })}
-              />
-            ) : null}
-            <AnswerForms on={on} page={page} actions={actions} />
-          </aside>
+                >
+                  {picked ? (
+                    <PickFacts
+                      page={page}
+                      element={element}
+                      instance={instance}
+                      partition={partition}
+                      actions={actions}
+                    />
+                  ) : (
+                    <SceneSummary metadata={metadata} demo={demo} actions={actions} />
+                  )}
+                </PictureReadout>
+              ) : null
+            }
+          />
+          {side ? (
+            <aside
+              className="flex w-80 shrink-0 flex-col gap-3 overflow-auto p-2 hairline-l"
+              aria-label="Space facts"
+            >
+              {page.mode !== "3d" && meshes ? (
+                <CutControls
+                  axis={page.mode}
+                  cuts={page.cuts}
+                  bounds={meshes.bounds}
+                  onCuts={(cuts, how) => {
+                    try {
+                      cutPolygons(cuts, meshes.bounds);
+                    } catch (e) {
+                      return setError((e as Error).message);
+                    }
+                    setError(null);
+                    setPage({ cuts }, { history: how });
+                  }}
+                />
+              ) : null}
+              {on.has("boxes") && rows ? (
+                <EncodingLegend
+                  encoding={page.encoding}
+                  legend={legend}
+                  onEncoding={(encoding) => setPage({ encoding })}
+                />
+              ) : null}
+              <AnswerForms on={on} page={page} actions={actions} />
+            </aside>
+          ) : null}
         </div>
       </Surface>
     </NativeObservationScope>

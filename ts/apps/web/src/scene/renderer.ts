@@ -635,7 +635,6 @@ export function createRenderer(mount: HTMLElement, meshes: SceneMeshes, wheelHos
       mesh.frustumCulled = false;
       outlined.add(mesh);
     }
-    thumbsStale = true;
     render();
   };
 
@@ -742,6 +741,10 @@ export function createRenderer(mount: HTMLElement, meshes: SceneMeshes, wheelHos
       render();
     },
     paint(...args: Paint) {
+      // The thumbnails are each axis's overview: they redraw when what is shown changes, never for
+      // a selection or a hover. A redraw is three scene renders and a GPU readback, ~200 ms of
+      // main thread on a 1,600-element capture, which every click and hover used to pay.
+      if (args[1] !== painted[1] || args[2] !== painted[2]) thumbsStale = true;
       painted = args;
       paintNow(...args);
     },

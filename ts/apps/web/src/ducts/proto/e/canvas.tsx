@@ -45,16 +45,10 @@ import { NodeFactsView, SegmentFactsView } from "../../facts";
 import { labelOfNode, legsOf } from "../../legs";
 import { sceneRequestOf } from "../../manifest";
 import { findingLayers, findingShapes, noRunLayers } from "../../finding-layers";
-import {
-  boundsOfIds,
-  clearPose,
-  ModelPicture,
-  poseOf,
-  subjectPose,
-  usePictureBounds,
-} from "../../model-picture";
+import { boundsOfIds, ModelPicture, poseOf, usePictureBounds } from "../../model-picture";
+import { clearPose, subjectPose } from "#/scene/framing";
 import { GoToSubject } from "./go-to";
-import { PictureReadout } from "./readout";
+import { PictureReadout } from "#/scene/readout";
 import { RunDetail, runOf } from "./run-detail";
 import { DEFAULT_DESIGN_FRICTION_RATE } from "@pe/ducts-domain/equivalent-length";
 import { ProvisionalNote } from "../../provisional";

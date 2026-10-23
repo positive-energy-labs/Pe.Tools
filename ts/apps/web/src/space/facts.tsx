@@ -1,6 +1,7 @@
 /**
- * The picture pane's side: what the pick is (its PrimRow or scene handle, Selection Box beside it),
- * the visibility verbs, the row encoding's legend, and one small form per answer layer that is on.
+ * What the picture is of, for its fixed readout (the scene's summary, or what the pick is: its
+ * PrimRow or scene handle, Selection Box beside it, and the visibility verbs), and for the pane's
+ * side the row encoding's legend and one small form per answer layer that is on.
  * Every read runs a manifest verb; its answer lands on the Page and the layer draws it.
  */
 import { useState, type ReactNode } from "react";
@@ -39,6 +40,84 @@ const Fact = ({ name, children }: { name: string; children: ReactNode }) => (
   </>
 );
 
+/**
+ * A pick's Subject name: its category, the DWG layer it came from, and "linked" when it lives in a
+ * link. The element id is a fact beneath the name, never the name (SURFACE-PHILOSOPHY I1).
+ * TODO(S2): render through the kit Subject text once it lands, so the name also footnotes the picture.
+ */
+export const pickName = (h: {
+  category: string;
+  layer?: string | null;
+  linkInstanceId?: number | null;
+  source?: { linkInstanceId?: number | null } | null;
+}) =>
+  [h.category, h.layer, (h.linkInstanceId ?? h.source?.linkInstanceId) != null ? "linked" : null]
+    .filter(Boolean)
+    .join(" · ");
+
+/** The visibility verbs; they change what the picture draws, never the model. */
+function VisibilityVerbs({ actions }: { actions: Record<Verb, ActionHandle> }) {
+  return (
+    <>
+      {(["hide", "isolate", "showAll"] as const).map((verb) => (
+        <Button
+          key={verb}
+          label={actions[verb].label}
+          refusal={actions[verb].refusal}
+          onClick={() => void actions[verb].run()}
+        >
+          {actions[verb].label}
+        </Button>
+      ))}
+    </>
+  );
+}
+
+/** The readout with nothing picked: what the scene is and the state it is in. */
+export function SceneSummary({
+  metadata,
+  demo,
+  actions,
+}: {
+  metadata: Psc1Metadata;
+  demo: boolean;
+  actions: Record<Verb, ActionHandle>;
+}) {
+  const missing = metadata.unavailableElements;
+  return (
+    <section className="flex flex-col gap-1" aria-label="scene">
+      <dl className="grid grid-cols-[auto_1fr] gap-x-2 t-small m-0" data-scene-summary="">
+        <Fact name="scene">
+          {metadata.phase === "focus" ? "the named elements" : "with context"}
+        </Fact>
+        <Fact name="elements">{metadata.elements.length.toLocaleString()}</Fact>
+        <Fact name="read">
+          {demo ? "fixture" : metadata.stamp.fresh ? "fresh" : "stale"} · epoch{" "}
+          {metadata.stamp.epoch}
+        </Fact>
+        {missing.length ? (
+          <>
+            <dt data-tone="caution">no mesh</dt>
+            <dd
+              className="face-mono m-0 min-w-0 truncate"
+              title={missing.map((e) => `${e.elementId} ${e.reason}`).join("\n")}
+            >
+              {missing.length} ·{" "}
+              {missing
+                .map((e) => e.reason)
+                .filter((r, i, all) => all.indexOf(r) === i)
+                .join(", ")}
+            </dd>
+          </>
+        ) : null}
+      </dl>
+      <div className="flex flex-wrap items-center gap-1">
+        <VisibilityVerbs actions={actions} />
+      </div>
+    </section>
+  );
+}
+
 /** The pick's facts: a mesh's handle, else a row box's PrimRow; Selection Box beside it. */
 export function PickFacts({
   page,
@@ -57,9 +136,7 @@ export function PickFacts({
   const observation = useNativeObservation();
   const row = page.rows && page.row !== null ? rowAt(page.rows.response, page.row) : null;
   let target: ElementTarget | null = null;
-  let facts: ReactNode = (
-    <p className="t-small text-ink-2 m-0">Nothing picked: click a mesh or a row box.</p>
-  );
+  let facts: ReactNode = null;
   if (element && instance) {
     const h = element.handle;
     target = sceneTarget(observation, instance);
@@ -116,16 +193,7 @@ export function PickFacts({
       {facts}
       <div className="flex flex-wrap items-center gap-1">
         {target ? <SelectionBoxButton target={target} /> : null}
-        {(["hide", "isolate", "showAll"] as const).map((verb) => (
-          <Button
-            key={verb}
-            label={actions[verb].label}
-            refusal={actions[verb].refusal}
-            onClick={() => void actions[verb].run()}
-          >
-            {actions[verb].label}
-          </Button>
-        ))}
+        <VisibilityVerbs actions={actions} />
       </div>
     </section>
   );

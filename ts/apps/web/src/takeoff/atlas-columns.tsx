@@ -138,15 +138,7 @@ export function useAtlasColumns({
         width: "w-20",
         sort: ATLAS_COLUMN_SEMANTICS.zone.sort,
         search: (row) => row.zone.zone.key,
-        cell: (row) => (
-          <span className="px-(--item-pad-x)">
-            <span
-              className="mr-1 size-2"
-              style={{ backgroundColor: `rgb(${row.zone.zone.color})` }}
-            />
-            {row.zone.zone.key}
-          </span>
-        ),
+        cell: (row) => <span className="px-(--item-pad-x)">{row.zone.zone.key}</span>,
       },
       {
         key: "name",

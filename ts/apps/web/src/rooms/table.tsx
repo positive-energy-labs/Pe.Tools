@@ -2,7 +2,10 @@
  * The rooms table: one row per zone, room and held region. Every edit stages a Work cell (`transitionPatches`)
  * against what the region holds in Revit; nothing is written until `apply`.
  */
-import { useMemo } from "react";
+import { useMemo, useState } from "react";
+import type { TableState } from "@pe/kit/table/model";
+import { visibleRows } from "@pe/kit/table/view";
+import { TableFrame } from "#/components/master-table/table-frame";
 import {
   roomEditKey,
   roomEditSchema,
@@ -284,21 +287,47 @@ export function RoomsTable({
     ];
   }, [cells, wire, rows]);
 
+  // The table is a collection like any list (SURFACE-PHILOSOPHY N3): one search, "/" focuses it.
+  const [state, setState] = useState<TableState>({ sorts: [], query: "" });
+  const rowKey = (row: RoomRow) => row.region.guid;
+  const visibleKeys = useMemo(
+    () => visibleRows(rows, columns, state).map(rowKey),
+    [rows, columns, state],
+  );
   return (
-    <Table
+    <TableFrame
       label="room regions"
       rows={rows}
       columns={columns}
-      rowKey={(row) => row.region.guid}
-      revitIds={(row) => [row.region.elementId]}
-      selection={{ selected, onChange: onSelect }}
-      activeKey={hovered}
-      onRowHover={(row) => onHover(row?.region.guid ?? null)}
-      empty={
-        <EmptyState story="scope" exit={empty.exit}>
-          {empty.says}
-        </EmptyState>
-      }
-    />
+      rowKey={rowKey}
+      state={state}
+      onStateChange={setState}
+      search
+    >
+      <Table
+        label="room regions"
+        rows={rows}
+        columns={columns}
+        rowKey={rowKey}
+        state={state}
+        onStateChange={setState}
+        visibleKeys={visibleKeys}
+        revitIds={(row) => [row.region.elementId]}
+        selection={{ selected, onChange: onSelect }}
+        activeKey={hovered}
+        onRowHover={(row) => onHover(row?.region.guid ?? null)}
+        empty={
+          rows.length ? (
+            <EmptyState story="filter" exit="clear the search">
+              the search hid all {rows.length} regions
+            </EmptyState>
+          ) : (
+            <EmptyState story="scope" exit={empty.exit}>
+              {empty.says}
+            </EmptyState>
+          )
+        }
+      />
+    </TableFrame>
   );
 }
