@@ -64,8 +64,8 @@ export function SegmentFactsView({
         rows={[
           ["size", `${segment.size} ${segment.shape}`, "geometry"],
           ["length", num(segment.lengthFt, "ft", 2), "geometry"],
-          ["flow", num(derivedCfm, "cfm"), "derived (pass 1)"],
-          ["flow", num(revit.flowCfm, "cfm"), "revit-reported"],
+          ["Pe flow", num(derivedCfm, "cfm"), "derived (pass 1)"],
+          ["Revit flow", num(revit.flowCfm, "cfm"), "revit-reported"],
           ["velocity", num(revit.velocityFpm, "fpm"), "revit-reported"],
           ["friction", num(revit.frictionInWgPer100Ft, "in-wg/100 ft", 3), "revit-reported"],
           ["pressure drop", num(revit.pressureDropInWg, "in-wg", 4), "revit-reported"],

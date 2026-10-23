@@ -1,8 +1,16 @@
 import { expect, test } from "vite-plus/test";
 import type { DuctSnapshot } from "@pe/ducts-domain/types";
 import { ruleByKey } from "@pe/ducts-domain/loss-rules";
-import { barRows, ruleConditions } from "./bar-model";
+import { barRows, ruleConditions, selectedBarRow } from "./bar-model";
 import type { Split } from "../b/model";
+
+test("the open rule editor follows its fittings when repricing changes their group key", () => {
+  const selected = { key: "unpriced radius", ids: [7, 8] };
+  const regrouped = { key: "mitered CR3-6", ids: [7, 8, 9] };
+  expect(selectedBarRow([regrouped], selected)).toBe(regrouped);
+  expect(selectedBarRow([regrouped, selected], selected)).toBe(selected);
+  expect(selectedBarRow([{ key: "another family", ids: [10] }], selected)).toBeUndefined();
+});
 
 test("bar columns follow this run's actual rules, lookup inputs, unique count and unknown loss", () => {
   const node = {

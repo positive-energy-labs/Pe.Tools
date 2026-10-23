@@ -18,18 +18,6 @@ import { tableOf, type Priced } from "@pe/ducts-domain/pricing";
 import type { LossesWork } from "../../work";
 import { PressureEquivalent } from "./pressure-equivalent";
 
-/** The sidebar and bar editor stage the same person-owned family cell. */
-export function assignFamilyRule(work: LossesWork, family: string, rule: string) {
-  const cell = work.doc?.ruleAssignments?.[family] ?? {};
-  return work.write(
-    transitionPatches(
-      ["ruleAssignments"],
-      family,
-      cell,
-      rule ? { kind: "stage", rung: { value: { rule } } } : { kind: "unstage" },
-    ),
-  );
-}
 // proto: copied from losses-view.tsx
 const fmt = (n: number | null | undefined) => (n == null ? "" : n.toFixed(4));
 /** Stage a rule's table; staging the table already staged takes it back. */

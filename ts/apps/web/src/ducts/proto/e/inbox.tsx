@@ -1,7 +1,8 @@
 import { type ListSearch } from "@pe/agent-contracts";
 import { useContext, useEffect, useRef, useState, type ReactNode } from "react";
 import { Ban, Check, Eye, EyeOff, Fan, Link, Pencil, X, type LucideIcon } from "lucide-react";
-import type { DuctsRouteDocument, RouteStatePatch } from "@pe/agent-contracts";
+import type { DuctsRouteDocument } from "@pe/agent-contracts";
+import type { LossesWork } from "../../work";
 import type { DuctSnapshot } from "@pe/ducts-domain/types";
 import { Button } from "@pe/kit/lang/button";
 import { FactChip } from "@pe/kit/lang/chip";
@@ -42,7 +43,7 @@ import { RuleAssignment } from "./rule-assignment";
 type InboxWork = {
   doc: DuctsRouteDocument | null;
   revision: number | null;
-  write: (patch: RouteStatePatch[]) => Promise<unknown>;
+  write: LossesWork["write"];
   /** The model's store: its rulings are the base a verdict or role press stages against. */
   store: DuctSnapshot["store"];
 };

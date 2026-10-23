@@ -6,7 +6,7 @@ const search = (keywords = "", pills: Record<string, string> = {}) =>
   });
 // @vitest-environment jsdom
 import { useState } from "react";
-import { cleanup, fireEvent, render, screen, waitFor, within } from "@testing-library/react";
+import { act, cleanup, fireEvent, render, screen, waitFor, within } from "@testing-library/react";
 import { afterEach, expect, test, vi } from "vite-plus/test";
 import type { FanResult } from "@pe/ducts-domain/losses";
 import type { Priced } from "@pe/ducts-domain/pricing";
@@ -73,6 +73,28 @@ const context = (over: Partial<TreeCtx> = {}): TreeCtx => ({
   ...over,
 });
 const keyed = (key: string) => document.querySelector<HTMLElement>(`[data-key="${key}"]`)!;
+
+test("typing in a large tree reuses its name index instead of renaming every hidden run", async () => {
+  vi.stubGlobal(
+    "ResizeObserver",
+    class {
+      observe() {}
+      unobserve() {}
+      disconnect() {}
+    },
+  );
+  const grilleName = vi.fn((row: TreeNode) => row.name);
+  const runs = Array.from({ length: 1000 }, (_, i) => node(`run${i}`, "run", i + 100));
+  render(<SystemTree ctx={context({ trees: [node("system", "system", 1, runs)], grilleName })} />);
+  grilleName.mockClear();
+  await act(async () => {
+    fireEvent.change(screen.getByRole("combobox", { name: "Search system tree" }), {
+      target: { value: "no matching run" },
+    });
+  });
+  expect(grilleName.mock.calls.length).toBeLessThan(100);
+  vi.unstubAllGlobals();
+});
 const toggle = (key: string) => fireEvent.click(keyed(key).querySelector(".dl-row-twist")!);
 
 test("critical context opens initially; one selected part reveals, retains native refs, hover and rule jump", () => {

@@ -6,7 +6,6 @@
  * collapsed when it holds none. Hovering a row anywhere lights its element set on the drawing.
  */
 import { useCallback, useEffect, useMemo, useRef, useState, type ReactNode } from "react";
-import type { RouteStatePatch } from "@pe/agent-contracts";
 import type { DuctsApply } from "@pe/host-contracts/generated";
 import { survey, unitFlowsIn } from "@pe/ducts-domain/survey";
 import { fansOwedBase, type OwedBase } from "@pe/ducts-domain/fan-assignment";
@@ -154,10 +153,10 @@ function EScreenBody({ props }: { props: ProtoProps }) {
     () => ({
       doc,
       revision: props.work.revision,
-      write: props.work.write as unknown as (p: RouteStatePatch[]) => Promise<unknown>,
+      write: work.write,
       store: snapshot?.store ?? null,
     }),
-    [doc, props.work.revision, props.work.write, snapshot],
+    [doc, props.work.revision, work.write, snapshot],
   );
   const ruleOf = useMemo(() => ruleOfIds(priced), [priced]);
   // The tree draws the topology that was priced (bridged joins, phase filter); the raw one left the

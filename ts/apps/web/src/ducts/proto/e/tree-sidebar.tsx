@@ -6,7 +6,7 @@ import { TooltipHint } from "@pe/kit/lang/tooltip";
  * An element a rule prices carries one verb: jump to its type's rule in the Rules section. There is
  * no per-row rule editor: a rule is global (family:type plus condition), never one fitting's.
  */
-import { useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import { ListTree } from "lucide-react";
 import { Button } from "@pe/kit/lang/button";
 import { emptyListState, useList, type ListState } from "@pe/kit/lang/collection";
@@ -117,6 +117,9 @@ const idsOf = (node: TreeNode): number[] => {
   return [...out];
 };
 
+const idOf = (node: TreeNode) => (node.kind === "run" ? node.terminal : node.id);
+const childrenOf = (node: TreeNode) => node.children;
+
 export function SystemTree({
   ctx,
   address,
@@ -139,24 +142,33 @@ export function SystemTree({
     open: [...ctx.trees.map((tree) => tree.key), ...(crit ? [crit.key] : [])],
   }));
   // A run is the path from the unit to one grille: "FC-17 → Price LBP15A Supply 12 X 6, Level 2".
-  const runName = (n: TreeNode) =>
-    `${n.name.split(" → ")[0]} → ${ctx.grilleName(n)}${n.level ? `, ${n.level}` : ""}`;
-  const labelOf = (node: TreeNode) =>
-    node.kind === "run"
-      ? runName(node)
-      : node.kind === "element"
-        ? ctx.grilleName(node)
-        : node.name;
-  const idOf = (node: TreeNode) => (node.kind === "run" ? node.terminal : node.id);
+  const runName = useCallback(
+    (n: TreeNode) =>
+      `${n.name.split(" → ")[0]} → ${ctx.grilleName(n)}${n.level ? `, ${n.level}` : ""}`,
+    [ctx.grilleName],
+  );
+  const labelOf = useCallback(
+    (node: TreeNode) =>
+      node.kind === "run"
+        ? runName(node)
+        : node.kind === "element"
+          ? ctx.grilleName(node)
+          : node.name,
+    [runName, ctx.grilleName],
+  );
+  const search = useCallback(
+    (node: TreeNode) => ({
+      text: [labelOf(node), node.kind, node.level],
+      ids: idOf(node) == null ? [] : [idOf(node)!],
+    }),
+    [labelOf],
+  );
   const list = useList<TreeNode, "name">({
     scope: address?.scope,
     items: ctx.trees,
     keyOf: (node) => node.key,
-    tree: { childrenOf: (node) => node.children },
-    search: (node) => ({
-      text: [labelOf(node), node.kind, node.level],
-      ids: idOf(node) == null ? [] : [idOf(node)!],
-    }),
+    tree: { childrenOf },
+    search,
     fields: {
       kind: {
         kind: "text",

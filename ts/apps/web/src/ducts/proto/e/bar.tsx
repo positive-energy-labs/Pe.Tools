@@ -23,8 +23,8 @@ import { Button } from "@pe/kit/lang/button";
 import { Input } from "@pe/kit/lang/input";
 import { SearchControl } from "@pe/kit/lang/search-control";
 import type { LossesWork } from "../../work";
-import { assignFamilyRule } from "./rules";
-import { barRows, ruleConditions, type BarRow } from "./bar-model";
+import { assignFamilyRule } from "./rule-assignment";
+import { barRows, ruleConditions, selectedBarRow, type BarRow } from "./bar-model";
 import { fanLoad } from "@pe/ducts-domain/fan-headroom";
 import type { Provisional } from "@pe/ducts-domain/losses";
 import { Popover, PopoverContent, PopoverTrigger } from "@pe/kit/lang/popover";
@@ -333,14 +333,15 @@ function BreakdownList({
   const bar = useRef<HTMLSpanElement>(null);
   const [side, setSide] = useState("bottom");
   const [expanded, setExpanded] = useState(false);
-  const [selected, setSelected] = useState<string | null>(null);
+  const [selected, setSelected] = useState<{ key: string; ids: readonly number[] } | null>(null);
   const [leaders, setLeaders] = useState<{ key: string; d: string }[]>([]);
   const entries = useMemo(
     () => barRows(split, scale, context?.nodes ?? new Map()),
     [split, scale, context?.nodes],
   );
+  const current = selectedBarRow(entries, selected);
   const small = entries.filter(
-    (entry) => entry.dp > 0 && entry.share < 3 && entry.key !== selected,
+    (entry) => entry.dp > 0 && entry.share < 3 && entry.key !== current?.key,
   );
   const rolled = !expanded && small.length > 1;
   const other = rolled
@@ -367,7 +368,6 @@ function BreakdownList({
   const bare = visible.filter((row) => !row.at.length);
   const ordered = barLeft !== flip ? [...led].reverse() : led;
   const rows = flip ? [...bare, ...ordered] : [...ordered, ...bare];
-  const current = entries.find((entry) => entry.key === selected);
   const barCol = Math.min(144, Math.max(96, barW));
 
   useLayoutEffect(() => {
@@ -490,10 +490,14 @@ function BreakdownList({
                   key={row.key}
                   data-loss-row={row.key}
                   data-e-group-key={row.label}
-                  data-selected={selected === row.key || undefined}
+                  data-selected={current?.key === row.key || undefined}
                   onMouseEnter={light ? () => light(row.ids) : undefined}
                   onMouseLeave={light ? () => light(back ?? null) : undefined}
-                  onClick={() => (row.key === "other" ? setExpanded(true) : setSelected(row.key))}
+                  onClick={() =>
+                    row.key === "other"
+                      ? setExpanded(true)
+                      : setSelected({ key: row.key, ids: row.ids })
+                  }
                 >
                   {barLeft ? zone : null}
                   <td className={number} data-loss-value="">
@@ -508,7 +512,9 @@ function BreakdownList({
                     <Button
                       label={row.key === "other" ? row.label : `Edit rule for ${row.label}`}
                       onClick={() =>
-                        row.key === "other" ? setExpanded(true) : setSelected(row.key)
+                        row.key === "other"
+                          ? setExpanded(true)
+                          : setSelected({ key: row.key, ids: row.ids })
                       }
                     >
                       <span className="whitespace-normal text-left">{row.label}</span>
@@ -814,11 +820,11 @@ export function MetaHeader() {
     <span className="inline-flex items-center gap-1.5" data-e-columns="">
       <span className={COL.bar} aria-hidden />
       <TooltipHint content="effective length from the fan to this row's far end, in equivalent feet at each duct's own friction rate; the small number beside it is the loss in in-wg">
-        <span className={`${COL.ft} text-right`}>to here, eq ft</span>
+        <span className={`${COL.ft} text-right`}>Σ eq ft</span>
       </TooltipHint>
       <span className={COL.wg} aria-hidden />
       <TooltipHint content="this row's own effective length, in equivalent feet; the small number beside it is its own loss in in-wg">
-        <span className={`${COL.ft} border-line border-l pl-1.5 text-right`}>own, eq ft</span>
+        <span className={`${COL.ft} border-line border-l pl-1.5 text-right`}>+ eq ft</span>
       </TooltipHint>
       <span className={COL.wg} aria-hidden />
       <span className={COL.mark} aria-hidden />

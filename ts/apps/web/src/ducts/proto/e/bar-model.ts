@@ -5,6 +5,17 @@ import type { Split } from "../b/model";
 type Node = DuctSnapshot["nodes"][number];
 export type BarRow = ReturnType<typeof barRows>[number];
 
+/** Assigning a rule can rename and regroup the same fittings. Keep their editor open. */
+export function selectedBarRow<T extends { key: string; ids: readonly number[] }>(
+  rows: readonly T[],
+  selected: { key: string; ids: readonly number[] } | null,
+) {
+  return selected
+    ? (rows.find((row) => row.key === selected.key) ??
+        rows.find((row) => row.ids.some((id) => selected.ids.includes(id))))
+    : undefined;
+}
+
 /** Read the run already priced for this bar, never scan every system on opening. */
 export function barRows(split: Split, scale: number, nodes: ReadonlyMap<number, Node>) {
   let pos = 0;

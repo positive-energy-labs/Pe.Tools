@@ -9,7 +9,7 @@ import type { Priced } from "@pe/ducts-domain/pricing";
 import type { SystemScope } from "@pe/ducts-domain/system-scope";
 import type { DuctSnapshot } from "@pe/ducts-domain/types";
 import { useScopeGestures, type ScopeGesture } from "@pe/kit/keys";
-import { useEffect, useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 import { emptyListState, useList } from "@pe/kit/lang/collection";
 import { ListView } from "@pe/kit/lang/list-view";
 import { observedElements, useNativeObservation } from "#/revit/observation";
@@ -63,18 +63,25 @@ export function InputsPane(props: InputsPaneProps) {
   useScopeGestures(INPUT_KEYS);
   const observation = useNativeObservation();
   const { snapshot, priced, work, scope, nameOf, selected, select, light } = props;
-  const { units, terminals } = inputRowsOf(snapshot, scope);
+  const { units, terminals } = useMemo(() => inputRowsOf(snapshot, scope), [snapshot, scope]);
   const ctx: InputsCtx | null = priced ? { snapshot, priced, work, groups: scope.groups } : null;
-  const items = [
-    ...units.map((id) => ({ id, kind: "unit" as const })),
-    ...terminals.map((id) => ({ id, kind: "grille" as const })),
-  ];
+  const items = useMemo(
+    () => [
+      ...units.map((id) => ({ id, kind: "unit" as const })),
+      ...terminals.map((id) => ({ id, kind: "grille" as const })),
+    ],
+    [units, terminals],
+  );
+  const search = useCallback(
+    (item: (typeof items)[number]) => ({ text: [nameOf(item.id), item.kind], ids: [item.id] }),
+    [nameOf],
+  );
   const [state, setState] = useState(emptyListState<"name">);
   const list = useList({
     scope: props.address?.scope,
     items,
     keyOf: (item) => `${item.kind}:${item.id}`,
-    search: (item) => ({ text: [nameOf(item.id), item.kind], ids: [item.id] }),
+    search,
     fields: {
       kind: { kind: "text" as const, read: (item) => item.kind, values: ["unit", "grille"] },
     },
