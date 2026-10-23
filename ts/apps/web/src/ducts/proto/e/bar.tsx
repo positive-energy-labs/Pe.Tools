@@ -1,3 +1,5 @@
+import { useList } from "@pe/kit/lang/collection";
+import { PlainList, ListView } from "@pe/kit/lang/list-view";
 import { TooltipHint } from "@pe/kit/lang/tooltip";
 /**
  * THROWAWAY (protoui round 3, E2): the loss bar the tree draws, and its one-line legend.
@@ -20,8 +22,6 @@ import type { DuctSnapshot } from "@pe/ducts-domain/types";
 import type { Priced } from "@pe/ducts-domain/pricing";
 import { tableOf } from "@pe/ducts-domain/pricing";
 import { Button } from "@pe/kit/lang/button";
-import { Input } from "@pe/kit/lang/input";
-import { SearchControl } from "@pe/kit/lang/search-control";
 import type { LossesWork } from "../../work";
 import { assignFamilyRule } from "./rule-assignment";
 import { barRows, ruleConditions, selectedBarRow, type BarRow } from "./bar-model";
@@ -229,6 +229,12 @@ export function systemIssues(s: {
  * content. Each line opens the system, where its inbox rows are. The picture's plate wears the same mark.
  */
 export function SystemMark({ issues, open }: { issues: readonly SystemIssue[]; open: () => void }) {
+  const list = useList({
+    items: issues,
+    keyOf: (issue) => issue.says,
+    search: (issue) => ({ text: [issue.says] }),
+    onPick: open,
+  });
   const worst = issues.find((i) => i.tone === "alarm") ?? issues[0];
   if (!worst) return null;
   return (
@@ -254,21 +260,14 @@ export function SystemMark({ issues, open }: { issues: readonly SystemIssue[]; o
         </span>
       </PopoverTrigger>
       <PopoverContent facing className="w-72">
-        <ul className="flex flex-col gap-1" data-e-issues="" data-facing-rows>
-          {issues.map((issue) => (
-            <li key={issue.says}>
-              <button
-                type="button"
-                className="veil flex w-full items-baseline gap-1.5 rounded-control px-1 py-0.5 text-left"
-                data-tone={issue.tone}
-                onClick={open}
-              >
-                <span className="mt-1 inline-block size-1.5 shrink-0 rounded-full bg-current" />
-                <span className="text-ink">{issue.says}</span>
-              </button>
-            </li>
-          ))}
-        </ul>
+        <div data-e-issues="" data-facing-rows>
+          <PlainList
+            list={list}
+            aria-label="system issues"
+            empty={{ message: "No issues", exit: "Open the system" }}
+            row={(issue) => ({ label: issue.says, wrap: true })}
+          />
+        </div>
       </PopoverContent>
     </Popover>
   );
@@ -625,7 +624,6 @@ function BreakdownList({
 }
 
 function RulePick({ row, work, priced }: { row: BarRow; work: LossesWork; priced: Priced | null }) {
-  const [search, setSearch] = useState("");
   const [family, setFamily] = useState(row.families[0] ?? "");
   const [error, setError] = useState<string | null>(null);
   const [pending, setPending] = useState(false);
@@ -642,11 +640,17 @@ function RulePick({ row, work, priced }: { row: BarRow; work: LossesWork; priced
       setPending(false);
     }
   };
-  const choices = row.candidates.filter((rule) =>
-    `${priced ? tableOf(priced, rule.key) : rule.table} ${rule.family} ${rule.type} ${rule.cond}`
-      .toLowerCase()
-      .includes(search.toLowerCase()),
-  );
+  const choices = useList({
+    items: row.candidates,
+    keyOf: (rule) => rule.key,
+    search: (rule) => ({
+      text: [priced ? tableOf(priced, rule.key) : rule.table, rule.family, rule.type, rule.cond],
+    }),
+    onPick: (rule) => {
+      if (!pending) void pick(rule.key);
+    },
+    refusalOf: () => (pending ? "Assigning rule" : null),
+  });
   return (
     <aside
       aria-label="ASHRAE rule picker"
@@ -688,52 +692,34 @@ function RulePick({ row, work, priced }: { row: BarRow; work: LossesWork; priced
               </Button>
             </div>
           ) : null}
-          <SearchControl>
-            <Input
-              surface="embedded"
-              aria-label="Search applicable ASHRAE rules"
-              placeholder="table, rule, condition…"
-              value={search}
-              onChange={(event) => setSearch(event.target.value)}
-            />
-          </SearchControl>
-          <ul
+          <ListView
+            list={choices}
             aria-label="Applicable ASHRAE rules"
-            className="max-h-64 overflow-y-auto hairline-rows mt-1"
-          >
-            {choices.map((rule) => {
+            maxHeight="16rem"
+            empty={{ message: "No applicable rules", exit: "Choose another family" }}
+            row={(rule) => {
               const condition = ruleConditions(rule, row);
               const active = staged
                 ? staged === rule.key
                 : row.rules.some((current) => current.key === rule.key);
-              return (
-                <li key={rule.key} className="py-1" data-selected={active || undefined}>
-                  <Button
-                    label={`Use ${priced ? tableOf(priced, rule.key) : rule.table} ${rule.family} ${rule.type} ${rule.cond}`}
-                    pressed={active}
-                    busy={pending}
-                    onClick={() => void pick(rule.key)}
-                  >
-                    <span className="face-mono">
-                      {priced ? tableOf(priced, rule.key) : rule.table}
-                    </span>{" "}
-                    · {rule.family} {active ? " · current" : ""}
-                  </Button>
-                  <p className={condition.inactive ? "text-ink-2" : undefined}>
-                    {condition.words}
-                    {condition.inactive ? " · not matched" : ""}
-                  </p>
-                  {condition.actual ? <p className="text-ink-2">{condition.actual}</p> : null}
-                  <p className="text-ink-2">{rule.basis}</p>
-                </li>
-              );
-            })}
-            {!choices.length ? (
-              <li className="py-2 text-ink-2">
-                No matching rules. Clear the search to see applicable rules.
-              </li>
-            ) : null}
-          </ul>
+              return {
+                label: `${priced ? tableOf(priced, rule.key) : rule.table} · ${rule.family}${active ? " · current" : ""}`,
+                active,
+                lines: 2,
+                wrap: true,
+                sub: (
+                  <>
+                    <p className={condition.inactive ? "text-ink-2" : undefined}>
+                      {condition.words}
+                      {condition.inactive ? " · not matched" : ""}
+                    </p>
+                    {condition.actual ? <p className="text-ink-2">{condition.actual}</p> : null}
+                    <p className="text-ink-2">{rule.basis}</p>
+                  </>
+                ),
+              };
+            }}
+          />
         </>
       )}
       {error ? (
