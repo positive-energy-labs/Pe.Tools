@@ -271,6 +271,10 @@ test("seeded real-user route journey", async () => {
       requestId?: string;
       requestMethod?: string;
       leaseThread?: string;
+      leaseInput?: unknown;
+      leaseAccepted?: unknown;
+      observedAt?: number;
+      error?: string;
       loaderId?: string;
     }[],
   };
@@ -451,9 +455,11 @@ test("seeded real-user route journey", async () => {
             )
               receipt.observedWebBuilds.push(String(value));
           let leaseThread: string | undefined;
+          let leaseInput: unknown;
           if (new URL(request.url).pathname === "/pe/route-view/ducts" && request.postData) {
             try {
-              leaseThread = JSON.parse(request.postData).thread;
+              leaseInput = JSON.parse(request.postData);
+              leaseThread = (leaseInput as { thread?: string }).thread;
             } catch {
               /* Not a lease publication. */
             }
@@ -466,8 +472,17 @@ test("seeded real-user route journey", async () => {
             requestMethod: request.method,
             loaderId: event.params.loaderId,
             leaseThread,
+            leaseInput,
+            observedAt: Date.now(),
           });
         }
+        if (event.method === "Network.loadingFailed")
+          receipt.network.push({
+            method: event.method,
+            requestId: event.params.requestId,
+            error: event.params.errorText,
+            observedAt: Date.now(),
+          });
         if (event.method === "Network.loadingFinished")
           finishedRequests.add(event.params.requestId);
         if (
@@ -493,6 +508,7 @@ test("seeded real-user route journey", async () => {
             requestMethod: requests.get(event.params.requestId)?.method,
             leaseThread: requests.get(event.params.requestId)?.leaseThread,
             loaderId: event.params.loaderId,
+            observedAt: Date.now(),
           });
         if (event.method === "Network.webSocketCreated")
           receipt.network.push({ method: event.method, url: event.params.url });
@@ -694,7 +710,8 @@ test("seeded real-user route journey", async () => {
             e.requestMethod === "PUT",
         ).length,
       });
-      // Let initial acquisitions finish, then hold an exact baseline. No allowance for periodic storms.
+      // Initial acquisitions settle before the witness. Identical five-second lease PUTs
+      // renew seen-time without changing revision (RouteViewStore.publish); SSE must stay quiet.
       let baseline = counts();
       let stableSince = Date.now();
       await p.until(
@@ -720,10 +737,132 @@ test("seeded real-user route journey", async () => {
         "initial world/route acquisition quiescence",
         15_000,
       );
+      const latestLease = [...receipt.network]
+        .reverse()
+        .find(
+          (e) =>
+            e.loaderId === loaderId &&
+            e.requestMethod === "PUT" &&
+            e.status === 200 &&
+            e.leaseThread === thread &&
+            e.requestId &&
+            finishedRequests.has(e.requestId) &&
+            e.url &&
+            new URL(e.url).pathname === "/pe/route-view/ducts",
+        )!;
+      const baselineRequest = receipt.network.find(
+        (e) => e.method === "Network.requestWillBeSent" && e.requestId === latestLease.requestId,
+      );
+      if (!baselineRequest?.leaseInput)
+        throw new Error("PRECONDITION: accepted lease PUT input is absent from CDP");
+      const acceptedBody = async (requestId: string) => {
+        const response = await p.send("Network.getResponseBody", { requestId });
+        return JSON.parse(
+          response.base64Encoded
+            ? Buffer.from(response.body, "base64").toString("utf8")
+            : response.body,
+        );
+      };
+      const baselineAccepted = await acceptedBody(latestLease.requestId!);
+      latestLease.leaseAccepted = baselineAccepted;
+      const { revision, ...baselineView } = baselineAccepted;
+      expect(baselineView, "accepted lease echoes the actual PUT view").toEqual(
+        baselineRequest.leaseInput,
+      );
+      expect(typeof revision).toBe("number");
+      const startIndex = receipt.network.length;
+      const checked = new Set<string>();
+      const renewals: {
+        requestId: string;
+        observedAt?: number;
+        instance: string;
+        revision: number;
+        identicalView: boolean;
+      }[] = [];
+      let lastAccepted = latestLease.observedAt!;
+      const inspectQuiet = async () => {
+        expect(
+          counts().sseResponses,
+          "quiet watchdog: SSE response identity remains continuous; no reacquisition",
+        ).toBe(baseline.sseResponses);
+        const traffic = receipt.network.slice(startIndex);
+        const puts = traffic.filter(
+          (e) =>
+            e.method === "Network.requestWillBeSent" &&
+            e.loaderId === loaderId &&
+            e.url &&
+            new URL(e.url).pathname.startsWith("/pe/route-view/ducts"),
+        );
+        for (const request of puts) {
+          expect(
+            request.requestMethod,
+            "quiet lease identity: only identical PUT renewals, never remove/DELETE or commands",
+          ).toBe("PUT");
+          expect(
+            new URL(request.url!).pathname,
+            "quiet lease identity: same publication endpoint",
+          ).toBe("/pe/route-view/ducts");
+          expect(
+            request.leaseInput,
+            "quiet lease identity: same instance and identical complete view input",
+          ).toEqual(baselineRequest.leaseInput);
+          expect(
+            traffic.find(
+              (e) => e.method === "Network.loadingFailed" && e.requestId === request.requestId,
+            ),
+            "quiet lease renewal transport remains acquired",
+          ).toBeUndefined();
+          const response = traffic.find(
+            (e) => e.method === "Network.responseReceived" && e.requestId === request.requestId,
+          );
+          if (response) expect(response.status, "quiet lease renewal accepted").toBe(200);
+          if (
+            !response ||
+            !finishedRequests.has(request.requestId!) ||
+            checked.has(request.requestId!)
+          )
+            continue;
+          const renewed = await acceptedBody(request.requestId!);
+          response.leaseAccepted = renewed;
+          const { revision: nextRevision, ...view } = renewed;
+          expect(view, "quiet lease identity: accepted view remains identical").toEqual(
+            baselineView,
+          );
+          expect(
+            nextRevision,
+            "quiet lease identity: no-op renewal preserves accepted revision",
+          ).toBe(revision);
+          expect(
+            response.observedAt! - lastAccepted,
+            "quiet lease identity: accepted renewals never cross host expiry",
+          ).toBeLessThan(15_000);
+          lastAccepted = response.observedAt!;
+          checked.add(request.requestId!);
+          renewals.push({
+            requestId: request.requestId!,
+            observedAt: response.observedAt,
+            instance: view.instance,
+            revision: nextRevision,
+            identicalView: true,
+          });
+          receipt.coverage.watchdog = JSON.stringify({
+            ...JSON.parse(receipt.coverage.watchdog),
+            renewals,
+          });
+        }
+        expect(
+          Date.now() - lastAccepted,
+          "quiet lease identity: accepted lease never expires/reacquires (host MAX_AGE_MS)",
+        ).toBeLessThan(15_000);
+        return puts.every((e) => checked.has(e.requestId!));
+      };
       receipt.coverage.watchdog = JSON.stringify({
         dwellMs: 36_000,
         leaseUrl: lease.url,
-        revision: accepted.revision,
+        revision,
+        instance: baselineView.instance,
+        viewInput: baselineRequest.leaseInput,
+        renewals,
         worldStreamUrl: world.url,
         sampledEveryMs: 100,
         baseline,
@@ -751,21 +890,24 @@ test("seeded real-user route journey", async () => {
         const end = Date.now() + 36_000;
         while (Date.now() < end) {
           await sleep(100);
-          expect(
-            counts(),
-            "quiet watchdog: no SSE reconnect or route-view reacquisition/publication",
-          ).toEqual(baseline);
+          await inspectQuiet();
         }
+        await p.until(
+          inspectQuiet,
+          "all observed quiet renewals accepted with unchanged identity/revision",
+          15_000,
+        );
         if (red)
           throw new Error(
-            "RED CONTROL INEFFECTIVE: transport disruption did not change observed acquisition counts",
+            "RED CONTROL INEFFECTIVE: transport disruption did not violate SSE/lease identity",
           );
         await settled(p);
       });
       receipt.coverage.watchdog = JSON.stringify({
         ...JSON.parse(receipt.coverage.watchdog),
         final: counts(),
-        result: "36s DOM and exact network quiescence passed",
+        result:
+          "36s sampled DOM continuity, stable SSE, identical-view same-revision lease renewals passed",
       });
     });
 

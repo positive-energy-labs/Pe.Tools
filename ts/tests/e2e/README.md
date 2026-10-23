@@ -64,11 +64,14 @@ the observed build, and list dirty working-tree paths. A dirty source can only r
 An unknown or mismatched served build fails rather than borrowing the harness checkout's HEAD.
 
 The 36-second quiet watchdog witness first requires an accepted route lease and world SSE,
-then waits for initial acquisition to settle. SSE response counts, route-view request counts
-and accepted PUT publication counts must stay exactly unchanged throughout the dwell.
+then waits for initial acquisition to settle. SSE response counts must stay exactly unchanged.
+The bridge renews its lease every five seconds. Each observed renewal must be an identical-view,
+same-instance PUT whose accepted view and revision remain unchanged, with no host expiry gap.
+Lease removal, changed input, changed revision, failed renewal or SSE reacquisition fails the witness.
+The receipt records baseline view input and each accepted renewal's request id, time and revision.
 To exercise the deliberately failing transport control, set `CHAOS_WATCHDOG_RED=disconnect`
 before the same command. It cuts browser networking for one second after the quiet baseline.
-Expect the network-quiescence assertion to fail on reacquisition. A DOM-only failure or
+Expect the SSE/lease-identity assertion to fail on reacquisition. A DOM-only failure or
 `RED CONTROL INEFFECTIVE` does not certify the network oracle. Clear that variable for acceptance.
 
 The seed selects rendered system controls, disruption order and outage duration. The story
