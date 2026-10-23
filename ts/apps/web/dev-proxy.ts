@@ -177,7 +177,16 @@ async function checkoutMiddleware(
       }
       if (!readHostRequest(req.method ?? "GET", req.url!, body ? JSON.parse(body) : undefined)) {
         res.statusCode = 403;
-        res.end("This frontend borrows host reads only. Writes and host lifecycle are disabled.");
+        res.setHeader("content-type", "application/json");
+        res.end(
+          JSON.stringify({
+            error: {
+              code: "read-only-frontend",
+              message:
+                "This frontend borrows host reads only. Writes and host lifecycle are disabled.",
+            },
+          }),
+        );
         return;
       }
       const headers = new Headers({ [HOST_RUNTIME_SERVICE_HEADER]: checkoutServiceName() });

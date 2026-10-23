@@ -112,7 +112,7 @@ test("25 item 3: a commit refused LATER (an async write) puts the cell back and 
 });
 
 test("a unit-bearing cell draws its unit inside the box, empty or filled, and keeps committing", async () => {
-  const onCommit = vi.fn(() => null);
+  const onCommit = vi.fn(() => undefined);
   const { cell } = inTable(
     <StateCell
       value=""
