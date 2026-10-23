@@ -462,10 +462,6 @@
   font-weight: var(--weight-regular);
   color: var(--pe-ink-2);
 }
-/* A column head's trigger: a plain label at rest, the control frame only when touched. The border
-   is reserved transparent and the padding fixed, so the label never moves; the pad less the
-   border puts the label on the body cells' inset. */
-
 [data-pe] .face-mono {
   font-family: var(--font-mono);
   font-variant-numeric: tabular-nums;

@@ -17,8 +17,9 @@ import { createPortal } from "react-dom";
 import type { ReactTable, RowData } from "@tanstack/react-table";
 import { defaultRangeExtractor, useVirtualizer, type Range } from "@tanstack/react-virtual";
 
+import { Minimap, type MinimapMark } from "../lang/gutter-minimap";
 import { CellHost } from "../lang/cell";
-import { Row } from "../lang/row";
+import { land, Row } from "../lang/row";
 import { CellNavigationProvider, type CellMove } from "./cell-navigation";
 import type { ResolvedColumn } from "./master-table-columns";
 import { CELL_EDITOR, editCell, isInteractive, isTypingKey } from "./master-table-state";
@@ -277,6 +278,23 @@ export function MasterTableBody<Row extends RowData>({
         end: item.end - margin,
       }))
     : visibleRows.map((_, index) => ({ index, start: 0, end: 0 }));
+  const minimapMarks = useMemo(
+    () =>
+      visibleRows.flatMap((row, index): MinimapMark[] => {
+        const reason = damage?.(row.original);
+        return reason ? [{ index, damage: reason }] : [];
+      }),
+    [visibleRows, damage],
+  );
+  const landing = useRef<number | null>(null);
+  useLayoutEffect(() => {
+    if (landing.current === null) return;
+    const row = tbody?.querySelector<HTMLElement>(`tr[data-index="${landing.current}"]`);
+    if (row) {
+      landing.current = null;
+      land(row);
+    }
+  });
   const tail = virtualized ? virtual.getTotalSize() - (drawn.at(-1)?.end ?? 0) : 0;
 
   // N1: the active row is followed into view only when it was named from elsewhere (a link, the
@@ -441,6 +459,29 @@ export function MasterTableBody<Row extends RowData>({
         openContext(cell);
       }}
     >
+      <Minimap
+        count={visibleRows.length}
+        range={
+          virtual.range
+            ? {
+                start: virtual.range.startIndex,
+                end: virtual.range.endIndex,
+              }
+            : null
+        }
+        marks={minimapMarks}
+        scroller={scroller}
+        height={virtual.scrollRect?.height ?? 0}
+        onJump={(index) => {
+          landing.current = index;
+          virtual.scrollToIndex(index, { align: "start" });
+          const row = tbody?.querySelector<HTMLElement>(`tr[data-index="${index}"]`);
+          if (row) {
+            landing.current = null;
+            land(row);
+          }
+        }}
+      />
       {copyFailed?.isConnected &&
         createPortal(<Row role="status" label="Clipboard access failed" />, copyFailed)}
       {createPortal(

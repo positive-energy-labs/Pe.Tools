@@ -9,6 +9,8 @@ The one-system design cluster: the design LANGUAGE (raw values in `apps/web/src/
 ## Decided
 - 2026-10-23, N7 reach uses kit `reach.ts` and `[data-reach="rest|reach|hover|focus"]`. The reach block in kit `lang.css` owns hover paint. Rows, subject text and the web scene adapter share the existing scoped channel.
 
+- 2026-10-23, kit-raise N8 and CSS ownership, requested by kaitpw: `useMinimap` at `@pe/kit/lang/minimap` gives `ListView` and `MasterTableBody` one gutter overview at 200 shown rows. The threshold is provisional under M1. Virtual ranges drive the viewport; section/tree heads and `data-damage` drive marks. Pointer and keyboard jumps use `list.reveal()` or the table virtualizer plus `land()`. The 1000-row specimen lives in `lang-list.tsx`. `design-guard.test.ts` checks authored class ownership across its complete CSS entry/import graph. Contextual overrides of shared classes require a file/class reason and stale exceptions fail. Column-header button rules now belong to `button.css`; `lens.css` alone owns `chat-tail-floater`.
+
 - 2026-10-23, kit-raise N4: kit `RevitTarget` requires the displayed observation scope and owns layout-transparent target boundaries. `Row revitIds`, `FactChip revit`, and `SubjectText` tokens inherit that scope through portals. The web root retains the one Selection Box / Select menu; null and non-native scopes still refuse native actions. The specimen is `lang-list.tsx`; `kit-raise.revit-target.guard.test.ts` rejects hand-authored scopes outside the menu/parser.
 
 - 2026-10-23, I5: the subject owns overlay geometry through kit `SubjectBox`; Popover and HoverCard share one open slot, and Escape stays inside that slot (or its active editor). `facing` projects actual placement to row order. SVG marks use kit `SvgTip` with a short word instead of a native title. Consumers include ducts bars, schematics, family views, rooms and takeoff; placement and legibility still require the browser pass.
@@ -670,6 +672,8 @@ These rows are byte-for-byte text from `34bd5e17`. The searchable comment preser
 - 2026-10-08, react-grab `freeze()` during feedback picking (halts the note popover); `.pick-mark` in `--pe-line-2` (vanishes); rasterizing `document.body` (drops `<html>` styles, 10px crop error; rasterize `document.documentElement`).
 
 ## Owed
+
+- 2026-10-23, kit-raise minimap browser pass: verify gutter placement, visible damage/head ticks, keyboard/drag landings, and long grouped/tree lists with external scrollers. The implementation slice is restricted to compile and deterministic lanes by WAVE3/WAVE2; no visual or frame-budget claim is made.
 
 - 2026-10-23, system-switch acknowledgement under 100 ms is proven only for three warm production handler-to-two-RAF cases (40.8/42.4/53.5 ms); cold/all-system and native input-to-first-paint bounds remain unproven. See the [production report](../../../.artifacts/runs/final-20261023/REPORT.md).
 - 2026-10-23, parameter-table native acceptance remains unproven: the production route uses an explicit fixture; FOM working prose and reference formatting still need the doctrine pass on real populated state. See the [production report](../../../.artifacts/runs/final-20261023/REPORT.md).
