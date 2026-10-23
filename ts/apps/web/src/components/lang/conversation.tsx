@@ -1,10 +1,8 @@
 import { TooltipHint } from "@pe/kit/lang/tooltip";
-/** The transcript turn (head, body, bubble, tool status) and the composer (frame, box). Presentation
- *  only; the logic lives in workbench/ and chat/. Painted in
- *  conversation.css. */
+/** Transcript and composer presentation; conversation.css owns the look. */
 import { type ComponentProps, type KeyboardEvent, type ReactNode } from "react";
 import { Textarea } from "@pe/kit/lang/input";
-import { OutcomeLine } from "@pe/kit/lang/outcome";
+import { ButtonOutcome } from "@pe/kit/lang/button";
 import { ProviderMark } from "./provider-mark";
 import "@pe/kit/lang/lang.css";
 import "./conversation.css";
@@ -95,12 +93,7 @@ export function ComposerFrame({ children }: { children: ReactNode }) {
   return <div className="dl-composer-frame">{children}</div>;
 }
 
-/**
- * The one box you write in: work, the draft (it grows to a cap, then scrolls), then the controls:
- * attach, state and the pickers' marks left, fork and
- * Send/Stop right. `variant="reply"` is the notice card's: the draft and the Send/Stop slot alone. Enter sends
- * unless `onKey` takes the key.
- */
+/** Draft and controls; Enter sends unless an open menu owns the key. */
 export function Composer({
   variant,
   areaRef,
@@ -120,33 +113,23 @@ export function Composer({
 }: Omit<ComponentProps<typeof Textarea>, "ref" | "rows" | "surface" | "size" | "onKeyDown"> & {
   variant?: "reply";
   areaRef?: (area: HTMLTextAreaElement | null) => void;
-  /** A file drag over the box takes the recess ground. */
   dragging?: boolean;
   drop?: ComponentProps<"div">;
-  /** Popups anchored on the form (slash and `@` menus). */
   menus?: ReactNode;
-  /** The box's top section: asks, chips, refusals. */
   work?: ReactNode;
-  /** Send owns its refusal, below the control that asked. */
+  /** Button owns the refusal overlay under Send. */
   refusal?: string | null;
-  /** The marks after the attach control, bottom left; each opens its picker. */
   pickers?: ReactNode;
-  /** The bottom row's first control. */
   attach?: ReactNode;
-  /** Just left of Send, bottom right. */
   fork?: ReactNode;
-  /** State chips beside the controls. */
   tools?: ReactNode;
-  /** The one Send/Stop slot. */
   send: ReactNode;
   onSend: () => void;
-  /** True when the key belongs to an open menu, not the draft. */
   onKey?: (event: KeyboardEvent<HTMLTextAreaElement>) => boolean;
 }) {
   return (
     <form className="relative w-full">
       {menus}
-      {/* The one object you write in: work it carries, the text, its controls. */}
       <div
         className="dl-composer-box"
         data-surface={dragging ? "recess" : "artifact"}
@@ -168,7 +151,6 @@ export function Composer({
             }
           }}
         />
-        {/* Bottom left: attach, then the pickers' marks. */}
         {attach || pickers || tools ? (
           <div data-composer-lead="">
             {attach}
@@ -176,13 +158,11 @@ export function Composer({
             {tools}
           </div>
         ) : null}
-        {/* Bottom right: fork, then the one Send slot (Stop replaces Send while a turn runs). */}
         <div data-composer-cluster="">
           {fork}
-          <div data-composer-send="">
+          <ButtonOutcome value={refusal ? { kind: "refused", label: refusal } : null}>
             {send}
-            {refusal ? <OutcomeLine kind="refused" label={refusal} /> : null}
-          </div>
+          </ButtonOutcome>
         </div>
       </div>
     </form>

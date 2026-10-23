@@ -1191,6 +1191,11 @@ svg [data-damage] {
   border-color: var(--pe-line-2);
   background-color: color-mix(in srgb, var(--pe-line) 20%, transparent);
 }
+.dl-button-outcome {
+  width: max-content;
+  max-inline-size: min(20rem, var(--available-width));
+  padding: var(--space-unit);
+}
 .dl-button:is(.dl-control, [data-kind="quiet"]:hover, [aria-pressed="true"]) {
   color: var(--pe-ink);
 }

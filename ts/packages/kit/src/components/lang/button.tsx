@@ -4,6 +4,8 @@ import type { Tone } from "../../lib/token";
  *  `refusal` keeps it focusable, inert, and says why. No children draws an icon-only square. */
 import {
   isValidElement,
+  createContext,
+  useContext,
   useRef,
   useState,
   type ComponentProps,
@@ -20,6 +22,8 @@ import { useWork } from "./pane";
 import "./button.css";
 
 const NAV_ICON = { back: ArrowLeft, forward: ArrowRight, out: ExternalLink };
+/** A composing surface supplies state; its button owns the anchored overlay. */
+export const ButtonOutcome = createContext<OutcomeLineProps | null>(null);
 
 export type ButtonProps = Omit<
   ComponentProps<"button">,
@@ -58,6 +62,7 @@ export function Button({
 }: ButtonProps) {
   const [pending, setPending] = useState(false);
   const [outcome, setOutcome] = useState<OutcomeLineProps | null>(null);
+  const shownOutcome = useContext(ButtonOutcome) ?? outcome;
   const anchor = useRef<HTMLButtonElement | null>(null);
   const running = useRef(false);
   const busy = suppliedBusy || pending;
@@ -76,11 +81,9 @@ export function Button({
         .then(
           (value) =>
             setOutcome(
-              value && typeof value === "object" && "message" in value
+              value && "message" in value
                 ? { kind: "refused", label: value.message }
-                : value && typeof value === "object" && "kind" in value && "label" in value
-                  ? value
-                  : { kind: "receipt", label: `${label} complete` },
+                : value || { kind: "receipt", label: `${label} complete` },
             ),
           (error: unknown) =>
             setOutcome({
@@ -135,8 +138,6 @@ export function Button({
         <GlyphOf icon={Glyph as LucideIcon} />
       )}
       {typeof children === "string" ? (
-        // No native title (the hint guard): the full label stays the button's accessible name.
-        // ponytail: a cut label has no hover hint; measure on pointer entry like Row if missed.
         <span className="dl-button-label">{busy ? `${children}…` : children}</span>
       ) : (
         (children as ReactNode)
@@ -147,8 +148,7 @@ export function Button({
     button
   ) : (
     <Tooltip>
-      {/* A composing trigger's id (a Popover's) is the tooltip trigger's id too: Base UI finds
-          its hovered trigger by id, so two ids on one button silently kill the tooltip. */}
+      {/* Base UI needs the composing trigger's id to identify its hovered button. */}
       <TooltipTrigger render={button} id={id} />
       {tip == null ? null : <TooltipContent>{tip}</TooltipContent>}
     </Tooltip>
@@ -156,15 +156,15 @@ export function Button({
   return (
     <>
       {control}
-      {outcome && (
-        <Popover
-          open
-          onOpenChange={(open) => {
-            if (!open) setOutcome(null);
-          }}
-        >
-          <PopoverContent anchor={anchor} side="bottom" initialFocus={false}>
-            <OutcomeLine {...outcome} />
+      {shownOutcome && (
+        <Popover key={shownOutcome.label} open onOpenChange={(open) => !open && setOutcome(null)}>
+          <PopoverContent
+            className="dl-button-outcome"
+            anchor={anchor}
+            side="bottom"
+            initialFocus={false}
+          >
+            <OutcomeLine {...shownOutcome} />
           </PopoverContent>
         </Popover>
       )}
