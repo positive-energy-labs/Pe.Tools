@@ -10,9 +10,11 @@ import {
   bindWork,
   emptyThreadLifecycle,
   navigationSnapshotSchema,
+  routeAddress,
   workKey,
 } from "@pe/agent-contracts";
 import { RouteWorkspace, type RouteWorkspaceRegistration } from "@pe/runtime";
+import { createRouteRegistrations } from "@pe/mcps";
 import { createPeRoutes } from "../src/pe-routes.ts";
 import { fileRouteDocumentStore } from "../src/route-document-store.ts";
 import { readNavigation } from "../src/navigation.ts";
@@ -87,6 +89,79 @@ test("HTTP navigation resumes only the exact unique current document and reflect
   documents = [];
   expect((await read()).works[0]!.url).toBeNull();
   expect((await read()).works[0]!.reason).toContain("not currently available");
+});
+
+test("saved Ducts Work resumes only its unique current document and survives missing or ambiguous bindings", async () => {
+  const directory = await temporary();
+  const store = fileRouteDocumentStore(directory);
+  const scope = bindWork("ducts", address("C:\\Models\\Ducts.rvt"));
+  const workspace = new RouteWorkspace({ store, registrations: createRouteRegistrations() });
+  const written = await workspace.apply(
+    scope,
+    "ducts",
+    "human",
+    [
+      {
+        path: ["flows", "1100", "staged"],
+        value: { value: { cfm: 250, source: "Reviewed office supply flow" } },
+      },
+    ],
+    0,
+  );
+  expect(written.ok).toBe(true);
+  const before = await bytes(directory);
+  const ref = { session: "current-process-incarnation", openId: "current-open-lifetime" };
+  let documents = [{ ...ref, address: scope.target }];
+  const navigation = () =>
+    readNavigation(workspace, {
+      threads: async () => [],
+      documents: async () => documents,
+    });
+  const linked = (await navigation()).works;
+  expect(linked).toHaveLength(1);
+  expect(linked[0]).toMatchObject({
+    id: workKey(scope),
+    route: "ducts",
+    state: "ready",
+    revision: 1,
+    reason: null,
+    url: routeAddress("ducts").link({}, { target: JSON.stringify({ kind: "open", ref }) }),
+  });
+  documents = [...documents, { ...documents[0]!, session: "another-process-incarnation" }];
+  expect((await navigation()).works).toMatchObject([
+    {
+      id: workKey(scope),
+      state: "ready",
+      revision: 1,
+      url: null,
+      reason: "This address has multiple current document bindings.",
+    },
+  ]);
+  documents = [];
+  expect((await navigation()).works).toMatchObject([
+    {
+      id: workKey(scope),
+      state: "ready",
+      revision: 1,
+      url: null,
+      reason: expect.stringContaining("not currently available"),
+    },
+  ]);
+  const reopened = { session: "reopened-process-incarnation", openId: "reopened-lifetime" };
+  documents = [{ ...reopened, address: scope.target }];
+  expect((await navigation()).works).toEqual([
+    {
+      ...linked[0],
+      url: routeAddress("ducts").link(
+        {},
+        { target: JSON.stringify({ kind: "open", ref: reopened }) },
+      ),
+    },
+  ]);
+  expect(await bytes(directory)).toEqual(before);
+  expect((await workspace.read(scope, "ducts"))?.doc).toMatchObject({
+    flows: { "1100": { staged: { value: { cfm: 250, source: "Reviewed office supply flow" } } } },
+  });
 });
 
 test("transplanted identity and malformed data are reported without mutating their files", async () => {

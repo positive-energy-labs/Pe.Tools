@@ -725,6 +725,10 @@ export function useDuctsReading<T>(
     envelope?.state === "ready" &&
     body?.key === key &&
     body.nativeObservation?.version === envelope.version;
+  // Only a body previously admitted as ready may remain visible, and only for this exact subject.
+  const previous = useRef<{ key: string; data: T } | null>(null);
+  if (previous.current?.key !== key) previous.current = null;
+  if (valid && body.data !== undefined) previous.current = { key: key!, data: body.data };
   const error =
     reading.state === "failed"
       ? Error(reading.message)
@@ -735,6 +739,8 @@ export function useDuctsReading<T>(
           : undefined;
   return {
     data: valid ? body.data : undefined,
+    previous: previous.current?.data,
+    staleReason: reading.state === "stale" ? reading.reason : ("dirtied" as const),
     nativeObservation: valid ? body.nativeObservation : undefined,
     version: valid ? body.nativeObservation?.version : undefined,
     error,

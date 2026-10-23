@@ -113,7 +113,7 @@ test("the host-owned /pe surface answers without Revit", async () => {
     expect(keys).toContain("op:pod.list");
     expect(keys).not.toContain("route:pods.open");
     expect(keys).toContain("skill:@product/skills/build-pod");
-    expect(keys.some((key) => key.startsWith("op:revit."))).toBe(false);
+    expect(keys).toContain("op:revit.catalog.loaded-families");
 
     // The thread's targets, their Reading, and route Work, with no tenant behind them.
     // Anonymous loopback is read-only; the owner's terminal token (written at start) is a human.

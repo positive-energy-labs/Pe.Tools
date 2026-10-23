@@ -592,7 +592,7 @@ export function mintPageDoor(
 }
 
 /**
- * D4: the step-begin check. A grant basis holds while its thread still targets that exact lifetime
+ * D4: the step-begin and native-dispatch check. A grant basis holds while its thread still targets that exact lifetime
  * under the same admission; a Full-access basis while the switch stays Full or a human has since
  * added the document; a document acquisition while that acquisition still holds that exact
  * lifetime; every other basis holds for the attempt.
@@ -626,7 +626,7 @@ export function live(basis: Basis | null, door = "step begin"): Refused | null {
       : refuse(
           "grant.revoked",
           door,
-          `Refused at ${door}: access was switched to Guarded and thread ${basis.thread} does not target ${refText(basis.lifetime)}. Steps already running finish; nothing new starts.`,
+          `Refused at ${door}: access was switched to Guarded and thread ${basis.thread} does not target ${refText(basis.lifetime)}. Native work already dispatched finishes; queued work does not start. Authored Work is retained.`,
           { lifetime: basis.lifetime },
         );
   if (basis?.kind !== "grant") return null;
@@ -635,7 +635,7 @@ export function live(basis: Basis | null, door = "step begin"): Refused | null {
     : refuse(
         "grant.revoked",
         door,
-        `Refused at ${door}: ${refText(basis.lifetime)} was removed from thread ${basis.thread}'s documents. Steps already running finish; nothing new starts. Add it again to write it.`,
+        `Refused at ${door}: ${refText(basis.lifetime)} was removed from thread ${basis.thread}'s documents. Native work already dispatched finishes; queued work does not start. Authored Work is retained. Add the document again to write it.`,
         { lifetime: basis.lifetime },
       );
 }

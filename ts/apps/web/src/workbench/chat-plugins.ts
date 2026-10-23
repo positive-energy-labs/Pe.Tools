@@ -102,7 +102,7 @@ export function capturedPlace(
   const search = Object.fromEntries(
     at.keys.filter((name) => name in input).map((name) => [name, input[name]]),
   );
-  if (key === "schedules" && scope.binding === "workspace") search.schedule = scope.work;
+  if (key === "schedules" && scope.binding === "workspace") search.workspaceId = scope.work;
   return { ok: true, route: key, page: at.read(search).page, carry };
 }
 

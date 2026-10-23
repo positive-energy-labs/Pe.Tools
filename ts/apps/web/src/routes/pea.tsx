@@ -1,6 +1,5 @@
 import { createFileRoute, retainSearchParams } from "@tanstack/react-router";
 import { routeFile } from "#/route";
-import { ChatShell } from "#/chat/chat-shell";
 /**
  * Chat URL state — the single home for navigable/shareable state. TanStack Router owns all of it
  * (validateSearch + the middlewares below); nothing hand-rolls `new URL().searchParams`.
@@ -25,11 +24,6 @@ export const Route = createFileRoute("/pea")({
 });
 
 function RouteComponent() {
-  // `target` is the root's retained pin (routes/__root.tsx), carried across every Chat link.
-  const { thread, target } = Route.useSearch();
-  return <ChatRouteContent thread={thread} target={target} />;
-}
-
-export function ChatRouteContent({ target }: { thread?: string; target?: string }) {
-  return <ChatShell target={target} />;
+  // RouteDock owns the persistent ChatShell; this leaf owns only its address contract.
+  return null;
 }

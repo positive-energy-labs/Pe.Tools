@@ -1,5 +1,143 @@
 # e2e lane: one test per acceptance journey (E2E-J1..J6)
 
+## Seeded route journey (Vitest + chrome-agent)
+
+From an integrated checkout, the owned demo is one command:
+
+```powershell
+vp run --no-cache journey:routes
+```
+
+The launcher starts `src/dev.ts --no-revit --no-tray` through the checkout's installed Node/jiti runtime,
+an isolated product home and local SDK/app-data roots, the canonical source Vite child, and a
+private visible chrome-agent instance on a dynamically selected port. It reads the host service
+receipt and returned browser identity, then runs Vitest with `refresh,reconnect,worker` required. It never
+starts Revit or sends a Pea prompt. The integrated navigation fixture must expose its real demo
+Refresh action. `--seed`, `--require` and `--source` override the default seed, requested coverage
+and served source checkout. `custody.json` and `host.log` live under the dated route-launch run.
+Before launching owned Chrome, the launcher waits up to 90 seconds for the full HTML document.
+Vite can bind its port before the first SSR import completes. The receipt records that setup
+duration separately; HTTP readiness is not browser acceptance and CDP deadlines stay unchanged.
+The launcher restores online networking through the test, stops only its own Chrome, requests
+token-authenticated shutdown of its own host, disconnects its IPC child and bounds process exit.
+The explicit `--no-tray` producer contract keeps the shared checkout tray receipt untouched.
+The launcher checks its SHA-256 each second and after cleanup, and fails if it changes.
+
+Explicit attached mode borrows the named page/server and leaves their lifecycle to the caller:
+
+```powershell
+vp run --no-cache journey:routes -- --attached --source C:/path/to/served/Pe.Tools --url 'http://127.0.0.1:5173/ducts?demo=navigation' --port 9255 --target 129DC0038D97FA0AEC5ED4E23D8524D3 --require refresh,reconnect,worker
+```
+
+`vp run --no-cache test:route-chaos` from `ts` runs the opt-in `route-chaos.config.ts` suite.
+Always pass `--no-cache`: a cached task verdict cannot prove a browser journey.
+It borrows one explicitly named page from a Chrome instance launched by `chrome-agent`.
+It starts no browser, server, host, Revit session, or inference turn. Stop only the instance and
+server you launched after the run. Keep the tab visible and serve a stable tree: editing the
+served checkout invalidates a run.
+
+```powershell
+# Runtime owner: start this checkout's server separately using the repo's vp tooling.
+# Choose a free private port. 9255 belongs to the parent integration session.
+chrome-agent launch --port 9264 -- --disable-background-timer-throttling --disable-renderer-backgrounding --disable-backgrounding-occluded-windows
+$env:CDP_PORT = '9264'
+# /json is CDP metadata, never an application-state oracle. Pick the full id of your own page.
+$pages = Invoke-RestMethod "http://127.0.0.1:$env:CDP_PORT/json"
+$pages | Select-Object id, type, url
+$env:CDP_TARGET = '<full page id>'
+$env:CHAOS_LANE = 'demo'
+$env:E2E_WEB = 'http://127.0.0.1:<actual web port>/ducts?demo=navigation'
+$env:CHAOS_SEED = '20261023'
+$env:CHAOS_REQUIRE = 'refresh,reconnect,worker'
+$env:CHAOS_PRODUCT_ROOT = 'C:/path/to/served/Pe.Tools'
+vp run --no-cache test:route-chaos
+# chrome-agent stop <exact instance name returned by launch>
+```
+
+The same test supports `CHAOS_LANE=host` with a full `/ducts?target=...` URL and no `demo`
+query. The runtime owner supplies the host, document and disposable Work. Neither a saved
+snapshot nor borrowed reads proves native writes. Do not use a person's existing draft or Work.
+
+Both modes require observed real host-fetch `x-pe-web-build` headers to match the named source
+HEAD's canonical 12-character build stamp. Receipts record the source HEAD separately from
+the observed build, and list dirty working-tree paths. A dirty source can only report `partial`.
+An unknown or mismatched served build fails rather than borrowing the harness checkout's HEAD.
+
+The 36-second quiet watchdog witness first requires an accepted route lease and world SSE,
+then waits for initial acquisition to settle. SSE response counts must stay exactly unchanged.
+The bridge renews its lease every five seconds. Each observed renewal must be an identical-view,
+same-instance PUT whose accepted view and revision remain unchanged, with no host expiry gap.
+Lease removal, changed input, changed revision, failed renewal or SSE reacquisition fails the witness.
+The receipt records baseline view input and each accepted renewal's request id, time and revision.
+To exercise the deliberately failing transport control, set `CHAOS_WATCHDOG_RED=disconnect`
+before the same command. It cuts browser networking for one second after the quiet baseline.
+Expect the SSE/lease-identity assertion to fail on reacquisition. A DOM-only failure or
+`RED CONTROL INEFFECTIVE` does not certify the network oracle. Clear that variable for acceptance.
+
+The seed selects rendered system controls, disruption order and outage duration. The story
+searches and filters, travels all → A → B → all, uses Back/Forward, selects a tree row, opens a
+copied URL and reloads it, refreshes, goes offline/online, pauses an available pricing worker,
+and leaves/returns through Pea and its existing thread controls. It never sends a Pea prompt.
+An empty Pea draft is required. Two visible existing threads enable A → B → A draft/transcript
+identity checks. Hidden retained composers are excluded from all reads.
+Same-thread route visits require the original Ducts DOM object. Global Pea or explicit thread
+switches can change the thread address and dispose that leaf; return must restore the exact URL,
+rendered picture/readout, selection and URL pose without alerts, loading or newly armed actions.
+The receipt records both thread addresses, original-node retention and restored reading. This
+does not change the strict DOM/focus/scroll/pose/geometry checks during untouched disruptions.
+
+`CHAOS_REQUIRE` is an explicit comma-separated list of capabilities that must execute: `refresh`,
+`reconnect`, `worker`, `thread`, `arming`. The direct Vitest entry has no default; the launcher
+requires `refresh,reconnect,worker`. Missing `thread` or `arming` remains explicitly partial. Unavailable optional
+capabilities get an `unavailable` step and an explicit `UNPROVEN` coverage entry. A requested
+capability or missing core precondition fails Vitest; there are no skipped tests. `reconnect`
+requires a new observed SSE response after the outage. Offline/online alone cannot satisfy it.
+The receipt is `partial` whenever any capability is omitted or unavailable, even if the selected
+Vitest assertions pass. It is `passed` only when every capability is explicitly required and runs.
+The core navigation, search/filter, history, copied-URL, reload, Escape and quiet watchdog dwell
+assertions always run. `CHAOS_REQUIRE=navigation` is an explicitly partial diagnostic subset.
+Omitted disruptions are recorded and do not execute, so an unrelated omitted native scenario
+cannot mutate Work. The quiet dwell requires an accepted lease revision from the observed host
+response for the current URL thread and a world SSE subscription in the network URL. It holds
+still for 36 seconds, crossing the original watchdog interval, under the same sampled continuity
+checks. Missing lease or world subscription is a failed precondition, not quiet proof.
+Escape must clear selection while preserving the pose. History uses the real app Back/Forward
+controls where present, otherwise CDP `Page.navigateToHistoryEntry`; Alt+Arrows belongs to stage
+view history and is not used as browser history.
+
+For `arming`, supply `CHAOS_LANE=host`, `CHAOS_STAGE_SELECTOR` (a visible, enabled input on
+disposable Work), and `CHAOS_STAGE_VALUE`. This step persists a Work edit through trusted input,
+runs native Preview through its real control, and checks that refresh/route return disarms
+the actual `write N to Revit` control. It never presses Write. Native write consumption and stale native responses still need
+the parent's controlled native receipt loop. Example strict host coverage:
+
+```powershell
+$env:CHAOS_LANE = 'host'
+$env:E2E_WEB = '<actual full /ducts URL with a bound disposable target>'
+$env:CHAOS_REQUIRE = 'refresh,reconnect,worker,thread,arming'
+$env:CHAOS_STAGE_SELECTOR = '<real visible editor selector discovered on that model>'
+$env:CHAOS_STAGE_VALUE = '<valid changed value>'
+vp run --no-cache test:route-chaos
+```
+
+Each run writes `.artifacts/runs/browser-YYYYMMDD-route-chaos/<seed>-<timestamp>/receipt.json`
+with checkout/commit, each step's before/after DOM observations, coverage and network metadata.
+A failure writes `seed-<seed>-step-<step>-failed.{html,txt,png}`. A pre-connection failure has only
+the JSON receipt. The persistent CDP socket has connection/command timeouts and rejects pending
+commands on disconnect. Teardown restores online networking, resumes/detaches a paused worker,
+and closes the socket; it does not close the borrowed Chrome.
+
+Continuity checks sample every 100 ms. They hold actual main, canvas/SVG, activeElement and
+scroll-ancestor DOM references and check identity/connection as well as scroll positions,
+pane scroll, URL pose and action arming during untouched disruptions. This is sampled continuity,
+not every-frame proof. Native CDP layout-shift events cover the full disruption window. Named navigation,
+selection, reload and deliberate focus moves have their own assertions. This is browser
+acceptance only after the full requested lane runs; formatting and the missing-precondition
+diagnostic are not acceptance. The parent supplies the deterministic `demo=navigation` fixture
+with named systems through production geometry/pricing; it needs no existing Revit. The suite
+also accepts `demo=scene` if it has at least two rendered systems and a selectable run. Baseline
+`2ef96e25` has no systems or groups in `demo=scene`, and this test change preserves that story.
+
 Rules (rulings-1640 §1): act only through real controls with trusted input, assert only on the rendered DOM, see each test RED first, and run against a real host (and real Revit where the journey touches it). `cdp.ts` is the whole helper; `host.ps1` starts this checkout's own no-Revit host.
 
 ## Before any Pea step (user note, 2026-09-18)

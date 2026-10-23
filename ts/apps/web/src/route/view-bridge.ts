@@ -13,6 +13,7 @@ import {
   type RouteViewRoute,
 } from "@pe/agent-contracts";
 import { peClient } from "#/host/pe-client";
+import { reportFault } from "#/host/diagnostics";
 import { useHostEvents } from "#/readings";
 import { causeRefusal, refuse, type Refusal } from "./refusal";
 import { applyPageIntent, type PageIntent } from "./view-owner";
@@ -139,11 +140,15 @@ function useRouteViewBridge<R extends RouteViewRoute>({
             revision.current = accepted.revision;
             published.current = value;
           }
+        })
+        .catch((cause) => {
+          reportFault({ code: "host.failed", routeCode: route, streamKind: "view.publish" }, cause);
+          throw cause;
         });
       publishing.current = next;
       return next;
     },
-    [routeCurrent],
+    [routeCurrent, route],
   );
   useEffect(() => {
     if (!view) return;
@@ -169,7 +174,9 @@ function useRouteViewBridge<R extends RouteViewRoute>({
             { keepalive: true },
           );
         })
-        .catch(() => {});
+        .catch((cause) =>
+          reportFault({ code: "host.failed", routeCode: route, streamKind: "view.remove" }, cause),
+        );
     },
     [Boolean(view)],
   );
@@ -207,7 +214,9 @@ function useRouteViewBridge<R extends RouteViewRoute>({
               },
             },
           })
-          .catch(() => {});
+          .catch((cause) =>
+            reportFault({ code: "host.failed", routeCode: route, streamKind: "view.ack" }, cause),
+          );
       const agent = routeAddress(value.route).agent;
       let patch: Partial<RoutePage<R>>;
       try {
@@ -248,17 +257,22 @@ function useRouteViewBridge<R extends RouteViewRoute>({
     void publish(view)
       .then(async () => {
         if (canceled || !eligible()) return;
-        await peClient.call("view.ack", {
-          params: { route },
-          body: {
-            outcome: "rendered",
-            instance: instance.current,
-            commandId: event.commandId,
-            revision: event.revision,
-            page: view.page,
-            facts: view.facts,
-          },
-        });
+        await peClient
+          .call("view.ack", {
+            params: { route },
+            body: {
+              outcome: "rendered",
+              instance: instance.current,
+              commandId: event.commandId,
+              revision: event.revision,
+              page: view.page,
+              facts: view.facts,
+            },
+          })
+          .catch((cause) => {
+            reportFault({ code: "host.failed", routeCode: route, streamKind: "view.ack" }, cause);
+            throw cause;
+          });
         if (!canceled) setIntent(null);
       })
       .catch(() => {});

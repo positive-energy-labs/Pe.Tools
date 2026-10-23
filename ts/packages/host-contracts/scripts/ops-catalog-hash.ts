@@ -1,5 +1,5 @@
 /**
- * The ops-catalog drift hash. `host-ops.generated.ts` is projected from the dotnet graph, so a
+ * The ops-catalog drift hash. The generated contracts and catalog project the dotnet graph, so a
  * dotnet edit that forgets to regenerate is drift. Rebuilding dotnet to notice took 200 to 330 s per
  * guard run; hashing every C# source takes milliseconds and reddens on the same edits.
  *
@@ -54,7 +54,7 @@ if (process.argv.includes("--write")) {
   writeFileSync(SHA, `${now}\n`);
 } else if (readFileSync(SHA, "utf8").trim() !== now) {
   console.error(
-    `ops-catalog: dotnet sources changed since host-ops.generated.ts was generated. Run \`pnpm codegen\` in ts/packages/host-contracts and commit both files.`,
+    `ops-catalog: dotnet sources changed since the contracts and catalog were generated. Run \`pnpm codegen\` in ts/packages/host-contracts and commit the generated artifacts and hash.`,
   );
   process.exit(1);
 }

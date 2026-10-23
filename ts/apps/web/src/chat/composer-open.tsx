@@ -69,10 +69,17 @@ function ComposerBay() {
   const machine = machineOf(reading);
   const { rows, threads, loading } = useBayReadings(machine, fixture);
   return (
-    <div className="flex h-[28rem] w-full flex-col p-(--gutter)" data-testid="composer-bay">
+    <div
+      className="flex h-[28rem] w-full flex-col p-(--gutter)"
+      data-testid="composer-bay"
+      aria-busy={reading.state !== "ready" && reading.state !== "failed"}
+    >
       <PatchBay
         machine={machine}
-        loading={loading || reading.state === "loading"}
+        loading={loading || (machine === null && reading.state === "loading")}
+        refusal={
+          reading.state === "ready" ? null : "Refresh the machine reading before changing Revit"
+        }
         rows={rows}
         threads={threads}
         fixture={fixture}

@@ -9,8 +9,9 @@ export default defineConfig({
       "**/.artifacts/**",
       // tsr owns this file's shape and its dev watcher instantly reverts any reformat
       "**/routeTree.gen.ts",
-      // host-typegen owns this checked-in contract artifact; codegen:check compares exact bytes
+      // host-typegen owns these checked-in artifacts; codegen:check compares exact bytes
       "**/host-ops.generated.ts",
+      "**/host-catalog.generated.ts",
       // `pe-revit context product` writes this file ("DO NOT EDIT"); regeneration undoes any reformat
       "**/product.g.ts",
       // Pe.Revit.Sdk owns these files byte-for-byte and `pe-revit doctor`'s ts-client-drift check

@@ -79,10 +79,11 @@ export interface PageMove<P> {
   readonly guard?: readonly (keyof P)[];
 }
 
-export type PageTransitionOrigin = "page" | "action" | "pea";
+export type PageTransitionOrigin = "page" | "action" | "pea" | "url" | "initial";
 
 /** Pure coupled Page rules. The owner validates the normalized patch as one complete candidate.
- * URL restoration bypasses these rules so restored fields keep their explicit values.
+ * Restores reset dependents too. The owner preserves explicitly restored fields atomically;
+ * evidence-dependent guards defer URL/initial membership checks until the Reading arrives.
  */
 export type PageTransition<P> = (
   current: Readonly<P>,

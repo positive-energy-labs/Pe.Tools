@@ -1,5 +1,7 @@
 import { useEffect, useMemo, useState, type ReactNode } from "react";
 import { useAtomValue } from "@effect/atom-react";
+import { useRouterState } from "@tanstack/react-router";
+import { routeAddress } from "@pe/agent-contracts";
 import { ChatShell } from "#/chat/chat-shell";
 import { PaneSplit } from "@pe/kit/lang/pane";
 import { ChatPlanIntent } from "#/route/situation-ladder";
@@ -18,6 +20,9 @@ export function RouteDock({
 }) {
   const { store } = useWorkbench();
   const tabs = useRouteTabs();
+  const pea = useRouterState({
+    select: (state) => state.location.pathname === routeAddress("pea").path,
+  });
   const plan = useAtomValue(store.atoms.planIntent);
   const planRefusal = useAtomValue(store.atoms.planRefusal);
   const intent = useMemo(
@@ -61,6 +66,7 @@ export function RouteDock({
         />
       )}
       <ChatPlanIntent.Provider value={intent}>
+        {/* Pea and tool pages share this owner so navigation cannot destroy unsent drafts. */}
         <PaneSplit
           axis={narrow ? "vertical" : "horizontal"}
           grow
@@ -82,7 +88,13 @@ export function RouteDock({
                 },
           }}
           start={<RouteRetention {...tabs} renderRoute={renderRoute} />}
-          end={tabs.route ? <ChatShell docked target={tabs.target} /> : children}
+          end={
+            tabs.route || pea ? (
+              <ChatShell docked={Boolean(tabs.route)} target={tabs.target} />
+            ) : (
+              children
+            )
+          }
         />
       </ChatPlanIntent.Provider>
     </div>

@@ -2,9 +2,31 @@ import { describe, expect, it } from "vite-plus/test";
 
 import { semanticActions } from "@pe/agent-contracts";
 
-import { actionRoute } from "./chat-plugins";
+import { actionRoute, capturedPlace } from "./chat-plugins";
 
 describe("chat plugin records", () => {
+  it("a recorded schedule opens its declared workspace and retains the execution document", () => {
+    const place = capturedPlace(
+      "schedules",
+      {
+        binding: "workspace",
+        route: "schedules",
+        target: null,
+        work: "schedule-42",
+      },
+      {},
+      { kind: "open", ref: { session: "one", openId: "original" } },
+    );
+    expect(place).toMatchObject({
+      ok: true,
+      page: { workspaceId: "schedule-42" },
+      carry: {
+        work: "schedule-42",
+        target: JSON.stringify({ kind: "open", ref: { session: "one", openId: "original" } }),
+      },
+    });
+    expect(capturedPlace("schedules", null, {})).toMatchObject({ ok: false });
+  });
   it("an action opens the pane whose manifest declares a verb doing it, never a guess at its words", () => {
     expect(actionRoute("takeoffs.sync")).toBe("takeoffs");
     expect(actionRoute("rooms.merge")).toBe("rooms");

@@ -1,6 +1,13 @@
 import { expect, test } from "vite-plus/test";
 import { tsOnlyOperationCatalog, tsOnlyOperationSchemas } from "@pe/host-contracts/operation-types";
 import { Schema } from "effect";
+import * as generated from "@pe/host-contracts/generated";
+import { hostOpCatalog } from "@pe/host-contracts/catalog";
+
+test("browser contracts exclude the full discovery catalog; the host catalog covers the same operations", () => {
+  expect(generated).not.toHaveProperty("hostOpCatalog");
+  expect(hostOpCatalog.map((operation) => operation.key)).toEqual(generated.hostOpKeys);
+});
 
 test("host-local op catalog covers every TS-only op exactly once (GET /ops discovery)", () => {
   const catalogKeys = tsOnlyOperationCatalog.map((entry) => entry.key);

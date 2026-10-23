@@ -12,6 +12,7 @@ import {
   familyReads,
   actionBasesSchema,
   settingsRouteState,
+  scheduleGridRouteState,
   routeAddress,
   routeViewRoutes,
   type RouteViewRoute,
@@ -252,18 +253,26 @@ function routeViewRows(route: RouteViewRoute): Capability[] {
       key: `route:${route}.set-view`,
       kind: "route-command",
       title: `Set ${spec.title} visible view`,
-      description: `${policy} Read route:${route}.view first, then pass its instance and revision with a nonempty subset of ${sets.join(", ")}${words ? ` or ${Object.keys(words.shape).join(", ")}` : ""}. The browser acknowledges the render before this returns.`,
+      description: `${policy} For a mounted view, read route:${route}.view first, then pass its instance and revision. To open or reuse this tool's tab in the thread, omit both instance and revision; the call waits for a mounted view and uses its current revision, or returns applied: false if none mounts. Pass a nonempty subset of ${sets.join(", ")}${words ? ` or ${Object.keys(words.shape).join(", ")}` : ""}. The browser acknowledges an applied render before this returns.`,
       finds: [lower, "filter", "visible", "page", ...finds],
       needs: "nothing",
       mutates: true,
       principal: capabilityPrincipals(true),
       input: z.toJSONSchema(
-        z.object({
-          instance: z.uuid(),
-          revision: z.number().int().nonnegative(),
-          ...fields.partial().shape,
-          ...words?.partial().shape,
-        }),
+        z.union([
+          z.object({
+            instance: z.uuid(),
+            revision: z.number().int().nonnegative(),
+            ...fields.partial().shape,
+            ...words?.partial().shape,
+          }),
+          z.object({
+            instance: z.never().optional(),
+            revision: z.never().optional(),
+            ...fields.partial().shape,
+            ...words?.partial().shape,
+          }),
+        ]),
       ) as Record<string, unknown>,
       source: "browser Page",
       rank: 2,
@@ -275,7 +284,9 @@ function routeRows(spec: RouteStateSpec<z.ZodType>): Capability[] {
   const scopeHint =
     spec.route === settingsRouteState.route
       ? "Use op:pod.list to enumerate members. Supply workspaceId for the member's Work opened by the editor; propose fields against its adopted basis. This is shared file Work independent of Revit."
-      : "Runs under this thread's Scope; no target input.";
+      : spec.route === scheduleGridRouteState.route
+        ? "Supply workspaceId from the schedule reading to address its Work."
+        : "Runs under this thread's one document; with several, pass an exact open target from this thread's documents. The override selects this call's document-owned Work and does not change the thread.";
   const read: Capability = {
     key: `route:${spec.route}`,
     kind: "route-doc",

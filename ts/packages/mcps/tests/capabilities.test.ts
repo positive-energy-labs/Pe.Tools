@@ -652,20 +652,29 @@ test("an exact-open turn Target reads and writes route Work under its document's
 test("ADR 0021: a thread with several targets refuses a call with no override; an override names one", async () => {
   fakeRuntimeHost("http://127.0.0.1:9");
   const dispatched: (string | null)[] = [];
+  const work: URL[] = [];
+  const workWrites: unknown[] = [];
+  let connected = true;
   vi.stubGlobal("fetch", async (input: string, init?: RequestInit) => {
     const url = new URL(input);
     if (url.pathname === "/pe/capabilities") return Response.json(catalog());
     if (url.pathname === "/ops") return Response.json({ operations: [] });
+    if (url.pathname.includes("/route-state/")) {
+      work.push(url);
+      if (typeof init?.body === "string") workWrites.push(JSON.parse(init.body));
+      return Response.json({ ok: true, revision: 3, doc: {} });
+    }
     const body = JSON.parse(typeof init?.body === "string" ? init.body : "{}");
     if (body.key === "bridge.sessions.list")
       return Response.json({
         sessions: [
           {
             sessionId: "b1",
-            connected: true,
+            connected,
             openDocuments: [
               { openId: "a", address: "C:\\Models\\A.rvt", isFamilyDocument: false },
               { openId: "b", address: "C:\\Models\\B.rvt", isFamilyDocument: false },
+              { openId: "outside", address: "C:\\Models\\Other.rvt", isFamilyDocument: false },
             ],
           },
         ],
@@ -695,6 +704,62 @@ test("ADR 0021: a thread with several targets refuses a call with no override; a
       ),
     ).toMatchObject({ ok: true, revision: 2 });
     expect(dispatched).toEqual(["b"]);
+    const route = { key: "route:families", timeoutSeconds: 30 };
+    expect(await run(peRead, route, head)).toMatchObject({
+      ok: false,
+      content: expect.stringContaining("several-targets"),
+    });
+    const target = { kind: "open", ref: { session: "b1", openId: "b" } };
+    expect(await run(peRead, { ...route, target }, head)).toMatchObject({
+      ok: true,
+      target: { session: "b1", document: "C:\\Models\\B.rvt" },
+    });
+    expect(
+      await run(
+        peDo,
+        {
+          ...route,
+          key: "route:families.propose",
+          target,
+          expectedRevision: 3,
+          input: { patches: [{ path: ["scope", "proposal"], value: {} }] },
+        },
+        head,
+      ),
+    ).toMatchObject({ ok: true, revision: 2 });
+    for (const openId of ["outside", "closed"]) {
+      expect(
+        await run(
+          peDo,
+          {
+            ...route,
+            key: "route:families.propose",
+            expectedRevision: 3,
+            target: { kind: "open", ref: { session: "b1", openId } },
+          },
+          head,
+        ),
+      ).toMatchObject({ ok: false });
+    }
+    expect(await run(peRead, { ...route, target: { id: "sdk" } }, head)).toMatchObject({
+      ok: false,
+    });
+    expect(
+      work.map((url) => [url.searchParams.get("target"), url.searchParams.get("open")]),
+    ).toEqual([
+      ["C:\\Models\\B.rvt", "b1/b"],
+      ["C:\\Models\\B.rvt", "b1/b"],
+    ]);
+    expect(workWrites).toMatchObject([{ expectedRevision: 3 }]);
+    expect(head.targets.map((entry) => entry.request)).toEqual(
+      ["a", "b"].map((openId) => ({ kind: "open", ref: { session: "b1", openId } })),
+    );
+    connected = false;
+    expect(await run(peRead, { ...route, target }, head)).toMatchObject({
+      ok: false,
+      content: expect.stringContaining("disconnected"),
+    });
+    expect(work).toHaveLength(2);
   } finally {
     vi.unstubAllGlobals();
     vi.unstubAllEnvs();
@@ -941,6 +1006,25 @@ test("route:ducts.set-view with no mounted view opens Ducts as a thread tab, the
     },
   ]);
   expect(result).toMatchObject({ ok: true });
+
+  sets.length = 0;
+  expect(
+    await run(peDo, {
+      key: "route:ducts.set-view",
+      timeoutSeconds: 30,
+      input: { instance: "6f1c2a9e-4b7d-4c3e-9a1f-2d8e5b7c0a11", revision: 1, system: "SA 19" },
+    }),
+  ).toMatchObject({ ok: true });
+  expect(sets).toMatchObject([{ revision: 1 }]); // The host fences the caller's revision, never a refreshed one.
+  sets.length = 0;
+  expect(
+    await run(peDo, {
+      key: "route:ducts.set-view",
+      timeoutSeconds: 30,
+      input: { revision: 1, system: "SA 19" },
+    }),
+  ).toMatchObject({ ok: false, content: expect.stringContaining("both instance and revision") });
+  expect(sets).toEqual([]);
 
   // A Ducts tab already in the thread but off screen is reused, never duplicated.
   tabs.length = 0;

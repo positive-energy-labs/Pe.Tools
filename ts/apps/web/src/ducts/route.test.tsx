@@ -30,20 +30,30 @@ import { act, cleanup, fireEvent, render, screen, waitFor } from "@testing-libra
 import { afterEach, beforeEach, expect, test, vi } from "vite-plus/test";
 import { machineFixture } from "../../../../packages/agent-contracts/tests/machine-fixture";
 import type { ProtoProps } from "./proto/props";
+import { useNativeObservation } from "#/revit/observation";
+import { pricingJob, type PricingRequest, type PricingResponse } from "./pricing-job";
 
-const drawing = vi.hoisted(() => ({ lightweight: false }));
+const drawing = vi.hoisted(() => ({ lightweight: false, latest: null as ProtoProps | null }));
 vi.mock("./proto/e/screen", async (original) => {
   const { EScreen } = await original<typeof import("./proto/e/screen")>();
   return {
-    EScreen: ({ props }: { props: ProtoProps }) =>
-      drawing.lightweight ? (
-        <div data-proto={props.snapshot ? "E2" : undefined}>
+    EScreen: ({ props }: { props: ProtoProps }) => {
+      const observation = useNativeObservation();
+      drawing.latest = props;
+      return drawing.lightweight ? (
+        <div
+          data-proto={props.snapshot ? "E2" : undefined}
+          data-native={
+            observation.scope?.source === "native" && observation.scope.document !== null
+          }
+        >
           {props.snapshot ? props.snapshot.document.elapsedMs : "reading ducts…"}
           {props.reading.refreshing ? "refreshing…" : ""}
         </div>
       ) : (
         <EScreen props={props} />
-      ),
+      );
+    },
   };
 });
 
@@ -194,6 +204,7 @@ const inventory = {
 
 beforeEach(() => {
   drawing.lightweight = false;
+  drawing.latest = null;
   work = ductsRouteState.schema.parse({ assumptions: {} });
   revision = 0;
   requests.length = 0;
@@ -356,11 +367,18 @@ beforeEach(() => {
 });
 afterEach(() => {
   cleanup();
+  window.history.replaceState({}, "", "/");
   inventory.sessions[0]!.openDocuments.splice(1);
   vi.unstubAllGlobals();
 });
 
-async function mount(search = "&system=SA", hosted = false, target = "slice", thread = "fixture") {
+async function mount(
+  search = "&system=SA",
+  hosted = false,
+  target = "slice",
+  thread = "fixture",
+  nativeRead = true,
+) {
   const root = createRootRoute();
   const route = createRoute({
     getParentRoute: () => root,
@@ -380,10 +398,54 @@ async function mount(search = "&system=SA", hosted = false, target = "slice", th
       <RouterProvider router={router} />
     </ChatHosted.Provider>,
   );
-  await waitFor(() => expect(requests.length).toBeGreaterThan(0));
+  if (nativeRead) await waitFor(() => expect(requests.length).toBeGreaterThan(0));
   await waitFor(() => expect(screen.queryByText("reading ducts…")).toBeNull());
   return { ...rendered, router };
 }
+
+test("navigation demo prices the production route and moves all to Office to Lab to all without native authority", async () => {
+  drawing.lightweight = true;
+  window.history.replaceState({}, "", "/ducts?demo=navigation");
+  const flights: PricingRequest[] = [];
+  vi.stubGlobal(
+    "Worker",
+    class {
+      onmessage: ((event: MessageEvent<PricingResponse>) => void) | null = null;
+      onerror = null;
+      solve = pricingJob();
+      postMessage(request: PricingRequest) {
+        flights.push(request);
+        const data = this.solve(request);
+        queueMicrotask(() => this.onmessage?.({ data } as MessageEvent<PricingResponse>));
+      }
+      terminate() {}
+    },
+  );
+  try {
+    const { router } = await mount("&demo=navigation", false, "slice", "fixture", false);
+    await waitFor(() => expect(drawing.latest?.analysis?.systems).toHaveLength(3));
+    expect(screen.getByText(/Navigation fixture \(synthetic/)).toBeTruthy();
+    expect(drawing.latest?.doc).toBeNull();
+    expect(document.querySelector('[data-proto="E2"]')?.getAttribute("data-native")).toBe("false");
+    expect(await drawing.latest!.actions.preview.run()).toMatchObject({ code: "not-ready" });
+    const epoch = drawing.latest!.page.epoch;
+    const before = flights.length;
+    fireEvent.click(screen.getByRole("button", { name: /^refresh/, hidden: true }));
+    await waitFor(() => expect(drawing.latest!.page.epoch).toBe(epoch + 1));
+    await waitFor(() => expect(flights.length).toBeGreaterThan(before));
+    await waitFor(() => expect(drawing.latest!.priced).not.toBeNull());
+    expect(await drawing.latest!.actions.apply.run()).toMatchObject({ code: "not-ready" });
+    for (const system of ["SA Office", "SA Lab", ""]) {
+      act(() => drawing.latest!.setPage({ system }));
+      await waitFor(() => expect(router.state.location.search).toMatchObject({ system }));
+      expect(drawing.latest?.page.system).toBe(system);
+    }
+    expect(requests).toEqual([]);
+  } finally {
+    cleanup();
+    window.history.replaceState({}, "", "/");
+  }
+}, 30_000);
 
 test("a changed document fences a pending read after changing targets and returning to that exact open document", async () => {
   // Exercise the real route, target and read owners. Tree/layout work cannot falsify this race.
@@ -399,6 +461,8 @@ test("a changed document fences a pending read after changing targets and return
   );
   const mounted = await mount("&system=SA", false, target, "");
   await waitFor(() => expect(document.querySelector('[data-proto="E2"]')).not.toBeNull());
+  const picture = document.querySelector('[data-proto="E2"]');
+  expect(picture?.getAttribute("data-native")).toBe("true");
   let release: (value: Response) => void = () => {};
   reply = () =>
     new Promise((resolve) => {
@@ -407,6 +471,10 @@ test("a changed document fences a pending read after changing targets and return
   fireEvent.click(screen.getByRole("button", { name: /^refresh/, hidden: true }));
   expect(document.querySelector('[data-proto="E2"]')).not.toBeNull();
   await waitFor(() => expect(requests.length).toBe(2));
+  expect(document.querySelector('[data-proto="E2"]')).toBe(picture);
+  expect(picture?.closest('[aria-busy="true"]')).not.toBeNull();
+  expect(picture?.textContent).toContain("refreshing");
+  expect(picture?.getAttribute("data-native")).toBe("false");
   const old = response();
   reply = async () => Response.json(response());
   const pick = async (title: string) => {

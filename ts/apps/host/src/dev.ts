@@ -85,6 +85,7 @@ const program = hostProgram(
                 !Number.isFinite(Date.parse(frontend.processStartUtc))
               )
                 reject(new Error("Invalid dev frontend address"));
+              else if (process.argv.includes("--no-tray")) resolve(frontend.url);
               else
                 void publishDevTraySession({
                   schemaVersion: 1,

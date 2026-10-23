@@ -145,6 +145,21 @@ export const APP_ROUTES: readonly AppRoute[] = [
     resume: "document",
   },
   {
+    key: "ducts",
+    path: "/ducts",
+    title: "Ducts",
+    label: "Pressure drop",
+    iconKey: "Wind",
+    description:
+      "Review duct systems, stage pressure-drop inputs and rulings, and preview or apply the changes in Revit.",
+    task: "Calculate loads & airflow",
+    exposure: "Main",
+    aliases: "duct pressure drop static pressure airflow fan systems",
+    runtimeNeed: "Revit for model reads and writes",
+    directory: true,
+    resume: "document",
+  },
+  {
     key: "grilles",
     path: "/grilles",
     title: "Grilles",

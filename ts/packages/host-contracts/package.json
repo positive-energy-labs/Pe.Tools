@@ -27,6 +27,11 @@
       "import": "./src/operation-types.ts",
       "default": "./src/operation-types.ts"
     },
+    "./catalog": {
+      "types": "./src/generated/host-catalog.generated.ts",
+      "import": "./src/generated/host-catalog.generated.ts",
+      "default": "./src/generated/host-catalog.generated.ts"
+    },
     "./generated": {
       "types": "./src/generated/host-ops.generated.ts",
       "import": "./src/generated/host-ops.generated.ts",
@@ -75,7 +80,7 @@
     "check": "vp check",
     "prepublishOnly": "vp run build",
     "codegen": "dotnet run --project ../../../dotnet/Pe.Dev.Cli -- ops-catalog --out .cache/ops-catalog.json && vpx node --import jiti/register scripts/host-typegen.ts --catalog .cache/ops-catalog.json && node scripts/ops-catalog-hash.ts --write",
-    "codegen:check": "dotnet run --project ../../../dotnet/Pe.Dev.Cli -- ops-catalog --out .cache/ops-catalog.json && vpx node --import jiti/register scripts/host-typegen.ts --catalog .cache/ops-catalog.json --check",
+    "codegen:check": "dotnet run --project ../../../dotnet/Pe.Dev.Cli -- ops-catalog --out .cache/ops-catalog.json && vpx node --import jiti/register scripts/host-typegen.ts --catalog .cache/ops-catalog.json --check && node scripts/ops-catalog-hash.ts",
     "codegen:verify-live": "vpx node --import jiti/register scripts/host-typegen.ts --check"
   },
   "dependencies": {

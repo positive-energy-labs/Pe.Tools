@@ -12,11 +12,13 @@ import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { stagedDucts, type DuctClaim, type TrichotomyCellLike } from "@pe/agent-contracts";
 import type { Reading } from "@pe/agent-contracts";
 import type { DuctSnapshot } from "@pe/ducts-domain/types";
+import { EMPTY_CATALOGS } from "@pe/ducts-domain/catalog";
 
 import { Surface } from "@pe/kit/lang/surface";
 import { frozenDemo } from "#/host/demo-client";
 import { SAVED, useDuctSnapshot, useDuctTables, useDuctCatalogs } from "./host";
 import { SCENE_CLAIMS, SCENE_FIXTURE } from "./scene.fixture";
+import { NAVIGATION_FIXTURE } from "./navigation.fixture";
 import { RouteShell, useRoute, useRouteThread } from "#/route";
 import { Ladder } from "#/route/ladder";
 import { useChooseTarget } from "#/route/shell";
@@ -61,6 +63,7 @@ function useBodyAction(action: ActionHandle): ActionHandle {
 }
 
 const fmt = (n: number | null | undefined) => (n == null ? "—" : n.toFixed(4));
+const NO_NATIVE_OBSERVATION: NativeObservation = { scope: null };
 
 /** Revit's critical path as a word, whatever the engine flag: a system with no path reads "no path". */
 const revitSays = (inWg: number | null | undefined) => (inWg == null ? "no path" : fmt(inWg));
@@ -71,10 +74,32 @@ export function DuctsRoute({ url = true }: { url?: boolean } = {}) {
   const thread = useRouteThread();
   // `?demo=scene` mounts the makeup-air fixture, snapshot included, and no host is read; its
   // subject and claims have the staged cells' shapes, and a verdict press stays in this page.
-  const demo = useMemo(() => (frozenDemo() === "scene" ? SCENE_FIXTURE : null), []);
-  const [demoClaims, setDemoClaims] = useState<Record<string, DuctClaim>>(SCENE_CLAIMS);
+  const demoName = useMemo(frozenDemo, []);
+  const demo =
+    demoName === "navigation" ? NAVIGATION_FIXTURE : demoName === "scene" ? SCENE_FIXTURE : null;
+  const [demoClaims, setDemoClaims] = useState<Record<string, DuctClaim>>(
+    () => demo?.claims ?? SCENE_CLAIMS,
+  );
   const loadedReading = useRef<LoadedDuctsReading | null>(null);
-  const manifest = useMemo(() => bindDuctsManifest(() => loadedReading.current), []);
+  const manifest = useMemo(() => {
+    const bound = bindDuctsManifest(() => loadedReading.current);
+    if (demoName !== "navigation") return bound;
+    return {
+      ...bound,
+      // A fixture has no document authority, even with a real target/thread carried in the URL.
+      needs: undefined,
+      actions: {
+        ...bound.actions!,
+        refresh: {
+          ...bound.actions!.refresh,
+          does: undefined,
+          needs: "host" as const,
+          actor: "any" as const,
+          says: "Recalculate the navigation fixture in the pricing worker; no Revit read or write",
+        },
+      },
+    };
+  }, [demoName]);
   // The snapshot and tables are read below, once the target resolves; the verbs see them here.
   const [provided, setProvided] = useState<
     Record<"ducts" | "tables" | "catalogs" | "pricing", Reading<unknown>>
@@ -100,6 +125,7 @@ export function DuctsRoute({ url = true }: { url?: boolean } = {}) {
     staged.labelParameter,
   );
   const snapshot = demo?.snapshot ?? read.snapshot;
+  const snapshotCurrent = demo !== null || read.current;
   // useDuctSnapshot fences responses by the exact request generation before exposing data.
   const nativeObservation = useMemo<NativeObservation>(
     () => ({
@@ -117,7 +143,9 @@ export function DuctsRoute({ url = true }: { url?: boolean } = {}) {
   const error = demo ? null : read.error;
   const pending = demo ? false : read.pending;
   const catalogs = useDuctCatalogs(page.epoch);
-  const tables = useDuctTables(doc?.session ?? null);
+  const tables = useDuctTables(demo ? null : (doc?.session ?? null));
+  const grids = demoName === "navigation" ? NAVIGATION_FIXTURE.grids : tables.grids;
+  const catalogTables = demoName === "navigation" ? EMPTY_CATALOGS : catalogs.tables;
   // The system's groups (Work's subject cells and claims key on group ids, never shown).
   const systemGroups = useMemo(
     () => (snapshot && page.system ? systemScope(snapshot, page.system).groups : []),
@@ -168,11 +196,11 @@ export function DuctsRoute({ url = true }: { url?: boolean } = {}) {
   );
   const pricingInput = useMemo<PricingInput | null>(
     () =>
-      snapshot && tables.grids && !pending
+      snapshot && snapshotCurrent && grids && !pending && !error
         ? {
             snapshot,
-            grids: tables.grids,
-            catalogs: catalogs.tables,
+            grids,
+            catalogs: catalogTables,
             doc: handle.work.doc,
             revision: handle.work.revision,
             epoch: page.epoch,
@@ -181,9 +209,11 @@ export function DuctsRoute({ url = true }: { url?: boolean } = {}) {
         : null,
     [
       snapshot,
-      tables.grids,
-      catalogs.tables,
+      snapshotCurrent,
+      grids,
+      catalogTables,
       pending,
+      error,
       handle.work.doc,
       handle.work.revision,
       page.epoch,
@@ -197,14 +227,31 @@ export function DuctsRoute({ url = true }: { url?: boolean } = {}) {
       pricing: pricingState.observation
         ? { state: "ready", observation: pricingState.observation }
         : { state: "absent" },
-      catalogs: { state: "ready", observation: catalogs.tables },
-      ducts: snapshot ? { state: "ready", observation: snapshot } : { state: "absent" },
-      tables: tables.grids ? { state: "ready", observation: tables.grids } : { state: "absent" },
+      catalogs: { state: "ready", observation: catalogTables },
+      ducts: snapshot
+        ? snapshotCurrent
+          ? { state: "ready", observation: snapshot }
+          : error
+            ? { state: "failed", previous: snapshot, message: error }
+            : { state: "stale", previous: snapshot, reason: read.staleReason }
+        : { state: "absent" },
+      tables: grids ? { state: "ready", observation: grids } : { state: "absent" },
     });
-  }, [snapshot, tables.grids, catalogs.tables, pricingState.observation]);
+  }, [
+    snapshot,
+    snapshotCurrent,
+    error,
+    read.staleReason,
+    grids,
+    catalogTables,
+    pricingState.observation,
+  ]);
   const reading = useMemo<LoadedDuctsReading | null>(
-    () => (snapshot ? { snapshot, drawn: priced?.snapshot ?? null, claims: claimCells } : null),
-    [snapshot, priced?.snapshot, claimCells],
+    () =>
+      snapshot && snapshotCurrent
+        ? { snapshot, drawn: priced?.snapshot ?? null, claims: claimCells }
+        : null,
+    [snapshot, snapshotCurrent, priced?.snapshot, claimCells],
   );
   loadedReading.current = reading;
   // A camera write cannot change system membership; do not rebuild its evidence for each pose.
@@ -226,7 +273,6 @@ export function DuctsRoute({ url = true }: { url?: boolean } = {}) {
     key: string | null;
     snapshot: DuctSnapshot;
     priced: NonNullable<typeof priced>;
-    observation: NativeObservation;
     analysis: NonNullable<typeof pricingState.observation>["result"]["analysis"];
   } | null>(null);
   if (snapshot && priced)
@@ -234,14 +280,13 @@ export function DuctsRoute({ url = true }: { url?: boolean } = {}) {
       key: documentKey,
       snapshot,
       priced,
-      observation: nativeObservation,
       analysis: pricingState.observation!.result.analysis,
     };
   const held =
     !priced && lastPriced.current?.key === documentKey && (pending || !!snapshot)
       ? lastPriced.current
       : null;
-  const pricing = !!snapshot && !!tables.grids && !priced && !held && !pricingState.error;
+  const pricing = !!snapshot && !!grids && !priced && !held && !pricingState.error;
   // The Work every pane reads: the model's stored rulings under the person's pending ones.
   const seen = useMemo(
     () => withStoredRulings(handle.work.doc, snapshot?.store),
@@ -306,7 +351,7 @@ export function DuctsRoute({ url = true }: { url?: boolean } = {}) {
           ? `${readingWord}; the bars show the last read`
           : tables.error
             ? `ducts.tables failed: ${tables.error}`
-            : !tables.grids
+            : !grids
               ? "reading the ASHRAE tables"
               : !priced
                 ? "pricing…"
@@ -332,7 +377,14 @@ export function DuctsRoute({ url = true }: { url?: boolean } = {}) {
 
   const sentence = (
     <>
-      on {SAVED ? "saved snapshot" : <LadderPicker ladder={ladder} disabled={busy} />}
+      on{" "}
+      {demoName === "navigation" ? (
+        "Navigation fixture (synthetic; native actions disabled)"
+      ) : SAVED ? (
+        "saved snapshot"
+      ) : (
+        <LadderPicker ladder={ladder} disabled={busy} />
+      )}
       {", "}
       <Ladder
         levels={[
@@ -403,7 +455,7 @@ export function DuctsRoute({ url = true }: { url?: boolean } = {}) {
   const empty =
     !doc && !SAVED && !demo
       ? { says: "no document bound", exit: "choose a document in the sentence" }
-      : error
+      : error && !snapshot
         ? { says: `ducts.snapshot failed: ${error}`, exit: "refresh once the host answers" }
         : !snapshot
           ? { says: "reading ducts…", exit: "wait for the snapshot" }
@@ -457,7 +509,7 @@ export function DuctsRoute({ url = true }: { url?: boolean } = {}) {
     reading: {
       pending,
       error: error ?? pricingState.error ?? null,
-      refreshing: !!held || (pending && !!snapshot),
+      refreshing: !!held || (!snapshotCurrent && !!snapshot),
     },
     actions,
     staged: pendingCount(handle.work.doc, snapshot?.store),
@@ -487,7 +539,14 @@ export function DuctsRoute({ url = true }: { url?: boolean } = {}) {
               }}
               target={{
                 session: ladder.sessionWord,
-                document: SAVED ? "saved snapshot" : demo ? "scene fixture" : ladder.docWord,
+                document:
+                  demoName === "navigation"
+                    ? "navigation fixture"
+                    : SAVED
+                      ? "saved snapshot"
+                      : demo
+                        ? "scene fixture"
+                        : ladder.docWord,
               }}
               sentence={sentence}
               ledger={[
@@ -508,8 +567,12 @@ export function DuctsRoute({ url = true }: { url?: boolean } = {}) {
         />
       }
     >
-      <NativeObservationScope value={held?.observation ?? nativeObservation}>
-        <EScreen props={shell} />
+      <NativeObservationScope
+        value={snapshotCurrent && !held ? nativeObservation : NO_NATIVE_OBSERVATION}
+      >
+        <div className="contents" aria-busy={!!snapshot && (!snapshotCurrent || !!held)}>
+          <EScreen props={shell} />
+        </div>
       </NativeObservationScope>
     </Surface>
   );

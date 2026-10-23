@@ -34,3 +34,6 @@ export const recordBridgeQueue = (...args: Parameters<ActionJournal["recordQueue
   journal
     ? journal.recordQueue(...args)
     : Promise.reject(Error("Receipt owner has not been initialized"));
+
+export const bridgeDispatchRefusal = (requestId: string): string | null =>
+  journal?.dispatchRefusal(requestId) ?? null;

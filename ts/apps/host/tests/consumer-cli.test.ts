@@ -11,7 +11,10 @@ import { ActionJournal } from "../src/action-journal.ts";
 import { RevitBridge } from "../src/bridge.ts";
 import { makeCallRoute } from "../src/call-route.ts";
 import { opsCatalogRoute } from "../src/ops-catalog.ts";
-import { tsOnlyOperationCatalog } from "@pe/host-contracts/operation-types";
+import { isTsOnlyOperationKey, tsOnlyOperationCatalog } from "@pe/host-contracts/operation-types";
+import { hostOpCatalog } from "@pe/host-contracts/catalog";
+import { createCapabilityCatalogSource } from "@pe/mcps";
+import { machineFixture } from "../../../packages/agent-contracts/tests/machine-fixture.ts";
 import { sdkSessions } from "./native-receipt-fixture.ts";
 import { fakeRuntimeHost } from "../../../packages/mcps/tests/runtime-host-fixture.ts";
 import { hostOwnership } from "../src/host-ownership.ts";
@@ -19,12 +22,16 @@ import { callerOf, writeTerminalContext } from "../src/control.ts";
 import { withInvocationContext } from "@pe/runtime/context";
 import { resolveLaneAndRoot } from "@pe/mcps";
 
-test("untargeted /ops without bridge attachments returns local operations without SDK discovery", async () => {
+test("missing or ambiguous bridge keeps generated discovery metadata and reports availability separately", async () => {
   const sdk = vi.fn(async () => {
     throw new Error("SDK discovery should not run without a bridge attachment");
   });
   const invoke = vi.fn(() => Effect.die("native catalog should not run"));
-  const bridge = { list: Effect.succeed([]), invoke } as unknown as RevitBridge["Service"];
+  let attachments: unknown[] = [];
+  const bridge = {
+    list: Effect.sync(() => attachments),
+    invoke,
+  } as unknown as RevitBridge["Service"];
   const web = HttpRouter.toWebHandler(
     opsCatalogRoute(() => Effect.die("not navigation"), sdk).pipe(
       Layer.provideMerge(Layer.succeed(RevitBridge, bridge)),
@@ -34,13 +41,56 @@ test("untargeted /ops without bridge attachments returns local operations withou
   try {
     const response = await web.handler(new Request("http://host/ops"), Context.empty() as never);
     expect(response.status).toBe(200);
-    expect(await response.json()).toEqual({
-      operations: tsOnlyOperationCatalog,
+    const body = await response.json();
+    expect(body).toEqual({
+      operations: [
+        ...hostOpCatalog.filter((op) => !isTsOnlyOperationKey(op.key)),
+        ...tsOnlyOperationCatalog,
+      ],
       bridgeCatalogError: "No Revit session is connected to the bridge.",
     });
     expect(sdk).not.toHaveBeenCalled();
     expect(invoke).not.toHaveBeenCalled();
+    // The agent's actual catalog projection retains schemas, document needs and human-only actors.
+    vi.stubGlobal("fetch", async (input: string | URL | Request) => {
+      const url = new URL(input instanceof Request ? input.url : String(input));
+      return url.pathname === "/ops"
+        ? web.handler(new Request(url), Context.empty() as never)
+        : Response.json({ result: { recents: [] } });
+    });
+    const source = createCapabilityCatalogSource({
+      hostBaseUrl: "http://host",
+      registrations: [],
+      machine: async () => machineFixture(),
+    });
+    const catalog = await source.read();
+    expect(catalog.bridgeSessionId).toBeUndefined();
+    expect(catalog.sources.catalog).toContain("bridge catalog unavailable");
+    expect(
+      catalog.capabilities.find((op) => op.key === "op:revit.catalog.loaded-families"),
+    ).toMatchObject({
+      needs: "document",
+      mutates: false,
+      input: { type: "object" },
+    });
+    expect(catalog.capabilities.find((op) => op.key === "op:families.plan")).toMatchObject({
+      principal: ["human"],
+    });
+    for (const op of tsOnlyOperationCatalog)
+      expect(body.operations.filter((row: { key: string }) => row.key === op.key)).toEqual([op]);
+
+    // A nonempty attachment inventory enters SDK resolution. Its ambiguity is not catalog absence.
+    attachments = [{ sessionId: "one" }, { sessionId: "two" }];
+    sdk.mockRejectedValueOnce(Error("Several Revit sessions match; select one."));
+    source.invalidate();
+    const ambiguous = await source.read();
+    expect(ambiguous.sources.catalog).toContain("Several Revit sessions match");
+    expect(ambiguous.capabilities).toEqual(catalog.capabilities);
+    expect(ambiguous.bridgeSessionId).toBeUndefined();
+    expect(sdk).toHaveBeenCalledTimes(1);
+    expect(invoke).not.toHaveBeenCalled();
   } finally {
+    vi.unstubAllGlobals();
     await web.dispose();
   }
 });
@@ -179,6 +229,16 @@ test("actual pea/Gunshi argv crosses local HTTP: actor/id/openId, file/stdin A/B
   ];
   const stdinOriginal = Object.getOwnPropertyDescriptor(process, "stdin")!;
   try {
+    const discovery = await (await fetch(`${base}/ops?session=A`)).json();
+    expect(discovery).toEqual({
+      operations: [...operations, ...tsOnlyOperationCatalog],
+      bridgeSessionId: "A",
+    });
+    expect(
+      discovery.operations.some(
+        (op: { key: string }) => op.key === "revit.catalog.loaded-families",
+      ),
+    ).toBe(false);
     await runPeaMain(["script", "execute", "--file", file, ...flags("cli-file-A", "A")]);
     const stream = new PassThrough();
     Object.defineProperty(process, "stdin", { configurable: true, value: stream });

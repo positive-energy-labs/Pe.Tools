@@ -500,7 +500,7 @@ installer/package lane or `pea --installed ...`.
 
 ## Contract decisions (runtime op catalog)
 
-The runtime contract self-registers: C# `BridgeOp` fields/`[BridgeOperation]` methods register at startup, and the TS host serves the live catalog — request/response JSON Schemas included — from `GET /ops` (rationale: `docs/features/host/LEDGER.md`). Typegen runs two lanes (`7af1eba`):
+C# operation metadata owns the contract. `GET /ops` serves the selected bridge catalog, including request/response JSON Schemas. If bridge acquisition fails, it serves the generated `hostOpCatalog` and reports availability separately in `bridgeCatalogError`; it does not claim a selected `bridgeSessionId`. Host-local operations take precedence in both cases. Typegen runs two lanes (`7af1eba`):
 
 ```powershell
 # offline lane (deterministic; catalog projected from C# source via pe-dev ops-catalog)
@@ -514,11 +514,12 @@ The generator is `packages/host-contracts/scripts/host-typegen.ts`; `pnpm verify
 
 What lives in `@pe/host-contracts`:
 
-- `src/generated/host-ops.generated.ts` — the typegen lockfile: per-op request/response interfaces, the `HostOps` map, `hostOpKeys`.
+- `src/generated/host-ops.generated.ts` — browser-safe operation interfaces, the `HostOps` map, `hostOpKeys`, and `hostOpSafety`.
+- `src/generated/host-catalog.generated.ts` — the complete host-only C# metadata projection `hostOpCatalog`, exported as `@pe/host-contracts/catalog`.
 - `src/operation-types.ts` — hand-authored TS-only op schemas (settings runtime, APS auth, logs), key guards, `OpKey`/`OpRequestOf`/`OpResponseOf`.
 - `src/contracts/` — hand-authored bridge protocol, product constants, and operation vocabulary.
 
-Session selection is caller scope, not operation payload: `HostSessionScope.bridgeSessionId` travels as the `x-pe-bridge-session-id` header on `POST /call` and `GET /ops`. The catalog response echoes `bridgeSessionId`; the live verify lane refuses a mismatched echo. The offline lane involves no session at all — and today it silently swallows a `--session` arg (host ledger, drive B-10).
+Session selection is caller scope, not operation payload: `HostSessionScope.bridgeSessionId` travels as the `x-pe-bridge-session-id` header on `POST /call` and `GET /ops`. The catalog response echoes `bridgeSessionId`; the live verify lane refuses a mismatched echo or a `bridgeCatalogError`, so static discovery cannot pass as live parity. The offline lane involves no session at all — and today it silently swallows a `--session` arg (host ledger, drive B-10).
 
 ### Field options, examples, and the registration gate
 

@@ -49,7 +49,11 @@ export function AtlasWorkspace() {
     <NativeObservationScope value={store.nativeObservation}>
       <Surface head={headRail}>
         {readout != null && (
-          <div data-slot="readout-band" className="shrink-0 py-1.5">
+          <div
+            data-slot="readout-band"
+            className="shrink-0 py-1.5"
+            aria-busy={geometry?.state === "loading" || geometry?.state === "stale"}
+          >
             {readout}
           </div>
         )}

@@ -8507,7 +8507,7 @@ export interface HostOps {
   "takeoffs.snapshot": { request: TakeoffsSnapshot.Req.Request; response: TakeoffsSnapshot.Res.Response };
 }
 
-/** Runtime key list matching HostOps — powers key guards without a metadata catalog. */
+/** Runtime key list matching HostOps. */
 export const hostOpKeys = [
   "data-table.apply",
   "document.temporary.release",

@@ -90,6 +90,7 @@ export function bindSpaceManifest(readScene: () => LoadedSpaceScene | null): typ
     transition: (current, patch, origin) => {
       const normalized = manifest.transition?.(current, patch, origin) ?? { patch };
       if ("refusal" in normalized) return normalized;
+      if (origin === "url" || origin === "initial") return normalized;
       const candidate = { ...current, ...normalized.patch };
       const scene = readScene();
       const matching = scene && scene.id === candidate.scene ? scene : null;
