@@ -26,6 +26,7 @@
     "./lang/lang.css": "./src/components/lang/lang.css",
     "./lang/legend": "./src/components/lang/legend.tsx",
     "./lang/list-popup": "./src/components/lang/list-popup.tsx",
+    "./lang/minimap": "./src/components/lang/gutter-minimap.tsx",
     "./lang/list-view": "./src/components/lang/list-view.tsx",
     "./lang/pane-crumb": "./src/components/lang/pane-crumb.tsx",
     "./lang/readout": "./src/components/lang/readout.tsx",

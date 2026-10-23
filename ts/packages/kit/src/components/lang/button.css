@@ -108,3 +108,17 @@
   text-overflow: ellipsis;
   white-space: nowrap;
 }
+
+/* A column head's trigger: a plain label at rest, the control frame only when touched. The border
+   is reserved transparent and the padding fixed, so the label never moves; the pad less the
+   border puts the label on the body cells' inset. */
+[data-pe] .dl-button[data-colhead-trigger] {
+  height: var(--item-h);
+  padding: 0 calc(var(--item-pad-x) - 1px);
+  border-color: transparent;
+  background-color: transparent;
+}
+[data-pe] .dl-button[data-colhead-trigger]:is(:hover, :focus-visible, [data-popup-open]) {
+  border-color: var(--pe-line-2);
+  background-color: color-mix(in srgb, var(--pe-line) 20%, transparent);
+}

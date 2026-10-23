@@ -1124,3 +1124,45 @@ svg [data-damage] {
 [data-svg-tip] {
   pointer-events: visiblePainted;
 }
+
+/* N8: one gutter maps row ordinals; the virtualizer supplies its viewport. */
+[data-minimap-owner] {
+  padding-inline-end: calc(var(--space-unit) * 4);
+}
+[data-minimap-host] {
+  position: sticky;
+  inset-inline-start: 0;
+  top: 0;
+  height: 0;
+  z-index: var(--z-sticky);
+  pointer-events: none;
+}
+[data-minimap] {
+  position: absolute;
+  inset-inline-end: calc(var(--space-unit) * -4);
+  top: 0;
+  width: calc(var(--space-unit) * 4);
+  background: var(--pe-recess);
+  cursor: crosshair;
+  touch-action: none;
+  user-select: none;
+  pointer-events: auto;
+}
+[data-minimap]:focus-visible {
+  outline: 1px solid var(--pe-ink);
+}
+[data-minimap] > i {
+  position: absolute;
+  inset-inline: 0;
+  height: 1px;
+  background: var(--pe-line-2);
+  pointer-events: none;
+}
+[data-minimap-viewport] {
+  position: absolute;
+  inset-inline: 0;
+  min-height: 2px;
+  border: 1px solid var(--pe-ink-2);
+  background: var(--pe-select);
+  pointer-events: none;
+}

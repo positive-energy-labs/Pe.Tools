@@ -26,9 +26,6 @@
 .chat-column [data-annotation="lane"] {
   bottom: var(--chat-composer-height, 0px);
 }
-.chat-column .chat-tail-floater {
-  bottom: calc(var(--chat-composer-height, 0px) + var(--gutter));
-}
 /* N6: a thread switch keeps the last transcript, dimmed under a sweep along the title's hairline,
    until the next body reads. The dim waits a beat so a fast read never flickers; the sweep is
    transform-only. The inert wrapper is `display: contents`, so the dim lands on its children. */

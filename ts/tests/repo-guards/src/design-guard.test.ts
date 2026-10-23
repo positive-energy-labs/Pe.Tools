@@ -46,17 +46,9 @@ describe("design guard â€” current token authority", () => {
     expect(paths.filter((path, index) => paths.indexOf(path) !== index)).toEqual([]);
   });
   it("declares each authored class in one CSS owner", () => {
-    const owners = ["base.css", "design-lang.css", "components/lang/lang.css"];
-    const declarations = new Map<string, string[]>();
-    for (const owner of owners) {
-      const css = stripComments(FILES.find((file) => file.rel === owner)?.text ?? "");
-      const names = [
-        ...css.matchAll(/^\s*(?:\[data-pe\]\s+)?\.([\w-]+)(?=\s*[,{}]|[[:])/gm),
-        ...css.matchAll(/@utility\s+([\w-]+)/g),
-      ].map((match) => match[1]);
-      for (const name of new Set(names))
-        declarations.set(name, [...(declarations.get(name) ?? []), owner]);
-    }
+    const declarations = authoredOwners(
+      [...LIVE_CSS].map((rel) => CSS_BY_REL.get(rel)!).filter(Boolean),
+    );
     const duplicates = [...declarations]
       .filter(([, classOwners]) => classOwners.length > 1)
       .map(([name, classOwners]) => `${name}: ${classOwners.join(", ")}`)
@@ -283,6 +275,112 @@ for (const rel of LIVE_CSS) {
     if (imported) LIVE_CSS.add(imported);
   }
 }
+
+// Authored selectors only: generated Tailwind CSS and runtime styles are outside this check.
+const splitSelectors = (text: string) => {
+  const parts: string[] = [];
+  let depth = 0;
+  let start = 0;
+  for (let index = 0; index < text.length; index++) {
+    if ("([".includes(text[index])) depth++;
+    else if (")]".includes(text[index])) depth--;
+    else if (text[index] === "," && depth === 0) {
+      parts.push(text.slice(start, index).trim());
+      start = index + 1;
+    }
+  }
+  return [...parts, text.slice(start).trim()];
+};
+const selectors = (css: string) =>
+  [...stripComments(css).matchAll(/([^{}]+)\{/g)].flatMap((block) =>
+    block[1].trim().startsWith("@") ? [] : splitSelectors(block[1]),
+  );
+const isOwnSelector = (selector: string) => {
+  const match = /^(?:\[data-pe\]\s+)?\.([\w-]+)(.*)$/.exec(selector);
+  // States and pseudo-elements specialize a class; descendant/child slots do not own it.
+  return match && !/[ >+~]/.test(match[2].replace(/\[[^\]]*\]|\([^)]*\)/g, "")) ? match[1] : null;
+};
+const authoredOwners = (files: Entry[]) => {
+  const owners = new Map<string, string[]>();
+  for (const file of files) {
+    const names = new Set([
+      ...selectors(file.text)
+        .map(isOwnSelector)
+        .filter((name): name is string => !!name),
+      ...[...stripComments(file.text).matchAll(/@utility\s+([\w-]+)/g)].map((match) => match[1]),
+    ]);
+    for (const name of names) owners.set(name, [...(owners.get(name) ?? []), file.rel]);
+  }
+  return owners;
+};
+
+// Scoped composition is deliberate. Every file/class pair carries its own reason.
+const CONTEXTUAL_OVERRIDES: Record<string, string> = {
+  "components/lang/conversation.css:dl-button": "Composer buttons align with its input baseline.",
+  "components/lang/hotkey-command.css:dl-button": "Command button reserves its chord affordance.",
+  "navigation/app-bar.css:dl-button": "App bar and settings control geometry follows its rail.",
+  "navigation/app-bar.css:dl-hotkey-command":
+    "App bar commands and settings align their shortcut trail.",
+  "workbench/lens.css:prose-pe": "Transcript prose fits the shared chat reading measure.",
+  "workbench/lens.css:dl-composer-frame": "Chat surface composer shares the transcript inset.",
+  "workbench/lens.css:dl-composer-box": "Chat surface composer shares the transcript measure.",
+  "workbench/lens.css:dl-message-body": "An in-run message aligns with the run lane.",
+  "workbench/lens.css:dl-message-bubble": "Chat bubbles use the transcript plane.",
+  "workbench/lens.css:dl-tool-status": "Tool status fits the timeline marker.",
+  "components/lang/navigation.css:dl-row": "Navigation supplies its pane inset and active state.",
+  "components/lang/navigation.css:dl-row-label":
+    "Title and unread weight use the navigation text edge.",
+  "components/lang/navigation.css:dl-row-sub": "Secondary text carries words and tabular ages.",
+  "components/lang/navigation.css:dl-row-eyebrow": "Eyebrow text carries words and tabular ages.",
+  "components/lang/navigation.css:dl-row-meta": "Metadata carries words and tabular ages.",
+  "components/lang/navigation.css:dl-row-lead":
+    "Title/target rows align their lead to the first line.",
+  "chat/thread-navigation.css:dl-row": "Thread sidebar supplies its pane inset.",
+  "chat/thread-navigation.css:dl-row-sub": "Thread secondary text uses body face and tabular ages.",
+  "chat/thread-navigation.css:dl-row-meta": "Thread metadata uses body face and tabular ages.",
+};
+
+describe("CSS ownership across the compiled entry graph", () => {
+  it("requires a reason for every contextual override of kit vocabulary", () => {
+    const kitFiles = [...LIVE_CSS]
+      .map((rel) => CSS_BY_REL.get(rel)!)
+      .filter(
+        (file) =>
+          file && (file.abs?.startsWith(KIT_ROOT) || file.rel.startsWith("components/lang/")),
+      );
+    const sharedOwners = authoredOwners(kitFiles);
+    const kitClasses = new Set(sharedOwners.keys());
+    const overrides = new Set<string>();
+    for (const rel of LIVE_CSS) {
+      const file = CSS_BY_REL.get(rel);
+      if (!file || file.abs?.startsWith(KIT_ROOT)) continue;
+      for (const selector of selectors(file.text)) {
+        if (isOwnSelector(selector)) continue;
+        for (const match of selector.matchAll(/\.([\w-]+)/g)) {
+          if (kitClasses.has(match[1]) && !sharedOwners.get(match[1])?.includes(rel))
+            overrides.add(`${rel}:${match[1]}`);
+        }
+      }
+    }
+    expect([...overrides].filter((key) => !CONTEXTUAL_OVERRIDES[key]).sort()).toEqual([]);
+    expect(
+      Object.keys(CONTEXTUAL_OVERRIDES)
+        .filter((key) => !overrides.has(key))
+        .sort(),
+    ).toEqual([]);
+  });
+  it("rejects duplicate owners even in route entries and through CSS imports", () => {
+    expect(
+      authoredOwners([{ rel: "route.css", text: ".route :is(.sample, .other) {}" }]).size,
+    ).toBe(0);
+    expect(
+      authoredOwners([
+        { rel: "kit.css", text: ".sample {}" },
+        { rel: "route.css", text: "@media (width > 1px) { .sample[data-active] {} }" },
+      ]).get("sample"),
+    ).toEqual(["kit.css", "route.css"]);
+  });
+});
 
 const cssUnescape = (value: string): string =>
   value.replace(/\\(?:([0-9a-fA-F]{1,6})\s?|([^\r\n]))/g, (_, hex: string, escaped: string) =>
