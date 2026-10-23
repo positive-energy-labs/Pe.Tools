@@ -43,10 +43,13 @@ public static class Scene {
         var unavailable = ids.Where(id => !available.Contains(id)).Select(id => {
             var element = document.GetElement(id.ToElementId());
             return new SceneUnavailableElement(id, element?.UniqueId, element?.Category?.Name,
-                element is null ? "Element is absent from this document." : "No visible Medium-detail mesh was produced.");
+                element is null ? "Element is absent from this document." : "No visible mesh was produced at Medium or Fine detail.");
         }).ToList();
+        var focusBounds = rows.Where(x => x.Partition.Kind == SourceKind.Host && ids.Contains(x.Row.ElementId))
+            .Select(x => x.Row.Box).DefaultIfEmpty(crop ?? Aabb.Empty).Aggregate(Union);
         var candidates = rows.Where(x => crop is null || x.Row.Box.Overlaps(crop.Value))
-            .OrderByDescending(x => x.Partition.Kind == SourceKind.Host && ids.Contains(x.Row.ElementId)).ToList();
+            .OrderByDescending(x => x.Partition.Kind == SourceKind.Host && ids.Contains(x.Row.ElementId))
+            .ThenBy(x => focusBounds.DistanceSquared(x.Row.Box)).ToList();
         var elements = new List<SceneElement>();
         var triangles = 0;
         var omitted = 0;

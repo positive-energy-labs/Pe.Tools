@@ -1,7 +1,7 @@
 namespace Pe.Revit.Space;
 
 /// <summary>
-///     One geometry walk. Medium detail (Fine when Medium draws no solid), references off, over one
+///     One geometry walk. Medium detail (Fine when Medium misses the body), references off, over one
 ///     document with one transform.
 ///     Transforms are applied here and nowhere else: everything downstream is host internal feet.
 /// </summary>
@@ -24,7 +24,7 @@ internal static class Ingest {
         IncludeNonVisibleObjects = false,
     };
 
-    /// <summary>The retry for elements Medium draws as lines only. Proven on Chadds 2026-09-26: all
+    /// <summary>The retry for missing or incomplete bodies. Proven on Chadds 2026-09-26: all
     /// 4,707 pipe fittings, 72 plumbing fixtures and 50 conduit fittings have a Solid only at Fine.</summary>
     private static readonly Options FineOpts = new() {
         DetailLevel = ViewDetailLevel.Fine,
@@ -65,17 +65,24 @@ internal static class Ingest {
         var start = sink.Count;
         var sawSolid = false;
         Read(e, Opts, xf, prim, sink, ref sawSolid, region);
-        // A solid that the region clip dropped sets sawSolid, so only an element Medium draws no solid
-        // for retries at Fine; a clipped-out element never pays for a second walk.
-        if (sink.Count == start && !sawSolid) Read(e, FineOpts, xf, prim, sink, ref sawSolid, region);
+        var box = TriangleBounds(sink, start);
+        var body = sink.Count > start ? ElementBounds(e, xf) : null;
+        // A cuff is a solid too. Retry when it spans less than half the body's longest axis;
+        // a region-rejected solid still avoids the second walk. Keep Medium if Fine is worse or absent.
+        if (sink.Count == start ? !sawSolid : body is { } b && b.CoverageBy(box) < 0.5) {
+            var fine = new List<Tri>();
+            var fineSolid = false;
+            Read(e, FineOpts, xf, prim, fine, ref fineSolid, region);
+            var fineBox = TriangleBounds(fine, 0);
+            if (fine.Count > 0 && (sink.Count == start || body is { } full && full.CoverageBy(fineBox) > full.CoverageBy(box))) {
+                sink.RemoveRange(start, sink.Count - start);
+                sink.AddRange(fine);
+                sawSolid = fineSolid;
+                box = fineBox;
+            }
+        }
         var count = sink.Count - start;
         if (count == 0) return null;
-
-        var box = Aabb.Empty;
-        for (var i = start; i < sink.Count; i++) {
-            var t = sink[i];
-            box = box.Include(t.A).Include(t.B).Include(t.C);
-        }
 
         return new PrimRow(
             source,
@@ -160,16 +167,31 @@ internal static class Ingest {
         }
     }
 
+    private static Aabb? ElementBounds(Element element, Transform xf) {
+        try { return element.get_BoundingBox(null) is { } bounds ? Bounds(bounds, xf) : null; }
+        catch { return null; }
+    }
+
+    private static Aabb TriangleBounds(List<Tri> triangles, int start) {
+        var box = Aabb.Empty;
+        for (var i = start; i < triangles.Count; i++)
+            box = box.Include(triangles[i].A).Include(triangles[i].B).Include(triangles[i].C);
+        return box;
+    }
+
+    private static Aabb Bounds(BoundingBoxXYZ bounds, Transform transform) {
+        var toHost = transform.Multiply(bounds.Transform);
+        var box = Aabb.Empty;
+        foreach (var x in new[] { bounds.Min.X, bounds.Max.X })
+        foreach (var y in new[] { bounds.Min.Y, bounds.Max.Y })
+        foreach (var z in new[] { bounds.Min.Z, bounds.Max.Z })
+            box = box.Include(P(toHost, new XYZ(x, y, z)));
+        return box;
+    }
+
     private static bool Overlaps(Solid solid, Transform transform, Aabb region) {
         try {
-            var bounds = solid.GetBoundingBox();
-            var toHost = transform.Multiply(bounds.Transform);
-            var box = Aabb.Empty;
-            foreach (var x in new[] { bounds.Min.X, bounds.Max.X })
-            foreach (var y in new[] { bounds.Min.Y, bounds.Max.Y })
-            foreach (var z in new[] { bounds.Min.Z, bounds.Max.Z })
-                box = box.Include(P(toHost, new XYZ(x, y, z)));
-            return box.Overlaps(region);
+            return Bounds(solid.GetBoundingBox(), transform).Overlaps(region);
         } catch {
             // Missing native bounds must retain the geometry, never erase context.
             return true;
@@ -259,15 +281,9 @@ internal static class Ingest {
             var count = sink.Count - start;
             if (count == 0) continue;
 
-            var box = Aabb.Empty;
-            for (var i = start; i < sink.Count; i++) {
-                var t = sink[i];
-                box = box.Include(t.A).Include(t.B).Include(t.C);
-            }
-
             rows.Add(new PrimRow(
                 source, ii.Id.Value(), ii.UniqueId, ii.Category?.Name ?? "<none>",
-                PrimKind.Curve2D, box, count, pair.Key, new Extrusion(tallest, reasons)));
+                PrimKind.Curve2D, TriangleBounds(sink, start), count, pair.Key, new Extrusion(tallest, reasons)));
             added++;
         }
 

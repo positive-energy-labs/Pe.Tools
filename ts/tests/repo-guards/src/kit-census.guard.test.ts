@@ -28,6 +28,10 @@ const allow = (entries: Record<string, string>): Allow[] =>
 // Filenames use the wave-4 final homes: land.ts, revit-target.tsx and go-to.tsx.
 // prettier-ignore
 const RULES: Rule[] = [
+  { id: "scene-completeness-forwarded", doctrine: "N6",
+    pattern: /return \{(?![^}]*\bomittedElements:)(?=[^}]*meshes: artifact\.meshes)[^}]*\}/g,
+    roots: [W + "scene/use-scene.ts"], allow: [],
+    cannotSee: "Correct counts, native geometry coverage, distance ordering or advisory visibility; hook tests cover count forwarding." },
   { id: "tutorial-facts-from-primitives", doctrine: "P1",
     pattern: /\b\w+_(?:KEYS|MODES|VIEWS)\s*(?::[^=;]+)?=\s*\[|\{(?:SPACE_LAYERS|ENCODINGS)\.map\(/g,
     roots: [W + "**/*docs*.tsx", W + "**/manifest.tsx"], allow: [],

@@ -24,6 +24,8 @@ export type SceneRead = {
   /** Why there are no meshes: the capture or the artifact failed; null otherwise. */
   error: string | null;
   pending: boolean;
+  omittedElements: number;
+  unavailableElements: number;
 };
 
 export function useScene(
@@ -47,6 +49,8 @@ export function useScene(
     meshes: artifact.meshes,
     error: request ? (call.error?.message ?? artifact.error) : null,
     pending: !!request && !!doc && (call.pending || artifact.pending),
+    omittedElements: artifact.metadata?.omittedElements ?? 0,
+    unavailableElements: artifact.metadata?.unavailableElements.length ?? 0,
   };
 }
 
