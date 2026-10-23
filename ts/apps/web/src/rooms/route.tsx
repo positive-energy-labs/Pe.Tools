@@ -483,6 +483,7 @@ function RoomsBody({
                     hovered={hovered}
                     pinned={pinned}
                     setPinned={setPinned}
+                    onClear={() => setPage({ selected: [] })}
                     card={card}
                     onDrop={onDrop}
                     onNote={onNote}

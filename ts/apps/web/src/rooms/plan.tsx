@@ -2,15 +2,20 @@
  * The rooms plan: Revit's picture of the view (as exported, never redrawn) under one path per
  * zone, room and held region, inked by the region's state, on a pan-zoom canvas. Every room and
  * held region wears a numbered callout whose label is the table's. Click selects, shift-click adds,
- * hover pairs with the table row, a click on empty ground clears; wheel zooms at the cursor.
+ * hover pairs with the table row; a click on empty ground keeps the selection and Esc clears it, as
+ * on every stage (SURFACE-PHILOSOPHY N2). The selection's facts sit in the fixed top-left readout;
+ * F frames the selection (else fits the view), clear of the readout and the docked legend.
  */
 import { type CSSProperties, type ReactNode, useEffect, useMemo, useRef } from "react";
+import { useScopeGestures, useScopeKeys } from "@pe/kit/keys";
+import { PLANE_GESTURES } from "#/scene/gestures";
+import { PictureReadout } from "#/scene/readout";
+import { useViewHistory } from "#/scene/view-history";
 import type { RoomsSnapshot } from "@pe/host-contracts/generated";
 
 import { FactChip } from "@pe/kit/lang/chip";
 import { Pane } from "#/components/lang/pane";
 import { revitTarget } from "@pe/kit/lang/row";
-import { fitView } from "#/scene/plane";
 import { PLAN_CLICK_PX as CLICK_PX, usePlaneViewport } from "#/scene/use-plane-viewport";
 import { usePlanMap } from "#/lib/plan-map";
 import type { RoomsPage } from "./manifest";
@@ -243,6 +248,7 @@ export function RoomsPlan({
     size,
     view,
     move,
+    frame: frameBox,
     dragging,
     dragDistance: dragDist,
     handlers,
@@ -289,10 +295,48 @@ export function RoomsPlan({
         [shape.box.minX, shape.box.minY] as const,
         [shape.box.maxX, shape.box.maxY] as const,
       ]);
-    if (!boxes.length) return;
+    const to = boxes.length ? frameBox(boundsOf(boxes), ZOOM_PAD_PX) : null;
+    if (!to) return;
     zoomed.current = zoomKey;
-    move(fitView(boundsOf(boxes), size, ZOOM_PAD_PX), "move");
-  }, [world, size, zoomKey, zoomTo, move]);
+    move(to, "move");
+  }, [world, size, zoomKey, zoomTo, move]); // eslint-disable-line react-hooks/exhaustive-deps
+
+  // The one camera move a person names (N1): F frames the selection, else fits the view.
+  useScopeGestures(PLANE_GESTURES);
+  useScopeKeys([
+    {
+      hotkey: "F",
+      label: "frame",
+      says: "Frame the selection; with nothing selected, fit the view",
+      callback: () => {
+        if (!world) return;
+        const boxes = world.shapes
+          .filter((shape) => selected.has(shape.region.guid))
+          .flatMap((shape) => [
+            [shape.box.minX, shape.box.minY] as const,
+            [shape.box.maxX, shape.box.maxY] as const,
+          ]);
+        const to = boxes.length ? frameBox(boundsOf(boxes), ZOOM_PAD_PX) : frameBox(world.fit);
+        if (to) move(to, "move");
+      },
+    },
+  ]);
+  useViewHistory();
+  // Esc clears at the plan's scope, where a pick leaves focus. ponytail: a document-bound Esc here
+  // kept a stale callback (it fired with an empty selection); bind it wider when a table pick must
+  // clear too.
+  useScopeKeys([
+    {
+      hotkey: "Escape",
+      label: "clear the selection",
+      says: "Clear the selection, without moving the view",
+      refusal: selected.size ? null : "nothing is selected",
+      callback: () => {
+        if (selected.size) onSelect(null, false);
+      },
+    },
+  ]);
+  const picked = world?.shapes.filter((shape) => selected.has(shape.region.guid)) ?? [];
 
   // The lease's one key is the viewport (`roomsAddress.agent`); the rest stays the person's.
   useRouteLease("rooms", [page, setPage], {
@@ -368,7 +412,7 @@ export function RoomsPlan({
   }, [world, size, view, callouts]);
 
   const legend = (
-    <div className="flex flex-wrap items-center gap-1 px-1 py-1" aria-label="plan legend">
+    <div className="flex flex-wrap items-center gap-1" aria-label="plan legend">
       {REGION_STATES.map((state) => (
         <FactChip
           key={state}
@@ -451,7 +495,6 @@ export function RoomsPlan({
 
   return (
     <Pane {...pane}>
-      {legend}
       {notice}
       <div
         ref={setHost}
@@ -459,9 +502,6 @@ export function RoomsPlan({
         className="relative min-h-0 flex-1 overflow-hidden"
         style={{ cursor: dragging ? "grabbing" : "grab", touchAction: "none" }}
         {...handlers}
-        onClick={() => {
-          if (dragDist.current < CLICK_PX) onSelect(null, false);
-        }}
       >
         <div style={worldStyle}>
           <svg
@@ -609,6 +649,41 @@ export function RoomsPlan({
           </svg>
         ) : null}
         {geo && overlay ? overlay(geo) : null}
+        {/* Surfaces over the plan claim their own pointer: a press on them never pans. */}
+        <div onPointerDown={(e) => e.stopPropagation()}>
+          {picked.length ? (
+            <PictureReadout
+              hug
+              title={
+                picked.length === 1
+                  ? [
+                      picked[0]!.label,
+                      picked[0]!.region.name && picked[0]!.region.name !== picked[0]!.label
+                        ? picked[0]!.region.name
+                        : null,
+                      picked[0]!.region.type,
+                    ]
+                      .filter(Boolean)
+                      .join(" · ")
+                  : `${picked.length} regions`
+              }
+              onClear={() => onSelect(null, false)}
+            >
+              <span className="face-mono whitespace-nowrap" data-rooms-readout="">
+                {picked.length === 1
+                  ? `${picked[0]!.state} · ${picked[0]!.region.role} · ${picked[0]!.region.sqft.toFixed(0)} sf`
+                  : `${picked.map((shape) => shape.label).join(", ")} · ${picked.reduce((sf, shape) => sf + shape.region.sqft, 0).toFixed(0)} sf`}
+              </span>
+            </PictureReadout>
+          ) : null}
+          <div
+            data-slot="pane-legend"
+            data-surface="page"
+            className="absolute bottom-2 left-2 max-w-[calc(100%-1rem)] rounded-sm"
+          >
+            {legend}
+          </div>
+        </div>
       </div>
     </Pane>
   );

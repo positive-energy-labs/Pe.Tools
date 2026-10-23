@@ -116,7 +116,6 @@ export function LevelPlan({
   onSelectZone,
   onHover,
   onCursor,
-  onClear,
 }: {
   lease?: {
     thread?: string;
@@ -147,7 +146,6 @@ export function LevelPlan({
   onSelectZone: (z: ModelZone) => void;
   onHover: (id: string) => void;
   onCursor: (z: ModelZone, guid: string) => void;
-  onClear: () => void;
 }) {
   const drawn = useMemo(() => zones.filter(onPlan), [zones]);
   const skipped = zones.length - drawn.length;
@@ -333,14 +331,6 @@ export function LevelPlan({
         >
           <title>Level plan — declared zones, detected rooms, held residue</title>
 
-          <rect
-            x={0}
-            y={0}
-            width={world.width}
-            height={world.height}
-            fill="transparent"
-            onClick={onClear}
-          />
           {plan ? <PlanImageLayer plan={plan} frame={frame} /> : null}
 
           {drawn.map((z) => {

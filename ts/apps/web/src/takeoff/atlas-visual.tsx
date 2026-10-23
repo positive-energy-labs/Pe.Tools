@@ -30,7 +30,6 @@ export function AtlasVisual() {
     levelZones,
     selectZone,
     focusRoom,
-    clearScope,
     scopeShortcuts,
   } = useAtlasWorkspace();
   return (
@@ -126,7 +125,6 @@ export function AtlasVisual() {
         onSelectZone={selectZone}
         onHover={(id) => store.actions.hover(id)}
         onCursor={focusRoom}
-        onClear={clearScope}
         readout={
           <PictureReadout
             hug

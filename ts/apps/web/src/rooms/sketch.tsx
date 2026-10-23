@@ -64,6 +64,7 @@ export function RoomsSketch({
   hovered,
   pinned,
   setPinned,
+  onClear,
   card,
   onDrop,
   onNote,
@@ -75,6 +76,8 @@ export function RoomsSketch({
   hovered: string | null;
   pinned: string | null;
   setPinned: (id: string | null) => void;
+  /** Ends the plan's selection (the last thing Esc does here). */
+  onClear: () => void;
   /** Draws one card; `live` = its verbs are pressable (pinned), else a hover glance. */
   card: (card: Card, live: boolean) => ReactNode;
   /** Stages the drawn mark; answers a refusal's sentence, else null. */
@@ -90,14 +93,18 @@ export function RoomsSketch({
   useScopeKeys([
     {
       hotkey: "Escape",
-      label: "cancel or unpin",
-      says: "cancel the mark or note being drawn, else unpin the card",
+      label: "cancel or clear",
+      says: "cancel the mark or note being drawn, else unpin the card and clear the selection",
       options: { ignoreInputs: false },
       callback: () => {
         if (draft || placing) {
           setDraft(null);
           setPlacing(null);
-        } else setPinned(null);
+        } else {
+          // This scope is deeper than the plan's own Esc, so it ends the selection too (N2).
+          setPinned(null);
+          onClear();
+        }
       },
     },
     {
