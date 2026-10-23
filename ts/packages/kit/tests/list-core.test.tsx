@@ -95,6 +95,18 @@ test("facet choices replace positive equality alternatives and retain authored c
   expect(result.current.state.query).toBe("System loss>=4 !kind=Other");
 });
 
+test("tiny lists render through the same rows without ResizeObserver or viewport geometry", () => {
+  vi.stubGlobal("ResizeObserver", undefined);
+  function Harness() {
+    const list = useList({ ...options, items: items.slice(0, 3) });
+    return <ListView list={list} bar={false} aria-label="tiny systems"
+      row={(item) => ({ label: item.name })} empty={{ message: "No systems", exit: "Read a model" }} />;
+  }
+  const { container } = render(<Harness />);
+  expect(screen.getAllByRole("option")).toHaveLength(3);
+  expect(container.querySelector("[data-index]")).toBeNull();
+});
+
 test("renderer mounts a bounded viewport, exposes drop targets and distinguishes filtered empty", async () => {
   vi.stubGlobal("ResizeObserver", class { observe() {} unobserve() {} disconnect() {} });
   vi.spyOn(HTMLElement.prototype, "offsetHeight", "get").mockReturnValue(120);
@@ -106,7 +118,7 @@ test("renderer mounts a bounded viewport, exposes drop targets and distinguishes
   vi.spyOn(HTMLElement.prototype, "getBoundingClientRect").mockReturnValue({ x: 0, y: 0, top: 0, left: 0, bottom: 120, right: 400, width: 400, height: 120, toJSON() {} });
   const drop = vi.fn();
   function Harness() {
-    const list = useList(options);
+    const list = useList({ ...options, groups: { of: (item) => String(Math.floor((Number(item.id) - 10000) / 40)) } });
     return <ListView list={list} aria-label="test systems" maxHeight="120px" row={(item) => ({ label: item.name })}
       sectionProps={() => ({ onDrop: drop })} empty={{ message: "No systems", exit: "Read a model" }} />;
   }

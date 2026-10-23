@@ -91,6 +91,11 @@ export function ListView<T, Sort extends string = string>(props: ListViewProps<T
     setScroller(maxHeight ? root : scrollParent(root) ?? root);
     return () => list.setTarget(null);
   }, [root, maxHeight, list.setTarget]);
+  useLayoutEffect(() => {
+    if (list.total < 60 && list.collection.cursor) {
+      document.getElementById(list.collection.rowProps(list.collection.cursor).id)?.scrollIntoView?.({ block: "nearest" });
+    }
+  }, [list.total, list.collection.cursor, list.revealRequest?.serial]);
   const label = props["aria-label"];
   return (
     <div ref={setRoot} {...list.collection.listProps} role={list.tree ? "tree" : "listbox"}
@@ -123,10 +128,34 @@ export function ListView<T, Sort extends string = string>(props: ListViewProps<T
   );
 }
 
-function SectionBody<T, Sort extends string>({ list, rows, row, scroller, estimate, overscan, detail }: {
+type SectionBodyProps<T, Sort extends string> = {
   list: ListController<T, Sort>; rows: readonly ListItem<T>[]; row: (item: T) => ListRowParts;
   scroller: HTMLElement | null; estimate: number; overscan: number; detail?: (item: T) => ReactNode;
-}) {
+};
+
+function SectionBody<T, Sort extends string>(props: SectionBodyProps<T, Sort>) {
+  if (props.list.total >= 60) return <VirtualSectionBody {...props} />;
+  return <div data-list-body="" role="presentation">{props.rows.map((item) =>
+    <ListItemView key={item.key} list={props.list} item={item} row={props.row} detail={props.detail} />)}</div>;
+}
+
+function ListItemView<T, Sort extends string>({ list, item, row, detail }: Pick<SectionBodyProps<T, Sort>, "list" | "row" | "detail"> & { item: ListItem<T> }) {
+  const parts = row(item.item);
+  const behavior = list.collection.rowProps(item.key);
+  const expanded = list.state.open.includes(item.key);
+  return <>
+    <Row {...parts} {...behavior} onMouseMove={() => { behavior.onMouseMove(); parts.onMouseMove?.(); }}
+      role={list.tree ? "treeitem" : "option"} stage={list.stageOf?.(item.item) ?? parts.stage}
+      refusal={list.refusalOf?.(item.item) ?? parts.refusal}
+      depth={list.tree ? item.depth : undefined} expanded={item.branch ? expanded || list.filtering : detail ? expanded : undefined}
+      onToggle={() => list.toggleOpen(item.key)}
+      actions={detail ? <>{parts.actions}<Button label={`${expanded ? "Close" : "Open"} details`}
+        onClick={() => list.toggleOpen(item.key)}>{expanded ? "Close" : "Details"}</Button></> : parts.actions} />
+    {expanded && detail ? <div data-list-detail="">{detail(item.item)}</div> : null}
+  </>;
+}
+
+function VirtualSectionBody<T, Sort extends string>({ list, rows, row, scroller, estimate, overscan, detail }: SectionBodyProps<T, Sort>) {
   const body = useRef<HTMLDivElement>(null);
   const [margin, setMargin] = useState(0);
   useLayoutEffect(() => {
@@ -155,19 +184,10 @@ function SectionBody<T, Sort extends string>({ list, rows, row, scroller, estima
       style={{ height: virtual.getTotalSize() }}>
       {virtual.getVirtualItems().map((entry) => {
         const item = rows[entry.index]!;
-        const parts = row(item.item);
-        const expanded = list.state.open.includes(item.key);
         return <div key={entry.key} ref={virtual.measureElement} data-index={entry.index}
           role="presentation" className="absolute top-0 left-0 w-full"
           style={{ transform: `translateY(${entry.start - margin}px)` }}>
-          <Row {...parts} {...list.collection.rowProps(item.key)}
-            role={list.tree ? "treeitem" : "option"} stage={list.stageOf?.(item.item) ?? parts.stage}
-            refusal={list.refusalOf?.(item.item) ?? parts.refusal}
-            depth={list.tree ? item.depth : undefined} expanded={item.branch ? expanded || list.filtering : detail ? expanded : undefined}
-            onToggle={() => list.toggleOpen(item.key)}
-            actions={<>{parts.actions}{detail ? <Button label={`${expanded ? "Close" : "Open"} details`}
-              onClick={() => list.toggleOpen(item.key)}>{expanded ? "Close" : "Details"}</Button> : null}</>} />
-          {expanded && detail ? <div data-list-detail="">{detail(item.item)}</div> : null}
+          <ListItemView list={list} item={item} row={row} detail={detail} />
         </div>;
       })}
     </div>
