@@ -5,7 +5,7 @@ import { TooltipHint } from "@pe/kit/lang/tooltip";
  * group's max element named (a click selects it); line weight and categories are rows of their own
  * stroke with a count in this group. Missing values are a row, never left out.
  */
-import { Legend, type LegendRow, type LegendStroke } from "@pe/kit/lang/legend";
+import { Legend, legendWord, type LegendRow, type LegendStroke } from "@pe/kit/lang/legend";
 
 import { DASH_CLASS, formatQuantity, type Encoding, type Stroke } from "../../encoding";
 
@@ -49,59 +49,55 @@ export function ScaleLegend({
         </TooltipHint>
       </span>
     ) : quantity ? (
-      <span className="text-ink-2">no element in this system has a value</span>
+      <TooltipHint content="No element in this system has a value">
+        <span className="text-ink-2">no values</span>
+      </TooltipHint>
     ) : null;
-  const rows: LegendRow[] =
-    encoding.kind === "plain"
-      ? []
-      : ramp.map(([key, bin]) => ({
-          key,
-          stroke: strokeOf(bin.stroke, encoding.kind === "flow" && key === "known"),
-          word: bin.word,
-          count: counts.get(key) ?? 0,
-          says: bin.says,
-        }));
+  const rows: LegendRow[] = ramp.map(([key, bin]) => ({
+    key,
+    stroke: strokeOf(bin.stroke, encoding.kind === "flow" && key === "known"),
+    word: bin.word,
+    count: counts.get(key) ?? 0,
+    says: bin.says,
+  }));
 
   return (
-    <Legend
-      className={className}
-      reading={encoding.key}
-      label={encoding.label}
-      unit={quantity?.unit}
-      says={encoding.says}
-      ramp={
-        encoding.kind === "sequential"
-          ? {
-              steps: ramp.map(([key, bin]) => ({
-                key,
-                ink: bin.stroke.ink,
-                says: `${bin.word}: ${counts.get(key) ?? 0} elements`,
-              })),
-              breaks:
-                quantity && quantity.min != null && quantity.max != null
-                  ? [quantity.min, ...quantity.edges, quantity.max].map(f)
-                  : [],
-            }
-          : undefined
-      }
-      rows={rows}
-      plain={
-        encoding.kind === "plain"
-          ? "no reading: pick one above the drawing's right edge"
-          : undefined
-      }
-      missing={
-        gapCount && gap
-          ? {
-              key: "missing",
-              stroke: strokeOf(gap.stroke),
-              word: "no value",
-              count: gapCount,
-              says: gap.says,
-            }
-          : null
-      }
-      foot={foot}
-    />
+    <div>
+      <Legend
+        className={className}
+        reading={encoding.key}
+        label={encoding.label}
+        unit={quantity?.unit}
+        says={encoding.says}
+        ramp={
+          encoding.kind === "sequential"
+            ? {
+                steps: ramp.map(([key, bin]) => ({
+                  key,
+                  ink: bin.stroke.ink,
+                  says: `${bin.word}: ${counts.get(key) ?? 0} elements`,
+                })),
+                breaks:
+                  quantity && quantity.min != null && quantity.max != null
+                    ? [quantity.min, ...quantity.edges, quantity.max].map(f)
+                    : [],
+              }
+            : undefined
+        }
+        rows={rows}
+        missing={
+          gapCount && gap
+            ? {
+                key: "missing",
+                stroke: strokeOf(gap.stroke),
+                word: legendWord("no value"),
+                count: gapCount,
+                says: gap.says,
+              }
+            : null
+        }
+      />
+      {foot}
+    </div>
   );
 }

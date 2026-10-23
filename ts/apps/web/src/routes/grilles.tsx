@@ -160,7 +160,12 @@ function GrillesRoute() {
   );
 
   const chart = (
-    <Pane flush title="field" meta={`${field.length} buildable`}>
+    <Pane
+      flush
+      title="field"
+      meta={`${field.length} buildable`}
+      legend={<KeyLegend keys={FIELD_KEYS} lead={FIELD_KEYS.length} bind={false} />}
+    >
       {active && (
         <TooltipHint content="Focus, then arrow keys: left/right walk qty, up/down walk opening width">
           <div
@@ -174,7 +179,6 @@ function GrillesRoute() {
             }}
           >
             <FieldChart field={field} active={active} onPick={(p) => set(active.id, p)} />
-            <KeyLegend keys={FIELD_KEYS} lead={FIELD_KEYS.length} bind={false} className="mx-1" />
           </div>
         </TooltipHint>
       )}

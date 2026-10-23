@@ -7,7 +7,7 @@ import { Pane } from "@pe/kit/lang/pane";
 import { revitTarget } from "@pe/kit/lang/row";
 import { usePlaneViewport, PLAN_CLICK_PX } from "#/scene/use-plane-viewport";
 import { usePlanMap } from "#/lib/plan-map";
-import { Key } from "#/components/anatomy";
+import { Legend, legendWord, type LegendRow } from "@pe/kit/lang/legend";
 import { EmptyState } from "@pe/kit/lang/empty";
 import { OutcomeLine } from "@pe/kit/lang/outcome";
 import { PLAN_REFUSAL, type PlanRefusal } from "#/takeoff/plan-image";
@@ -324,17 +324,49 @@ export function LevelPlan({
     <Pane
       {...pane}
       legend={
-        <div
-          className="pointer-events-none flex max-w-full flex-wrap items-center gap-x-2 gap-y-0.5 rounded-sm px-2 py-0.5"
-          data-surface="page"
-        >
-          {ROOM_STATES.map((s) => (
-            <Key key={s} tone={stateInk(s)} label={STATE_META[s].label} />
-          ))}
-          <Key tone={ABSENT_INK} label="held residue" seam />
-          <Key tone={CURSOR_INK} label="cursor" />
-          {skipped > 0 && <Key tone={ABSENT_INK} label={`${skipped} off-plan`} seam />}
-        </div>
+        <Legend
+          label="rooms"
+          rows={[
+            ...ROOM_STATES.map(
+              (s): LegendRow => ({
+                key: s,
+                word: legendWord(STATE_META[s].label),
+                says: STATE_META[s].note,
+                stroke: {
+                  ink: stateInk(s),
+                  width: 1,
+                  shape: "box",
+                  fill: `color-mix(in srgb, ${stateInk(s)} 16%, transparent)`,
+                },
+              }),
+            ),
+            {
+              key: "held",
+              word: legendWord("held residue"),
+              stroke: { ink: ABSENT_INK, width: 1, shape: "box", className: "dash-void" },
+            },
+            {
+              key: "cursor",
+              word: legendWord("cursor"),
+              stroke: { ink: CURSOR_INK, width: 1, shape: "box" },
+            },
+            ...(skipped > 0
+              ? [
+                  {
+                    key: "off-plan",
+                    word: legendWord("off-plan"),
+                    count: skipped,
+                    stroke: {
+                      ink: ABSENT_INK,
+                      width: 1,
+                      shape: "box" as const,
+                      className: "dash-void",
+                    },
+                  },
+                ]
+              : []),
+          ]}
+        />
       }
     >
       {above}

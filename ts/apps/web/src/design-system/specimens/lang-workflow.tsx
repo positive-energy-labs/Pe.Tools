@@ -17,7 +17,7 @@ import { StateCell } from "@pe/kit/lang/cell";
 import { Tag } from "@pe/kit/lang/chip";
 import { KeyHint, KeyLegend, type LegendKey } from "@pe/kit/lang/key-hint";
 import { Button } from "@pe/kit/lang/button";
-import { Legend } from "@pe/kit/lang/legend";
+import { Legend, legendWord } from "@pe/kit/lang/legend";
 import { tokenRef } from "@pe/kit/lib/token";
 import { Verdict } from "@pe/kit/lang/verdict";
 import { ARMING_SPECIMEN } from "#/design-system/specimens-data";
@@ -76,23 +76,27 @@ export function LangWorkflowSpecimens() {
               ],
               breaks: ["0", "800", "1,400", "2,100"],
             }}
-            foot={<span className="text-ink-2">max 2,100 fpm</span>}
           />
           <Legend
             label="Health"
             rows={[
-              { key: "ok", stroke: { ink: tokenRef("ink"), width: 2 }, word: "clean", count: 41 },
+              {
+                key: "ok",
+                stroke: { ink: tokenRef("ink"), width: 1, shape: "box" },
+                word: legendWord("clean"),
+              },
               {
                 key: "open",
                 stroke: { ink: tokenRef("alarm"), width: 2, className: "dash-void" },
-                word: "open end",
+                word: legendWord("open end"),
                 count: 3,
+                says: "A connector has nothing attached; caps are not open ends.",
               },
             ]}
             missing={{
               key: "missing",
               stroke: { ink: tokenRef("ink-mute"), width: 1 },
-              word: "no value",
+              word: legendWord("no value"),
               count: 2,
             }}
           />

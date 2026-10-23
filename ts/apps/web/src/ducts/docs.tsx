@@ -72,6 +72,13 @@ function DuctsDocs() {
 
       <h3>The picture</h3>
       <p>
+        The picture key pairs each mark with a short name and a count. Hover or focus a row for its
+        meaning. Sequential scales show breaks for this system, and the maximum links to its
+        element. A plain segment means no reading is selected; choose a reading above the drawing's
+        right edge. No values means no element in this system has a value for that reading. Alt+/
+        opens this tutorial.
+      </p>
+      <p>
         The model picture is the chosen system's own geometry, captured from Revit: every duct,
         fitting, terminal and unit of every network the system is in, with the walls and other
         elements around it when the context layer is on. Leg totals, place names, gaps and the

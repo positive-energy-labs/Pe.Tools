@@ -5,7 +5,6 @@ import { TooltipHint } from "./tooltip";
  * word and a count each. A value the encoding cannot read is a row too (`missing`), never left out:
  * blank reads as safe. The drawing owns the meaning (what a bin is, its stroke); this owns the look.
  */
-import type { ReactNode } from "react";
 
 import { tokenRef } from "../../lib/token";
 
@@ -18,13 +17,25 @@ export interface LegendStroke {
   className?: string;
   /** A direction arrow on the sample (a flow encoding's known bin). */
   arrow?: boolean;
+  shape?: "box";
+  fill?: string;
+}
+
+declare const shortWord: unique symbol;
+export type LegendWord = string & { readonly [shortWord]: true };
+
+/** Validate dynamic labels at the boundary; explanations belong in `says`. */
+export function legendWord(text: string): LegendWord {
+  if (!text.trim() || /[.!?](?:\s|$)/.test(text) || text.trim().split(/\s+/).length > 4)
+    throw new Error(`Legend word must be one to four words without sentences: ${text}`);
+  return text as LegendWord;
 }
 
 export interface LegendRow {
   key: string;
   stroke: LegendStroke;
-  word: string;
-  count: number;
+  word: LegendWord;
+  count?: number;
   says?: string;
 }
 
@@ -46,27 +57,36 @@ export interface LegendProps {
   ramp?: { steps: readonly LegendStep[]; breaks: readonly string[] };
   /** A categorical, weight or flow reading: one row per bin. */
   rows?: readonly LegendRow[];
-  /** What to say when there is no reading to key. */
-  plain?: ReactNode;
   /** The row for elements the reading cannot read; absent draws none. */
   missing?: LegendRow | null;
-  /** A last line (the group's max element and a way to select it). */
-  foot?: ReactNode;
   className?: string;
 }
 
 function StrokeSample({ stroke }: { stroke: LegendStroke }) {
   return (
     <svg aria-hidden width={28} height={12} viewBox="0 0 28 12" className="shrink-0">
-      <line
-        x1={2}
-        y1={6}
-        x2={26}
-        y2={6}
-        stroke={stroke.ink}
-        strokeWidth={Math.min(stroke.width, 8)}
-        className={stroke.className}
-      />
+      {stroke.shape === "box" ? (
+        <rect
+          x={9}
+          y={1}
+          width={10}
+          height={10}
+          fill={stroke.fill ?? "none"}
+          stroke={stroke.ink}
+          strokeWidth={stroke.width}
+          className={stroke.className}
+        />
+      ) : (
+        <line
+          x1={2}
+          y1={6}
+          x2={26}
+          y2={6}
+          stroke={stroke.ink}
+          strokeWidth={Math.min(stroke.width, 8)}
+          className={stroke.className}
+        />
+      )}
       {stroke.arrow ? (
         <path d="M12 2.5 17 6 12 9.5" fill="none" stroke={tokenRef("page")} strokeWidth={4} />
       ) : null}
@@ -88,9 +108,7 @@ export function Legend({
   reading,
   ramp,
   rows,
-  plain,
   missing,
-  foot,
   className = "",
 }: LegendProps) {
   return (
@@ -141,27 +159,32 @@ export function Legend({
           <div className="grid grid-cols-[auto_1fr_auto] items-center gap-x-2">
             {rows.map((row) => (
               <TooltipHint key={row.key} content={row.says}>
-                <div className="contents" data-bin={row.key}>
+                <div
+                  className="col-span-3 grid grid-cols-subgrid items-center"
+                  tabIndex={row.says ? 0 : undefined}
+                  data-bin={row.key}
+                >
                   <StrokeSample stroke={row.stroke} />
-                  <span className="whitespace-nowrap">{row.word}</span>
-                  <Count n={row.count} />
+                  <span className="whitespace-nowrap">{legendWord(row.word)}</span>
+                  {row.count != null ? <Count n={row.count} /> : <span />}
                 </div>
               </TooltipHint>
             ))}
           </div>
-        ) : plain != null ? (
-          <span className="text-ink-2">{plain}</span>
         ) : null}
         {missing ? (
           <TooltipHint content={missing.says}>
-            <div className="flex items-center gap-2" data-bin={missing.key}>
+            <div
+              className="flex items-center gap-2"
+              tabIndex={missing.says ? 0 : undefined}
+              data-bin={missing.key}
+            >
               <StrokeSample stroke={missing.stroke} />
-              <span className="text-ink-2 whitespace-nowrap">{missing.word}</span>
-              <Count n={missing.count} />
+              <span className="text-ink-2 whitespace-nowrap">{legendWord(missing.word)}</span>
+              {missing.count != null ? <Count n={missing.count} /> : null}
             </div>
           </TooltipHint>
         ) : null}
-        {foot}
       </section>
     </TooltipHint>
   );

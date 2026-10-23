@@ -7,6 +7,7 @@
  * inks come only from `ISSUE_KINDS` (`issues.tsx`) by their `blocks` class; everything else is a
  * house token.
  */
+import { legendWord, type LegendWord } from "@pe/kit/lang/legend";
 import type { Blocks } from "@pe/ducts-domain/issues";
 import type { DuctInferenceGrade } from "@pe/agent-contracts";
 import type { DashRole, Tone } from "@pe/kit/lib/token";
@@ -48,7 +49,7 @@ export interface Stroke {
 }
 
 interface Bin {
-  word: string;
+  word: LegendWord;
   says: string;
   stroke: Stroke;
 }
@@ -195,12 +196,12 @@ function binsOf(
   const bins: Record<string, Bin> = {};
   strokes.forEach((stroke, i) => {
     bins[`b${i}`] = {
-      word: `${f(lows[i]!)}–${f(highs[i]!)} ${unit}`,
+      word: legendWord(`${f(lows[i]!)}–${f(highs[i]!)} ${unit}`),
       says: `from ${f(lows[i]!)} up to ${f(highs[i]!)} ${unit}`,
       stroke,
     };
   });
-  bins.missing = { word: "no value", says: missing, stroke: MISSING };
+  bins.missing = { word: legendWord("no value"), says: missing, stroke: MISSING };
   return bins;
 }
 
@@ -330,12 +331,12 @@ function flow(facts: GroupFacts, directions: ReadonlyMap<number, 1 | -1>): Encod
     arrow,
     bins: {
       known: {
-        word: "with the air",
+        word: legendWord("with the air"),
         says: "the walk from the fan reached it; the arrow points downstream",
         stroke: PLAIN,
       },
       unknown: {
-        word: "direction unknown",
+        word: legendWord("direction unknown"),
         says: "the walk from the fan never reached it, or the system names no direction",
         stroke: { ink: CLEAN_INK, width: 2, dash: "seam" },
       },
@@ -365,7 +366,9 @@ const fixed = (): Record<"none" | "health" | "legs" | "provenance", Encoding> =>
     label: "none",
     says: "Every segment in plain ink: the drawing without a reading",
     layer: null,
-    bins: { plain: { word: "segment", says: "a segment of this system", stroke: PLAIN } },
+    bins: {
+      plain: { word: legendWord("segment"), says: "a segment of this system", stroke: PLAIN },
+    },
     bin: () => "plain",
   },
   health: {
@@ -376,22 +379,22 @@ const fixed = (): Record<"none" | "health" | "legs" | "provenance", Encoding> =>
     layer: "issues",
     bins: {
       walkable: {
-        word: "blocks walking",
+        word: legendWord("blocks walking"),
         says: "an issue on it keeps a walk from the root from reaching every terminal",
         stroke: { ink: blocksInk("walkable"), width: 5, dash: null },
       },
       budgetable: {
-        word: "blocks the budget",
+        word: legendWord("blocks the budget"),
         says: "an issue on it leaves a static or a drop unknown",
         stroke: { ink: blocksInk("budgetable"), width: 3.5, dash: null },
       },
       none: {
-        word: "advisory",
+        word: legendWord("advisory"),
         says: "an advisory issue only; it blocks nothing",
         stroke: { ink: blocksInk("none"), width: 2, dash: "seam" },
       },
       clean: {
-        word: "no issue",
+        word: legendWord("no issue"),
         says: "no issue names this segment",
         stroke: { ink: CLEAN_INK, width: 1.5, dash: null },
       },
@@ -406,12 +409,12 @@ const fixed = (): Record<"none" | "health" | "legs" | "provenance", Encoding> =>
     layer: null,
     bins: {
       leg: {
-        word: "on a leg",
+        word: legendWord("on a leg"),
         says: "a subject element inside one leg",
         stroke: { ink: CLEAN_INK, width: 3.5, dash: null },
       },
       off: {
-        word: "off every leg",
+        word: legendWord("off every leg"),
         says: "a subject element the cut placed on no leg: a place, or the edge of a gap",
         stroke: { ink: token("ink-mute"), width: 2, dash: "seam" },
       },
@@ -427,17 +430,17 @@ const fixed = (): Record<"none" | "health" | "legs" | "provenance", Encoding> =>
     layer: null,
     bins: {
       "revit-reported": {
-        word: "Revit-reported",
+        word: legendWord("Revit-reported"),
         says: "Revit reports flow on this segment",
         stroke: { ink: token("viz-1"), width: 2.5, dash: null },
       },
       derived: {
-        word: "derived only",
+        word: legendWord("derived only"),
         says: "no Revit flow; the pass-1 walk derived one",
         stroke: { ink: token("viz-5"), width: 2.5, dash: null },
       },
       geometry: {
-        word: "geometry only",
+        word: legendWord("geometry only"),
         says: "size and length only: neither Revit nor pass 1 knows its flow",
         stroke: MISSING,
       },

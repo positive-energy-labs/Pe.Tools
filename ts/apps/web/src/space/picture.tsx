@@ -60,6 +60,7 @@ export function SpacePicture({
   status,
   onError,
   readout,
+  legend,
   alias,
 }: {
   lease?: { thread: string; ready: boolean; context: Record<string, unknown> };
@@ -73,6 +74,7 @@ export function SpacePicture({
   onError: (message: string | null) => void;
   /** The fixed top-left readout: the scene's summary, or the selection's identity and facts. */
   readout?: ReactNode;
+  legend?: ReactNode;
   /** Filled here: the alias-click a Subject named in text calls. It selects and flies (N4). */
   alias?: { current: ((key: string) => void) | null };
 }) {
@@ -331,6 +333,7 @@ export function SpacePicture({
   return (
     <Pane
       id="space-picture"
+      legend={legend}
       title="Space"
       meta={
         metadata
