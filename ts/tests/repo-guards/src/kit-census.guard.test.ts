@@ -28,6 +28,17 @@ const allow = (entries: Record<string, string>): Allow[] =>
 // Filenames use the wave-4 final homes: land.ts, revit-target.tsx and go-to.tsx.
 // prettier-ignore
 const RULES: Rule[] = [
+  { id: "subject-contact-one-reach", doctrine: "N7", pattern: /data-lit=\{lit|aria-pressed=|data-pressed=/g,
+    roots: [K + "components/lang/subject-text.tsx"], allow: [],
+    cannotSee: "Computed paint or focus/pointer lifetime; reach.test.tsx checks press metadata and the shared grace." },
+  { id: "landing-outline-only", doctrine: "N7",
+    pattern: /\[data-landed\]\s*\{[^}]*background(?:-[\w-]+)?\s*:|@keyframes pe-land\s*\{(?:(?!\n\})[\s\S])*background(?:-\w+)?\s*:/g,
+    roots: [K + "components/lang/lang.css"], allow: [],
+    cannotSee: "Call-site paint, cascade or browser animation; reach.test.tsx inspects the CSS owner and a computed transparent focus box." },
+  { id: "hint-travel-focus-owner", doctrine: "N7",
+    pattern: /^(?![\s\S]*const surface = useHoverSurface\([\s\S]*ref=\{surface\.ref\}[\s\S]*surface\.onKeyDown\(event\))[^]/g,
+    roots: [K + "components/lang/tooltip.tsx"], allow: [],
+    cannotSee: "Measured popup geometry, path containment, nested hint behavior or keyboard order; tooltip.test.tsx exercises those cases." },
   { id: "list-head-meta-yields-at-360", doctrine: "L3",
     pattern: /^(?![\s\S]*@container list \(max-width: 360px\)\s*\{\s*\.dl-row-colhead-meta,[^{}]*\{\s*display: none;)[\s\S]/g,
     roots: [K + "components/lang/lang.css"], allow: [], cannotSee: "Rendered label width, ellipsis and tooltip layout; LN360 needs browser measurement." },

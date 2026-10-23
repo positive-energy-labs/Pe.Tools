@@ -1,4 +1,4 @@
-import { HOVER_GRACE, useHoverGrace } from "./hover-grace";
+import { HOVER_GRACE, useHoverGrace, useHoverSurface } from "./hover-grace";
 import { reachProps } from "./reach";
 import {
   createContext,
@@ -8,6 +8,7 @@ import {
   useEffect,
   useId,
   useState,
+  useRef,
   type ComponentProps,
   type ReactNode,
 } from "react";
@@ -15,9 +16,12 @@ import { Tooltip as Primitive } from "@base-ui/react/tooltip";
 import { cn } from "../../lib/utils";
 import { floatingSurface, useSubjectPosition, type FloatingPosition } from "./popover-internal";
 
-const Description = createContext<{ id: string; open: boolean; anchor: Element | null } | null>(
-  null,
-);
+const Description = createContext<{
+  id: string;
+  open: boolean;
+  anchor: Element | null;
+  contact: (element: HTMLDivElement | null, over: boolean) => void;
+} | null>(null);
 
 // After a press, a hint waits for the pointer to move: content that lands under a still pointer
 // (a list that shrank after a pick) never pops its hint unasked. A layout-only mousemove carries
@@ -90,12 +94,31 @@ export function Tooltip({
   const [anchor, setAnchor] = useState<Element | null>(null);
   const [uncontrolled, setOpen] = useState(defaultOpen);
   const open = controlled ?? uncontrolled;
+  const held = useRef<{ element: HTMLDivElement | null; over: boolean }>({
+    element: null,
+    over: false,
+  });
+  const contact = useCallback((element: HTMLDivElement | null, over: boolean) => {
+    held.current = { element, over };
+  }, []);
   const root = (
-    <Description.Provider value={{ id, open, anchor }}>
+    <Description.Provider value={{ id, open, anchor, contact }}>
       <Primitive.Root
         {...props}
         open={open}
         onOpenChange={(next, event) => {
+          const focus =
+            held.current.element?.contains(document.activeElement) ||
+            anchor?.contains(document.activeElement);
+          if (
+            (!next &&
+              ["trigger-hover", "trigger-focus"].includes(event.reason) &&
+              (focus || held.current.over)) ||
+            (next && open && event.reason === "trigger-focus")
+          ) {
+            event.cancel();
+            return;
+          }
           if (next && still && event.reason === "trigger-hover") event.cancel();
           onOpenChange?.(next, event);
           if (!event.isCanceled) {
@@ -139,11 +162,14 @@ export function TooltipContent({
   alignOffset = 0,
   className,
   anchor,
+  ref,
+  onKeyDown,
   ...props
 }: Omit<Primitive.Popup.Props, "className"> &
   FloatingPosition & { className?: string; anchor?: Element | null }) {
   const description = useContext(Description);
   const away = useSubjectPosition(anchor ?? description?.anchor ?? null);
+  const surface = useHoverSurface(anchor ?? description?.anchor ?? null, ref, description?.contact);
   return (
     <Primitive.Portal>
       <Primitive.Positioner
@@ -167,6 +193,11 @@ export function TooltipContent({
           data-slot="tooltip-content"
           className={cn(floatingSurface, className)}
           {...props}
+          ref={surface.ref}
+          onKeyDown={(event) => {
+            onKeyDown?.(event);
+            surface.onKeyDown(event);
+          }}
         />
       </Primitive.Positioner>
     </Primitive.Portal>

@@ -1,5 +1,8 @@
 // @vitest-environment jsdom
 import { act, cleanup, fireEvent, render, screen } from "@testing-library/react";
+import { readFileSync } from "node:fs";
+import { createRequire } from "node:module";
+import { useCallback } from "react";
 import { afterEach, expect, test, vi } from "vite-plus/test";
 import { useCollection, useList } from "../src/components/lang/collection";
 import { ListView, listColumns } from "../src/components/lang/list-view";
@@ -7,18 +10,123 @@ import { sideAwayFrom } from "../src/components/lang/popover";
 import { Row } from "../src/components/lang/row";
 import { StateCell } from "../src/components/lang/cell";
 import { SubjectTextContext } from "../src/components/lang/reach";
-import { nameOrFallback, subjectDocument } from "../src/components/lang/subject-text";
+import { nameOrFallback, subjectDocument, SubjectText } from "../src/components/lang/subject-text";
+import { HOVER_GRACE, useHoverGrace } from "../src/components/lang/hover-grace";
 
 import { Button } from "../src/components/lang/button";
 import { FactChip } from "../src/components/lang/chip";
 import { Switcher } from "../src/components/lang/switcher";
 import { PaneCrumb } from "../src/components/lang/pane-crumb";
-import { SvgTip } from "../src/components/lang/tooltip";
+import { SvgTip, TooltipProvider } from "../src/components/lang/tooltip";
 import { reachStore, useReach } from "../src/components/lang/reach";
 
 afterEach(() => {
   cleanup();
+  vi.useRealTimers();
   Reflect.deleteProperty(HTMLElement.prototype, "scrollIntoView");
+});
+
+test("pressing a reference uses focus reach and its popup shares the lighting grace", async () => {
+  vi.useFakeTimers();
+  const reach = reachStore();
+  const go = vi.fn();
+  function Fixture() {
+    const close = useCallback(
+      () => reach.set((s) => ({ ...s, lighting: { ids: new Set(), references: [], focus: null } })),
+      [],
+    );
+    const grace = useHoverGrace<string>(close);
+    return (
+      <SubjectTextContext
+        value={{
+          nameOf: () => "FR-2",
+          reach,
+          go,
+          light: (references, focus, owner) => {
+            grace.cancel();
+            reach.set((s) => ({
+              ...s,
+              lighting: { ids: new Set([42]), references, focus, owner },
+            }));
+          },
+          clear: grace.leave,
+        }}
+      >
+        <SubjectText text={["Open end at ", { id: 42 }]} />
+        <button>outside</button>
+      </SubjectTextContext>
+    );
+  }
+  const view = render(
+    <TooltipProvider delay={0}>
+      <Fixture />
+    </TooltipProvider>,
+  );
+  const reference = screen.getByRole("button", { name: "go to FR-2, reference 1" });
+  fireEvent.mouseEnter(reference);
+  fireEvent.pointerEnter(reference);
+  fireEvent.click(reference);
+  expect(reference.getAttribute("data-reach")).toBe("focus");
+  expect(reference.className).toBe("subject-ref");
+  for (const attribute of ["aria-pressed", "data-pressed", "data-lit"])
+    expect(reference.hasAttribute(attribute)).toBe(false);
+  expect(go).toHaveBeenCalledWith(42);
+  fireEvent.mouseLeave(reference);
+  fireEvent.mouseLeave(view.container.querySelector("[data-subject-text]")!);
+  await act(() => vi.advanceTimersByTime(950));
+  expect(reach.get().lighting.focus).toBe(42);
+  fireEvent.mouseEnter(reference);
+  fireEvent.mouseMove(reference);
+  await act(() => vi.advanceTimersByTime(400));
+  const popup = screen.getByRole("tooltip");
+  fireEvent.mouseOut(reference, { relatedTarget: popup });
+  fireEvent.mouseLeave(reference);
+  fireEvent.mouseOut(view.container.querySelector("[data-subject-text]")!, {
+    relatedTarget: popup,
+  });
+  fireEvent.mouseLeave(view.container.querySelector("[data-subject-text]")!);
+  fireEvent.mouseOver(popup);
+  fireEvent.mouseEnter(popup);
+  await act(async () => screen.getByRole("button", { name: "outside" }).focus());
+  await act(() => vi.advanceTimersByTime(950));
+  expect(popup.isConnected).toBe(true);
+  expect(reach.get().lighting.focus).toBe(42);
+  fireEvent.mouseOut(popup, { relatedTarget: screen.getByRole("button", { name: "outside" }) });
+  fireEvent.mouseOver(screen.getByRole("button", { name: "outside" }));
+  fireEvent.mouseLeave(popup);
+  fireEvent.mouseLeave(popup.parentElement!);
+  await act(() => vi.advanceTimersByTime(HOVER_GRACE - 1));
+  expect(reach.get().lighting.focus).toBe(42);
+  await act(() => vi.advanceTimersByTime(2));
+  expect(reach.get().lighting.focus).toBeNull();
+});
+
+test("focus and landing are outline-only, and reference contact never fills or boxes the word", () => {
+  const css = readFileSync(createRequire(import.meta.url).resolve("@pe/kit/lang/lang.css"), "utf8");
+  const rules = [...css.matchAll(/([^{}]+)\{([^{}]*)\}/g)];
+  const focus = rules.filter(
+    ([, selector]) =>
+      selector!.includes('[data-reach="focus"]') && selector!.includes("[data-reach]:"),
+  );
+  expect(focus).toHaveLength(1);
+  expect(focus[0]![2]).toContain("outline: 2px solid");
+  const landed = rules.filter(([, selector]) => selector!.trim() === "[data-landed]");
+  for (const [, , body] of [...focus, ...landed])
+    expect(body).not.toMatch(/background(?:-\w+)?\s*:/);
+  expect(css.match(/@keyframes pe-land\s*\{([\s\S]*?)\n\}/)![1]).not.toContain("background");
+  const mark = rules.filter(
+    ([, selector]) => selector!.includes(".subject-ref") && selector!.includes(".subject-mark"),
+  );
+  for (const [, , body] of mark) expect(body).not.toMatch(/background(?:-\w+)?\s*:/);
+  render(
+    <>
+      <style>{[...focus, ...landed].map(([rule]) => rule).join("\n")}</style>
+      <div data-reach="focus" data-landed="" data-testid="focus-box" />
+    </>,
+  );
+  expect(getComputedStyle(screen.getByTestId("focus-box")).backgroundColor).toBe(
+    "rgba(0, 0, 0, 0)",
+  );
 });
 
 const rect = (left: number, top: number, width = 10, height = 10) =>

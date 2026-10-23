@@ -7,6 +7,7 @@ The one-system design cluster: the design LANGUAGE (raw values in `apps/web/src/
 **This ledger owns every cross-route design-language and primitive gap.** Route ledgers name their own applications and evidence; they never restate a ruling or a gap that lives here. A rule lives in exactly one home: a type, a check, a swatch specimen, or `.agents/skills/lens.house/SKILL.md`. `docs/design/SURFACE-PHILOSOPHY.md` indexes those homes.
 
 ## Decided
+- 2026-10-23, N7: Hover travel protects the hull of departure and the actual popup rectangle; tooltip Tab order visits its own references before page controls. Subject presses use hover/focus reach and the existing lighting grace, with outline-only landing and no filled reference pill or word box.
 - 2026-10-23, N1/I5/L3: Tooltip footnotes keep their containing evidence open; hints flip before shrinking below min-content; folded Floater content uses a fixed, field-bounded portal and keyboard focus with preventScroll (O3, LN-INPUT, D02/O1; browser re-check owed in kit-raise wave 7).
 - 2026-10-23, Tutorial reads mounted kit facts from `lang/teach.ts`; controls own keys, search syntax, modes and alternate views, so help follows page state without route-owned lists.
 
