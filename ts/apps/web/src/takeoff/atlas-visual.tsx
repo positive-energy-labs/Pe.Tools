@@ -2,8 +2,9 @@ import { Suspense } from "react";
 import { Button } from "@pe/kit/lang/button";
 import { Switcher } from "#/components/lang/switcher";
 import { LevelPlan } from "#/takeoff/level-plan";
-import { LevelStats } from "#/takeoff/level-stats";
-import { ZoneCard } from "#/takeoff/zone-card";
+import { LevelTotals } from "#/takeoff/level-totals";
+import { ZoneFacts } from "#/takeoff/zone-facts";
+import { PictureReadout } from "#/scene/readout";
 import { useAtlasWorkspace } from "#/takeoff/atlas-context";
 import { ScopeKeys } from "@pe/kit/keys";
 import { levelsOf } from "#/takeoff/plan-image";
@@ -14,26 +15,19 @@ export function AtlasVisual() {
   const {
     store,
     world,
-    live,
-    busy,
-    geoReady,
-    actions,
     queriedZones,
     tableState,
     zoneKey,
     cursor,
     planOpen,
-    statsOpen,
     level,
     planImage,
     setLevel,
     setPlanOpen,
-    setStatsOpen,
     stateOf,
     zoneCalls,
     selected,
     levelZones,
-    cursorRow,
     selectZone,
     focusRoom,
     clearScope,
@@ -104,15 +98,6 @@ export function AtlasVisual() {
               <span className="hairline-l ml-1 flex items-center gap-1 pl-1">
                 <Button
                   kind="framed"
-                  label="level stats"
-                  onClick={() => setStatsOpen(!statsOpen)}
-                  pressed={statsOpen}
-                  reason="level-wide totals — the whole-building dashboard was noise; the level is the unit you actually work in"
-                >
-                  <span className="face-mono">level stats</span>
-                </Button>
-                <Button
-                  kind="framed"
                   label={planOpen ? "▴ hide plan" : "▾ show plan"}
                   onClick={() => setPlanOpen(!planOpen)}
                   reason={
@@ -123,10 +108,6 @@ export function AtlasVisual() {
                 >
                   <span className="face-mono">{planOpen ? "▴ hide plan" : "▾ show plan"}</span>
                 </Button>
-              </span>
-
-              <span className="t-small face-mono ml-auto min-w-0 truncate">
-                {selected ? `${selected.zone.key} in scope` : "whole house in scope"} · Esc clears
               </span>
             </div>
           </>
@@ -146,31 +127,20 @@ export function AtlasVisual() {
         onHover={(id) => store.actions.hover(id)}
         onCursor={focusRoom}
         onClear={clearScope}
-      >
-        {statsOpen && (
-          <LevelStats
-            level={level}
-            zones={levelZones}
-            stateOf={stateOf}
-            onClose={() => setStatsOpen(false)}
-          />
-        )}
-
-        {selected && (
-          <ZoneCard
-            store={store}
-            zone={selected}
-            cursorRoom={cursorRow?.room ?? null}
-            geoReady={geoReady}
-            live={live}
-            busy={busy}
-            actions={actions}
-            stateOf={stateOf}
-            systems={world.systems}
-            onClose={() => selectZone(null)}
-          />
-        )}
-      </LevelPlan>
+        readout={
+          <PictureReadout
+            hug
+            title={selected ? `${selected.zone.key} ${selected.name}` : undefined}
+            onClear={selected ? () => selectZone(null) : undefined}
+          >
+            {selected ? (
+              <ZoneFacts store={store} zone={selected} stateOf={stateOf} systems={world.systems} />
+            ) : (
+              <LevelTotals zones={levelZones} stateOf={stateOf} />
+            )}
+          </PictureReadout>
+        }
+      />
     </Suspense>
   );
 }

@@ -6,7 +6,33 @@ import { fitView } from "./plane";
 
 export const PLAN_CLICK_PX = 5;
 
-/** Page owns the pose. A null pose fits at render; the first gesture starts from that fit. */
+/** What docked surfaces take: a band at the top and the bottom (the readout, the key legend), and
+ * the right edge of a top-left one (the readout), which a fit may clear sideways instead. */
+type Inset = { top: number; bottom: number; left: number };
+const DOCKED = "[data-slot='pane-dock'], [data-slot='pane-legend']";
+
+/** What surfaces docked over the field cover, as a top and a bottom band: a fit stays clear of them. */
+function measureInset(host: HTMLElement): Inset {
+  const h = host.getBoundingClientRect();
+  let top = 0,
+    bottom = 0,
+    left = 0;
+  for (const el of host.querySelectorAll(DOCKED)) {
+    const r = el.getBoundingClientRect();
+    if (!r.height) continue;
+    if (r.top - h.top < h.height / 2) {
+      top = Math.max(top, r.bottom - h.top);
+      if (r.left - h.left < h.width / 2) left = Math.max(left, r.right - h.left);
+    } else bottom = Math.max(bottom, h.bottom - r.top);
+  }
+  return { top, bottom, left };
+}
+
+/**
+ * Page owns the pose. A null pose fits at render; the first gesture starts from that fit. Every fit
+ * (the rest pose and `frame`) lands clear of the surfaces docked over the field, so the readout
+ * and the legend never cover the plan they describe (SURFACE-PHILOSOPHY L2; `clearPose` in 3D).
+ */
 export function usePlaneViewport(
   viewport: PlaneViewport | null,
   fit: Bounds2 | null,
@@ -14,9 +40,21 @@ export function usePlaneViewport(
 ) {
   const [host, setHost] = useState<HTMLDivElement | null>(null);
   const [size, setSize] = useState<Viewport2 | null>(null);
+  const [inset, setInset] = useState<Inset>({ top: 0, bottom: 0, left: 0 });
+  /** Fit `box` below the top surfaces, or beside the top-left one: whichever shows it larger. */
+  const clearFit = (box: Bounds2, at: Viewport2, pad = 0): PlaneViewport => {
+    const fit = (x: number, y: number, width: number, height: number) => {
+      const v = fitView(box, { width: Math.max(1, width), height: Math.max(1, height) }, pad);
+      return { ...v, tx: v.tx + x, ty: v.ty + y };
+    };
+    const below = fit(0, inset.top, at.width, at.height - inset.top - inset.bottom);
+    if (!inset.left) return below;
+    const beside = fit(inset.left, 0, at.width - inset.left, at.height - inset.bottom);
+    return beside.scale > below.scale ? beside : below;
+  };
   const view =
     viewport ??
-    (fit && size ? fitView(fit, size) : { kind: "plane" as const, scale: 1, tx: 0, ty: 0 });
+    (fit && size ? clearFit(fit, size) : { kind: "plane" as const, scale: 1, tx: 0, ty: 0 });
   const latest = useRef({ view, onViewport });
   latest.current = { view, onViewport };
   const pending = useRef<PlaneViewport | null>(null);
@@ -43,13 +81,25 @@ export function usePlaneViewport(
   }, []);
   useEffect(() => {
     if (!host) return;
+    const inset = () => {
+      const next = measureInset(host);
+      setInset((was) =>
+        was.top === next.top && was.bottom === next.bottom && was.left === next.left ? was : next,
+      );
+    };
     const observer = new ResizeObserver(([entry]) => {
       const { width, height } = entry!.contentRect;
       setSize(width > 0 && height > 0 ? { width, height } : null);
+      inset();
     });
     observer.observe(host);
+    // The docked surfaces resize on their own (a selection fills the readout): re-measure the bands.
+    const docks = new ResizeObserver(inset);
+    host.querySelectorAll(DOCKED).forEach((el) => docks.observe(el));
     const reader = createWheelReader();
     const wheel = (event: WheelEvent) => {
+      // A surface over the picture (the readout) claims its own wheel: it scrolls, the picture stays.
+      if (event.defaultPrevented) return;
       event.preventDefault();
       const rect = host.getBoundingClientRect();
       const v = pending.current ?? latest.current.view;
@@ -64,6 +114,7 @@ export function usePlaneViewport(
     host.addEventListener("gesturechange", preventGesture, { passive: false });
     return () => {
       observer.disconnect();
+      docks.disconnect();
       host.removeEventListener("wheel", wheel);
       host.removeEventListener("gesturestart", preventGesture);
       host.removeEventListener("gesturechange", preventGesture);
@@ -77,6 +128,8 @@ export function usePlaneViewport(
     size,
     view,
     move,
+    /** The pose that shows `box` (content px) clear of the docked surfaces; null before a size. */
+    frame: (box: Bounds2, pad = 0) => (size ? clearFit(box, size, pad) : null),
     dragging,
     dragDistance,
     handlers: {

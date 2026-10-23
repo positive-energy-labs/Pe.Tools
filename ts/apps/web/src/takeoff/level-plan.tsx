@@ -1,4 +1,8 @@
 import { useMemo, type ReactNode } from "react";
+import { useScopeGestures, useScopeKeys } from "@pe/kit/keys";
+import { PLANE_GESTURES } from "#/scene/gestures";
+import { useViewHistory } from "#/scene/view-history";
+import "#/scene/damage.css";
 import type { PlaneViewport } from "@pe/agent-contracts";
 import { Pane } from "#/components/lang/pane";
 import { revitTarget } from "@pe/kit/lang/row";
@@ -99,7 +103,7 @@ export function LevelPlan({
   viewport: pageViewport,
   onViewport,
   above,
-  children,
+  readout,
   plan,
   planRefusal,
   planError,
@@ -124,7 +128,8 @@ export function LevelPlan({
   viewport: PlaneViewport | null;
   onViewport: (next: PlaneViewport, how: "gesture" | "move") => void;
   above?: ReactNode;
-  children?: ReactNode;
+  /** The fixed top-left readout over the plan: the level's totals, or the selected zone. */
+  readout?: ReactNode;
   /** Absent until a plan image reaches the route; the zones draw alone. */
   plan?: TakeoffPlanImage | null;
   /** The host's named reason the view has no registered image; said, never drawn as nothing. */
@@ -167,11 +172,16 @@ export function LevelPlan({
       : { minX: 0, minY: 0, maxX: viewport.width, maxY: viewport.height };
     return { ...viewport, frame, fit };
   }, [bounds, plan]);
-  const { setHost, size, view, move, handlers, dragDistance, dragging } = usePlaneViewport(
-    pageViewport,
-    world?.fit ?? null,
-    onViewport,
-  );
+  const {
+    setHost,
+    size,
+    view,
+    move,
+    frame: frameBox,
+    handlers,
+    dragDistance,
+    dragging,
+  } = usePlaneViewport(pageViewport, world?.fit ?? null, onViewport);
   // No lease: nothing to publish (`visible` is false), so an empty Page stands in.
   useRouteLease<"takeoffs", Partial<TakeoffPage>>("takeoffs", lease?.page ?? [{}, () => {}], {
     thread: lease?.thread,
@@ -219,7 +229,7 @@ export function LevelPlan({
     () =>
       world
         ? drawn.flatMap((z) => [
-            { d: pathD(z.zone.loops, world.frame), ink: `rgb(${z.zone.color})` },
+            { d: pathD(z.zone.loops, world.frame), ink: token("ink-2") },
             ...z.rooms
               .filter((room) => room.outer)
               .map((room) => ({
@@ -231,6 +241,31 @@ export function LevelPlan({
     [world, drawn, stateOf],
   );
   const map = usePlanMap(view, move, world, size, shapes, plan ?? null);
+  // The one camera move a person names (N1): F frames the selected zone, else fits the level.
+  const selectedZone = drawn.find((z) => z.zone.guid === selectedKey) ?? null;
+  useScopeGestures(PLANE_GESTURES);
+  useScopeKeys([
+    {
+      hotkey: "F",
+      label: "frame",
+      says: "Frame the selected zone; with none selected, fit the level",
+      callback: () => {
+        if (!world) return;
+        const b = selectedZone?.zone.bounds;
+        const next = b
+          ? frameBox(
+              boundsOf([
+                world.frame.toViewport([b.minX, b.minY]),
+                world.frame.toViewport([b.maxX, b.maxY]),
+              ]),
+              24,
+            )
+          : frameBox(world.fit);
+        if (next) move(next, "move");
+      },
+    },
+  ]);
+  useViewHistory();
   const pane = { id: "plan", title: "plan", scroll: "clip" as const, flush: true, floaters: [map] };
   if (!bounds || !world)
     return (
@@ -310,8 +345,9 @@ export function LevelPlan({
 
           {drawn.map((z) => {
             const dimmed = shown !== null && !shown.has(z.zone.guid);
-            const on = z.zone.key === selectedKey;
-            const rgb = `rgb(${z.zone.color})`;
+            const on = z.zone.guid === selectedKey;
+            // Monotone (I3): a zone's Revit colour names nothing the label does not; ink only.
+            const ink = token("ink");
             const [zoneLabelX, zoneLabelY] = frame.toViewport([
               (z.zone.bounds.minX + z.zone.bounds.maxX) / 2,
               (z.zone.bounds.minY + z.zone.bounds.maxY) / 2,
@@ -327,10 +363,10 @@ export function LevelPlan({
                   {...revitTarget(z.zone.elementId == null ? [] : [z.zone.elementId])}
                   d={pathD(z.zone.loops, frame)}
                   fillRule="evenodd"
-                  fill={`color-mix(in srgb, ${rgb} ${on ? 16 : 8}%, transparent)`}
-                  stroke={rgb}
-                  strokeWidth={on ? 2.5 : 1}
-                  strokeOpacity={on ? 1 : 0.55}
+                  fill={on ? `color-mix(in srgb, ${ink} 6%, transparent)` : "transparent"}
+                  stroke={ink}
+                  strokeWidth={on ? 2 : 1}
+                  strokeOpacity={on ? 0.9 : 0.4}
                   vectorEffect="non-scaling-stroke"
                   onClick={(e) => {
                     e.stopPropagation();
@@ -365,6 +401,7 @@ export function LevelPlan({
                       <circle
                         key={room.guid}
                         {...revitTarget(room.elementId == null ? [] : [room.elementId])}
+                        data-damage={state === "call" && !isCursor ? "" : undefined}
                         cx={labelX}
                         cy={labelY}
                         r={span / 260}
@@ -384,12 +421,13 @@ export function LevelPlan({
                       onClick={click}
                     >
                       <path
+                        data-damage={state === "call" && !isCursor ? "" : undefined}
                         d={pathD([room.outer, ...room.holes], frame)}
                         fillRule="evenodd"
                         fill={`color-mix(in srgb, ${tone} ${isCursor ? 34 : state === "unreviewed" ? 7 : 13}%, transparent)`}
                         stroke={tone}
                         strokeOpacity={0.85}
-                        strokeWidth={isCursor ? 2.5 : state === "call" ? 1.75 : 1}
+                        strokeWidth={isCursor ? 2.5 : 1}
                         vectorEffect="non-scaling-stroke"
                       >
                         <title>{`${room.name} — ${room.sqft} sf · ${STATE_META[state].label}`}</title>
@@ -431,25 +469,23 @@ export function LevelPlan({
             );
           })}
         </svg>
+        {/* Surfaces over the plan claim their own pointer: a press on them never pans or clears. */}
+        <div onPointerDown={(e) => e.stopPropagation()} onClick={(e) => e.stopPropagation()}>
+          {readout}
+          <div
+            data-slot="pane-legend"
+            className="pointer-events-none absolute bottom-2 left-2 flex max-w-[calc(100%-1rem)] flex-wrap items-center gap-x-2 gap-y-0.5 rounded-sm px-2 py-0.5"
+            data-surface="page"
+          >
+            {ROOM_STATES.map((s) => (
+              <Key key={s} tone={stateInk(s)} label={STATE_META[s].label} />
+            ))}
+            <Key tone={ABSENT_INK} label="held residue" seam />
+            <Key tone={CURSOR_INK} label="cursor" />
+            {skipped > 0 && <Key tone={ABSENT_INK} label={`${skipped} off-plan`} seam />}
+          </div>
+        </div>
       </div>
-
-      <div
-        className="hairline-t pointer-events-none flex shrink-0 flex-wrap items-center gap-x-2 gap-y-0.5 px-2 py-0.5"
-        data-surface="recess"
-      >
-        {ROOM_STATES.map((s) => (
-          <Key key={s} tone={stateInk(s)} label={STATE_META[s].label} />
-        ))}
-        <Key tone={ABSENT_INK} label="held residue" seam />
-        <Key tone={CURSOR_INK} label="cursor" />
-        {skipped > 0 && (
-          <span className="t-small face-mono">
-            {skipped} sub-{PLAN_MIN_SQFT} sf scribble{skipped === 1 ? "" : "s"} off-plan — see the
-            rail
-          </span>
-        )}
-      </div>
-      {children}
     </Pane>
   );
 }

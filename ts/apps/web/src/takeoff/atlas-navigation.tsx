@@ -1,85 +1,88 @@
-import { Suspense } from "react";
+import { Suspense, useEffect } from "react";
 import { FactChip } from "@pe/kit/lang/chip";
-import { List } from "@pe/kit/lang/list-popup";
-import { StateDot } from "@pe/kit/table/cells";
+import { emptyListState, useList } from "@pe/kit/lang/collection";
+import { ListView } from "@pe/kit/lang/list-view";
 import { Pane } from "#/components/lang/pane";
 import { fmtNum } from "@pe/kit/table/model";
-import { ROOM_STATES, STATE_META } from "#/takeoff/room-state";
 import { onPlan } from "#/takeoff/room-actions";
 import { ZoneStateBar } from "#/takeoff/zone-state-bar";
 import { ZoneThumb } from "#/takeoff/zone-plan";
 import { useAtlasWorkspace } from "#/takeoff/atlas-context";
 import { ScopeKeys } from "@pe/kit/keys";
 import { levelsOf } from "#/takeoff/plan-image";
-import { TooltipHint } from "@pe/kit/lang/tooltip";
+import type { ModelZone } from "#/takeoff/world";
 
+/**
+ * The zones rail: the kit list every route navigates with (SURFACE-PHILOSOPHY N3), so "/" searches
+ * it, the arrows walk it and each level is a sticky, collapsible head. The room-state key lives
+ * once, beside the plan it describes; the rail no longer repeats it.
+ */
 export function AtlasNavigation() {
   const { world, zoneKey, zoneStates, filteredZones, selectZone, scopeShortcuts } =
     useAtlasWorkspace();
+  const levels = levelsOf(world.lanes);
+  const list = useList<ModelZone>({
+    // Levels in the world's order, each once: many view lanes share a level.
+    items: levels.flatMap((label) => filteredZones.filter((z) => z.zone.lane.label === label)),
+    keyOf: (z) => z.zone.guid,
+    search: (z) => ({
+      text: [z.zone.key, z.name, z.zone.lane.label, z.stage, ...z.tags],
+      ids: z.zone.elementId == null ? [] : [z.zone.elementId],
+    }),
+    groups: { of: (z) => z.zone.lane.label, order: levels, collapsible: levels },
+    state: { ...emptyListState(), selected: zoneKey ? [zoneKey] : [] },
+    select: "single",
+    onPick: (z) => selectZone(z.zone.guid === zoneKey ? null : z),
+  });
+  // A zone picked on the plan or the table opens its level and lands on its row.
+  useEffect(() => {
+    if (zoneKey && list.target && list.rows.some((row) => row.key === zoneKey))
+      list.reveal(zoneKey);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [zoneKey, list.target]);
   return (
     <Suspense fallback={<div className="t-small t-upper p-2 text-ink-2">reading zones…</div>}>
-      <Pane id="zones" flush title="zones" meta={`${world.zones.length} declared`}>
+      <Pane id="zones" flush scroll="clip" title="zones" meta={`${world.zones.length} declared`}>
         <ScopeKeys keys={scopeShortcuts} />
-
-        <div className="hairline-b px-2 py-1.5">
-          <div className="t-small t-upper mb-1">room states — one per room</div>
-          <div className="flex flex-wrap items-center gap-x-2 gap-y-0.5">
-            {ROOM_STATES.map((s) => (
-              <TooltipHint content={STATE_META[s].note} key={s}>
-                <span className="t-small face-mono inline-flex items-center gap-1 text-ink-2">
-                  <StateDot tone={STATE_META[s].tone} dim={s === "unreviewed"} />
-                  {STATE_META[s].label}
-                </span>
-              </TooltipHint>
-            ))}
-          </div>
+        <div className="min-h-0 flex-1 overflow-auto">
+          <ListView
+            list={list}
+            aria-label="zones"
+            primary
+            empty={{
+              message: "No zones declared",
+              exit: "Adopt zones from a zoning-plan view in the Adopt stage",
+            }}
+            row={(z) => {
+              const states = zoneStates(z);
+              const calls = states.filter((s) => s === "call").length;
+              const off = !onPlan(z);
+              return {
+                revitIds: z.zone.elementId == null ? [] : [z.zone.elementId],
+                lead: <ZoneThumb zone={z.zone} className="size-5" />,
+                label: (
+                  <span className="truncate">
+                    <span className="face-mono">{z.zone.key}</span>{" "}
+                    {off ? "off-plan scribble" : z.name}
+                  </span>
+                ),
+                meta: (
+                  <span className="flex items-center gap-1">
+                    {calls > 0 && (
+                      <FactChip tone="alarm" title="Rooms in this zone need a human call">
+                        {calls} call{calls === 1 ? "" : "s"}
+                      </FactChip>
+                    )}
+                    <ZoneStateBar zone={z} states={states} className="w-12 shrink-0" />
+                  </span>
+                ),
+                title: off
+                  ? `off-plan scribble · ${fmtNum(z.zone.declaredSqft, 0)} sf, drawn far from the level; listed, not drawn`
+                  : `${z.name} · ${z.zone.lane.label} · ${fmtNum(z.zone.declaredSqft, 0)} sf declared`,
+              };
+            }}
+          />
         </div>
-
-        <List
-          aria-label="zones"
-          // Levels in the world's order, each once: many view lanes share a level (29). Each level
-          // is a sticky group head with its count.
-          items={levelsOf(world.lanes).flatMap((label) =>
-            filteredZones.filter((z) => z.zone.lane.label === label),
-          )}
-          keyOf={(z) => z.zone.guid}
-          labelOf={(z) => `${z.zone.key} ${z.name}`}
-          groupOf={(z) => z.zone.lane.label}
-          empty="no zones match the query"
-          onPick={(z) => selectZone(z.zone.guid === zoneKey ? null : z)}
-          row={(z) => {
-            const states = zoneStates(z);
-            const calls = states.filter((s) => s === "call").length;
-            const off = !onPlan(z);
-            return {
-              revitIds: z.zone.elementId == null ? [] : [z.zone.elementId],
-              lead: <ZoneThumb zone={z.zone} />,
-              label: (
-                <span className="truncate">
-                  <span className="face-mono">{z.zone.key}</span>{" "}
-                  {off ? "off-plan scribble" : z.name}
-                </span>
-              ),
-              meta: (
-                <span className="flex items-center gap-1">
-                  {calls > 0 && (
-                    <FactChip
-                      tone="alarm"
-                      title={`${calls} room${calls === 1 ? "" : "s"} in this zone need a human call — an open detector flag or .r10 drift`}
-                    >
-                      {calls} call{calls === 1 ? "" : "s"}
-                    </FactChip>
-                  )}
-                  <ZoneStateBar zone={z} states={states} className="w-16 shrink-0" />
-                </span>
-              ),
-              active: z.zone.guid === zoneKey,
-              title: off
-                ? `off-plan scribble — ${fmtNum(z.zone.declaredSqft, 0)} sf, drawn far from the level cluster; kept in the list, excluded from the plan`
-                : `${z.name} · ${z.zone.lane.label} · ${fmtNum(z.zone.declaredSqft, 0)} sf declared`,
-            };
-          }}
-        />
       </Pane>
     </Suspense>
   );

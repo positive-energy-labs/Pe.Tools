@@ -52,7 +52,6 @@ function useAtlasModel({ store, headRail, sidePanel, readoutBand }: AtlasProps) 
   // These are private widget mechanics. Remounting the Atlas intentionally resets them.
   const [fieldsMode, setFieldsMode] = useState<"columns" | "panel">("columns");
   const [planOpen, setPlanOpen] = useState(true);
-  const [statsOpen, setStatsOpen] = useState(false);
   const [tableState, setTableState] = useState<TableState>({
     sorts: [],
     query: "",
@@ -232,7 +231,6 @@ function useAtlasModel({ store, headRail, sidePanel, readoutBand }: AtlasProps) 
     fieldsMode,
     setFieldsMode,
     planOpen,
-    statsOpen,
     tableState,
     rows,
     visibleKeys,
@@ -240,7 +238,6 @@ function useAtlasModel({ store, headRail, sidePanel, readoutBand }: AtlasProps) 
     planImage,
     setLevel,
     setPlanOpen,
-    setStatsOpen,
     stateOf,
     zoneStates,
     zoneCalls,
