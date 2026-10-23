@@ -68,6 +68,7 @@ import { BarPopover, fmtFt, SystemMark, systemIssues } from "./bar";
 import type { Split, systemList } from "../b/model";
 import type { StageIssue } from "../../inbox-rows";
 import { damageLayer } from "#/scene/damage";
+import { LAND, LAND_EASING } from "#/scene/marks";
 import { usePictureFloaters } from "./picture-floaters";
 import { RulingBody, useMarks } from "./rulings";
 import { noRunParts } from "../../subject-text";
@@ -139,14 +140,16 @@ export interface ECanvasExtra {
 }
 
 /** The landing mark: drawn once per landing (keyed), scales in and fades while the camera is still. */
+// The alias-jump landing lands like every stage mark (`scene/marks.ts`): one ease and length, at
+// the selection outline's weight, then fades so the silhouette selection carries on.
 const flash = (node: HTMLDivElement | null) => {
   node?.animate(
     [
-      { opacity: 0.9, transform: "scale(1.35)" },
-      { opacity: 0.9, transform: "scale(1)", offset: 0.3 },
+      { opacity: 1, transform: "scale(1.35)", easing: LAND_EASING },
+      { opacity: 1, transform: "scale(1)", offset: 0.6 },
       { opacity: 0, transform: "scale(1)" },
     ],
-    { duration: 900, easing: "ease-out", fill: "forwards" },
+    { duration: (LAND * 1000) / 0.6, fill: "forwards" },
   );
 };
 
@@ -813,7 +816,7 @@ function Canvas({
           <div
             aria-hidden
             data-e-landed=""
-            className="pointer-events-none absolute text-ink outline outline-1 outline-current"
+            className="pointer-events-none absolute text-ink outline outline-2 outline-current"
             style={{
               left: landed.box.x - 6,
               top: landed.box.y - 6,

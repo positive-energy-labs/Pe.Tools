@@ -30,8 +30,11 @@ const VOLUME_ALPHA: Record<IssueState, number> = {
   focus: 0.6,
 };
 const CASING = 1.5;
-/** The landing swell when an issue becomes the focus, in seconds. */
-const LAND = 0.65;
+/** The landing swell when an issue becomes the focus, in seconds; every landing on the stage
+ * (an issue focused, a subject reached by an alias jump) runs this long on `LAND_EASING`. */
+export const LAND = 0.65;
+/** `landing`'s cubic ease-out as CSS, for DOM marks that land with the stage's own. */
+export const LAND_EASING = "cubic-bezier(0.33, 1, 0.68, 1)";
 const WHITE = new THREE.Color(1, 1, 1);
 
 /** 1 at the moment of landing, easing out to 0 over `LAND`. */
