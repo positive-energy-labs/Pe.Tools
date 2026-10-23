@@ -259,7 +259,7 @@ export function EntityRouteView({
           ledger={[
             ...(podRelevant
               ? ([
-                  ["pod", pod ? `${pod.id} · ${pod.folder}` : "none"],
+                  ["pod", pod ? `${pod.name} · ${pod.folder}` : "none"],
                   ["spec", page.path || "none"],
                 ] as const)
               : []),

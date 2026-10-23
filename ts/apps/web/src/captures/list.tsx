@@ -23,8 +23,10 @@ const focusWords = (focus: CaptureReceipt["focus"]): string =>
         ? `scope box ${focus.scopeBox}`
         : "whole view";
 
-const when = (at: string) =>
-  new Date(at).toLocaleString(undefined, { dateStyle: "short", timeStyle: "short" });
+// One formatter: toLocaleString with options builds a new Intl formatter per call (39 ms of a row
+// click on 23 captures, 2026-10-23 profile).
+const WHEN = new Intl.DateTimeFormat(undefined, { dateStyle: "short", timeStyle: "short" });
+const when = (at: string) => WHEN.format(new Date(at));
 
 const search = (receipt: CaptureReceipt) => ({
   text: [
@@ -43,6 +45,9 @@ function CaptureDetail({ receipt }: { receipt: CaptureReceipt }) {
   return (
     <div className="flex flex-col gap-2 p-(--gutter)">
       <span className="flex min-w-0 flex-wrap items-center gap-1.5">
+        <FactChip title="Who asked: a web route, an agent, or a person at the CLI.">
+          {receipt.origin}
+        </FactChip>
         <FactChip title="What the request cropped to.">{focusWords(receipt.focus)}</FactChip>
         {receipt.registration ? null : (
           <FactChip
@@ -123,11 +128,8 @@ export function CapturesList({
         lead: <img src={receipt.url} alt="" loading="lazy" className="h-5 w-8 object-cover" />,
         label: receipt.view.name ?? "view",
         aside: receipt.document.title ?? "untitled document",
-        meta: (
-          <span className="face-mono">
-            {receipt.origin} · {when(receipt.at)}
-          </span>
-        ),
+        // L3: one short meta (when); who took it is in the detail and the search.
+        meta: <span className="face-mono">{when(receipt.at)}</span>,
       })}
       detail={(receipt) => <CaptureDetail receipt={receipt} />}
     />
