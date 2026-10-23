@@ -4,7 +4,7 @@
  * resident cache shared by every mount. Null request reads nothing. `useSceneArtifact` is the
  * second half alone: a saved scene by its id, with no capture.
  */
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 
 import { useHostOp } from "#/readings";
 import { NATIVE_READ_WAIT_S } from "#/route/waits";
@@ -27,6 +27,28 @@ export type SceneRead = {
   omittedElements: number;
   unavailableElements: number;
 };
+
+/** N6: retain drawing data by bound document, even while native action authority is withdrawn. */
+export function usePictureRead(
+  capture: SceneRead,
+  key: string | null,
+  system: string,
+  refreshing: boolean,
+) {
+  const last = useRef<{ key: string; system: string; read: SceneRead } | null>(null);
+  if (last.current?.key !== key) last.current = null;
+  if (capture.meshes && key) last.current = { key, system, read: capture };
+  const holding = !capture.meshes ? last.current : null;
+  const pending = capture.pending || refreshing;
+  return {
+    holding: pending ? holding : null,
+    read: {
+      ...(holding?.read ?? capture),
+      error: capture.error,
+      pending,
+    },
+  };
+}
 
 export function useScene(
   request: ReturnType<typeof sceneRequest> | null,

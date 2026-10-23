@@ -51,7 +51,6 @@ export function boundsOfIds(
   );
 }
 
-/** The capture's bounds and its focus meshes', or the subject's centrelines' with no meshes. */
 export function usePictureBounds(meshes: SceneMeshes | null, scene: Scene): PictureBounds | null {
   return useMemo(() => {
     if (meshes)
@@ -140,11 +139,7 @@ export function ModelPicture({
     onIssueHover(target?.key ?? null);
     onHover(target?.elementId ?? null);
   };
-  // Subscribe inside the picture, never in the route: even the centreline-only preview follows
-  // the live camera while native meshes are loading, without waking pricing or the inbox.
-  // Camera motion holds the last pose: the native renderer moves while the DOM layer fades and
-  // re-projects once at release or landing, never a React render per gesture frame.
-  // Without meshes the layer IS the picture, so it follows every frame.
+  // Meshes move natively during a gesture; DOM annotations re-project only at release.
   const held = useRef<OrbitViewport | null>(null);
   const pose = useSyncExternalStore(orbit.subscribe, () =>
     meshes && held.current && orbit.moving() ? held.current : (held.current = orbit.read()),
@@ -171,7 +166,6 @@ export function ModelPicture({
     o.observe(host);
     return () => o.disconnect();
   }, [host]);
-  // With meshes the renderer reports every frame's camera; without, the fit is computed here.
   const [framed, setFramed] = useState<{ project: Project; size: Size } | null>(null);
   const lastFrame = useRef(framed);
   useEffect(() => {
@@ -193,7 +187,6 @@ export function ModelPicture({
     ids.size ? new Set([...ids].flatMap((id) => keysOf.get(id) ?? [])) : NONE;
   const selectedKeys = useMemo(() => keys(selected), [selected, keysOf]); // eslint-disable-line react-hooks/exhaustive-deps
   const litKeys = useMemo(() => keys(lit), [lit, keysOf]); // eslint-disable-line react-hooks/exhaustive-deps
-  const isolated = layers.has("meshes") ? null : NONE;
   const meshed = useMemo(
     () =>
       new Set(
@@ -204,24 +197,22 @@ export function ModelPicture({
     [meshes, layers.has("meshes")], // eslint-disable-line react-hooks/exhaustive-deps
   );
 
-  const { orbitPivot } = stage;
   const frameAt = (key: string | null) =>
     stage.frameOn(key && meshes ? boundsOfInstances(meshes, (i) => i.key === key) : null);
 
-  const status = said
-    ? said
-    : read.error
+  const status =
+    said ??
+    (read.error
       ? `scene: ${read.error}`
-      : read.pending
-        ? "capturing meshes… gestures wait"
-        : !meshes
-          ? "no meshes: choose a system on a Revit document"
-          : null;
+      : !meshes
+        ? "no meshes: choose a system on a Revit document"
+        : null);
   useWork(read.pending, "capturing meshes… gestures wait");
   return (
     <div
       ref={setHost}
       data-model-picture=""
+      inert={read.pending || undefined}
       aria-busy={read.pending || undefined}
       data-reading={read.pending ? "pending" : undefined}
       className="relative min-h-0 flex-1 overflow-hidden"
@@ -236,11 +227,11 @@ export function ModelPicture({
           className="size-full"
           meshes={meshes}
           orbit={orbit}
-          orbitPivot={orbitPivot}
+          orbitPivot={stage.orbitPivot}
           wheelHost={wheelHost ?? host}
           selected={selectedKeys}
           lit={litKeys}
-          isolated={isolated}
+          isolated={layers.has("meshes") ? null : NONE}
           layers={findings3d}
           hoveredIssue={hoveredIssue}
           focusedIssue={issue}
@@ -282,7 +273,6 @@ export function ModelPicture({
           ref={fade}
           className="pointer-events-none absolute inset-0 transition-opacity duration-150 data-flying:opacity-0"
         >
-          {/* Captions stay inside the picture: a label at the bottom edge is lifted, not clipped. */}
           <CaptionBounds.Provider value={overlay.size}>
             <Annotations
               {...overlay}

@@ -28,6 +28,10 @@ const allow = (entries: Record<string, string>): Allow[] =>
 // Filenames use the wave-4 final homes: land.ts, revit-target.tsx and go-to.tsx.
 // prettier-ignore
 const RULES: Rule[] = [
+  { id: "picture-retention-document-custody", doctrine: "N6",
+    pattern: /const pictureKey = native\b|lastPicture|cloneElement\(holding\.view/g,
+    roots: [W + "ducts/proto/e/canvas.tsx"], allow: [],
+    cannotSee: "Runtime retention or cross-document leaks; scene3d tests cover canvas identity while native authority is withdrawn." },
   { id: "scene-completeness-forwarded", doctrine: "N6",
     pattern: /return \{(?![^}]*\bomittedElements:)(?=[^}]*meshes: artifact\.meshes)[^}]*\}/g,
     roots: [W + "scene/use-scene.ts"], allow: [],
