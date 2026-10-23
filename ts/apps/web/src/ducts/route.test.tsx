@@ -35,12 +35,15 @@ const drawing = vi.hoisted(() => ({ lightweight: false }));
 vi.mock("./proto/e/screen", async (original) => {
   const { EScreen } = await original<typeof import("./proto/e/screen")>();
   return {
-    EScreen: ({ props }: { props: ProtoProps }) => drawing.lightweight ? (
-      <div data-proto={props.snapshot ? "E2" : undefined}>
-        {props.snapshot ? props.snapshot.document.elapsedMs : "reading ducts…"}
-        {props.reading.refreshing ? "refreshing…" : ""}
-      </div>
-    ) : <EScreen props={props} />,
+    EScreen: ({ props }: { props: ProtoProps }) =>
+      drawing.lightweight ? (
+        <div data-proto={props.snapshot ? "E2" : undefined}>
+          {props.snapshot ? props.snapshot.document.elapsedMs : "reading ducts…"}
+          {props.reading.refreshing ? "refreshing…" : ""}
+        </div>
+      ) : (
+        <EScreen props={props} />
+      ),
   };
 });
 
@@ -421,7 +424,9 @@ test("a changed document fences a pending read after changing targets and return
   await act(async () =>
     release(Response.json({ ...old, document: { ...old.document, elapsedMs: 999999 } })),
   );
-  expect(screen.getByRole("region", { name: "Ducts route", hidden: true }).textContent).not.toContain("999999");
+  expect(
+    screen.getByRole("region", { name: "Ducts route", hidden: true }).textContent,
+  ).not.toContain("999999");
 });
 
 test("a staged subject, claims and labelParameter render the subject scene; a verdict press stages the claim", async () => {

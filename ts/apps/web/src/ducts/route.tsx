@@ -45,7 +45,17 @@ function useBodyAction(action: ActionHandle): ActionHandle {
   latest.current = action;
   const { label, says, needs, actor, chord, refusal, stage, count } = action;
   return useMemo(
-    () => ({ label, says, needs, actor, chord, refusal, stage, count, run: (input) => latest.current.run(input) }),
+    () => ({
+      label,
+      says,
+      needs,
+      actor,
+      chord,
+      refusal,
+      stage,
+      count,
+      run: (input) => latest.current.run(input),
+    }),
     [label, says, needs, actor, chord, refusal, stage, count],
   );
 }
@@ -194,10 +204,14 @@ export function DuctsRoute({ url = true }: { url?: boolean } = {}) {
   );
   // A re-read prices its new snapshot behind the last priced one: the screen keeps drawing what it
   // has, marked refreshing, instead of blanking to "pricing…". Never across documents.
-  const lastPriced = useRef<{ key: string | null; snapshot: DuctSnapshot; priced: NonNullable<typeof priced>; observation: NativeObservation } | null>(
-    null,
-  );
-  if (snapshot && priced) lastPriced.current = { key: documentKey, snapshot, priced, observation: nativeObservation };
+  const lastPriced = useRef<{
+    key: string | null;
+    snapshot: DuctSnapshot;
+    priced: NonNullable<typeof priced>;
+    observation: NativeObservation;
+  } | null>(null);
+  if (snapshot && priced)
+    lastPriced.current = { key: documentKey, snapshot, priced, observation: nativeObservation };
   const held =
     !priced && lastPriced.current?.key === documentKey && (pending || !!snapshot)
       ? lastPriced.current
@@ -369,15 +383,32 @@ export function DuctsRoute({ url = true }: { url?: boolean } = {}) {
           ? { says: "reading ducts…", exit: "wait for the snapshot" }
           : null;
 
-  const onSelect = useCallback((id: number | null) => setPage({ selected: id == null ? "" : String(id), issue: "" }), [setPage]);
-  const onSelectClaim = useCallback((claim: Claim) => setPage({ selected: claim.id, issue: "" }), [setPage]);
+  const onSelect = useCallback(
+    (id: number | null) => setPage({ selected: id == null ? "" : String(id), issue: "" }),
+    [setPage],
+  );
+  const onSelectClaim = useCallback(
+    (claim: Claim) => setPage({ selected: claim.id, issue: "" }),
+    [setPage],
+  );
   const previewAction = useBodyAction(handle.actions.preview);
   const applyAction = useBodyAction(handle.actions.apply);
   const healPreviewAction = useBodyAction(handle.actions["heal-preview"]);
   const healAction = useBodyAction(handle.actions.heal);
   const fanPreviewAction = useBodyAction(handle.actions["fan-preview"]);
   const fanAction = useBodyAction(handle.actions.fan);
-  const actions = useMemo(() => ({ preview: previewAction, apply: applyAction, healPreview: healPreviewAction, heal: healAction, fanPreview: fanPreviewAction, fan: fanAction, busy }), [previewAction, applyAction, healPreviewAction, healAction, fanPreviewAction, fanAction, busy]);
+  const actions = useMemo(
+    () => ({
+      preview: previewAction,
+      apply: applyAction,
+      healPreview: healPreviewAction,
+      heal: healAction,
+      fanPreview: fanPreviewAction,
+      fan: fanAction,
+      busy,
+    }),
+    [previewAction, applyAction, healPreviewAction, healAction, fanPreviewAction, fanAction, busy],
+  );
   const shell: ProtoProps = {
     snapshot: held?.snapshot ?? snapshot,
     priced: held?.priced ?? priced,

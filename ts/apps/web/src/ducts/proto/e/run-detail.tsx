@@ -123,7 +123,9 @@ export function RunDetail({
         </dd>
         <dd className="text-ink-mute">{over ? "over the design rate" : ""}</dd>
         <dt className="text-ink-2">roughness</dt>
-        <dd className="face-mono">{run.roughnessFt == null ? "—" : `${run.roughnessFt.toFixed(4)} ft`}</dd>
+        <dd className="face-mono">
+          {run.roughnessFt == null ? "—" : `${run.roughnessFt.toFixed(4)} ft`}
+        </dd>
         <dd className="text-ink-mute">{run.roughness ?? ""}</dd>
         <dt className="text-ink-2">friction loss</dt>
         <dd className="face-mono">{fmt(run.frictionDp, 4)} in-wg</dd>

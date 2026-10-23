@@ -1,5 +1,13 @@
 import { type ListSearch } from "@pe/agent-contracts";
-import { useContext, useEffect, useRef, useState, type ReactNode } from "react";
+import {
+  useCallback,
+  useContext,
+  useEffect,
+  useMemo,
+  useRef,
+  useState,
+  type ReactNode,
+} from "react";
 import { Ban, Check, Eye, EyeOff, Fan, Link, Pencil, X, type LucideIcon } from "lucide-react";
 import type { DuctsRouteDocument } from "@pe/agent-contracts";
 import type { LossesWork } from "../../work";
@@ -7,7 +15,7 @@ import type { DuctSnapshot } from "@pe/ducts-domain/types";
 import { Button } from "@pe/kit/lang/button";
 import { FactChip } from "@pe/kit/lang/chip";
 import { useList, emptyListState, type ListState } from "@pe/kit/lang/collection";
-import { ListView } from "@pe/kit/lang/list-view";
+import { ListView, type ListRowParts } from "@pe/kit/lang/list-view";
 import { PreviewAction } from "@pe/kit/lang/preview-action";
 import { reviewTransitions, type CellWire } from "#/components/work/band";
 import type { ActionHandle } from "#/route/handle";
@@ -168,263 +176,291 @@ export function Inbox({
   const intent = useRef<{ key: string; timer?: ReturnType<typeof setTimeout> } | null>(null);
   useEffect(() => () => clearTimeout(intent.current?.timer), []);
   const [selecting, setSelecting] = useState(false);
-  const cellOf = (segment: string, key: string) =>
-    (work.doc as unknown as Record<string, Record<string, object> | undefined> | null)?.[segment]?.[
-      key
-    ] ?? {};
+  const cellOf = useCallback(
+    (segment: string, key: string) =>
+      (work.doc as unknown as Record<string, Record<string, object> | undefined> | null)?.[
+        segment
+      ]?.[key] ?? {},
+    [work.doc],
+  );
 
   /** One verb as a button: the compact icon square, or the worded one in an open row. */
-  const verbButton = (verb: RowVerb, i: number, worded: boolean): ReactNode => {
-    const make = (
-      key: string,
-      icon: LucideIcon,
-      label: string,
-      says: string,
-      run: () => void,
-      extra: { pressed?: boolean; refusal?: string | null; busy?: boolean; commit?: boolean } = {},
-    ) => (
-      <Button
-        key={key}
-        {...(worded
-          ? {
-              kind: extra.commit ? ("commit" as const) : ("framed" as const),
-              icon: verb.kind === "select" ? icon : undefined,
-            }
-          : { icon })}
-        label={worded ? label : says}
-        reason={worded ? says : undefined}
-        pressed={extra.pressed}
-        refusal={extra.refusal}
-        busy={extra.busy}
-        onClick={run}
-      >
-        {worded ? label : undefined}
-      </Button>
-    );
-    switch (verb.kind) {
-      case "price-as":
-        return worded ? <RuleAssignment key={`rule${i}`} family={verb.family} work={work} /> : null;
-      case "verdict":
-        return make(
-          `v${i}`,
-          VERDICT_ICON[verb.verdict],
-          verb.label,
-          verb.says,
-          () =>
-            void work.write(
-              verdictPatches(work.doc, verb.key, verb.on ? "unset" : verb.verdict, work.store),
-            ),
-          { pressed: verb.on },
-        );
-      case "role":
-        return make(
-          `r${i}`,
-          Fan,
-          verb.label,
-          verb.says,
-          () =>
-            void work.write(
-              rulingPatches(work.doc, work.store, "roles", String(verb.id), verb.role),
-            ),
-        );
-      case "airflow":
-        // The choice is the shared compact picker, in the open row only.
-        return worded ? (
-          <SlotPicker
-            key={`a${i}`}
-            word={verb.of === "unit" ? "Unit airflow" : "Grille airflow"}
-            current={verb.current}
-            options={verb.options}
-            noun={verb.of === "unit" ? "units" : "grilles"}
-            where="in this scope"
-            onPick={(slot) => void work.write(airflowPatches(work.doc, slot, verb.of))}
-          />
-        ) : null;
-      case "focus":
-        return make(`f${i}`, Pencil, verb.label, verb.says, () => onFocusCell(verb.cell));
-      case "preview":
-        // A Heal row draws its glyph in the closed row; a fan's label names the unit and the
-        // system, so it draws worded in the open row only.
-        if (verb.on.verb === "heal")
-          return (
-            <PreviewVerb key={`p${i}`} verb={verb} pair={heal} icon={worded ? undefined : Eye} />
-          );
-        return worded ? <FanButton key={`n${i}`} verb={verb} fan={fan} /> : null;
-      case "claim":
-        return VERDICTS.map((v, j) =>
-          make(
-            `c${i}${j}`,
-            ([Check, X, Ban] as const)[j]!,
-            v.word,
-            `${v.word}: ${v.says}`,
-            () => onVerdict?.(verb.claim, v.value),
-            {
-              pressed: verb.claim.verdict === v.value,
-              refusal: onVerdict ? null : "no subject: the verdict has nowhere to stage",
-            },
-          ),
-        );
-      case "stage": {
-        const wire: CellWire = {
-          segment: verb.segment as CellWire["segment"],
-          revision: work.revision,
-          write: work.write as CellWire["write"],
-        };
-        const kind = verb.move;
-        return make(
-          `s${i}${kind}`,
-          kind === "accept" ? Check : X,
-          verb.label,
-          verb.says,
-          () =>
-            void reviewTransitions(wire, verb.key, cellOf(verb.segment, verb.key))
-              .find((t) => t.kind === kind)
-              ?.run(),
-        );
-      }
-      case "select": {
-        const target = observedElements(observation, verb.ids);
-        const prepared = prepareElements(target, true);
-        return make(
-          `x${i}`,
-          SelectInRevitIcon,
-          "Select in Revit",
-          "Select in Revit",
-          () => {
-            setNativeResult(null);
-            setSelecting(true);
-            void showInRevit(target, true)
-              .then(setNativeResult)
-              .finally(() => setSelecting(false));
-          },
-          {
-            refusal: prepared.kind === "refused" ? prepared.message : null,
-            busy: selecting,
-          },
-        );
-      }
-    }
-  };
-  const verbsOf = (item: InboxItem, worded: boolean) =>
-    item.verbs.flatMap((verb, i) => [verbButton(verb, i, worded)].flat());
-
-  const spec = (item: InboxItem): RulingRow => {
-    const target = observedElements(observation, item.ids);
-    const claim = item.verbs.find((v) => v.kind === "claim");
-    const title = claim?.kind === "claim" ? claimLine(claim.claim, nameOf) : item.title;
-    const description = subjectDocument(
-      item.parts ?? [claim?.kind === "claim" ? claim.claim.text : (item.note ?? item.title)],
-      subjects?.nameOf ?? (() => null),
-      item.parts ? [] : item.ids,
-    );
-    const heading = subjectDocument(
-      [title],
-      subjects?.nameOf ?? (() => null),
-      [],
-      description.references,
-    );
-    // The row badges what its heading names; what its own text lit since (a token, the open
-    // description) stays while the pointer is in the row, and a pending clear is cancelled.
-    const relight = () => {
-      const lit = subjects!.reach.get().lighting;
-      subjects!.light(
-        lit.owner === item.key ? lit.references : heading.references,
-        null,
-        item.key,
-        item.ids,
+  const verbButton = useCallback(
+    (verb: RowVerb, i: number, worded: boolean): ReactNode => {
+      const make = (
+        key: string,
+        icon: LucideIcon,
+        label: string,
+        says: string,
+        run: () => void,
+        extra: {
+          pressed?: boolean;
+          refusal?: string | null;
+          busy?: boolean;
+          commit?: boolean;
+        } = {},
+      ) => (
+        <Button
+          key={key}
+          {...(worded
+            ? {
+                kind: extra.commit ? ("commit" as const) : ("framed" as const),
+                icon: verb.kind === "select" ? icon : undefined,
+              }
+            : { icon })}
+          label={worded ? label : says}
+          reason={worded ? says : undefined}
+          pressed={extra.pressed}
+          refusal={extra.refusal}
+          busy={extra.busy}
+          onClick={run}
+        >
+          {worded ? label : undefined}
+        </Button>
       );
-    };
-    return {
-      key: item.key,
-      search: { text: [title, item.status, item.kind, item.note], ids: item.ids },
-      kind: diagnosticKind(item),
-      group: item.group,
-      statusText: item.status,
-      label: <SubjectText document={heading} owner={item.key} />,
-      title,
-      stage: item.kind === "proposal" ? "proposed" : undefined,
-      stagedBy: item.kind === "proposal" ? "pea" : undefined,
-      // The closed row gives the label the width: the status in its compact words.
-      meta: <span data-tone={item.tone}>{compactStatus(item.status)}</span>,
-      actions: () => verbsOf(item, false),
-      onMouseEnter: () => {
-        // The collapsed row shows its heading: badge what the heading names, tint all it stands for.
-        const enter = () => {
-          if (subjects) relight();
-          else light(item.ids);
-          onIssueHover?.(item.key);
-        };
-        clearTimeout(intent.current?.timer);
-        intent.current = {
-          key: item.key,
-          timer: setTimeout(() => ((intent.current = { key: item.key }), enter()), 90),
-        };
-      },
-      onMouseLeave: () => {
-        if (intent.current?.key === item.key) {
-          clearTimeout(intent.current.timer);
-          intent.current = null;
-        }
-        if (subjects) subjects.clear(item.key);
-        else light(null);
-      },
-      onMouseMove: () => {
-        // Re-light (after a token's own hover) only once the row holds the pointer.
-        if (intent.current?.key === item.key && !intent.current.timer) relight();
-      },
-      revitIds: target.ids,
-      revitRefs: target.refs,
-      lit: (selected != null && item.ids.includes(selected)) || item.key === focused,
-      // A person's own row click selects and releases the landing address (`onPick`); only a stage click lands on `issue`.
-      pick: () => onSelect(item.ids[0] ?? null),
-      detail: () => (
-        <>
-          {compactStatus(item.status) !== item.status ? (
-            <p className="t-small" data-tone={item.tone} data-inbox-status="">
-              {item.status}
-            </p>
-          ) : null}
-          {subjects ? (
-            // The open row shows its description: anywhere over it badges what it names (the row
-            // itself badges only its heading's), so the pointer keeps the badges on its way out.
-            <p
-              onMouseMove={(e) => {
-                e.stopPropagation();
-                subjects.light(description.references, null, item.key, item.ids);
-              }}
-            >
-              <SubjectText document={description} owner={item.key} />
-            </p>
-          ) : claim?.kind === "claim" ? (
-            <InboxClaim
-              claim={claim.claim}
-              nameOf={nameOf}
-              light={light}
-              onSelect={onSelect}
-              onShown={setNativeResult}
+      switch (verb.kind) {
+        case "price-as":
+          return worded ? (
+            <RuleAssignment key={`rule${i}`} family={verb.family} work={work} />
+          ) : null;
+        case "verdict":
+          return make(
+            `v${i}`,
+            VERDICT_ICON[verb.verdict],
+            verb.label,
+            verb.says,
+            () =>
+              void work.write(
+                verdictPatches(work.doc, verb.key, verb.on ? "unset" : verb.verdict, work.store),
+              ),
+            { pressed: verb.on },
+          );
+        case "role":
+          return make(
+            `r${i}`,
+            Fan,
+            verb.label,
+            verb.says,
+            () =>
+              void work.write(
+                rulingPatches(work.doc, work.store, "roles", String(verb.id), verb.role),
+              ),
+          );
+        case "airflow":
+          // The choice is the shared compact picker, in the open row only.
+          return worded ? (
+            <SlotPicker
+              key={`a${i}`}
+              word={verb.of === "unit" ? "Unit airflow" : "Grille airflow"}
+              current={verb.current}
+              options={verb.options}
+              noun={verb.of === "unit" ? "units" : "grilles"}
+              where="in this scope"
+              onPick={(slot) => void work.write(airflowPatches(work.doc, slot, verb.of))}
             />
-          ) : item.note ? (
-            <p>{item.note}</p>
-          ) : (
-            <p>{item.title}</p>
-          )}
-          <div className="flex flex-wrap items-center gap-1" data-inbox-verbs="">
-            {verbsOf(item, true)}
-          </div>
-        </>
-      ),
-    };
-  };
+          ) : null;
+        case "focus":
+          return make(`f${i}`, Pencil, verb.label, verb.says, () => onFocusCell(verb.cell));
+        case "preview":
+          // A Heal row draws its glyph in the closed row; a fan's label names the unit and the
+          // system, so it draws worded in the open row only.
+          if (verb.on.verb === "heal")
+            return (
+              <PreviewVerb key={`p${i}`} verb={verb} pair={heal} icon={worded ? undefined : Eye} />
+            );
+          return worded ? <FanButton key={`n${i}`} verb={verb} fan={fan} /> : null;
+        case "claim":
+          return VERDICTS.map((v, j) =>
+            make(
+              `c${i}${j}`,
+              ([Check, X, Ban] as const)[j]!,
+              v.word,
+              `${v.word}: ${v.says}`,
+              () => onVerdict?.(verb.claim, v.value),
+              {
+                pressed: verb.claim.verdict === v.value,
+                refusal: onVerdict ? null : "no subject: the verdict has nowhere to stage",
+              },
+            ),
+          );
+        case "stage": {
+          const wire: CellWire = {
+            segment: verb.segment as CellWire["segment"],
+            revision: work.revision,
+            write: work.write as CellWire["write"],
+          };
+          const kind = verb.move;
+          return make(
+            `s${i}${kind}`,
+            kind === "accept" ? Check : X,
+            verb.label,
+            verb.says,
+            () =>
+              void reviewTransitions(wire, verb.key, cellOf(verb.segment, verb.key))
+                .find((t) => t.kind === kind)
+                ?.run(),
+          );
+        }
+        case "select": {
+          const target = observedElements(observation, verb.ids);
+          const prepared = prepareElements(target, true);
+          return make(
+            `x${i}`,
+            SelectInRevitIcon,
+            "Select in Revit",
+            "Select in Revit",
+            () => {
+              setNativeResult(null);
+              setSelecting(true);
+              void showInRevit(target, true)
+                .then(setNativeResult)
+                .finally(() => setSelecting(false));
+            },
+            {
+              refusal: prepared.kind === "refused" ? prepared.message : null,
+              busy: selecting,
+            },
+          );
+        }
+      }
+    },
+    [work, nameOf, heal, fan, onFocusCell, onVerdict, cellOf, observation, selecting],
+  );
+  const verbsOf = useCallback(
+    (item: InboxItem, worded: boolean) =>
+      item.verbs.flatMap((verb, i) => [verbButton(verb, i, worded)].flat()),
+    [verbButton],
+  );
 
-  const { writeSpec } = inboxWriteRows(write);
+  const spec = useCallback(
+    (item: InboxItem): RulingRow => {
+      const target = observedElements(observation, item.ids);
+      const claim = item.verbs.find((v) => v.kind === "claim");
+      const title = claim?.kind === "claim" ? claimLine(claim.claim, nameOf) : item.title;
+      const description = subjectDocument(
+        item.parts ?? [claim?.kind === "claim" ? claim.claim.text : (item.note ?? item.title)],
+        subjects?.nameOf ?? (() => null),
+        item.parts ? [] : item.ids,
+      );
+      const heading = subjectDocument(
+        [title],
+        subjects?.nameOf ?? (() => null),
+        [],
+        description.references,
+      );
+      // The row badges what its heading names; what its own text lit since (a token, the open
+      // description) stays while the pointer is in the row, and a pending clear is cancelled.
+      const relight = () => {
+        const lit = subjects!.reach.get().lighting;
+        subjects!.light(
+          lit.owner === item.key ? lit.references : heading.references,
+          null,
+          item.key,
+          item.ids,
+        );
+      };
+      return {
+        key: item.key,
+        search: { text: [title, item.status, item.kind, item.note], ids: item.ids },
+        kind: diagnosticKind(item),
+        group: item.group,
+        statusText: item.status,
+        label: <SubjectText document={heading} owner={item.key} />,
+        title,
+        stage: item.kind === "proposal" ? "proposed" : undefined,
+        stagedBy: item.kind === "proposal" ? "pea" : undefined,
+        // The closed row gives the label the width: the status in its compact words.
+        meta: <span data-tone={item.tone}>{compactStatus(item.status)}</span>,
+        actions: () => verbsOf(item, false),
+        onMouseEnter: () => {
+          // The collapsed row shows its heading: badge what the heading names, tint all it stands for.
+          const enter = () => {
+            if (subjects) relight();
+            else light(item.ids);
+            onIssueHover?.(item.key);
+          };
+          clearTimeout(intent.current?.timer);
+          intent.current = {
+            key: item.key,
+            timer: setTimeout(() => ((intent.current = { key: item.key }), enter()), 90),
+          };
+        },
+        onMouseLeave: () => {
+          if (intent.current?.key === item.key) {
+            clearTimeout(intent.current.timer);
+            intent.current = null;
+          }
+          if (subjects) subjects.clear(item.key);
+          else light(null);
+        },
+        onMouseMove: () => {
+          // Re-light (after a token's own hover) only once the row holds the pointer.
+          if (intent.current?.key === item.key && !intent.current.timer) relight();
+        },
+        revitIds: target.ids,
+        revitRefs: target.refs,
+        // A person's own row click selects and releases the landing address (`onPick`); only a stage click lands on `issue`.
+        pick: () => onSelect(item.ids[0] ?? null),
+        detail: () => (
+          <>
+            {compactStatus(item.status) !== item.status ? (
+              <p className="t-small" data-tone={item.tone} data-inbox-status="">
+                {item.status}
+              </p>
+            ) : null}
+            {subjects ? (
+              // The open row shows its description: anywhere over it badges what it names (the row
+              // itself badges only its heading's), so the pointer keeps the badges on its way out.
+              <p
+                onMouseMove={(e) => {
+                  e.stopPropagation();
+                  subjects.light(description.references, null, item.key, item.ids);
+                }}
+              >
+                <SubjectText document={description} owner={item.key} />
+              </p>
+            ) : claim?.kind === "claim" ? (
+              <InboxClaim
+                claim={claim.claim}
+                nameOf={nameOf}
+                light={light}
+                onSelect={onSelect}
+                onShown={setNativeResult}
+              />
+            ) : item.note ? (
+              <p>{item.note}</p>
+            ) : (
+              <p>{item.title}</p>
+            )}
+            <div className="flex flex-wrap items-center gap-1" data-inbox-verbs="">
+              {verbsOf(item, true)}
+            </div>
+          </>
+        ),
+      };
+    },
+    [observation, nameOf, subjects, verbsOf, light, onIssueHover, onSelect],
+  );
 
-  const rows: RulingRow[] = [
-    ...groups.fix.map(spec),
-    ...groups.set.map(spec),
-    ...groups.check.map(spec),
-    { ...writeSpec, lit: focused === "write" },
-    ...groups.diagnostics.map(spec),
-  ];
+  const baseRows = useMemo(
+    () => [
+      ...groups.fix.map(spec),
+      ...groups.set.map(spec),
+      ...groups.check.map(spec),
+      inboxWriteRows(write).writeSpec,
+      ...groups.diagnostics.map(spec),
+    ],
+    [groups, spec, write],
+  );
+  const rows = useMemo(() => {
+    const lit = new Set(
+      [...groups.fix, ...groups.set, ...groups.check, ...groups.diagnostics]
+        .filter((item) => selected != null && item.ids.includes(selected))
+        .map((item) => item.key),
+    );
+    if (focused) lit.add(focused);
+    return baseRows.map((row) => (lit.has(row.key) ? { ...row, lit: true } : row));
+  }, [baseRows, groups, selected, focused]);
   return (
     <>
       <div
@@ -537,29 +573,38 @@ function RulingsList({
     reveal.current = null;
     list.reveal(key);
   });
+  const row = useCallback(
+    ({ key, actions, detail: _detail, title: _title, ...parts }: RulingRow): ListRowParts => ({
+      ...parts,
+      active: key === hoveredIssue,
+      actions: actions?.(),
+    }),
+    [hoveredIssue],
+  );
+  const opened = useRef(list.state.open);
+  opened.current = list.state.open;
+  const detail = useCallback(
+    (row: RulingRow) =>
+      row.detail ? (
+        <div
+          data-inbox-detail={row.key}
+          className="px-4 py-1 flex flex-col gap-1.5"
+          onMouseEnter={row.onMouseEnter}
+          onMouseLeave={row.onMouseLeave}
+          onMouseMove={row.onMouseMove}
+        >
+          {opened.current.includes(row.key) ? row.detail() : null}
+        </div>
+      ) : null,
+    [],
+  );
   return (
     <ListView
       aria-label="rulings"
       list={list}
       // `title` is the sort text, not a hint: the row hints only what it cuts short.
-      row={({ key, actions, detail: _detail, title: _title, ...parts }) => ({
-        ...parts,
-        active: key === hoveredIssue,
-        actions: actions?.(),
-      })}
-      detail={(row) =>
-        row.detail ? (
-          <div
-            data-inbox-detail={row.key}
-            className="px-4 py-1 flex flex-col gap-1.5"
-            onMouseEnter={row.onMouseEnter}
-            onMouseLeave={row.onMouseLeave}
-            onMouseMove={row.onMouseMove}
-          >
-            {list.state.open.includes(row.key) ? row.detail() : null}
-          </div>
-        ) : null
-      }
+      row={row}
+      detail={detail}
       empty={{ message: "Nothing to rule on", exit: "Stage a change or ask Pea" }}
     />
   );

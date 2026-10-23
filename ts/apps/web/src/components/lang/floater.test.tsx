@@ -1,12 +1,15 @@
 // @vitest-environment jsdom
-import { cleanup, fireEvent, render } from "@testing-library/react";
+import { act, cleanup, fireEvent, render } from "@testing-library/react";
 import { afterEach, expect, test, vi } from "vite-plus/test";
 
 import { createLiveOrbit } from "#/scene/live-orbit";
 import { Floater, type FloaterSpec } from "./floater";
 import { OrbitMinimap, type OrbitViewport } from "./minimap";
 
-afterEach(cleanup);
+afterEach(() => {
+  cleanup();
+  vi.unstubAllGlobals();
+});
 
 const viewport: OrbitViewport = { kind: "orbit", yaw: 30, elev: 30, zoom: 1, pivot: [0, 0, 0] };
 const pointer = (el: Element, type: string, x: number, y: number) =>
@@ -51,15 +54,37 @@ test("a floater without size slides and resizes from the content box at gesture 
   pointer(grip, "pointerup", 400, 90);
   expect(floater.style.translate).toBe("0 80px");
 
-  // Content can arrive after mounting. The cap keeps the first measured default on later drags.
+  // Content can arrive after mounting. Its first measured box still obeys the field's caps.
   rect.mockReturnValue(new DOMRect(100, 10, 490, 500));
   pointer(resize, "pointerdown", 100, 510);
   pointer(resize, "pointermove", 90, 520);
   pointer(resize, "pointerup", 90, 520);
-  expect([floater.style.width, floater.style.height]).toEqual(["490px", "500px"]);
+  expect([floater.style.width, floater.style.height]).toEqual(["240px", "420px"]);
   expect(floater.style.getPropertyValue("--floater-content-w")).toBe("100%");
   expect(orbit.read()).toEqual(viewport);
   expect(outerPointer).not.toHaveBeenCalled();
+});
+
+test("shrinking a navigation field caps its floaters and restores their preferred size on growth", () => {
+  const observers: (() => void)[] = [];
+  vi.stubGlobal(
+    "ResizeObserver",
+    class {
+      constructor(callback: () => void) {
+        observers.push(callback);
+      }
+      observe() {}
+      disconnect() {}
+    },
+  );
+  const { floater } = setup({ width: 230, height: 230 });
+  const field = vi.spyOn(floater.parentElement!, "getBoundingClientRect");
+  field.mockReturnValue(new DOMRect(0, 0, 280, 500));
+  act(() => observers.forEach((run) => run()));
+  expect([floater.style.width, floater.style.height]).toEqual(["112px", "112px"]);
+  field.mockReturnValue(new DOMRect(0, 0, 600, 600));
+  act(() => observers.forEach((run) => run()));
+  expect([floater.style.width, floater.style.height]).toEqual(["230px", "230px"]);
 });
 
 test("explicit sizes keep responsive caps and resize handles leave globe orbit dragging intact", () => {
@@ -67,7 +92,7 @@ test("explicit sizes keep responsive caps and resize handles leave globe orbit d
   pointer(resize, "pointerdown", 360, 240);
   pointer(resize, "pointermove", -1000, 1000);
   pointer(resize, "pointerup", -1000, 1000);
-  expect([floater.style.width, floater.style.height]).toEqual(["360px", "420px"]);
+  expect([floater.style.width, floater.style.height]).toEqual(["240px", "420px"]);
   expect(onViewport).not.toHaveBeenCalled();
   const globe = view.getByRole("group", { name: "orbit globe" });
   pointer(globe, "pointerdown", 400, 100);

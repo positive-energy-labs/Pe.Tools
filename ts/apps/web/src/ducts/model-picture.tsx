@@ -84,9 +84,12 @@ export function subjectPose(
   bounds: PictureBounds,
   target: Bounds,
   now: OrbitViewport | null,
+  aspect = 1,
 ): OrbitViewport {
-  const to = frame(bounds.scene, inContext(target), now ?? undefined);
-  return now && now.zoom > to.zoom / 1.6 && now.zoom < to.zoom * 1.6 ? { ...to, zoom: now.zoom } : to;
+  const to = frame(bounds.scene, inContext(target), now ?? undefined, aspect);
+  return now && now.zoom > to.zoom / 1.6 && now.zoom < to.zoom * 1.6
+    ? { ...to, zoom: now.zoom }
+    : to;
 }
 
 const overlap = (a: DOMRect, b: DOMRect) =>
@@ -127,13 +130,20 @@ export function clearPose(
   const xs = points.map((p) => p[0]),
     ys = points.map((p) => p[1]);
   const [w, h] = [Math.max(...xs) - Math.min(...xs), Math.max(...ys) - Math.min(...ys)];
-  const [cx, cy] = [(Math.max(...xs) + Math.min(...xs)) / 2, (Math.max(...ys) + Math.min(...ys)) / 2];
+  const [cx, cy] = [
+    (Math.max(...xs) + Math.min(...xs)) / 2,
+    (Math.max(...ys) + Math.min(...ys)) / 2,
+  ];
   const best = ANCHORS.flatMap((fx) => ANCHORS.map((fy) => [fx * at.width, fy * at.height]))
     .map(([x, y]) => {
       const box = new DOMRect(at.left + x! - w / 2, at.top + y! - h / 2, w, h);
       const covered = blocks.reduce((sum, b) => sum + overlap(box, b), 0);
       const outside = w * h - overlap(box, at);
-      return { x: x!, y: y!, cost: (covered + outside) * 1e3 + Math.hypot(x! - at.width / 2, y! - at.height / 2) };
+      return {
+        x: x!,
+        y: y!,
+        cost: (covered + outside) * 1e3 + Math.hypot(x! - at.width / 2, y! - at.height / 2),
+      };
     })
     .reduce((a, b) => (b.cost < a.cost ? b : a));
   return shiftOnScreen(view, scene, at.height, best.x - cx, best.y - cy);
@@ -156,8 +166,13 @@ export function usePictureBounds(meshes: SceneMeshes | null, scene: Scene): Pict
 export const poseOf = (
   viewport: DuctsPage["viewport"],
   bounds: PictureBounds | null,
+  size?: Size | null,
 ): OrbitViewport | null =>
-  viewport?.kind === "orbit" ? viewport : bounds ? frame(bounds.scene, bounds.subject) : null;
+  viewport?.kind === "orbit"
+    ? viewport
+    : bounds
+      ? frame(bounds.scene, bounds.subject, undefined, size ? size.width / size.height : 1)
+      : null;
 
 export function ModelPicture({
   read,
@@ -289,7 +304,7 @@ export function ModelPicture({
     if (viewport) return flyTo(orbit, viewport, { scene: bounds?.scene });
     // Fit can already be the saved Page value while a live gesture has moved away from it: fly to
     // it, then Page's fit (null) is the one entry, not the fit's coordinates.
-    const fit = poseOf(null, bounds);
+    const fit = poseOf(null, bounds, size);
     if (fit)
       flyTo(orbit, fit, {
         history: null,
@@ -312,8 +327,10 @@ export function ModelPicture({
     if (!bounds) return;
     const target = key && meshes ? boundsOfInstances(meshes, (i) => i.key === key) : null;
     if (!target) return move(null);
-    const view = subjectPose(bounds, target, orbit.read());
-    flyTo(orbit, host ? clearPose(view, target, bounds.scene, host) : view, { scene: bounds.scene });
+    const view = subjectPose(bounds, target, orbit.read(), size ? size.width / size.height : 1);
+    flyTo(orbit, host ? clearPose(view, target, bounds.scene, host) : view, {
+      scene: bounds.scene,
+    });
   };
 
   useScopeGestures(ORBIT_GESTURES);
@@ -326,7 +343,7 @@ export function ModelPicture({
         if (!selected.size) return move(null);
         const target = boundsOfIds(meshes, scene, selected);
         if (!bounds || !target) return setSaid("the selection is not in the picture");
-        const view = subjectPose(bounds, target, orbit.read());
+        const view = subjectPose(bounds, target, orbit.read(), size ? size.width / size.height : 1);
         move(host ? clearPose(view, target, bounds.scene, host) : view);
       },
     },
@@ -442,7 +459,9 @@ export function ModelPicture({
               pointOf={pointOf}
               issue={issue}
               onPick={onPick}
-              onFrame={(id) => frameAt(meshes?.instances.find((i) => i.revitId === id)?.key ?? null)}
+              onFrame={(id) =>
+                frameAt(meshes?.instances.find((i) => i.revitId === id)?.key ?? null)
+              }
               onRuling={onRuling}
               onHover={onHover}
             />

@@ -15,6 +15,27 @@ import {
 } from "./orbit";
 
 const bounds = { minX: 100, minY: 200, minZ: 0, maxX: 140, maxY: 230, maxZ: 12 };
+it("a system fit contains every corner in portrait and landscape navigation panes", () => {
+  for (const size of [
+    { width: 280, height: 845 },
+    { width: 1400, height: 800 },
+  ]) {
+    const project = viewportProject(
+      frame(bounds, bounds, undefined, size.width / size.height),
+      bounds,
+      size,
+    );
+    for (const x of [bounds.minX, bounds.maxX])
+      for (const y of [bounds.minY, bounds.maxY])
+        for (const z of [bounds.minZ, bounds.maxZ]) {
+          const p = project([x, y, z])!;
+          expect(p[0]).toBeGreaterThanOrEqual(0);
+          expect(p[0]).toBeLessThanOrEqual(size.width);
+          expect(p[1]).toBeGreaterThanOrEqual(0);
+          expect(p[1]).toBeLessThanOrEqual(size.height);
+        }
+  }
+});
 const controlsOf = (pose: ReturnType<typeof toCamera>) => {
   const xyz = ([x, y, z]: number[]) => ({ x: x!, y: y!, z: z! });
   return { object: { position: xyz(pose.position) }, target: xyz(pose.target) };
@@ -118,8 +139,18 @@ describe("frame and looks", () => {
 it("a view shifted on screen puts the old centre dx right and dy down, in the same orientation", () => {
   const scene = { minX: -50, maxX: 50, minY: -50, maxY: 50, minZ: 0, maxZ: 20 };
   const size = { width: 800, height: 600 };
-  for (const [yaw, elev] of [[-45, 35], [120, 60], [10, 89]] as const) {
-    const v = { kind: "orbit" as const, yaw, elev, zoom: 3, pivot: [5, -7, 4] as [number, number, number] };
+  for (const [yaw, elev] of [
+    [-45, 35],
+    [120, 60],
+    [10, 89],
+  ] as const) {
+    const v = {
+      kind: "orbit" as const,
+      yaw,
+      elev,
+      zoom: 3,
+      pivot: [5, -7, 4] as [number, number, number],
+    };
     const moved = shiftOnScreen(v, scene, size.height, 120, -80);
     expect([moved.yaw, moved.elev, moved.zoom]).toEqual([v.yaw, v.elev, v.zoom]);
     const at = viewportProject(moved, scene, size)(v.pivot)!;

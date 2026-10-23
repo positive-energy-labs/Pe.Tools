@@ -221,8 +221,12 @@ export function OrbitMinimap({
   paint?: (project: (p: readonly number[]) => [number, number]) => ReactNode;
   stops?: "globe";
 }) {
-  const viewport = useSyncExternalStore(orbit.subscribe, orbit.read);
-  const { yaw, elev } = viewport ?? { yaw: 0, elev: 0 };
+  // Alias flights change pivot and zoom, neither of which changes this orientation picture.
+  const orientation = useSyncExternalStore(orbit.subscribe, () => {
+    const pose = orbit.read();
+    return pose ? `${pose.yaw.toFixed(3)},${pose.elev.toFixed(3)}` : "0,0";
+  });
+  const [yaw = 0, elev = 0] = orientation.split(",").map(Number);
   const pressed = useRef<{
     x: number;
     y: number;
@@ -298,6 +302,7 @@ export function OrbitMinimap({
           opacity={front ? 1 : 0.35}
           onClick={() => {
             if (below || pressed.current?.moved) return;
+            const viewport = orbit.read();
             if (viewport) orbit.move({ ...viewport, yaw: stop.rel ?? yaw, elev: stop.elev });
           }}
         >

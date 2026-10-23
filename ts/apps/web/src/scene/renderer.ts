@@ -482,9 +482,11 @@ export function createRenderer(mount: HTMLElement, meshes: SceneMeshes, wheelHos
     if (ground.getHSL({ h: 0, s: 0, l: 0 }).l > 0.5) focusTint.lerp(ground, 0.35);
     contextTint.copy(inkOf("ink-mute", mount)).lerp(ground, 0.5);
     renderer.setClearColor(ground);
-    byId.forEach((instance, id) =>
-      colors[id]!.copy(instance.focus || MEP.test(instance.category) ? focusTint : contextTint),
-    );
+    byId.forEach((instance, id) => {
+      colors[id]!.copy(instance.focus || MEP.test(instance.category) ? focusTint : contextTint);
+      batch.setColorAt(id, colors[id]!);
+    });
+    marked.clear();
     thumbsStale = true;
     paintNow(...painted);
   });

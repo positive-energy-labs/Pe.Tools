@@ -1,11 +1,34 @@
 import { createLiveOrbit } from "#/scene/live-orbit";
 // @vitest-environment jsdom
-import { cleanup, fireEvent, render } from "@testing-library/react";
+import { act, cleanup, fireEvent, render } from "@testing-library/react";
+import { Profiler } from "react";
 import { afterEach, expect, test, vi } from "vite-plus/test";
 
 import { OrbitMinimap, PlaneMinimap, type OrbitViewport } from "./minimap";
 
 afterEach(cleanup);
+
+test("an alias pan/zoom flight does not render the globe, and a stop uses the latest pose", () => {
+  const viewport: OrbitViewport = { kind: "orbit", yaw: 30, elev: 30, zoom: 1, pivot: [0, 0, 0] };
+  const orbit = createLiveOrbit(viewport, vi.fn());
+  const renderGlobe = vi.fn();
+  const view = render(
+    <Profiler id="globe" onRender={renderGlobe}>
+      <OrbitMinimap orbit={orbit} />
+    </Profiler>,
+  );
+  renderGlobe.mockClear();
+  const token = orbit.begin();
+  const next: OrbitViewport = { ...viewport, zoom: 3, pivot: [10, 20, 0] };
+  act(() => {
+    orbit.preview(token, { ...next, zoom: 2 });
+    orbit.preview(token, next);
+  });
+  expect(renderGlobe).not.toHaveBeenCalled();
+  fireEvent.click(view.container.querySelector('[data-orbit-stop="90/45"]')!);
+  expect(orbit.read()).toEqual({ ...next, yaw: 90, elev: 45 });
+  expect(renderGlobe).toHaveBeenCalledTimes(1);
+});
 
 test("globe preview uses total displacement before a prop echo and commits only on release", () => {
   const onViewport = vi.fn();

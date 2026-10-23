@@ -133,7 +133,7 @@ function useYield(ref: RefObject<HTMLDivElement | null>, place: Corner) {
 
 const MIN = { width: 64, height: 40 };
 /** Responsive caps: a share of the field, including when its pane shrinks after a resize. */
-const CAP = { width: 0.6, height: 0.7 };
+const CAP = { width: 0.4, height: 0.7 };
 const clamp = (v: number, lo: number, hi: number) => Math.max(lo, Math.min(hi, v));
 const CURSOR = { tl: "nwse", br: "nwse", tr: "nesw", bl: "nesw" } as const;
 const HANDLE = {
@@ -183,10 +183,13 @@ export function Floater({ spec }: { spec: FloaterSpec }) {
     const own = ref.current;
     const field = own?.parentElement;
     if (!own || !field) return;
-    defaultSize.current ??= own.getBoundingClientRect();
+    const measured = own.getBoundingClientRect();
+    if (measured.width > 0 && measured.height > 0) defaultSize.current ??= measured;
     const measure = () => {
       const { width, height } = field.getBoundingClientRect();
-      setFieldSize((before) => before.width === width && before.height === height ? before : { width, height });
+      setFieldSize((before) =>
+        before.width === width && before.height === height ? before : { width, height },
+      );
     };
     measure();
     if (typeof ResizeObserver === "undefined") return;
@@ -195,9 +198,14 @@ export function Floater({ spec }: { spec: FloaterSpec }) {
     return () => observer.disconnect();
   }, []);
   const preferred = box ?? defaultSize.current;
-  const ratio = preferred && fieldSize.width > 0 && fieldSize.height > 0
-    ? Math.min(1, Math.max(MIN.width, fieldSize.width * CAP.width) / preferred.width, Math.max(MIN.height, fieldSize.height * CAP.height) / preferred.height)
-    : 1;
+  const ratio =
+    preferred && fieldSize.width > 0 && fieldSize.height > 0
+      ? Math.min(
+          1,
+          Math.max(MIN.width, fieldSize.width * CAP.width) / preferred.width,
+          Math.max(MIN.height, fieldSize.height * CAP.height) / preferred.height,
+        )
+      : 1;
   const shown = preferred && { width: preferred.width * ratio, height: preferred.height * ratio };
   const gutter = () => parseFloat(getComputedStyle(ref.current!).getPropertyValue("--gutter")) || 0;
   const startSlide = useRef(0);
@@ -209,18 +217,11 @@ export function Floater({ spec }: { spec: FloaterSpec }) {
     });
   };
   const resizing = (e: ReactPointerEvent<HTMLElement>) => {
-    // Measure at the first resize so content loaded after mount supplies its current size.
-    defaultSize.current ??= ref.current!.getBoundingClientRect();
-    const initial = defaultSize.current;
     const [h, v] = [at.corner[1] === "r" ? -1 : 1, at.corner[0] === "t" ? 1 : -1];
     drag(e, ref.current!, (dx, dy, f, r) =>
       setBox({
-        width: clamp(r.width + h * dx, MIN.width, Math.max(initial.width, f.width * CAP.width)),
-        height: clamp(
-          r.height + v * dy,
-          MIN.height,
-          Math.max(initial.height, f.height * CAP.height),
-        ),
+        width: clamp(r.width + h * dx, MIN.width, Math.max(MIN.width, f.width * CAP.width)),
+        height: clamp(r.height + v * dy, MIN.height, Math.max(MIN.height, f.height * CAP.height)),
       }),
     );
   };

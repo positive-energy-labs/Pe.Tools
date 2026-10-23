@@ -211,7 +211,27 @@ function Canvas({
   ); // eslint-disable-line react-hooks/exhaustive-deps
   const read = useScene(request, native, page.epoch);
   const bounds = usePictureBounds(read.meshes, scene);
-  const committedPose = useMemo(() => poseOf(page.viewport, bounds), [page.viewport, bounds]);
+  const [pictureHost, setPictureHost] = useState<HTMLDivElement | null>(null);
+  const [pictureSize, setPictureSize] = useState<{ width: number; height: number } | null>(null);
+  useEffect(() => {
+    if (!pictureHost) return;
+    const observer = new ResizeObserver(([entry]) => {
+      const { width, height } = entry!.contentRect;
+      setPictureSize((before) =>
+        before?.width === width && before.height === height
+          ? before
+          : width > 0 && height > 0
+            ? { width, height }
+            : null,
+      );
+    });
+    observer.observe(pictureHost);
+    return () => observer.disconnect();
+  }, [pictureHost]);
+  const committedPose = useMemo(
+    () => poseOf(page.viewport, bounds, pictureSize),
+    [page.viewport, bounds, pictureSize],
+  );
   const pose = committedPose;
   // Marks the landing of the next flight `useLiveOrbit` makes to a Page pose (an alias jump).
   const landing = useRef<(() => void) | null>(null);
@@ -236,7 +256,6 @@ function Canvas({
   const byId = useMemo(() => snapshotById(snapshot), [snapshot]);
   const nameOfId = useMemo(() => elementNamer(snapshot, sub), [snapshot, sub]);
   const pointer = useRef({ x: 0, y: 0 });
-  const [pictureHost, setPictureHost] = useState<HTMLDivElement | null>(null);
   // A pick shows in the readout at once; the route hears of it after that paint (below).
   const [shown, setShown] = useState<number | null>(null);
   const [openRuling, setOpenRuling] = useState<number | null>(null);
@@ -471,8 +490,9 @@ function Canvas({
   const viewOf = (ids: ReadonlySet<number>) => {
     const target = bounds && picture === "model" ? boundsOfIds(read.meshes, scene, ids) : null;
     if (!bounds || !target) return null;
-    const view = subjectPose(bounds, target, orbit.read());
     const at = pictureHost?.querySelector("[data-model-picture]");
+    const rect = at?.getBoundingClientRect();
+    const view = subjectPose(bounds, target, orbit.read(), rect ? rect.width / rect.height : 1);
     return at ? clearPose(view, target, bounds.scene, at) : view;
   };
   const markLanding = (ids: ReadonlySet<number>, back: string) => () => {
@@ -536,7 +556,7 @@ function Canvas({
     owed.current = null;
     setLanded(null);
     if (!page.selected) return;
-    if (own?.id === page.selected && performance.now() - own.at < 2000) return;
+    if (own?.id === page.selected) return;
     const crossed = page.system !== was.system && page.viewport === null;
     if (!crossed && page.viewport !== was.viewport) return;
     const from = /^\d+$/.test(was.selected) ? nameOf(Number(was.selected)) : null;
@@ -590,7 +610,10 @@ function Canvas({
     const finding =
       r.kind === "claim" ? `claim:${r.claim.id}` : r.kind === "issue" ? r.issue.id : r.finding.id;
     const issue = issues.find((i) => i.findings.includes(finding))?.key ?? finding;
-    setPage({ selected: String(r.at), issue, rulingSearch: emptyListSearch() }, { history: "push" });
+    setPage(
+      { selected: String(r.at), issue, rulingSearch: emptyListSearch() },
+      { history: "push" },
+    );
     setOpenRuling(r.n);
   };
   const schematic = (size: "main" | "inset") => (
@@ -667,7 +690,7 @@ function Canvas({
               aria-label={`clear the selection in ${systemName}`}
               onClick={() => {
                 setPage({ selected: "" }, { history: "push" });
-                const fit = poseOf(null, bounds);
+                const fit = poseOf(null, bounds, pictureSize);
                 if (fit && picture === "model")
                   flyTo(orbit, fit, {
                     history: null,
@@ -883,9 +906,7 @@ function Canvas({
               ) : nodeFacts ? (
                 <NodeFactsView {...nodeFacts} />
               ) : (
-                <p className="text-ink-2">
-                  element {nameOfId(readId) ?? readId} is not drawn here
-                </p>
+                <p className="text-ink-2">element {nameOfId(readId) ?? readId} is not drawn here</p>
               )}
               <p data-pe-loss={readId}>
                 Pe loss <span className="face-mono">{fmt(index.loss.get(readId), 4)}</span> in-wg ·
@@ -981,7 +1002,6 @@ function Canvas({
           />
           {picture === "model" ? <KeyLegend keys={PICTURE_KEYS} lead={0} /> : null}
         </div>
-
       </div>
     </Pane>
   );

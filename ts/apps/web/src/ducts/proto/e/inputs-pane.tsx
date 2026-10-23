@@ -11,7 +11,7 @@ import type { DuctSnapshot } from "@pe/ducts-domain/types";
 import { useScopeGestures, type ScopeGesture } from "@pe/kit/keys";
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { emptyListState, useList } from "@pe/kit/lang/collection";
-import { ListView } from "@pe/kit/lang/list-view";
+import { ListView, type ListRowParts } from "@pe/kit/lang/list-view";
 import { observedElements, useNativeObservation } from "#/revit/observation";
 
 import { EquipmentCells, TerminalCells, type InputsCtx } from "./input-cells";
@@ -65,7 +65,10 @@ export function InputsPane(props: InputsPaneProps) {
   const observation = useNativeObservation();
   const { snapshot, priced, work, scope, nameOf, selected, select, light } = props;
   const { units, terminals } = useMemo(() => inputRowsOf(snapshot, scope), [snapshot, scope]);
-  const ctx: InputsCtx | null = priced ? { snapshot, priced, work, groups: scope.groups } : null;
+  const ctx = useMemo<InputsCtx | null>(
+    () => (priced ? { snapshot, priced, work, groups: scope.groups } : null),
+    [snapshot, priced, work, scope.groups],
+  );
   // A unit that is a fan reads as one, with its own section's TEL and ESP beside its cells.
   const fans = useMemo(
     () => new Map(fanFacts(priced, scope.groups, nameOf).map((f) => [f.unit, f])),
@@ -117,6 +120,46 @@ export function InputsPane(props: InputsPaneProps) {
     // Reveal through the core only when its filtered rows include the route's selection.
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [selected, list.state.search, list.state.sort]);
+  const row = useCallback(
+    ({ id, kind }: (typeof items)[number]): ListRowParts => {
+      if (!ctx) return { label: nameOf(id) };
+      const target = observedElements(observation, [id]);
+      const fan = kind === "unit" ? fans.get(id) : undefined;
+      return {
+        lines: 2,
+        wrap: true,
+        label: nameOf(id),
+        title: fan ? `${nameOf(id)} · ${fan.role}: ${fan.says}` : nameOf(id),
+        aside: fan?.role ?? kind,
+        sub: (
+          <span
+            className="flex min-w-0 flex-col gap-0.5"
+            onClick={(event) => event.stopPropagation()}
+            onKeyDown={(event) => event.stopPropagation()}
+          >
+            {kind === "unit" ? (
+              <>
+                <EquipmentCells ctx={ctx} id={id} />
+                {fan ? (
+                  <span className="face-mono t-small text-ink-2" data-e-fan-facts={id}>
+                    {fan.says}
+                  </span>
+                ) : null}
+                {props.fanVerbs?.(id) ?? null}
+              </>
+            ) : (
+              <TerminalCells ctx={ctx} id={id} />
+            )}
+          </span>
+        ),
+        onMouseEnter: () => light([id]),
+        onMouseLeave: () => light(null),
+        revitIds: target.ids,
+        revitRefs: target.refs,
+      };
+    },
+    [ctx, observation, fans, nameOf, props.fanVerbs, light],
+  );
   if (!units.length && !terminals.length)
     return <p className="t-small text-ink-2 p-2">no unit or grille in this system</p>;
   if (!ctx)
@@ -136,42 +179,7 @@ export function InputsPane(props: InputsPaneProps) {
           message: "no unit or grille in this system",
           exit: "Choose a system with a unit or grille",
         }}
-        row={({ id, kind }) => {
-          const target = observedElements(observation, [id]);
-          const fan = kind === "unit" ? fans.get(id) : undefined;
-          return {
-            lines: 2,
-            wrap: true,
-            label: nameOf(id),
-            title: fan ? `${nameOf(id)} · ${fan.role}: ${fan.says}` : nameOf(id),
-            aside: fan?.role ?? kind,
-            sub: (
-              <span
-                className="flex min-w-0 flex-col gap-0.5"
-                onClick={(event) => event.stopPropagation()}
-                onKeyDown={(event) => event.stopPropagation()}
-              >
-                {kind === "unit" ? (
-                  <>
-                    <EquipmentCells ctx={ctx} id={id} />
-                    {fan ? (
-                      <span className="face-mono t-small text-ink-2" data-e-fan-facts={id}>
-                        {fan.says}
-                      </span>
-                    ) : null}
-                    {props.fanVerbs?.(id) ?? null}
-                  </>
-                ) : (
-                  <TerminalCells ctx={ctx} id={id} />
-                )}
-              </span>
-            ),
-            onMouseEnter: () => light([id]),
-            onMouseLeave: () => light(null),
-            revitIds: target.ids,
-            revitRefs: target.refs,
-          };
-        }}
+        row={row}
       />
     </div>
   );

@@ -40,10 +40,11 @@ export const center = (b: Bounds): Vec3 => [
   (b.minZ + b.maxZ) / 2,
 ];
 
-/** Camera distance at zoom 1: the bounds' sphere fills the vertical field of view. */
-export function fitDistance(b: Bounds) {
+/** Fit the bounds' sphere inside the smaller field of view, including portrait panes. */
+export function fitDistance(b: Bounds, aspect = 1) {
   const radius = Math.max(Math.hypot(b.maxX - b.minX, b.maxY - b.minY, b.maxZ - b.minZ) / 2, 0.5);
-  return radius / Math.sin((ORBIT_FOV / 2) * RAD);
+  const half = Math.atan(Math.tan((ORBIT_FOV / 2) * RAD) * Math.min(1, Math.max(aspect, 0.001)));
+  return radius / Math.sin(half);
 }
 
 export function toCamera(v: OrbitViewport, bounds: Bounds): { position: Vec3; target: Vec3 } {
@@ -99,12 +100,13 @@ export function frame(
   scene: Bounds,
   target: Bounds = scene,
   from: Pick<OrbitViewport, "yaw" | "elev"> = FIT_FROM,
+  aspect = 1,
 ): OrbitViewport {
   return {
     kind: "orbit",
     yaw: from.yaw,
     elev: from.elev,
-    zoom: fitDistance(scene) / fitDistance(target),
+    zoom: fitDistance(scene) / fitDistance(target, aspect),
     pivot: center(target),
   };
 }
