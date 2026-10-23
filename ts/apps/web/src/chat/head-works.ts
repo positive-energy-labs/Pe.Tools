@@ -99,21 +99,18 @@ export function useHeadWorks(
     const doc = work.doc as Doc | null;
     if (!doc || !publicRoutes.get(route)) return [];
     const key = keyOf(manifest, address, document);
-    const place = capturedPlace(route, key, doc);
-    const open = (plan: boolean, focus?: readonly string[]) => {
-      const refusal = focus?.length
-        ? "This group path did not record a route subject; open the route and choose its subject."
-        : place.ok
-          ? null
-          : place.refusal;
-      if (refusal) {
-        setOpenRefusal({ route, message: refusal });
+    const place = capturedPlace(route, key, doc, undefined, false);
+    // A review names a cell: the route's own page fields for it land on its place; a route that
+    // declares none opens as before.
+    const open = (plan: boolean, at?: Record<string, string>) => {
+      if (!place.ok) {
+        setOpenRefusal({ route, message: place.refusal });
         return;
       }
-      if (!place.ok) return;
       setOpenRefusal(null);
       if (plan) exits.planIn(place);
-      else exits.open(place);
+      else
+        exits.open(at ? { ...place, page: { ...place.page, ...at } as typeof place.page } : place);
     };
     return heads.flatMap((head: Cells<Doc>): HeadWork[] => {
       const cells = (
@@ -139,6 +136,7 @@ export function useHeadWorks(
             },
           },
           groupOf: head.groupOf,
+          ...(head.label ? { label: head.label } : {}),
           ...(head.show ? { show: head.show } : {}),
           stale: work.stale,
           conflict: conflicts.has(route),
@@ -149,7 +147,7 @@ export function useHeadWorks(
           commit: plan
             ? { word: "apply", run: () => open(true) }
             : { word: "open", run: () => open(false) },
-          open: (focus) => open(false, focus),
+          open: (cell) => open(false, cell && head.focus ? head.focus(cell) : undefined),
           // A planned Work commits whole: all its cells are one head line (F-B-4).
           ...(plan ? { line: `${route}:${JSON.stringify(key)}` } : {}),
           ...(exits.planRefusal?.route === route ? { refusal: exits.planRefusal.message } : {}),

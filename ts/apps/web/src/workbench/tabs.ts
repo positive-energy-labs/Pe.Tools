@@ -344,6 +344,8 @@ export function useRouteTabs() {
     page?: LinkPage<R>,
     explicit?: Pick<Carry, "target" | "work">,
     duplicate = false,
+    /** Land `page` on the route's open tab without resetting the fields it does not name. */
+    keep = false,
   ) => {
     const epoch = ++navigationEpoch.current;
     const sourcePath = router.state.location.pathname;
@@ -369,11 +371,21 @@ export function useRouteTabs() {
       const nextLink =
         page === undefined && explicit === undefined && existing
           ? existing.link
-          : routeAddress(targetRoute).link(page, {
-              target:
-                explicit?.target ?? carry.target ?? (pinned ? JSON.stringify(pinned) : undefined),
-              work: explicit?.work ?? carry.work,
-            });
+          : routeAddress(targetRoute).link(
+              keep && existing
+                ? ({
+                    ...routeAddress(targetRoute).read(
+                      Object.fromEntries(new URL(existing.link, "http://tab").searchParams),
+                    ).page,
+                    ...page,
+                  } as LinkPage<R>)
+                : page,
+              {
+                target:
+                  explicit?.target ?? carry.target ?? (pinned ? JSON.stringify(pinned) : undefined),
+                work: explicit?.work ?? carry.work,
+              },
+            );
       const canonical = routeAddress(targetRoute).tab(nextLink);
       if (!canonical.ok) throw Error(canonical.error);
       const id = existing ? existing.id : crypto.randomUUID();

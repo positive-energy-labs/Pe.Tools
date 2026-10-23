@@ -4,7 +4,8 @@ import { afterEach, expect, test, vi } from "vite-plus/test";
 
 import type { ActionHandle } from "#/route/handle";
 
-import type { CellRef, InboxItem } from "../../inbox-rows";
+import { focusRow, type CellRef, type InboxItem } from "../../inbox-rows";
+import { manifest } from "../../manifest";
 import type { ReviewLine } from "../../write-review";
 import { Inbox } from "./inbox";
 
@@ -34,6 +35,8 @@ function mount(
     store?: Parameters<typeof Inbox>[0]["work"]["store"];
     fanRefusal?: string | null;
     selected?: number | null;
+    focused?: string | null;
+    check?: InboxItem[];
     diagnostic?: { kind: string; pick: (kind: string) => void };
   } = {},
 ) {
@@ -113,7 +116,7 @@ function mount(
         ],
       }),
     ],
-    check: [],
+    check: over.check ?? [],
     diagnostics: [
       item({ key: "d1", group: "diagnostics", title: "near join", status: "near-miss" }),
     ],
@@ -143,6 +146,7 @@ function mount(
       heal={heal}
       fan={fan}
       selected={over.selected ?? null}
+      focused={over.focused ?? null}
       diagnostic={over.diagnostic ?? { kind: "", pick: () => {} }}
     />,
   );
@@ -243,4 +247,62 @@ test("taking back a stored ignore stages a delete over it", () => {
   expect(write).toHaveBeenCalledWith([
     { path: ["assumptions", "open-end:2:1", "staged"], value: { delete: true } },
   ]);
+});
+
+// The chat head's "→ review" on a staged cell: the cell family's `focus` writes `issue`, the screen
+// resolves it with `focusRow` against the inbox's rows, and the Inbox opens and selects that row.
+const reviewPage = (segment: string, key: string) => {
+  const family = manifest.cells!.find((one) => one.segment === segment)!;
+  return family.focus!(key);
+};
+const rowKeysOf = (over: NonNullable<Parameters<typeof mount>[0]>) =>
+  new Set([
+    "heal:g1",
+    "f1",
+    "flows:30",
+    "d1",
+    ...(over.set ?? []).map((i) => i.key),
+    ...(over.check ?? []).map((i) => i.key),
+  ]);
+
+test("review on a staged rule with no row of its own lands on the Write row", () => {
+  const { issue } = reviewPage("rules", "elbow-1d-le10") as { issue: string };
+  const focused = focusRow(issue, rowKeysOf({}));
+  expect(focused).toBe("write");
+  const { container } = mount({ focused });
+  const row = container.querySelector('[data-key="write"]') as HTMLElement;
+  expect(row.hasAttribute("data-selected")).toBe(true);
+  expect(container.querySelectorAll("[data-selected]")).toHaveLength(1);
+});
+
+test("review on a proposed rule lands on that cell's own row, opened", () => {
+  const check = [
+    item({
+      key: "rules:elbow-1d-le10",
+      group: "check",
+      kind: "proposal",
+      title: "Rule · Round Elbow : 1 D",
+      verbs: [],
+    }),
+  ];
+  const { issue } = reviewPage("rules", "elbow-1d-le10") as { issue: string };
+  const focused = focusRow(issue, rowKeysOf({ check }));
+  expect(focused).toBe("rules:elbow-1d-le10");
+  const { container } = mount({ focused, check });
+  const row = container.querySelector('[data-key="rules:elbow-1d-le10"]') as HTMLElement;
+  expect(row.hasAttribute("data-selected")).toBe(true);
+  expect(container.querySelector('[data-inbox-detail="rules:elbow-1d-le10"]')).not.toBeNull();
+});
+
+test("an issue id that names no Work cell lands nowhere extra", () => {
+  expect(focusRow("open-end:2:1", new Set(["f1"]))).toBeNull();
+  expect(focusRow("", new Set(["f1"]))).toBeNull();
+  // A staged verdict's cell is keyed by its issue id; its row is the issue's own.
+  expect(focusRow("assumptions:open-end:2:1", new Set(["open-end:2:1"]))).toBe("open-end:2:1");
+});
+
+test("a loss-rule group reads as its family, type and condition", () => {
+  const family = manifest.cells!.find((one) => one.segment === "rules")!;
+  expect(family.label!("elbow-1d-le10")).toBe("Round Elbow 1 D · D ≤ 10 in");
+  expect(family.label!("not-a-rule")).toBe("not-a-rule");
 });

@@ -18,6 +18,7 @@ internal static class PeRoutes {
             public const string Layers = "layers";
             public const string Picture = "picture";
             public const string Viewport = "viewport";
+            public const string Issue = "issue";
         }
     }
 

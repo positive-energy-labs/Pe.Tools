@@ -90,6 +90,8 @@
   --motion-blink: 1.1s;
   --motion-sheen: 2.4s;
   --motion-pulse: 2s;
+  /* A row a link landed on: one emphasis pulse that settles to the selected state. */
+  --motion-land: 1.4s;
   --pattern-caution-hatch: repeating-linear-gradient(
     -45deg,
     color-mix(in srgb, var(--pe-ink) 40%, transparent) 0 2px,

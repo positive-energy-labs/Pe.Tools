@@ -63,13 +63,19 @@ export function capturedPlace(
   scope: WorkKey | null,
   source: unknown,
   named?: DocumentRequest,
+  /**
+   * False for the head's read of live Work: Ducts' Work is document-owned and holds no system (the
+   * system is Page state), so the head opens the route and keeps the system the person chose. A
+   * recorded Pea call still names an exact system or is refused.
+   */
+  subject = true,
 ): CapturedPlace {
   const key = routeOf(route);
   if (!key) return { ok: false, refusal: `This route has no saved Place contract: ${route}` };
   if (!scope)
     return { ok: false, refusal: "This reading did not record its Work or document target." };
   const input = isRecord(source) ? source : {};
-  if (key === "ducts" && (typeof input.system !== "string" || !input.system.trim()))
+  if (subject && key === "ducts" && (typeof input.system !== "string" || !input.system.trim()))
     return {
       ok: false,
       refusal:

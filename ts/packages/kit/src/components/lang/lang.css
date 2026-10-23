@@ -159,7 +159,29 @@ tr.dl-row[data-active] {
   background-color: var(--pe-select);
   --pe-on: var(--pe-select);
 }
-tr.dl-row[data-active]::before {
+tr/* Landed: a row that becomes selected (a link, a pick) draws a full-ink outline once, then settles
+   to the plain selected fill. Fill and ink only; reduced motion keeps just the settled state. */
+@keyframes pe-land {
+  from {
+    outline-color: var(--pe-ink);
+    background-color: color-mix(in srgb, var(--pe-ink) 22%, var(--pe-select));
+  }
+  to {
+    outline-color: transparent;
+    background-color: var(--pe-select);
+  }
+}
+[data-inbox-group] .dl-row[data-selected] {
+  outline: 2px solid transparent;
+  outline-offset: -2px;
+  animation: pe-land var(--motion-land) ease-out 1;
+}
+@media (prefers-reduced-motion: reduce) {
+  [data-inbox-group] .dl-row[data-selected] {
+    animation: none;
+  }
+}
+.dl-row[data-active]::before {
   content: none;
 }
 .dl-row[data-lines="2"] {

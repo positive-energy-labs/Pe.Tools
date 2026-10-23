@@ -46,6 +46,8 @@ export function createChatPageStore(deps: {
       route: R,
       page?: LinkPage<R>,
       carry?: Pick<Carry, "target" | "work">,
+      duplicate?: boolean,
+      keep?: boolean,
     ) => Promise<boolean>;
   } | null = null;
   const drafts = new Map<string, ThreadTab[]>();
@@ -144,11 +146,12 @@ export function createChatPageStore(deps: {
         route: R,
         page?: LinkPage<R>,
         carry?: Pick<Carry, "target" | "work">,
+        keep = false,
       ) => {
         planGeneration++;
         deps.registry.set(planIntent, null);
         set("open", planRefusal, null);
-        return tabs?.open(route, page, carry) ?? Promise.resolve(false);
+        return tabs?.open(route, page, carry, false, keep) ?? Promise.resolve(false);
       },
       /**
        * The head's commit verb (K3): open the route's pane UNSCOPED (plan consumes the whole staged

@@ -270,3 +270,7 @@ export const isPlainDamper = (family: string | null) =>
   family != null && /damper/i.test(family) && !/fire|smoke|combination/i.test(family);
 
 export const ruleByKey = (key: string) => LOSS_RULES.find((r) => r.key === key);
+
+/** A rule in the person's words: "Round Elbow 1 D · D ≤ 10 in" (family, type, condition). */
+export const ruleWords = (rule: Pick<LossRule, "family" | "type" | "cond">) =>
+  `${rule.family} ${rule.type} · ${rule.cond.replace("<=", "≤").replace(">=", "≥")}`;

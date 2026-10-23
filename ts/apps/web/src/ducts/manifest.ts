@@ -23,6 +23,7 @@ import {
   type RouteStatePatch,
 } from "@pe/agent-contracts";
 
+import type { Cells } from "#/route/cells";
 import { defineRoute, semanticActionInput, type Ctx } from "#/route/manifest";
 import { refuse } from "#/route/refusal";
 import { NATIVE_APPLY_WAIT_S } from "#/route/waits";
@@ -35,8 +36,9 @@ import {
 import type { DuctsApply, DuctsAssignFan, DuctsHeal } from "@pe/host-contracts/generated";
 import { EMPTY_CATALOGS, type Catalogs } from "@pe/ducts-domain/catalog";
 import type { Grids } from "@pe/ducts-domain/loss-grid";
-import { ruleByKey } from "@pe/ducts-domain/loss-rules";
+import { ruleByKey, ruleWords } from "@pe/ducts-domain/loss-rules";
 import { applyRequest, price } from "@pe/ducts-domain/pricing";
+import { cellFocus } from "./inbox-rows";
 import { pendingRulings, withStoredRulings } from "@pe/ducts-domain/rulings";
 import type { DuctSnapshot } from "@pe/ducts-domain/types";
 import { espBefore, fanOf, healOf, healTarget, offeredFan } from "@pe/ducts-domain/action-targets";
@@ -376,6 +378,28 @@ const why = (run: () => unknown) => {
   const tried = attempt(run);
   return "no" in tried ? tried.no : null;
 };
+
+/**
+ * Every keyed Work cell family lands a chat review on its own inbox row (`cellFocus`), and a loss
+ * rule's group reads as its family, type and condition rather than its key.
+ */
+const ductCells = (families: Cells<DuctsRouteDocument>[]): Cells<DuctsRouteDocument>[] =>
+  families.map((family) => {
+    const { segment } = family;
+    if (segment === null) return family;
+    return {
+      ...family,
+      focus: (key) => ({ issue: cellFocus(segment, key) }),
+      ...(segment === "rules"
+        ? {
+            label: (group) => {
+              const rule = ruleByKey(group);
+              return rule ? ruleWords(rule) : group;
+            },
+          }
+        : {}),
+    };
+  });
 const none = z.void() as unknown as z.ZodType<never>;
 
 export const manifest = defineRoute<
@@ -389,7 +413,7 @@ export const manifest = defineRoute<
   docs: ductsDocs,
   needs: "project",
   work: ductsRouteState,
-  cells: [
+  cells: ductCells([
     {
       segment: "calculation",
       groupOf: (key) => [key],
@@ -483,7 +507,7 @@ export const manifest = defineRoute<
       noun: "parameter slots",
       show: (value) => String(value),
     },
-  ],
+  ]),
   // Both are host reads the route owns (`host.ts`) and provides to the verbs: the snapshot keyed on
   // target, subject, slots and epoch; the tables on the session.
   readings: { ducts: () => null, tables: () => null, catalogs: () => null },

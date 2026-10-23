@@ -39,8 +39,13 @@ const ductsFields = {
     { url: "replace", agent: "set" },
     fitViewportCodec<Viewport>(),
   ),
-  /** The selected issue id (it may name no element); empty = none. Pea's, never the URL's. */
-  issue: field(text(), { agent: "set" }),
+  /**
+   * The selected inbox row: an issue id (it may name no element), or `<segment>:<cell key>` for a
+   * Work cell; empty = none. Exception to "Pea's, never the URL's": the chat head's review link is
+   * an address (`LinkPage` carries URL keys only) and must land on a cell's row. `replace`, so a
+   * row pick never fills history; the issue-id half still resets whenever the selection moves.
+   */
+  issue: field(text(), { url: "replace", agent: "set" }),
   /** The Diagnostics kind picked in its key; empty = none. Pea reads it; only the person sets it. */
   diagnostic: field(text(), { agent: "read" }),
 };

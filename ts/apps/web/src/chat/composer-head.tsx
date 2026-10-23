@@ -443,7 +443,8 @@ export function ComposerWork({ situation }: { situation: ChatSituation }) {
     documentAddress(inventory, bound),
     ladder.docWord ?? "document",
     {
-      open: (place) => void store.actions.openTab(place.route, place.page, place.carry),
+      // keep: a review lands on the open tab without resetting the system the person chose.
+      open: (place) => void store.actions.openTab(place.route, place.page, place.carry, true),
       planIn: (place) => store.actions.planIn(place.route, place.page, place.carry),
       planRefusal: useAtomValue(store.atoms.planRefusal),
     },
