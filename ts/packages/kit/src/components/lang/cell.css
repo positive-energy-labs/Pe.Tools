@@ -409,9 +409,15 @@
 }
 @container dl-cells (max-width: 24rem) {
   .dl-cells-note {
-    display: none;
+    position: absolute;
+    top: 100%;
+    left: 0;
+    z-index: 5;
+    padding: 0 4px;
+    background: var(--pe-on);
+    box-shadow: inset 0 0 0 1px var(--pe-line-2);
+    visibility: hidden;
   }
-  /* it returns as an overlay hanging under its cell, so revealing it never shoves a neighbour. */
 
   /* density tightens the padding only, at rest and on hover alike: the border stays. */
   .dl-cell[data-unit] {
