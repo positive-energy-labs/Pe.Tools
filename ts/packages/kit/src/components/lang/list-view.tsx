@@ -170,7 +170,7 @@ function ListRenderer<T, Sort extends string>(props: ListViewProps<T, Sort> & { 
     }
     if (rows.length >= MINIMAP_FROM)
       rows.forEach((item, index) => {
-        const damage = row(item.item).damage;
+        const damage = row(item.item).damage ?? item.damage;
         if (damage || item.branch)
           marks.push({ index, damage: damage ?? undefined, head: item.branch });
       });
@@ -398,6 +398,8 @@ function ListItemViewInner<T, Sort extends string>({
     <>
       <Row
         {...parts}
+        revit={parts.revit ?? item.revit}
+        damage={parts.damage ?? item.damage}
         id={id}
         data-key={item.key}
         cursor={cursor}
@@ -454,6 +456,8 @@ const ListItemView = memo(
     a.item.item === b.item.item &&
     a.item.depth === b.item.depth &&
     a.item.branch === b.item.branch &&
+    a.item.revit?.join(",") === b.item.revit?.join(",") &&
+    a.item.damage === b.item.damage &&
     a.row === b.row &&
     a.detail === b.detail &&
     a.cursor === b.cursor &&

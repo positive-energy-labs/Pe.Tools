@@ -48,7 +48,6 @@ function Issues({ issues: all }: { issues: readonly Issue[] }) {
         ),
         meta: ISSUE_KINDS[issue.kind].label,
         title: ISSUE_KINDS[issue.kind].what,
-        revit: issue.elementId == null ? [] : [issue.elementId],
         wrap: true,
       })}
     />

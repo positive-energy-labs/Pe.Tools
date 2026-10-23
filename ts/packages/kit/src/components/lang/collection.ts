@@ -1,4 +1,6 @@
 import { land } from "./land";
+import { rowRevit } from "./revit-target";
+import { rowDamage } from "../master-table/model";
 
 export const VIRTUAL_FROM = 60;
 import { startTransition, useEffect, useId, useMemo, useRef, useState } from "react";
@@ -16,6 +18,7 @@ import {
   listSearchRefusal,
   pickListPill,
   type ListSearch,
+  type Reading,
 } from "@pe/agent-contracts";
 import type { RowState } from "./row";
 
@@ -23,6 +26,26 @@ type FilterMode = "none" | "substring" | "fuzzy" | "words";
 type SelectMode = "none" | "single" | "multi";
 /** Provenance supplied by the reading owner, never inferred from retained items. */
 export type ListReading = "ready" | "pending" | "failed";
+/** Keep the observation's lifecycle beside its rows, including the owner's retained previous read. */
+export function listOf<T, Item>(reading: Reading<T>, rows: (value: T) => readonly Item[]) {
+  const value =
+    reading.state === "ready"
+      ? reading.observation
+      : "previous" in reading
+        ? reading.previous
+        : undefined;
+  const items = value === undefined ? [] : rows(value);
+  return {
+    items,
+    rows: items,
+    status: (reading.state === "ready"
+      ? "ready"
+      : reading.state === "failed"
+        ? "failed"
+        : "pending") as ListReading,
+    failure: reading.state === "failed" ? reading.message : undefined,
+  };
+}
 export interface ReadingContext {
   reading: ListReading;
 }
@@ -638,7 +661,7 @@ export interface ListOptions<T, Sort extends string = string> {
   refusalOf?: (item: T) => string | null | undefined;
 }
 
-export interface ListItem<T> {
+export interface ListItem<T> extends Pick<RowState, "revit" | "damage"> {
   key: string;
   item: T;
   depth: number;
@@ -703,6 +726,11 @@ export function listModel<T, Sort extends string>(
       const children = options.tree?.childrenOf(item) ?? [];
       const group = section ?? options.groups?.of(item) ?? "";
       all.push({
+        revit:
+          rowRevit(item) ??
+          (searchIndex?.get(item) ?? options.search(item)).ids ??
+          rowRevit(undefined, key),
+        damage: rowDamage(item),
         key,
         item,
         depth: ancestors.length,

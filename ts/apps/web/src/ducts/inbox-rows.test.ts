@@ -365,9 +365,9 @@ describe("healing replaces the capped and connect verdicts", () => {
     expect(issues.find((i) => i.key === "heal:g1")?.findings).toEqual(
       expect.arrayContaining(["open-end:g1:2:1", "proximity:5:0|6:0"]),
     );
-    expect(issues.find((i) => i.key === "flows:30")?.blocking).toBe(true);
+    expect(issues.find((i) => i.key === "flows:30")?.damage).toBeTruthy();
     expect(
-      issues.filter((i) => rows.diagnostics.some((r) => r.key === i.key)).every((i) => !i.blocking),
+      issues.filter((i) => rows.diagnostics.some((r) => r.key === i.key)).every((i) => !i.damage),
     ).toBe(true);
     const flow = issues.find((i) => i.key === "flows:30")!;
     const picker = { ...flow, key: "airflow", ids: [30, 31] };

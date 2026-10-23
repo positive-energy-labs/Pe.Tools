@@ -9,6 +9,30 @@ export type RevitElementReference = {
   linkInstanceIds?: readonly number[];
 };
 
+/** Native identity wins over a presentation key; never parse ids out of composite keys. */
+export function rowRevit(row: unknown, key?: string): readonly number[] | undefined {
+  if (row && typeof row === "object") {
+    const fields = row as Record<string, unknown>;
+    for (const name of ["revit", "ids"])
+      if (Array.isArray(fields[name]) && fields[name].every(Number.isSafeInteger))
+        return fields[name];
+    for (const name of ["elementId", "targetElementId"])
+      if (name in fields)
+        return Number.isSafeInteger(fields[name]) && (fields[name] as number) > 0
+          ? [fields[name] as number]
+          : [];
+    // Wrappers may carry one native identity (e.g. a record plus its observed subject).
+    const subjects = Object.values(fields).filter(
+      (value): value is RevitElementReference =>
+        !!value && typeof value === "object" && "elementId" in value,
+    );
+    if (subjects.length === 1) return rowRevit(subjects[0]);
+    if (subjects.length > 1) return [];
+  }
+  const id = key && /^\d+$/.test(key) ? Number(key) : NaN;
+  return Number.isSafeInteger(id) && id > 0 ? [id] : undefined;
+}
+
 /** The attribute the app's element menu reads: put it on any element that stands for Revit elements. */
 export const revitTarget = (
   ids: readonly number[] | null | undefined,

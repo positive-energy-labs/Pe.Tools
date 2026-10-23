@@ -8,6 +8,10 @@ The one-system design cluster: the design LANGUAGE (raw values in `apps/web/src/
 
 ## Decided
 
+- 2026-10-23, N6: `listOf` carries a Reading's retained observation and lifecycle into lists and tables; census row `reading-list-adapter` rejects local extraction that drops that lifecycle.
+- 2026-10-23, N4: Row renderers infer native targets from element identity and numeric keys within the captured RevitScope; census row `row-revit-inferred` rejects redundant identity callbacks.
+- 2026-10-23, I2: `rowDamage` owns declared cell/verdict roll-up independently of hidden columns; plan and mesh damage consumers read the row model.
+
 - 2026-10-23, P1: `Pane picture` requires a legend; `Scene3D` and plane hosts require a readout slot; `PictureStage` requires the go-to slot; zero-argument `useStage` reads its node and verbs from that context. Kit keeps `useScopeGestures` private; the existing `ScopeGestures` component declares scoped gestures with these rendered slots.
 
 - 2026-10-23, I2, `kit-census.guard.test.ts` / `css-damage-owner`: Damage selectors and pulse have one kit CSS owner.

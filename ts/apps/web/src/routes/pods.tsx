@@ -1,3 +1,4 @@
+import { listOf } from "@pe/kit/lang/collection";
 import { useRouteSearch } from "#/route/activity";
 /**
  * /pods — the thinnest view over `pod.list`: every pod's members, the one spec editor, and the
@@ -151,13 +152,11 @@ export function PodsRouteContent({
       ? handle.resolution.target.ref
       : null;
   const [live, refresh] = usePodList(!demo);
-  const pods: readonly PodRow[] = demo
-    ? DEMO_BROWSE
-    : live.state === "ready"
-      ? (live.observation as PodRow[])
-      : live.state === "stale"
-        ? (live.previous as PodRow[])
-        : [];
+  const source = listOf(
+    demo ? { state: "ready", observation: DEMO_BROWSE } : live,
+    (rows) => rows as readonly PodRow[],
+  );
+  const pods = source.items;
   const ref = demo && !pod ? { pod: DEMO_PODS[0]!.id, path: DEMO_SPEC_PATH } : { pod, path };
   const row = pods.find((item) => item.id === ref.pod);
   const member = row?.members.find((item) => item.path === ref.path) ?? null;
@@ -277,6 +276,7 @@ export function PodsRouteContent({
                 />
               ))}
             <List
+              {...source}
               aria-label="pod members"
               items={pods.flatMap((item) => item.members.map((m) => ({ pod: item, member: m })))}
               keyOf={({ pod, member: m }) => `${pod.id}${SEP}${m.path}`}

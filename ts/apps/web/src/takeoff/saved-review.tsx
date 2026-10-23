@@ -17,6 +17,7 @@ import { TakeoffsControllerOwner } from "#/takeoff/route";
 import { RouteShell, useRoute } from "#/route";
 import { Button } from "@pe/kit/lang/button";
 import { List } from "@pe/kit/lang/list-popup";
+import { listOf } from "@pe/kit/lang/collection";
 import { previousOf } from "#/readings";
 import { savedTakeoffsManifest as savedManifest } from "#/route/surface-manifests";
 import type { TakeoffViewSelection } from "#/takeoff/route-workspace";
@@ -64,8 +65,10 @@ export function SavedTakeoffsView({
       </>
     );
   const reading = capture ? one : many;
-  const rows = (capture ? [] : (previousOf(many) ?? [])).filter(
-    (row) => document === undefined || (document !== null && sameAddress(row.document, document)),
+  const source = listOf(many, (rows) =>
+    rows.filter(
+      (row) => document === undefined || (document !== null && sameAddress(row.document, document)),
+    ),
   );
   return (
     <main className="min-h-screen px-6 py-4">
@@ -89,13 +92,9 @@ export function SavedTakeoffsView({
         // Pending, failed and empty are the list's own states (R7, R17), never a blank.
         <List
           aria-label="saved captures"
-          items={rows}
+          {...source}
           keyOf={(row) => row.id}
           labelOf={(row) => row.title || row.id}
-          status={
-            reading.state === "failed" ? "failed" : reading.state === "ready" ? "ready" : "pending"
-          }
-          failure={reading.state === "failed" ? reading.message : undefined}
           empty="No saved captures. Read a selected document in live mode to capture geometry."
           onPick={(row) => select({ work: row.id })}
           row={(row) => ({

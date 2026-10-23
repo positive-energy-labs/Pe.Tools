@@ -22,6 +22,7 @@ import { Minimap, type MinimapMark } from "../lang/gutter-minimap";
 import { CellHost } from "../lang/cell";
 import { land } from "../lang/land";
 import { Row } from "../lang/row";
+import { rowRevit } from "../lang/revit-target";
 import { CellNavigationProvider, type CellMove } from "./cell-navigation";
 import type { ResolvedColumn } from "./master-table-columns";
 import { CELL_EDITOR, editCell, isInteractive, isTypingKey } from "./master-table-state";
@@ -151,6 +152,7 @@ export function MasterTableBody<Row extends RowData>({
   activeKey,
   rowClassName,
   revit,
+  damage,
   keep,
   onRowClick,
   selectedKeys,
@@ -170,6 +172,7 @@ export function MasterTableBody<Row extends RowData>({
   activeKey?: string | null;
   rowClassName?: (row: Row) => string | undefined;
   revit?: (row: Row) => readonly number[];
+  damage: (row: Row) => string | null;
   keep?: (row: Row) => boolean;
   onRowClick?: (row: Row) => void;
   selectedKeys?: ReadonlySet<string>;
@@ -278,18 +281,7 @@ export function MasterTableBody<Row extends RowData>({
         end: item.end - margin,
       }))
     : visibleRows.map((_, index) => ({ index, start: 0, end: 0 }));
-  const damageOf = (row: Row) => {
-    const own = "damage" in row ? row.damage : null;
-    if (typeof own === "string" && own) return own;
-    for (const column of columnByKey.values()) {
-      const state = column.readState?.(row);
-      if (state?.damage) return state.damage;
-      const verdict = column.readVerdict?.(row);
-      if (verdict?.tone === "alarm") return verdict.word;
-    }
-    return null;
-  };
-  const damages = visibleRows.map((row) => damageOf(row.original));
+  const damages = visibleRows.map((row) => damage(row.original));
   const minimapMarks = damages.flatMap((damage, index): MinimapMark[] =>
     damage ? [{ index, damage }] : [],
   );
@@ -505,7 +497,7 @@ export function MasterTableBody<Row extends RowData>({
           <Fragment key={key}>
             {gap > 0 && <Spacer height={gap} />}
             <MasterRow
-              revit={revit?.(tableRow.original)}
+              revit={revit?.(tableRow.original) ?? rowRevit(tableRow.original, key)}
               row={tableRow.original}
               rowKey={key}
               index={rowIndex}

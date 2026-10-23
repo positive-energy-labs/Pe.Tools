@@ -1,3 +1,4 @@
+import { listOf } from "@pe/kit/lang/collection";
 /**
  * /rooms — the Situation over one level's plan view and its Room Regions. The sentence names the
  * document, the level and the view; the body is the plan beside the table, or the route's
@@ -17,11 +18,10 @@ import type { RoomsSnapshot } from "@pe/host-contracts/generated";
 import type { CellWire } from "#/components/work/band";
 import { EmptyState } from "@pe/kit/lang/empty";
 import { List } from "@pe/kit/lang/list-popup";
-import { OutcomeLine } from "@pe/kit/lang/outcome";
 import { Pane } from "@pe/kit/lang/pane";
 import { PaneSplit } from "@pe/kit/lang/pane-resize";
 import { Surface } from "@pe/kit/lang/surface";
-import { previousOf, useHostCall } from "#/readings";
+import { useHostCall } from "#/readings";
 import { callHostRpc } from "#/host/client";
 import { RouteShell, useRoute, useRouteThread } from "#/route";
 import { Ladder } from "#/route/ladder";
@@ -527,18 +527,16 @@ function RoomsBody({
 
 /** History: this route's action receipts, newest first. */
 function RoomsHistory({ receipts }: { receipts: Reading<unknown> }) {
-  const all = (previousOf(receipts) as readonly ActionReceipt[] | undefined) ?? [];
-  const rows = all
-    .filter((receipt) => receipt.key.startsWith("rooms."))
-    .sort((a, b) => b.startedAt.localeCompare(a.startedAt));
+  const source = listOf(receipts, (value) =>
+    (value as readonly ActionReceipt[])
+      .filter((receipt) => receipt.key.startsWith("rooms."))
+      .sort((a, b) => b.startedAt.localeCompare(a.startedAt)),
+  );
   return (
-    <Pane title="history" meta={`${rows.length}`}>
-      {receipts.state === "failed" ? (
-        <OutcomeLine kind="error" label="receipts unread" says={receipts.message} />
-      ) : null}
+    <Pane title="history" meta={`${source.items.length}`}>
       <List<ActionReceipt>
         aria-label="rooms receipts"
-        items={rows}
+        {...source}
         keyOf={(receipt) => receipt.id}
         labelOf={(receipt) => receipt.key}
         empty={

@@ -81,7 +81,6 @@ function WritesTable({ writes }: { writes: Write[] }) {
         label="projected writes"
         state={state}
         onStateChange={setState}
-        revit={(write) => [write.targetElementId]}
       />
     </TableFrame>
   );

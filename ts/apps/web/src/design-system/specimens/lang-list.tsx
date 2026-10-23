@@ -31,6 +31,7 @@ import { RecipeGrid, SpecimenFrame } from "./recipe-grid";
 const VAST_ROWS = Array.from({ length: 1000 }, (_, index) => ({
   key: String(index),
   name: `Row ${index + 1}`,
+  damage: index % 137 === 0 ? "Needs repair" : null,
 }));
 const KINDS = ["String", "Integer", "Double", "ElementId"];
 const common = {
@@ -58,7 +59,6 @@ export function LangListSpecimens() {
           maxHeight="calc(var(--item-h) * 12)"
           row={(item) => ({
             label: item.name,
-            damage: Number(item.key) % 137 === 0 ? "Needs repair" : undefined,
           })}
           empty={{ message: "No rows", exit: "Clear search" }}
         />

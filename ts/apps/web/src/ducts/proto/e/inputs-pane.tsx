@@ -125,7 +125,6 @@ export function InputsPane(props: InputsPaneProps) {
         ),
         onMouseEnter: () => light([id]),
         onMouseLeave: () => light(null),
-        revit: target.ids,
         revitRefs: target.refs,
       };
     },

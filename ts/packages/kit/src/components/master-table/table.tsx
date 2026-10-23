@@ -17,12 +17,14 @@ import { useTable, type RowData } from "@tanstack/react-table";
 import { cellFactsText, cellStateLabel } from "../lang/cell";
 import { Tag } from "../lang/chip";
 import { useCollection } from "../lang/collection";
+import type { ListReading } from "../lang/collection";
+import { StatusLine } from "../lang/list-popup";
 import { EmptyState } from "../lang/empty";
 import { MasterTableBody } from "./master-table-body";
 import { resolveStateColumn } from "./master-table-columns";
 import { MasterTableHeader } from "./master-table-header";
 import { fromSortingState, resolveUpdater, toSortingState } from "./master-table-state";
-import type { Column, TableState } from "./model";
+import { rowDamage, type Column, type TableState } from "./model";
 import { masterTableFeatures, toColumnDefs } from "./tanstack-adapter";
 import { emptyTableState, visibleRows } from "./view";
 import { useScopeKeys } from "../../keys";
@@ -72,6 +74,8 @@ function useTableSelection(selection: TableSelection | undefined, shown: readonl
 
 export interface TableProps<Row extends RowData> {
   rows: readonly Row[];
+  status?: ListReading;
+  failure?: string;
   columns: readonly Column<Row>[];
   rowKey: (row: Row) => string;
   /** The grid's accessible name; a frame's scope label says it visibly. */
@@ -107,6 +111,8 @@ export interface TableProps<Row extends RowData> {
 
 export function Table<Row extends RowData>({
   rows,
+  status = "ready",
+  failure,
   columns: rawColumns,
   rowKey,
   label,
@@ -250,6 +256,7 @@ export function Table<Row extends RowData>({
             activeKey={activeKey}
             rowClassName={rowClassName}
             revit={revit}
+            damage={(row) => rowDamage(row, rawColumns)}
             keep={keep}
             onRowClick={onRowClick}
             selectedKeys={selection?.selected}
@@ -262,7 +269,12 @@ export function Table<Row extends RowData>({
             scroller={scroller}
           />
         </table>
-        {shownRows.length === 0 && (
+        {status !== "ready" && (
+          <StatusLine tone={status === "failed" ? "alarm" : undefined}>
+            {status === "failed" ? (failure ?? "Reading failed") : "Reading…"}
+          </StatusLine>
+        )}
+        {shownRows.length === 0 && status === "ready" && (
           <div className="mx-auto max-w-md p-6 text-center">
             {rows.length > 0 ? (
               <EmptyState

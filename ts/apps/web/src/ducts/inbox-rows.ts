@@ -1131,11 +1131,17 @@ function writeRow(left: { fix: number; set: number }, write: WriteState): WriteR
 /** The Fix rows that hold the ESP back: every one but a Heal row standing in no path. */
 export const holding = (fix: readonly InboxItem[]) => fix.filter((i) => i.blocks !== false).length;
 
+export const inboxDamage = (row: InboxItem): string | null =>
+  (row.group === "fix" && row.blocks !== false) || row.group === "set"
+    ? compactStatus(row.status) || "blocked"
+    : null;
+
 export interface StageIssue {
   key: string;
   ids: readonly number[];
   findings: readonly string[];
-  blocking: boolean;
+  damage: string | null;
+  priority?: number;
 }
 
 /** The inbox owns identity and severity; the stage only chooses how to draw it. */
@@ -1146,7 +1152,8 @@ export function stageIssues(
     key: row.key,
     ids: row.ids,
     findings: row.findingIds ?? [row.key],
-    blocking: (row.group === "fix" && row.blocks !== false) || row.group === "set",
+    damage: inboxDamage(row),
+    priority: Number(row.key === "airflow" || row.key === "unit-airflow"),
   }));
 }
 
@@ -1161,7 +1168,7 @@ export function issueAt(
     candidates.find((issue) => issue.key === preferred) ??
     candidates.sort(
       (a, b) =>
-        Number(b.blocking) - Number(a.blocking) ||
+        Number(!!b.damage) - Number(!!a.damage) ||
         a.ids.length - b.ids.length ||
         Number(a.key === "airflow" || a.key === "unit-airflow") -
           Number(b.key === "airflow" || b.key === "unit-airflow"),

@@ -124,6 +124,7 @@ export function AtlasVisual() {
         selectedKey={zoneKey}
         cursor={cursor}
         stateOf={stateOf}
+        rows={store.atlasRows}
         onSelectZone={selectZone}
         onHover={(id) => store.actions.hover(id)}
         onCursor={focusRoom}
