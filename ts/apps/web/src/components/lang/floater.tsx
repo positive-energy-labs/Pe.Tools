@@ -281,7 +281,7 @@ function FloaterKeys({
       label: `close ${spec.label}`,
       says: `Close the ${spec.label} floater and return to the pane.`,
       callback: () => {
-        element.current?.closest<HTMLElement>("[data-slot='pane']")?.focus();
+        element.current?.closest<HTMLElement>("[data-slot='pane']")?.focus({ preventScroll: true });
         spec.onOpenChange(false);
       },
     },

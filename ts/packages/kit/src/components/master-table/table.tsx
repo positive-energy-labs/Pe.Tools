@@ -181,6 +181,7 @@ export function Table<Row extends RowData>({
   );
 
   const theadRef = useRef<HTMLTableSectionElement | null>(null);
+  const [scroller, setScroller] = useState<HTMLDivElement | null>(null);
   const [rowTops, setRowTops] = useState<number[]>([]);
   useLayoutEffect(() => {
     const thead = theadRef.current;
@@ -208,6 +209,7 @@ export function Table<Row extends RowData>({
   return (
     <>
       <div
+        ref={setScroller}
         className={maxHeight ? "overflow-auto" : "min-h-0 flex-1 overflow-auto"}
         style={maxHeight ? { maxHeight } : undefined}
         // Scrolled sideways, the locked column floats over the rows and casts its shade.
@@ -251,6 +253,7 @@ export function Table<Row extends RowData>({
             gutter={gutter}
             gutterWidth={GUTTER_PX}
             cellEdit={cellEdit}
+            scroller={scroller}
           />
         </table>
         {shownRows.length === 0 && (

@@ -86,6 +86,7 @@ export type RowProps = RowState & {
   onMouseEnter?: () => void;
   onMouseLeave?: () => void;
   "data-key"?: string;
+  "data-index"?: number;
 } & (
     | {
         as?: "div";
@@ -180,6 +181,7 @@ export function Row(props: RowProps) {
     onMouseEnter: props.onMouseEnter,
     onMouseLeave: props.onMouseLeave,
     "data-key": props["data-key"],
+    "data-index": props["data-index"],
     tabIndex: props.tabIndex,
     onKeyDown: props.onKeyDown,
     onDoubleClick: props.onDoubleClick,

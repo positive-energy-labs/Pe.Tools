@@ -30,6 +30,7 @@ import {
 } from "./collection";
 import { Row, RowGroupHead, type RowState } from "./row";
 import { TooltipHint } from "./tooltip";
+import { focusQuiet } from "../../lib/utils";
 
 /** What a caller draws for one item: the Row's slots and its own states. */
 type RowParts = Omit<RowState, "cursor" | "selected"> & {
@@ -116,8 +117,7 @@ export function List<T>(props: ListProps<T>) {
   props.onCollection?.(collection);
   const { status, visible, query } = collection;
   useEffect(() => {
-    if (searchable && inputEl && keyRegion?.contains(document.activeElement))
-      inputEl.focus({ preventScroll: true });
+    if (searchable && inputEl && keyRegion?.contains(document.activeElement)) focusQuiet(inputEl);
   }, [collection.level, searchable, inputEl, keyRegion]);
   const cursorRow = visible.find((row) => row.key === collection.cursor);
   const footer = typeof props.footer === "function" ? props.footer(collection.level) : props.footer;
@@ -620,7 +620,7 @@ export function CellListSelect<T>({
   const move = useCellNavigation();
   const close = () => {
     setOpen(false);
-    host?.current?.focus();
+    focusQuiet(host?.current);
   };
   return (
     <>

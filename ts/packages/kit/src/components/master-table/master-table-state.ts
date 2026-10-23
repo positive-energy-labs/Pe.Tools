@@ -2,6 +2,7 @@ import type { KeyboardEvent } from "react";
 import type { SortingState } from "@tanstack/react-table";
 
 import type { TableState } from "./model";
+import { focusQuiet } from "../../lib/utils";
 
 export function toSortingState(sorts: TableState["sorts"]): SortingState {
   return sorts.map((sort) => ({ id: sort.key, desc: sort.dir === "desc" }));
@@ -30,7 +31,7 @@ export function editCell(cell: HTMLTableCellElement, replacement?: string): bool
     const select = cell.querySelector<HTMLSelectElement>("select:not([disabled])");
     if (select) {
       if (replacement !== undefined) return false;
-      select.focus();
+      focusQuiet(select);
       return true;
     }
     // A button-shaped editor (a CellSelect's trigger) declares itself; editing it is opening it.
@@ -44,7 +45,7 @@ export function editCell(cell: HTMLTableCellElement, replacement?: string): bool
     opener.click();
     return true;
   }
-  editor.focus();
+  focusQuiet(editor);
   if (replacement !== undefined) editor.value = replacement;
   const end = editor.value.length;
   editor.setSelectionRange(end, end);

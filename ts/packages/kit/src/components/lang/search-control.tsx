@@ -1,6 +1,6 @@
 import type { ComponentProps, KeyboardEvent, ReactNode } from "react";
 import { Search } from "lucide-react";
-import { cn } from "../../lib/utils";
+import { cn, focusQuiet } from "../../lib/utils";
 import "./lang.css";
 
 /**
@@ -43,7 +43,7 @@ export function SearchControl({
           event.currentTarget.contains(target) &&
           !target.closest("button,a,input,textarea,select,[data-search-lead]")
         )
-          event.currentTarget.querySelector("input")?.focus();
+          focusQuiet(event.currentTarget.querySelector("input"));
       }}
     >
       {lead ? (

@@ -16,6 +16,7 @@ import { type ListController } from "./collection";
 import { KeyHint } from "./key-hint";
 import { ListPopup } from "./list-popup";
 import { CompletionGhost, Matched, SearchControl } from "./search-control";
+import { focusQuiet } from "../../lib/utils";
 
 /** One suggestion: a keyword kept as typed, a value that becomes a pill, or a field to pick from. */
 type Pick = {
@@ -79,7 +80,7 @@ export function ListSearchBox<T, Sort extends string>({
   const valueLabel = (key: string, value: string) => facet(key)?.labels?.get(value) ?? value;
 
   const focus = (caret?: number) => {
-    input.current?.focus();
+    focusQuiet(input.current);
     if (caret !== undefined)
       requestAnimationFrame(() => input.current?.setSelectionRange(caret, caret));
   };
@@ -461,7 +462,7 @@ export function ListSearchBox<T, Sort extends string>({
                   list.setSearch({ ...list.state.search, keywords: "" });
                 } else if (pills.length) list.removePill(pills.at(-1)!.field);
                 // Nothing left to undo: hand the keys back to the rows.
-                else if (list.target) list.target.focus();
+                else if (list.target) focusQuiet(list.target);
                 else event.currentTarget.blur();
               } else if (event.key === "Backspace" && !typedNow) {
                 if (editor?.from) {

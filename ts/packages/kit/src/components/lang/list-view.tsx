@@ -19,6 +19,7 @@ import { ListPopup } from "./list-popup";
 import { ListSearchBox } from "./list-search";
 import { Row, type RowProps } from "./row";
 import "./lang.css";
+import { focusQuiet } from "../../lib/utils";
 
 export type ListRowParts = Omit<
   Extract<RowProps, { as?: "div" }>,
@@ -131,13 +132,17 @@ export function ListView<T, Sort extends string = string>(props: ListViewProps<T
     setScroller(maxHeight ? root : (scrollParent(root) ?? root));
     return () => list.setTarget(null);
   }, [root, maxHeight, list.setTarget]);
+  // N1: the view follows the cursor only when the person asked: a key moved it (`steer`) or a
+  // reveal named it. A refresh, resize, hover or a linked pane's cursor never scrolls the list.
+  const request = `${list.collection.steer}:${list.revealRequest?.serial ?? 0}`;
+  const served = useRef("0:0");
   useLayoutEffect(() => {
-    if (list.total < 60 && list.collection.cursor) {
-      document
-        .getElementById(list.collection.rowProps(list.collection.cursor).id)
-        ?.scrollIntoView?.({ block: "nearest" });
-    }
-  }, [list.total, list.collection.cursor, list.revealRequest?.serial]);
+    if (list.total >= 60 || served.current === request || !list.collection.cursor) return;
+    served.current = request;
+    document
+      .getElementById(list.collection.rowProps(list.collection.cursor).id)
+      ?.scrollIntoView?.({ block: "nearest" });
+  }, [request]);
   const label = props["aria-label"];
   // Rows render through this ref, so a memoized row that skipped a render still acts on today's list.
   const live = useRef(list);
@@ -220,6 +225,8 @@ export function ListView<T, Sort extends string = string>(props: ListViewProps<T
               estimate={estimate}
               overscan={overscan}
               detail={detail}
+              request={request}
+              served={served}
             />
           ) : null}
         </section>
@@ -237,6 +244,9 @@ type SectionBodyProps<T, Sort extends string> = {
   estimate: number;
   overscan: number;
   detail?: (item: T) => ReactNode;
+  /** The latest scroll request (key move or reveal) and the last one a body honoured. */
+  request: string;
+  served: RefObject<string>;
 };
 
 function SectionBody<T, Sort extends string>(props: SectionBodyProps<T, Sort>) {
@@ -373,9 +383,12 @@ function VirtualSectionBody<T, Sort extends string>({
   estimate,
   overscan,
   detail,
+  request,
+  served,
 }: SectionBodyProps<T, Sort>) {
   const body = useRef<HTMLDivElement>(null);
-  const [margin, setMargin] = useState(0);
+  // Null until measured: a request made as this body mounts waits for its real margin.
+  const [margin, setMargin] = useState<number | null>(null);
   const [headroom, setHeadroom] = useState(0);
   useLayoutEffect(() => {
     if (!body.current || !scroller) return;
@@ -409,15 +422,17 @@ function VirtualSectionBody<T, Sort extends string>({
     estimateSize: () => estimate,
     getItemKey: (index) => rows[index]!.key,
     overscan,
-    scrollMargin: margin,
+    scrollMargin: margin ?? 0,
     scrollPaddingStart: headroom,
     scrollPaddingEnd: headroom,
   });
   const requestedKey = list.collection.cursor;
   const cursorIndex = rows.findIndex((item) => item.key === requestedKey);
   useLayoutEffect(() => {
-    if (cursorIndex >= 0 && scroller) virtual.scrollToIndex(cursorIndex, { align: "auto" });
-  }, [cursorIndex, margin, scroller, list.revealRequest?.serial, virtual]);
+    if (cursorIndex < 0 || !scroller || margin === null || served.current === request) return;
+    served.current = request;
+    virtual.scrollToIndex(cursorIndex, { align: "auto" });
+  }, [request, cursorIndex, margin === null, scroller]);
   return (
     <div
       ref={body}
@@ -435,7 +450,7 @@ function VirtualSectionBody<T, Sort extends string>({
             data-index={entry.index}
             role="presentation"
             className="absolute top-0 left-0 w-full"
-            style={{ transform: `translateY(${entry.start - margin}px)` }}
+            style={{ transform: `translateY(${entry.start - (margin ?? 0)}px)` }}
           >
             <ListItemView
               {...rowState(list, item)}
@@ -516,7 +531,7 @@ function useListSearchFocus(
         callback: (event) => {
           if (pick() !== self.current) return;
           event.preventDefault();
-          input.current?.focus();
+          focusQuiet(input.current);
           input.current?.select();
         },
         options: { conflictBehavior: "allow", preventDefault: false },
