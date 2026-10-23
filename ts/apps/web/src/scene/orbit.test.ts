@@ -1,7 +1,8 @@
 import { describe, expect, it } from "vite-plus/test";
 import { Quaternion, Vector3 } from "three";
-import { newCamera } from "./projection";
+import { newCamera, viewportProject } from "./projection";
 import {
+  shiftOnScreen,
   applyLook,
   boundsOfPoints,
   fitDistance,
@@ -112,4 +113,17 @@ describe("frame and looks", () => {
     expect(samePose(v, { ...v, yaw: v.yaw + 1 }, bounds)).toBe(false);
     expect(samePose(v, { ...v, pivot: [121, 215, 6] }, bounds)).toBe(false);
   });
+});
+
+it("a view shifted on screen puts the old centre dx right and dy down, in the same orientation", () => {
+  const scene = { minX: -50, maxX: 50, minY: -50, maxY: 50, minZ: 0, maxZ: 20 };
+  const size = { width: 800, height: 600 };
+  for (const [yaw, elev] of [[-45, 35], [120, 60], [10, 89]] as const) {
+    const v = { kind: "orbit" as const, yaw, elev, zoom: 3, pivot: [5, -7, 4] as [number, number, number] };
+    const moved = shiftOnScreen(v, scene, size.height, 120, -80);
+    expect([moved.yaw, moved.elev, moved.zoom]).toEqual([v.yaw, v.elev, v.zoom]);
+    const at = viewportProject(moved, scene, size)(v.pivot)!;
+    expect(at[0]).toBeCloseTo(400 + 120, 0);
+    expect(at[1]).toBeCloseTo(300 - 80, 0);
+  }
 });

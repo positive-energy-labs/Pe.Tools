@@ -1,5 +1,5 @@
 import { expect, test, vi } from "vite-plus/test";
-import { createLiveOrbit, glideTo } from "./live-orbit";
+import { createLiveOrbit, flyTo } from "./live-orbit";
 import type { OrbitViewport } from "./orbit";
 
 const initial: OrbitViewport = { kind: "orbit", yaw: 0, elev: 30, zoom: 1, pivot: [0, 0, 0] };
@@ -59,40 +59,110 @@ test("external moves and replacement gestures invalidate late input; cancellatio
   expect(commit).not.toHaveBeenCalled();
 });
 
-test("a frame eases from the current camera, commits once, and yields to new input", () => {
+/** A frame clock: `run(ms)` steps 16 ms frames; `stall(ms)` delivers one frame after a gap. */
+function frames() {
+  const queue: FrameRequestCallback[] = [];
+  vi.stubGlobal("requestAnimationFrame", (f: FrameRequestCallback) => queue.push(f));
   let now = 0;
-  const frames: FrameRequestCallback[] = [];
-  vi.spyOn(performance, "now").mockImplementation(() => now);
-  vi.stubGlobal("requestAnimationFrame", (f: FrameRequestCallback) => frames.push(f));
-  const tick = (at: number) => {
-    now = at;
-    frames.shift()!(at);
+  const frame = () => queue.splice(0).forEach((f) => f(now));
+  return {
+    queue,
+    run: (ms: number) => {
+      for (const end = now + ms; now < end; now += 16) frame();
+    },
+    stall: (ms: number) => {
+      now += ms;
+      frame();
+    },
   };
+}
+
+test("a flight eases from the current camera, commits once, and yields to new input", () => {
+  const { queue, run } = frames();
   try {
     const commit = vi.fn();
     const orbit = createLiveOrbit(initial, commit);
     const to = { ...initial, zoom: 4, pivot: [10, 20, 30] as [number, number, number] };
-    glideTo(orbit, to, 100);
+    flyTo(orbit, to);
     expect(orbit.read()).toEqual(initial);
-    tick(0);
-    tick(50);
+    run(200);
     expect(orbit.read()!.zoom).toBeGreaterThan(1);
     expect(orbit.read()!.zoom).toBeLessThan(4);
     expect(commit).not.toHaveBeenCalled();
-    tick(100);
+    run(800);
     expect(orbit.read()).toEqual(to);
     expect(commit).toHaveBeenCalledExactlyOnceWith(to, "move");
     commit.mockClear();
-    glideTo(orbit, initial, 100);
+    flyTo(orbit, initial);
     const input = orbit.begin();
     const dragged = { ...to, yaw: 15 };
     orbit.preview(input, dragged);
-    tick(150);
+    run(100);
     expect(orbit.read()).toEqual(dragged);
-    expect(frames).toHaveLength(0);
+    expect(queue).toHaveLength(0);
     expect(commit).not.toHaveBeenCalled();
   } finally {
     vi.unstubAllGlobals();
-    vi.restoreAllMocks();
+  }
+});
+
+test("a long hop rises until both ends share the view, and a restore lands without a commit", () => {
+  const { run } = frames();
+  try {
+    const commit = vi.fn();
+    const near = { ...initial, zoom: 8, pivot: [0, 0, 0] as [number, number, number] };
+    const orbit = createLiveOrbit(near, commit);
+    const scene = { minX: -100, maxX: 100, minY: -100, maxY: 100, minZ: 0, maxZ: 10 };
+    const far = { ...near, pivot: [150, 0, 0] as [number, number, number] };
+    let landed = false;
+    flyTo(orbit, far, { history: null, scene, onLand: () => (landed = true) });
+    run(260);
+    // Mid-flight the camera is wider than either end, so origin and destination are both in view.
+    expect(orbit.read()!.zoom).toBeLessThan(8 / 4);
+    run(1000);
+    expect(orbit.read()).toEqual(far);
+    expect(landed).toBe(true);
+    expect(commit).not.toHaveBeenCalled();
+  } finally {
+    vi.unstubAllGlobals();
+  }
+});
+
+test("a main-thread stall delays a flight instead of skipping it", () => {
+  const { run, stall } = frames();
+  try {
+    const orbit = createLiveOrbit(initial, vi.fn());
+    const to = { ...initial, pivot: [10, 0, 0] as [number, number, number] };
+    flyTo(orbit, to);
+    run(16);
+    stall(1100);
+    expect(orbit.read()!.pivot[0]).toBeGreaterThan(0);
+    expect(orbit.read()!.pivot[0]).toBeLessThan(5);
+    run(1000);
+    expect(orbit.read()).toEqual(to);
+  } finally {
+    vi.unstubAllGlobals();
+  }
+});
+
+test("a second flight retargets from mid-air and only the last lands", () => {
+  const { run } = frames();
+  try {
+    const commit = vi.fn();
+    const orbit = createLiveOrbit(initial, commit);
+    const a = { ...initial, pivot: [10, 0, 0] as [number, number, number] };
+    const b = { ...initial, pivot: [0, 10, 0] as [number, number, number] };
+    flyTo(orbit, a, { history: "replace" });
+    run(150);
+    const mid = orbit.read()!;
+    flyTo(orbit, b, { history: "replace" });
+    run(32);
+    // Leaving at speed: the retarget's first frames already move toward b.
+    expect(orbit.read()!.pivot[1]).toBeGreaterThan(mid.pivot[1] + 0.1);
+    run(1000);
+    expect(orbit.read()).toEqual(b);
+    expect(commit).toHaveBeenCalledExactlyOnceWith(b, "gesture");
+  } finally {
+    vi.unstubAllGlobals();
   }
 });
