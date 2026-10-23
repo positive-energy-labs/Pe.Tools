@@ -44,7 +44,7 @@ import { reviewLines, writePreview } from "../../write-review";
 import { buildTree, systemList, type TreeNode } from "../b/model";
 import type { ProtoProps } from "../props";
 import { DEFAULT_DESIGN_FRICTION_RATE } from "@pe/ducts-domain/equivalent-length";
-import { fmtFt, SplitStrip, systemRowParts } from "./bar";
+import { BarRules, fmtFt, SplitStrip, systemRowParts } from "./bar";
 import { DuctSettings } from "./settings";
 import { FanSections } from "./fan-sections";
 import { RunDetail, runOf } from "./run-detail";
@@ -813,6 +813,7 @@ function EScreenBody({ props }: { props: ProtoProps }) {
       }}
     >
       <div ref={rootRef} data-proto="E2" className="flex size-full min-h-0">
+        <BarRules snapshot={drawn!} work={work} priced={priced}>
         <DuctSettings work={work} rate={designRate} snapshot={snapshot} scope={scope} />
         <PaneSplit
           axis="horizontal"
@@ -872,6 +873,7 @@ function EScreenBody({ props }: { props: ProtoProps }) {
             />
           }
         />
+        </BarRules>
       </div>
     </SubjectTextContext.Provider>
   );

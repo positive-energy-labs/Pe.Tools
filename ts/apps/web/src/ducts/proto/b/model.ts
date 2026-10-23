@@ -34,6 +34,8 @@ export interface SplitPart {
  * whole, the largest run's total.
  */
 export interface Split {
+  /** The exact run behind this bar; rule columns must not borrow another path's lookup. */
+  rows: readonly Row[];
   unit: SplitPart;
   duct: SplitPart;
   terminal: SplitPart;
@@ -52,6 +54,7 @@ function splitOf(
 ): Split {
   const part = (): SplitPart => ({ dp: 0, ids: [], unpriced: 0 });
   const split: Split = {
+    rows,
     unit: part(),
     duct: part(),
     terminal: part(),
