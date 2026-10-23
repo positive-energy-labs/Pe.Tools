@@ -300,7 +300,8 @@ function ChatSurface({ target, docked = false }: ChatShellProps) {
           title={
             selectTitle(chat) ||
             threads.find((thread) => thread.id === currentThreadId)?.title ||
-            "thread"
+            // I1: no thread yet is the draft the first send creates.
+            (currentThreadId ? "thread" : "New thread")
           }
           leadingActions={
             narrow ? (
