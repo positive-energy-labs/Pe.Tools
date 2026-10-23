@@ -31,6 +31,8 @@ it("keeps motion local, publishes on release and accepts external camera moves",
     setThumbs: vi.fn(),
     paint: vi.fn(),
     setLayers: vi.fn(),
+    lightIssue: vi.fn(),
+    pickIssue: () => null,
     setClip: vi.fn(),
     dispose: vi.fn(),
   };

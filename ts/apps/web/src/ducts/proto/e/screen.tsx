@@ -24,6 +24,7 @@ import { airflowOptions } from "../../airflow";
 import { elementNamer } from "../../claims";
 import {
   annotatedFindings,
+  stageIssues,
   fanVerbs,
   healRunView,
   focusRow,
@@ -382,6 +383,8 @@ function EScreenBody({ props }: { props: ProtoProps }) {
   const encoded = useGroupEncoding(snapshot, priced, drawGroups, page.encoding);
   // The tree reads the drawing's quantity; a categorical reading (or none) keeps Pe's fan-to-here loss.
   const reading = encoded.encoding.quantity ? encoded.encoding : null;
+  const issues = useMemo(() => (inbox ? stageIssues(inbox) : []), [inbox]);
+  const [hoveredIssue, setHoveredIssue] = useState<string | null>(null);
   const [lit, setLit] = useState<ReadonlySet<number>>(new Set());
   const [ruleFocus, setRuleFocus] = useState<string | null>(null);
   // null = automatic: open when the inbox holds a row, collapsed when it holds none.
@@ -713,6 +716,14 @@ function EScreenBody({ props }: { props: ProtoProps }) {
           fan={fanHandles}
           selected={selected}
           focused={focusKey}
+          hoveredIssue={hoveredIssue}
+          onIssueHover={setHoveredIssue}
+          onIssuePick={(item) =>
+            setPage(
+              { selected: item.ids[0] == null ? "" : String(item.ids[0]), issue: item.key },
+              { history: "push" },
+            )
+          }
           address={{
             query: page.rulingQuery,
             sort: page.rulingSort,
@@ -771,6 +782,9 @@ function EScreenBody({ props }: { props: ProtoProps }) {
                   lit={lit}
                   issueScope={issueScope}
                   annotated={annotated}
+                  issues={issues}
+                  hoveredIssue={hoveredIssue}
+                  onIssueHover={setHoveredIssue}
                   scale={encoded}
                   nameOf={nameOf}
                   groups={drawGroups}

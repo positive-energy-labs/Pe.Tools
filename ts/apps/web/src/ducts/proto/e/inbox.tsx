@@ -123,6 +123,9 @@ export function Inbox({
   fan,
   selected,
   focused,
+  hoveredIssue,
+  onIssueHover,
+  onIssuePick,
   address,
 }: {
   groups: Record<Exclude<InboxGroup, "write">, readonly InboxItem[]>;
@@ -140,6 +143,9 @@ export function Inbox({
   selected: number | null;
   /** The inbox row a review named (`focusRow`): it opens, wears selected and pulses once. */
   focused: string | null;
+  hoveredIssue?: string | null;
+  onIssueHover?: (key: string | null) => void;
+  onIssuePick?: (item: InboxItem) => void;
   address?: {
     query: string;
     sort: "" | "name" | "status";
@@ -303,11 +309,14 @@ export function Inbox({
       stagedBy: item.kind === "proposal" ? "pea" : undefined,
       meta: <span data-tone={item.tone}>{item.status}</span>,
       actions: () => verbsOf(item, false),
-      onMouseEnter: () => light(item.ids),
+      onMouseEnter: () => {
+        light(item.ids);
+        onIssueHover?.(item.key);
+      },
       revitIds: target.ids,
       revitRefs: target.refs,
       lit: (selected != null && item.ids.includes(selected)) || item.key === focused,
-      pick: () => onSelect(item.ids[0] ?? null),
+      pick: () => (onIssuePick ? onIssuePick(item) : onSelect(item.ids[0] ?? null)),
       detail: () => (
         <>
           {claim?.kind === "claim" ? (
@@ -342,8 +351,13 @@ export function Inbox({
   ];
   return (
     <>
-      <div onMouseLeave={() => light(null)}>
-        <RulingsList rows={rows} focused={focused} address={address} />
+      <div
+        onMouseLeave={() => {
+          light(null);
+          onIssueHover?.(null);
+        }}
+      >
+        <RulingsList rows={rows} focused={focused} hoveredIssue={hoveredIssue} address={address} />
       </div>
       {nativeResult ? (
         <div role="status" className="px-2 py-1">
@@ -362,10 +376,12 @@ const rulingSearch = (row: RulingRow) => row.search;
 function RulingsList({
   rows,
   focused,
+  hoveredIssue,
   address,
 }: {
   rows: RulingRow[];
   focused: string | null;
+  hoveredIssue?: string | null;
   address?: {
     query: string;
     sort: "" | "name" | "status";
@@ -436,8 +452,9 @@ function RulingsList({
     <ListView
       aria-label="rulings"
       list={list}
-      row={({ key: _key, actions, detail: _detail, ...parts }) => ({
+      row={({ key, actions, detail: _detail, ...parts }) => ({
         ...parts,
+        active: key === hoveredIssue,
         actions: actions?.(),
       })}
       detail={(row) =>

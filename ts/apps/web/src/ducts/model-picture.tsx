@@ -29,6 +29,8 @@ import { Annotations, type Label, type Ruling } from "./annotations";
 import type { Encoding } from "./encoding";
 import type { DuctsPage } from "./manifest";
 import type { Scene } from "./scene";
+import type { StageIssue } from "./inbox-rows";
+import type { IssueTarget } from "#/scene/types";
 
 /** The bounds the camera is built on (the capture's), and the subject's own inside them. */
 export type PictureBounds = { scene: Bounds; subject: Bounds };
@@ -38,7 +40,7 @@ const FRAME_MIN_FT = 12;
 const GLIDE_MS = 350;
 /** The longest gap between the two clicks of a double-click. */
 const DOUBLE_MS = 400;
-const NONE:ReadonlySet<string> = new Set();
+const NONE: ReadonlySet<string> = new Set();
 
 const centrelinePoints = (scene: Scene, ids?: ReadonlySet<number>) => [
   ...scene.segments.flatMap((f) => (!ids || ids.has(f.segment.id) ? f.segment.polyline : [])),
@@ -91,6 +93,9 @@ export function ModelPicture({
   labels,
   rulings,
   findings3d,
+  issues,
+  hoveredIssue,
+  onIssueHover,
   noRuns,
   pointOf,
   issue,
@@ -113,6 +118,9 @@ export function ModelPicture({
   rulings: readonly Ruling[];
   /** The annotated findings drawn in 3D (`finding-layers.ts`), under the same `findings` layer as the pins. */
   findings3d: readonly Layer3D[];
+  issues: readonly StageIssue[];
+  hoveredIssue: string | null;
+  onIssueHover: (key: string | null) => void;
   noRuns?: Parameters<typeof Annotations>[0]["noRuns"];
   pointOf: (id: number) => readonly number[] | null;
   issue: string;
@@ -122,6 +130,16 @@ export function ModelPicture({
   onHover: (id: number | null) => void;
 }) {
   const meshes = read.meshes;
+  const pickIssue = (target: IssueTarget) => {
+    setPage(
+      { selected: String(target.elementId), issue: target.key, rulingQuery: "" },
+      { history: "push" },
+    );
+  };
+  const hoverIssue = (target: IssueTarget | null) => {
+    onIssueHover(target?.key ?? null);
+    onHover(target?.elementId ?? null);
+  };
   // Subscribe inside the picture, never in the route: even the centreline-only preview follows
   // the live camera while native meshes are loading, without waking pricing or the inbox.
   const pose = useSyncExternalStore(orbit.subscribe, orbit.read);
@@ -230,9 +248,7 @@ export function ModelPicture({
   const frameAt = (key: string | null) => {
     if (!bounds) return;
     const target = key && meshes ? boundsOfInstances(meshes, (i) => i.key === key) : null;
-    move(
-      frame(bounds.scene, target ? padded(target) : bounds.subject, orbit.read() ?? undefined),
-    );
+    move(frame(bounds.scene, target ? padded(target) : bounds.subject, orbit.read() ?? undefined));
   };
 
   useScopeGestures(ORBIT_GESTURES);
@@ -315,6 +331,10 @@ export function ModelPicture({
           lit={litKeys}
           isolated={isolated}
           layers={layers.has("findings") ? findings3d : undefined}
+          hoveredIssue={hoveredIssue}
+          focusedIssue={issue}
+          onIssueHover={hoverIssue}
+          onIssuePick={pickIssue}
           onProject={(project, at) => setFramed({ project, size: at })}
           onDoubleClick={(pick) =>
             frameAt(withinDouble() ? lastClick.current!.key : (pick?.instance.key ?? null))
@@ -339,6 +359,10 @@ export function ModelPicture({
           hovered={hovered}
           labels={labels}
           noRuns={noRuns}
+          issues={issues}
+          hoveredIssue={hoveredIssue}
+          onIssueHover={hoverIssue}
+          onIssuePick={pickIssue}
           rulings={rulings}
           pointOf={pointOf}
           issue={issue}

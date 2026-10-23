@@ -4,7 +4,14 @@ import { describe, expect, it } from "vite-plus/test";
 import type { HealPlan } from "@pe/ducts-domain/heal";
 import type { SystemScope } from "@pe/ducts-domain/system-scope";
 
-import { healRunView, inboxRows, type TriageInput } from "./inbox-rows";
+import {
+  focusRow,
+  stageIssues,
+  issueAt,
+  healRunView,
+  inboxRows,
+  type TriageInput,
+} from "./inbox-rows";
 import type { Claim } from "./legs";
 import type { DuctsHealRun } from "./manifest";
 
@@ -348,5 +355,22 @@ describe("healing replaces the capped and connect verdicts", () => {
       status: "healed 1 · ESP 0.312 → 0.405 in-wg",
       blocks: false,
     });
+  });
+  it("stage identities land on the exact row, including Heal folding and direct terminal input", () => {
+    const rows = inboxRows({ ...base, heal });
+    const issues = stageIssues(rows);
+    const keys = new Set([...rows.fix, ...rows.set, ...rows.diagnostics].map((r) => r.key));
+    for (const issue of issues) expect(focusRow(issue.key, keys)).toBe(issue.key);
+    expect(issues.find((i) => i.key === "heal:g1")?.findings).toEqual(
+      expect.arrayContaining(["open-end:g1:2:1", "proximity:5:0|6:0"]),
+    );
+    expect(issues.find((i) => i.key === "flows:30")?.blocking).toBe(true);
+    expect(
+      issues.filter((i) => rows.diagnostics.some((r) => r.key === i.key)).every((i) => !i.blocking),
+    ).toBe(true);
+    const flow = issues.find((i) => i.key === "flows:30")!;
+    const picker = { ...flow, key: "airflow", ids: [30, 31] };
+    expect(issueAt([picker, flow], [30])?.key).toBe("flows:30");
+    expect(issueAt([picker, flow], [30], "airflow")?.key).toBe("airflow");
   });
 });

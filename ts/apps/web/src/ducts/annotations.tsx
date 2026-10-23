@@ -12,6 +12,8 @@ import { token } from "@pe/kit/lib/token";
 import type { DuctFinding } from "@pe/agent-contracts";
 import type { NoRunBranch } from "@pe/ducts-domain/no-runs";
 import { observedElements, useNativeObservation } from "#/revit/observation";
+import type { IssueTarget } from "#/scene/types";
+import { issueAt, type StageIssue } from "./inbox-rows";
 import type { Project, Size } from "#/scene/projection";
 
 import {
@@ -73,6 +75,10 @@ export function Annotations({
   hovered,
   labels,
   noRuns,
+  issues = [],
+  hoveredIssue,
+  onIssueHover,
+  onIssuePick,
   rulings,
   pointOf,
   issue,
@@ -89,6 +95,10 @@ export function Annotations({
   hovered: number | null;
   labels: readonly Label[];
   noRuns?: ReadonlyMap<number, NoRunBranch>;
+  issues?: readonly StageIssue[];
+  hoveredIssue?: string | null;
+  onIssueHover?: (target: IssueTarget | null) => void;
+  onIssuePick?: (target: IssueTarget) => void;
   rulings: readonly Ruling[];
   /** A model point for an element: a node's point, or a segment's middle vertex. */
   pointOf: (id: number) => readonly number[] | null;
@@ -111,6 +121,24 @@ export function Annotations({
     onMouseLeave: () => onHover(null),
     onClick: (e: React.MouseEvent) => onPick(id, at(e)),
   });
+  const branchIssue = (branch: NoRunBranch) =>
+    issueAt(
+      issues,
+      branch.reasons.map((r) => r.at),
+      hoveredIssue ?? issue,
+    ) ?? issueAt(issues, branch.elements, hoveredIssue ?? issue);
+  const noRunTarget = (id: number, branch: NoRunBranch) => {
+    const row = branchIssue(branch);
+    if (!row) return element(id);
+    const target = { key: row.key, elementId: id };
+    return {
+      ...element(id),
+      "data-stage-issue": row.key,
+      onMouseEnter: () => onIssueHover?.(target),
+      onMouseLeave: () => onIssueHover?.(null),
+      onClick: () => onIssuePick?.(target),
+    };
+  };
   // The heavy strings rebuild per projection, never per hover.
   const lines = useMemo(
     () =>
@@ -147,9 +175,9 @@ export function Annotations({
                 d={d}
                 fill="none"
                 stroke={token("viz-3")}
-                strokeWidth={5}
+                strokeWidth={branchIssue(noRun)?.key === hoveredIssue ? 8 : 5}
                 strokeLinecap="round"
-                {...element(id)}
+                {...noRunTarget(id, noRun)}
               >
                 <title>No run: {noRun.reasons.map((r) => r.text).join("; ")}</title>
               </path>
@@ -199,7 +227,7 @@ export function Annotations({
           >
             {back ? <circle r={GLYPH * 2.5} fill={back} fillOpacity={0.7} /> : null}
             {noRun ? (
-              <g {...element(id)}>
+              <g {...noRunTarget(id, noRun)}>
                 <title>No run: {noRun.reasons.map((r) => r.text).join("; ")}</title>
                 <circle r={GLYPH} fill={token("viz-3")} />
               </g>
@@ -241,6 +269,16 @@ export function Annotations({
                   ? issueInk(r.issue)
                   : token("caution");
             const on = r.kind === "issue" && r.issue.id === issue;
+            const finding =
+              r.kind === "claim"
+                ? `claim:${r.claim.id}`
+                : r.kind === "issue"
+                  ? r.issue.id
+                  : r.finding.id;
+            const target = {
+              key: issues.find((i) => i.findings.includes(finding))?.key ?? finding,
+              elementId: r.at,
+            };
             return (
               <g
                 key={r.n}
@@ -248,6 +286,8 @@ export function Annotations({
                 data-ruling-kind={r.kind}
                 transform={`translate(${xy[0] + slot * PIN * 2.2} ${xy[1] - PIN * 2.4})`}
                 style={HIT}
+                onMouseEnter={() => onIssueHover?.(target)}
+                onMouseLeave={() => onIssueHover?.(null)}
                 onClick={(e) => onRuling(r, at(e))}
               >
                 {r.kind === "claim" ? (
