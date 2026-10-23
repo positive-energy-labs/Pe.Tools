@@ -81,7 +81,7 @@ export function Lineup({ variant }: { variant: string }) {
       </div>
       {/* protoui switcher: alien on purpose */}
       <div
-        data-surface="artifact"
+        data-surface="document"
         className="fixed left-1/2 z-[2147483646] flex w-[440px] -translate-x-1/2 items-center justify-between rounded-full border-2 border-dashed border-line-2 px-2 py-1 face-mono text-[13px] text-ink shadow-lg"
         style={{ bottom: 56 + 4 }}
       >

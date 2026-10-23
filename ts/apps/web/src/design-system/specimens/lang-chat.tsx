@@ -2,7 +2,7 @@ import { ThreadsSidebar, ThreadSidebarActions } from "#/chat/thread-palette";
 import { ModeDial } from "#/chat/mode-dial";
 import { demoThreads } from "#/chat/thread-navigation";
 import { emptyChatState } from "@pe/agent-contracts/chat-state";
-import { Pane } from "#/components/lang/pane";
+import { Pane } from "@pe/kit/lang/pane";
 import {
   Composer,
   ComposerFrame,

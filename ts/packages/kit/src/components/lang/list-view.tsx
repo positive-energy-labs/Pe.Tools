@@ -280,6 +280,7 @@ function ListRenderer<T, Sort extends string>(props: ListViewProps<T, Sort> & { 
             <button
               type="button"
               data-list-section-head=""
+              data-surface="artifact"
               aria-expanded={!section.closed}
               aria-disabled={!section.collapsible || undefined}
               onClick={(event) => {

@@ -13,7 +13,7 @@ import { createFileRoute, useRouter } from "@tanstack/react-router";
 import { FactChip } from "@pe/kit/lang/chip";
 import { EmptyState } from "@pe/kit/lang/empty";
 import { OutcomeLine } from "@pe/kit/lang/outcome";
-import { Pane, PaneSplit } from "#/components/lang/pane";
+import { Pane, PaneSplit } from "@pe/kit/lang/pane";
 import { List } from "@pe/kit/lang/list-popup";
 import { Button } from "@pe/kit/lang/button";
 import { RunsList } from "#/route/runs-list";

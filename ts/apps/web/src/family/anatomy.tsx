@@ -106,7 +106,7 @@ export function AnatomyDrawing({
     <div className="flex size-full min-h-0">
       <div className="flex min-w-0 flex-1">{views}</div>
       <div className="hairline-l w-72 shrink-0 overflow-y-auto p-2" data-surface="page">
-        <div className="hairline-b -mx-2 -mt-2 mb-1.5 px-2 py-1.5" data-surface="recess">
+        <div className="hairline-b -mx-2 -mt-2 mb-1.5 px-2 py-1.5">
           <p className="t-small t-upper flex items-center gap-1 text-ink-2">
             constituents · {typeName}
             <TooltipHint>

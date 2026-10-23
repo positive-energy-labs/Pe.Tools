@@ -9,7 +9,7 @@ import { useEffect, useMemo, useState } from "react";
 import { ActionReceiptView } from "#/actions/receipt";
 import { FactChip } from "@pe/kit/lang/chip";
 import { EmptyState } from "@pe/kit/lang/empty";
-import { Pane } from "#/components/lang/pane";
+import { Pane } from "@pe/kit/lang/pane";
 import { Button } from "@pe/kit/lang/button";
 import { Provenance } from "@pe/kit/lang/section";
 import { Surface } from "@pe/kit/lang/surface";

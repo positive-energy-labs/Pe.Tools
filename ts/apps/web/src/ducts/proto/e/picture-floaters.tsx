@@ -6,7 +6,7 @@ import { useSceneReach } from "#/scene/reach";
 import { useMemo, useState, type ReactNode } from "react";
 
 import { Button } from "@pe/kit/lang/button";
-import type { FloaterSpec } from "#/components/lang/floater";
+import type { FloaterSpec } from "@pe/kit/lang/floater";
 import { OrbitMinimap } from "#/components/lang/minimap";
 import type { OrbitViewport } from "#/scene/orbit";
 import type { LiveOrbit } from "#/scene/live-orbit";

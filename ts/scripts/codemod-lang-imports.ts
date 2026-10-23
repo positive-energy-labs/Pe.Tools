@@ -5,6 +5,10 @@ import { fileURLToPath } from "node:url";
 const root = resolve(dirname(fileURLToPath(import.meta.url)), "..");
 const web = join(root, "apps/web/src/components/lang");
 export const langImports: Record<string, string> = {
+  pane: "pane",
+  "pane-resize": "pane-resize",
+  "pane-strip": "pane-strip",
+  floater: "floater",
   help: "tooltip",
   label: "input",
   textarea: "input",

@@ -1,3 +1,5 @@
+import { PaneOverlay } from "@pe/kit/lang/pane";
+import { ButtonGroup } from "@pe/kit/lang/button-group";
 import { SvgTip } from "@pe/kit/lang/tooltip";
 /**
  * The plan's feedback layer (V6 calm): a tools bar with two marks and a note, the drawn marks,
@@ -249,33 +251,32 @@ export function RoomsSketch({
           />
         ) : null}
       </svg>
-      <div
-        className="absolute top-1 left-1 flex items-center gap-1"
-        data-surface="page"
-        onPointerDown={stop}
-        onClick={stop}
-      >
-        <Switcher<Tool>
-          ariaLabel="plan tool"
-          value={tool}
-          onChange={(next) => {
-            setTool(next);
-            setDraft(null);
-            setPlacing(null);
-            setSaid(null);
-          }}
-          options={TOOLS}
-        />
-        {said ? (
-          <Button label="dismiss" reason="dismiss" onClick={() => setSaid(null)}>
-            {said} ×
-          </Button>
-        ) : null}
-      </div>
+      <PaneOverlay label="plan tools">
+        <div onPointerDown={stop} onClick={stop}>
+          <ButtonGroup>
+            <Switcher<Tool>
+              ariaLabel="plan tool"
+              value={tool}
+              onChange={(next) => {
+                setTool(next);
+                setDraft(null);
+                setPlacing(null);
+                setSaid(null);
+              }}
+              options={TOOLS}
+            />
+            {said ? (
+              <Button label="dismiss" reason="dismiss" onClick={() => setSaid(null)}>
+                {said} ×
+              </Button>
+            ) : null}
+          </ButtonGroup>
+        </div>
+      </PaneOverlay>
       {placing ? (
         <div
           className="absolute"
-          data-surface="artifact"
+          data-surface="document"
           style={place([placing])}
           onPointerDown={stop}
           onClick={stop}
@@ -296,7 +297,7 @@ export function RoomsSketch({
       ) : shown ? (
         <div
           className="absolute"
-          data-surface="artifact"
+          data-surface="document"
           data-projection={shown.id}
           style={{
             ...place(shown.polygon),

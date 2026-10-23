@@ -11,7 +11,7 @@ import { useRouter, useRouterState } from "@tanstack/react-router";
 import { THREAD_TABS_MAX, routeAddress, type RouteKey, type ThreadTab } from "@pe/agent-contracts";
 import { RouteActivity, type RouteActivityScope } from "#/route/activity";
 import { currentLocation } from "#/route/url";
-import { PaneErrorBoundary } from "#/components/lang/pane";
+import { PaneErrorBoundary } from "@pe/kit/lang/pane";
 
 interface RetainedRoute {
   key: string;

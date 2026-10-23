@@ -4,7 +4,7 @@ import { afterEach, expect, test, vi } from "vite-plus/test";
 
 import { KeyScope, readKeyMeta, readRegistrations } from "@pe/kit/keys";
 
-import { Pane } from "./pane";
+import { Pane } from "@pe/kit/lang/pane";
 
 vi.mock("#/host/diagnostics", () => ({ reportFault: vi.fn() }));
 afterEach(() => {

@@ -1,7 +1,7 @@
 import { useEffect, useMemo, useState, type ReactNode } from "react";
 import { useAtomValue } from "@effect/atom-react";
 import { ChatShell } from "#/chat/chat-shell";
-import { PaneSplit } from "#/components/lang/pane";
+import { PaneSplit } from "@pe/kit/lang/pane";
 import { ChatPlanIntent } from "#/route/situation-ladder";
 import { useWorkbench } from "./provider";
 import { useRouteTabs } from "./tabs";

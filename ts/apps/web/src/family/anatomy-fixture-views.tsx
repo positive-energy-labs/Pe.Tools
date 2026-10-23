@@ -75,7 +75,7 @@ export function AnatomyViews({
             key={view.key}
             viewBox={`0 0 ${BOX} ${BOX}`}
             className="hairline-r face-mono h-full min-w-0 flex-1 last:border-r-0"
-            data-surface="artifact"
+            data-surface="document"
             role="img"
             aria-label={`family ${view.key} view`}
           >

@@ -13,7 +13,7 @@ import { routeAddress, type CaptureReceipt } from "@pe/agent-contracts";
 import { readCaptures } from "#/captures/host";
 import { CapturesList } from "#/captures/list";
 import { OutcomeLine } from "@pe/kit/lang/outcome";
-import { Pane } from "#/components/lang/pane";
+import { Pane } from "@pe/kit/lang/pane";
 import { Surface } from "@pe/kit/lang/surface";
 import { RouteShell, useRoute, useRouteLease, urlPage, type RouteManifest } from "#/route";
 

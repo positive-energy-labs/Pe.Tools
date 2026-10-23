@@ -83,7 +83,9 @@ function useYield(ref: RefObject<HTMLDivElement | null>, place: Corner) {
       const gutter = parseFloat(getComputedStyle(own).getPropertyValue("--gutter")) || 0;
       const fixed = [
         ...field.querySelectorAll("[data-slot='pane-legend'], [data-slot='pane-dock']"),
-      ].map((el) => el.getBoundingClientRect());
+      ]
+        .filter((el) => !el.closest("[data-slot='floater']"))
+        .map((el) => el.getBoundingClientRect());
       const others = [...field.querySelectorAll(":scope > [data-slot='floater']")]
         .filter((el) => el.compareDocumentPosition(own) & Node.DOCUMENT_POSITION_FOLLOWING)
         .map((el) => el.getBoundingClientRect())
@@ -164,19 +166,19 @@ function drag(
   event.preventDefault();
 }
 
-export function Floater({ spec }: { spec: FloaterSpec }) {
+type FloaterSurfaceSpec = Omit<FloaterSpec, "onOpenChange"> &
+  Partial<Pick<FloaterSpec, "onOpenChange">>;
+
+export function Floater({ spec }: { spec: FloaterSurfaceSpec }) {
   const ref = useRef<HTMLDivElement>(null);
   const at = useYield(ref, spec.place);
   const [slide, setSlide] = useState(0);
   const [box, setBox] = useState(spec.size);
-  const defaultSize = useRef(spec.size);
   const [fieldSize, setFieldSize] = useState({ width: 0, height: 0 });
   useLayoutEffect(() => {
     const own = ref.current;
     const field = own?.parentElement;
     if (!own || !field) return;
-    const measured = own.getBoundingClientRect();
-    if (measured.width > 0 && measured.height > 0) defaultSize.current ??= measured;
     const measure = () => {
       const { width, height } = field.getBoundingClientRect();
       setFieldSize((before) =>
@@ -189,7 +191,7 @@ export function Floater({ spec }: { spec: FloaterSpec }) {
     observer.observe(field);
     return () => observer.disconnect();
   }, []);
-  const preferred = box ?? defaultSize.current;
+  const preferred = box;
   const ratio =
     preferred && fieldSize.width > 0 && fieldSize.height > 0
       ? Math.min(
@@ -199,6 +201,9 @@ export function Floater({ spec }: { spec: FloaterSpec }) {
         )
       : 1;
   const shown = preferred && { width: preferred.width * ratio, height: preferred.height * ratio };
+  useLayoutEffect(() => {
+    ref.current?.parentElement?.dispatchEvent(new Event(MOVED));
+  }, [slide, shown?.width, shown?.height]);
   const gutter = () => parseFloat(getComputedStyle(ref.current!).getPropertyValue("--gutter")) || 0;
   const startSlide = useRef(0);
   const sliding = (e: ReactPointerEvent<HTMLElement>) => {
@@ -224,6 +229,13 @@ export function Floater({ spec }: { spec: FloaterSpec }) {
         role="region"
         aria-label={spec.label}
         tabIndex={-1}
+        onPointerDownCapture={(event) => {
+          const control = (event.target as HTMLElement).closest(
+            "a,button,input,select,textarea,[contenteditable='true'],[tabindex]",
+          );
+          if (!control || control === event.currentTarget)
+            event.currentTarget.focus({ preventScroll: true });
+        }}
         data-slot="floater"
         data-floater={spec.key}
         data-place={at.corner}
@@ -231,6 +243,8 @@ export function Floater({ spec }: { spec: FloaterSpec }) {
         className={`absolute z-popup shadow-float p-1 ${PLACE[at.corner]}`}
         style={{
           ...shown,
+          maxWidth: `max(${MIN.width}px, ${CAP.width * 100}%)`,
+          maxHeight: `max(${MIN.height}px, ${CAP.height * 100}%)`,
           ["--floater-w" as string]: shown && `${shown.width}px`,
           ["--floater-h" as string]: shown && `${shown.height}px`,
           ["--floater-content-w" as string]: shown && "100%",
@@ -238,15 +252,15 @@ export function Floater({ spec }: { spec: FloaterSpec }) {
           translate: at.dy + slide ? `0 ${at.dy + slide}px` : undefined,
         }}
       >
-        <FloaterKeys spec={spec} element={ref} />
-        {spec.render()}
+        {spec.onOpenChange ? <FloaterKeys spec={spec} element={ref} /> : null}
+        <div data-slot="floater-content">{spec.render()}</div>
         <div
           data-slot="floater-grip"
           aria-label={`move ${spec.label}`}
           className="group absolute inset-x-0 -top-1 z-10 h-2.5 cursor-grab touch-none active:cursor-grabbing"
           onPointerDown={sliding}
         >
-          <span className="pointer-events-none absolute left-1/2 top-1/2 h-px w-6 -translate-x-1/2 bg-line-2 transition-[width,background-color] duration-control group-hover:w-10 group-hover:bg-ink-2 group-active:bg-ink motion-reduce:transition-none" />
+          <span className="pointer-events-none absolute left-1/2 top-1/2 h-px w-6 -translate-x-1/2 bg-line-2 transition-colors duration-control group-hover:bg-ink-2 group-active:bg-ink motion-reduce:transition-none" />
         </div>
         <div
           data-slot="floater-resize"
@@ -264,7 +278,7 @@ function FloaterKeys({
   spec,
   element,
 }: {
-  spec: FloaterSpec;
+  spec: FloaterSurfaceSpec;
   element: RefObject<HTMLDivElement | null>;
 }) {
   useScopeKeys([
@@ -274,7 +288,7 @@ function FloaterKeys({
       says: `Close the ${spec.label} floater and return to the pane.`,
       callback: () => {
         element.current?.closest<HTMLElement>("[data-slot='pane']")?.focus({ preventScroll: true });
-        spec.onOpenChange(false);
+        spec.onOpenChange?.(false);
       },
     },
   ]);

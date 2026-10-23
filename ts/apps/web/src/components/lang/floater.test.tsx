@@ -3,7 +3,7 @@ import { act, cleanup, fireEvent, render } from "@testing-library/react";
 import { afterEach, expect, test, vi } from "vite-plus/test";
 
 import { createLiveOrbit } from "#/scene/live-orbit";
-import { Floater, type FloaterSpec } from "./floater";
+import { Floater, type FloaterSpec } from "@pe/kit/lang/floater";
 import { OrbitMinimap, type OrbitViewport } from "./minimap";
 
 afterEach(() => {

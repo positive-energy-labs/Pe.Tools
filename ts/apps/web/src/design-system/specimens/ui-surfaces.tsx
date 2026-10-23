@@ -73,7 +73,7 @@ function OverlaySpecimen() {
   return (
     <SubjectBox box={subject}>
       <div className="flex items-center gap-3">
-        <div ref={subject} className="hairline p-3" data-surface="recess">
+        <div ref={subject} className="hairline p-3" data-surface="support">
           Subject
         </div>
         {["A", "B"].map((name) => (

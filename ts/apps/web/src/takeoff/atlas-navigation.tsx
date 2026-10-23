@@ -1,7 +1,7 @@
 import { Suspense, useEffect } from "react";
 import { emptyListState, useList } from "@pe/kit/lang/collection";
 import { ListView } from "@pe/kit/lang/list-view";
-import { Pane } from "#/components/lang/pane";
+import { Pane } from "@pe/kit/lang/pane";
 import { fmtNum } from "@pe/kit/table/model";
 import { onPlan } from "#/takeoff/room-actions";
 import { ZoneStateBar } from "#/takeoff/zone-state-bar";

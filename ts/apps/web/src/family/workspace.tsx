@@ -110,7 +110,7 @@ import { routeAddress } from "@pe/agent-contracts";
 
 import { Button } from "@pe/kit/lang/button";
 import { Code, stringify } from "@pe/kit/lang/code";
-import { PaneSplit } from "#/components/lang/pane";
+import { PaneSplit } from "@pe/kit/lang/pane";
 import { buildReceiptSummary } from "#/family/build";
 import type { FamilyStore } from "#/family/store";
 import { FamilyWorkspaceAnatomy } from "#/family/workspace-anatomy";

@@ -17,7 +17,7 @@ import { Table } from "@pe/kit/table/table";
 import { TableFrame } from "#/components/master-table/table-frame";
 import { emptyTableState } from "@pe/kit/table/view";
 import type { TableState } from "@pe/kit/table/model";
-import { Pane } from "#/components/lang/pane";
+import { Pane } from "@pe/kit/lang/pane";
 import { useMeasuredParse } from "#/host/measured-parse";
 import type { HostCallOptions } from "#/host/client";
 import type { CellWire } from "#/components/work/band";
