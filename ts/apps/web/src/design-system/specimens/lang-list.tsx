@@ -62,7 +62,10 @@ export function LangListSpecimens() {
   const plain = useList({ ...common, search: (kind) => ({ text: [kind] }) });
   return (
     <>
-      <SpecimenFrame name="ListView - 1000 rows - minimap" importPath="@pe/kit/lang/list-view">
+      <SpecimenFrame
+        name="ListView - sticky search and section stack - 1000 rows"
+        importPath="@pe/kit/lang/list-view"
+      >
         <ListView
           list={vast}
           aria-label="1000 rows"

@@ -29,7 +29,19 @@ const search = (keywords = "", pills: Record<string, string> = {}): ListSearch =
   pills: Object.entries(pills).map(([field, value]) => ({ field, op: "=", value })),
 });
 
-test("slash targets a separate filter bar from its focused list body", () => {
+test("a separate search row measures sticky headroom and retains slash targeting", () => {
+  const height = vi.spyOn(HTMLElement.prototype, "offsetHeight", "get").mockReturnValue(38);
+  let resize: () => void = () => {};
+  vi.stubGlobal(
+    "ResizeObserver",
+    class {
+      constructor(private notify: () => void) {}
+      observe(element: Element) {
+        if (element.matches("[data-list-search]")) resize = this.notify;
+      }
+      disconnect() {}
+    },
+  );
   function Fixture() {
     const list = useList({ ...options, items: items.slice(0, 2) });
     return (
@@ -46,6 +58,16 @@ test("slash targets a separate filter bar from its focused list body", () => {
   }
   render(<Fixture />);
   const body = screen.getByRole("listbox", { name: "separate" });
+  expect(body.style.getPropertyValue("--list-search-height")).toBe("38px");
+  expect(
+    screen
+      .getByRole("combobox", { name: "Search separate" })
+      .closest("[data-list-search]")
+      ?.hasAttribute("data-list-bar"),
+  ).toBe(true);
+  height.mockReturnValue(62);
+  act(() => resize());
+  expect(body.style.getPropertyValue("--list-search-height")).toBe("62px");
   body.focus();
   fireEvent.keyDown(body, { key: "/", code: "Slash" });
   expect(document.activeElement).toBe(screen.getByRole("combobox", { name: "Search separate" }));
@@ -552,17 +574,9 @@ test("renderer mounts a bounded viewport, exposes drop targets and distinguishes
   vi.spyOn(HTMLElement.prototype, "clientWidth", "get").mockReturnValue(400);
   const scroll = vi.fn();
   Object.defineProperty(HTMLElement.prototype, "scrollTo", { configurable: true, value: scroll });
-  vi.spyOn(HTMLElement.prototype, "getBoundingClientRect").mockReturnValue({
-    x: 0,
-    y: 0,
-    top: 0,
-    left: 0,
-    bottom: 120,
-    right: 400,
-    width: 400,
-    height: 120,
-    toJSON() {},
-  });
+  vi.spyOn(HTMLElement.prototype, "getBoundingClientRect").mockReturnValue(
+    new DOMRect(0, 0, 400, 120),
+  );
   const drop = vi.fn();
   function Harness() {
     const list = useList({
@@ -589,18 +603,14 @@ test("renderer mounts a bounded viewport, exposes drop targets and distinguishes
   const head = container.querySelector<HTMLButtonElement>("[data-list-section-head]")!;
   Object.defineProperty(head, "getBoundingClientRect", {
     configurable: true,
-    value: () => ({
-      x: 0,
-      y: 20,
-      top: 20,
-      left: 0,
-      bottom: 40,
-      right: 400,
-      width: 400,
-      height: 20,
-      toJSON() {},
-    }),
+    value: () => new DOMRect(0, 20, 400, 20),
   });
+  expect(
+    container
+      .querySelector<HTMLElement>("[data-list-view]")!
+      .style.getPropertyValue("--list-search-height"),
+  ).toBe("120px");
+  expect(head.style.top).toContain("var(--list-search-height, 0px)");
   scroll.mockClear();
   fireEvent.click(head);
   expect(head.getAttribute("aria-expanded")).toBe("true");
