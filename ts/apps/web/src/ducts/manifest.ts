@@ -45,7 +45,7 @@ import { espBefore, fanOf, healOf, healTarget, offeredFan } from "@pe/ducts-doma
 import { healRequestGroup } from "@pe/ducts-domain/heal";
 import { pendingCount, stagedCells, stagedEsp } from "@pe/ducts-domain/staged";
 import { unitFlowsIn } from "@pe/ducts-domain/survey";
-import { scopeOf, systemScope, systemsOf } from "@pe/ducts-domain/system-scope";
+import { scopeOf, systemScope, groupsOfSystem } from "@pe/ducts-domain/system-scope";
 import { healWords, networkWord, outcomeWords } from "@pe/ducts-domain/words";
 import { claimsForGroup } from "@pe/ducts-domain/claims";
 import { sceneRequest } from "#/scene/host";
@@ -139,7 +139,7 @@ export function reconcileDuctsMembers(
   reading: LoadedDuctsReading | null,
 ): Partial<DuctsPage> {
   if (!reading) return {};
-  if (page.system && !systemsOf(reading.snapshot).some((system) => system.name === page.system))
+  if (page.system && groupsOfSystem(reading.snapshot, page.system).length === 0)
     return { system: ductsPageSchema.parse({}).system, selected: "", issue: "", viewport: null };
   // A deep link can name a shared-network element absent from the raw system. Keep it until the
   // priced topology is ready to prove membership; clearing here loses a valid copied selection.
@@ -167,10 +167,7 @@ export function bindDuctsManifest(read: () => LoadedDuctsReading | null): typeof
           };
         return normalized;
       }
-      if (
-        candidate.system &&
-        !systemsOf(reading.snapshot).some((system) => system.name === candidate.system)
-      )
+      if (candidate.system && groupsOfSystem(reading.snapshot, candidate.system).length === 0)
         return {
           refusal: refuse(
             "not-ready",

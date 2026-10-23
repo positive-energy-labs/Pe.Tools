@@ -193,7 +193,11 @@ export function DuctsRoute({ url = true }: { url?: boolean } = {}) {
     [snapshot, priced?.snapshot, claimCells],
   );
   loadedReading.current = reading;
-  const reconciled = reconcileDuctsMembers(page, reading);
+  // A camera write cannot change system membership; do not rebuild its evidence for each pose.
+  const reconciled = useMemo(
+    () => reconcileDuctsMembers(page, reading),
+    [page.system, page.selected, reading],
+  );
   const membersReady = reading?.drawn != null && Object.keys(reconciled).length === 0;
   const reconciledPage = useRef<object | null>(null);
   useEffect(() => {
