@@ -1,4 +1,4 @@
-import { GoToPopup } from "@pe/kit/lang/list-popup";
+import { GoToPopup } from "@pe/kit/lang/go-to";
 import { SvgTip } from "@pe/kit/lang/tooltip";
 import { useMemo, type ReactNode } from "react";
 import { useStage } from "#/scene/stage-controller";

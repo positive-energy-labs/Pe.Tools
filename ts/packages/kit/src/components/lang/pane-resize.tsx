@@ -13,9 +13,9 @@ import {
 
 import { ChevronDown, ChevronLeft, ChevronRight, ChevronUp } from "lucide-react";
 
-import { Button } from "@pe/kit/lang/button";
-import { tv } from "@pe/kit/lib/tv";
-import { TooltipHint } from "@pe/kit/lang/tooltip";
+import { Button } from "./button";
+import { tv } from "../../lib/tv";
+import { TooltipHint } from "./tooltip";
 
 /** Collapse shrinks the target to `collapsedSize`. With `title` the split draws a rail there (the
  * title rotated under an expand press); without it the pane's own header stays as the affordance. */

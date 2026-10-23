@@ -1,7 +1,7 @@
 import { ButtonGroup } from "@pe/kit/lang/button-group";
 import { Button } from "@pe/kit/lang/button";
 import { Crosshair, X } from "lucide-react";
-import { useLiveOrbit } from "#/scene/live-orbit";
+import { useLiveOrbit } from "@pe/kit/lang/live-orbit";
 /**
  * The pane strip specimen (ledger 2026-10-21): one pane with two modes, two floaters (a plane
  * minimap over a stand-in 4000x3000 field, an orbit globe with a few painted segments) and three
@@ -13,7 +13,7 @@ import { PaneCrumb } from "@pe/kit/lang/pane-crumb";
 
 import { Floater } from "@pe/kit/lang/floater";
 import { Pane, PaneOverlay } from "@pe/kit/lang/pane";
-import { PaneStrip } from "@pe/kit/lang/pane-strip";
+import { PaneStrip } from "../../../../../packages/kit/src/components/lang/pane-strip";
 import {
   canvasColor,
   OrbitMinimap,
@@ -21,7 +21,7 @@ import {
   type OrbitViewport,
   type PlaneViewport,
   type ScrollViewport,
-} from "#/components/lang/minimap";
+} from "@pe/kit/lang/minimap";
 
 import { SpecimenFrame } from "./recipe-grid";
 
@@ -190,7 +190,7 @@ function PaneStripWidths() {
     </Pane>
   );
   return (
-    <SpecimenFrame name="Pane strip, narrow and wide" importPath="@pe/kit/lang/pane-strip">
+    <SpecimenFrame name="Pane strip, narrow and wide" importPath="@pe/kit/lang/pane">
       <div className="flex flex-col gap-4">
         <div className="h-48 w-[400px]" data-strip-width="narrow">
           {strip("pane-strip-narrow")}
@@ -226,7 +226,7 @@ export function PaneStripSpecimen() {
   );
   return (
     <>
-      <SpecimenFrame name="Pane strip, Floater, Minimap" importPath="@pe/kit/lang/pane-strip">
+      <SpecimenFrame name="Pane strip, Floater, Minimap" importPath="@pe/kit/lang/pane">
         <div className="h-96 w-full max-w-3xl">
           <Pane
             id="pane-strip-specimen"

@@ -2,9 +2,9 @@
 import { act, cleanup, fireEvent, render } from "@testing-library/react";
 import { afterEach, expect, test, vi } from "vite-plus/test";
 
-import { createLiveOrbit } from "#/scene/live-orbit";
+import { createLiveOrbit } from "@pe/kit/lang/live-orbit";
 import { Floater, type FloaterSpec } from "@pe/kit/lang/floater";
-import { OrbitMinimap, type OrbitViewport } from "./minimap";
+import { OrbitMinimap, type OrbitViewport } from "@pe/kit/lang/minimap";
 
 afterEach(() => {
   cleanup();
@@ -61,14 +61,14 @@ test("a floater avoids the docked readout without a legend", () => {
   vi.spyOn(HTMLElement.prototype, "getBoundingClientRect").mockImplementation(
     function (this: HTMLElement) {
       if (this.dataset.field !== undefined) return new DOMRect(0, 0, 600, 600);
-      if (this.dataset.slot === "pane-dock") return new DOMRect(450, 0, 150, 100);
+      if (this.hasAttribute("data-picture-readout")) return new DOMRect(450, 0, 150, 100);
       if (this.dataset.slot === "floater") return new DOMRect(500, 0, 100, 100);
       return new DOMRect();
     },
   );
   const view = render(
     <div data-field="">
-      <div data-slot="pane-dock" />
+      <div data-picture-readout="selection" />
       <Floater
         spec={{
           key: "dock",

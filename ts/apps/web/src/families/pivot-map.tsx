@@ -2,7 +2,7 @@ import { useCallback, useEffect, useState, type RefObject } from "react";
 import { familyCellKey } from "@pe/agent-contracts";
 
 import type { FloaterSpec } from "@pe/kit/lang/floater";
-import { canvasColor, PlaneMinimap } from "#/components/lang/minimap";
+import { canvasColor, PlaneMinimap } from "@pe/kit/lang/minimap";
 import type { TypeRow } from "./matrix-columns";
 import type { PatchOverlay } from "./patch-overlay";
 import { filledValue, type PivotRow } from "./pivot";

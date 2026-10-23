@@ -1,7 +1,14 @@
 import { viewportCodec } from "@pe/agent-contracts";
 import { useLayoutEffect, useRef, useState } from "react";
-import { fitDistance, ORBIT_FOV, type OrbitViewport } from "./orbit";
-import type { Bounds } from "./types";
+import type { OrbitViewport } from "@pe/agent-contracts";
+type Bounds = {
+  minX: number;
+  minY: number;
+  minZ: number;
+  maxX: number;
+  maxY: number;
+  maxZ: number;
+};
 
 type Move = "gesture" | "move";
 export type OrbitGesture = { readonly from: OrbitViewport };
@@ -19,9 +26,7 @@ const equal = (a: OrbitViewport | null, b: OrbitViewport | null) =>
 const samePage = (a: OrbitViewport | null, b: OrbitViewport | null) =>
   equal(a, b) || (!!a && !!b && viewportCodec.encode(a) === viewportCodec.encode(b));
 
-/** One live pose shared by the canvas and its controls. Page persists only the released pose:
- * publishing each frame through Page previously reran the whole route (918 ms orbit gaps).
- * A gesture token prevents a cancelled/replaced gesture from overwriting an external move. */
+/** Publish only released poses: per-frame Page writes rerendered the route in 918 ms gaps. */
 export function createLiveOrbit(
   initial: OrbitViewport | null,
   commit: (v: OrbitViewport, how: Move) => void,
@@ -94,8 +99,7 @@ export function createLiveOrbit(
 export type LiveOrbit = ReturnType<typeof createLiveOrbit>;
 
 const flights = new WeakMap<LiveOrbit, OrbitGesture>();
-/** True while a flight owns the camera. Views that cost a React render per frame (the DOM
- * annotation layer) hold their last pose until `notify` at the landing or interruption. */
+/** Costly DOM views hold their last pose until a flight lands or is interrupted. */
 export const isFlying = (orbit: LiveOrbit) => orbit.owns(flights.get(orbit) ?? null);
 const easeInOut = (t: number) => (t < 0.5 ? 4 * t ** 3 : 1 - (-2 * t + 2) ** 3 / 2);
 const easeOut = (t: number) => 1 - (1 - t) ** 3;
@@ -111,12 +115,7 @@ export type Flight = {
   onLand?: () => void;
 };
 
-/**
- * Travel to a pose: eased in and out, the shortest yaw, no roll. A hop longer than the view rises
- * mid-flight until origin and destination share the frame (a van Wijk zoom, cut to a sine), so
- * the eye keeps its place. Any gesture or newer move takes the orbit and ends it at once; a newer
- * flight retargets from where this one is, leaving at speed rather than restarting from rest.
- */
+/** Long hops rise to keep both ends visible; retargeting keeps the current speed. */
 export function flyTo(orbit: LiveOrbit, to: OrbitViewport, flight: Flight = {}) {
   const from = orbit.read();
   const retarget = orbit.owns(flights.get(orbit) ?? null);
@@ -130,7 +129,14 @@ export function flyTo(orbit: LiveOrbit, to: OrbitViewport, flight: Flight = {}) 
   const z0 = Math.log(from.zoom),
     z1 = Math.log(to.zoom);
   const radius = flight.scene
-    ? fitDistance(flight.scene) * Math.sin((ORBIT_FOV / 2) * (Math.PI / 180))
+    ? Math.max(
+        Math.hypot(
+          flight.scene.maxX - flight.scene.minX,
+          flight.scene.maxY - flight.scene.minY,
+          flight.scene.maxZ - flight.scene.minZ,
+        ) / 2,
+        0.5,
+      )
     : 0;
   const reach = radius && travel ? Math.log(radius / (0.65 * travel)) : Infinity;
   const rise = Math.max(0, (z0 + z1) / 2 - Math.max(reach, Math.min(0, z0, z1)));
@@ -181,10 +187,7 @@ export function glideLook(orbit: LiveOrbit) {
   if (now) flyTo(orbit, { ...now, yaw: NORTH_YAW });
 }
 
-/** Scope changes (system, document, view mode) cancel gestures even if the saved pose is equal.
- * pageValue is the actual Page key, distinct from a derived fit. Its identity detects explicit
- * external moves even to the same saved pose; rebuilding an equal fit is not such a move.
- * Delayed acknowledgements of our commits must not reset a newer gesture. */
+/** Scope and Page identity cancel gestures; acknowledgements never reset newer input. */
 export function useLiveOrbit(
   pose: OrbitViewport | null,
   commit: (v: OrbitViewport, how: Move) => void,

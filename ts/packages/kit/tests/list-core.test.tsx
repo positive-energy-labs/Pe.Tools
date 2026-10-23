@@ -793,9 +793,13 @@ test("land restarts one token-timed mark and optionally focuses the destination 
   document.body.append(el);
   const scroll = vi.fn();
   el.scrollIntoView = scroll;
+  land(el, { focus: true, requested: false, scroll });
+  expect(scroll).not.toHaveBeenCalled();
+  expect(el.hasAttribute("data-landed")).toBe(false);
+  expect(document.activeElement).not.toBe(el.firstElementChild);
   land(el, { focus: true });
   expect(document.activeElement).toBe(el.firstElementChild);
-  expect(scroll).toHaveBeenCalledWith({ block: "nearest", behavior: "instant" });
+  expect(scroll).toHaveBeenCalledWith({ block: "nearest", inline: "nearest", behavior: "instant" });
   expect(el.hasAttribute("data-landed")).toBe(true);
   vi.advanceTimersByTime(1000);
   land(el);

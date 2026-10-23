@@ -25,7 +25,7 @@ import {
   useNativeObservation,
   type NativeObservation,
 } from "#/revit/observation";
-import type { LiveOrbit, OrbitGesture } from "./live-orbit";
+import type { LiveOrbit, OrbitGesture } from "@pe/kit/lang/live-orbit";
 import { isClick, pickAt } from "./picking";
 import { samePlane, type PlaneAxis, type PlaneViewport } from "./plane";
 import type { Project, Ray, Size } from "./projection";

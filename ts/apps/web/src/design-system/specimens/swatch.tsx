@@ -2,7 +2,7 @@ import { Link } from "@tanstack/react-router";
 
 import { ThemeToggle } from "@pe/kit/lang/theme-toggle";
 import { FactChip } from "@pe/kit/lang/chip";
-import { SearchControl } from "@pe/kit/lang/search-control";
+import { SearchControl } from "../../../../../packages/kit/src/components/lang/search-control";
 import { KeyHint } from "@pe/kit/lang/key-hint";
 
 import { LangBaySpecimens } from "./lang-bay";

@@ -1,4 +1,4 @@
-import { TooltipHint } from "@pe/kit/lang/tooltip";
+import { TooltipHint } from "./tooltip";
 import {
   Children,
   Component,
@@ -16,16 +16,16 @@ import {
 import { createPortal } from "react-dom";
 import { ButtonGroup } from "./button-group";
 
-import { Floater, type FloaterSpec } from "@pe/kit/lang/floater";
-import { PaneStrip, type PaneStripProps } from "@pe/kit/lang/pane-strip";
-import { KeyScope, useDeclaredGestures } from "@pe/kit/keys";
-import { KeyLegend } from "@pe/kit/lang/key-hint";
-import { POINTER_WORD } from "@pe/kit/lang/gesture-glyph";
-import { Button } from "@pe/kit/lang/button";
-import { tv, type VariantProps } from "@pe/kit/lib/tv";
+import { Floater, type FloaterSpec } from "./floater";
+import { PaneStrip, type PaneStripProps } from "./pane-strip";
+import { KeyScope, useDeclaredGestures } from "../../keys";
+import { KeyLegend } from "./key-hint";
+import { POINTER_WORD } from "./gesture-glyph";
+import { Button } from "./button";
+import { tv, type VariantProps } from "../../lib/tv";
 
-import { Rail } from "@pe/kit/lang/rail";
-import "@pe/kit/lang/pane.css";
+import { Rail } from "./rail";
+import "./pane.css";
 
 const PaneFaultContext = createContext<((error: unknown) => void) | undefined>(undefined);
 /** The application supplies its diagnostics sink once; kit has no host dependency. */

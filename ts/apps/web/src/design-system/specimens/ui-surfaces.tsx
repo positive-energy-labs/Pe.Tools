@@ -10,13 +10,13 @@ import {
   dialogRecipe,
 } from "@pe/kit/lang/dialog";
 import { ValueDiff, valueDiffRecipe } from "@pe/kit/lang/value-diff";
-import { Rail } from "@pe/kit/lang/rail";
+import { Rail } from "../../../../../packages/kit/src/components/lang/rail";
 import { RecipeGrid, SpecimenFrame } from "./recipe-grid";
 
 export function UiSurfaceSpecimens() {
   return (
     <>
-      <SpecimenFrame name="Rail" importPath="@pe/kit/lang/rail">
+      <SpecimenFrame name="Rail" importPath="@pe/kit/lang/pane">
         <div className="grid w-80 gap-2">
           <Rail lead={<span className="t-small t-upper">lead only</span>} />
           <Rail

@@ -8,7 +8,7 @@ import { boundsOfInstances, boundsOfPoints, frame, type OrbitViewport } from "#/
 import type { PictureBounds } from "#/scene/framing";
 import type { useStage } from "#/scene/stage-controller";
 import { viewportProject, type Project, type Size } from "#/scene/projection";
-import { type LiveOrbit } from "#/scene/live-orbit";
+import { type LiveOrbit } from "@pe/kit/lang/live-orbit";
 import { Scene3D } from "#/scene/scene3d";
 import type { SceneRead } from "#/scene/use-scene";
 import type { Bounds, Layer3D, SceneMeshes } from "#/scene/types";

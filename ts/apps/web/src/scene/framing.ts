@@ -1,3 +1,4 @@
+import { PANE_OBSTACLES } from "@pe/kit/lang/floater";
 /**
  * Framing a subject on any 3D stage: the pose that shows it with its neighbours, slid clear of the
  * readout and every surface docked over the picture. Shared by /ducts and /space; only a named
@@ -52,7 +53,7 @@ const ANCHORS = [0.5, 0.4, 0.6, 0.3, 0.7, 0.2, 0.8, 0.12, 0.88];
 
 /**
  * `view` slid so `target` lands in the most open part of the picture: clear of the readout and
- * every surface docked over it (`pane-dock`, `pane-legend`, `floater`), the centre preferred. A narrow picture
+ * every surface docked over it (readout, legend, floater), the centre preferred. A narrow picture
  * stacks its floaters down the middle; a subject framed dead centre would land under one.
  */
 export function clearPose(
@@ -65,9 +66,7 @@ export function clearPose(
   const field = picture.closest("[data-slot='pane-field']");
   if (!field || !at.width || !at.height) return view;
   const blocks = [
-    ...field.querySelectorAll(
-      "[data-slot='pane-dock'], [data-slot='pane-legend'], :scope > [data-slot='floater']",
-    ),
+    ...field.querySelectorAll(`${PANE_OBSTACLES}, :scope > [data-slot='floater']`),
   ].map((el) => el.getBoundingClientRect());
   if (!blocks.length) return view;
   const project = viewportProject(view, scene, at);

@@ -1,7 +1,7 @@
 // @vitest-environment jsdom
 import { cleanup, fireEvent, render, screen, waitFor } from "@testing-library/react";
 import { afterEach, expect, test, vi } from "vite-plus/test";
-import { GoToPopup } from "../src/components/lang/list-popup";
+import { GoToPopup } from "../src/components/lang/go-to";
 import { SubjectTextContext } from "../src/components/lang/subject-text";
 import { reachStore } from "../src/components/lang/reach";
 

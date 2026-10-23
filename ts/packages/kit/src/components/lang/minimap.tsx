@@ -1,18 +1,14 @@
-import { SvgTip } from "@pe/kit/lang/tooltip";
-/**
- * A minimap is a floater kind (ledger 2026-10-21): a small picture of the whole field with the
- * viewport drawn on it; a click writes the viewport (`"move"`), a drag glides it (`"gesture"`).
- * Two pictures, one contract: `PlaneMinimap` for a scrolled or panned plane (the families pivot
- * minimap, generalised) and `OrbitMinimap` for an orbit camera (the ducts globe, ported).
- */
+import { MinimapViewport } from "./minimap-viewport";
+import "./lang.css";
+import { SvgTip } from "./tooltip";
 import { useEffect, useRef, useState, type MouseEvent, type ReactNode } from "react";
 
-import { tokenRef } from "@pe/kit/lib/token";
+import { tokenRef } from "../../lib/token";
 
 import type { OrbitViewport, PlaneViewport, ScrollViewport } from "@pe/agent-contracts";
 export type { OrbitViewport, PlaneViewport, ScrollViewport };
 
-import { glideLook, type LiveOrbit, type OrbitGesture } from "#/scene/live-orbit";
+import { glideLook, type LiveOrbit, type OrbitGesture } from "./live-orbit";
 
 type ViewportHow = "gesture" | "move";
 
@@ -23,10 +19,6 @@ interface MinimapProps<V> {
 
 type Size = { width: number; height: number };
 
-/* ── The plane ─────────────────────────────────────────────────────────────── */
-
-// ponytail: one fixed thumbnail box, as the pivot minimap had; size it from the floater when a
-// consumer needs a different one.
 const THUMB = 260;
 
 /**
@@ -41,7 +33,6 @@ export const canvasColor = (ctx: CanvasRenderingContext2D, role: string): string
   return colour;
 };
 
-/** The field rectangle the viewport shows, in field units. */
 const visibleRect = (v: PlaneViewport | ScrollViewport, size: Size) =>
   v.kind === "scroll"
     ? { x: v.left, y: v.top, width: size.width, height: size.height }
@@ -52,7 +43,6 @@ const visibleRect = (v: PlaneViewport | ScrollViewport, size: Size) =>
         height: size.height / v.scale,
       };
 
-/** The viewport centred on field point (x, y); a scroll viewport stays inside the field. */
 const centredOn = <V extends PlaneViewport | ScrollViewport>(
   v: V,
   x: number,
@@ -124,22 +114,17 @@ export function PlaneMinimap<V extends PlaneViewport | ScrollViewport>({
           onViewport(at(event), "move");
         }}
       />
-      <div
-        data-minimap-viewport=""
-        className="pointer-events-none absolute text-ink"
+      <MinimapViewport
         style={{
           left: box.x * k,
           top: box.y * k,
           width: Math.max(4, box.width * k),
           height: Math.max(4, box.height * k),
-          border: "1px solid currentColor",
         }}
       />
     </div>
   );
 }
-
-/* ── The orbit ─────────────────────────────────────────────────────────────── */
 
 const SIZE = 220;
 const C = SIZE / 2;
@@ -159,7 +144,6 @@ const towards = (yaw: number, elev: number): Vec => {
   return [Math.cos(rad(yaw)) * cosE, Math.sin(rad(yaw)) * cosE, Math.sin(rad(elev))];
 };
 
-/** The globe's projection: a unit-sphere point to SVG coordinates, at the viewport's yaw/elev. */
 const globeProjection = (yaw: number, elev: number) => {
   const cos = Math.cos(rad(yaw));
   const sin = Math.sin(rad(yaw));
@@ -172,7 +156,6 @@ const globeProjection = (yaw: number, elev: number) => {
   };
 };
 
-/** The 18 orientations, as camera yaw (null keeps the yaw) and elevation. */
 const STOPS: readonly { rel: number | null; elev: number; pole: boolean }[] = [
   { rel: null, elev: 90, pole: true },
   { rel: null, elev: -90, pole: true },
@@ -185,7 +168,6 @@ const STOPS: readonly { rel: number | null; elev: number; pole: boolean }[] = [
 ];
 
 const COMPASS = ["N", "NE", "E", "SE", "S", "SW", "W", "NW"] as const;
-/** The compass word of a plan direction, from project north (+y). */
 const bearing = (v: Vec, step: 45 | 90 = 45) => {
   const deg = ((((Math.atan2(v[0], v[1]) * 180) / Math.PI) % 360) + 360) % 360;
   return COMPASS[((Math.round(deg / step) * step) / 45) % 8]!;
@@ -195,12 +177,6 @@ const poleLabel = (v: Vec, elev: number) =>
 const stopTitle = (v: Vec, elev: number) =>
   elev === 90 ? "↑ plan" : elev < 0 ? "↓ floor" : `${bearing(v)} ${elev}°`;
 
-/**
- * The globe: a wire sphere whose three great circles (plan, N-S and E-W) carry 6 poles and 12
- * mid-arc stops; a click on a stop writes that orientation, a drag turns the globe. Far-side wire
- * and stops draw dim, behind the picture; stops below the floor are drawn and refused. `lines` draw
- * the picture in unit-sphere space, z up, without React work while the camera moves.
- */
 function globeBody(yaw: number, elev: number) {
   const at = globeProjection(yaw, elev);
   const eye = towards(yaw, elev);
@@ -211,7 +187,6 @@ function globeBody(yaw: number, elev: number) {
       return (t: number): Vec => [u[0] * Math.cos(t), u[1] * Math.cos(t), Math.sin(t)];
     }),
   ];
-  // Each circle splits into the near half (solid) and the far half (faint).
   let near = "";
   let far = "";
   for (const circle of circles)
@@ -250,7 +225,6 @@ export function OrbitMinimap({
   orbit: LiveOrbit;
   lines?: readonly (readonly (readonly number[])[])[];
   litLines?: readonly (readonly (readonly number[])[])[];
-  stops?: "globe";
 }) {
   const svg = useRef<SVGSVGElement>(null);
   const live = useRef(orbit);

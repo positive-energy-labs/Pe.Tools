@@ -1,5 +1,5 @@
 import { expect, test, vi } from "vite-plus/test";
-import { createLiveOrbit, flyTo } from "./live-orbit";
+import { createLiveOrbit, flyTo } from "@pe/kit/lang/live-orbit";
 import { viewportCodec } from "@pe/agent-contracts";
 import type { OrbitViewport } from "./orbit";
 

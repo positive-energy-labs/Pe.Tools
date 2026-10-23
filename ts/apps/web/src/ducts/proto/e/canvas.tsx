@@ -24,7 +24,7 @@ import { observedElements } from "#/revit/observation";
 import { Pane } from "@pe/kit/lang/pane";
 import { useNativeObservation } from "#/revit/observation";
 import { useScene } from "#/scene/use-scene";
-import { useLiveOrbit } from "#/scene/live-orbit";
+import { useLiveOrbit } from "@pe/kit/lang/live-orbit";
 import type { Bounds } from "#/scene/types";
 import { Button } from "@pe/kit/lang/button";
 import { viewportProject } from "#/scene/projection";

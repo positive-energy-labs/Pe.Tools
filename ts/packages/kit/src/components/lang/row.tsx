@@ -1,10 +1,4 @@
 import { reachProps, useReach, useReachSetter } from "./reach";
-/**
- * The one list item and table row (`as="tr"`): one height, one type rung, mono only from a column
- * or the meta slot. States are data attributes (cursor, selected, active, pending, failed), never
- * hues; a refusal is `aria-disabled` and greyed, its reason in a Tooltip (never drawn).
- * Painted in lang.css. A Row with `depth` is a tree node; ListView nests them.
- */
 import { createContext, useContext, useState, type CSSProperties, type ReactNode } from "react";
 import { ChevronRight, Flame } from "lucide-react";
 
@@ -17,9 +11,19 @@ import "./lang.css";
 const landings = new WeakMap<HTMLElement, ReturnType<typeof setTimeout>>();
 
 /** A named arrival scrolls nearest and marks once; focus is reserved for editing destinations. */
-export function land(el: HTMLElement, { focus = false }: { focus?: boolean } = {}) {
+export function land(
+  el: HTMLElement | null | undefined,
+  {
+    focus = false,
+    requested = true,
+    scroll,
+  }: { focus?: boolean; requested?: boolean; scroll?: () => void } = {},
+) {
+  if (!requested) return;
+  scroll?.();
+  if (!el) return;
   clearTimeout(landings.get(el));
-  el.scrollIntoView?.({ block: "nearest", behavior: "instant" });
+  el.scrollIntoView?.({ block: "nearest", inline: "nearest", behavior: "instant" });
   if (focus)
     (el.querySelector<HTMLElement>("input, select, textarea, button, [tabindex]") ?? el).focus({
       preventScroll: true,
@@ -217,7 +221,7 @@ const rowStateProps = (state: RowState) => ({
 export function Row(props: RowProps) {
   const { damage, refusal } = props;
   const rung = useReach(props.revitIds?.[0]);
-  const setReach = useReachSetter();
+  const setReach = useReachSetter("hovered");
   const shared = {
     ...reachProps(rung),
     id: props.id,
