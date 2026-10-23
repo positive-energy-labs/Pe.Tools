@@ -3,7 +3,7 @@ import type { LineSegments2 } from "three/addons/lines/LineSegments2.js";
 import { expect, it } from "vite-plus/test";
 import { damageLayers, damageMark, damageLayer, heartbeat, setDamageHue } from "./damage";
 import { landing, markFrame, markLines } from "./marks";
-import { fogDensity, groundOf, GROUND_MATERIAL } from "./grounds";
+import { BLACK, WHITE, fogDensity, groundOf, GROUND_MATERIAL } from "./grounds";
 import { SceneMeshes, type LayerFrame, type SceneInstance } from "./types";
 
 const instance: SceneInstance = {
@@ -88,6 +88,16 @@ it("damage keeps mesh and row identity, beats, flashes once, and holds still for
         !extra.selected && !extra.lit && extra.state !== "hover" && extra.state !== "focus",
       );
   }
+});
+
+it.each([WHITE, BLACK])("shared ground colours cannot be corrupted by a material", (color) => {
+  const before = color.clone();
+  expect(() => color.copy(new THREE.Color())).toThrow(TypeError);
+  const material = new THREE.MeshLambertMaterial({ ...GROUND_MATERIAL, color });
+  material.color.lerp(before, 0.5);
+  expect(material.color).not.toBe(color);
+  expect(color.equals(before)).toBe(true);
+  material.dispose();
 });
 
 it("grounds follow capture focus or lighting, with scale-invariant exponential fog", () => {
