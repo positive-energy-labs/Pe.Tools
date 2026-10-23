@@ -28,6 +28,15 @@ const allow = (entries: Record<string, string>): Allow[] =>
 // Filenames use the wave-4 final homes: land.ts, revit-target.tsx and go-to.tsx.
 // prettier-ignore
 const RULES: Rule[] = [
+  { id: "svg-reach-identity", doctrine: "N7", pattern: /svg \[data-revit-ids\]/g,
+    roots: [K + "components/lang/lang.css"], allow: [],
+    cannotSee: "Computed SVG paint; references-only native targets must use reach state, not numeric-id presence." },
+  { id: "hover-close-owner", doctrine: "N7", pattern: /timer:\s*setTimeout|setTimeout\([^;]{0,300}NO_LIGHTING/g,
+    roots: [W + "ducts/proto/e/screen.tsx"], allow: [],
+    cannotSee: "Aliased timers and timers outside the subject-lighting owner; browser travel still needs a pass." },
+  { id: "label-placement-owner", doctrine: "L3", pattern: /while\s*\(|taken\.some|clear\(box\)/g,
+    roots: [W + "ducts/{annotations,subject-labels}.tsx"], allow: [],
+    cannotSee: "Computed placement or visual overlaps; only the former local collision loops are scanned." },
   { id: "css-damage-owner", doctrine: "I2", pattern: /pe-damage-beat|\[data-damage\]/g,
     roots: [W + "**/*.css", K + "**/*.css"],
     allow: [{ glob: K + "components/lang/lang.css", reason: "One shared critical-damage mark owns the pulse and selectors." }],

@@ -1,3 +1,4 @@
+import { useHoverGrace } from "@pe/kit/lang/hover-grace";
 import { land } from "@pe/kit/lang/land";
 /**
  * THROWAWAY (protoui round 3): E2 ("C simplicity, B layout"). LEFT a resizable double sidebar: a
@@ -532,30 +533,17 @@ function LoadedScreenBody({
     () => reach.set((state) => ({ ...state, lighting: NO_LIGHTING })),
     [reach, snapshot, page.system, page.picture],
   );
-  // Lit Subjects carried out of a text stay lit while the pointer keeps moving over the picture
-  // (`hold`), so it can reach their badges (about 500 px from the inbox on Chadds EX 19); they go
-  // dark 700 ms after it stops or leaves. Any light cancels a pending clear.
-  const clearing = useRef<{ timer?: ReturnType<typeof setTimeout>; owner?: string }>({});
-  useEffect(() => () => clearTimeout(clearing.current.timer), []);
-  const clearSubjects = useCallback(
+  const closeSubjects = useCallback(
     (owner: string) => {
-      clearTimeout(clearing.current.timer);
-      clearing.current = {
-        owner,
-        timer: setTimeout(() => {
-          clearing.current = {};
-          reach.set((state) =>
-            state.lighting.owner === owner ? { ...state, lighting: NO_LIGHTING } : state,
-          );
-        }, 700),
-      };
+      reach.set((state) =>
+        state.lighting.owner === owner ? { ...state, lighting: NO_LIGHTING } : state,
+      );
     },
     [reach],
   );
-  const holdSubjects = useCallback(() => {
-    const { owner } = clearing.current;
-    if (owner) clearSubjects(owner);
-  }, [clearSubjects]);
+  const grace = useHoverGrace(closeSubjects);
+  const clearSubjects = grace.leave;
+  const holdSubjects = grace.hold;
   const lightSubjects = useCallback(
     (
       references: readonly SubjectReference[],
@@ -563,8 +551,7 @@ function LoadedScreenBody({
       owner?: string,
       ids: readonly number[] = [],
     ) => {
-      clearTimeout(clearing.current.timer);
-      clearing.current = {};
+      grace.cancel();
       const tinted = new Set(focus == null ? [...ids, ...references.map((r) => r.id)] : [focus]);
       reach.set((state) => {
         const current = state.lighting;
@@ -585,7 +572,7 @@ function LoadedScreenBody({
             };
       });
     },
-    [reach],
+    [reach, grace],
   );
   const setHoveredIssue = useReachSetter("issue", reach);
   const issues = useMemo(() => (inbox ? stageIssues(inbox) : []), [inbox]);

@@ -100,7 +100,7 @@ function PaneStripAnatomy() {
           floaters={[corner]}
           layers={{ value: ["grid"], options: unbound(LAYERS), onToggle: () => {} }}
         />
-        <div className="relative h-24 w-64" data-surface="support">
+        <div className="relative h-24 w-64" data-surface="support" data-slot="pane-field">
           {open ? <Floater spec={corner} /> : null}
         </div>
       </div>

@@ -155,3 +155,20 @@ test("shrinking a navigation field caps its floaters and restores their preferre
   act(() => observers.forEach((run) => run()));
   expect([floater.style.width, floater.style.height]).toEqual(["230px", "230px"]);
 });
+
+test("a CSS-folded floater is a chip that opens its content on press", async () => {
+  const computed = getComputedStyle;
+  vi.stubGlobal("getComputedStyle", (el: Element) => {
+    const style = computed(el);
+    const read = style.getPropertyValue.bind(style);
+    vi.spyOn(style, "getPropertyValue").mockImplementation((name) =>
+      name === "--floater-folded" ? "1" : read(name),
+    );
+    return style;
+  });
+  const { view, floater } = setup();
+  expect(floater.hasAttribute("data-folded")).toBe(true);
+  expect(view.queryByText("content")).toBeNull();
+  fireEvent.click(view.getByRole("button", { name: "globe" }));
+  expect(await view.findByText("content")).toBeTruthy();
+});

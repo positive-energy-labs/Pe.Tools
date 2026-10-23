@@ -1,11 +1,13 @@
+import { layoutCaptions } from "./subject-labels";
 import { expect, it } from "vite-plus/test";
-import { placeChips, placeLabels } from "./annotations";
+import { placeChips } from "./annotations";
 
 it("footnote chips sit above their anchors, clear each other and the anchors, and stay in the picture", () => {
   const size = { width: 400, height: 300 };
   // Five anchors within a few pixels: close connectors on one fitting.
   const anchors = [0, 1, 2, 3, 4].map((i) => ({ x: 200 + i * 3, y: 150 + (i % 2) * 2, n: i + 1 }));
-  const chips = placeChips(anchors, size);
+  const chips = placeChips(anchors, size).filter((chip) => chip !== null);
+  expect(chips).toHaveLength(anchors.length);
   expect(chips[0]).toEqual({ x: 200, y: 126 });
   const boxes = chips.map((c, i) => {
     const w = 9 + 7 * String(anchors[i]!.n).length;
@@ -23,17 +25,29 @@ it("footnote chips sit above their anchors, clear each other and the anchors, an
 });
 
 it("loss labels: the same words at one place draw once; different words step down", () => {
-  const project = (p: readonly number[]) => [p[0]!, p[1]!] as [number, number];
-  const placed = placeLabels(
+  const placed = layoutCaptions(
     [
-      { key: "leg", at: [10, 10, 0], text: "Σ 121 eq ft", priced: true },
-      { key: "path", at: [11, 10, 0], text: "Σ 121 eq ft", priced: true },
-      { key: "other", at: [10, 10, 0], text: "Σ 45 eq ft", priced: true },
+      { key: "leg", x: 18, y: 24, text: "Σ 121 eq ft", priced: true },
+      { key: "path", x: 19, y: 24, text: "Σ 121 eq ft", priced: true },
+      { key: "other", x: 18, y: 24, text: "Σ 45 eq ft", priced: true },
     ],
-    project as never,
+    { x: 0, y: 0, width: 400, height: 300 },
   );
   expect(placed.map((p) => [p.key, p.y])).toEqual([
     ["leg", 24],
     ["other", 36],
   ]);
+});
+
+it("hover gives a dropped caption priority without overprinting another caption", () => {
+  const labels = [1, 2].map((id) => ({
+    key: String(id),
+    x: 0,
+    y: 10,
+    text: `subject ${id}`,
+    ids: [id],
+  }));
+  const bounds = { x: 0, y: 0, width: 80, height: 12 };
+  expect(layoutCaptions(labels, bounds).map((p) => p.key)).toEqual(["1"]);
+  expect(layoutCaptions(labels, bounds, [], 2).map((p) => p.key)).toEqual(["2"]);
 });

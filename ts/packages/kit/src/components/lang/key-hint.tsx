@@ -1,3 +1,4 @@
+import { useHoverGrace } from "./hover-grace";
 import type { ReactNode } from "react";
 import { chordLabel, type Chord, type PointerKind } from "../../keys";
 import { GestureGlyph, POINTER_WORD } from "./gesture-glyph";
@@ -20,7 +21,7 @@ export function KeyHint({
   );
 }
 
-import { Fragment, useState } from "react";
+import { Fragment, useCallback, useState } from "react";
 import { useScopeKeys } from "../../keys";
 
 import { tokenRef } from "../../lib/token";
@@ -75,6 +76,8 @@ export function KeyLegend({
 }) {
   const [pinned, setPinned] = useState(defaultOpen);
   const [hover, setHover] = useState(false);
+  const close = useCallback(() => setHover(false), []);
+  const grace = useHoverGrace(close);
   const open = pinned || hover;
   useScopeKeys([
     {
@@ -90,8 +93,11 @@ export function KeyLegend({
       data-key-legend={open ? "open" : "closed"}
       className={`t-small select-none rounded-sm px-2 py-1 font-sans ${className}`}
       style={{ background: tokenRef("page") }}
-      onMouseEnter={() => setHover(true)}
-      onMouseLeave={() => setHover(false)}
+      onMouseEnter={() => {
+        grace.cancel();
+        setHover(true);
+      }}
+      onMouseLeave={() => grace.leave(undefined)}
     >
       {open ? (
         <div className="grid grid-cols-[auto_1fr] items-center gap-x-3">

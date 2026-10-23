@@ -1,3 +1,4 @@
+import { HOVER_GRACE } from "./hover-grace";
 import { useRef } from "react";
 import { Popover as Primitive } from "@base-ui/react/popover";
 import {
@@ -39,8 +40,8 @@ export function HoverCardTrigger({
       kind={kind}
       openOnHover
       delay={500}
-      closeDelay={200}
       {...props}
+      closeDelay={HOVER_GRACE}
     />
   );
 }

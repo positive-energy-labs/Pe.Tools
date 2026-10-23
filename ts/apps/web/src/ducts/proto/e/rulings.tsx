@@ -100,7 +100,9 @@ export function useMarks({
             const end = [...leg.ids, leg.to.id].reverse().find((id) => cumulative.has(id));
             const text =
               end == null ? `${leg.name} · unpriced` : `Σ ${fmtFt(cumulative.get(end))} eq ft`;
-            return [{ key: `${leg.name}|${leg.ids[0]}`, at, text, priced: end != null }];
+            return [
+              { key: `${leg.name}|${leg.ids[0]}`, at, text, ids: leg.ids, priced: end != null },
+            ];
           })
         : scene.nodes.flatMap((f) => {
             if (f.node.kind !== "terminal") return [];
@@ -108,6 +110,7 @@ export function useMarks({
             return [
               {
                 key: String(f.node.id),
+                ids: [f.node.id],
                 at: f.node.point,
                 text: total == null ? "unpriced" : `Σ ${fmtFt(total)} eq ft`,
                 priced: total != null,

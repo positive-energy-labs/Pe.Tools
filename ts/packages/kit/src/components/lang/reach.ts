@@ -105,6 +105,7 @@ export function reachProps(rung: ReachRung = "rest") {
     el.setAttribute("data-reach", focused ? "focus" : over ? "hover" : rung);
   return {
     "data-reach": rung,
+    onPointerEnter: (event: PointerEvent<Element>) => paint(event.currentTarget, true),
     onPointerOver: (event: PointerEvent<Element>) => paint(event.currentTarget, true),
     onPointerOut: (event: PointerEvent<Element>) => {
       if (!event.currentTarget.contains(event.relatedTarget as Node | null))

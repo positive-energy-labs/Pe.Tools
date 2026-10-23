@@ -1,3 +1,4 @@
+import { HOVER_GRACE, useHoverGrace } from "./hover-grace";
 import { reachProps } from "./reach";
 import {
   createContext,
@@ -112,6 +113,7 @@ export function TooltipTrigger(props: Primitive.Trigger.Props) {
     <Primitive.Trigger
       className="dl-button"
       {...props}
+      closeDelay={HOVER_GRACE}
       aria-describedby={
         [props["aria-describedby"], description?.open ? description.id : undefined]
           .filter(Boolean)
@@ -172,9 +174,11 @@ export function TooltipContent({
 }
 
 /** A short hint on the containing SVG mark, including keyboard focus; no HTML inside SVG. */
-export function SvgTip({ content }: { content: string }) {
+export function SvgTip({ content }: { content: ReactNode }) {
   const [mark, setMark] = useState<SVGElement | null>(null);
   const [open, setOpen] = useState(false);
+  const close = useCallback(() => setOpen(false), []);
+  const grace = useHoverGrace(close);
   const attach = useCallback(
     (node: SVGMetadataElement | null) =>
       setMark(node?.parentElement instanceof SVGElement ? node.parentElement : null),
@@ -184,18 +188,20 @@ export function SvgTip({ content }: { content: string }) {
     if (!mark) return;
     let timer: ReturnType<typeof setTimeout>;
     const enter = () => {
+      grace.cancel();
       mark.setAttribute("data-reach", mark.matches(":focus") ? "focus" : "hover");
       timer = setTimeout(() => setOpen(true), 350);
     };
     const leave = () => {
       clearTimeout(timer);
-      setOpen(false);
+      grace.leave(undefined);
       mark.setAttribute(
         "data-reach",
         mark.matches(":focus") ? "focus" : mark.matches(":hover") ? "hover" : "rest",
       );
     };
     const focus = () => {
+      grace.cancel();
       mark.setAttribute("data-reach", "focus");
       setOpen(true);
     };
@@ -205,14 +211,15 @@ export function SvgTip({ content }: { content: string }) {
     mark.setAttribute("data-reach", "rest");
     const description = mark.getAttribute("aria-description");
     if (tab == null) mark.setAttribute("tabindex", "0");
-    mark.setAttribute("aria-description", content);
+    if (typeof content === "string") mark.setAttribute("aria-description", content);
     mark.addEventListener("pointerenter", enter);
     mark.addEventListener("pointerleave", leave);
     mark.addEventListener("focus", focus);
     mark.addEventListener("blur", leave);
     mark.addEventListener("pointerdown", leave);
     return () => {
-      leave();
+      clearTimeout(timer);
+      grace.cancel();
       mark.removeAttribute("data-svg-tip");
       if (reach == null) mark.removeAttribute("data-reach");
       else mark.setAttribute("data-reach", reach);
@@ -225,12 +232,20 @@ export function SvgTip({ content }: { content: string }) {
       mark.removeEventListener("blur", leave);
       mark.removeEventListener("pointerdown", leave);
     };
-  }, [mark, content]);
+  }, [mark, content, grace]);
   return (
     <>
       <metadata ref={attach} />
       <Tooltip open={open} onOpenChange={setOpen}>
-        <TooltipContent anchor={mark}>{content}</TooltipContent>
+        <TooltipContent
+          anchor={mark}
+          onFocusCapture={grace.cancel}
+          onBlurCapture={() => grace.leave(undefined)}
+          onPointerEnter={grace.cancel}
+          onPointerLeave={() => grace.leave(undefined)}
+        >
+          {content}
+        </TooltipContent>
       </Tooltip>
     </>
   );

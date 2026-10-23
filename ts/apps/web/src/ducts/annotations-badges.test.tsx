@@ -1,6 +1,8 @@
 // @vitest-environment jsdom
 import { cleanup, fireEvent, render } from "@testing-library/react";
 import { afterEach, expect, it, vi } from "vite-plus/test";
+import { ElementMenu } from "#/revit/element-menu";
+import { NativeObservationScope } from "#/revit/observation";
 import { Annotations } from "./annotations";
 import { SubjectTextContext } from "@pe/kit/lang/reach";
 import { reachStore } from "@pe/kit/lang/reach";
@@ -64,4 +66,46 @@ it("a footnote badge sits on a drawn subject (mesh, else ghosted centreline, els
   expect(light).toHaveBeenLastCalledWith(references, 2, "row");
   fireEvent.click(mark);
   expect(go).toHaveBeenCalledWith(2);
+});
+
+it("pin pointer entry paints reach and right click exposes Select and Selection Box", async () => {
+  const pick = vi.fn();
+  const props = {
+    project: () => [100, 100],
+    size: { width: 400, height: 300 },
+    scene: { segments: [], nodes: [], subject: null },
+    layers: new Set(["findings"]),
+    encoding: {},
+    selected: new Set(),
+    hovered: null,
+    labels: [],
+    rulings: [{ kind: "issue", n: 1, at: 42, issue: { id: "open", kind: "open-end" } }],
+    issue: "",
+    pointOf: () => [0, 0, 0],
+    onPick() {},
+    onFrame() {},
+    onRuling: pick,
+    onHover() {},
+  };
+  const view = render(
+    <NativeObservationScope
+      value={{
+        scope: { document: { session: "s", openId: "o" }, source: "native" },
+        references: [{ elementId: 42, uniqueId: "captured" }],
+      }}
+    >
+      <ElementMenu />
+      <Annotations {...(props as unknown as Parameters<typeof Annotations>[0])} />
+    </NativeObservationScope>,
+  );
+  const pin = view.container.querySelector("[data-ruling-pin='1']")!;
+  expect(pin.getAttribute("data-revit-refs")).toContain("captured");
+  fireEvent.pointerEnter(pin);
+  expect(pin.getAttribute("data-reach")).toBe("hover");
+  fireEvent.click(pin);
+  expect(pick).toHaveBeenCalledOnce();
+  fireEvent.contextMenu(pin);
+  expect(await view.findByRole("option", { name: "Select" })).toBeTruthy();
+  expect(view.getByRole("option", { name: "Selection Box in Revit" })).toBeTruthy();
+  expect(view.queryByRole("menu")).toBeNull();
 });
