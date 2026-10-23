@@ -3,7 +3,7 @@ import type { RevitDetailSheets } from "@pe/host-contracts/generated";
 import { EmptyState } from "@pe/kit/lang/empty";
 import { OutcomeLine } from "#/components/lang/outcome";
 import { Provenance, Section } from "#/components/lang/section";
-import { VizChip } from "#/ops/primitives";
+import { FactChip } from "@pe/kit/lang/chip";
 import { asNumber, asRecord, asRecords, asString } from "#/ops/registry";
 import type { SyntheticOp, SyntheticViewProps } from "#/lab/synthetic";
 import { SheetCanvas } from "#/ops/views/detail/schedules";
@@ -209,9 +209,15 @@ function DrawingSetView({ results, observedAtMs, call }: SyntheticViewProps) {
           aside={
             selectedEntry ? (
               <>
-                <VizChip viz={1}>{selectedEntry.summary.viewportCount} views</VizChip>
-                <VizChip viz={2}>{selectedEntry.summary.scheduleInstanceCount} schedules</VizChip>
-                <VizChip viz={6}>{selectedEntry.summary.textNoteCount} notes</VizChip>
+                <FactChip title="viewports placed on the sheet">
+                  {selectedEntry.summary.viewportCount} views
+                </FactChip>
+                <FactChip title="schedule instances placed on the sheet">
+                  {selectedEntry.summary.scheduleInstanceCount} schedules
+                </FactChip>
+                <FactChip title="text notes on the sheet">
+                  {selectedEntry.summary.textNoteCount} notes
+                </FactChip>
               </>
             ) : undefined
           }

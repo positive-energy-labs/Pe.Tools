@@ -94,7 +94,7 @@ export function useLifecycle({
         const receipt = await runLifecycle(command, session, policy);
         setOutcome({
           kind: receipt.state === "succeeded" ? "receipt" : "advisory",
-          label: `${command} ${receipt.state} · action ${receipt.id}`,
+          label: `${command} ${receipt.state}`,
         });
       } catch (caught) {
         setOutcome({ kind: "refused", label: `${command} refused: ${String(caught)}` });

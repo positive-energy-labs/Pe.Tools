@@ -103,7 +103,7 @@ function useWorldLog(handle: OpenHandle, fixture: boolean) {
     for (const row of unresolved.data ?? [])
       if (!noted.current.has(row.id)) {
         noted.current.add(row.id);
-        handle.note(`unresolved ${row.key}`, `action ${row.id} is ${row.state}`, true, {
+        handle.note(`unresolved ${row.key}`, row.state, true, {
           kind: "receipt",
           id: row.id,
         });

@@ -255,12 +255,14 @@ export type ShowElementsResult =
 export function showElementsMessage(result: ShowElementsResult): string {
   if (result.kind !== "action" || !result.data) return result.message;
   const data = result.data;
-  const issues = data.issues.map((issue) => `${issue.elementId}: ${issue.message}`).join("; ");
+  // I1: counts and messages, never element ids; the pointer already says which elements.
+  const issues = [...new Set(data.issues.map((issue) => issue.message))].join("; ");
+  const n = (count: number) => `${count} element${count === 1 ? "" : "s"}`;
   const unverified = data.shown.filter((id) => !data.identityVerified.includes(id));
   return [
     data.note,
-    data.missing.length ? `Missing: ${data.missing.join(", ")}.` : "",
-    data.hidden.length ? `Still hidden in the view: ${data.hidden.join(", ")}.` : "",
+    data.missing.length ? `Missing: ${n(data.missing.length)}.` : "",
+    data.hidden.length ? `Still hidden in the view: ${n(data.hidden.length)}.` : "",
     issues,
     unverified.length
       ? `${unverified.length} ID-only target(s); stale identity was not verified.`

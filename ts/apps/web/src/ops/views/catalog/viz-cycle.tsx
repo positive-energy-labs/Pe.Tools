@@ -1,5 +1,4 @@
 import { token } from "@pe/kit/lib/token";
-import type { ReactNode } from "react";
 import { EmptyState } from "@pe/kit/lang/empty";
 import { Provenance, Section } from "#/components/lang/section";
 import { type TreeNode, TreeView } from "#/ops/primitives";
@@ -11,10 +10,6 @@ import {
   asRecords,
   asString,
 } from "#/ops/registry";
-
-export function MonoAside({ children }: { children: ReactNode }) {
-  return <span className="">{children}</span>;
-}
 
 export function pageNote(data: Record<string, unknown>): string | undefined {
   const page = asRecord(data.page);
@@ -65,7 +60,7 @@ export function insertPath(
     if (!existing) {
       existing = {
         id: key,
-        label: <span className="">{segment}</span>,
+        label: segment,
         children: [],
       };
       index.set(key, existing);
@@ -206,7 +201,7 @@ export function ProjectIndexView({ data }: OpViewProps) {
     );
   return (
     <Section label="Project Index">
-      <TreeView nodes={nodes} dense />
+      <TreeView nodes={nodes} label="project index" />
       <Provenance>
         {summary.truncated === true ? "index truncated by budget · " : ""}
         {pageNote(record) ?? "counts are index-time observations, not live proof"}

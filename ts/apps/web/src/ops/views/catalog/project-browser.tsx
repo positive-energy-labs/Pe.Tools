@@ -9,8 +9,13 @@ import {
   asRecords,
   asString,
 } from "#/ops/registry";
-import { IssuesNote, MonoAside, insertPath, pageNote } from "./viz-cycle";
-import { TooltipHint } from "@pe/kit/lang/tooltip";
+import { IssuesNote, insertPath, pageNote } from "./viz-cycle";
+
+/** I1: a handle's element id is never printed; it rides the row for the element menu. */
+const idsOf = (handle: Record<string, unknown> | undefined) => {
+  const id = asNumber(handle?.elementId);
+  return id === undefined ? undefined : [id];
+};
 
 export function ProjectBrowserView({ data }: OpViewProps) {
   const record = asRecord(data);
@@ -37,12 +42,12 @@ export function ProjectBrowserView({ data }: OpViewProps) {
       if (!pathLabel) continue;
       const folderNode: TreeNode = {
         id: `org/${section}/folder/${pathLabel}`,
-        label: <span className="">{pathLabel}</span>,
+        label: pathLabel,
         meta: `${asNumber(folder.elementCount) ?? 0}`,
         children: asRecords(folder.sampleHandles).map((h, i) => ({
           id: `org/${section}/folder/${pathLabel}/sample/${i}`,
           label: asString(h.label) ?? "∅",
-          meta: asNumber(h.elementId) !== undefined ? `id ${asNumber(h.elementId)}` : undefined,
+          revitIds: idsOf(h),
         })),
       };
       sectionNode.children?.push(folderNode);
@@ -73,8 +78,7 @@ export function ProjectBrowserView({ data }: OpViewProps) {
     const leaf: TreeNode = {
       id: `${sectionKey}/item/${asString(handle?.uniqueId) ?? asString(handle?.label) ?? String(items.indexOf(item))}`,
       label: asString(handle?.label) ?? "∅",
-      meta:
-        asNumber(handle?.elementId) !== undefined ? `id ${asNumber(handle?.elementId)}` : undefined,
+      revitIds: idsOf(handle),
     };
     if (segments.length > 0 && sectionNode) {
       const folder = insertPath(
@@ -96,20 +100,12 @@ export function ProjectBrowserView({ data }: OpViewProps) {
       </EmptyState>
     );
   return (
-    <Section
-      label="Project Browser"
-      aside={
-        <TooltipHint content={asString(record.browserSnapshotId)}>
-          <span>
-            <MonoAside>snapshot ·{(asString(record.browserSnapshotId) ?? "∅").slice(-8)}</MonoAside>
-          </span>
-        </TooltipHint>
-      }
-    >
-      <TreeView nodes={roots} dense />
+    <Section label="Project Browser">
+      <TreeView nodes={roots} label="project browser" />
       <Provenance>
         view={asString(record.view) ?? "?"} · folder counts are indexed at snapshot time
-        {pageNote(record) ? ` · ${pageNote(record)}` : ""}
+        {pageNote(record) ? ` · ${pageNote(record)}` : ""} · snapshot{" "}
+        <span className="face-mono">{asString(record.browserSnapshotId) ?? "∅"}</span>
       </Provenance>
       <IssuesNote data={record} />
     </Section>

@@ -96,7 +96,7 @@ export async function showInRevit(
       kind: "action",
       action,
       data,
-      message: `Revit action ${action.id}: ${action.state}${"error" in action ? `: ${action.error}` : ""}`,
+      message: `Revit ${action.state}${"error" in action ? `: ${action.error}` : ""}`,
     };
   } catch (error) {
     return {

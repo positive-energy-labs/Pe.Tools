@@ -3,7 +3,7 @@ import { FactChip } from "@pe/kit/lang/chip";
 import { CoverageBar } from "#/components/lang/coverage-bar";
 import { EmptyState } from "@pe/kit/lang/empty";
 import { Provenance, Section } from "#/components/lang/section";
-import { KVGrid, VizChip } from "#/ops/primitives";
+import { KVGrid } from "#/ops/primitives";
 import { UnrecognizedShape, asNumber, asRecord, asRecords, asString, text } from "#/ops/registry";
 import type { SyntheticOp, SyntheticViewProps } from "#/lab/synthetic";
 import { MonoAside, composition, obs } from "./viz-cycle";
@@ -54,9 +54,7 @@ function AttentionGlanceView({ results, observedAtMs }: SyntheticViewProps) {
             <TooltipHint content={text(activeView.title)}>
               <span className="min-w-0 truncate">{text(activeView.title)}</span>
             </TooltipHint>
-            <VizChip viz={activeView.isSheet === true ? 2 : 1} title="view kind">
-              {text(activeView.viewType)}
-            </VizChip>
+            <FactChip title="view kind">{text(activeView.viewType)}</FactChip>
             {activeView.isTemplate === true && (
               <FactChip
                 tone="caution"

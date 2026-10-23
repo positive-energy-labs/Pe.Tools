@@ -67,16 +67,20 @@ const itemKey = (item: DirectoryItem) =>
 const itemTitle = (item: DirectoryItem) =>
   item.kind === "tool" ? item.tool.title : item.kind === "work" ? item.work.label : item.pod.name;
 
+const at = (iso: string) =>
+  new Date(iso).toLocaleString(undefined, { dateStyle: "short", timeStyle: "short" });
+
 function NavigationStatus() {
   const { snapshot, loading, error, refresh } = useNavigation();
   return (
     <div className="flex flex-wrap items-center gap-2 text-ink-2">
-      <span>
+      {/* I6: a word and its value; the reason rides the tooltip. */}
+      <span title={error ?? undefined}>
         {loading
-          ? "Reading saved Works and Pea threads…"
+          ? "reading…"
           : error
-            ? `Navigation inventory unavailable: ${error}${snapshot ? `; cached observation ${snapshot.observedAt} retained, Work resume paused` : ""}`
-            : `Saved inventory observed ${snapshot?.observedAt ?? "never"}`}
+            ? `unavailable${snapshot ? ` · cached ${at(snapshot.observedAt)} · resume paused` : ""}`
+            : `inventory · ${snapshot ? at(snapshot.observedAt) : "never"}`}
       </span>
       <Button
         label="Refresh navigation inventory"

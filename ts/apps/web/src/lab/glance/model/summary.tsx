@@ -2,10 +2,9 @@ import { FactChip } from "@pe/kit/lang/chip";
 import { CoverageBar } from "#/components/lang/coverage-bar";
 import { EmptyState } from "@pe/kit/lang/empty";
 import { Provenance, Section } from "#/components/lang/section";
-import { VizChip } from "#/ops/primitives";
 import { UnrecognizedShape, asNumber, asRecord, asRecords, asString, text } from "#/ops/registry";
 import type { SyntheticViewProps } from "#/lab/synthetic";
-import { MonoAside, SERIES_META, Stat, categoryViz, composition, obs } from "./viz-cycle";
+import { MonoAside, SERIES_META, Stat, composition, obs } from "./viz-cycle";
 import { TooltipHint } from "@pe/kit/lang/tooltip";
 
 export function ModelGlanceView({ results, observedAtMs }: SyntheticViewProps) {
@@ -83,13 +82,9 @@ export function ModelGlanceView({ results, observedAtMs }: SyntheticViewProps) {
               const count = asNumber(entry.sheetCount) ?? 0;
               const meta = SERIES_META[letter];
               return (
-                <VizChip
-                  key={letter}
-                  viz={meta?.viz ?? 4}
-                  title={`${count} sheets numbered ${letter}…`}
-                >
+                <FactChip key={letter} title={`${count} sheets numbered ${letter}…`}>
                   {letter} {meta ? `· ${meta.label}` : ""} {count}
-                </VizChip>
+                </FactChip>
               );
             })
           )}
@@ -177,14 +172,10 @@ export function ModelGlanceView({ results, observedAtMs }: SyntheticViewProps) {
             />
             {topBoundCategories.length > 0 && (
               <div className="flex flex-wrap gap-1">
-                {topBoundCategories.map((cat, i) => (
-                  <VizChip
-                    key={cat.name}
-                    viz={categoryViz(cat.name, i)}
-                    title={`${cat.count} bindings`}
-                  >
+                {topBoundCategories.map((cat) => (
+                  <FactChip key={cat.name} title={`${cat.count} bindings`}>
                     {cat.name} {cat.count}
-                  </VizChip>
+                  </FactChip>
                 ))}
                 <MonoAside>most-bound categories</MonoAside>
               </div>
