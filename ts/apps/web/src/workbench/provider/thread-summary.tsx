@@ -24,6 +24,8 @@ export interface WorkbenchContextValue {
   loading: boolean;
   error?: string;
   threads: StoredThreadSummary[];
+  /** The host answered the roster once; until then an empty list is unknown, not empty. */
+  rosterRead: boolean;
   providers: ProvidersState;
   /** The head a thread binds at first send; read only while no thread is open. */
   draft: HeadDraft;

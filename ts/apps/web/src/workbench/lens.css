@@ -75,11 +75,13 @@
 [data-annotation="frame"]:not([data-scrolls]) [data-annotation="lane"] {
   visibility: hidden;
 }
+/* L2/N8: the jump to the tail is the timeline's own move, so it sits at the foot of the rail's
+   lane, hugging the right edge, never over the transcript's text. */
 .chat-tail-floater {
   position: absolute;
   bottom: var(--gutter);
-  left: 50%;
-  transform: translateX(-50%);
+  right: calc(var(--side-lane) / 2);
+  transform: translateX(50%);
   z-index: 8;
   background: var(--pe-page);
   --pe-on: var(--pe-page);

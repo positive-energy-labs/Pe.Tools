@@ -9,7 +9,7 @@ export function ModeDial({
 }: {
   mode: Mode;
   setMode: (mode: Mode) => void;
-  count?: number;
+  count?: number | string;
 }) {
   return (
     <PaneTabs

@@ -96,6 +96,7 @@ export function WorkbenchProvider({ children }: { children: ReactNode }) {
   });
   const client = useMemo(() => harnessClient(config.origin), [config.origin]);
   const [threads, setThreads] = useState<StoredThreadSummary[]>([]);
+  const [rosterRead, setRosterRead] = useState(false);
   const rosterEpoch = useRef(0);
   const [draft, setDraft] = useState<HeadDraft>(EMPTY_HEAD);
   // Undefined until the human picks or clears: the draft then shows the sole user document, if any.
@@ -124,6 +125,7 @@ export function WorkbenchProvider({ children }: { children: ReactNode }) {
   useEffect(() => {
     if (demo) {
       setThreads(demoThreads(demo));
+      setRosterRead(true);
       return;
     }
     let fault: string | undefined;
@@ -131,6 +133,7 @@ export function WorkbenchProvider({ children }: { children: ReactNode }) {
       (listed) => {
         rosterEpoch.current++;
         setThreads((current) => mergeThreadRoster(current, listed));
+        setRosterRead(true);
         // A fresh roster ends the list's own staleness, never another verb's complaint.
         setError((current) => (current === fault ? undefined : current));
       },
@@ -372,6 +375,7 @@ export function WorkbenchProvider({ children }: { children: ReactNode }) {
       loading,
       error,
       threads,
+      rosterRead,
       providers,
       draft,
       setDraft,
@@ -470,6 +474,7 @@ export function WorkbenchProvider({ children }: { children: ReactNode }) {
       sendPrompt,
       store,
       threads,
+      rosterRead,
       turnFailure,
     ],
   );

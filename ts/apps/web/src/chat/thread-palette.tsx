@@ -670,6 +670,7 @@ export function ThreadsSidebar({
   compactRows: compactRowsOverride,
   primary = false,
   searchSerial = 0,
+  reading = false,
   ...verbs
 }: ThreadVerbs & {
   threads: RosterThread[];
@@ -679,6 +680,8 @@ export function ThreadsSidebar({
   address?: ThreadListAddress;
   /** The page's own list: "/" outside a field lands in its search. */
   primary?: boolean;
+  /** The roster has not been read yet: empty means unknown, not "no threads". */
+  reading?: boolean;
   /** Bumped by Mod+K: focus this list's search (also on mount, for the narrow dialog). */
   searchSerial?: number;
 }) {
@@ -941,7 +944,11 @@ export function ThreadsSidebar({
           aria-label="threads"
           bar={false}
           estimate={compactRows ? 20 : 40}
-          empty={{ message: "No threads yet", exit: "Start a new thread beside search" }}
+          empty={
+            reading
+              ? { message: "reading threads…", exit: "" }
+              : { message: "No threads yet", exit: "Start a new thread beside search" }
+          }
           row={rowParts}
           sectionProps={(section) => {
             const shelf = SHELF_ORDER.find((key) => SHELF_WORD[key] === section.key)!;

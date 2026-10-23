@@ -101,6 +101,7 @@ function ChatSurface({ target, docked = false }: ChatShellProps) {
     bodyAtom,
     loading,
     threads,
+    rosterRead,
     providers,
     currentThreadId,
     prompt,
@@ -390,14 +391,21 @@ function ChatSurface({ target, docked = false }: ChatShellProps) {
                 id="threads"
                 ground="artifact"
                 title="threads"
-                meta={threads.length}
-                tabs={<ModeDial mode={mode} setMode={setMode} count={threads.length} />}
+                meta={rosterRead ? threads.length : "…"}
+                tabs={
+                  <ModeDial
+                    mode={mode}
+                    setMode={setMode}
+                    count={rosterRead ? threads.length : "…"}
+                  />
+                }
                 flush={mode === "threads"}
                 actions={<ThreadSidebarActions onNew={() => void newThread()} />}
               >
                 {mode === "threads" ? (
                   <ThreadsSidebar
                     primary
+                    reading={!rosterRead}
                     searchSerial={searchSerial}
                     address={threadListAddress}
                     threads={sidebarThreads}
@@ -440,7 +448,7 @@ function ChatSurface({ target, docked = false }: ChatShellProps) {
           <DialogContent>
             <DialogTitle>Threads</DialogTitle>
             <div className="flex items-center justify-between gap-1">
-              <ModeDial mode={mode} setMode={setMode} count={threads.length} />
+              <ModeDial mode={mode} setMode={setMode} count={rosterRead ? threads.length : "…"} />
               <span className="flex shrink-0 items-center gap-1">
                 <ThreadSidebarActions
                   onNew={() => {
@@ -453,6 +461,7 @@ function ChatSurface({ target, docked = false }: ChatShellProps) {
             <div className="h-[75dvh] min-h-0 min-w-0">
               {mode === "threads" ? (
                 <ThreadsSidebar
+                  reading={!rosterRead}
                   searchSerial={searchSerial}
                   address={threadListAddress}
                   threads={sidebarThreads}
