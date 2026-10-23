@@ -23,6 +23,7 @@ import {
 } from "effect/unstable/http";
 import {
   addressSchema,
+  sameAddress,
   bindWork,
   documentRefSchema,
   documentRows,
@@ -43,6 +44,7 @@ import {
   type Capability,
   type CapabilityCatalog,
   type WorkKey,
+  type Caller,
   HOST_LOG_PAGE_MAX,
 } from "@pe/agent-contracts";
 import {
@@ -94,6 +96,7 @@ import {
   currentCaller,
   refusalHeaders,
   routeActorOf,
+  threadHead,
 } from "./control.ts";
 import { bindRevoke } from "./revoke.ts";
 import { hostActionJournal, hostLog } from "./gateway-owner.ts";
@@ -168,6 +171,62 @@ const message = (error: unknown) => (error instanceof Error ? error.message : St
 /** The route-document, Reading, capability and Families-view surface, host-owned. */
 export function createPeRoutes(options: PeRoutesOptions) {
   const work = new RouteWorkspace({ registrations: options.registrations, store: options.store });
+  async function routeWorkKey(url: URL, route: string, shape: "read" | "write", caller: Caller) {
+    const scope = workKey(url, route, shape);
+    if (
+      scope instanceof Response ||
+      scope.binding === "workspace" ||
+      scope.binding === "host" ||
+      caller.kind === "human" ||
+      caller.kind === "anonymous"
+    )
+      return scope;
+    const refused = (error: string) => json({ ok: false, error, hint: error }, 403);
+    const thread = callerThread(caller);
+    if (!thread) return refused("Document-owned route Work requires this caller's thread targets.");
+    let documents;
+    try {
+      documents = z
+        .array(documentRefSchema.extend({ address: addressSchema.nullable() }))
+        .parse(await options.navigation?.documents());
+    } catch {
+      return refused("Current document bindings are unavailable; retained Work has not changed.");
+    }
+    const head = threadHead(thread);
+    const targeted = (doc: (typeof documents)[number]) =>
+      head?.targets.some(({ request }) =>
+        request.kind === "open"
+          ? request.ref.session === doc.session && request.ref.openId === doc.openId
+          : request.session === doc.session &&
+            doc.address !== null &&
+            sameAddress(request.address, doc.address),
+      );
+    const ref = scope.binding === "open" ? scope.open : scope.from;
+    const matching = documents.filter((doc) =>
+      ref
+        ? doc.session === ref.session && doc.openId === ref.openId
+        : scope.binding === "address" &&
+          doc.address !== null &&
+          sameAddress(scope.target, doc.address) &&
+          targeted(doc),
+    );
+    if (matching.length !== 1)
+      return refused(
+        "Route Work target is closed or ambiguous; name an exact current open document.",
+      );
+    const doc = matching[0]!;
+    if (
+      scope.binding === "address" &&
+      (doc.address === null || !sameAddress(scope.target, doc.address))
+    )
+      return refused("Route Work target Address does not match its exact open document.");
+    if (!targeted(doc))
+      return refused(
+        "Route Work target must be one of this thread's documents, even under Full. Retained Work has not changed.",
+      );
+    // Authoring Work is not native execution: masks/revisions govern proposals, not native grants.
+    return bindWork(route, doc.address, undefined, { session: doc.session, openId: doc.openId });
+  }
   const analysis = options.ductsAnalysis
     ? createDuctsAnalysis({
         ...options.ductsAnalysis,
@@ -511,7 +570,7 @@ export function createPeRoutes(options: PeRoutesOptions) {
       const actor = routeActorOf(caller);
       if (method === "GET" && !route) return json(work.list());
       if (method === "GET" && route && !verb) {
-        const scope = workKey(url, route, "read");
+        const scope = await routeWorkKey(url, route, "read", caller);
         if (scope instanceof Response) return scope;
         try {
           const view = await work.view(scope, route);
@@ -555,7 +614,7 @@ export function createPeRoutes(options: PeRoutesOptions) {
           },
         );
       if (write && route) {
-        const scope = workKey(url, route, "write");
+        const scope = await routeWorkKey(url, route, "write", caller);
         if (scope instanceof Response) return scope;
         const parsed = write.schema.safeParse(await body());
         if (!parsed.success) {

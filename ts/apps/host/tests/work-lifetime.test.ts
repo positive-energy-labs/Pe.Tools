@@ -2,13 +2,18 @@ import { machineFixture } from "../../../packages/agent-contracts/tests/machine-
 import { mkdtemp, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { expect, test } from "vite-plus/test";
+import { createServer } from "node:http";
+import { afterEach, expect, test } from "vite-plus/test";
 import { z } from "zod";
 import {
   address,
   routeBindingsSchema,
   takeoffsRouteState,
   threadHeadSchema,
+  ductsRouteState,
+  bindWork,
+  workKey,
+  type ThreadHead,
 } from "@pe/agent-contracts";
 import { RouteWorkspace, type RouteWorkspaceRegistration } from "@pe/runtime";
 import { Effect, PubSub } from "effect";
@@ -17,6 +22,185 @@ import { createPeRoutes, fileRouteDocumentStore, makeHostPeRoutes } from "../src
 import { withInvocationContext } from "@pe/runtime/context";
 import type { Caller } from "@pe/agent-contracts";
 import { human, pea } from "./callers.ts";
+import { admitCrossing, bindControl } from "../src/control.ts";
+
+afterEach(() =>
+  bindControl({
+    heads: null,
+    acquired: () => null,
+    acquiredSession: () => null,
+    fullAccess: () => false,
+  }),
+);
+
+test("HTTP Work resolves B without native authority, refuses forged targets and retains staged/proposed Work after removal", async () => {
+  const directory = await mkdtemp(join(tmpdir(), "pe-work-crossing-"));
+  const a = { session: "session", openId: "a", address: address("C:/Models/A.rvt") };
+  const b = { session: "session", openId: "b", address: address("C:/Models/B.rvt") };
+  const outside = {
+    session: "session",
+    openId: "outside",
+    address: address("C:/Models/Other.rvt"),
+  };
+  let documents = [a, b, outside];
+  let full = false;
+  let head: ThreadHead = {
+    revision: 4,
+    targets: [
+      {
+        request: { kind: "open", ref: { session: a.session, openId: a.openId } },
+        admission: { revision: 4, at: "2026-10-23T00:00:00Z", via: "local" },
+      },
+      { request: { kind: "open", ref: { session: b.session, openId: b.openId } }, admission: null },
+    ],
+  };
+  bindControl({
+    heads: () => head,
+    acquired: () => null,
+    acquiredSession: () => null,
+    fullAccess: () => full,
+  });
+  const store = fileRouteDocumentStore(join(directory, "work"));
+  const app = createPeRoutes({
+    registrations: [{ spec: ductsRouteState, handlers: {} }],
+    store,
+    heads: { observe: () => () => {} },
+    navigation: { documents: async () => documents, threads: async () => [] },
+  });
+  // Real HTTP transport; this fixture supplies the trusted caller that production middleware mints.
+  const server = createServer(async (incoming, outgoing) => {
+    try {
+      const chunks: Buffer[] = [];
+      for await (const chunk of incoming) chunks.push(Buffer.from(chunk));
+      const response = await withInvocationContext(
+        {
+          caller: incoming.headers["x-test-author"] === "human" ? human : pea(),
+        },
+        () =>
+          app.fetch(
+            new Request(new URL(incoming.url!, base), {
+              method: incoming.method,
+              headers: { "content-type": "application/json" },
+              ...(chunks.length ? { body: Buffer.concat(chunks) } : {}),
+            }),
+          ),
+      );
+      outgoing.writeHead(response.status, Object.fromEntries(response.headers));
+      outgoing.end(Buffer.from(await response.arrayBuffer()));
+    } catch (error) {
+      outgoing.writeHead(500);
+      outgoing.end(String(error));
+    }
+  });
+  await new Promise<void>((resolve) => server.listen(0, "127.0.0.1", resolve));
+  const base = `http://127.0.0.1:${(server.address() as { port: number }).port}`;
+  const query = (doc = b, target = doc.address) =>
+    new URLSearchParams({ open: `${doc.session}/${doc.openId}`, target }).toString();
+  const request = (search: string, patches?: unknown[], revision = 0, caller: Caller = pea()) =>
+    fetch(`${base}/pe/route-state/ducts${patches ? "/apply" : ""}?${search}`, {
+      headers: { "content-type": "application/json", "x-test-author": caller.kind },
+      ...(patches
+        ? { method: "POST", body: JSON.stringify({ patches, expectedRevision: revision }) }
+        : {}),
+    });
+  try {
+    expect(() =>
+      admitCrossing(
+        pea(),
+        { kind: "document", ref: { session: b.session, openId: b.openId } },
+        "/actions",
+      ),
+    ).toThrow();
+    expect(await (await request(query())).json()).toMatchObject({
+      revision: 0,
+      doc: { workingPhase: {} },
+    });
+    const proposed = [{ path: ["workingPhase", "proposal"], value: { value: "Existing" } }];
+    expect(await (await request(query(), proposed)).json()).toMatchObject({
+      ok: true,
+      revision: 1,
+    });
+    expect(await (await request(query(a))).json()).toMatchObject({
+      revision: 0,
+      doc: { workingPhase: {} },
+    });
+    // Omitting target= still resolves the saved B address, rather than inventing ephemeral Work.
+    expect(await (await request("open=session/b")).json()).toMatchObject({
+      revision: 1,
+      doc: { workingPhase: { proposal: { value: "Existing" } } },
+    });
+    documents.push({ ...b, session: "other-session" });
+    expect(await (await request(`target=${encodeURIComponent(b.address)}`)).json()).toMatchObject({
+      revision: 1,
+    });
+    documents.pop();
+    expect(
+      await (
+        await request(query(), [{ path: ["workingPhase", "staged"], value: { value: "New" } }], 1)
+      ).json(),
+    ).toMatchObject({ ok: false });
+    expect(
+      await (
+        await request(
+          query(),
+          [{ path: ["workingPhase", "staged"], value: { value: "New" } }],
+          1,
+          human,
+        )
+      ).json(),
+    ).toMatchObject({ ok: true, revision: 2 });
+    for (const search of [
+      query(outside),
+      query(b, a.address),
+      "open=session/closed",
+      `target=${encodeURIComponent(outside.address)}`,
+    ]) {
+      expect((await request(search)).status).toBe(403);
+      expect((await request(search, proposed, 2)).status).toBe(403);
+    }
+    documents = [a, outside];
+    expect((await request(query(), proposed, 2)).status).toBe(403);
+    documents = [a, b, outside];
+    full = true;
+    expect((await request(query(outside), proposed, 2)).status).toBe(403);
+    full = false;
+    const key = bindWork("ducts", b.address);
+    const before = await app.workspace.readRaw(key, "ducts");
+    expect(before).toMatchObject({
+      revision: 2,
+      doc: { workingPhase: { proposal: { value: "Existing" }, staged: { value: "New" } } },
+    });
+    head = { revision: 5, targets: head.targets.slice(0, 1) };
+    expect((await request(query(), proposed, 2)).status).toBe(403);
+    expect(await app.workspace.readRaw(key, "ducts")).toEqual(before);
+    const navigation = await fetch(`${base}/pe/navigation`, {
+      headers: { "x-test-author": "human" },
+    });
+    expect(await navigation.json()).toMatchObject({
+      works: expect.arrayContaining([
+        expect.objectContaining({
+          id: workKey(key),
+          route: "ducts",
+          label: expect.any(String),
+          state: "ready",
+          revision: 2,
+          proposals: 1,
+        }),
+      ]),
+    });
+    // A human can inspect the retained authored/staged document; a fresh workspace reads the same bytes.
+    expect(await (await request(query(), undefined, 0, human)).json()).toMatchObject(before!);
+    const restarted = new RouteWorkspace({
+      registrations: [{ spec: ductsRouteState, handlers: {} }],
+      store,
+    });
+    expect(await restarted.readRaw(key, "ducts")).toEqual(before);
+  } finally {
+    server.closeAllConnections();
+    await new Promise<void>((resolve) => server.close(() => resolve()));
+    await rm(directory, { recursive: true, force: true, maxRetries: 3, retryDelay: 50 });
+  }
+});
 
 /** Route writes cross as the human the identity middleware would mint for the web app. */
 const asHuman = (owner: { fetch: (request: Request) => Promise<Response> }) => (request: Request) =>
@@ -192,6 +376,17 @@ test("host HTTP publishes one discard when a bridge frame closes the last docume
 
 /** The host's route-state surface checks every write's revision, body and actor. */
 test("HTTP authored writes enforce short local revision checks", async () => {
+  bindControl({
+    heads: () => ({
+      revision: 1,
+      targets: [
+        {
+          request: { kind: "named", session: "session", address: address("C:/Models/A.rvt") },
+          admission: null,
+        },
+      ],
+    }),
+  });
   const schema = z
     .object({
       bindings: routeBindingsSchema,
@@ -257,6 +452,10 @@ test("HTTP authored writes enforce short local revision checks", async () => {
     })(),
     heads: { observe: () => () => {} },
     capabilityCatalog: { read: catalogRead },
+    navigation: {
+      documents: async () => [{ session: "session", openId: "a", address: "C:/Models/A.rvt" }],
+      threads: async () => [],
+    },
   });
   const queryA = `target=${encodeURIComponent(address(String.raw`C:\Models\A.rvt`))}`;
   expect(
