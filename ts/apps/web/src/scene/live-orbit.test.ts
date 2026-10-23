@@ -74,6 +74,7 @@ test("a frame eases from the current camera, commits once, and yields to new inp
     const to = { ...initial, zoom: 4, pivot: [10, 20, 30] as [number, number, number] };
     glideTo(orbit, to, 100);
     expect(orbit.read()).toEqual(initial);
+    tick(0);
     tick(50);
     expect(orbit.read()!.zoom).toBeGreaterThan(1);
     expect(orbit.read()!.zoom).toBeLessThan(4);

@@ -5,7 +5,8 @@
  * schematic is the one-line. Element facts open beside its projected box; rulings open at the pointer. A pick, a
  * frame, a look and a gesture each write only their own Page keys.
  */
-import { useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { flushSync } from "react-dom";
 
 import { DUCTS_LAYERS, toggleLayer } from "@pe/agent-contracts";
 import { snapshotById } from "@pe/ducts-domain/readiness";
@@ -153,20 +154,39 @@ function Canvas({
   const pointer = useRef({ x: 0, y: 0 });
   const [pictureHost, setPictureHost] = useState<HTMLDivElement | null>(null);
   const [open, setOpen] = useState<Open>(null);
-  const selectionFrame = useRef(0);
-  useEffect(() => () => cancelAnimationFrame(selectionFrame.current), []);
-  useLayoutEffect(() => {
-    if (open?.what !== "element") return;
-    // Start after the popup mounts. Scheduling from the click starts one frame too early:
-    // the router's synchronous selection render would still block its first visible frame.
-    cancelAnimationFrame(selectionFrame.current);
-    selectionFrame.current = requestAnimationFrame(() => {
-      selectionFrame.current = requestAnimationFrame(() => {
-        selectionFrame.current = 0;
+  const selectionPublish = useRef<ReturnType<typeof setTimeout> | undefined>(undefined);
+  const pendingSelection = useRef<number | null>(null);
+  useEffect(() => () => clearTimeout(selectionPublish.current), []);
+  useEffect(() => {
+    // Page's Escape cannot see a pick waiting for its first paint. Cancel it at the event boundary
+    // so a fast Escape, including one before the popup mounts, cannot resurrect selection later.
+    const escapePending = (event: KeyboardEvent) => {
+      if (event.key !== "Escape" || pendingSelection.current === null) return;
+      clearTimeout(selectionPublish.current);
+      pendingSelection.current = null;
+      setOpen(null);
+      setPage({ selected: "" }, { history: "push" });
+      event.preventDefault();
+      event.stopPropagation();
+    };
+    document.addEventListener("keydown", escapePending, true);
+    return () => document.removeEventListener("keydown", escapePending, true);
+  }, [setPage]);
+  const mountFacts = useCallback(
+    (node: HTMLDivElement | null) => {
+      if (!node || open?.what !== "element" || pendingSelection.current !== open.id) return;
+      // Two RAFs can run only 3 ms apart in headless Chrome, before a visible paint. Give the
+      // mounted portal 50 ms before the router expands the sidebar's expensive selection rows.
+      clearTimeout(selectionPublish.current);
+      selectionPublish.current = setTimeout(() => {
+        selectionPublish.current = undefined;
+        if (pendingSelection.current !== open.id) return;
+        pendingSelection.current = null;
         setPage({ selected: String(open.id) }, { history: "push" });
-      });
-    });
-  }, [open, setPage]);
+      }, 50);
+    },
+    [open, setPage],
+  );
   const pointOf = (id: number): readonly number[] | null => {
     const node = byId.nodes.get(id);
     if (node) return node.point;
@@ -240,6 +260,7 @@ function Canvas({
   // Opening facts is local and urgent. Updating the address also renders the tree and rules;
   // let that work follow the first paint instead of holding the popover behind it.
   const pick = (id: number | null, at = pointer.current) => {
+    pendingSelection.current = id;
     const host = pictureHost?.querySelector("[data-model-picture]");
     const rect = host?.getBoundingClientRect();
     const now = orbit.read();
@@ -279,7 +300,7 @@ function Canvas({
           },
     );
     if (id == null) {
-      cancelAnimationFrame(selectionFrame.current);
+      clearTimeout(selectionPublish.current);
       setPage({ selected: "" }, { history: "push" });
     }
   };
@@ -287,7 +308,8 @@ function Canvas({
     if (!page.selected) setOpen(null);
   }, [page.selected]);
   const ruling = (r: Ruling, at: { x: number; y: number }) => {
-    cancelAnimationFrame(selectionFrame.current);
+    clearTimeout(selectionPublish.current);
+    pendingSelection.current = null;
     setPage({ selected: String(r.at) }, { history: "push" });
     setOpen({ what: "ruling", n: r.n, ...at });
   };
@@ -420,7 +442,16 @@ function Canvas({
         onWheelCapture={() => {
           if (open) setOpen(null);
         }}
-        onDoubleClickCapture={() => setOpen(null)}
+        onDoubleClickCapture={() => {
+          const id = pendingSelection.current;
+          if (id !== null) {
+            clearTimeout(selectionPublish.current);
+            pendingSelection.current = null;
+            // Finish the selection render before the canvas starts its frame animation.
+            flushSync(() => setPage({ selected: String(id) }, { history: "push" }));
+          }
+          setOpen(null);
+        }}
       >
         {picture === "model" ? (
           <ModelPicture
@@ -499,12 +530,14 @@ function Canvas({
             if (o) return;
             setOpen(null);
             if (details.reason === "escape-key") {
-              cancelAnimationFrame(selectionFrame.current);
+              clearTimeout(selectionPublish.current);
+              pendingSelection.current = null;
               setPage({ selected: "" }, { history: "push" });
             }
           }}
         >
           <PopoverContent
+            ref={mountFacts}
             anchor={anchor}
             side={open?.what === "element" ? open.side : "bottom"}
             collisionAvoidance={{ side: "none", align: "shift" }}

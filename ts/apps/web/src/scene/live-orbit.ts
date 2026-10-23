@@ -84,10 +84,11 @@ export function glideTo(orbit: LiveOrbit, to: OrbitViewport, ms = 350) {
   const from = orbit.read();
   const token = orbit.begin();
   if (!from || !token) return;
-  const started = performance.now();
+  let started: number | null = null;
   const yaw = ((to.yaw - from.yaw + 540) % 360) - 180;
   requestAnimationFrame(function step(at) {
     if (!orbit.owns(token)) return;
+    started ??= at;
     const t = Math.min((at - started) / ms, 1);
     const k = 1 - (1 - t) ** 3;
     orbit.preview(
