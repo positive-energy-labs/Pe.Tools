@@ -156,10 +156,19 @@ export function systemStatus(s: {
   total: number | null;
   rating: number | null;
   fanless: boolean;
+  blocked: boolean;
   provisional: Provisional;
 }): SystemStatus | null {
   if (s.fanless)
-    return { tone: "alarm", says: "needs a fix: no unit in this system moves air, so nothing is priced" };
+    return {
+      tone: "alarm",
+      says: "needs a fix: no unit in this system moves air, so nothing is priced",
+    };
+  if (s.blocked)
+    return {
+      tone: "alarm",
+      says: "needs a fix: a loss on its runs is implausible, so its static is not shown as a number to trust",
+    };
   if (s.total == null)
     return { tone: "caution", says: "not priced: no run from a fan to a terminal was found" };
   const load = fanLoad(s.total, s.rating);

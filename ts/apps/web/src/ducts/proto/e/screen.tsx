@@ -39,7 +39,15 @@ import { reviewLines } from "../../write-review";
 import { buildTree, systemList, type TreeNode } from "../b/model";
 import type { ProtoProps } from "../props";
 import { DEFAULT_DESIGN_FRICTION_RATE } from "@pe/ducts-domain/equivalent-length";
-import { BarLegend, fmtFt, SplitStrip, SystemBar } from "./bar";
+import {
+  BarLegend,
+  fmtFt,
+  SplitStrip,
+  SystemFact,
+  SystemLine,
+  systemStatus,
+  type SystemStatus,
+} from "./bar";
 import { DuctSettings } from "./settings";
 import { FanSections } from "./fan-sections";
 import { RunDetail, runOf } from "./run-detail";
@@ -58,17 +66,13 @@ const NO_GROUPS: readonly string[] = [];
 const LIST_ROW_PX = 48;
 
 /** The row's one hint: what the bar and its numbers mean, so the bar draws no tooltip of its own. */
-const systemHint = (s: ReturnType<typeof systemList>[number]) =>
+const systemHint = (s: ReturnType<typeof systemList>[number], status: SystemStatus | null) =>
   [
     `${s.name} · ${s.sub}`,
     s.total == null
       ? null
-      : s.rating != null
-        ? `fan static Pe computes ${s.total.toFixed(3)} of the unit's rated ${s.rating.toFixed(2)} in-wg`
-        : `fan static Pe computes ${s.total.toFixed(3)} in-wg; the unit states no rated external static`,
-    s.provisional
-      ? `provisional: rests on ${s.provisional.count} unruled inferred join(s), worst ${s.provisional.worst}`
-      : null,
+      : `fan static Pe computes ${s.total.toFixed(3)} in-wg${s.rating != null ? ` of the unit's rated ${s.rating.toFixed(2)}` : ""}`,
+    status?.says ?? null,
   ]
     .filter(Boolean)
     .join("\n");
@@ -526,38 +530,25 @@ function EScreenBody({ props }: { props: ProtoProps }) {
           }}
           row={(s) => {
             const open = () => setPage({ system: s.key, selected: "", issue: "" });
-            // A system none of whose groups has an air mover prices nothing: its row says it needs a fix.
+            // A system none of whose groups has an air mover prices nothing: its marker says it needs a fix.
+            const status = systemStatus(s);
             return (
-              <Row
-                role="listitem"
-                tabIndex={0}
-                lines={2}
-                label={s.name}
-                sub={s.sub}
-                title={systemHint(s)}
-                meta={
-                  s.fanless ? (
-                    <span data-tone="alarm" data-e-fanless={s.key}>
-                      needs a fix: no fan
-                    </span>
-                  ) : s.blocked ? (
-                    <span data-tone="alarm" data-e-blocked={s.key}>
-                      needs a fix: implausible loss
-                    </span>
-                  ) : (
-                    <SystemBar
-                      value={s.total}
-                      split={s.split}
-                      rating={s.rating}
-                      provisional={s.provisional}
-                    />
-                  )
-                }
-                onClick={open}
-                onKeyDown={(event) => {
-                  if (event.key === "Enter") open();
-                }}
-              />
+              <div className="relative">
+                <Row
+                  role="listitem"
+                  tabIndex={0}
+                  lines={2}
+                  label={s.name}
+                  sub={s.sub}
+                  title={systemHint(s, status)}
+                  meta={<SystemFact value={s.total} rating={s.rating} status={status} />}
+                  onClick={open}
+                  onKeyDown={(event) => {
+                    if (event.key === "Enter") open();
+                  }}
+                />
+                <SystemLine value={s.total} split={s.split} rating={s.rating} />
+              </div>
             );
           }}
         />
