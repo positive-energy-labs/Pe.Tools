@@ -19,10 +19,14 @@ test("24 detached canvas disposals release their original document key listeners
   const registrations = add.mock.calls.filter(([type]) => type === "keydown" || type === "keyup");
   expect(registrations.filter(([type]) => type === "keydown")).toHaveLength(24);
   for (const [type, listener] of registrations)
-    expect(remove.mock.calls.some(([removedType, removedListener, options]) =>
-      type === removedType && listener === removedListener &&
-      (options === true || (typeof options === "object" && options.capture === true)),
-    )).toBe(true);
+    expect(
+      remove.mock.calls.some(
+        ([removedType, removedListener, options]) =>
+          type === removedType &&
+          listener === removedListener &&
+          (options === true || (typeof options === "object" && options.capture === true)),
+      ),
+    ).toBe(true);
   add.mockRestore();
   remove.mockRestore();
 });

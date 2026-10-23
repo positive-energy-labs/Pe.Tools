@@ -1,7 +1,12 @@
 // @vitest-environment jsdom
 import { act, cleanup, render, waitFor } from "@testing-library/react";
 import { afterEach, expect, test } from "vite-plus/test";
-import { createMemoryHistory, createRootRoute, createRouter, RouterProvider } from "@tanstack/react-router";
+import {
+  createMemoryHistory,
+  createRootRoute,
+  createRouter,
+  RouterProvider,
+} from "@tanstack/react-router";
 import { useRouteSearchSlice } from "./activity";
 
 afterEach(cleanup);
@@ -17,7 +22,15 @@ test("URL field subscribers ignore selection writes and still follow their own f
     const selected = useRouteSearchSlice((search) => search.selected);
     return <output data-testid="selected">{String(selected ?? "")}</output>;
   }
-  const route = createRootRoute({ component: () => <><Target /><Selection /></>, validateSearch: (search) => search });
+  const route = createRootRoute({
+    component: () => (
+      <>
+        <Target />
+        <Selection />
+      </>
+    ),
+    validateSearch: (search) => search,
+  });
   const history = createMemoryHistory({ initialEntries: ["/?target=A"] });
   const router = createRouter({ routeTree: route, history });
   const view = render(<RouterProvider router={router} />);

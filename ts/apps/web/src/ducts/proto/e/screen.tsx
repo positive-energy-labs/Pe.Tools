@@ -227,6 +227,8 @@ function EScreenBody({ props }: { props: ProtoProps }) {
 }
 
 /** Loading is outside this component so every loaded render calls the same hooks. */
+// TODO: N6: rebuild only changed pane projections on pricing delivery. The worker removes solve
+// and triage CPU, but retained-display and result commits still exceed the interaction budget.
 function LoadedScreenBody({
   props,
 }: {
