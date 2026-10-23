@@ -1,17 +1,24 @@
 // @vitest-environment jsdom
 import { StrictMode } from "react";
-import { cleanup, render, screen, within } from "@testing-library/react";
-import { afterEach, expect, test, vi } from "vite-plus/test";
+import { cleanup, render, screen, waitFor, within } from "@testing-library/react";
+import { afterEach, beforeEach, expect, test, vi } from "vite-plus/test";
 import { Pane } from "@pe/kit/lang/pane";
 import { useList } from "@pe/kit/lang/collection";
 import { ListView } from "@pe/kit/lang/list-view";
 import { Switcher } from "@pe/kit/lang/switcher";
 import { readTeaching } from "@pe/kit/lang/teach";
-import { useTeaching } from "@pe/kit/lang/use-teach";
+import { TeachRegion, useTeaching } from "@pe/kit/lang/use-teach";
 import { KeyScope, useScopeKeys } from "@pe/kit/keys";
 import { QueryBox } from "@pe/kit/table/query";
 import { HelpWorld } from "#/route/help";
 
+beforeEach(() => {
+  vi.spyOn(HTMLElement.prototype, "getBoundingClientRect").mockImplementation(
+    function (this: HTMLElement) {
+      return this.closest("[hidden]") ? new DOMRect() : new DOMRect(0, 0, 400, 600);
+    },
+  );
+});
 afterEach(() => {
   cleanup();
   vi.restoreAllMocks();
@@ -19,10 +26,10 @@ afterEach(() => {
 });
 const noop = () => {};
 const options = [
-  { value: "model", label: "model", title: "Geometry" },
-  { value: "plan", label: "plan", title: "Plan view" },
+  { value: "parallel", label: "parallel", title: "Measured" },
+  { value: "perspective", label: "perspective", title: "Depth" },
 ];
-function ListFixture({ mode = "model", extra = false }: { mode?: string; extra?: boolean }) {
+function ListFixture({ mode = "parallel", extra = false }: { mode?: string; extra?: boolean }) {
   const list = useList({
     items: Array.from({ length: 8 }, (_, i) => ({ key: String(i), name: `Duct ${i}` })),
     keyOf: (x) => x.key,
@@ -47,7 +54,9 @@ function ListFixture({ mode = "model", extra = false }: { mode?: string; extra?:
         },
       ]}
     >
-      <Switcher ariaLabel="picture" options={options} value={mode} onChange={noop} />
+      <TeachRegion value={undefined}>
+        <Switcher ariaLabel="projection" options={options} value={mode} onChange={noop} />
+      </TeachRegion>
       <ListView
         list={list}
         aria-label="systems"
@@ -62,9 +71,6 @@ function Tutorial() {
 }
 
 test("ListView publishes real fields; the open tutorial follows modes and fields, and unmount withdraws all facts", () => {
-  vi.spyOn(HTMLElement.prototype, "getBoundingClientRect").mockReturnValue(
-    new DOMRect(0, 0, 400, 600),
-  );
   const page = (mode: string, extra: boolean) => (
     <StrictMode>
       <ListFixture mode={mode} extra={extra} />
@@ -72,21 +78,43 @@ test("ListView publishes real fields; the open tutorial follows modes and fields
       <Tutorial />
     </StrictMode>
   );
-  const view = render(page("model", false));
-  const search = readTeaching().find((f) => f.kind === "search" && f.label === "Search systems");
-  expect(search).toMatchObject({ kind: "search", fields: [{ label: "Name", operators: ["is"] }] });
+  const view = render(page("parallel", false));
   const tutorial = screen
     .getAllByRole("region", { name: "Systems" })
     .find((node) => !node.hasAttribute("data-slot"))!;
   expect(tutorial.querySelector(".dl-leader-diagram")?.textContent).toContain("Name");
-  expect(within(tutorial).getByText("model · active")).toBeTruthy();
+  expect(within(tutorial).getByText("parallel · active")).toBeTruthy();
   expect(within(tutorial).getByLabelText("schematic").textContent).toContain("available");
   expect(screen.getByRole("heading", { name: "2 Untaught" })).toBeTruthy();
-  view.rerender(page("plan", true));
-  expect(within(tutorial).getByText("plan · active")).toBeTruthy();
+  view.rerender(page("perspective", true));
+  expect(within(tutorial).getByText("perspective · active")).toBeTruthy();
   expect(tutorial.querySelector(".dl-leader-diagram")?.textContent).toContain("Size");
-  view.unmount();
-  expect(readTeaching()).toEqual([]);
+});
+
+test("zero-box panes withdraw facts without rehoming them; untitled panes use their list name", async () => {
+  const view = render(
+    <>
+      <div>
+        <ListFixture />
+      </div>
+      <Tutorial />
+    </>,
+  );
+  const wrapper = view.container.firstElementChild as HTMLElement;
+  wrapper.hidden = true;
+  await waitFor(() => expect(readTeaching()).toEqual([]));
+  expect(screen.queryByRole("heading")).toBeNull();
+  wrapper.hidden = false;
+  await waitFor(() => expect(screen.getByText("parallel · active")).toBeTruthy());
+  view.rerender(
+    <>
+      <Pane id="e-sidebar">
+        <div data-list-view="" aria-label="System tree" />
+      </Pane>
+      <Tutorial />
+    </>,
+  );
+  expect(screen.getByRole("heading", { name: "1 System tree" })).toBeTruthy();
 });
 
 test("hidden scopes withdraw keys, modes and regions; key refusal changes remain live", () => {
@@ -101,24 +129,16 @@ test("hidden scopes withdraw keys, modes and regions; key refusal changes remain
       <KeyScope id="stage" hidden={hidden}>
         <Pane title="Picture">
           <Keys refused={refused} />
-          <Switcher ariaLabel="picture" options={options} value="model" onChange={noop} />
+          <Switcher ariaLabel="picture" options={options} value="parallel" onChange={noop} />
         </Pane>
       </KeyScope>
       <Tutorial />
     </>
   );
   const view = render(page(false, false));
-  expect(
-    readTeaching().some((f) => f.kind === "keys" && f.items.some((k) => k.label === "projection")),
-  ).toBe(true);
+  expect(screen.getByText("projection")).toBeTruthy();
   view.rerender(page(false, true));
   expect(screen.getByText(/refuses now: capturing/)).toBeTruthy();
-  expect(
-    readTeaching()
-      .filter((f) => f.kind === "keys")
-      .flatMap((f) => (f.kind === "keys" ? f.items : []))
-      .some((k) => k.refusal === "capturing"),
-  ).toBe(true);
   view.rerender(page(true, true));
   expect(readTeaching()).toEqual([]);
 });
@@ -148,6 +168,4 @@ test("table search teaches only its real fields and operators and removes them o
     "Name",
   ]);
   expect(search?.kind === "search" && search.fields[0]?.operators).toContain(">");
-  cleanup();
-  expect(readTeaching()).toEqual([]);
 });

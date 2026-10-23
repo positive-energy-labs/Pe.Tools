@@ -1,5 +1,4 @@
-/** Alt+/ explains mounted kit facts; only the route's purpose prose is hand-written. */
-import { useEffect, useLayoutEffect, useRef, useState, type ReactNode } from "react";
+import { useEffect, useRef, useState, type ReactNode } from "react";
 import { Dialog as DialogPrimitive } from "@base-ui/react/dialog";
 import { KeyHint } from "@pe/kit/lang/key-hint";
 import { Button } from "@pe/kit/lang/button";
@@ -15,40 +14,6 @@ import { startFeedback } from "#/components/feedback-picker";
 import { SettingsHelpTrigger } from "#/machine/navigation";
 
 const HELP_CHORD = { hotkey: "Alt+/", label: "How this tool works" } as const;
-type Region = { id: string; scope?: string; rect: DOMRect };
-function useRegions(facts: readonly Teaching[]) {
-  const [regions, setRegions] = useState<Region[]>([]);
-  useLayoutEffect(() => {
-    const panes = [...document.querySelectorAll<HTMLElement>('[data-slot="pane"][data-teach-id]')];
-    const measure = () => {
-      const next = panes
-        .filter((p) => p.checkVisibility?.() ?? !!p.getBoundingClientRect().width)
-        .map((p) => ({
-          id: p.dataset.teachId!,
-          scope: p.dataset.paneId,
-          rect: p.getBoundingClientRect(),
-        }));
-      setRegions((old) => (JSON.stringify(old) === JSON.stringify(next) ? old : next));
-    };
-    measure();
-    const resize = typeof ResizeObserver === "undefined" ? null : new ResizeObserver(measure);
-    panes.forEach((p) => resize?.observe(p));
-    const mutation = new MutationObserver(measure);
-    mutation.observe(document.body, {
-      subtree: true,
-      childList: true,
-      attributes: true,
-      attributeFilter: ["style", "hidden", "class"],
-    });
-    window.addEventListener("resize", measure);
-    return () => {
-      resize?.disconnect();
-      mutation.disconnect();
-      window.removeEventListener("resize", measure);
-    };
-  }, [facts]);
-  return regions;
-}
 function Keys({ facts }: { facts: readonly Teaching[] }) {
   const unique = new Map<string, TeachKey>();
   for (const fact of facts)
@@ -111,32 +76,18 @@ function Choices({ fact }: { fact: Extract<Teaching, { kind: "modes" | "views" }
     </div>
   );
 }
-/** Shared with the mounted-facts specimen and deterministic Help integration test. */
 export function HelpWorld({ facts }: { facts: readonly Teaching[] }) {
-  const regions = useRegions(facts);
-  const regionOf = (fact: Teaching) =>
-    regions.find(
-      (r) =>
-        r.id === fact.region ||
-        (fact.kind === "keys" &&
-          (r.scope === fact.scope ||
-            facts.some((f) => f.kind === "keys" && f.scope === fact.scope && f.region === r.id))),
-    );
-  const areas = [
-    ...regions,
-    ...(facts.some((f) => f.kind !== "region" && f.kind !== "keys" && !regionOf(f))
-      ? [{ id: "tool", rect: null }]
-      : []),
-  ];
+  const areas = facts.filter((f) => f.kind === "region");
+  facts = facts.filter((f) => !f.region || areas.some((r) => r.id === f.region));
+  if (facts.some((f) => f.kind !== "keys" && !f.region))
+    areas.push({ kind: "region", id: "tool", label: "tool" });
   return (
     <div className="flex flex-col gap-4 px-8">
-      <Keys facts={facts.filter((f) => !regionOf(f))} />
+      <Keys facts={facts.filter((f) => !f.region)} />
       <div className="flex flex-wrap items-start gap-4">
         {areas.map((r, i) => {
-          const region = facts.find((f) => f.id === r.id && f.kind === "region");
-          const own = facts.filter(
-            (f) => (regionOf(f)?.id ?? (f.kind !== "keys" ? "tool" : undefined)) === r.id,
-          );
+          const own = facts.filter((f) => (f.region ?? "tool") === r.id);
+          const pane = document.querySelector<HTMLElement>(`[data-teach-id="${r.id}"]`);
           const views = new Map(
             own.flatMap((f) =>
               f.kind === "views" ? f.options.map((o) => [o.key, o] as const) : [],
@@ -145,21 +96,18 @@ export function HelpWorld({ facts }: { facts: readonly Teaching[] }) {
           return (
             <section
               key={r.id}
-              aria-label={region?.label ?? "tool"}
+              aria-label={r.label}
               className="hairline-x hairline-y flex min-w-0 flex-col gap-2 p-2"
-              style={{ flex: `${r.rect?.width || 1} 1 20rem` }}
+              style={{ flex: `${pane?.getBoundingClientRect().width || 1} 1 20rem` }}
             >
               <h2 className="t-small t-upper">
-                {i + 1} {region?.label ?? "tool"}
+                {i + 1} {r.label}
               </h2>
-              {region?.kind === "region" && region.purpose ? (
-                <p className="t-small text-ink-2">{region.purpose}</p>
-              ) : null}
+              {r.purpose ? <p className="t-small text-ink-2">{r.purpose}</p> : null}
               {own
                 .filter(
                   (f) =>
-                    f.kind !== "search" ||
-                    f.label !== "Search" ||
+                    !(f.kind === "search" && f.label === "Search") ||
                     !own.some((s) => s.kind === "search" && s.label !== "Search"),
                 )
                 .map((f) =>
@@ -196,7 +144,7 @@ export function HelpWorld({ facts }: { facts: readonly Teaching[] }) {
                   }}
                 />
               ) : null}
-              <Keys facts={own} />
+              <Keys facts={own.filter((f) => f.region)} />
             </section>
           );
         })}
@@ -251,12 +199,10 @@ function HelpBody({
   );
 }
 
-/** Every mounted help button's opener, newest last. Several mount at once while navigation hands
- *  the top bar from one route to the next, so none of them binds the chord itself. */
+/** Navigation can mount several openers; the newest owns Help. */
 const openers: (() => void)[] = [];
 
-/** The one Alt+/ binding (AppChrome): on the document, so help opens with focus anywhere, the
- *  composer's draft included; it opens the newest help button's page. */
+/** AppChrome binds once on the document, including inputs. */
 export function HelpChord() {
   useScopeKeys(
     [

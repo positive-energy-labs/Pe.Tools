@@ -28,6 +28,12 @@ const allow = (entries: Record<string, string>): Allow[] =>
 // Filenames use the wave-4 final homes: land.ts, revit-target.tsx and go-to.tsx.
 // prettier-ignore
 const RULES: Rule[] = [
+  { id: "tutorial-no-machine-region-title", doctrine: "I1", pattern: /teachText\(title\)\s*\|\|\s*id/g,
+    roots: [K + "components/lang/pane.tsx"], allow: [],
+    cannotSee: "Rendered names, zero-size panes or stale facts; teach integration tests exercise those states." },
+  { id: "tutorial-no-orphan-rehoming", doctrine: "P1", pattern: /regionOf\(f\)\?\.id\s*\?\?/g,
+    roots: [W + "route/help.tsx"], allow: [],
+    cannotSee: "Other fallback spellings or layout; integration tests cover withdrawal without rehoming." },
   { id: "scene-completeness-forwarded", doctrine: "N6",
     pattern: /return \{(?![^}]*\bomittedElements:)(?=[^}]*meshes: artifact\.meshes)[^}]*\}/g,
     roots: [W + "scene/use-scene.ts"], allow: [],

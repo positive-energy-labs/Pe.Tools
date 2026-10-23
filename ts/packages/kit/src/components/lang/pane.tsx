@@ -242,7 +242,7 @@ export function Pane({
 }: PicturePaneProps) {
   const teachId = useTeach({
     kind: "region",
-    label: teachText(title) || id || "pane",
+    label: teachText(title) || "pane",
     purpose: teachText(help) || undefined,
   });
   const { root, body } = paneRecipe({ scroll, flush });
