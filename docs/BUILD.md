@@ -32,6 +32,18 @@ worktree takes a stable slot in 5200-5999 hashed from its dev host's service nam
 `dev.ts` records the origin that actually bound, which is the only origin the host's
 `identity.origin` accepts. The backend keeps its SDK-owned dynamic port.
 
+For browser proof, a worktree may explicitly borrow another checkout's host reads. Set
+`PE_WEB_READ_HOST_CHECKOUT` to that checkout root and `PE_TOOLS_HOST_BASE_URL` to its receipt's
+loopback origin, then run `vp dev --port <free-port>` from `ts/apps/web`. This starts only Vite.
+The frontend binds its API marker to the named host and rebases admitted reads to that host's
+origin. Its middleware allows declared GET reads and only `ducts.snapshot`, `ducts.tables` and
+`revit.detail.space-scene` on
+`POST /call`; it refuses writes, host lifecycle and bridge sockets. Normal source identity and
+host takeover checks remain unchanged. The route's `target` uses the current bridge attachment
+id from the inventory, not the SDK session alias. This proves worktree web behavior against
+the host's loaded payload, not fresh worktree C# or host code. See
+[dev-proxy.ts](../ts/apps/web/dev-proxy.ts) for the enforced boundary.
+
 The full PWA entries are **Pe.Tools** and **Pe.Tools Dev**. Their separate compact launchers are
 **Pe.Tools Tray** and **Pe.Tools Dev Tray**. The next MSI authors `Pe.Tools Tray` with
 `Pe.Host.exe --show-tray`; it starts the claim-owned tray or forwards to its existing owner.

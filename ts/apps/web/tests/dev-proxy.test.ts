@@ -3,7 +3,99 @@ import { EventEmitter } from "node:events";
 import type { IncomingMessage } from "node:http";
 import { expect, test, vi } from "vite-plus/test";
 import { checkoutRoot } from "../checkout-paths.ts";
-import { checkoutIngress, devHostProxy, isCheckoutRequest } from "../dev-proxy.ts";
+import {
+  checkoutIngress,
+  checkoutServiceName,
+  devHostProxy,
+  isCheckoutRequest,
+  readHostRequest,
+} from "../dev-proxy.ts";
+
+test("borrowed host mode changes only web identity and permits Ducts reads, never writes", () => {
+  try {
+    vi.stubEnv("PE_WEB_READ_HOST_CHECKOUT", checkoutRoot);
+    vi.stubEnv("PE_TOOLS_HOST_BASE_URL", "http://127.0.0.1:12345");
+    expect(checkoutServiceName()).toBe(sourceHostServiceName(checkoutRoot));
+    expect(readHostRequest("GET", "/pe/resources?keys=[]")).toBe(true);
+    expect(readHostRequest("POST", "/call", { key: "ducts.snapshot", request: {} })).toBe(true);
+    expect(readHostRequest("POST", "/call", { key: "ducts.tables", request: {} })).toBe(true);
+    for (const [method, path, body] of [
+      ["POST", "/call", { key: "ducts.apply" }],
+      ["POST", "/pe/route-state/ducts/apply", {}],
+      ["POST", "/host/shutdown", {}],
+      ["GET", "/pe/route-state/ducts/salvage", undefined],
+      ["GET", "/api/bridge", undefined],
+    ] as const)
+      expect(readHostRequest(method, path, body)).toBe(false);
+    vi.stubEnv("PE_TOOLS_HOST_BASE_URL", "https://remote.example");
+    expect(checkoutServiceName).toThrow("127.0.0.1");
+  } finally {
+    vi.unstubAllEnvs();
+  }
+});
+
+test("borrowed frontend forwards reads with host origin and refuses mutations before dispatch", async () => {
+  const { createServer: createVite } = await import("vite-plus");
+  const { createServer } = await import("node:http");
+  const { once } = await import("node:events");
+  const forwarded: { url?: string; origin?: string; referer?: string; body: string }[] = [];
+  const backend = createServer(async (req, res) => {
+    let body = "";
+    for await (const chunk of req) body += chunk;
+    forwarded.push({
+      url: req.url,
+      origin: req.headers.origin,
+      referer: req.headers.referer,
+      body,
+    });
+    res.end("read");
+  });
+  backend.listen(0, "127.0.0.1");
+  await once(backend, "listening");
+  const target = `http://127.0.0.1:${(backend.address() as { port: number }).port}`;
+  vi.stubEnv("PE_WEB_READ_HOST_CHECKOUT", checkoutRoot);
+  vi.stubEnv("PE_TOOLS_HOST_BASE_URL", target);
+  const vite = await createVite({
+    configFile: false,
+    plugins: [checkoutIngress()],
+    server: { host: "127.0.0.1", port: 0 },
+    logLevel: "silent",
+  });
+  try {
+    await vite.listen();
+    const origin = `http://127.0.0.1:${(vite.httpServer!.address() as { port: number }).port}`;
+    const headers = {
+      origin,
+      referer: `${origin}/ducts`,
+      "content-type": "application/json",
+      "x-pe-runtime-service": checkoutServiceName(),
+    };
+    const send = (key: string) =>
+      fetch(`${origin}/call`, {
+        method: "POST",
+        headers,
+        body: JSON.stringify({ key, request: {} }),
+      });
+    expect((await send("ducts.snapshot")).status).toBe(200);
+    expect(forwarded).toEqual([
+      {
+        url: "/call",
+        origin: target,
+        referer: `${target}/ducts`,
+        body: JSON.stringify({ key: "ducts.snapshot", request: {} }),
+      },
+    ]);
+    for (const key of ["ducts.apply", "script.execute", "revit.context.show-elements"])
+      expect((await send(key)).status).toBe(403);
+    for (const path of ["/admin/shutdown", "/pe/route-state/ducts/apply", "/api/bridge"])
+      expect((await fetch(`${origin}${path}`, { method: "POST", headers })).status).toBe(403);
+    expect(forwarded).toHaveLength(1);
+  } finally {
+    await vite.close();
+    backend.close();
+    vi.unstubAllEnvs();
+  }
+});
 
 test("access-053/036: dev SPA navigation forwards the host's minted cookie; Page iframes never mint", async () => {
   const fetch = vi.fn(
