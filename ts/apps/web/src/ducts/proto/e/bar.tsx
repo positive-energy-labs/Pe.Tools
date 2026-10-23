@@ -5,7 +5,26 @@ import { TooltipHint } from "@pe/kit/lang/tooltip";
  * fills its track and every other row reads as a share of it. Unpriced draws no track: an empty bar
  * would read as zero loss.
  */
-import { Fragment, useEffect, useRef, useState, type ComponentProps, type ReactNode } from "react";
+import {
+  createContext,
+  Fragment,
+  useContext,
+  useLayoutEffect,
+  useMemo,
+  useRef,
+  useState,
+  type ComponentProps,
+  type ReactNode,
+} from "react";
+import type { DuctSnapshot } from "@pe/ducts-domain/types";
+import type { Priced } from "@pe/ducts-domain/pricing";
+import { tableOf } from "@pe/ducts-domain/pricing";
+import { Button } from "@pe/kit/lang/button";
+import { Input } from "@pe/kit/lang/input";
+import { SearchControl } from "@pe/kit/lang/search-control";
+import type { LossesWork } from "../../work";
+import { assignFamilyRule } from "./rules";
+import { barRows, ruleConditions, type BarRow } from "./bar-model";
 import { fanLoad } from "@pe/ducts-domain/fan-headroom";
 import type { Provisional } from "@pe/ducts-domain/losses";
 import { Popover, PopoverContent, PopoverTrigger } from "@pe/kit/lang/popover";
@@ -15,6 +34,27 @@ import { tokenRef } from "@pe/kit/lib/token";
 import { observedElements, useNativeObservation } from "#/revit/observation";
 
 import type { Split, SplitPart, systemList } from "../b/model";
+
+const RuleContext = createContext<{
+  nodes: ReadonlyMap<number, DuctSnapshot["nodes"][number]>;
+  work: LossesWork;
+  priced: Priced | null;
+} | null>(null);
+export function BarRules({
+  snapshot,
+  work,
+  priced,
+  children,
+}: {
+  snapshot: DuctSnapshot;
+  work: LossesWork;
+  priced: Priced | null;
+  children: ReactNode;
+}) {
+  const nodes = useMemo(() => new Map(snapshot.nodes.map((node) => [node.id, node])), [snapshot]);
+  const value = useMemo(() => ({ nodes, work, priced }), [nodes, work, priced]);
+  return <RuleContext value={value}>{children}</RuleContext>;
+}
 
 export const fmt = (n: number | null | undefined, d = 3) => (n == null ? "—" : n.toFixed(d));
 
@@ -274,68 +314,7 @@ export function systemRowParts(
 /** The loss columns' precision: a short duct really loses ~0.0001 in-wg, and 3 places would read it as 0. */
 const LOSS_PLACES = 4;
 
-/** Row and bar heights of the leader diagram, px: the leaders are drawn against them. */
-const ROW_H = 20;
-const BAR_H = 12;
-/** Segments under this share of the scale roll up into one "other (N)" entry. */
-const SMALL = 0.03;
-
-type Entry = {
-  key: string;
-  label: string;
-  dp: number;
-  unpriced: number;
-  ids: readonly number[];
-  /** Bar-space centres (0..1) of the segment or segments this entry leads to; none = no segment. */
-  at: number[];
-  title?: string;
-};
-
-/** The groups in bar order, each with the centre of its segment, small ones rolled into one entry. */
-function entriesOf(split: Split, scale: number): Entry[] {
-  let pos = 0;
-  const drawn: Entry[] = PARTS.flatMap((p) =>
-    split.groups
-      .filter((g) => g.part === p.key && g.dp > 0)
-      .map((g) => {
-        const w = Math.min(1 - pos, g.dp / scale);
-        const at = pos + w / 2;
-        pos += g.dp / scale;
-        return { key: g.key, label: g.label, dp: g.dp, unpriced: g.unpriced, ids: g.ids, at: [at] };
-      }),
-  );
-  const small = drawn.filter((e) => e.dp / scale < SMALL);
-  const big = small.length > 1 ? drawn.filter((e) => !small.includes(e)) : drawn;
-  const other: Entry[] =
-    small.length > 1
-      ? [
-          {
-            key: "other",
-            label: `other (${small.length})`,
-            dp: small.reduce((a, e) => a + e.dp, 0),
-            unpriced: small.reduce((a, e) => a + e.unpriced, 0),
-            ids: small.flatMap((e) => e.ids),
-            at: small.flatMap((e) => e.at),
-            title: small
-              .map((e) => `${e.label}  ${fmt(e.dp, LOSS_PLACES)}`)
-              .join(String.fromCharCode(10)),
-          },
-        ]
-      : [];
-  const unknown: Entry[] = split.groups
-    .filter((g) => g.dp <= 0 && g.unpriced > 0)
-    .map((g) => ({ key: g.key, label: g.label, dp: 0, unpriced: g.unpriced, ids: g.ids, at: [] }));
-  return [...big, ...other, ...unknown];
-}
-
-/**
- * The breakdown of one bar: the bar drawn large, every segment on a thin leader to its label
- * (group name, in-wg, share). The bar and its numbers sit on the trigger's side, the names fan away
- * from it, and each leader drops from its segment then runs outward at its label's height; the row
- * order follows the side so no two leaders cross. Segments
- * under 3% roll up into one "other (N)" entry whose leaders gather on its row. Tabular numerals
- * align the numbers. Hovering an entry lights its elements.
- */
+/** The table keeps tiny groups behind one expandable row, with each segment still led to it. */
 function BreakdownList({
   split,
   scale,
@@ -347,19 +326,51 @@ function BreakdownList({
   scale: number;
   light?: Light;
   back?: readonly number[];
-  /** The hovered bar's width, px: the large bar takes it (within limits) and sits on the trigger's side. */
   barW: number;
 }) {
-  const entries = entriesOf(split, scale);
-  const rows = entries.length;
-  const leader = tokenRef("ink-2");
-  // The popover's resolved side puts the large bar on the side nearest the hovered one, its labels
-  // fanning away: top (popover above) = bar at the bottom; right of the trigger, or above/below it
-  // (left edges aligned), = bar at the left; left of the trigger = bar at the right. Row order
-  // follows the side so no two leaders cross.
+  const context = useContext(RuleContext);
   const root = useRef<HTMLDivElement>(null);
+  const bar = useRef<HTMLSpanElement>(null);
   const [side, setSide] = useState("bottom");
-  useEffect(() => {
+  const [expanded, setExpanded] = useState(false);
+  const [selected, setSelected] = useState<string | null>(null);
+  const [leaders, setLeaders] = useState<{ key: string; d: string }[]>([]);
+  const entries = useMemo(
+    () => barRows(split, scale, context?.nodes ?? new Map()),
+    [split, scale, context?.nodes],
+  );
+  const small = entries.filter(
+    (entry) => entry.dp > 0 && entry.share < 3 && entry.key !== selected,
+  );
+  const rolled = !expanded && small.length > 1;
+  const other = rolled
+    ? {
+        ...small[0]!,
+        key: "other",
+        label: `other (${small.length})`,
+        dp: small.reduce((sum, row) => sum + row.dp, 0),
+        share: small.reduce((sum, row) => sum + row.share, 0),
+        count: new Set(small.flatMap((row) => row.ids)).size,
+        unpriced: small.reduce((sum, row) => sum + row.unpriced, 0),
+        ids: small.flatMap((row) => row.ids),
+        at: small.flatMap((row) => row.at),
+        words: "Expand loss groups",
+        tables: [],
+        conditions: [],
+        rules: [],
+      }
+    : null;
+  const visible = rolled ? [...entries.filter((entry) => !small.includes(entry)), other!] : entries;
+  const flip = side === "top";
+  const barLeft = side !== "left";
+  const led = visible.filter((row) => row.at.length);
+  const bare = visible.filter((row) => !row.at.length);
+  const ordered = barLeft !== flip ? [...led].reverse() : led;
+  const rows = flip ? [...bare, ...ordered] : [...ordered, ...bare];
+  const current = entries.find((entry) => entry.key === selected);
+  const barCol = Math.min(144, Math.max(96, barW));
+
+  useLayoutEffect(() => {
     const popup = root.current?.closest("[data-side]");
     if (!popup) return;
     const read = () => setSide(popup.getAttribute("data-side") ?? "bottom");
@@ -368,131 +379,342 @@ function BreakdownList({
     watch.observe(popup, { attributes: true, attributeFilter: ["data-side"] });
     return () => watch.disconnect();
   }, []);
-  const flip = side === "top";
-  const barLeft = side !== "left";
-  const reversed = barLeft !== flip;
-  // Entries with a segment take the rows nearest the bar, in the order that keeps leaders apart;
-  // the ones with none (no drop: unknown) go to the far end, where no leader has to pass them.
-  const led = entries.filter((e) => e.at.length).length;
-  const bare = rows - led;
-  const rowOf = (i: number) => {
-    const e = entries[i]!;
-    if (!e.at.length) return flip ? i - led : led + (i - led);
-    const r = reversed ? led - 1 - i : i;
-    return flip ? bare + r : r;
-  };
-  const edge = flip ? rows * ROW_H + 4 : -4;
-  const caption = (
-    <p className="t-small text-ink-2">
-      full width = <span className="face-mono text-ink">{fmt(scale)}</span> in-wg
-    </p>
+  useLayoutEffect(() => {
+    const box = root.current;
+    if (!box) return;
+    const measure = () => {
+      const origin = box.getBoundingClientRect();
+      const track = bar.current?.getBoundingClientRect();
+      if (!track) return;
+      const y0 = (flip ? track.top : track.bottom) - origin.top;
+      const x0 = track.left - origin.left;
+      setLeaders(
+        rows.flatMap((row) => {
+          const tr = box.querySelector(`[data-loss-row="${CSS.escape(row.key)}"]`);
+          if (!tr || !row.at.length) return [];
+          const rect = tr.getBoundingClientRect();
+          const y = rect.top + rect.height / 2 - origin.top;
+          return [
+            {
+              key: row.key,
+              d: row.at
+                .map(
+                  (at) =>
+                    `M${x0 + at * track.width} ${y0} V${y} H${barLeft ? x0 + track.width : x0}`,
+                )
+                .join(" "),
+            },
+          ];
+        }),
+      );
+    };
+    measure();
+    const watch = new ResizeObserver(measure);
+    watch.observe(box);
+    return () => watch.disconnect();
+  }, [split, scale, side, expanded, barCol, selected]);
+
+  const track = (
+    <span
+      ref={bar}
+      className="relative block h-3 w-full"
+      style={{ backgroundColor: tokenRef("line") }}
+    >
+      <SplitFill split={split} scale={scale} hint={false} />
+    </span>
   );
-  const barCol = Math.min(224, Math.max(128, barW));
-  const first = flip ? 1 : 2;
-  // Columns: the bar zone and its numbers sit together on the trigger's side, the names beyond.
-  const col = barLeft ? { zone: 1, wg: 2, pct: 3, name: 4 } : { name: 1, wg: 2, pct: 3, zone: 4 };
+  const number = "face-mono tabular-nums text-right px-1 align-middle";
+  const zone = <td aria-hidden className="p-1" />;
   return (
     <div
-      className="flex flex-col gap-1"
+      className="flex flex-wrap items-start gap-3"
       data-e-breakdown=""
       data-e-side={side}
       data-e-flip={flip || undefined}
-      ref={root}
     >
-      {flip ? null : caption}
-      <div
-        className="grid items-center gap-x-2"
-        style={{
-          gridTemplateColumns: barLeft
-            ? `${barCol}px auto auto minmax(0,1fr)`
-            : `minmax(0,1fr) auto auto ${barCol}px`,
-          gridTemplateRows: flip
-            ? `repeat(${rows}, ${ROW_H}px) ${BAR_H + 4}px`
-            : `${BAR_H + 4}px repeat(${rows}, ${ROW_H}px)`,
-        }}
-        data-e-groups=""
-      >
-        <span
-          className="relative block"
-          style={{
-            gridColumn: col.zone,
-            gridRow: flip ? rows + 1 : 1,
-            height: BAR_H,
-            backgroundColor: tokenRef("line"),
-            alignSelf: flip ? "end" : "start",
-          }}
-        >
-          <SplitFill split={split} scale={scale} light={light} back={back} hint={false} />
-        </span>
-        {entries.map((e, i) => {
-          const gridRow = first + rowOf(i);
-          return (
-            <div
-              key={e.key}
-              className="contents"
-              data-e-group-key={e.label}
-              title={e.title}
-              onMouseEnter={light ? () => light(e.ids) : undefined}
-              onMouseLeave={light ? () => light(back ?? null) : undefined}
-            >
-              <span
-                className="flex min-w-0 items-baseline gap-1.5"
-                style={{ gridColumn: col.name, gridRow }}
-                title={e.title ?? e.label}
-              >
-                <span className="truncate">{e.label}</span>
-                {e.unpriced > 0 ? (
-                  <span className="shrink-0" data-tone="caution">
-                    {e.dp > 0 ? `+ ${e.unpriced} unpriced` : "no drop: unknown"}
-                  </span>
+      <div className="min-w-0 flex-1 basis-[760px]">
+        <p className="text-ink-2 mb-1">
+          full width = <span className="face-mono text-ink">{fmt(scale)}</span> in-wg · select a
+          group to edit its rule
+        </p>
+        <div ref={root} className="relative" data-e-groups="">
+          <table
+            aria-label="Loss groups and pricing rules"
+            className="w-full table-fixed text-left"
+          >
+            <colgroup>
+              {barLeft ? <col style={{ width: barCol }} /> : null}
+              <col className="w-[64px]" />
+              <col className="w-[44px]" />
+              <col className="w-[38px]" />
+              <col />
+              <col />
+              <col />
+              {!barLeft ? <col style={{ width: barCol }} /> : null}
+            </colgroup>
+            <thead className="hairline-b text-ink-2">
+              <tr>
+                {barLeft ? (
+                  <th scope="col" className="p-1">
+                    {!flip ? track : <span className="sr-only">Bar leaders</span>}
+                  </th>
                 ) : null}
-              </span>
-              <span
-                className="face-mono text-ink text-right tabular-nums"
-                style={{ gridColumn: col.wg, gridRow }}
-              >
-                {e.dp > 0 ? fmt(e.dp, LOSS_PLACES) : ""}
-              </span>
-              <span
-                className="face-mono text-ink-2 w-[4ch] text-right tabular-nums"
-                style={{ gridColumn: col.pct, gridRow }}
-              >
-                {e.dp > 0 ? `${Math.round((e.dp / scale) * 100)}%` : ""}
-              </span>
-            </div>
-          );
-        })}
-        <svg
-          className="h-full w-full overflow-visible"
-          style={{ gridColumn: col.zone, gridRow: `${first} / span ${Math.max(1, rows)}` }}
-          viewBox={`0 0 100 ${Math.max(1, rows) * ROW_H}`}
-          preserveAspectRatio="none"
-          aria-hidden
-          data-e-leaders=""
-        >
-          {entries.map((e, i) => {
-            const y = rowOf(i) * ROW_H + ROW_H / 2;
-            return e.at.length ? (
+                <th scope="col" className="px-1 text-right">
+                  in-wg
+                </th>
+                <th scope="col" className="px-1 text-right">
+                  %
+                </th>
+                <th scope="col" className="px-1 text-right">
+                  count
+                </th>
+                <th scope="col" className="px-2">
+                  loss group
+                </th>
+                <th scope="col" className="px-2">
+                  ASHRAE / rule
+                </th>
+                <th scope="col" className="px-2">
+                  conditions / inputs
+                </th>
+                {!barLeft ? (
+                  <th scope="col" className="p-1">
+                    {!flip ? track : <span className="sr-only">Bar leaders</span>}
+                  </th>
+                ) : null}
+              </tr>
+            </thead>
+            <tbody className="hairline-rows">
+              {rows.map((row) => (
+                <tr
+                  key={row.key}
+                  data-loss-row={row.key}
+                  data-e-group-key={row.label}
+                  data-selected={selected === row.key || undefined}
+                  onMouseEnter={light ? () => light(row.ids) : undefined}
+                  onMouseLeave={light ? () => light(back ?? null) : undefined}
+                  onClick={() => (row.key === "other" ? setExpanded(true) : setSelected(row.key))}
+                >
+                  {barLeft ? zone : null}
+                  <td className={number} data-loss-value="">
+                    {row.dp > 0 || !row.unpriced ? fmt(row.dp, LOSS_PLACES) : "—"}
+                    {row.dp > 0 && row.unpriced ? "+?" : ""}
+                  </td>
+                  <td className={number}>
+                    {row.dp > 0 || !row.unpriced ? row.share.toFixed(1) : "—"}
+                  </td>
+                  <td className={number}>{row.count}</td>
+                  <th scope="row" className="px-2 py-1 text-left font-normal break-words">
+                    <Button
+                      label={row.key === "other" ? row.label : `Edit rule for ${row.label}`}
+                      onClick={() =>
+                        row.key === "other" ? setExpanded(true) : setSelected(row.key)
+                      }
+                    >
+                      <span className="whitespace-normal text-left">{row.label}</span>
+                    </Button>
+                    {row.unpriced ? (
+                      <span className="block" data-tone="caution">
+                        {row.unpriced} unpriced
+                      </span>
+                    ) : null}
+                  </th>
+                  <td className="px-2 py-1 align-middle break-words">
+                    <span className="face-mono">{row.tables.join(", ")}</span>
+                    <span className="block">{row.words}</span>
+                  </td>
+                  <td className="px-2 py-1 align-middle break-words">
+                    {row.conditions.length ? (
+                      row.conditions.map((condition) => (
+                        <span
+                          key={condition}
+                          className={`block ${
+                            row.rules.some((rule) => {
+                              const state = ruleConditions(rule, row);
+                              return state.words === condition && state.inactive;
+                            })
+                              ? "text-ink-2"
+                              : ""
+                          }`}
+                        >
+                          {condition}
+                        </span>
+                      ))
+                    ) : (
+                      <span className="text-ink-2">not applicable</span>
+                    )}
+                    {row.rules.some((rule) => ruleConditions(rule, row).inactive) ? (
+                      <span className="text-ink-2">geometry condition bypassed</span>
+                    ) : null}
+                  </td>
+                  {!barLeft ? zone : null}
+                </tr>
+              ))}
+            </tbody>
+            {flip ? (
+              <tfoot>
+                <tr>
+                  {barLeft ? <td className="p-1">{track}</td> : null}
+                  <td colSpan={6} />
+                  {!barLeft ? <td className="p-1">{track}</td> : null}
+                </tr>
+              </tfoot>
+            ) : null}
+          </table>
+          <svg
+            className="pointer-events-none absolute inset-0 size-full overflow-visible"
+            aria-hidden
+            data-e-leaders=""
+          >
+            {leaders.map((line) => (
               <path
-                key={e.key}
-                d={[
-                  ...e.at.map((x) => `M${x * 100} ${edge} V${y}`),
-                  barLeft
-                    ? `M${Math.min(...e.at) * 100} ${y} H100`
-                    : `M${Math.max(...e.at) * 100} ${y} H0`,
-                ].join(" ")}
+                key={line.key}
+                d={line.d}
                 fill="none"
-                stroke={leader}
+                stroke={tokenRef("ink-2")}
                 strokeWidth={1}
-                vectorEffect="non-scaling-stroke"
-                strokeDasharray={e.at.length > 1 ? "2 2" : undefined}
+                strokeDasharray={line.key === "other" ? "2 2" : undefined}
               />
-            ) : null;
-          })}
-        </svg>
+            ))}
+          </svg>
+        </div>
+        {expanded && small.length > 1 ? (
+          <Button
+            label="Collapse small loss groups"
+            onClick={() => {
+              setExpanded(false);
+              setSelected(null);
+            }}
+          >
+            collapse groups under 3%
+          </Button>
+        ) : null}
       </div>
-      {flip ? caption : null}
+      {current && context ? (
+        <RulePick key={current.key} row={current} work={context.work} priced={context.priced} />
+      ) : null}
     </div>
+  );
+}
+
+function RulePick({ row, work, priced }: { row: BarRow; work: LossesWork; priced: Priced | null }) {
+  const [search, setSearch] = useState("");
+  const [family, setFamily] = useState(row.families[0] ?? "");
+  const [error, setError] = useState<string | null>(null);
+  const [pending, setPending] = useState(false);
+  const staged = work.doc?.ruleAssignments?.[family]?.staged?.value.rule;
+  const pick = async (rule: string) => {
+    setPending(true);
+    setError(null);
+    try {
+      const refusal = await assignFamilyRule(work, family, rule);
+      setError(refusal?.message ?? null);
+    } catch (cause) {
+      setError(cause instanceof Error ? cause.message : String(cause));
+    } finally {
+      setPending(false);
+    }
+  };
+  const choices = row.candidates.filter((rule) =>
+    `${priced ? tableOf(priced, rule.key) : rule.table} ${rule.family} ${rule.type} ${rule.cond}`
+      .toLowerCase()
+      .includes(search.toLowerCase()),
+  );
+  return (
+    <aside
+      aria-label="ASHRAE rule picker"
+      data-e-rule-picker=""
+      className="min-w-0 flex-1 basis-[280px] hairline-t pt-2"
+    >
+      <p>{row.label}</p>
+      <p className="face-mono my-1" data-e-rule-price="">
+        {fmt(row.dp, LOSS_PLACES)} in-wg{row.unpriced ? ` + ${row.unpriced} unpriced` : ""}
+      </p>
+      {!row.candidates.length || !family ? (
+        <p className="text-ink-2">{row.words}. No applicable family rule to assign.</p>
+      ) : (
+        <>
+          {row.families.length > 1 ? (
+            <select
+              className="dl-control w-full"
+              aria-label="Fitting family"
+              value={family}
+              onChange={(event) => setFamily(event.target.value)}
+            >
+              {row.families.map((value) => (
+                <option key={value}>{value}</option>
+              ))}
+            </select>
+          ) : null}
+          <p className="text-ink-2 mb-2">
+            Every fitting in the family {family} uses this rule, across all systems. An assignment
+            overrides automatic geometry matching.
+          </p>
+          {staged ? (
+            <div
+              className="flex flex-wrap items-center gap-2 mb-2"
+              data-e-staged-assignment={family}
+            >
+              <strong>staged: {staged}</strong>
+              <Button label="Unstage family rule" busy={pending} onClick={() => void pick("")}>
+                unstage
+              </Button>
+            </div>
+          ) : null}
+          <SearchControl>
+            <Input
+              surface="embedded"
+              aria-label="Search applicable ASHRAE rules"
+              placeholder="table, rule, condition…"
+              value={search}
+              onChange={(event) => setSearch(event.target.value)}
+            />
+          </SearchControl>
+          <ul
+            aria-label="Applicable ASHRAE rules"
+            className="max-h-64 overflow-y-auto hairline-rows mt-1"
+          >
+            {choices.map((rule) => {
+              const condition = ruleConditions(rule, row);
+              const active = staged
+                ? staged === rule.key
+                : row.rules.some((current) => current.key === rule.key);
+              return (
+                <li key={rule.key} className="py-1" data-selected={active || undefined}>
+                  <Button
+                    label={`Use ${priced ? tableOf(priced, rule.key) : rule.table} ${rule.family} ${rule.type} ${rule.cond}`}
+                    pressed={active}
+                    busy={pending}
+                    onClick={() => void pick(rule.key)}
+                  >
+                    <span className="face-mono">
+                      {priced ? tableOf(priced, rule.key) : rule.table}
+                    </span>{" "}
+                    · {rule.family} {active ? " · current" : ""}
+                  </Button>
+                  <p className={condition.inactive ? "text-ink-2" : undefined}>
+                    {condition.words}
+                    {condition.inactive ? " · not matched" : ""}
+                  </p>
+                  {condition.actual ? <p className="text-ink-2">{condition.actual}</p> : null}
+                  <p className="text-ink-2">{rule.basis}</p>
+                </li>
+              );
+            })}
+            {!choices.length ? (
+              <li className="py-2 text-ink-2">
+                No matching rules. Clear the search to see applicable rules.
+              </li>
+            ) : null}
+          </ul>
+        </>
+      )}
+      {error ? (
+        <p role="alert" data-tone="alarm">
+          {error}
+        </p>
+      ) : null}
+    </aside>
   );
 }
 
@@ -528,7 +750,7 @@ function BarPopover({
       <PopoverTrigger
         ref={trigger}
         openOnHover
-        delay={150}
+        delay={0}
         aria-label="loss breakdown by element group"
         data-e-bar-trigger=""
         className={`flex items-center p-0! min-h-0! border-0 ${className ?? ""}`}
@@ -539,7 +761,8 @@ function BarPopover({
       <PopoverContent
         side="bottom"
         align="start"
-        className="w-[min(36rem,var(--available-width))] p-2"
+        className="w-[min(74rem,var(--available-width))] p-2"
+        onClick={(event) => event.stopPropagation()}
       >
         <BreakdownList split={split} scale={scale} light={light} back={back} barW={barW} />
       </PopoverContent>
@@ -562,7 +785,8 @@ export function SplitStrip({
     <div className="border-line border-b px-2 py-1.5 t-small" data-e-split-strip="">
       <BarPopover split={split} scale={scale} light={light} className="h-4 w-full">
         <span className="relative block h-2.5 w-full" style={{ backgroundColor: tokenRef("line") }}>
-          <SplitFill split={split} scale={scale} light={light} hint={false} />
+          {/* Highlight from the open table: entering the trigger must not rebuild the whole scene. */}
+          <SplitFill split={split} scale={scale} hint={false} />
         </span>
       </BarPopover>
     </div>

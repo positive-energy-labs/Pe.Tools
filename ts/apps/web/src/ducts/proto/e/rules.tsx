@@ -16,6 +16,19 @@ import { ValueDiff } from "#/components/lang/value-diff";
 import { LOSS_RULES, ruleByKey } from "@pe/ducts-domain/loss-rules";
 import { tableOf, type Priced } from "@pe/ducts-domain/pricing";
 import type { LossesWork } from "../../work";
+
+/** The sidebar and bar editor stage the same person-owned family cell. */
+export function assignFamilyRule(work: LossesWork, family: string, rule: string) {
+  const cell = work.doc?.ruleAssignments?.[family] ?? {};
+  return work.write(
+    transitionPatches(
+      ["ruleAssignments"],
+      family,
+      cell,
+      rule ? { kind: "stage", rung: { value: { rule } } } : { kind: "unstage" },
+    ),
+  );
+}
 // proto: copied from losses-view.tsx
 const fmt = (n: number | null | undefined) => (n == null ? "" : n.toFixed(4));
 /** Stage a rule's table; staging the table already staged takes it back. */
@@ -103,7 +116,11 @@ export function Chips({
   // The pressed chip is the table every instance is looked up under now; a staged one also wears
   // caution. Picking the staged table again takes it back (`tablePatches`). Chips wrap, never clip.
   return (
-    <span role="group" aria-label={`${rule.family} : ${rule.type} table`} className="flex flex-wrap gap-1">
+    <span
+      role="group"
+      aria-label={`${rule.family} : ${rule.type} table`}
+      className="flex flex-wrap gap-1"
+    >
       {rule.options.map((table) => {
         const isStaged = staged === table.toUpperCase();
         return (
