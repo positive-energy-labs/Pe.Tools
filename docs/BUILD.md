@@ -514,7 +514,8 @@ The generator is `packages/host-contracts/scripts/host-typegen.ts`; `pnpm verify
 
 What lives in `@pe/host-contracts`:
 
-- `src/generated/host-ops.generated.ts` — the typegen lockfile: per-op request/response interfaces, the `HostOps` map, `hostOpKeys`, `hostOpSafety`, and the complete C# metadata projection `hostOpCatalog`.
+- `src/generated/host-ops.generated.ts` — browser-safe operation interfaces, the `HostOps` map, `hostOpKeys`, and `hostOpSafety`.
+- `src/generated/host-catalog.generated.ts` — the complete host-only C# metadata projection `hostOpCatalog`, exported as `@pe/host-contracts/catalog`.
 - `src/operation-types.ts` — hand-authored TS-only op schemas (settings runtime, APS auth, logs), key guards, `OpKey`/`OpRequestOf`/`OpResponseOf`.
 - `src/contracts/` — hand-authored bridge protocol, product constants, and operation vocabulary.
 

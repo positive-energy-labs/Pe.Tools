@@ -12,7 +12,7 @@ import {
   tsOnlyOperationCatalog,
 } from "@pe/host-contracts/operation-types";
 import { NoRevitSession, RevitBridge } from "./bridge.ts";
-import { hostOpCatalog } from "@pe/host-contracts/generated";
+import { hostOpCatalog } from "@pe/host-contracts/catalog";
 // A selected bridge supplies its current catalog. Without one, C#-generated metadata keeps the
 // vocabulary discoverable; bridgeCatalogError reports availability, never permission to execute.
 /** A browser navigation (Accept: text/html) to an API path belongs to the SPA, not the JSON. */

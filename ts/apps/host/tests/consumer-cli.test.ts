@@ -12,7 +12,7 @@ import { RevitBridge } from "../src/bridge.ts";
 import { makeCallRoute } from "../src/call-route.ts";
 import { opsCatalogRoute } from "../src/ops-catalog.ts";
 import { isTsOnlyOperationKey, tsOnlyOperationCatalog } from "@pe/host-contracts/operation-types";
-import { hostOpCatalog } from "@pe/host-contracts/generated";
+import { hostOpCatalog } from "@pe/host-contracts/catalog";
 import { createCapabilityCatalogSource } from "@pe/mcps";
 import { machineFixture } from "../../../packages/agent-contracts/tests/machine-fixture.ts";
 import { sdkSessions } from "./native-receipt-fixture.ts";
