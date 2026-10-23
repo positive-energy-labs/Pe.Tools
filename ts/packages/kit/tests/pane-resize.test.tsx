@@ -37,11 +37,18 @@ test.each(["horizontal", "vertical"] as const)(
         resize={{ target: "end", defaultSize: 500, minSize: 260, minOtherSize: 560 }}
       />,
     );
+    const split = container.firstElementChild as HTMLElement;
+    expect(split.style[axis === "horizontal" ? "gridTemplateColumns" : "gridTemplateRows"]).toBe(
+      "minmax(0, 1fr) var(--gutter) var(--pane-size)",
+    );
+    const style = getComputedStyle(split);
+    const size = parseFloat(style.getPropertyValue("--pane-size"));
+    expect(size).toBe(332);
     expect(
-      (container.firstElementChild as HTMLElement).style[
-        axis === "horizontal" ? "gridTemplateColumns" : "gridTemplateRows"
-      ],
-    ).toBe("minmax(0, 1fr) var(--gutter) 332px");
+      split.getBoundingClientRect()[axis === "horizontal" ? "width" : "height"] -
+        parseFloat(style.getPropertyValue("--gutter")) -
+        size,
+    ).toBe(560);
     const seam = screen.getByRole("separator");
     const handles = [...seam.querySelectorAll<HTMLElement>("[data-slot='pane-resize-grip']")];
     expect(handles.map((el) => el.dataset.corner)).toEqual(["center", "tr", "bl"]);
@@ -181,12 +188,10 @@ test("20 drag steps preview geometry without React commits, then commit once wit
   expect(during).toBe(0);
   expect(commits).toHaveBeenCalledTimes(1);
   expect(pictureCommits).not.toHaveBeenCalled();
-  expect(fitted).toBe("minmax(0, 1fr) var(--gutter) var(--pane-size, 332px)");
+  expect(fitted).toBe("minmax(0, 1fr) var(--gutter) var(--pane-size)");
   expect(container.querySelector("canvas")).toBe(canvas);
-  expect(split.style.gridTemplateColumns).toBe(
-    "minmax(0, 1fr) var(--gutter) var(--pane-size, 312px)",
-  );
-  expect(split.style.getPropertyValue("--pane-size")).toBe("");
+  expect(split.style.gridTemplateColumns).toBe("minmax(0, 1fr) var(--gutter) var(--pane-size)");
+  expect(getComputedStyle(split).getPropertyValue("--pane-size")).toBe("312px");
   expect(storage.setItem).toHaveBeenCalledExactlyOnceWith("stillness", "312");
 });
 
