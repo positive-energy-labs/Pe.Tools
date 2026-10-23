@@ -21,7 +21,7 @@ import { Situation } from "#/route/situation";
 import { LadderPicker, useDocumentLadder } from "#/route/situation-ladder";
 import { NativeObservationScope, type NativeObservation } from "#/revit/observation";
 import type { Psc1Metadata } from "#/scene/psc1";
-import { PictureReadout } from "#/scene/readout";
+import { PictureReadout } from "@pe/kit/lang/readout";
 import { useSceneArtifact } from "#/scene/use-scene";
 import type { Layer3D } from "#/scene/types";
 

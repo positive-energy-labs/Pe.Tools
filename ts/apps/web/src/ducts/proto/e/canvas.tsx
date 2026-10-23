@@ -24,7 +24,6 @@ import { snapshotById } from "@pe/ducts-domain/readiness";
 import { noRunBranches } from "@pe/ducts-domain/no-runs";
 import { systemScope } from "@pe/ducts-domain/system-scope";
 import { TooltipHint } from "@pe/kit/lang/tooltip";
-import { ChevronRight } from "lucide-react";
 import { SelectionBoxButton } from "#/revit/element-menu";
 import { observedElements } from "#/revit/observation";
 import { KeyLegend } from "#/components/lang/kbd";
@@ -48,7 +47,8 @@ import { findingLayers, findingShapes, noRunLayers } from "../../finding-layers"
 import { boundsOfIds, ModelPicture, poseOf, usePictureBounds } from "../../model-picture";
 import { clearPose, subjectPose } from "#/scene/framing";
 import { GoToSubject } from "./go-to";
-import { PictureReadout } from "#/scene/readout";
+import { PictureReadout } from "@pe/kit/lang/readout";
+import { PaneCrumb } from "@pe/kit/lang/pane-crumb";
 import { RunDetail, runOf } from "./run-detail";
 import { DEFAULT_DESIGN_FRICTION_RATE } from "@pe/ducts-domain/equivalent-length";
 import { ProvisionalNote } from "../../provisional";
@@ -678,68 +678,33 @@ function Canvas({
     priced && page.system && readId != null
       ? runOf(priced, systemScope(snapshot, page.system).groups, readId)
       : null;
-  const title =
-    systemName == null ? (
-      <span className="flex min-w-0 items-center gap-1.5">
-        <span className="truncate">All systems</span>
-      </span>
-    ) : (
-      <span className="flex min-w-0 items-center gap-0.5" data-e-crumb="">
-        {/* Priority when the header strip leaves little room: the system never shrinks, the
-            picked element keeps a few letters, the root crumb gives way first. */}
-        <button
-          type="button"
-          className="veil min-w-0 shrink-[8] truncate rounded-control px-1 text-ink-2 hover:text-ink"
-          aria-label="show every system"
-          onClick={identity.allSystems}
-        >
-          Systems
-        </button>
-        <ChevronRight aria-hidden className="size-3.5 shrink-0 text-ink-2" />
-        {pickedName == null ? (
-          <TooltipHint content={systemName}>
-            <span className="shrink-0 px-1">{systemName}</span>
-          </TooltipHint>
-        ) : (
-          <TooltipHint content={`${systemName} · clear the selection`}>
-            <button
-              type="button"
-              className="veil shrink-0 rounded-control px-1 text-ink-2 hover:text-ink"
-              aria-label={`clear the selection in ${systemName}`}
-              onClick={() => {
-                setPage({ selected: "" }, { history: "push" });
-                const fit = poseOf(null, bounds, pictureSize);
-                if (fit && picture === "model")
-                  flyTo(orbit, fit, {
-                    history: null,
-                    scene: bounds?.scene,
-                    onLand: () => setPage({ viewport: null }, { history: "replace" }),
-                  });
-              }}
-            >
-              {systemName}
-            </button>
-          </TooltipHint>
-        )}
-        {pickedName == null || pickedId == null ? null : (
-          <>
-            <ChevronRight aria-hidden className="size-3.5 shrink-0 text-ink-2" />
-            <TooltipHint content={`${pickedName} · go to it`}>
-              {/* The picked element's name is a Subject: pressing it is the same alias-click as in text. */}
-              <button
-                type="button"
-                className="veil min-w-[6ch] truncate rounded-control px-1"
-                data-e-selected={pickedId}
-                aria-label={`go to ${pickedName}`}
-                onClick={() => subjects?.go?.(pickedId)}
-              >
-                {pickedName}
-              </button>
-            </TooltipHint>
-          </>
-        )}
-      </span>
-    );
+  const title = (
+    <PaneCrumb
+      segments={
+        systemName == null
+          ? [{ label: "All systems" }]
+          : [
+              { label: "Systems", onPress: identity.allSystems },
+              {
+                label: systemName,
+                onPress:
+                  pickedName == null
+                    ? undefined
+                    : () => setPage({ selected: "" }, { history: "push" }),
+              },
+              ...(pickedName == null || pickedId == null
+                ? []
+                : [
+                    {
+                      label: pickedName,
+                      onPress: () => subjects?.go?.(pickedId),
+                      revitIds: [pickedId],
+                    },
+                  ]),
+            ]
+      }
+    />
+  );
 
   const model = (
     <ModelPicture

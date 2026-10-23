@@ -9,7 +9,7 @@
 import { type CSSProperties, type ReactNode, useEffect, useMemo, useRef } from "react";
 import { useScopeGestures, useScopeKeys } from "@pe/kit/keys";
 import { PLANE_GESTURES } from "#/scene/gestures";
-import { PictureReadout } from "#/scene/readout";
+import { PictureReadout } from "@pe/kit/lang/readout";
 import { useViewHistory } from "#/scene/view-history";
 import type { RoomsSnapshot } from "@pe/host-contracts/generated";
 
@@ -327,20 +327,6 @@ export function RoomsPlan({
     },
   ]);
   useViewHistory();
-  // Esc clears at the plan's scope, where a pick leaves focus. ponytail: a document-bound Esc here
-  // kept a stale callback (it fired with an empty selection); bind it wider when a table pick must
-  // clear too.
-  useScopeKeys([
-    {
-      hotkey: "Escape",
-      label: "clear the selection",
-      says: "Clear the selection, without moving the view",
-      refusal: selected.size ? null : "nothing is selected",
-      callback: () => {
-        if (selected.size) onSelect(null, false);
-      },
-    },
-  ]);
   const picked = world?.shapes.filter((shape) => selected.has(shape.region.guid)) ?? [];
 
   // The lease's one key is the viewport (`roomsAddress.agent`); the rest stays the person's.
@@ -658,7 +644,6 @@ export function RoomsPlan({
         <div onPointerDown={(e) => e.stopPropagation()}>
           {picked.length ? (
             <PictureReadout
-              hug
               title={
                 picked.length === 1
                   ? [
