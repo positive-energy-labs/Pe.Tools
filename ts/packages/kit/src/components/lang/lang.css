@@ -610,7 +610,6 @@ svg [data-damage] {
   white-space: nowrap;
   text-overflow: ellipsis;
 }
-/* Titles and facts share one line; neither can force the other off it. */
 .dl-row-line,
 .dl-row-colhead {
   display: grid;
@@ -648,6 +647,7 @@ svg [data-damage] {
   }
 }
 @container list (max-width: 360px) {
+  .dl-row-colhead-meta,
   [data-list-column][data-priority="1"] {
     display: none;
   }
@@ -742,32 +742,26 @@ svg [data-damage] {
   margin: 4px 0;
   background: var(--pe-line);
 }
-/* Sticky section heads sit on their own plane. */
-.dl-row-head {
-  position: sticky;
-  top: 0;
-  z-index: 1;
-  display: flex;
-  align-items: center;
-  gap: 4px;
-  min-height: var(--item-h);
-  padding: 0 var(--item-mark-pad-x);
-  background: var(--pe-on);
-  font-size: var(--type-small-size);
-  font-weight: var(--weight-strong);
-  color: var(--pe-ink-2);
-}
-/* Column heads share the rows' fixed measures and truncation. */
+/* Sticky heads share a plane distinct from the supporting list. */
+.dl-row-head,
 .dl-row-colhead {
   position: sticky;
   top: 0;
   z-index: 1;
   min-height: var(--item-h);
   padding: 0 var(--item-mark-pad-x);
-  background: var(--pe-on);
-  border-bottom: 1px solid var(--pe-line);
+  background: var(--pe-artifact);
   font-size: var(--type-small-size);
   color: var(--pe-ink-2);
+}
+.dl-row-head {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  font-weight: var(--weight-strong);
+}
+.dl-row-colhead {
+  border-bottom: 1px solid var(--pe-line);
   user-select: none;
 }
 .dl-row-colhead-meta {

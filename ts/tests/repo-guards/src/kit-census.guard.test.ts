@@ -28,6 +28,12 @@ const allow = (entries: Record<string, string>): Allow[] =>
 // Filenames use the wave-4 final homes: land.ts, revit-target.tsx and go-to.tsx.
 // prettier-ignore
 const RULES: Rule[] = [
+  { id: "list-head-meta-yields-at-360", doctrine: "L3",
+    pattern: /^(?![\s\S]*@container list \(max-width: 360px\)\s*\{\s*\.dl-row-colhead-meta,[^{}]*\{\s*display: none;)[\s\S]/g,
+    roots: [K + "components/lang/lang.css"], allow: [], cannotSee: "Rendered label width, ellipsis and tooltip layout; LN360 needs browser measurement." },
+  { id: "list-head-independent-plane", doctrine: "L4",
+    pattern: /^(?![\s\S]*\.dl-row-colhead\s*\{[^}]*background:\s*var\(--pe-artifact\))[\s\S]/g,
+    roots: [K + "components/lang/lang.css"], allow: [], cannotSee: "Computed theme colours or inherited overrides; D23 needs browser measurement." },
   { id: "scene-completeness-forwarded", doctrine: "N6",
     pattern: /return \{(?![^}]*\bomittedElements:)(?=[^}]*meshes: artifact\.meshes)[^}]*\}/g,
     roots: [W + "scene/use-scene.ts"], allow: [],
