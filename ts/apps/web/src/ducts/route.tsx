@@ -221,7 +221,11 @@ export function DuctsRoute({ url = true }: { url?: boolean } = {}) {
     const paths = [...scope.terminals].flatMap((t) => priced.next.paths[t] ?? []);
     const worst = worstRun(priced.next, scope.groups, scope.terminals);
     return {
-      fan: worst?.total ?? null,
+      // A group with an implausible row has no price: no fan static, never a partial sum.
+      blocked: [...scope.groups].some((g) => (priced.next.byGroup[g]?.implausible.length ?? 0) > 0),
+      fan: [...scope.groups].some((g) => (priced.next.byGroup[g]?.implausible.length ?? 0) > 0)
+        ? null
+        : (worst?.total ?? null),
       provisional: paths.find((p) => p.provisional)?.provisional ?? null,
       fanless: groups.filter((g) => scope.pricing.has(g.id)).every((g) => !g.rootIds.length),
       revitCritical:
@@ -244,9 +248,11 @@ export function DuctsRoute({ url = true }: { url?: boolean } = {}) {
             ? "pricing…"
             : solved?.fanless
               ? "no air mover; priced from the open end"
-              : solved
-                ? `Pe fan ${fmt(solved.fan)} in-wg${provisionalWords(solved.provisional)} (not in Revit until written), Revit ${revitSays(solved.revitCritical)}`
-                : `largest Pe fan ${fmt(priced.next.fan)} in-wg${provisionalWords(priced.next.provisional)} over ${systems.length} systems`;
+              : solved?.blocked
+                ? "needs a fix: implausible loss (no Pe fan; nothing is written to Revit for it)"
+                : solved
+                  ? `Pe fan ${fmt(solved.fan)} in-wg${provisionalWords(solved.provisional)} (not in Revit until written), Revit ${revitSays(solved.revitCritical)}`
+                  : `largest Pe fan ${fmt(priced.next.fan)} in-wg${provisionalWords(priced.next.provisional)} over ${systems.length} systems`;
   // Every written segment's cells count in the Work sentence.
   const counted = useMemo(
     () =>

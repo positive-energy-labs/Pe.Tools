@@ -25,6 +25,7 @@ export const BLOCKING_KINDS: ReadonlySet<string> = new Set([
   "no-fan",
   "no-terminal-flow",
   "no-flow",
+  "implausible-loss",
 ]);
 
 export function bin(item: { kind: string; grade?: DuctInferenceGrade | null }): DuctBin {

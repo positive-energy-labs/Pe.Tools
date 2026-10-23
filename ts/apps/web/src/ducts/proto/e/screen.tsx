@@ -395,6 +395,8 @@ function EScreenBody({ props }: { props: ProtoProps }) {
     groups[0] ??
     "";
   const groupFan = leadGroup ? priced?.next.byGroup[leadGroup]?.fan : undefined;
+  // Any group of the system with an implausible row: its ESP is a partial sum, so none is shown.
+  const blockedLoss = groups.some((g) => (priced?.next.byGroup[g]?.implausible.length ?? 0) > 0);
   const grilleName = (n: TreeNode) => {
     const id = n.kind === "run" ? n.terminal : n.id;
     return (id != null ? labels.get(id) : undefined) ?? n.name;
@@ -403,9 +405,11 @@ function EScreenBody({ props }: { props: ProtoProps }) {
   const designRate = priced?.staged.designFriction ?? DEFAULT_DESIGN_FRICTION_RATE;
   const groupTel = leadGroup ? priced?.next.byGroup[leadGroup]?.criticalTel : undefined;
   const pricedWord = priced
-    ? groupFan == null || critical?.total == null
-      ? "this system is not priced"
-      : `TEL ${fmtFt(critical.ft ?? groupTel)} ft · ESP ${critical.total.toFixed(3)} in-wg`
+    ? blockedLoss
+      ? "needs a fix: implausible loss"
+      : groupFan == null || critical?.total == null
+        ? "this system is not priced"
+        : `TEL ${fmtFt(critical.ft ?? groupTel)} ft · ESP ${critical.total.toFixed(3)} in-wg`
     : "not priced yet";
   const runDetail = priced && scope && selected != null ? runOf(priced, groups, selected) : null;
   // The selected element, wherever it was picked from, offers Revit in plain sight.
@@ -535,6 +539,10 @@ function EScreenBody({ props }: { props: ProtoProps }) {
                   s.fanless ? (
                     <span data-tone="alarm" data-e-fanless={s.key}>
                       needs a fix: no fan
+                    </span>
+                  ) : s.blocked ? (
+                    <span data-tone="alarm" data-e-blocked={s.key}>
+                      needs a fix: implausible loss
                     </span>
                   ) : (
                     <SystemBar
