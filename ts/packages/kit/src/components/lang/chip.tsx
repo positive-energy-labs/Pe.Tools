@@ -1,3 +1,4 @@
+import type { Tone } from "../../lib/token";
 /**
  * Two chips: `FactChip` is a machine-measured state fact (no press), `NarrowChip` a removable
  * narrowing that scopes the view and never hides rows. `title` is required on both; tone comes from
@@ -25,29 +26,19 @@ export const chipRecipe = tv({
     tag: "t-small tabular-nums",
   },
   variants: {
-    tone: {
-      meta: {},
-      caution: {},
-      done: {},
-      alarm: {},
-      pea: {},
-    },
     state: {
       solid: {},
       seam: { base: "seam-border" },
     },
   },
-  defaultVariants: { tone: "meta", state: "solid" },
+  defaultVariants: { state: "solid" },
 });
-
-/** The meaning roles a fact may wear. No chip-only hues exist, by design. */
-type FactTone = "meta" | "caution" | "done" | "alarm" | "pea";
 
 interface FactChipProps {
   revit?: readonly number[];
   children: React.ReactNode;
-  /** `meta` (the default) is the neutral machine-measured fact — most chips are this. */
-  tone?: FactTone;
+  /** Omitted is a neutral machine-measured fact — most chips are this. */
+  tone?: Tone;
   /** Seam: typed but unproven. Reserved border style; see the header. */
   dashed?: boolean;
   /** Required: what the fact means and what would change it. */
@@ -55,15 +46,15 @@ interface FactChipProps {
 }
 
 /** A state fact, machine-measured, so mono. Not a control — it has no press. */
-export function FactChip({ children, tone = "meta", dashed, title, revit }: FactChipProps) {
+export function FactChip({ children, tone, dashed, title, revit }: FactChipProps) {
   const target = useRevitTarget(revit);
-  const { base, label } = chipRecipe({ tone, state: dashed ? "seam" : "solid" });
+  const { base, label } = chipRecipe({ state: dashed ? "seam" : "solid" });
   return (
     <TooltipHint content={title}>
       <span
         {...target}
         className={base()}
-        data-tone={tone === "meta" ? undefined : tone}
+        data-tone={tone}
         data-surface="artifact"
         data-seam={dashed === true ? "" : undefined}
       >
@@ -101,7 +92,7 @@ export function NarrowChip({
   onEdit,
   detail,
 }: NarrowChipProps) {
-  const slot = chipRecipe({ tone: caution ? "caution" : "meta" });
+  const slot = chipRecipe();
   const said = detail ? `${label} ${detail}` : label;
   return (
     <TooltipHint content={title}>

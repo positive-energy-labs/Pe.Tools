@@ -1,3 +1,4 @@
+import type { Tone } from "@pe/kit/lib/token";
 /**
  * /family — the pure layer: what a family profile IS, and every reading of it.
  *
@@ -17,7 +18,7 @@
  * closed over a module constant would silently keep answering about the fixture.
  */
 import { showCellValue, type MeasuredValue } from "@pe/agent-contracts";
-import type { TableState, VerdictTone } from "@pe/kit/table/model";
+import type { TableState } from "@pe/kit/table/model";
 import {
   boundParam,
   type GeomConstituent,
@@ -203,13 +204,10 @@ export const MARK_TITLE: Record<Agreement, string> = {
  * this", and the `ƒ` glyph plus italic already carry it. Borrowing `--pe-done` — which
  * is what the retired `--st-derived` shim resolved to — would have claimed the value LANDED.
  */
-export const AGREEMENT_TONE: Record<Agreement, VerdictTone> = {
-  agree: "ink",
+export const AGREEMENT_TONE: Partial<Record<Agreement, Tone>> = {
   drift: "alarm",
-  derived: "ink",
   "only-profile": "caution",
   "only-live": "caution",
-  unread: "mute",
 };
 
 /** Worst-first, so a row's one-word state is the thing it is most asking of you. */

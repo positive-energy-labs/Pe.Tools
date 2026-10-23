@@ -1,3 +1,4 @@
+import type { Tone } from "../../lib/token";
 /**
  * `Code` is the read-only highlighted block (paint with chrome, height clamp owned here);
  * `JsonEditor` is paint under a live textarea, framed by its caller. Highlighting is
@@ -97,7 +98,7 @@ interface CodeProps {
    * running off the right edge.
    */
   wrap?: boolean;
-  tone?: "error";
+  tone?: Tone;
   /**
    * False while the payload is still arriving (an open markdown fence). A `mermaid` block shows
    * its source until then and never draws a half-written graph.
@@ -143,7 +144,7 @@ export function Code({
   const body = {
     "data-code-pane": "",
     "data-code-wrap": wrap ? "" : undefined,
-    "data-tone": tone === "error" ? "alarm" : undefined,
+    "data-tone": tone,
     className: clamp ? "max-h-[32rem] overflow-auto" : undefined,
   };
   return (

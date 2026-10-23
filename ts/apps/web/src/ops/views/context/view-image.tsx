@@ -27,7 +27,7 @@ export function ViewImageView({ data }: OpViewProps) {
             <FactChip title="The sheet the picture was taken from.">{res.sheetNumber}</FactChip>
           ) : null}
           <FactChip
-            tone={sha ? "meta" : "caution"}
+            tone={sha ? undefined : "caution"}
             title={
               sha
                 ? "Revit registered the picture: model corners place its pixels under geometry."

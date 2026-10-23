@@ -165,12 +165,12 @@ export function OpsRoute({ page }: { page: AddressPage<"ops"> }) {
                 <div className="flex flex-wrap items-center gap-2">
                   <h1>{selected.displayName ?? selected.key}</h1>
                   <FactChip
-                    tone={isMutation(selected) ? "caution" : "meta"}
+                    tone={isMutation(selected) ? "caution" : undefined}
                     title={isMutation(selected) ? "changes external state" : "read-only"}
                   >
                     {selected.intent ?? "unknown intent"}
                   </FactChip>
-                  <FactChip tone="meta" title="host-declared cost tier">
+                  <FactChip title="host-declared cost tier">
                     {selected.costTier ?? "unknown cost"}
                   </FactChip>
                 </div>

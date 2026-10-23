@@ -304,6 +304,7 @@ export function StateCell(props: StateCellProps) {
           aria-busy={pending || undefined}
           onClick={locate}
           data-body={read.body ?? undefined}
+          data-damage={props.damage || undefined}
           data-seam={read.seam ? "" : undefined}
           data-contest={read.contested ? "" : undefined}
           data-never={read.never ? "" : undefined}
@@ -421,6 +422,7 @@ export function StateCell(props: StateCellProps) {
 
   // ONE footline, ranked and joined onto a single clamped line rather than stacked.
   const facts: React.ReactNode[] = [];
+  if (props.damage) facts.push(props.damage);
   if (capReason != null) facts.push(capReason);
   // SPECIMEN: /design-system/band. A counter fold without its value makes accept/deny illegible
   // in hoverless compact heads.
@@ -463,6 +465,7 @@ export function StateCell(props: StateCellProps) {
           <span
             className={slots.base()}
             data-body={read.body ?? undefined}
+            data-damage={props.damage || undefined}
             data-seam={read.seam ? "" : undefined}
             data-contest={read.contested ? "" : undefined}
             data-never={read.never ? "" : undefined}

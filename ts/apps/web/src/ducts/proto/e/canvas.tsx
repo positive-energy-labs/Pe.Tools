@@ -1,3 +1,4 @@
+import { nameOrFallback } from "@pe/kit/lang/subject-text";
 /**
  * The picture pane: one `Pane` whose strip holds the picture mode (model or schematic, `S` swaps),
  * the layers, and two floaters, the orbit globe (`G`) and the other picture small (a click swaps).
@@ -859,7 +860,7 @@ function Canvas({
         {/* The plate: what the picture is of and the state it is in, readable without a hover;
             with an element selected, that element (kaitpw 2026-10-23: selection info lives here). */}
         <PictureReadout
-          title={readId == null ? undefined : (nameOf(readId) ?? `element ${readId}`)}
+          title={readId == null ? undefined : nameOrFallback(nameOf(readId))}
           onClear={readId == null ? undefined : () => pick(null)}
           foot={
             landed ? (

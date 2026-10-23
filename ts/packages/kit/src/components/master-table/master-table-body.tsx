@@ -1,3 +1,4 @@
+import type { Tone } from "../../lib/token";
 import {
   createRef,
   Fragment,
@@ -34,7 +35,7 @@ type VisibleRow<Row extends RowData> = ReturnType<Table<Row>["getRowModel"]>["ro
 type Gutter<Row> = (row: Row) => {
   count: number;
   title: string;
-  tone?: "alarm" | "caution";
+  tone?: Tone;
 } | null;
 
 interface MasterRowProps<Row extends RowData> {

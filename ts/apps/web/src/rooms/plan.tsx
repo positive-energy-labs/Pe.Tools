@@ -407,7 +407,7 @@ export function RoomsPlan({
       {REGION_STATES.map((state) => (
         <FactChip
           key={state}
-          tone={state === "stale" ? "caution" : "meta"}
+          tone={state === "stale" ? "caution" : undefined}
           title={REGION_INK[state].says}
         >
           <span className="flex items-center gap-1">

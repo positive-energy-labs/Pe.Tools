@@ -36,7 +36,7 @@ function itemsOf(snapshot: DuctSnapshot, system: string, nameOf: (id: number) =>
       system: here.has(e.id) ? system : into,
       id: e.id,
       name: nameOf(e.id),
-      detail: `${kind} ${into} ${"category" in e ? (e.category ?? "") : "duct"} ${e.id}`,
+      detail: `${kind} ${into} ${"category" in e ? (e.category ?? "") : "duct"}`,
       group: here.has(e.id) ? HERE : ELSEWHERE,
       meta: here.has(e.id) ? kind : `${kind} · ${into}`,
     };
@@ -131,9 +131,7 @@ export function GoToSubject({
         setOpen(false);
       }}
       createLabel={(text) =>
-        byId(snapshot, text)
-          ? `go to element ${text.trim()}`
-          : `${text.trim()}: no element by that id`
+        byId(snapshot, text) ? "go to matching element" : `${text.trim()}: no element by that id`
       }
       row={(i) => ({ label: i.name, meta: i.meta })}
     />

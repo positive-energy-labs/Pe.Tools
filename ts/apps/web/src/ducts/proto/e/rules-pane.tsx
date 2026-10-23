@@ -1,4 +1,5 @@
 import { revitTarget } from "@pe/kit/lang/row";
+import { nameOrFallback } from "@pe/kit/lang/subject-text";
 import { TooltipHint } from "@pe/kit/lang/tooltip";
 /**
  * THROWAWAY (protoui round 3, E2): the Rules section, "the table is the product" (pressure-drop
@@ -170,7 +171,7 @@ export const RulesTree = memo(function RulesTree({
             id={n.id}
             held={snapshot.nodes.find((x) => x.id === n.id)?.loss?.revitPressureDropInWg}
             work={work}
-            label={`stated drop on ${n.id}`}
+            label={`stated drop on ${nameOrFallback(nameOf(n.id))}`}
           />
         </div>
       </TooltipHint>

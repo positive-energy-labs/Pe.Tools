@@ -2,7 +2,6 @@ import { useMemo, type ReactNode } from "react";
 import { useScopeGestures, useScopeKeys } from "@pe/kit/keys";
 import { PLANE_GESTURES } from "#/scene/gestures";
 import { useViewHistory } from "#/scene/view-history";
-import "#/scene/damage.css";
 import type { PlaneViewport } from "@pe/agent-contracts";
 import { Pane } from "#/components/lang/pane";
 import { revitTarget } from "@pe/kit/lang/row";

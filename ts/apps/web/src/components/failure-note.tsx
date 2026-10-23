@@ -34,7 +34,7 @@ export function FailureNote({ text, onDoor }: { text: string; onDoor: (href: str
             <Code
               code={failure.detail}
               lang="plaintext"
-              tone="error"
+              tone="alarm"
               wrap
               head="copy"
               copyLabel="Copy the details"

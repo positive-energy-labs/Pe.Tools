@@ -515,13 +515,13 @@ export function SpecEditor({
               {member.pod} · {member.path}
             </span>
             <FactChip
-              tone={schema ? "meta" : "caution"}
+              tone={schema ? undefined : "caution"}
               title={schema ?? "No $schema: plain data, no library validates it."}
             >
               {schema ? (schema.split("/").at(-1) ?? schema) : "no $schema"}
             </FactChip>
             <FactChip
-              tone={session ? "done" : "meta"}
+              tone={session ? "done" : undefined}
               title={
                 session
                   ? "A Revit session is attached: composition and semantic issues are live."
@@ -538,7 +538,7 @@ export function SpecEditor({
               </TooltipHint>
             ) : (
               <FactChip
-                tone={options.word ? "meta" : "caution"}
+                tone={options.word ? undefined : "caution"}
                 dashed={!options.word}
                 title={
                   options.word

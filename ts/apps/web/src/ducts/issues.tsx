@@ -1,3 +1,4 @@
+import type { Tone } from "@pe/kit/lib/token";
 /**
  * The one duct-issue taxonomy: every view, the tables, the legend and Chat read it from here.
  * C# emits only the kind (`DuctIssueKind`); what it means, what it blocks and how it is coloured
@@ -8,7 +9,6 @@
 import type { DuctFinding } from "@pe/agent-contracts";
 import { ISSUE_BLOCKS, type Blocks, type IssueKind } from "@pe/ducts-domain/issues";
 import { INFERRED_KINDS } from "@pe/ducts-domain/proximity";
-import type { VerdictTone } from "@pe/kit/table/model";
 import { SubjectText } from "@pe/kit/lang/subject-text";
 export interface IssueKindInfo {
   /** One to three words. */
@@ -17,14 +17,14 @@ export interface IssueKindInfo {
   what: string;
   blocks: Blocks;
   color: {
-    tone: VerdictTone;
+    tone: Tone | undefined;
     shade: number;
   };
 }
-const TONE: Record<Blocks, VerdictTone> = {
+const TONE: Record<Blocks, Tone | undefined> = {
   walkable: "alarm",
   budgetable: "caution",
-  none: "mute",
+  none: undefined,
 };
 const kind = (key: IssueKind, label: string, what: string, shade: number): IssueKindInfo => ({
   label,

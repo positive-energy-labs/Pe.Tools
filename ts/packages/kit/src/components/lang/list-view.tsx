@@ -1,3 +1,4 @@
+import type { Tone } from "../../lib/token";
 import { useVirtualizer } from "@tanstack/react-virtual";
 import {
   memo,
@@ -116,7 +117,7 @@ export interface ListViewProps<T, Sort extends string = string> {
   ) => Pick<
     HTMLAttributes<HTMLElement>,
     "onDragOver" | "onDrop" | "onDragEnter" | "onDragLeave" | "onContextMenu"
-  > & { "data-dim"?: boolean; "data-tone"?: string };
+  > & { "data-dim"?: boolean; "data-tone"?: Tone };
 }
 
 /** One renderer, one common scroller, one measured virtual body per section. No paged tails. */

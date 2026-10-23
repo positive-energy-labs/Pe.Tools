@@ -1,10 +1,6 @@
-/**
- * Subject text (doctrine I1): prose never prints a raw id. Each id a route can name becomes a
- * Subject, its short human name and a footnote number; the number is the same mark the picture
- * draws over the element (`.subject-badge`), so a reader matches text and picture at a glance.
- * Hovering a block lights all its Subjects; hovering or focusing one narrows to it; pressing one is
- * the route's one alias-click (`go`). A route supplies only what it has: a route with no picture
- * gives `nameOf` alone, and `refProps` makes each token answer the Revit element menu (N4).
+/** Subject prose names elements with the picture's shared footnote marks. Hovering the block
+ * lights all its Subjects; focus narrows to one; pressing calls the route's alias-click (`go`).
+ * The route supplies `nameOf`; `refProps` binds each token to its Revit element menu.
  */
 import {
   createContext,
@@ -17,6 +13,9 @@ import {
 import { useRevitTarget } from "./row";
 import { TooltipHint } from "./tooltip";
 import "./lang.css";
+
+/** One word for a subject whose snapshot supplies no human name. */
+export const nameOrFallback = (name?: string | null): string => name?.trim() || "unnamed element";
 
 export type SubjectPart = string | { id: number; connector?: number };
 export type SubjectReference = { id: number; name: string; number: number };
@@ -35,9 +34,8 @@ export function subjectDocument(
   const references: SubjectReference[] = [...numbering];
   const parts: SubjectDocument["parts"] = [];
   const seen = new Set<number>();
-  const reference = (id: number, connector?: number): boolean => {
-    const name = nameOf(id);
-    if (!name) return false;
+  const reference = (id: number, connector?: number) => {
+    const name = nameOrFallback(nameOf(id));
     let ref = references.find((r) => r.id === id);
     if (!ref) {
       ref = { id, name, number: references.length + 1 };
@@ -45,11 +43,10 @@ export function subjectDocument(
     }
     seen.add(id);
     parts.push({ ...ref, connector });
-    return true;
   };
   for (const part of source) {
     if (typeof part !== "string") {
-      if (!reference(part.id, part.connector)) parts.push(`element ${part.id} (not in snapshot)`);
+      reference(part.id, part.connector);
       continue;
     }
     let at = 0;
@@ -64,7 +61,7 @@ export function subjectDocument(
   }
   // Rows know their subjects even when the description contains no id (e.g. "No flow").
   for (const id of new Set(ids)) {
-    if (seen.has(id) || !nameOf(id)) continue;
+    if (seen.has(id)) continue;
     parts.push(seen.size ? ", " : " · ");
     reference(id);
   }
@@ -166,19 +163,19 @@ export function SubjectText({
   const owner = blockOwner ?? localOwner;
   const clear = context?.clear;
   useEffect(() => () => clear?.(owner), [clear, owner]);
+  const doc =
+    document ??
+    subjectDocument(
+      typeof text === "string" ? [text] : (text ?? []),
+      context?.nameOf ?? (() => null),
+      ids,
+    );
   if (!context)
     return (
       <span {...target}>
-        {typeof text === "string"
-          ? text
-          : document
-            ? document.parts.map((p) => (typeof p === "string" ? p : p.name)).join("")
-            : text?.map((p) => (typeof p === "string" ? p : `element ${p.id}`)).join("")}
+        {doc.parts.map((p) => (typeof p === "string" ? p : p.name)).join("")}
       </span>
     );
-  const doc =
-    document ??
-    subjectDocument(typeof text === "string" ? [text] : (text ?? []), context.nameOf, ids);
   const light = (id: number | null) => context.light?.(doc.references, id, owner);
   return (
     <span

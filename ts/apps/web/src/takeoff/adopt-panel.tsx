@@ -1,3 +1,4 @@
+import { nameOrFallback } from "@pe/kit/lang/subject-text";
 import { Fragment, type ComponentProps } from "react";
 import { showAdopt, TakeoffProposalRows } from "#/takeoff/proposals";
 import { FactChip } from "@pe/kit/lang/chip";
@@ -75,7 +76,7 @@ export function AdoptRegions({ store }: { store: TakeoffsController }) {
               <span className="w-16">{fmtNum(r.region.sqft, 0)} sf</span>
               <div className="min-w-0 flex-1">
                 <CommitInput
-                  aria-label={`Zone name for region ${r.region.elementId} in ${r.view}`}
+                  aria-label={`Zone name for ${nameOrFallback(r.name)} in ${r.view}`}
                   value={r.name}
                   placeholder="zone name"
                   onCommit={(name) => patchRow(r.view, r.region.elementId, { name })}
@@ -83,7 +84,7 @@ export function AdoptRegions({ store }: { store: TakeoffsController }) {
               </div>
               <div className="w-24">
                 <CommitInput
-                  aria-label={`System tag for region ${r.region.elementId} in ${r.view}`}
+                  aria-label={`System tag for ${nameOrFallback(r.name)} in ${r.view}`}
                   value={r.systemTag}
                   placeholder="system tag"
                   onCommit={(systemTag) => patchRow(r.view, r.region.elementId, { systemTag })}

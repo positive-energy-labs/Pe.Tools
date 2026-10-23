@@ -40,10 +40,10 @@ function Glyph({ state }: { state: CardState }) {
   );
 }
 
-/** The card id, square-bracketed from Pea, round from a person. */
+/** The author is a readable word; the card id stays in its facts. */
 const Tag = ({ card }: { card: Card }) => (
   <TooltipHint content={card.by === "pea" ? "from Pea" : "from a person"}>
-    <span className="face-mono">{card.by === "pea" ? `[${card.id}]` : `(${card.id})`}</span>
+    <span className="face-mono">{card.by === "pea" ? "Pea" : "person"}</span>
   </TooltipHint>
 );
 

@@ -1,3 +1,4 @@
+import { nameOrFallback } from "@pe/kit/lang/subject-text";
 import { showFamilyCell, type FamiliesPatchCell, type PodDraftSource } from "@pe/agent-contracts";
 
 import { FactChip } from "@pe/kit/lang/chip";
@@ -207,7 +208,7 @@ export function FamiliesProposalsBand() {
 }
 
 /** One salvaged exclusion as the person reads it: its current name, or that it is gone. */
-const heldWord = (row: SalvagedExclusion) => row.name ?? `element ${row.id} · no longer loaded`;
+const heldWord = (row: SalvagedExclusion) => row.name ?? `${nameOrFallback()} · no longer loaded`;
 
 /**
  * In the start-fresh confirm, read-only: what the Work being set aside held back, by the names the

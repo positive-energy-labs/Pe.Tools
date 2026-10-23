@@ -689,7 +689,7 @@ function ToolCallPart({
               lang="json"
               title="out"
               copyLabel="Copy output"
-              tone="error"
+              tone="alarm"
               wrap
             />
           ) : (

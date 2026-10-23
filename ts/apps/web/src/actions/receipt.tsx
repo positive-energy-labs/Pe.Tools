@@ -150,7 +150,7 @@ export function ActionReceiptView({
                 {"error" in step && (
                   <details>
                     <summary>Step error</summary>
-                    <Code code={step.error} lang="plaintext" tone="error" wrap />
+                    <Code code={step.error} lang="plaintext" tone="alarm" wrap />
                   </details>
                 )}
               </div>
@@ -165,7 +165,7 @@ export function ActionReceiptView({
             {"error" in row && (
               <details>
                 <summary data-tone="caution">{row.error.split("\n")[0]}</summary>
-                <Code code={row.error} lang="plaintext" tone="error" wrap />
+                <Code code={row.error} lang="plaintext" tone="alarm" wrap />
               </details>
             )}
             {row.kind === "operation" && "result" in row && outputRenderers[row.key]

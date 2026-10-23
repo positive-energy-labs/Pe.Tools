@@ -1,3 +1,4 @@
+import type { Tone } from "../../lib/token";
 /** Every control that acts. `label` is its name (and its tooltip when it draws only a glyph);
  *  `refusal` keeps it focusable, inert, and says why. No children draws an icon-only square. */
 import { isValidElement, type ComponentProps, type ReactElement, type ReactNode } from "react";
@@ -23,7 +24,7 @@ export type ButtonProps = Omit<
     reason?: string;
     pressed?: boolean;
     icon?: LucideIcon | ReactElement;
-    "data-tone"?: string;
+    "data-tone"?: Tone;
   };
 
 export function Button({

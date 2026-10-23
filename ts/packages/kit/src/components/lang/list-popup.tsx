@@ -1,3 +1,4 @@
+import type { Tone } from "../../lib/token";
 /**
  * `<List>` is the inline list (pane body, rail, sidebar); `<ListPopup>` is the same list in a Base UI
  * Popover used for positioning only. Anchors: `trigger`, `caret` (a point in caller-owned text), and
@@ -80,7 +81,7 @@ type ListProps<T> = Omit<CollectionOptions<T>, "target"> & {
 };
 
 /** The words a list says instead of rows: one per status, never a blank. */
-function StatusLine({ children, tone }: { children: ReactNode; tone?: "caution" }) {
+function StatusLine({ children, tone }: { children: ReactNode; tone?: Tone }) {
   return (
     <div className="dl-row" role="status" data-tone={tone} data-pending={tone ? undefined : ""}>
       <span className="dl-row-label">{children}</span>
@@ -386,7 +387,7 @@ function PopupTrigger({
   face?: TriggerFace;
   children: ReactNode;
   "data-derived"?: string;
-  "data-tone"?: string;
+  "data-tone"?: Tone;
 }) {
   return (
     <PopoverTrigger className={TRIGGER_FACE[face]} data-list-trigger={face} {...props}>

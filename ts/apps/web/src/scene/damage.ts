@@ -11,9 +11,15 @@ import type {
 } from "./types";
 
 /** The one critical-damage hue: the only saturated colour on the stage, so it never needs a key. */
-const CORE = new THREE.Color(0xb3140a);
-const RIM = new THREE.Color(0xff5a36);
-const HOT = new THREE.Color(0xffd9c9);
+const CORE = new THREE.Color();
+const RIM = new THREE.Color();
+const HOT = new THREE.Color();
+/** Renderer init resolves the kit alarm token once, in the page's colour space. */
+export function setDamageHue(alarm: THREE.Color) {
+  CORE.copy(alarm);
+  RIM.copy(alarm).lerp(new THREE.Color(1, 1, 1), 0.25);
+  HOT.copy(alarm).lerp(new THREE.Color(1, 1, 1), 0.85);
+}
 /** Seconds per heartbeat. */
 const PERIOD = 1.5;
 
