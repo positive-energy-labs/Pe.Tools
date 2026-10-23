@@ -1,5 +1,5 @@
 /** Browser proof against the real host: capture → plan → apply with filed receipts read back on `/pods`. */
-import { existsSync, mkdtempSync } from "node:fs";
+import { existsSync, mkdtempSync, writeFileSync } from "node:fs";
 import { createServer as createNodeServer } from "node:http";
 import { tmpdir } from "node:os";
 import { join, resolve } from "node:path";
@@ -9,6 +9,7 @@ import { devHostProxy } from "../../web/dev-proxy.ts";
 import { afterAll, beforeAll, expect, test } from "vite-plus/test";
 import type { ServiceHostHandle } from "@pe/host-contracts/pe-service-host";
 import { readServiceFile } from "@pe/host-contracts/pe-service";
+import { HOST_RUNTIME_SERVICE_HEADER } from "@pe/host-contracts/service-identity";
 import { address, bindWork } from "@pe/agent-contracts";
 import { makeHttpLive } from "../src/app.ts";
 import { hostOwnership, productRoot } from "../src/host-ownership.ts";
@@ -118,6 +119,201 @@ afterAll(async () => {
 type Page = any;
 
 const SCRATCH = process.env.PE_DEMO_LANE_SHOTS;
+
+test("unsent draft remains current across real offline/online stream recovery", async () => {
+  const page = await browser!.newPage();
+  const requests: { method: string; url: string }[] = [];
+  const responses: { status: number; url: string }[] = [];
+  const draft = "Unsent reconnect draft: keep this exact text.";
+  const evidence: Record<string, unknown> = {};
+  page.on("request", (request: any) =>
+    requests.push({ method: request.method(), url: request.url() }),
+  );
+  page.on("response", (response: any) =>
+    responses.push({ status: response.status(), url: response.url() }),
+  );
+  const streams = () =>
+    responses.filter(
+      (response) => response.status === 200 && response.url.includes("/pe/resources"),
+    ).length;
+  try {
+    await page.goto(`${baseUrl}/ducts?demo=navigation`, { waitUntil: "domcontentloaded" });
+    const composer = page.getByRole("textbox", { name: "Message", exact: true });
+    await expect.poll(() => composer.isVisible(), { timeout: 30_000 }).toBe(true);
+    await expect
+      .poll(() => new URL(page.url()).searchParams.get("thread"), { timeout: 30_000 })
+      .toMatch(/^[0-9a-f-]{36}$/);
+    await expect
+      .poll(() => page.getByText("All systems", { exact: true }).count(), { timeout: 30_000 })
+      .toBeGreaterThan(0);
+    await expect.poll(streams, { timeout: 30_000 }).toBeGreaterThan(0);
+    await composer.fill(draft);
+    const thread = new URL(page.url()).searchParams.get("thread");
+    expect(
+      await page.evaluate((id: string) => sessionStorage.getItem(`pe.routeThread.${id}`), thread),
+    ).toBe("minted");
+    const before = streams();
+    evidence.before = { thread, streams: before, draft: await composer.inputValue() };
+    await page.context().setOffline(true);
+    await new Promise((resolve) => setTimeout(resolve, 1_000));
+    await page.context().setOffline(false);
+    await expect.poll(streams, { timeout: 15_000 }).toBeGreaterThan(before);
+    await expect
+      .poll(() => page.locator("[data-composer-refusal]").allTextContents(), { timeout: 15_000 })
+      .not.toContain("This thread is not current; re-reading it from the host.");
+    expect(await composer.inputValue()).toBe(draft);
+    expect(new URL(page.url()).searchParams.get("thread")).toBe(thread);
+    expect(
+      requests.filter((request) => new URL(request.url).pathname === `/pe/threads/${thread}`),
+    ).toEqual([]);
+    expect(
+      requests.filter(
+        (request) => request.method === "POST" && /\/prompt(?:\?|$)/.test(request.url),
+      ),
+    ).toEqual([]);
+    evidence.after = { thread, streams: streams(), draft: await composer.inputValue() };
+  } finally {
+    await page.context().setOffline(false);
+    if (SCRATCH) {
+      writeFileSync(
+        join(SCRATCH, "thread-reconnect.json"),
+        JSON.stringify({ ...evidence, requests, responses }, null, 2),
+      );
+      writeFileSync(join(SCRATCH, "thread-reconnect.html"), await page.content());
+      await page.screenshot({ path: join(SCRATCH, "thread-reconnect.png") });
+    }
+    await page.close();
+  }
+}, 90_000);
+
+test("empty persisted thread stays fenced until its real host reread lands", async () => {
+  const page = await browser!.newPage();
+  const responses: { status: number; url: string }[] = [];
+  const evidence: Record<string, unknown> = {};
+  const draft = "Unsent durable-thread draft: do not send.";
+  let release = () => {};
+  page.on("response", (response: any) =>
+    responses.push({ status: response.status(), url: response.url() }),
+  );
+  try {
+    await page.goto(`${baseUrl}/ducts?demo=navigation`, { waitUntil: "domcontentloaded" });
+    await expect
+      .poll(() => page.getByText("All systems", { exact: true }).count(), { timeout: 30_000 })
+      .toBeGreaterThan(0);
+    // Real public host calls create an empty thread without starting a harness turn.
+    const marker = { name: HOST_RUNTIME_SERVICE_HEADER, service: hostOwnership.serviceName };
+    const created = await page.evaluate(async (marker: { name: string; service: string }) => {
+      const headers = { [marker.name]: marker.service, "content-type": "application/json" };
+      const providers = await fetch("/pe/providers", { headers }).then((response) =>
+        response.json(),
+      );
+      const response = await fetch("/pe/threads", {
+        method: "POST",
+        headers,
+        body: JSON.stringify({ providerId: providers[0].id }),
+      });
+      if (!response.ok) throw Error(`Create thread: ${response.status} ${await response.text()}`);
+      const thread = await response.json();
+      return fetch(`/pe/threads/${thread.id}`, { headers }).then((response) => response.json());
+    }, marker);
+    expect(created.events).toEqual([]);
+    const bodyPath = `/pe/threads/${created.id}`;
+    const bodies = () =>
+      responses.filter(
+        (response) => response.status === 200 && new URL(response.url).pathname === bodyPath,
+      ).length;
+    const before = bodies();
+    await page.goto(`${baseUrl}/ducts?demo=navigation&thread=${created.id}`, {
+      waitUntil: "domcontentloaded",
+    });
+    await expect.poll(bodies, { timeout: 30_000 }).toBeGreaterThan(before);
+    await expect
+      .poll(() => page.getByText("All systems", { exact: true }).count(), { timeout: 30_000 })
+      .toBeGreaterThan(0);
+    const follows = () =>
+      responses.filter((response) => {
+        const url = new URL(response.url);
+        return (
+          url.pathname === "/pe/resources" &&
+          JSON.parse(url.searchParams.get("keys") ?? "[]").some(
+            (key: { kind: string; thread?: string }) =>
+              key.kind === "thread" && key.thread === created.id,
+          )
+        );
+      }).length;
+    await expect.poll(follows, { timeout: 15_000 }).toBeGreaterThan(0);
+    expect(
+      await page.evaluate(
+        (id: string) => sessionStorage.getItem(`pe.routeThread.${id}`),
+        created.id,
+      ),
+    ).toBeNull();
+    const composer = page.getByRole("textbox", { name: "Message", exact: true });
+    await composer.fill(draft);
+    evidence.selection = {
+      created,
+      url: page.url(),
+      follows: follows(),
+      draft: await composer.inputValue(),
+    };
+    let blocked = 0;
+    const held = new Promise<void>((resolve) => {
+      release = resolve;
+    });
+    await page.route(
+      (url: URL) => url.pathname === bodyPath,
+      async (route: any) => {
+        blocked++;
+        await held;
+        await route.continue();
+      },
+    );
+    await page.context().setOffline(true);
+    await new Promise((resolve) => setTimeout(resolve, 1_000));
+    await page.context().setOffline(false);
+    await expect.poll(() => blocked, { timeout: 15_000 }).toBeGreaterThan(0);
+    await expect
+      .poll(() => page.locator("[data-composer-refusal]").allTextContents(), { timeout: 15_000 })
+      .toContain("This thread is not current; re-reading it from the host.");
+    expect(await composer.inputValue()).toBe(draft);
+    evidence.held = { head: created.head, blocked, draft: await composer.inputValue() };
+    if (SCRATCH) await page.screenshot({ path: join(SCRATCH, "durable-thread-held.png") });
+    const reads = bodies();
+    release();
+    await expect.poll(bodies, { timeout: 15_000 }).toBeGreaterThan(reads);
+    await expect
+      .poll(() => page.locator("[data-composer-refusal]").allTextContents(), { timeout: 15_000 })
+      .toEqual([]);
+    expect(await composer.inputValue()).toBe(draft);
+    const fresh = await page.evaluate(
+      ({ path, marker }: { path: string; marker: { name: string; service: string } }) =>
+        fetch(path, { headers: { [marker.name]: marker.service } }).then((response) =>
+          response.json(),
+        ),
+      { path: bodyPath, marker },
+    );
+    expect(fresh.head).toEqual(created.head);
+    // Opening a real thread may discover models/commands; it still has no prompt or turn.
+    expect(
+      fresh.events.filter((event: { kind: string }) =>
+        ["prompt", "turn_start", "turn_end"].includes(event.kind),
+      ),
+    ).toEqual([]);
+    evidence.after = { head: fresh.head, draft: await composer.inputValue(), bodyReads: bodies() };
+  } finally {
+    release();
+    await page.context().setOffline(false);
+    if (SCRATCH) {
+      writeFileSync(
+        join(SCRATCH, "durable-thread-reconnect.json"),
+        JSON.stringify({ ...evidence, responses }, null, 2),
+      );
+      writeFileSync(join(SCRATCH, "durable-thread-reconnect.html"), await page.content());
+      await page.screenshot({ path: join(SCRATCH, "durable-thread-reconnect.png") });
+    }
+    await page.close();
+  }
+}, 90_000);
 
 /** The app bar folds the Situation into a drawer that is inert until pinned (Ctrl+.); pin it so
  * its head, verbs and ladder are on the page. Pinning is page state, so every load pins again. */
