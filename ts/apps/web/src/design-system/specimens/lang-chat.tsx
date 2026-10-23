@@ -77,7 +77,7 @@ export function LangChatSpecimens() {
             title="threads"
             ground="artifact"
             tabs={<ModeDial mode="threads" setMode={() => {}} />}
-            actions={<ThreadSidebarActions onNew={() => {}} onSearch={() => {}} />}
+            actions={<ThreadSidebarActions onNew={() => {}} />}
           >
             <ThreadsSidebar
               threads={

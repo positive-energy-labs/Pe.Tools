@@ -3,12 +3,7 @@ import { useNavigate, useRouterState } from "@tanstack/react-router";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useAtomRefresh, useAtomValue } from "@effect/atom-react";
 import { ModeDial } from "#/chat/mode-dial";
-import {
-  NewThreadButton,
-  ThreadDialog,
-  ThreadsSidebar,
-  ThreadSidebarActions,
-} from "#/chat/thread-palette";
+import { NewThreadButton, ThreadsSidebar, ThreadSidebarActions } from "#/chat/thread-palette";
 import { useWorkbench } from "#/workbench/provider";
 import { MODES, type Mode } from "#/workbench/depth";
 import { useCacheView } from "#/workbench/world";
@@ -93,7 +88,11 @@ function ChatSurface({ target, docked = false }: ChatShellProps) {
     if (addressedThread) setComposing(false);
   }, [addressedThread]);
   useEffect(() => {
-    if (composing) composerRef.current?.querySelector("textarea")?.focus();
+    // The bank keeps hidden composers; the draft's is the one laid out.
+    if (composing)
+      [...(composerRef.current?.querySelectorAll("textarea") ?? [])]
+        .find((area) => area.offsetParent !== null)
+        ?.focus();
   }, [composing]);
   const activity = compact && !addressedThread && !composing;
   const {
@@ -215,9 +214,25 @@ function ChatSurface({ target, docked = false }: ChatShellProps) {
   const handleDeleteThread = async (id: string) => {
     if (await deleteThread(id)) setDeletedThreadIds((previous) => new Set([...previous, id]));
   };
-  const paletteOpen = useAtomValue(store.atoms.paletteOpen);
-  usePublishPagePalette(handle.manifest.key, paletteOpen, store.actions.setPaletteOpen);
   const sideOpen = useAtomValue(store.atoms.sideOpen);
+  // N3: the thread list is the one thread navigator. Its "palette" is its own search, revealed
+  // and focused in place (the sidebar, or the narrow dialog that holds it), never a second list.
+  const [searchSerial, setSearchSerial] = useState(0);
+  const findThread = () => {
+    store.actions.setSideOpen(true);
+    setSearchSerial((serial) => serial + 1);
+  };
+  usePublishPagePalette(handle.manifest.key, false, (open) => open && findThread());
+
+  // N6: a thread switch keeps the last read transcript, inert and dimmed under a progress mark,
+  // until the next body reads. The boundary turns over with the body it shows, so an old failure
+  // still cannot mask the new thread.
+  const body = useAtomValue(bodyAtom);
+  const shownRef = useRef({ thread: currentThreadId, bodyAtom, chat });
+  if (body._tag !== "Initial" || shownRef.current.thread === currentThreadId)
+    shownRef.current = { thread: currentThreadId, bodyAtom, chat };
+  const shown = shownRef.current;
+  const switching = shown.thread !== currentThreadId;
 
   // Context gauges (cap + OM meters) ride beside the composer now, so the cache view is derived
   // here instead of inside the Lens. userTurns gates the diff baseline (advances on each send).
@@ -231,14 +246,13 @@ function ChatSurface({ target, docked = false }: ChatShellProps) {
 
   // Surface chords, not manifest actions: they move Page state and never refuse. They bind on
   // whatever scope node the chat surface sits in, so help lists them beside the route's chords.
-  const togglePagePalette = () => store.actions.setPaletteOpen((open) => !open);
   useScopeKeys([
     {
       hotkey: "Mod+K",
-      callback: togglePagePalette,
+      callback: findThread,
       options: { ignoreInputs: false },
-      label: "palette",
-      says: "open or close the Do palette",
+      label: "find a thread",
+      says: "focus the thread list's search: switch what this page shows",
     },
     ...(["Mod+1", "Mod+2"] as const).map((hotkey, i) => ({
       hotkey,
@@ -269,14 +283,19 @@ function ChatSurface({ target, docked = false }: ChatShellProps) {
   };
   const chatColumn = (
     <div data-chat-column="" ref={columnRef} className="chat-column min-h-0 min-w-0 flex-1">
-      <div data-chat-transcript="" className="min-h-0 min-w-0">
+      <div
+        data-chat-transcript=""
+        data-switching={switching ? "" : undefined}
+        aria-busy={switching}
+        className="min-h-0 min-w-0"
+      >
         <Pane
           scroll="clip"
           flush
           id="transcript"
           name
           titleAlign="center"
-          meta={handle.demo ? "Fixture" : undefined}
+          meta={handle.demo ? "Fixture" : switching ? "reading" : undefined}
           title={
             selectTitle(chat) ||
             threads.find((thread) => thread.id === currentThreadId)?.title ||
@@ -292,7 +311,7 @@ function ChatSurface({ target, docked = false }: ChatShellProps) {
             ) : null
           }
           actions={<ChatCluster handle={handle} situation={situation} />}
-          boundaryKey={currentThreadId}
+          boundaryKey={shown.thread}
           onRetry={retryBody}
         >
           {missingThread ? (
@@ -304,7 +323,9 @@ function ChatSurface({ target, docked = false }: ChatShellProps) {
               <NewThreadButton onNew={() => void newThread()} />
             </div>
           ) : (
-            <ThreadBody bodyAtom={bodyAtom} state={chat} />
+            <div inert={switching} className="contents">
+              <ThreadBody bodyAtom={shown.bodyAtom} state={shown.chat} />
+            </div>
           )}
         </Pane>
       </div>
@@ -331,7 +352,7 @@ function ChatSurface({ target, docked = false }: ChatShellProps) {
     >
       {!docked && (
         <PrimaryRouteControls route="chat" slot="palette">
-          <PagePaletteButton open={togglePagePalette} />
+          <PagePaletteButton open={findThread} />
         </PrimaryRouteControls>
       )}
       {!docked && (
@@ -372,15 +393,12 @@ function ChatSurface({ target, docked = false }: ChatShellProps) {
                 meta={threads.length}
                 tabs={<ModeDial mode={mode} setMode={setMode} count={threads.length} />}
                 flush={mode === "threads"}
-                actions={
-                  <ThreadSidebarActions
-                    onSearch={() => store.actions.setPaletteOpen(true)}
-                    onNew={() => void newThread()}
-                  />
-                }
+                actions={<ThreadSidebarActions onNew={() => void newThread()} />}
               >
                 {mode === "threads" ? (
                   <ThreadsSidebar
+                    primary
+                    searchSerial={searchSerial}
                     address={threadListAddress}
                     threads={sidebarThreads}
                     providers={providers.list ?? []}
@@ -425,7 +443,6 @@ function ChatSurface({ target, docked = false }: ChatShellProps) {
               <ModeDial mode={mode} setMode={setMode} count={threads.length} />
               <span className="flex shrink-0 items-center gap-1">
                 <ThreadSidebarActions
-                  onSearch={() => store.actions.setPaletteOpen(true)}
                   onNew={() => {
                     void newThread();
                     store.actions.setSideOpen(false);
@@ -436,6 +453,7 @@ function ChatSurface({ target, docked = false }: ChatShellProps) {
             <div className="h-[75dvh] min-h-0 min-w-0">
               {mode === "threads" ? (
                 <ThreadsSidebar
+                  searchSerial={searchSerial}
                   address={threadListAddress}
                   threads={sidebarThreads}
                   providers={providers.list ?? []}
@@ -460,20 +478,6 @@ function ChatSurface({ target, docked = false }: ChatShellProps) {
           </DialogContent>
         </Dialog>
       ) : null}
-      <ThreadDialog
-        threads={sidebarThreads}
-        providers={providers.list ?? []}
-        currentThreadId={currentThreadId || chat.id}
-        open={paletteOpen}
-        onOpenChange={store.actions.setPaletteOpen}
-        onSelect={openThread}
-        onNew={() => void newThread()}
-        onFork={(id, providerId) => void forkThread(providerId, id)}
-        onRename={handleRenameThread}
-        onDelete={handleDeleteThread}
-        onUpdate={updateThread}
-        onNewTarget={(target) => void newThread(target)}
-      />
     </main>
   );
 }

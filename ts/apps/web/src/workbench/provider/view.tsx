@@ -290,7 +290,7 @@ export function WorkbenchProvider({ children }: { children: ReactNode }) {
         return created.id;
       } catch (caught) {
         throw Error(
-          `Thread ${created.id} was created, but ${errorMessage(caught)} Open it from Threads to continue.`,
+          `The new thread was created, but ${errorMessage(caught)} Open it from Threads to continue.`,
         );
       }
     })().finally(() => {

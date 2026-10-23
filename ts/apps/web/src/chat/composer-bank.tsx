@@ -27,6 +27,8 @@ export function ComposerBank({
   refusal?: string | null;
 }) {
   const [visited, setVisited] = useState(() => new Set([currentThreadId]));
+  // N1: focus moves on page arrival and on the person's own moves (New thread), not on a switch.
+  const [arrival] = useState(currentThreadId);
   useEffect(() => {
     setVisited((previous) => {
       const next = new Set(
@@ -57,6 +59,7 @@ export function ComposerBank({
               work={work}
               refusal={refusal}
               initialDraft={initialDraft}
+              autoFocus={threadId === arrival}
             />
           </Activity>
         );

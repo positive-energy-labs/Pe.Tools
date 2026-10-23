@@ -277,18 +277,12 @@ export function ChatSituationHead({
             : []),
           [
             "target",
-            head.targets.length
-              ? (situation.ladder.docWord ?? targetLabel({ head }))
-              : "none · Chat runs; Revit operations need a document",
+            head.targets.length ? (situation.ladder.docWord ?? targetLabel({ head })) : "none",
           ],
-          ["state", status.text],
+          // I6: a word, not a sentence; the composer's own controls show the wait.
+          ["state", head.stale ? `${status.text} · stale` : status.text],
         ]}
       />
-      {head.stale && (
-        <p className="text-ink-2">
-          Thread context is not current; composer controls wait for its owner.
-        </p>
-      )}
       {status.detail && <p data-tone="caution">{status.detail}</p>}
     </div>
   );
@@ -315,9 +309,7 @@ export function ChatCluster({
               ["thread", threadLabel],
               [
                 "target",
-                head.targets.length
-                  ? `r${head.revision}${head.stale ? " · stale" : ""}`
-                  : "none · Chat runs; Revit operations need a document",
+                head.targets.length ? `r${head.revision}${head.stale ? " · stale" : ""}` : "none",
               ],
             ]}
           />
