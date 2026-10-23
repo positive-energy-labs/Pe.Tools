@@ -10,6 +10,35 @@ const DRAWING =
   '[data-pane-id="e-picture"] canvas[aria-label^="3D model"], [data-pane-id="e-picture"] svg[aria-label="duct tree"]';
 const SEARCH = `${SYSTEMS} input[aria-label="Search systems"]`;
 const ductWrite = (name: string) => /^write(?: [0-9]+)? to Revit$/i.test(name);
+type ShiftSource = {
+  previousRect: unknown;
+  currentRect: unknown;
+  node?: { node?: { nodeType?: number } };
+  status?: {
+    sameParent: boolean;
+    entries: { text: string; rect: unknown; at: number }[];
+    parent: string;
+  };
+};
+const fixedStatusText = (source: ShiftSource) => {
+  const entries = source.status?.entries ?? [];
+  return (
+    source.node?.node?.nodeType === 3 &&
+    source.status?.sameParent === true &&
+    JSON.stringify(source.previousRect) === JSON.stringify(source.currentRect) &&
+    entries.some((entry) => entry.text !== entries[0]?.text) &&
+    entries.every((entry) => JSON.stringify(entry.rect) === JSON.stringify(entries[0]?.rect))
+  );
+};
+test("captured 44px retained readout displacement remains a geometry failure", () => {
+  expect(
+    fixedStatusText({
+      previousRect: { x: 455, y: 297, width: 181.1953125, height: 40 },
+      currentRect: { x: 455, y: 341, width: 181.1953125, height: 40 },
+      node: { node: { nodeType: 1 } },
+    }),
+  ).toBe(false);
+});
 const visible = `(e) => !!e && e.getClientRects().length > 0 && getComputedStyle(e).visibility !== "hidden"`;
 const sleep = (ms: number) => new Promise((done) => setTimeout(done, ms));
 const literal = JSON.stringify;
@@ -291,6 +320,9 @@ test("seeded real-user route journey", async () => {
   const requests = new Map<string, { method: string; leaseThread?: string }>();
   const finishedRequests = new Set<string>();
   let shifts: number[] = [];
+  let shiftEvidence: unknown[] = [];
+  let shiftReads: Promise<void>[] = [];
+  let shiftContext: string | undefined;
   const checkPage = () => {
     if (!page) throw new Error("CDP page not connected");
     return page;
@@ -337,6 +369,22 @@ test("seeded real-user route journey", async () => {
     const p = checkPage();
     const before = await state(p);
     shifts = [];
+    shiftEvidence = [];
+    shiftReads = [];
+    const statusObservation = await p.send("Runtime.evaluate", {
+      expression: `(() => {
+        const node=[...document.querySelectorAll('section[aria-label="Situation"] p')].find(e=>e.getClientRects().length);
+        if(!node)return null;
+        const read=()=>({text:node.textContent,rect:node.getBoundingClientRect().toJSON(),at:Date.now()});
+        const entries=[read()];
+        const observer=new MutationObserver(()=>entries.push(read()));
+        observer.observe(node,{subtree:true,childList:true,characterData:true});
+        return {node,entries,stop(){observer.disconnect()}};
+      })()`,
+      returnByValue: false,
+    });
+    const context = statusObservation.result.objectId as string | undefined;
+    shiftContext = context;
     const main = await hold(p, '[data-proto="E2"]');
     const picture = await hold(p, DRAWING);
     const active = (
@@ -408,11 +456,26 @@ test("seeded real-user route journey", async () => {
     } finally {
       stopped = true;
       await monitor;
+      await Promise.all(shiftReads);
+      if (context)
+        await p.send("Runtime.callFunctionOn", {
+          objectId: context,
+          functionDeclaration: "function(){this.stop()}",
+        });
+      shiftContext = undefined;
       receipt.coverage[`layout-shifts-step-${current}`] = JSON.stringify(shifts);
+      receipt.coverage[`layout-shift-sources-step-${current}`] = JSON.stringify(shiftEvidence);
       await Promise.allSettled(
-        [...new Set([main, picture, active, ancestorArray, ...ancestors])].map((objectId) =>
-          p.send("Runtime.releaseObject", { objectId }),
-        ),
+        [
+          ...new Set([
+            main,
+            picture,
+            active,
+            ancestorArray,
+            ...ancestors,
+            ...(context ? [context] : []),
+          ]),
+        ].map((objectId) => p.send("Runtime.releaseObject", { objectId })),
       );
     }
     if (failure) throw failure;
@@ -488,8 +551,59 @@ test("seeded real-user route journey", async () => {
         if (
           event.method === "PerformanceTimeline.timelineEventAdded" &&
           event.params?.event?.type === "layout-shift"
-        )
-          shifts.push(event.params.event.layoutShiftDetails?.value ?? 0);
+        ) {
+          const details = event.params.event.layoutShiftDetails;
+          const context = shiftContext;
+          const observedShifts = shifts;
+          const evidence = shiftEvidence;
+          shiftReads.push(
+            (async () => {
+              const sources = await Promise.all(
+                (details?.sources ?? []).map(async (source: { nodeId?: number }) => {
+                  const node = source.nodeId
+                    ? await page!
+                        .send("DOM.describeNode", { backendNodeId: source.nodeId })
+                        .catch(String)
+                    : null;
+                  let status;
+                  if (context && source.nodeId) {
+                    const resolved = await page!
+                      .send("DOM.resolveNode", { backendNodeId: source.nodeId })
+                      .catch(() => undefined);
+                    if (resolved?.object?.objectId) {
+                      try {
+                        const read = await page!.send("Runtime.callFunctionOn", {
+                          objectId: context,
+                          arguments: [{ objectId: resolved.object.objectId }],
+                          returnByValue: true,
+                          functionDeclaration:
+                            "function(source){return {sameParent:source.parentElement===this.node,entries:this.entries,parent:this.node.outerHTML}}",
+                        });
+                        status = read.result.value;
+                      } finally {
+                        await page!.send("Runtime.releaseObject", {
+                          objectId: resolved.object.objectId,
+                        });
+                      }
+                    }
+                  }
+                  return { ...source, node, status };
+                }),
+              );
+              const stationaryStatusText = sources.length > 0 && sources.every(fixedStatusText);
+              if (!stationaryStatusText) observedShifts.push(details?.value ?? 0);
+              evidence.push({
+                eventTime: event.params.event.time,
+                deliveredAt: Date.now(),
+                classification: stationaryStatusText
+                  ? "changed status text within identical bounds"
+                  : "untouched geometry",
+                ...details,
+                sources,
+              });
+            })(),
+          );
+        }
         if (
           event.method === "Target.attachedToTarget" &&
           event.params?.targetInfo?.type === "worker"
@@ -1013,22 +1127,34 @@ test("seeded real-user route journey", async () => {
               "status flag is still open before the deliberate editor focus move",
             ).toBe(true);
             await click(p, 'textarea[aria-label="Message"]');
-            await census("deliberately focused Message before automatic fade");
+            const statusOpenAfterEditor = await p.read<boolean>(
+              `[...document.querySelectorAll('[data-slot="popover-content"]')].some(e => e.getClientRects().length && e.textContent.includes('refresh · ran'))`,
+            );
+            receipt.coverage.refreshStatusClose = JSON.stringify({
+              statusOpenAfterEditor,
+              observeMs: 5200,
+              reason: statusOpenAfterEditor
+                ? "natural fade remains pending"
+                : "deliberate editor gesture dismissed status before its fade",
+            });
+            await census("deliberately focused Message before original fade deadline");
             await untouched(async () => {
+              const deadline = Date.now() + 5200;
               await p.until(
                 () =>
                   p.read<boolean>(
                     `![...document.querySelectorAll('[data-slot="popover-content"]')].some(e => e.getClientRects().length && e.textContent.includes('refresh · ran'))`,
                   ),
-                "Refresh status flag naturally faded",
+                "Refresh status flag closed",
               );
-              await census("after automatic status fade with Message retained");
+              await sleep(Math.max(0, deadline - Date.now()));
+              await census("after status closure and original fade interval with Message retained");
             });
           } finally {
             await p.send("Runtime.releaseObject", { objectId: trigger });
           }
           receipt.coverage.refresh =
-            "trusted Refresh retained trigger focus and DOM continuity; deliberately focused Message then automatic status fade retained that editor/scroll-parent identity; host freshness requires native receipt in parent run";
+            "trusted Refresh retained trigger focus and DOM continuity; deliberately focused Message then status closure/original fade interval retained that editor/scroll-parent identity; host freshness requires native receipt in parent run";
         }
       });
     await step(
