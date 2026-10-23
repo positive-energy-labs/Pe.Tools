@@ -9,8 +9,7 @@ const noop = () => {};
 const CFM = { label: "cfm" };
 const INWG = { label: "in-wg", short: "wg" };
 
-/** The unit-bearing cell in a `.dl-cells` group at the three sidebar widths: nothing wraps, and the
- *  decoration, note and unit label give way in that order (hover or focus returns them). */
+/** Cells keep their editing width and wrap at the left edge; notes yield before the values. */
 function UnitCellSpecimen({ width }: { width: number }) {
   const item = (value: string, unit: typeof CFM, note: string) => (
     <span className="dl-cells-item">

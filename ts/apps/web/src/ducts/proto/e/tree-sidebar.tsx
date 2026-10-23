@@ -76,7 +76,7 @@ function QuantityBar({ encoding, ids }: { encoding: Encoding; ids: readonly numb
         data-e-quantity={peak ? peak.value : ""}
         data-e-peak={peak?.id ?? ""}
       >
-        <span className="relative inline-block h-1.5 w-16" aria-hidden>
+        <span className="relative inline-block h-1.5 w-16 @max-[300px]:hidden" aria-hidden>
           {share != null ? (
             <>
               <span className="absolute inset-0" style={{ backgroundColor: tokenRef("line") }} />
@@ -228,7 +228,7 @@ export function SystemTree({
     }
   });
   return (
-    <div className="min-h-0 flex-1 overflow-y-auto" onMouseLeave={() => ctx.light(null)}>
+    <div className="min-w-0" onMouseLeave={() => ctx.light(null)}>
       <ListView
         list={list}
         aria-label="system tree"
@@ -251,6 +251,7 @@ export function SystemTree({
           const stand = n.critical === "longest" && n.key !== ctx.criticalKey;
           const ruleKey = n.kind === "element" && n.id != null ? ctx.ruleOf.get(n.id) : undefined;
           return {
+            wrap: true,
             lead: critical ? (
               <TooltipHint
                 content={stand ? "longest developed run: stand-in until priced" : "critical run"}

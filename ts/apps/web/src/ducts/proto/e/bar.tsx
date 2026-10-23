@@ -276,6 +276,7 @@ export function systemRowParts(
   return {
     metaFill: true,
     lines: 2,
+    wrap: true,
     label: s.name,
     sub: s.sub,
     title: hint,

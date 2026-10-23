@@ -134,11 +134,13 @@ export function InputsPane(props: InputsPaneProps) {
           const target = observedElements(observation, [id]);
           return {
             lines: 2,
+            wrap: true,
             label: nameOf(id),
             title: nameOf(id),
             aside: kind,
             sub: (
               <span
+                className="flex min-w-0 flex-col gap-0.5"
                 onClick={(event) => event.stopPropagation()}
                 onKeyDown={(event) => event.stopPropagation()}
               >

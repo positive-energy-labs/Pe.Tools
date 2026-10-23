@@ -44,6 +44,12 @@ export function LangListSpecimens() {
             <RowGroupHead label="states" count={6} />
             <Row label="rest" meta="meta" lines={props.lines === "2" ? 2 : 1} sub="second line" />
             <Row label="cursor" cursor />
+            <Row
+              label="A long row title stays readable in a narrow pane"
+              sub="Secondary content wraps at the same edge and adds only the height it needs."
+              lines={2}
+              wrap
+            />
             <Row label="selected" selected />
             <Row label="active" active />
             <Row label="pending" pending />

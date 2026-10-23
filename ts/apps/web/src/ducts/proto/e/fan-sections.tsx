@@ -41,7 +41,7 @@ export function FanSections({
       data-e-fans
       onMouseLeave={() => light(null)}
     >
-      {title ? <p className="t-small text-ink-2 px-2 pt-1">{title}</p> : null}
+      {title ? <p className="t-small text-ink-2 px-(--item-mark-pad-x) py-1">{title}</p> : null}
       <ListView
         list={list}
         aria-label={title ? `fan sections of ${title}` : "fan sections"}
@@ -59,10 +59,18 @@ export function FanSections({
           const sub = `${f.cfm ?? "no"} cfm · TEL ${fmtFt(f.tel)} ft · ESP ${f.esp.toFixed(3)} in-wg · ${where}`;
           return {
             lines: 2,
+            wrap: true,
             label: nameOf(f.unit),
             title: `${nameOf(f.unit)}: ${sub}`,
             aside: k === 0 ? "largest fan" : "fan",
-            sub,
+            sub: (
+              <span className="flex flex-wrap gap-x-2">
+                <span className="whitespace-nowrap">{f.cfm ?? "no"} cfm</span>
+                <span className="whitespace-nowrap">TEL {fmtFt(f.tel)} ft</span>
+                <span className="whitespace-nowrap">ESP {f.esp.toFixed(3)} in-wg</span>
+                <span>{where}</span>
+              </span>
+            ),
             onMouseEnter: () => light(f.owned),
             revitIds: target.ids,
             revitRefs: target.refs,

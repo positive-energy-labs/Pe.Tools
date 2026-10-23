@@ -169,12 +169,12 @@ export function RulesTree({
     );
   };
 
-  // One grid for every rule: the name column is a fixed share, so the table chips start on one x.
-  // Names wrap (never truncate) and the chips wrap (never clip).
-  const COLS = "grid grid-cols-[19ch_minmax(0,1fr)] gap-x-3 gap-y-0.5";
+  // Keep both columns aligned; stack only when the pane cannot hold a readable pair.
+  const COLS =
+    "grid grid-cols-1 @min-[360px]:grid-cols-[minmax(0,2fr)_minmax(0,3fr)] gap-x-2 gap-y-1";
   return (
     <div
-      className="flex flex-col"
+      className="@container flex min-w-0 flex-col px-(--item-mark-pad-x)"
       data-e-rules={wide ? "all" : "this"}
       onMouseLeave={() => light(null)}
     >
@@ -195,17 +195,17 @@ export function RulesTree({
             <li
               key={n.key}
               data-key={n.key}
-              data-cursor={focus === n.key ? "" : undefined}
-              className="border-line data-[cursor]:bg-select/40 border-b py-1 last:border-b-0"
+              data-highlighted={focus === n.key ? "" : undefined}
+              className="hairline-b py-1 last:border-b-0"
               onMouseEnter={() => light(idsUnder(n.ruleKey))}
               onClick={() => onFocus(n.key)}
             >
               <div className={COLS}>
                 <div className="min-w-0">
-                  <p className="break-words" title={rule?.cond ? `${name} · ${rule.cond}` : name}>
+                  <p className="wrap-anywhere" title={rule?.cond ? `${name} · ${rule.cond}` : name}>
                     {name}
                   </p>
-                  <p className="t-small text-ink-2 break-words">{rule?.cond || "any size"}</p>
+                  <p className="t-small text-ink-2 wrap-anywhere">{rule?.cond || "any size"}</p>
                 </div>
                 <div className="flex min-w-0 flex-col gap-0.5">
                   <Chips ruleKey={n.ruleKey} priced={priced} work={work} />
@@ -250,7 +250,7 @@ export function RulesTree({
                 data-e-unruled-ids={[...ids].join(" ")}
                 onMouseEnter={() => light([...ids])}
               >
-                <p className="min-w-0 break-words">
+                <p className="min-w-0 wrap-anywhere">
                   {family ?? nameOf(first!)}
                   {ids.size ? <span className="t-small text-ink-2"> ×{ids.size}</span> : null}
                 </p>
