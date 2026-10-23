@@ -17,7 +17,8 @@ import { Button } from "./button";
 import { type ListController, type ListItem } from "./collection";
 import { EmptyState } from "./empty";
 import { useScopeGestures, useScopeKeys, useScopeLive } from "../../keys";
-import { ListPopup } from "./list-popup";
+import { OutcomeLine } from "./outcome";
+import { ListPopup, StatusLine } from "./list-popup";
 import { ListSearchBox } from "./list-search";
 import { land, Row, type RowProps } from "./row";
 import "./lang.css";
@@ -75,6 +76,9 @@ export function ListBar<T, Sort extends string>({
   return (
     <div data-list-bar="" data-surface="artifact">
       <ListSearchBox list={list} label={label} input={input} />
+      {list.collection.reading === "pending" && list.total ? (
+        <OutcomeLine kind="busy" label="reading…" />
+      ) : null}
       <div
         className={`flex items-center gap-1 ${compact ? "overflow-x-auto *:shrink-0" : "flex-wrap px-(--item-pad-x)"}`}
       >
@@ -187,11 +191,21 @@ function ListRenderer<T, Sort extends string>(props: ListViewProps<T, Sort> & { 
           ) : null}
         </div>
       ) : null}
-      {!list.total ? (
+      {props.bar === false && list.collection.reading === "pending" && list.total ? (
+        <div data-list-bar="">
+          <OutcomeLine kind="busy" label="reading…" />
+        </div>
+      ) : null}
+      {list.collection.reading === "failed" ? (
+        <StatusLine tone="caution">{list.failure ?? "read failed"}</StatusLine>
+      ) : list.collection.reading === "pending" && !list.total ? (
+        <StatusLine>reading…</StatusLine>
+      ) : null}
+      {!list.total && list.collection.reading === "ready" ? (
         <EmptyState story="scope" exit={empty.exit}>
           {empty.message}
         </EmptyState>
-      ) : !list.shown ? (
+      ) : list.total && !list.shown ? (
         <div role="status">
           <EmptyState story="filter" exit="Clear the search to see all rows">
             {list.refusal ? "Search cannot be applied" : `No matching ${label}`}
