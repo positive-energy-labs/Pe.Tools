@@ -1,3 +1,4 @@
+import { TooltipHint } from "@pe/kit/lang/tooltip";
 import { LeaderDiagram } from "@pe/kit/lang/leader-diagram";
 import { RevitTarget } from "@pe/kit/lang/row";
 import { useNativeObservation } from "#/revit/observation";
@@ -80,12 +81,14 @@ export function FanFacts({
                 size: share,
                 label: (
                   <RevitTarget scope={observation.scope} ids={[fact.unit]}>
-                    <span title={fact.says}>
-                      {nameOf(fact.unit)}{" "}
-                      <span className="text-ink-2">
-                        {fact.role} {fact.end}
+                    <TooltipHint content={fact.says}>
+                      <span>
+                        {nameOf(fact.unit)}{" "}
+                        <span className="text-ink-2">
+                          {fact.role} {fact.end}
+                        </span>
                       </span>
-                    </span>
+                    </TooltipHint>
                   </RevitTarget>
                 ),
                 value: (

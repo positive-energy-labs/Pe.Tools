@@ -22,7 +22,6 @@ const allow = {
     "Static field validation messages, with no picks.",
   "space/manifest.tsx":
     "Fixed tutorial keys describing layers and encodings, with no row navigation.",
-  "space/facts.tsx": "Encoding mark-and-word legend, with no row navigation.",
 };
 
 it("navigation lists use the kit", () => {
