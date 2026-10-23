@@ -308,6 +308,21 @@ test("a loss-rule group reads as its family, type and condition", () => {
   expect(family.label!("not-a-rule")).toBe("not-a-rule");
 });
 
+test("picking another ruling for the selected element retains that row's details", () => {
+  const { container } = mount({
+    selected: 10,
+    check: [
+      item({ key: "same-element", group: "check", title: "Another ruling for 10", ids: [10] }),
+    ],
+  });
+  fireEvent.click(screen.getByText("Another ruling for 10"));
+  expect(container.querySelector('[data-inbox-detail="same-element"]')).not.toBeNull();
+  expect(container.querySelector('[data-inbox-detail="heal:g1"]')).toBeNull();
+  expect(container.querySelector('[data-key="same-element"]')?.getAttribute("aria-selected")).toBe(
+    "true",
+  );
+});
+
 test("Rulings use counted query facets and stage marks without replacing an excluding address", () => {
   const onChange = vi.fn();
   const { container } = mount({

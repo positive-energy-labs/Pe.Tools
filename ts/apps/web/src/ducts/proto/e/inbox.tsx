@@ -371,7 +371,10 @@ export function Inbox({
       row.pick?.();
     },
   });
-  const desired = rows.find((row) => row.key === focused) ?? rows.find((row) => row.lit);
+  const desired =
+    rows.find((row) => row.key === focused) ??
+    rows.find((row) => row.lit && view.selected.includes(row.key)) ??
+    rows.find((row) => row.lit);
   const reveal = useRef<string | null>(null);
   useEffect(() => {
     reveal.current = desired?.key ?? null;
@@ -399,7 +402,7 @@ export function Inbox({
         <ListView
           aria-label="rulings"
           list={list}
-          row={(row) => row}
+          row={({ key: _key, ...parts }) => parts}
           detail={(row) =>
             row.detail ? (
               <div data-inbox-detail={row.key} className="px-4 py-1 flex flex-col gap-1.5">

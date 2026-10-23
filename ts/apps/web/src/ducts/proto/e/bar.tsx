@@ -123,7 +123,7 @@ function SplitFill({
 }
 
 /** One thing wrong or unsure about a system: its tone and its sentence. */
-export interface SystemIssue {
+interface SystemIssue {
   tone: "alarm" | "caution";
   says: string;
 }
@@ -132,7 +132,7 @@ export interface SystemIssue {
  * Everything a system's row has to say beyond its number, worst first, so a dash is never bare.
  * Empty is a priced system in range, with a stated rating, resting on no unruled join.
  */
-export function systemIssues(s: {
+function systemIssues(s: {
   total: number | null;
   rating: number | null;
   fanless: boolean;
@@ -467,7 +467,7 @@ function BreakdownList({
  * one wherever the viewport allows. Single-system strip and every all-systems row use this; the
  * content mounts only while open (Portal owns lazy mounting), so 355 rows hold 355 closed roots.
  */
-export function BarPopover({
+function BarPopover({
   split,
   scale,
   light,
