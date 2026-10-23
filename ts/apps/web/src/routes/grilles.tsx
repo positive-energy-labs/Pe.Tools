@@ -35,7 +35,7 @@ import { SpecDrawing } from "#/grilles/spec-drawing";
 
 import { grillesManifest as manifest } from "#/route/surface-manifests";
 import { TooltipHint } from "@pe/kit/lang/tooltip";
-import { KeyLegend, type LegendKey } from "#/components/lang/kbd";
+import { KeyLegend, type LegendKey } from "@pe/kit/lang/key-hint";
 
 const url = urlPage(manifest)!;
 

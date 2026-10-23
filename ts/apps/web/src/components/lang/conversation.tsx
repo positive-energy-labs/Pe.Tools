@@ -3,7 +3,7 @@ import { TooltipHint } from "@pe/kit/lang/tooltip";
  *  only; the logic lives in workbench/ and chat/. Painted in
  *  conversation.css. */
 import { type ComponentProps, type KeyboardEvent, type ReactNode } from "react";
-import { Textarea } from "./textarea";
+import { Textarea } from "@pe/kit/lang/input";
 import { ProviderMark } from "./provider-mark";
 import "@pe/kit/lang/lang.css";
 import "./conversation.css";

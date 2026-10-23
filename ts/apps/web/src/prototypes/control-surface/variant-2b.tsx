@@ -30,7 +30,7 @@ import {
 
 import { Button } from "@pe/kit/lang/button";
 import { Input } from "@pe/kit/lang/input";
-import { Kbd } from "#/components/lang/kbd";
+import { KeyHint } from "@pe/kit/lang/key-hint";
 import { List } from "@pe/kit/lang/list-popup";
 import { NavigationGroup, NavigationItem } from "#/components/lang/navigation";
 import { ProviderMark } from "#/components/lang/provider-mark";
@@ -823,7 +823,7 @@ function WindowPalette({ onClose, onPick }: { onClose: () => void; onPick: (hit:
           }}
           footer={
             <div className="flex items-center justify-end gap-1.5 px-1 pb-1 t-small text-ink-2">
-              <Kbd>↑↓</Kbd> move <Kbd hotkey="Enter" /> choose <Kbd hotkey="Escape" /> close
+              <KeyHint>↑↓</KeyHint> move <KeyHint hotkey="Enter" /> choose <KeyHint hotkey="Escape" /> close
             </div>
           }
         />
@@ -888,7 +888,7 @@ export default function Variant() {
           >
             <Search aria-hidden className="size-3.5" />
             <span className="min-w-0 flex-1 truncate text-left">{outcome}</span>
-            <Kbd mute>Ctrl K</Kbd>
+            <KeyHint mute>Ctrl K</KeyHint>
           </button>
         </div>
         <div

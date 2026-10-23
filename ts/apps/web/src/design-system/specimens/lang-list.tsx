@@ -1,3 +1,4 @@
+import { CellListSelect, List, ListChips, ListInput, ListPopup, ListSegmentInput, PopupFrame, CommandPalette } from "@pe/kit/lang/list-popup";
 /**
  * The list grammar's swatch frames: the one Row (its recipe and every state), and the containers
  * that draw it — List inline, ListPopup on a trigger, and the in-cell list. The full comparison of
@@ -5,19 +6,11 @@
  */
 import { useState } from "react";
 
-import {
-  CellListSelect,
-  List,
-  ListChips,
-  ListInput,
-  ListPopup,
-  ListSegmentInput,
-  PopupFrame,
-} from "@pe/kit/lang/list-popup";
+
 import { Popover } from "@base-ui/react/popover";
 import { MoreHorizontal } from "lucide-react";
 import { Button } from "@pe/kit/lang/button";
-import { CommandPalette } from "#/components/lang/command-palette";
+
 import { Row, RowGroupHead, rowRecipe } from "@pe/kit/lang/row";
 import { Table } from "@pe/kit/table/table";
 
@@ -109,7 +102,7 @@ export function LangListSpecimens() {
           />
         </div>
       </SpecimenFrame>
-      <SpecimenFrame name="CommandPalette" importPath="#/components/lang/command-palette">
+      <SpecimenFrame name="CommandPalette" importPath="@pe/kit/lang/list-popup">
         <PaletteSpecimen />
       </SpecimenFrame>
     </>

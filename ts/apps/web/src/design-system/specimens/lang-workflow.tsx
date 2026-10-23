@@ -15,7 +15,7 @@ import {
 } from "#/components/work/band";
 import { StateCell } from "@pe/kit/lang/cell";
 import { Tag } from "@pe/kit/lang/chip";
-import { Kbd, KeyLegend, type LegendKey } from "#/components/lang/kbd";
+import { KeyHint, KeyLegend, type LegendKey } from "@pe/kit/lang/key-hint";
 import { Button } from "@pe/kit/lang/button";
 import { Legend } from "@pe/kit/lang/legend";
 import { tokenRef } from "@pe/kit/lib/token";
@@ -27,7 +27,7 @@ import { TooltipHint } from "@pe/kit/lang/tooltip";
 
 const noop = () => {};
 
-/** A drawing's keys: pointer gestures as words, keys as `Kbd`. */
+/** A drawing's keys: pointer gestures as words, keys as `KeyHint`. */
 const LEGEND_SPECIMEN: readonly LegendKey[] = [
   { pointer: "drag", does: "orbit" },
   { keys: ["Shift"], pointer: "drag", does: "pan" },
@@ -51,13 +51,13 @@ export function LangWorkflowSpecimens() {
   return (
     <>
       <ReviewLandingSpecimen />
-      <SpecimenFrame name="Kbd" importPath="#/components/lang/kbd">
+      <SpecimenFrame name="KeyHint" importPath="@pe/kit/lang/key-hint">
         <div className="flex items-center gap-2">
-          <Kbd>⌘K</Kbd>
-          <Kbd mute>Esc</Kbd>
+          <KeyHint>⌘K</KeyHint>
+          <KeyHint mute>Esc</KeyHint>
         </div>
       </SpecimenFrame>
-      <SpecimenFrame name="KeyLegend" importPath="#/components/lang/kbd">
+      <SpecimenFrame name="KeyLegend" importPath="@pe/kit/lang/key-hint">
         <div className="flex items-end gap-6">
           <KeyLegend keys={LEGEND_SPECIMEN} bind={false} />
           <KeyLegend keys={LEGEND_SPECIMEN} bind={false} defaultOpen />

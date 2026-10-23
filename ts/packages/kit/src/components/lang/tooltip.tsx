@@ -1,5 +1,6 @@
 import {
   createContext,
+  isValidElement,
   useContext,
   useId,
   useState,
@@ -34,14 +35,22 @@ export function TooltipHint({
   children,
   side,
   keep = false,
-}: {
+}: ({
   content: ReactNode;
   children: ReactElement<{ id?: string; tabIndex?: number }>;
+} | { content?: never; children: ReactNode }) & {
   side?: ComponentProps<typeof TooltipContent>["side"];
   /** Keep the tooltip mounted (closed) while `content` is empty, so content that arrives on
    *  pointer entry (a row's measured cut) opens it instead of remounting the element. */
   keep?: boolean;
 }) {
+  if (content === undefined && !keep) return (
+    <Tooltip>
+      <TooltipTrigger type="button" aria-label="What is this?" className="veil grid size-5 cursor-help place-items-center rounded-control t-small face-mono text-ink-2 hover:text-ink">?</TooltipTrigger>
+      <TooltipContent side={side ?? "bottom"} align="start">{children}</TooltipContent>
+    </Tooltip>
+  );
+  if (!isValidElement<{ id?: string; tabIndex?: number }>(children)) return null;
   const empty = content == null || content === "" || content === false;
   if (empty && !keep) return children;
   return (

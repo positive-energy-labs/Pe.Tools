@@ -1,8 +1,8 @@
 import { useLayoutEffect, useRef, useState } from "react";
 import { RefreshCw } from "lucide-react";
-import { CommandPalette } from "#/components/lang/command-palette";
+import { CommandPalette } from "@pe/kit/lang/list-popup";
 import { Button } from "@pe/kit/lang/button";
-import { Kbd } from "#/components/lang/kbd";
+import { KeyHint } from "@pe/kit/lang/key-hint";
 import { useNavigation } from "./state";
 import type { ResultKind } from "./global-items";
 import { friendlyObservation } from "./model";
@@ -84,7 +84,7 @@ export function GlobalSearch({
             onClick={refresh}
           />
           <span className="flex items-center gap-1 t-small text-ink-2">
-            <Kbd>↑↓</Kbd> move <Kbd hotkey="Enter" /> open <Kbd hotkey="Escape" /> close
+            <KeyHint>↑↓</KeyHint> move <KeyHint hotkey="Enter" /> open <KeyHint hotkey="Escape" /> close
           </span>
           {ledger.refusal && <p className="w-full text-ink-2">{ledger.refusal}</p>}
           {error && (

@@ -27,7 +27,7 @@ import { TooltipHint } from "@pe/kit/lang/tooltip";
 import { ChevronRight } from "lucide-react";
 import { SelectionBoxButton } from "#/revit/element-menu";
 import { observedElements } from "#/revit/observation";
-import { KeyLegend } from "#/components/lang/kbd";
+import { KeyLegend } from "@pe/kit/lang/key-hint";
 import { Pane } from "#/components/lang/pane";
 import { useNativeObservation } from "#/revit/observation";
 import { useScene } from "#/scene/use-scene";

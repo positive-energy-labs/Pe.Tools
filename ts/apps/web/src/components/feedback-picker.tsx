@@ -7,7 +7,7 @@ import { Button } from "@pe/kit/lang/button";
 import { HotkeyCommand } from "#/components/lang/hotkey-command";
 import { PopupFrame } from "@pe/kit/lang/list-popup";
 import { OutcomeLine } from "#/components/lang/outcome";
-import { Textarea } from "#/components/lang/textarea";
+import { Textarea } from "@pe/kit/lang/input";
 import { deliverFeedback, sendFeedback, type FeedbackReceipt } from "#/host/feedback";
 import { useAction } from "#/readings";
 import { useScopeKeys } from "@pe/kit/keys";

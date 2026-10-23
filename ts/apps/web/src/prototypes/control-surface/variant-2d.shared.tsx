@@ -31,10 +31,10 @@ import {
 } from "lucide-react";
 
 import { Button } from "@pe/kit/lang/button";
-import { CommandPalette } from "#/components/lang/command-palette";
+import { CommandPalette } from "@pe/kit/lang/list-popup";
 import { Input } from "@pe/kit/lang/input";
 import { TooltipHint } from "@pe/kit/lang/tooltip";
-import { Kbd } from "#/components/lang/kbd";
+import { KeyHint } from "@pe/kit/lang/key-hint";
 import "#/navigation/app-bar.css";
 
 import {
@@ -373,7 +373,7 @@ export function TrayRoutes({ mode }: { mode: "buttons" | "appbar" }) {
         />
       </TooltipHint>
       <span className="pe-appbar-search-hint" aria-hidden>
-        <Kbd mute>Ctrl K</Kbd>
+        <KeyHint mute>Ctrl K</KeyHint>
         <Search aria-hidden />
       </span>
     </div>
@@ -592,7 +592,7 @@ export function TrayRoutes({ mode }: { mode: "buttons" | "appbar" }) {
             className="flex items-center justify-end gap-1.5 px-1 pb-1 t-small text-ink-2"
             onClick={noop}
           >
-            <Kbd>↑↓</Kbd> move <Kbd hotkey="Enter" /> choose <Kbd hotkey="Escape" /> close
+            <KeyHint>↑↓</KeyHint> move <KeyHint hotkey="Enter" /> choose <KeyHint hotkey="Escape" /> close
           </div>
         }
       />

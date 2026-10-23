@@ -1,6 +1,6 @@
 import type { LucideIcon } from "lucide-react";
 import { Button, type ButtonProps } from "@pe/kit/lang/button";
-import { Kbd } from "./kbd";
+import { KeyHint } from "@pe/kit/lang/key-hint";
 import {
   actionScopeKeys,
   invokeAction,
@@ -58,7 +58,7 @@ function ChordFaces({ hotkey, tone }: { hotkey: Chord; tone?: string }) {
   return (
     <>
       <span data-command-keys aria-hidden>
-        <Kbd>
+        <KeyHint>
           <span data-command-symbols data-tone={tone}>
             {chordLabel(hotkey)
               .split("+")
@@ -66,12 +66,12 @@ function ChordFaces({ hotkey, tone }: { hotkey: Chord; tone?: string }) {
                 <KeyMark key={`${key}-${index}`} name={key} />
               ))}
           </span>
-        </Kbd>
+        </KeyHint>
       </span>
       <span data-command-chord>
-        <Kbd>
+        <KeyHint>
           <span data-tone={tone}>{chordLabel(hotkey)}</span>
-        </Kbd>
+        </KeyHint>
       </span>
     </>
   );

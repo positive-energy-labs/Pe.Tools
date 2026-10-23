@@ -32,7 +32,7 @@ import type { Psc1Metadata } from "#/scene/psc1";
 import { flyTo, glideLook, useLiveOrbit } from "#/scene/live-orbit";
 import { useViewHistory } from "#/scene/view-history";
 import { STAGE_KEYS } from "#/scene/stage-keys";
-import { KeyLegend, type LegendKey } from "#/components/lang/kbd";
+import { KeyLegend, type LegendKey } from "@pe/kit/lang/key-hint";
 import { Scene3D } from "#/scene/scene3d";
 import type { Layer3D, Pick, SceneMeshes } from "#/scene/types";
 

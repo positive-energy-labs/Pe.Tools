@@ -13,7 +13,7 @@ import type { DuctsRouteDocument } from "@pe/agent-contracts";
 import type { LossesWork } from "../../work";
 import type { DuctSnapshot } from "@pe/ducts-domain/types";
 import { Button } from "@pe/kit/lang/button";
-import { HelpTip } from "#/components/lang/help";
+import { TooltipHint } from "@pe/kit/lang/tooltip";
 import { FactChip } from "@pe/kit/lang/chip";
 import { useList, emptyListState, type ListState } from "@pe/kit/lang/collection";
 import { ListView, type ListRowParts } from "@pe/kit/lang/list-view";
@@ -405,7 +405,7 @@ export function Inbox({
           <>
             <div className="flex items-center gap-1 t-small">
               <span>Evidence</span>
-              <HelpTip>
+              <TooltipHint>
                 {compactStatus(item.status) !== item.status ? (
                   <p data-tone={item.tone} data-inbox-status="">
                     {item.status}
@@ -434,7 +434,7 @@ export function Inbox({
                 ) : (
                   <p>{item.title}</p>
                 )}
-              </HelpTip>
+              </TooltipHint>
             </div>
             <div className="flex flex-wrap items-center gap-1" data-inbox-verbs="">
               {verbsOf(item, true)}

@@ -1,5 +1,6 @@
-import { CellStateKey, cellStateKeyRecipe } from "#/components/lang/cell-key";
-import { StateCell, stateCellRecipe } from "@pe/kit/lang/cell";
+import { CellStateKey, cellStateKeyRecipe, StateCell, stateCellRecipe } from "@pe/kit/lang/cell";
+
+
 import { FactChip, FileChip, MentionChip, NarrowChip, Tag, chipRecipe } from "@pe/kit/lang/chip";
 
 import { RecipeGrid } from "./recipe-grid";
@@ -65,7 +66,7 @@ export function LangCellSpecimens() {
       />
       <RecipeGrid
         name="CellStateKey"
-        importPath="#/components/lang/cell-key"
+        importPath="@pe/kit/lang/cell"
         recipe={cellStateKeyRecipe}
         render={() => <CellStateKey />}
       />

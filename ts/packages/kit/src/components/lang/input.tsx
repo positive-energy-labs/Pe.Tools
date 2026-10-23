@@ -1,7 +1,7 @@
 import * as React from "react";
 import { Input as InputPrimitive } from "@base-ui/react/input";
 
-import { tv } from "../../lib/tv";
+import { tv, type VariantProps } from "../../lib/tv";
 
 export const inputRecipe = tv({
   base: "w-full min-w-0 px-(--control-pad-x) py-0.5 t-small outline-none file:inline-flex file:h-6 file:border-0 file:bg-transparent file:font-semibold file:text-ink placeholder:text-ink-2 disabled:pointer-events-none disabled:cursor-not-allowed disabled:opacity-50",
@@ -36,3 +36,50 @@ function Input({
 }
 
 export { Input };
+
+
+
+export const labelRecipe = tv({
+  base: "flex items-center gap-2 t-small font-semibold select-none peer-disabled:cursor-not-allowed peer-disabled:opacity-50",
+});
+
+// ponytail: base-ui has no Label primitive; a native <label> covers every use here.
+function Label(props: Omit<React.ComponentProps<"label">, "className">) {
+  return <label data-slot="label" className={labelRecipe()} {...props} />;
+}
+
+export { Label };
+
+
+
+export const textareaRecipe = tv({
+  base: "flex field-sizing-content w-full resize-none rounded-control border border-line bg-line/20 px-(--control-pad-x) py-2 transition-colors outline-none placeholder:text-ink-2 focus-visible:border-line-2 focus-visible:ring-2 focus-visible:ring-line-2/30 disabled:cursor-not-allowed disabled:opacity-50 aria-invalid:border-caution aria-invalid:ring-2 aria-invalid:ring-caution dark:bg-line/30",
+  variants: {
+    size: { compact: "min-h-9", normal: "min-h-16", tall: "min-h-32" },
+    surface: {
+      field: "t-small",
+      // Embedded in a frame that owns focus (the composer box rings itself): no ring of its own.
+      embedded:
+        "t-prose rounded-none border-0 bg-transparent focus-visible:ring-0 dark:bg-transparent",
+    },
+  },
+  defaultVariants: { size: "normal", surface: "field" },
+});
+
+function Textarea({
+  size,
+  surface,
+  face,
+  ...props
+}: Omit<React.ComponentProps<"textarea">, "className"> &
+  VariantProps<typeof textareaRecipe> & { face?: "mono" }) {
+  return (
+    <textarea
+      data-slot="textarea"
+      className={`${textareaRecipe({ size, surface })}${face === "mono" ? " face-mono" : ""}`}
+      {...props}
+    />
+  );
+}
+
+export { Textarea };

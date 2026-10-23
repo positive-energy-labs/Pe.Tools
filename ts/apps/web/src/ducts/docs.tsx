@@ -24,7 +24,7 @@ import {
 } from "@pe/agent-contracts/ducts-guide";
 import { CompareTable } from "./compare-table";
 import { DuctCases } from "./docs-cases";
-import { KeyLegend, type LegendKey } from "#/components/lang/kbd";
+import { KeyLegend, type LegendKey } from "@pe/kit/lang/key-hint";
 import { STAGE_KEYS } from "#/scene/stage-keys";
 
 const PRESSURE_DROP = mapLink("pressure-drop")!;

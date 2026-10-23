@@ -2,7 +2,7 @@ import { ActivityDisclosure } from "#/components/lang/activity";
 import { FactChip } from "@pe/kit/lang/chip";
 import { CoverageBar, coverageBarRecipe } from "#/components/lang/coverage-bar";
 import { EmptyState, emptyStateRecipe } from "@pe/kit/lang/empty";
-import { HelpTip } from "#/components/lang/help";
+import { TooltipHint } from "@pe/kit/lang/tooltip";
 import { OutcomeLine, outcomeLineRecipe, type OutcomeKind } from "#/components/lang/outcome";
 import { Provenance, Section, sectionRecipe } from "#/components/lang/section";
 import { Switcher, switcherRecipe } from "#/components/lang/switcher";
@@ -50,8 +50,8 @@ export function LangStatusSpecimens() {
           </EmptyState>
         )}
       />
-      <SpecimenFrame name="HelpTip" importPath="#/components/lang/help">
-        <HelpTip>What this region shows and how to read it.</HelpTip>
+      <SpecimenFrame name="TooltipHint" importPath="@pe/kit/lang/tooltip">
+        <TooltipHint>What this region shows and how to read it.</TooltipHint>
       </SpecimenFrame>
       <RecipeGrid
         name="OutcomeLine"
@@ -72,7 +72,7 @@ export function LangStatusSpecimens() {
         render={() => (
           <Section
             label="loaded families"
-            help={<HelpTip>What this section shows.</HelpTip>}
+            help={<TooltipHint>What this section shows.</TooltipHint>}
             aside={<FactChip title="Rows currently in scope.">214 rows</FactChip>}
           >
             <p>section content sits unenclosed</p>

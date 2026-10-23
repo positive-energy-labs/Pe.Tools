@@ -1,9 +1,10 @@
+import { TooltipHint } from "@pe/kit/lang/tooltip";
 import { token } from "@pe/kit/lib/token";
 import { useState, type ReactNode } from "react";
 import { ArtifactFrame } from "@pe/kit/lang/artifact-frame";
 import { fmtNum, StateCell, type StateCellProps } from "@pe/kit/lang/cell";
 import { FactChip } from "@pe/kit/lang/chip";
-import { HelpTip } from "#/components/lang/help";
+
 import { Switcher } from "#/components/lang/switcher";
 import { Button } from "@pe/kit/lang/button";
 import { Pane } from "#/components/lang/pane";
@@ -32,7 +33,7 @@ import {
 import { VariantGridLens } from "./grid-lens";
 import { VariantFomLens } from "./fom-lens";
 import { VariantBodLens } from "./bod-lens";
-import { TooltipHint } from "@pe/kit/lang/tooltip";
+
 
 /** The address's lens and its push; a module-level hook, so only its readers re-render (N6). */
 export type UseLens = () => readonly [Lens, (lens: Lens) => void];
@@ -256,13 +257,13 @@ export function VariantE({ useLens }: { useLens: UseLens }) {
                   ProjectA_Clone_Aug_11 <span style={muted}>›</span> Mechanical Equipment{" "}
                   <span style={muted}>›</span> Main House fan coils × PE_* parameters
                 </span>
-                <HelpTip>
+                <TooltipHint>
                   One substrate, three lenses. The grid is every fan coil × every attribute; the FOM
                   exhibit and the BOD list are saved projections of the same rows and the same
                   authored facts — switching lens re-projects, it never copies. The authored lane
                   below is the write path: edit a design fact and its whole linked column stages,
                   grouped by type, because the parameters live at type scope.
-                </HelpTip>
+                </TooltipHint>
                 <LensSwitcher useLens={useLens} />
                 <span className="ml-auto flex shrink-0 items-center gap-2">
                   <FactChip
