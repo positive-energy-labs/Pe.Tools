@@ -56,6 +56,7 @@ export const hostOperationDefinitionSchema = Schema.Struct({
   description: Schema.optional(Schema.String),
   searchTerms: Schema.optional(Schema.Array(Schema.String)),
   intent: Schema.optional(hostOperationIntentSchema),
+  usesTransactions: Schema.optional(Schema.Boolean),
   needs: hostOperationNeedsSchema,
   costTier: Schema.optional(hostOperationCostTierSchema),
   visibility: Schema.optional(hostOperationVisibilitySchema),

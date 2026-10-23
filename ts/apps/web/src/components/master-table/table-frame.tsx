@@ -12,7 +12,7 @@ import type { RowData } from "@tanstack/react-table";
 import { ArtifactFrame } from "@pe/kit/lang/artifact-frame";
 import { NarrowChip } from "@pe/kit/lang/chip";
 import { Button } from "@pe/kit/lang/button";
-import { useScopeKeys } from "@pe/kit/keys";
+import { actionScopeKeys, useScopeKeys } from "@pe/kit/keys";
 import type { Column, QueryCommand, QueryVocabulary, TableState } from "@pe/kit/table/model";
 import { QueryBox } from "@pe/kit/table/query";
 import { ColumnQuery, QueryWorkbench, queryCapabilities } from "@pe/kit/table/query-workbench";
@@ -77,18 +77,24 @@ export function TableFrame<Row extends RowData>({
   const [queryInput, setQueryInput] = useState<HTMLInputElement | null>(null);
   const region = queryInput?.closest<HTMLElement>('[data-slot="artifact-frame"]') ?? null;
   useScopeKeys(
-    [
-      { hotkey: "/", label: "Search this table", callback: () => queryInput?.focus() },
+    actionScopeKeys([
       {
-        hotkey: "F",
+        id: "table.search",
+        bindings: ["/"],
+        label: "Search this table",
+        invoke: () => queryInput?.focus(),
+      },
+      {
+        id: "table.filters",
+        bindings: ["Shift+F"],
         label: "Open this table's filters",
-        callback: () => {
+        invoke: () => {
           const trigger = region?.querySelector<HTMLButtonElement>("[data-table-filter-trigger]");
           trigger?.focus();
           trigger?.click();
         },
       },
-    ],
+    ]),
     region,
   );
   // A route vocabulary narrowed the rows already; the frame only orders them.
@@ -147,12 +153,14 @@ export function TableFrame<Row extends RowData>({
   );
   return (
     <ArtifactFrame
-      className="relative flex min-h-0 flex-1 flex-col"
+      className="relative"
       label={label}
       head={
         <>
           {controls}
-          {summary && <span className="face-mono t-small text-ink-2">{summary}</span>}
+          {summary && (
+            <span className="min-w-0 truncate face-mono t-small text-ink-2">{summary}</span>
+          )}
         </>
       }
       headTrail={

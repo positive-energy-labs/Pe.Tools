@@ -2,6 +2,7 @@ import { hostProcessIdentity, sourceHostServiceName } from "@pe/host-contracts/s
 import { EventEmitter } from "node:events";
 import type { IncomingMessage } from "node:http";
 import { expect, test, vi } from "vite-plus/test";
+import { hostOpSafety } from "@pe/host-contracts/generated";
 import { checkoutRoot } from "../checkout-paths.ts";
 import {
   checkoutIngress,
@@ -9,6 +10,7 @@ import {
   devHostProxy,
   isCheckoutRequest,
   readHostRequest,
+  isAppNavigation,
 } from "../dev-proxy.ts";
 
 test("borrowed host mode changes only web identity and permits Ducts reads, never writes", () => {
@@ -16,7 +18,7 @@ test("borrowed host mode changes only web identity and permits Ducts reads, neve
     vi.stubEnv("PE_WEB_READ_HOST_CHECKOUT", checkoutRoot);
     vi.stubEnv("PE_TOOLS_HOST_BASE_URL", "http://127.0.0.1:12345");
     expect(checkoutServiceName()).toBe(sourceHostServiceName(checkoutRoot));
-    expect(readHostRequest("GET", "/pe/resources?keys=[]")).toBe(true);
+    expect(readHostRequest("GET", '/pe/resources?keys=[{"kind":"inventory"}]')).toBe(true);
     expect(readHostRequest("POST", "/call", { key: "ducts.snapshot", request: {} })).toBe(true);
     expect(readHostRequest("POST", "/call", { key: "ducts.tables", request: {} })).toBe(true);
     for (const [method, path, body] of [
@@ -32,6 +34,55 @@ test("borrowed host mode changes only web identity and permits Ducts reads, neve
   } finally {
     vi.unstubAllEnvs();
   }
+});
+
+test("borrowed calls follow generated safety metadata, including rolled-back transaction refusals", () => {
+  for (const [key, safety] of Object.entries(hostOpSafety))
+    expect(readHostRequest("POST", "/call", { key }), key).toBe(
+      safety.intent === "Read" && !safety.usesTransactions,
+    );
+  for (const key of [
+    "family.look",
+    "family.loadTest",
+    "family.plan",
+    "families.plan",
+    "op.cancel",
+    "unknown",
+    "toString",
+  ])
+    expect(readHostRequest("POST", "/call", { key }), key).toBe(false);
+  for (const path of ["/captures", `/captures/${"a".repeat(64)}.png`])
+    expect(readHostRequest("GET", path)).toBe(true);
+  expect(readHostRequest("POST", "/captures")).toBe(false);
+  expect(readHostRequest("POST", "/schedules/readings", { key: "schedule.grid.snapshot" })).toBe(
+    true,
+  );
+  expect(readHostRequest("POST", "/schedules/readings", { key: "schedule.grid.push" })).toBe(false);
+  expect(readHostRequest("POST", "/family/readings", { key: "parameter-links.read" })).toBe(true);
+  expect(readHostRequest("POST", "/family/readings", { key: "family.apply" })).toBe(false);
+  expect(
+    readHostRequest("POST", "/family/readings", {
+      key: "parameter-links.read",
+      input: { evaluate: true },
+    }),
+  ).toBe(false);
+  expect(
+    readHostRequest(
+      "GET",
+      '/pe/resources?keys=[{"kind":"families-matrix","target":{"session":"x","openId":"y"},"filter":{"categoryNames":["Mechanical Equipment"],"familyNames":[],"placementScope":"AllLoaded"}}]',
+    ),
+  ).toBe(false);
+  expect(readHostRequest("GET", "/pe/resources?keys=bad")).toBe(false);
+});
+
+test("document requests reach the app before API routing, without turning API doors into documents", () => {
+  for (const url of ["/family", "/families", "/schedules", "/captures", "/ops"])
+    for (const headers of [{ accept: "text/html" }, { "sec-fetch-mode": "navigate" }])
+      expect(isAppNavigation({ method: "GET", url, headers }), url).toBe(true);
+  for (const url of ["/call", "/host/shutdown", "/pages/probe/", "/api/bridge"])
+    expect(isAppNavigation({ method: "GET", url, headers: { accept: "text/html" } }), url).toBe(
+      false,
+    );
 });
 
 test("borrowed frontend forwards reads with host origin and refuses mutations before dispatch", async () => {

@@ -292,12 +292,13 @@ export const paneSplitRecipe = tv({
 export function PaneSplit({ axis, start, end, resize, hide, grow, secondary }: PaneSplitProps) {
   const rootRef = useRef<HTMLDivElement>(null);
   const state = usePaneSize(resize ?? NO_RESIZE);
-  const horizontal = axis === "horizontal";
+  const [stacked, setStacked] = useState(false);
+  const horizontal = axis === "horizontal" && !stacked;
   const bothSides = start != null && end != null && hide == null;
   const target = resize?.target ?? "start";
   const tracks = !bothSides
     ? "minmax(0, 1fr)"
-    : resize == null
+    : resize == null || stacked
       ? "minmax(0, 1fr) var(--gutter) minmax(0, 1fr)"
       : target === "start"
         ? `${state.renderedSize}px var(--gutter) minmax(0, 1fr)`
@@ -306,12 +307,31 @@ export function PaneSplit({ axis, start, end, resize, hide, grow, secondary }: P
     ? { gridTemplateColumns: tracks }
     : { gridTemplateRows: tracks };
 
+  const seamSize = () =>
+    rootRef.current
+      ? parseFloat(getComputedStyle(rootRef.current).getPropertyValue("--gutter")) || 0
+      : 0;
   const measuredContainer = () => {
     const rect = rootRef.current?.getBoundingClientRect();
-    return rect ? (horizontal ? rect.width : rect.height) : undefined;
+    return rect ? (horizontal ? rect.width : rect.height) - seamSize() : undefined;
   };
 
-  usePaneFit(rootRef, (rect) => state.fit(horizontal ? rect.width : rect.height));
+  usePaneFit(rootRef, (rect) => {
+    const gutter = seamSize();
+    const constrained =
+      bothSides &&
+      axis === "horizontal" &&
+      resize != null &&
+      rect.width > 0 &&
+      rect.width < resize.minSize + (resize.minOtherSize ?? 0) + gutter;
+    // A supporting rail yields before the subject loses its minimum width. Splits without a
+    // collapse affordance stack instead, so neither mounted pane becomes a zero-width field.
+    const stack = constrained && resize?.collapse?.title == null;
+    setStacked(stack);
+    if (constrained && resize?.collapse?.title != null && !state.collapsed)
+      resize.collapse.onCollapsedChange?.(true);
+    if (!stack) state.fit((axis === "horizontal" ? rect.width : rect.height) - gutter);
+  });
 
   const railTitle = resize?.collapse?.title;
   const renderSide = (side: "start" | "end", child: ReactNode) => {
@@ -358,7 +378,7 @@ export function PaneSplit({ axis, start, end, resize, hide, grow, secondary }: P
         {/* A collapsed side under a rail stays mounted, so its pane keeps its state. */}
         <div
           data-pane-secondary={
-            bothSides && side === (secondary ?? (horizontal ? resize?.target : false))
+            bothSides && side === (secondary ?? (axis === "horizontal" ? resize?.target : false))
               ? ""
               : undefined
           }
@@ -379,19 +399,19 @@ export function PaneSplit({ axis, start, end, resize, hide, grow, secondary }: P
     <div
       ref={rootRef}
       data-slot="pane-split"
-      data-axis={axis}
+      data-axis={horizontal ? "horizontal" : "vertical"}
       data-surface="page"
       className={paneSplitRecipe({ axis, grow })}
       style={gridStyle}
     >
       {renderSide("start", start)}
-      {bothSides && resize && (
+      {bothSides && resize && !stacked && (
         <div
           className="size-full min-h-0 min-w-0"
           style={horizontal ? { gridColumn: 2, gridRow: 1 } : { gridColumn: 1, gridRow: 2 }}
         >
           <PaneResizeHandle
-            axis={axis}
+            axis={horizontal ? "horizontal" : "vertical"}
             value={state.renderedSize}
             startValue={state.collapsed ? resize.minSize : state.size}
             min={resize.minSize}

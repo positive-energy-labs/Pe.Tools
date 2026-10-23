@@ -1,3 +1,4 @@
+import { TooltipHint } from "@pe/kit/lang/tooltip";
 /**
  * THROWAWAY (protoui round 3, E2): the Rules section, "the table is the product" (pressure-drop
  * ledger, 2026-10-04): a person edits a fitting type's table, never a raw coefficient; the rule is
@@ -150,24 +151,27 @@ export const RulesTree = memo(function RulesTree({
   }, [priced, groupOf, groups, wide]);
   const overrideRow = (n: Extract<RuleNode, { kind: "override" }>, nested = false) => {
     return (
-      <div
+      <TooltipHint
         key={n.key}
-        data-key={nested ? undefined : n.key}
-        className={`${COLS} items-baseline ${nested ? "pt-0.5" : "py-1"}`}
-        title={`override: a stated drop on ${nameOf(n.id)} replaces the rule's lookup for this one fitting`}
-        onMouseEnter={() => light([n.id])}
+        content={`override: a stated drop on ${nameOf(n.id)} replaces the rule's lookup for this one fitting`}
       >
-        <p className="t-small min-w-0 break-words">
-          <span data-tone="caution">override</span> · {nameOf(n.id)}
-        </p>
-        <DropCell
-          segment="componentDrops"
-          id={n.id}
-          held={snapshot.nodes.find((x) => x.id === n.id)?.loss?.revitPressureDropInWg}
-          work={work}
-          label={`stated drop on ${n.id}`}
-        />
-      </div>
+        <div
+          data-key={nested ? undefined : n.key}
+          className={`${COLS} items-baseline ${nested ? "pt-0.5" : "py-1"}`}
+          onMouseEnter={() => light([n.id])}
+        >
+          <p className="t-small min-w-0 break-words">
+            <span data-tone="caution">override</span> · {nameOf(n.id)}
+          </p>
+          <DropCell
+            segment="componentDrops"
+            id={n.id}
+            held={snapshot.nodes.find((x) => x.id === n.id)?.loss?.revitPressureDropInWg}
+            work={work}
+            label={`stated drop on ${n.id}`}
+          />
+        </div>
+      </TooltipHint>
     );
   };
 
@@ -204,26 +208,27 @@ export const RulesTree = memo(function RulesTree({
             >
               <div className={COLS}>
                 <div className="min-w-0">
-                  <p className="wrap-anywhere" title={rule?.cond ? `${name} · ${rule.cond}` : name}>
-                    {name}
-                  </p>
+                  <TooltipHint content={rule?.cond ? `${name} · ${rule.cond}` : name}>
+                    <p className="wrap-anywhere">{name}</p>
+                  </TooltipHint>
                   <p className="t-small text-ink-2 wrap-anywhere">{rule?.cond || "any size"}</p>
                 </div>
                 <div className="flex min-w-0 flex-col gap-0.5">
                   <Chips ruleKey={n.ruleKey} priced={priced} work={work} />
                   <p className="t-small text-ink-2 flex flex-wrap items-center gap-x-2">
-                    <span title="instances this rule governs in scope">×{n.count}</span>
+                    <TooltipHint content="instances this rule governs in scope">
+                      <span>×{n.count}</span>
+                    </TooltipHint>
                     {missing ? (
-                      <span data-tone="caution" title="instances with no value under this table">
-                        {missing} unpriced
-                      </span>
+                      <TooltipHint content="instances with no value under this table">
+                        <span data-tone="caution">{missing} unpriced</span>
+                      </TooltipHint>
                     ) : null}
-                    <span
-                      data-e-fanout={n.ruleKey}
-                      title="What staging another table for this rule would re-price, in every system"
-                    >
-                      {fanOutWords(fanOuts.get(n.ruleKey) ?? { grilles: 0, systems: 0 })}
-                    </span>
+                    <TooltipHint content="What staging another table for this rule would re-price, in every system">
+                      <span data-e-fanout={n.ruleKey}>
+                        {fanOutWords(fanOuts.get(n.ruleKey) ?? { grilles: 0, systems: 0 })}
+                      </span>
+                    </TooltipHint>
                   </p>
                 </div>
               </div>

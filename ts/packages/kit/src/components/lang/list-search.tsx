@@ -60,7 +60,7 @@ export function ListSearchBox<T, Sort extends string>({
   if (echo.source !== keywords) setEcho({ source: keywords, value: keywords });
   const [field, setField] = useState<HTMLInputElement | null>(null);
   const [open, setOpen] = useState(false);
-  // The field menu without a typed word (Filter, ArrowDown, a click into an empty box).
+  // The field menu without a typed word (Filter or a click into an empty box).
   const [browse, setBrowse] = useState(false);
   const [editor, setEditor] = useState<Editor | null>(null);
   const [cursor, setCursor] = useState<string | null>(null);
@@ -173,7 +173,7 @@ export function ListSearchBox<T, Sort extends string>({
           };
         });
     } else if (seenToken && !browse && (open || field === document.activeElement)) {
-      // Also while focused and closed, so ↓ after Enter reopens on the same completions.
+      // A closed box still offers its inline ghost; ↓ enters the rows instead of reopening it.
       needle = seenToken[0].toLowerCase();
       const base = { ...list.state.search, keywords: seen.slice(0, seenToken.index).trimEnd() };
       const values = list.facets
@@ -249,10 +249,10 @@ export function ListSearchBox<T, Sort extends string>({
       (cursored && cursored !== "search" ? enabled.find((each) => each.key === cursored) : null) ??
       ghostPick ??
       enabled.find((each) => each.key !== "search");
-    return { picks, enabled, current, active, word, ghostPick, tabPick };
+    return { picks, current, active, word, ghostPick, tabPick };
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [list, seen, editor, browse, open, cursor, field]);
-  const { picks, enabled, current, active, word, ghostPick, tabPick } = suggest;
+  const { picks, current, active, word, ghostPick, tabPick } = suggest;
   const typedNow = editor ? editor.query : typed;
   const ghost =
     ghostPick && (editor || seen === typed) && typedNow.endsWith(word)
@@ -450,13 +450,16 @@ export function ListSearchBox<T, Sort extends string>({
               const caretAtEnd = event.currentTarget.selectionStart === typedNow.length;
               if (event.key === "ArrowRight" && ghostPick && caretAtEnd) ghostPick.take();
               else if (event.key === "ArrowDown" || event.key === "ArrowUp") {
-                setOpen(true);
-                if (picks.length) {
-                  const next = enabled.find((each) => each.key !== "search");
-                  setCursor(next?.key ?? null);
-                } else setBrowse(true);
-              } else if (event.key === "Enter") flush();
-              else if (event.key === "Escape") {
+                flush();
+                close();
+                const rows = list.rows.filter((row) => !list.refusalOf?.(row.item));
+                const row = event.key === "ArrowDown" ? rows[0] : rows.at(-1);
+                if (row) list.collection.setCursor(row.key, true);
+                focusQuiet(list.target);
+              } else if (event.key === "Enter") {
+                flush();
+                close();
+              } else if (event.key === "Escape") {
                 if (typed) {
                   setEcho({ source: keywords, value: "" });
                   list.setSearch({ ...list.state.search, keywords: "" });

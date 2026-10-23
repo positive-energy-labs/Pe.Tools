@@ -8,7 +8,7 @@
       "#/*": ["./src/*"],
       "@/*": ["./src/*"]
     },
-    "lib": ["ES2022", "ES2024.Promise", "DOM", "DOM.Iterable"],
+    "lib": ["ES2022", "ES2024.Promise", "DOM", "DOM.Iterable", "DOM.AsyncIterable"],
     "types": ["vite-plus/client", "node"],
 
     /* Bundler mode */

@@ -8,7 +8,82 @@ import { OrbitMinimap, type OrbitViewport } from "./minimap";
 
 afterEach(() => {
   cleanup();
+  vi.restoreAllMocks();
   vi.unstubAllGlobals();
+});
+
+test.each([false, true])(
+  "floaters avoid earlier siblings even at a free home (legend=%s)",
+  (legend) => {
+    vi.spyOn(HTMLElement.prototype, "getBoundingClientRect").mockImplementation(
+      function (this: HTMLElement) {
+        if (this.dataset.field !== undefined) return new DOMRect(0, 0, 600, 600);
+        if (this.dataset.slot === "pane-legend") return new DOMRect(260, 0, 80, 30);
+        if (this.dataset.slot === "floater") {
+          const corner = this.dataset.place!;
+          const dy = Number(this.style.translate.split(" ")[1]?.replace("px", "")) || 0;
+          return new DOMRect(
+            corner[1] === "r" ? 500 : 0,
+            (corner[0] === "b" ? 500 : 0) + dy,
+            100,
+            100,
+          );
+        }
+        return new DOMRect();
+      },
+    );
+    const spec = (key: string): FloaterSpec => ({
+      key,
+      label: key,
+      place: "tr",
+      size: { width: 100, height: 100 },
+      open: true,
+      onOpenChange: vi.fn(),
+      render: () => key,
+    });
+    const view = render(
+      <div data-field="">
+        {legend && <div data-slot="pane-legend" />}
+        <Floater spec={spec("first")} />
+        <Floater spec={spec("second")} />
+      </div>,
+    );
+    const first = view.getByRole("region", { name: "first" }).getBoundingClientRect();
+    const second = view.getByRole("region", { name: "second" }).getBoundingClientRect();
+    expect(first.x).toBe(500);
+    expect(
+      second.bottom <= first.top || second.top >= first.bottom || second.right <= first.left,
+    ).toBe(true);
+  },
+);
+
+test("a floater avoids the docked readout without a legend", () => {
+  vi.spyOn(HTMLElement.prototype, "getBoundingClientRect").mockImplementation(
+    function (this: HTMLElement) {
+      if (this.dataset.field !== undefined) return new DOMRect(0, 0, 600, 600);
+      if (this.dataset.slot === "pane-dock") return new DOMRect(450, 0, 150, 100);
+      if (this.dataset.slot === "floater") return new DOMRect(500, 0, 100, 100);
+      return new DOMRect();
+    },
+  );
+  const view = render(
+    <div data-field="">
+      <div data-slot="pane-dock" />
+      <Floater
+        spec={{
+          key: "dock",
+          label: "dock",
+          place: "tr",
+          size: { width: 100, height: 100 },
+          open: true,
+          onOpenChange: vi.fn(),
+          render: () => "map",
+        }}
+      />
+    </div>,
+  );
+  const floater = view.getByRole("region", { name: "dock" });
+  expect(floater.dataset.place === "tr" && !floater.style.translate).toBe(false);
 });
 
 const viewport: OrbitViewport = { kind: "orbit", yaw: 30, elev: 30, zoom: 1, pivot: [0, 0, 0] };

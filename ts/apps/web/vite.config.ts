@@ -1,7 +1,12 @@
 import path, { dirname, resolve } from "node:path";
 import { checkoutRoot, familyFixturesDir } from "./checkout-paths.ts";
 import { devIcons } from "./dev-icons.ts";
-import { checkoutIngress, checkoutServiceName, devHostProxy } from "./dev-proxy.ts";
+import {
+  checkoutIngress,
+  checkoutServiceName,
+  devHostProxy,
+  readHostCheckout,
+} from "./dev-proxy.ts";
 import { receiptBuildDefines } from "../host/src/build-stamp.ts";
 import { devFrontendPort, hostProcessIdentity } from "@pe/host-contracts/service-identity";
 import react from "@vitejs/plugin-react";
@@ -39,7 +44,9 @@ const config = defineConfig(({ mode, command }) => {
       __PE_WEB_RECEIPT_BUILD__: receiptBuildDefines(command === "build" ? "release" : "dev")
         .__PE_WEB_RECEIPT_BUILD__,
       "import.meta.env.PE_RUNTIME_SERVICE": JSON.stringify(
-        command === "build" ? hostProcessIdentity.serviceName : checkoutServiceName(),
+        command === "build" && !readHostCheckout()
+          ? hostProcessIdentity.serviceName
+          : checkoutServiceName(),
       ),
     },
     plugins: [

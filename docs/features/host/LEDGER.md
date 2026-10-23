@@ -210,6 +210,8 @@ design-system ledger, not restated here.
 - 2026-08-16 — (/settings) Hand-rolled busy/error state per command: replaced by `useVerb`, which serializes open/re-read/validate/save.
 
 ## Owed
+
+- 2026-10-23, borrowed-host proof boundary: `PE_WEB_READ_HOST_CHECKOUT` now admits generated non-transaction reads and production preview, but refuses scope publication, route-view publication and Work writes. `/parameter-links` remains in Work hydration, schedule picker publication needs a deep link to its successful immutable read, and `/family` has no live family editor when inventory holds only Chadds. Keep these full-route claims open; do not relax the read-only boundary or use fixtures to close them. Evidence: `.artifacts/runs/browser-20261023-shell-kit/REPORT.md`; commands and permitted scope: `docs/BUILD.md`.
 - 2026-10-14: the Windows `guard-relaunch.test.ts` fixture left `C:\Users\kaitp\AppData\Local\Temp\pe-relaunch-7X7Ug6` after `rmSync` returned EPERM. The isolated test passed; automatic approval review rejected explicit folder cleanup as blocked by policy. Remove this test-owned residue when permitted.
 - Tray UX note round 3: mixed-DPI second-monitor acceptance and Revit-focused acceptance remain unproven. The isolated WebView2 run proves simultaneous windows and unchanged foreground HWND; it uses controlled notice and device-environment fixtures, not installed-host behavior.
 - Tray UX merge gate: repo guards inherited two failures at c25f8737: harness/install.ts product-environment paths and scaffold count 94 above 93. Fix in the owning campaign; note wave does not raise the ceiling or change installer storage policy.

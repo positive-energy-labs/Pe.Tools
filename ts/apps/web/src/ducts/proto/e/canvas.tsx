@@ -696,9 +696,9 @@ function Canvas({
         </button>
         <ChevronRight aria-hidden className="size-3.5 shrink-0 text-ink-2" />
         {pickedName == null ? (
-          <span className="shrink-0 px-1" title={systemName}>
-            {systemName}
-          </span>
+          <TooltipHint content={systemName}>
+            <span className="shrink-0 px-1">{systemName}</span>
+          </TooltipHint>
         ) : (
           <TooltipHint content={`${systemName} · clear the selection`}>
             <button
@@ -1026,9 +1026,11 @@ function Canvas({
                   </>
                 )}
               </span>
-              <span className="truncate text-ink-2" title={identity.system.sub} data-e-identity="">
-                {identity.system.sub}
-              </span>
+              <TooltipHint content={identity.system.sub}>
+                <span className="truncate text-ink-2" data-e-identity="">
+                  {identity.system.sub}
+                </span>
+              </TooltipHint>
             </>
           )}
         </PictureReadout>

@@ -1,4 +1,4 @@
-﻿using Pe.Shared.Product;
+using Pe.Shared.Product;
 using Pe.Revit.DocumentData.Parameters;
 using Pe.Revit.Failures;
 using Autodesk.Revit.DB;
@@ -34,7 +34,7 @@ internal static class FamilyFoundryBridgeOps {
     private static Task<FamilyCaptureData> CaptureFamily(FamilyCaptureRequest _, FamilyDocument document, CancellationToken cancellationToken) =>
         PaletteThreading.RunRevitAsync(() => CaptureActiveFamily(document.Value), cancellationToken);
 
-    [Op("family.plan", Does = "Diff an inline family spec (`{ select, patch, run }`) against the active family document and return the plan with a deterministic hash.", Title = "Plan Family", Finds = ["family", "spec", "plan", "plan-hash", "reconcile"], Cost = OpCost.Expensive)]
+    [Op("family.plan", Does = "Diff an inline family spec (`{ select, patch, run }`) against the active family document and return the plan with a deterministic hash.", Title = "Plan Family", Finds = ["family", "spec", "plan", "plan-hash", "reconcile"], Cost = OpCost.Expensive, UsesTransactions = true)]
     private static Task<FamilyFoundryPlanData> PlanFamily(FamilyPlanRequest request, FamilyDocument document, CancellationToken cancellationToken) =>
         PaletteThreading.RunRevitAsync(() => PlanFamilies(request.SpecJson, document.Value, null, request.ExecutionOptions), cancellationToken);
 
@@ -47,7 +47,7 @@ internal static class FamilyFoundryBridgeOps {
     private static Task<FamiliesCaptureData> CaptureLoaded(FamiliesCaptureRequest request, ProjectDocument document, CancellationToken cancellationToken) =>
         PaletteThreading.RunRevitAsync(() => CaptureFamilies(request.FamilyIds, document.Value), cancellationToken);
 
-    [Op("families.plan", Does = "Diff an inline family spec against exactly the passed `familyNames` (exact loaded family names; the spec's `select` only when none are passed) and return the plan per family, each with the id its name resolved to and a deterministic hash. A name that resolves to no single editable family is a refused entry with a null id.", Title = "Plan Loaded Families", Finds = ["families", "spec", "plan", "plan-hash", "reconcile", "bulk"], Cost = OpCost.Expensive, Actor = OpActor.Human)]
+    [Op("families.plan", Does = "Diff an inline family spec against exactly the passed `familyNames` (exact loaded family names; the spec's `select` only when none are passed) and return the plan per family, each with the id its name resolved to and a deterministic hash. A name that resolves to no single editable family is a refused entry with a null id.", Title = "Plan Loaded Families", Finds = ["families", "spec", "plan", "plan-hash", "reconcile", "bulk"], Cost = OpCost.Expensive, Actor = OpActor.Human, UsesTransactions = true)]
     private static Task<FamilyFoundryPlanData> PlanLoaded(FamiliesPlanRequest request, ProjectDocument document, CancellationToken cancellationToken) =>
         PaletteThreading.RunRevitAsync(() => PlanFamilies(request.SpecJson, document.Value, request.FamilyNames, request.ExecutionOptions, cancellationToken), cancellationToken);
 
