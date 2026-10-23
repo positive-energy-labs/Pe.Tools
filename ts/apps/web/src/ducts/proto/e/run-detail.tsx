@@ -1,3 +1,5 @@
+import { useNativeObservation } from "#/revit/observation";
+import { RevitTarget, revitTarget } from "@pe/kit/lang/row";
 import { TooltipHint } from "@pe/kit/lang/tooltip";
 /**
  * The per-run panel, the way RHVAC lays one duct out: its straight length, the design loss per
@@ -102,10 +104,12 @@ export function RunDetail({
   nameOf: (id: number) => string;
   light: (ids: readonly number[] | null) => void;
 }) {
+  const observation = useNativeObservation();
   const over = run.rate != null && run.rate > designRate;
   return (
     <section
       className="border-line t-small max-h-[45%] shrink-0 overflow-y-auto border-t px-2 py-1.5"
+      {...revitTarget([run.ductId])}
       data-e-run-detail={run.ductId}
       aria-label="run detail"
       onMouseEnter={() => light([run.ductId])}
@@ -145,14 +149,16 @@ export function RunDetail({
         <ul className="grid grid-cols-[1fr_auto_auto] gap-x-3" data-e-parts="">
           {run.parts.map((part, i) => (
             <li key={`${part.id}:${i}`} className="contents" onMouseEnter={() => light([part.id])}>
-              <TooltipHint content={part.desc}>
-                <span className="truncate">
-                  {nameOf(part.id)}
-                  {part.stated ? <span className="text-ink-mute"> · stated</span> : null}
-                </span>
-              </TooltipHint>
-              <span className="face-mono text-right">{fmtFt(part.eqFt)}</span>
-              <span className="face-mono text-right">{fmt(part.dp, 4)}</span>
+              <RevitTarget ids={[part.id]} scope={observation.scope}>
+                <TooltipHint content={part.desc}>
+                  <span className="truncate">
+                    {nameOf(part.id)}
+                    {part.stated ? <span className="text-ink-mute"> · stated</span> : null}
+                  </span>
+                </TooltipHint>
+                <span className="face-mono text-right">{fmtFt(part.eqFt)}</span>
+                <span className="face-mono text-right">{fmt(part.dp, 4)}</span>
+              </RevitTarget>
             </li>
           ))}
         </ul>

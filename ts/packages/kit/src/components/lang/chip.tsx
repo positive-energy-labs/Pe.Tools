@@ -6,6 +6,7 @@
 import { Fragment, type ReactNode } from "react";
 import { X } from "lucide-react";
 
+import { useRevitTarget } from "./row";
 import { Button } from "./button";
 import { HoverCard, HoverCardTrigger, HoverCardContent } from "./hover-card";
 
@@ -43,6 +44,7 @@ export const chipRecipe = tv({
 type FactTone = "meta" | "caution" | "done" | "alarm" | "pea";
 
 interface FactChipProps {
+  revit?: readonly number[];
   children: React.ReactNode;
   /** `meta` (the default) is the neutral machine-measured fact — most chips are this. */
   tone?: FactTone;
@@ -53,11 +55,13 @@ interface FactChipProps {
 }
 
 /** A state fact, machine-measured, so mono. Not a control — it has no press. */
-export function FactChip({ children, tone = "meta", dashed, title }: FactChipProps) {
+export function FactChip({ children, tone = "meta", dashed, title, revit }: FactChipProps) {
+  const target = useRevitTarget(revit);
   const { base, label } = chipRecipe({ tone, state: dashed ? "seam" : "solid" });
   return (
     <TooltipHint content={title}>
       <span
+        {...target}
         className={base()}
         data-tone={tone === "meta" ? undefined : tone}
         data-surface="artifact"

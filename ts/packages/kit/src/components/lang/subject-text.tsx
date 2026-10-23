@@ -14,6 +14,7 @@ import {
   useSyncExternalStore,
   type ReactNode,
 } from "react";
+import { useRevitTarget } from "./row";
 import { TooltipHint } from "./tooltip";
 import "./lang.css";
 
@@ -149,14 +150,17 @@ export const SubjectTextContext = createContext<SubjectTextScope | null>(null);
 export function SubjectText({
   text,
   ids = [],
+  revit,
   document,
   owner: blockOwner,
 }: {
   text?: string | readonly SubjectPart[];
   ids?: readonly number[];
+  revit?: readonly number[];
   document?: SubjectDocument;
   owner?: string;
 }) {
+  const target = useRevitTarget(revit ?? ids);
   const context = useContext(SubjectTextContext);
   const localOwner = useId();
   const owner = blockOwner ?? localOwner;
@@ -164,13 +168,13 @@ export function SubjectText({
   useEffect(() => () => clear?.(owner), [clear, owner]);
   if (!context)
     return (
-      <>
+      <span {...target}>
         {typeof text === "string"
           ? text
           : document
             ? document.parts.map((p) => (typeof p === "string" ? p : p.name)).join("")
             : text?.map((p) => (typeof p === "string" ? p : `element ${p.id}`)).join("")}
-      </>
+      </span>
     );
   const doc =
     document ??
@@ -178,6 +182,7 @@ export function SubjectText({
   const light = (id: number | null) => context.light?.(doc.references, id, owner);
   return (
     <span
+      {...target}
       data-subject-text=""
       onMouseEnter={() => light(null)}
       onMouseMove={(e) => e.stopPropagation()}
@@ -213,6 +218,7 @@ function SubjectRef({
   scope: SubjectTextScope;
   onHover: (on: boolean) => void;
 }) {
+  const target = useRevitTarget([part.id]);
   const lit = useReach(scope.reach, (state) => state.lighting.focus === part.id);
   const port = part.connector != null ? ` port ${part.connector}` : "";
   const go = scope.go;
@@ -231,6 +237,7 @@ function SubjectRef({
         className="subject-ref"
         data-claim-element={part.id}
         data-lit={lit ? "" : undefined}
+        {...target}
         {...scope.refProps?.(part.id)}
         aria-label={`${go ? "go to " : ""}${part.name}${port}, reference ${part.number}`}
         aria-disabled={go ? undefined : true}

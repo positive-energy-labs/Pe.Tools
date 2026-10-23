@@ -1,3 +1,4 @@
+import { RevitTarget } from "@pe/kit/lang/row";
 import {
   memo,
   useCallback,
@@ -30,7 +31,7 @@ const OVERSCAN = 3;
 import { ParameterMetadata, type ParameterMetadataRecord } from "./parameter-metadata";
 import type { OverlayCell, PatchOverlay } from "./patch-overlay";
 import { TooltipHint } from "@pe/kit/lang/tooltip";
-import { revitFamily, revitScope, type RevitObservationScope } from "#/revit/element-target";
+import { revitFamily, type RevitObservationScope } from "#/revit/element-target";
 
 const HOW = {
   type: "an explicit type cell",
@@ -227,229 +228,230 @@ export const TypeGrid = memo(function TypeGrid({
 
   return (
     <CellNavigationProvider move={move}>
-      <div
-        ref={scroller}
-        className="min-h-0 flex-1 overflow-auto"
-        role="grid"
-        aria-label="parameters × family types"
-        aria-rowcount={rows.length + 1}
-        aria-colcount={types.length + 1}
-        {...revitScope(nativeScope)}
-      >
+      <RevitTarget scope={nativeScope ?? null}>
         <div
-          style={{
-            position: "relative",
-            width: totalWidth,
-            height: Math.max(totalHeight, viewport.height),
-          }}
+          ref={scroller}
+          className="min-h-0 flex-1 overflow-auto"
+          role="grid"
+          aria-label="parameters × family types"
+          aria-rowcount={rows.length + 1}
+          aria-colcount={types.length + 1}
         >
           <div
-            role="row"
-            className="z-sticky"
-            data-surface="recess"
             style={{
-              position: "sticky",
-              top: 0,
+              position: "relative",
               width: totalWidth,
-              height: GRID.header,
+              height: Math.max(totalHeight, viewport.height),
             }}
           >
             <div
-              role="columnheader"
-              className="z-popup t-small t-upper border-b px-2"
+              role="row"
+              className="z-sticky"
               data-surface="recess"
               style={{
                 position: "sticky",
-                left: 0,
                 top: 0,
-                display: "inline-flex",
-                alignItems: "end",
-                width: identityWidth,
+                width: totalWidth,
                 height: GRID.header,
               }}
             >
-              parameter
-            </div>
-            {groups
-              .filter((group) => group.start < colEnd && group.start + group.count > colStart)
-              .map((group) => (
-                <TooltipHint
-                  content={`${group.name} · right-click or BX for current placements across all types`}
-                  key={group.name}
-                >
+              <div
+                role="columnheader"
+                className="z-popup t-small t-upper border-b px-2"
+                data-surface="recess"
+                style={{
+                  position: "sticky",
+                  left: 0,
+                  top: 0,
+                  display: "inline-flex",
+                  alignItems: "end",
+                  width: identityWidth,
+                  height: GRID.header,
+                }}
+              >
+                parameter
+              </div>
+              {groups
+                .filter((group) => group.start < colEnd && group.start + group.count > colStart)
+                .map((group) => (
+                  <TooltipHint
+                    content={`${group.name} · right-click or BX for current placements across all types`}
+                    key={group.name}
+                  >
+                    <div
+                      role="presentation"
+                      tabIndex={0}
+                      {...revitFamily(group)}
+                      className="t-small t-upper truncate border-b border-l px-1"
+                      data-surface="recess"
+                      style={{
+                        position: "absolute",
+                        left: Math.max(
+                          identityWidth + group.start * GRID.type,
+                          viewport.left + identityWidth,
+                        ),
+                        top: 0,
+                        width: Math.max(
+                          0,
+                          identityWidth +
+                            Math.min(group.start + group.count, colEnd) * GRID.type -
+                            Math.max(
+                              identityWidth + group.start * GRID.type,
+                              viewport.left + identityWidth,
+                            ),
+                        ),
+                        height: 26,
+                      }}
+                    >
+                      {group.name}
+                    </div>
+                  </TooltipHint>
+                ))}
+              {visibleTypes.map((type, offset) => (
+                <TooltipHint content={`${type.familyName} · ${type.typeName}`} key={type.key}>
                   <div
-                    role="presentation"
-                    tabIndex={0}
-                    {...revitFamily(group)}
-                    className="t-small t-upper truncate border-b border-l px-1"
+                    role="columnheader"
+                    aria-colindex={colStart + offset + 2}
+                    aria-label={`${type.familyName} · ${type.typeName}`}
+                    className="t-small truncate border-b border-l px-1"
                     data-surface="recess"
                     style={{
                       position: "absolute",
-                      left: Math.max(
-                        identityWidth + group.start * GRID.type,
-                        viewport.left + identityWidth,
-                      ),
-                      top: 0,
-                      width: Math.max(
-                        0,
-                        identityWidth +
-                          Math.min(group.start + group.count, colEnd) * GRID.type -
-                          Math.max(
-                            identityWidth + group.start * GRID.type,
-                            viewport.left + identityWidth,
-                          ),
-                      ),
+                      left: identityWidth + (colStart + offset) * GRID.type,
+                      top: 26,
+                      width: GRID.type,
                       height: 26,
                     }}
                   >
-                    {group.name}
+                    {type.typeName}
                   </div>
                 </TooltipHint>
               ))}
-            {visibleTypes.map((type, offset) => (
-              <TooltipHint content={`${type.familyName} · ${type.typeName}`} key={type.key}>
+            </div>
+            {visibleRows.map((row, rowOffset) => {
+              const rowIndex = rowStart + rowOffset;
+              return (
                 <div
-                  role="columnheader"
-                  aria-colindex={colStart + offset + 2}
-                  aria-label={`${type.familyName} · ${type.typeName}`}
-                  className="t-small truncate border-b border-l px-1"
-                  data-surface="recess"
+                  key={row.key}
+                  role="row"
+                  aria-rowindex={rowIndex + 2}
+                  className="t-small"
                   style={{
                     position: "absolute",
-                    left: identityWidth + (colStart + offset) * GRID.type,
-                    top: 26,
-                    width: GRID.type,
-                    height: 26,
+                    left: 0,
+                    top: GRID.header + rowIndex * GRID.row,
+                    width: totalWidth,
+                    height: GRID.row,
                   }}
                 >
-                  {type.typeName}
+                  <div
+                    role="rowheader"
+                    className="z-raised flex items-center border-b"
+                    data-surface="recess"
+                    style={{ position: "sticky", left: 0, width: identityWidth, height: GRID.row }}
+                  >
+                    <div className="min-w-0 flex-1">
+                      <ReadCell value={row.name} reason={row.key} />
+                    </div>
+                    {row.kind === "new" && (
+                      <TooltipHint content="The native patch creates this parameter; the reading has none by this name.">
+                        <span className="t-small shrink-0 px-1" data-tone="pea">
+                          new
+                        </span>
+                      </TooltipHint>
+                    )}
+                    <div className="shrink-0 pr-1">
+                      <ParameterMetadata
+                        row={row}
+                        records={edit.metadata?.get(row.key) ?? []}
+                        patch={edit.overlay?.parameters[row.name]}
+                      />
+                    </div>
+                  </div>
+                  {visibleTypes.map((type, offset) => {
+                    const colIndex = colStart + offset;
+                    const scope = type.scopes[row.key];
+                    const present = scope && scope !== "Unresolved";
+                    const projected =
+                      edit.overlay?.cells[
+                        familyCellKey({
+                          familyName: type.familyName,
+                          typeName: type.typeName,
+                          parameter: row.name,
+                        })
+                      ];
+                    return (
+                      <div
+                        key={type.key}
+                        role="gridcell"
+                        aria-colindex={colIndex + 2}
+                        aria-label={`${row.name} · ${type.familyName} · ${type.typeName}`}
+                        data-grid-row={rowIndex}
+                        data-grid-col={colIndex}
+                        tabIndex={-1}
+                        className="border-b border-l"
+                        data-landed={
+                          landed?.row === rowIndex && landed.col === colIndex ? "" : undefined
+                        }
+                        style={{
+                          position: "absolute",
+                          left: identityWidth + colIndex * GRID.type,
+                          top: 0,
+                          width: GRID.type,
+                          height: GRID.row,
+                          // The landing mark: full ink inside the cell, so neighbours never move (L3).
+                          ...(landed?.row === rowIndex && landed.col === colIndex
+                            ? { outline: "2px solid var(--pe-ink)", outlineOffset: -2 }
+                            : {}),
+                        }}
+                      >
+                        {projected && !edit.readOnly ? (
+                          <ProjectedCell
+                            cell={projected}
+                            current={present ? (type.values[row.key] ?? "") : ""}
+                          />
+                        ) : !present ? (
+                          <ReadCell
+                            value="∅"
+                            reason="parameter absent from this type"
+                            className="text-ink-mute"
+                          />
+                        ) : edit.readOnly ? (
+                          <ReadCell
+                            value={type.values[row.key]?.trim() ? type.values[row.key] : "blank"}
+                            reason="saved type value"
+                          />
+                        ) : (
+                          <ParamCell
+                            row={type}
+                            col={edit.params.get(row.key)!}
+                            live={edit.live}
+                            propose={edit.propose}
+                            parse={edit.parse}
+                          />
+                        )}
+                      </div>
+                    );
+                  })}
                 </div>
-              </TooltipHint>
-            ))}
-          </div>
-          {visibleRows.map((row, rowOffset) => {
-            const rowIndex = rowStart + rowOffset;
-            return (
+              );
+            })}
+            {rows.length === 0 && (
               <div
-                key={row.key}
-                role="row"
-                aria-rowindex={rowIndex + 2}
-                className="t-small"
+                className="p-6"
                 style={{
-                  position: "absolute",
+                  position: "sticky",
                   left: 0,
-                  top: GRID.header + rowIndex * GRID.row,
-                  width: totalWidth,
-                  height: GRID.row,
+                  top: GRID.header,
+                  width: Math.min(viewport.width, 600),
                 }}
               >
-                <div
-                  role="rowheader"
-                  className="z-raised flex items-center border-b"
-                  data-surface="recess"
-                  style={{ position: "sticky", left: 0, width: identityWidth, height: GRID.row }}
-                >
-                  <div className="min-w-0 flex-1">
-                    <ReadCell value={row.name} reason={row.key} />
-                  </div>
-                  {row.kind === "new" && (
-                    <TooltipHint content="The native patch creates this parameter; the reading has none by this name.">
-                      <span className="t-small shrink-0 px-1" data-tone="pea">
-                        new
-                      </span>
-                    </TooltipHint>
-                  )}
-                  <div className="shrink-0 pr-1">
-                    <ParameterMetadata
-                      row={row}
-                      records={edit.metadata?.get(row.key) ?? []}
-                      patch={edit.overlay?.parameters[row.name]}
-                    />
-                  </div>
-                </div>
-                {visibleTypes.map((type, offset) => {
-                  const colIndex = colStart + offset;
-                  const scope = type.scopes[row.key];
-                  const present = scope && scope !== "Unresolved";
-                  const projected =
-                    edit.overlay?.cells[
-                      familyCellKey({
-                        familyName: type.familyName,
-                        typeName: type.typeName,
-                        parameter: row.name,
-                      })
-                    ];
-                  return (
-                    <div
-                      key={type.key}
-                      role="gridcell"
-                      aria-colindex={colIndex + 2}
-                      aria-label={`${row.name} · ${type.familyName} · ${type.typeName}`}
-                      data-grid-row={rowIndex}
-                      data-grid-col={colIndex}
-                      tabIndex={-1}
-                      className="border-b border-l"
-                      data-landed={
-                        landed?.row === rowIndex && landed.col === colIndex ? "" : undefined
-                      }
-                      style={{
-                        position: "absolute",
-                        left: identityWidth + colIndex * GRID.type,
-                        top: 0,
-                        width: GRID.type,
-                        height: GRID.row,
-                        // The landing mark: full ink inside the cell, so neighbours never move (L3).
-                        ...(landed?.row === rowIndex && landed.col === colIndex
-                          ? { outline: "2px solid var(--pe-ink)", outlineOffset: -2 }
-                          : {}),
-                      }}
-                    >
-                      {projected && !edit.readOnly ? (
-                        <ProjectedCell
-                          cell={projected}
-                          current={present ? (type.values[row.key] ?? "") : ""}
-                        />
-                      ) : !present ? (
-                        <ReadCell
-                          value="∅"
-                          reason="parameter absent from this type"
-                          className="text-ink-mute"
-                        />
-                      ) : edit.readOnly ? (
-                        <ReadCell
-                          value={type.values[row.key]?.trim() ? type.values[row.key] : "blank"}
-                          reason="saved type value"
-                        />
-                      ) : (
-                        <ParamCell
-                          row={type}
-                          col={edit.params.get(row.key)!}
-                          live={edit.live}
-                          propose={edit.propose}
-                          parse={edit.parse}
-                        />
-                      )}
-                    </div>
-                  );
-                })}
+                {empty}
               </div>
-            );
-          })}
-          {rows.length === 0 && (
-            <div
-              className="p-6"
-              style={{
-                position: "sticky",
-                left: 0,
-                top: GRID.header,
-                width: Math.min(viewport.width, 600),
-              }}
-            >
-              {empty}
-            </div>
-          )}
+            )}
+          </div>
         </div>
-      </div>
+      </RevitTarget>
     </CellNavigationProvider>
   );
 });

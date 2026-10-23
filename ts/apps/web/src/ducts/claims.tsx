@@ -12,8 +12,8 @@ import {
 } from "@pe/agent-contracts";
 
 import { TooltipHint } from "@pe/kit/lang/tooltip";
-import { revitTarget } from "@pe/kit/lang/row";
-import { showInRevit, revitScope } from "#/revit/element-menu";
+import { RevitTarget } from "@pe/kit/lang/row";
+import { showInRevit } from "#/revit/element-menu";
 import type { ShowElementsResult } from "#/revit/element-target";
 import { observedElements, useNativeObservation } from "#/revit/observation";
 import { tokenRef } from "@pe/kit/lib/token";
@@ -147,33 +147,33 @@ export function ClaimElement({
     <TooltipHint
       content={`${part.name} · element ${part.id}: ${native ? "click to select it in Revit" : "click to select it in the drawing"}`}
     >
-      <button
-        type="button"
-        data-claim-element={part.id}
-        {...revitScope(observation.scope)}
-        {...revitTarget(target.ids, target.refs)}
-        aria-label={`${part.name} ${part.id}`}
-        className="subject-ref"
-        onMouseEnter={() => onHover(part.id)}
-        onMouseLeave={() => onHover(null)}
-        onFocus={() => onHover(part.id)}
-        onBlur={() => onHover(null)}
-        onClick={(e) => {
-          e.stopPropagation();
-          if (!native) return onPick(part.id);
-          void showInRevit(target, true).then(onShown);
-        }}
-      >
-        {part.dot ? (
-          <span
-            aria-hidden
-            className="inline-block size-1.5 rounded-full align-middle"
-            style={{ backgroundColor: tokenRef("ink-2") }}
-          />
-        ) : (
-          part.name
-        )}
-      </button>
+      <RevitTarget ids={target.ids} refs={target.refs} scope={observation.scope}>
+        <button
+          type="button"
+          data-claim-element={part.id}
+          aria-label={`${part.name} ${part.id}`}
+          className="subject-ref"
+          onMouseEnter={() => onHover(part.id)}
+          onMouseLeave={() => onHover(null)}
+          onFocus={() => onHover(part.id)}
+          onBlur={() => onHover(null)}
+          onClick={(e) => {
+            e.stopPropagation();
+            if (!native) return onPick(part.id);
+            void showInRevit(target, true).then(onShown);
+          }}
+        >
+          {part.dot ? (
+            <span
+              aria-hidden
+              className="inline-block size-1.5 rounded-full align-middle"
+              style={{ backgroundColor: tokenRef("ink-2") }}
+            />
+          ) : (
+            part.name
+          )}
+        </button>
+      </RevitTarget>
     </TooltipHint>
   );
 }
