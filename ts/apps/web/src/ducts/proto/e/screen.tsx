@@ -55,7 +55,7 @@ const NO_GROUPS: readonly string[] = [];
 type Side = "left" | "right";
 
 /** Below this the screen is narrow: the inbox is a rail until asked for. Below TIGHT the sidebar is too. */
-const NARROW_PX = 1000;
+const NARROW_PX = 1100;
 const TIGHT_PX = 700;
 
 /** The element's width, measured; 0 until it is (jsdom never measures). */
