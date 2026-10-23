@@ -133,6 +133,7 @@ function ChatSurface({ target, docked = false }: ChatShellProps) {
       void navigate({
         to: ".",
         replace: true,
+        resetScroll: false,
         search: (previous: Record<string, unknown>) => ({
           ...previous,
           ...sidebarAddress.write({ threadQuery, threadSort }),

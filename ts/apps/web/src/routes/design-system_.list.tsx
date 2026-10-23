@@ -105,13 +105,20 @@ const SYSTEM_TREE: SpecNode[] = [
 ];
 
 function TreePanel({ say }: { say: (text: string) => void }) {
-  const list = useList({ items: SYSTEM_TREE, keyOf: (n) => n.key,
-    search: (n) => ({ text: [n.name] }), tree: { childrenOf: (n) => n.children ?? [] },
+  const list = useList({
+    items: SYSTEM_TREE,
+    keyOf: (n) => n.key,
+    search: (n) => ({ text: [n.name] }),
+    tree: { childrenOf: (n) => n.children ?? [] },
     initialState: { open: ["sa19", "sa19/r1", "sa19/r1/b"] },
     onPick: (n) => say(`pick “${n.name}”`),
   });
   return (
-    <ListView list={list} bar={false} maxHeight="16rem" estimate={20}
+    <ListView
+      list={list}
+      bar={false}
+      maxHeight="16rem"
+      estimate={20}
       aria-label="system call tree"
       empty={{ message: "No systems in this document", exit: "Read a model" }}
       row={(n) => ({ label: n.name, meta: n.loss })}
@@ -143,8 +150,16 @@ function ListRoute() {
       </header>
 
       <main className="flex flex-col gap-8 pt-6 pb-16">
-        <CoreListPanel state={readCoreListState(search.list)}
-          onState={(state) => { void navigate({ search: { list: JSON.stringify(state) }, replace: true }); }} />
+        <CoreListPanel
+          state={readCoreListState(search.list)}
+          onState={(state) => {
+            void navigate({
+              search: { list: JSON.stringify(state) },
+              replace: true,
+              resetScroll: false,
+            });
+          }}
+        />
         <div className="grid gap-x-8 gap-y-6 md:grid-cols-2 xl:grid-cols-4">
           <Panel title="sidebar" kind="List · actions">
             <SidebarPanel say={say} />

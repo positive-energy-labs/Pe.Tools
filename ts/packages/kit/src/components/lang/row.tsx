@@ -134,7 +134,7 @@ export type RowProps = RowState & {
 /** The states as attributes: the one place a row's state becomes DOM. */
 const rowStateProps = (state: RowState) => ({
   "data-stage": state.stage,
-  "data-staged-by": state.stage && state.stage !== "clean" ? state.stagedBy ?? "pea" : undefined,
+  "data-staged-by": state.stage && state.stage !== "clean" ? (state.stagedBy ?? "pea") : undefined,
   "data-cursor": state.cursor ? "" : undefined,
   "data-selected": state.selected ? "" : undefined,
   "data-active": state.active ? "" : undefined,
@@ -212,7 +212,14 @@ export function Row(props: RowProps) {
     );
   }
   const row = <ListRow {...props} shared={shared} />;
-  return props.band != null ? <div data-list-row-band="">{row}{props.band}</div> : row;
+  return props.band != null ? (
+    <div data-list-row-band="">
+      {row}
+      {props.band}
+    </div>
+  ) : (
+    row
+  );
 }
 
 /** The div row. A title or fact the row cuts short is its own hint: measured on pointer entry, the
