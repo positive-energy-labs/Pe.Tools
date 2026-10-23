@@ -28,6 +28,9 @@ const allow = (entries: Record<string, string>): Allow[] =>
 // Filenames use the wave-4 final homes: land.ts, revit-target.tsx and go-to.tsx.
 // prettier-ignore
 const RULES: Rule[] = [
+  { id: "composer-outcome-overlay", doctrine: "L3", pattern: /<OutcomeLine\b/g,
+    roots: [W + "components/lang/conversation.tsx"], allow: [],
+    cannotSee: "Aliased components or layout rects; mounted tests cover portal placement, browser W4 measures stability." },
   { id: "scene-completeness-forwarded", doctrine: "N6",
     pattern: /return \{(?![^}]*\bomittedElements:)(?=[^}]*meshes: artifact\.meshes)[^}]*\}/g,
     roots: [W + "scene/use-scene.ts"], allow: [],
