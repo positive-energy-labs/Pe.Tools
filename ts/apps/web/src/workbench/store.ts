@@ -70,7 +70,6 @@ export function createChatPageStore(deps: {
   };
   let planGeneration = 0;
   const core = createRouteOwner("chat", deps.registry);
-  const paletteOpen = core.owned("widget/palette-open", Atom.make(false));
   const expandedPane = core.owned("widget/expanded-pane", Atom.make<"side" | null>("side"));
   /** The head's commit verb, waiting for its hosted route to run it once (page state, not URL). */
   const planIntent = core.owned(
@@ -99,7 +98,6 @@ export function createChatPageStore(deps: {
     registry: deps.registry,
     search: deps.search,
     atoms: {
-      paletteOpen,
       sideOpen,
       planIntent,
       planRefusal,
@@ -129,7 +127,6 @@ export function createChatPageStore(deps: {
           /* The replaced URL still names the confirmed owner. */
         }
       },
-      setPaletteOpen: (value: Setter<boolean>) => set("set-palette", paletteOpen, value),
       setSideOpen: (value: Setter<boolean>) => setPaneOpen("side", value),
       setMode: (mode: string) => void deps.search.patch({ mode }),
       connectTabs: (commands: NonNullable<typeof tabs>) => {
