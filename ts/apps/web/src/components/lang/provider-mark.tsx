@@ -1,3 +1,4 @@
+import { SvgTip } from "@pe/kit/lang/tooltip";
 /**
  * Who runs a thread, as a monochrome glyph in currentColor sized to the text (1em); it never mints
  * a hue. Unknown harnesses wear the pea fallback and the label still says which.
@@ -44,7 +45,7 @@ export function ProviderMark({
       className="inline-block shrink-0 align-[-0.125em]"
       {...props}
     >
-      <title>{NAME[key]}</title>
+      <SvgTip content={key} />
       {key === "claude" ? (
         <path d={ANTHROPIC} />
       ) : key === "codex" ? (

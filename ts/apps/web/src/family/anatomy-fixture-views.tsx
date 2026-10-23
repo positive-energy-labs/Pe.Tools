@@ -1,3 +1,4 @@
+import { SvgTip } from "@pe/kit/lang/tooltip";
 import { token } from "@pe/kit/lib/token";
 import { EmptyState } from "@pe/kit/lang/empty";
 import type { Draft, Focus, FamilyPageModel } from "#/family/model";
@@ -78,7 +79,7 @@ export function AnatomyViews({
             role="img"
             aria-label={`family ${view.key} view`}
           >
-            <title>{`${view.label} — true scale, resolved as the ${typeName} type. The other types are the thin outlines behind it.`}</title>
+            <SvgTip content={view.label} />
 
             {/* datum: elevations get a ground line, the plan gets the origin crosshair */}
             {view.v === "z" ? (
@@ -145,14 +146,7 @@ export function AnatomyViews({
             {parts.map((part) => {
               if (part.kind !== "conn") {
                 const active = focusedParts.has(part.slug);
-                const prose = world.source.profile.solids[part.slug] ?? "";
-                const title = (
-                  <title>
-                    {part.isVoid
-                      ? `${part.slug} — ${prose}. Core Height is a formula, so this is drawn from what feeds it rather than from a literal. Dashed because it is a SUBTRACTION: declared volume with no material behind it.`
-                      : `${part.slug} — ${prose}. Drawn true to the ${typeName} type's numbers; hovering it lights the parameters it consumes in the table.`}
-                  </title>
-                );
+                const title = <SvgTip content={part.isVoid ? "void" : "solid"} />;
                 /* THE ONE LEGAL DASH AMONG PARTS: a void must never read as material. */
                 const shared = {
                   ...hover(part.slug),
@@ -185,7 +179,6 @@ export function AnatomyViews({
                 );
               }
 
-              const prose = world.source.profile.connectors[part.slug] ?? "";
               const stroke = connectorStroke(part.slug);
               const u = part.pos[view.u];
               const v = part.pos[view.v];
@@ -193,7 +186,7 @@ export function AnatomyViews({
 
               // Face-on: the connector's normal runs along the view's depth, so its face projects
               // as its true shape. A drain with no authored diameter draws a fixed glyph — the
-              // tooltip says the size is a glyph, not a claim.
+              // missing diameter stays a fixed glyph.
               if (part.normal.axis === view.depth) {
                 const r = part.dia != null ? (part.dia / 2) * SCALE : 3;
                 return (
@@ -208,9 +201,7 @@ export function AnatomyViews({
                     stroke={stroke}
                     strokeWidth={active ? 1.4 : 0.8}
                   >
-                    <title>
-                      {`${part.slug} — ${prose}. Face-on in this view${part.dia != null ? `, ${part.dia}in across` : " — no diameter dim authored, so the size here is a glyph, not a claim"}.`}
-                    </title>
+                    <SvgTip content={"connector"} />
                   </circle>
                 );
               }
@@ -227,9 +218,7 @@ export function AnatomyViews({
               const y1 = Y(v + dv * stubLen);
               return (
                 <g key={part.slug} {...hover(part.slug)}>
-                  <title>
-                    {`${part.slug} — ${prose}. The tick is the connection face; the line is the stub${part.stub != null ? `, ${part.stub}in deep` : ""}.`}
-                  </title>
+                  <SvgTip content={"connector"} />
                   {/* a fat transparent hit line, so a 1px stub is still hoverable */}
                   <line x1={x0} y1={y0} x2={x1} y2={y1} stroke="transparent" strokeWidth={9} />
                   <line

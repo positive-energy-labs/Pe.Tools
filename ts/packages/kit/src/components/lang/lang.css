@@ -74,6 +74,12 @@
   min-width: min(6ch, 100%);
 }
 :root {
+  --subject-mark-size: 14px;
+  --subject-mark-edge: var(--pe-ink-2);
+  --subject-mark-ground: var(--pe-page);
+  --subject-mark-ink: var(--pe-ink);
+  --subject-mark-lit-ground: var(--pe-ink);
+  --subject-mark-lit-ink: var(--pe-page);
   --head-h: calc(var(--item-h) * 5);
 }
 /* Tones: call sites declare state; the language owns its rendering. */
@@ -334,17 +340,14 @@ tr.dl-row[data-active] {
   animation: pe-land var(--motion-land) ease-out 1;
 }
 @media (prefers-reduced-motion: reduce) {
-  [data-inbox-group] .dl-row[data-selected],
-  [data-landed] {
+  [data-inbox-group] .dl-row[data-selected] {
     animation: none;
   }
   [data-landed] {
+    animation: none;
     outline-color: var(--pe-ink);
     background-color: var(--pe-select);
   }
-}
-.dl-row:not(tr)[data-active]::before {
-  content: none;
 }
 .dl-row[data-lines="2"] {
   min-height: calc(var(--item-h) * 2);
@@ -886,6 +889,8 @@ svg [data-damage] {
   padding-inline: var(--item-mark-pad-x);
 }
 .dl-search input {
+  /* A long placeholder ellipsizes without pushing the frame wider. */
+  text-overflow: ellipsis;
   height: calc(var(--control-h) - 4px);
   min-height: 0;
 }
@@ -897,10 +902,6 @@ svg [data-damage] {
 }
 .dl-search [data-search-field] {
   padding-block: 1px;
-}
-/* A long placeholder ellipsizes inside the field instead of pushing the frame wider. */
-.dl-search input {
-  text-overflow: ellipsis;
 }
 /* THE LOCK SHADE: once a table scrolls sideways, its last locked column casts a shade over the
    rows passing under it. At rest it casts nothing, because nothing is under it. `::before`, because a
@@ -1025,14 +1026,6 @@ svg [data-damage] {
    ring; lit (its own token hovered or focused, or `data-lit`) it fills with ink. Hovering
    the prose block that holds them (or `data-lit` on it) draws every rule at full weight; the picture lights the
    same subjects. Geometry is fixed: no state changes a size, so nothing reflows. */
-:root {
-  --subject-mark-size: 14px;
-  --subject-mark-edge: var(--pe-ink-2);
-  --subject-mark-ground: var(--pe-page);
-  --subject-mark-ink: var(--pe-ink);
-  --subject-mark-lit-ground: var(--pe-ink);
-  --subject-mark-lit-ink: var(--pe-page);
-}
 .subject-ref {
   position: relative;
   border-radius: var(--control-radius);
@@ -1119,4 +1112,15 @@ svg [data-damage] {
 /* Observation boundaries do not alter their children's layout. */
 [data-revit-target] {
   display: contents;
+}
+
+/* The first row stays nearest the anchor when its popup opens above it. */
+[data-facing][data-side="top"] [data-facing-rows] {
+  display: flex;
+  flex-direction: column-reverse;
+}
+
+/* Hints retain a hit surface even inside a pointer-transparent SVG decoration layer. */
+[data-svg-tip] {
+  pointer-events: visiblePainted;
 }

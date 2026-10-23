@@ -1,4 +1,5 @@
 import { nameOrFallback } from "@pe/kit/lang/subject-text";
+import { SvgTip } from "@pe/kit/lang/tooltip";
 import { useId, useState } from "react";
 import type { PartitionReviewData } from "@pe/agent-contracts";
 import { List } from "@pe/kit/lang/list-popup";
@@ -209,7 +210,7 @@ function ReviewShapes({
                   : undefined
               }
             >
-              <title>{label}</title>
+              <SvgTip content={residue ? "residue" : "partition"} />
             </path>
             {hatch && <path d={d} fill={`url(#${id})`} pointerEvents="none" />}
             {shape.label && (

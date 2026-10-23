@@ -1,12 +1,11 @@
+import { SvgTip } from "@pe/kit/lang/tooltip";
 import type { ConnGeo } from "#/family/family-model";
-import type { FamilyPageModel } from "#/family/model";
 import { NORMAL_RE, hoverProps, type Axis, type ViewDef } from "#/family/anatomy-model";
 
 export function ConnectorMark({
   conn,
   view,
   focusedParts,
-  world,
   X,
   Y,
   scale,
@@ -16,7 +15,6 @@ export function ConnectorMark({
   conn: ConnGeo;
   view: ViewDef;
   focusedParts: Set<string>;
-  world: FamilyPageModel;
   X: (value: number) => number;
   Y: (value: number) => number;
   scale: number;
@@ -34,7 +32,6 @@ export function ConnectorMark({
   if (u == null || v == null) return null;
   const active = focusedParts.has(conn.slug);
   const stroke = connectorStroke(conn.slug);
-  const prose = world.source.profile.connectors[conn.slug] ?? `${conn.domain} · ${conn.shape}`;
 
   // Face-on: the normal runs along the view's depth, so the face projects true.
   if (axis === view.depth) {
@@ -51,7 +48,7 @@ export function ConnectorMark({
           stroke={stroke}
           strokeWidth={active ? 1.4 : 0.8}
         >
-          <title>{`${conn.slug} — ${prose}. Face-on in this view, ${conn.w}in across, drawn where its frame resolves.`}</title>
+          <SvgTip content={"round connector"} />
         </circle>
       );
     if (conn.w != null && conn.h != null)
@@ -68,7 +65,7 @@ export function ConnectorMark({
           stroke={stroke}
           strokeWidth={active ? 1.4 : 0.8}
         >
-          <title>{`${conn.slug} — ${prose}. Face-on in this view, ${conn.w}×${conn.h}in, drawn where its frame resolves.`}</title>
+          <SvgTip content={"rectangular connector"} />
         </rect>
       );
     return (
@@ -83,7 +80,7 @@ export function ConnectorMark({
         stroke={stroke}
         strokeWidth={active ? 1.4 : 0.8}
       >
-        <title>{`${conn.slug} — ${prose}. Face-on — its size dims do not resolve at this type, so the size here is a glyph, not a claim.`}</title>
+        <SvgTip content={"connector"} />
       </circle>
     );
   }
@@ -100,9 +97,7 @@ export function ConnectorMark({
   const y1 = Y(v + dv * stubLen);
   return (
     <g key={conn.slug} {...hover(conn.slug)}>
-      <title>
-        {`${conn.slug} — ${prose}. The tick is the connection face; the line marks its direction.`}
-      </title>
+      <SvgTip content={"connector"} />
       {/* a fat transparent hit line, so a 1px line is still hoverable */}
       <line x1={x0} y1={y0} x2={x1} y2={y1} stroke="transparent" strokeWidth={9} />
       <line x1={x0} y1={y0} x2={x1} y2={y1} stroke={stroke} strokeWidth={active ? 1.6 : 1} />

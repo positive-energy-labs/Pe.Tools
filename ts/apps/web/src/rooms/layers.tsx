@@ -1,3 +1,4 @@
+import { SvgTip } from "@pe/kit/lang/tooltip";
 /**
  * The solver's layer 1 on the rooms plan (`rooms.trace`): rails, openings, the network and the
  * faces, each a layer the URL names (`?layers=rails,openings`, `ROOMS_LAYERS` in agent-contracts). Drawn in the plan's world px, over
@@ -128,7 +129,7 @@ export function TraceLayers({
                   strokeLinecap: "round",
                 }}
               >
-                <title>{`${opening.kind} · ${ft(opening.widthFt)} · ${opening.doorPieces} door pieces · header ${pct(opening.headerFraction)} · wall ${pct(opening.wallFraction)}`}</title>
+                <SvgTip content={opening.kind} />
               </line>
             )),
           )}

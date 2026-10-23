@@ -1,3 +1,4 @@
+import { SvgTip } from "@pe/kit/lang/tooltip";
 /**
  * The rooms plan: Revit's picture of the view (as exported, never redrawn) under one path per
  * zone, room and held region, inked by the region's state, on a pan-zoom canvas. Every room and
@@ -503,9 +504,9 @@ export function RoomsPlan({
             role="img"
             aria-label="rooms plan"
           >
-            <title>Room regions on the plan view</title>
+            <SvgTip content={"room regions"} />
             {plan ? <PlanImageLayer plan={plan} frame={world.frame} /> : null}
-            {world.shapes.map(({ region, label, state, d }) => {
+            {world.shapes.map(({ region, state, d }) => {
               const ink = token(REGION_INK[state].ink!);
               const on = selected.has(region.guid);
               const hot = hovered === region.guid;
@@ -536,7 +537,7 @@ export function RoomsPlan({
                     if (dragDist.current < CLICK_PX) onSelect(region.guid, event.shiftKey);
                   }}
                 >
-                  <title>{`${label} · ${region.sqft.toFixed(0)} sf · ${state}${unassigned(region) ? " · unassigned" : ""}`}</title>
+                  <SvgTip content={state} />
                 </path>
               );
             })}
