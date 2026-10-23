@@ -1,5 +1,5 @@
 // @vitest-environment jsdom
-import { cleanup, fireEvent, render, screen } from "@testing-library/react";
+import { cleanup, fireEvent, render, screen, waitFor } from "@testing-library/react";
 import { afterEach, expect, test, vi } from "vite-plus/test";
 
 import { KeyScope, readKeyMeta, readRegistrations } from "@pe/kit/keys";
@@ -7,6 +7,8 @@ import { KeyScope, readKeyMeta, readRegistrations } from "@pe/kit/keys";
 import { Pane, PictureContext } from "@pe/kit/lang/pane";
 import { PictureReadout } from "@pe/kit/lang/readout";
 import { Popover, PopoverTrigger, SubjectPopoverContent } from "@pe/kit/lang/popover";
+import { Switcher } from "@pe/kit/lang/switcher";
+import { readTeaching } from "@pe/kit/lang/teach";
 
 afterEach(() => {
   cleanup();
@@ -54,6 +56,79 @@ const modes = (onChange = vi.fn()) => ({
     { key: "plan", label: "plan", chord: "1" as const, says: "Look straight down." },
     { key: "iso", label: "iso", chord: "2" as const },
   ],
+});
+
+test("folded controls teach their choices through the live trigger and withdraw with their owner", async () => {
+  vi.spyOn(HTMLElement.prototype, "scrollWidth", "get").mockReturnValue(500);
+  vi.spyOn(HTMLElement.prototype, "clientWidth", "get").mockReturnValue(400);
+  vi.spyOn(HTMLElement.prototype, "getBoundingClientRect").mockImplementation(
+    function (this: HTMLElement) {
+      return this.closest('[data-slot="popover-content"], [hidden]')
+        ? new DOMRect()
+        : new DOMRect(0, 0, 400, 600);
+    },
+  );
+  const page = (value: string) => (
+    <PictureContext
+      value={{
+        selected: false,
+        box: () => null,
+        projection: (
+          <Switcher
+            ariaLabel="projection"
+            value={value}
+            onChange={vi.fn()}
+            options={[
+              { value: "parallel", label: "parallel", title: "Measured" },
+              { value: "perspective", label: "perspective", title: "Depth" },
+            ]}
+          />
+        ),
+      }}
+    >
+      <Pane
+        picture
+        title="Systems"
+        legend={null}
+        layers={{ value: ["grid"], options: [{ key: "grid", label: "grid" }], onToggle: vi.fn() }}
+      >
+        body
+      </Pane>
+    </PictureContext>
+  );
+  const view = render(page("parallel"));
+  expect(view.container.querySelector('[data-slot="pane-strip"]')?.getAttribute("data-fold")).toBe(
+    "4",
+  );
+  expect(screen.queryByRole("button", { name: "parallel" })).toBeNull();
+  const projection = () =>
+    readTeaching().find((f) => f.kind === "modes" && f.label === "projection");
+  await waitFor(() =>
+    expect(projection()).toMatchObject({
+      options: [
+        { key: "parallel", active: true },
+        { key: "perspective", active: false },
+      ],
+    }),
+  );
+  expect(readTeaching().find((f) => f.kind === "views")).toMatchObject({
+    options: [{ key: "grid", active: true }],
+  });
+  view.rerender(page("perspective"));
+  await waitFor(() =>
+    expect(projection()).toMatchObject({
+      options: [
+        { key: "parallel", active: false },
+        { key: "perspective", active: true },
+      ],
+    }),
+  );
+  view.container.hidden = true;
+  await waitFor(() => expect(readTeaching()).toEqual([]));
+  view.container.hidden = false;
+  await waitFor(() => expect(projection()).toBeTruthy());
+  view.unmount();
+  expect(readTeaching()).toEqual([]);
 });
 
 /** The live registrations this pane's scope node made, as Help reads them. */

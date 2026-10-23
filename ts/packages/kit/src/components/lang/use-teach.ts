@@ -13,6 +13,8 @@ import { readTeaching, registerTeaching, subscribeTeaching, type TeachDescriptor
 
 export const TeachRegion = createContext<string | undefined>(undefined);
 export const TeachLive = createContext(true);
+/** Folded controls teach through their visible trigger, even while the popup is closed. */
+export const TeachOwner = createContext<RefObject<HTMLElement | null> | undefined>(undefined);
 /** Read the same words the primitive draws, including composed labels; never call a component. */
 export const teachText = (node: ReactNode): string =>
   Children.toArray(node)
@@ -34,6 +36,7 @@ export function useTeach(
 ) {
   const id = useId();
   const parent = useContext(TeachRegion);
+  host = useContext(TeachOwner) ?? host;
   const live = useContext(TeachLive) && enabled;
   const region = descriptor?.kind === "region" ? id : parent;
   const value = JSON.stringify(descriptor);
