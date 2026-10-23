@@ -110,6 +110,8 @@ function collectionKey(definition: ScopeKey, region: HTMLElement | null): ScopeK
   return {
     ...definition,
     callback: (event, context) => {
+      // IME confirmation belongs to the composition, never to a pick or a cursor move.
+      if (event.isComposing || event.keyCode === 229) return;
       const control =
         event.target instanceof Element
           ? event.target.closest(
@@ -117,7 +119,9 @@ function collectionKey(definition: ScopeKey, region: HTMLElement | null): ScopeK
             )
           : null;
       const row = control?.closest(".dl-row");
-      if (control?.closest("[data-list-search]") && region?.contains(control)) return;
+      // A list body ignores its search field; the field's own suggestion list (region === control) does not.
+      if (control !== region && control?.closest("[data-list-search]") && region?.contains(control))
+        return;
       if (row && region?.contains(row)) return;
       if (definition.options?.preventDefault !== false) event.preventDefault();
       if (definition.options?.stopPropagation !== false) event.stopPropagation();

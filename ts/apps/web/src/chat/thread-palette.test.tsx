@@ -137,7 +137,7 @@ test("plain click activates while modifiers and Space select through the shared 
 test("explicit pills narrow threads and Clear search exposes every shelf", async () => {
   mount();
   fireEvent.click(screen.getByRole("button", { name: "Filter threads" }));
-  fireEvent.click(await screen.findByRole("option", { name: "Filter by Provider" }));
+  fireEvent.click(await screen.findByRole("option", { name: /^Filter by Provider/ }));
   const choices = screen.getByRole("listbox", { name: "Filter values" });
   expect(choices.querySelectorAll("[role=option]").length).toBeGreaterThan(0);
   fireEvent.keyDown(screen.getByRole("combobox", { name: "Choose Provider" }), { key: "Escape" });

@@ -88,8 +88,13 @@ test("millwork in Model AND Count > 1, through the query box, the header, and it
   );
   const { container, rerender } = render(workspace(read));
   const box = screen.getByRole<HTMLInputElement>("combobox", { name: "table query" });
+  // A suggestion's label is split around the typed characters (kit `Matched`), so match its text.
   const pick = (label: string) =>
-    fireEvent.click(within(screen.getByRole("listbox")).getByText(label));
+    fireEvent.click(
+      within(screen.getByRole("listbox"))
+        .getAllByRole("option")
+        .find((option) => option.querySelector(".dl-row-label")?.textContent?.startsWith(label))!,
+    );
   const shown = () => container.querySelectorAll("tbody tr").length;
 
   const chip = (name: string) => screen.queryByRole("button", { name });

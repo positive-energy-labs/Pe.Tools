@@ -10,7 +10,7 @@ import { useCallback, useEffect, useRef, useState } from "react";
 import { ListTree } from "lucide-react";
 import { Button } from "@pe/kit/lang/button";
 import { emptyListState, useList, type ListState } from "@pe/kit/lang/collection";
-import { ListView } from "@pe/kit/lang/list-view";
+import { ListView, type ListRowParts } from "@pe/kit/lang/list-view";
 import { tokenRef } from "@pe/kit/lib/token";
 import { observedElements, useNativeObservation } from "#/revit/observation";
 
@@ -227,6 +227,96 @@ export function SystemTree({
       list.reveal(key);
     }
   });
+  // Stable across a selection: the kit then redraws only the rows whose selected or cursor state moved.
+  const row = useCallback(
+    (n: TreeNode): ListRowParts => {
+      const target = observedElements(observation, idsOf(n));
+      const label =
+        n.kind === "run" ? runName(n) : n.kind === "element" ? ctx.grilleName(n) : n.name;
+      const critical = n.kind === "run" && (n.key === ctx.criticalKey || n.critical != null);
+      const over = n.rate != null && n.rate > ctx.designRate;
+      const stand = n.critical === "longest" && n.key !== ctx.criticalKey;
+      const ruleKey = n.kind === "element" && n.id != null ? ctx.ruleOf.get(n.id) : undefined;
+      return {
+        wrap: true,
+        lead: critical ? (
+          <TooltipHint
+            content={stand ? "longest developed run: stand-in until priced" : "critical run"}
+          >
+            <span>{stand ? "◇" : "◆"}</span>
+          </TooltipHint>
+        ) : over ? (
+          <TooltipHint
+            content={`friction ${n.rate!.toFixed(3)} in-wg per 100 ft is over the design rate ${ctx.designRate} (a diagnostic, not a blocker)`}
+          >
+            <span className="text-ink-2" data-e-over={n.id ?? ""}>
+              ▴
+            </span>
+          </TooltipHint>
+        ) : undefined,
+        // Kinds read apart by weight and ink: run (a path to one grille) strong, stretch plain, part quiet.
+        label: (
+          <span
+            className={
+              n.kind === "system" || n.kind === "run"
+                ? "font-medium"
+                : n.kind === "element"
+                  ? "text-ink-2"
+                  : undefined
+            }
+            data-e-kind={n.kind}
+          >
+            {label}
+          </span>
+        ),
+        // Always a title: the kit Row wraps itself in a Tooltip only once it measures a cut
+        // title, and that late wrap re-renders the row and drops the chevron's first press.
+        title: label,
+        meta: ctx.reading?.quantity ? (
+          <QuantityBar encoding={ctx.reading} ids={idsOf(n)} />
+        ) : (
+          <MetaBar
+            value={n.total}
+            ft={n.ft}
+            selfFt={n.kind === "leg" || n.kind === "element" ? n.selfFt : undefined}
+            scale={ctx.scale}
+            provisional={n.provisional}
+            self={n.kind === "leg" || n.kind === "element" ? n.self : ""}
+            unpriced={n.unpriced}
+            split={n.split}
+            light={ctx.light}
+            rowIds={idsOf(n)}
+          />
+        ),
+        actions: ruleKey ? (
+          <Button
+            icon={ListTree}
+            label="jump to its type's rule"
+            data-e-jump={ruleKey}
+            onClick={(e) => {
+              e.stopPropagation();
+              ctx.jumpToRule(ruleKey);
+            }}
+          />
+        ) : undefined,
+        onMouseEnter: () => ctx.light(idsOf(n)),
+        revitIds: target.ids,
+        revitRefs: target.refs,
+      };
+    },
+    [
+      observation,
+      runName,
+      ctx.grilleName,
+      ctx.criticalKey,
+      ctx.designRate,
+      ctx.ruleOf,
+      ctx.reading,
+      ctx.scale,
+      ctx.light,
+      ctx.jumpToRule,
+    ],
+  );
   return (
     <div className="min-w-0" onMouseLeave={() => ctx.light(null)}>
       <ListView
@@ -256,81 +346,7 @@ export function SystemTree({
             <MetaHeader />
           ),
         }}
-        row={(n) => {
-          const target = observedElements(observation, idsOf(n));
-          const label =
-            n.kind === "run" ? runName(n) : n.kind === "element" ? ctx.grilleName(n) : n.name;
-          const critical = n.kind === "run" && (n.key === ctx.criticalKey || n.critical != null);
-          const over = n.rate != null && n.rate > ctx.designRate;
-          const stand = n.critical === "longest" && n.key !== ctx.criticalKey;
-          const ruleKey = n.kind === "element" && n.id != null ? ctx.ruleOf.get(n.id) : undefined;
-          return {
-            wrap: true,
-            lead: critical ? (
-              <TooltipHint
-                content={stand ? "longest developed run: stand-in until priced" : "critical run"}
-              >
-                <span>{stand ? "◇" : "◆"}</span>
-              </TooltipHint>
-            ) : over ? (
-              <TooltipHint
-                content={`friction ${n.rate!.toFixed(3)} in-wg per 100 ft is over the design rate ${ctx.designRate} (a diagnostic, not a blocker)`}
-              >
-                <span className="text-ink-2" data-e-over={n.id ?? ""}>
-                  ▴
-                </span>
-              </TooltipHint>
-            ) : undefined,
-            // Kinds read apart by weight and ink: run (a path to one grille) strong, stretch plain, part quiet.
-            label: (
-              <span
-                className={
-                  n.kind === "system" || n.kind === "run"
-                    ? "font-medium"
-                    : n.kind === "element"
-                      ? "text-ink-2"
-                      : undefined
-                }
-                data-e-kind={n.kind}
-              >
-                {label}
-              </span>
-            ),
-            // Always a title: the kit Row wraps itself in a Tooltip only once it measures a cut
-            // title, and that late wrap re-renders the row and drops the chevron's first press.
-            title: label,
-            meta: ctx.reading?.quantity ? (
-              <QuantityBar encoding={ctx.reading} ids={idsOf(n)} />
-            ) : (
-              <MetaBar
-                value={n.total}
-                ft={n.ft}
-                selfFt={n.kind === "leg" || n.kind === "element" ? n.selfFt : undefined}
-                scale={ctx.scale}
-                provisional={n.provisional}
-                self={n.kind === "leg" || n.kind === "element" ? n.self : ""}
-                unpriced={n.unpriced}
-                split={n.split}
-                light={ctx.light}
-                rowIds={idsOf(n)}
-              />
-            ),
-            actions: ruleKey ? (
-              <Button
-                icon={ListTree}
-                label="jump to its type's rule"
-                data-e-jump={ruleKey}
-                onClick={(e) => {
-                  e.stopPropagation();
-                  ctx.jumpToRule(ruleKey);
-                }}
-              />
-            ) : undefined,
-            onMouseEnter: () => ctx.light(idsOf(n)),
-            revitIds: target.ids,
-            revitRefs: target.refs,
-          };
-        }}
+        row={row}
       />
     </div>
   );

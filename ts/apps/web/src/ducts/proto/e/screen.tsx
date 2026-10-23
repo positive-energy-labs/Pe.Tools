@@ -595,6 +595,17 @@ function EScreenBody({ props }: { props: ProtoProps }) {
     [inbox, heal, diagnosticKind],
   );
 
+  // Stable, so the tree's memoized rows redraw only where a selection or cursor moved.
+  const grilleName = useCallback(
+    (n: TreeNode) => {
+      const id = n.kind === "run" ? n.terminal : n.id;
+      return (id != null ? labels.get(id) : undefined) ?? n.name;
+    },
+    [labels],
+  );
+  const jumpToRuleNow = useRef<(key: string) => void>(() => {});
+  const jumpToRule = useCallback((key: string) => jumpToRuleNow.current(key), []);
+
   if (!snapshot) return <p className="text-ink-2 p-4">{props.empty?.says ?? "reading ducts…"}</p>;
   const tree = trees.length ? trees : null;
   const chosen = tree != null && scope != null;
@@ -664,9 +675,9 @@ function EScreenBody({ props }: { props: ProtoProps }) {
     "";
   // Any group of the system with an implausible row: its ESP is a partial sum, so none is shown.
   const blockedLoss = groups.some((g) => (priced?.next.byGroup[g]?.implausible.length ?? 0) > 0);
-  const grilleName = (n: TreeNode) => {
-    const id = n.kind === "run" ? n.terminal : n.id;
-    return (id != null ? labels.get(id) : undefined) ?? n.name;
+  jumpToRuleNow.current = (key) => {
+    setRuleFocus(key);
+    pick("right");
   };
   const designRate = priced?.staged.designFriction ?? DEFAULT_DESIGN_FRICTION_RATE;
   // The tree is the whole pane (kaitpw 2026-10-23: the header block "only takes up space", the
@@ -694,10 +705,7 @@ function EScreenBody({ props }: { props: ProtoProps }) {
             ruleOf,
             light,
             select,
-            jumpToRule: (key: string) => {
-              setRuleFocus(key);
-              pick("right");
-            },
+            jumpToRule,
             reading,
             designRate,
           }}

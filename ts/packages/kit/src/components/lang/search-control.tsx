@@ -60,7 +60,7 @@ export function SearchControl({
         className="flex min-w-0 flex-1 flex-wrap items-center gap-x-1 gap-y-px px-(--control-pad-x)"
       >
         {chips}
-        <span className="flex min-w-[min(100%,26ch)] flex-1 items-center gap-1">
+        <span className="flex min-w-[min(100%,var(--search-input-min,26ch))] flex-1 items-center gap-1">
           <Search aria-hidden data-search-glyph="" className="size-3 shrink-0" />
           {children}
         </span>
@@ -75,6 +75,49 @@ export function SearchControl({
         </span>
       ) : null}
     </div>
+  );
+}
+
+/** The typed characters inside a suggestion. Weight means unsaved (house law 6), so the match is
+ *  full ink and the rest recedes to ink-2: contrast, not bold and not a hue. */
+export function Matched({ text, needle }: { text: string; needle: string }) {
+  const at = needle ? text.toLowerCase().indexOf(needle.toLowerCase()) : -1;
+  if (at < 0) return <>{text}</>;
+  return (
+    <span className="text-ink-2" data-matched="">
+      {text.slice(0, at)}
+      <span className="text-ink">{text.slice(at, at + needle.length)}</span>
+      {text.slice(at + needle.length)}
+    </span>
+  );
+}
+
+/** The completion Tab or → would accept, drawn after the typed text in the input's own font.
+ *  `ghost` is only the untyped remainder; the caller decides when one exists. */
+export function CompletionGhost({
+  value,
+  ghost,
+  children,
+}: {
+  value: string;
+  ghost: string;
+  children: ReactNode;
+}) {
+  return (
+    <span className="relative flex min-w-0 flex-1 items-center">
+      {children}
+      {ghost ? (
+        // ponytail: aligned only while the typed text fits; an overflowing input hides the ghost.
+        <span
+          aria-hidden
+          data-completion-ghost=""
+          className="pointer-events-none absolute inset-0 flex items-center overflow-hidden whitespace-pre"
+        >
+          <span className="invisible">{value}</span>
+          <span className="text-ink-mute">{ghost}</span>
+        </span>
+      ) : null}
+    </span>
   );
 }
 

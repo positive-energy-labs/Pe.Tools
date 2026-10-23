@@ -9,7 +9,7 @@
  * chips follow the arrow chip, its tokens are offered for the word being typed, each complete word
  * (a space, Tab, or a paste) goes through its token, and Enter on an empty word runs the command.
  */
-import { SearchControl } from "../lang/search-control";
+import { CompletionGhost, Matched, SearchControl } from "../lang/search-control";
 import { useEffect, useState, type ReactNode } from "react";
 
 import { NarrowChip } from "../lang/chip";
@@ -325,6 +325,27 @@ export function QueryBox({
   // Enter on an empty word after the arrow runs the command, unless the cursor was moved onto a token.
   const cursored = picks.some((each) => each.key === cursor);
   const runs = armed && draft === "" && !cursored;
+  // The word the picks complete: the token after the arrow, a condition's value, else a field name.
+  const needle = armed
+    ? draft.trim()
+    : field
+      ? clause.kind === "field"
+        ? clause.value.trim()
+        : ""
+      : bare;
+  const completes = (each: Pick) =>
+    each.key !== "search" &&
+    each.key !== "typed" &&
+    needle !== "" &&
+    each.label.length > needle.length &&
+    each.label.toLowerCase().startsWith(needle.toLowerCase());
+  // The ghost and Tab agree: a moved cursor, else the first pick the typed word begins.
+  const ghostPick = draft.endsWith(needle) ? picks.find(completes) : undefined;
+  const tabPick =
+    picks.find((each) => each.key === cursor && each.key !== "search") ??
+    ghostPick ??
+    picks.find((each) => each.key !== "search") ??
+    picks[0];
 
   return (
     <SearchControl
@@ -385,83 +406,100 @@ export function QueryBox({
         </>
       }
     >
-      <TooltipHint
-        content={
-          command
-            ? "Words search every field; a field name starts a condition; ! negates. An arrow (→ or ->) ends the query and names what to do with the rows it keeps."
-            : "Words search every field (4 finds the number 4, not 14). A field name starts a step-by-step condition or sort; ! negates."
-        }
+      <CompletionGhost
+        value={draft}
+        ghost={open && ghostPick ? ghostPick.label.slice(needle.length) : ""}
       >
-        <input
-          ref={(element) => {
-            setInput(element);
-            onInput?.(element);
-          }}
-          role="combobox"
-          aria-label="table query"
-          aria-autocomplete="list"
-          aria-invalid={
-            field?.kind === "number" &&
-            clause.kind === "field" &&
-            clause.value.trim() !== "" &&
-            parseConditionNumber(clause.value) == null
-              ? true
-              : undefined
+        <TooltipHint
+          content={
+            command
+              ? "Words search every field; a field name starts a condition; ! negates. An arrow (→ or ->) ends the query and names what to do with the rows it keeps."
+              : "Words search every field (4 finds the number 4, not 14). A field name starts a step-by-step condition or sort; ! negates."
           }
-          autoComplete="off"
-          className="t-small face-mono h-(--item-h) min-w-0 flex-1 bg-transparent outline-none placeholder:text-ink-2"
-          value={draft}
-          placeholder={
-            armed ? command!.placeholder : (placeholder ?? "search any field, or type a field name")
-          }
-          onChange={(event) => {
-            const value = event.target.value;
-            setOpen(true);
-            if (armed) return onDraft(value);
-            if (command && ARROW.test(value)) return arm(value);
-            const quoting = value.split('"').length % 2 === 0;
-            // "Room Na" is still naming a field across its space: it stays one draft.
-            if (quoting || !/\s/.test(value) || (!/[~=<>]/.test(value) && naming(value)))
-              return type(value);
-            const parts = queryWords(value);
-            const rest = /\s$/.test(value) ? "" : (parts.pop() ?? "");
-            setEditing(null);
-            type(rest, join(base, ...parts));
-          }}
-          onFocus={() => setOpen(true)}
-          onClick={() => setOpen(true)}
-          onBlur={() => setOpen(false)}
-          // Enter on an empty word after the arrow runs the command. Taken in the capture phase: the
-          // open list owns this input's keys through a native listener that stops propagation, so a
-          // bubble-phase handler would never hear it while tokens are still offered.
-          onKeyDownCapture={(event) => {
-            if (event.key !== "Enter" || !runs) return;
-            event.preventDefault();
-            event.stopPropagation();
-            command!.onCommit();
-          }}
-          onKeyDown={(event) => {
-            // With the list closed, Escape still clears the word, then drops the command.
-            if (event.key === "Escape" && armed && !open)
-              return draft === "" ? command!.onArmed(false) : onDraft("");
-            if (event.key !== "Backspace" || draft !== "") return;
-            event.preventDefault();
-            // Backspace on an empty box takes the last chip back into the box, as text.
-            if (armed) {
-              const last = command!.chips.at(-1);
-              if (last) {
-                last.onRemove();
-                onDraft(last.label);
-              } else command!.onArmed(false);
-              return;
+        >
+          <input
+            ref={(element) => {
+              setInput(element);
+              onInput?.(element);
+            }}
+            role="combobox"
+            aria-label="table query"
+            aria-autocomplete="list"
+            aria-invalid={
+              field?.kind === "number" &&
+              clause.kind === "field" &&
+              clause.value.trim() !== "" &&
+              parseConditionNumber(clause.value) == null
+                ? true
+                : undefined
             }
-            const last = committed.at(-1);
-            if (last) type(last, committed.slice(0, -1).join(" "));
-            else if (state.sorts.length)
-              onStateChange({ ...state, sorts: state.sorts.slice(0, -1) });
-          }}
-        />
-      </TooltipHint>
+            autoComplete="off"
+            className="t-small face-mono h-(--item-h) min-w-0 flex-1 bg-transparent outline-none placeholder:text-ink-2"
+            value={draft}
+            placeholder={
+              armed
+                ? command!.placeholder
+                : (placeholder ?? "search any field, or type a field name")
+            }
+            onChange={(event) => {
+              const value = event.target.value;
+              setOpen(true);
+              if (armed) return onDraft(value);
+              if (command && ARROW.test(value)) return arm(value);
+              const quoting = value.split('"').length % 2 === 0;
+              // "Room Na" is still naming a field across its space: it stays one draft.
+              if (quoting || !/\s/.test(value) || (!/[~=<>]/.test(value) && naming(value)))
+                return type(value);
+              const parts = queryWords(value);
+              const rest = /\s$/.test(value) ? "" : (parts.pop() ?? "");
+              setEditing(null);
+              type(rest, join(base, ...parts));
+            }}
+            onFocus={() => setOpen(true)}
+            onClick={() => setOpen(true)}
+            onBlur={() => setOpen(false)}
+            // Enter on an empty word after the arrow runs the command. Taken in the capture phase: the
+            // open list owns this input's keys through a native listener that stops propagation, so a
+            // bubble-phase handler would never hear it while tokens are still offered.
+            onKeyDownCapture={(event) => {
+              if (event.key !== "Enter" || !runs) return;
+              event.preventDefault();
+              event.stopPropagation();
+              command!.onCommit();
+            }}
+            onKeyDown={(event) => {
+              // → at the end of the word takes what the ghost shows, as Tab does.
+              if (
+                event.key === "ArrowRight" &&
+                open &&
+                ghostPick &&
+                event.currentTarget.selectionStart === draft.length
+              ) {
+                event.preventDefault();
+                return ghostPick.take();
+              }
+              // With the list closed, Escape still clears the word, then drops the command.
+              if (event.key === "Escape" && armed && !open)
+                return draft === "" ? command!.onArmed(false) : onDraft("");
+              if (event.key !== "Backspace" || draft !== "") return;
+              event.preventDefault();
+              // Backspace on an empty box takes the last chip back into the box, as text.
+              if (armed) {
+                const last = command!.chips.at(-1);
+                if (last) {
+                  last.onRemove();
+                  onDraft(last.label);
+                } else command!.onArmed(false);
+                return;
+              }
+              const last = committed.at(-1);
+              if (last) type(last, committed.slice(0, -1).join(" "));
+              else if (state.sorts.length)
+                onStateChange({ ...state, sorts: state.sorts.slice(0, -1) });
+            }}
+          />
+        </TooltipHint>
+      </CompletionGhost>
       <ListPopup<Pick>
         anchor="caret"
         // Suggestions are short facts (a field, an operator, a value): a picker's measure, not prose's.
@@ -491,15 +529,14 @@ export function QueryBox({
         onCursorChange={setCursor}
         // Tab completes to the first suggestion; the typed row is what Enter already keeps.
         onTab={() => {
-          const entry =
-            picks.find((each) => each.key === cursor && each.key !== "search") ??
-            picks.find((each) => each.key !== "search") ??
-            picks[0];
-          entry?.take();
-          return Boolean(entry);
+          tabPick?.take();
+          return Boolean(tabPick);
         }}
         onPick={(entry) => entry.take()}
-        row={(entry) => ({ label: entry.label, meta: entry.hint })}
+        row={(entry) => ({
+          label: <Matched text={entry.label} needle={needle} />,
+          meta: entry.hint,
+        })}
         detail={(entry) => entry.description}
       />
     </SearchControl>
