@@ -88,6 +88,9 @@ export interface TableProps<Row extends RowData> {
   rowClassName?: (row: Row) => string | undefined;
   /** The Revit elements represented by each row, served by the root element menu. */
   revitIds?: (row: Row) => readonly number[];
+  /** Rows kept drawn while scrolled out of view (a long grid draws only the rows in view): the
+   *  rows another surface anchors to, such as a connector's end. */
+  keep?: (row: Row) => boolean;
   /** The word for a row's critical damage (I2: kit `Row` damage), or nothing for a calm row. */
   damage?: (row: Row) => string | null | undefined;
   gutter?: (row: Row) => { count: number; title: string; tone?: "alarm" | "caution" } | null;
@@ -117,6 +120,7 @@ export function Table<Row extends RowData>({
   onRowHover,
   rowClassName,
   revitIds,
+  keep,
   damage,
   gutter,
   empty,
@@ -249,6 +253,7 @@ export function Table<Row extends RowData>({
             rowClassName={rowClassName}
             revitIds={revitIds}
             damage={damage}
+            keep={keep}
             onRowClick={onRowClick}
             selectedKeys={selection?.selected}
             refusalOf={selection?.refusal}

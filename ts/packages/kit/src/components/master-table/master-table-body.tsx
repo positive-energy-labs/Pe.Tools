@@ -148,6 +148,7 @@ export function MasterTableBody<Row extends RowData>({
   rowClassName,
   revitIds,
   damage,
+  keep,
   onRowClick,
   selectedKeys,
   refusalOf,
@@ -167,6 +168,7 @@ export function MasterTableBody<Row extends RowData>({
   rowClassName?: (row: Row) => string | undefined;
   revitIds?: (row: Row) => readonly number[];
   damage?: (row: Row) => string | null | undefined;
+  keep?: (row: Row) => boolean;
   onRowClick?: (row: Row) => void;
   selectedKeys?: ReadonlySet<string>;
   refusalOf?: (key: string) => string | null | undefined;
@@ -246,6 +248,10 @@ export function MasterTableBody<Row extends RowData>({
   const pinned = [focusedKey, activeKey ?? undefined]
     .map((key) => (key === undefined ? undefined : indexOf.get(key)))
     .filter((index): index is number => index !== undefined);
+  if (virtualized && keep)
+    visibleRows.forEach((row, index) => {
+      if (keep(row.original)) pinned.push(index);
+    });
   const pinnedKey = pinned.join(",");
   const rangeExtractor = useCallback(
     (range: Range) =>
