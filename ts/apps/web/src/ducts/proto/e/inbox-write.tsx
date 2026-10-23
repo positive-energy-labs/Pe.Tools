@@ -14,7 +14,6 @@ export type RulingRow = Omit<ListRowParts, "actions"> & {
   actions?: () => ReactNode;
   detail?: () => ReactNode;
   lit?: boolean;
-  pick?: () => void;
 };
 import type { ActionHandle } from "#/route/handle";
 import type { WriteRow } from "../../inbox-rows";

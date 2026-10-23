@@ -637,10 +637,7 @@ function LoadedScreenBody({
     [page.system],
   );
 
-  const select = useCallback(
-    (id: number | null) => (id != null && jump.current ? jump.current(id) : props.onSelect(id)),
-    [props.onSelect],
-  );
+  const select = props.onSelect;
   // The critical run is the largest priced total over every section: the worst fan's run (B's
   // model marks Pe's only when the group solve names one; a provisional solve can leave it
   // unnamed, so the largest total stands in). Only the runs that price the system count: a shared
@@ -693,8 +690,7 @@ function LoadedScreenBody({
                 node?.groupId ?? snapshot.groups.find((x) => x.rootIds.includes(cell.id))?.id;
               return g ? systemOfGroup(drawn ?? snapshot, g) : page.system;
             })();
-      if (into === page.system && jump.current) jump.current(cell.id);
-      else setPage({ system: into, selected: String(cell.id), issue: "" });
+      setPage({ system: into, selected: String(cell.id), issue: "" });
       setSideFor({ system: into, side: "right" });
       setInputsOpen(true);
       setCellFocus(cell);
@@ -1017,7 +1013,7 @@ function LoadedScreenBody({
             focused={focusKey}
             reach={reach}
             onIssueHover={setHoveredIssue}
-            onPick={() => setPage({ issue: "" }, { history: "replace" })}
+            onPick={(issue) => setPage({ selected: "", issue }, { history: "push" })}
             address={{
               scope: `${page.system}:${page.epoch}`,
               search: page.rulingSearch,
@@ -1060,7 +1056,7 @@ function LoadedScreenBody({
       light: lightSubjects,
       clear: grace.leave,
       hold: grace.hold,
-      go: (id: number) => select(id),
+      go: (id: number) => (jump.current ? jump.current(id) : select(id)),
       refProps: subjectProps,
     }),
     [subjectName, reach, lightSubjects, grace, select, subjectProps],

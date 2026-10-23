@@ -151,8 +151,8 @@ export function Inbox({
   selected: number | null;
   /** The inbox row a review named (`focusRow`): it opens, wears selected and pulses once. */
   focused: string | null;
-  /** A person's pick releases the review landing address. */
-  onPick?: () => void;
+  /** A row's identity selects every subject it carries. */
+  onPick: (key: string) => void;
   hoveredIssue?: string | null;
   onIssueHover?: (key: string | null) => void;
   address?: ListPersist<"name" | "status">;
@@ -374,8 +374,6 @@ export function Inbox({
         },
         revit: target.ids,
         revitRefs: target.refs,
-        // A person's own row click selects and releases the landing address (`onPick`); only a stage click lands on `issue`.
-        pick: () => onSelect(item.ids[0] ?? null),
         detail: () => (
           <>
             <div className="flex items-center gap-1 t-small">
@@ -476,7 +474,7 @@ function RulingsList({
 }: {
   rows: RulingRow[];
   focused: string | null;
-  onPick?: () => void;
+  onPick: (key: string) => void;
   address?: ListPersist<"name" | "status">;
 }) {
   const [view, setView] = useState<ListState<"name" | "status">>(() => ({
@@ -514,13 +512,12 @@ function RulingsList({
     },
     stageOf: (row) => row.stage ?? "clean",
     onPick: (row) => {
-      onPick?.();
+      onPick(row.key);
       setView((previous) => ({
         ...previous,
         selected: [row.key],
         open: previous.open.includes(row.key) ? [] : [row.key],
       }));
-      row.pick?.();
     },
   });
   const row = useCallback(

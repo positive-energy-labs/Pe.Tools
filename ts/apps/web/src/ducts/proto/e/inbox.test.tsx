@@ -169,7 +169,7 @@ function mount(
       fan={fan}
       selected={over.selected ?? null}
       focused={over.focused ?? null}
-      onPick={over.onPick}
+      onPick={over.onPick ?? (() => {})}
       address={over.address}
     />,
   );
@@ -428,14 +428,14 @@ test("open findings keep compact state and actions, with full evidence in focusa
   expect(within(help).getByText("Facing open ends need inspection in Revit.")).toBeTruthy();
 });
 
-test("a person's own row pick releases a review landing, while automatic reveal does not", () => {
+test("a person's row pick carries its identity, while automatic reveal does not pick", () => {
   const onPick = vi.fn();
   const view = mount({ focused: "flows:30", onPick });
   expect(onPick).not.toHaveBeenCalled();
   fireEvent.click(view.container.querySelector('[data-key="flows:30"]')!);
-  expect(onPick).toHaveBeenCalledOnce();
+  expect(onPick).toHaveBeenLastCalledWith("flows:30");
   fireEvent.click(screen.getByText("Write to Revit"));
-  expect(onPick).toHaveBeenCalledTimes(2);
+  expect(onPick).toHaveBeenLastCalledWith("write");
 });
 
 test("a no-rule row stages a family-wide price-as choice through Work", async () => {

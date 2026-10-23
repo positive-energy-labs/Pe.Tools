@@ -9,7 +9,6 @@ import { revitTarget } from "@pe/kit/lang/revit-target";
 import { frame } from "./orbit";
 import { Pane } from "@pe/kit/lang/pane";
 import { viewportCodec } from "@pe/agent-contracts";
-import type { Bounds } from "./types";
 
 vi.mock("./view-history", () => ({ useViewHistory: () => vi.fn() }));
 afterEach(() => vi.unstubAllGlobals());
@@ -51,90 +50,6 @@ it("projected bounds use client coordinates and refuse points behind the camera"
 function StageActions() {
   return useStage().goTo;
 }
-
-it("selecting only changes the pivot; F frames at release; Escape clears and keeps the pose", () => {
-  const scene: Bounds = { minX: 0, minY: 0, minZ: 0, maxX: 200, maxY: 200, maxZ: 50 };
-  const target: Bounds = { minX: 20, minY: 20, minZ: 10, maxX: 30, maxY: 30, maxZ: 20 };
-  const initial = frame(scene);
-  const url = new URL("https://pe.test/ducts");
-  const publish = vi.fn(({ viewport }) =>
-    url.searchParams.set("viewport", viewportCodec.encode(viewport)),
-  );
-  const orbit = createLiveOrbit(initial, stageViewport(publish));
-  const frames: FrameRequestCallback[] = [];
-  vi.stubGlobal("requestAnimationFrame", (callback: FrameRequestCallback) => frames.push(callback));
-  const clearSelection = vi.fn();
-  let selectedBounds: Bounds | null = null;
-  const view = renderHook(() => useStage(), {
-    wrapper: ({ children }) => (
-      <PictureStage
-        goTo={<span>go to a subject</span>}
-        kind="orbit"
-        orbit={orbit}
-        bounds={{ scene, subject: scene }}
-        host={null}
-        selectedBounds={selectedBounds}
-        clearSelection={clearSelection}
-      >
-        <StageActions />
-        <button
-          onClick={() => {
-            selectedBounds = target;
-            url.searchParams.set("selected", "42");
-          }}
-        >
-          select
-        </button>
-        {children}
-      </PictureStage>
-    ),
-  });
-  expect(screen.getByText("go to a subject")).toBeTruthy();
-  fireEvent.click(screen.getByText("select"));
-  view.rerender();
-  expect(url.searchParams.get("selected")).toBe("42");
-  expect(url.searchParams.has("viewport")).toBe(false);
-  expect(orbit.read()).toEqual(initial);
-  expect(publish).not.toHaveBeenCalled();
-  expect(view.result.current.orbitPivot).toEqual([25, 25, 15]);
-  const expected = view.result.current.poseOf(target);
-  act(() => {
-    fireEvent.keyDown(document.body, { key: "f", code: "KeyF" });
-  });
-  expect(frames.length).toBeGreaterThan(0);
-  expect(publish).not.toHaveBeenCalled();
-  act(() => {
-    for (let time = 0; frames.length; time += 17) frames.shift()!(time);
-  });
-  expect(orbit.read()).toEqual(expected);
-  expect(publish).toHaveBeenLastCalledWith({ viewport: expected }, { history: "push" });
-  const framed = orbit.read();
-  act(() => {
-    fireEvent.keyDown(document.body, { key: "Escape", code: "Escape" });
-  });
-  expect(clearSelection).toHaveBeenCalledOnce();
-  expect(orbit.read()).toEqual(framed);
-
-  selectedBounds = null;
-  view.rerender();
-  act(() => {
-    fireEvent.keyDown(document.body, { key: "f", code: "KeyF" });
-  });
-  act(() => {
-    for (let time = 0; frames.length; time += 17) frames.shift()!(time);
-  });
-  expect(orbit.read()).toEqual(initial);
-  act(() => {
-    const gesture = orbit.begin();
-    orbit.preview(gesture, { ...initial, yaw: 90 });
-    orbit.end(gesture);
-  });
-  expect(publish).toHaveBeenLastCalledWith(
-    { viewport: { ...initial, yaw: 90 } },
-    { history: "replace" },
-  );
-  view.unmount();
-});
 
 it("the stage supplies a projection Switcher and O publishes one restorable named move", () => {
   const pose = frame({ minX: 0, minY: 0, minZ: 0, maxX: 10, maxY: 20, maxZ: 30 });

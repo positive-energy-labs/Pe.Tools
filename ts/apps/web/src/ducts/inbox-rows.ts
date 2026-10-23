@@ -1070,9 +1070,9 @@ export interface StageIssue {
 
 /** The inbox owns identity and severity; the stage only chooses how to draw it. */
 export function stageIssues(
-  rows: Pick<ReturnType<typeof triage>, "fix" | "set" | "diagnostics">,
+  rows: Pick<ReturnType<typeof inboxRows>, "fix" | "set" | "check" | "diagnostics">,
 ): StageIssue[] {
-  return [...rows.fix, ...rows.set, ...rows.diagnostics].map((row) => ({
+  return [...rows.fix, ...rows.set, ...rows.check, ...rows.diagnostics].map((row) => ({
     key: row.key,
     ids: row.ids,
     findings: row.findingIds ?? [row.key],
