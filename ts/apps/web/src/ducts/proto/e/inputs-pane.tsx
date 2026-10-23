@@ -7,7 +7,7 @@
 import type { Priced } from "@pe/ducts-domain/pricing";
 import type { SystemScope } from "@pe/ducts-domain/system-scope";
 import type { DuctSnapshot } from "@pe/ducts-domain/types";
-import { useScopeGestures, type ScopeGesture } from "@pe/kit/keys";
+import { ScopeGestures, type ScopeGesture } from "@pe/kit/keys";
 import { useCallback, useMemo } from "react";
 import { useList, type ListPersist } from "@pe/kit/lang/collection";
 import { ListView, type ListRowParts } from "@pe/kit/lang/list-view";
@@ -55,7 +55,6 @@ const INPUT_KEYS: readonly ScopeGesture[] = [
 ];
 
 export function InputsPane(props: InputsPaneProps) {
-  useScopeGestures(INPUT_KEYS);
   const observation = useNativeObservation();
   const { snapshot, priced, work, scope, nameOf, selected, select, light } = props;
   const { units, terminals } = useMemo(() => inputRowsOf(snapshot, scope), [snapshot, scope]);
@@ -142,6 +141,7 @@ export function InputsPane(props: InputsPaneProps) {
     );
   return (
     <div aria-label="inputs" data-e-inputs>
+      <ScopeGestures gestures={INPUT_KEYS} />
       <ListView
         list={list}
         aria-label="inputs"

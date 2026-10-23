@@ -1,4 +1,6 @@
 import { Suspense } from "react";
+import type { PlaneViewport } from "@pe/agent-contracts";
+import { stageViewport } from "#/scene/stage-controller";
 import { Button } from "@pe/kit/lang/button";
 import { Switcher } from "#/components/lang/switcher";
 import { LevelPlan } from "#/takeoff/level-plan";
@@ -59,9 +61,9 @@ export function AtlasVisual() {
           },
         }}
         viewport={store.viewport}
-        onViewport={(viewport, how) =>
-          store.setViewport(viewport, how === "move" ? "push" : "replace")
-        }
+        onViewport={stageViewport<PlaneViewport>(({ viewport }, { history }) =>
+          store.setViewport(viewport, history),
+        )}
         above={
           <>
             <ScopeKeys keys={scopeShortcuts} />

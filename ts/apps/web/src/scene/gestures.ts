@@ -126,3 +126,21 @@ export const PLANE_GESTURES: readonly ScopeGesture[] = [
 ];
 
 export type { PointerKind };
+
+/** A spatial surface owns wheel, browser pinch and touch; none escape to the page. */
+export function captureGestures(
+  host: HTMLElement,
+  wheel = (event: WheelEvent) => event.preventDefault(),
+) {
+  const touchAction = host.style.touchAction;
+  host.style.touchAction = "none";
+  const prevent = (event: Event) => event.preventDefault();
+  host.addEventListener("wheel", wheel, { passive: false });
+  for (const name of ["gesturestart", "gesturechange"])
+    host.addEventListener(name, prevent, { passive: false });
+  return () => {
+    host.style.touchAction = touchAction;
+    host.removeEventListener("wheel", wheel);
+    for (const name of ["gesturestart", "gesturechange"]) host.removeEventListener(name, prevent);
+  };
+}

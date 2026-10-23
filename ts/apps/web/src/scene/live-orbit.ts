@@ -175,11 +175,10 @@ export function flyTo(orbit: LiveOrbit, to: OrbitViewport, flight: Flight = {}) 
 // (the capture's SceneMeshes carry bounds and instances only); when one does, rotate the yaw by it here.
 const NORTH_YAW = 270;
 
-/** Turn to look north (elevation, zoom and pivot kept), released as a gesture so Page's viewport
- * is replaced. A newer gesture or move takes the orbit and ends it. */
+/** Look north is a named move. A newer gesture or move takes the orbit and ends it. */
 export function glideLook(orbit: LiveOrbit) {
   const now = orbit.read();
-  if (now) flyTo(orbit, { ...now, yaw: NORTH_YAW }, { history: "replace" });
+  if (now) flyTo(orbit, { ...now, yaw: NORTH_YAW });
 }
 
 /** Scope changes (system, document, view mode) cancel gestures even if the saved pose is equal.

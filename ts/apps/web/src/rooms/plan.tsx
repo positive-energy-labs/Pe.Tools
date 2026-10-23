@@ -1,17 +1,9 @@
+/** Revit's registered picture under selectable room regions, paired with the table. */
 import { SvgTip } from "@pe/kit/lang/tooltip";
-/**
- * The rooms plan: Revit's picture of the view (as exported, never redrawn) under one path per
- * zone, room and held region, inked by the region's state, on a pan-zoom canvas. Every room and
- * held region wears a numbered callout whose label is the table's. Click selects, shift-click adds,
- * hover pairs with the table row; a click on empty ground keeps the selection and Esc clears it, as
- * on every stage (SURFACE-PHILOSOPHY N2). The selection's facts sit in the fixed top-left readout;
- * F frames the selection (else fits the view), clear of the readout and the docked legend.
- */
 import { type CSSProperties, type ReactNode, useEffect, useMemo, useRef } from "react";
-import { useScopeGestures, useScopeKeys } from "@pe/kit/keys";
-import { PLANE_GESTURES } from "#/scene/gestures";
+import type { PlaneViewport } from "@pe/agent-contracts";
+import { useStage, stageViewport } from "#/scene/stage-controller";
 import { PictureReadout } from "@pe/kit/lang/readout";
-import { useViewHistory } from "#/scene/view-history";
 import type { RoomsSnapshot } from "@pe/host-contracts/generated";
 
 import { FactChip } from "@pe/kit/lang/chip";
@@ -247,8 +239,14 @@ export function RoomsPlan({
     return { frame, width, height, shapes, fit, pxPerFt: Math.abs(fx - ox) };
   }, [bounds, rows, plan]);
 
+  const viewport = usePlaneViewport(
+    page.viewport,
+    world?.fit ?? null,
+    stageViewport<PlaneViewport>(setPage),
+  );
   const {
     setHost,
+    host,
     size,
     view,
     move,
@@ -256,9 +254,7 @@ export function RoomsPlan({
     dragging,
     dragDistance: dragDist,
     handlers,
-  } = usePlaneViewport(page.viewport, world?.fit ?? null, (viewport, how) =>
-    setPage({ viewport }, { history: how === "move" ? "push" : "replace" }),
-  );
+  } = viewport;
   const layers = page.layers;
   const mapShapes = useMemo(
     () =>
@@ -307,27 +303,23 @@ export function RoomsPlan({
     move(to, "move");
   }, [world, size, zoomKey, zoomTo, move]); // eslint-disable-line react-hooks/exhaustive-deps
 
-  // The one camera move a person names (N1): F frames the selection, else fits the view.
-  useScopeGestures(PLANE_GESTURES);
-  useScopeKeys([
-    {
-      hotkey: "F",
-      label: "frame",
-      says: "Frame the selection; with nothing selected, fit the view",
-      callback: () => {
-        if (!world) return;
-        const boxes = world.shapes
-          .filter((shape) => selected.has(shape.region.guid))
-          .flatMap((shape) => [
-            [shape.box.minX, shape.box.minY] as const,
-            [shape.box.maxX, shape.box.maxY] as const,
-          ]);
-        const to = boxes.length ? frameBox(boundsOf(boxes), ZOOM_PAD_PX) : frameBox(world.fit);
-        if (to) move(to, "move");
-      },
+  const selectedPoints =
+    world?.shapes
+      .filter((shape) => selected.has(shape.region.guid))
+      .flatMap((shape) => [
+        [shape.box.minX, shape.box.minY] as const,
+        [shape.box.maxX, shape.box.maxY] as const,
+      ]) ?? [];
+  useStage({
+    kind: "plane",
+    host,
+    viewport,
+    bounds: world?.fit ?? null,
+    selectedBounds: selectedPoints.length ? boundsOf(selectedPoints) : null,
+    clearSelection: () => {
+      if (selected.size) onSelect(null, false);
     },
-  ]);
-  useViewHistory();
+  });
   const picked = world?.shapes.filter((shape) => selected.has(shape.region.guid)) ?? [];
 
   // The lease's one key is the viewport (`roomsAddress.agent`); the rest stays the person's.
@@ -486,13 +478,20 @@ export function RoomsPlan({
   const font = CALLOUT_FONT_PX;
 
   return (
-    <Pane {...pane}>
+    <Pane
+      {...pane}
+      legend={
+        <div data-surface="page" className="max-w-full rounded-sm">
+          {legend}
+        </div>
+      }
+    >
       {notice}
       <div
         ref={setHost}
         data-rooms-plan=""
         className="relative min-h-0 flex-1 overflow-hidden"
-        style={{ cursor: dragging ? "grabbing" : "grab", touchAction: "none" }}
+        style={{ cursor: dragging ? "grabbing" : "grab" }}
         {...handlers}
       >
         <div style={worldStyle}>
@@ -667,13 +666,6 @@ export function RoomsPlan({
               </span>
             </PictureReadout>
           ) : null}
-          <div
-            data-slot="pane-legend"
-            data-surface="page"
-            className="absolute bottom-2 left-2 max-w-[calc(100%-1rem)] rounded-sm"
-          >
-            {legend}
-          </div>
         </div>
       </div>
     </Pane>

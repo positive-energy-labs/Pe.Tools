@@ -150,7 +150,7 @@ test("the rim N always glides north (eye at 270), keeping elevation, zoom and pi
   expect(view.container.querySelector('[data-orbit-look="S"]')).toBeNull();
   fireEvent.click(view.container.querySelector('[data-orbit-look="N"]')!);
   await vi.waitFor(() => expect(onViewport).toHaveBeenCalledTimes(1));
-  expect(onViewport).toHaveBeenLastCalledWith({ ...viewport, yaw: 270 }, "gesture");
+  expect(onViewport).toHaveBeenLastCalledWith({ ...viewport, yaw: 270 }, "move");
   fireEvent.click(view.container.querySelector('[data-orbit-look="N"]')!);
   await vi.waitFor(() => expect(end).toHaveBeenCalledTimes(2));
   expect(orbit.read()).toEqual({ ...viewport, yaw: 270 });

@@ -1,6 +1,8 @@
 import { Fragment, useState } from "react";
 import { useScopeKeys, type Chord } from "@pe/kit/keys";
 import { KeyHint as Kbd } from "@pe/kit/lang/key-hint";
+import { GestureGlyph, POINTER_WORD } from "@pe/kit/lang/gesture-glyph";
+import type { PointerKind } from "@pe/kit/keys";
 
 export { Kbd };
 import { tokenRef } from "@pe/kit/lib/token";
@@ -16,12 +18,16 @@ export interface LegendKey {
 }
 
 function Press({ keys = [], pointer }: Omit<LegendKey, "does">) {
+  const kind = (Object.keys(POINTER_WORD) as PointerKind[]).find(
+    (kind) => POINTER_WORD[kind] === pointer,
+  );
   return (
     <span className="inline-flex items-center gap-1 whitespace-nowrap">
       {keys.map((key, i) => (
         <Kbd key={`${key}-${i}`}>{key}</Kbd>
       ))}
       {keys.length && pointer ? <span className="text-ink-mute">+</span> : null}
+      {kind ? <GestureGlyph pointer={kind} /> : null}
       {pointer ? <span className="text-ink-2">{pointer}</span> : null}
     </span>
   );

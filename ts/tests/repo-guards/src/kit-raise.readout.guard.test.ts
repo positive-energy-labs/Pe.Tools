@@ -22,6 +22,10 @@ const sources = new Map(files(ROOT).map((rel) => [rel, readFileSync(join(ROOT, r
 const readout =
   /import\s*\{[^}]*\bPictureReadout\b[^}]*\}\s*from\s*["']@pe\/kit\/lang\/readout["']/;
 const PARENTS: Record<string, { owner: string; reason: string }> = {
+  "scene/pan-zoom.tsx": {
+    owner: "ducts/proto/e/canvas.tsx",
+    reason: "the schematic's local viewport shares the picture pane's readout",
+  },
   "ducts/model-picture.tsx": {
     owner: "ducts/proto/e/canvas.tsx",
     reason: "model and schematic share the pane's single readout",

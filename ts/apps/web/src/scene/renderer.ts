@@ -16,7 +16,13 @@ import { LineMaterial } from "three/addons/lines/LineMaterial.js";
 import { LineSegments2 } from "three/addons/lines/LineSegments2.js";
 import { BEACON_LAYER, createGlow, GLOW_LAYER } from "./glow";
 import { createOutline, OUTLINE_CHANNEL, OUTLINE_LAYER } from "./outline";
-import { createWheelReader, pointerIntent, wheelPixels, wheelPlane } from "./gestures";
+import {
+  captureGestures,
+  createWheelReader,
+  pointerIntent,
+  wheelPixels,
+  wheelPlane,
+} from "./gestures";
 import { createMeshPicker } from "./picking";
 import { createOrbitControls } from "./orbit-controls";
 import { center, fromControls, rotateAbout, toCamera, type OrbitViewport } from "./orbit";
@@ -452,10 +458,7 @@ export function createRenderer(mount: HTMLElement, meshes: SceneMeshes, wheelHos
     controls.update();
     moves.dispatchEvent({ type: "end" });
   };
-  const preventGesture = (event: Event) => event.preventDefault();
-  wheelHost.addEventListener("wheel", wheel, { passive: false });
-  wheelHost.addEventListener("gesturestart", preventGesture, { passive: false });
-  wheelHost.addEventListener("gesturechange", preventGesture, { passive: false });
+  const releaseGestures = captureGestures(wheelHost, wheel);
   const observer = new ResizeObserver(resize);
   observer.observe(mount);
   resize();
@@ -820,9 +823,7 @@ export function createRenderer(mount: HTMLElement, meshes: SceneMeshes, wheelHos
       window.removeEventListener("pointermove", planeMove);
       window.removeEventListener("pointerup", planeUp);
       canvas.removeEventListener("pointerdown", turnStart, true);
-      wheelHost.removeEventListener("wheel", wheel);
-      wheelHost.removeEventListener("gesturestart", preventGesture);
-      wheelHost.removeEventListener("gesturechange", preventGesture);
+      releaseGestures();
       batch.dispose();
       scene.remove(batch);
       material.dispose();
