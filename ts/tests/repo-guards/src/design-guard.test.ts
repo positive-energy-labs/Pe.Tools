@@ -323,9 +323,7 @@ const authoredOwners = (files: Entry[]) => {
             expect(stateOwners.filter((name) => REACH_STATE_OVERRIDES[name]).sort()).toEqual(
               Object.keys(REACH_STATE_OVERRIDES).sort(),
             );
-            stateOnlyOwners.push(
-              ...stateOwners.filter((name) => !REACH_STATE_OVERRIDES[name]),
-            );
+            stateOnlyOwners.push(...stateOwners.filter((name) => !REACH_STATE_OVERRIDES[name]));
             return "";
           })
         : file.text;
@@ -334,7 +332,9 @@ const authoredOwners = (files: Entry[]) => {
       ...selectors(ownershipSource)
         .map(isOwnSelector)
         .filter((name): name is string => !!name),
-      ...[...stripComments(ownershipSource).matchAll(/@utility\s+([\w-]+)/g)].map((match) => match[1]),
+      ...[...stripComments(ownershipSource).matchAll(/@utility\s+([\w-]+)/g)].map(
+        (match) => match[1],
+      ),
     ]);
     for (const name of names) owners.set(name, [...(owners.get(name) ?? []), file.rel]);
   }
