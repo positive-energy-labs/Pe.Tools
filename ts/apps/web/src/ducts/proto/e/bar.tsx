@@ -221,7 +221,8 @@ function SystemMarker({ issues, open }: { issues: SystemIssue[]; open: () => voi
         aria-label={issues.map((i) => i.says).join("; ")}
         data-tone={tone}
         data-e-marker={tone}
-        className="absolute top-0.5 right-1 z-[1] flex size-4 items-center justify-center rounded-full p-0! min-h-0!"
+        // A 16 px dot with a 24 px reach (the ::before), ringed in ink while hovered or open.
+        className="absolute top-0.5 right-1 z-[1] flex size-4 items-center justify-center rounded-full p-0! min-h-0! before:absolute before:-inset-1 before:rounded-full before:content-[''] hover:outline hover:outline-offset-1 hover:outline-ink data-popup-open:outline data-popup-open:outline-offset-1 data-popup-open:outline-ink"
         style={{ backgroundColor: tokenRef(tone), color: tokenRef(tone) }}
       >
         <span className="t-small leading-none" style={{ color: tokenRef("page") }}>
@@ -234,7 +235,7 @@ function SystemMarker({ issues, open }: { issues: SystemIssue[]; open: () => voi
             <li key={issue.says}>
               <button
                 type="button"
-                className="flex w-full items-baseline gap-1.5 text-left"
+                className="veil flex w-full items-baseline gap-1.5 rounded-control px-1 py-0.5 text-left"
                 data-tone={issue.tone}
                 onClick={open}
               >
@@ -760,7 +761,7 @@ function BarPopover({
         delay={0}
         aria-label="loss breakdown by element group"
         data-e-bar-trigger=""
-        className={`flex items-center p-0! min-h-0! border-0 ${className ?? ""}`}
+        className={`relative flex items-center p-0! min-h-0! border-0 before:absolute before:inset-x-0 before:-inset-y-1 before:content-[''] ${className ?? ""}`}
         onClick={(event) => event.stopPropagation()}
       >
         {children}

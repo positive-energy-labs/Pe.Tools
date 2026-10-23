@@ -158,6 +158,49 @@ export function LangPressSpecimens() {
       >
         <PreviewActionSpecimen />
       </SpecimenFrame>
+      <SpecimenFrame
+        name="Subject reference · rest, its block hovered, lit (token hovered or focused); the picture's badge"
+        importPath="@pe/kit/lang/lang.css"
+      >
+        <div className="grid grid-cols-[auto_auto] items-center justify-start gap-x-4 gap-y-2 t-prose">
+          <span className="t-small face-mono text-ink-2">rest</span>
+          <span>
+            ends open at{" "}
+            <button type="button" className="subject-ref">
+              9×9 transition<span className="subject-mark">1</span>
+            </button>
+          </span>
+          <span className="t-small face-mono text-ink-2">block</span>
+          <span data-subject-text="" data-lit="">
+            ends open at{" "}
+            <button type="button" className="subject-ref">
+              9×9 transition<span className="subject-mark">1</span>
+            </button>
+          </span>
+          <span className="t-small face-mono text-ink-2">lit</span>
+          <span>
+            ends open at{" "}
+            <button type="button" className="subject-ref" data-lit="">
+              9×9 transition<span className="subject-mark">1</span>
+            </button>
+          </span>
+          <span className="t-small face-mono text-ink-2">badge</span>
+          <svg width="64" height="24" aria-hidden>
+            <g className="subject-badge" transform="translate(12 12)">
+              <circle r={9} />
+              <text y={3.5} textAnchor="middle">
+                1
+              </text>
+            </g>
+            <g className="subject-badge" data-lit="" transform="translate(40 12)">
+              <circle r={9} />
+              <text y={3.5} textAnchor="middle">
+                2
+              </text>
+            </g>
+          </svg>
+        </div>
+      </SpecimenFrame>
       <Section label="SituationAction · fresh · stale (caution edge and wash)">
         <span className="inline-flex gap-2">
           <SituationAction handle={handleOf(false)} name="read" action={readVerb} chord="R" />

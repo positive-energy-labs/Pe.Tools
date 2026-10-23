@@ -72,6 +72,38 @@ export interface PreviewLine {
 /** The reason a held preview no longer holds. */
 export const STALE_WORDS = "changed since preview";
 
+/**
+ * A row's status in the closed inbox row, where the label has the width: the same claim in fewer
+ * words. The full status stays the row's search and sort text and heads the open row.
+ */
+export function compactStatus(status: string): string {
+  const read = /^(\d+) of (\d+) (?:terminals|units) read$/.exec(status);
+  if (read) return `${read[1]}/${read[2]} read`;
+  const previewed = /^previewed: (\d+) pass · (\d+) refused/.exec(status);
+  if (previewed) return `${previewed[1]} pass · ${previewed[2]} refused`;
+  return (
+    COMPACT[status] ??
+    status
+      .replace(/ · not on .*'s runs$/, "")
+      .replace(/^not on .*'s runs$/, "off runs")
+      .replace(/^ruled: /, "")
+      .replace(/^Pea proposes /, "Pea: ")
+      .replace(/ · ESP .* in-wg$/, "")
+  );
+}
+const COMPACT: Record<string, string> = {
+  "outside priced paths": "off path",
+  "not previewed": "unpreviewed",
+  "possible missed join": "missed join?",
+  "priced per fan": "per fan",
+  "priced as a tree": "as a tree",
+  "no design flow": "no flow",
+  "fix in Revit": "in Revit",
+  "blocks the path": "blocks",
+  "nothing staged": "none staged",
+  [STALE_WORDS]: "changed",
+};
+
 export type RowVerb =
   | { kind: "price-as"; family: string }
   /** Stage a verdict on an assumption key; `on` is the staged verdict, pressing it again takes it back. */

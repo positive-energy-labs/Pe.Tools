@@ -36,14 +36,22 @@
 .dl-button[data-kind="nav"]:focus-visible {
   background-color: var(--pe-select);
   color: var(--pe-ink);
-  outline: 2px solid var(--pe-ink);
-  outline-offset: 1px;
 }
 /* Pressed is the house selection fill. It must out-rank the resting grounds above (`.dl-control`
    and the transparent unframed ground), which the zero-specificity selection rule in lang.css loses to. */
 .dl-button[aria-pressed="true"] {
   background-color: var(--pe-select);
   border-color: var(--pe-line-2);
+}
+/* A framed toggle reads on or off at a glance: off is secondary ink on the frame; on is sunk into
+   its frame (the well, an ink-2 edge), the way the search bar's pressed trail is. The select fill
+   alone measured 1.1:1 against the off frame on the floating plane (layers, 2026-10-23). */
+.dl-button.dl-control[aria-pressed="false"] {
+  color: var(--pe-ink-2);
+}
+.dl-button.dl-control[aria-pressed="true"] {
+  border-color: var(--pe-ink-2);
+  box-shadow: var(--shadow-well);
 }
 /* A washed tone (Stop's alarm, a stale verb's caution) draws its ink and wash over the frame. */
 .dl-button[data-tone][data-wash] {
@@ -58,8 +66,14 @@
 .dl-button:hover:not(:disabled, [aria-disabled="true"]) {
   background-image: var(--fill-veil);
 }
+.dl-button:active:not(:disabled, [aria-disabled="true"]) {
+  background-image: var(--fill-press);
+}
+/* One focus ring for every button: the house outline (2px ink), never a hairline. A 1px --pe-line-2
+   ring measured 1.6:1 on the dark page and read as no focus at all (reach audit, 2026-10-23). */
 .dl-button:focus-visible {
-  outline: 1px solid var(--pe-line-2);
+  outline: 2px solid var(--pe-ink);
+  outline-offset: 1px;
 }
 .dl-button:is(:disabled, [aria-disabled="true"]) {
   cursor: not-allowed;

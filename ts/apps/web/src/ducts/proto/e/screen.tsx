@@ -5,7 +5,15 @@
  * numbered ruling pins and click popovers; RIGHT the inbox of rows a person has a verb on,
  * collapsed when it holds none. Hovering a row anywhere lights its element set on the drawing.
  */
-import { useCallback, useEffect, useMemo, useRef, useState, type ReactNode } from "react";
+import {
+  useCallback,
+  useEffect,
+  useMemo,
+  useRef,
+  useState,
+  type ComponentProps,
+  type ReactNode,
+} from "react";
 import type { DuctsApply } from "@pe/host-contracts/generated";
 import { survey, unitFlowsIn } from "@pe/ducts-domain/survey";
 import { fansOwedBase, type OwedBase } from "@pe/ducts-domain/fan-assignment";
@@ -23,7 +31,13 @@ import { systemsNeedingFix } from "../../system-list-search";
 import { elementNamer } from "../../claims";
 import { noRunParts, subjectNamer, type SubjectReference } from "../../subject-text";
 import { noRunBranches } from "@pe/ducts-domain/no-runs";
-import { SubjectTextContext, type SubjectLighting } from "../../subject-text-view";
+import {
+  NO_LIGHTING,
+  reachStore,
+  SubjectTextContext,
+  useReach,
+  type ReachStore,
+} from "../../subject-text-view";
 import {
   annotatedFindings,
   stageIssues,
@@ -421,45 +435,59 @@ function EScreenBody({ props }: { props: ProtoProps }) {
   const encoded = useGroupEncoding(snapshot, priced, drawGroups, page.encoding);
   // The tree reads the drawing's quantity; a categorical reading (or none) keeps Pe's fan-to-here loss.
   const reading = encoded.encoding.quantity ? encoded.encoding : null;
-  const [lighting, setLit] = useState<SubjectLighting>({
-    ids: new Set(),
-    references: [],
-    focus: null,
-  });
+  // Hover never sets screen state: the reach store re-renders only what draws it.
+  const [reach] = useState(reachStore);
   const subjectName = useMemo(() => (snapshot ? subjectNamer(snapshot) : () => null), [snapshot]);
   useEffect(
-    () => setLit({ ids: new Set(), references: [], focus: null }),
-    [snapshot, page.system, page.picture],
+    () => reach.set((state) => ({ ...state, lighting: NO_LIGHTING })),
+    [reach, snapshot, page.system, page.picture],
   );
-  const clearSubjects = useCallback((owner: string) => {
-    setLit((current) =>
-      current.owner === owner ? { ids: new Set(), references: [], focus: null } : current,
-    );
-  }, []);
-  const lightSubjects = (
-    references: readonly SubjectReference[],
-    focus: number | null,
-    owner?: string,
-  ) => {
-    setLit((current) =>
-      current.owner === owner &&
-      current.focus === focus &&
-      current.references.length === references.length &&
-      current.references.every(
-        (r, i) => r.id === references[i]?.id && r.number === references[i]?.number,
-      )
-        ? current
-        : {
-            ids: new Set(focus == null ? references.map((r) => r.id) : [focus]),
-            references,
-            focus,
-            owner,
-          },
-    );
-    props.onHover(null);
-  };
+  const clearSubjects = useCallback(
+    (owner: string) =>
+      reach.set((state) =>
+        state.lighting.owner === owner ? { ...state, lighting: NO_LIGHTING } : state,
+      ),
+    [reach],
+  );
+  const lightSubjects = useCallback(
+    (references: readonly SubjectReference[], focus: number | null, owner?: string) =>
+      reach.set((state) => {
+        const current = state.lighting;
+        const same =
+          current.owner === owner &&
+          current.focus === focus &&
+          current.references.length === references.length &&
+          current.references.every(
+            (r, i) => r.id === references[i]?.id && r.number === references[i]?.number,
+          );
+        return same && state.hovered === null
+          ? state
+          : {
+              ...state,
+              hovered: null,
+              lighting: same
+                ? current
+                : {
+                    ids: new Set(focus == null ? references.map((r) => r.id) : [focus]),
+                    references,
+                    focus,
+                    owner,
+                  },
+            };
+      }),
+    [reach],
+  );
+  const setHovered = useCallback(
+    (hovered: number | null) =>
+      reach.set((state) => (state.hovered === hovered ? state : { ...state, hovered })),
+    [reach],
+  );
+  const setHoveredIssue = useCallback(
+    (issue: string | null) =>
+      reach.set((state) => (state.issue === issue ? state : { ...state, issue })),
+    [reach],
+  );
   const issues = useMemo(() => (inbox ? stageIssues(inbox) : []), [inbox]);
-  const [hoveredIssue, setHoveredIssue] = useState<string | null>(null);
   const [ruleFocus, setRuleFocus] = useState<string | null>(null);
   // null = automatic: open when the inbox holds a row, collapsed when it holds none.
   const [inboxOpen, setInboxOpen] = useState<boolean | null>(null);
@@ -488,10 +516,16 @@ function EScreenBody({ props }: { props: ProtoProps }) {
   const side = chosen && sideFor.system === page.system ? sideFor.side : home;
   const pick = (side: Side) => setSideFor({ system: page.system, side });
 
-  const light = (ids: readonly number[] | null) => {
-    setLit({ ids: new Set(ids ?? []), references: [], focus: null });
-    props.onHover(ids?.[0] ?? null);
-  };
+  const light = (ids: readonly number[] | null) =>
+    reach.set((state) =>
+      !ids?.length && !state.lighting.ids.size && state.hovered === null
+        ? state
+        : {
+            ...state,
+            lighting: { ids: new Set(ids ?? []), references: [], focus: null },
+            hovered: ids?.[0] ?? null,
+          },
+    );
   const select = (id: number | null) => props.onSelect(id);
   // The critical run is the largest priced total over every section: the worst fan's run (B's
   // model marks Pe's only when the group solve names one; a provisional solve can leave it
@@ -775,7 +809,7 @@ function EScreenBody({ props }: { props: ProtoProps }) {
       flush
     >
       {inbox ? (
-        <Inbox
+        <ReachInbox
           groups={inbox}
           work={inboxWork}
           nameOf={nameOf}
@@ -797,7 +831,7 @@ function EScreenBody({ props }: { props: ProtoProps }) {
           fan={fanHandles}
           selected={selected}
           focused={focusKey}
-          hoveredIssue={hoveredIssue}
+          reach={reach}
           onIssueHover={setHoveredIssue}
           onPick={() => setPage({ issue: "" }, { history: "replace" })}
           address={{
@@ -816,10 +850,12 @@ function EScreenBody({ props }: { props: ProtoProps }) {
     <SubjectTextContext.Provider
       value={{
         nameOf: subjectName,
-        lighting,
+        reach,
         light: lightSubjects,
         clear: clearSubjects,
-        pick: props.onSelect,
+        // The one alias-click. Today it selects; the grounding transition (bring the subject into
+        // view) belongs here so every Subject token, row and caption gets it at once.
+        go: (id) => props.onSelect(id),
       }}
     >
       <div ref={rootRef} data-proto="E2" className="flex size-full min-h-0">
@@ -864,13 +900,13 @@ function EScreenBody({ props }: { props: ProtoProps }) {
               }}
               start={
                 <div className="relative size-full min-w-0">
-                  <ECanvas
+                  <ReachCanvas
                     {...props}
-                    lit={lighting.ids}
+                    reach={reach}
+                    onHover={setHovered}
                     issueScope={issueScope}
                     annotated={annotated}
                     issues={issues}
-                    hoveredIssue={hoveredIssue}
                     onIssueHover={setHoveredIssue}
                     scale={encoded}
                     nameOf={nameOf}
@@ -990,4 +1026,29 @@ function SystemsList({
       }}
     />
   );
+}
+
+/** The picture redraws on every reach (lit rows, hovered element, hovered issue); the screen does not. */
+function ReachCanvas({
+  reach,
+  ...props
+}: Omit<ComponentProps<typeof ECanvas>, "lit" | "hovered" | "hoveredIssue"> & { reach: ReachStore }) {
+  const state = useReach(reach, (s) => s);
+  return (
+    <ECanvas
+      {...props}
+      lit={state.lighting.ids}
+      hovered={state.hovered}
+      hoveredIssue={state.issue}
+    />
+  );
+}
+
+/** The inbox redraws only when the hovered issue (its rail) changes. */
+function ReachInbox({
+  reach,
+  ...props
+}: Omit<ComponentProps<typeof Inbox>, "hoveredIssue"> & { reach: ReachStore }) {
+  const issue = useReach(reach, (s) => s.issue);
+  return <Inbox {...props} hoveredIssue={issue} />;
 }

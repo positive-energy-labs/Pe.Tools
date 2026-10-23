@@ -179,7 +179,7 @@ interface PaneResizeHandleProps {
 const paneResizeHandleRecipe = tv({
   slots: {
     root: "group z-raised flex touch-none items-center justify-center outline-none",
-    bar: "bg-line transition-colors duration-control group-hover:bg-ink-2 group-focus-visible:bg-ink-2 motion-reduce:transition-none",
+    bar: "bg-line transition-colors duration-control group-hover:bg-ink-2 group-focus-visible:bg-ink-2 group-active:bg-ink motion-reduce:transition-none",
   },
   variants: {
     axis: {

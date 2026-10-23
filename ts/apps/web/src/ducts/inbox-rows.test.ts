@@ -5,6 +5,7 @@ import type { HealPlan } from "@pe/ducts-domain/heal";
 import type { SystemScope } from "@pe/ducts-domain/system-scope";
 
 import {
+  compactStatus,
   focusRow,
   stageIssues,
   issueAt,
@@ -383,4 +384,14 @@ it("a no-rule finding offers one price-as pick per named family", () => {
     findings: [finding({ id: "no-rule:Radius Elbow", kind: "no-rule", elementIds: [55] })],
   });
   expect(rows.diagnostics[0]?.verbs).toContainEqual({ kind: "price-as", family: "Radius Elbow" });
+});
+
+it("compacts a status for the closed row and keeps unknown words", () => {
+  expect(compactStatus("0 of 6 units read")).toBe("0/6 read");
+  expect(compactStatus("3 of 12 terminals read")).toBe("3/12 read");
+  expect(compactStatus("outside priced paths")).toBe("off path");
+  expect(compactStatus("previewed: 2 pass · 1 refused · out of date")).toBe("2 pass · 1 refused");
+  expect(compactStatus("no flow · not on SA 19's runs")).toBe("no flow");
+  expect(compactStatus("healed 3 · ESP 0.100 → 0.200 in-wg")).toBe("healed 3");
+  expect(compactStatus("stretched")).toBe("stretched");
 });

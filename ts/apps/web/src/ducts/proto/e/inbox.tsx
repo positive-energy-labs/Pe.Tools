@@ -23,6 +23,7 @@ import { airflowPatches } from "../../airflow";
 import { rulingPatches, verdictPatches } from "../../assumptions";
 import { VERDICTS, type Verdict } from "../../claims";
 import {
+  compactStatus,
   diagnosticKind,
   INBOX_LABELS,
   INBOX_ORDER,
@@ -328,7 +329,8 @@ export function Inbox({
       title,
       stage: item.kind === "proposal" ? "proposed" : undefined,
       stagedBy: item.kind === "proposal" ? "pea" : undefined,
-      meta: <span data-tone={item.tone}>{item.status}</span>,
+      // The closed row gives the label the width: the status in its compact words.
+      meta: <span data-tone={item.tone}>{compactStatus(item.status)}</span>,
       actions: () => verbsOf(item, false),
       onMouseEnter: () => {
         if (subjects) subjects.light(description.references, null, item.key);
@@ -344,6 +346,11 @@ export function Inbox({
       pick: () => onSelect(item.ids[0] ?? null),
       detail: () => (
         <>
+          {compactStatus(item.status) !== item.status ? (
+            <p className="t-small" data-tone={item.tone} data-inbox-status="">
+              {item.status}
+            </p>
+          ) : null}
           {subjects ? (
             <p>
               <SubjectText document={description} owner={item.key} />
@@ -486,7 +493,8 @@ function RulingsList({
     <ListView
       aria-label="rulings"
       list={list}
-      row={({ key, actions, detail: _detail, ...parts }) => ({
+      // `title` is the sort text, not a hint: the row hints only what it cuts short.
+      row={({ key, actions, detail: _detail, title: _title, ...parts }) => ({
         ...parts,
         active: key === hoveredIssue,
         actions: actions?.(),

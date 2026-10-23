@@ -7,7 +7,7 @@ export function HelpTip({ children }: { children: React.ReactNode }) {
       <TooltipTrigger
         type="button"
         aria-label="What is this?"
-        className="grid size-5 cursor-help place-items-center t-small face-mono text-ink-2"
+        className="veil grid size-5 cursor-help place-items-center rounded-control t-small face-mono text-ink-2 hover:text-ink"
       >
         ?
       </TooltipTrigger>

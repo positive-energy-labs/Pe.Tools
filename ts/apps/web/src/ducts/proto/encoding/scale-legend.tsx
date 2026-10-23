@@ -41,7 +41,7 @@ export function ScaleLegend({
         <TooltipHint content={`select ${nameOf(quantity.maxId) ?? "it"}`}>
           <button
             type="button"
-            className="max-w-56 cursor-pointer truncate underline decoration-dotted underline-offset-2"
+            className="subject-ref max-w-56 truncate"
             onClick={() => onSelect(quantity.maxId!)}
           >
             {nameOf(quantity.maxId) ?? "an unnamed element"}

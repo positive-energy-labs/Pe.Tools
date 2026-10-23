@@ -4,7 +4,7 @@ import { afterEach, expect, test, vi } from "vite-plus/test";
 import type { DuctSnapshot } from "@pe/ducts-domain/types";
 import snapshot from "./fixtures/synthetic-snapshot.json";
 import { subjectDocument, subjectNamer } from "./subject-text";
-import { SubjectText, SubjectTextContext } from "./subject-text-view";
+import { SubjectText, reachStore, SubjectTextContext } from "./subject-text-view";
 
 afterEach(cleanup);
 const names = new Map([
@@ -76,12 +76,13 @@ test("names use a grille's mark, fitting size and part, then type, without inven
   expect(named(99999999)).toBeNull();
 });
 
-test("block hover lights all references; token hover/focus narrows and exit restores; unmount clears", () => {
+test("block hover lights all references; token hover/focus narrows and exit restores; press goes; unmount clears", () => {
   const light = vi.fn();
   const clear = vi.fn();
+  const go = vi.fn();
   const { container, unmount } = render(
     <SubjectTextContext.Provider
-      value={{ nameOf, light, clear, lighting: { ids: new Set(), references: [], focus: null } }}
+      value={{ nameOf, light, clear, go, reach: reachStore() }}
     >
       <SubjectText text="10368760 ends at 12317607:0 facing 12317611:0" />
     </SubjectTextContext.Provider>,
@@ -89,13 +90,15 @@ test("block hover lights all references; token hover/focus narrows and exit rest
   const block = container.querySelector("[data-subject-text]")!;
   fireEvent.mouseEnter(block);
   expect(light.mock.lastCall?.[0].map((r: { id: number }) => r.id)).toEqual([...names.keys()]);
-  const token = screen.getByRole("button", { name: "14×10 duct 12317607" });
+  const token = screen.getByRole("button", { name: "go to 14×10 duct port 0, reference 2" });
   fireEvent.mouseEnter(token);
   expect(light.mock.lastCall?.[1]).toBe(12317607);
   fireEvent.mouseLeave(token);
   expect(light.mock.lastCall?.[1]).toBeNull();
   fireEvent.focus(token);
   expect(light.mock.lastCall?.[1]).toBe(12317607);
+  fireEvent.click(token);
+  expect(go).toHaveBeenCalledExactlyOnceWith(12317607);
   fireEvent.mouseLeave(block);
   expect(clear).toHaveBeenCalled();
   clear.mockClear();

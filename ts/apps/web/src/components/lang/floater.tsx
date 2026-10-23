@@ -208,10 +208,10 @@ export function Floater({ spec }: { spec: FloaterSpec }) {
         <div
           data-slot="floater-grip"
           aria-label={`move ${spec.label}`}
-          className="absolute inset-x-0 top-0 z-10 h-1.5 cursor-grab touch-none"
+          className="group absolute inset-x-0 -top-1 z-10 h-2.5 cursor-grab touch-none active:cursor-grabbing"
           onPointerDown={sliding}
         >
-          <span className="pointer-events-none absolute left-1/2 top-1/2 h-px w-6 -translate-x-1/2 bg-line" />
+          <span className="pointer-events-none absolute left-1/2 top-1/2 h-px w-6 -translate-x-1/2 bg-line-2 transition-[width,background-color] duration-control group-hover:w-10 group-hover:bg-ink-2 group-active:bg-ink motion-reduce:transition-none" />
         </div>
         <div
           data-slot="floater-resize"
