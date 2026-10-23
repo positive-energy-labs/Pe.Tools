@@ -823,7 +823,9 @@ function EScreenBody({ props }: { props: ProtoProps }) {
         lighting,
         light: lightSubjects,
         clear: clearSubjects,
-        pick: props.onSelect,
+        // The one alias-click. Today it selects; the grounding transition (bring the subject into
+        // view) belongs here so every Subject token, row and caption gets it at once.
+        go: (id) => props.onSelect(id),
       }}
     >
       <div ref={rootRef} data-proto="E2" className="flex size-full min-h-0">

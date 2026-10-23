@@ -36,7 +36,9 @@
 
   /* Plumbing and parallel data-viz palette */
   --pe-on: var(--pe-page);
-  --pe-veil: color-mix(in srgb, var(--pe-ink) 10%, transparent);
+  /* Hover is the veil; a press doubles it (`--fill-press`). 14%: at 10% a hovered row on the dark
+     recess ground read as unlit (reach audit, 2026-10-23). */
+  --pe-veil: color-mix(in srgb, var(--pe-ink) 14%, transparent);
   --viz-1: light-dark(oklch(0.47 0.085 249.5), oklch(0.795 0.085 249.5));
   --viz-2: light-dark(oklch(0.47 0.085 155), oklch(0.795 0.085 155));
   --viz-3: light-dark(oklch(0.47 0.045 230), oklch(0.795 0.045 230));
@@ -103,6 +105,7 @@
     transparent 2px 4px
   );
   --fill-veil: linear-gradient(var(--pe-veil), var(--pe-veil));
+  --fill-press: var(--fill-veil), var(--fill-veil);
   --shadow-float:
     inset 0 1px 0 var(--pe-lift), 0 0 0 1px var(--pe-lift), 0 8px 24px var(--pe-shade);
   --shadow-modal: 0 4px 24px color-mix(in srgb, var(--pe-scrim) 50%, transparent);
@@ -208,6 +211,12 @@
     outline-offset: 2px;
   }
 
+  /* Tailwind's preflight gives a bare button the arrow; anything pressable shows the hand unless
+     it refuses (a refusal keeps its own not-allowed). Layered, so a cursor utility still wins. */
+  [data-pe] :is(button, select, summary, [role="button"]):not(:disabled, [aria-disabled="true"]) {
+    cursor: pointer;
+  }
+
   [data-pe] a {
     color: var(--pe-nav);
     text-underline-offset: 2px;
@@ -282,6 +291,9 @@
 
 [data-pe] .veil:hover {
   background-image: var(--fill-veil);
+}
+[data-pe] .veil:active {
+  background-image: var(--fill-press);
 }
 
 [data-pe] .hairline {

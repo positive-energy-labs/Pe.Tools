@@ -350,14 +350,17 @@ export function Annotations({
             data-subject-badge={ref.id}
             data-footnote={ref.number}
             data-emphasized={active}
+            // The kit's subject mark: the same chip the text draws after the name, lit together.
+            className="subject-badge"
+            data-lit={subjects.lighting.focus === ref.id ? "" : undefined}
             opacity={active ? 1 : 0.35}
             transform={`translate(${x} ${y})`}
           >
             <line x1={0} y1={0} x2={xy[0] - x} y2={xy[1] - y} stroke={token("ink-2")} />
-            <circle r={9} fill={token("page")} stroke={token("ink")} strokeWidth={active ? 2 : 1} />
-            <Caption x={0} y={3} anchor="middle" ink={token("ink")}>
-              {String(ref.number)}
-            </Caption>
+            <circle r={9} />
+            <text y={3.5} textAnchor="middle">
+              {ref.number}
+            </text>
           </g>
         );
       })}

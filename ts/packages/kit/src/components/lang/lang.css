@@ -199,6 +199,16 @@
   text-align: left;
   cursor: pointer;
 }
+[data-list-section-head]:hover {
+  background-image: var(--fill-veil);
+  color: var(--pe-ink);
+}
+[data-list-section-head]:active {
+  background-image: var(--fill-press);
+}
+[data-list-section-head]:focus-visible {
+  outline-offset: -2px;
+}
 [data-list-section-head] > svg {
   width: 1.2em;
   height: 1.2em;
@@ -342,8 +352,23 @@ tr.dl-row[data-active] {
   background-image: var(--fill-veil);
   color: var(--pe-ink);
 }
+[data-list-trigger="inline"]:active {
+  background-image: var(--fill-press);
+}
 .dl-row[data-cursor] {
   background-image: var(--fill-veil);
+}
+/* REACH: a row that picks announces it before the press: the hand, the veil (the list cursor follows
+   the pointer), a doubled veil while pressed, and the house ring drawn inside the row so a scroller
+   never clips it. A refused row keeps the arrow. */
+.dl-row:is([role="option"], [role="treeitem"], [role="row"]):not([aria-disabled="true"]) {
+  cursor: pointer;
+}
+.dl-row:active:not([aria-disabled="true"]) {
+  background-image: var(--fill-press);
+}
+.dl-row:focus-visible {
+  outline-offset: -2px;
 }
 .dl-row[data-active]::before {
   content: "";
@@ -644,6 +669,10 @@ tr.dl-row[data-active] {
 .dl-control:is(:hover, :focus-visible, :focus-within):not(:disabled, :has(input:disabled)) {
   border-color: var(--pe-line-2);
 }
+/* Where typing goes is unmistakable: the frame takes the secondary ink, a step past hover. */
+.dl-control:focus-within:not(:disabled, :has(input:disabled)) {
+  border-color: var(--pe-ink-2);
+}
 .dl-control[aria-invalid="true"] {
   border-color: var(--pe-caution);
 }
@@ -662,7 +691,7 @@ tr.dl-row[data-active] {
   background-color: var(--pe-page);
 }
 .dl-search:focus-within {
-  outline: 1px solid var(--pe-line-2);
+  outline: 1px solid var(--pe-ink-2);
 }
 .dl-search[data-face="bar"] {
   box-sizing: border-box;
@@ -827,4 +856,100 @@ tr.dl-row[data-active] {
 }
 .dl-connector-label[data-before] {
   transform: translate(-100%, -50%);
+}
+
+/* SUBJECT REFERENCE: a named element in prose (a Subject) and its footnote number. The name reads as
+   a link by its rule, not by a hue: full ink over a solid underline at a fixed offset. The number is
+   one mark drawn in two places, the chip after the name here and the numbered badge over the element
+   in the picture (`.subject-badge`), so a reader matches them at a glance. At rest the chip is a
+   ring; lit (its own token hovered or focused, or the badge hovered) it fills with ink. Hovering
+   the prose block that holds them draws every rule in it at full weight, the picture lights the
+   same subjects. Geometry is fixed: no state changes a size, so nothing reflows. */
+:root {
+  --subject-mark-size: 14px;
+  --subject-mark-edge: var(--pe-ink-2);
+  --subject-mark-ground: var(--pe-page);
+  --subject-mark-ink: var(--pe-ink);
+  --subject-mark-lit-ground: var(--pe-ink);
+  --subject-mark-lit-ink: var(--pe-page);
+}
+.subject-ref {
+  position: relative;
+  border-radius: var(--control-radius);
+  color: var(--pe-ink);
+  font-weight: var(--weight-medium);
+  text-decoration-line: underline;
+  text-decoration-style: solid;
+  text-decoration-thickness: 1px;
+  text-decoration-color: var(--pe-line-2);
+  text-underline-offset: 3px;
+  cursor: pointer;
+}
+/* The hit box grows past the glyphs by a hairline gutter, never the line box (no reflow). */
+.subject-ref::before {
+  content: "";
+  position: absolute;
+  inset: -2px -2px;
+}
+[data-subject-text]:hover .subject-ref {
+  text-decoration-color: var(--pe-ink-2);
+}
+.subject-ref:is(:hover, :focus-visible, [data-lit]) {
+  background-image: var(--fill-veil);
+  text-decoration-color: var(--pe-ink);
+}
+.subject-ref:active {
+  background-image: var(--fill-press);
+}
+.subject-mark {
+  display: inline-grid;
+  place-items: center;
+  box-sizing: border-box;
+  min-width: var(--subject-mark-size);
+  height: var(--subject-mark-size);
+  margin-left: 2px;
+  padding: 0 3px;
+  border: 1px solid var(--subject-mark-edge);
+  border-radius: calc(var(--subject-mark-size) / 2);
+  background: var(--subject-mark-ground);
+  color: var(--subject-mark-ink);
+  font-family: var(--font-mono);
+  font-size: 9px;
+  font-size-adjust: none;
+  font-weight: var(--weight-strong);
+  font-variant-numeric: tabular-nums;
+  line-height: 1;
+  /* Superscript without the line box growing: raised by transform, not vertical-align. */
+  vertical-align: baseline;
+  transform: translateY(-0.45em);
+  text-decoration: none;
+}
+[data-subject-text]:hover .subject-mark {
+  border-color: var(--pe-ink);
+}
+.subject-ref:is(:hover, :focus-visible, [data-lit]) .subject-mark,
+.subject-mark[data-lit] {
+  border-color: var(--subject-mark-lit-ground);
+  background: var(--subject-mark-lit-ground);
+  color: var(--subject-mark-lit-ink);
+}
+/* The same mark over the picture: an SVG group holding a circle and its number. */
+/* A badge only draws while its prose block is hovered, so it wears that state's full-ink edge. */
+.subject-badge > circle {
+  fill: var(--subject-mark-ground);
+  stroke: var(--pe-ink);
+  stroke-width: 1.5;
+}
+.subject-badge > text {
+  fill: var(--subject-mark-ink);
+  font-family: var(--font-mono);
+  font-size: 10px;
+  font-weight: var(--weight-strong);
+}
+.subject-badge[data-lit] > circle {
+  fill: var(--subject-mark-lit-ground);
+  stroke: var(--subject-mark-lit-ground);
+}
+.subject-badge[data-lit] > text {
+  fill: var(--subject-mark-lit-ink);
 }

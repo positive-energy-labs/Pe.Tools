@@ -139,9 +139,7 @@ export function ClaimElement({
   onHover,
   onPick,
   onShown,
-  footnote,
-  connector,
-}: { part: Exclude<ClaimPart, string>; footnote?: number; connector?: number } & ClaimHandlers) {
+}: { part: Exclude<ClaimPart, string> } & ClaimHandlers) {
   const observation = useNativeObservation();
   const target = observedElements(observation, [part.id]);
   const native = observation.scope?.source === "native" && observation.scope.document !== null;
@@ -155,7 +153,7 @@ export function ClaimElement({
         {...revitScope(observation.scope)}
         {...revitTarget(target.ids, target.refs)}
         aria-label={`${part.name} ${part.id}`}
-        className="cursor-pointer underline decoration-dotted underline-offset-2"
+        className="subject-ref"
         onMouseEnter={() => onHover(part.id)}
         onMouseLeave={() => onHover(null)}
         onFocus={() => onHover(part.id)}
@@ -173,11 +171,7 @@ export function ClaimElement({
             style={{ backgroundColor: tokenRef("ink-2") }}
           />
         ) : (
-          <>
-            {part.name}
-            {connector != null ? ` port ${connector}` : ""}
-            {footnote != null ? <sup data-subject-footnote={footnote}>{footnote}</sup> : null}
-          </>
+          part.name
         )}
       </button>
     </TooltipHint>

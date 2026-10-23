@@ -5,7 +5,7 @@
  * schematic is the one-line. Element facts open beside its projected box; rulings open at the pointer. A pick, a
  * frame, a look and a gesture each write only their own Page keys.
  */
-import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { useCallback, useContext, useEffect, useMemo, useRef, useState } from "react";
 import { flushSync } from "react-dom";
 
 import { DUCTS_LAYERS, emptyListSearch, toggleLayer } from "@pe/agent-contracts";
@@ -46,7 +46,7 @@ import { damageLayer } from "#/scene/damage";
 import { usePictureFloaters } from "./picture-floaters";
 import { RulingBody, useMarks } from "./rulings";
 import { noRunParts } from "../../subject-text";
-import { SubjectText } from "../../subject-text-view";
+import { SubjectText, SubjectTextContext } from "../../subject-text-view";
 
 type Open =
   | { what: "element"; id: number; x: number; y: number; box: DOMRect; side: "left" | "right" }
@@ -420,6 +420,7 @@ function Canvas({
       ? Number(page.selected)
       : null;
   const pickedName = pickedId == null ? null : nameOf(pickedId);
+  const subjects = useContext(SubjectTextContext);
   const title =
     systemName == null ? (
       "picture"
@@ -432,7 +433,7 @@ function Canvas({
         <TooltipHint content={`${systemName} · clear the selection`}>
           <button
             type="button"
-            className="min-w-0 shrink truncate"
+            className="veil min-w-0 shrink truncate rounded-control px-1 text-ink-2 hover:text-ink"
             aria-label={`clear the selection in ${systemName}`}
             onClick={() => setPage({ selected: "" }, { history: "push" })}
           >
@@ -440,13 +441,18 @@ function Canvas({
           </button>
         </TooltipHint>
         <ChevronRight aria-hidden className="size-3.5 shrink-0 text-ink-2" />
-        <span
-          className="min-w-0 truncate"
-          title={pickedName}
-          data-e-selected={pickedId ?? undefined}
-        >
-          {pickedName}
-        </span>
+        <TooltipHint content={`${pickedName} · go to it`}>
+          {/* The picked element's name is a Subject: pressing it is the same alias-click as in text. */}
+          <button
+            type="button"
+            className="veil min-w-0 truncate rounded-control px-1"
+            data-e-selected={pickedId ?? undefined}
+            aria-label={`go to ${pickedName}`}
+            onClick={() => pickedId != null && subjects?.go(pickedId)}
+          >
+            {pickedName}
+          </button>
+        </TooltipHint>
       </span>
     );
 
@@ -585,7 +591,8 @@ function Canvas({
             encoding={scale.encoding}
             counts={scale.counts}
             nameOf={scale.nameOf}
-            onSelect={(id) => pick(id)}
+            // The max's element is named in text: the alias-click, not a picture pick.
+            onSelect={(id) => (subjects ? subjects.go(id) : pick(id))}
           />
           {picture === "model" ? <KeyLegend keys={PICTURE_KEYS} lead={0} /> : null}
         </div>
