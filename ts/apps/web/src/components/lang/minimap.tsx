@@ -335,6 +335,10 @@ export function OrbitMinimap({
       aria-label="orbit globe"
       data-minimap="orbit"
       className="block cursor-grab touch-none select-none overflow-visible"
+      style={{
+        width: `var(--floater-content-w, ${SIZE}px)`,
+        height: `var(--floater-content-h, ${SIZE}px)`,
+      }}
       onPointerDown={(event) => {
         if (event.button !== 0) return;
         // A drag turns the globe; it never starts a text selection in the pane.

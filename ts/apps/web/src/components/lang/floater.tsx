@@ -4,11 +4,18 @@
  * bind only while focus is inside it. Esc inside it closes it and hands focus back to the pane.
  * A floater whose corner would cover the body's `pane-legend` moves to the nearest place that covers
  * neither the legend nor another floater: a corner, else stacked past the floater holding one;
- * none free, it keeps its own. The person slides it along the edge it sits on by its top grip and,
- * when it has a `size`, resizes it from the inner corner within responsive caps (the smallest is our
+ * none free, it keeps its own. The person slides it along the edge it sits on by its top grip and
+ * resizes it from the inner corner within responsive caps (the smallest is our
  * way of hiding it). A floater may overlap the neighbouring panes' edges; that is wanted.
  */
-import { useLayoutEffect, useRef, useState, type PointerEvent as ReactPointerEvent, type ReactNode, type RefObject } from "react";
+import {
+  useLayoutEffect,
+  useRef,
+  useState,
+  type PointerEvent as ReactPointerEvent,
+  type ReactNode,
+  type RefObject,
+} from "react";
 
 import { KeyScope, useScopeKeys, type Chord } from "@pe/kit/keys";
 
@@ -121,13 +128,19 @@ function drag(
   own: HTMLElement,
   move: (dx: number, dy: number, field: DOMRect, rect: DOMRect) => void,
 ) {
+  if (event.button !== 0) return;
+  event.stopPropagation();
   const field = own.parentElement!.getBoundingClientRect();
   const rect = own.getBoundingClientRect();
   const [x, y] = [event.clientX, event.clientY];
   const target = event.currentTarget;
   target.setPointerCapture(event.pointerId);
-  const onMove = (e: PointerEvent) => move(e.clientX - x, e.clientY - y, field, rect);
-  const stop = () => {
+  const onMove = (e: PointerEvent) => {
+    e.stopPropagation();
+    move(e.clientX - x, e.clientY - y, field, rect);
+  };
+  const stop = (e: PointerEvent) => {
+    e.stopPropagation();
     target.removeEventListener("pointermove", onMove);
     target.removeEventListener("pointerup", stop);
     target.removeEventListener("pointercancel", stop);
@@ -143,6 +156,7 @@ export function Floater({ spec }: { spec: FloaterSpec }) {
   const at = useYield(ref, spec.place);
   const [slide, setSlide] = useState(0);
   const [box, setBox] = useState(spec.size);
+  const defaultSize = useRef(spec.size);
   const gutter = () => parseFloat(getComputedStyle(ref.current!).getPropertyValue("--gutter")) || 0;
   const startSlide = useRef(0);
   const sliding = (e: ReactPointerEvent<HTMLElement>) => {
@@ -153,11 +167,18 @@ export function Floater({ spec }: { spec: FloaterSpec }) {
     });
   };
   const resizing = (e: ReactPointerEvent<HTMLElement>) => {
+    // Measure at the first resize so content loaded after mount supplies its current size.
+    defaultSize.current ??= ref.current!.getBoundingClientRect();
+    const initial = defaultSize.current;
     const [h, v] = [at.corner[1] === "r" ? -1 : 1, at.corner[0] === "t" ? 1 : -1];
     drag(e, ref.current!, (dx, dy, f, r) =>
       setBox({
-        width: clamp(r.width + h * dx, MIN.width, Math.max(spec.size!.width, f.width * CAP.width)),
-        height: clamp(r.height + v * dy, MIN.height, Math.max(spec.size!.height, f.height * CAP.height)),
+        width: clamp(r.width + h * dx, MIN.width, Math.max(initial.width, f.width * CAP.width)),
+        height: clamp(
+          r.height + v * dy,
+          MIN.height,
+          Math.max(initial.height, f.height * CAP.height),
+        ),
       }),
     );
   };
@@ -177,6 +198,8 @@ export function Floater({ spec }: { spec: FloaterSpec }) {
           ...box,
           ["--floater-w" as string]: box && `${box.width}px`,
           ["--floater-h" as string]: box && `${box.height}px`,
+          ["--floater-content-w" as string]: box && "100%",
+          ["--floater-content-h" as string]: box && "100%",
           translate: at.dy + slide ? `0 ${at.dy + slide}px` : undefined,
         }}
       >
@@ -187,16 +210,16 @@ export function Floater({ spec }: { spec: FloaterSpec }) {
           aria-label={`move ${spec.label}`}
           className="absolute inset-x-0 top-0 z-10 h-1.5 cursor-grab touch-none"
           onPointerDown={sliding}
+        >
+          <span className="pointer-events-none absolute left-1/2 top-1/2 h-px w-6 -translate-x-1/2 bg-line" />
+        </div>
+        <div
+          data-slot="floater-resize"
+          aria-label={`resize ${spec.label}`}
+          className={`absolute z-10 size-2.5 touch-none ${HANDLE[at.corner]}`}
+          style={{ cursor: `${CURSOR[at.corner]}-resize` }}
+          onPointerDown={resizing}
         />
-        {box ? (
-          <div
-            data-slot="floater-resize"
-            aria-label={`resize ${spec.label}`}
-            className={`absolute z-10 size-2.5 touch-none ${HANDLE[at.corner]}`}
-            style={{ cursor: `${CURSOR[at.corner]}-resize` }}
-            onPointerDown={resizing}
-          />
-        ) : null}
       </div>
     </KeyScope>
   );
