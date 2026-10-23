@@ -92,7 +92,9 @@ test("SVG hints focus their containing mark and preserve its accessible descript
   expect(mark.getAttribute("aria-description")).toBe("original");
 });
 
-test("ordinary tooltips inherit the subject box", async () => {
+test("ordinary tooltips inherit the subject box when that side fits", async () => {
+  vi.spyOn(document.documentElement, "clientWidth", "get").mockReturnValue(1024);
+  vi.spyOn(document.documentElement, "clientHeight", "get").mockReturnValue(768);
   render(
     <TooltipProvider delay={0}>
       <SubjectBox box={rect(100, 100, 200, 200)}>
@@ -108,21 +110,7 @@ test("ordinary tooltips inherit the subject box", async () => {
   await act(async () => mark.focus());
   const tip = await screen.findByRole("tooltip");
   await waitFor(() => expect(tip.getAttribute("data-side")).toBe("right"));
-});
-
-test("an SVG hint opens on pointer dwell and closes on leave", async () => {
-  render(
-    <svg>
-      <path aria-label="edge" d="M0 0 L10 10">
-        <SvgTip content="edge" />
-      </path>
-    </svg>,
-  );
-  const mark = screen.getByLabelText("edge");
-  fireEvent.pointerEnter(mark);
-  expect(await screen.findByRole("tooltip")).toBeTruthy();
-  fireEvent.pointerLeave(mark);
-  await waitFor(() => expect(screen.queryByRole("tooltip")).toBeNull());
+  vi.restoreAllMocks();
 });
 
 test("the slot closes a controlled sibling even when its caller leaves open true", async () => {

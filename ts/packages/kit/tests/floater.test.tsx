@@ -10,85 +10,56 @@ afterEach(() => {
   vi.unstubAllGlobals();
 });
 
-test.each([false, true])(
-  "floaters avoid earlier siblings even at a free home (legend=%s)",
-  (legend) => {
-    vi.spyOn(HTMLElement.prototype, "getBoundingClientRect").mockImplementation(
-      function (this: HTMLElement) {
-        if (this.dataset.field !== undefined) return new DOMRect(0, 0, 600, 600);
-        if (this.dataset.slot === "pane-legend") return new DOMRect(260, 0, 80, 30);
-        if (this.dataset.slot === "floater") {
-          const corner = this.dataset.place!;
-          const dy = Number(this.style.translate.split(" ")[1]?.replace("px", "")) || 0;
-          return new DOMRect(
-            corner[1] === "r" ? 500 : 0,
-            (corner[0] === "b" ? 500 : 0) + dy,
-            100,
-            100,
-          );
-        }
-        return new DOMRect();
-      },
-    );
-    const spec = (key: string): FloaterSpec => ({
-      key,
-      label: key,
-      place: "tr",
-      size: { width: 100, height: 100 },
-      open: true,
-      onOpenChange: vi.fn(),
-      render: () => key,
-    });
-    const view = render(
-      <div data-field="">
-        {legend && <div data-slot="pane-legend" />}
-        <Floater spec={spec("first")} />
-        <Floater spec={spec("second")} />
-      </div>,
-    );
-    const first = view.getByRole("region", { name: "first" }).getBoundingClientRect();
-    const second = view.getByRole("region", { name: "second" }).getBoundingClientRect();
-    expect(first.x).toBe(500);
-    expect(
-      second.bottom <= first.top || second.top >= first.bottom || second.right <= first.left,
-    ).toBe(true);
-  },
-);
+const spec = (key: string, size?: FloaterSpec["size"]): FloaterSpec => ({
+  key,
+  label: key,
+  place: "tr",
+  size,
+  open: true,
+  onOpenChange: vi.fn(),
+  render: () => <svg aria-label="globe picture" width="220" height="220" />,
+});
 
-test.each(["data-picture-readout", "data-slot"])(
-  "a floater yields when %s furniture arrives",
-  async (attribute) => {
-    vi.spyOn(HTMLElement.prototype, "getBoundingClientRect").mockImplementation(
-      function (this: HTMLElement) {
-        if (this.dataset.field !== undefined) return new DOMRect(0, 0, 600, 600);
-        if (this.hasAttribute("data-picture-readout") || this.dataset.slot === "pane-work")
-          return new DOMRect(450, 0, 150, 100);
-        if (this.dataset.slot === "floater") return new DOMRect(500, 0, 100, 100);
-        return new DOMRect();
-      },
-    );
-    const field = (busy: boolean) => (
+function mockField() {
+  vi.spyOn(HTMLElement.prototype, "getBoundingClientRect").mockImplementation(function () {
+    if (this.dataset.field !== undefined) return new DOMRect(0, 0, 600, 600);
+    if (this.matches("[data-picture-readout], [data-slot='pane-work'], [data-slot='pane-legend']"))
+      return new DOMRect(450, 0, 150, 100);
+    if (this.dataset.slot !== "floater") return new DOMRect();
+    const corner = this.dataset.place!;
+    const dy = Number(this.style.translate.split(" ")[1]?.replace("px", "")) || 0;
+    return new DOMRect(corner[1] === "r" ? 500 : 0, (corner[0] === "b" ? 500 : 0) + dy, 100, 100);
+  });
+}
+
+test.each(["sibling", "pane-legend", "data-picture-readout", "pane-work"])(
+  "floaters yield to arriving %s without losing their preferred home",
+  async (kind) => {
+    mockField();
+    const field = (arrived: boolean) => (
       <div data-field="">
-        {busy && <div {...{ [attribute]: "pane-work" }} />}
-        <Floater
-          spec={{
-            key: "dock",
-            label: "dock",
-            place: "tr",
-            size: { width: 100, height: 100 },
-            open: true,
-            onOpenChange: vi.fn(),
-            render: () => "map",
-          }}
-        />
+        {arrived &&
+          (kind === "sibling" ? (
+            <Floater spec={spec("first", { width: 100, height: 100 })} />
+          ) : (
+            <div {...{ [kind === "data-picture-readout" ? kind : "data-slot"]: kind }} />
+          ))}
+        <Floater spec={spec("second", { width: 100, height: 100 })} />
       </div>
     );
     const view = render(field(false));
-    const floater = view.getByRole("region", { name: "dock" });
-    expect(floater.dataset.place === "tr" && !floater.style.translate).toBe(true);
+    const second = view.getByRole("region", { name: "second" });
+    expect(second.dataset.place === "tr" && !second.style.translate).toBe(true);
     view.rerender(field(true));
     await waitFor(() =>
-      expect(floater.dataset.place === "tr" && !floater.style.translate).toBe(false),
+      expect(second.dataset.place === "tr" && !second.style.translate).toBe(false),
+    );
+    if (kind !== "sibling") return;
+    const first = view.getByRole("region", { name: "first" }).getBoundingClientRect();
+    const rect = second.getBoundingClientRect();
+    expect(first.x).toBe(500);
+    expect(rect.bottom <= first.top || rect.top >= first.bottom || rect.right <= first.left).toBe(
+      true,
     );
   },
 );
@@ -100,17 +71,7 @@ function setup(size?: FloaterSpec["size"]) {
   const outerPointer = vi.fn();
   const view = render(
     <div onPointerDown={outerPointer} onPointerMove={outerPointer} onPointerUp={outerPointer}>
-      <Floater
-        spec={{
-          key: "globe",
-          label: "globe",
-          place: "tr",
-          size,
-          open: true,
-          onOpenChange: vi.fn(),
-          render: () => "content",
-        }}
-      />
+      <Floater spec={spec("globe", size)} />
     </div>,
   );
   const floater = view.getByRole("region", { name: "globe" });
@@ -165,19 +126,23 @@ test("shrinking a navigation field caps its floaters and restores their preferre
   expect([floater.style.width, floater.style.height]).toEqual(["230px", "230px"]);
 });
 
-test("a CSS-folded floater is a chip that opens its content on press", async () => {
-  const computed = getComputedStyle;
-  vi.stubGlobal("getComputedStyle", (el: Element) => {
-    const style = computed(el);
-    const read = style.getPropertyValue.bind(style);
-    vi.spyOn(style, "getPropertyValue").mockImplementation((name) =>
-      name === "--floater-folded" ? "1" : read(name),
-    );
-    return style;
-  });
-  const { view, floater } = setup();
-  expect(floater.hasAttribute("data-folded")).toBe(true);
-  expect(view.queryByText("content")).toBeNull();
-  fireEvent.click(view.getByRole("button", { name: "globe" }));
-  expect(await view.findByText("content")).toBeTruthy();
-});
+test.each([undefined, { width: 230, height: 230 }])(
+  "a CSS-folded floater opens on a fixed content-sized plane (size=%s)",
+  async (size) => {
+    render(<style>{'[data-slot="floater"] { --floater-folded: 1; }'}</style>);
+    const { view, floater } = setup(size);
+    expect(floater.hasAttribute("data-folded")).toBe(true);
+    expect(view.queryByLabelText("globe picture")).toBeNull();
+    const focus = vi.spyOn(HTMLElement.prototype, "focus");
+    fireEvent.click(view.getByRole("button", { name: "globe" }));
+    const svg = await view.findByLabelText("globe picture");
+    const popup = svg.closest<HTMLElement>('[data-slot="popover-content"]')!;
+    expect(popup).toBeTruthy();
+    expect(popup.parentElement!.style.position).toBe("fixed");
+    expect(floater.contains(popup)).toBe(false);
+    expect(popup.style.width).toBe(size ? "230px" : "");
+    expect(popup.style.height).toBe(size ? "230px" : "");
+    await waitFor(() => expect(focus.mock.contexts).toContain(popup));
+    expect(focus.mock.calls.every(([options]) => options?.preventScroll)).toBe(true);
+  },
+);

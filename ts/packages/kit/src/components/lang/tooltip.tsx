@@ -85,6 +85,7 @@ export function Tooltip({
   onOpenChange,
   ...props
 }: Primitive.Root.Props) {
+  const parent = useContext(Description);
   const id = useId();
   const [anchor, setAnchor] = useState<Element | null>(null);
   const [uncontrolled, setOpen] = useState(defaultOpen);
@@ -93,6 +94,8 @@ export function Tooltip({
     <Description.Provider value={{ id, open, anchor }}>
       <Primitive.Root
         {...props}
+        // The shared warm-up group would dismiss this evidence when its footnote opens a hint.
+        disabled={props.disabled || parent?.open}
         open={open}
         onOpenChange={(next, event) => {
           if (next && still && event.reason === "trigger-hover") event.cancel();
@@ -145,7 +148,7 @@ export function TooltipContent({
       <Primitive.Positioner
         anchor={anchor}
         side={away?.side ?? side}
-        collisionAvoidance={away ? { side: "none", align: "shift" } : undefined}
+        collisionAvoidance={{ side: "flip", align: "shift", fallbackAxisSide: "start" }}
         align={align}
         sideOffset={
           typeof sideOffset === "function"
@@ -161,11 +164,7 @@ export function TooltipContent({
           role="tooltip"
           data-surface="artifact"
           data-slot="tooltip-content"
-          className={cn(
-            floatingSurface,
-            "max-w-[min(24rem,var(--available-width))] px-2 py-1",
-            className,
-          )}
+          className={cn(floatingSurface, className)}
           {...props}
         />
       </Primitive.Positioner>
@@ -177,8 +176,7 @@ export function TooltipContent({
 export function SvgTip({ content }: { content: ReactNode }) {
   const [mark, setMark] = useState<SVGElement | null>(null);
   const [open, setOpen] = useState(false);
-  const close = useCallback(() => setOpen(false), []);
-  const grace = useHoverGrace(close);
+  const grace = useHoverGrace(setOpen);
   const attach = useCallback(
     (node: SVGMetadataElement | null) =>
       setMark(node?.parentElement instanceof SVGElement ? node.parentElement : null),
@@ -194,7 +192,7 @@ export function SvgTip({ content }: { content: ReactNode }) {
     };
     const leave = () => {
       clearTimeout(timer);
-      grace.leave(undefined);
+      grace.leave(false);
       mark.setAttribute(
         "data-reach",
         mark.matches(":focus") ? "focus" : mark.matches(":hover") ? "hover" : "rest",
@@ -205,32 +203,28 @@ export function SvgTip({ content }: { content: ReactNode }) {
       mark.setAttribute("data-reach", "focus");
       setOpen(true);
     };
-    const tab = mark.getAttribute("tabindex");
+    const previous = ["data-svg-tip", "data-reach", "tabindex", "aria-description"].map(
+      (name) => [name, mark.getAttribute(name)] as const,
+    );
     mark.setAttribute("data-svg-tip", "");
-    const reach = mark.getAttribute("data-reach");
     mark.setAttribute("data-reach", "rest");
-    const description = mark.getAttribute("aria-description");
-    if (tab == null) mark.setAttribute("tabindex", "0");
+    if (!mark.hasAttribute("tabindex")) mark.setAttribute("tabindex", "0");
     if (typeof content === "string") mark.setAttribute("aria-description", content);
-    mark.addEventListener("pointerenter", enter);
-    mark.addEventListener("pointerleave", leave);
-    mark.addEventListener("focus", focus);
-    mark.addEventListener("blur", leave);
-    mark.addEventListener("pointerdown", leave);
+    const events = {
+      pointerenter: enter,
+      pointerleave: leave,
+      focus,
+      blur: leave,
+      pointerdown: leave,
+    };
+    Object.entries(events).forEach(([name, handler]) => mark.addEventListener(name, handler));
     return () => {
       clearTimeout(timer);
       grace.cancel();
-      mark.removeAttribute("data-svg-tip");
-      if (reach == null) mark.removeAttribute("data-reach");
-      else mark.setAttribute("data-reach", reach);
-      if (tab == null) mark.removeAttribute("tabindex");
-      if (description == null) mark.removeAttribute("aria-description");
-      else mark.setAttribute("aria-description", description);
-      mark.removeEventListener("pointerenter", enter);
-      mark.removeEventListener("pointerleave", leave);
-      mark.removeEventListener("focus", focus);
-      mark.removeEventListener("blur", leave);
-      mark.removeEventListener("pointerdown", leave);
+      previous.forEach(([name, value]) =>
+        value == null ? mark.removeAttribute(name) : mark.setAttribute(name, value),
+      );
+      Object.entries(events).forEach(([name, handler]) => mark.removeEventListener(name, handler));
     };
   }, [mark, content, grace]);
   return (
@@ -240,9 +234,9 @@ export function SvgTip({ content }: { content: ReactNode }) {
         <TooltipContent
           anchor={mark}
           onFocusCapture={grace.cancel}
-          onBlurCapture={() => grace.leave(undefined)}
+          onBlurCapture={() => grace.leave(false)}
           onPointerEnter={grace.cancel}
-          onPointerLeave={() => grace.leave(undefined)}
+          onPointerLeave={() => grace.leave(false)}
         >
           {content}
         </TooltipContent>

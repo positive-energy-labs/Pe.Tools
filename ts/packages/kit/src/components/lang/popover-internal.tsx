@@ -151,6 +151,7 @@ export type PopoverContentProps = Omit<Primitive.Popup.Props, "className"> &
     anchor?: Primitive.Positioner.Props["anchor"];
     collisionAvoidance?: Primitive.Positioner.Props["collisionAvoidance"];
     collisionPadding?: Primitive.Positioner.Props["collisionPadding"];
+    collisionBoundary?: Primitive.Positioner.Props["collisionBoundary"];
     positionerClassName?: string;
     /** Keep the popup mounted while closed (a menu whose state outlives its opening). */
     keepMounted?: boolean;
@@ -205,6 +206,7 @@ export function PopoverContent({
   anchor,
   collisionAvoidance,
   collisionPadding = 8,
+  collisionBoundary,
   positionerClassName,
   className,
   keepMounted,
@@ -219,10 +221,13 @@ export function PopoverContent({
       : anchor && typeof anchor === "object" && "current" in anchor
         ? anchor.current
         : (trigger ?? null);
-  const away = useSubjectPosition(target);
+  const subject = useSubjectPosition(target);
+  // L2: bounded furniture stays in its own field; subject overlays still clear the picture.
+  const away = collisionBoundary ? null : subject;
   return (
     <Primitive.Portal keepMounted={keepMounted}>
       <Primitive.Positioner
+        positionMethod="fixed"
         anchor={anchor}
         side={away?.side ?? side}
         align={align}
@@ -233,6 +238,7 @@ export function PopoverContent({
         }
         alignOffset={alignOffset}
         collisionPadding={collisionPadding}
+        collisionBoundary={collisionBoundary}
         collisionAvoidance={away ? { side: "none", align: "shift" } : collisionAvoidance}
         className={cn("isolate z-popup", positionerClassName)}
       >
