@@ -6,7 +6,7 @@ import type { Column } from "@pe/kit/table/model";
 import { ReadCell } from "@pe/kit/table/cells";
 import { TooltipHint } from "@pe/kit/lang/tooltip";
 /**
- * THROWAWAY (protoui round 3, E2): the loss bar the tree draws, and its one-line legend.
+ * The loss bar the tree draws, and its one-line legend.
  * Full width is the group's critical run (Pe's largest fan-to-grille total), so the critical row
  * fills its track and every other row reads as a share of it. Unpriced draws no track: an empty bar
  * would read as zero loss.

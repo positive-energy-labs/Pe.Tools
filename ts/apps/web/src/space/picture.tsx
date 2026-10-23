@@ -282,9 +282,6 @@ export function SpacePicture({
       ),
     [hasPose, orbit, box],
   );
-  // The key legend holds the bottom left. TODO(S1): a floater whose home corner is free skips the
-  // floaters before it (floater.tsx useYield), so North displaced to "br" sat on East; it stacks
-  // under Top instead until that lands.
   const place = { top: "tl", north: "tl", east: "br" } as const;
   const floaters: FloaterSpec[] = [
     {

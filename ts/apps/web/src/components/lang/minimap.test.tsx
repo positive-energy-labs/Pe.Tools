@@ -1,3 +1,4 @@
+import { Floater, type FloaterSpec } from "@pe/kit/lang/floater";
 import { reachStore } from "@pe/kit/lang/reach";
 import { SubjectTextContext } from "@pe/kit/lang/subject-text";
 import { Row } from "@pe/kit/lang/row";
@@ -197,4 +198,64 @@ test("the kit row channel lights the globe through the one scene adapter without
   expect(path.getAttribute("d")).toBe("");
   expect(orbit.read()).toEqual(viewport);
   expect(commit).not.toHaveBeenCalled();
+});
+
+const floaterViewport: OrbitViewport = {
+  kind: "orbit",
+  yaw: 30,
+  elev: 30,
+  zoom: 1,
+  pivot: [0, 0, 0],
+};
+const floaterPointer = (el: Element, type: string, x: number, y: number) =>
+  fireEvent(el, new MouseEvent(type, { bubbles: true, button: 0, clientX: x, clientY: y }));
+
+function setupFloater(size?: FloaterSpec["size"]) {
+  const onViewport = vi.fn();
+  const orbit = createLiveOrbit(floaterViewport, onViewport);
+  const outerPointer = vi.fn();
+  const view = render(
+    <div onPointerDown={outerPointer} onPointerMove={outerPointer} onPointerUp={outerPointer}>
+      <Floater
+        spec={{
+          key: "globe",
+          label: "globe",
+          place: "tr",
+          size,
+          open: true,
+          onOpenChange: vi.fn(),
+          render: () => <OrbitMinimap orbit={orbit} />,
+        }}
+      />
+    </div>,
+  );
+  const floater = view.getByRole("region", { name: "globe" });
+  vi.spyOn(floater.parentElement!, "getBoundingClientRect").mockReturnValue(
+    new DOMRect(0, 0, 600, 600),
+  );
+  const rect = vi
+    .spyOn(floater, "getBoundingClientRect")
+    .mockReturnValue(new DOMRect(360, 10, 230, 230));
+  const grip = view.getByLabelText("move globe");
+  const resize = view.getByLabelText("resize globe");
+  grip.setPointerCapture = resize.setPointerCapture = vi.fn();
+  return { view, orbit, onViewport, outerPointer, floater, rect, grip, resize };
+}
+
+test("explicit sizes keep responsive caps and resize handles leave globe orbit dragging intact", () => {
+  const { view, orbit, onViewport, floater, resize } = setupFloater({ width: 230, height: 230 });
+  floaterPointer(resize, "pointerdown", 360, 240);
+  floaterPointer(resize, "pointermove", -1000, 1000);
+  floaterPointer(resize, "pointerup", -1000, 1000);
+  expect([floater.style.width, floater.style.height]).toEqual(["240px", "420px"]);
+  expect(onViewport).not.toHaveBeenCalled();
+  const globe = view.getByRole("group", { name: "orbit globe" });
+  floaterPointer(globe, "pointerdown", 400, 100);
+  floaterPointer(globe, "pointermove", 450, 125);
+  floaterPointer(globe, "pointerup", 450, 125);
+  expect(orbit.read()).toEqual({ ...floaterViewport, yaw: 10, elev: 40 });
+  expect(onViewport).toHaveBeenCalledExactlyOnceWith(
+    { ...floaterViewport, yaw: 10, elev: 40 },
+    "gesture",
+  );
 });

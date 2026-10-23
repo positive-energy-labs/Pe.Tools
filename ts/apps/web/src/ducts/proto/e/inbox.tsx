@@ -1,12 +1,4 @@
-import {
-  useCallback,
-  useContext,
-  useEffect,
-  useMemo,
-  useRef,
-  useState,
-  type ReactNode,
-} from "react";
+import { useCallback, useContext, useMemo, useRef, useState, type ReactNode } from "react";
 import { Ban, Check, Eye, EyeOff, Fan, Link, Pencil, X, type LucideIcon } from "lucide-react";
 import type { DuctsRouteDocument } from "@pe/agent-contracts";
 import type { LossesWork } from "../../work";
@@ -166,10 +158,6 @@ export function Inbox({
   const observation = useNativeObservation();
   const subjects = useContext(SubjectTextContext);
   const [nativeResult, setNativeResult] = useState<ShowElementsResult | null>(null);
-  // Hover intent: a row lights only after the pointer dwells on it, so a pointer passing over rows
-  // on its way out (to a badge in the picture) does not replace what it carries.
-  const intent = useRef<{ key: string; timer?: ReturnType<typeof setTimeout> } | null>(null);
-  useEffect(() => () => clearTimeout(intent.current?.timer), []);
   const [selecting, setSelecting] = useState(false);
   const cellOf = useCallback(
     (segment: string, key: string) =>
@@ -371,29 +359,16 @@ export function Inbox({
         meta: blocked ? undefined : status,
         actions: () => verbsOf(item, false),
         onMouseEnter: () => {
-          // The collapsed row shows its heading: badge what the heading names, tint all it stands for.
-          const enter = () => {
-            if (subjects) relight();
-            else light(item.ids);
-            onIssueHover?.(item.key);
-          };
-          clearTimeout(intent.current?.timer);
-          intent.current = {
-            key: item.key,
-            timer: setTimeout(() => ((intent.current = { key: item.key }), enter()), 90),
-          };
+          if (subjects) relight();
+          else light(item.ids);
+          onIssueHover?.(item.key);
         },
         onMouseLeave: () => {
-          if (intent.current?.key === item.key) {
-            clearTimeout(intent.current.timer);
-            intent.current = null;
-          }
           if (subjects) subjects.clear?.(item.key);
           else light(null);
         },
         onMouseMove: () => {
-          // Re-light (after a token's own hover) only once the row holds the pointer.
-          if (intent.current?.key === item.key && !intent.current.timer) relight();
+          if (subjects) relight();
         },
         revitIds: target.ids,
         revitRefs: target.refs,
@@ -506,8 +481,17 @@ function RulingsList({
     ...emptyListState(),
     closed: [INBOX_LABELS.diagnostics],
   }));
+  const desired =
+    rows.find((row) => row.key === focused) ??
+    rows.find((row) => row.lit && view.selected.includes(row.key)) ??
+    rows.find((row) => row.lit);
   const list = useList({
     persist: address,
+    followSelection: {
+      key: desired?.key ?? null,
+      context: desired?.key ?? "",
+      open: desired ? [desired.key] : [],
+    },
     items: rows,
     keyOf: (row) => row.key,
     search: rulingSearch,
@@ -536,31 +520,6 @@ function RulingsList({
       }));
       row.pick?.();
     },
-  });
-  const desired =
-    rows.find((row) => row.key === focused) ??
-    rows.find((row) => row.lit && view.selected.includes(row.key)) ??
-    rows.find((row) => row.lit);
-  const reveal = useRef<string | null>(null);
-  useEffect(() => {
-    reveal.current = desired?.key ?? null;
-  }, [desired?.key]);
-  useEffect(() => {
-    const key = reveal.current;
-    if (!key) return;
-    const section = list.sections.find((section) => section.rows.some((row) => row.key === key));
-    if (!section) return;
-    if (section.closed || !view.open.includes(key) || !view.selected.includes(key)) {
-      setView((previous) => ({
-        ...previous,
-        closed: previous.closed.filter((name) => name !== section.key),
-        open: [key],
-        selected: [key],
-      }));
-      return;
-    }
-    reveal.current = null;
-    list.reveal(key);
   });
   const row = useCallback(
     ({

@@ -12,7 +12,7 @@ import {
   type ReactNode,
   type RefObject,
 } from "react";
-import { flushSync } from "react-dom";
+import { land } from "@pe/kit/lang/row";
 
 import { DUCTS_LAYERS, emptyListSearch, toggleLayer } from "@pe/agent-contracts";
 import { snapshotById } from "@pe/ducts-domain/readiness";
@@ -54,7 +54,6 @@ import type { Split } from "../../loss-split";
 import type { systemList } from "../../system-list";
 import type { StageIssue } from "../../inbox-rows";
 import { damageLayer } from "#/scene/damage";
-import { LAND, LAND_EASING } from "#/scene/marks";
 import { usePictureFloaters } from "./picture-floaters";
 import { RulingBody, useMarks } from "./rulings";
 import { noRunParts } from "../../subject-text";
@@ -125,18 +124,8 @@ export interface ECanvasExtra {
   jump?: RefObject<((id: number) => void) | null>;
 }
 
-/** The landing mark: drawn once per landing (keyed), scales in and fades while the camera is still. */
-// The alias-jump landing lands like every stage mark (`scene/marks.ts`): one ease and length, at
-// the selection outline's weight, then fades so the silhouette selection carries on.
-const flash = (node: HTMLDivElement | null) => {
-  node?.animate(
-    [
-      { opacity: 1, transform: "scale(1.35)", easing: LAND_EASING },
-      { opacity: 1, transform: "scale(1)", offset: 0.6 },
-      { opacity: 0, transform: "scale(1)" },
-    ],
-    { duration: (LAND * 1000) / 0.6, fill: "forwards" },
-  );
+const landPicture = (node: HTMLDivElement | null) => {
+  if (node) land(node);
 };
 
 export function ECanvas(props: ProtoProps & ECanvasExtra) {
@@ -257,27 +246,7 @@ function Canvas({
   const byId = useMemo(() => snapshotById(snapshot), [snapshot]);
   const nameOfId = useMemo(() => elementNamer(snapshot, sub), [snapshot, sub]);
   const pointer = useRef({ x: 0, y: 0 });
-  // A pick shows in the readout at once; the route hears of it after that paint (below).
-  const [shown, setShown] = useState<number | null>(null);
   const [openRuling, setOpenRuling] = useState<number | null>(null);
-  const selectionPublish = useRef<ReturnType<typeof setTimeout> | undefined>(undefined);
-  const pendingSelection = useRef<number | null>(null);
-  useEffect(() => () => clearTimeout(selectionPublish.current), []);
-  useEffect(() => {
-    // Page's Escape cannot see a pick waiting for its first paint. Cancel it at the event boundary
-    // so a fast Escape, including one before the popup mounts, cannot resurrect selection later.
-    const escapePending = (event: KeyboardEvent) => {
-      if (event.key !== "Escape" || pendingSelection.current === null) return;
-      clearTimeout(selectionPublish.current);
-      pendingSelection.current = null;
-      setShown(null);
-      setPage({ selected: "" }, { history: "push" });
-      event.preventDefault();
-      event.stopPropagation();
-    };
-    document.addEventListener("keydown", escapePending, true);
-    return () => document.removeEventListener("keydown", escapePending, true);
-  }, [setPage]);
   const pointOf = (id: number): readonly number[] | null => {
     const node = byId.nodes.get(id);
     if (node) return node.point;
@@ -447,26 +416,11 @@ function Canvas({
         })
       : null;
   };
-  // Showing the pick is local and urgent. Updating the address also renders the tree and rules;
-  // let that work follow the readout's first paint. Two RAFs can run only 3 ms apart in headless
-  // Chrome, before a visible paint, so the publish waits a frame and then 50 ms.
   const pick = (id: number | null) => {
-    clearTimeout(selectionPublish.current);
-    pendingSelection.current = id;
-    setShown(id);
     setOpenRuling(null);
-    if (id == null) return setPage({ selected: "" }, { history: "push" });
-    requestAnimationFrame(() => {
-      if (pendingSelection.current !== id) return;
-      selectionPublish.current = setTimeout(() => {
-        if (pendingSelection.current !== id) return;
-        pendingSelection.current = null;
-        setPage({ selected: String(id) }, { history: "push" });
-      }, 50);
-    });
+    setPage({ selected: id == null ? "" : String(id) }, { history: "push" });
   };
   useEffect(() => {
-    if (pendingSelection.current === null) setShown(null);
     if (!page.selected) setOpenRuling(null);
   }, [page.selected]);
 
@@ -485,7 +439,7 @@ function Canvas({
     host: pictureHost,
     selectedBounds: boundsOfIds(read.meshes, scene, selected),
     clearSelection: () => {
-      if (page.selected || pendingSelection.current !== null) pick(null);
+      if (page.selected) pick(null);
     },
     onHistoryStep: () => setLanded(null),
   });
@@ -525,9 +479,6 @@ function Canvas({
   const goBack = () => stage.go("back");
 
   const ruling = (r: Ruling) => {
-    clearTimeout(selectionPublish.current);
-    pendingSelection.current = null;
-    setShown(null);
     const finding =
       r.kind === "claim" ? `claim:${r.claim.id}` : r.kind === "issue" ? r.issue.id : r.finding.id;
     const issue = issues.find((i) => i.findings.includes(finding))?.key ?? finding;
@@ -561,7 +512,6 @@ function Canvas({
     small: () => schematic("inset"),
   });
 
-  // The readout's subject: the pick being shown, else the Page's selection.
   const ruled = openRuling == null ? null : (rulings.find((r) => r.n === openRuling) ?? null);
   // The title is a breadcrumb: the system (press it to clear the selection), then the picked
   // element. Its state, a switch and a re-read speak in the plate: the header strip leaves the
@@ -573,7 +523,7 @@ function Canvas({
   const pickedName = pickedId == null ? null : nameOf(pickedId);
   const subjects = useContext(SubjectTextContext);
   const systemState = identity.system ? systemIssues(identity.system) : [];
-  const readId = shown ?? pickedId;
+  const readId = pickedId;
   const segFacts = readId == null ? null : scene.segments.find((f) => f.segment.id === readId);
   const nodeFacts = readId == null ? null : scene.nodes.find((f) => f.node.id === readId);
   // How Pe prices the selection's run (was the sidebar's run detail; selection lives here now).
@@ -710,24 +660,12 @@ function Canvas({
             return;
           }
           pointer.current = { x: e.clientX, y: e.clientY };
-          // A gesture is the eye moving on: the landing marks and the way back go.
-          if (landed && !(e.target as Element).closest("[data-picture-readout]")) setLanded(null);
         }}
         onWheelCapture={(e) => {
           if (holding) {
             e.nativeEvent.preventDefault();
             e.stopPropagation();
             return;
-          }
-          if (landed && !(e.target as Element).closest("[data-picture-readout]")) setLanded(null);
-        }}
-        onDoubleClickCapture={() => {
-          const id = pendingSelection.current;
-          if (id !== null) {
-            clearTimeout(selectionPublish.current);
-            pendingSelection.current = null;
-            // Finish the selection render before the canvas starts its frame animation.
-            flushSync(() => setPage({ selected: String(id) }, { history: "push" }));
           }
         }}
       >
@@ -746,8 +684,7 @@ function Canvas({
         {landed?.box ? (
           <div
             aria-hidden
-            data-e-landed=""
-            className="pointer-events-none absolute text-ink outline outline-2 outline-current"
+            className="pointer-events-none absolute"
             style={{
               left: landed.box.x - 6,
               top: landed.box.y - 6,
@@ -755,7 +692,7 @@ function Canvas({
               height: landed.box.height + 12,
             }}
             key={landed.n}
-            ref={flash}
+            ref={landPicture}
           />
         ) : null}
 
