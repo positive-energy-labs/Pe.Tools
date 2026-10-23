@@ -164,7 +164,6 @@ export const RulesTree = memo(function RulesTree({
                 </span>
               ),
               onMouseEnter: () => light([n.id]),
-              wrap: true,
             };
           const rule = ruleByKey(n.key);
           const name = rule ? `${rule.family} : ${rule.type}` : n.key;
@@ -184,7 +183,6 @@ export const RulesTree = memo(function RulesTree({
             ),
             meta: `×${n.ids.length}${missing ? ` · ${missing} unpriced` : ""}`,
             lines: 2,
-            wrap: true,
             onMouseEnter: () => light(n.ids),
           };
         }}
@@ -205,7 +203,6 @@ export const RulesTree = memo(function RulesTree({
                 label: family ?? nameOf(first!),
                 meta: ids.size ? `×${ids.size}` : undefined,
                 lines: 2,
-                wrap: true,
                 onMouseEnter: () => light([...ids]),
                 sub: (
                   <div

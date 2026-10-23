@@ -270,7 +270,6 @@ function ContextItems({
           label: item.name,
           aside: item.src,
           active: open,
-          wrap: true,
           meta: (
             <>
               {blast ? `${BLAST_LABEL[blast]} · ` : ""}

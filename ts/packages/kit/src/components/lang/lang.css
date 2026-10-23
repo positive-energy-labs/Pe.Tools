@@ -536,19 +536,18 @@ svg [data-damage] {
   flex-shrink: 0;
   align-items: center;
 }
-/* TREE (ListView): one indent step per level, and the classic guide: each ancestor's column
-   carries a hairline through the chevron's centre, so an open node's line runs down the full
-   span of its descendants. One rule on `--depth` (set by Row from `depth`); no call site indents. */
+/* Semantic depth stays intact; visual guides and indent stop after four levels. */
 .dl-row[data-depth] {
   --tree-step: calc(var(--item-h) * 2 / 3);
-  padding-left: calc(var(--item-mark-pad-x) + var(--depth) * var(--tree-step));
+  --tree-depth: min(var(--depth), 4);
+  padding-left: calc(var(--item-mark-pad-x) + var(--tree-depth) * var(--tree-step));
 }
 .dl-row:not(tr)[data-depth]::after {
   content: "";
   position: absolute;
   inset-block: 0;
   left: var(--item-mark-pad-x);
-  width: calc(var(--depth) * var(--tree-step));
+  width: calc(var(--tree-depth) * var(--tree-step));
   background: repeating-linear-gradient(
     to right,
     transparent 0 calc(var(--tree-step) / 2 - 0.5px),
@@ -594,21 +593,9 @@ svg [data-damage] {
   white-space: nowrap;
   text-overflow: ellipsis;
 }
-.dl-row[data-wrap] .dl-row-label {
-  overflow: visible;
-}
-.dl-row[data-wrap] :is(.dl-row-title, .dl-row-sub) {
-  overflow: visible;
-  white-space: normal;
-  overflow-wrap: anywhere;
-}
-.dl-row[data-wrap] .dl-row-line {
-  align-items: start;
-}
-/* The first line shares its width fairly: each column grows evenly from zero and stops at its own
-   text, so a short title or a short fact is never cut, and two long ones meet at the middle. (Flex
-   could not: a zero-basis title let the trailing slot take the whole line.) */
-.dl-row-line {
+/* Titles and facts share one line; neither can force the other off it. */
+.dl-row-line,
+.dl-row-colhead {
   display: grid;
   grid-template-columns: minmax(0, max-content) minmax(0, max-content);
   justify-content: space-between;
@@ -616,22 +603,41 @@ svg [data-damage] {
   align-items: center;
   gap: 6px;
 }
-/* Under a column header the trailing slot is a table: its columns stay whole and the title yields.
-   The tree is a size container, so a caller drops its secondary columns by the tree's width
-   (`@max-[…]:hidden`) rather than leaving the title nothing. */
-[role="tree"][data-columns] {
-  container-type: inline-size;
+/* Column cells stay on the title line. Less important measures yield before the label. */
+[data-list-view] {
+  container: list / inline-size;
 }
-[role="tree"][data-columns] :is(.dl-row-line, .dl-row-colhead) {
+[data-list-view][data-columns] :is(.dl-row-line, .dl-row-colhead) {
   grid-template-columns: minmax(0, 1fr) max-content;
 }
-@container (max-width: 360px) {
-  [role="tree"][data-columns] .dl-row[data-wrap] .dl-row-line {
-    grid-template-columns: minmax(0, 1fr);
-    gap: 0;
+[data-list-column] {
+  display: inline-block;
+  flex: 0 0 auto;
+  width: 7ch;
+  overflow: hidden;
+  text-align: right;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+[data-list-column="bar"] {
+  width: 5ch;
+}
+[data-list-column="mark"] {
+  width: 1ch;
+}
+@container list (max-width: 460px) {
+  [data-list-column][data-priority="2"] {
+    display: none;
   }
-  [role="tree"][data-columns] .dl-row[data-wrap] .dl-row-meta {
-    justify-self: end;
+}
+@container list (max-width: 360px) {
+  [data-list-column][data-priority="1"] {
+    display: none;
+  }
+}
+@container list (max-width: 240px) {
+  [data-list-column][data-priority="0"] {
+    display: none;
   }
 }
 
@@ -642,16 +648,15 @@ svg [data-damage] {
 .dl-row[data-meta-fill] :is(.dl-row-meta, .dl-row-fact) {
   width: 100%;
 }
-.dl-row-title {
+.dl-row-title,
+.dl-row-colhead-label,
+.dl-row-colhead-meta {
+  white-space: nowrap;
   min-width: 0;
   overflow: hidden;
   text-overflow: ellipsis;
 }
-/* THE TRAILING SLOT: the state (`.dl-row-fact`) and the verbs (`.dl-row-actions`) stack in one
-   grid cell, right-aligned, as wide as the wider and one line tall, so a swap never shifts the
-   row. With hover the verbs replace the state on hover, keyboard focus, the list cursor or an
-   open menu; without hover the state stays and the verbs lie unseen over it, so a tap opens them.
-   A fact the line cuts short rides the row's hint (row.tsx). */
+/* Facts and verbs share one cell so reaching an action never moves the row. */
 .dl-row-meta {
   display: inline-grid;
   grid-template-columns: minmax(0, auto);
@@ -703,11 +708,6 @@ svg [data-damage] {
 .dl-row-actions .dl-button:focus-visible {
   outline-offset: -1px;
 }
-/* L3: hovering the row leaves its facts alone; the verbs take the slot only when the pointer
-   reaches the slot itself, keyboard focus is on the row, or the keys hold the list cursor there. */
-@media (hover: hover) {
-}
-
 @media (hover: none) {
   .dl-row-actions {
     justify-self: stretch;
@@ -725,8 +725,7 @@ svg [data-damage] {
   margin: 4px 0;
   background: var(--pe-line);
 }
-/* A group head IS the roster's shelf head (navigation.css): sentence case, its count quiet, a
-   hairline to the edge. No fill: it stands on the ground it sits on, so rows pass under it. */
+/* Sticky section heads sit on their own plane. */
 .dl-row-head {
   position: sticky;
   top: 0;
@@ -741,17 +740,11 @@ svg [data-damage] {
   font-weight: var(--weight-strong);
   color: var(--pe-ink-2);
 }
-/* A Tree's column header: sticky, the rows' own padding and gap, a hairline under it. Its meta cell
-   is a flex-shrink-0 mono block like .dl-row-meta, so the caller's column widths line up. */
+/* Column heads share the rows' fixed measures and truncation. */
 .dl-row-colhead {
   position: sticky;
   top: 0;
   z-index: 1;
-  display: grid;
-  grid-template-columns: minmax(0, max-content) minmax(0, max-content);
-  justify-content: space-between;
-  align-items: center;
-  gap: 6px;
   min-height: var(--item-h);
   padding: 0 var(--item-mark-pad-x);
   background: var(--pe-on);
@@ -760,17 +753,11 @@ svg [data-damage] {
   color: var(--pe-ink-2);
   user-select: none;
 }
-.dl-row-colhead-label {
-  min-width: 0;
-  overflow-wrap: anywhere;
-}
 .dl-row-colhead-meta {
-  min-width: 0;
-  overflow: hidden;
+  max-width: 65cqw;
   font-family: var(--font-mono);
   font-size-adjust: var(--mono-adjust);
   font-weight: var(--weight-mono);
-  white-space: nowrap;
 }
 .dl-row-head > :first-child::first-letter {
   text-transform: uppercase;

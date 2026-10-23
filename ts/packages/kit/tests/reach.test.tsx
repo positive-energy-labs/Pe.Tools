@@ -2,7 +2,7 @@
 import { act, cleanup, fireEvent, render, screen } from "@testing-library/react";
 import { afterEach, expect, test, vi } from "vite-plus/test";
 import { useCollection, useList } from "../src/components/lang/collection";
-import { ListView } from "../src/components/lang/list-view";
+import { ListView, listColumns } from "../src/components/lang/list-view";
 import { sideAwayFrom } from "../src/components/lang/popover";
 import { Row } from "../src/components/lang/row";
 import { StateCell } from "../src/components/lang/cell";
@@ -30,6 +30,28 @@ test("a popover avoiding a subject opens on the anchor side away from it", () =>
   expect(sideAwayFrom(rect(0, 100), rect(200, 100))).toBe("left");
   expect(sideAwayFrom(rect(400, 100), rect(200, 100))).toBe("right");
 });
+
+test("list columns declare shared cell kinds and yield priorities without width classes", () => {
+  expect(
+    listColumns({ total: { kind: "number", priority: 0 }, loss: { kind: "number", priority: 2 } }),
+  ).toEqual({
+    total: { "data-list-column": "number", "data-priority": 0 },
+    loss: { "data-list-column": "number", "data-priority": 2 },
+  });
+});
+
+test.each(["pointerEnter", "focus"] as const)(
+  "a clipped row exposes its full title on %s without replacing the row",
+  (reach) => {
+    const { container } = render(<Row label="A long run name" tabIndex={0} depth={9} />);
+    const row = container.querySelector<HTMLElement>(".dl-row")!;
+    Object.defineProperty(row.querySelector(".dl-row-title"), "scrollWidth", { value: 300 });
+    fireEvent[reach](row);
+    expect(row.getAttribute("aria-description")).toBe("A long run name");
+    expect(container.querySelector(".dl-row")).toBe(row);
+    expect(row.getAttribute("aria-level")).toBe("10");
+  },
+);
 
 test("a damaged row says its damage in words beside the title", () => {
   render(<Row label="EX 4" damage="no price" />);

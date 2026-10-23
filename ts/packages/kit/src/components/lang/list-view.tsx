@@ -33,6 +33,18 @@ export type ListRowParts = Omit<
   "id" | "role" | "cursor" | "selected" | "onClick" | "depth" | "expanded" | "onToggle"
 >;
 
+/** Declare once for a list's header and cells. Higher priorities yield first; CSS owns widths. */
+export function listColumns<K extends string>(
+  columns: Record<K, { kind: "number" | "bar" | "mark"; priority: 0 | 1 | 2 }>,
+) {
+  return Object.fromEntries(
+    Object.entries<{ kind: string; priority: number }>(columns).map(([key, column]) => [
+      key,
+      { "data-list-column": column.kind, "data-priority": column.priority },
+    ]),
+  ) as Record<K, { "data-list-column": string; "data-priority": number }>;
+}
+
 function pressSection(
   head: HTMLButtonElement,
   closed: boolean,

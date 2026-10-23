@@ -1,5 +1,5 @@
 import { useList } from "@pe/kit/lang/collection";
-import { PlainList, ListView } from "@pe/kit/lang/list-view";
+import { PlainList, ListView, listColumns } from "@pe/kit/lang/list-view";
 import { LeaderDiagram } from "@pe/kit/lang/leader-diagram";
 import { Table } from "@pe/kit/table/table";
 import type { Column } from "@pe/kit/table/model";
@@ -273,7 +273,7 @@ export function SystemMark({ issues, open }: { issues: readonly SystemIssue[]; o
             list={list}
             aria-label="system issues"
             empty={{ message: "No issues", exit: "Open the system" }}
-            row={(issue) => ({ label: issue.says, wrap: true })}
+            row={(issue) => ({ label: issue.says })}
           />
         </div>
       </PopoverContent>
@@ -315,7 +315,6 @@ export function systemRowParts(
   return {
     metaFill: true,
     lines: 2,
-    wrap: true,
     label: s.name,
     sub: s.sub,
     title: hint,
@@ -634,7 +633,6 @@ function RulePick({ row, work, priced }: { row: BarRow; work: LossesWork; priced
                 label: `${priced ? tableOf(priced, rule.key) : rule.table} · ${rule.family}${active ? " · current" : ""}`,
                 active,
                 lines: 2,
-                wrap: true,
                 sub: (
                   <>
                     <p className={condition.inactive ? "text-ink-2" : undefined}>
@@ -712,44 +710,32 @@ export function BarPopover({
   );
 }
 
-/**
- * The loss columns' widths, one recipe for the header and every row so they align. A narrow tree
- * (the kit ListView is the container) drops the small in-wg columns, then the bar, so the names keep
- * room; the in-wg rides the feet cell's hint.
- */
-const COL = {
-  bar: "w-10 @max-[300px]:hidden",
-  ft: "w-12",
-  wg: "w-12 @max-[460px]:hidden",
-  mark: "w-1.5",
-} as const;
+const COL = listColumns({
+  bar: { kind: "bar", priority: 1 },
+  ft: { kind: "number", priority: 0 },
+  wg: { kind: "number", priority: 2 },
+  mark: { kind: "mark", priority: 0 },
+});
 
-/**
- * The header over `MetaBar`'s columns: ListView's `columns.meta`. Feet are the primary unit (ACCA
- * Manual D reads a fitting as equivalent feet of duct); the small in-wg beside each is the pressure.
- */
 export function MetaHeader() {
   return (
     <span className="inline-flex items-center gap-1.5" data-e-columns="">
-      <span className={COL.bar} aria-hidden />
+      <span {...COL.bar} aria-hidden />
       <TooltipHint content="effective length from the fan to this row's far end, in equivalent feet at each duct's own friction rate; the small number beside it is the loss in in-wg">
-        <span className={`${COL.ft} text-right`}>Σ eq ft</span>
+        <span {...COL.ft}>Σ eq ft</span>
       </TooltipHint>
-      <span className={COL.wg} aria-hidden />
+      <span {...COL.wg} aria-hidden />
       <TooltipHint content="this row's own effective length, in equivalent feet; the small number beside it is its own loss in in-wg">
-        <span className={`${COL.ft} border-line border-l pl-1.5 text-right`}>+ eq ft</span>
+        <span {...COL.ft} className="hairline-l pl-1.5">
+          + eq ft
+        </span>
       </TooltipHint>
-      <span className={COL.wg} aria-hidden />
-      <span className={COL.mark} aria-hidden />
+      <span {...COL.wg} aria-hidden />
+      <span {...COL.mark} aria-hidden />
     </span>
   );
 }
 
-/**
- * The bar for a row's trailing slot: a fixed track (rows align), then the effective length to here
- * in feet with its in-wg beside it in smaller ink, then the row's own the same way. The bar's share
- * is the in-wg total against the critical run (the ESP is the budget); the numbers are feet.
- */
 export function MetaBar({
   value,
   scale,
@@ -762,22 +748,15 @@ export function MetaBar({
   light,
   rowIds,
 }: {
-  /** The loss to here, in-wg. */
   value: number | null;
   scale: number | null;
-  /** The effective length to here, ft. */
   ft: number | null;
   provisional?: Provisional;
-  /** This row's own loss, in-wg, drawn after the total when given; "" holds the column empty. */
   self?: number | null | "";
-  /** This row's own effective length, ft. */
   selfFt?: number | null;
-  /** A priced path that could not price this row: its word stands where the number would, never 0. */
   unpriced?: { word: string; why: string } | null;
-  /** A whole run's three parts (run and system rows): the fill splits, and a part's hover lights it. */
   split?: Split | null;
   light?: Light;
-  /** The row's own set, lit again when the pointer leaves a part. */
   rowIds?: readonly number[];
 }) {
   const share = value != null && scale ? Math.min(1, value / scale) : null;
@@ -790,7 +769,7 @@ export function MetaBar({
         : `+${fmtFt(selfFt)}`;
   return (
     <span className="inline-flex items-center gap-1.5" data-e-bar={share ?? ""}>
-      <span className={`relative inline-block h-1.5 ${COL.bar}`} aria-hidden>
+      <span {...COL.bar} className="relative h-1.5" aria-hidden>
         {share != null ? (
           <>
             <span className="absolute inset-0" style={{ backgroundColor: tokenRef("line") }} />
@@ -806,12 +785,14 @@ export function MetaBar({
         ) : null}
       </span>
       <TooltipHint content={`${fmt(value, LOSS_PLACES)} in-wg to here`}>
-        <span className={`${COL.ft} text-right`} data-e-ft={ft ?? ""}>
+        <span {...COL.ft} data-e-ft={ft ?? ""}>
           {fmtFt(ft)}
         </span>
       </TooltipHint>
       <TooltipHint content="loss to here, in-wg">
-        <span className={`${COL.wg} text-ink-2 t-small`}>{fmt(value, LOSS_PLACES)}</span>
+        <span {...COL.wg} className="text-ink-2 t-small">
+          {fmt(value, LOSS_PLACES)}
+        </span>
       </TooltipHint>
       {self !== undefined ? (
         <>
@@ -821,21 +802,18 @@ export function MetaBar({
               (typeof self === "number" ? `+${fmt(self, LOSS_PLACES)} in-wg own` : undefined)
             }
           >
-            <span
-              className={`border-line border-l pl-1.5 ${COL.ft} text-right`}
-              data-e-own={unpriced ? "unpriced" : ""}
-            >
+            <span {...COL.ft} className="hairline-l pl-1.5" data-e-own={unpriced ? "unpriced" : ""}>
               {own}
             </span>
           </TooltipHint>
           <TooltipHint content="own loss, in-wg">
-            <span className={`${COL.wg} text-ink-2 t-small`}>
+            <span {...COL.wg} className="text-ink-2 t-small">
               {unpriced || self === "" || self == null ? "" : `+${fmt(self, LOSS_PLACES)}`}
             </span>
           </TooltipHint>
         </>
       ) : null}
-      <span className={COL.mark} data-tone={provisional ? "caution" : undefined}>
+      <span {...COL.mark} data-tone={provisional ? "caution" : undefined}>
         {provisional ? "~" : ""}
       </span>
     </span>

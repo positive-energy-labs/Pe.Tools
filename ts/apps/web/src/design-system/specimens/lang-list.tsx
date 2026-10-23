@@ -1,5 +1,5 @@
 import { useList } from "@pe/kit/lang/collection";
-import { ListView, PlainList } from "@pe/kit/lang/list-view";
+import { ListView, PlainList, listColumns } from "@pe/kit/lang/list-view";
 /**
  * The list grammar's swatch frames: the one Row (its recipe and every state), and the containers
  * that draw it — List inline, ListPopup on a trigger, and the in-cell list. The full comparison of
@@ -33,6 +33,16 @@ const VAST_ROWS = Array.from({ length: 1000 }, (_, index) => ({
   name: `Row ${index + 1}`,
   damage: index % 137 === 0 ? "Needs repair" : null,
 }));
+const MEASURES = listColumns({
+  total: { kind: "number", priority: 0 },
+  extra: { kind: "number", priority: 2 },
+});
+const measures = (
+  <>
+    <span {...MEASURES.total}>123.4</span>
+    <span {...MEASURES.extra}>0.125</span>
+  </>
+);
 const KINDS = ["String", "Integer", "Double", "ElementId"];
 const common = {
   items: KINDS,
@@ -57,8 +67,10 @@ export function LangListSpecimens() {
           list={vast}
           aria-label="1000 rows"
           maxHeight="calc(var(--item-h) * 12)"
+          columns={{ label: "Name", meta: measures }}
           row={(item) => ({
-            label: item.name,
+            label: `${item.name}: a long run title across a narrow pane`,
+            meta: measures,
           })}
           empty={{ message: "No rows", exit: "Clear search" }}
         />
@@ -86,12 +98,7 @@ export function LangListSpecimens() {
             <RowGroupHead label="states" count={6} />
             <Row label="rest" meta="meta" lines={props.lines === "2" ? 2 : 1} sub="second line" />
             <Row label="cursor" cursor />
-            <Row
-              label="A long row title stays readable in a narrow pane"
-              sub="Secondary content wraps at the same edge and adds only the height it needs."
-              lines={2}
-              wrap
-            />
+            <Row label="A long row title stays readable in a narrow pane" meta={measures} />
             <Row label="selected" selected />
             <RevitTarget scope={{ document: null, source: "fixture" }}>
               <Row label="Revit target (fixture: actions refuse)" revit={[42]} />

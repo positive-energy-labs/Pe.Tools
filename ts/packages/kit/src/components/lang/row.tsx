@@ -79,8 +79,6 @@ export type RowProps = RowState & {
         /** A second line: only with `lines={2}`, which is two item heights. */
         sub?: ReactNode;
         lines?: 1 | 2 | 3;
-        /** Let titles and secondary content reflow; the row grows only as much as it needs. */
-        wrap?: boolean;
         /** Target and time above a navigation item's title; three lines reserve one item height each. */
         eyebrow?: ReactNode;
         /** A short fact (count, type, state, shortcut, time): the trailing slot of the first line.
@@ -93,8 +91,7 @@ export type RowProps = RowState & {
         actions?: ReactNode;
         /** A measure below the row, inside its measured virtual extent. */
         band?: ReactNode;
-        /** A tree row: its nesting level from 0. The row indents one step per level and
-         *  draws its ancestors' guide lines (lang.css); it is the only indent a list may draw. */
+        /** Semantic depth from zero; CSS caps the visual indent. */
         depth?: number;
         /** With `depth`: open or closed draws the chevron, absent is a leaf (its space is held). */
         expanded?: boolean;
@@ -188,13 +185,19 @@ export function Row(props: RowProps) {
   );
 }
 
-/** The div row. A title or fact the row cuts short is its own hint: measured on pointer entry, the
- *  full text rides the row's one Tooltip unless a refusal or a caller's hint already holds it. */
+/** Truncated text is measured on reach and uses the row's existing hint. */
 function ListRow({
   shared,
   ...props
 }: Extract<RowProps, { as?: "div" }> & { shared: Record<string, unknown> }) {
   const [cut, setCut] = useState<string | null>(null);
+  const measureCut = ({ currentTarget }: { currentTarget: HTMLElement }) => {
+    const cutText = (selector: string) => {
+      const el = currentTarget.querySelector<HTMLElement>(selector);
+      return el && el.scrollWidth > el.clientWidth ? el.textContent : null;
+    };
+    setCut([cutText(".dl-row-title"), cutText(".dl-row-fact")].filter(Boolean).join(" · "));
+  };
   const slots = rowRecipe({ lines: props.lines ?? 1 });
   const fact = props.meta != null ? <span className="dl-row-fact">{props.meta}</span> : null;
   const tree = props.depth !== undefined;
@@ -211,21 +214,13 @@ function ListRow({
         {...shared}
         className={slots.base()}
         data-meta-fill={props.metaFill ? "" : undefined}
-        data-wrap={props.wrap ? "" : undefined}
         data-lines={props.lines !== 1 ? props.lines : undefined}
         data-depth={tree ? props.depth : undefined}
         aria-level={tree ? props.depth! + 1 : undefined}
         aria-expanded={tree ? props.expanded : undefined}
         style={tree ? ({ "--depth": props.depth } as CSSProperties) : undefined}
-        onPointerEnter={(event) => {
-          const cutText = (selector: string) => {
-            const el = event.currentTarget.querySelector<HTMLElement>(selector);
-            return el && el.scrollWidth > el.clientWidth ? el.textContent : null;
-          };
-          const title = cutText(".dl-row-title");
-          const fact = cutText(".dl-row-fact");
-          setCut(title || fact ? [title, fact].filter(Boolean).join(" · ") : null);
-        }}
+        onPointerEnter={measureCut}
+        onFocus={measureCut}
       >
         {tree ? (
           <span
@@ -243,8 +238,6 @@ function ListRow({
         {props.lead != null ? <span className={slots.lead()}>{props.lead}</span> : null}
         <span className={slots.label()}>
           {props.lines === 3 ? <span className="dl-row-eyebrow">{props.eyebrow}</span> : null}
-          {/* The first line: the title, then one trailing slot where the state and the verbs
-            share a cell (lang.css), so a sub line runs the full width under it. */}
           <span className="dl-row-line">
             {props.damage ? (
               // The word never truncates: the title yields beside it.
