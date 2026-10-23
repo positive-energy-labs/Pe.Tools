@@ -1005,6 +1005,16 @@ test("seeded real-user route journey", async () => {
               await sleep(350);
               await settled(p);
               await census("after re-read settled");
+            });
+            expect(
+              await p.read<boolean>(
+                `[...document.querySelectorAll('[data-slot="popover-content"]')].some(e => e.getClientRects().length && e.textContent.includes('refresh · ran'))`,
+              ),
+              "status flag is still open before the deliberate editor focus move",
+            ).toBe(true);
+            await click(p, 'textarea[aria-label="Message"]');
+            await census("deliberately focused Message before automatic fade");
+            await untouched(async () => {
               await p.until(
                 () =>
                   p.read<boolean>(
@@ -1012,13 +1022,13 @@ test("seeded real-user route journey", async () => {
                   ),
                 "Refresh status flag naturally faded",
               );
-              await census("after automatic status fade");
+              await census("after automatic status fade with Message retained");
             });
           } finally {
             await p.send("Runtime.releaseObject", { objectId: trigger });
           }
           receipt.coverage.refresh =
-            "refresh control + DOM continuity; host freshness requires native receipt in parent run";
+            "trusted Refresh retained trigger focus and DOM continuity; deliberately focused Message then automatic status fade retained that editor/scroll-parent identity; host freshness requires native receipt in parent run";
         }
       });
     await step(
