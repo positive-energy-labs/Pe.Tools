@@ -1,7 +1,9 @@
 import * as THREE from "three";
+import type { LineSegments2 } from "three/addons/lines/LineSegments2.js";
 import { expect, it } from "vite-plus/test";
 import { damageLayers, damageMark, damageLayer, heartbeat, setDamageHue } from "./damage";
-import { landing } from "./marks";
+import { landing, markFrame, markLines } from "./marks";
+import { fogDensity, groundOf, GROUND_MATERIAL } from "./grounds";
 import { SceneMeshes, type LayerFrame, type SceneInstance } from "./types";
 
 const instance: SceneInstance = {
@@ -41,10 +43,14 @@ it("damage keeps mesh and row identity, beats, flashes once, and holds still for
   const layer = damageLayer(meshes, instance, targets, ["no-flow:7"]);
   const group = new THREE.Group();
   layer.build(group);
+  const p = [0, 0, 0],
+    q = [1, 1, 1];
+  const lines = markLines([[p, q]], alarm, { dash: { size: 2, gap: 3 } });
+  expect(lines.children.map((c) => (c as LineSegments2).material.dashed)).toEqual([false, true]);
   const born = performance.now() / 1000;
   expect(layer.targets).toEqual(targets);
   expect(group.position.toArray()).toEqual([101, 101, 0]);
-  const skin = group.children[1] as THREE.Mesh<THREE.BufferGeometry, THREE.ShaderMaterial>;
+  const skin = group.children[0] as THREE.Mesh<THREE.BufferGeometry, THREE.ShaderMaterial>;
   expect(skin.material.uniforms.core!.value).toEqual(alarm);
   const energy = () => skin.material.uniforms.energy!.value as number;
   const at = (seconds: number, extra: Partial<LayerFrame> = {}): LayerFrame => ({
@@ -66,6 +72,35 @@ it("damage keeps mesh and row identity, beats, flashes once, and holds still for
   expect(energy()).toBe(steady);
   layer.frame!(group, at(born + 5.4, { reducedMotion: true, state: "hover" }));
   expect(energy()).toBeGreaterThan(steady);
+  for (const extra of [
+    {},
+    { state: "reach" },
+    { state: "hover" },
+    { state: "focus" },
+    { selected: true },
+    { lit: true },
+    {},
+  ] as Partial<LayerFrame>[]) {
+    layer.frame!(group, at(born + 6, extra));
+    markFrame(lines, at(born + 6, extra));
+    for (const child of [...group.children, ...lines.children] as THREE.Mesh[])
+      expect((child.material as THREE.Material).depthTest).toBe(
+        !extra.selected && !extra.lit && extra.state !== "hover" && extra.state !== "focus",
+      );
+  }
+});
+
+it("grounds follow capture focus or lighting, with scale-invariant exponential fog", () => {
+  expect([groundOf(false), groundOf(true), groundOf(false, true)]).toEqual([
+    "context",
+    "subject",
+    "subject",
+  ]);
+  expect(GROUND_MATERIAL).toMatchObject({ depthTest: true, depthWrite: true });
+  const b = { minX: 0, minY: 0, minZ: 0, maxX: 3, maxY: 4, maxZ: 0 };
+  const larger = { ...b, maxX: 30, maxY: 40 };
+  expect(fogDensity(b)).toBeCloseTo(fogDensity(larger) * 10);
+  expect(Number.isFinite(fogDensity({ ...b, maxX: 0, maxY: 0 }))).toBe(true);
 });
 
 it("row damage feeds both plan marks and native mesh skins, then clears with the row", () => {
