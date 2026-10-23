@@ -28,6 +28,11 @@ const allow = (entries: Record<string, string>): Allow[] =>
 // Filenames use the wave-4 final homes: land.ts, revit-target.tsx and go-to.tsx.
 // prettier-ignore
 const RULES: Rule[] = [
+  { id: "scene-ground-presets", doctrine: "L4",
+    pattern: /\b(?:opacity|color)\s*[:=]\s*(?:0x[\da-f]+|\d+(?:\.\d+)?|["'])|new THREE\.Color\(\s*(?:\d|["'])|setClearColor\(\s*(?:\d|["'])|\b0x[\da-f]{6}\b|\.color\.set(?:Hex|RGB|HSL)?\(\s*(?:\d|["'])/gi,
+    roots: [W + "scene/**/*.ts"],
+    allow: [{ glob: W + "scene/grounds.ts", reason: "One owner for subject/context materials, marker alpha and mask channel values." }],
+    cannotSee: "Computed literals, GLSL expressions, token values or rendered contrast/occlusion." },
   { id: "css-damage-owner", doctrine: "I2", pattern: /pe-damage-beat|\[data-damage\]/g,
     roots: [W + "**/*.css", K + "**/*.css"],
     allow: [{ glob: K + "components/lang/lang.css", reason: "One shared critical-damage mark owns the pulse and selectors." }],

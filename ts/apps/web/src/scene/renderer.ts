@@ -1,21 +1,20 @@
-/**
- * The imperative core under `Scene3D`: one WebGLRenderer, one `BatchedMesh` for every element,
- * one perspective camera driven by OrbitControls, and one group per answer layer. No React. Cut
- * from the space spike's canvas; the cuts themselves stay in space and reach the shader only as
- * packed polygons (`setClip`).
- *
- * The batch holds positions relative to `origin` (the bounds centre) and sits at `origin`, so the
- * camera, controls, layers and raycast hits are all world feet while float32 vertices stay small.
- *
- * An axis picture (`setPlane`) swaps in one orthographic camera that pans and zooms only; the
- * perspective pose is untouched under it. Axis thumbnails (`setThumbs`) are drawn by this same
- * context into 2D canvases, only when what they show changed, never per orbit frame.
- */
+/** Scene3D's imperative renderer. Batch vertices are bounds-centred to preserve float32 fidelity;
+ * camera poses, layers and picks stay in world feet. Thumbnails reuse this context only when stale.
+ * Space owns cut geometry; only packed polygons cross into the material shader. */
 import * as THREE from "three";
 import { LineMaterial } from "three/addons/lines/LineMaterial.js";
 import { LineSegments2 } from "three/addons/lines/LineSegments2.js";
-import { BEACON_LAYER, createGlow, GLOW_LAYER } from "./glow";
-import { createOutline, OUTLINE_CHANNEL, OUTLINE_LAYER } from "./outline";
+import { createGlow, GLOW_LAYER, OCCLUDER_LAYER } from "./glow";
+import { createOutline, OUTLINE_LAYER } from "./outline";
+import {
+  FILL,
+  fogDensity,
+  groundOf,
+  GROUND_MATERIAL,
+  LIGHT,
+  OUTLINE_CHANNEL,
+  sceneGrounds,
+} from "./grounds";
 import {
   captureGestures,
   createWheelReader,
@@ -78,7 +77,6 @@ void sceneClip() {
   }
 }`;
 
-const MEP = /duct|pipe|conduit|tray|mechanical|plumbing|sprinkler|terminal|electrical/i;
 /** The pointer within this many px of an issue mark is reaching for it (a pre-hover cue). */
 const REACH_PX = 24;
 /** Outlines are drawn for at most this many elements per mark; past it the fill alone carries it. */
@@ -97,27 +95,17 @@ const BOX_EDGES = [
   [2, 6],
   [3, 7],
 ] as const;
-/** Element states, strongest last. Selection, hover and a lit row are fills and outlines in the
- * page's ink, never a hue (house law 5): the stage's one hue is damage. */
+/** Selection/hover/lighting use page ink; only damage carries a hue. */
 type Mark = "hover" | "lit" | "selected";
-const FILL: Record<Mark, number> = { hover: 0.22, lit: 0.4, selected: 0.6 };
 
-/** Throws when WebGL is unavailable; the component says so. */
 export function createRenderer(mount: HTMLElement, meshes: SceneMeshes, wheelHost = mount) {
   const measuring = timing();
   mark("build-start", { instances: meshes.instances.length });
   const renderer = new THREE.WebGLRenderer({ antialias: true });
   renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
-  // The Pe palette, from the page's own tokens: the picture sits on the artifact ground, focus
-  // elements are a warm mid grey between the muted and secondary inks, context recedes toward the
-  // ground. Mid-tone on purpose: selection and hover lift toward the ink and stay visible, and the
-  // stage's only saturated colour is damage. A theme change repaints the same scene and camera.
   setDamageHue(inkOf("alarm", mount));
-  const ground = inkOf("artifact", mount);
-  const ink = inkOf("ink", mount);
-  const focusTint = inkOf("ink-mute", mount).lerp(inkOf("ink-2", mount), 0.55);
-  if (ground.getHSL({ h: 0, s: 0, l: 0 }).l > 0.5) focusTint.lerp(ground, 0.35);
-  const contextTint = inkOf("ink-mute", mount).lerp(ground, 0.5);
+  let grounds = sceneGrounds(mount);
+  const { ground, ink } = grounds;
   renderer.setClearColor(ground);
   const canvas = renderer.domElement;
   canvas.setAttribute(
@@ -127,16 +115,14 @@ export function createRenderer(mount: HTMLElement, meshes: SceneMeshes, wheelHos
   canvas.tabIndex = 0;
   canvas.className = "block size-full";
   mount.prepend(canvas);
-  const glow = createGlow(renderer);
   const outline = createOutline(renderer, ink, ground);
 
   const bounds = meshes.bounds;
   const origin = new THREE.Vector3(...center(bounds));
   const scene = new THREE.Scene();
-  // Kept under clipping: a lit face of a resting element stays below white, so a lifted (selected,
-  // hovered) element is visibly lighter rather than both saturating.
-  scene.add(new THREE.HemisphereLight(0xfff8ee, 0x403a30, 1.15));
-  const sun = new THREE.DirectionalLight(0xfffaf2, 1.55);
+  scene.fog = new THREE.FogExp2(ground, fogDensity(bounds));
+  scene.add(new THREE.HemisphereLight(LIGHT.sky, LIGHT.floor, 1.15));
+  const sun = new THREE.DirectionalLight(LIGHT.sun, 1.55);
   sun.position.set(1, -1, 3);
   scene.add(sun);
   const camera = newCamera();
@@ -191,7 +177,7 @@ export function createRenderer(mount: HTMLElement, meshes: SceneMeshes, wheelHos
     clipCount: { value: [0, 0, 0] },
     clipKeep: { value: [1, 1, 1] },
   };
-  const material = new THREE.MeshLambertMaterial({ color: 0xffffff, side: THREE.DoubleSide });
+  const material = new THREE.MeshLambertMaterial({ ...GROUND_MATERIAL, side: THREE.DoubleSide });
   material.onBeforeCompile = (shader) => {
     Object.assign(shader.uniforms, uniforms);
     shader.vertexShader = `varying vec3 vClipPosition;\n${shader.vertexShader}`.replace(
@@ -210,13 +196,18 @@ export function createRenderer(mount: HTMLElement, meshes: SceneMeshes, wheelHos
     0,
     material,
   );
-  // Opaque geometry needs no per-frame depth sort. Per-element visibility stays native; picking reads this same packed geometry.
-  batch.sortObjects = false;
+  // Back-to-front instance sorting preserves context translucency; opaque subject fragments write depth.
   batch.position.copy(origin);
+  batch.layers.enable(OCCLUDER_LAYER);
   scene.add(batch);
-  /** Batch instance id → element, and each element's resting colour. */
+  const glow = createGlow(renderer, material);
   const byId: SceneInstance[] = [];
-  const colors: THREE.Color[] = [];
+  const tint = (id: number, instance: SceneInstance, mark: Mark | null = null) => {
+    const preset = grounds[groundOf(instance.focus, mark !== null)];
+    const color = preset.color.clone();
+    if (mark) color.lerp(ink, FILL[mark]);
+    batch.setColorAt(id, new THREE.Vector4(color.r, color.g, color.b, preset.opacity));
+  };
   mark("geometry-start");
   for (const instance of meshes.instances) {
     const vertices = meshes.positions.slice(
@@ -234,10 +225,8 @@ export function createRenderer(mount: HTMLElement, meshes: SceneMeshes, wheelHos
     geometry.computeBoundingSphere();
     geometry.computeBoundingBox();
     const id = batch.addInstance(batch.addGeometry(geometry));
-    const color = (instance.focus || MEP.test(instance.category) ? focusTint : contextTint).clone();
-    batch.setColorAt(id, color);
+    tint(id, instance);
     byId[id] = instance;
-    colors[id] = color;
     geometry.dispose();
   }
   mark("geometry", { meshes: byId.length, multiDraw: renderer.extensions.has("WEBGL_multi_draw") });
@@ -337,6 +326,7 @@ export function createRenderer(mount: HTMLElement, meshes: SceneMeshes, wheelHos
             state,
             landed: state === "focus" ? seconds - focusedAt : Infinity,
             selected: !!layer.targets?.some((t) => selectedIds.has(t.elementId)),
+            lit: !!layer.targets?.some((t) => litIds.has(t.elementId)),
           }) || animate;
       }
       // Geometry is unchanged between the main, thumbnail, glow and outline passes.
@@ -480,22 +470,17 @@ export function createRenderer(mount: HTMLElement, meshes: SceneMeshes, wheelHos
           ? "reach"
           : "rest";
   };
-  /** True while any layer draws into the glow pass; the pass costs nothing otherwise. */
   let glowing = false;
   const motion = window.matchMedia("(prefers-reduced-motion: reduce)");
   motion.addEventListener("change", render);
   const theme = new MutationObserver(() => {
-    ground.copy(inkOf("artifact", mount));
-    ink.copy(inkOf("ink", mount));
-    focusTint.copy(inkOf("ink-mute", mount)).lerp(inkOf("ink-2", mount), 0.55);
-    if (ground.getHSL({ h: 0, s: 0, l: 0 }).l > 0.5) focusTint.lerp(ground, 0.35);
-    contextTint.copy(inkOf("ink-mute", mount)).lerp(ground, 0.5);
+    grounds = sceneGrounds(mount);
+    ground.copy(grounds.ground);
+    ink.copy(grounds.ink);
+    scene.fog!.color.copy(ground);
+    setDamageHue(inkOf("alarm", mount));
     renderer.setClearColor(ground);
-    byId.forEach((instance, id) => {
-      colors[id]!.copy(instance.focus || MEP.test(instance.category) ? focusTint : contextTint);
-      batch.setColorAt(id, colors[id]!);
-    });
-    marked.clear();
+    byId.forEach((instance, id) => tint(id, instance, marked.get(id) ?? null));
     thumbsStale = true;
     paintNow(...painted);
   });
@@ -573,13 +558,13 @@ export function createRenderer(mount: HTMLElement, meshes: SceneMeshes, wheelHos
     return best;
   };
 
-  // Element outlines: each marked element's triangles, drawn only into the outline mask.
   const outlined = new THREE.Group();
   outlined.position.copy(origin);
   scene.add(outlined);
   const marked = new Map<number, Mark>();
   /** Revit ids of the selected elements, for marks standing on them. */
   const selectedIds = new Set<number>();
+  const litIds = new Set<number>();
   let hoveredElement: string | null = null;
   type Paint = [
     selected: ReadonlySet<string> | undefined,
@@ -603,14 +588,15 @@ export function createRenderer(mount: HTMLElement, meshes: SceneMeshes, wheelHos
               ? "hover"
               : null;
       if (mark) next.set(id, mark);
-      if (mark !== (marked.get(id) ?? null))
-        batch.setColorAt(id, mark ? colors[id]!.clone().lerp(ink, FILL[mark]) : colors[id]!);
+      if (mark !== (marked.get(id) ?? null)) tint(id, byId[id]!, mark);
     });
     marked.clear();
     selectedIds.clear();
+    litIds.clear();
     for (const [id, mark] of next) {
       marked.set(id, mark);
       const revitId = byId[id]!.revitId;
+      if (revitId != null) litIds.add(revitId);
       if (mark === "selected" && revitId != null) selectedIds.add(revitId);
     }
     for (const child of [...outlined.children]) {
@@ -654,9 +640,6 @@ export function createRenderer(mount: HTMLElement, meshes: SceneMeshes, wheelHos
     moves,
     /** The camera the picture shows now: the orbit's, or the plane's. */
     active,
-    batch,
-    origin,
-    byId,
     pick: createMeshPicker(batch, byId),
     pickIssue(at: { clientX: number; clientY: number }): IssueTarget | null {
       const rect = canvas.getBoundingClientRect();
@@ -800,11 +783,7 @@ export function createRenderer(mount: HTMLElement, meshes: SceneMeshes, wheelHos
       }
       glowing = false;
       for (const { group } of layers.values())
-        group.traverse(
-          (object) =>
-            void (glowing ||=
-              object.layers.isEnabled(GLOW_LAYER) || object.layers.isEnabled(BEACON_LAYER)),
-        );
+        group.traverse((object) => void (glowing ||= object.layers.isEnabled(GLOW_LAYER)));
       fitLines(scene);
       thumbsStale = true;
       render();

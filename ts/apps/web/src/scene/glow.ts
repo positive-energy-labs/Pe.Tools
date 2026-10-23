@@ -1,18 +1,12 @@
-/**
- * A selective screen-space halo: objects on `GLOW_LAYER` are drawn into a half-resolution mask,
- * blurred twice (separable Gaussian), and laid over the finished frame. The halo is a constant
- * width in pixels, so a damaged element reads as a beacon at a system-wide fit and as a soft
- * bloom close up. The picture itself never draws `GLOW_LAYER` (cameras see layer 0 only).
- *
- * The composite is alpha over (not additive) so the halo tints a light background as well as
- * lighting a dark one. Costs nothing while no object is on the layer.
- */
+/** Full-resolution silhouettes, half-resolution blur. Alpha-over tints light and dark themes;
+ * only the glow pass sees GLOW_LAYER, and the renderer skips it when there are no sources. */
 import * as THREE from "three";
 import { FullScreenQuad } from "three/addons/postprocessing/Pass.js";
+import { BLACK } from "./grounds";
 
 export const GLOW_LAYER = 1;
-/** Glow sources that only feed the halo (a fixed-pixel beacon): never cut out of it. */
-export const BEACON_LAYER = 3;
+/** Model geometry seeds the masks' depth without painting their colour. */
+export const OCCLUDER_LAYER = 4;
 
 const vertexShader = /* glsl */ `
 varying vec2 vUv;
@@ -35,17 +29,16 @@ uniform sampler2D mask;
 uniform float strength;
 varying vec2 vUv;
 void main() {
-  // Outside the source only (mostly): the element's own skin keeps its form under the halo.
-  vec4 m = texture2D(mask, vUv);
-  vec3 c = max(texture2D(map, vUv).rgb - m.rgb, 0.0) * strength;
+  // Full-resolution coverage preserves the mesh edge; half-resolution colour never cuts it out.
+  vec3 c = texture2D(map, vUv).rgb * (1.0 - texture2D(mask, vUv).a) * strength;
   float a = clamp(max(c.r, max(c.g, c.b)), 0.0, 1.0);
   gl_FragColor = vec4(c / max(a, 1e-3), a);
 }`;
 
-export function createGlow(renderer: THREE.WebGLRenderer) {
-  const target = () =>
-    new THREE.WebGLRenderTarget(1, 1, { type: THREE.HalfFloatType, depthBuffer: false });
-  const [mask, a, b] = [target(), target(), target()];
+export function createGlow(renderer: THREE.WebGLRenderer, occluder: THREE.Material) {
+  const mask = new THREE.WebGLRenderTarget(1, 1, { type: THREE.HalfFloatType, samples: 4 });
+  const a = new THREE.WebGLRenderTarget(1, 1, { type: THREE.HalfFloatType, depthBuffer: false });
+  const b = new THREE.WebGLRenderTarget(1, 1, { type: THREE.HalfFloatType, depthBuffer: false });
   const blur = new THREE.ShaderMaterial({
     uniforms: { map: { value: null }, step: { value: new THREE.Vector2() } },
     vertexShader,
@@ -71,45 +64,49 @@ export function createGlow(renderer: THREE.WebGLRenderer) {
     y: number,
   ) => {
     blur.uniforms.map!.value = from.texture;
-    blur.uniforms.step!.value.set(x / from.width, y / from.height);
+    const ratio = renderer.getPixelRatio() / (from === mask ? 1 : 2);
+    blur.uniforms.step!.value.set((x * ratio) / from.width, (y * ratio) / from.height);
     renderer.setRenderTarget(to);
     quad.render(renderer);
   };
 
   return {
     setSize(width: number, height: number) {
-      const ratio = renderer.getPixelRatio() / 2;
+      const ratio = renderer.getPixelRatio();
       const w = Math.max(1, Math.round(width * ratio));
       const h = Math.max(1, Math.round(height * ratio));
-      for (const t of [mask, a, b]) t.setSize(w, h);
+      mask.setSize(w, h);
+      for (const t of [a, b])
+        t.setSize(Math.max(1, Math.round(w / 2)), Math.max(1, Math.round(h / 2)));
     },
-    /** After the picture: draw `scene`'s glow layer through `camera` and lay its halo over. */
     render(scene: THREE.Scene, camera: THREE.Camera) {
       renderer.getClearColor(clear);
       const alpha = renderer.getClearAlpha();
       const layers = camera.layers.mask;
-      camera.layers.set(GLOW_LAYER);
-      renderer.setClearColor(0x000000, 0);
-      renderer.setRenderTarget(mask);
-      renderer.render(scene, camera);
-      // The halo's source is the mask plus the beacons; only the mask is cut out of the halo.
-      renderer.setRenderTarget(a);
-      renderer.render(scene, camera);
       const autoClear = renderer.autoClear;
-      renderer.autoClear = false;
-      camera.layers.set(BEACON_LAYER);
+      renderer.setClearColor(BLACK, 0);
+      renderer.setRenderTarget(mask);
+      camera.layers.set(OCCLUDER_LAYER);
+      // The actual batch material preserves section cuts and per-element visibility in depth.
+      const colorWrite = occluder.colorWrite;
+      occluder.colorWrite = false;
+      renderer.autoClear = true;
       renderer.render(scene, camera);
-      renderer.autoClear = autoClear;
+      occluder.colorWrite = colorWrite;
+      renderer.autoClear = false;
+      camera.layers.set(GLOW_LAYER);
+      renderer.render(scene, camera);
+      renderer.autoClear = true;
       camera.layers.mask = layers;
       renderer.setClearColor(clear, alpha);
-      pass(a, b, 1, 0);
-      pass(b, a, 0, 1);
-      pass(a, b, 2.5, 0);
-      pass(b, a, 0, 2.5);
-      pass(a, b, 5, 0);
-      pass(b, a, 0, 5);
+      pass(mask, a, 1, 0);
+      pass(a, b, 0, 1);
+      pass(b, a, 2.5, 0);
+      pass(a, b, 0, 2.5);
+      pass(b, a, 5, 0);
+      pass(a, b, 0, 5);
       renderer.setRenderTarget(null);
-      composite.uniforms.map!.value = a.texture;
+      composite.uniforms.map!.value = b.texture;
       composite.uniforms.mask!.value = mask.texture;
       quad.material = composite;
       renderer.autoClear = false;

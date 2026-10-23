@@ -1,20 +1,10 @@
-/**
- * Silhouette outlines for marked elements (selected, lit by a hovered row, under the pointer): the
- * marked geometry is drawn into a mask (one channel per mark), and one full-screen pass rings each
- * silhouette in the page ink with a thin dark casing outside it, so it reads over light ducts and a
- * light ground alike. Constant width in pixels; it follows the true silhouette of any element (a
- * round duct included), and shows through occluders so a selection is never lost behind others.
- */
+/** Only lit elements get x-ray silhouettes: selection, row lighting and pointer hover.
+ * The ink and dark casing keep the outline visible on light meshes and ground alike. */
 import * as THREE from "three";
 import { FullScreenQuad } from "three/addons/postprocessing/Pass.js";
+import { BLACK } from "./grounds";
 
 export const OUTLINE_LAYER = 2;
-/** Mask channel per mark, strongest first. */
-export const OUTLINE_CHANNEL = {
-  selected: new THREE.Color(1, 0, 0),
-  lit: new THREE.Color(0, 1, 0),
-  hover: new THREE.Color(0, 0, 1),
-} as const;
 
 const vertexShader = /* glsl */ `
 varying vec2 vUv;
@@ -80,13 +70,12 @@ export function createOutline(
       mask.setSize(Math.max(1, Math.round(width * ratio)), Math.max(1, Math.round(height * ratio)));
       material.uniforms.texel!.value.set(1 / mask.width, 1 / mask.height);
     },
-    /** After the picture: draw `scene`'s outline layer through `camera` and ring it. */
     render(scene: THREE.Scene, camera: THREE.Camera) {
       renderer.getClearColor(clear);
       const alpha = renderer.getClearAlpha();
       const layers = camera.layers.mask;
       camera.layers.set(OUTLINE_LAYER);
-      renderer.setClearColor(0x000000, 0);
+      renderer.setClearColor(BLACK, 0);
       renderer.setRenderTarget(mask);
       renderer.render(scene, camera);
       camera.layers.mask = layers;

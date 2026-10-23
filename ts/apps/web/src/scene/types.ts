@@ -68,6 +68,8 @@ export type LayerFrame = {
   landed: number;
   /** An element this mark stands on is selected: the mark yields its interior to the selection. */
   selected?: boolean;
+  /** A mesh under this mark is hovered or lit by a row. */
+  lit?: boolean;
 };
 export type Layer3D = {
   key: string;
