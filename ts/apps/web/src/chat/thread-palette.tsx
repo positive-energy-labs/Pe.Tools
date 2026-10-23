@@ -1,5 +1,5 @@
 import { threadSearchDefault } from "@pe/agent-contracts";
-import { memo, useEffect, useMemo, useRef, useState } from "react";
+import { memo, useEffect, useMemo, useRef, useState, type ReactNode } from "react";
 import {
   AlarmClock,
   AlarmClockOff,
@@ -41,6 +41,9 @@ import { Input } from "@pe/kit/lang/input";
 import { useList, type ListState, type ListPersist } from "@pe/kit/lang/collection";
 import { ListView, type ListRowParts } from "@pe/kit/lang/list-view";
 import { Button } from "@pe/kit/lang/button";
+import { Pane } from "@pe/kit/lang/pane";
+import { Switcher } from "@pe/kit/lang/switcher";
+import { MODE_HINT, MODES, type Mode } from "#/workbench/depth";
 import { ProviderMark } from "#/components/lang/provider-mark";
 import { useSurfaceHost } from "#/navigation/surface-host";
 import { peClient } from "#/host/pe-client";
@@ -970,9 +973,53 @@ export function ThreadsSidebar({
   );
 }
 
-/** The surrounding pane owns these actions beside its tabs, outside the scrolling roster. */
-export function ThreadSidebarActions({ onNew }: { onNew: () => void }) {
-  return <Button icon={Plus} label="New thread" onClick={onNew} />;
+/** Desktop and dialog share the pane's title modes and grouped actions. */
+export function ThreadPane({
+  mode,
+  setMode,
+  count,
+  onNew,
+  children,
+}: {
+  mode: Mode;
+  setMode: (mode: Mode) => void;
+  count: number | string;
+  onNew: () => void;
+  children: ReactNode;
+}) {
+  return (
+    <Pane
+      id="threads"
+      title="threads"
+      ground="artifact"
+      scroll="clip"
+      flush={mode === "threads"}
+      tabs={
+        <Switcher
+          ariaLabel="View depth"
+          value={mode}
+          onChange={setMode}
+          options={MODES.map((value) => ({
+            value,
+            title: MODE_HINT[value],
+            label: (
+              <>
+                {value}
+                {value === "threads" ? <small>{count}</small> : null}
+              </>
+            ),
+          }))}
+        />
+      }
+      actions={
+        <Button label="New thread" onClick={onNew}>
+          new
+        </Button>
+      }
+    >
+      {children}
+    </Pane>
+  );
 }
 
 export function NewThreadButton({ onNew }: { onNew: () => void }) {

@@ -30,7 +30,7 @@ import {
 import { Button } from "@pe/kit/lang/button";
 import { Input } from "@pe/kit/lang/input";
 import { Row, RowGroupHead } from "@pe/kit/lang/row";
-import { ThreadsSidebar, ThreadSidebarActions } from "#/chat/thread-palette";
+import { ThreadsSidebar, NewThreadButton } from "#/chat/thread-palette";
 import { demoThreads } from "#/chat/thread-navigation";
 import { emptyChatState } from "@pe/agent-contracts/chat-state";
 
@@ -228,7 +228,7 @@ const PALETTE_EXTRAS = [
 function PalettePane({ selected, onSelect }: { selected: string; onSelect: (id: string) => void }) {
   return (
     <>
-      <PaneHead meta={<ThreadSidebarActions onNew={() => onSelect("new")} />}>
+      <PaneHead meta={<NewThreadButton onNew={() => onSelect("new")} />}>
         Palette · {PALETTE_THREADS.length}
       </PaneHead>
       <div className="min-h-0 flex-1">

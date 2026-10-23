@@ -11,7 +11,7 @@ import { afterEach, beforeEach, expect, test, vi } from "vite-plus/test";
 import type { UpdateThreadRequest } from "@pe/agent-contracts";
 import { emptyChatState } from "@pe/agent-contracts/chat-state";
 import { demoThreads } from "./thread-navigation";
-import { ThreadsSidebar } from "./thread-palette";
+import { ThreadsSidebar, ThreadPane } from "./thread-palette";
 
 afterEach(cleanup);
 beforeEach(() => {
@@ -83,6 +83,27 @@ function mount(
 }
 const row = (title: string) => screen.getByText(title).closest<HTMLElement>('[role="option"]')!;
 
+test("thread head uses the pane title switcher and grouped labelled new action", () => {
+  const onNew = vi.fn(),
+    setMode = vi.fn();
+  const { container } = render(
+    <ThreadPane mode="threads" setMode={setMode} count={9} onNew={onNew}>
+      roster
+    </ThreadPane>,
+  );
+  const header = container.querySelector('[data-slot="pane-header"]')!;
+  const modes = screen.getByRole("group", { name: "View depth" });
+  expect(modes.closest('[data-slot="rail-lead"]')).toBeTruthy();
+  expect(header.contains(modes)).toBe(true);
+  const action = screen.getByRole("button", { name: "New thread" });
+  expect(action.textContent).toBe("new");
+  expect(action.closest('[data-slot="rail-actions"] .dl-button-group')).toBeTruthy();
+  fireEvent.click(action);
+  expect(onNew).toHaveBeenCalledOnce();
+  fireEvent.click(within(modes).getByRole("button", { name: "world" }));
+  expect(setMode).toHaveBeenCalledWith("world");
+});
+
 test("the menu on a selected row acts on every selected thread and greys what needs one", async () => {
   const onUpdate = mount();
   fireEvent.click(row("Draft the BIM handoff notes"), { ctrlKey: true });
@@ -136,6 +157,10 @@ test("plain click activates while modifiers and Space select through the shared 
 
 test("explicit pills narrow threads and Clear search exposes every shelf", async () => {
   mount();
+  const searchRow = screen
+    .getByRole("combobox", { name: "Search threads" })
+    .closest("[data-list-search]");
+  expect(searchRow?.querySelector("[data-list-pill]")?.textContent).toBe("Scope: All");
   fireEvent.click(screen.getByRole("button", { name: "Filter threads" }));
   fireEvent.click(await screen.findByRole("option", { name: /^Filter by Provider/ }));
   const choices = screen.getByRole("listbox", { name: "Filter values" });
