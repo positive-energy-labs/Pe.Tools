@@ -2,6 +2,7 @@
 .dl-button {
   display: inline-flex;
   min-width: 0;
+  max-width: 100%;
   align-items: center;
   gap: 0.25rem;
   cursor: pointer;
@@ -84,4 +85,12 @@
 :is(.dl-row, [data-row]) .dl-button:is(.dl-control, [data-icon-only]) {
   min-height: var(--item-h);
   height: var(--item-h);
+}
+/* A text label truncates with an ellipsis when its container is narrower than it (the full label
+   rides as the title or the tooltip); the min-width lets the flex item shrink below its content. */
+.dl-button-label {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }

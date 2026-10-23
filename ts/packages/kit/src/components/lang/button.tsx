@@ -75,7 +75,13 @@ export function Button({
       ) : (
         <GlyphOf icon={Glyph as LucideIcon} />
       )}
-      {busy && typeof children === "string" ? `${children}…` : (children as ReactNode)}
+      {typeof children === "string" ? (
+        <span className="dl-button-label" title={tipped ? undefined : children}>
+          {busy ? `${children}…` : children}
+        </span>
+      ) : (
+        (children as ReactNode)
+      )}
     </button>
   );
   if (!tipped) return button;

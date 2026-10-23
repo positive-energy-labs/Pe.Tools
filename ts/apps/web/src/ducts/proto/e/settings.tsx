@@ -16,7 +16,6 @@ import type { SystemScope } from "@pe/ducts-domain/system-scope";
 import type { DuctSnapshot } from "@pe/ducts-domain/types";
 import { Button } from "@pe/kit/lang/button";
 import { cellFromTrichotomy, StateCell } from "@pe/kit/lang/cell";
-import { ListPopup } from "@pe/kit/lang/list-popup";
 import { Popover, PopoverContent, PopoverTrigger } from "@pe/kit/lang/popover";
 import { reviewTransitions, type CellWire } from "#/components/work/band";
 import { PrimaryRouteControls } from "#/navigation/route-controls";
@@ -26,10 +25,10 @@ import {
   airflowPatches,
   slotWord,
   type AirflowOf,
-  type AirflowOption,
 } from "../../airflow";
 import type { LossesWork } from "../../work";
 import { RulesTree } from "./rules-pane";
+import { SlotPicker } from "./slot-picker";
 
 const KEY = "designFriction";
 
@@ -213,7 +212,6 @@ function AirflowSlot({
   of: AirflowOf;
 }) {
   const { current, options } = airflowOptions(snapshot, scope, of);
-  const at = options.find((o) => o.slot === current);
   const noun = of === "unit" ? "units" : "grilles";
   const word = of === "unit" ? "Unit airflow" : "Grille airflow";
   return (
@@ -225,35 +223,14 @@ function AirflowSlot({
       >
         {word}
       </span>
-      <span className="flex min-w-0 [&>button]:max-w-full">
-        <ListPopup<AirflowOption>
-          anchor="trigger"
-          face="inline"
-          triggerLabel={word}
-          title={`${word} is read from ${slotWord(current)}: ${at?.have ?? 0} of ${at?.of ?? 0} ${noun} ${scope ? "in this system" : "in the document"} hold a value`}
-          aria-label={`${word} parameter`}
-          items={options}
-          keyOf={(o) => o.slot}
-          labelOf={(o) => o.slot}
-          select="single"
-          selected={[current]}
-          empty="no airflow parameters"
-          onPick={(o) => void work.write(airflowPatches(work.doc, o.slot, of) as never)}
-          row={(o) => ({
-            label: <span className="face-mono">{o.slot}</span>,
-            meta: `${o.have}/${o.of}`,
-            title: o.label,
-          })}
-          trigger={
-            <span className="flex min-w-0 items-baseline gap-1">
-              <span className="face-mono truncate">{slotWord(current)}</span>
-              <span className="shrink-0 text-ink-2">
-                · {at?.have ?? 0}/{at?.of ?? 0}
-              </span>
-            </span>
-          }
-        />
-      </span>
+      <SlotPicker
+        word={word}
+        current={current}
+        options={options}
+        noun={noun}
+        where={scope ? "in this system" : "in the document"}
+        onPick={(slot) => void work.write(airflowPatches(work.doc, slot, of) as never)}
+      />
     </>
   );
 }

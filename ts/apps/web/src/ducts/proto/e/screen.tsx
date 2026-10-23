@@ -38,7 +38,7 @@ import { reviewLines } from "../../write-review";
 import { buildTree, systemList, type TreeNode } from "../b/model";
 import type { ProtoProps } from "../props";
 import { DEFAULT_DESIGN_FRICTION_RATE } from "@pe/ducts-domain/equivalent-length";
-import { BarLegend, fmtFt, SplitStrip, SystemRow } from "./bar";
+import { fmtFt, SplitStrip, SystemRow } from "./bar";
 import { DuctSettings } from "./settings";
 import { FanSections } from "./fan-sections";
 import { RunDetail, runOf } from "./run-detail";
@@ -449,7 +449,6 @@ function EScreenBody({ props }: { props: ProtoProps }) {
             </p>
           ) : (
             <>
-              <BarLegend scale={scale} criticalName={critical ? grilleName(critical) : null} />
               <SplitStrip split={critical?.split ?? tree[0]!.split} scale={scale} light={light} />
             </>
           )}

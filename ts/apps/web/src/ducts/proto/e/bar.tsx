@@ -5,7 +5,7 @@ import { TooltipHint } from "@pe/kit/lang/tooltip";
  * fills its track and every other row reads as a share of it. Unpriced draws no track: an empty bar
  * would read as zero loss.
  */
-import { Fragment, type ComponentProps } from "react";
+import { Fragment, useEffect, useRef, useState, type ComponentProps, type ReactNode } from "react";
 import { fanLoad } from "@pe/ducts-domain/fan-headroom";
 import type { Provisional } from "@pe/ducts-domain/losses";
 import { Popover, PopoverContent, PopoverTrigger } from "@pe/kit/lang/popover";
@@ -21,51 +21,29 @@ export const fmt = (n: number | null | undefined, d = 3) => (n == null ? "—" :
 export const fmtFt = (ft: number | null | undefined) =>
   ft == null ? "—" : Math.abs(ft) < 10 ? ft.toFixed(1) : Math.round(ft).toLocaleString("en-US");
 
-export function BarLegend({
-  scale,
-  criticalName,
-}: {
-  scale: number | null;
-  criticalName: string | null;
-}) {
-  return (
-    <p className="t-small text-ink-2 border-line border-b px-2 py-1" data-e-legend="">
-      {scale == null ? (
-        "bars: not priced yet (the ASHRAE tables are not read), so no row draws a bar"
-      ) : (
-        <>
-          eq ft = effective length from the fan to the row's far end, each fitting as equivalent
-          feet at its duct's own friction rate (small number: in-wg) · bar = in-wg, full width = the
-          critical run ◆ {criticalName ?? "—"} <span className="face-mono">{fmt(scale)}</span>; a
-          run's bar splits per element group, inked by part: unit end, ducts &amp; fittings, grille
-        </>
-      )}
-    </p>
-  );
-}
-
-/** The three parts of a run, in bar order (air order: the unit, the ducts, the grille), each its own ink. */
+/** The three parts of a run, in bar order (air order: the unit, the ducts, the grille). The bar is one ink: colour here would claim a meaning the parts do not have. */
 const PARTS = [
   {
     key: "unit",
     word: "unit end",
     says: "passive devices in series with the fan (coil, dehu)",
-    ink: "viz-1",
   },
   {
     key: "duct",
     word: "ducts & fittings",
     says: "straight duct and every fitting between the unit and the grille",
-    ink: "ink-2",
   },
-  { key: "terminal", word: "grille", says: "the terminal's own drop", ink: "viz-5" },
+  { key: "terminal", word: "grille", says: "the terminal's own drop" },
 ] as const;
+
+/** The bar's one ink; groups are told apart by hairline dividers and, in the popover, leader lines. */
+const INK = "ink-2";
 
 type Light = (ids: readonly number[] | null) => void;
 
 /**
  * A run's loss as abutting segments against `scale`: one per element group (a duct type, a fitting
- * family type, ...), each inked by its part and set off by a hairline of the ground. A segment's
+ * family type, ...), each set off by a hairline of the ground, all in one ink. A segment's
  * width is its in-wg share; hovering one lights the elements that pay it, leaving gives the row's set back.
  */
 function SplitFill({
@@ -88,7 +66,7 @@ function SplitFill({
   let at = 0;
   return (
     <>
-      {PARTS.map(({ key, word, ink }) => {
+      {PARTS.map(({ key, word }) => {
         const part: SplitPart = split[key];
         const segments = split.groups
           .filter((g) => g.part === key && g.dp > 0)
@@ -108,7 +86,7 @@ function SplitFill({
                     style={{
                       left: `${left * 100}%`,
                       width: `${Math.min(1 - left, group.dp / scale) * 100}%`,
-                      backgroundColor: tokenRef(ink),
+                      backgroundColor: tokenRef(INK),
                       boxShadow: `inset -1px 0 0 ${tokenRef("page")}`,
                     }}
                     onMouseEnter={light ? () => light(group.ids) : undefined}
@@ -131,7 +109,7 @@ function SplitFill({
                 className="absolute -inset-y-px w-1.5 border border-dashed"
                 data-e-split={`${key}-unpriced`}
                 {...revitTarget(target.ids, target.refs)}
-                style={{ left: `min(${at * 100}%, calc(100% - 6px))`, borderColor: tokenRef(ink) }}
+                style={{ left: `min(${at * 100}%, calc(100% - 6px))`, borderColor: tokenRef(INK) }}
                 onMouseEnter={light ? () => light(part.ids) : undefined}
                 onMouseLeave={light ? () => light(back ?? null) : undefined}
               />
@@ -235,8 +213,8 @@ function SystemMarker({ issues, open }: { issues: SystemIssue[]; open: () => voi
  * ESP Pe computes (over the unit's rating when it states one). The bar is on the system's own scale
  * with the same groups and inks as the strip; with a rating it is required over available, ringed
  * in the alarm tone when over. Unpriced draws no track: an empty bar would read as zero. The
- * corner marker carries the issues. The bar draws no tooltips of its own: hundreds of rows would
- * draw hundreds.
+ * corner marker carries the issues. The bar draws no tooltips of its own; hovering or clicking it opens the shared
+ * breakdown popover (`BarPopover`), whose content mounts only while open.
  */
 export function SystemRow({
   system: s,
@@ -275,10 +253,11 @@ export function SystemRow({
             className={`flex w-full items-center gap-2 ${issues.length ? "pr-5" : ""}`}
             data-e-fact=""
           >
-            <span className="relative block h-1.5 min-w-8 flex-1" aria-hidden data-e-minibar="">
-              {s.total != null && scale && s.split ? (
+            {s.total != null && scale && s.split ? (
+              <BarPopover split={s.split} scale={scale} className="h-3 min-w-8 flex-1">
                 <span
-                  className="absolute inset-0 block"
+                  className="relative block h-1.5 w-full"
+                  data-e-minibar=""
                   data-e-load={load.state === "rated" ? load.ratio.toFixed(3) : ""}
                   style={over ? { boxShadow: `0 0 0 1px ${tokenRef("alarm")}` } : undefined}
                 >
@@ -288,8 +267,10 @@ export function SystemRow({
                   />
                   <SplitFill split={s.split} scale={scale} hint={false} />
                 </span>
-              ) : null}
-            </span>
+              </BarPopover>
+            ) : (
+              <span className="relative block h-1.5 min-w-8 flex-1" aria-hidden data-e-minibar="" />
+            )}
             <span className="face-mono shrink-0" data-tone={over ? "alarm" : undefined}>
               {fmt(s.total)}
               {load.state === "rated" ? ` / ${fmt(load.available, 2)}` : ""}
@@ -306,10 +287,241 @@ export function SystemRow({
   );
 }
 
+/** The loss columns' precision: a short duct really loses ~0.0001 in-wg, and 3 places would read it as 0. */
+const LOSS_PLACES = 4;
+
+/** Row and bar heights of the leader diagram, px: the leaders are drawn against them. */
+const ROW_H = 20;
+const BAR_H = 12;
+/** Segments under this share of the scale roll up into one "other (N)" entry. */
+const SMALL = 0.03;
+
+type Entry = {
+  key: string;
+  label: string;
+  dp: number;
+  unpriced: number;
+  ids: readonly number[];
+  /** Bar-space centres (0..1) of the segment or segments this entry leads to; none = no segment. */
+  at: number[];
+  title?: string;
+};
+
+/** The groups in bar order, each with the centre of its segment, small ones rolled into one entry. */
+function entriesOf(split: Split, scale: number): Entry[] {
+  let pos = 0;
+  const drawn: Entry[] = PARTS.flatMap((p) =>
+    split.groups
+      .filter((g) => g.part === p.key && g.dp > 0)
+      .map((g) => {
+        const w = Math.min(1 - pos, g.dp / scale);
+        const at = pos + w / 2;
+        pos += g.dp / scale;
+        return { key: g.key, label: g.label, dp: g.dp, unpriced: g.unpriced, ids: g.ids, at: [at] };
+      }),
+  );
+  const small = drawn.filter((e) => e.dp / scale < SMALL);
+  const big = small.length > 1 ? drawn.filter((e) => !small.includes(e)) : drawn;
+  const other: Entry[] =
+    small.length > 1
+      ? [
+          {
+            key: "other",
+            label: `other (${small.length})`,
+            dp: small.reduce((a, e) => a + e.dp, 0),
+            unpriced: small.reduce((a, e) => a + e.unpriced, 0),
+            ids: small.flatMap((e) => e.ids),
+            at: small.flatMap((e) => e.at),
+            title: small.map((e) => `${e.label}  ${fmt(e.dp, LOSS_PLACES)}`).join(String.fromCharCode(10)),
+          },
+        ]
+      : [];
+  const unknown: Entry[] = split.groups
+    .filter((g) => g.dp <= 0 && g.unpriced > 0)
+    .map((g) => ({ key: g.key, label: g.label, dp: 0, unpriced: g.unpriced, ids: g.ids, at: [] }));
+  return [...big, ...other, ...unknown];
+}
+
 /**
- * The critical run's split, wide, under the path header: where the fan's static goes, unit end to
- * grille, one entry per element group with its in-wg and share. Hovering one lights its elements everywhere.
+ * The breakdown of one bar: the bar drawn large, every segment on a thin leader to its label
+ * (group name, in-wg, share). Labels sit in a column left of the bar in bar order, and each leader
+ * drops from its segment then runs left at its label's height, so no two leaders cross. Segments
+ * under 3% roll up into one "other (N)" entry whose leaders gather on its row. Tabular numerals
+ * align the numbers. Hovering an entry lights its elements.
  */
+function BreakdownList({
+  split,
+  scale,
+  light,
+  back,
+  barW,
+}: {
+  split: Split;
+  scale: number;
+  light?: Light;
+  back?: readonly number[];
+  /** The hovered bar's width, px: the large bar takes it (within limits) and sits under its right edge. */
+  barW: number;
+}) {
+  const entries = entriesOf(split, scale);
+  const rows = entries.length;
+  const leader = tokenRef("ink-2");
+  // The popover's resolved side decides where the bar sits: nearest the hovered bar, so below it the
+  // bar is on top and, flipped above it, at the bottom (the labels fan away from it either way).
+  const root = useRef<HTMLDivElement>(null);
+  const [flip, setFlip] = useState(false);
+  useEffect(() => {
+    const popup = root.current?.closest("[data-side]");
+    if (!popup) return;
+    const read = () => setFlip(popup.getAttribute("data-side") === "top");
+    read();
+    const watch = new MutationObserver(read);
+    watch.observe(popup, { attributes: true, attributeFilter: ["data-side"] });
+    return () => watch.disconnect();
+  }, []);
+  const rowOf = (i: number) => (flip ? rows - 1 - i : i);
+  const edge = flip ? rows * ROW_H + 4 : -4;
+  const ordered = flip ? [...entries].reverse() : entries;
+  const caption = (
+    <p className="t-small text-ink-2">
+      full width = <span className="face-mono text-ink">{fmt(scale)}</span> in-wg
+    </p>
+  );
+  const barCol = Math.min(224, Math.max(128, barW));
+  return (
+    <div className="flex flex-col gap-1" data-e-breakdown="" data-e-flip={flip || undefined} ref={root}>
+      {flip ? null : caption}
+      <div
+        className="grid items-center gap-x-2"
+        style={{
+          gridTemplateColumns: `minmax(0,1fr) auto auto ${barCol}px`,
+          gridTemplateRows: flip
+            ? `repeat(${rows}, ${ROW_H}px) ${BAR_H + 4}px`
+            : `${BAR_H + 4}px repeat(${rows}, ${ROW_H}px)`,
+        }}
+        data-e-groups=""
+      >
+        <span
+          className="relative block"
+          style={{
+            gridColumn: 4,
+            gridRow: flip ? rows + 1 : 1,
+            height: BAR_H,
+            backgroundColor: tokenRef("line"),
+            alignSelf: flip ? "end" : "start",
+          }}
+        >
+          <SplitFill split={split} scale={scale} light={light} back={back} hint={false} />
+        </span>
+        {ordered.map((e) => (
+          <div
+            key={e.key}
+            className="contents"
+            data-e-group-key={e.label}
+            title={e.title}
+            onMouseEnter={light ? () => light(e.ids) : undefined}
+            onMouseLeave={light ? () => light(back ?? null) : undefined}
+          >
+            <span className="flex min-w-0 items-baseline gap-1.5" title={e.title ?? e.label}>
+              <span className="truncate">{e.label}</span>
+              {e.unpriced > 0 ? (
+                <span className="shrink-0" data-tone="caution">
+                  {e.dp > 0 ? `+ ${e.unpriced} unpriced` : "no drop: unknown"}
+                </span>
+              ) : null}
+            </span>
+            <span className="face-mono text-ink text-right tabular-nums">
+              {e.dp > 0 ? fmt(e.dp, LOSS_PLACES) : ""}
+            </span>
+            <span className="face-mono text-ink-2 w-[4ch] text-right tabular-nums">
+              {e.dp > 0 ? `${Math.round((e.dp / scale) * 100)}%` : ""}
+            </span>
+          </div>
+        ))}
+        <svg
+          className="h-full w-full overflow-visible"
+          style={{ gridColumn: 4, gridRow: `${flip ? 1 : 2} / span ${Math.max(1, rows)}` }}
+          viewBox={`0 0 100 ${Math.max(1, rows) * ROW_H}`}
+          preserveAspectRatio="none"
+          aria-hidden
+          data-e-leaders=""
+        >
+          {entries.map((e, i) => {
+            const y = rowOf(i) * ROW_H + ROW_H / 2;
+            return e.at.length ? (
+              <path
+                key={e.key}
+                d={[
+                  ...e.at.map((x) => `M${x * 100} ${edge} V${y}`),
+                  `M${Math.max(...e.at) * 100} ${y} H0`,
+                ].join(" ")}
+                fill="none"
+                stroke={leader}
+                strokeWidth={1}
+                vectorEffect="non-scaling-stroke"
+                strokeDasharray={e.at.length > 1 ? "2 2" : undefined}
+              />
+            ) : null;
+          })}
+        </svg>
+      </div>
+      {flip ? caption : null}
+    </div>
+  );
+}
+
+/**
+ * The one breakdown popover: the bar is its trigger (hover or click), the per-group list its
+ * content, aligned to the trigger's right edge so the large bar sits under (or over) the hovered
+ * one wherever the viewport allows. Single-system strip and every all-systems row use this; the
+ * content mounts only while open (Portal owns lazy mounting), so 355 rows hold 355 closed roots.
+ */
+export function BarPopover({
+  split,
+  scale,
+  light,
+  back,
+  className,
+  children,
+}: {
+  split: Split;
+  scale: number;
+  light?: Light;
+  back?: readonly number[];
+  className?: string;
+  children: ReactNode;
+}) {
+  const trigger = useRef<HTMLButtonElement>(null);
+  const [barW, setBarW] = useState(0);
+  return (
+    <Popover
+      onOpenChange={(open) => {
+        if (open) setBarW(trigger.current?.getBoundingClientRect().width ?? 0);
+      }}
+    >
+      <PopoverTrigger
+        ref={trigger}
+        openOnHover
+        delay={150}
+        aria-label="loss breakdown by element group"
+        data-e-bar-trigger=""
+        className={`flex items-center p-0! min-h-0! border-0 ${className ?? ""}`}
+        onClick={(event) => event.stopPropagation()}
+      >
+        {children}
+      </PopoverTrigger>
+      <PopoverContent
+        side="bottom"
+        align="end"
+        className="w-[min(36rem,var(--available-width))] p-2"
+      >
+        <BreakdownList split={split} scale={scale} light={light} back={back} barW={barW} />
+      </PopoverContent>
+    </Popover>
+  );
+}
+
+/** The critical run's split, wide, under the path header: just the bar; its breakdown is the popover. */
 export function SplitStrip({
   split,
   scale,
@@ -319,62 +531,17 @@ export function SplitStrip({
   scale: number | null;
   light: Light;
 }) {
-  const observation = useNativeObservation();
-  const declaration = (ids: readonly number[]) => {
-    const target = observedElements(observation, ids);
-    return revitTarget(target.ids, target.refs);
-  };
   if (!split || !scale) return null;
   return (
-    <div
-      className="border-line flex flex-col gap-1 border-b px-2 py-1.5 t-small"
-      data-e-split-strip=""
-    >
-      <span className="relative block h-2.5" style={{ backgroundColor: tokenRef("line") }}>
-        <SplitFill split={split} scale={scale} light={light} />
-      </span>
-      <span className="flex flex-wrap gap-x-3 text-ink-2">
-        {split.groups
-          .filter((g) => g.dp > 0 || g.unpriced > 0)
-          .map((group) => {
-            const part = PARTS.find((p) => p.key === group.part)!;
-            return (
-              <TooltipHint key={group.key} content={`${part.word}: ${part.says}`}>
-                <span
-                  className="inline-flex items-center gap-1"
-                  data-e-group-key={group.label}
-                  {...declaration(group.ids)}
-                  onMouseEnter={() => light(group.ids)}
-                  onMouseLeave={() => light(null)}
-                >
-                  <span
-                    className="inline-block size-2"
-                    style={{ backgroundColor: tokenRef(part.ink) }}
-                    aria-hidden
-                  />
-                  {group.label}{" "}
-                  {group.dp > 0 ? (
-                    <>
-                      <span className="face-mono text-ink">{fmt(group.dp, 3)}</span>
-                      <span className="face-mono">{Math.round((group.dp / scale) * 100)}%</span>
-                    </>
-                  ) : null}
-                  {group.unpriced > 0 ? (
-                    <span data-tone="caution">
-                      {group.dp > 0 ? `+ ${group.unpriced} unpriced` : "no drop: unknown"}
-                    </span>
-                  ) : null}
-                </span>
-              </TooltipHint>
-            );
-          })}
-      </span>
+    <div className="border-line border-b px-2 py-1.5 t-small" data-e-split-strip="">
+      <BarPopover split={split} scale={scale} light={light} className="h-4 w-full">
+        <span className="relative block h-2.5 w-full" style={{ backgroundColor: tokenRef("line") }}>
+          <SplitFill split={split} scale={scale} light={light} hint={false} />
+        </span>
+      </BarPopover>
     </div>
   );
 }
-
-/** The loss columns' precision: a short duct really loses ~0.0001 in-wg, and 3 places would read it as 0. */
-const LOSS_PLACES = 4;
 
 /**
  * The loss columns' widths, one recipe for the header and every row so they align. A narrow tree

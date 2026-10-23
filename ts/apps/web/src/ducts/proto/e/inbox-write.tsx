@@ -20,7 +20,7 @@ export function inboxWriteRows(write: WriteVerbs) {
     "data-kind": "write",
     title: write.row.title,
     status: (
-      <span className="inline-flex items-center gap-1" data-inbox-write="">
+      <span className="inline-flex max-w-full min-w-0 flex-wrap items-center gap-1" data-inbox-write="">
         <span>{write.row.status}</span>
         {/* The handle's own words, so the button reads as the Situation's does. */}
         <Button

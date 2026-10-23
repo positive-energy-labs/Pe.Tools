@@ -42,6 +42,7 @@ import {
 } from "../../inbox-rows";
 import type { Claim } from "../../legs";
 import { inboxWriteRows, type WriteVerbs } from "./inbox-write";
+import { SlotPicker } from "./slot-picker";
 import { InboxClaim, claimLine } from "./inbox-claim";
 
 type InboxWork = {
@@ -189,19 +190,18 @@ export function Inbox({
             ),
         );
       case "airflow":
-        // The choice lists in the open row only: one press per candidate, its coverage beside it.
-        return worded
-          ? verb.options.map((o) =>
-              make(
-                `a${i}${o.slot}`,
-                Pencil,
-                `${o.label} · ${o.have}/${o.of}`,
-                `Read every ${verb.of ?? "terminal"}'s airflow from ${o.label}: ${o.have} of ${o.of} ${verb.of ?? "terminal"}s hold a value`,
-                () => void work.write(airflowPatches(work.doc, o.slot, verb.of)),
-                { pressed: o.slot === verb.current },
-              ),
-            )
-          : null;
+        // The choice is the shared compact picker, in the open row only.
+        return worded ? (
+          <SlotPicker
+            key={`a${i}`}
+            word={verb.of === "unit" ? "Unit airflow" : "Grille airflow"}
+            current={verb.current}
+            options={verb.options}
+            noun={verb.of === "unit" ? "units" : "grilles"}
+            where="in this scope"
+            onPick={(slot) => void work.write(airflowPatches(work.doc, slot, verb.of))}
+          />
+        ) : null;
       case "focus":
         return make(`f${i}`, Pencil, verb.label, verb.says, () => onFocusCell(verb.cell));
       case "heal": {
