@@ -18,7 +18,7 @@ import { BEACON_LAYER, createGlow, GLOW_LAYER } from "./glow";
 import { createOutline, OUTLINE_CHANNEL, OUTLINE_LAYER } from "./outline";
 import { createWheelReader, pointerIntent, wheelPixels, wheelPlane } from "./gestures";
 import { createMeshPicker } from "./picking";
-import { OrbitControls } from "three/addons/controls/OrbitControls.js";
+import { createOrbitControls } from "./orbit-controls";
 import { center, fromControls, rotateAbout, toCamera, type OrbitViewport } from "./orbit";
 import { fitPlane, frameRect, fromFrame, type PlaneAxis, type PlaneViewport } from "./plane";
 import {
@@ -132,7 +132,7 @@ export function createRenderer(mount: HTMLElement, meshes: SceneMeshes, wheelHos
   sun.position.set(1, -1, 3);
   scene.add(sun);
   const camera = newCamera();
-  const controls = new OrbitControls(camera, canvas);
+  const controls = createOrbitControls(camera, canvas);
   controls.enableDamping = false;
   controls.screenSpacePanning = true;
   // The scheme (gestures.ts): left orbits, middle and right pan, Shift+left pans (OrbitControls'
@@ -763,6 +763,12 @@ export function createRenderer(mount: HTMLElement, meshes: SceneMeshes, wheelHos
     },
     /** One group per key, rebuilt when its layer object is replaced, disposed when its key leaves. */
     setLayers(next: readonly Layer3D[] = []) {
+      // An equal layer list must not schedule three thumbnail renders and GPU readbacks.
+      if (
+        layers.size === next.length &&
+        next.every((layer) => layers.get(layer.key)?.layer === layer)
+      )
+        return;
       for (const [key, held] of layers) {
         if (next.includes(held.layer)) continue;
         scene.remove(held.group);
@@ -797,6 +803,8 @@ export function createRenderer(mount: HTMLElement, meshes: SceneMeshes, wheelHos
       motion.removeEventListener("change", render);
       theme.disconnect();
       observer.disconnect();
+      controls.removeEventListener("change", render);
+      controls.removeEventListener("end", turnEnd);
       controls.dispose();
       canvas.removeEventListener("pointerdown", planeDown);
       window.removeEventListener("pointermove", planeMove);

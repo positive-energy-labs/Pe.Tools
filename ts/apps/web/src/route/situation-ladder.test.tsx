@@ -4,7 +4,10 @@ import { cleanup, render, screen } from "@testing-library/react";
 import { afterEach, expect, test, vi } from "vite-plus/test";
 import { MACHINE_SEEDS, CHECKOUT_HOT } from "#/open/seeds";
 
-vi.mock("#/machine/use-machine", () => ({ useMachine: () => ({ reading: { state: "absent" } }) }));
+vi.mock("#/machine/use-machine", () => ({
+  useMachineSlice: (select: (reading: { state: "absent" }) => unknown) =>
+    select({ state: "absent" }),
+}));
 const choose = vi.fn();
 vi.mock("#/route/shell", () => ({ useChooseTarget: () => [null, choose] }));
 const { useDocumentLadder, LadderPicker } = await import("./situation-ladder");

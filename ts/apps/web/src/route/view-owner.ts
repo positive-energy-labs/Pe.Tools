@@ -83,6 +83,14 @@ export function createViewOwner<P>(
       intent.attempted = true;
     }
     const before = read();
+    // History tagging and URL normalization can restore the current Page verbatim.
+    if (
+      origin === "url" &&
+      Object.entries(next as object).every(([key, value]) =>
+        deepEqual(before.page[key as keyof P], value, { ignoreUndefined: false }),
+      )
+    )
+      return null;
     if (snapshot) {
       const guard = options.guard;
       if (

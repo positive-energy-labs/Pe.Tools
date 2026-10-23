@@ -26,13 +26,12 @@ import { mergeThreadRoster, mergeThreadSummary } from "./thread-merge";
 import { emptyPrompt } from "../prompt";
 import { soleUserDocument } from "#/chat/scope";
 import { machineOf } from "#/machine/model";
-import { useMachine } from "#/machine/use-machine";
+import { useMachineSlice } from "#/machine/use-machine";
 
 export function WorkbenchProvider({ children }: { children: ReactNode }) {
   const config = useMemo(() => resolveWorkbenchConfig(), []);
   const navigate = useNavigate();
   const router = useRouter();
-  const routeLocation = useRouterState({ select: (state) => state.location });
   const navigationEpoch = useRef(0);
   useEffect(() => {
     let href = router.state.location.href;
@@ -41,9 +40,20 @@ export function WorkbenchProvider({ children }: { children: ReactNode }) {
       href = location.href;
     });
   }, [router]);
-  const search = useSearch({ strict: false });
+  const search = useSearch({
+    strict: false,
+    select: (search) => ({
+      thread: search.thread,
+      mode: search.mode,
+      turn: search.turn,
+      prompt: search.prompt,
+    }),
+    structuralSharing: true,
+  });
   const addressedThread = search.thread ?? "";
-  const issue = routeThreadIssue(addressedThread, routeLocation.state);
+  const issue = useRouterState({
+    select: (state) => routeThreadIssue(addressedThread, state.location.state),
+  });
   const currentThreadId = issue === "minted" ? "" : (issue ?? addressedThread);
   const draftHead = useReading<ThreadHead>(
     issue === "minted" ? { kind: "thread-head", thread: addressedThread } : null,
@@ -101,11 +111,8 @@ export function WorkbenchProvider({ children }: { children: ReactNode }) {
   const [draft, setDraft] = useState<HeadDraft>(EMPTY_HEAD);
   // Undefined until the human picks or clears: the draft then shows the sole user document, if any.
   const [chosenTarget, setDraftTarget] = useState<DocumentRequest | null>();
-  const machine = machineOf(useMachine().reading);
-  const draftTarget = useMemo(
-    () => (chosenTarget === undefined ? soleUserDocument(machine) : chosenTarget),
-    [chosenTarget, machine],
-  );
+  const soleDocument = useMachineSlice((reading) => soleUserDocument(machineOf(reading)));
+  const draftTarget = chosenTarget === undefined ? soleDocument : chosenTarget;
   const [error, setError] = useState<string>();
 
   // `?demo=<seed>`: the transcript shows that seed's thread and nothing is fetched.

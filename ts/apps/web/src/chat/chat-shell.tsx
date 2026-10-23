@@ -1,6 +1,7 @@
 import type { ListSearch } from "@pe/agent-contracts";
 import { useNavigate, useRouterState } from "@tanstack/react-router";
-import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { memo, useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { useRouteSearchSlice } from "#/route/activity";
 import { useAtomRefresh, useAtomValue } from "@effect/atom-react";
 import { ModeDial } from "#/chat/mode-dial";
 import { NewThreadButton, ThreadsSidebar, ThreadSidebarActions } from "#/chat/thread-palette";
@@ -49,9 +50,9 @@ import { routeAddress, routeAt } from "@pe/agent-contracts";
 
 type ChatShellProps = { target?: string; docked?: boolean };
 
-export function ChatShell(props: ChatShellProps) {
+export const ChatShell = memo(function ChatShell(props: ChatShellProps) {
   return <CurrentThreadChatSurface {...props} />;
-}
+});
 
 function CurrentThreadChatSurface(props: ChatShellProps) {
   const { currentThreadId, turn } = useWorkbench();
@@ -129,11 +130,14 @@ function ChatSurface({ target, docked = false }: ChatShellProps) {
     [startThread],
   );
   const navigate = useNavigate();
-  const location = useRouterState({ select: (state) => state.location });
-  const sidebarAddress = routeAddress(routeAt(location.pathname) ?? "pea");
-  const sidebarPage = sidebarAddress.read(location.search).page;
+  const pathname = useRouterState({ select: (state) => state.location.pathname });
+  const sidebarAddress = routeAddress(routeAt(pathname) ?? "pea");
+  const sidebarPage = useRouteSearchSlice((search) => {
+    const page = sidebarAddress.read(search).page;
+    return { threadSearch: page.threadSearch, threadSort: page.threadSort };
+  });
   const threadListAddress = {
-    scope: location.pathname,
+    scope: pathname,
     search: sidebarPage.threadSearch,
     sort: sidebarPage.threadSort,
     onChange: (threadSearch: ListSearch, threadSort: "recent" | "title" | "") => {

@@ -31,8 +31,16 @@ import {
   type DuctsReadingEnvelope,
 } from "@pe/agent-contracts";
 import * as Atom from "effect/unstable/reactivity/Atom";
-import { useAtomValue } from "@effect/atom-react";
-import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { RegistryContext, useAtomValue } from "@effect/atom-react";
+import {
+  useCallback,
+  useContext,
+  useEffect,
+  useMemo,
+  useRef,
+  useState,
+  useSyncExternalStore,
+} from "react";
 import type { Custody, Lane } from "@pe/host-contracts/contracts";
 import type {
   BridgeSessionListEntry,
@@ -51,6 +59,7 @@ import {
 import { reportFault } from "#/host/diagnostics";
 import { HOST_READ_WAIT_S } from "#/route/waits";
 import { resolveWorkbenchConfig } from "#/workbench/config.ts";
+import { deepEqual } from "@tanstack/react-router";
 
 export type { Lane };
 
@@ -98,15 +107,32 @@ export class PeReadings {
   private faulted = false;
   private readonly resyncs = new Set<() => void>();
   private unwatchWake?: () => void;
+  private readonly pending = new Map<string, Frame[]>();
+  private cancelDelivery?: () => void;
 
   constructor(
     private readonly url: () => string,
     private readonly connect: (url: string) => Source = openEventSource,
+    private readonly batch: (deliver: () => void) => () => void = (deliver) => {
+      if (typeof requestAnimationFrame !== "function") {
+        deliver();
+        return () => {};
+      }
+      if (document.visibilityState === "hidden") {
+        const timer = setTimeout(deliver, 0);
+        return () => clearTimeout(timer);
+      }
+      const frame = requestAnimationFrame(deliver);
+      return () => cancelAnimationFrame(frame);
+    },
   ) {}
 
   /** Retire this owner's transport. Idempotent, and one-way: no further request is ever issued. */
   close() {
     this.closed = true;
+    this.cancelDelivery?.();
+    this.cancelDelivery = undefined;
+    this.pending.clear();
     this.generation++;
     this.scheduled = false;
     this.pendingFenced = false;
@@ -200,6 +226,7 @@ export class PeReadings {
       found.listeners.delete(listener);
       if (found.listeners.size === 0 && this.entries.get(key) === found) {
         this.entries.delete(key);
+        this.pending.delete(key);
         this.schedule(false);
       }
     };
@@ -214,6 +241,9 @@ export class PeReadings {
   }
 
   private lose(retry: boolean) {
+    this.cancelDelivery?.();
+    this.cancelDelivery = undefined;
+    this.pending.clear();
     this.generation++;
     clearTimeout(this.watchdog);
     this.source?.close();
@@ -262,7 +292,17 @@ export class PeReadings {
 
   private open() {
     // Prerender and SSR have no window and no EventSource; the client subscribes again on hydration.
-    if (typeof window === "undefined" || this.closed || this.entries.size === 0) return;
+    if (typeof window === "undefined" || this.closed) return;
+    if (this.entries.size === 0) {
+      this.source?.close();
+      this.source = undefined;
+      this.retiring?.close();
+      this.retiring = undefined;
+      clearTimeout(this.watchdog);
+      this.unwatchWake?.();
+      this.unwatchWake = undefined;
+      return;
+    }
     this.watchWake();
     const generation = this.generation;
     const url = new URL(this.url());
@@ -301,12 +341,38 @@ export class PeReadings {
         const frame = readingFrameSchema.parse(JSON.parse(event.data as string));
         const entry = this.entries.get(frame.key);
         if (!entry) return;
-        if (frame.kind === "snapshot" || frame.kind === "failure") {
-          entry.latest = frame;
-          entry.stale = false;
-          this.attempts = 0;
+        const frames = this.pending.get(frame.key) ?? [];
+        // Keep log/gap order; consecutive state snapshots need only publish their final value.
+        if (frame.kind === "snapshot" && frames.at(-1)?.kind === "snapshot")
+          frames[frames.length - 1] = frame;
+        else frames.push(frame);
+        this.pending.set(frame.key, frames);
+        if (!this.cancelDelivery) {
+          let delivered = false;
+          const cancel = this.batch(() => {
+            delivered = true;
+            this.cancelDelivery = undefined;
+            const pending = [...this.pending];
+            this.pending.clear();
+            for (const [key, frames] of pending) {
+              const entry = this.entries.get(key);
+              if (!entry) continue;
+              for (const frame of frames) {
+                if (frame.kind === "gap") entry.stale = true;
+                if (frame.kind === "snapshot" || frame.kind === "failure") {
+                  const unchanged =
+                    !entry.stale && deepEqual(entry.latest, frame, { ignoreUndefined: false });
+                  entry.latest = frame;
+                  entry.stale = false;
+                  this.attempts = 0;
+                  if (unchanged) continue;
+                }
+                for (const accept of entry.listeners) accept(frame);
+              }
+            }
+          });
+          if (!delivered) this.cancelDelivery = cancel;
         }
-        for (const accept of entry.listeners) accept(frame);
       } catch {
         lost();
       }
@@ -360,7 +426,7 @@ function advance<T>(reading: Reading<T>, frame: Frame): Reading<T> {
       if (
         reading.state === "ready" &&
         (reading.changed ?? false) === (frame.changed ?? false) &&
-        JSON.stringify(reading.observation) === JSON.stringify(frame.value)
+        deepEqual(reading.observation, frame.value, { ignoreUndefined: false })
       )
         return reading;
       return {
@@ -369,6 +435,7 @@ function advance<T>(reading: Reading<T>, frame: Frame): Reading<T> {
         ...(frame.changed === undefined ? {} : { changed: frame.changed }),
       };
     case "failure":
+      if (reading.state === "failed" && reading.message === frame.error) return reading;
       return { state: "failed", message: frame.error, ...(previous !== undefined && { previous }) };
     case "gap":
       return previous === undefined ? absent : { state: "stale", previous, reason: "gap" };
@@ -677,10 +744,10 @@ export function useDuctsReading<T>(
 }
 
 /**
- * The slice of a Reading a component uses. A frame that leaves the slice equal (JSON-wise) does not
+ * The slice of a Reading a component uses. A frame that leaves the slice structurally equal does not
  * notify, so a poll that moved other fields re-renders nobody here.
  */
-function useReadingSlice<T, S>(
+export function useReadingSlice<T, S>(
   request: ReadingRequest | null,
   select: (reading: Reading<T>) => S,
   source: Readings = peReadings,
@@ -688,19 +755,24 @@ function useReadingSlice<T, S>(
   const key = request ? readingKey(request) : null;
   const selectRef = useRef(select);
   selectRef.current = select;
-  const slice = useMemo(() => {
-    const atom = request ? readingAtom<T>(request, source) : (absentAtom as Atom.Atom<Reading<T>>);
-    let held: { value: S; json: string } | undefined;
-    return Atom.make((get) => {
-      const value = selectRef.current(get(atom));
-      const json = JSON.stringify(value) ?? "";
-      if (held?.json === json) return held.value;
-      held = { value, json };
-      return value;
-    });
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [key, source]);
-  return useAtomValue(slice);
+  const registry = useContext(RegistryContext);
+  const atom = useMemo(
+    () => (request ? readingAtom<T>(request, source) : (absentAtom as Atom.Atom<Reading<T>>)),
+    [key, source],
+  ); // eslint-disable-line react-hooks/exhaustive-deps
+  const held = useRef<{ value: S } | undefined>(undefined);
+  const subscribe = useCallback(
+    (notify: () => void) => registry.subscribe(atom, notify),
+    [registry, atom],
+  );
+  const snapshot = useCallback(() => {
+    const value = selectRef.current(registry.get(atom));
+    if (held.current && deepEqual(held.current.value, value, { ignoreUndefined: false }))
+      return held.current.value;
+    held.current = { value };
+    return value;
+  }, [registry, atom]);
+  return useSyncExternalStore(subscribe, snapshot, snapshot);
 }
 
 /** The `host-status` slice a component uses; see `useReadingSlice`. */

@@ -90,7 +90,7 @@ export function RootComponent() {
                   >
                     <SituationPinnedControl />
                     <div className="min-h-0 min-w-0 flex-1">
-                      <RouteDock renderRoute={(body) => <SurfaceOutlet>{body}</SurfaceOutlet>}>
+                      <RouteDock renderRoute={renderSurfaceRoute}>
                         <SurfaceOutlet />
                       </RouteDock>
                     </div>
@@ -106,17 +106,19 @@ export function RootComponent() {
   );
 }
 
+const renderSurfaceRoute = (body: React.ReactNode) => <SurfaceOutlet>{body}</SurfaceOutlet>;
+
 function SurfaceOutlet({ children }: { children?: React.ReactNode }) {
   const host = useSurfaceHost();
-  const location = useRouterState({ select: (state) => state.location });
+  const pathnameNow = useRouterState({ select: (state) => state.location.pathname });
   const scope = useRouteActivity();
-  const pathname = scope?.pathname ?? location.pathname;
+  const pathname = scope?.pathname ?? pathnameNow;
   if (host.shell.routes === "all" || appRouteMount(pathname, host.surface))
     return children ?? <Outlet />;
   return (
     <div className="flex flex-col gap-3 p-3">
       <p>{appRouteByPath(pathname)?.label ?? "This tool"} opens in a full window.</p>
-      <Button label="Open in full window" onClick={() => host.openFullWindow(location.href)}>
+      <Button label="Open in full window" onClick={() => host.openFullWindow(window.location.href)}>
         Open in full window
       </Button>
     </div>

@@ -138,8 +138,7 @@ function hidePanel(unpinnedOnly = false) {
 
 export function SurfaceHostProvider({ children }: { children: ReactNode }) {
   const router = useRouter();
-  const location = useRouterState({ select: (state) => state.location });
-  const shell = location.search.shell;
+  const shell = useRouterState({ select: (state) => state.location.search.shell });
   const navigationRequest = useRef<(destination: string) => void>(() => {});
   const lastTrayLocation = useRef("/open?shell=tray");
   const [navigationRefusal, setNavigationRefusal] = useState<string | null>(null);
@@ -193,6 +192,7 @@ export function SurfaceHostProvider({ children }: { children: ReactNode }) {
   const open = useCallback(openFullWindow, []);
   const surface: AppSurface = shell === "tray" ? "tray" : standalone || overlay ? "pwa" : "web";
   const local = SURFACE_SHELLS[surface].routes !== "all";
+  const localHref = useRouterState({ select: (state) => (local ? state.location.href : "") });
   useEffect(() => {
     document.documentElement.dataset.shell = surface;
   }, [surface]);
@@ -254,13 +254,13 @@ export function SurfaceHostProvider({ children }: { children: ReactNode }) {
   }, [surface, local, router, handoff]);
   useEffect(() => {
     if (!local) return;
-    if (surfaceDestination(surface, location.href, window.location.origin) === "local") {
-      lastTrayLocation.current = location.href;
+    if (surfaceDestination(surface, localHref, window.location.origin) === "local") {
+      lastTrayLocation.current = localHref;
       return;
     }
-    navigationRequest.current(location.href);
+    navigationRequest.current(localHref);
     void router.navigate({ href: lastTrayLocation.current, replace: true, ignoreBlocker: true });
-  }, [surface, local, location.href, router]);
+  }, [surface, local, localHref, router]);
   const value = useMemo<SurfaceHost>(
     () => ({
       surface,

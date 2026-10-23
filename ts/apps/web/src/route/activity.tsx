@@ -1,5 +1,12 @@
-import { createContext, useCallback, useContext, useMemo, useSyncExternalStore } from "react";
-import { useRouter } from "@tanstack/react-router";
+import {
+  createContext,
+  useCallback,
+  useContext,
+  useMemo,
+  useRef,
+  useSyncExternalStore,
+} from "react";
+import { deepEqual, useRouter } from "@tanstack/react-router";
 import { routeAddress, type Carry, type RouteKey, type UrlPage } from "@pe/agent-contracts";
 
 type Disposable = { dispose(): void };
@@ -16,38 +23,63 @@ export interface RouteActivityScope {
 export const RouteActivity = createContext<RouteActivityScope | null>(null);
 export const useRouteActivity = () => useContext(RouteActivity);
 
-/** Route descendants read their own captured search even when Activity renders them hidden. */
-export function useRouteSearch<R extends RouteKey>(route: R): UrlPage<R> & Carry;
-export function useRouteSearch(): Record<string, unknown> & Carry;
-export function useRouteSearch(route?: RouteKey) {
+const decoded = new WeakMap<object, Map<RouteKey | undefined, Record<string, unknown> & Carry>>();
+function searchOf(search: Record<string, unknown>, route?: RouteKey) {
+  let pages = decoded.get(search);
+  if (!pages) decoded.set(search, (pages = new Map()));
+  let page = pages.get(route);
+  if (!page) {
+    const read = routeAddress(route ?? "pea").read(search);
+    page = {
+      ...(route ? read.page : search),
+      target: undefined,
+      work: undefined,
+      thread: undefined,
+      ...read.carry,
+    };
+    pages.set(route, page);
+  }
+  return page;
+}
+
+/** A URL publication wakes only readers whose selected fields changed, including retained tabs. */
+export function useRouteSearchSlice<S>(select: (search: Record<string, unknown> & Carry) => S): S {
   const scope = useRouteActivity();
   const router = useRouter({ warn: false });
   const raw = typeof location === "undefined" ? "" : location.search;
   const fallback = useMemo(() => Object.fromEntries(new URLSearchParams(raw)), [raw]);
+  const selector = useRef(select);
+  selector.current = select;
+  const held = useRef<{ value: S } | undefined>(undefined);
   const subscribe = useCallback(
-    (notify: () => void) => (router && !scope ? router.subscribe("onResolved", notify) : () => {}),
-    [router, scope],
+    (notify: () => void) => (router ? router.subscribe("onResolved", notify) : () => {}),
+    [router],
   );
-  const live = useSyncExternalStore(
-    subscribe,
-    () => scope?.search ?? router?.state.location.search ?? fallback,
-    () => scope?.search ?? router?.state.location.search ?? fallback,
-  );
-  const search = scope?.search ?? live;
-  const read = routeAddress(route ?? "pea").read(search);
-  // Router location is raw search; useSearch used to supply root-validated carry fields.
-  return {
-    ...(route ? read.page : search),
-    target: undefined,
-    work: undefined,
-    thread: undefined,
-    ...read.carry,
-  };
+  const snapshot = useCallback(() => {
+    const search =
+      scope && !scope.current()
+        ? scope.search
+        : (router?.state.location.search ?? scope?.search ?? fallback);
+    const value = selector.current(searchOf(search));
+    if (held.current && deepEqual(held.current.value, value, { ignoreUndefined: false }))
+      return held.current.value;
+    held.current = { value };
+    return value;
+  }, [router, scope, fallback]);
+  return useSyncExternalStore(subscribe, snapshot, snapshot);
+}
+
+/** Route descendants read their own captured search even when Activity renders them hidden. */
+export function useRouteSearch<R extends RouteKey>(route: R): UrlPage<R> & Carry;
+export function useRouteSearch(): Record<string, unknown> & Carry;
+export function useRouteSearch(route?: RouteKey) {
+  return useRouteSearchSlice((search) => (route ? searchOf(search, route) : search));
 }
 
 export function useRouteDemo(): string | null {
-  const search = useRouteSearch();
-  return search.live !== undefined ? null : typeof search.demo === "string" ? search.demo : null;
+  return useRouteSearchSlice((search) =>
+    search.live !== undefined ? null : typeof search.demo === "string" ? search.demo : null,
+  );
 }
 
 /** Retained callbacks can outlive the effect that installed them. Check custody when invoked. */

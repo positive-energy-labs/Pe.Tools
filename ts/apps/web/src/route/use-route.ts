@@ -69,6 +69,8 @@ export function useRoute<W, R extends string, P, A extends string>(
     [manifest, options.url, seed],
   );
   const urlInitial = useInitialUrlPage(url);
+  const currentManifest = useRef(manifest);
+  currentManifest.current = manifest;
   const owner = useRouteOwner(() => {
     const route = createRouteOwner(
       manifest.key,
@@ -78,7 +80,11 @@ export function useRoute<W, R extends string, P, A extends string>(
       route,
       manifest.page,
       { ...seed?.page, ...options.page, ...urlInitial },
-      { address: manifest.address, transition: manifest.transition },
+      {
+        address: manifest.address,
+        transition: (page, patch, origin) =>
+          currentManifest.current.transition?.(page, patch, origin) ?? { patch },
+      },
     );
     return {
       ...route,
@@ -173,6 +179,7 @@ export function useRoute<W, R extends string, P, A extends string>(
             ),
     [manifest.readings, page, seed, provided, key],
   );
+  const readingSpecsKey = JSON.stringify(resolvedReadingSpecs);
   const readingAtoms = useMemo(() => {
     const bound = JSON.parse(boundKey) as { session: string; openId: string } | null;
     return resolvedReadingSpecs.flatMap(([name, request]) => {
@@ -185,7 +192,8 @@ export function useRoute<W, R extends string, P, A extends string>(
         [name, readingAtom(req as ReadingRequest, peReadings), req as ReadingRequest] as const,
       ];
     });
-  }, [resolvedReadingSpecs, boundKey]);
+    // A Page move that names the same resources must not replace their aggregate subscription.
+  }, [readingSpecsKey, boundKey]); // eslint-disable-line react-hooks/exhaustive-deps
   const readingsAtom = useMemo(
     () =>
       Atom.make((get) => ({

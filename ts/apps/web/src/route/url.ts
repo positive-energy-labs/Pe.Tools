@@ -8,12 +8,12 @@
  */
 import { routeAddress, type History, type RouteKey, type RoutePage } from "@pe/agent-contracts";
 import { useRouter, type SearchMiddleware } from "@tanstack/react-router";
-import { useEffect } from "react";
+import { useEffect, useState } from "react";
 import { z } from "zod";
 import type { RouteManifest } from "./manifest";
 import type { ViewOwner } from "./view-owner";
 import { causeRefusal } from "./refusal";
-import { useRouteActivity, useRouteSearch } from "./activity";
+import { useRouteActivity } from "./activity";
 
 type AnyRouter = ReturnType<typeof useRouter>;
 const parsed = new WeakMap<object, ReturnType<AnyRouter["parseLocation"]>>();
@@ -229,11 +229,22 @@ export function useUrlPage<P>(url: UrlPage<P> | null, owner: ViewOwner<P>) {
       unpage();
       unhistory();
     };
-  }, [router, url, owner, activity, activity?.search]);
+  }, [router, url, owner, activity]);
 }
 
 /** First render: the page the address names, before any effect runs. */
 export function useInitialUrlPage<P>(url: UrlPage<P> | null): Partial<P> {
-  const search = useRouteSearch();
-  return url ? url.read(search) : {};
+  const router = useRouter({ warn: false });
+  const activity = useRouteActivity();
+  return useState(() =>
+    url
+      ? url.read(
+          activity?.search ??
+            router?.state.location.search ??
+            (typeof location === "undefined"
+              ? {}
+              : Object.fromEntries(new URLSearchParams(location.search))),
+        )
+      : {},
+  )[0];
 }
