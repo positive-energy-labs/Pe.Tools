@@ -497,7 +497,7 @@ const CORE_ITEMS: CoreItem[] = Array.from({ length: 5 }, (_, shelf) => {
   };
 });
 
-export const initialCoreListState = (): ListState<SpecimenSort> => ({
+const initialCoreListState = (): ListState<SpecimenSort> => ({
   ...emptyListState<SpecimenSort>(),
   sort: "name",
   open: CORE_ITEMS.map((item) => item.id),
