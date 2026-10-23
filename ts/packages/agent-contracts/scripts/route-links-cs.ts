@@ -15,6 +15,7 @@ import { existsSync, readFileSync, writeFileSync } from "node:fs";
 import { dirname, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 import { routeAddresses } from "../src/routes/index.ts";
+import { threadListFields } from "../src/routes/shared.ts";
 
 const HERE = dirname(fileURLToPath(import.meta.url));
 export const ROUTES_CS = resolve(HERE, "../../../../dotnet/Pe.App/Host/PeRoutes.generated.cs");
@@ -28,7 +29,10 @@ const pascal = (text: string) =>
 /** The generated C#, deterministic: routes and keys in declaration order, LF endings. */
 export function renderRoutesCs(): string {
   const routes = Object.entries(routeAddresses).map(([route, spec]) => {
-    const keys = Object.entries(spec.fields as Record<string, { url?: string; share?: false }>)
+    const keys = Object.entries({ ...threadListFields, ...spec.fields } as Record<
+      string,
+      { url?: string; share?: false }
+    >)
       .filter(([, field]) => field.url && field.share !== false)
       .map(([key]) => `            public const string ${pascal(key)} = "${key}";`);
     return [

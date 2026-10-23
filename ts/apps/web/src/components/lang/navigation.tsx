@@ -1,96 +1,13 @@
 /**
- * The thread roster: search, filters, shelves (`NavigationGroup`), rows (`NavigationItem`), a paged
- * tail. Rows are `Row`s; the view is a sentence-case, square, edge-to-edge list. Painted in navigation.css.
+ * Presentation retained for directory and prototype callers. Production lists use useList/ListView.
+ * These components own no list keyboard navigation. Painted in navigation.css.
  */
-import { useRef, useState, type ReactNode, type KeyboardEvent, type RefObject } from "react";
-import {
-  AlarmClock,
-  ChevronRight,
-  Clock3,
-  Hand,
-  LoaderCircle,
-  Search,
-  TriangleAlert,
-  X,
-} from "lucide-react";
+import { useRef, useState, type ReactNode } from "react";
+import { AlarmClock, ChevronRight, Clock3, Hand, LoaderCircle, TriangleAlert } from "lucide-react";
 import { Row } from "@pe/kit/lang/row";
-import { Input } from "@pe/kit/lang/input";
-import { Button } from "@pe/kit/lang/button";
-import { ListPopup } from "@pe/kit/lang/list-popup";
-import { KeyScope, useScopeKeys } from "@pe/kit/keys";
 import "@pe/kit/lang/lang.css";
 import "./navigation.css";
 import { TooltipHint } from "@pe/kit/lang/tooltip";
-
-export function NavigationSearch({
-  value,
-  onChange,
-  actions,
-}: {
-  value: string;
-  onChange: (value: string) => void;
-  actions?: ReactNode;
-}) {
-  const input = useRef<HTMLInputElement>(null);
-  const composing = useRef(false);
-  return (
-    <KeyScope id="navigation-search" element={input}>
-      <NavigationSearchKeys input={input} composing={composing} clear={() => onChange("")} />
-      <div data-navigation-search="" className="dl-control">
-        <Search aria-hidden />
-        <Input
-          ref={input}
-          surface="embedded"
-          aria-label="Search threads"
-          placeholder="Search"
-          value={value}
-          onChange={(event) => onChange(event.target.value)}
-          onCompositionStart={() => {
-            composing.current = true;
-          }}
-          onCompositionEnd={() => {
-            composing.current = false;
-          }}
-        />
-        {actions}
-      </div>
-    </KeyScope>
-  );
-}
-
-function NavigationSearchKeys({
-  input,
-  composing,
-  clear,
-}: {
-  input: RefObject<HTMLInputElement | null>;
-  composing: RefObject<boolean>;
-  clear: () => void;
-}) {
-  useScopeKeys([
-    {
-      hotkey: "Escape",
-      callback: () => {
-        if (!composing.current) clear();
-      },
-      label: "clear search",
-      options: { ignoreInputs: false },
-    },
-    {
-      hotkey: "ArrowDown",
-      callback: () => {
-        if (!composing.current)
-          input.current
-            ?.closest("nav")
-            ?.querySelector<HTMLElement>('[data-key][role="button"]')
-            ?.focus();
-      },
-      label: "first thread",
-      options: { ignoreInputs: false },
-    },
-  ]);
-  return null;
-}
 
 /** A shelf's open state outlives the page: stored per `persist` key, like a pane's width. */
 function useShelfOpen(persist: string | undefined, initial: boolean) {
@@ -221,96 +138,6 @@ export function NavigationGroup({
   );
 }
 
-/** A head-style strip of roster filters under the search; it wraps rather than overflows. */
-export function NavigationFilters({ children }: { children: ReactNode }) {
-  return (
-    <div data-navigation-filters="" role="group" aria-label="Filter threads">
-      {children}
-    </div>
-  );
-}
-
-/** One roster filter: its word until a value is picked, then the value and a clear. "*" is all. */
-export function NavigationFilter<K extends string>({
-  label,
-  all,
-  options,
-  value,
-  onChange,
-}: {
-  label: string;
-  /** The first option, meaning no filter ("All targets"). */
-  all: string;
-  options: { key: K; label: string }[];
-  value: K | "*";
-  onChange: (key: K | "*") => void;
-}) {
-  const picked = options.find((option) => option.key === value);
-  return (
-    <span data-navigation-filter="" data-active={picked ? "" : undefined}>
-      <ListPopup<{ key: K | "*"; label: string }>
-        anchor="trigger"
-        trigger={picked?.label ?? label}
-        title={picked ? `${label}: ${picked.label}` : undefined}
-        triggerLabel={picked ? `${label}: ${picked.label}` : `Filter threads by ${label}`}
-        aria-label={label}
-        items={[{ key: "*", label: all }, ...options]}
-        keyOf={(option) => option.key}
-        labelOf={(option) => option.label}
-        empty={`No ${label.toLowerCase()}`}
-        onPick={(option) => onChange(option.key)}
-        row={(option) => ({ label: option.label, active: option.key === value })}
-      />
-      {picked ? (
-        <Button
-          icon={X}
-          label={`Clear the ${label.toLowerCase()} filter`}
-          onClick={() => onChange("*")}
-        />
-      ) : null}
-    </span>
-  );
-}
-
-/** An on/off roster filter (Unread): a framed toggle that composes with the picked filters; its
- *  count is how many rows it would leave. */
-export function NavigationToggle({
-  label,
-  count,
-  pressed,
-  onChange,
-}: {
-  label: string;
-  count: number;
-  pressed: boolean;
-  onChange: (pressed: boolean) => void;
-}) {
-  return (
-    <Button kind="framed" label={label} pressed={pressed} onClick={() => onChange(!pressed)}>
-      {label}
-      <span data-slot="count">{count}</span>
-    </Button>
-  );
-}
-
-/** A shelf's paged tail: says how many rows are not drawn, and draws the next page. */
-export function NavigationMore({
-  hidden,
-  step,
-  onMore,
-}: {
-  hidden: number;
-  step: number;
-  onMore: () => void;
-}) {
-  return (
-    <button type="button" data-navigation-more="" onClick={onMore}>
-      Show {Math.min(step, hidden)} more
-      <span data-slot="count">{hidden} hidden</span>
-    </button>
-  );
-}
-
 export function NavigationItem({
   id,
   title,
@@ -357,33 +184,6 @@ export function NavigationItem({
   onSelect?: (range: boolean) => void;
   onDrop?: (id: string) => void;
 }) {
-  const keys = (event: KeyboardEvent<HTMLElement>) => {
-    if (event.target !== event.currentTarget || event.nativeEvent.isComposing) return;
-    if (event.key === "Enter" || event.key === " ") {
-      event.preventDefault();
-      onPick();
-    }
-    if (event.key === "ContextMenu" || (event.key === "F10" && event.shiftKey)) {
-      event.preventDefault();
-      onMenu();
-    }
-    if (["ArrowUp", "ArrowDown", "Home", "End"].includes(event.key)) {
-      const items = [
-        ...event.currentTarget
-          .closest("[data-navigation]")!
-          .querySelectorAll<HTMLElement>('[data-key][role="button"]'),
-      ];
-      const index = items.indexOf(event.currentTarget);
-      const next =
-        event.key === "Home"
-          ? 0
-          : event.key === "End"
-            ? items.length - 1
-            : (index + (event.key === "ArrowDown" ? 1 : -1) + items.length) % items.length;
-      event.preventDefault();
-      items[next]?.focus();
-    }
-  };
   const StateIcon =
     activity === "running"
       ? LoaderCircle
@@ -465,7 +265,6 @@ export function NavigationItem({
           if (event.ctrlKey || event.metaKey || event.shiftKey) onSelect?.(event.shiftKey);
           else onPick();
         }}
-        onKeyDown={keys}
         onDoubleClick={onRename}
         onContextMenu={(event) => {
           event.preventDefault();

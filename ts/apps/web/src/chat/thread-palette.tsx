@@ -6,10 +6,13 @@ import {
   ArchiveRestore,
   ChevronRight,
   CircleCheck,
+  Clock3,
   Copy,
   Download,
   GitFork,
+  Hand,
   ListFilter,
+  LoaderCircle,
   Mail,
   MailOpen,
   MoreHorizontal,
@@ -21,6 +24,7 @@ import {
   SquarePen,
   Timer,
   Trash2,
+  TriangleAlert,
   type LucideIcon,
 } from "lucide-react";
 import {
@@ -34,16 +38,9 @@ import { Dialog, DialogContent, DialogTitle } from "#/components/lang/dialog";
 import { ListPopup } from "@pe/kit/lang/list-popup";
 import { CommandPalette } from "#/components/lang/command-palette";
 import { Input } from "@pe/kit/lang/input";
-import { EmptyState } from "@pe/kit/lang/empty";
-import {
-  NavigationFilter,
-  NavigationFilters,
-  NavigationGroup,
-  NavigationItem,
-  NavigationMore,
-  NavigationSearch,
-  NavigationToggle,
-} from "#/components/lang/navigation";
+import { useList, type ListState } from "@pe/kit/lang/collection";
+import { ListBar, ListView, type ListRowParts } from "@pe/kit/lang/list-view";
+import { clauseText, readQuery } from "@pe/kit/table/view";
 import { Kbd } from "#/components/lang/kbd";
 import { Button } from "@pe/kit/lang/button";
 import { ProviderMark } from "#/components/lang/provider-mark";
@@ -51,6 +48,7 @@ import { useSurfaceHost } from "#/navigation/surface-host";
 import { peClient } from "#/host/pe-client";
 import { readPeError } from "@pe/host-contracts/pe-api";
 import "./thread-navigation.css";
+import "#/components/lang/navigation.css";
 import type { StoredThreadSummary } from "#/workbench/provider";
 import { isReady } from "#/workbench/provider/providers";
 import {
@@ -63,14 +61,16 @@ import {
   threadOrder,
   activityWord,
   wokeFromSnooze,
-  visibleThreads,
+  compareThreads,
+  inAttention,
+  threadActivity,
   threadSearchText,
   THREAD_STATES,
+  THREAD_SHELVES as SHELF_ORDER,
   oneThreadRefusal,
   soleRequest,
   threadActions,
   type ThreadActivity,
-  type ThreadFilter,
   type ThreadShelf,
   type TargetRead,
   type ThreadAction,
@@ -549,9 +549,6 @@ function ThreadActionsMenu({
   );
 }
 
-const SETTLED_PAGE = 10;
-const SETTLED_MORE = 25;
-
 function ThreadTime({ thread, now }: { thread: RosterThread; now: number }) {
   return (
     <TooltipHint content={new Date(thread.updatedAt).toLocaleString()}>
@@ -593,12 +590,81 @@ function CompactThreadTrail({ thread, now }: { thread: RosterThread; now: number
   );
 }
 
+export type ThreadSort = "recent" | "title";
+export interface ThreadListAddress {
+  query: string;
+  sort: ThreadSort | "";
+  onChange: (query: string, sort: ThreadSort | "") => void;
+}
+
+function initialShelfState(current: RosterThread | undefined): ListState<ThreadSort> {
+  const closed = SHELF_ORDER.filter((shelf) => {
+    if (current && shelfOf(current) === shelf) return false;
+    try {
+      const saved = localStorage.getItem(`pe.shelf.${shelf}`);
+      if (saved !== null) return saved !== "open";
+    } catch {
+      /* The list still works without storage. */
+    }
+    return shelf === "snoozed" || shelf === "settled" || shelf === "archived";
+  }).map((shelf) => SHELF_WORD[shelf]);
+  return { query: "scope=all", sort: "", closed, open: [], selected: [] };
+}
+
+function ThreadActivityMark({
+  thread,
+  now,
+  woke,
+}: {
+  thread: RosterThread;
+  now: number;
+  woke: boolean;
+}) {
+  const shelf = shelfOf(thread, now);
+  const activity = shelf === "snoozed" ? "snoozed" : threadActivity(thread);
+  const Icon =
+    activity === "snoozed"
+      ? Clock3
+      : activity === "working"
+        ? LoaderCircle
+        : activity === "waiting"
+          ? Hand
+          : activity === "failed"
+            ? TriangleAlert
+            : woke
+              ? AlarmClock
+              : null;
+  const word =
+    activity === "snoozed"
+      ? wakeLabel(new Date(thread.lifecycle.snoozedUntil!), new Date(now))
+      : (activityWord(thread) ?? (woke ? "Woke" : undefined));
+  return word ? (
+    <TooltipHint content={word}>
+      <span
+        data-slot="nav-state"
+        data-tone={
+          activity === "failed" ? "alarm" : activity === "waiting" || woke ? "caution" : undefined
+        }
+        role={Icon ? "img" : undefined}
+        aria-label={Icon ? word : undefined}
+      >
+        {Icon ? (
+          <Icon aria-hidden className={activity === "working" ? "animate-spin" : undefined} />
+        ) : (
+          word
+        )}
+      </span>
+    </TooltipHint>
+  ) : null;
+}
+
 export function ThreadsSidebar({
   threads,
   currentThreadId,
   onSelect,
   onNew,
   onSearch,
+  address,
   compactRows: compactRowsOverride,
   ...verbs
 }: ThreadVerbs & {
@@ -608,11 +674,13 @@ export function ThreadsSidebar({
   onNew: () => void;
   onSearch: () => void;
   compactRows?: boolean;
+  address?: ThreadListAddress;
 }) {
   const host = useSurfaceHost();
   const compactRows = compactRowsOverride ?? host.surface === "tray";
-  const [filter, setFilter] = useState<ThreadFilter>(host.surface === "tray" ? "inbox" : "all");
-  const [query, setQuery] = useState("");
+  const [view, setView] = useState(() =>
+    initialShelfState(threads.find((thread) => thread.id === currentThreadId)),
+  );
   const [now, setNow] = useState(Date.now);
   const previousThreads = useRef(new Map<string, RosterThread>());
   const [woken, setWoken] = useState<ReadonlySet<string>>(new Set());
@@ -632,7 +700,6 @@ export function ThreadsSidebar({
       )
         next.add(thread.id);
     }
-    // A setter that would not change the set does not run.
     if (next.size !== previous.size || ![...next].every((id) => previous.has(id))) setWoken(next);
     previousThreads.current = new Map(threads.map((thread) => [thread.id, thread]));
   }, [threads, currentThreadId, now]);
@@ -640,48 +707,110 @@ export function ThreadsSidebar({
     const timer = setInterval(() => setNow(Date.now()), 60_000);
     return () => clearInterval(timer);
   }, []);
-  const [settledLimit, setSettledLimit] = useState(SETTLED_PAGE);
-  const [target, setTarget] = useState("*");
-  const [provider, setProvider] = useState("*");
-  const [state, setState] = useState<ThreadActivity | "*">("*");
-  const [unread, setUnread] = useState(false);
+  const currentShelf = threads.find((thread) => thread.id === currentThreadId);
+  const currentShelfKey = currentShelf ? SHELF_WORD[shelfOf(currentShelf, now)] : undefined;
+  useEffect(() => {
+    if (currentShelfKey)
+      setView((previous) => ({
+        ...previous,
+        closed: previous.closed.filter((key) => key !== currentShelfKey),
+      }));
+  }, [currentThreadId, currentShelfKey]);
   const [menuId, setMenuId] = useState<string | null>(null);
-  const [selected, setSelected] = useState<ReadonlySet<string>>(new Set());
   const [bulkResult, setBulkResult] = useState("");
-  // Archive lives outside the roster (the palette and the menu reach it); the open thread still
-  // shows on its shelf so the place you stand is never missing from the list.
-  const archivedHere = threads.find(
-    (thread) => thread.id === currentThreadId && thread.lifecycle.status === "archived",
-  );
-  const roster = { query, filter, target, provider, state, now } as const;
-  const shown = [
-    ...visibleThreads(threads, { ...roster, unread }),
-    ...(archivedHere && filter === "all" ? [archivedHere] : []),
-  ];
-  const unreadCount = visibleThreads(threads, { ...roster, unread: true }).length;
+  const query = address?.query ?? view.query;
+  useEffect(() => {
+    if (address && address.query !== "scope=all")
+      setView((previous) => ({ ...previous, closed: [] }));
+  }, [address?.query]);
   const facets = useMemo(
     () => ({
       targets: targetFacets(threads),
       providers: [
         ...new Map(threads.map((thread) => [thread.providerId, thread.providerName])).entries(),
-      ].map(([key, label]) => ({ key, label })),
+      ],
     }),
     [threads],
   );
-  const select = (id: string, range: boolean) =>
-    setSelected((previous) => {
-      const next = new Set(previous);
-      const anchor = [...previous].at(-1);
-      if (range && anchor) {
-        const a = shown.findIndex((item) => item.id === anchor),
-          b = shown.findIndex((item) => item.id === id);
-        for (const item of shown.slice(Math.min(a, b), Math.max(a, b) + 1)) next.add(item.id);
-      } else if (next.has(id)) next.delete(id);
-      else next.add(id);
-      return next;
-    });
-  const clearSelection = () => setSelected(new Set());
-  const selectedThreads = threads.filter((thread) => selected.has(thread.id));
+  const list = useList<RosterThread, ThreadSort>({
+    items: [...threads].sort((a, b) => compareThreads(a, b, now)),
+    keyOf: (thread) => thread.id,
+    search: (thread) => ({ text: [threadSearchText(thread)] }),
+    fields: {
+      target: {
+        kind: "text",
+        read: targetFacet,
+        values: facets.targets.map((item) => item.key),
+        labels: new Map(facets.targets.map((item) => [item.key, item.label])),
+      },
+      provider: {
+        kind: "text",
+        read: (thread) => thread.providerId,
+        values: facets.providers.map(([key]) => key),
+        labels: new Map(facets.providers),
+      },
+      state: {
+        kind: "text",
+        read: threadActivity,
+        values: THREAD_STATES,
+        labels: new Map(THREAD_STATES.map((key) => [key, STATE_WORD[key]])),
+      },
+      unread: {
+        kind: "text",
+        read: (thread) => (isUnread(thread) ? "yes" : "no"),
+        values: ["yes"],
+        labels: new Map([["yes", "Unread"]]),
+      },
+      scope: {
+        kind: "text",
+        read: (thread) => (shelfOf(thread, now) === "archived" ? "archived" : "all"),
+        values: ["attention", "all", "archived"],
+        labels: new Map([
+          ["attention", "Attention"],
+          ["all", "All"],
+          ["archived", "Archived"],
+        ]),
+        match: (thread, value) =>
+          value.toLowerCase() === "attention"
+            ? inAttention(thread, now)
+            : value.toLowerCase() === "all"
+              ? thread.lifecycle.status !== "archived" || thread.id === currentThreadId
+              : value.toLowerCase() === "archived" && thread.lifecycle.status === "archived",
+      },
+    },
+    sorts: {
+      recent: (thread) => -Date.parse(thread.updatedAt),
+      title: (thread) => thread.title.toLocaleLowerCase(),
+    },
+    groups: {
+      of: (thread) => SHELF_WORD[shelfOf(thread, now)],
+      order: SHELF_ORDER.map((key) => SHELF_WORD[key]),
+    },
+    select: "multi",
+    state: { ...view, ...(address ? { query: address.query, sort: address.sort } : {}) },
+    onState: (next) => {
+      setView(next.query !== query && next.query !== "scope=all" ? { ...next, closed: [] } : next);
+      if (address && (next.query !== address.query || next.sort !== address.sort))
+        address.onChange(next.query, next.sort);
+      if (next.closed !== view.closed)
+        for (const shelf of SHELF_ORDER) {
+          try {
+            localStorage.setItem(
+              `pe.shelf.${shelf}`,
+              next.closed.includes(SHELF_WORD[shelf]) ? "closed" : "open",
+            );
+          } catch {
+            /* Collapse is still held in page state. */
+          }
+        }
+    },
+    onPick: (thread) => {
+      setView((previous) => ({ ...previous, selected: [] }));
+      onSelect(thread.id);
+    },
+  });
+  const clearSelection = () => list.setState({ ...list.state, selected: [] });
+  const selectedThreads = threads.filter((thread) => list.state.selected.includes(thread.id));
   const bulk = async (
     targets: RosterThread[],
     change: (thread: RosterThread) => UpdateThreadRequest,
@@ -693,83 +822,111 @@ export function ThreadsSidebar({
     setBulkResult(`${outcomes.filter(Boolean).length} of ${of} threads changed`);
     clearSelection();
   };
-  const shelves = SHELF_ORDER.map((shelf) => ({
-    shelf,
-    all: shown.filter((thread) => shelfOf(thread) === shelf),
-  })).filter(({ all }) => all.length);
+  const filterTarget = (thread: RosterThread) =>
+    list.setQuery(
+      [
+        ...readQuery(list.state.query)
+          .filter((clause) => clause.kind !== "field" || clause.label.toLowerCase() !== "target")
+          .map((clause) => clause.text),
+        clauseText(false, "target", "=", targetFacet(thread)),
+      ].join(" "),
+    );
+  const rowParts = (thread: RosterThread): ListRowParts => {
+    const shelf = shelfOf(thread, now);
+    const reorder = shelf === "active" || shelf === "pinned";
+    return {
+      label: compactRows ? (
+        <span className="pe-thread-label">
+          <span className="pe-thread-title">{thread.title}</span>
+          <CompactThreadTarget thread={thread} />
+        </span>
+      ) : (
+        thread.title
+      ),
+      lines: compactRows ? 1 : 2,
+      active: thread.id === currentThreadId,
+      meta: (
+        <span className="pe-thread-trail">
+          <ThreadActivityMark thread={thread} now={now} woke={woken.has(thread.id)} />
+          {compactRows ? (
+            <CompactThreadTrail thread={thread} now={now} />
+          ) : (
+            <ThreadTime thread={thread} now={now} />
+          )}
+          {isUnread(thread) ? <span data-slot="nav-unread" role="img" aria-label="unread" /> : null}
+        </span>
+      ),
+      sub: compactRows ? undefined : (
+        <span className="pe-thread-sub">
+          <span className="min-w-0 flex-1 truncate">
+            {thread.head.targets.length ? (
+              <TooltipHint content={exactTargets(thread.head)}>
+                <span>{targetLabel(thread)}</span>
+              </TooltipHint>
+            ) : null}
+          </span>
+          <TooltipHint content={[thread.providerName, thread.modelId].filter(Boolean).join(" · ")}>
+            <span>
+              <ProviderMark harness={thread.harness} />
+            </span>
+          </TooltipHint>
+        </span>
+      ),
+      title: [thread.title, thread.providerName, thread.modelId].filter(Boolean).join(" · "),
+      onDoubleClick: () => setMenuId(thread.id),
+      onContextMenu: (event) => {
+        event.preventDefault();
+        setMenuId(thread.id);
+      },
+      draggable: true,
+      onDragStart: (event) => event.dataTransfer.setData("text/pe-thread", thread.id),
+      onDragOver: (event) => {
+        if (reorder) event.preventDefault();
+      },
+      onDrop: reorder
+        ? (event) => {
+            event.preventDefault();
+            event.stopPropagation();
+            const id = event.dataTransfer.getData("text/pe-thread");
+            if (!id || id === thread.id) return;
+            const items = list.sections.find((section) => section.key === SHELF_WORD[shelf])!.rows;
+            const before = items[items.findIndex((item) => item.key === thread.id) - 1]?.item;
+            const order = before
+              ? (threadOrder(before) + threadOrder(thread)) / 2
+              : threadOrder(thread) - 1;
+            void verbs.onUpdate(id, { status: "active", pinned: shelf === "pinned", order });
+          }
+        : undefined,
+      actions: (
+        <ThreadActions
+          thread={thread}
+          {...verbs}
+          open={menuId === thread.id}
+          setOpen={(open) => setMenuId(open ? thread.id : null)}
+          selection={list.state.selected.includes(thread.id) ? selectedThreads : undefined}
+          onMany={(targets, change, of) => void bulk(targets, change, of)}
+          onFilterTarget={() => filterTarget(thread)}
+        />
+      ),
+    };
+  };
   return (
     <nav
-      data-navigation=""
+      data-thread-sidebar=""
       data-thread-rows={compactRows ? "compact" : undefined}
       aria-label="Threads"
       className="flex h-full min-h-0 flex-col gap-(--gutter)"
-      // Escape clears the selection unless a menu or dialog above it is taking the key.
-      onKeyDown={(event) => {
-        if (event.key === "Escape" && selected.size && !menuId && !event.defaultPrevented) {
-          event.stopPropagation();
-          clearSelection();
-        }
-      }}
     >
-      <NavigationSearch
-        value={query}
-        onChange={setQuery}
-        actions={
-          <>
-            <Button label="Search every thread" reason="Search every thread" onClick={onSearch}>
-              <Kbd mute hotkey="Mod+K" />
-            </Button>
-            <Button icon={Plus} label="New thread" onClick={onNew} />
-          </>
-        }
-      />
-      <div role="group" aria-label="Thread list" className="flex flex-wrap gap-1">
-        {(["inbox", "all", "archived"] as const).map((choice) => (
-          <Button
-            key={choice}
-            label={choice === "inbox" ? "Inbox" : choice === "all" ? "All" : "Archived"}
-            pressed={filter === choice}
-            onClick={() => {
-              setFilter(choice);
-              clearSelection();
-            }}
-          >
-            {choice === "inbox" ? "Inbox" : choice === "all" ? "All" : "Archived"}
-          </Button>
-        ))}
+      <div className="flex items-center justify-end gap-1">
+        <Button label="Search every thread" reason="Search every thread" onClick={onSearch}>
+          <Kbd mute hotkey="Mod+K" />
+        </Button>
+        <Button icon={Plus} label="New thread" onClick={onNew} />
       </div>
-      <NavigationFilters>
-        <NavigationFilter
-          label="Target"
-          all="All targets"
-          options={facets.targets}
-          value={target}
-          onChange={setTarget}
-        />
-        <NavigationFilter
-          label="Provider"
-          all="All providers"
-          options={facets.providers}
-          value={provider}
-          onChange={setProvider}
-        />
-        <NavigationFilter
-          label="State"
-          all="All states"
-          options={THREAD_STATES.map((key) => ({ key, label: STATE_WORD[key] }))}
-          value={state}
-          onChange={setState}
-        />
-        <NavigationToggle
-          label="Unread"
-          count={unreadCount}
-          pressed={unread}
-          onChange={setUnread}
-        />
-      </NavigationFilters>
-      {selected.size ? (
+      <ListBar list={list} label="threads" />
+      {list.state.selected.length ? (
         <div className="flex flex-wrap items-center gap-1">
-          <span>{selected.size} selected</span>
+          <span>{list.state.selected.length} selected</span>
           <span className="t-small text-ink-2">use any selected row's menu</span>
           <Button label="Clear" kind="framed" onClick={clearSelection}>
             Clear
@@ -781,168 +938,41 @@ export function ThreadsSidebar({
           {bulkResult}
         </p>
       ) : null}
-      <div
-        data-navigation-roster=""
-        className="min-h-0 flex-1 overflow-y-auto"
-        // A click on the list's own empty space (not a row, not a head) clears the selection.
-        onClick={(event) => {
-          if (event.target === event.currentTarget) clearSelection();
-        }}
-      >
-        {!shown.length ? (
-          <div className="px-(--gutter) py-3">
-            <EmptyState
-              story={threads.length ? "filter" : "scope"}
-              exit={
-                threads.length
-                  ? "clear the search and the filters"
-                  : "start a new thread beside search"
-              }
-            >
-              {threads.length ? "No threads match" : "No threads yet"}
-            </EmptyState>
-          </div>
-        ) : null}
-        {shelves.map(({ shelf, all }, index) => {
-          const compact = shelf === "settled" || shelf === "snoozed" || shelf === "archived";
-          // The settled tail pages (T3: 10, then 25 at a time) and always keeps the open thread.
-          const paged = shelf === "settled" && !query && filter === "all";
-          const items = paged
-            ? all.filter((thread, index) => index < settledLimit || thread.id === currentThreadId)
-            : all;
-          return (
-            <NavigationGroup
-              key={shelf}
-              label={shelf}
-              count={all.length}
-              compact={compact}
-              dim={shelf === "settled" || shelf === "archived"}
-              persist={shelf}
-              stack={{ index, of: shelves.length }}
-              forceOpen={
-                filter !== "all" || !!query || items.some((item) => item.id === currentThreadId)
-              }
-              onDrop={
-                shelf === "active" || shelf === "pinned" || shelf === "settled"
-                  ? (id) =>
-                      void verbs.onUpdate(
-                        id,
-                        shelf === "pinned"
-                          ? { pinned: true, order: Date.now() }
-                          : {
-                              status: shelf === "settled" ? "settled" : "active",
-                              pinned: false,
-                              order: Date.now(),
-                            },
-                      )
-                  : undefined
-              }
-            >
-              {items.map((thread, index) => (
-                <NavigationItem
-                  key={thread.id}
-                  id={thread.id}
-                  title={thread.title}
-                  target={
-                    compactRows ? (
-                      <CompactThreadTarget thread={thread} />
-                    ) : thread.head.targets.length ? (
-                      <TooltipHint content={exactTargets(thread.head)}>
-                        <span>{targetLabel(thread)}</span>
-                      </TooltipHint>
-                    ) : undefined
-                  }
-                  time={
-                    compactRows ? (
-                      <CompactThreadTrail thread={thread} now={now} />
-                    ) : (
-                      <ThreadTime thread={thread} now={now} />
-                    )
-                  }
-                  mark={compactRows ? undefined : <ProviderMark harness={thread.harness} />}
-                  meta={[thread.providerName, thread.modelId].filter(Boolean).join(" · ")}
-                  state={
-                    shelf === "snoozed"
-                      ? wakeLabel(new Date(thread.lifecycle.snoozedUntil!), new Date(now))
-                      : (activityWord(thread) ??
-                        (filter === "inbox" && isUnread(thread)
-                          ? "Unread"
-                          : woken.has(thread.id)
-                            ? "Woke"
-                            : undefined))
-                  }
-                  stateTone={
-                    thread.activity.state === "failed"
-                      ? "alarm"
-                      : thread.activity.pending
-                        ? "caution"
-                        : woken.has(thread.id)
-                          ? "caution"
-                          : undefined
-                  }
-                  activity={
-                    shelf === "snoozed"
-                      ? "snoozed"
-                      : thread.activity.pending || thread.activity.state === "waiting"
-                        ? "waiting"
-                        : thread.activity.state === "running"
-                          ? "running"
-                          : thread.activity.state === "failed"
-                            ? "failed"
-                            : woken.has(thread.id)
-                              ? "woke"
-                              : undefined
-                  }
-                  unread={isUnread(thread)}
-                  active={thread.id === currentThreadId}
-                  compact={compact}
-                  selected={selected.has(thread.id)}
-                  onSelect={(range) => select(thread.id, range)}
-                  onPick={() => {
-                    clearSelection();
-                    onSelect(thread.id);
-                  }}
-                  onRename={() => setMenuId(thread.id)}
-                  onMenu={() => setMenuId(thread.id)}
-                  onDrop={
-                    !compact
-                      ? (id) => {
-                          if (!id || id === thread.id) return;
-                          const before = items[index - 1];
-                          const order = before
-                            ? (threadOrder(before) + threadOrder(thread)) / 2
-                            : threadOrder(thread) - 1;
-                          void verbs.onUpdate(id, {
-                            status: "active",
-                            pinned: shelf === "pinned",
-                            order,
-                          });
-                        }
-                      : undefined
-                  }
-                  actions={
-                    <ThreadActions
-                      thread={thread}
-                      {...verbs}
-                      open={menuId === thread.id}
-                      setOpen={(open) => setMenuId(open ? thread.id : null)}
-                      selection={selected.has(thread.id) ? selectedThreads : undefined}
-                      onMany={(targets, change, of) => void bulk(targets, change, of)}
-                      onFilterTarget={() => setTarget(targetFacet(thread))}
-                    />
-                  }
-                />
-              ))}
-              {paged && all.length > items.length ? (
-                <NavigationMore
-                  onMore={() => setSettledLimit((limit) => limit + SETTLED_MORE)}
-                  hidden={all.length - items.length}
-                  step={SETTLED_MORE}
-                />
-              ) : null}
-            </NavigationGroup>
-          );
-        })}
+      <div data-thread-roster="" className="min-h-0 flex-1 overflow-y-auto">
+        <ListView
+          list={list}
+          aria-label="threads"
+          bar={false}
+          estimate={compactRows ? 20 : 40}
+          empty={{ message: "No threads yet", exit: "Start a new thread beside search" }}
+          row={rowParts}
+          sectionProps={(section) => {
+            const shelf = SHELF_ORDER.find((key) => SHELF_WORD[key] === section.key)!;
+            const acceptsDrop = shelf === "active" || shelf === "pinned" || shelf === "settled";
+            return {
+              "data-dim": shelf === "settled" || shelf === "archived",
+              onDragOver: (event) => {
+                if (acceptsDrop) event.preventDefault();
+              },
+              onDrop: (event) => {
+                if (!acceptsDrop) return;
+                event.preventDefault();
+                const id = event.dataTransfer.getData("text/pe-thread");
+                if (!id) return;
+                void verbs.onUpdate(
+                  id,
+                  shelf === "pinned"
+                    ? { pinned: true, order: Date.now() }
+                    : {
+                        status: shelf === "settled" ? "settled" : "active",
+                        pinned: false,
+                        order: Date.now(),
+                      },
+                );
+              },
+            };
+          }}
+        />
       </div>
     </nav>
   );
@@ -963,7 +993,6 @@ export function NewThreadButton({ onNew }: { onNew: () => void }) {
   );
 }
 
-const SHELF_ORDER: ThreadShelf[] = ["pinned", "active", "snoozed", "settled", "archived"];
 const SHELF_WORD: Record<ThreadShelf, string> = {
   pinned: "Pinned",
   active: "Active",
@@ -977,7 +1006,6 @@ const STATE_WORD: Record<ThreadActivity, string> = {
   failed: "Failed",
   idle: "Idle",
 };
-const UNFILTERED = { target: "*", provider: "*", state: "*", unread: false } as const;
 
 /** Every thread, archive included, on the sidebar's own row anatomy, grouped by shelf. */
 export function ThreadDialog({
@@ -996,10 +1024,11 @@ export function ThreadDialog({
   onNew: () => void;
 }) {
   const now = Date.now();
-  const roster = [
-    ...visibleThreads(threads, { query: "", filter: "all", ...UNFILTERED, now }),
-    ...visibleThreads(threads, { query: "", filter: "archived", ...UNFILTERED, now }),
-  ].sort((a, b) => SHELF_ORDER.indexOf(shelfOf(a, now)) - SHELF_ORDER.indexOf(shelfOf(b, now)));
+  const roster = [...threads].sort(
+    (a, b) =>
+      SHELF_ORDER.indexOf(shelfOf(a, now)) - SHELF_ORDER.indexOf(shelfOf(b, now)) ||
+      compareThreads(a, b, now),
+  );
   return (
     <CommandPalette<RosterThread>
       open={open}

@@ -1,12 +1,6 @@
-import {
-  NavigationFilter,
-  NavigationFilters,
-  NavigationGroup,
-  NavigationItem,
-  NavigationMore,
-  NavigationSearch,
-  NavigationToggle,
-} from "#/components/lang/navigation";
+import { ThreadsSidebar } from "#/chat/thread-palette";
+import { demoThreads } from "#/chat/thread-navigation";
+import { emptyChatState } from "@pe/agent-contracts/chat-state";
 import { Pane } from "#/components/lang/pane";
 import {
   Composer,
@@ -74,87 +68,28 @@ export function LangChatSpecimens() {
           ]}
         />
       </SpecimenFrame>
-      <SpecimenFrame name="Navigation" importPath="#/components/lang/navigation">
+      <SpecimenFrame name="Thread list" importPath="@pe/kit/lang/list-view">
         <div className="h-80 w-80">
           <Pane scroll="clip" title="threads" ground="artifact">
-            <div data-navigation="" className="flex h-full min-h-0 flex-col gap-(--gutter)">
-              <NavigationSearch value="" onChange={() => {}} />
-              <NavigationFilters>
-                <NavigationFilter
-                  label="Target"
-                  all="All targets"
-                  options={[{ key: "demo", label: "Operations Demo.rvt" }]}
-                  value="demo"
-                  onChange={() => {}}
-                />
-                <NavigationFilter
-                  label="Provider"
-                  all="All providers"
-                  options={[{ key: "codex", label: "Codex" }]}
-                  value="*"
-                  onChange={() => {}}
-                />
-                <NavigationFilter
-                  label="State"
-                  all="All states"
-                  options={[{ key: "working", label: "Working" }]}
-                  value="*"
-                  onChange={() => {}}
-                />
-                <NavigationToggle label="Unread" count={1} pressed={false} onChange={() => {}} />
-              </NavigationFilters>
-              <div data-navigation-roster="" className="min-h-0 flex-1 overflow-y-auto">
-                <NavigationGroup label="Active" count={2} stack={{ index: 0, of: 2 }}>
-                  <NavigationItem
-                    id="example"
-                    title="Coordinate the Level 2 supply air path"
-                    target="Operations Demo.rvt"
-                    meta="Codex · GPT-5.4"
-                    time="14:31"
-                    state="Working"
-                    unread
-                    active
-                    actions={<Button label="Thread actions">…</Button>}
-                    onPick={() => {}}
-                    onRename={() => {}}
-                    onMenu={() => {}}
-                  />
-                  <NavigationItem
-                    id="waiting"
-                    title="Review the equipment schedule"
-                    meta="Claude · Sonnet"
-                    time="14:20"
-                    state="1 waiting for you"
-                    stateTone="caution"
-                    actions={<Button label="Thread actions">…</Button>}
-                    onPick={() => {}}
-                    onRename={() => {}}
-                    onMenu={() => {}}
-                  />
-                </NavigationGroup>
-                <NavigationGroup
-                  label="Settled"
-                  count={1}
-                  compact
-                  forceOpen
-                  stack={{ index: 1, of: 2 }}
-                >
-                  <NavigationItem
-                    id="settled"
-                    title="Normalize equipment names"
-                    target="Operations Demo.rvt"
-                    meta="Claude"
-                    time="Yesterday"
-                    compact
-                    actions={<Button label="Thread actions">…</Button>}
-                    onPick={() => {}}
-                    onRename={() => {}}
-                    onMenu={() => {}}
-                  />
-                  <NavigationMore hidden={12} step={25} onMore={() => {}} />
-                </NavigationGroup>
-              </div>
-            </div>
+            <ThreadsSidebar
+              threads={
+                demoThreads({
+                  ...emptyChatState(),
+                  id: "example",
+                  title: "Coordinate the Level 2 supply air path",
+                }) as never
+              }
+              currentThreadId="example"
+              providers={[]}
+              onSelect={() => {}}
+              onNew={() => {}}
+              onSearch={() => {}}
+              onFork={() => {}}
+              onRename={() => {}}
+              onDelete={() => {}}
+              onUpdate={async () => true}
+              onNewTarget={() => {}}
+            />
           </Pane>
         </div>
       </SpecimenFrame>
