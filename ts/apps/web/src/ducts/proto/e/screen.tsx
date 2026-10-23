@@ -168,36 +168,6 @@ function EScreenBody({ props }: { props: ProtoProps }) {
     return raw.every((g) => groups.includes(g)) ? groups : [...new Set([...groups, ...raw])];
   }, [snapshot, page.system, groups]);
   const systems = useMemo(() => (drawn ? systemList(drawn, priced) : []), [drawn, priced]);
-  const searchable = useMemo(() => (drawn ? systemSearch(drawn) : null), [drawn]);
-  const systemListView = useList({
-    items: systems,
-    keyOf: (system) => system.key,
-    search: (system) => ({
-      text: [system.name, system.sub, ...(searchable?.get(system.key)?.text ?? [])],
-      ids: searchable?.get(system.key)?.ids,
-    }),
-    fields: {
-      status: { kind: "text", read: (system) => (system.total == null ? "unpriced" : "priced") },
-    },
-    sorts: { name: (system) => system.name, loss: (system) => -(system.total ?? -Infinity) },
-    state: {
-      ...emptyListState<"name" | "loss">(),
-      query: page.systemQuery,
-      sort: page.systemSort,
-      selected: page.system ? [page.system] : [],
-    },
-    onState: (next) => {
-      if (next.query !== page.systemQuery || next.sort !== page.systemSort)
-        setPage({ systemQuery: next.query, systemSort: next.sort });
-    },
-    onPick: (system) => setPage({ system: system.key, selected: "", issue: "" }),
-  });
-  useEffect(() => {
-    if (systemListView.target && systemListView.rows.some((row) => row.key === page.system))
-      systemListView.reveal(page.system);
-    // The selected system is revealed when its pane mounts; filtering never replaces the query.
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [page.system, systemListView.target]);
   // Each group the system is in is its own section, named by the system and its units; a group
   // that carries other systems says so, and shows whole.
   const sections = useMemo(
@@ -607,19 +577,7 @@ function EScreenBody({ props }: { props: ProtoProps }) {
       scroll="auto"
       flush
     >
-      <ListView
-        aria-label="systems"
-        list={systemListView}
-        primary
-        estimate={LIST_ROW_PX}
-        row={(system) =>
-          systemRowParts(system, () => setPage({ system: system.key, selected: "", issue: "" }))
-        }
-        empty={{
-          message: "No duct systems in this scope",
-          exit: "Read a model containing duct systems",
-        }}
-      />
+      <SystemsList systems={systems} drawn={drawn} page={page} setPage={setPage} />
     </Pane>
   );
   const rulesPane = (wide: boolean) => (
@@ -758,7 +716,8 @@ function EScreenBody({ props }: { props: ProtoProps }) {
           address={{
             query: page.rulingQuery,
             sort: page.rulingSort,
-            onChange: (rulingQuery, rulingSort) => setPage({ rulingQuery, rulingSort }),
+            onChange: (rulingQuery, rulingSort) =>
+              setPage({ rulingQuery, rulingSort }, { history: "replace" }),
           }}
         />
       ) : null}
@@ -824,5 +783,68 @@ function EScreenBody({ props }: { props: ProtoProps }) {
         }
       />
     </div>
+  );
+}
+
+/** Keep query renders below the model, drawing and ruling builders. */
+function SystemsList({
+  systems,
+  drawn,
+  page,
+  setPage,
+}: {
+  systems: ReturnType<typeof systemList>;
+  drawn: ProtoProps["snapshot"];
+  page: ProtoProps["page"];
+  setPage: ProtoProps["setPage"];
+}) {
+  const searchable = useMemo(() => (drawn ? systemSearch(drawn) : null), [drawn]);
+  const search = useCallback(
+    (system: ReturnType<typeof systemList>[number]) => ({
+      text: [system.name, system.sub, ...(searchable?.get(system.key)?.text ?? [])],
+      ids: searchable?.get(system.key)?.ids,
+    }),
+    [searchable],
+  );
+  const systemListView = useList({
+    items: systems,
+    keyOf: (system) => system.key,
+    search,
+    fields: {
+      status: { kind: "text", read: (system) => (system.total == null ? "unpriced" : "priced") },
+    },
+    sorts: { name: (system) => system.name, loss: (system) => -(system.total ?? -Infinity) },
+    state: {
+      ...emptyListState<"name" | "loss">(),
+      query: page.systemQuery,
+      sort: page.systemSort,
+      selected: page.system ? [page.system] : [],
+    },
+    onState: (next) => {
+      if (next.query !== page.systemQuery || next.sort !== page.systemSort)
+        setPage({ systemQuery: next.query, systemSort: next.sort }, { history: "replace" });
+    },
+    onPick: (system) => setPage({ system: system.key, selected: "", issue: "" }),
+  });
+  useEffect(() => {
+    if (systemListView.target && systemListView.rows.some((row) => row.key === page.system))
+      systemListView.reveal(page.system);
+    // The selected system is revealed when its pane mounts; filtering never replaces the query.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [page.system, systemListView.target]);
+  return (
+    <ListView
+      aria-label="systems"
+      list={systemListView}
+      primary
+      estimate={LIST_ROW_PX}
+      row={(system) =>
+        systemRowParts(system, () => setPage({ system: system.key, selected: "", issue: "" }))
+      }
+      empty={{
+        message: "No duct systems in this scope",
+        exit: "Read a model containing duct systems",
+      }}
+    />
   );
 }

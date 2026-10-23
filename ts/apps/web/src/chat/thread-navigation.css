@@ -28,10 +28,6 @@
   white-space: nowrap;
 }
 /* Thread-specific content uses Row slots; ListView owns grouping, keys and virtualization. */
-[data-thread-roster] {
-  margin-inline: calc(var(--gutter) * -1);
-  margin-bottom: calc(var(--gutter) * -1);
-}
 [data-thread-sidebar] .dl-row {
   padding-inline: var(--gutter);
 }

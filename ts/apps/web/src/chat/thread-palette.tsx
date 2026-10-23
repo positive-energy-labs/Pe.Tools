@@ -658,12 +658,12 @@ function ThreadActivityMark({
   ) : null;
 }
 
+const searchThread = (thread: RosterThread) => ({ text: [threadSearchText(thread)] });
+
 export function ThreadsSidebar({
   threads,
   currentThreadId,
   onSelect,
-  onNew,
-  onSearch,
   address,
   compactRows: compactRowsOverride,
   ...verbs
@@ -671,8 +671,6 @@ export function ThreadsSidebar({
   threads: RosterThread[];
   currentThreadId: string;
   onSelect: (id: string) => void;
-  onNew: () => void;
-  onSearch: () => void;
   compactRows?: boolean;
   address?: ThreadListAddress;
 }) {
@@ -718,11 +716,6 @@ export function ThreadsSidebar({
   }, [currentThreadId, currentShelfKey]);
   const [menuId, setMenuId] = useState<string | null>(null);
   const [bulkResult, setBulkResult] = useState("");
-  const query = address?.query ?? view.query;
-  useEffect(() => {
-    if (address && address.query !== "scope=all")
-      setView((previous) => ({ ...previous, closed: [] }));
-  }, [address?.query]);
   const facets = useMemo(
     () => ({
       targets: targetFacets(threads),
@@ -732,10 +725,14 @@ export function ThreadsSidebar({
     }),
     [threads],
   );
+  const orderedThreads = useMemo(
+    () => [...threads].sort((a, b) => compareThreads(a, b, now)),
+    [threads, now],
+  );
   const list = useList<RosterThread, ThreadSort>({
-    items: [...threads].sort((a, b) => compareThreads(a, b, now)),
+    items: orderedThreads,
     keyOf: (thread) => thread.id,
-    search: (thread) => ({ text: [threadSearchText(thread)] }),
+    search: searchThread,
     fields: {
       target: {
         kind: "text",
@@ -789,7 +786,7 @@ export function ThreadsSidebar({
     select: "multi",
     state: { ...view, ...(address ? { query: address.query, sort: address.sort } : {}) },
     onState: (next) => {
-      setView(next.query !== query && next.query !== "scope=all" ? { ...next, closed: [] } : next);
+      setView(next);
       if (address && (next.query !== address.query || next.sort !== address.sort))
         address.onChange(next.query, next.sort);
       if (next.closed !== view.closed)
@@ -809,6 +806,10 @@ export function ThreadsSidebar({
       onSelect(thread.id);
     },
   });
+  useEffect(() => {
+    if (list.state.query !== "scope=all")
+      setView((previous) => (previous.closed.length ? { ...previous, closed: [] } : previous));
+  }, [list.state.query]);
   const currentListed = list.rows.some((row) => row.key === currentThreadId);
   const currentReveal = useRef({ thread: currentThreadId, complete: false });
   useEffect(() => {
@@ -925,15 +926,9 @@ export function ThreadsSidebar({
       data-thread-sidebar=""
       data-thread-rows={compactRows ? "compact" : undefined}
       aria-label="Threads"
-      className="flex h-full min-h-0 flex-col gap-(--gutter)"
+      className="flex h-full min-h-0 flex-col"
     >
-      <div className="flex items-center justify-end gap-1">
-        <Button label="Search every thread" reason="Search every thread" onClick={onSearch}>
-          <Kbd mute hotkey="Mod+K" />
-        </Button>
-        <Button icon={Plus} label="New thread" onClick={onNew} />
-      </div>
-      <ListBar list={list} label="threads" />
+      <ListBar list={list} label="threads" compact />
       {list.state.selected.length ? (
         <div className="flex flex-wrap items-center gap-1">
           <span>{list.state.selected.length} selected</span>
@@ -985,6 +980,24 @@ export function ThreadsSidebar({
         />
       </div>
     </nav>
+  );
+}
+
+/** The surrounding pane owns these actions beside its tabs, outside the scrolling roster. */
+export function ThreadSidebarActions({
+  onSearch,
+  onNew,
+}: {
+  onSearch: () => void;
+  onNew: () => void;
+}) {
+  return (
+    <>
+      <Button label="Search every thread" reason="Search every thread" onClick={onSearch}>
+        <Kbd mute hotkey="Mod+K" />
+      </Button>
+      <Button icon={Plus} label="New thread" onClick={onNew} />
+    </>
   );
 }
 

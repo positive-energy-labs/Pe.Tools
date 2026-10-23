@@ -4,6 +4,7 @@ import {
   useLayoutEffect,
   useRef,
   useState,
+  startTransition,
   type ReactNode,
   type HTMLAttributes,
 } from "react";
@@ -53,10 +54,13 @@ export function ListBar<T, Sort extends string>({
   list,
   label,
   primary = false,
+  compact = false,
 }: {
   list: ListController<T, Sort>;
   label: string;
   primary?: boolean;
+  /** Keep narrow-pane controls on one horizontally scrollable line. */
+  compact?: boolean;
 }) {
   const defaultOrder = list.grouped ? "Shelf order" : "Input order";
   const sortItems = [
@@ -75,13 +79,15 @@ export function ListBar<T, Sort extends string>({
         primary={primary}
         region={list.target}
       />
-      <div className="flex flex-wrap items-center gap-1 px-(--item-pad-x) py-1">
+      <div
+        className={`flex items-center gap-1 ${compact ? "overflow-x-auto *:shrink-0" : "flex-wrap px-(--item-pad-x) py-1"}`}
+      >
         {list.facets.map((facet) => (
           <div
             key={facet.key}
             role="group"
             aria-label={facet.key}
-            className="flex flex-wrap items-center gap-1"
+            className={`flex items-center gap-1 ${compact ? "" : "flex-wrap"}`}
           >
             <ListPopup
               anchor="trigger"
@@ -487,6 +493,12 @@ export function ListFilter({
   /** Enter in the filter. */
   onEnter?: () => void;
 }) {
+  const [draft, setDraft] = useState({ source: value, value });
+  if (draft.source !== value) setDraft({ source: value, value });
+  const change = (next: string) => {
+    setDraft({ source: value, value: next });
+    startTransition(() => onChange(next));
+  };
   const input = useRef<HTMLInputElement>(null);
   const self = useRef<Target | null>(null);
   self.current ??= {
@@ -524,20 +536,20 @@ export function ListFilter({
     ],
     body,
   );
-  const narrowed = value.trim() !== "";
+  const narrowed = draft.value.trim() !== "";
   return (
     <SearchControl face="bar" data-list-filter="">
       <input
         ref={input}
-        value={value}
+        value={draft.value}
         aria-label={label}
         placeholder={placeholder}
         className="min-w-0 flex-1 bg-transparent outline-none"
-        onChange={(event) => onChange(event.currentTarget.value)}
+        onChange={(event) => change(event.currentTarget.value)}
         onKeyDown={(event) => {
           if (event.key === "Escape") {
             event.stopPropagation();
-            onChange("");
+            change("");
             event.currentTarget.blur();
           } else if (event.key === "Enter") onEnter?.();
         }}

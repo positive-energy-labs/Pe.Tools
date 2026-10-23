@@ -1,6 +1,6 @@
 // @vitest-environment jsdom
 import { useState } from "react";
-import { cleanup, fireEvent, render, screen, within } from "@testing-library/react";
+import { cleanup, fireEvent, render, screen, waitFor, within } from "@testing-library/react";
 import { afterEach, expect, test, vi } from "vite-plus/test";
 import type { FanResult } from "@pe/ducts-domain/losses";
 import type { Priced } from "@pe/ducts-domain/pricing";
@@ -110,7 +110,7 @@ test("manual expansion survives selection elsewhere and the list owns tree keybo
   expect(tree.getAttribute("aria-activedescendant")).toBe(keyed("leg10").id);
 });
 
-test("address query and name sort round trip; revealing an excluded selection never clears authored grammar", () => {
+test("address query and name sort round trip; revealing an excluded selection never clears authored grammar", async () => {
   const changed = vi.fn();
   function AddressTree({ selected = 20 }: { selected?: number }) {
     const [query, setQuery] = useState("kind=element 10");
@@ -140,7 +140,7 @@ test("address query and name sort round trip; revealing an excluded selection ne
   expect(input.getAttribute("value")).toBe("kind=element 10");
   expect(changed).not.toHaveBeenCalled();
   fireEvent.change(input, { target: { value: "" } });
-  expect(changed).toHaveBeenLastCalledWith("", "name");
+  await waitFor(() => expect(changed).toHaveBeenLastCalledWith("", "name"));
   const runs = screen
     .getAllByRole("treeitem")
     .filter((row) => row.querySelector('[data-e-kind="run"]'));
@@ -200,7 +200,7 @@ test("inputs preserve scoped order and selection, while editing and fan verbs st
   expect(props.light).toHaveBeenLastCalledWith(null);
 });
 
-test("inputs use address grammar/name order and retain the unpriced waiting state", () => {
+test("inputs use address grammar/name order and retain the unpriced waiting state", async () => {
   const changed = vi.fn();
   const props = inputs({
     selected: 20,
@@ -215,7 +215,7 @@ test("inputs use address grammar/name order and retain the unpriced waiting stat
   fireEvent.change(screen.getByRole("textbox", { name: "Search inputs" }), {
     target: { value: "10" },
   });
-  expect(changed).toHaveBeenCalledWith("10", "name");
+  await waitFor(() => expect(changed).toHaveBeenCalledWith("10", "name"));
   view.rerender(<InputsPane {...inputs({ priced: null })} />);
   expect(
     screen.getByText("flow, ESP and role cells open once the loss tables are read"),

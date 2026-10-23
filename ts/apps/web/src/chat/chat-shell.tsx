@@ -2,7 +2,12 @@ import { useNavigate, useRouterState } from "@tanstack/react-router";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useAtomRefresh, useAtomValue } from "@effect/atom-react";
 import { ModeDial } from "#/chat/mode-dial";
-import { NewThreadButton, ThreadDialog, ThreadsSidebar } from "#/chat/thread-palette";
+import {
+  NewThreadButton,
+  ThreadDialog,
+  ThreadsSidebar,
+  ThreadSidebarActions,
+} from "#/chat/thread-palette";
 import { useWorkbench } from "#/workbench/provider";
 import { MODES, type Mode } from "#/workbench/depth";
 import { useCacheView } from "#/workbench/world";
@@ -364,6 +369,13 @@ function ChatSurface({ target, docked = false }: ChatShellProps) {
                 title="threads"
                 meta={threads.length}
                 tabs={<ModeDial mode={mode} setMode={setMode} count={threads.length} />}
+                flush={mode === "threads"}
+                actions={
+                  <ThreadSidebarActions
+                    onSearch={() => store.actions.setPaletteOpen(true)}
+                    onNew={() => void newThread()}
+                  />
+                }
               >
                 {mode === "threads" ? (
                   <ThreadsSidebar
@@ -372,11 +384,9 @@ function ChatSurface({ target, docked = false }: ChatShellProps) {
                     providers={providers.list ?? []}
                     currentThreadId={currentThreadId || chat.id}
                     onSelect={openThread}
-                    onNew={() => void newThread()}
                     onFork={(id, providerId) => void forkThread(providerId, id)}
                     onRename={handleRenameThread}
                     onDelete={handleDeleteThread}
-                    onSearch={() => store.actions.setPaletteOpen(true)}
                     onUpdate={updateThread}
                     onNewTarget={(target) => void newThread(target)}
                   />
@@ -409,7 +419,18 @@ function ChatSurface({ target, docked = false }: ChatShellProps) {
         <Dialog open onOpenChange={(open) => store.actions.setSideOpen(open)}>
           <DialogContent>
             <DialogTitle>Threads</DialogTitle>
-            <ModeDial mode={mode} setMode={setMode} count={threads.length} />
+            <div className="flex items-center justify-between gap-1">
+              <ModeDial mode={mode} setMode={setMode} count={threads.length} />
+              <span className="flex shrink-0 items-center gap-1">
+                <ThreadSidebarActions
+                  onSearch={() => store.actions.setPaletteOpen(true)}
+                  onNew={() => {
+                    void newThread();
+                    store.actions.setSideOpen(false);
+                  }}
+                />
+              </span>
+            </div>
             <div className="h-[75dvh] min-h-0 min-w-0">
               {mode === "threads" ? (
                 <ThreadsSidebar
@@ -421,14 +442,9 @@ function ChatSurface({ target, docked = false }: ChatShellProps) {
                     openThread(id);
                     store.actions.setSideOpen(false);
                   }}
-                  onNew={() => {
-                    void newThread();
-                    store.actions.setSideOpen(false);
-                  }}
                   onFork={(id, providerId) => void forkThread(providerId, id)}
                   onRename={handleRenameThread}
                   onDelete={handleDeleteThread}
-                  onSearch={() => store.actions.setPaletteOpen(true)}
                   onUpdate={updateThread}
                   onNewTarget={(target) => {
                     void newThread(target);

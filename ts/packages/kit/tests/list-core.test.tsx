@@ -45,10 +45,78 @@ test("slash targets a separate filter bar from its focused list body", () => {
 
 afterEach(() => {
   cleanup();
+  vi.useRealTimers();
   vi.restoreAllMocks();
   vi.unstubAllGlobals();
   Reflect.deleteProperty(HTMLElement.prototype, "scrollTo");
   Reflect.deleteProperty(HTMLElement.prototype, "scrollIntoView");
+});
+
+test("typing filters locally, publishes once on idle, and indexes search only on a data read", () => {
+  vi.useFakeTimers();
+  const search = vi.fn(options.search);
+  const onState = vi.fn();
+  const state = emptyListState<"loss" | "name">();
+  const hook = renderHook(
+    ({ data }) => useList({ ...options, items: data, search, state, onState }),
+    {
+      initialProps: { data: items },
+    },
+  );
+  expect(search).toHaveBeenCalledTimes(355);
+  act(() => hook.result.current.setQuery("System"));
+  act(() => {
+    vi.advanceTimersByTime(150);
+  });
+  act(() => hook.result.current.setQuery("System 354"));
+  expect(hook.result.current.shown).toBe(1);
+  expect(onState).not.toHaveBeenCalled();
+  expect(search).toHaveBeenCalledTimes(355);
+  act(() => {
+    vi.advanceTimersByTime(249);
+  });
+  expect(onState).not.toHaveBeenCalled();
+  act(() => {
+    vi.advanceTimersByTime(1);
+  });
+  expect(onState).toHaveBeenCalledTimes(1);
+  expect(onState.mock.lastCall?.[0].query).toBe("System 354");
+  hook.rerender({ data: items.map((item) => ({ ...item, name: "Changed" })) });
+  expect(search).toHaveBeenCalledTimes(710);
+  expect(hook.result.current.shown).toBe(0);
+});
+
+test("address navigation cancels pending typing; an idle acknowledgement preserves newer typing", () => {
+  vi.useFakeTimers();
+  const onState = vi.fn();
+  const hook = renderHook(
+    ({ query }) =>
+      useList({ ...options, state: { ...emptyListState<"loss" | "name">(), query }, onState }),
+    {
+      initialProps: { query: "" },
+    },
+  );
+  act(() => hook.result.current.setQuery("System"));
+  act(() => {
+    vi.advanceTimersByTime(250);
+  });
+  act(() => hook.result.current.setQuery("System 354"));
+  hook.rerender({ query: "System" });
+  expect(hook.result.current.state.query).toBe("System 354");
+  hook.rerender({ query: "kind=Return" });
+  expect(hook.result.current.state.query).toBe("kind=Return");
+  hook.rerender({ query: "System" });
+  expect(hook.result.current.state.query).toBe("System");
+  act(() => {
+    vi.advanceTimersByTime(300);
+  });
+  expect(onState).toHaveBeenCalledTimes(1);
+  act(() => hook.result.current.setQuery("unfinished"));
+  hook.unmount();
+  act(() => {
+    vi.advanceTimersByTime(300);
+  });
+  expect(onState).toHaveBeenCalledTimes(1);
 });
 
 interface Item {

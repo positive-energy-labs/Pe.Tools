@@ -31,7 +31,7 @@ import { Input } from "@pe/kit/lang/input";
 import { NavigationGroup, NavigationItem } from "#/components/lang/navigation";
 import { ProviderMark } from "#/components/lang/provider-mark";
 import { Row } from "@pe/kit/lang/row";
-import { ThreadsSidebar } from "#/chat/thread-palette";
+import { ThreadsSidebar, ThreadSidebarActions } from "#/chat/thread-palette";
 import { demoThreads } from "#/chat/thread-navigation";
 import { emptyChatState } from "@pe/agent-contracts/chat-state";
 
@@ -234,8 +234,12 @@ const PALETTE_EXTRAS = [
 function PalettePane({ selected, onSelect }: { selected: string; onSelect: (id: string) => void }) {
   return (
     <>
-      <PaneHead meta={`${PALETTE_THREADS.length} threads`}>Palette</PaneHead>
-      <div className="min-h-0 flex-1 p-(--gutter)">
+      <PaneHead
+        meta={<ThreadSidebarActions onNew={() => onSelect("new")} onSearch={() => undefined} />}
+      >
+        Palette · {PALETTE_THREADS.length}
+      </PaneHead>
+      <div className="min-h-0 flex-1">
         {/* Real component, mounted as the app mounts it. OWED: ThreadsSidebar takes no trailing-groups
             slot, so route/Revit/machine rows are a second nav beneath it, outside its filter and search. */}
         <ThreadsSidebar
@@ -243,8 +247,6 @@ function PalettePane({ selected, onSelect }: { selected: string; onSelect: (id: 
           currentThreadId={selected}
           providers={[]}
           onSelect={onSelect}
-          onNew={() => onSelect("new")}
-          onSearch={() => undefined}
           onFork={() => undefined}
           onRename={() => undefined}
           onDelete={() => undefined}

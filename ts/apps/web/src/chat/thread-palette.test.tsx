@@ -65,8 +65,6 @@ function mount(
       currentThreadId="open"
       providers={[]}
       onSelect={onSelect}
-      onNew={vi.fn()}
-      onSearch={vi.fn()}
       onFork={vi.fn()}
       onRename={vi.fn()}
       onDelete={vi.fn()}
@@ -181,8 +179,6 @@ test("changing the current thread reveals an offscreen row among 355 without rep
     threads: roster as never,
     providers: [],
     onSelect: vi.fn(),
-    onNew: vi.fn(),
-    onSearch: vi.fn(),
     onFork: vi.fn(),
     onRename: vi.fn(),
     onDelete: vi.fn(),

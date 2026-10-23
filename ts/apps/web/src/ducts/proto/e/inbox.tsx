@@ -302,13 +302,13 @@ export function Inbox({
       stage: item.kind === "proposal" ? "proposed" : undefined,
       stagedBy: item.kind === "proposal" ? "pea" : undefined,
       meta: <span data-tone={item.tone}>{item.status}</span>,
-      actions: verbsOf(item, false),
+      actions: () => verbsOf(item, false),
       onMouseEnter: () => light(item.ids),
       revitIds: target.ids,
       revitRefs: target.refs,
       lit: (selected != null && item.ids.includes(selected)) || item.key === focused,
       pick: () => onSelect(item.ids[0] ?? null),
-      detail: (
+      detail: () => (
         <>
           {claim?.kind === "claim" ? (
             <InboxClaim
@@ -340,6 +340,38 @@ export function Inbox({
     { ...writeSpec, lit: focused === "write" },
     ...groups.diagnostics.map(spec),
   ];
+  return (
+    <>
+      <div onMouseLeave={() => light(null)}>
+        <RulingsList rows={rows} focused={focused} address={address} />
+      </div>
+      {nativeResult ? (
+        <div role="status" className="px-2 py-1">
+          <FactChip title="what revit.context.show-elements answered">
+            {showElementsMessage(nativeResult)}
+          </FactChip>
+        </div>
+      ) : null}
+    </>
+  );
+}
+
+const rulingSearch = (row: RulingRow) => row.search;
+
+/** Query state must not rebuild every ruling and its action elements. */
+function RulingsList({
+  rows,
+  focused,
+  address,
+}: {
+  rows: RulingRow[];
+  focused: string | null;
+  address?: {
+    query: string;
+    sort: "" | "name" | "status";
+    onChange: (query: string, sort: "" | "name" | "status") => void;
+  };
+}) {
   const [view, setView] = useState<ListState<"name" | "status">>(() => ({
     ...emptyListState(),
     closed: [INBOX_LABELS.diagnostics],
@@ -347,7 +379,7 @@ export function Inbox({
   const list = useList({
     items: rows,
     keyOf: (row) => row.key,
-    search: (row) => row.search,
+    search: rulingSearch,
     fields: {
       kind: { kind: "text", read: (row) => row.kind },
       section: { kind: "text", read: (row) => INBOX_LABELS[row.group] },
@@ -401,29 +433,21 @@ export function Inbox({
     list.reveal(key);
   });
   return (
-    <>
-      <div onMouseLeave={() => light(null)}>
-        <ListView
-          aria-label="rulings"
-          list={list}
-          row={({ key: _key, ...parts }) => parts}
-          detail={(row) =>
-            row.detail ? (
-              <div data-inbox-detail={row.key} className="px-4 py-1 flex flex-col gap-1.5">
-                {row.detail}
-              </div>
-            ) : null
-          }
-          empty={{ message: "Nothing to rule on", exit: "Stage a change or ask Pea" }}
-        />
-      </div>
-      {nativeResult ? (
-        <div role="status" className="px-2 py-1">
-          <FactChip title="what revit.context.show-elements answered">
-            {showElementsMessage(nativeResult)}
-          </FactChip>
-        </div>
-      ) : null}
-    </>
+    <ListView
+      aria-label="rulings"
+      list={list}
+      row={({ key: _key, actions, detail: _detail, ...parts }) => ({
+        ...parts,
+        actions: actions?.(),
+      })}
+      detail={(row) =>
+        row.detail ? (
+          <div data-inbox-detail={row.key} className="px-4 py-1 flex flex-col gap-1.5">
+            {list.state.open.includes(row.key) ? row.detail() : null}
+          </div>
+        ) : null
+      }
+      empty={{ message: "Nothing to rule on", exit: "Stage a change or ask Pea" }}
+    />
   );
 }

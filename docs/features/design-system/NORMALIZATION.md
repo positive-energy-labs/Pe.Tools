@@ -12,4 +12,6 @@ Picker widths stay within 18–20rem and shrink to the available viewport. Descr
 
 `SearchControl` owns the persistent search frame, search glyph, ground, and focus treatment. Query chips and picker inputs compose inside it. Call sites choose geometry and provide state; they do not redraw its appearance.
 
+List typing paints locally before a transition projects results. `useList` publishes typing after idle; route adapters replace the address. Stable search readers index each data read. Row builders create actions only for mounted rows and details only when open. `list-core.test.tsx` guards indexing, idle publication, navigation and acknowledgement races. Browser timings remain a separate proof.
+
 `QueryVocabulary.filters` names domain conditions with a label, explanation and canonical clause. A `default` marks a starting condition; it never applies an invisible predicate. The caller seeds its query with `defaultFilterQuery`. Chips, picker toggles and restoration project and edit that same query. Clearing it removes defaults too; restoration preserves other authored conditions. Domain evaluators remain with the owning route.

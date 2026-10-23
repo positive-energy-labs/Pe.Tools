@@ -3,7 +3,7 @@
  * no pixels: it turns items into visible rows, holds cursor, selection and query, and binds keys
  * on the scope node (`useScopeKeys`). Identity is by key, never by object.
  */
-import { useEffect, useId, useMemo, useState } from "react";
+import { startTransition, useEffect, useId, useMemo, useRef, useState } from "react";
 
 import { useScopeKeys, type ScopeKey } from "../../keys";
 import {
@@ -566,6 +566,7 @@ export const emptyListState = <Sort extends string = string>(): ListState<Sort> 
 export interface ListOptions<T, Sort extends string = string> {
   items: readonly T[];
   keyOf: (item: T) => string;
+  /** Keep this reader stable; its index is rebuilt when the data or reader changes. */
   search: (item: T) => {
     text: readonly (string | number | null | undefined)[];
     ids?: readonly number[];
@@ -583,6 +584,7 @@ export interface ListOptions<T, Sort extends string = string> {
   select?: SelectMode;
   state?: ListState<Sort>;
   initialState?: Partial<ListState<Sort>>;
+  /** Typing publishes after 250 ms idle; explicit selection, sort and facet changes publish immediately. */
   onState?: (state: ListState<Sort>) => void;
   onPick?: (item: T) => void;
   refusalOf?: (item: T) => string | null | undefined;
@@ -627,6 +629,7 @@ export const hasListFacet = (query: string, field: string, value: string) =>
 export function listModel<T, Sort extends string>(
   options: ListOptions<T, Sort>,
   state: ListState<Sort>,
+  searchIndex?: ReadonlyMap<T, ListSearch>,
 ) {
   const all: ListItem<T>[] = [];
   const visit = (items: readonly T[], ancestors: readonly string[], section?: string) => {
@@ -664,7 +667,7 @@ export function listModel<T, Sort extends string>(
     typedSort && options.sorts && typedSort in options.sorts ? (typedSort as Sort) : state.sort;
   const clauses = readQuery(words.filter((word) => !word.startsWith("sort:")).join(" "));
   const word = (item: T, text: string) => {
-    const searchable = options.search(item);
+    const searchable = searchIndex?.get(item) ?? options.search(item);
     return listWordMatches(searchable, text);
   };
   const matching = all.filter((row) => passes(row.item, clauses, fields, word));
@@ -764,18 +767,58 @@ export function useList<T, Sort extends string = string>(options: ListOptions<T,
     closed: options.groups?.defaultClosed ?? [],
     ...options.initialState,
   }));
-  const state = options.state ?? ownState;
+  const source = options.state ?? ownState;
+  const [query, setQuery] = useState({ source: source.query, value: source.query });
+  const published = useRef<string | undefined>(undefined);
+  // Address navigation wins over an unfinished edit. An acknowledgement of our own idle
+  // write must not replace newer typing that arrived while the router was committing it.
+  let currentQuery = query.value;
+  if (query.source !== source.query) {
+    currentQuery = source.query === published.current ? query.value : source.query;
+    published.current = undefined;
+    setQuery({ source: source.query, value: currentQuery });
+  }
+  const state = { ...source, query: currentQuery };
+  const latest = useRef({ options, state });
+  latest.current = { options, state };
+  const publication = useRef<ReturnType<typeof setTimeout> | undefined>(undefined);
+  useEffect(() => {
+    if (currentQuery === source.query) return;
+    publication.current = setTimeout(() => {
+      const { options: current, state: next } = latest.current;
+      published.current = next.query;
+      startTransition(() => {
+        if (!current.state) setOwnState(next);
+        current.onState?.(next);
+      });
+    }, 250);
+    return () => clearTimeout(publication.current);
+  }, [currentQuery, source.query]);
   const setState = (next: ListState<Sort>) => {
+    clearTimeout(publication.current);
+    setQuery({ source: source.query, value: next.query });
+    published.current = next.query;
     if (!options.state) setOwnState(next);
     options.onState?.(next);
   };
-  const model = useMemo(() => listModel(options, state), [options, state]);
+  const searchIndex = useMemo(() => {
+    const index = new Map<T, ListSearch>();
+    const visit = (items: readonly T[]) => {
+      for (const item of items) {
+        index.set(item, options.search(item));
+        if (options.tree) visit(options.tree.childrenOf(item));
+      }
+    };
+    visit(options.items);
+    return index;
+  }, [options.items, options.search, options.tree?.childrenOf]);
+  const model = listModel(options, state, searchIndex);
   const [target, setTarget] = useState<HTMLElement | null>(null);
   const rows = model.sections.flatMap((section) => (section.closed ? [] : section.rows));
   const collection = useCollection({
     items: rows,
     keyOf: (row) => row.key,
-    labelOf: (row) => String(options.search(row.item).text[0] ?? row.key),
+    labelOf: (row) => String(searchIndex.get(row.item)?.text[0] ?? row.key),
     query: state.query,
     filter: "none",
     select: options.select ?? "single",
@@ -841,7 +884,7 @@ export function useList<T, Sort extends string = string>(options: ListOptions<T,
     rows,
     revealRequest,
     setQuery: (query: string) => {
-      setState({ ...state, query });
+      setQuery({ source: source.query, value: query });
       collection.setCursor(null);
     },
     setSort: (sort: Sort | "") =>

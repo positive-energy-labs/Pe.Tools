@@ -4,14 +4,15 @@ import type { ListRowParts } from "@pe/kit/lang/list-view";
 import type { ListSearch } from "@pe/kit/lang/collection";
 import { STALE_WORDS, type InboxGroup, type PreviewState } from "../../inbox-rows";
 
-export type RulingRow = ListRowParts & {
+export type RulingRow = Omit<ListRowParts, "actions"> & {
   key: string;
   title: string;
   group: InboxGroup;
   kind: string;
   statusText: string;
   search: ListSearch;
-  detail?: ReactNode;
+  actions?: () => ReactNode;
+  detail?: () => ReactNode;
   lit?: boolean;
   pick?: () => void;
 };
@@ -66,12 +67,14 @@ export function inboxWriteRows(write: WriteVerbs) {
       </span>
     ),
     detail:
-      write.apply.refusal || write.row.held ? (
-        <>
-          {write.apply.refusal ? <p data-inbox-write-says="">{write.apply.refusal}</p> : null}
-          {write.row.held ? <p data-inbox-write-held="">{write.row.held}</p> : null}
-        </>
-      ) : undefined,
+      write.apply.refusal || write.row.held
+        ? () => (
+            <>
+              {write.apply.refusal ? <p data-inbox-write-says="">{write.apply.refusal}</p> : null}
+              {write.row.held ? <p data-inbox-write-held="">{write.row.held}</p> : null}
+            </>
+          )
+        : undefined,
   };
 
   return { writeSpec };
