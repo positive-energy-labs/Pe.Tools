@@ -5,7 +5,7 @@ import { ChevronRight, Flame } from "lucide-react";
 
 import { tv } from "../../lib/tv";
 import { TooltipHint } from "./tooltip";
-import { useRevitTarget, type RevitElementReference } from "./revit-target";
+import { rowRevit, useRevitTarget, type RevitElementReference } from "./revit-target";
 import type { StateCellProps } from "./cell-state";
 
 import "./lang.css";
@@ -126,6 +126,7 @@ const rowStateProps = (state: RowState) => ({
 });
 
 export function Row(props: RowProps) {
+  props = { ...props, revit: props.revit ?? rowRevit(undefined, props["data-key"]) };
   const { damage, refusal } = props;
   const rung = useReach(props.revit?.[0]);
   const setReach = useReachSetter("hovered");

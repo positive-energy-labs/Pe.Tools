@@ -412,11 +412,12 @@ function BreakdownList({
       label: "in-wg",
       right: true,
       width: "w-20",
-      cell: (row) => (
-        <ReadCell
-          value={`${row.dp > 0 || !row.unpriced ? fmt(row.dp, LOSS_PLACES) : "\u2014"}${row.dp > 0 && row.unpriced ? "+?" : ""}`}
-        />
-      ),
+      state: (row) => ({
+        value: `${row.dp > 0 || !row.unpriced ? fmt(row.dp, LOSS_PLACES) : "\u2014"}${row.dp > 0 && row.unpriced ? "+?" : ""}`,
+        damage: split.rows.some((loss) => row.ids.includes(loss.id) && loss.error)
+          ? "blocked loss"
+          : null,
+      }),
     },
     {
       key: "share",
@@ -515,12 +516,7 @@ function BreakdownList({
           items={rows.map((row) => ({ key: row.key, at: row.at, dashed: row.key === "other" }))}
         >
           <Table
-            rows={rows.map((row) => ({
-              ...row,
-              damage: split.rows.some((loss) => row.ids.includes(loss.id) && loss.error)
-                ? "blocked loss"
-                : null,
-            }))}
+            rows={rows}
             columns={columns}
             rowKey={(row) => row.key}
             label="Loss groups and pricing rules"
@@ -528,7 +524,6 @@ function BreakdownList({
             activeKey={current?.key}
             onRowClick={choose}
             onRowHover={light ? (row) => light(row?.ids ?? back ?? null) : undefined}
-            revit={(row) => row.ids}
             keep={() => true}
             caption={
               <>

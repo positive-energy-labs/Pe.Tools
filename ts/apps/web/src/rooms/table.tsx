@@ -312,7 +312,6 @@ export function RoomsTable({
         state={state}
         onStateChange={setState}
         visibleKeys={visibleKeys}
-        revit={(row) => [row.region.elementId]}
         selection={{ selected, onChange: onSelect }}
         activeKey={hovered}
         onRowHover={(row) => onHover(row?.region.guid ?? null)}

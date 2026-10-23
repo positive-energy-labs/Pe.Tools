@@ -286,7 +286,7 @@ it("join faces, bars and overhang all carry the same inbox identity", () => {
   const id = "proximity:1:1|2:0";
   const shapes = findingShapes(snapshot, new Set([id]), null);
   const layers = findingLayers(shapes, [
-    { key: "heal:g", ids: [999, 2, 1], findings: [id], blocking: true },
+    { key: "heal:g", ids: [999, 2, 1], findings: [id], damage: "blocked" },
   ]);
   expect(layers.length).toBeGreaterThan(0);
   for (const layer of layers) {
@@ -302,8 +302,8 @@ it("a no-run branch draws one mark per element, answering the row its reason nam
     new Map([[1, { elements: [1, 2], reasons: [{ at: 2, text: "flowless terminal" }] as never }]]),
     snapshot,
     [
-      { key: "branch", ids: [1, 2], findings: [], blocking: false },
-      { key: "terminal", ids: [2], findings: [], blocking: true },
+      { key: "branch", ids: [1, 2], findings: [], damage: null },
+      { key: "terminal", ids: [2], findings: [], damage: "blocked" },
     ],
   );
   expect(layers).toHaveLength(1);

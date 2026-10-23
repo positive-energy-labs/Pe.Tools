@@ -1,6 +1,6 @@
 import * as THREE from "three";
 import { expect, it } from "vite-plus/test";
-import { damageLayer, heartbeat, setDamageHue } from "./damage";
+import { damageLayers, damageMark, damageLayer, heartbeat, setDamageHue } from "./damage";
 import { landing } from "./marks";
 import { SceneMeshes, type LayerFrame, type SceneInstance } from "./types";
 
@@ -66,4 +66,16 @@ it("damage keeps mesh and row identity, beats, flashes once, and holds still for
   expect(energy()).toBe(steady);
   layer.frame!(group, at(born + 5.4, { reducedMotion: true, state: "hover" }));
   expect(energy()).toBeGreaterThan(steady);
+});
+
+it("row damage feeds both plan marks and native mesh skins, then clears with the row", () => {
+  const row = { key: "flow:7", ids: [7], damage: "no airflow", findings: ["no-flow:7"] };
+  expect(damageMark(row)).toEqual({ "data-damage": "no airflow" });
+  const layers = damageLayers(meshes, [row]);
+  expect(layers).toHaveLength(1);
+  expect(layers[0]!.targets).toEqual([{ key: row.key, elementId: 7 }]);
+  expect(layers[0]!.findings).toEqual(row.findings);
+  expect(damageMark({ ...row, damage: null })["data-damage"]).toBeUndefined();
+  expect(damageLayers(meshes, [{ ...row, damage: null }])).toEqual([]);
+  expect(damageLayers(meshes, [{ ...row, ids: [8] }])).toEqual([]);
 });

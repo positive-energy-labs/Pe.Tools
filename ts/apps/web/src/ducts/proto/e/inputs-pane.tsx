@@ -122,7 +122,6 @@ export function InputsPane(props: InputsPaneProps) {
             )}
           </span>
         ),
-        revit: target.ids,
         revitRefs: target.refs,
       };
     },

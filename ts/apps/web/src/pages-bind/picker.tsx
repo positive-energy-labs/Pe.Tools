@@ -16,7 +16,7 @@ import { Button } from "@pe/kit/lang/button";
 import { EmptyState } from "@pe/kit/lang/empty";
 import { Row } from "@pe/kit/lang/row";
 import { TooltipHint } from "@pe/kit/lang/tooltip";
-import { emptyListState, useList } from "@pe/kit/lang/collection";
+import { emptyListState, listOf, useList } from "@pe/kit/lang/collection";
 import { ListView } from "@pe/kit/lang/list-view";
 import { Section } from "@pe/kit/lang/section";
 import { Surface } from "@pe/kit/lang/surface";
@@ -62,6 +62,7 @@ export function BindPicker({
   reading,
   threads,
   documents,
+  inventory,
   outcome,
   onBind,
 }: {
@@ -69,6 +70,7 @@ export function BindPicker({
   reading: PageTargetReading | null;
   threads: readonly HarnessThreadSummary[] | null;
   documents: readonly Pinnable[] | null;
+  inventory?: import("@pe/agent-contracts").Reading<unknown>;
   /** The last bind's answer: the host's refusal, or null. */
   outcome: { ok: boolean; message: string } | null;
   onBind: (slot: PageChoice) => void;
@@ -102,6 +104,8 @@ export function BindPicker({
         binding.address.toLowerCase() === choice.doc.address.toLowerCase(),
   );
   const list = useList({
+    ...(inventory ? listOf(inventory, () => items) : {}),
+    // Threads have their own owner; an initial inventory read must not hide known threads.
     items,
     keyOf,
     search,
@@ -248,6 +252,7 @@ function BindingPickerRoute({ slug }: { slug: string }) {
         reading={reading}
         threads={threads}
         documents={documents}
+        inventory={inventory}
         outcome={outcome}
         onBind={onBind}
       />

@@ -51,7 +51,6 @@ export function AtlasNavigation() {
               const calls = states.filter((s) => s === "call").length;
               const off = !onPlan(z);
               return {
-                revit: z.zone.elementId == null ? [] : [z.zone.elementId],
                 lead: <ZoneThumb zone={z.zone} className="size-5" />,
                 label: (
                   <span className="truncate">

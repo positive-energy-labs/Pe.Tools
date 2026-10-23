@@ -7,6 +7,7 @@ import { Pane } from "@pe/kit/lang/pane";
 import { revitTarget } from "@pe/kit/lang/revit-target";
 import { usePlaneViewport, PLAN_CLICK_PX } from "#/scene/use-plane-viewport";
 import { usePlanMap } from "#/lib/plan-map";
+import { damageMark } from "#/scene/damage";
 import { Legend, legendWord, type LegendRow } from "@pe/kit/lang/legend";
 import { EmptyState } from "@pe/kit/lang/empty";
 import { OutcomeLine } from "@pe/kit/lang/outcome";
@@ -112,6 +113,7 @@ export function LevelPlan({
   selectedKey,
   cursor,
   stateOf,
+  rows,
   onSelectZone,
   onHover,
   onCursor,
@@ -142,10 +144,12 @@ export function LevelPlan({
   selectedKey: string | null;
   cursor: string | null;
   stateOf: (room: ModelRoom) => RoomState;
+  rows: readonly import("./controller").AtlasRow[];
   onSelectZone: (z: ModelZone | null) => void;
   onHover: (id: string) => void;
   onCursor: (z: ModelZone, guid: string) => void;
 }) {
+  const rowByRoom = useMemo(() => new Map(rows.map((row) => [row.room.guid, row])), [rows]);
   const drawn = useMemo(() => zones.filter(onPlan), [zones]);
   const skipped = zones.length - drawn.length;
 
@@ -477,7 +481,7 @@ export function LevelPlan({
                           <circle
                             key={room.guid}
                             {...revitTarget(room.elementId == null ? [] : [room.elementId])}
-                            data-damage={state === "call" && !isCursor ? "" : undefined}
+                            {...damageMark(rowByRoom.get(room.guid))}
                             cx={labelX}
                             cy={labelY}
                             r={span / 260}
@@ -497,7 +501,7 @@ export function LevelPlan({
                           onClick={click}
                         >
                           <path
-                            data-damage={state === "call" && !isCursor ? "" : undefined}
+                            {...damageMark(rowByRoom.get(room.guid))}
                             d={pathD([room.outer, ...room.holes], frame)}
                             fillRule="evenodd"
                             fill={`color-mix(in srgb, ${tone} ${isCursor ? 34 : state === "unreviewed" ? 7 : 13}%, transparent)`}

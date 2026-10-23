@@ -1,4 +1,6 @@
 import { reachProps } from "./reach";
+import { rowRevit } from "./revit-target";
+import { rowDamage } from "../master-table/model";
 import type { Tone } from "../../lib/token";
 import {
   Children,
@@ -192,7 +194,15 @@ export function List<T>(props: ListProps<T>) {
         />
       );
     const slots = props.row(row.item);
-    return <Row key={row.key} {...collection.rowProps(row.key)} {...slots} />;
+    return (
+      <Row
+        key={row.key}
+        {...collection.rowProps(row.key)}
+        {...slots}
+        revit={slots.revit ?? rowRevit(row.item, row.key)}
+        damage={slots.damage ?? rowDamage(row.item)}
+      />
+    );
   };
   return (
     <div

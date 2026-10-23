@@ -157,7 +157,6 @@ export function RunDetail({
               label: nameOf(part.id),
               aside: part.stated ? "stated" : undefined,
               title: part.desc,
-              revit: [part.id],
               meta: `${fmtFt(part.eqFt)} · ${fmt(part.dp, 4)}`,
             })}
           />

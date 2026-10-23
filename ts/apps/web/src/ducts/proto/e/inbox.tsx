@@ -25,6 +25,7 @@ import { rulingPatches, verdictPatches } from "../../assumptions";
 import { VERDICTS, type Verdict } from "../../claims";
 import {
   compactStatus,
+  inboxDamage,
   diagnosticKind,
   INBOX_LABELS,
   INBOX_ORDER,
@@ -318,7 +319,7 @@ export function Inbox({
 
   const spec = useCallback(
     (item: InboxItem): RulingRow => {
-      const blocked = (item.group === "fix" && item.blocks !== false) || item.group === "set";
+      const damage = inboxDamage(item);
       const status = compactStatus(item.status);
       const target = observedElements(observation, item.ids);
       const claim = item.verbs.find((v) => v.kind === "claim");
@@ -356,8 +357,8 @@ export function Inbox({
         stage: item.kind === "proposal" ? "proposed" : undefined,
         stagedBy: item.kind === "proposal" ? "pea" : undefined,
         // The closed row gives the label the width: the status in its compact words.
-        damage: blocked ? status : undefined,
-        meta: blocked ? undefined : status,
+        damage,
+        meta: damage ? undefined : status,
         actions: () => verbsOf(item, false),
         onMouseEnter: () => {
           if (subjects) relight();

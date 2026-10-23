@@ -90,6 +90,7 @@ export interface AtlasRow {
   readonly room: ModelRoom;
   readonly state: AtlasRoomState;
   readonly open: readonly string[];
+  readonly damage: string | null;
 }
 
 export interface AdoptDraft {
@@ -214,7 +215,13 @@ function atlasRows(
       const open = room.flags.filter(
         (flag) => decisions[takeoffDecisionKey(room.guid, flag)] === undefined,
       );
-      return { zone, room, open, state: atlasRoomState(room, open.length) };
+      return {
+        zone,
+        room,
+        open,
+        state: atlasRoomState(room, open.length),
+        damage: open.length ? "needs a call" : null,
+      };
     }),
   );
 }

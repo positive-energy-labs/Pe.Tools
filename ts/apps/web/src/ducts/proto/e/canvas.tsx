@@ -52,7 +52,7 @@ import { BarPopover, fmtFt, SystemMark, systemIssues } from "./bar";
 import type { Split } from "../../loss-split";
 import type { systemList } from "../../system-list";
 import type { StageIssue } from "../../inbox-rows";
-import { damageLayer } from "#/scene/damage";
+import { damageLayers } from "#/scene/damage";
 import { land } from "@pe/kit/lang/land";
 import { usePictureFloaters } from "./picture-floaters";
 import { RulingBody, useMarks } from "./rulings";
@@ -281,35 +281,7 @@ function Canvas({
   );
 
   const damage = useMemo(
-    () =>
-      read.meshes
-        ? read.meshes.instances.flatMap((instance) => {
-            if (
-              !instance.vertexCount ||
-              instance.revitId == null ||
-              instance.linkInstanceId != null
-            )
-              return [];
-            const blockers = issues
-              .filter((issue) => issue.blocking && issue.ids.includes(instance.revitId!))
-              .sort(
-                (a, b) =>
-                  a.ids.length - b.ids.length ||
-                  Number(a.key === "airflow" || a.key === "unit-airflow") -
-                    Number(b.key === "airflow" || b.key === "unit-airflow"),
-              );
-            return blockers.length
-              ? [
-                  damageLayer(
-                    read.meshes!,
-                    instance,
-                    blockers.map((issue) => ({ key: issue.key, elementId: instance.revitId! })),
-                    blockers.flatMap((issue) => issue.findings),
-                  ),
-                ]
-              : [];
-          })
-        : [],
+    () => (read.meshes ? damageLayers(read.meshes, issues) : []),
     [read.meshes, issues],
   );
   // Each stage mark answers its own picture layer: no-runs to `no-run`, findings and damage to `findings`.

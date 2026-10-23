@@ -4,6 +4,25 @@ import type { ReactNode } from "react";
 
 import type { StateCellProps } from "../lang/cell";
 
+/** One damage source for rows, minimaps and pictures, independent of which columns are visible. */
+export function rowDamage<Row>(row: Row, columns: readonly Column<Row>[] = []): string | null {
+  if (
+    row &&
+    typeof row === "object" &&
+    "damage" in row &&
+    typeof row.damage === "string" &&
+    row.damage
+  )
+    return row.damage;
+  for (const column of columns) {
+    const damage = column.state?.(row).damage;
+    if (damage) return damage;
+    const verdict = column.verdict?.(row);
+    if (verdict?.tone === "alarm") return verdict.word;
+  }
+  return null;
+}
+
 /** A column. Capabilities are opt-in by the presence of a field, never by a flag. */
 interface ColumnBase<Row> {
   /** Stable id — filter/sort state and React keys are keyed on it. */

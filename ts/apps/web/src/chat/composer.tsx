@@ -1,3 +1,4 @@
+import { listOf } from "@pe/kit/lang/collection";
 // The thread's composer: fills the one `Composer` box with attachments, slash and `@` menus and
 // the pickers. Logic lives in the hooks and `useSend`.
 import { useMemo, useState, type ReactNode } from "react";
@@ -157,7 +158,7 @@ export function ThreadComposer({
                 query={mentions.query}
                 onCollection={mentions.bind}
                 aria-label="Mentions"
-                items={mentions.rows}
+                {...listOf(handle.readings.capabilities, () => mentions.rows)}
                 keyOf={(row) => row.key}
                 labelOf={(row) => row.title}
                 groupOf={(row) => MENTION_KINDS[row.kind].group}

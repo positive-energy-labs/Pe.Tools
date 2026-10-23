@@ -7,6 +7,7 @@ import { TableFrame } from "#/components/master-table/table-frame";
 import { fmtNum } from "@pe/kit/table/model";
 import { Pane, PaneSplit } from "@pe/kit/lang/pane";
 import { RoomPanelFromStore } from "#/takeoff/room-panel";
+import { listOf } from "@pe/kit/lang/collection";
 import type { AtlasRow as Row } from "#/takeoff/controller";
 import { useAtlasWorkspace } from "#/takeoff/atlas-context";
 import { ScopeKeys } from "@pe/kit/keys";
@@ -102,11 +103,15 @@ export function AtlasTable() {
               }
             >
               <Table
-                rows={rows}
+                {...listOf(
+                  store.source === "saved" && store.displayedCapture
+                    ? { state: "ready", observation: store.displayedCapture.snapshot }
+                    : store.snapshot,
+                  () => rows,
+                )}
                 columns={columns}
                 rowKey={rowKey}
                 label="rooms in scope"
-                revit={(row) => (row.room.elementId == null ? [] : [row.room.elementId])}
                 state={tableState}
                 onStateChange={setTableState}
                 activeKey={cursor}

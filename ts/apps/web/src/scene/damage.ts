@@ -1,4 +1,8 @@
 import * as THREE from "three";
+import { rowDamage } from "@pe/kit/table/model";
+
+/** Plan marks read the same row model as the table. */
+export const damageMark = (row: unknown) => ({ "data-damage": rowDamage(row) || undefined });
 import { BEACON_LAYER, GLOW_LAYER } from "./glow";
 import { landing } from "./marks";
 import type {
@@ -90,6 +94,36 @@ const skin = (alpha: number, xray: boolean) =>
     toneMapped: false,
     side: THREE.DoubleSide,
   });
+
+/** Match damage row identities to native meshes; linked instances need their own captured references. */
+export function damageLayers(
+  meshes: SceneMeshes,
+  rows: readonly {
+    key: string;
+    ids: readonly number[];
+    damage: string | null;
+    priority?: number;
+    findings: readonly string[];
+  }[],
+): Layer3D[] {
+  return meshes.instances.flatMap((instance) => {
+    if (!instance.vertexCount || instance.revitId == null || instance.linkInstanceId != null)
+      return [];
+    const blockers = rows
+      .filter((row) => rowDamage(row) && row.ids.includes(instance.revitId!))
+      .sort((a, b) => a.ids.length - b.ids.length || (a.priority ?? 0) - (b.priority ?? 0));
+    return blockers.length
+      ? [
+          damageLayer(
+            meshes,
+            instance,
+            blockers.map((row) => ({ key: row.key, elementId: instance.revitId! })),
+            blockers.flatMap((row) => row.findings),
+          ),
+        ]
+      : [];
+  });
+}
 
 /** A blocking issue on real mesh geometry: a burning skin, a screen-space halo (the renderer's
  * glow pass), a heartbeat, and a hit flash when it first appears. Steady under reduced motion. No

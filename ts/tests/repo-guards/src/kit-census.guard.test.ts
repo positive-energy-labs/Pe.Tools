@@ -3,6 +3,7 @@ import { existsSync, readdirSync, readFileSync } from "node:fs";
 import { dirname, join, matchesGlob, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 import { expect, it } from "vite-plus/test";
+import ts from "typescript";
 import { REACH_BLOCK } from "./reach-pattern.ts";
 
 const ROOT = resolve(dirname(fileURLToPath(import.meta.url)), "../../..");
@@ -17,7 +18,7 @@ type Rule = {
   allow: Allow[];
   max?: Record<string, number>;
   asOf?: string;
-  select?: "classes" | "hover-css" | "reach";
+  select?: "classes" | "hover-css" | "reach" | "reading-rows";
   exclude?: string[];
   cannotSee: string;
 };
@@ -134,6 +135,13 @@ const RULES: Rule[] = [
     pattern: /hotkey:\s*["']F["']|how === "gesture" \? "replace" : "push"|navigateNativeHistory|hotkey:\s*["']Alt\+Arrow/g,
     roots: [W + "**/*.{ts,tsx}"], exclude: [W + "scene/**", W + "navigation/**"], allow: [],
     cannotSee: "Key aliases, callback-hidden navigation and actual camera/history behavior." },
+  { id: "reading-list-adapter", doctrine: "N6", pattern: /.+/g,
+    roots: [W + "**/*.{ts,tsx}"], select: "reading-rows", allow: [],
+    cannotSee: "Cross-component props and imported projections; follows local aliases only." },
+  { id: "row-revit-inferred", doctrine: "N4",
+    pattern: /revit=\{\(\w+\)\s*=>\s*(?:\(?\w+(?:\.\w+)*\.(?:elementId|targetElementId)\s*==\s*null\s*\?\s*\[\]\s*:\s*)?(?:\[(?:\w+\.)+(?:elementId|targetElementId)\]|\w+\.ids)\)?\}/g,
+    roots: [W + "**/*.tsx"], allow: [],
+    cannotSee: "Named callbacks, composite projections and aliased identity fields." },
   { id: "revit-target-attr", doctrine: "N4",
     pattern: /\bdata-revit-ids\s*=|<[^>]*className="contents"[^>]*\{\.\.\.revit|<[^>]*\{\.\.\.revit[^>]*className="contents"/gs,
     roots: ["{apps,packages}/*/src/**/*.{ts,tsx}"], exclude: [K + "**"],
@@ -171,6 +179,75 @@ const selectorMatches = (classes: string, selector: string) =>
     .split(/\.(?!\d)/)
     .every((token) => classes.split(/\s+/).includes(token));
 
+// Follow local aliases to the read that produced rows, rather than banning unrelated readings in a file.
+function unadaptedReadings(source: string): string[] {
+  const file = ts.createSourceFile(
+    "rows.tsx",
+    source,
+    ts.ScriptTarget.Latest,
+    true,
+    ts.ScriptKind.TSX,
+  );
+  const bindings = new Map<ts.Node, Map<string, ts.Expression | undefined>>();
+  const scope = (node: ts.Node): ts.Node =>
+    ts.isFunctionLike(node) || ts.isSourceFile(node) ? node : scope(node.parent);
+  const bind = (node: ts.Node, name: string, value?: ts.Expression) => {
+    const owner = scope(node);
+    if (!bindings.has(owner)) bindings.set(owner, new Map());
+    bindings.get(owner)!.set(name, value);
+  };
+  const visit = (node: ts.Node, act: (node: ts.Node) => void) => {
+    act(node);
+    ts.forEachChild(node, (child) => visit(child, act));
+  };
+  visit(file, (node) => {
+    if (ts.isVariableDeclaration(node) && ts.isIdentifier(node.name) && node.initializer)
+      bind(node, node.name.text, node.initializer);
+    if (ts.isParameter(node) && ts.isIdentifier(node.name)) bind(node, node.name.text);
+  });
+  const fromReading = (node: ts.Node, seen = new Set<ts.Node>()): boolean => {
+    if (ts.isCallExpression(node) && node.expression.getText(file) === "listOf") return false;
+    if (ts.isCallExpression(node) && node.expression.getText(file) === "previousOf") return true;
+    if (ts.isPropertyAccessExpression(node) && ["observation", "previous"].includes(node.name.text))
+      return true;
+    if (ts.isIdentifier(node)) {
+      let owner = scope(node);
+      while (true) {
+        const local = bindings.get(owner);
+        if (local?.has(node.text)) {
+          const value = local.get(node.text);
+          return !!value && !seen.has(value) && fromReading(value, new Set([...seen, value]));
+        }
+        if (ts.isSourceFile(owner)) return false;
+        owner = scope(owner.parent);
+      }
+    }
+    return ts.forEachChild(node, (child) => fromReading(child, seen) || undefined) ?? false;
+  };
+  const hits: string[] = [];
+  visit(file, (node) => {
+    if (ts.isCallExpression(node) && node.expression.getText(file) === "useList") {
+      const options = node.arguments[0];
+      if (options && ts.isObjectLiteralExpression(options)) {
+        const items = options.properties.find((prop) => prop.name?.getText(file) === "items");
+        if (items && fromReading(items)) hits.push(items.getText(file));
+      }
+    }
+    if (ts.isJsxSelfClosingElement(node) || ts.isJsxOpeningElement(node)) {
+      if (!["Table", "List", "ListPopup", "ListView"].includes(node.tagName.getText(file))) return;
+      for (const prop of node.attributes.properties)
+        if (
+          ts.isJsxAttribute(prop) &&
+          ["rows", "items", "list"].includes(prop.name.getText(file)) &&
+          prop.initializer &&
+          fromReading(prop.initializer)
+        )
+          hits.push(prop.getText(file));
+    }
+  });
+  return hits;
+}
+
 it.each(RULES)("$id ($doctrine)", (rule) => {
   const used = new Set<Allow>();
   const violations: string[] = [];
@@ -192,13 +269,15 @@ it.each(RULES)("$id ($doctrine)", (rule) => {
     }
     if (rule.select === "hover-css") source = source.replace(/\/\*[\s\S]*?\*\//g, "");
     const values =
-      rule.select === "classes"
-        ? [...source.matchAll(/\bclassName=["']([^"']*)["']/g)].map((m) => m[1]!)
-        : rule.select === "hover-css"
-          ? [...source.matchAll(/([^{}]+)\{([^{}]*)\}/g)]
-              .filter((m) => /:(?:hover|focus(?:-visible|-within)?)/.test(m[1]!))
-              .map((m) => m[2]!)
-          : [source];
+      rule.select === "reading-rows"
+        ? unadaptedReadings(source)
+        : rule.select === "classes"
+          ? [...source.matchAll(/\bclassName=["']([^"']*)["']/g)].map((m) => m[1]!)
+          : rule.select === "hover-css"
+            ? [...source.matchAll(/([^{}]+)\{([^{}]*)\}/g)]
+                .filter((m) => /:(?:hover|focus(?:-visible|-within)?)/.test(m[1]!))
+                .map((m) => m[2]!)
+            : [source];
     const hits = values.flatMap((value) => [...value.matchAll(rule.pattern)].map(() => value));
     let allowed = 0;
     for (const hit of hits) {
