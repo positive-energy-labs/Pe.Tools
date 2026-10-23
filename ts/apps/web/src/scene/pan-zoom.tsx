@@ -6,7 +6,7 @@ import { clampZoom } from "./plane";
 import { PLAN_CLICK_PX, usePlaneViewport } from "./use-plane-viewport";
 
 /** The content at 1:1 from the top-left, or shrunk to fit when it is larger than the box. */
-export function restingView(content: Viewport2, box: Viewport2): PlaneViewport {
+function restingView(content: Viewport2, box: Viewport2): PlaneViewport {
   const scale = Math.min(1, box.width / content.width, box.height / content.height);
   return { kind: "plane", scale: clampZoom(scale), tx: 0, ty: 0 };
 }

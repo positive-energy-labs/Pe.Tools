@@ -30,7 +30,7 @@ import { STAGE_KEYS } from "#/scene/stage-keys";
 const PRESSURE_DROP = mapLink("pressure-drop")!;
 
 /** The picture pane's keys; the pane's own legend and this page read the same list. */
-export const PICTURE_KEYS: readonly LegendKey[] = [
+const PICTURE_KEYS: readonly LegendKey[] = [
   ...STAGE_KEYS,
   { keys: ["/"], does: "go to a subject: a name, family, size, system or element id" },
   { keys: ["S"], does: "swap the model and the schematic" },

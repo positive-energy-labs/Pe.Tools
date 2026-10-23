@@ -6,7 +6,6 @@ import { useCurrentThreadView } from "../thread-view";
 import {
   computeCacheView,
   signatureMap,
-  type Blast,
   type CacheState,
   type CacheView,
 } from "../world-cache";
@@ -74,23 +73,6 @@ export const PILL_LABEL: Record<NonNullable<ContextItem["state"]>, string> = {
   in: "in context",
   "on-demand": "on demand",
   off: "not loaded",
-};
-
-export const PILL_BASE =
-  "rounded-sm border-[0.5px] px-[5px] py-px t-small face-mono whitespace-nowrap";
-
-export const PILL_TONE: Record<NonNullable<ContextItem["state"]>, string> = {
-  in: "text-ink-2 border-line-2",
-  "on-demand": "text-ink-2 border-line-2",
-  off: "text-ink-mute border-line",
-};
-
-export const BLAST_BASE = "rounded-sm border-[0.5px] px-1 t-small face-mono whitespace-nowrap";
-
-export const BLAST_TONE: Record<Blast, "caution" | "done" | undefined> = {
-  prefix: "caution",
-  system: undefined,
-  free: "done",
 };
 
 export const WORLD_ROW =

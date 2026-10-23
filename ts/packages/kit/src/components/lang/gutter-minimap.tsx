@@ -10,7 +10,7 @@ export type MinimapRange = { start: number; end: number };
 export type MinimapMark = { index: number; damage?: string; head?: boolean };
 
 /** Row ordinals, never row measurements. The virtualizer owns the viewport range. */
-export function useMinimap({
+function useMinimap({
   count,
   range,
   onJump,

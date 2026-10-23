@@ -11,7 +11,7 @@ import { withStoredRulings } from "@pe/ducts-domain/rulings";
 import { systemsNeedingFix } from "./system-list-search";
 import { systemList } from "./system-list";
 
-export interface PricingBase {
+interface PricingBase {
   snapshot: DuctSnapshot;
   grids: Grids;
   catalogs: Catalogs;

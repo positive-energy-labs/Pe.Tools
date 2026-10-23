@@ -107,7 +107,7 @@ export function SchedulesView({ data }: OpViewProps) {
   );
 }
 
-export const ANCHOR_VIZ: Record<string, VizIndex> = {
+const ANCHOR_VIZ: Record<string, VizIndex> = {
   Viewport: 1,
   ScheduleInstance: 2,
   TextNote: 6,
