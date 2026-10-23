@@ -28,6 +28,10 @@ const allow = (entries: Record<string, string>): Allow[] =>
 // Filenames use the wave-4 final homes: land.ts, revit-target.tsx and go-to.tsx.
 // prettier-ignore
 const RULES: Rule[] = [
+  { id: "pane-and-picture-stillness", doctrine: "N6",
+    pattern: /settle\(next\);\s*if \(commit|onResize=\{state\.resizeTo\}|export function PictureStage\(/g,
+    roots: [K + "components/lang/pane-resize.tsx", W + "scene/stage-controller.ts"], allow: [],
+    cannotSee: "Aliased writes, fresh props bypassing memo, or browser layout; Profiler tests cover sibling send, focus, 20 drag steps and canvas retention." },
   { id: "list-head-meta-yields-at-360", doctrine: "L3",
     pattern: /^(?![\s\S]*@container list \(max-width: 360px\)\s*\{\s*\.dl-row-colhead-meta,[^{}]*\{\s*display: none;)[\s\S]/g,
     roots: [K + "components/lang/lang.css"], allow: [], cannotSee: "Rendered label width, ellipsis and tooltip layout; LN360 needs browser measurement." },

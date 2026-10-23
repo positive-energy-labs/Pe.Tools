@@ -38,18 +38,6 @@ interface PaneSizeSpec {
   collapse?: PaneCollapseSpec;
 }
 
-interface PaneSizeState {
-  size: number;
-  collapsed: boolean;
-  renderedSize: number;
-  resizeTo: (size: number, containerSize: number | undefined, commit: boolean) => void;
-  /** Re-clamp against a measured container. Hydrated/persisted sizes are clamped only here —
-   * `minOtherSize` is meaningless until the container has a real size — and never persisted,
-   * so a small window doesn't overwrite the size the user actually chose. */
-  fit: (containerSize: number | undefined) => void;
-  reset: () => void;
-}
-
 function clampSize(size: number, spec: PaneSizeSpec, containerSize?: number) {
   const containerMax =
     containerSize == null || containerSize <= 0
@@ -62,85 +50,53 @@ function clampSize(size: number, spec: PaneSizeSpec, containerSize?: number) {
 function storedSize(spec: PaneSizeSpec) {
   if (!spec.persist || typeof window === "undefined") return spec.defaultSize;
   try {
-    const stored = window.localStorage.getItem(spec.persist);
-    if (stored == null) return spec.defaultSize;
-    const saved = Number(stored);
+    const saved = Number(window.localStorage.getItem(spec.persist) ?? spec.defaultSize);
     return Number.isFinite(saved) ? clampSize(saved, spec) : spec.defaultSize;
   } catch {
     return spec.defaultSize;
   }
 }
 
-function usePaneSize(spec: PaneSizeSpec): PaneSizeState {
+function usePaneSize(spec: PaneSizeSpec) {
   const [internalSize, setInternalSize] = useState(() => storedSize(spec));
-  const size = clampSize(internalSize, spec);
   const collapsed = spec.collapse?.collapsed ?? false;
 
-  const setCollapsed = useCallback(
-    (next: boolean) => spec.collapse?.onCollapsedChange?.(next),
-    [spec.collapse],
-  );
-
-  // `spec` is a fresh object each render; only its bounds can change the clamp.
-  const sizeRef = useRef(internalSize);
-  sizeRef.current = internalSize;
-  const specRef = useRef(spec);
-  specRef.current = spec;
-  // A setter that would not change the size does not run.
-  const settle = useCallback((next: number) => {
-    if (next !== sizeRef.current) setInternalSize(next);
+  const current = useRef(spec);
+  current.current = spec;
+  // Container fitting never persists: a small window must not overwrite the chosen size.
+  const fit = useCallback((containerSize?: number) => {
+    setInternalSize((size) => clampSize(size, current.current, containerSize));
   }, []);
-  useEffect(() => {
-    settle(clampSize(sizeRef.current, specRef.current));
-  }, [settle, spec.minSize, spec.maxSize, spec.minOtherSize]);
+  useEffect(() => fit(), [fit, spec.minSize, spec.maxSize]);
 
-  const resizeTo = useCallback(
-    (requested: number, containerSize: number | undefined, commit: boolean) => {
-      const threshold = spec.collapse?.collapseBelow;
-      if (threshold != null && requested < threshold) {
-        setCollapsed(true);
-        return;
+  const resizeTo = (requested: number, containerSize?: number) => {
+    const threshold = spec.collapse?.collapseBelow;
+    if (threshold != null && requested < threshold) {
+      spec.collapse?.onCollapsedChange?.(true);
+      return;
+    }
+
+    if (collapsed) spec.collapse?.onCollapsedChange?.(false);
+    const next = clampSize(requested, spec, containerSize);
+    setInternalSize(next);
+    if (spec.persist && typeof window !== "undefined") {
+      try {
+        window.localStorage.setItem(spec.persist, String(next));
+      } catch {
+        // Persistence is best-effort; layout must remain usable when storage is unavailable.
       }
-
-      if (collapsed) setCollapsed(false);
-      const next = clampSize(requested, spec, containerSize);
-      settle(next);
-      if (commit && spec.persist && typeof window !== "undefined") {
-        try {
-          window.localStorage.setItem(spec.persist, String(next));
-        } catch {
-          // Persistence is best-effort; layout must remain usable when storage is unavailable.
-        }
-      }
-    },
-    [collapsed, setCollapsed, settle, spec],
-  );
-
-  const fit = useCallback(
-    (containerSize: number | undefined) => {
-      if (containerSize == null || containerSize <= 0) return;
-      settle(clampSize(sizeRef.current, specRef.current, containerSize));
-    },
-    [settle],
-  );
-
-  const reset = useCallback(() => {
-    setCollapsed(false);
-    resizeTo(spec.defaultSize, undefined, true);
-  }, [resizeTo, setCollapsed, spec.defaultSize]);
+    }
+  };
 
   return {
-    size,
     collapsed,
-    renderedSize: collapsed ? (spec.collapse?.collapsedSize ?? 0) : size,
+    renderedSize: collapsed ? (spec.collapse?.collapsedSize ?? 0) : clampSize(internalSize, spec),
     resizeTo,
     fit,
-    reset,
+    reset: () => resizeTo(spec.defaultSize),
   };
 }
 
-/** Keep a pane size honest against its measured container — at mount and on every container
- * resize — closing the gap where a persisted size starves the other side until first drag. */
 function usePaneFit(
   ref: React.RefObject<HTMLDivElement | null>,
   measure: (rect: DOMRectReadOnly) => void,
@@ -223,9 +179,8 @@ export function PaneResizeHandle({
     if (!drag.current) return;
     const next = drag.current.latest;
     drag.current = null;
-    if (event.currentTarget.hasPointerCapture(event.pointerId)) {
+    if (event.currentTarget.hasPointerCapture(event.pointerId))
       event.currentTarget.releasePointerCapture(event.pointerId);
-    }
     onResize(next, containerSize(), true);
   };
 
@@ -234,10 +189,7 @@ export function PaneResizeHandle({
     const positive = axis === "horizontal" ? event.key === "ArrowRight" : event.key === "ArrowDown";
     if (!negative && !positive && event.key !== "Home") return;
     event.preventDefault();
-    if (event.key === "Home") {
-      onReset();
-      return;
-    }
+    if (event.key === "Home") return onReset();
     const direction = positive ? 1 : -1;
     onResize(value + growth * direction * KEYBOARD_STEP_PX, containerSize(), true);
   };
@@ -300,8 +252,8 @@ export function PaneSplit({ axis, start, end, resize, hide, grow }: PaneSplitPro
     : resize == null || stacked
       ? "minmax(0, 1fr) var(--gutter) minmax(0, 1fr)"
       : target === "start"
-        ? `${state.renderedSize}px var(--gutter) minmax(0, 1fr)`
-        : `minmax(0, 1fr) var(--gutter) ${state.renderedSize}px`;
+        ? `var(--pane-size, ${state.renderedSize}px) var(--gutter) minmax(0, 1fr)`
+        : `minmax(0, 1fr) var(--gutter) var(--pane-size, ${state.renderedSize}px)`;
   const gridStyle: CSSProperties = horizontal
     ? { gridTemplateColumns: tracks }
     : { gridTemplateRows: tracks };
@@ -415,12 +367,22 @@ export function PaneSplit({ axis, start, end, resize, hide, grow }: PaneSplitPro
           <PaneResizeHandle
             axis={horizontal ? "horizontal" : "vertical"}
             value={state.renderedSize}
-            startValue={state.collapsed ? resize.minSize : state.size}
+            startValue={state.collapsed ? resize.minSize : state.renderedSize}
             min={resize.minSize}
             max={resize.maxSize}
             growth={target === "start" ? 1 : -1}
             containerSize={measuredContainer}
-            onResize={state.resizeTo}
+            onResize={(requested, container, commit) => {
+              // Pointer motion belongs to layout; React owns only the released size/collapse.
+              if (commit) {
+                rootRef.current?.style.removeProperty("--pane-size");
+                state.resizeTo(requested, container);
+              } else
+                rootRef.current?.style.setProperty(
+                  "--pane-size",
+                  `${clampSize(requested, resize, container)}px`,
+                );
+            }}
             onReset={state.reset}
           />
         </div>

@@ -5,6 +5,7 @@ import {
   createContext,
   createElement,
   Fragment,
+  memo,
   useContext,
   useEffect,
   useState,
@@ -188,11 +189,7 @@ function useStageBindings(options: OrbitStage | PlaneStage) {
             })),
           })
         : null,
-    goTo: createElement(
-      Fragment,
-      null,
-      createElement(ScopeGestures, { gestures, host: options.host }),
-    ),
+    goTo: createElement(ScopeGestures, { gestures, host: options.host }) as ReactNode,
     frameOn,
     poseOf,
     go,
@@ -204,7 +201,7 @@ function useStageBindings(options: OrbitStage | PlaneStage) {
 const StageContext = createContext<ReturnType<typeof useStageBindings> | null>(null);
 
 /** The picture host supplies its state once; every nested part gets the same verbs. */
-export function PictureStage({
+export const PictureStage = memo(function PictureStage({
   children,
   goTo,
   ...picture
@@ -253,7 +250,7 @@ export function PictureStage({
       typeof children === "function" ? children(stage) : children,
     ),
   );
-}
+});
 
 /** The picture owns the bindings; consumers only read its verbs. */
 export function useStage() {
