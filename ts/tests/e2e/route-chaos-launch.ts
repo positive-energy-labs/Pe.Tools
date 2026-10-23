@@ -2,8 +2,9 @@
 import { spawn, execFile, type ChildProcess } from "node:child_process";
 import { promisify, parseArgs } from "node:util";
 import { createServer } from "node:net";
-import { mkdir, readFile, readdir, writeFile, rm } from "node:fs/promises";
+import { mkdir, readFile, readdir, writeFile } from "node:fs/promises";
 import { resolve, join } from "node:path";
+import { createHash } from "node:crypto";
 
 const exec = promisify(execFile);
 const { values } = parseArgs({
@@ -40,22 +41,37 @@ const receipt = {
   browser: "",
   browserPort: 0,
   target: "",
+  documentReady: undefined as
+    | { url: string; status: number; elapsedMs: number; bytes: number }
+    | undefined,
+  tray: undefined as
+    | { before: string | null; after: string | null; changed: boolean; sampleMs: number }
+    | undefined,
   result: "running",
   cleanup: [] as string[],
 };
 const save = () => writeFile(join(dir, "custody.json"), JSON.stringify(receipt, null, 2));
+const journeyResultPath = join(dir, "journey-result.json");
 const env: NodeJS.ProcessEnv = { ...process.env, PYTHONIOENCODING: "utf-8" };
 let host: ChildProcess | undefined;
 let testProcess: ChildProcess | undefined;
 let hostLog = "";
 let cancelled = false;
+let documentAbort: AbortController | undefined;
 let token = "";
 let browser: { name: string; port: number } | undefined;
 let browserLaunchAttempted = false;
 let existingBrowsers = new Set<string>();
-const trayPath = join(source, ".artifacts", "dev-tray", "session.json");
-let previousTray: string | undefined;
-let hostInstance = "";
+let trayMonitor: ReturnType<typeof setInterval> | undefined;
+const trayHash = async () => {
+  const bytes = await readFile(join(source, ".artifacts", "dev-tray", "session.json")).catch(
+    (error) => {
+      if (error.code === "ENOENT") return undefined;
+      throw error;
+    },
+  );
+  return bytes ? createHash("sha256").update(bytes).digest("hex") : null;
+};
 const pause = (ms: number) => new Promise((done) => setTimeout(done, ms));
 async function wait<T>(
   read: () => Promise<T | undefined>,
@@ -85,6 +101,7 @@ async function exited(child: ChildProcess, timeout: number) {
 }
 const interrupt = () => {
   cancelled = true;
+  documentAbort?.abort(new Error("Interrupted during source document readiness"));
   if (testProcess)
     void stopOwned(testProcess).catch((error) => receipt.cleanup.push(String(error)));
 };
@@ -118,11 +135,22 @@ try {
   let port = Number(values.port);
   let target = values.target;
   if (values.attached) {
-    if (!web || !port || !target)
+    if (!web || !port || !target || !values.source)
       throw new Error(
-        "Attached mode requires --url, --port and --target; it borrows them without lifecycle changes",
+        "Attached mode requires --url, --port, --target and --source for served-build provenance; it borrows them without lifecycle changes",
       );
   } else {
+    receipt.tray = { before: await trayHash(), after: null, changed: false, sampleMs: 1000 };
+    trayMonitor = setInterval(() => {
+      void trayHash()
+        .then((hash) => {
+          if (hash !== receipt.tray!.before) receipt.tray!.changed = true;
+        })
+        .catch((error) => {
+          receipt.tray!.changed = true;
+          receipt.cleanup.push(`Tray observation: ${String(error)}`);
+        });
+    }, 1000);
     const home = join(dir, "home");
     env.PE_TOOLS_PRODUCT_HOME = home;
     env.LOCALAPPDATA = join(dir, "localappdata");
@@ -140,13 +168,16 @@ try {
     await mkdir(home, { recursive: true });
     await mkdir(env.LOCALAPPDATA!, { recursive: true });
     await mkdir(env.APPDATA!, { recursive: true });
-    previousTray = await readFile(trayPath, "utf8").catch(() => undefined);
-    host = spawn(process.execPath, ["--import", "jiti/register", "src/dev.ts", "--no-revit"], {
-      cwd: join(source, "ts", "apps", "host"),
-      env,
-      stdio: ["ignore", "pipe", "pipe", "ipc"],
-      windowsHide: true,
-    });
+    host = spawn(
+      process.execPath,
+      ["--import", "jiti/register", "src/dev.ts", "--no-revit", "--no-tray"],
+      {
+        cwd: join(source, "ts", "apps", "host"),
+        env,
+        stdio: ["ignore", "pipe", "pipe", "ipc"],
+        windowsHide: true,
+      },
+    );
     host.once("error", (error) => {
       hostLog += `\n${String(error)}`;
     });
@@ -176,7 +207,6 @@ try {
       90_000,
     );
     token = service.token;
-    hostInstance = service.instanceId;
     receipt.hostPort = service.port;
     web = await wait(
       async () => {
@@ -186,6 +216,31 @@ try {
       "source web origin",
       90_000,
     );
+    web = new URL("/ducts?demo=navigation", web).href;
+    receipt.web = web;
+    await save();
+    // A bound Vite port precedes its first SSR import. Keep cold compilation outside
+    // the CDP command deadline; this checks server readiness, never browser acceptance.
+    const documentStart = Date.now();
+    documentAbort = new AbortController();
+    const document = await fetch(web, {
+      signal: AbortSignal.any([AbortSignal.timeout(90_000), documentAbort.signal]),
+    });
+    const html = await document.text();
+    documentAbort = undefined;
+    receipt.documentReady = {
+      url: web,
+      status: document.status,
+      elapsedMs: Date.now() - documentStart,
+      bytes: Buffer.byteLength(html),
+    };
+    await save();
+    if (
+      !document.ok ||
+      !document.headers.get("content-type")?.includes("text/html") ||
+      !/<html\b/i.test(html)
+    )
+      throw new Error(`Source document readiness failed: HTTP ${document.status}`);
     port = await freePort();
     receipt.browserPort = port;
     await save();
@@ -221,7 +276,6 @@ try {
     const pages = targets.filter((target) => target.type === "page");
     if (pages.length !== 1) throw new Error("Owned browser must start with one page");
     target = pages[0]!.id;
-    web = new URL("/ducts?demo=navigation", web).href;
   }
   receipt.web = web!;
   receipt.browserPort = port;
@@ -236,6 +290,7 @@ try {
     CHAOS_SEED: values.seed,
     CHAOS_REQUIRE: values.require,
     CHAOS_PRODUCT_ROOT: source,
+    CHAOS_RESULT_PATH: journeyResultPath,
   };
   testProcess = spawn("vp", ["test", "run", "--config", "tests/e2e/route-chaos.config.ts"], {
     cwd: testTs,
@@ -260,11 +315,7 @@ try {
   process.exitCode = code;
   receipt.result =
     code === 0
-      ? ["refresh", "reconnect", "worker", "thread", "arming"].every((capability) =>
-          values.require.split(",").includes(capability),
-        )
-        ? "passed"
-        : "partial"
+      ? (JSON.parse(await readFile(journeyResultPath, "utf8")) as { result: string }).result
       : "failed";
 } catch (error) {
   receipt.result = String(error);
@@ -327,11 +378,6 @@ try {
       receipt.cleanup.push(
         `owned source host ${host.pid} exited=${host.exitCode ?? host.signalCode}`,
       );
-      const current = await readFile(trayPath, "utf8").catch(() => undefined);
-      if (current && JSON.parse(current).hostInstanceId === hostInstance) {
-        if (previousTray) await writeFile(trayPath, previousTray);
-        else await rm(trayPath);
-      }
     }
   } catch (error) {
     receipt.cleanup.push(`Host cleanup: ${String(error)}`);
@@ -339,6 +385,19 @@ try {
   }
   process.removeListener("SIGINT", interrupt);
   process.removeListener("SIGTERM", interrupt);
+  if (trayMonitor) clearInterval(trayMonitor);
+  if (receipt.tray) {
+    receipt.tray.after = await trayHash().catch((error) => {
+      receipt.tray!.changed = true;
+      receipt.cleanup.push(`Tray final observation: ${String(error)}`);
+      return null;
+    });
+    receipt.tray.changed ||= receipt.tray.after !== receipt.tray.before;
+    if (receipt.tray.changed) {
+      process.exitCode = 1;
+      receipt.result = "failed: shared tray bytes changed during owned --no-tray run";
+    }
+  }
   await save();
   console.log(`Route journey custody: ${dir}`);
 }

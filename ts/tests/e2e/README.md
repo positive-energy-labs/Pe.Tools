@@ -8,21 +8,25 @@ From an integrated checkout, the owned demo is one command:
 vp run --no-cache journey:routes
 ```
 
-The launcher starts `src/dev.ts --no-revit` through the checkout's installed Node/jiti runtime,
+The launcher starts `src/dev.ts --no-revit --no-tray` through the checkout's installed Node/jiti runtime,
 an isolated product home and local SDK/app-data roots, the canonical source Vite child, and a
 private visible chrome-agent instance on a dynamically selected port. It reads the host service
 receipt and returned browser identity, then runs Vitest with `refresh,worker` required. It never
 starts Revit or sends a Pea prompt. The integrated navigation fixture must expose its real demo
 Refresh action. `--seed`, `--require` and `--source` override the default seed, requested coverage
 and served source checkout. `custody.json` and `host.log` live under the dated route-launch run.
+Before launching owned Chrome, the launcher waits up to 90 seconds for the full HTML document.
+Vite can bind its port before the first SSR import completes. The receipt records that setup
+duration separately; HTTP readiness is not browser acceptance and CDP deadlines stay unchanged.
 The launcher restores online networking through the test, stops only its own Chrome, requests
 token-authenticated shutdown of its own host, disconnects its IPC child and bounds process exit.
-It restores the previous dev-tray receipt only while that receipt still names its own host.
+The explicit `--no-tray` producer contract keeps the shared checkout tray receipt untouched.
+The launcher checks its SHA-256 each second and after cleanup, and fails if it changes.
 
 Explicit attached mode borrows the named page/server and leaves their lifecycle to the caller:
 
 ```powershell
-vp run --no-cache journey:routes -- --attached --url 'http://127.0.0.1:5173/ducts?demo=navigation' --port 9255 --target 129DC0038D97FA0AEC5ED4E23D8524D3 --require refresh,worker
+vp run --no-cache journey:routes -- --attached --source C:/path/to/served/Pe.Tools --url 'http://127.0.0.1:5173/ducts?demo=navigation' --port 9255 --target 129DC0038D97FA0AEC5ED4E23D8524D3 --require refresh,worker
 ```
 
 `vp run --no-cache test:route-chaos` from `ts` runs the opt-in `route-chaos.config.ts` suite.
@@ -45,6 +49,7 @@ $env:CHAOS_LANE = 'demo'
 $env:E2E_WEB = 'http://127.0.0.1:<actual web port>/ducts?demo=navigation'
 $env:CHAOS_SEED = '20261023'
 $env:CHAOS_REQUIRE = 'refresh'
+$env:CHAOS_PRODUCT_ROOT = 'C:/path/to/served/Pe.Tools'
 vp run --no-cache test:route-chaos
 # chrome-agent stop <exact instance name returned by launch>
 ```
@@ -52,6 +57,19 @@ vp run --no-cache test:route-chaos
 The same test supports `CHAOS_LANE=host` with a full `/ducts?target=...` URL and no `demo`
 query. The runtime owner supplies the host, document and disposable Work. Neither a saved
 snapshot nor borrowed reads proves native writes. Do not use a person's existing draft or Work.
+
+Both modes require observed real host-fetch `x-pe-web-build` headers to match the named source
+HEAD's canonical 12-character build stamp. Receipts record the source HEAD separately from
+the observed build, and list dirty working-tree paths. A dirty source can only report `partial`.
+An unknown or mismatched served build fails rather than borrowing the harness checkout's HEAD.
+
+The 36-second quiet watchdog witness first requires an accepted route lease and world SSE,
+then waits for initial acquisition to settle. SSE response counts, route-view request counts
+and accepted PUT publication counts must stay exactly unchanged throughout the dwell.
+To exercise the deliberately failing transport control, set `CHAOS_WATCHDOG_RED=disconnect`
+before the same command. It cuts browser networking for one second after the quiet baseline.
+Expect the network-quiescence assertion to fail on reacquisition. A DOM-only failure or
+`RED CONTROL INEFFECTIVE` does not certify the network oracle. Clear that variable for acceptance.
 
 The seed selects rendered system controls, disruption order and outage duration. The story
 searches and filters, travels all → A → B → all, uses Back/Forward, selects a tree row, opens a

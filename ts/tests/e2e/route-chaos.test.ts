@@ -130,7 +130,7 @@ async function state(page: Page) {
         const body = e.querySelector('[data-slot="pane-body"]');
         return { id: e.getAttribute('data-pane-id'), top: body?.scrollTop ?? 0, left: body?.scrollLeft ?? 0 };
       }),
-      armed: [...document.querySelectorAll('button')].filter(shown).filter(e => e.getAttribute('data-preview-action') === 'armed' || (!e.disabled && e.getAttribute('aria-disabled') !== 'true' && /^(apply|write|heal|make fan)\\b/i.test(e.getAttribute('aria-label') || e.innerText.trim()))).map(e => e.getAttribute('aria-label') || e.innerText.trim()),
+      armed: [...document.querySelectorAll('button')].filter(shown).filter(e => !e.disabled && e.getAttribute('aria-disabled') !== 'true' && /^(apply|write|heal|make fan)\\b/i.test(e.getAttribute('aria-label') || e.innerText.trim())).map(e => e.getAttribute('aria-label') || e.innerText.trim()),
       alerts: [...document.querySelectorAll('[role="alert"]')].filter(shown).map(e => e.innerText),
       loading: [...document.querySelectorAll('[data-e-pricing], [data-e-loading], [data-e-opening]')].some(shown),
       refreshing: [...document.querySelectorAll('[data-e-refreshing], [data-e-capturing]')].some(shown)
@@ -216,10 +216,16 @@ test("seeded real-user route journey", async () => {
   const lane = process.env.CHAOS_LANE;
   const root = execFileSync("git", ["rev-parse", "--show-toplevel"], { encoding: "utf8" }).trim();
   const commit = execFileSync("git", ["rev-parse", "HEAD"], { encoding: "utf8" }).trim();
-  const productCheckout = process.env.CHAOS_PRODUCT_ROOT ?? root;
-  const productCommit = execFileSync("git", ["-C", productCheckout, "rev-parse", "HEAD"], {
+  const productCheckout = process.env.CHAOS_PRODUCT_ROOT;
+  if (!productCheckout)
+    throw new Error("PRECONDITION: CHAOS_PRODUCT_ROOT must name the served source checkout");
+  const productSourceCommit = execFileSync("git", ["-C", productCheckout, "rev-parse", "HEAD"], {
     encoding: "utf8",
   }).trim();
+  const productDirty = () =>
+    execFileSync("git", ["-C", productCheckout, "status", "--porcelain"], {
+      encoding: "utf8",
+    }).trim();
   const dir = resolve(
     root,
     ".artifacts",
@@ -234,7 +240,9 @@ test("seeded real-user route journey", async () => {
     commit,
     checkout: root,
     productCheckout,
-    productCommit,
+    productSourceCommit,
+    productDirty: productDirty(),
+    observedWebBuilds: [] as string[],
     started: new Date().toISOString(),
     target: process.env.CDP_TARGET,
     port: process.env.CDP_PORT,
@@ -266,7 +274,11 @@ test("seeded real-user route journey", async () => {
       loaderId?: string;
     }[],
   };
-  const save = () => writeFileSync(join(dir, "receipt.json"), JSON.stringify(receipt, null, 2));
+  const save = () => {
+    const json = JSON.stringify(receipt, null, 2);
+    writeFileSync(join(dir, "receipt.json"), json);
+    if (process.env.CHAOS_RESULT_PATH) writeFileSync(process.env.CHAOS_RESULT_PATH, json);
+  };
   let page: Page | undefined;
   let current = 0;
   let workerSession: string | undefined;
@@ -432,6 +444,12 @@ test("seeded real-user route journey", async () => {
       page.onEvent((event) => {
         if (event.method === "Network.requestWillBeSent") {
           const request = event.params.request;
+          for (const [name, value] of Object.entries(request.headers ?? {}))
+            if (
+              name.toLowerCase() === "x-pe-web-build" &&
+              !receipt.observedWebBuilds.includes(String(value))
+            )
+              receipt.observedWebBuilds.push(String(value));
           let leaseThread: string | undefined;
           if (new URL(request.url).pathname === "/pe/route-view/ducts" && request.postData) {
             try {
@@ -441,6 +459,14 @@ test("seeded real-user route journey", async () => {
             }
           }
           requests.set(event.params.requestId, { method: request.method, leaseThread });
+          receipt.network.push({
+            method: event.method,
+            url: request.url,
+            requestId: event.params.requestId,
+            requestMethod: request.method,
+            loaderId: event.params.loaderId,
+            leaseThread,
+          });
         }
         if (event.method === "Network.loadingFinished")
           finishedRequests.add(event.params.requestId);
@@ -486,6 +512,17 @@ test("seeded real-user route journey", async () => {
         );
       receipt.coverage.browser = JSON.stringify(await page.send("Browser.getVersion"));
       await settled(page);
+      await page.until(
+        async () => receipt.observedWebBuilds.length > 0,
+        "real host-fetch x-pe-web-build header",
+      );
+      expect(
+        receipt.observedWebBuilds,
+        "served web build must match the named source checkout",
+      ).toEqual([productSourceCommit.slice(0, 12)]);
+      receipt.coverage.provenance = receipt.productDirty
+        ? "UNPROVEN: served header matches source HEAD, but working tree is dirty; exact source bytes are unproven"
+        : "observed real host-fetch x-pe-web-build matches clean source HEAD";
     });
     const p = checkPage();
     let a = "";
@@ -638,16 +675,97 @@ test("seeded real-user route journey", async () => {
         "observed world SSE subscription URL",
         15_000,
       );
+      const counts = () => ({
+        sseResponses: receipt.network.filter((e) => e.stream && e.loaderId === loaderId).length,
+        routeRequests: receipt.network.filter(
+          (e) =>
+            e.method === "Network.requestWillBeSent" &&
+            e.loaderId === loaderId &&
+            e.url &&
+            new URL(e.url).pathname === "/pe/route-view/ducts",
+        ).length,
+        routePublications: receipt.network.filter(
+          (e) =>
+            e.method === "Network.responseReceived" &&
+            e.loaderId === loaderId &&
+            e.url &&
+            new URL(e.url).pathname === "/pe/route-view/ducts" &&
+            e.status === 200 &&
+            e.requestMethod === "PUT",
+        ).length,
+      });
+      // Let initial acquisitions finish, then hold an exact baseline. No allowance for periodic storms.
+      let baseline = counts();
+      let stableSince = Date.now();
+      await p.until(
+        async () => {
+          const now = counts();
+          if (JSON.stringify(now) !== JSON.stringify(baseline)) {
+            baseline = now;
+            stableSince = Date.now();
+          }
+          return (
+            Date.now() - stableSince >= 2000 &&
+            receipt.network
+              .filter(
+                (e) =>
+                  e.method === "Network.requestWillBeSent" &&
+                  e.loaderId === loaderId &&
+                  e.url &&
+                  new URL(e.url).pathname === "/pe/route-view/ducts",
+              )
+              .every((e) => !!e.requestId && finishedRequests.has(e.requestId))
+          );
+        },
+        "initial world/route acquisition quiescence",
+        15_000,
+      );
       receipt.coverage.watchdog = JSON.stringify({
         dwellMs: 36_000,
         leaseUrl: lease.url,
         revision: accepted.revision,
         worldStreamUrl: world.url,
         sampledEveryMs: 100,
+        baseline,
+        redControl: process.env.CHAOS_WATCHDOG_RED ?? null,
       });
       await untouched(async () => {
-        await sleep(36_000);
+        const red = process.env.CHAOS_WATCHDOG_RED;
+        if (red) {
+          if (red !== "disconnect")
+            throw new Error("Unknown CHAOS_WATCHDOG_RED; expected disconnect");
+          await p.send("Network.emulateNetworkConditions", {
+            offline: true,
+            latency: 0,
+            downloadThroughput: -1,
+            uploadThroughput: -1,
+          });
+          await sleep(1000);
+          await p.send("Network.emulateNetworkConditions", {
+            offline: false,
+            latency: 0,
+            downloadThroughput: -1,
+            uploadThroughput: -1,
+          });
+        }
+        const end = Date.now() + 36_000;
+        while (Date.now() < end) {
+          await sleep(100);
+          expect(
+            counts(),
+            "quiet watchdog: no SSE reconnect or route-view reacquisition/publication",
+          ).toEqual(baseline);
+        }
+        if (red)
+          throw new Error(
+            "RED CONTROL INEFFECTIVE: transport disruption did not change observed acquisition counts",
+          );
         await settled(p);
+      });
+      receipt.coverage.watchdog = JSON.stringify({
+        ...JSON.parse(receipt.coverage.watchdog),
+        final: counts(),
+        result: "36s DOM and exact network quiescence passed",
       });
     });
 
@@ -887,8 +1005,22 @@ test("seeded real-user route journey", async () => {
         "persisted a real Work cell via UI; native Preview armed Write; refresh and route return disarmed Write. Native write consumption remains UNPROVEN";
     });
     expect(p.errors, "no uncaught browser exceptions").toEqual([]);
+    expect(receipt.observedWebBuilds, "served build remains the named source build").toEqual([
+      productSourceCommit.slice(0, 12),
+    ]);
+    expect(productDirty(), "served source tree did not change during the run").toBe(
+      receipt.productDirty,
+    );
+    expect(
+      execFileSync("git", ["-C", productCheckout, "rev-parse", "HEAD"], {
+        encoding: "utf8",
+      }).trim(),
+      "served source HEAD did not change during the run",
+    ).toBe(productSourceCommit);
     receipt.result =
-      receipt.omitted.length || receipt.steps.some((item) => item.status === "unavailable")
+      receipt.productDirty ||
+      receipt.omitted.length ||
+      receipt.steps.some((item) => item.status === "unavailable")
         ? "partial"
         : "passed";
     await p.dump(dir, "final");
