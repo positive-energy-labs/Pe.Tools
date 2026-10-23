@@ -10,6 +10,7 @@ import {
   type RefObject,
 } from "react";
 import { cn } from "../../lib/utils";
+import { SubjectTextContext, useReachState } from "./reach";
 
 export const floatingSurface =
   "max-h-(--available-height) overflow-y-auto overscroll-contain t-small text-ink float-surface outline-none";
@@ -18,13 +19,15 @@ export type FloatingPosition = Pick<
   "side" | "align" | "sideOffset" | "alignOffset"
 >;
 
-const Subject = createContext<DOMRect | RefObject<Element | null> | null>(null);
+const Subject = createContext<DOMRect | RefObject<Element | null> | (() => DOMRect | null) | null>(
+  null,
+);
 /** The picture, row or bar supplies its box once, without overlay-specific props. */
 export function SubjectBox({
   box,
   children,
 }: {
-  box: DOMRect | RefObject<Element | null> | null;
+  box: DOMRect | RefObject<Element | null> | (() => DOMRect | null) | null;
   children: ReactNode;
 }) {
   return <Subject.Provider value={box}>{children}</Subject.Provider>;
@@ -173,7 +176,14 @@ export function sideAwayFrom(anchor: DOMRect, subject: DOMRect): Side {
 
 export function useSubjectPosition(anchor: Element | null) {
   const subject = useContext(Subject);
-  const box = subject && "current" in subject ? subject.current?.getBoundingClientRect() : subject;
+  const picture = useReachState(useContext(SubjectTextContext)?.reach, (state) => state.picture);
+  const source = subject ?? picture;
+  const box =
+    typeof source === "function"
+      ? source()
+      : source && "current" in source
+        ? source.current?.getBoundingClientRect()
+        : source;
   if (!box || !anchor) return null;
   const rect = anchor.getBoundingClientRect();
   const side = sideAwayFrom(rect, box);

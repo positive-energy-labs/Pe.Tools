@@ -1167,7 +1167,7 @@ svg [data-damage] {
   outline: 2px solid var(--pe-ink);
   outline-offset: -2px;
 }
-[data-svg-tip]:is(
+:is([data-svg-tip], svg [data-revit-ids]):is(
   [data-reach="reach"],
   [data-reach="hover"],
   [data-reach="focus"],

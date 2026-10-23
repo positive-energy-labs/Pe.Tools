@@ -6,6 +6,14 @@ import type { OrbitViewport } from "./orbit";
 import { createLiveOrbit } from "@pe/kit/lang/live-orbit";
 import { OrbitMinimap } from "@pe/kit/lang/minimap";
 import { Scene3D } from "./scene3d";
+import { Row } from "@pe/kit/lang/row";
+import type { Pick } from "./types";
+
+const picking = vi.hoisted(() => ({ current: null as Pick | null }));
+vi.mock("./picking", async (original) => ({
+  ...(await original<typeof import("./picking")>()),
+  pickAt: () => picking.current,
+}));
 
 const renderer = vi.hoisted(() => ({ current: null as any }));
 vi.mock("./renderer", () => ({
@@ -42,6 +50,8 @@ it("keeps motion local, publishes on release and accepts external camera moves",
     setLayers: vi.fn(),
     lightIssue: vi.fn(),
     pickIssue: () => null,
+    reach: vi.fn(),
+    hoverElement: vi.fn(),
     setClip: vi.fn(),
     dispose: vi.fn(),
   };
@@ -55,7 +65,19 @@ it("keeps motion local, publishes on release and accepts external camera moves",
       maxY: 1,
       maxZ: 1,
     },
-    [],
+    [
+      {
+        key: "mesh42",
+        revitId: 42,
+        uniqueId: "uid42",
+        documentKey: "doc",
+        linkInstanceId: null,
+        category: "test",
+        focus: true,
+        firstVertex: 0,
+        vertexCount: 3,
+      },
+    ],
   );
   const onViewport = vi.fn();
   const onPick = vi.fn();
@@ -64,9 +86,21 @@ it("keeps motion local, publishes on release and accepts external camera moves",
     <>
       <Scene3D readout={<span>picture state</span>} meshes={meshes} orbit={orbit} onPick={onPick} />
       <OrbitMinimap orbit={orbit} />
+      <Row label="linked row" revit={[42]} />
     </>,
   );
   expect(view.getByText("picture state")).toBeTruthy();
+  const row = view.getByText("linked row").closest(".dl-row")!;
+  fireEvent.mouseEnter(row);
+  expect(renderer.current.paint.mock.lastCall[3]).toEqual(new Set(["mesh42"]));
+  fireEvent.mouseLeave(row);
+  expect(renderer.current.paint.mock.lastCall[3]).toEqual(new Set());
+  picking.current = { instance: meshes.instances[0]!, point: [0, 0, 0] };
+  fireEvent.pointerMove(renderer.current.canvas);
+  expect(row.getAttribute("data-reach")).toBe("hover");
+  fireEvent.pointerLeave(renderer.current.canvas);
+  expect(row.getAttribute("data-reach")).toBe("rest");
+  picking.current = null;
   const globe = view.getByRole("group", { name: "orbit globe" });
   const initialGlobe = globe.innerHTML;
   act(() => {

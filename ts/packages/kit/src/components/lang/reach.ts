@@ -43,9 +43,10 @@ export type Reach = {
   lighting: SubjectLighting;
   hovered: number | null;
   issue: string | null;
+  picture: (() => DOMRect | null) | null;
 };
 export function reachStore() {
-  let state: Reach = { lighting: NO_LIGHTING, hovered: null, issue: null };
+  let state: Reach = { lighting: NO_LIGHTING, hovered: null, issue: null, picture: null };
   const listeners = new Set<() => void>();
   return {
     get: () => state,
@@ -64,6 +65,7 @@ export function reachStore() {
 }
 type ReachStore = ReturnType<typeof reachStore>;
 const IDLE = reachStore();
+export const useReachChannel = () => useContext(SubjectTextContext)?.reach ?? IDLE;
 /** One slice of the reach state; `pick` must return a stable value (a field or a primitive). */
 export function useReachState<T>(
   store: ReachStore | null | undefined,
@@ -89,7 +91,7 @@ export function useReach(id?: number): ReachRung {
 }
 export function useReachSetter<K extends "hovered" | "issue">(field: K, channel?: ReachStore) {
   const context = useContext(SubjectTextContext);
-  const store = channel ?? context?.reach;
+  const store = channel ?? context?.reach ?? IDLE;
   return useCallback(
     (value: Reach[K]) =>
       store?.set((state) => (state[field] === value ? state : { ...state, [field]: value })),

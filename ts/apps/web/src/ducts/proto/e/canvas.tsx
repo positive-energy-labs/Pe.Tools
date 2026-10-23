@@ -36,10 +36,9 @@ import { labelOfNode, legsOf } from "../../legs";
 import { sceneRequestOf } from "../../manifest";
 import { findingLayers, findingShapes, noRunLayers } from "../../finding-layers";
 import { boundsOfIds, ModelPicture, poseOf, usePictureBounds } from "../../model-picture";
-import { PictureStage, useStage, stageViewport } from "#/scene/stage-controller";
+import { PictureStage, useStage, stageViewport, projectBounds } from "#/scene/stage-controller";
 import { GoToSubject } from "./go-to";
 import { PictureReadout } from "@pe/kit/lang/readout";
-import { PaneCrumb } from "@pe/kit/lang/pane-crumb";
 import { RunDetail, runOf } from "./run-detail";
 import { DEFAULT_DESIGN_FRICTION_RATE } from "@pe/ducts-domain/equivalent-length";
 import { ProvisionalNote } from "../../provisional";
@@ -59,7 +58,7 @@ import { usePictureFloaters } from "./picture-floaters";
 import { RulingBody, useMarks } from "./rulings";
 import { noRunParts } from "../../subject-text";
 import { SubjectText } from "@pe/kit/lang/subject-text";
-import { SubjectTextContext } from "@pe/kit/lang/reach";
+import { SubjectTextContext, useReachState, useReachChannel } from "@pe/kit/lang/reach";
 
 const LAYER_WORDS: Record<
   (typeof DUCTS_LAYERS)[number],
@@ -90,13 +89,7 @@ function OpeningNote() {
 
 export interface ECanvasExtra {
   issues: readonly StageIssue[];
-  hoveredIssue: string | null;
   onIssueHover: (key: string | null) => void;
-  /** The element set a sidebar row lights; empty lights nothing. */
-  lit: ReadonlySet<number>;
-  /** The element under the pointer, here or in a pane (the screen's reach store). */
-  hovered: number | null;
-  onHover: (id: number | null) => void;
   /** The system's groups (stable, `systemScope`); the picture draws every one. */
   groups: readonly string[];
   /** The group whose fan the header reads: the system's largest; the schematic draws it. */
@@ -119,7 +112,6 @@ export interface ECanvasExtra {
     open: () => void;
     /** The critical run's loss groups under the ESP, with the system's fans at its head. */
     breakdown: { split: Split; scale: number; fans: () => ReactNode } | null;
-    /** The title's root crumb: back to every system. */
     allSystems: () => void;
   };
   /** The screen's alias picks call this when the subject is already the selection: fly again. */
@@ -149,13 +141,9 @@ function Canvas({
   claims,
   onVerdict,
   work,
-  hovered: fallbackHovered,
-  onHover: fallbackOnHover,
-  lit,
   issueScope,
   annotated,
   issues,
-  hoveredIssue,
   onIssueHover,
   groups,
   lead,
@@ -167,10 +155,10 @@ function Canvas({
   onSelect,
   onPose,
 }: ProtoProps & ECanvasExtra & { snapshot: NonNullable<ProtoProps["snapshot"]> }) {
-  const { hovered, onHover } = useSceneReach({
-    hovered: fallbackHovered,
-    onHover: fallbackOnHover,
-  });
+  const { hovered, onHover } = useSceneReach();
+  const reach = useReachChannel();
+  const lit = useReachState(reach, (state) => state.lighting.ids);
+  const hoveredIssue = useReachState(reach, (state) => state.issue);
   const observation = useNativeObservation();
   const index = useMemo(() => indexOf(snapshot, priced), [snapshot, priced]);
   const labelOf = useMemo(() => labelOfNode(snapshot), [snapshot]);
@@ -396,27 +384,7 @@ function Canvas({
     const rect = pictureHost?.querySelector("[data-model-picture]")?.getBoundingClientRect();
     const now = orbit.read();
     const project = b && now && bounds && rect ? viewportProject(now, bounds.scene, rect) : null;
-    const points =
-      b && project
-        ? [b.minX, b.maxX].flatMap((x) =>
-            [b.minY, b.maxY].flatMap((y) =>
-              [b.minZ, b.maxZ].flatMap((z) => {
-                const p = project([x, y, z]);
-                return p ? [p] : [];
-              }),
-            ),
-          )
-        : [];
-    const xs = points.map((p) => p[0] + rect!.left);
-    const ys = points.map((p) => p[1] + rect!.top);
-    return points.length
-      ? DOMRect.fromRect({
-          x: Math.min(...xs),
-          y: Math.min(...ys),
-          width: Math.max(...xs) - Math.min(...xs),
-          height: Math.max(...ys) - Math.min(...ys),
-        })
-      : null;
+    return b && project && rect ? projectBounds(b, project, rect) : null;
   };
   const pick = (id: number | null) => {
     setOpenRuling(null);
@@ -470,14 +438,10 @@ function Canvas({
   });
 
   const ruled = openRuling == null ? null : (rulings.find((r) => r.n === openRuling) ?? null);
-  // The title is a breadcrumb: the system (press it to clear the selection), then the picked
-  // element. Its state, a switch and a re-read speak in the plate: the header strip leaves the
-  // title too little room for them.
   const pickedId =
     page.selected && /^\d+$/.test(page.selected) && !claims.some((c) => c.id === page.selected)
       ? Number(page.selected)
       : null;
-  const pickedName = pickedId == null ? null : nameOf(pickedId);
   const subjects = useContext(SubjectTextContext);
   const systemState = identity.system ? systemIssues(identity.system) : [];
   const readId = pickedId;
@@ -488,33 +452,6 @@ function Canvas({
     priced && page.system && readId != null
       ? runOf(priced, systemScope(snapshot, page.system).groups, readId)
       : null;
-  const title = (
-    <PaneCrumb
-      segments={
-        systemName == null
-          ? [{ label: "All systems" }]
-          : [
-              { label: "Systems", onPress: identity.allSystems },
-              {
-                label: systemName,
-                onPress:
-                  pickedName == null
-                    ? undefined
-                    : () => setPage({ selected: "" }, { history: "push" }),
-              },
-              ...(pickedName == null || pickedId == null
-                ? []
-                : [
-                    {
-                      label: pickedName,
-                      onPress: () => subjects?.go?.(pickedId),
-                      revit: [pickedId],
-                    },
-                  ]),
-            ]
-      }
-    />
-  );
 
   const viewOf = (stage: ReturnType<typeof useStage>, ids: ReadonlySet<number>) =>
     picture === "model" ? stage.poseOf(boundsOfIds(read.meshes, scene, ids)) : null;
@@ -584,6 +521,7 @@ function Canvas({
         // The picture and a held picture share the current selection readout.
         const readout = (
           <PictureReadout
+            subject={systemName ?? undefined}
             title={readId == null ? undefined : nameOrFallback(nameOf(readId))}
             onClear={readId == null ? undefined : () => pick(null)}
             foot={
@@ -746,7 +684,7 @@ function Canvas({
             layers={layers}
             encoding={scale.encoding}
             selected={selected}
-            lit={litAll}
+            lit={lit}
             hovered={hovered}
             labels={labels}
             rulings={marks}
@@ -769,7 +707,11 @@ function Canvas({
           <Pane
             picture
             id="e-picture"
-            title={title}
+            title={
+              <Button label="All systems" onClick={identity.allSystems}>
+                Systems
+              </Button>
+            }
             scroll="clip"
             flush
             actions={
@@ -873,7 +815,6 @@ function Canvas({
                   ref={landPicture}
                 />
               ) : null}
-
             </div>
           </Pane>
         );

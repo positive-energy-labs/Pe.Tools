@@ -1,21 +1,26 @@
-import { useCallback, type ReactNode } from "react";
+import { useCallback, useContext, useEffect, type ReactNode } from "react";
 import { X } from "lucide-react";
-import { PaneOverlay } from "./pane";
+import { PaneOverlay, PictureReadoutContext } from "./pane";
 import { Button } from "./button";
 import "./lang.css";
 
 /** Selection replaces the summary in one dock; clearing it never owns a viewport move. */
 export function PictureReadout({
+  subject,
   title,
   onClear,
   children,
   foot,
 }: {
+  /** The picture's named subject, retained above an individual selection in the pane crumb. */
+  subject?: ReactNode;
   title?: ReactNode;
   onClear?: () => void;
   children: ReactNode;
   foot?: ReactNode;
 }) {
+  const register = useContext(PictureReadoutContext);
+  useEffect(() => register?.({ subject, title, onClear }), [register, subject, title, onClear]);
   const selected = title != null;
   // Native and non-passive: the picture's wheel listener skips the claimed event.
   const body = useCallback((node: HTMLDivElement | null) => {

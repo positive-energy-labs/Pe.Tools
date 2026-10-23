@@ -1,5 +1,4 @@
 import { land } from "@pe/kit/lang/land";
-import { SubjectBox } from "@pe/kit/lang/popover";
 /**
  * THROWAWAY (protoui round 3): E2 ("C simplicity, B layout"). LEFT a resizable double sidebar: a
  * top pane (all systems | the chosen system, tree over Inputs) over a bottom pane (all-systems
@@ -588,7 +587,6 @@ function LoadedScreenBody({
     },
     [reach],
   );
-  const setHovered = useReachSetter("hovered", reach);
   const setHoveredIssue = useReachSetter("issue", reach);
   const issues = useMemo(() => (inbox ? stageIssues(inbox) : []), [inbox]);
   // The picture's alias jump: selection and the view that shows it, one Page write.
@@ -884,7 +882,6 @@ function LoadedScreenBody({
             nameOf={nameOf}
             selected={selected}
             select={select}
-            light={light}
           />
         </Pane>
       ) : null,
@@ -1084,102 +1081,97 @@ function LoadedScreenBody({
     [subjectName, reach, lightSubjects, clearSubjects, holdSubjects, select, subjectProps],
   );
 
-  const picture = useRef<HTMLDivElement>(null);
   return (
-    <SubjectBox box={picture}>
-      <SubjectTextContext.Provider value={subjectContext}>
-        <div ref={rootRef} data-proto="E2" className="flex size-full min-h-0">
-          <BarRules snapshot={drawn!} work={work} priced={priced}>
-            <DuctSettings work={work} rate={designRate} snapshot={snapshot} scope={scope} />
-            <PaneSplit
-              axis="horizontal"
-              resize={{
-                target: "start",
-                defaultSize: 420,
-                minSize: 280,
-                maxSize: 760,
-                // The picture keeps 360 beside the inbox rail; a tight screen starts with the sidebar a rail.
-                minOtherSize: 392,
-                persist: "proto-e-sidebar",
-                collapse: {
-                  collapsed: sidebarCollapsed,
-                  onCollapsedChange: (collapsed) => {
-                    if (!collapsed) setPanePriority("sidebar");
-                    setTreeCollapsed(collapsed);
-                  },
-                  collapsedSize: 32,
-                  collapseBelow: 200,
-                  title: scope?.name ?? "systems",
+    <SubjectTextContext.Provider value={subjectContext}>
+      <div ref={rootRef} data-proto="E2" className="flex size-full min-h-0">
+        <BarRules snapshot={drawn!} work={work} priced={priced}>
+          <DuctSettings work={work} rate={designRate} snapshot={snapshot} scope={scope} />
+          <PaneSplit
+            axis="horizontal"
+            resize={{
+              target: "start",
+              defaultSize: 420,
+              minSize: 280,
+              maxSize: 760,
+              // The picture keeps 360 beside the inbox rail; a tight screen starts with the sidebar a rail.
+              minOtherSize: 392,
+              persist: "proto-e-sidebar",
+              collapse: {
+                collapsed: sidebarCollapsed,
+                onCollapsedChange: (collapsed) => {
+                  if (!collapsed) setPanePriority("sidebar");
+                  setTreeCollapsed(collapsed);
                 },
-              }}
-              start={left}
-              end={
-                <PaneSplit
-                  axis="horizontal"
-                  resize={{
-                    target: "end",
-                    defaultSize: 340,
-                    minSize: 260,
-                    maxSize: 520,
-                    minOtherSize: width > 0 && width < TIGHT_PX ? 240 : 360,
-                    persist: "proto-e-inbox",
-                    collapse: {
-                      collapsed: !inboxShown,
-                      onCollapsedChange: (collapsed) => {
-                        if (!collapsed) setPanePriority("inbox");
-                        setInboxOpen(!collapsed);
-                      },
-                      collapsedSize: 32,
-                      collapseBelow: 200,
-                      title: `Rulings · ${toRule}`,
+                collapsedSize: 32,
+                collapseBelow: 200,
+                title: scope?.name ?? "systems",
+              },
+            }}
+            start={left}
+            end={
+              <PaneSplit
+                axis="horizontal"
+                resize={{
+                  target: "end",
+                  defaultSize: 340,
+                  minSize: 260,
+                  maxSize: 520,
+                  minOtherSize: width > 0 && width < TIGHT_PX ? 240 : 360,
+                  persist: "proto-e-inbox",
+                  collapse: {
+                    collapsed: !inboxShown,
+                    onCollapsedChange: (collapsed) => {
+                      if (!collapsed) setPanePriority("inbox");
+                      setInboxOpen(!collapsed);
                     },
-                  }}
-                  start={
-                    <div ref={picture} className="relative size-full min-w-0">
-                      <ReachCanvas
-                        {...props}
-                        reach={reach}
-                        onHover={setHovered}
-                        issueScope={issueScope}
-                        annotated={annotated}
-                        issues={issues}
-                        onIssueHover={setHoveredIssue}
-                        scale={encoded}
-                        nameOf={nameOf}
-                        jump={jump}
-                        groups={drawGroups}
-                        lead={leadGroup}
-                        identity={{
-                          system: chosenRow,
-                          census,
-                          refreshing: props.reading.refreshing,
-                          open: () => pick("right"),
-                          breakdown:
-                            (critical?.split ?? tree?.[0]?.split) && scale
-                              ? {
-                                  split: (critical?.split ?? tree?.[0]?.split)!,
-                                  scale,
-                                  fans: () => (
-                                    <FanFacts
-                                      facts={fanFacts(priced, groups, nameOf)}
-                                      nameOf={nameOf}
-                                    />
-                                  ),
-                                }
-                              : null,
-                          allSystems: () => setPage({ system: "", selected: "", issue: "" }),
-                        }}
-                      />
-                    </div>
-                  }
-                  end={inboxPane}
-                />
-              }
-            />
-          </BarRules>
-        </div>
-      </SubjectTextContext.Provider>
-    </SubjectBox>
+                    collapsedSize: 32,
+                    collapseBelow: 200,
+                    title: `Rulings · ${toRule}`,
+                  },
+                }}
+                start={
+                  <div className="relative size-full min-w-0">
+                    <ECanvas
+                      {...props}
+                      issueScope={issueScope}
+                      annotated={annotated}
+                      issues={issues}
+                      onIssueHover={setHoveredIssue}
+                      scale={encoded}
+                      nameOf={nameOf}
+                      jump={jump}
+                      groups={drawGroups}
+                      lead={leadGroup}
+                      identity={{
+                        system: chosenRow,
+                        census,
+                        refreshing: props.reading.refreshing,
+                        open: () => pick("right"),
+                        breakdown:
+                          (critical?.split ?? tree?.[0]?.split) && scale
+                            ? {
+                                split: (critical?.split ?? tree?.[0]?.split)!,
+                                scale,
+                                fans: () => (
+                                  <FanFacts
+                                    facts={fanFacts(priced, groups, nameOf)}
+                                    nameOf={nameOf}
+                                  />
+                                ),
+                              }
+                            : null,
+                        allSystems: () => setPage({ system: "", selected: "", issue: "" }),
+                      }}
+                    />
+                  </div>
+                }
+                end={inboxPane}
+              />
+            }
+          />
+        </BarRules>
+      </div>
+    </SubjectTextContext.Provider>
   );
 }
 
@@ -1296,24 +1288,6 @@ const SystemsList = memo(function SystemsList({
     />
   );
 });
-
-/** The picture redraws on every reach (lit rows, hovered element, hovered issue); the screen does not. */
-function ReachCanvas({
-  reach,
-  ...props
-}: Omit<ComponentProps<typeof ECanvas>, "lit" | "hovered" | "hoveredIssue"> & {
-  reach: ReturnType<typeof reachStore>;
-}) {
-  const state = useReachState(reach, (s) => s);
-  return (
-    <ECanvas
-      {...props}
-      lit={state.lighting.ids}
-      hovered={state.hovered}
-      hoveredIssue={state.issue}
-    />
-  );
-}
 
 /** The inbox redraws only when the hovered issue (its rail) changes. */
 function ReachInbox({

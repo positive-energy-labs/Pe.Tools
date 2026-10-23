@@ -8,6 +8,10 @@ The one-system design cluster: the design LANGUAGE (raw values in `apps/web/src/
 
 ## Decided
 
+- 2026-10-23, I4: A picture `Pane` derives its crumb from its scope title, `PictureReadout` subject and selection, and `PictureStage` selection state. `PaneCrumb.segments` remains only for a scope the picture cannot know.
+- 2026-10-23, I5: A picture `Pane` supplies its projected selection box, or pane rectangle, through the reach channel. `SubjectPopoverContent` uses it across sibling panes; routes do not provide `SubjectBox`.
+- 2026-10-23, N7: `Scene3D` and plane-stage native targets share the kit row reach channel. Ducts retains aggregate lighting and footnote numbering.
+
 - 2026-10-23, P1: `Pane picture` requires a legend; `Scene3D` and plane hosts require a readout slot; `PictureStage` requires the go-to slot; zero-argument `useStage` reads its node and verbs from that context. Kit keeps `useScopeGestures` private; the existing `ScopeGestures` component declares scoped gestures with these rendered slots.
 
 - 2026-10-23, I2, `kit-census.guard.test.ts` / `css-damage-owner`: Damage selectors and pulse have one kit CSS owner.
