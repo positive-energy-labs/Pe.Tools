@@ -20,7 +20,7 @@ it("keeps Send's refusal under Send on the overlay plane without changing the dr
       tools={<span>ready</span>}
     />
   );
-  const { container, rerender } = render(view(null));
+  const { rerender } = render(view(null));
   const draft = screen.getByRole("textbox");
   const send = screen.getByRole("button", { name: "send" });
   // base-ui stamps a `data-base-ui-inert` marker on the popup's ancestor siblings for outside-press
