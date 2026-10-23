@@ -41,9 +41,10 @@ it("derives one chip from busy descendants, clears it, and keeps nested panes se
   const { container, rerender } = render(view(true));
   const outer = screen.getByRole("region", { name: "outer" });
   await waitFor(() =>
-    expect(outer.querySelector(':scope > [data-slot="pane-work"]')?.textContent).toBe(
-      "capturing meshes… gestures wait · reading…",
-    ),
+    expect(
+      outer.querySelector(':scope > [data-slot="pane-field"] > [data-slot="pane-work"]')
+        ?.textContent,
+    ).toBe("capturing meshes… gestures wait · reading…"),
   );
   expect(container.querySelectorAll('[data-slot="pane-work"]')).toHaveLength(2);
   expect(outer.querySelector('[data-slot="pane-field"]')?.getAttribute("data-working")).toBe(
@@ -56,7 +57,11 @@ it("derives one chip from busy descendants, clears it, and keeps nested panes se
       </Pane>
     </Pane>,
   );
-  await waitFor(() => expect(outer.querySelector(':scope > [data-slot="pane-work"]')).toBeNull());
+  await waitFor(() =>
+    expect(
+      outer.querySelector(':scope > [data-slot="pane-field"] > [data-slot="pane-work"]'),
+    ).toBeNull(),
+  );
   expect(container.querySelectorAll('[data-slot="pane-work"]')).toHaveLength(1);
 });
 

@@ -15,7 +15,8 @@ import {
 
 import { KeyScope, useScopeKeys, type Chord } from "@pe/kit/keys";
 
-export const PANE_OBSTACLES = "[data-slot='pane-legend'], [data-picture-readout]";
+export const PANE_OBSTACLES =
+  "[data-slot='pane-legend'], [data-picture-readout], [data-slot='pane-work']";
 
 type Corner = "tl" | "tr" | "bl" | "br";
 
@@ -124,13 +125,19 @@ function useYield(
     run();
     const moved = () => requestAnimationFrame(run);
     field.addEventListener(MOVED, moved);
-    if (typeof ResizeObserver === "undefined") return () => field.removeEventListener(MOVED, moved);
-    const observer = new ResizeObserver(run);
-    observer.observe(field);
-    observer.observe(own);
-    field.querySelectorAll(PANE_OBSTACLES).forEach((el) => observer.observe(el));
+    const observer = typeof ResizeObserver === "undefined" ? null : new ResizeObserver(run);
+    observer?.observe(field);
+    observer?.observe(own);
+    const obstacles = () => {
+      field.querySelectorAll(PANE_OBSTACLES).forEach((el) => observer?.observe(el));
+      run();
+    };
+    const children = new MutationObserver(obstacles);
+    children.observe(field, { childList: true });
+    obstacles();
     return () => {
-      observer.disconnect();
+      children.disconnect();
+      observer?.disconnect();
       field.removeEventListener(MOVED, moved);
     };
   }, [ref, place, preferred?.width, preferred?.height]);

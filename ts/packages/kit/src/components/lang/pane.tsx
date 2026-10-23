@@ -84,7 +84,7 @@ function usePaneWork(host: React.RefObject<HTMLElement | null>) {
 export const PictureContext = createContext<{
   selected: boolean;
   box: () => DOMRect | null;
-  layers?: ReactNode;
+  projection?: ReactNode;
 } | null>(null);
 type ReadoutIdentity = { subject?: ReactNode; title?: ReactNode; onClear?: () => void };
 export const PictureReadoutContext = createContext<
@@ -327,10 +327,13 @@ export function Pane({
     (modes?.options.length ?? 0) > 0 ||
     (floaters?.length ?? 0) > 0 ||
     (layers?.options.length ?? 0) > 0 ||
-    (picture && stage?.layers) ? (
-      <PaneStrip modes={modes} floaters={floaters} layers={layers}>
-        {picture && stage?.layers}
-      </PaneStrip>
+    (picture && stage?.projection) ? (
+      <PaneStrip
+        modes={modes}
+        floaters={floaters}
+        layers={layers}
+        projection={picture && stage?.projection}
+      />
     ) : null;
   const heading = (
     <>
@@ -430,12 +433,12 @@ export function Pane({
                     spec.open ? <Floater key={spec.key} spec={spec} /> : null,
                   )}
                   <PaneGestureLegend host={rootRef}>{legend}</PaneGestureLegend>
+                  {work.length > 0 && (
+                    <div data-slot="pane-work" role="status" className="t-small">
+                      {[...new Set(work.map((entry) => entry.label))].join(" · ")}
+                    </div>
+                  )}
                 </div>
-                {work.length > 0 && (
-                  <div data-slot="pane-work" role="status" className="t-small">
-                    {[...new Set(work.map((entry) => entry.label))].join(" · ")}
-                  </div>
-                )}
               </PaneOverlayContext>
             </section>
           </KeyScope>

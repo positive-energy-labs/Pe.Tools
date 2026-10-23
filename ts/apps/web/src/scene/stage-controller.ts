@@ -190,7 +190,7 @@ function useStageBindings(options: OrbitStage | PlaneStage) {
     { keys: ["Alt", "← / →"], label: "back / forward (also mouse buttons 3 / 4)" },
   ];
   return {
-    layers:
+    projection:
       options.kind === "orbit" && !options.axis
         ? createElement(Switcher<NonNullable<OrbitViewport["projection"]>>, {
             ariaLabel: "projection",
@@ -261,7 +261,7 @@ export function PictureStage({
   };
   return createElement(
     PictureContext,
-    { value: { selected: picture.selectedBounds != null, box, layers: bindings.layers } },
+    { value: { selected: picture.selectedBounds != null, box, projection: bindings.projection } },
     createElement(
       StageContext,
       { value: stage },

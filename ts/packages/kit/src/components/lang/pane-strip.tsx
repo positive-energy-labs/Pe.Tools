@@ -110,8 +110,8 @@ export function PaneStrip({
   modes,
   floaters,
   layers,
-  children,
-}: PaneStripProps & { children?: ReactNode }) {
+  projection,
+}: PaneStripProps & { projection?: ReactNode }) {
   const live = useScopeLive();
   const [ref, fold] = useFold();
   const bind = (option: StripOption, run: () => void): ScopeKey[] =>
@@ -189,10 +189,10 @@ export function PaneStrip({
             {floaterButtons}
           </Folded>
         ))}
-      {(layers || children) &&
+      {(layers || projection) &&
         (fold < 1 ? (
           <ButtonGroup label="layers">
-            {children}
+            {projection}
             {layerButtons}
           </ButtonGroup>
         ) : (
@@ -200,7 +200,7 @@ export function PaneStrip({
             label="layers"
             count={layers ? `${layers.value.length}/${layers.options.length}` : ""}
           >
-            {children}
+            {projection}
             {layerButtons}
           </Folded>
         ))}

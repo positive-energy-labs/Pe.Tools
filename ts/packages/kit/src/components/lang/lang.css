@@ -7,8 +7,7 @@
   width: 100%;
   height: 100%;
 }
-[data-slot="pane-field"][data-working],
-[data-slot="pane-field"][data-working] * {
+[data-slot="pane-field"][data-working] {
   cursor: progress;
 }
 [data-slot="pane-work"] {
