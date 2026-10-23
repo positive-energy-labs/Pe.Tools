@@ -23,7 +23,8 @@ import { useScopeGestures, useScopeKeys, useScopeLive } from "../../keys";
 import { OutcomeLine } from "./outcome";
 import { ListPopup, StatusLine } from "./list-popup";
 import { ListSearchBox } from "./list-search";
-import { land, Row, type RowProps } from "./row";
+import { land } from "./land";
+import { Row, type RowProps } from "./row";
 import "./lang.css";
 import { focusQuiet } from "../../lib/utils";
 
@@ -60,17 +61,15 @@ function pressSection(
 export function ListBar<T, Sort extends string>({
   list,
   label,
-  primary = false,
   compact = false,
 }: {
   list: ListController<T, Sort>;
   label: string;
-  primary?: boolean;
   /** Keep narrow-pane controls on one horizontally scrollable line. */
   compact?: boolean;
 }) {
   const input = useRef<HTMLInputElement>(null);
-  useListSearchFocus(input, list.target, primary);
+  useListSearchFocus(input, list.target);
   const defaultOrder = list.grouped ? "Shelf order" : "Input order";
   const sortItems = [
     { key: "", label: defaultOrder },
@@ -112,10 +111,6 @@ export interface ListViewProps<T, Sort extends string = string> {
   empty: { message: string; exit: string };
   /** Omit when the surrounding pane already owns scrolling. */
   maxHeight?: string;
-  estimate?: number;
-  overscan?: number;
-  primary?: boolean;
-  bar?: boolean;
   columns?: { label: ReactNode; meta?: ReactNode };
   /** Open state is the same data-owned `open` used for tree expansion. */
   detail?: (item: T) => ReactNode;
@@ -133,10 +128,8 @@ export function ListView<T, Sort extends string = string>(props: ListViewProps<T
 }
 
 /** Small collections share rows, keys and sections without search chrome or virtualization. */
-export function PlainList<T, Sort extends string = string>(
-  props: Omit<ListViewProps<T, Sort>, "bar" | "primary" | "estimate" | "overscan">,
-) {
-  return <ListRenderer {...props} bar={false} plain />;
+export function PlainList<T, Sort extends string = string>(props: ListViewProps<T, Sort>) {
+  return <ListRenderer {...props} plain />;
 }
 
 function ListRenderer<T, Sort extends string>(props: ListViewProps<T, Sort> & { plain?: boolean }) {
@@ -144,7 +137,7 @@ function ListRenderer<T, Sort extends string>(props: ListViewProps<T, Sort> & { 
     { pointer: "click", label: "select the row" },
     { pointer: "hover", label: "move the cursor" },
   ]);
-  const { list, row, empty, maxHeight, estimate = 40, overscan = 6, detail } = props;
+  const { list, row, empty, maxHeight, detail } = props;
   const [root, setRoot] = useState<HTMLDivElement | null>(null);
   const [scroller, setScroller] = useState<HTMLElement | null>(null);
   useLayoutEffect(() => {
@@ -209,6 +202,7 @@ function ListRenderer<T, Sort extends string>(props: ListViewProps<T, Sort> & { 
       }
     : null;
   const label = props["aria-label"];
+  const searching = !props.plain && (list.total > 7 || list.filtering || !!list.state.sort);
   // Rows render through this ref, so a memoized row that skipped a render still acts on today's list.
   const live = useRef(list);
   live.current = list;
@@ -238,7 +232,7 @@ function ListRenderer<T, Sort extends string>(props: ListViewProps<T, Sort> & { 
           }}
         />
       )}
-      {props.bar !== false ? <ListBar list={list} label={label} primary={props.primary} /> : null}
+      {searching ? <ListBar list={list} label={label} /> : null}
       {props.columns ? (
         <div className="dl-row-colhead" role="presentation" data-tree-columns="">
           <span className="dl-row-colhead-label">{props.columns.label}</span>
@@ -247,7 +241,7 @@ function ListRenderer<T, Sort extends string>(props: ListViewProps<T, Sort> & { 
           ) : null}
         </div>
       ) : null}
-      {props.bar === false && list.collection.reading === "pending" && list.total ? (
+      {!searching && list.collection.reading === "pending" && list.total ? (
         <div data-list-bar="">
           <OutcomeLine kind="busy" label="reading…" />
         </div>
@@ -314,8 +308,6 @@ function ListRenderer<T, Sort extends string>(props: ListViewProps<T, Sort> & { 
               reportRange={overview.rows.length >= MINIMAP_FROM ? reportRange : undefined}
               row={row}
               scroller={scroller}
-              estimate={estimate}
-              overscan={overscan}
               detail={detail}
               request={request}
               served={served}
@@ -337,8 +329,6 @@ type SectionBodyProps<T, Sort extends string> = {
   rows: readonly ListItem<T>[];
   row: (item: T) => ListRowParts;
   scroller: HTMLElement | null;
-  estimate: number;
-  overscan: number;
   detail?: (item: T) => ReactNode;
   /** The latest scroll request (key move or reveal) and the last one a body honoured. */
   request: string;
@@ -479,8 +469,6 @@ function VirtualSectionBody<T, Sort extends string>({
   rows,
   row,
   scroller,
-  estimate,
-  overscan,
   detail,
   request,
   served,
@@ -516,12 +504,15 @@ function VirtualSectionBody<T, Sort extends string>({
       .forEach((element) => observer.observe(element));
     return () => observer.disconnect();
   }, [scroller, list.sections.length, list.state.closed, rows.length]);
+  const estimate = scroller
+    ? parseFloat(getComputedStyle(scroller).getPropertyValue("--item-h")) || 20
+    : 20;
   const virtual = useVirtualizer({
     count: rows.length,
     getScrollElement: () => scroller,
     estimateSize: () => estimate,
     getItemKey: (index) => rows[index]!.key,
-    overscan,
+    overscan: 6,
     scrollMargin: margin ?? 0,
     scrollPaddingStart: headroom,
     scrollPaddingEnd: headroom,
@@ -596,7 +587,6 @@ export interface SearchKeyOwner {
   region: () => HTMLElement | null;
   focus: () => void;
   available?: () => boolean;
-  primary?: boolean;
 }
 const targets = new Set<SearchKeyOwner>();
 const listeners = new Set<() => void>();
@@ -618,14 +608,14 @@ export function scrollParent(el: HTMLElement | null): HTMLElement | null {
   return null;
 }
 
-/** The filter `/` goes to: the one with focus in its region, then the one under the pointer, then the primary. */
+/** The filter `/` goes to: the one with focus in its region, then the one under the pointer, then the first live list. */
 function pick(): SearchKeyOwner | null {
   const all = [...targets].filter((t) => t.available?.() !== false);
   const active = document.activeElement;
   return (
     all.find((t) => active && t.region()?.contains(active)) ??
     all.find((t) => t.region()?.matches(":hover")) ??
-    all.find((t) => t.primary) ??
+    all[0] ??
     null
   );
 }
@@ -639,9 +629,6 @@ export function useSearchKey(owner: SearchKeyOwner) {
     region: () => latest.current.region(),
     focus: () => latest.current.focus(),
     available: () => latest.current.available?.() !== false,
-    get primary() {
-      return latest.current.primary;
-    },
   }));
   useEffect(() => {
     if (!live) return;
@@ -661,7 +648,7 @@ export function useSearchKey(owner: SearchKeyOwner) {
           {
             hotkey: "/",
             label: "Search",
-            says: "Search the focused region, then the region under the pointer, then the primary list.",
+            says: "Search the focused region, then the region under the pointer, then the first live list.",
             callback: (event) => {
               // The composer owns slash commands while its text field has focus.
               if (
@@ -686,7 +673,6 @@ export function useSearchKey(owner: SearchKeyOwner) {
 function useListSearchFocus(
   input: RefObject<HTMLInputElement | null>,
   region: HTMLElement | null | undefined,
-  primary: boolean,
 ) {
   useSearchKey({
     region: () =>
@@ -694,7 +680,6 @@ function useListSearchFocus(
       input.current?.closest<HTMLElement>("[data-list-view]") ??
       scrollParent(input.current),
     available: () => !!input.current,
-    primary,
     focus: () => {
       focusQuiet(input.current);
       input.current?.select();

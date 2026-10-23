@@ -163,7 +163,7 @@ export const RulesTree = memo(function RulesTree({
                   />
                 </span>
               ),
-              revitIds: [n.id],
+              revit: [n.id],
               onMouseEnter: () => light([n.id]),
               wrap: true,
             };
@@ -186,7 +186,7 @@ export const RulesTree = memo(function RulesTree({
             meta: `×${n.ids.length}${missing ? ` · ${missing} unpriced` : ""}`,
             lines: 2,
             wrap: true,
-            revitIds: n.ids,
+            revit: n.ids,
             onMouseEnter: () => light(n.ids),
           };
         }}
@@ -205,7 +205,7 @@ export const RulesTree = memo(function RulesTree({
                 : undefined;
               return {
                 label: family ?? nameOf(first!),
-                revitIds: [...ids],
+                revit: [...ids],
                 meta: ids.size ? `×${ids.size}` : undefined,
                 lines: 2,
                 wrap: true,

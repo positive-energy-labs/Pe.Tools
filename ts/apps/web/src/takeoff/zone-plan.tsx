@@ -1,6 +1,6 @@
 import { contentViewport, fitFrame, type Bounds2 } from "#/lib/affine-frame";
 import { pathD } from "#/takeoff/model";
-import { revitTarget } from "@pe/kit/lang/row";
+import { revitTarget } from "@pe/kit/lang/revit-target";
 import { cn } from "@pe/kit/lib/utils";
 
 export function ZoneThumb({

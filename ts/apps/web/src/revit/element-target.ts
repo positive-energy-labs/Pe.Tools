@@ -1,5 +1,5 @@
 import { documentRefSchema, type ActionReceipt, type DocumentRef } from "@pe/agent-contracts";
-import { revitTarget, type RevitElementReference } from "@pe/kit/lang/row";
+import { revitTarget, type RevitElementReference } from "@pe/kit/lang/revit-target";
 import type { OpRequestOf, OpResponseOf } from "@pe/host-contracts/operation-types";
 import type { DetachedAction } from "../../../../packages/mcps/src/shared/takeoff-action-client";
 

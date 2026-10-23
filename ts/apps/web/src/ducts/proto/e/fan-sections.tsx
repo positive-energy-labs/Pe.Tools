@@ -1,6 +1,6 @@
 import { TooltipHint } from "@pe/kit/lang/tooltip";
 import { LeaderDiagram } from "@pe/kit/lang/leader-diagram";
-import { RevitTarget } from "@pe/kit/lang/row";
+import { RevitTarget } from "@pe/kit/lang/revit-target";
 import { useNativeObservation } from "#/revit/observation";
 /**
  * A system's fans (ducts-domain `fan-sections.ts`), in words: one line per fan, largest design flow

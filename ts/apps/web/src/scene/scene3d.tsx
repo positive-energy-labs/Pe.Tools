@@ -1,4 +1,4 @@
-import { RevitTarget } from "@pe/kit/lang/row";
+import { RevitTarget } from "@pe/kit/lang/revit-target";
 /**
  * The one 3D renderer in the web app. The route's viewport (a Page key of kind `orbit`) owns the
  * committed pose. The shared LiveOrbit owns motion from either canvas or globe until release.
@@ -17,7 +17,7 @@ import { RevitTarget } from "@pe/kit/lang/row";
  * canvases this canvas paints each axis into.
  */
 import { useEffect, useRef, useState, type ReactNode } from "react";
-import { revitTarget } from "@pe/kit/lang/row";
+import { revitTarget } from "@pe/kit/lang/revit-target";
 import { viewportCodec } from "@pe/agent-contracts";
 import { type ElementTarget } from "#/revit/element-target";
 import {

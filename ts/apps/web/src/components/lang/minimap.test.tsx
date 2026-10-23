@@ -1,5 +1,5 @@
 import { reachStore } from "@pe/kit/lang/reach";
-import { SubjectTextContext } from "@pe/kit/lang/subject-text";
+import { SubjectTextContext } from "@pe/kit/lang/reach";
 import { Row } from "@pe/kit/lang/row";
 import { useSceneReach } from "#/scene/reach";
 import { createLiveOrbit } from "#/scene/live-orbit";
@@ -184,7 +184,7 @@ test("the kit row channel lights the globe through the one scene adapter without
   }
   const view = render(
     <SubjectTextContext value={{ nameOf: () => "duct", reach: channel }}>
-      <Row label="duct" revitIds={[42]} />
+      <Row label="duct" revit={[42]} />
       <Picture />
     </SubjectTextContext>,
   );

@@ -19,7 +19,8 @@ import type { Claim } from "../../legs";
 import type { Scene } from "../../scene";
 import type { ProtoProps } from "../props";
 import { fmtFt } from "./bar";
-import { SubjectText, SubjectTextContext } from "@pe/kit/lang/subject-text";
+import { SubjectText } from "@pe/kit/lang/subject-text";
+import { SubjectTextContext } from "@pe/kit/lang/reach";
 
 /** Cumulative effective length from the fan to each element, in equivalent feet, along priced paths. */
 function cumulativeOf(priced: ProtoProps["priced"]): Map<number, number> {
@@ -142,7 +143,7 @@ export function RulingBody({
         </p>
         <p>
           {subjects ? (
-            <SubjectText text={r.claim.text} ids={r.claim.at} />
+            <SubjectText text={r.claim.text} revit={r.claim.at} />
           ) : (
             <ClaimText
               parts={claimParts(r.claim.text, nameOfId)}
@@ -190,7 +191,7 @@ export function RulingBody({
       <p>
         <SubjectText
           text={r.issue.note}
-          ids={r.issue.elementId == null ? [] : [r.issue.elementId]}
+          revit={r.issue.elementId == null ? [] : [r.issue.elementId]}
         />
       </p>
       <p className="text-ink-2">{info.what} No verdict verb exists for a snapshot issue.</p>

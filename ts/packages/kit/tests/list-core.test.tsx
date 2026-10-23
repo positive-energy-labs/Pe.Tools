@@ -20,7 +20,7 @@ import {
 import { type ListSearch } from "@pe/agent-contracts";
 import { ListBar, ListView, PlainList, useSearchKey } from "../src/components/lang/list-view";
 import { List, ListPopup } from "../src/components/lang/list-popup";
-import { land } from "../src/components/lang/row";
+import { land } from "../src/components/lang/land";
 import { readGestures, readKeyMeta, readRegistrations } from "../src/keys";
 
 const search = (keywords = "", pills: Record<string, string> = {}): ListSearch => ({
@@ -37,7 +37,6 @@ test("slash targets a separate filter bar from its focused list body", () => {
         <ListBar list={list} label="separate" />
         <ListView
           list={list}
-          bar={false}
           aria-label="separate"
           row={(item) => ({ label: item.name })}
           empty={{ message: "Empty", exit: "Add a row" }}
@@ -300,7 +299,7 @@ test("unknown versions, fields and operators refuse instead of broadening", () =
 
 test("completion is explicit, cancels losslessly, previews token removal, and replaces pills", async () => {
   function Harness() {
-    const list = useList({ ...options, items: items.slice(0, 3) });
+    const list = useList({ ...options, items: items.slice(0, 8) });
     return (
       <ListView
         list={list}
@@ -324,18 +323,18 @@ test("completion is explicit, cancels losslessly, previews token removal, and re
   expect(input.getAttribute("aria-activedescendant")).toBeTruthy();
   fireEvent.keyDown(input, { key: "Enter" });
   const picker = screen.getByRole("combobox", { name: "Choose Kind" });
-  expect(screen.getByRole("option", { name: /Supply2/ })).toBeTruthy();
+  expect(screen.getByRole("option", { name: /Supply4/ })).toBeTruthy();
   fireEvent.keyDown(picker, { key: "Escape" });
   expect(input.getAttribute("value")).toBe("System kind");
   fireEvent.change(input, { target: { value: "System kin" } });
   fireEvent.change(input, { target: { value: "System kind" } });
   fireEvent.keyDown(input, { key: "ArrowDown" });
   fireEvent.keyDown(input, { key: "Enter" });
-  fireEvent.click(screen.getByRole("option", { name: /Supply2/ }));
+  fireEvent.click(screen.getByRole("option", { name: /Supply4/ }));
   expect(input.getAttribute("value")).toBe("System");
   expect(screen.getByRole("button", { name: 'Remove the "Kind: Supply" narrowing' })).toBeTruthy();
   fireEvent.click(screen.getByRole("button", { name: "Kind: Supply" }));
-  fireEvent.click(screen.getByRole("option", { name: /Return1/ }));
+  fireEvent.click(screen.getByRole("option", { name: /Return4/ }));
   expect(screen.queryByRole("button", { name: 'Remove the "Kind: Supply" narrowing' })).toBeNull();
   expect(screen.getByRole("button", { name: 'Remove the "Kind: Return" narrowing' })).toBeTruthy();
   fireEvent.keyDown(input, { key: "Escape" });
@@ -350,7 +349,7 @@ test("completion is explicit, cancels losslessly, previews token removal, and re
 
 test("a typed word completes as a ghost, Tab or → takes it, and Backspace reopens the last pill", () => {
   function Harness() {
-    const list = useList({ ...options, items: items.slice(0, 3) });
+    const list = useList({ ...options, items: items.slice(0, 8) });
     return (
       <ListView
         list={list}
@@ -403,7 +402,7 @@ test("a stable row callback lets a selection redraw only the rows it touched", (
     return { label: item.name };
   };
   function Harness() {
-    const list = useList({ ...options, items: items.slice(0, 5) });
+    const list = useList({ ...options, items: items.slice(0, 8) });
     return (
       <ListView
         list={list}
@@ -423,7 +422,7 @@ test("a stable row callback lets a selection redraw only the rows it touched", (
 test("Filter preserves keywords, exposes disabled zero values, and Enter never picks a data row", () => {
   const picked = vi.fn();
   function Harness() {
-    const list = useList({ ...options, items: items.slice(0, 3), onPick: picked });
+    const list = useList({ ...options, items: items.slice(0, 8), onPick: picked });
     return (
       <ListView
         list={list}
@@ -518,7 +517,6 @@ test("small-list keyboard and repeated reveal scroll the mounted row with the ne
         <button onClick={() => list.reveal("10039")}>Reveal last</button>
         <ListView
           list={list}
-          bar={false}
           maxHeight="100px"
           aria-label="small systems"
           row={(item) => ({ label: item.name })}
@@ -690,7 +688,7 @@ test("an external combobox inside another row retains collection keys and ListBa
   host.remove();
   const pick = vi.fn();
   function Harness() {
-    const list = useList({ ...options, items: items.slice(0, 2), onPick: pick });
+    const list = useList({ ...options, items: items.slice(0, 8), onPick: pick });
     return (
       <ListView
         list={list}
@@ -712,7 +710,7 @@ test("an external combobox inside another row retains collection keys and ListBa
 
 test("after Enter commits completion, ArrowDown enters filtered rows and Escape keeps its layers", () => {
   const picked = vi.fn();
-  const data = items.slice(0, 3).map((item) => ({ ...item, name: `${item.kind} ${item.name}` }));
+  const data = items.slice(0, 8).map((item) => ({ ...item, name: `${item.kind} ${item.name}` }));
   function Fixture() {
     const list = useList({ ...options, items: data, onPick: picked });
     return (
@@ -730,7 +728,7 @@ test("after Enter commits completion, ArrowDown enters filtered rows and Escape 
   fireEvent.change(input, { target: { value: "System" } });
   fireEvent.click(screen.getByRole("button", { name: "Filter committed search" }));
   fireEvent.click(screen.getByRole("option", { name: /^Filter by Kind/ }));
-  fireEvent.click(screen.getByRole("option", { name: /Supply2/ }));
+  fireEvent.click(screen.getByRole("option", { name: /Supply4/ }));
   fireEvent.change(input, { target: { value: "Sup" } });
   expect(input.getAttribute("aria-expanded")).toBe("true");
   fireEvent.keyDown(input, { key: "Enter" });
@@ -761,7 +759,6 @@ test("list help declares pointer behavior and keeps cursor keys registered once"
     return (
       <ListView
         list={list}
-        bar={false}
         aria-label="gesture list"
         row={(item) => ({ label: item.name })}
         empty={{ message: "Empty", exit: "Add a row" }}
@@ -833,8 +830,8 @@ test("persist owns search and sort without publishing selection-only changes", (
 test("slash arbitration prioritizes focused regions, leaves text editing alone and hands off on unmount", () => {
   const first = vi.fn(),
     second = vi.fn();
-  function Owner({ id, primary, focus }: { id: string; primary?: boolean; focus: () => void }) {
-    useSearchKey({ region: () => document.getElementById(id), primary, focus });
+  function Owner({ id, focus }: { id: string; focus: () => void }) {
+    useSearchKey({ region: () => document.getElementById(id), focus });
     return (
       <div id={id} tabIndex={0}>
         <input aria-label={id} />
@@ -843,7 +840,7 @@ test("slash arbitration prioritizes focused regions, leaves text editing alone a
   }
   const view = render(
     <>
-      <Owner id="first" primary focus={first} />
+      <Owner id="first" focus={first} />
       <Owner id="second" focus={second} />
     </>,
   );
@@ -857,7 +854,7 @@ test("slash arbitration prioritizes focused regions, leaves text editing alone a
   screen.getByRole("textbox", { name: "second" }).focus();
   fireEvent.keyDown(document.activeElement!, { key: "/", code: "Slash" });
   expect(second).toHaveBeenCalledTimes(1);
-  view.rerender(<Owner id="second" primary focus={second} />);
+  view.rerender(<Owner id="second" focus={second} />);
   document.getElementById("second")!.focus();
   fireEvent.keyDown(document.activeElement!, { key: "/", code: "Slash" });
   expect(second).toHaveBeenCalledTimes(2);

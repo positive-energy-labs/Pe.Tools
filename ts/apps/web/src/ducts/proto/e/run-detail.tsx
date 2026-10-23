@@ -1,5 +1,5 @@
 import { useNativeObservation } from "#/revit/observation";
-import { RevitTarget, revitTarget } from "@pe/kit/lang/row";
+import { RevitTarget, revitTarget } from "@pe/kit/lang/revit-target";
 import { useList } from "@pe/kit/lang/collection";
 import { PlainList } from "@pe/kit/lang/list-view";
 /**
@@ -157,7 +157,7 @@ export function RunDetail({
               label: nameOf(part.id),
               aside: part.stated ? "stated" : undefined,
               title: part.desc,
-              revitIds: [part.id],
+              revit: [part.id],
               onMouseEnter: () => light([part.id]),
               meta: `${fmtFt(part.eqFt)} · ${fmt(part.dp, 4)}`,
             })}

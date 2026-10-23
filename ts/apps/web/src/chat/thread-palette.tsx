@@ -39,7 +39,7 @@ import { Dialog, DialogContent, DialogTitle } from "@pe/kit/lang/dialog";
 import { ListPopup } from "@pe/kit/lang/list-popup";
 import { Input } from "@pe/kit/lang/input";
 import { useList, type ListState, type ListPersist } from "@pe/kit/lang/collection";
-import { ListBar, ListView, type ListRowParts } from "@pe/kit/lang/list-view";
+import { ListView, type ListRowParts } from "@pe/kit/lang/list-view";
 import { Button } from "@pe/kit/lang/button";
 import { ProviderMark } from "#/components/lang/provider-mark";
 import { useSurfaceHost } from "#/navigation/surface-host";
@@ -662,7 +662,6 @@ export function ThreadsSidebar({
   onSelect,
   address,
   compactRows: compactRowsOverride,
-  primary = false,
   searchSerial = 0,
   reading = false,
   ...verbs
@@ -915,7 +914,6 @@ export function ThreadsSidebar({
       aria-label="Threads"
       className="flex h-full min-h-0 flex-col"
     >
-      <ListBar list={list} label="threads" compact primary={primary} />
       {list.state.selected.length ? (
         <div className="flex flex-wrap items-center gap-1">
           <span>{list.state.selected.length} selected</span>
@@ -934,8 +932,6 @@ export function ThreadsSidebar({
         <ListView
           list={list}
           aria-label="threads"
-          bar={false}
-          estimate={compactRows ? 20 : 40}
           empty={
             reading
               ? { message: "reading threads…", exit: "" }

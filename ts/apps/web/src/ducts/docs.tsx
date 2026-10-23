@@ -88,7 +88,7 @@ function DuctsDocs() {
         and a click on it swaps the two. Each move is one step Back can undo; dragging the camera is
         not.
       </p>
-      <KeyLegend keys={PICTURE_KEYS} lead={PICTURE_KEYS.length} defaultOpen bind={false} />
+      <KeyLegend keys={PICTURE_KEYS} lead={PICTURE_KEYS.length} defaultOpen />
 
       <h3>Rules and findings</h3>
       <p>

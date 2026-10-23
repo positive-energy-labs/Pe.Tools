@@ -2,7 +2,7 @@
 import { act, fireEvent, renderHook } from "@testing-library/react";
 import { afterEach, expect, it, vi } from "vite-plus/test";
 import { createLiveOrbit } from "./live-orbit";
-import { useStage, stageViewport } from "./stage-controller";
+import { PictureStage, useStage, stageViewport } from "./stage-controller";
 import { frame } from "./orbit";
 import type { Bounds } from "./types";
 
@@ -18,20 +18,23 @@ it("selecting only changes the pivot; F frames at release; Escape clears and kee
   const frames: FrameRequestCallback[] = [];
   vi.stubGlobal("requestAnimationFrame", (callback: FrameRequestCallback) => frames.push(callback));
   const clearSelection = vi.fn();
-  const view = renderHook(
-    ({ selectedBounds }: { selectedBounds: Bounds | null }) =>
-      useStage({
-        kind: "orbit",
-        orbit,
-        bounds: { scene, subject: scene },
-        host: null,
-        selectedBounds,
-        clearSelection,
-      }),
-    { initialProps: { selectedBounds: null as Bounds | null } },
-  );
-
-  view.rerender({ selectedBounds: target });
+  let selectedBounds: Bounds | null = null;
+  const view = renderHook(() => useStage(), {
+    wrapper: ({ children }) => (
+      <PictureStage
+        kind="orbit"
+        orbit={orbit}
+        bounds={{ scene, subject: scene }}
+        host={null}
+        selectedBounds={selectedBounds}
+        clearSelection={clearSelection}
+      >
+        {children}
+      </PictureStage>
+    ),
+  });
+  selectedBounds = target;
+  view.rerender();
   expect(orbit.read()).toEqual(initial);
   expect(publish).not.toHaveBeenCalled();
   expect(view.result.current.orbitPivot).toEqual([25, 25, 15]);
@@ -53,7 +56,8 @@ it("selecting only changes the pivot; F frames at release; Escape clears and kee
   expect(clearSelection).toHaveBeenCalledOnce();
   expect(orbit.read()).toEqual(framed);
 
-  view.rerender({ selectedBounds: null });
+  selectedBounds = null;
+  view.rerender();
   act(() => {
     fireEvent.keyDown(document.body, { key: "f", code: "KeyF" });
   });

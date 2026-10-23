@@ -280,7 +280,6 @@ export function Directory({ page: address }: { page: AddressPage<"home"> }) {
         list={list}
         row={row}
         aria-label="tools and saved Works"
-        primary
         empty={{
           message: "No tools in this exposure",
           exit: "Choose All exposure to see the catalogue",

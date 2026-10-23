@@ -1,4 +1,11 @@
-import { useEffect, useState } from "react";
+import {
+  createContext,
+  createElement,
+  useContext,
+  useEffect,
+  useState,
+  type ReactNode,
+} from "react";
 import { chordLabel, useScopeGestures, useScopeKeys, type ScopeKey } from "@pe/kit/keys";
 import type { PlaneViewport } from "@pe/agent-contracts";
 import { clearPose, subjectPose, type PictureBounds } from "./framing";
@@ -22,7 +29,6 @@ export const stageViewport =
 type Common = {
   host: HTMLElement | null;
   clearSelection: () => void;
-  extraKeys?: readonly ScopeKey[];
   onHistoryStep?: () => void;
 };
 type OrbitStage = Common & {
@@ -30,8 +36,8 @@ type OrbitStage = Common & {
   orbit: LiveOrbit;
   bounds: PictureBounds | null;
   selectedBounds: Bounds | null;
-  /** Pending N1 ruling: Space axes retain their Escape-to-3D and fit-only framing. */
-  spaceAxisException?: { label: string; escape: () => void; frame: () => void } | null;
+  /** An orthographic axis retains its return pose and fit-only framing. */
+  axis?: { label: string; escape: () => void; frame: () => void } | null;
 };
 type PlaneStage = Common & {
   kind: "plane";
@@ -41,7 +47,7 @@ type PlaneStage = Common & {
 };
 
 /** Selection is input to the pivot only. Only these named verbs may move a stage. */
-export function useStage(options: OrbitStage | PlaneStage) {
+function useStageBindings(options: OrbitStage | PlaneStage) {
   const go = useViewHistory(options.onHistoryStep);
   const [body, setBody] = useState<HTMLElement | null>(null);
   useEffect(() => setBody(document.body), []);
@@ -62,7 +68,7 @@ export function useStage(options: OrbitStage | PlaneStage) {
       if (next) options.viewport.move(next, "move");
       return;
     }
-    if (options.spaceAxisException) return options.spaceAxisException.frame();
+    if (options.axis) return options.axis.frame();
     const pose = poseOf(target);
     if (pose) flyTo(options.orbit, pose, { scene: options.bounds?.scene });
   };
@@ -79,7 +85,7 @@ export function useStage(options: OrbitStage | PlaneStage) {
             hotkey: "P",
             label: "plan or isometric",
             says: "Look down or isometric, keeping pivot and zoom",
-            available: () => !options.spaceAxisException,
+            available: () => !options.axis,
             callback: () => {
               const now = options.orbit.read();
               if (now)
@@ -92,24 +98,19 @@ export function useStage(options: OrbitStage | PlaneStage) {
             hotkey: "N",
             label: "look north",
             says: "Look north, keeping elevation, pivot and zoom",
-            available: () => !options.spaceAxisException,
+            available: () => !options.axis,
             callback: () => {
               glideLook(options.orbit);
             },
           },
         ] satisfies ScopeKey[])
       : []),
-    ...(options.extraKeys ?? []),
   ];
   const escape: ScopeKey = {
     hotkey: "Escape",
-    label:
-      options.kind === "orbit" && options.spaceAxisException
-        ? options.spaceAxisException.label
-        : "clear the selection",
+    label: options.kind === "orbit" && options.axis ? options.axis.label : "clear the selection",
     callback: () => {
-      if (options.kind === "orbit" && options.spaceAxisException)
-        options.spaceAxisException.escape();
+      if (options.kind === "orbit" && options.axis) options.axis.escape();
       else options.clearSelection();
     },
     options: { conflictBehavior: "allow" },
@@ -140,4 +141,28 @@ export function useStage(options: OrbitStage | PlaneStage) {
     orbitPivot:
       options.kind === "orbit" && options.selectedBounds ? center(options.selectedBounds) : null,
   };
+}
+
+const StageContext = createContext<ReturnType<typeof useStageBindings> | null>(null);
+
+/** The picture host supplies its state once; every nested part gets the same verbs. */
+export function PictureStage({
+  children,
+  ...picture
+}: (OrbitStage | PlaneStage) & {
+  children: ReactNode | ((stage: NonNullable<ReturnType<typeof useStage>>) => ReactNode);
+}) {
+  const stage = useStageBindings(picture);
+  return createElement(
+    StageContext,
+    { value: stage },
+    typeof children === "function" ? children(stage) : children,
+  );
+}
+
+/** The picture owns the bindings; consumers only read its verbs. */
+export function useStage() {
+  const stage = useContext(StageContext);
+  if (!stage) throw new Error("useStage requires a PictureStage");
+  return stage;
 }

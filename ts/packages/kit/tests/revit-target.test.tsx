@@ -2,9 +2,11 @@
 import { cleanup, render, screen } from "@testing-library/react";
 import { createPortal } from "react-dom";
 import { afterEach, expect, test } from "vite-plus/test";
-import { RevitTarget, Row } from "../src/components/lang/row";
+import { RevitTarget } from "../src/components/lang/revit-target";
+import { Row } from "../src/components/lang/row";
 import { FactChip } from "../src/components/lang/chip";
-import { SubjectText, SubjectTextContext } from "../src/components/lang/subject-text";
+import { SubjectText } from "../src/components/lang/subject-text";
+import { SubjectTextContext } from "../src/components/lang/reach";
 
 afterEach(cleanup);
 const scope = { document: { session: "session", openId: "captured-document" }, source: "native" };
@@ -12,7 +14,7 @@ const scope = { document: { session: "session", openId: "captured-document" }, s
 test("Row ids, chip ids and subject tokens carry their captured scope through portals and null boundaries", () => {
   const view = render(
     <RevitTarget scope={scope}>
-      {createPortal(<Row label="fitting" revitIds={[42, 43]} />, document.body)}
+      {createPortal(<Row label="fitting" revit={[42, 43]} />, document.body)}
       <FactChip title="captured fitting" revit={[42]}>
         chip
       </FactChip>
@@ -20,7 +22,7 @@ test("Row ids, chip ids and subject tokens carry their captured scope through po
         <SubjectText text="42" revit={[42]} />
       </SubjectTextContext>
       <RevitTarget scope={null}>
-        <Row label="unscoped" revitIds={[99]} />
+        <Row label="unscoped" revit={[99]} />
       </RevitTarget>
     </RevitTarget>,
   );

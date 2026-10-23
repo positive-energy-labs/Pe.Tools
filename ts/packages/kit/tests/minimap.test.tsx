@@ -23,9 +23,7 @@ function Fixture({ count }: { count: number }) {
     <ListView
       list={list}
       row={row}
-      bar={false}
       maxHeight="200px"
-      estimate={20}
       aria-label="rows"
       empty={{ message: "Empty", exit: "Read rows" }}
     />
@@ -126,17 +124,17 @@ test("a vast ListView maps its virtual range and a midpoint press lands at row 5
   // The same gutter and landing contract belongs to tables, including pinned active rows.
   view.rerender(
     <Table
-      rows={items}
+      rows={items.map((item) => ({ ...item, damage: item.key === "500" ? "Needs repair" : null }))}
       rowKey={(item) => item.key}
       label="table rows"
       maxHeight="200px"
       activeKey="0"
-      damage={(item) => (item.key === "500" ? "Needs repair" : null)}
       columns={[{ key: "name", label: "Name", cell: (item) => item.name }]}
     />,
   );
   const tableMap = view.container.querySelector<HTMLElement>("[data-minimap]")!;
   expect(tableMap).toBeTruthy();
+  expect(tableMap.querySelector('[data-damage="Needs repair"]')).toBeTruthy();
   fireEvent.pointerDown(tableMap, { button: 0, clientY: 100, pointerId: 1 });
   await waitFor(() => {
     expect(Number(tableMap.getAttribute("aria-valuenow"))).toBeGreaterThan(450);

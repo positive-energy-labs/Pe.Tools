@@ -7,7 +7,7 @@ import { SvgTip } from "@pe/kit/lang/tooltip";
 import { ROOMS_LAYERS } from "@pe/agent-contracts";
 import type { RoomsTrace } from "@pe/host-contracts/generated";
 
-import { revitTarget } from "@pe/kit/lang/row";
+import { revitTarget } from "@pe/kit/lang/revit-target";
 import { FactChip } from "@pe/kit/lang/chip";
 import { tokenRef } from "@pe/kit/lib/token";
 import type { Point2 } from "#/lib/affine-frame";

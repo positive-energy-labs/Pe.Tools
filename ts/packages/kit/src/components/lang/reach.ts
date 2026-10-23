@@ -1,11 +1,31 @@
 import {
+  createContext,
   useCallback,
   useContext,
   useSyncExternalStore,
   type FocusEvent,
   type PointerEvent,
 } from "react";
-import { SubjectTextContext, type SubjectReference } from "./subject-text";
+
+export type SubjectReference = { id: number; name: string; number: number };
+
+/** One picture's subject names, lighting and navigation. */
+export type SubjectTextScope = {
+  nameOf: (id: number) => string | null;
+  reach?: ReachStore;
+  light?: (
+    references: readonly SubjectReference[],
+    focus: number | null,
+    owner?: string,
+    ids?: readonly number[],
+  ) => void;
+  clear?: (owner: string) => void;
+  /** Defer clearing while the pointer travels over the picture. */
+  hold?: () => void;
+  go?: (id: number) => void;
+  refProps?: (id: number) => Record<string, string | undefined>;
+};
+export const SubjectTextContext = createContext<SubjectTextScope | null>(null);
 
 export const REACH_RUNGS = ["rest", "reach", "hover", "focus"] as const;
 export type ReachRung = (typeof REACH_RUNGS)[number];
@@ -18,12 +38,7 @@ export type SubjectLighting = {
 };
 export const NO_LIGHTING: SubjectLighting = { ids: new Set(), references: [], focus: null };
 
-/**
- * What the pointer is reaching for, outside React state: the lit Subjects, the hovered element and
- * the hovered issue. A hover writes here and only the marks that draw it re-render; a route-level
- * setState re-rendered every pane per pointer crossing, 170 to 550 ms each on Chadds SA 44 (ducts
- * reach audit, 2026-10-23).
- */
+/** Shared pointer and subject lighting; only subscribers to a changed mark re-render. */
 export type Reach = {
   lighting: SubjectLighting;
   hovered: number | null;

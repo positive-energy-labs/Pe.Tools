@@ -2,7 +2,7 @@
 import { cleanup, fireEvent, render } from "@testing-library/react";
 import { afterEach, expect, it, vi } from "vite-plus/test";
 import { Annotations } from "./annotations";
-import { SubjectTextContext } from "@pe/kit/lang/subject-text";
+import { SubjectTextContext } from "@pe/kit/lang/reach";
 import { reachStore } from "@pe/kit/lang/reach";
 
 vi.mock("@pe/kit/lib/token", () => ({

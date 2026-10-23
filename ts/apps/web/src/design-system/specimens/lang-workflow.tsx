@@ -59,8 +59,8 @@ export function LangWorkflowSpecimens() {
       </SpecimenFrame>
       <SpecimenFrame name="KeyLegend" importPath="@pe/kit/lang/key-hint">
         <div className="flex items-end gap-6">
-          <KeyLegend keys={LEGEND_SPECIMEN} bind={false} />
-          <KeyLegend keys={LEGEND_SPECIMEN} bind={false} defaultOpen />
+          <KeyLegend keys={LEGEND_SPECIMEN} />
+          <KeyLegend keys={LEGEND_SPECIMEN} defaultOpen />
         </div>
       </SpecimenFrame>
       <SpecimenFrame name="Legend" importPath="@pe/kit/lang/legend">

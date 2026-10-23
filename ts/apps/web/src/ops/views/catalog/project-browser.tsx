@@ -47,7 +47,7 @@ export function ProjectBrowserView({ data }: OpViewProps) {
         children: asRecords(folder.sampleHandles).map((h, i) => ({
           id: `org/${section}/folder/${pathLabel}/sample/${i}`,
           label: asString(h.label) ?? "∅",
-          revitIds: idsOf(h),
+          revit: idsOf(h),
         })),
       };
       sectionNode.children?.push(folderNode);
@@ -78,7 +78,7 @@ export function ProjectBrowserView({ data }: OpViewProps) {
     const leaf: TreeNode = {
       id: `${sectionKey}/item/${asString(handle?.uniqueId) ?? asString(handle?.label) ?? String(items.indexOf(item))}`,
       label: asString(handle?.label) ?? "∅",
-      revitIds: idsOf(handle),
+      revit: idsOf(handle),
     };
     if (segments.length > 0 && sectionNode) {
       const folder = insertPath(

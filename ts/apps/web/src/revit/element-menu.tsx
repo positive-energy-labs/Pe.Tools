@@ -1,5 +1,5 @@
 /**
- * The element menu: anything on any page that stands for Revit elements (a kit Row's `revitIds`,
+ * The element menu: anything on any page that stands for Revit elements (a kit Row's `revit`,
  * or `revitTarget(ids)` spread on any element) answers right-click with Revit's own two verbs,
  * Selection Box and Select, and answers BX (Revit's Selection Box shortcut) under the pointer or
  * focus. One delegate at the root serves every surface; a surface only declares its ids.
@@ -10,7 +10,7 @@ import { SelectInRevitIcon, SelectionBoxKey } from "@pe/kit/lang/gesture-glyph";
 import { ListPopup } from "@pe/kit/lang/list-popup";
 import { Button } from "@pe/kit/lang/button";
 import { FactChip } from "@pe/kit/lang/chip";
-import { revitTarget } from "@pe/kit/lang/row";
+import { revitTarget } from "@pe/kit/lang/revit-target";
 import { submitAction } from "../../../../packages/mcps/src/shared/takeoff-action-client";
 import {
   elementTargetOf as targetOf,

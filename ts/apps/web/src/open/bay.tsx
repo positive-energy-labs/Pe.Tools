@@ -826,7 +826,6 @@ function JobList({ jobs }: { jobs: readonly PeaJob[] }) {
     <ListView
       list={list}
       aria-label="Pea jobs"
-      bar={false}
       empty={{ message: "No Pea jobs", exit: "Ask Pea to work in this Revit" }}
       row={(job) => ({
         lines: 2,

@@ -6,7 +6,7 @@ import { useContext, useEffect, useMemo, useRef, useState, useSyncExternalStore 
 import type { PageMove } from "#/route/manifest";
 import { boundsOfInstances, boundsOfPoints, frame, type OrbitViewport } from "#/scene/orbit";
 import type { PictureBounds } from "#/scene/framing";
-import type { useStage } from "#/scene/stage-controller";
+import { useStage } from "#/scene/stage-controller";
 import { viewportProject, type Project, type Size } from "#/scene/projection";
 import { type LiveOrbit } from "#/scene/live-orbit";
 import { Scene3D } from "#/scene/scene3d";
@@ -14,7 +14,7 @@ import type { SceneRead } from "#/scene/use-scene";
 import type { Bounds, Layer3D, SceneMeshes } from "#/scene/types";
 
 import { CaptionBounds } from "./subject-labels";
-import { SubjectTextContext } from "@pe/kit/lang/subject-text";
+import { SubjectTextContext } from "@pe/kit/lang/reach";
 import { Annotations, type Label, type Ruling } from "./annotations";
 import type { Encoding } from "./encoding";
 import type { DuctsPage } from "./manifest";
@@ -70,7 +70,6 @@ export function ModelPicture({
   read,
   bounds,
   orbit,
-  stage,
   wheelHost,
   scene,
   layers,
@@ -94,7 +93,6 @@ export function ModelPicture({
   read: SceneRead;
   bounds: PictureBounds | null;
   orbit: LiveOrbit;
-  stage: ReturnType<typeof useStage>;
   wheelHost?: HTMLElement | null;
   scene: Scene;
   layers: ReadonlySet<string>;
@@ -117,6 +115,7 @@ export function ModelPicture({
   onRuling: (r: Ruling, at: { x: number; y: number }) => void;
   onHover: (id: number | null) => void;
 }) {
+  const stage = useStage();
   const meshes = read.meshes;
   const subjects = useContext(SubjectTextContext);
   const pickIssue = (target: IssueTarget) => {

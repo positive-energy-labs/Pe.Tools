@@ -27,7 +27,7 @@ it("empty chrome has no header or empty title, while metadata and actions can ea
   expect(screen.getByRole("button", { name: "fit" })).toBeTruthy();
 });
 
-it("nested picture furniture joins the same field, and readout wheel and Escape survive the portal", () => {
+it("nested picture furniture joins the same field, and readout wheel and clear button survive the portal", () => {
   const clear = vi.fn();
   const { container } = render(
     <Pane overlay={<span>tools</span>}>
@@ -53,7 +53,7 @@ it("nested picture furniture joins the same field, and readout wheel and Escape 
   expect(wheel.defaultPrevented).toBe(true);
   expect(body.scrollTop).toBe(20);
   fireEvent.pointerDown(screen.getByText("facts"));
-  fireEvent.keyDown(document.activeElement!, { key: "Escape" });
+  fireEvent.click(screen.getByRole("button", { name: "Clear the selection · Esc" }));
   expect(clear).toHaveBeenCalledOnce();
 });
 

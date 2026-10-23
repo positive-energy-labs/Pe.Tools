@@ -23,7 +23,7 @@ import { SearchControl } from "./search-control";
 import { OutcomeLine } from "./outcome";
 
 import { useSearchKey } from "./list-view";
-import { SubjectTextContext } from "./subject-text";
+import { SubjectTextContext } from "./reach";
 
 import { CellHost } from "./cell";
 import { Input } from "./input";
@@ -766,7 +766,7 @@ export interface GoToItem {
   meta?: ReactNode;
   id?: number | string | null;
   /** Override for linked or non-native subjects whose numeric id is not a host target. */
-  revitIds?: readonly number[];
+  revit?: readonly number[];
 }
 
 /** The picture's subject picker. Building the index is work reserved for opening it. */
@@ -848,7 +848,7 @@ export function GoToPopup<Item extends GoToItem>({
       row={(item) => ({
         label: item.name,
         meta: item.meta,
-        revitIds: item.revitIds ?? (typeof item.id === "number" ? [item.id] : undefined),
+        revit: item.revit ?? (typeof item.id === "number" ? [item.id] : undefined),
       })}
     />
   );

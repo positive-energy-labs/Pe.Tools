@@ -10,7 +10,8 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import { spaceElementKey, type Reading } from "@pe/agent-contracts";
 import { Input } from "@pe/kit/lang/input";
-import { SubjectText, SubjectTextContext } from "@pe/kit/lang/subject-text";
+import { SubjectText } from "@pe/kit/lang/subject-text";
+import { SubjectTextContext } from "@pe/kit/lang/reach";
 import { useRevitSubjectProps } from "#/revit/element-menu";
 
 import { Surface } from "@pe/kit/lang/surface";
@@ -257,7 +258,7 @@ export function SpaceRoute({ url = true }: { url?: boolean } = {}) {
       </span>
       {metadata && page.ids.length ? (
         <SubjectTextContext value={subjects}>
-          <SubjectText text={[]} ids={page.ids} />
+          <SubjectText text={[]} revit={page.ids} />
         </SubjectTextContext>
       ) : null}
       {metadata

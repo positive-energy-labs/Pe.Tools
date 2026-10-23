@@ -94,7 +94,7 @@ interface CodeProps {
   /**
    * Break long lines instead of scrolling them. Code is `white-space: pre` because a wrapped
    * line lies about where the line ends; prose that happens to be machine output — a stack
-   * trace, an error string, a system prompt — has no such structure to protect and reads worse
+   * trace, an error string, an instruction — has no such structure to protect and reads worse
    * running off the right edge.
    */
   wrap?: boolean;

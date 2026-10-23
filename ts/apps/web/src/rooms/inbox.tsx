@@ -1,4 +1,4 @@
-import { revitTarget } from "@pe/kit/lang/row";
+import { revitTarget } from "@pe/kit/lang/revit-target";
 /**
  * The feedback inbox (V6 calm): one row per mark or note on the view, in `CARD_STATES` order. A
  * row points (hover pairs its region, click pins its card on the plan); verbs live on the card,
@@ -360,7 +360,7 @@ export function RoomsInbox({
                   <Tag card={card} />
                 </span>
               ),
-              revitIds: regions
+              revit: regions
                 .filter((region) => card.guids.includes(region.guid))
                 .map((region) => region.elementId),
               label: cardLine(card, labelOf),

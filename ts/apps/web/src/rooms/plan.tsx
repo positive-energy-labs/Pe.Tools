@@ -3,13 +3,13 @@ import { GoToPopup } from "@pe/kit/lang/list-popup";
 import { SvgTip } from "@pe/kit/lang/tooltip";
 import { type CSSProperties, type ReactNode, useEffect, useMemo, useRef } from "react";
 import type { PlaneViewport } from "@pe/agent-contracts";
-import { useStage, stageViewport } from "#/scene/stage-controller";
+import { PictureStage, stageViewport } from "#/scene/stage-controller";
 import { PictureReadout } from "@pe/kit/lang/readout";
 import type { RoomsSnapshot } from "@pe/host-contracts/generated";
 
 import { Legend, legendWord } from "@pe/kit/lang/legend";
 import { Pane } from "@pe/kit/lang/pane";
-import { revitTarget } from "@pe/kit/lang/row";
+import { revitTarget } from "@pe/kit/lang/revit-target";
 import { PLAN_CLICK_PX as CLICK_PX, usePlaneViewport } from "#/scene/use-plane-viewport";
 import { usePlanMap } from "#/lib/plan-map";
 import type { RoomsPage } from "./manifest";
@@ -332,16 +332,7 @@ export function RoomsPlan({
         [shape.box.minX, shape.box.minY] as const,
         [shape.box.maxX, shape.box.maxY] as const,
       ]) ?? [];
-  useStage({
-    kind: "plane",
-    host,
-    viewport,
-    bounds: world?.fit ?? null,
-    selectedBounds: selectedPoints.length ? boundsOf(selectedPoints) : null,
-    clearSelection: () => {
-      if (selected.size) onSelect(null, false);
-    },
-  });
+
   const picked = world?.shapes.filter((shape) => selected.has(shape.region.guid)) ?? [];
 
   // The lease's one key is the viewport (`roomsAddress.agent`); the rest stays the person's.
@@ -464,19 +455,31 @@ export function RoomsPlan({
     </>
   );
 
+  const pictureStage = {
+    kind: "plane" as const,
+    host,
+    viewport,
+    bounds: world?.fit ?? null,
+    selectedBounds: selectedPoints.length ? boundsOf(selectedPoints) : null,
+    clearSelection: () => {
+      if (selected.size) onSelect(null, false);
+    },
+  };
   if (empty || !world)
     return (
-      <Pane {...pane} legend={legend}>
-        {notice}
-        <div className="flex flex-1 items-center justify-center px-4">
-          <EmptyState
-            story="scope"
-            exit={empty?.exit ?? "draw a zone on this view in Revit, then press partition"}
-          >
-            {empty?.says ?? "no zones, rooms or plan image on this view yet"}
-          </EmptyState>
-        </div>
-      </Pane>
+      <PictureStage {...pictureStage}>
+        <Pane {...pane} legend={legend}>
+          {notice}
+          <div className="flex flex-1 items-center justify-center px-4">
+            <EmptyState
+              story="scope"
+              exit={empty?.exit ?? "draw a zone on this view in Revit, then press partition"}
+            >
+              {empty?.says ?? "no zones, rooms or plan image on this view yet"}
+            </EmptyState>
+          </div>
+        </Pane>
+      </PictureStage>
     );
 
   const worldStyle: CSSProperties = {
@@ -492,189 +495,191 @@ export function RoomsPlan({
   const font = CALLOUT_FONT_PX;
 
   return (
-    <Pane {...pane} legend={legend}>
-      {notice}
-      <div
-        ref={setHost}
-        data-rooms-plan=""
-        className="relative min-h-0 flex-1 overflow-hidden"
-        style={{ cursor: dragging ? "grabbing" : "grab" }}
-        {...handlers}
-      >
-        <div style={worldStyle}>
-          <svg
-            width={world.width}
-            height={world.height}
-            viewBox={`0 0 ${world.width} ${world.height}`}
-            style={{ position: "absolute", left: 0, top: 0, overflow: "visible" }}
-            role="img"
-            aria-label="rooms plan"
-          >
-            <SvgTip content={"room regions"} />
-            {plan ? <PlanImageLayer plan={plan} frame={world.frame} /> : null}
-            {world.shapes.map(({ region, state, d }) => {
-              const ink = token(REGION_INK[state].ink!);
-              const on = selected.has(region.guid);
-              const hot = hovered === region.guid;
-              const width = on ? 3 : 2;
-              return (
-                <path
-                  key={region.guid}
-                  {...revitTarget([region.elementId])}
-                  data-state={state}
-                  data-unassigned={unassigned(region) || undefined}
-                  d={d}
-                  fillRule="evenodd"
-                  fill={
-                    state === "zone"
-                      ? "none"
-                      : `color-mix(in srgb, ${ink} ${on || hot ? FILL_HOT_PCT : FILL_PCT}%, transparent)`
-                  }
-                  stroke={ink}
-                  className={REGION_INK[state].dash ?? undefined}
-                  style={{
-                    strokeWidth: `calc(var(--sw) * ${width}px)`,
-                    cursor: "pointer",
-                  }}
-                  onMouseEnter={() => onHover(region.guid)}
-                  onMouseLeave={() => onHover(null)}
-                  onClick={(event) => {
-                    event.stopPropagation();
-                    if (dragDist.current < CLICK_PX) onSelect(region.guid, event.shiftKey);
-                  }}
-                >
-                  <SvgTip content={state} />
-                </path>
-              );
-            })}
-            {trace.data ? (
-              <TraceLayers
-                trace={trace.data}
-                on={layers}
-                toWorld={world.frame.toViewport}
-                pxPerFt={world.pxPerFt}
-              />
-            ) : null}
-          </svg>
-        </div>
-        {size ? (
-          <svg
-            width={size.width}
-            height={size.height}
-            style={{ position: "absolute", left: 0, top: 0, pointerEvents: "none" }}
-            aria-label="region callouts"
-          >
-            {callouts.map((callout) => {
-              const on = selected.has(callout.guid);
-              const hot = hovered === callout.guid;
-              const [ax, ay] = callout.anchor;
-              const [px, py] = callout.pin;
-              const textX = px + callout.pinWidth / 2 + 8;
-              return (
-                <g
-                  key={callout.guid}
-                  {...revitTarget([
-                    world.shapes.find((shape) => shape.region.guid === callout.guid)!.region
-                      .elementId,
-                  ])}
-                  data-callout={callout.label}
-                  style={{ pointerEvents: "auto", cursor: "pointer" }}
-                  onMouseEnter={() => onHover(callout.guid)}
-                  onMouseLeave={() => onHover(null)}
-                  onClick={(event) => {
-                    event.stopPropagation();
-                    if (dragDist.current < CLICK_PX) onSelect(callout.guid, event.shiftKey);
-                  }}
-                >
-                  {callout.leader ? (
-                    <>
-                      <line
-                        x1={ax}
-                        y1={ay}
-                        x2={px}
-                        y2={py}
-                        stroke={callout.ink}
-                        strokeWidth={1.5}
-                      />
-                      <circle cx={ax} cy={ay} r={2.5} fill={callout.ink} />
-                    </>
-                  ) : null}
-                  <rect
-                    x={px}
-                    y={py - PIN_R * 0.75}
-                    width={callout.box[2] - px - 4}
-                    height={PIN_R * 1.5}
-                    rx={4}
-                    fill={token("page")}
-                    fillOpacity={0.92}
-                    stroke={callout.ink}
-                    strokeWidth={on || hot ? 2 : 1}
-                  />
-                  <rect
-                    x={px - callout.pinWidth / 2}
-                    y={py - PIN_R}
-                    width={callout.pinWidth}
-                    height={PIN_R * 2}
-                    rx={PIN_R}
-                    fill={callout.ink}
-                    stroke={on ? token("ink") : token("page")}
-                    strokeWidth={on ? 3 : 1.5}
-                  />
-                  <text
-                    x={px}
-                    y={py}
-                    textAnchor="middle"
-                    dominantBaseline="central"
-                    fontSize={font}
-                    fontFamily="var(--font-mono)"
-                    fill={token("page")}
-                  >
-                    {callout.label}
-                  </text>
-                  <text
-                    x={textX}
-                    y={py}
-                    dominantBaseline="central"
-                    fontSize={font}
-                    fontFamily="var(--font-mono)"
-                    fill={token("ink")}
-                  >
-                    {callout.text}
-                  </text>
-                </g>
-              );
-            })}
-          </svg>
-        ) : null}
-        {geo && overlay ? overlay(geo) : null}
-        {/* Surfaces over the plan claim their own pointer: a press on them never pans. */}
-        <div onPointerDown={(e) => e.stopPropagation()}>
-          {picked.length ? (
-            <PictureReadout
-              title={
-                picked.length === 1
-                  ? [
-                      picked[0]!.label,
-                      picked[0]!.region.name && picked[0]!.region.name !== picked[0]!.label
-                        ? picked[0]!.region.name
-                        : null,
-                      picked[0]!.region.type,
-                    ]
-                      .filter(Boolean)
-                      .join(" · ")
-                  : `${picked.length} regions`
-              }
-              onClear={() => onSelect(null, false)}
+    <PictureStage {...pictureStage}>
+      <Pane {...pane} legend={legend}>
+        {notice}
+        <div
+          ref={setHost}
+          data-rooms-plan=""
+          className="relative min-h-0 flex-1 overflow-hidden"
+          style={{ cursor: dragging ? "grabbing" : "grab" }}
+          {...handlers}
+        >
+          <div style={worldStyle}>
+            <svg
+              width={world.width}
+              height={world.height}
+              viewBox={`0 0 ${world.width} ${world.height}`}
+              style={{ position: "absolute", left: 0, top: 0, overflow: "visible" }}
+              role="img"
+              aria-label="rooms plan"
             >
-              <span className="face-mono whitespace-nowrap" data-rooms-readout="">
-                {picked.length === 1
-                  ? `${picked[0]!.state} · ${picked[0]!.region.role} · ${picked[0]!.region.sqft.toFixed(0)} sf`
-                  : `${picked.map((shape) => shape.label).join(", ")} · ${picked.reduce((sf, shape) => sf + shape.region.sqft, 0).toFixed(0)} sf`}
-              </span>
-            </PictureReadout>
+              <SvgTip content={"room regions"} />
+              {plan ? <PlanImageLayer plan={plan} frame={world.frame} /> : null}
+              {world.shapes.map(({ region, state, d }) => {
+                const ink = token(REGION_INK[state].ink!);
+                const on = selected.has(region.guid);
+                const hot = hovered === region.guid;
+                const width = on ? 3 : 2;
+                return (
+                  <path
+                    key={region.guid}
+                    {...revitTarget([region.elementId])}
+                    data-state={state}
+                    data-unassigned={unassigned(region) || undefined}
+                    d={d}
+                    fillRule="evenodd"
+                    fill={
+                      state === "zone"
+                        ? "none"
+                        : `color-mix(in srgb, ${ink} ${on || hot ? FILL_HOT_PCT : FILL_PCT}%, transparent)`
+                    }
+                    stroke={ink}
+                    className={REGION_INK[state].dash ?? undefined}
+                    style={{
+                      strokeWidth: `calc(var(--sw) * ${width}px)`,
+                      cursor: "pointer",
+                    }}
+                    onMouseEnter={() => onHover(region.guid)}
+                    onMouseLeave={() => onHover(null)}
+                    onClick={(event) => {
+                      event.stopPropagation();
+                      if (dragDist.current < CLICK_PX) onSelect(region.guid, event.shiftKey);
+                    }}
+                  >
+                    <SvgTip content={state} />
+                  </path>
+                );
+              })}
+              {trace.data ? (
+                <TraceLayers
+                  trace={trace.data}
+                  on={layers}
+                  toWorld={world.frame.toViewport}
+                  pxPerFt={world.pxPerFt}
+                />
+              ) : null}
+            </svg>
+          </div>
+          {size ? (
+            <svg
+              width={size.width}
+              height={size.height}
+              style={{ position: "absolute", left: 0, top: 0, pointerEvents: "none" }}
+              aria-label="region callouts"
+            >
+              {callouts.map((callout) => {
+                const on = selected.has(callout.guid);
+                const hot = hovered === callout.guid;
+                const [ax, ay] = callout.anchor;
+                const [px, py] = callout.pin;
+                const textX = px + callout.pinWidth / 2 + 8;
+                return (
+                  <g
+                    key={callout.guid}
+                    {...revitTarget([
+                      world.shapes.find((shape) => shape.region.guid === callout.guid)!.region
+                        .elementId,
+                    ])}
+                    data-callout={callout.label}
+                    style={{ pointerEvents: "auto", cursor: "pointer" }}
+                    onMouseEnter={() => onHover(callout.guid)}
+                    onMouseLeave={() => onHover(null)}
+                    onClick={(event) => {
+                      event.stopPropagation();
+                      if (dragDist.current < CLICK_PX) onSelect(callout.guid, event.shiftKey);
+                    }}
+                  >
+                    {callout.leader ? (
+                      <>
+                        <line
+                          x1={ax}
+                          y1={ay}
+                          x2={px}
+                          y2={py}
+                          stroke={callout.ink}
+                          strokeWidth={1.5}
+                        />
+                        <circle cx={ax} cy={ay} r={2.5} fill={callout.ink} />
+                      </>
+                    ) : null}
+                    <rect
+                      x={px}
+                      y={py - PIN_R * 0.75}
+                      width={callout.box[2] - px - 4}
+                      height={PIN_R * 1.5}
+                      rx={4}
+                      fill={token("page")}
+                      fillOpacity={0.92}
+                      stroke={callout.ink}
+                      strokeWidth={on || hot ? 2 : 1}
+                    />
+                    <rect
+                      x={px - callout.pinWidth / 2}
+                      y={py - PIN_R}
+                      width={callout.pinWidth}
+                      height={PIN_R * 2}
+                      rx={PIN_R}
+                      fill={callout.ink}
+                      stroke={on ? token("ink") : token("page")}
+                      strokeWidth={on ? 3 : 1.5}
+                    />
+                    <text
+                      x={px}
+                      y={py}
+                      textAnchor="middle"
+                      dominantBaseline="central"
+                      fontSize={font}
+                      fontFamily="var(--font-mono)"
+                      fill={token("page")}
+                    >
+                      {callout.label}
+                    </text>
+                    <text
+                      x={textX}
+                      y={py}
+                      dominantBaseline="central"
+                      fontSize={font}
+                      fontFamily="var(--font-mono)"
+                      fill={token("ink")}
+                    >
+                      {callout.text}
+                    </text>
+                  </g>
+                );
+              })}
+            </svg>
           ) : null}
+          {geo && overlay ? overlay(geo) : null}
+          {/* Surfaces over the plan claim their own pointer: a press on them never pans. */}
+          <div onPointerDown={(e) => e.stopPropagation()}>
+            {picked.length ? (
+              <PictureReadout
+                title={
+                  picked.length === 1
+                    ? [
+                        picked[0]!.label,
+                        picked[0]!.region.name && picked[0]!.region.name !== picked[0]!.label
+                          ? picked[0]!.region.name
+                          : null,
+                        picked[0]!.region.type,
+                      ]
+                        .filter(Boolean)
+                        .join(" · ")
+                    : `${picked.length} regions`
+                }
+                onClear={() => onSelect(null, false)}
+              >
+                <span className="face-mono whitespace-nowrap" data-rooms-readout="">
+                  {picked.length === 1
+                    ? `${picked[0]!.state} · ${picked[0]!.region.role} · ${picked[0]!.region.sqft.toFixed(0)} sf`
+                    : `${picked.map((shape) => shape.label).join(", ")} · ${picked.reduce((sf, shape) => sf + shape.region.sqft, 0).toFixed(0)} sf`}
+                </span>
+              </PictureReadout>
+            ) : null}
+          </div>
         </div>
-      </div>
-    </Pane>
+      </Pane>
+    </PictureStage>
   );
 }

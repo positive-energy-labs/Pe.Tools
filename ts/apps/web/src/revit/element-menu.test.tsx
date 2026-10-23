@@ -1,5 +1,5 @@
 // @vitest-environment jsdom
-import { RevitTarget, revitTarget } from "@pe/kit/lang/row";
+import { RevitTarget, revitTarget } from "@pe/kit/lang/revit-target";
 import { cleanup, fireEvent, render, waitFor } from "@testing-library/react";
 import { afterEach, expect, test, vi } from "vite-plus/test";
 import { ElementMenu, SelectionBoxButton, showInRevit } from "./element-menu";

@@ -355,7 +355,6 @@ export function Ledger({
             <ListView
               list={list}
               aria-label={presentation.label}
-              bar={false}
               empty={{ message: ledger.props.empty, exit: "Open a tool or ask Pea to begin work" }}
               row={ledger.props.row}
             />

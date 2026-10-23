@@ -1,10 +1,11 @@
 import { CELL_STATE_ORDER, StateCell, cellStateLabel, type StateCellProps } from "../lang/cell";
 import { VerdictCell } from "./cells";
-import type { Column, ValueColumn } from "./model";
+import type { Column, ValueColumn, Verdict } from "./model";
 import type { QueryRead } from "./view";
 
 export type ResolvedColumn<Row> = ValueColumn<Row> & {
   condition?: QueryRead<Row>;
+  readVerdict?: (row: Row) => Verdict;
   readState?: (row: Row) => StateCellProps;
   readWord?: (row: Row) => string;
 };
@@ -32,6 +33,7 @@ function resolveBody<Row>(column: Column<Row>): ResolvedColumn<Row> {
     return {
       ...column,
       verdict: undefined,
+      readVerdict: verdict,
       cell: (row: Row) => <VerdictCell verdict={verdict(row)} />,
       facet: column.facet ?? ((row: Row) => verdict(row).word),
       sort: column.sort ?? ((row: Row) => verdict(row).word),

@@ -8,7 +8,7 @@ import { SvgTip } from "@pe/kit/lang/tooltip";
  */
 import { useContext, useMemo } from "react";
 
-import { revitTarget } from "@pe/kit/lang/row";
+import { revitTarget } from "@pe/kit/lang/revit-target";
 import { token } from "@pe/kit/lib/token";
 import type { DuctFinding } from "@pe/agent-contracts";
 import { observedElements, useNativeObservation } from "#/revit/observation";
@@ -29,7 +29,8 @@ import {
 import type { Claim } from "./legs";
 import type { Scene } from "./scene";
 import { Caption, pathOf, SubjectLabels } from "./subject-labels";
-import { SubjectTextContext, useSubjectLighting } from "@pe/kit/lang/subject-text";
+import { SubjectTextContext } from "@pe/kit/lang/reach";
+import { useSubjectLighting } from "@pe/kit/lang/subject-text";
 
 export type Ruling =
   | { kind: "claim"; n: number; at: number; claim: Claim }

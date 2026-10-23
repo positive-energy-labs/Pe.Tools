@@ -1,48 +1,14 @@
 import { reachProps, useReach, useReachSetter } from "./reach";
-/**
- * The one list item and table row (`as="tr"`): one height, one type rung, mono only from a column
- * or the meta slot. States are data attributes (cursor, selected, active, pending, failed), never
- * hues; a refusal is `aria-disabled` and greyed, its reason in a Tooltip (never drawn).
- * Painted in lang.css. A Row with `depth` is a tree node; ListView nests them.
- */
-import { createContext, useContext, useState, type CSSProperties, type ReactNode } from "react";
+/** List item or table row (`as="tr"`). State becomes attributes; lang.css owns its marks. */
+import { useState, type CSSProperties, type ReactNode } from "react";
 import { ChevronRight, Flame } from "lucide-react";
 
 import { tv } from "../../lib/tv";
 import { TooltipHint } from "./tooltip";
+import { useRevitTarget, type RevitElementReference } from "./revit-target";
 import type { StateCellProps } from "./cell-state";
 
 import "./lang.css";
-
-const landings = new WeakMap<HTMLElement, ReturnType<typeof setTimeout>>();
-
-/** A named arrival scrolls nearest and marks once; focus is reserved for editing destinations. */
-export function land(el: HTMLElement, { focus = false }: { focus?: boolean } = {}) {
-  clearTimeout(landings.get(el));
-  el.scrollIntoView?.({ block: "nearest", behavior: "instant" });
-  if (focus)
-    (el.querySelector<HTMLElement>("input, select, textarea, button, [tabindex]") ?? el).focus({
-      preventScroll: true,
-    });
-  el.removeAttribute("data-landed");
-  // Restart the CSS animation even for two consecutive arrivals on the same element.
-  void el.offsetWidth;
-  el.setAttribute("data-landed", "");
-  const duration =
-    getComputedStyle(el).getPropertyValue("--motion-land").trim() ||
-    getComputedStyle(document.documentElement).getPropertyValue("--motion-land").trim();
-  const ms = parseFloat(duration) * (duration.endsWith("ms") ? 1 : 1000);
-  landings.set(
-    el,
-    setTimeout(
-      () => {
-        el.removeAttribute("data-landed");
-        landings.delete(el);
-      },
-      Number.isFinite(ms) ? ms : 0,
-    ),
-  );
-}
 
 export const rowRecipe = tv({
   slots: {
@@ -71,69 +37,14 @@ export interface RowState {
   active?: boolean;
   pending?: boolean;
   failed?: boolean;
-  /** Critical damage (I2): the row blocks the result (a price, a write) until the person fixes it.
-   *  The word says what it blocks ("no price", "no airflow"). It burns on the row itself: an alarm
-   *  edge with the 3D burn's heartbeat, a faint wash, and the flame mark with the word (a table row
-   *  says the word in its hint). Rare and loud: calm rows never carry it. */
+  /** A blocking condition's name. Calm rows omit it; table rows say it in their hint. */
   damage?: string | null;
   /** Present, the row refuses picks and is greyed; the reason is its tooltip, not drawn text. */
   refusal?: string | null;
   /** The Revit elements the row stands for: right-click or BX shows them in Revit (the app's element menu). */
-  revitIds?: readonly number[];
+  revit?: readonly number[];
   /** Captured native references; the app verifies kind and expected identity before dispatch. */
   revitRefs?: readonly RevitElementReference[];
-}
-
-/** Structural projection of native element handles; kit owns no document resolution. */
-export type RevitElementReference = {
-  elementId: number | null;
-  uniqueId?: string | null;
-  documentKey?: string;
-  kind?: string;
-  linkInstanceIds?: readonly number[];
-};
-
-/** The attribute the app's element menu reads: put it on any element that stands for Revit elements. */
-export const revitTarget = (
-  ids: readonly number[] | null | undefined,
-  refs?: readonly RevitElementReference[],
-) => ({
-  "data-revit-ids": ids?.length ? ids.join(",") : undefined,
-  "data-revit-refs": refs?.length ? JSON.stringify(refs) : undefined,
-});
-
-/** A displayed observation's scope, including explicit null boundaries. */
-const RevitScopeContext = createContext<object | null>(null);
-
-/** Layout-transparent target boundary; ids can never be declared without their scope. */
-export function RevitTarget({
-  ids,
-  refs,
-  scope,
-  children,
-}: {
-  ids?: readonly number[];
-  refs?: readonly RevitElementReference[];
-  scope: object | null;
-  children: ReactNode;
-}) {
-  return (
-    <RevitScopeContext value={scope}>
-      <div
-        data-revit-target=""
-        data-revit-scope={JSON.stringify(scope)}
-        {...revitTarget(ids, refs)}
-      >
-        {children}
-      </div>
-    </RevitScopeContext>
-  );
-}
-
-/** Copy the captured scope onto targets, including targets rendered through portals. */
-export function useRevitTarget(ids?: readonly number[], refs?: readonly RevitElementReference[]) {
-  const scope = useContext(RevitScopeContext);
-  return { ...revitTarget(ids, refs), "data-revit-scope": JSON.stringify(scope) };
 }
 
 export type RowProps = RowState & {
@@ -216,7 +127,7 @@ const rowStateProps = (state: RowState) => ({
 
 export function Row(props: RowProps) {
   const { damage, refusal } = props;
-  const rung = useReach(props.revitIds?.[0]);
+  const rung = useReach(props.revit?.[0]);
   const setReach = useReachSetter();
   const shared = {
     ...reachProps(rung),
@@ -226,11 +137,11 @@ export function Row(props: RowProps) {
     onMouseMove: props.onMouseMove,
     onMouseEnter: () => {
       props.onMouseEnter?.();
-      if (props.revitIds?.length) setReach(props.revitIds[0]!);
+      if (props.revit?.length) setReach(props.revit[0]!);
     },
     onMouseLeave: () => {
       props.onMouseLeave?.();
-      if (props.revitIds?.length) setReach(null);
+      if (props.revit?.length) setReach(null);
     },
     "data-key": props["data-key"],
     "data-index": props["data-index"],
@@ -246,7 +157,7 @@ export function Row(props: RowProps) {
     onDragOver: props.onDragOver,
     onDrop: props.onDrop,
     ...rowStateProps(props),
-    ...useRevitTarget(props.revitIds, props.revitRefs),
+    ...useRevitTarget(props.revit, props.revitRefs),
   };
   if (props.as === "tr") {
     const slots = rowRecipe();

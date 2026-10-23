@@ -73,7 +73,9 @@
     "./lang/pane-resize": "./src/components/lang/pane-resize.tsx",
     "./lang/pane-strip": "./src/components/lang/pane-strip.tsx",
     "./lang/floater": "./src/components/lang/floater.tsx",
-    "./lang/button-group": "./src/components/lang/button-group.tsx"
+    "./lang/button-group": "./src/components/lang/button-group.tsx",
+    "./lang/land": "./src/components/lang/land.ts",
+    "./lang/revit-target": "./src/components/lang/revit-target.tsx"
   },
   "scripts": {
     "build": "vp build && node scripts/page.mjs",

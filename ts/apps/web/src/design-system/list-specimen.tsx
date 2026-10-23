@@ -585,8 +585,6 @@ export function CoreListPanel({
               <ListView
                 list={list}
                 aria-label="specimen systems"
-                primary
-                estimate={40}
                 empty={{ message: "No fixture systems", exit: "Reset the specimen" }}
                 row={(item) => ({
                   label: item.name,

@@ -119,7 +119,6 @@ export function CapturesList({
     <ListView
       list={list}
       aria-label="captures"
-      primary
       empty={{
         message: "no captures kept yet",
         exit: "take one: capture_view, or revit.context.view-image in /ops",

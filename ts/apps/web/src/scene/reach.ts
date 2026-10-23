@@ -1,6 +1,6 @@
 import { useContext } from "react";
 import { useReachSetter, useReachState } from "@pe/kit/lang/reach";
-import { SubjectTextContext } from "@pe/kit/lang/subject-text";
+import { SubjectTextContext } from "@pe/kit/lang/reach";
 
 /** Props remain usable in isolated pictures; a mounted subject scope is the authority. */
 export function useSceneReach(fallback?: {

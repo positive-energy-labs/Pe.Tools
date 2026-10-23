@@ -57,34 +57,33 @@ function Press({ keys = [], pointer }: Omit<LegendKey, "does">) {
  */
 const LEGEND_CHORD = "Shift+/" as Chord;
 
-function LegendKeys({ toggle }: { toggle: () => void }) {
-  useScopeKeys([
-    { hotkey: LEGEND_CHORD, label: "keys", says: "Show or hide the keys", callback: toggle },
-  ]);
-  return null;
-}
-
 /**
  * A surface's keys and gestures, quiet until asked: one line of the `lead` entries, the whole list
  * on hover or `?`. It sits on the page ground so it reads over a drawing; it frames nothing,
- * because it operates nothing. `bind={false}` leaves `?` to a caller (a specimen beside a live one).
+ * because it operates nothing. The enclosing key scope owns its binding.
  */
 export function KeyLegend({
   keys,
   lead = 3,
   defaultOpen = false,
-  bind = true,
   className = "",
 }: {
   keys: readonly LegendKey[];
   lead?: number;
   defaultOpen?: boolean;
-  bind?: boolean;
   className?: string;
 }) {
   const [pinned, setPinned] = useState(defaultOpen);
   const [hover, setHover] = useState(false);
   const open = pinned || hover;
+  useScopeKeys([
+    {
+      hotkey: LEGEND_CHORD,
+      label: "keys",
+      says: "Show or hide the keys",
+      callback: () => setPinned((p) => !p),
+    },
+  ]);
   return (
     <section
       aria-label="keys"
@@ -94,7 +93,6 @@ export function KeyLegend({
       onMouseEnter={() => setHover(true)}
       onMouseLeave={() => setHover(false)}
     >
-      {bind ? <LegendKeys toggle={() => setPinned((p) => !p)} /> : null}
       {open ? (
         <div className="grid grid-cols-[auto_1fr] items-center gap-x-3">
           {keys.map((key, i) => (

@@ -50,11 +50,11 @@ export type TreeNode = {
   children?: TreeNode[];
   defaultOpen?: boolean;
   /** A leaf that stands for Revit elements answers right-click with Selection Box and Select (N4). */
-  revitIds?: readonly number[];
+  revit?: readonly number[];
 };
 
 const childrenOf = (node: TreeNode) => node.children ?? [];
-const searchOf = (node: TreeNode) => ({ text: [node.label], ids: node.revitIds });
+const searchOf = (node: TreeNode) => ({ text: [node.label], ids: node.revit });
 const opened = (nodes: readonly TreeNode[], depth = 0): string[] =>
   nodes.flatMap((node) => [
     ...((node.defaultOpen ?? depth < 1) && node.children?.length ? [node.id] : []),
@@ -76,7 +76,7 @@ export function TreeView({ nodes, label }: { nodes: TreeNode[]; label: string })
       aria-label={label}
       maxHeight="32rem"
       empty={{ message: `no ${label}`, exit: "run the operation on a richer document" }}
-      row={(node) => ({ label: node.label, meta: node.meta, revitIds: node.revitIds })}
+      row={(node) => ({ label: node.label, meta: node.meta, revit: node.revit })}
     />
   );
 }

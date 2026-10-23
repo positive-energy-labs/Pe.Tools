@@ -384,9 +384,9 @@ export function cellFactsText(p: StateCellProps): string | null {
         ? `you reviewed ${p.reviewed ?? "—"} · Revit now ${p.modelValue} · yours`
         : `model holds ${p.modelValue}`,
     );
-  if (p.counterValue != null) parts.push(`pea proposes ${p.counterValue}`);
+  if (p.counterValue != null) parts.push(`agent proposes ${p.counterValue}`);
   // The proposal is what the cell draws; the original and the author ride the tooltip.
-  if (p.stage === "proposed") parts.push("proposed by pea");
+  if (p.stage === "proposed") parts.push("proposed by the agent");
   if (p.currentValue != null && p.stage === "proposed") parts.push(`currently ${p.currentValue}`);
   if (p.capReason != null) parts.push(p.capReason);
   if (p.note != null)

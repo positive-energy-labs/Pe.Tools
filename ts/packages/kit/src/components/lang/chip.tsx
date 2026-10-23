@@ -8,7 +8,7 @@ import type { Tone } from "../../lib/token";
 import { Fragment, type ReactNode } from "react";
 import { X } from "lucide-react";
 
-import { useRevitTarget } from "./row";
+import { useRevitTarget } from "./revit-target";
 import { Button } from "./button";
 import { HoverCard, HoverCardTrigger, HoverCardContent } from "./hover-card";
 
@@ -174,7 +174,7 @@ interface MentionChipProps {
   onRemove?: () => void;
 }
 
-/** An `@` mention: label and kind; hover inspects what Pea received (pointer, facts, when read). */
+/** An `@` mention: label and kind; hover inspects what the agent received (pointer, facts, when read). */
 export function MentionChip({ label, kind, pointer, facts, takenAt, onRemove }: MentionChipProps) {
   const { base, label: name, count } = chipRecipe();
   const rows = Object.entries(facts).filter(([, value]) => value !== null && value !== "");
@@ -194,7 +194,7 @@ export function MentionChip({ label, kind, pointer, facts, takenAt, onRemove }: 
       </HoverCardTrigger>
       <HoverCardContent side="top" aria-label={`Snapshot of ${label}`}>
         <div className="grid grid-cols-[auto_minmax(0,1fr)] gap-x-3 gap-y-0.5">
-          <span className="text-ink-2">what Pea received</span>
+          <span className="text-ink-2">what the agent received</span>
           <span className="face-mono break-all">{pointer}</span>
           {rows.map(([fact, value]) => (
             <Fragment key={fact}>
