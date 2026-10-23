@@ -22,11 +22,7 @@ const HERE = "In this system";
 const ELSEWHERE = "Elsewhere";
 const SYSTEMS = "Systems";
 
-function itemsOf(
-  snapshot: DuctSnapshot,
-  system: string,
-  nameOf: (id: number) => string,
-): Item[] {
+function itemsOf(snapshot: DuctSnapshot, system: string, nameOf: (id: number) => string): Item[] {
   const here = system ? systemScope(snapshot, system).members : new Set<number>();
   const systemsOfGroup = new Map(snapshot.groups.map((g) => [g.id, g.systemNames]));
   const tagged = (e: DuctSnapshot["nodes"][number] | DuctSnapshot["segments"][number]) =>
@@ -34,9 +30,7 @@ function itemsOf(
   const elements = [...snapshot.nodes, ...snapshot.segments].filter(tagged).map((e): Item => {
     // Its own system, else the first of the network it sits in (the old go-to's rule).
     const into = e.systemName || (e.groupId && systemsOfGroup.get(e.groupId)?.[0]) || NO_SYSTEM;
-    const kind = ("size" in e ? [e.type, e.size] : [e.family, e.type])
-      .filter(Boolean)
-      .join(" · ");
+    const kind = ("size" in e ? [e.type, e.size] : [e.family, e.type]).filter(Boolean).join(" · ");
     return {
       key: `e${e.id}`,
       system: here.has(e.id) ? system : into,
@@ -137,7 +131,9 @@ export function GoToSubject({
         setOpen(false);
       }}
       createLabel={(text) =>
-        byId(snapshot, text) ? `go to element ${text.trim()}` : `${text.trim()}: no element by that id`
+        byId(snapshot, text)
+          ? `go to element ${text.trim()}`
+          : `${text.trim()}: no element by that id`
       }
       row={(i) => ({ label: i.name, meta: i.meta })}
     />

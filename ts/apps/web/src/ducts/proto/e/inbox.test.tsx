@@ -397,7 +397,7 @@ test("Rulings use explicit pills and stage marks without replacing an excluding 
   );
 });
 
-test("missed-join diagnostics retain their label, status, selection action and inline note", () => {
+test("open findings keep compact state and actions, with full evidence in focusable help", async () => {
   mount({
     diagnostics: [
       item({
@@ -415,12 +415,17 @@ test("missed-join diagnostics retain their label, status, selection action and i
   });
   const row = document.querySelector<HTMLElement>('[data-key="missed:10:20"]')!;
   expect(within(row).getByText("Open ends 4.0 inches apart: 10 and 20")).toBeTruthy();
-  // The closed row carries the compact status; the open row heads with the full one.
   expect(within(row).getByText("missed join?")).toBeTruthy();
-  expect(screen.getByText("possible missed join")).toBeTruthy();
+  const detail = document.querySelector<HTMLElement>('[data-inbox-detail="missed:10:20"]')!;
+  expect(within(detail).getByText("Evidence")).toBeTruthy();
+  expect(screen.queryByText("possible missed join")).toBeNull();
+  expect(screen.queryByText("Facing open ends need inspection in Revit.")).toBeNull();
   expect(row.getAttribute("data-revit-ids")).toBe("10,20");
   expect(within(row).getByRole("button", { name: /select/i })).toBeTruthy();
-  expect(screen.getByText("Facing open ends need inspection in Revit.")).toBeTruthy();
+  fireEvent.focus(within(detail).getByRole("button", { name: "What is this?" }));
+  const help = await screen.findByRole("tooltip");
+  expect(within(help).getByText("possible missed join")).toBeTruthy();
+  expect(within(help).getByText("Facing open ends need inspection in Revit.")).toBeTruthy();
 });
 
 test("a person's own row pick releases a review landing, while automatic reveal does not", () => {

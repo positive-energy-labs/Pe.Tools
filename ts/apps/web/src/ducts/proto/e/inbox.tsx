@@ -13,6 +13,7 @@ import type { DuctsRouteDocument } from "@pe/agent-contracts";
 import type { LossesWork } from "../../work";
 import type { DuctSnapshot } from "@pe/ducts-domain/types";
 import { Button } from "@pe/kit/lang/button";
+import { HelpTip } from "#/components/lang/help";
 import { FactChip } from "@pe/kit/lang/chip";
 import { useList, emptyListState, type ListState } from "@pe/kit/lang/collection";
 import { ListView, type ListRowParts } from "@pe/kit/lang/list-view";
@@ -402,35 +403,39 @@ export function Inbox({
         pick: () => onSelect(item.ids[0] ?? null),
         detail: () => (
           <>
-            {compactStatus(item.status) !== item.status ? (
-              <p className="t-small" data-tone={item.tone} data-inbox-status="">
-                {item.status}
-              </p>
-            ) : null}
-            {subjects ? (
-              // The open row shows its description: anywhere over it badges what it names (the row
-              // itself badges only its heading's), so the pointer keeps the badges on its way out.
-              <p
-                onMouseMove={(e) => {
-                  e.stopPropagation();
-                  subjects.light?.(description.references, null, item.key, item.ids);
-                }}
-              >
-                <SubjectText document={description} owner={item.key} />
-              </p>
-            ) : claim?.kind === "claim" ? (
-              <InboxClaim
-                claim={claim.claim}
-                nameOf={nameOf}
-                light={light}
-                onSelect={onSelect}
-                onShown={setNativeResult}
-              />
-            ) : item.note ? (
-              <p>{item.note}</p>
-            ) : (
-              <p>{item.title}</p>
-            )}
+            <div className="flex items-center gap-1 t-small">
+              <span>Evidence</span>
+              <HelpTip>
+                {compactStatus(item.status) !== item.status ? (
+                  <p data-tone={item.tone} data-inbox-status="">
+                    {item.status}
+                  </p>
+                ) : null}
+                {subjects ? (
+                  // Evidence help badges the subjects it names; the row itself badges its heading.
+                  <p
+                    onMouseMove={(e) => {
+                      e.stopPropagation();
+                      subjects.light?.(description.references, null, item.key, item.ids);
+                    }}
+                  >
+                    <SubjectText document={description} owner={item.key} />
+                  </p>
+                ) : claim?.kind === "claim" ? (
+                  <InboxClaim
+                    claim={claim.claim}
+                    nameOf={nameOf}
+                    light={light}
+                    onSelect={onSelect}
+                    onShown={setNativeResult}
+                  />
+                ) : item.note ? (
+                  <p>{item.note}</p>
+                ) : (
+                  <p>{item.title}</p>
+                )}
+              </HelpTip>
+            </div>
             <div className="flex flex-wrap items-center gap-1" data-inbox-verbs="">
               {verbsOf(item, true)}
             </div>

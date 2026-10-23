@@ -22,7 +22,7 @@ Explains: kit `useList` and `ListView` (virtual rows), keyword search plus picke
 Extreme: no collection is navigated by scrolling alone. Pickers, menus, palettes, inboxes and sidebars are one `ListView` with one row anatomy, and a keystroke paints in the next frame.
 
 **N4. Make everything you can see reachable in one move from where you see it.**
-"I should b able to get its section box in revit in one click *at the location in the ui where im interfacing with it*." (2026-10-21). "i hate adding random buttons everywhere" (2026-10-21). "these should link to the inbox maybe? they need some sort of bold focus indication too" (2026-10-23)
+"I should b able to get its section box in revit in one click _at the location in the ui where im interfacing with it_." (2026-10-21). "i hate adding random buttons everywhere" (2026-10-21). "these should link to the inbox maybe? they need some sort of bold focus indication too" (2026-10-23)
 Explains: right-click on anything that stands for Revit elements gives Selection Box and Select; a link lands on its row; selecting a thing opens every row that names it; a help link closes help.
 Extreme: every name, id, count, chip and mark is a take-me-there, to the row, to the picture and to Revit, with a strong landing mark.
 
@@ -126,54 +126,54 @@ Extreme: no surface is judged from a description, mock or fixture alone. Each cl
 
 ### Rejected, in kaitpw's words
 
-| Pattern | Verdict |
-|---|---|
-| Click cuts the camera and drops a popover on the target | "super disorienting and unpredictable" |
-| A verb that opens a popover and moves the orbit | "state the drop is also horrible ux" |
-| A thin full-width notification bar instead of a marker with a count | "this is horrible" |
-| A prose legend under the list | "absolutely horrible ... an incomprehensible wall of text" |
-| Raw ids in finding text | "incomprehensible" |
-| A re-read that blanks the page | "literally impossible to use" |
-| Search that lags per keystroke | "untenable" |
-| Inputs with no visible frame at rest | "non-standard and kinda hidden (in unfocused state u cant see anythign)" |
-| Slot choice in the Inputs pane; slots as a large settings block | "feels super wrong"; "far too big and disorienting" |
-| Selection state in the sidebar | "the wrong place for selected state" |
-| A hue per part in a breakdown bar | "an ugly strobe of color" |
-| ASCII tree guides | "the ascii looks horrible" |
-| SVG centreline isometric as the model picture | "0 information to identify what your looking at" |
-| A crude glow and plain footnotes | "the glow is kinda unsophisticated, footnotes dont stand out" |
+| Pattern                                                             | Verdict                                                                  |
+| ------------------------------------------------------------------- | ------------------------------------------------------------------------ |
+| Click cuts the camera and drops a popover on the target             | "super disorienting and unpredictable"                                   |
+| A verb that opens a popover and moves the orbit                     | "state the drop is also horrible ux"                                     |
+| A thin full-width notification bar instead of a marker with a count | "this is horrible"                                                       |
+| A prose legend under the list                                       | "absolutely horrible ... an incomprehensible wall of text"               |
+| Raw ids in finding text                                             | "incomprehensible"                                                       |
+| A re-read that blanks the page                                      | "literally impossible to use"                                            |
+| Search that lags per keystroke                                      | "untenable"                                                              |
+| Inputs with no visible frame at rest                                | "non-standard and kinda hidden (in unfocused state u cant see anythign)" |
+| Slot choice in the Inputs pane; slots as a large settings block     | "feels super wrong"; "far too big and disorienting"                      |
+| Selection state in the sidebar                                      | "the wrong place for selected state"                                     |
+| A hue per part in a breakdown bar                                   | "an ugly strobe of color"                                                |
+| ASCII tree guides                                                   | "the ascii looks horrible"                                               |
+| SVG centreline isometric as the model picture                       | "0 information to identify what your looking at"                         |
+| A crude glow and plain footnotes                                    | "the glow is kinda unsophisticated, footnotes dont stand out"            |
 
 ### Checklist
 
 Run each item in a browser on the real route with real data (M2). Each item names its principle, what to do, what to measure, and the pass condition.
 
-| # | Principle | Do and measure | Pass |
-|---|---|---|---|
-| 1 | N1 | Read the viewport (URL `viewport` and camera pose) or `scrollTop`; click a selectable thing; press Escape; read again | Unchanged after both; only F, double-click or a minimap click changes it |
-| 2 | N1 | Open and close every popover, menu and detail on the surface; read `document.activeElement` scroll parents and the pose | No scroll or pose change |
-| 3 | N2 | Repeat wheel, two-finger scroll, pinch (ctrl+wheel) and drag five times, with selections and clicks between | Same effect each time; `visualViewport.scale` stays 1; page `scrollY` unchanged |
-| 4 | N2 | Census icons for Select and Selection Box across routes | Select is the reticle and Selection Box the `bx` key glyph everywhere |
-| 5 | N3 | For each collection over 7 rows: press "/", type a word from a non-title field, use ArrowDown and Enter | Search focuses; rows filter; completion lists fields and values; keyboard moves and opens |
-| 6 | N3, N6 | Type 5 keys in each search; measure keydown to next paint | Median under 16 ms; no visible lag |
-| 7 | N3, P1 | Inspect each list's root | It is kit `ListView` (virtual rows, sticky collapsible heads) |
-| 8 | N4 | Right-click every row, mesh, chip and name that stands for Revit elements | Menu offers Selection Box and Select |
-| 9 | N4 | Click every link, id, count and chip | It lands on its row or element with a visible landing mark |
-| 10 | N5 | Make a named move, copy the URL to a new tab, then press Back in the first tab | New tab shows the same view and selection; Back undoes exactly that move |
-| 11 | N6 | Trigger a re-read and a slow navigation; sample frames every 50 ms | No frame shows an empty main pane; progress shows within 100 ms; repeat input refused |
-| 12 | N7 | Move the cursor onto each control, row and mesh; click its label, unit and padding | A hover mark shows before click; the whole visible box activates; armed controls stay armed after Escape |
-| 13 | I1 | Scan visible text (`innerText`) outside mono fact values for `/\b\d{6,9}\b/` and `/\bg\d{5,}\b/` | Zero matches; each reference is a named Subject with a footnote that also marks the picture |
-| 14 | I2 | With one price-blocking finding, screenshot the surface with no hover | The blocking element, row or cell shows damage; calm findings do not pulse |
-| 15 | I3 | List every non-neutral computed fill and stroke | Each hue maps to one named meaning in the key or tokens |
-| 16 | I4 | Select three different things; record where the selection name and facts appear | Same fixed place each time (crumb or summary box), never a popover at the pointer; layers and modes show an active state |
-| 17 | I5 | For each popover, intersect its rect with its anchor and with the selected element's projected box | Zero overlap; nearest row faces the anchor; one popover open; no layout shift |
-| 18 | I6 | Count sentences on the working surface outside help and tutorial | None; every legend is mark plus word |
-| 19 | L1 | For each header, section and frame, compare its text with the rest of the page | Each carries state or a verb that no other place shows |
-| 20 | L2 | Open every footer, floater and detail; measure the area of the navigated field it covers | Nothing covers the field unless the person placed it; floaters drag along their edge and shrink |
-| 21 | L3 | Record a `layout-shift` PerformanceObserver over hover, focus, open and load | Cumulative shift 0 for things the person did not touch |
-| 22 | L3 | At 1024, 1280, 1600 px and at each pane's min width, compare `scrollWidth` with `clientWidth` and title/meta rects | No overflow; text ellipsizes; meta never overlaps the title; children hug an edge |
-| 23 | L4 | Sample ground colours of subject, sidebars, search and sticky heads, and each hairline against its ground | Subject brightest; supports recede; search and heads on their own plane; every hairline visible |
-| 24 | P2 | List every button that writes outside the route | Each one is in the Situation; preview-to-do is one button that stays armed |
-| 25 | P3 | Look for configuration controls on the working surface | None; configuration is a compact picker in Settings |
+| #   | Principle | Do and measure                                                                                                          | Pass                                                                                                                     |
+| --- | --------- | ----------------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------ |
+| 1   | N1        | Read the viewport (URL `viewport` and camera pose) or `scrollTop`; click a selectable thing; press Escape; read again   | Unchanged after both; only F, double-click or a minimap click changes it                                                 |
+| 2   | N1        | Open and close every popover, menu and detail on the surface; read `document.activeElement` scroll parents and the pose | No scroll or pose change                                                                                                 |
+| 3   | N2        | Repeat wheel, two-finger scroll, pinch (ctrl+wheel) and drag five times, with selections and clicks between             | Same effect each time; `visualViewport.scale` stays 1; page `scrollY` unchanged                                          |
+| 4   | N2        | Census icons for Select and Selection Box across routes                                                                 | Select is the reticle and Selection Box the `bx` key glyph everywhere                                                    |
+| 5   | N3        | For each collection over 7 rows: press "/", type a word from a non-title field, use ArrowDown and Enter                 | Search focuses; rows filter; completion lists fields and values; keyboard moves and opens                                |
+| 6   | N3, N6    | Type 5 keys in each search; measure keydown to next paint                                                               | Median under 16 ms; no visible lag                                                                                       |
+| 7   | N3, P1    | Inspect each list's root                                                                                                | It is kit `ListView` (virtual rows, sticky collapsible heads)                                                            |
+| 8   | N4        | Right-click every row, mesh, chip and name that stands for Revit elements                                               | Menu offers Selection Box and Select                                                                                     |
+| 9   | N4        | Click every link, id, count and chip                                                                                    | It lands on its row or element with a visible landing mark                                                               |
+| 10  | N5        | Make a named move, copy the URL to a new tab, then press Back in the first tab                                          | New tab shows the same view and selection; Back undoes exactly that move                                                 |
+| 11  | N6        | Trigger a re-read and a slow navigation; sample frames every 50 ms                                                      | No frame shows an empty main pane; progress shows within 100 ms; repeat input refused                                    |
+| 12  | N7        | Move the cursor onto each control, row and mesh; click its label, unit and padding                                      | A hover mark shows before click; the whole visible box activates; armed controls stay armed after Escape                 |
+| 13  | I1        | Scan visible text (`innerText`) outside mono fact values for `/\b\d{6,9}\b/` and `/\bg\d{5,}\b/`                        | Zero matches; each reference is a named Subject with a footnote that also marks the picture                              |
+| 14  | I2        | With one price-blocking finding, screenshot the surface with no hover                                                   | The blocking element, row or cell shows damage; calm findings do not pulse                                               |
+| 15  | I3        | List every non-neutral computed fill and stroke                                                                         | Each hue maps to one named meaning in the key or tokens                                                                  |
+| 16  | I4        | Select three different things; record where the selection name and facts appear                                         | Same fixed place each time (crumb or summary box), never a popover at the pointer; layers and modes show an active state |
+| 17  | I5        | For each popover, intersect its rect with its anchor and with the selected element's projected box                      | Zero overlap; nearest row faces the anchor; one popover open; no layout shift                                            |
+| 18  | I6        | Count sentences on the working surface outside help and tutorial                                                        | None; every legend is mark plus word                                                                                     |
+| 19  | L1        | For each header, section and frame, compare its text with the rest of the page                                          | Each carries state or a verb that no other place shows                                                                   |
+| 20  | L2        | Open every footer, floater and detail; measure the area of the navigated field it covers                                | Nothing covers the field unless the person placed it; floaters drag along their edge and shrink                          |
+| 21  | L3        | Record a `layout-shift` PerformanceObserver over hover, focus, open and load                                            | Cumulative shift 0 for things the person did not touch                                                                   |
+| 22  | L3        | At 1024, 1280, 1600 px and at each pane's min width, compare `scrollWidth` with `clientWidth` and title/meta rects      | No overflow; text ellipsizes; meta never overlaps the title; children hug an edge                                        |
+| 23  | L4        | Sample ground colours of subject, sidebars, search and sticky heads, and each hairline against its ground               | Subject brightest; supports recede; search and heads on their own plane; every hairline visible                          |
+| 24  | P2        | List every button that writes outside the route                                                                         | Each one is in the Situation; preview-to-do is one button that stays armed                                               |
+| 25  | P3        | Look for configuration controls on the working surface                                                                  | None; configuration is a compact picker in Settings                                                                      |
 
 ## B · Homes of the rules
 

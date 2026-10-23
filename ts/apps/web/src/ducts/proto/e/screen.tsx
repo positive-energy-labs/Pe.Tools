@@ -866,7 +866,7 @@ function LoadedScreenBody({
               light={light}
             />
           ) : (
-            <p className="text-ink-2 p-2">rules are read once the tables are in</p>
+            <p className="text-ink-2 p-2">Loading rules</p>
           )}
         </Pane>
       )),

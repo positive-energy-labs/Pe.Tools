@@ -101,4 +101,3 @@ export function clearPose(
     .reduce((a, b) => (b.cost < a.cost ? b : a));
   return shiftOnScreen(view, scene, at.height, best.x - cx, best.y - cy);
 }
-

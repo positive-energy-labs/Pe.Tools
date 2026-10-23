@@ -200,11 +200,7 @@ export function StagedRules({
     !unitFlows &&
     !roles
   )
-    return (
-      <p className="text-ink-2 t-small">
-        nothing staged: no rule, drop, catalog, flow, role or unit ESP
-      </p>
-    );
+    return <p className="text-ink-2 t-small">None staged</p>;
   return (
     <div className="flex flex-col gap-0.5 t-small" data-e-staged="">
       {keys.map((key) => {
