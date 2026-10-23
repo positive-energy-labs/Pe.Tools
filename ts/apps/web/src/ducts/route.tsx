@@ -88,6 +88,16 @@ export function DuctsRoute({ url = true }: { url?: boolean } = {}) {
       ...bound,
       // A fixture has no document authority, even with a real target/thread carried in the URL.
       needs: undefined,
+      actions: {
+        ...bound.actions!,
+        refresh: {
+          ...bound.actions!.refresh,
+          does: undefined,
+          needs: "host" as const,
+          actor: "any" as const,
+          says: "Recalculate the navigation fixture in the pricing worker; no Revit read or write",
+        },
+      },
     };
   }, [demoName]);
   // The snapshot and tables are read below, once the target resolves; the verbs see them here.

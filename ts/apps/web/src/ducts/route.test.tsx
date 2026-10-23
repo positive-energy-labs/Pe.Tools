@@ -406,6 +406,7 @@ async function mount(
 test("navigation demo prices the production route and moves all to Office to Lab to all without native authority", async () => {
   drawing.lightweight = true;
   window.history.replaceState({}, "", "/ducts?demo=navigation");
+  const flights: PricingRequest[] = [];
   vi.stubGlobal(
     "Worker",
     class {
@@ -413,6 +414,7 @@ test("navigation demo prices the production route and moves all to Office to Lab
       onerror = null;
       solve = pricingJob();
       postMessage(request: PricingRequest) {
+        flights.push(request);
         const data = this.solve(request);
         queueMicrotask(() => this.onmessage?.({ data } as MessageEvent<PricingResponse>));
       }
@@ -426,6 +428,13 @@ test("navigation demo prices the production route and moves all to Office to Lab
     expect(drawing.latest?.doc).toBeNull();
     expect(document.querySelector('[data-proto="E2"]')?.getAttribute("data-native")).toBe("false");
     expect(await drawing.latest!.actions.preview.run()).toMatchObject({ code: "not-ready" });
+    const epoch = drawing.latest!.page.epoch;
+    const before = flights.length;
+    fireEvent.click(screen.getByRole("button", { name: /^refresh/, hidden: true }));
+    await waitFor(() => expect(drawing.latest!.page.epoch).toBe(epoch + 1));
+    await waitFor(() => expect(flights.length).toBeGreaterThan(before));
+    await waitFor(() => expect(drawing.latest!.priced).not.toBeNull());
+    expect(await drawing.latest!.actions.apply.run()).toMatchObject({ code: "not-ready" });
     for (const system of ["SA Office", "SA Lab", ""]) {
       act(() => drawing.latest!.setPage({ system }));
       await waitFor(() => expect(router.state.location.search).toMatchObject({ system }));
