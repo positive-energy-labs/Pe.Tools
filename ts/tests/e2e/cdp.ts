@@ -8,36 +8,83 @@ import { join } from "node:path";
 
 export type Page = Awaited<ReturnType<typeof connect>>;
 
-export async function connect(port = Number(process.env.CDP_PORT)) {
+export async function connect(
+  port = Number(process.env.CDP_PORT),
+  targetId = process.env.CDP_TARGET,
+) {
   if (!port)
     throw new Error("PRECONDITION: CDP_PORT (your own chrome-agent's port, 924x) is unset");
-  const targets = (await (await fetch(`http://127.0.0.1:${port}/json`)).json()) as {
+  const targets = (await (
+    await fetch(`http://127.0.0.1:${port}/json`, { signal: AbortSignal.timeout(10_000) })
+  ).json()) as {
+    id: string;
     type: string;
     webSocketDebuggerUrl: string;
   }[];
-  const ws = new WebSocket(targets.find((t) => t.type === "page")!.webSocketDebuggerUrl);
-  await new Promise((resolve, reject) => {
-    ws.onopen = resolve;
-    ws.onerror = reject;
+  const target = targets.find((t) => t.type === "page" && (!targetId || t.id === targetId));
+  if (!target) throw new Error(`PRECONDITION: no Chrome page target ${targetId ?? "(any)"}`);
+  const ws = new WebSocket(target.webSocketDebuggerUrl);
+  await new Promise<void>((resolve, reject) => {
+    const timer = setTimeout(() => {
+      ws.close();
+      reject(new Error("CDP connection timed out"));
+    }, 10_000);
+    ws.onopen = () => {
+      clearTimeout(timer);
+      resolve();
+    };
+    ws.onerror = () => {
+      clearTimeout(timer);
+      reject(new Error("CDP connection failed"));
+    };
   });
   let id = 0;
+  let loadSerial = 0;
   const errors: string[] = [];
-  const pending = new Map<number, (m: { result?: any; error?: { message: string } }) => void>();
+  const listeners = new Set<
+    (event: { method?: string; params?: any; sessionId?: string }) => void
+  >();
+  const pending = new Map<
+    number,
+    { accept(m: { result?: any; error?: { message: string } }): void; reject(error: Error): void }
+  >();
+  const disconnected = () => {
+    for (const command of pending.values()) command.reject(new Error("CDP socket disconnected"));
+    pending.clear();
+  };
+  ws.onclose = disconnected;
+  ws.onerror = disconnected;
   ws.onmessage = (e) => {
     const m = JSON.parse(String(e.data));
+    if (m.method === "Page.loadEventFired") loadSerial++;
+    for (const listener of listeners) listener(m);
     if (m.method === "Runtime.exceptionThrown")
       errors.push(
         m.params.exceptionDetails.exception?.description ?? m.params.exceptionDetails.text,
       );
-    pending.get(m.id)?.(m);
+    pending.get(m.id)?.accept(m);
     pending.delete(m.id);
   };
-  const send = (method: string, params: object = {}): Promise<any> =>
+  const send = (method: string, params: object = {}, sessionId?: string): Promise<any> =>
     new Promise((resolve, reject) => {
-      pending.set(++id, (m) =>
-        m.error ? reject(new Error(`${method}: ${m.error.message}`)) : resolve(m.result),
-      );
-      ws.send(JSON.stringify({ id, method, params }));
+      if (ws.readyState !== WebSocket.OPEN) return reject(new Error("CDP socket is not open"));
+      const commandId = ++id;
+      const timer = setTimeout(() => {
+        pending.delete(commandId);
+        reject(new Error(`${method}: CDP command timed out`));
+      }, 15_000);
+      pending.set(commandId, {
+        accept: (m) => {
+          clearTimeout(timer);
+          if (m.error) reject(new Error(`${method}: ${m.error.message}`));
+          else resolve(m.result);
+        },
+        reject: (error) => {
+          clearTimeout(timer);
+          reject(error);
+        },
+      });
+      ws.send(JSON.stringify({ id: commandId, method, params, sessionId }));
     });
   const read = async <T>(expression: string): Promise<T> => {
     const r = await send("Runtime.evaluate", {
@@ -51,23 +98,36 @@ export async function connect(port = Number(process.env.CDP_PORT)) {
       );
     return r.result.value as T;
   };
-  await send("Emulation.setDeviceMetricsOverride", {
-    width: 1400,
-    height: 900,
-    deviceScaleFactor: 1,
-    mobile: false,
-  });
-
-  await send("Runtime.enable");
-  // Each dev launch serves deps from a fresh temp dir; a cached module graph points at the old one.
-  await send("Network.enable");
-  await send("Network.setCacheDisabled", { cacheDisabled: true });
+  try {
+    await send("Emulation.setDeviceMetricsOverride", {
+      width: 1400,
+      height: 900,
+      deviceScaleFactor: 1,
+      mobile: false,
+    });
+    await send("Runtime.enable");
+    await send("Page.enable");
+    // Each dev launch serves deps from a fresh temp dir; a cached module graph points at the old one.
+    await send("Network.enable");
+    await send("Network.setCacheDisabled", { cacheDisabled: true });
+  } catch (error) {
+    disconnected();
+    ws.close();
+    throw error;
+  }
   const page = {
     /** Uncaught page exceptions, for evidence dumps only (never an assertion). */
     errors,
+    onEvent(listener: (event: { method?: string; params?: any; sessionId?: string }) => void) {
+      listeners.add(listener);
+      return () => listeners.delete(listener);
+    },
     send,
     read,
-    close: () => ws.close(),
+    close: () => {
+      disconnected();
+      ws.close();
+    },
     text: () => read<string>("document.body.innerText"),
     textOf: (selector: string) =>
       read<string>(`document.querySelector(${JSON.stringify(selector)})?.innerText ?? ""`),
@@ -80,17 +140,26 @@ export async function connect(port = Number(process.env.CDP_PORT)) {
       (await read(locate(name, within))) !== null,
     url: () => read<string>("location.href"),
     async open(url: string) {
-      await send("Page.navigate", { url });
+      const before = loadSerial;
+      const navigation = await send("Page.navigate", { url });
+      if (navigation.errorText) throw new Error(`Page.navigate: ${navigation.errorText}`);
       await page.until(
-        () => read<boolean>("document.readyState === 'complete'"),
+        async () =>
+          (!navigation.loaderId || loadSerial > before) &&
+          (await read<boolean>("document.readyState === 'complete'")),
         "page load",
         60_000,
       );
     },
     async reload() {
+      const before = loadSerial;
       await send("Page.reload", {});
-      await new Promise((r) => setTimeout(r, 300));
-      await page.until(() => read<boolean>("document.readyState === 'complete'"), "reload");
+      await page.until(
+        async () =>
+          loadSerial > before && (await read<boolean>("document.readyState === 'complete'")),
+        "reload",
+        60_000,
+      );
     },
     /** Poll until `check` is truthy; the timeout names what never appeared. */
     async until<T>(check: () => Promise<T>, what: string, ms = 15_000): Promise<NonNullable<T>> {
@@ -251,13 +320,21 @@ export async function connect(port = Number(process.env.CDP_PORT)) {
     /** Evidence: DOM dump + screenshot into the run directory. */
     async dump(dir: string, name: string) {
       mkdirSync(dir, { recursive: true });
-      writeFileSync(
-        join(dir, `${name}.html`),
-        await read<string>("document.documentElement.outerHTML"),
-      );
-      writeFileSync(join(dir, `${name}.txt`), await page.text());
-      const shot = await send("Page.captureScreenshot", { format: "png" });
-      writeFileSync(join(dir, `${name}.png`), Buffer.from(shot.data, "base64"));
+      const captures = await Promise.allSettled([
+        read<string>("document.documentElement.outerHTML").then((html) =>
+          writeFileSync(join(dir, `${name}.html`), html),
+        ),
+        page.text().then((text) => writeFileSync(join(dir, `${name}.txt`), text)),
+        send("Page.captureScreenshot", { format: "png" }).then((shot) =>
+          writeFileSync(join(dir, `${name}.png`), Buffer.from(shot.data, "base64")),
+        ),
+      ]);
+      const failed = captures.filter((capture) => capture.status === "rejected");
+      if (failed.length)
+        throw new AggregateError(
+          failed.map((capture) => capture.reason),
+          "Partial CDP evidence capture",
+        );
     },
   };
   return page;

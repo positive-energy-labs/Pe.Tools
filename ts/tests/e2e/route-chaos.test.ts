@@ -1,0 +1,739 @@
+import { execFileSync } from "node:child_process";
+import { mkdirSync, writeFileSync } from "node:fs";
+import { join, resolve } from "node:path";
+import { expect, test } from "vite-plus/test";
+import { connect, CTRL, type Page } from "./cdp.ts";
+
+const SYSTEMS = '[data-list-view][aria-label="systems"]';
+const PICTURE = "[data-model-picture]";
+const SEARCH = `${SYSTEMS} input[aria-label="Search systems"]`;
+const visible = `(e) => !!e && e.getClientRects().length > 0 && getComputedStyle(e).visibility !== "hidden"`;
+const sleep = (ms: number) => new Promise((done) => setTimeout(done, ms));
+const literal = JSON.stringify;
+
+/** Read-only locator. All actions below go through CDP Input, Page, Network or Debugger. */
+async function box(page: Page, selector: string, name?: string) {
+  return page.read<{ x: number; y: number } | null>(`(() => {
+    const elements = [...document.querySelectorAll(${literal(selector)})].filter(${visible});
+    const e = elements.find(e => ${name === undefined ? "true" : `[e.getAttribute('aria-label'), e.innerText?.trim()].includes(${literal(name)})`});
+    if (!e || e.disabled || e.getAttribute('aria-disabled') === 'true') return null;
+    const r = e.getBoundingClientRect();
+    const row = ['option', 'treeitem'].includes(e.getAttribute('role'));
+    const y = row ? r.top + Math.min(10, r.height / 2) : r.top + r.height / 2;
+    for (const ratio of row ? [0.35, 0.5, 0.2, 0.65] : [0.5]) {
+      const x = r.left + r.width * ratio;
+      const hit = document.elementFromPoint(x, y);
+      if (x > 0 && y > 0 && x < innerWidth && y < innerHeight && (hit === e || e.contains(hit)) &&
+          (!row || !hit.closest('button, a, input, select, textarea, [role=button]'))) return { x, y };
+    }
+    return null;
+  })()`);
+}
+
+async function click(page: Page, selector: string, name?: string) {
+  const point = await page.until(
+    () => box(page, selector, name),
+    `visible enabled ${name ?? selector}`,
+  );
+  await page.send("Input.dispatchMouseEvent", { type: "mouseMoved", ...point });
+  await sleep(180);
+  for (const type of ["mousePressed", "mouseReleased"])
+    await page.send("Input.dispatchMouseEvent", { type, ...point, button: "left", clickCount: 1 });
+}
+const button = (page: Page, name: string, root = "") =>
+  click(page, `${root} button, ${root} [role=button]`.trim(), name);
+
+async function fill(page: Page, selector: string, value: string) {
+  await click(page, selector);
+  await page.press("a", CTRL);
+  await page.press("Backspace");
+  await page.type(value);
+}
+
+const fieldValue = (page: Page, selector: string) =>
+  page.read<string>(
+    `[...document.querySelectorAll(${literal(selector)})].find(${visible})?.value ?? ''`,
+  );
+const visibleText = (page: Page, selector: string) =>
+  page.read<string>(
+    `[...document.querySelectorAll(${literal(selector)})].find(${visible})?.innerText ?? ''`,
+  );
+const actionName = (page: Page, word: string) =>
+  page.read<string | null>(
+    `[...document.querySelectorAll('button')].filter(${visible}).map(e => e.getAttribute('aria-label') || e.innerText.trim()).find(name => new RegExp(${literal(`^${word}(?: [0-9]+)?$`)}).test(name)) ?? null`,
+  );
+
+async function stageWork(page: Page, selector: string, value: string) {
+  if (!(await box(page, selector)) && (await box(page, "button", "Expand Inputs")))
+    await button(page, "Expand Inputs");
+  if (!(await box(page, selector)))
+    throw new Error("PRECONDITION: disposable Work editor must be visible and enabled");
+  await fill(page, selector, value);
+  await page.press("Enter");
+}
+
+async function state(page: Page) {
+  return page.read<{
+    url: string;
+    pictureTitle: string;
+    visibility: string;
+    title: string;
+    crumb: string;
+    selected: string | null;
+    focus: {
+      tag: string;
+      label: string | null;
+      id: string;
+      value: string | null;
+      scroll: number[];
+    };
+    panes: { id: string; top: number; left: number }[];
+    armed: string[];
+    alerts: string[];
+    loading: boolean;
+    refreshing: boolean;
+  }>(`(() => {
+    const shown = ${visible};
+    const active = document.activeElement;
+    const scroll = [];
+    for (let e = active; e; e = e.parentElement) {
+      if (e.scrollHeight > e.clientHeight || e.scrollWidth > e.clientWidth) scroll.push(e.scrollTop, e.scrollLeft);
+    }
+    return {
+      url: location.href, title: document.title,
+      visibility: document.visibilityState,
+      pictureTitle: [...document.querySelectorAll('[data-pane-id="e-picture"] [data-slot="pane-title"]')].find(shown)?.innerText ?? '',
+      crumb: [...document.querySelectorAll('[data-e-crumb], [data-picture-readout]')].filter(shown).map(e => e.innerText).join(' | '),
+      selected: [...document.querySelectorAll('[data-e-selected]')].find(shown)?.getAttribute('data-e-selected') ?? null,
+      focus: { tag: active?.tagName, label: active?.getAttribute('aria-label'), id: active?.id ?? '', value: active?.value ?? null, scroll },
+      panes: [...document.querySelectorAll('[data-pane-id]')].filter(shown).map(e => {
+        const body = e.querySelector('[data-slot="pane-body"]');
+        return { id: e.getAttribute('data-pane-id'), top: body?.scrollTop ?? 0, left: body?.scrollLeft ?? 0 };
+      }),
+      armed: [...document.querySelectorAll('button')].filter(shown).filter(e => e.getAttribute('data-preview-action') === 'armed' || (!e.disabled && e.getAttribute('aria-disabled') !== 'true' && /^(apply|write|heal|make fan)\\b/i.test(e.getAttribute('aria-label') || e.innerText.trim()))).map(e => e.getAttribute('aria-label') || e.innerText.trim()),
+      alerts: [...document.querySelectorAll('[role="alert"]')].filter(shown).map(e => e.innerText),
+      loading: [...document.querySelectorAll('[data-e-pricing], [data-e-loading], [data-e-opening]')].some(shown),
+      refreshing: [...document.querySelectorAll('[data-e-refreshing], [data-e-capturing]')].some(shown)
+    };
+  })()`);
+}
+
+async function settled(page: Page, allowHeld = false) {
+  await page.until(
+    async () => {
+      const s = await state(page);
+      if (s.alerts.length) throw new Error(`Rendered alert: ${s.alerts.join(" | ")}`);
+      return !s.loading && (allowHeld || !s.refreshing) && (await page.count(PICTURE)) > 0;
+    },
+    "loaded duct picture",
+    60_000,
+  );
+}
+
+async function subject(page: Page, system: string, allowHeld = false) {
+  await page.until(
+    async () => {
+      const s = await state(page);
+      return (
+        new URL(s.url).searchParams.get("system") === (system || null) &&
+        !s.loading &&
+        (system ? s.pictureTitle.includes(system) : s.pictureTitle.includes("All systems"))
+      );
+    },
+    `URL and picture agree on ${system || "all systems"}`,
+    30_000,
+  );
+  await settled(page, allowHeld);
+}
+
+async function rows(page: Page) {
+  return page.read<{ key: string; text: string }[]>(
+    `[...document.querySelectorAll(${literal(`${SYSTEMS} [role=option][data-key]`)})].filter(${visible}).map(e => ({ key: e.getAttribute('data-key'), text: e.innerText.split('\\n')[0] }))`,
+  );
+}
+
+/** Save actual DOM nodes as remote references, outside app state. No injected observers or stores. */
+async function hold(page: Page, selector: string) {
+  const result = await page.send("Runtime.evaluate", {
+    expression: `[...document.querySelectorAll(${literal(selector)})].find(${visible})`,
+    returnByValue: false,
+  });
+  if (!result.result.objectId) throw new Error(`PRECONDITION: no visible ${selector} to retain`);
+  return result.result.objectId as string;
+}
+
+async function retained(page: Page, objectId: string) {
+  const result = await page.send("Runtime.callFunctionOn", {
+    objectId,
+    functionDeclaration:
+      "function() { return this.isConnected && this.getClientRects().length > 0; }",
+    returnByValue: true,
+  });
+  return result.result.value === true;
+}
+
+function random(seed: number) {
+  let value = seed >>> 0;
+  return () => {
+    value = (Math.imul(value, 1664525) + 1013904223) >>> 0;
+    return value / 4294967296;
+  };
+}
+
+test("seeded real-user route journey", async () => {
+  const seed = Number(process.env.CHAOS_SEED ?? 20261023);
+  expect(
+    Number.isSafeInteger(seed) && seed >= 0 && seed <= 0xffffffff,
+    "CHAOS_SEED is uint32",
+  ).toBe(true);
+  const rng = random(seed);
+  const capabilities = ["refresh", "reconnect", "worker", "thread", "arming"];
+  const required = new Set((process.env.CHAOS_REQUIRE ?? "").split(",").filter(Boolean));
+  for (const capability of required)
+    expect(capabilities, `unknown CHAOS_REQUIRE ${capability}`).toContain(capability);
+  const lane = process.env.CHAOS_LANE;
+  const root = execFileSync("git", ["rev-parse", "--show-toplevel"], { encoding: "utf8" }).trim();
+  const commit = execFileSync("git", ["rev-parse", "HEAD"], { encoding: "utf8" }).trim();
+  const dir = resolve(
+    root,
+    ".artifacts",
+    "runs",
+    `browser-${new Date().toISOString().slice(0, 10).replaceAll("-", "")}-route-chaos`,
+    `${seed}-${Date.now()}`,
+  );
+  mkdirSync(dir, { recursive: true });
+  const receipt = {
+    seed,
+    lane,
+    commit,
+    checkout: root,
+    started: new Date().toISOString(),
+    target: process.env.CDP_TARGET,
+    port: process.env.CDP_PORT,
+    required: [...required],
+    omitted: capabilities.filter((capability) => !required.has(capability)),
+    result: "running",
+    steps: [] as {
+      step: number;
+      name: string;
+      status: string;
+      before?: unknown;
+      after?: unknown;
+      error?: string;
+    }[],
+    coverage: {} as Record<string, string>,
+    network: [] as { method: string; url?: string; status?: number; stream?: boolean }[],
+  };
+  const save = () => writeFileSync(join(dir, "receipt.json"), JSON.stringify(receipt, null, 2));
+  let page: Page | undefined;
+  let current = 0;
+  let workerSession: string | undefined;
+  const workers = new Map<string, string>();
+  const paused = new Set<string>();
+  let shifts: number[] = [];
+  const checkPage = () => {
+    if (!page) throw new Error("CDP page not connected");
+    return page;
+  };
+  const available = (capability: string, present: boolean, reason: string) => {
+    receipt.coverage[capability] = present ? "available" : `UNPROVEN: ${reason}`;
+    if (!present && receipt.steps.length) receipt.steps.at(-1)!.status = "unavailable";
+    if (!present && required.has(capability))
+      throw new Error(`PRECONDITION: ${capability}: ${reason}`);
+    return present;
+  };
+  async function step(name: string, run: () => Promise<void>) {
+    const item = {
+      step: ++current,
+      name,
+      status: "running",
+    } as (typeof receipt.steps)[number];
+    receipt.steps.push(item);
+    save();
+    console.log(`seed=${seed} step=${current} ${name}`);
+    try {
+      item.before = page ? await state(page) : undefined;
+      await run();
+      item.after = page ? await state(page) : undefined;
+      if (page) expect((await state(page)).alerts, "no rendered crash alert").toEqual([]);
+      if (item.status === "running") item.status = "passed";
+    } catch (error) {
+      item.status = "failed";
+      item.error = String(error);
+      throw error;
+    } finally {
+      save();
+    }
+  }
+
+  // Poll the held main/picture and focus/scroll on every non-navigation disruption.
+  async function untouched(run: () => Promise<void>) {
+    const p = checkPage();
+    const before = await state(p);
+    shifts = [];
+    const main = await hold(p, '[data-proto="E2"]');
+    const picture = await hold(
+      p,
+      `${PICTURE} canvas[aria-label^="3D model"], ${PICTURE} svg[aria-label="duct tree"]`,
+    );
+    let stopped = false;
+    let failure: unknown;
+    const monitor = (async () => {
+      while (!stopped) {
+        try {
+          expect(await retained(p, main), "main DOM continuity").toBe(true);
+          expect(await retained(p, picture), "canvas/SVG continuity").toBe(true);
+          const after = await state(p);
+          expect(after.visibility, "measured tab stays visible").toBe("visible");
+          expect(after.focus, "untouched focus and its scroll parents").toEqual(before.focus);
+          expect(after.panes, "untouched pane scroll").toEqual(before.panes);
+          expect(new URL(after.url).searchParams.get("viewport"), "untouched URL pose").toBe(
+            new URL(before.url).searchParams.get("viewport"),
+          );
+          expect(
+            after.armed.filter((action) => !before.armed.includes(action)),
+            "no stale action rearming",
+          ).toEqual([]);
+          expect(after.alerts, "no rendered crash alert").toEqual([]);
+        } catch (error) {
+          failure = error;
+          return;
+        }
+        await sleep(100);
+      }
+    })();
+    try {
+      await run();
+    } finally {
+      stopped = true;
+      await monitor;
+      receipt.coverage[`layout-shifts-step-${current}`] = JSON.stringify(shifts);
+      await p.send("Runtime.releaseObject", { objectId: main });
+      await p.send("Runtime.releaseObject", { objectId: picture });
+    }
+    if (failure) throw failure;
+    expect(
+      shifts.filter((value) => value > 0),
+      "untouched layout shifts",
+    ).toEqual([]);
+  }
+
+  try {
+    await step("explicit lane and Chrome custody", async () => {
+      if (
+        !process.env.E2E_WEB ||
+        !process.env.CDP_PORT ||
+        !process.env.CDP_TARGET ||
+        !process.env.CHAOS_REQUIRE ||
+        !["demo", "host"].includes(lane ?? "")
+      )
+        throw new Error(
+          "PRECONDITION: E2E_WEB (full /ducts URL), CDP_PORT, CDP_TARGET, CHAOS_LANE=demo|host and explicit CHAOS_REQUIRE are required",
+        );
+      const url = new URL(process.env.E2E_WEB);
+      if (
+        url.pathname !== "/ducts" ||
+        (lane === "demo"
+          ? !["scene", "navigation"].includes(url.searchParams.get("demo") ?? "")
+          : url.searchParams.has("demo"))
+      )
+        throw new Error(
+          "PRECONDITION: demo lane needs /ducts?demo=navigation (or scene with two systems); host lane needs /ducts with no demo query",
+        );
+      page = await connect();
+      page.onEvent((event) => {
+        if (
+          event.method === "PerformanceTimeline.timelineEventAdded" &&
+          event.params?.event?.type === "layout-shift"
+        )
+          shifts.push(event.params.event.layoutShiftDetails?.value ?? 0);
+        if (
+          event.method === "Target.attachedToTarget" &&
+          event.params?.targetInfo?.type === "worker"
+        )
+          workers.set(event.params.sessionId, event.params.targetInfo.url);
+        if (event.method === "Target.detachedFromTarget") workers.delete(event.params.sessionId);
+        if (event.method === "Debugger.paused" && event.sessionId) paused.add(event.sessionId);
+        if (event.method === "Debugger.resumed" && event.sessionId) paused.delete(event.sessionId);
+        if (event.method === "Network.responseReceived")
+          receipt.network.push({
+            method: event.method,
+            url: event.params.response.url,
+            status: event.params.response.status,
+            stream: event.params.response.mimeType === "text/event-stream",
+          });
+        if (event.method === "Network.webSocketCreated")
+          receipt.network.push({ method: event.method, url: event.params.url });
+      });
+      await page.send("PerformanceTimeline.enable", { eventTypes: ["layout-shift"] });
+      // Page auto-attachment only sees related workers. Never attach to another browser tab's worker.
+      await page.send("Target.setAutoAttach", {
+        autoAttach: true,
+        waitForDebuggerOnStart: false,
+        flatten: true,
+        filter: [{ type: "worker" }, { exclude: true }],
+      });
+      await page.open(url.href);
+      if ((await state(page)).visibility !== "visible")
+        throw new Error(
+          "PRECONDITION: route-chaos needs a visible foreground Chrome tab for measured continuity",
+        );
+      receipt.coverage.browser = JSON.stringify(await page.send("Browser.getVersion"));
+      await settled(page);
+    });
+    const p = checkPage();
+    let a = "";
+    let b = "";
+    await step("discover at least two actual system controls", async () => {
+      if (await box(p, "button", "show every system")) await button(p, "show every system");
+      const options = await rows(p);
+      if (options.length < 2)
+        throw new Error(
+          `PRECONDITION: all→A→B→all needs two rendered system rows; found ${options.length}. demo=scene baseline has groups: [] and systems: []`,
+        );
+      const index = Math.floor(rng() * options.length);
+      a = options[index]!.key;
+      b = options[(index + 1) % options.length]!.key;
+      receipt.coverage.systems = JSON.stringify(options);
+    });
+    await step("search, filter, Escape and clear through real list controls", async () => {
+      await fill(p, SEARCH, "chaos-no-such-system-" + seed);
+      await p.press("Escape");
+      await p.until(
+        async () => (await rows(p)).length === 0,
+        "search transition excludes all rows",
+      );
+      await button(p, "Clear search", SYSTEMS);
+      await p.until(
+        async () => (await rows(p)).some((row) => row.key === a),
+        "cleared search restores system A",
+      );
+      await button(p, "Filter systems", SYSTEMS);
+      await click(p, '[aria-label="Search filters"] [data-key="field:airType"]');
+      await p.until(
+        () => p.count('[aria-label="Filter values"] [role=option]'),
+        "air-type filter values",
+      );
+      await click(p, '[aria-label="Filter values"] [role=option]');
+      await p.until(() => p.count(`${SYSTEMS} [data-list-pill]`), "committed real filter pill");
+      await button(p, "Clear search", SYSTEMS);
+      await p.press("Escape");
+    });
+    const pickSystem = async (key: string, allowHeld = false) => {
+      if (
+        !(await box(p, `${SYSTEMS} [role=option][data-key=${literal(key)}]`)) &&
+        (await box(p, "button", "Expand Systems"))
+      )
+        await button(p, "Expand Systems");
+      await click(p, `${SYSTEMS} [role=option][data-key=${literal(key)}]`);
+      await subject(p, key, allowHeld);
+    };
+    await step("all → A; Back → all; Forward → A", async () => {
+      await pickSystem(a);
+      await button(p, "Back");
+      await subject(p, "");
+      await button(p, "Forward");
+      await subject(p, a);
+    });
+    await step("open Systems pane; A → B; B → all", async () => {
+      // The pane rail reveals the same list without changing the named system.
+      await button(p, "Expand Systems");
+      await pickSystem(b);
+      await button(p, "show every system");
+      await subject(p, "");
+    });
+    await step("select a real tree row and retain copied URL through reload", async () => {
+      await pickSystem(a);
+      await click(p, '[data-pane-id="e-sidebar"] [role=treeitem][aria-level="2"][data-key]');
+      await p.until(
+        async () => !!new URL(await p.url()).searchParams.get("selected"),
+        "tree selection published to URL",
+      );
+      const copied = await p.url();
+      const before = await state(p);
+      await p.open(copied);
+      await settled(p);
+      expect(new URL(await p.url()).searchParams.get("selected")).toBe(
+        new URL(copied).searchParams.get("selected"),
+      );
+      expect((await state(p)).crumb).toBe(before.crumb);
+      await p.reload();
+      await settled(p);
+      expect((await state(p)).crumb).toBe(before.crumb);
+      expect(new URL(await p.url()).searchParams.get("system")).toBe(a);
+      // Focus the selected subject through its real control; Escape alone must preserve its pose.
+      await click(p, "[data-e-selected]");
+      expect(
+        new URL(await p.url()).searchParams.get("selected"),
+        "selection is armed before Escape",
+      ).toBe(new URL(copied).searchParams.get("selected"));
+      await sleep(350);
+      const escapePose = new URL(await p.url()).searchParams.get("viewport");
+      await p.press("Escape");
+      await p.until(
+        async () => !new URL(await p.url()).searchParams.get("selected"),
+        "Escape clears the selected element",
+      );
+      await sleep(200);
+      expect(new URL(await p.url()).searchParams.get("viewport"), "Escape preserves pose").toBe(
+        escapePose,
+      );
+    });
+
+    const disruptions = rng() < 0.5 ? ["refresh", "reconnect"] : ["reconnect", "refresh"];
+    for (const disruption of disruptions)
+      await step(`untouched ${disruption}`, async () => {
+        if (disruption === "reconnect") {
+          const streams = receipt.network.filter((event) => event.stream).length;
+          await untouched(async () => {
+            await p.send("Network.emulateNetworkConditions", {
+              offline: true,
+              latency: 0,
+              downloadThroughput: -1,
+              uploadThroughput: -1,
+            });
+            await sleep(500 + Math.floor(rng() * 1000));
+            await p.send("Network.emulateNetworkConditions", {
+              offline: false,
+              latency: 0,
+              downloadThroughput: -1,
+              uploadThroughput: -1,
+            });
+            if (streams)
+              await p.until(
+                async () => receipt.network.filter((event) => event.stream).length > streams,
+                "new SSE response after reconnect",
+                15_000,
+              );
+            else await sleep(500);
+            await settled(p);
+          });
+          available(
+            "reconnect",
+            receipt.network.filter((event) => event.stream).length > streams,
+            "offline/online ran, but no new SSE response was observed; this lane cannot prove stream reconnect",
+          );
+          if (receipt.network.filter((event) => event.stream).length > streams)
+            receipt.coverage.reconnect =
+              "new SSE response observed after CDP offline/online; DOM continuity retained";
+        } else {
+          if (!(await box(p, "button", "refresh")) && (await box(p, "button", "Show Situation")))
+            await button(p, "Show Situation");
+          if (
+            !available(
+              "refresh",
+              !!(await box(p, "button", "refresh")),
+              "no enabled refresh control; bind a real document for host lane",
+            )
+          )
+            return;
+          // Deliberate focus move happens before the untouched observation window.
+          const point = await p.until(() => box(p, "button", "refresh"), "refresh control");
+          await p.send("Input.dispatchMouseEvent", { type: "mouseMoved", ...point });
+          await p.send("Input.dispatchMouseEvent", {
+            type: "mousePressed",
+            ...point,
+            button: "left",
+            clickCount: 1,
+          });
+          // Mousedown puts focus on the control. Observe before mouseup admits the refresh.
+          await untouched(async () => {
+            await p.send("Input.dispatchMouseEvent", {
+              type: "mouseReleased",
+              ...point,
+              button: "left",
+              clickCount: 1,
+            });
+            await sleep(350);
+            await settled(p);
+          });
+          receipt.coverage.refresh =
+            "refresh control + DOM continuity; host freshness requires native receipt in parent run";
+        }
+      });
+    await step(
+      "worker paused in flight; old completion cannot replace current system",
+      async () => {
+        const worker = [...workers].find(([, url]) => /pricing\.worker/.test(url));
+        if (!available("worker", !!worker, "pricing worker not discoverable on this target"))
+          return;
+        workerSession = worker![0];
+        await p.send("Debugger.enable", {}, workerSession);
+        await p.send("Debugger.pause", {}, workerSession);
+        await p.until(async () => paused.has(workerSession!), "pricing worker actually paused");
+        try {
+          await button(p, "refresh");
+          await p.until(() => p.count("[data-e-refreshing]"), "held result while worker is paused");
+          if (
+            lane === "host" &&
+            process.env.CHAOS_STAGE_SELECTOR &&
+            process.env.CHAOS_STAGE_VALUE !== undefined
+          ) {
+            await stageWork(p, process.env.CHAOS_STAGE_SELECTOR, process.env.CHAOS_STAGE_VALUE);
+            receipt.coverage.workerWork = "changed a real Work editor while old pricing was paused";
+          }
+          await button(p, "show every system");
+          await subject(p, "", true);
+          await pickSystem(b, true);
+        } finally {
+          await p.send("Debugger.resume", {}, workerSession);
+        }
+        await settled(p);
+        await subject(p, b);
+        const freshReadout = await visibleText(p, "[data-picture-readout]");
+        const copied = await p.url();
+        await p.open(copied);
+        await settled(p);
+        expect(
+          await visibleText(p, "[data-picture-readout]"),
+          "late worker delivery agrees with a fresh URL load of persisted Work",
+        ).toBe(freshReadout);
+        receipt.coverage.worker =
+          "pricing worker paused during refresh; changed system before completion; final readout agrees with fresh URL load";
+      },
+    );
+    await step("route leave/return; Pea draft identity through thread leave/return", async () => {
+      const route = await p.url();
+      const main = await hold(p, '[data-proto="E2"]');
+      await button(p, "Open Pea");
+      await p.until(async () => new URL(await p.url()).pathname === "/pea", "Pea route");
+      const composer = 'textarea[aria-label="Message"]';
+      await p.until(() => box(p, composer), "Pea composer", 30_000);
+      const threads = await p.read<string[]>(
+        `[...document.querySelectorAll('[data-list-view][aria-label="threads"] [role=option][data-key]')].filter(${visible}).map(e => e.getAttribute('data-key'))`,
+      );
+      const canSwitch = available(
+        "thread",
+        threads.length >= 2,
+        "two existing visible disposable threads are required for thread identity proof",
+      );
+      const pickThread = async (id: string) => {
+        await click(
+          p,
+          `[data-list-view][aria-label="threads"] [role=option][data-key=${literal(id)}]`,
+        );
+        await p.until(
+          async () =>
+            new URL(await p.url()).searchParams.get("thread") === id &&
+            (await p.count('[data-chat-transcript][aria-busy="true"]')) === 0,
+          `thread ${id} loaded`,
+        );
+      };
+      if (canSwitch) await pickThread(threads[0]!);
+      const transcript = await visibleText(p, "[data-chat-transcript]");
+      const marker = `unsent route-chaos ${seed}`;
+      const draftBefore = await fieldValue(p, composer);
+      if (draftBefore)
+        throw new Error("PRECONDITION: Pea composer must be empty in disposable browser profile");
+      await fill(p, composer, marker);
+      if (canSwitch) {
+        await pickThread(threads[1]!);
+        expect(await fieldValue(p, composer), "A's draft never appears in B").not.toBe(marker);
+        await pickThread(threads[0]!);
+        expect(await fieldValue(p, composer), "A's draft returns to A").toBe(marker);
+        expect(await visibleText(p, "[data-chat-transcript]"), "A's transcript returns to A").toBe(
+          transcript,
+        );
+      }
+      const pea = await p.url();
+      await button(p, "Home / tool directory");
+      await button(p, "Back");
+      await p.until(() => box(p, composer), "composer on return");
+      expect(await p.url()).toBe(pea);
+      expect(await fieldValue(p, composer)).toBe(marker);
+      await fill(p, composer, "");
+      for (let back = 0; back < 6 && new URL(await p.url()).pathname !== "/ducts"; back++) {
+        await button(p, "Back");
+        await sleep(150);
+      }
+      await settled(p);
+      expect(await p.url()).toBe(route);
+      expect(await retained(p, main), "Activity retained the Ducts main DOM").toBe(true);
+      await p.send("Runtime.releaseObject", { objectId: main });
+      receipt.coverage.draft = "unsent draft survives route leave/return";
+      if (canSwitch)
+        receipt.coverage.thread =
+          "A→B→A keeps distinct draft and transcript; route leave/return keeps A's draft";
+    });
+    await step("staged Work preview loses authority after refresh and route return", async () => {
+      const editor = process.env.CHAOS_STAGE_SELECTOR;
+      const stageValue = process.env.CHAOS_STAGE_VALUE;
+      if (
+        !available(
+          "arming",
+          lane === "host" && !!editor && stageValue !== undefined,
+          "host lane needs a disposable Work editor CHAOS_STAGE_SELECTOR and CHAOS_STAGE_VALUE; staging persists Work, preview asks native Revit, Apply is never pressed",
+        )
+      )
+        return;
+      await pickSystem(a);
+      if (!(await box(p, "button", "refresh")) && (await box(p, "button", "Show Situation")))
+        await button(p, "Show Situation");
+      await stageWork(p, editor!, stageValue!);
+      const preview = await p.until(
+        async () => {
+          const name = await actionName(p, "preview");
+          return name && (await box(p, "button", name)) ? name : null;
+        },
+        "persisted staged Work exposes an enabled Preview",
+        30_000,
+      );
+      await button(p, preview);
+      await p.until(
+        async () => (await state(p)).armed.some((name) => /^apply\b/i.test(name)),
+        "real preview arms Apply",
+        60_000,
+      );
+      await p.press("Escape");
+      await button(p, "refresh");
+      await settled(p);
+      await p.until(
+        async () => !(await state(p)).armed.some((name) => /^apply\b/i.test(name)),
+        "refresh disarms stale Apply",
+      );
+      await button(p, "Open Pea");
+      await button(p, "Back");
+      await settled(p);
+      expect(
+        (await state(p)).armed.filter((name) => /^apply\b/i.test(name)),
+        "route return cannot rearm stale Apply",
+      ).toEqual([]);
+      receipt.coverage.arming =
+        "persisted a real Work cell via UI; native preview armed Apply; refresh and route return disarmed it. Native write consumption remains UNPROVEN";
+    });
+    expect(p.errors, "no uncaught browser exceptions").toEqual([]);
+    receipt.result =
+      receipt.omitted.length || receipt.steps.some((item) => item.status === "unavailable")
+        ? "partial"
+        : "passed";
+    await p.dump(dir, "final");
+  } catch (error) {
+    receipt.result = "failed";
+    if (page)
+      await page.dump(dir, `seed-${seed}-step-${current}-failed`).catch((dumpError) => {
+        receipt.coverage.failureArtifact = `UNPROVEN: ${String(dumpError)}`;
+      });
+    throw error;
+  } finally {
+    if (page) {
+      await page
+        .send("Network.emulateNetworkConditions", {
+          offline: false,
+          latency: 0,
+          downloadThroughput: -1,
+          uploadThroughput: -1,
+        })
+        .catch(() => undefined);
+      if (workerSession) {
+        await page.send("Debugger.resume", {}, workerSession).catch(() => undefined);
+        await page
+          .send("Target.detachFromTarget", { sessionId: workerSession })
+          .catch(() => undefined);
+      }
+      receipt.coverage.exceptions = JSON.stringify(page.errors);
+      page.close();
+    }
+    save();
+    console.log(`route-chaos ${receipt.result}: ${dir}`);
+  }
+});

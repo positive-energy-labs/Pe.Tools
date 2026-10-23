@@ -16,6 +16,7 @@
   },
   "type": "module",
   "scripts": {
+    "test:route-chaos": "vp test run --config tests/e2e/route-chaos.config.ts",
     "codegen": "pnpm --filter @pe/host-contracts codegen",
     "verify": "node scripts/verify.ts",
     "test": "vp run -r test",
