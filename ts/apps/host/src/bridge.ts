@@ -1,7 +1,7 @@
 import { Context, Deferred, Effect, Layer, PubSub, Ref, Schema } from "effect";
 import type { HttpServerRequest, HttpServerResponse } from "effect/unstable/http";
 import { HttpServerResponse as Response } from "effect/unstable/http";
-import { recordBridgeQueue } from "./gateway-owner.ts";
+import { bridgeDispatchRefusal, recordBridgeQueue } from "./gateway-owner.ts";
 import { receiptProducerSchema, type DocumentRef, type ReceiptProducer } from "@pe/agent-contracts";
 import { randomUUID } from "node:crypto";
 import { runtimeOwnerRejection } from "@pe/host-contracts/service-identity";
@@ -544,15 +544,27 @@ export const RevitBridgeLive = Layer.effect(
               }),
             );
         }
-        const phase = yield* Ref.modify(session.requests, (requests) => {
-          if (requests.get(requestId)?.phase === "cancelled")
-            return ["cancelled", requests] as const;
-          if (reserved && fence !== revocation) return ["waiting", requests] as const;
-          const next = new Map(requests);
-          next.set(requestId, { operationKey, requestId, reply, phase: "dispatched" });
-          return ["dispatched", next] as const;
-        });
+        const phase = yield* Ref.modify(
+          session.requests,
+          (
+            requests,
+          ): readonly [
+            "cancelled" | "waiting" | "dispatched" | { refusal: string },
+            ReadonlyMap<string, BridgeRequest>,
+          ] => {
+            if (requests.get(requestId)?.phase === "cancelled")
+              return ["cancelled", requests] as const;
+            if (reserved && fence !== revocation) return ["waiting", requests] as const;
+            const refusal = reserved ? bridgeDispatchRefusal(requestId) : null;
+            if (refusal) return [{ refusal }, requests] as const;
+            const next = new Map(requests);
+            next.set(requestId, { operationKey, requestId, reply, phase: "dispatched" });
+            return ["dispatched", next] as const;
+          },
+        );
         if (phase === "dispatched") break;
+        if (typeof phase !== "string")
+          return yield* Effect.fail(new BridgeError(phase.refusal, 403, { notDispatched: true }));
         if (phase === "cancelled")
           return yield* Effect.fail(
             new BridgeError(`'${operationKey}' was cancelled before dispatch.`, 499, {

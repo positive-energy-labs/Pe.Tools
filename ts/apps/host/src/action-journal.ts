@@ -413,6 +413,13 @@ export class ActionJournal implements ReceiptReader {
     );
   }
 
+  /** The committed step index also fences native work after it has waited in the bridge queue. */
+  dispatchRefusal(requestId: string): string | null {
+    const action = this.stepAction.get(requestId);
+    const row = action ? this.rows.get(action) : undefined;
+    return row ? (live(row.basis, "native dispatch")?.message ?? null) : null;
+  }
+
   async list(target?: DocumentRef, id?: string): Promise<ActionReceipt[]> {
     await this.loadOnce();
     await this.tail;
