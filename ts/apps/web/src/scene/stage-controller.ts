@@ -13,17 +13,11 @@ import {
   useSyncExternalStore,
   type ReactNode,
 } from "react";
-import {
-  chordLabel,
-  ScopeGestures,
-  useScopeKeys,
-  type ScopeKey,
-  type ScopeGesture,
-} from "@pe/kit/keys";
+import { ScopeGestures, type ScopeKey } from "@pe/kit/keys";
 import type { PlaneViewport } from "@pe/agent-contracts";
 import type { PictureBounds } from "./framing";
 import { viewportProject, type Project } from "./projection";
-import { ORBIT_GESTURES } from "./gestures";
+import { useStageKeys } from "./stage-keys";
 import { flyTo, glideLook, type LiveOrbit } from "@pe/kit/lang/live-orbit";
 import { applyLook, center, frame, shiftOnScreen, type OrbitViewport } from "./orbit";
 import type { Bounds } from "./types";
@@ -173,22 +167,13 @@ function useStageBindings(options: OrbitStage | PlaneStage) {
     },
     options: { conflictBehavior: "allow" },
   };
-  useScopeKeys(keys);
-  useScopeKeys([escape], body);
+  const gestures = useStageKeys(keys, escape, body, options.kind === "orbit");
   useEffect(() => {
     if (options.kind !== "plane" || !options.host) return;
     const frame = () => frameOn(null);
     options.host.addEventListener("dblclick", frame);
     return () => options.host?.removeEventListener("dblclick", frame);
   }, [options]);
-  const gestures: readonly ScopeGesture[] = [
-    ...(options.kind === "orbit" ? ORBIT_GESTURES : []),
-    ...keys
-      .filter((key) => key.available?.() !== false)
-      .map((key) => ({ keys: [chordLabel(key.hotkey)], label: key.says ?? key.label })),
-    { keys: ["Esc"], label: escape.label },
-    { keys: ["Alt", "← / →"], label: "back / forward (also mouse buttons 3 / 4)" },
-  ];
   return {
     layers:
       options.kind === "orbit" && !options.axis

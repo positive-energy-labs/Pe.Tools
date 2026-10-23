@@ -24,20 +24,7 @@ import {
 } from "@pe/agent-contracts/ducts-guide";
 import { CompareTable } from "./compare-table";
 import { DuctCases } from "./docs-cases";
-import { KeyLegend, type LegendKey } from "@pe/kit/lang/key-hint";
-import { STAGE_KEYS } from "#/scene/stage-keys";
-
 const PRESSURE_DROP = mapLink("pressure-drop")!;
-
-/** Includes projection O through STAGE_KEYS, shared with the picture's own legend. */
-const PICTURE_KEYS: readonly LegendKey[] = [
-  ...STAGE_KEYS,
-  { keys: ["/"], does: "go to a subject: a name, family, size, system or element id" },
-  { keys: ["S"], does: "swap the model and the schematic" },
-  { keys: ["M"], does: "meshes on or off" },
-  { keys: ["C"], does: "context around the system on or off" },
-  { keys: ["L"], does: "centrelines on or off" },
-];
 
 function DuctsDocs() {
   return (
@@ -88,7 +75,6 @@ function DuctsDocs() {
         and a click on it swaps the two. Each move is one step Back can undo; dragging the camera is
         not.
       </p>
-      <KeyLegend keys={PICTURE_KEYS} lead={PICTURE_KEYS.length} defaultOpen />
 
       <h3>Rules and findings</h3>
       <p>

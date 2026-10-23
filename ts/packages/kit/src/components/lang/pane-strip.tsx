@@ -15,6 +15,7 @@ import { Popover, PopoverContent, PopoverTrigger } from "./popover-internal";
 
 import type { FloaterSpec } from "./floater";
 import { Switcher } from "./switcher";
+import { useTeach } from "./use-teach";
 
 export interface StripOption {
   key: string;
@@ -113,6 +114,25 @@ export function PaneStrip({
   children,
 }: PaneStripProps & { children?: ReactNode }) {
   const live = useScopeLive();
+  useTeach({
+    kind: "views",
+    label: "views and layers",
+    options: [
+      ...(floaters?.map((f) => ({
+        key: f.key,
+        label: f.label,
+        says: f.says,
+        active: f.open,
+        place: f.place,
+      })) ?? []),
+      ...(layers?.options.map((o) => ({
+        key: o.key,
+        label: o.label,
+        says: o.says,
+        active: layers.value.includes(o.key),
+      })) ?? []),
+    ],
+  });
   const [ref, fold] = useFold();
   const bind = (option: StripOption, run: () => void): ScopeKey[] =>
     option.chord == null

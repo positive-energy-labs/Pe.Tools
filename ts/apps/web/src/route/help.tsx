@@ -1,298 +1,209 @@
-/**
- * The help page (Alt+/). The layout is the data: the body measures the visible panes, reads every
- * hotkey registration back from TanStack, and joins them to a pane by `meta.scope`. Chords bound
- * above any pane sit in a band over the chart; a pane's keys hang off it with a leader; the route's
- * `docs` prose renders below. Nothing here is a second list of keys.
- *
- * Panes and registrations are read once as the body mounts (it exists only while open), so the page
- * is a still picture of the route, not a subscriber that re-renders on every registration.
- */
-import { useEffect, useLayoutEffect, useMemo, useRef, useState, type ReactNode } from "react";
+/** Alt+/ explains mounted kit facts; only the route's purpose prose is hand-written. */
+import { useEffect, useLayoutEffect, useRef, useState, type ReactNode } from "react";
 import { Dialog as DialogPrimitive } from "@base-ui/react/dialog";
-
 import { KeyHint } from "@pe/kit/lang/key-hint";
 import { Button } from "@pe/kit/lang/button";
+import { LeaderDiagram } from "@pe/kit/lang/leader-diagram";
+import { SearchControl } from "@pe/kit/lang/search-control";
+import { TooltipHint } from "@pe/kit/lang/tooltip";
+import { useTeaching } from "@pe/kit/lang/use-teach";
+import type { Teaching, TeachKey } from "@pe/kit/lang/teach";
+import { useScopeKeys } from "@pe/kit/keys";
+import { GestureKey } from "@pe/kit/lang/gesture-glyph";
 import { HotkeyCommand } from "#/components/lang/hotkey-command";
 import { startFeedback } from "#/components/feedback-picker";
 import { SettingsHelpTrigger } from "#/machine/navigation";
-import {
-  chordLabel,
-  readGestures,
-  readKeyMeta,
-  readRegistrations,
-  useScopeKeys,
-  type Chord,
-  type DeclaredGesture,
-  type KeyMeta,
-} from "@pe/kit/keys";
-import { GestureKey } from "@pe/kit/lang/gesture-glyph";
-import { TooltipHint } from "@pe/kit/lang/tooltip";
 
-interface Region {
-  id: string;
-  label: string;
-  rect: DOMRect;
-}
-
-interface Bound extends KeyMeta {
-  hotkey: Chord;
-}
-
-/** A pointer gesture or natively handled key a pane declared; drawn in the same card as chords. */
-type Gestured = DeclaredGesture & { hotkey?: undefined };
-type Line = Bound | Gestured;
-const isGesture = (line: Line): line is Gestured => line.hotkey === undefined;
-
-const CARD_W = 240;
-/** The chord that opens this page; the page does not list it among the keys it explains. */
 const HELP_CHORD = { hotkey: "Alt+/", label: "How this tool works" } as const;
-const CARD_GAP = 12;
-/** Below this the chart keeps one column of cards instead of two. */
-const TWO_COLUMNS_W = 800;
-
-/**
- * The panes the user can see now. A pane under `<Activity mode="hidden">` stays mounted with
- * `display: none`, so it measures 0x0 at the origin; `checkVisibility()` is false for it and for
- * anything inside a hidden subtree, which is exactly what "drawn" means.
- */
-const measureRegions = (): Region[] =>
-  [...document.querySelectorAll<HTMLElement>('[data-slot="pane"]')]
-    .filter((el) => el.checkVisibility())
-    .map((el, index) => ({
-      id: el.dataset.paneId ?? `${el.dataset.kind ?? "pane"}-${index}`,
-      label:
-        el.querySelector('[data-slot="pane-title"]')?.textContent?.trim() ||
-        el.querySelector('[data-slot="pane-header"] h2')?.textContent?.trim() ||
-        el.getAttribute("aria-label") ||
-        el.dataset.paneId ||
-        el.dataset.kind ||
-        `pane ${index + 1}`,
-      rect: el.getBoundingClientRect(),
-    }));
-
-const unionOf = (regions: readonly Region[]) => {
-  const left = Math.min(...regions.map((r) => r.rect.left));
-  const top = Math.min(...regions.map((r) => r.rect.top));
-  return new DOMRect(
-    left,
-    top,
-    Math.max(...regions.map((r) => r.rect.right)) - left,
-    Math.max(...regions.map((r) => r.rect.bottom)) - top,
-  );
-};
-
-/** `flow` wraps the pairs across the line (the route band); default is one column (a card). */
-function Rows({ keys, flow = false }: { keys: readonly Line[]; flow?: boolean }) {
-  const gestures = new Set<string>();
-  // Several lists can declare the same gesture in one scope or in the route band.
-  const rows = keys.filter((line) => {
-    if (!isGesture(line)) return true;
-    const key = JSON.stringify([line.keys, line.pointer, line.label]);
-    if (gestures.has(key)) return false;
-    gestures.add(key);
-    return true;
-  });
-  return (
-    <dl
-      className={
-        flow
-          ? "flex min-w-0 flex-wrap gap-x-5 gap-y-1 t-small"
-          : "grid grid-cols-[auto_1fr] items-center gap-x-2.5 gap-y-1 t-small"
+type Region = { id: string; scope?: string; rect: DOMRect };
+function useRegions(facts: readonly Teaching[]) {
+  const [regions, setRegions] = useState<Region[]>([]);
+  useLayoutEffect(() => {
+    const panes = [...document.querySelectorAll<HTMLElement>('[data-slot="pane"][data-teach-id]')];
+    const measure = () => {
+      const next = panes
+        .filter((p) => p.checkVisibility?.() ?? !!p.getBoundingClientRect().width)
+        .map((p) => ({
+          id: p.dataset.teachId!,
+          scope: p.dataset.paneId,
+          rect: p.getBoundingClientRect(),
+        }));
+      setRegions((old) => (JSON.stringify(old) === JSON.stringify(next) ? old : next));
+    };
+    measure();
+    const resize = typeof ResizeObserver === "undefined" ? null : new ResizeObserver(measure);
+    panes.forEach((p) => resize?.observe(p));
+    const mutation = new MutationObserver(measure);
+    mutation.observe(document.body, {
+      subtree: true,
+      childList: true,
+      attributes: true,
+      attributeFilter: ["style", "hidden", "class"],
+    });
+    window.addEventListener("resize", measure);
+    return () => {
+      resize?.disconnect();
+      mutation.disconnect();
+      window.removeEventListener("resize", measure);
+    };
+  }, [facts]);
+  return regions;
+}
+function Keys({ facts }: { facts: readonly Teaching[] }) {
+  const unique = new Map<string, TeachKey>();
+  for (const fact of facts)
+    if (fact.kind === "keys")
+      for (const item of fact.items) {
+        if (item.label === HELP_CHORD.label) continue;
+        const id = `${fact.scope}:${item.keys?.join("+").replaceAll("Escape", "Esc") ?? ""}:${item.pointer ?? ""}`;
+        if (!unique.has(id) || !fact.gestures) unique.set(id, item);
       }
-    >
-      {rows.map((k) =>
-        isGesture(k) ? (
-          <div
-            key={`gesture:${k.keys?.join("+") ?? ""}:${k.pointer ?? ""}:${k.label}`}
-            className={flow ? "flex items-center gap-2.5" : "contents"}
-          >
-            <dt>
-              <GestureKey pointer={k.pointer} keys={k.keys} />
-            </dt>
-            <TooltipHint content={k.says ?? k.label}>
-              <dd className="text-ink">{k.label}</dd>
-            </TooltipHint>
-          </div>
-        ) : (
-          <div
-            key={`${chordLabel(k.hotkey)}:${k.name}`}
-            className={flow ? "flex items-center gap-2.5" : "contents"}
-          >
-            <dt>
-              <KeyHint mute={Boolean(k.refusal)} hotkey={k.hotkey} />
-            </dt>
-            <TooltipHint content={k.refusal ?? k.description}>
-              <dd className={k.refusal ? "text-ink-mute" : "text-ink"}>
-                {k.name}
-                {k.refusal ? ` — refuses now: ${k.refusal}` : ""}
-              </dd>
-            </TooltipHint>
-          </div>
-        ),
-      )}
+  return (
+    <dl className="flex flex-wrap items-center gap-x-4 gap-y-1 t-small">
+      {[...unique].map(([id, item]) => (
+        <div key={id} className="flex items-center gap-2">
+          <dt>
+            <GestureKey keys={item.keys} pointer={item.pointer} />
+          </dt>
+          <dd data-tone={item.refusal ? "caution" : undefined}>
+            {item.says ?? item.label}
+            {item.refusal ? ` — refuses now: ${item.refusal}` : ""}
+          </dd>
+        </div>
+      ))}
     </dl>
   );
 }
-
-/** Where a card's body ends; `Rows` draws a 24 px line per chord (three lines when it refuses) and a 28 px one per gesture (its glyph) under a 30 px head. */
-const cardHeight = (keys: readonly Line[]) =>
-  30 + 17 + keys.reduce((sum, k) => sum + (isGesture(k) ? 28 : k.refusal ? 64 : 24), 0);
-
-function Chart({
-  regions,
-  byRegion,
-}: {
-  regions: Region[];
-  byRegion: ReadonlyMap<string, Line[]>;
-}) {
-  const mid = useRef<HTMLDivElement>(null);
-  const [size, setSize] = useState<{ w: number; h: number } | null>(null);
-  useLayoutEffect(() => {
-    const measure = () => {
-      const rect = mid.current?.getBoundingClientRect();
-      if (rect) setSize({ w: rect.width, h: rect.height });
-    };
-    measure();
-    const observer = typeof ResizeObserver === "undefined" ? null : new ResizeObserver(measure);
-    if (mid.current) observer?.observe(mid.current);
-    return () => observer?.disconnect();
-  }, []);
-
-  const frame = unionOf(regions);
-  const twoColumns = size !== null && size.w >= TWO_COLUMNS_W;
-  const sideOf = (region: Region) =>
-    twoColumns && region.rect.left + region.rect.width / 2 <= frame.left + frame.width / 2
-      ? "left"
-      : "right";
-  // The chart is never shorter than its tallest column of cards; the page scrolls instead.
-  const need = Math.max(
-    ...(["left", "right"] as const).map((side) =>
-      regions
-        .filter((region) => sideOf(region) === side)
-        .reduce((sum, region) => {
-          const keys = byRegion.get(region.id) ?? [];
-          return keys.length ? sum + cardHeight(keys) + CARD_GAP : sum;
-        }, 8),
-    ),
-  );
-  const view = (() => {
-    if (!size) return null;
-    // One scale for both axes, so a pane keeps its shape on the chart.
-    const room = {
-      w: size.w - (twoColumns ? 2 : 1) * (CARD_W + 72) - (twoColumns ? 0 : 24),
-      h: size.h - 24,
-    };
-    const k = Math.min(
-      Math.max(room.w, 160) / frame.width,
-      room.h / frame.height,
-      720 / frame.width,
-    );
-    const w = frame.width * k;
-    const h = frame.height * k;
-    const x = twoColumns ? (size.w - w) / 2 : 24;
-    const y = (size.h - h) / 2;
-    return {
-      w,
-      h,
-      sx: (v: number) => x + (v - frame.left) * k,
-      sy: (v: number) => y + (v - frame.top) * k,
-    };
-  })();
-
-  // A region with keys gets a card on the side it sits on; a keyless region is outlined and named,
-  // and says nothing more. Cards stack in anchor order so leaders never cross.
-  const cards = view
-    ? (["left", "right"] as const).flatMap((side) => {
-        let floor = 8;
-        const placed = regions
-          .flatMap((region, index) => {
-            const keys = byRegion.get(region.id) ?? [];
-            const left = side === "left";
-            if (keys.length === 0 || sideOf(region) !== side) return [];
-            return [
-              {
-                region,
-                keys,
-                n: index + 1,
-                ax: view.sx(left ? region.rect.left : region.rect.right),
-                ay: view.sy(region.rect.top + region.rect.height / 2),
-              },
-            ];
-          })
-          .sort((p, q) => p.ay - q.ay)
-          .map((card) => {
-            const top = Math.max(floor, card.ay - 16);
-            floor = top + cardHeight(card.keys) + CARD_GAP;
-            return { ...card, side, top };
-          });
-        const overflow = Math.max(0, floor - CARD_GAP - (size!.h - 8));
-        return placed.map((card) => ({ ...card, top: Math.max(8, card.top - overflow) }));
-      })
-    : [];
-
+function Choices({ fact }: { fact: Extract<Teaching, { kind: "modes" | "views" }> }) {
+  const views = fact.kind === "views";
   return (
-    <div ref={mid} className="relative min-w-0 flex-1" style={{ minHeight: Math.max(need, 280) }}>
-      {size && view ? (
-        <>
-          <svg width={size.w} height={size.h} className="absolute inset-0 text-ink-mute">
-            {regions.map((r, i) => (
-              <g key={`${r.id}:${i}`}>
-                <rect
-                  x={view.sx(r.rect.left)}
-                  y={view.sy(r.rect.top)}
-                  width={Math.max(view.sx(r.rect.right) - view.sx(r.rect.left), 4)}
-                  height={Math.max(view.sy(r.rect.bottom) - view.sy(r.rect.top), 4)}
-                  fill="none"
-                  stroke="currentColor"
-                />
-                <text
-                  x={view.sx(r.rect.left) + 6}
-                  y={view.sy(r.rect.top) + 14}
-                  fill="currentColor"
-                  fontSize={10}
-                >
-                  {i + 1} {r.label}
-                </text>
-              </g>
-            ))}
-            {cards.map((c) => (
-              <g key={c.region.id + c.n}>
-                <line
-                  x1={c.side === "left" ? 24 + CARD_W : size.w - 24 - CARD_W}
-                  y1={c.top + 16}
-                  x2={c.ax}
-                  y2={c.ay}
-                  stroke="currentColor"
-                />
-                <circle cx={c.ax} cy={c.ay} r={2.5} fill="currentColor" />
-              </g>
-            ))}
-          </svg>
-          {cards.map((c) => (
-            <div
-              key={c.region.id + c.n}
-              data-surface="page"
-              className="absolute flex flex-col border border-line-2"
-              style={{
-                width: CARD_W,
-                left: c.side === "left" ? 24 : size.w - 24 - CARD_W,
-                top: c.top,
-              }}
-            >
-              <div className="t-small t-upper truncate px-2.5 py-1.5 text-ink">
-                {c.n} {c.region.label} · keys
-              </div>
-              <div className="hairline-t px-2.5 py-2">
-                <Rows keys={c.keys} />
-              </div>
-            </div>
-          ))}
-        </>
-      ) : null}
+    <div
+      aria-label={fact.label}
+      data-teach-views={views || undefined}
+      className={views ? "grid grid-cols-2 gap-1 t-small" : "flex flex-wrap gap-1 t-small"}
+    >
+      {fact.options.map((o) => (
+        <TooltipHint key={o.key} content={o.says}>
+          <span
+            tabIndex={0}
+            aria-current={o.active ? "true" : undefined}
+            aria-disabled={o.disabled || undefined}
+            data-teach-place={o.place}
+            aria-label={o.label}
+            className={
+              views
+                ? "hairline-x hairline-y p-1"
+                : o.active
+                  ? "on-select px-1 font-semibold"
+                  : "px-1 text-ink-2"
+            }
+            style={
+              o.place
+                ? { gridColumn: o.place[1] === "l" ? 1 : 2, order: o.place[0] === "t" ? 0 : 1 }
+                : undefined
+            }
+          >
+            {o.label}
+            {views ? ` · ${o.active ? "shown" : "available"}` : o.active ? " · active" : ""}
+          </span>
+        </TooltipHint>
+      ))}
     </div>
   );
 }
-
+/** Shared with the mounted-facts specimen and deterministic Help integration test. */
+export function HelpWorld({ facts }: { facts: readonly Teaching[] }) {
+  const regions = useRegions(facts);
+  const regionOf = (fact: Teaching) =>
+    regions.find(
+      (r) =>
+        r.id === fact.region ||
+        (fact.kind === "keys" &&
+          (r.scope === fact.scope ||
+            facts.some((f) => f.kind === "keys" && f.scope === fact.scope && f.region === r.id))),
+    );
+  const areas = [
+    ...regions,
+    ...(facts.some((f) => f.kind !== "region" && f.kind !== "keys" && !regionOf(f))
+      ? [{ id: "tool", rect: null }]
+      : []),
+  ];
+  return (
+    <div className="flex flex-col gap-4 px-8">
+      <Keys facts={facts.filter((f) => !regionOf(f))} />
+      <div className="flex flex-wrap items-start gap-4">
+        {areas.map((r, i) => {
+          const region = facts.find((f) => f.id === r.id && f.kind === "region");
+          const own = facts.filter(
+            (f) => (regionOf(f)?.id ?? (f.kind !== "keys" ? "tool" : undefined)) === r.id,
+          );
+          const views = new Map(
+            own.flatMap((f) =>
+              f.kind === "views" ? f.options.map((o) => [o.key, o] as const) : [],
+            ),
+          );
+          return (
+            <section
+              key={r.id}
+              aria-label={region?.label ?? "tool"}
+              className="hairline-x hairline-y flex min-w-0 flex-col gap-2 p-2"
+              style={{ flex: `${r.rect?.width || 1} 1 20rem` }}
+            >
+              <h2 className="t-small t-upper">
+                {i + 1} {region?.label ?? "tool"}
+              </h2>
+              {region?.kind === "region" && region.purpose ? (
+                <p className="t-small text-ink-2">{region.purpose}</p>
+              ) : null}
+              {own
+                .filter(
+                  (f) =>
+                    f.kind !== "search" ||
+                    f.label !== "Search" ||
+                    !own.some((s) => s.kind === "search" && s.label !== "Search"),
+                )
+                .map((f) =>
+                  f.kind === "search" ? (
+                    <div key={f.id} data-teach-search="" className="t-small">
+                      <LeaderDiagram
+                        label={`${f.label} syntax`}
+                        track={
+                          <SearchControl>
+                            <span className="truncate text-ink-2">{f.label} …</span>
+                          </SearchControl>
+                        }
+                        items={[
+                          ...f.syntax.map((line) => ({ key: line, at: [0.5], label: line })),
+                          ...f.fields.map((field, index) => ({
+                            key: field.label,
+                            at: [(index + 0.5) / f.fields.length],
+                            label: `${field.label} · ${field.operators.join(" / ")} · ${field.examples.join("; ")}`,
+                          })),
+                        ]}
+                      />
+                    </div>
+                  ) : f.kind === "modes" ? (
+                    <Choices key={f.id} fact={f} />
+                  ) : null,
+                )}
+              {views.size ? (
+                <Choices
+                  fact={{
+                    kind: "views",
+                    id: r.id,
+                    label: "views and layers",
+                    options: [...views.values()],
+                  }}
+                />
+              ) : null}
+              <Keys facts={own} />
+            </section>
+          );
+        })}
+      </div>
+    </div>
+  );
+}
 function HelpBody({
   docs,
   name,
@@ -304,57 +215,17 @@ function HelpBody({
   utilities?: boolean;
   close: () => void;
 }) {
-  const hotkeys = useMemo(readRegistrations, []);
-  const gestures = useMemo(readGestures, []);
-  const regions = useMemo(measureRegions, []);
-  // A chord bound at several nodes reads once, at the shallowest.
-  const bound = new Map<string, Bound>();
-  for (const reg of hotkeys) {
-    const meta = readKeyMeta(reg.options.meta);
-    if (
-      !meta ||
-      reg.options.enabled === false ||
-      (reg.hotkey === HELP_CHORD.hotkey && meta.name === HELP_CHORD.label)
-    )
-      continue;
-    const key = `${reg.hotkey}:${meta.actionId ?? meta.name}`;
-    if ((bound.get(key)?.depth ?? Infinity) > meta.depth)
-      bound.set(key, { ...meta, hotkey: reg.hotkey });
-  }
-  // The chart's cards are the visible panes; every other scope node's keys read as the route's.
-  const drawn = new Set(regions.map((region) => region.id));
-  const band: Line[] = [];
-  const byRegion = new Map<string, Line[]>();
-  const place = (line: Line) => {
-    if (drawn.has(line.scope))
-      byRegion.set(line.scope, [...(byRegion.get(line.scope) ?? []), line]);
-    else band.push(line);
-  };
-  // A pane's pointer gestures read before its chords: they are how the picture is driven.
-  for (const g of gestures) place({ ...g, hotkey: undefined });
-  for (const k of bound.values()) place(k);
-
+  const facts = useTeaching();
   return (
-    <div className="absolute inset-0 flex flex-col overflow-y-auto">
-      <div className="flex shrink-0 items-baseline gap-6 px-8 pt-6 pb-3">
+    <div className="absolute inset-0 flex flex-col gap-3 overflow-y-auto">
+      <div className="flex items-baseline gap-3 px-8 pt-6">
         <span className="t-title text-ink">{name}</span>
-        {band.length ? (
-          <Rows keys={band} flow />
-        ) : (
-          <span className="t-small text-ink-mute">this tool declares no chords</span>
-        )}
+        <KeyHint>Alt+/</KeyHint>
       </div>
-      {regions.length ? (
-        <Chart regions={regions} byRegion={byRegion} />
-      ) : (
-        <div className="flex flex-1 items-center justify-center t-small text-ink-mute">
-          this route draws no panes to explain
-        </div>
-      )}
+      <HelpWorld facts={facts} />
       {docs ? (
         <div
-          className="shrink-0 overflow-y-auto px-8 pt-3 pb-8 t-prose"
-          // A link in the prose is a "take me there": the page it lands on is the answer, so the help closes.
+          className="px-8 pt-3 pb-8 t-prose"
           onClick={(e) => {
             if ((e.target as HTMLElement).closest("a")) close();
           }}
@@ -363,7 +234,7 @@ function HelpBody({
         </div>
       ) : null}
       {utilities ? (
-        <div className="hairline-t flex shrink-0 items-center gap-3 px-8 py-3">
+        <div className="hairline-t flex items-center gap-3 px-8 py-3">
           <Button
             label="Send feedback"
             onClick={() => {

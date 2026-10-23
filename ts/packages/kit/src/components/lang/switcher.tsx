@@ -9,6 +9,7 @@ import { tv } from "../../lib/tv";
 
 import "./lang.css";
 import { TooltipHint } from "./tooltip";
+import { teachText, useTeach } from "./use-teach";
 
 export const switcherRecipe = tv({
   slots: {
@@ -41,6 +42,17 @@ export function Switcher<T extends string>({
   onChange: (next: T) => void;
   ariaLabel: string;
 }) {
+  useTeach({
+    kind: "modes",
+    label: ariaLabel,
+    options: options.map((option) => ({
+      key: option.value,
+      label: teachText(option.label),
+      says: option.title,
+      active: option.value === value,
+      disabled: option.disabled,
+    })),
+  });
   const { base } = switcherRecipe();
   return (
     <span role="group" aria-label={ariaLabel} className={base()}>

@@ -15,9 +15,8 @@
 import {
   createContext,
   use,
-  useEffect,
   useMemo,
-  useSyncExternalStore,
+  useLayoutEffect,
   type ReactNode,
   type RefObject,
 } from "react";
@@ -29,10 +28,12 @@ import {
   type UseHotkeyDefinition,
 } from "@tanstack/react-hotkeys";
 
+import { readTeaching } from "./components/lang/teach";
+import { TeachLive, useTeach, useTeaching } from "./components/lang/use-teach";
+
 /**
- * The help page reads every binding back through this; nothing keeps a second list of keys. It is a
- * snapshot, not a subscription: the library's hook re-renders its reader on every registration, and
- * a registration made while another component renders then sets state mid-render.
+ * Native binding inspection for diagnostics and deterministic tests. Tutorial subscribes to the
+ * teach registry after commit; native registrations can change while a component renders.
  */
 export const readRegistrations = () =>
   Array.from(getHotkeyManager().registrations.state.values()).map(toHotkeyRegistrationView);
@@ -94,7 +95,11 @@ export function KeyScope({
   const live = !hidden && above.live;
   const depth = above.depth + 1;
   const node = useMemo(() => ({ id, depth, live, element }), [id, depth, live, element]);
-  return <ScopeContext value={node}>{children}</ScopeContext>;
+  return (
+    <TeachLive value={live}>
+      <ScopeContext value={node}>{children}</ScopeContext>
+    </TeachLive>
+  );
 }
 
 /** Whether the innermost scope node is live: a key `available` reads it so a hidden pane binds nothing. */
@@ -187,6 +192,25 @@ export function useScopeKeys(
     }));
   // A `null` region is one not mounted yet: it binds nothing, never the node's element instead.
   useHotkeys(definitions, { target: region === null ? UNMOUNTED : (region ?? node.element) });
+  useTeach(
+    {
+      kind: "keys",
+      scope: node.id,
+      items: definitions
+        .filter((key) => key.options?.enabled !== false)
+        .map((key) => {
+          const meta = readKeyMeta(key.options?.meta)!;
+          return {
+            keys: [formatForDisplay(key.hotkey)],
+            label: meta.name,
+            says: meta.description,
+            refusal: meta.refusal,
+          };
+        }),
+    },
+    node.live,
+    region ?? node.element,
+  );
 }
 
 /* ── Gestures ──────────────────────────────────────────────────────────────── */
@@ -223,51 +247,36 @@ export interface DeclaredGesture extends ScopeGesture {
   host?: HTMLElement | null;
 }
 
-const declared = new Map<symbol, readonly DeclaredGesture[]>();
-const gestureListeners = new Set<() => void>();
-let gestureSnapshot: DeclaredGesture[] = [];
-const gesturesChanged = () => {
-  gestureSnapshot = [...declared.values()].flat();
-  gestureListeners.forEach((notify) => notify());
-};
-const subscribeGestures = (notify: () => void) => {
-  gestureListeners.add(notify);
-  return () => {
-    gestureListeners.delete(notify);
-  };
-};
-export const useDeclaredGestures = () =>
-  useSyncExternalStore(
-    subscribeGestures,
-    () => gestureSnapshot,
-    () => gestureSnapshot,
+// Geometry stays here; the teach registry is the only owner of gesture facts.
+const gestureHosts = new Map<string, HTMLElement | null | undefined>();
+export const readGestures = (): DeclaredGesture[] =>
+  readTeaching().flatMap((fact) =>
+    fact.kind === "keys" && fact.gestures
+      ? fact.items.map((g) => ({
+          ...g,
+          scope: fact.scope,
+          depth: fact.depth ?? 0,
+          host: gestureHosts.get(fact.id),
+        }))
+      : [],
   );
-
-/** Every gesture declared by a live scope node now; a snapshot, like `readRegistrations`. */
-export const readGestures = (): DeclaredGesture[] => [...declared.values()].flat();
-
-/** Declare gestures on the innermost scope node; a hidden node declares none. */
+export function useDeclaredGestures() {
+  const facts = useTeaching();
+  return useMemo(readGestures, [facts]);
+}
 function useScopeGestures(gestures: readonly ScopeGesture[], host?: HTMLElement | null): void {
   const node = use(ScopeContext);
-  const spelled = JSON.stringify(gestures);
-  useEffect(() => {
-    if (!node.live) return;
-    const id = Symbol(node.id);
-    declared.set(
-      id,
-      (JSON.parse(spelled) as ScopeGesture[]).map((g) => ({
-        ...g,
-        scope: node.id,
-        depth: node.depth,
-        host: host === undefined ? node.element?.current : host,
-      })),
-    );
-    gesturesChanged();
+  const id = useTeach(
+    { kind: "keys", scope: node.id, depth: node.depth, gestures: true, items: gestures },
+    node.live,
+    host ?? node.element,
+  );
+  useLayoutEffect(() => {
+    gestureHosts.set(id, host === undefined ? node.element?.current : host);
     return () => {
-      declared.delete(id);
-      gesturesChanged();
+      gestureHosts.delete(id);
     };
-  }, [node.id, node.depth, node.live, node.element, spelled, host]);
+  }, [id, node.element, host]);
 }
 
 export function ScopeGestures({

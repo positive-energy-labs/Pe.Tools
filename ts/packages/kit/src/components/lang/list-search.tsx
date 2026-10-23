@@ -18,6 +18,7 @@ import { KeyHint } from "./key-hint";
 import { ListPopup } from "./list-popup";
 import { CompletionGhost, Matched, SearchControl } from "./search-control";
 import { focusQuiet } from "../../lib/utils";
+import { useTeach } from "./use-teach";
 
 /** One suggestion: a keyword kept as typed, a value that becomes a pill, or a field to pick from. */
 type Pick = {
@@ -56,6 +57,20 @@ export function ListSearchBox<T, Sort extends string>({
   label: string;
   input: RefObject<HTMLInputElement | null>;
 }) {
+  useTeach({
+    kind: "search",
+    label: `Search ${label}`,
+    fields: list.facets.map((field) => ({
+      label: field.label,
+      operators: ["is"],
+      examples: [`Filter, choose ${field.label}, choose a value`],
+    })),
+    syntax: [
+      "Words search row text and exact element ids",
+      "Pick a field, then a value; filters are ANDed",
+      "Tab completes; Backspace edits the last filter",
+    ],
+  });
   const keywords = list.state.search.keywords;
   const [echo, setEcho] = useState({ source: keywords, value: keywords });
   if (echo.source !== keywords) setEcho({ source: keywords, value: keywords });
