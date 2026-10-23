@@ -176,8 +176,9 @@ async function logged(page: Page, label: string, says: string) {
   const situation = page.locator('section[aria-label="Situation"]');
   const allTab = situation.locator('[aria-description="all entries"]');
   if (await allTab.count()) await allTab.first().click();
-  const rows = situation.locator(`li[aria-description$=" · ${says}"]`);
-  const row = rows.filter({ hasText: new RegExp(`${label}$`) });
+  // The log is a kit list: a row is whatever element carries the hint, and its time sits after the label.
+  const rows = situation.locator(`[aria-description$=" · ${says}"]`);
+  const row = rows.filter({ hasText: label });
   await expect.poll(() => row.count(), { timeout: 30_000 }).toBeGreaterThan(0);
 }
 
