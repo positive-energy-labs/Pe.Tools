@@ -34,6 +34,7 @@ import { inboxWriteRows, type WriteVerbs, type RulingRow } from "./inbox-write";
 import { PreviewLines } from "./preview-lines";
 import { SlotPicker } from "./slot-picker";
 import { InboxClaim, claimLine } from "./inbox-claim";
+import { RuleAssignment } from "./rule-assignment";
 
 type InboxWork = {
   doc: DuctsRouteDocument | null;
@@ -123,6 +124,7 @@ export function Inbox({
   fan,
   selected,
   focused,
+  onPick,
   address,
 }: {
   groups: Record<Exclude<InboxGroup, "write">, readonly InboxItem[]>;
@@ -140,6 +142,8 @@ export function Inbox({
   selected: number | null;
   /** The inbox row a review named (`focusRow`): it opens, wears selected and pulses once. */
   focused: string | null;
+  /** A person's pick releases the review landing address. */
+  onPick?: () => void;
   address?: {
     query: string;
     sort: "" | "name" | "status";
@@ -183,6 +187,8 @@ export function Inbox({
       </Button>
     );
     switch (verb.kind) {
+      case "price-as":
+        return worded ? <RuleAssignment key={`rule${i}`} family={verb.family} work={work} /> : null;
       case "verdict":
         return make(
           `v${i}`,
@@ -343,7 +349,7 @@ export function Inbox({
   return (
     <>
       <div onMouseLeave={() => light(null)}>
-        <RulingsList rows={rows} focused={focused} address={address} />
+        <RulingsList rows={rows} focused={focused} address={address} onPick={onPick} />
       </div>
       {nativeResult ? (
         <div role="status" className="px-2 py-1">
@@ -363,9 +369,11 @@ function RulingsList({
   rows,
   focused,
   address,
+  onPick,
 }: {
   rows: RulingRow[];
   focused: string | null;
+  onPick?: () => void;
   address?: {
     query: string;
     sort: "" | "name" | "status";
@@ -399,6 +407,7 @@ function RulingsList({
     },
     stageOf: (row) => row.stage ?? "clean",
     onPick: (row) => {
+      onPick?.();
       setView((previous) => ({
         ...previous,
         selected: [row.key],

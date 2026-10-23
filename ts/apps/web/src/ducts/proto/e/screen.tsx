@@ -713,6 +713,7 @@ function EScreenBody({ props }: { props: ProtoProps }) {
           fan={fanHandles}
           selected={selected}
           focused={focusKey}
+          onPick={() => setPage({ issue: "" }, { history: "replace" })}
           address={{
             query: page.rulingQuery,
             sort: page.rulingSort,

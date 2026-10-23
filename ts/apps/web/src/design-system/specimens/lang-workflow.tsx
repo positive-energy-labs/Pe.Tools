@@ -1,3 +1,4 @@
+import { useState } from "react";
 import type { TrichotomyCellLike } from "@pe/agent-contracts";
 import { Save } from "lucide-react";
 
@@ -49,6 +50,7 @@ const wire: CellWire = { segment: "fields", write: async () => null, revision: 4
 export function LangWorkflowSpecimens() {
   return (
     <>
+      <ReviewLandingSpecimen />
       <SpecimenFrame name="Kbd" importPath="#/components/lang/kbd">
         <div className="flex items-center gap-2">
           <Kbd>⌘K</Kbd>
@@ -211,5 +213,33 @@ function ArmingSpecimen({ props }: { props: GridVariantProps }) {
         onCancel={noop}
       />
     </div>
+  );
+}
+
+/** The Staged Work link and its destination share the product's existing kit treatments. */
+function ReviewLandingSpecimen() {
+  const [landing, setLanding] = useState(0);
+  return (
+    <SpecimenFrame name="Review link - landing pulse" importPath="@pe/kit/lang/button">
+      <Button
+        kind="nav"
+        direction="forward"
+        label="review Round Elbow in Ducts"
+        reason="Open Round Elbow in Ducts, on its row"
+        onClick={() => setLanding((n) => n + 1)}
+      >
+        review
+      </Button>
+      <button
+        type="button"
+        key={landing}
+        data-landed={landing ? "" : undefined}
+        data-selected={landing ? "" : undefined}
+        className="dl-row px-2 py-1"
+        onClick={() => setLanding(0)}
+      >
+        Round Elbow - click this row to clear the landing
+      </button>
+    </SpecimenFrame>
   );
 }

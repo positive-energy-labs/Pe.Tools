@@ -350,3 +350,13 @@ describe("healing replaces the capped and connect verdicts", () => {
     });
   });
 });
+
+it("a no-rule finding offers one price-as pick per named family", () => {
+  const radius = { ...node(55, "fitting", "g1"), family: "Radius Elbow" };
+  const rows = inboxRows({
+    ...base,
+    snapshot: { ...snapshot, nodes: [radius] },
+    findings: [finding({ id: "no-rule:Radius Elbow", kind: "no-rule", elementIds: [55] })],
+  });
+  expect(rows.diagnostics[0]?.verbs).toContainEqual({ kind: "price-as", family: "Radius Elbow" });
+});
