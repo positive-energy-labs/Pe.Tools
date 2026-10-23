@@ -5,6 +5,7 @@ import { ArrowUp, GitFork, Paperclip, Square } from "lucide-react";
 import {
   capabilityCatalogSchema,
   type Capability,
+  type CapabilityCatalog,
   type Machine,
   type Reading,
 } from "@pe/agent-contracts";
@@ -37,6 +38,16 @@ import {
   withText,
 } from "./use-mentions";
 
+// N6: every visited thread mounts a composer and the machine Reading moves often; the catalog is
+// parsed once per capabilities Reading, not per composer and per machine tick.
+const parsedCatalogs = new WeakMap<object, CapabilityCatalog | undefined>();
+function parseCatalog(raw: unknown): CapabilityCatalog | undefined {
+  if (typeof raw !== "object" || raw === null) return undefined;
+  if (!parsedCatalogs.has(raw))
+    parsedCatalogs.set(raw, capabilityCatalogSchema.safeParse(raw).data);
+  return parsedCatalogs.get(raw);
+}
+
 /** The route handle's Enter runs Send scoped to this draft; `work` is the box's top section (live
  * asks, staged Work), `pickers` the provider and document pickers, `state` the run's. */
 export function ThreadComposer({
@@ -46,6 +57,7 @@ export function ThreadComposer({
   work,
   refusal,
   initialDraft = EMPTY_CHAT_DRAFT,
+  autoFocus = false,
 }: {
   handle: ChatHandle;
   pickers: ReactNode;
@@ -53,6 +65,8 @@ export function ThreadComposer({
   work?: ReactNode;
   refusal?: string | null;
   initialDraft?: ChatDraft;
+  /** Only the composer the page opened with takes focus; a thread switch leaves focus where it was. */
+  autoFocus?: boolean;
 }) {
   const [draft, setDraft] = useState(initialDraft);
   const { chat, providers, config, currentThreadId, threads, draft: head } = useWorkbench();
@@ -76,10 +90,8 @@ export function ThreadComposer({
   const form = area?.form ?? null;
   // Documents come from the live inventory, never the catalog read at mount.
   const machine = previousOf(handle.readings.machine as Reading<Machine>);
-  const catalog = useMemo(() => {
-    const read = capabilityCatalogSchema.safeParse(previousOf(handle.readings.capabilities)).data;
-    return read && machine && liveCatalog(read, machine);
-  }, [handle.readings.capabilities, machine]);
+  const read = parseCatalog(previousOf(handle.readings.capabilities));
+  const catalog = useMemo(() => read && machine && liveCatalog(read, machine), [read, machine]);
   const mentions = useMentions(draft, setDraft, catalog, area, slash.open);
   const setText = (text: string) => setDraft((previous) => withText(previous, text));
   const sendCurrent = () => void send.run();
@@ -282,7 +294,7 @@ export function ThreadComposer({
           placeholder={
             noneReady ? "no provider is ready" : "Ask Pea; / for a skill, @ to point at a thing"
           }
-          autoFocus
+          autoFocus={autoFocus}
           value={draft.text}
           onChange={(event) => {
             setText(event.currentTarget.value);

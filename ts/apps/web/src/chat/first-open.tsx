@@ -5,6 +5,7 @@
  */
 import { useState } from "react";
 import { Button } from "@pe/kit/lang/button";
+import { TooltipHint } from "@pe/kit/lang/tooltip";
 import { LoginLine, ProviderSetup } from "#/machine/pea";
 import type { Provider } from "@pe/agent-contracts";
 import { Switch } from "#/components/lang/switch";
@@ -25,13 +26,18 @@ export function AccessSwitch({ providers }: { providers: ProvidersState }) {
         onCheckedChange={(next) => void providers.setAccess(next)}
       />
       <span>Agent approvals</span>
-      <span className="text-ink-2">
-        {guarded === undefined
-          ? "reading…"
-          : guarded
-            ? "Guarded: shell and file tools ask first (new sessions); Pea writes only its own documents and the ones you add to a thread"
-            : "Full: shell and file tools run without asking (new sessions); Pea may write any open Revit document"}
-      </span>
+      {/* I6: the switch says one word; what that word means is the hover. */}
+      <TooltipHint
+        content={
+          guarded === false
+            ? "Shell and file tools run without asking (new sessions); Pea may write any open Revit document"
+            : "Shell and file tools ask first (new sessions); Pea writes only its own documents and the ones you add to a thread"
+        }
+      >
+        <span className="text-ink-2">
+          {guarded === undefined ? "reading…" : guarded ? "Guarded" : "Full"}
+        </span>
+      </TooltipHint>
     </label>
   );
 }

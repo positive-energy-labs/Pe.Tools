@@ -84,9 +84,6 @@ export function SessionStrip({
           <span className="ml-auto t-small face-mono text-ink-2">{fmtTok(used)} loaded</span>
         </div>
         <div className="flex min-w-0 items-center gap-2">
-          <span className="min-w-0 truncate t-small face-mono">
-            what pea sends the model · request order
-          </span>
           <div className="ml-auto flex flex-none items-center gap-1.5">
             <Switcher
               ariaLabel="density"
@@ -236,12 +233,13 @@ export function SessionStrip({
       </div>
 
       {inspect ? (
-        <div className="hairline-t mt-2 px-3 pt-2 pb-3 t-prose face-mono text-ink-mute">
-          cache state{" "}
-          <span className={CACHE_BASE} data-tone={CACHE_TONE.cached} data-wash>
-            ≈ inferred
-          </span>{" "}
-          from a frontend snapshot diff — the provider only reports aggregate cache totals.
+        <div className="hairline-t mt-2 px-3 pt-2 pb-3 face-mono text-ink-mute">
+          {/* I6: mark plus word; the why is the hover. */}
+          <TooltipHint content="Inferred from a frontend snapshot diff; the provider reports only aggregate cache totals">
+            <span className={CACHE_BASE} data-tone={CACHE_TONE.cached} data-wash>
+              cache ≈ inferred
+            </span>
+          </TooltipHint>
         </div>
       ) : null}
     </div>

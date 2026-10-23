@@ -37,11 +37,9 @@ import {
 } from "@pe/agent-contracts";
 import { Dialog, DialogContent, DialogTitle } from "#/components/lang/dialog";
 import { ListPopup } from "@pe/kit/lang/list-popup";
-import { CommandPalette } from "#/components/lang/command-palette";
 import { Input } from "@pe/kit/lang/input";
 import { useList, type ListState } from "@pe/kit/lang/collection";
 import { ListBar, ListView, type ListRowParts } from "@pe/kit/lang/list-view";
-import { Kbd } from "#/components/lang/kbd";
 import { Button } from "@pe/kit/lang/button";
 import { ProviderMark } from "#/components/lang/provider-mark";
 import { useSurfaceHost } from "#/navigation/surface-host";
@@ -549,13 +547,22 @@ function ThreadActionsMenu({
   );
 }
 
+// The row's own hover carries the exact time, targets and model (`rowHint`): one hover per row,
+// not one per fact, so a keystroke in search re-renders rows, not a tooltip tree per cell.
 function ThreadTime({ thread, now }: { thread: RosterThread; now: number }) {
-  return (
-    <TooltipHint content={new Date(thread.updatedAt).toLocaleString()}>
-      <time dateTime={thread.updatedAt}>{relativeThreadAge(thread.updatedAt, now)}</time>
-    </TooltipHint>
-  );
+  return <time dateTime={thread.updatedAt}>{relativeThreadAge(thread.updatedAt, now)}</time>;
 }
+
+const STAMP = new Intl.DateTimeFormat(undefined, { dateStyle: "short", timeStyle: "short" });
+const rowHint = (thread: RosterThread) =>
+  [
+    thread.title,
+    exactTargets(thread.head),
+    [thread.providerName, thread.modelId].filter(Boolean).join(" "),
+    STAMP.format(new Date(thread.updatedAt)),
+  ]
+    .filter(Boolean)
+    .join(" · ");
 
 /**
  * A row's menu re-renders only when its data changes. The closures the sidebar mints per render
@@ -571,9 +578,7 @@ const ThreadActions = memo(ThreadActionsMenu, (before, after) => {
 
 function CompactThreadTarget({ thread }: { thread: RosterThread }) {
   return thread.head.targets.length ? (
-    <TooltipHint content={exactTargets(thread.head)}>
-      <span className="pe-thread-target">{targetLabel(thread)}</span>
-    </TooltipHint>
+    <span className="pe-thread-target">{targetLabel(thread)}</span>
   ) : null;
 }
 
@@ -581,11 +586,7 @@ function CompactThreadTrail({ thread, now }: { thread: RosterThread; now: number
   return (
     <span className="pe-thread-trail">
       <ThreadTime thread={thread} now={now} />
-      <TooltipHint content={[thread.providerName, thread.modelId].filter(Boolean).join(" · ")}>
-        <span>
-          <ProviderMark harness={thread.harness} />
-        </span>
-      </TooltipHint>
+      <ProviderMark harness={thread.harness} />
     </span>
   );
 }
@@ -667,6 +668,9 @@ export function ThreadsSidebar({
   onSelect,
   address,
   compactRows: compactRowsOverride,
+  primary = false,
+  searchSerial = 0,
+  reading = false,
   ...verbs
 }: ThreadVerbs & {
   threads: RosterThread[];
@@ -674,7 +678,18 @@ export function ThreadsSidebar({
   onSelect: (id: string) => void;
   compactRows?: boolean;
   address?: ThreadListAddress;
+  /** The page's own list: "/" outside a field lands in its search. */
+  primary?: boolean;
+  /** The roster has not been read yet: empty means unknown, not "no threads". */
+  reading?: boolean;
+  /** Bumped by Mod+K: focus this list's search (also on mount, for the narrow dialog). */
+  searchSerial?: number;
 }) {
+  const navRef = useRef<HTMLElement>(null);
+  useEffect(() => {
+    if (searchSerial)
+      navRef.current?.querySelector<HTMLInputElement>("[data-list-bar] input")?.focus();
+  }, [searchSerial]);
   const host = useSurfaceHost();
   const compactRows = compactRowsOverride ?? host.surface === "tray";
   const [view, setView] = useState(() =>
@@ -848,36 +863,21 @@ export function ThreadsSidebar({
       ) : (
         thread.title
       ),
-      lines: compactRows ? 1 : 2,
+      // L1: a second line only when it names a target; the harness mark rides the first.
+      lines: compactRows || !thread.head.targets.length ? 1 : 2,
       active: thread.id === currentThreadId,
       meta: (
         <span className="pe-thread-trail">
           <ThreadActivityMark thread={thread} now={now} woke={woken.has(thread.id)} />
-          {compactRows ? (
-            <CompactThreadTrail thread={thread} now={now} />
-          ) : (
-            <ThreadTime thread={thread} now={now} />
-          )}
+          <CompactThreadTrail thread={thread} now={now} />
           {isUnread(thread) ? <span data-slot="nav-unread" role="img" aria-label="unread" /> : null}
         </span>
       ),
-      sub: compactRows ? undefined : (
-        <span className="pe-thread-sub">
-          <span className="min-w-0 flex-1 truncate">
-            {thread.head.targets.length ? (
-              <TooltipHint content={exactTargets(thread.head)}>
-                <span>{targetLabel(thread)}</span>
-              </TooltipHint>
-            ) : null}
-          </span>
-          <TooltipHint content={[thread.providerName, thread.modelId].filter(Boolean).join(" · ")}>
-            <span>
-              <ProviderMark harness={thread.harness} />
-            </span>
-          </TooltipHint>
-        </span>
-      ),
-      title: [thread.title, thread.providerName, thread.modelId].filter(Boolean).join(" · "),
+      sub:
+        compactRows || !thread.head.targets.length ? undefined : (
+          <span className="pe-thread-sub min-w-0 truncate">{targetLabel(thread)}</span>
+        ),
+      title: rowHint(thread),
       onDoubleClick: () => setMenuId(thread.id),
       onContextMenu: (event) => {
         event.preventDefault();
@@ -917,12 +917,13 @@ export function ThreadsSidebar({
   };
   return (
     <nav
+      ref={navRef}
       data-thread-sidebar=""
       data-thread-rows={compactRows ? "compact" : undefined}
       aria-label="Threads"
       className="flex h-full min-h-0 flex-col"
     >
-      <ListBar list={list} label="threads" compact />
+      <ListBar list={list} label="threads" compact primary={primary} />
       {list.state.selected.length ? (
         <div className="flex flex-wrap items-center gap-1">
           <span>{list.state.selected.length} selected</span>
@@ -943,7 +944,11 @@ export function ThreadsSidebar({
           aria-label="threads"
           bar={false}
           estimate={compactRows ? 20 : 40}
-          empty={{ message: "No threads yet", exit: "Start a new thread beside search" }}
+          empty={
+            reading
+              ? { message: "reading threads…", exit: "" }
+              : { message: "No threads yet", exit: "Start a new thread beside search" }
+          }
           row={rowParts}
           sectionProps={(section) => {
             const shelf = SHELF_ORDER.find((key) => SHELF_WORD[key] === section.key)!;
@@ -978,21 +983,8 @@ export function ThreadsSidebar({
 }
 
 /** The surrounding pane owns these actions beside its tabs, outside the scrolling roster. */
-export function ThreadSidebarActions({
-  onSearch,
-  onNew,
-}: {
-  onSearch: () => void;
-  onNew: () => void;
-}) {
-  return (
-    <>
-      <Button label="Search every thread" reason="Search every thread" onClick={onSearch}>
-        <Kbd mute hotkey="Mod+K" />
-      </Button>
-      <Button icon={Plus} label="New thread" onClick={onNew} />
-    </>
-  );
+export function ThreadSidebarActions({ onNew }: { onNew: () => void }) {
+  return <Button icon={Plus} label="New thread" onClick={onNew} />;
 }
 
 export function NewThreadButton({ onNew }: { onNew: () => void }) {
@@ -1024,103 +1016,11 @@ const STATE_WORD: Record<ThreadActivity, string> = {
   idle: "Idle",
 };
 
-/** Every thread, archive included, on the sidebar's own row anatomy, grouped by shelf. */
-export function ThreadDialog({
-  threads,
-  currentThreadId,
-  open,
-  onOpenChange,
-  onSelect,
-  onNew,
-}: ThreadVerbs & {
-  threads: RosterThread[];
-  currentThreadId: string;
-  open: boolean;
-  onOpenChange: (open: boolean) => void;
-  onSelect: (id: string) => void;
-  onNew: () => void;
-}) {
-  const now = Date.now();
-  const roster = [...threads].sort(
-    (a, b) =>
-      SHELF_ORDER.indexOf(shelfOf(a, now)) - SHELF_ORDER.indexOf(shelfOf(b, now)) ||
-      compareThreads(a, b, now),
-  );
-  return (
-    <CommandPalette<RosterThread>
-      open={open}
-      onOpenChange={onOpenChange}
-      aria-label="Threads"
-      items={roster}
-      keyOf={(thread) => thread.id}
-      labelOf={threadSearchText}
-      groupOf={(thread) => SHELF_WORD[shelfOf(thread, now)]}
-      filter="fuzzy"
-      searchAbove={0}
-      searchPlaceholder="Search every thread"
-      empty="No threads yet"
-      noMatch="No threads match"
-      maxHeight="min(32rem, 60dvh)"
-      onPick={(thread) => {
-        onSelect(thread.id);
-      }}
-      row={(thread) => {
-        const activity = activityWord(thread);
-        return {
-          label: (
-            <span className="pe-thread-label">
-              <span className="pe-thread-title">{thread.title}</span>
-              <CompactThreadTarget thread={thread} />
-            </span>
-          ),
-          lines: 1,
-          active: thread.id === currentThreadId,
-          meta: (
-            <span className="flex items-center gap-1.5">
-              {activity ? (
-                <span
-                  data-slot="nav-state"
-                  data-tone={
-                    thread.activity.state === "failed"
-                      ? "alarm"
-                      : thread.activity.pending
-                        ? "caution"
-                        : undefined
-                  }
-                >
-                  {activity}
-                </span>
-              ) : null}
-              <CompactThreadTrail thread={thread} now={now} />
-              {isUnread(thread) ? (
-                <span data-slot="nav-unread" role="img" aria-label="unread" />
-              ) : null}
-            </span>
-          ),
-        };
-      }}
-      footer={
-        <div className="flex items-center justify-between gap-3 px-1 pb-1">
-          <NewThreadButton
-            onNew={() => {
-              onNew();
-              onOpenChange(false);
-            }}
-          />
-          <span className="flex items-center gap-1.5 t-small text-ink-2">
-            <Kbd>↑↓</Kbd> move <Kbd hotkey="Enter" /> open <Kbd hotkey="Escape" /> close
-          </span>
-        </div>
-      }
-    />
-  );
-}
-
 /** The exact target a row's short label stands for: its path, or the session and open id. */
 function exactTarget(target: DocumentRequest): string {
   return target.kind === "named" ? target.address : `${target.ref.session} · ${target.ref.openId}`;
 }
 
-/** Every exact target of a thread, one per line, for the hover. */
+/** Every exact target of a thread, for the row's hover. */
 const exactTargets = (head: RosterThread["head"]) =>
   head.targets.map((target) => exactTarget(target.request)).join("\n");

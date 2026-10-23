@@ -234,9 +234,7 @@ const PALETTE_EXTRAS = [
 function PalettePane({ selected, onSelect }: { selected: string; onSelect: (id: string) => void }) {
   return (
     <>
-      <PaneHead
-        meta={<ThreadSidebarActions onNew={() => onSelect("new")} onSearch={() => undefined} />}
-      >
+      <PaneHead meta={<ThreadSidebarActions onNew={() => onSelect("new")} />}>
         Palette · {PALETTE_THREADS.length}
       </PaneHead>
       <div className="min-h-0 flex-1">
