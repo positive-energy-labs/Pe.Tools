@@ -23,6 +23,12 @@ import type { RowState } from "./row";
 
 type FilterMode = "none" | "substring" | "fuzzy" | "words";
 type SelectMode = "none" | "single" | "multi";
+/** Provenance supplied by the reading owner, never inferred from retained items. */
+export type Reading = "ready" | "pending" | "failed";
+export interface ReadingContext {
+  reading: Reading;
+}
+
 /** Empty (nothing in scope) is not no-match (the query hid everything): two exits. */
 type CollectionStatus = "ready" | "empty" | "no-match" | "pending" | "failed" | "refused";
 
@@ -33,7 +39,7 @@ export interface Level<T> {
   /** The breadcrumb's word for this rung (its bound value); default: the path's pick, else `label`. */
   crumb?: string;
   /** A pick on this rung has its own effect (the Situation ladder binds each rung as it goes). */
-  onPick?: (item: T) => void;
+  onPick?: (item: T, context: ReadingContext) => void;
   /** Many picks stay on this rung: the ladder does not advance. */
   multi?: boolean;
   /** The items do not depend on the path: a query shows this rung's hits once, not per parent. */
@@ -43,7 +49,7 @@ export interface Level<T> {
   /** What an empty rung says instead of the list's `empty`. */
   note?: string;
   /** Typed text becomes a value on this rung only (the list's `onCreate` applies to every rung). */
-  onCreate?: (text: string) => void;
+  onCreate?: (text: string, context: ReadingContext) => void;
   createLabel?: (text: string) => string;
 }
 
@@ -64,21 +70,21 @@ export interface CollectionOptions<T> {
   multiAction?: "toggle" | "activate";
   /** Controlled selection by key. */
   selected?: readonly string[];
-  onSelectedChange?: (keys: string[]) => void;
+  onSelectedChange?: (keys: string[], context: ReadingContext) => void;
   /** Controlled cursor by key: a focus owned outside the list (a linked pane's hover) is its cursor. */
   cursor?: string | null;
   /** The cursor moved (a hover or a key); fires only on a change. */
   onCursorChange?: (key: string | null) => void;
   /** A pick: Enter or click on a row (a create row calls `onCreate` instead). */
-  onPick?: (item: T, path: readonly T[]) => void;
+  onPick?: (item: T, path: readonly T[], context: ReadingContext) => void;
   /** Present, a sentinel row offers the typed text as a new value. */
-  onCreate?: (text: string) => void;
+  onCreate?: (text: string, context: ReadingContext) => void;
   /** A ladder: the list walks these levels; Enter picks and advances. */
   levels?: readonly Level<T>[];
   /** The rung a ladder opens on (the first one still unbound). */
   startLevel?: number;
   /** Remote options: pending and failed are states of the list, not rows. */
-  status?: "ready" | "pending" | "failed";
+  status?: Reading;
   /** A row that refuses picks, and why: keys and clicks both skip it. */
   refusalOf?: (item: T) => string | null | undefined;
   /** Escape with nothing to clear: the popup's close. */
@@ -234,7 +240,7 @@ export function useCollection<T>(options: CollectionOptions<T>) {
   const selectedKeys = options.selected ?? ownSelection;
   const setSelected = (keys: string[]) => {
     if (options.selected === undefined) setOwnSelection(keys);
-    options.onSelectedChange?.(keys);
+    options.onSelectedChange?.(keys, { reading: remote });
   };
 
   const level = levels ? Math.min(depth, levels.length - 1) : 0;
@@ -364,7 +370,7 @@ export function useCollection<T>(options: CollectionOptions<T>) {
 
   const pick = (row: VisibleRow<T> | undefined, shift = false, toggling = false) => {
     if (!row || row.kind === "head") return;
-    if (row.kind === "create") return createOf?.(row.text);
+    if (row.kind === "create") return createOf?.(row.text, { reading: remote });
     if (row.kind === "more") {
       setExpanded([...expanded, row.group]);
       return setCursorKey(row.next, true);
@@ -384,7 +390,7 @@ export function useCollection<T>(options: CollectionOptions<T>) {
     }
     if (select === "single") setSelected([row.key]);
     const rung = levels?.[row.level];
-    rung?.onPick?.(row.item);
+    rung?.onPick?.(row.item, { reading: remote });
     if (rung?.multi) return;
     if (levels && row.level + 1 < levels.length) {
       // The ladder advances: the pick is a step, not the end.
@@ -394,7 +400,7 @@ export function useCollection<T>(options: CollectionOptions<T>) {
       setCursorKey(null);
       return;
     }
-    options.onPick?.(row.item, row.path);
+    options.onPick?.(row.item, row.path, { reading: remote });
   };
 
   const escape = () => {
@@ -510,6 +516,8 @@ export function useCollection<T>(options: CollectionOptions<T>) {
     },
     visible,
     status,
+    reading: remote,
+    hasItems: levelItems.length > 0,
     cursor: cursor?.key ?? null,
     /** `steered`: the person's key moved it, so a renderer follows it into view. */
     setCursor: setCursorKey,
@@ -535,6 +543,8 @@ export function useCollection<T>(options: CollectionOptions<T>) {
     /** The list element's props: a listbox, multi when selecting many. */
     listProps: {
       id: listId,
+      "aria-busy": remote === "pending" || undefined,
+      "data-reading": remote,
       role: "listbox",
       "aria-multiselectable": select === "multi" || undefined,
     },
@@ -629,8 +639,10 @@ export interface ListOptions<T, Sort extends string = string> {
   state?: ListState<Sort>;
   initialState?: Partial<ListState<Sort>>;
   /** Typing publishes after 250 ms idle; explicit selection, sort and facet changes publish immediately. */
-  onState?: (state: ListState<Sort>) => void;
-  onPick?: (item: T) => void;
+  onState?: (state: ListState<Sort>, context: ReadingContext) => void;
+  status?: Reading;
+  failure?: string;
+  onPick?: (item: T, context: ReadingContext) => void;
   refusalOf?: (item: T) => string | null | undefined;
 }
 
@@ -857,7 +869,7 @@ export function useList<T, Sort extends string = string>(options: ListOptions<T,
     const { options: current } = latest.current;
     published.current.add(JSON.stringify(next.search));
     if (!current.state) setOwnState(next);
-    current.onState?.(next);
+    current.onState?.(next, { reading: current.status ?? "ready" });
     if (
       current.persist &&
       (JSON.stringify(next.search) !== JSON.stringify(current.persist.search) ||
@@ -898,6 +910,7 @@ export function useList<T, Sort extends string = string>(options: ListOptions<T,
   const rows = model.sections.flatMap((section) => (section.closed ? [] : section.rows));
   const collection = useCollection({
     items: rows,
+    status: options.status,
     keyOf: (row) => row.key,
     labelOf: (row) => String(searchIndex.get(row.item)?.text[0] ?? row.key),
     query: "",
@@ -910,7 +923,7 @@ export function useList<T, Sort extends string = string>(options: ListOptions<T,
     multiAction: "activate",
     onSelectedChange: (selected) => setState({ ...state, selected }),
     refusalOf: (row) => options.refusalOf?.(row.item),
-    onPick: (row) => options.onPick?.(row.item),
+    onPick: (row, _path, context) => options.onPick?.(row.item, context),
     onEscape: () => {
       if (state.search.keywords) setSearch({ ...state.search, keywords: "" });
       else if (state.search.pills.length)
@@ -1012,6 +1025,7 @@ export function useList<T, Sort extends string = string>(options: ListOptions<T,
   });
   return {
     ...model,
+    failure: options.failure,
     state,
     setState,
     collection,

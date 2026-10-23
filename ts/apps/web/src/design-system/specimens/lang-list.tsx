@@ -114,6 +114,18 @@ export function LangListSpecimens() {
           <FreeText />
           <SegmentInput />
           <List {...common} aria-label="inline list" filter="substring" />
+          <List
+            {...common}
+            aria-label="retained pending rows"
+            status="pending"
+            filter="substring"
+          />
+          <List
+            {...common}
+            aria-label="retained failed rows"
+            status="failed"
+            failure="Read failed; showing known storage types"
+          />
           <ListPopup
             {...common}
             anchor="trigger"

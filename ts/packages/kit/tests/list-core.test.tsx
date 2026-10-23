@@ -19,6 +19,7 @@ import {
 } from "../src/components/lang/collection";
 import { type ListSearch } from "@pe/agent-contracts";
 import { ListBar, ListView, PlainList, useSearchKey } from "../src/components/lang/list-view";
+import { List, ListPopup } from "../src/components/lang/list-popup";
 import { land } from "../src/components/lang/row";
 import { readGestures, readKeyMeta, readRegistrations } from "../src/keys";
 
@@ -220,7 +221,7 @@ test("multi navigation activates plain click/Enter and selects with modifiers, S
   act(() => result.current.setTarget(region));
   act(() => region.focus());
   act(() => result.current.collection.rowProps("10000").onClick({ shiftKey: false }));
-  expect(picked).toHaveBeenCalledWith(items[0]);
+  expect(picked).toHaveBeenCalledWith(items[0], { reading: "ready" });
   expect(result.current.state.selected).toEqual([]);
   act(() =>
     result.current.collection.rowProps("10000").onClick({ shiftKey: false, ctrlKey: true }),
@@ -229,7 +230,7 @@ test("multi navigation activates plain click/Enter and selects with modifiers, S
   fireEvent.keyDown(region, { key: "End" });
   expect(result.current.collection.cursor).toBe("10354");
   fireEvent.keyDown(region, { key: "Enter" });
-  expect(picked).toHaveBeenLastCalledWith(items[354]);
+  expect(picked).toHaveBeenLastCalledWith(items[354], { reading: "ready" });
   fireEvent.keyDown(region, { key: " ", code: "Space" });
   expect(result.current.state.selected).toEqual(["10000", "10354"]);
   act(() => result.current.collection.pick("10000", true));
@@ -684,7 +685,7 @@ test("an external combobox inside another row retains collection keys and ListBa
   expect(fireEvent.keyDown(input, { key: "ArrowDown" })).toBe(false);
   expect(result.current.cursor).toBe(items[0]!.id);
   fireEvent.keyDown(input, { key: "Enter" });
-  expect(picked).toHaveBeenCalledWith(items[0], []);
+  expect(picked).toHaveBeenCalledWith(items[0], [], { reading: "ready" });
   unmount();
   host.remove();
   const pick = vi.fn();
@@ -706,7 +707,7 @@ test("an external combobox inside another row retains collection keys and ListBa
   const rows = screen.getByRole("listbox", { name: "query keys" });
   expect(document.activeElement).toBe(rows);
   fireEvent.keyDown(rows, { key: "Enter" });
-  expect(pick).toHaveBeenCalledWith(items[0]);
+  expect(pick).toHaveBeenCalledWith(items[0], { reading: "ready" });
 });
 
 test("after Enter commits completion, ArrowDown enters filtered rows and Escape keeps its layers", () => {
@@ -740,7 +741,7 @@ test("after Enter commits completion, ArrowDown enters filtered rows and Escape 
   expect(document.activeElement).toBe(rows);
   expect(rows.getAttribute("aria-activedescendant")).toContain(data[0]!.id);
   fireEvent.keyDown(rows, { key: "Enter" });
-  expect(picked).toHaveBeenCalledWith(data[0]);
+  expect(picked).toHaveBeenCalledWith(data[0], { reading: "ready" });
   input.focus();
   fireEvent.change(input, { target: { value: "System kind" } });
   fireEvent.keyDown(input, { key: "Escape" });
@@ -891,4 +892,168 @@ test("following waits for an excluded query and opens ancestors only once per se
   hook.rerender({ selected: child.id });
   expect(hook.result.current.state.open).toContain(root.id);
   expect(hook.result.current.revealRequest?.serial).toBe((serial ?? 0) + 1);
+});
+
+const retainedItems = ["Alpha", "Beta"];
+const retainedOptions = { keyOf: (item: string) => item, labelOf: (item: string) => item };
+
+for (const renderer of ["List", "ListView", "PlainList"] as const) {
+  for (const reading of ["ready", "pending", "failed"] as const) {
+    test(`${renderer} keeps ${reading} rows interactive and exposes callback provenance`, () => {
+      const picked = vi.fn();
+      const selected = vi.fn();
+      function Fixture() {
+        const list = useList({
+          ...retainedOptions,
+          items: retainedItems,
+          search: (item) => ({ text: [item] }),
+          status: reading,
+          onPick: picked,
+          onState: selected,
+        });
+        const shared = { "aria-label": "retained", row: (item: string) => ({ label: item }) };
+        if (renderer === "List")
+          return (
+            <List
+              {...shared}
+              {...retainedOptions}
+              items={retainedItems}
+              status={reading}
+              empty="Empty"
+              select="single"
+              onPick={picked}
+              onSelectedChange={selected}
+            />
+          );
+        const View = renderer === "PlainList" ? PlainList : ListView;
+        return <View {...shared} list={list} empty={{ message: "Empty", exit: "Read again" }} />;
+      }
+      const view = render(<Fixture />);
+      const root = screen.getByRole("listbox", { name: "retained" });
+      expect(root.getAttribute("data-reading")).toBe(reading);
+      expect(root.getAttribute("aria-busy")).toBe(reading === "pending" ? "true" : null);
+      expect(screen.getAllByRole("option")).toHaveLength(2);
+      if (reading === "pending")
+        expect(view.container.querySelector('[data-kind="busy"]')).not.toBeNull();
+      if (reading === "failed") expect(screen.getByText("read failed")).toBeDefined();
+      root.focus();
+      fireEvent.keyDown(root, { key: "ArrowDown" });
+      fireEvent.keyDown(root, { key: "Enter" });
+      if (renderer === "List") expect(picked).toHaveBeenLastCalledWith("Alpha", [], { reading });
+      else expect(picked).toHaveBeenLastCalledWith("Alpha", { reading });
+      expect(selected.mock.lastCall?.[1]).toEqual({ reading });
+      fireEvent.mouseMove(screen.getByText("Beta"));
+      fireEvent.click(screen.getByText("Beta"));
+      expect(picked.mock.lastCall?.[0]).toBe("Beta");
+      expect(picked.mock.lastCall?.at(-1)).toEqual({ reading });
+    });
+
+    test(`${renderer} preserves the initial ${reading} state`, () => {
+      function Fixture() {
+        const list = useList({
+          ...retainedOptions,
+          items: [] as string[],
+          search: (item) => ({ text: [item] }),
+          status: reading,
+        });
+        const shared = { "aria-label": "initial", row: (item: string) => ({ label: item }) };
+        if (renderer === "List")
+          return (
+            <List {...shared} {...retainedOptions} items={[]} status={reading} empty="Empty" />
+          );
+        const View = renderer === "PlainList" ? PlainList : ListView;
+        return <View {...shared} list={list} empty={{ message: "Empty", exit: "Read again" }} />;
+      }
+      render(<Fixture />);
+      expect(screen.queryAllByRole("option")).toHaveLength(0);
+      expect(
+        screen.getByText(
+          reading === "ready" ? "Empty" : reading === "pending" ? "reading…" : "read failed",
+        ),
+      ).toBeDefined();
+      if (reading !== "ready") expect(screen.queryByText("Empty")).toBeNull();
+    });
+  }
+}
+
+test("create and ladder callbacks carry the current reading, including after it changes", () => {
+  const created = vi.fn();
+  const rungPick = vi.fn();
+  const hook = renderHook(
+    ({ reading }: { reading: "pending" | "failed" | "ready" }) =>
+      useCollection({
+        ...retainedOptions,
+        target: null,
+        status: reading,
+        query: "New",
+        onCreate: created,
+        levels: [{ label: "Kinds", items: () => retainedItems, onPick: rungPick }],
+      }),
+    { initialProps: { reading: "pending" } },
+  );
+  act(() => hook.result.current.pick("create:New"));
+  expect(created).toHaveBeenLastCalledWith("New", { reading: "pending" });
+  hook.rerender({ reading: "failed" });
+  act(() => hook.result.current.pick("Alpha"));
+  expect(rungPick).toHaveBeenLastCalledWith("Alpha", { reading: "failed" });
+  hook.rerender({ reading: "ready" });
+  act(() => hook.result.current.pick("create:New"));
+  expect(created).toHaveBeenLastCalledWith("New", { reading: "ready" });
+});
+
+test("a pending popup forwards provenance without firing another open/read request on navigation", () => {
+  const opened = vi.fn();
+  const picked = vi.fn();
+  render(
+    <ListPopup
+      {...retainedOptions}
+      items={retainedItems}
+      status="pending"
+      empty="Empty"
+      row={(item) => ({ label: item })}
+      aria-label="popup retained"
+      anchor="trigger"
+      trigger="Open"
+      open
+      onOpenChange={opened}
+      select="multi"
+      multiAction="activate"
+      onPick={picked}
+    />,
+  );
+  const root = screen.getByRole("listbox", { name: "popup retained" });
+  root.focus();
+  fireEvent.keyDown(root, { key: "ArrowDown" });
+  fireEvent.keyDown(root, { key: "Enter" });
+  fireEvent.click(screen.getByText("Beta"));
+  expect(picked).toHaveBeenLastCalledWith("Beta", [], { reading: "pending" });
+  expect(opened).not.toHaveBeenCalled();
+});
+
+test("a reread retains the same row and selection through pending, failure and recovery", () => {
+  function Fixture({ status }: { status: "ready" | "pending" | "failed" }) {
+    return (
+      <List
+        {...retainedOptions}
+        items={retainedItems}
+        status={status}
+        select="single"
+        row={(item) => ({ label: item })}
+        aria-label="reread"
+        empty="Empty"
+        filter="substring"
+      />
+    );
+  }
+  const view = render(<Fixture status="ready" />);
+  const row = screen.getByRole("option", { name: "Alpha" });
+  fireEvent.click(row);
+  for (const status of ["pending", "failed", "ready"] as const) {
+    view.rerender(<Fixture status={status} />);
+    expect(screen.getByRole("option", { name: "Alpha" })).toBe(row);
+    expect(row.getAttribute("aria-selected")).toBe("true");
+    expect(screen.getByRole("listbox").getAttribute("data-reading")).toBe(status);
+    expect(view.container.querySelector('[data-kind="busy"]') !== null).toBe(status === "pending");
+    expect(screen.queryByText("read failed") !== null).toBe(status === "failed");
+  }
 });
