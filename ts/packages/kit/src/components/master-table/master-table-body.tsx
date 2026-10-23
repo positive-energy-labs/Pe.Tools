@@ -52,12 +52,17 @@ interface MasterRowProps<Row extends RowData> {
   activeRowRef: React.RefObject<HTMLTableRowElement | null>;
   className: string;
   onRowClick?: (row: Row) => void;
-  onSelect?: (event: MouseEvent<HTMLTableRowElement>) => void;
+  onSelect?: (key: string, range: boolean) => void;
   onRowHover?: (row: Row | null) => void;
   /** The columns the children were drawn from: a row's cells redraw when the columns do. */
   columns: unknown;
   draft: unknown;
-  children: ReactNode;
+  /** The row's cells, drawn only when the row itself renders: built eagerly as children, every
+   *  row's cells were rebuilt on each body render (each virtual scroll frame) and then discarded
+   *  by the memo. Like children, it is not compared; `columns`, `draft` and `entry` stand for it. */
+  cells: () => ReactNode;
+  /** This row holds the grid's Tab stop. */
+  entry: boolean;
 }
 
 function MasterRowView<Row extends RowData>({
@@ -74,7 +79,7 @@ function MasterRowView<Row extends RowData>({
   onRowClick,
   onSelect,
   onRowHover,
-  children,
+  cells,
   draft: _draft,
 }: MasterRowProps<Row>) {
   const ref = useCallback(
@@ -100,11 +105,11 @@ function MasterRowView<Row extends RowData>({
       onClick={(event) => {
         if ((event.target as HTMLElement).closest("button,input,select,textarea,a,[role=button]"))
           return;
-        onSelect?.(event as MouseEvent<HTMLTableRowElement>);
+        onSelect?.(rowKey, (event as MouseEvent<HTMLTableRowElement>).shiftKey);
         onRowClick?.(row);
       }}
     >
-      {children}
+      {cells()}
     </Row>
   );
 }
@@ -127,6 +132,7 @@ const MasterRow = memo(
     // Cell state often lives in the columns (a route's Work), not the row: without this, a
     // stable row skipped every Work change and a staged cell never showed its mark.
     previous.columns === next.columns &&
+    previous.entry === next.entry &&
     previous.draft === next.draft,
 ) as typeof MasterRowView;
 
@@ -270,6 +276,11 @@ export function MasterTableBody<Row extends RowData>({
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [activeKey]);
 
+  // One stable select for every row: an arrow per row per render broke the row memo, and a
+  // virtual body renders on every scroll frame.
+  const selectRef = useRef(onSelect);
+  selectRef.current = onSelect;
+  const select = useCallback((key: string, range: boolean) => selectRef.current?.(key, range), []);
   // Memoized rows keep the first `moveFrom` they were drawn with, so it reads today's grid here.
   const grid = useRef({ tbody, count: visibleRows.length, virtualized, virtual });
   grid.current = { tbody, count: visibleRows.length, virtualized, virtual };
@@ -420,11 +431,6 @@ export function MasterTableBody<Row extends RowData>({
         const tableRow = visibleRows[rowIndex]!;
         const key = tableRow.id;
         const gap = virtualized ? start - (at ? drawn[at - 1]!.end : 0) : 0;
-        const cells = [
-          ...tableRow.getStartVisibleCells(),
-          ...tableRow.getCenterVisibleCells(),
-          ...tableRow.getEndVisibleCells(),
-        ];
         return (
           <Fragment key={key}>
             {gap > 0 && <Spacer height={gap} />}
@@ -440,146 +446,156 @@ export function MasterTableBody<Row extends RowData>({
               activeRowRef={activeRowRef}
               className={cn("veil h-(--item-h) scroll-mt-12", rowClassName?.(tableRow.original))}
               onRowClick={onRowClick}
-              onSelect={onSelect ? (event) => onSelect(key, event.shiftKey) : undefined}
+              onSelect={onSelect ? select : undefined}
               onRowHover={onRowHover}
               columns={columnByKey}
               draft={draft}
-            >
-              {gutter && <GutterCell row={tableRow.original} gutter={gutter} width={gutterWidth} />}
-              {cells.map((cell, columnIndex) => {
-                const column = columnByKey.get(cell.column.id);
-                if (!column) return null;
-                // The first DRAWN row: a scrolled virtual grid still has a Tab stop.
-                const isEntryCell =
-                  table.getFocusedCell() === undefined && at === 0 && columnIndex === 0;
-                return (
-                  <table.Subscribe
-                    key={cell.id}
-                    source={table.atoms.cellSelection}
-                    selector={() =>
-                      Number(cell.getIsFocused()) | (Number(cell.getIsSelected()) << 1)
-                    }
-                  >
-                    {(selection) => (
-                      <td
-                        ref={hostOf(cell.id)}
-                        data-cell-id={cell.id}
-                        data-column-key={column.key}
-                        role="gridcell"
-                        tabIndex={
-                          selection & 1 || (isEntryCell && table.getFocusedCell() === undefined)
-                            ? 0
-                            : -1
+              entry={at === 0}
+              cells={() => (
+                <>
+                  {gutter && (
+                    <GutterCell row={tableRow.original} gutter={gutter} width={gutterWidth} />
+                  )}
+                  {[
+                    ...tableRow.getStartVisibleCells(),
+                    ...tableRow.getCenterVisibleCells(),
+                    ...tableRow.getEndVisibleCells(),
+                  ].map((cell, columnIndex) => {
+                    const column = columnByKey.get(cell.column.id);
+                    if (!column) return null;
+                    // The first DRAWN row: a scrolled virtual grid still has a Tab stop.
+                    const isEntryCell =
+                      table.getFocusedCell() === undefined && at === 0 && columnIndex === 0;
+                    return (
+                      <table.Subscribe
+                        key={cell.id}
+                        source={table.atoms.cellSelection}
+                        selector={() =>
+                          Number(cell.getIsFocused()) | (Number(cell.getIsSelected()) << 1)
                         }
-                        aria-selected={Boolean(selection & 2)}
-                        data-master-cell=""
-                        onFocus={(event) => {
-                          focusedCellRef.current = event.currentTarget;
-                          setFocusedCell(event.currentTarget);
-                          if (event.target === event.currentTarget && !selectingEditor.current)
-                            table.setFocusedCell(tableRow.id, cell.column.id);
-                        }}
-                        onKeyDown={(event) => {
-                          if (event.target === event.currentTarget) handleGridKey(event);
-                        }}
-                        onCopy={
-                          cellEdit
-                            ? (event) => {
-                                if (event.target !== event.currentTarget) return;
-                                event.clipboardData.setData(
-                                  "text/plain",
-                                  cellEdit.read(tableRow.original, cell.column.id),
-                                );
-                                event.preventDefault();
-                              }
-                            : undefined
-                        }
-                        onPaste={
-                          cellEdit
-                            ? (event) => {
-                                if (event.target !== event.currentTarget) return;
-                                const selected = visibleRows.flatMap((row) =>
-                                  row
-                                    .getVisibleCells()
-                                    .filter((item) => item.getIsSelected())
-                                    .map((item) => ({
-                                      row: row.original,
-                                      column: item.column.id,
-                                    })),
-                                );
-                                cellEdit.fill(
-                                  selected.length > 1
-                                    ? selected
-                                    : [{ row: tableRow.original, column: cell.column.id }],
-                                  event.clipboardData.getData("text/plain"),
-                                );
-                                event.preventDefault();
-                              }
-                            : undefined
-                        }
-                        onMouseDown={(event) => {
-                          // A click SELECTS the cell (F-J3-5a): an idle editor under the pointer
-                          // would take the caret and make typing append. The td takes focus; the
-                          // first printable key then replaces the value, and a double-click, F2 or
-                          // Enter edits in place.
-                          const target = event.target as HTMLElement;
-                          const interceptEditor =
-                            target.matches(CELL_EDITOR) && document.activeElement !== target;
-                          if (interceptEditor) {
-                            event.preventDefault();
-                            selectingEditor.current = true;
-                            event.currentTarget.focus();
-                            selectingEditor.current = false;
-                          }
-                          if (!isInteractive(event.target) || interceptEditor)
-                            cell.getSelectionStartHandler(document)(event);
-                        }}
-                        onDoubleClick={(event) => {
-                          if (document.activeElement === event.currentTarget)
-                            editCell(event.currentTarget);
-                        }}
-                        onMouseEnter={cell.getSelectionExtendHandler()}
-                        data-lock={column.lock ? "" : undefined}
-                        style={column.lock ? { left: gutter ? gutterWidth : 0 } : undefined}
-                        className={cn(
-                          // The row rule is drawn INSIDE the cell: a border on a td adds to the row box and put
-                          // every list row at 21px (measured, annotation round 2 2026-08-31).
-                          "hairline-b-inset relative scroll-mt-12 border-l border-line p-0 outline-none first:border-l-0 focus-visible:ring-1 focus-visible:ring-inset focus-visible:ring-line-2",
-                          selection & 2 && "on-select",
-                          column.right && "text-right",
-                          column.width,
-                          column.lock && "sticky z-[5] bg-on",
-                        )}
                       >
-                        <CellNavigationProvider
-                          move={(direction) =>
-                            document.activeElement instanceof HTMLElement &&
-                            moveFrom(document.activeElement, direction, true)
-                          }
-                        >
-                          <CellHost.Provider value={hostOf(cell.id)}>
-                            {/* The column's own renderer, called, never `FlexRender`: TanStack
+                        {(selection) => (
+                          <td
+                            ref={hostOf(cell.id)}
+                            data-cell-id={cell.id}
+                            data-column-key={column.key}
+                            role="gridcell"
+                            tabIndex={
+                              selection & 1 || (isEntryCell && table.getFocusedCell() === undefined)
+                                ? 0
+                                : -1
+                            }
+                            aria-selected={Boolean(selection & 2)}
+                            data-master-cell=""
+                            onFocus={(event) => {
+                              focusedCellRef.current = event.currentTarget;
+                              setFocusedCell(event.currentTarget);
+                              if (event.target === event.currentTarget && !selectingEditor.current)
+                                table.setFocusedCell(tableRow.id, cell.column.id);
+                            }}
+                            onKeyDown={(event) => {
+                              if (event.target === event.currentTarget) handleGridKey(event);
+                            }}
+                            onCopy={
+                              cellEdit
+                                ? (event) => {
+                                    if (event.target !== event.currentTarget) return;
+                                    event.clipboardData.setData(
+                                      "text/plain",
+                                      cellEdit.read(tableRow.original, cell.column.id),
+                                    );
+                                    event.preventDefault();
+                                  }
+                                : undefined
+                            }
+                            onPaste={
+                              cellEdit
+                                ? (event) => {
+                                    if (event.target !== event.currentTarget) return;
+                                    const selected = visibleRows.flatMap((row) =>
+                                      row
+                                        .getVisibleCells()
+                                        .filter((item) => item.getIsSelected())
+                                        .map((item) => ({
+                                          row: row.original,
+                                          column: item.column.id,
+                                        })),
+                                    );
+                                    cellEdit.fill(
+                                      selected.length > 1
+                                        ? selected
+                                        : [{ row: tableRow.original, column: cell.column.id }],
+                                      event.clipboardData.getData("text/plain"),
+                                    );
+                                    event.preventDefault();
+                                  }
+                                : undefined
+                            }
+                            onMouseDown={(event) => {
+                              // A click SELECTS the cell (F-J3-5a): an idle editor under the pointer
+                              // would take the caret and make typing append. The td takes focus; the
+                              // first printable key then replaces the value, and a double-click, F2 or
+                              // Enter edits in place.
+                              const target = event.target as HTMLElement;
+                              const interceptEditor =
+                                target.matches(CELL_EDITOR) && document.activeElement !== target;
+                              if (interceptEditor) {
+                                event.preventDefault();
+                                selectingEditor.current = true;
+                                event.currentTarget.focus();
+                                selectingEditor.current = false;
+                              }
+                              if (!isInteractive(event.target) || interceptEditor)
+                                cell.getSelectionStartHandler(document)(event);
+                            }}
+                            onDoubleClick={(event) => {
+                              if (document.activeElement === event.currentTarget)
+                                editCell(event.currentTarget);
+                            }}
+                            onMouseEnter={cell.getSelectionExtendHandler()}
+                            data-lock={column.lock ? "" : undefined}
+                            style={column.lock ? { left: gutter ? gutterWidth : 0 } : undefined}
+                            className={cn(
+                              // The row rule is drawn INSIDE the cell: a border on a td adds to the row box and put
+                              // every list row at 21px (measured, annotation round 2 2026-08-31).
+                              "hairline-b-inset relative scroll-mt-12 border-l border-line p-0 outline-none first:border-l-0 focus-visible:ring-1 focus-visible:ring-inset focus-visible:ring-line-2",
+                              selection & 2 && "on-select",
+                              column.right && "text-right",
+                              column.width,
+                              column.lock && "sticky z-[5] bg-on",
+                            )}
+                          >
+                            <CellNavigationProvider
+                              move={(direction) =>
+                                document.activeElement instanceof HTMLElement &&
+                                moveFrom(document.activeElement, direction, true)
+                              }
+                            >
+                              <CellHost.Provider value={hostOf(cell.id)}>
+                                {/* The column's own renderer, called, never `FlexRender`: TanStack
                             renders a def's `cell` as a component TYPE, and the def is rebuilt
                             whenever the columns are, so every cell remounted on each Work change
                             and a half-typed value (and focus) vanished with its input (O8-c). */}
-                            {column.cell(tableRow.original)}
-                          </CellHost.Provider>
-                        </CellNavigationProvider>
-                        {draft?.id === cell.id && (
-                          <FillDraft
-                            text={draft.text}
-                            onText={(text) =>
-                              setDraft((current) => current && { ...current, text })
-                            }
-                            finish={finishDraft}
-                          />
+                                {column.cell(tableRow.original)}
+                              </CellHost.Provider>
+                            </CellNavigationProvider>
+                            {draft?.id === cell.id && (
+                              <FillDraft
+                                text={draft.text}
+                                onText={(text) =>
+                                  setDraft((current) => current && { ...current, text })
+                                }
+                                finish={finishDraft}
+                              />
+                            )}
+                          </td>
                         )}
-                      </td>
-                    )}
-                  </table.Subscribe>
-                );
-              })}
-            </MasterRow>
+                      </table.Subscribe>
+                    );
+                  })}
+                </>
+              )}
+            />
           </Fragment>
         );
       })}
