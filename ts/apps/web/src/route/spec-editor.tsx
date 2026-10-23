@@ -31,8 +31,8 @@ import { ArtifactFrame } from "@pe/kit/lang/artifact-frame";
 import { FactChip, Tag } from "@pe/kit/lang/chip";
 import { Code, JsonEditor } from "@pe/kit/lang/code";
 import { EmptyState } from "@pe/kit/lang/empty";
-import { OutcomeLine } from "#/components/lang/outcome";
-import { Switcher } from "#/components/lang/switcher";
+import { OutcomeLine } from "@pe/kit/lang/outcome";
+import { Switcher } from "@pe/kit/lang/switcher";
 import { SchemaToFieldRender } from "#/lib/schema-to-field-render";
 import { projectHostValidationState } from "#/lib/schema-to-field-render/field-state";
 import { inventoryOf, previousOf, useHostStatusSlice, useInventory } from "#/readings";
@@ -515,13 +515,13 @@ export function SpecEditor({
               {member.pod} · {member.path}
             </span>
             <FactChip
-              tone={schema ? "meta" : "caution"}
+              tone={schema ? undefined : "caution"}
               title={schema ?? "No $schema: plain data, no library validates it."}
             >
               {schema ? (schema.split("/").at(-1) ?? schema) : "no $schema"}
             </FactChip>
             <FactChip
-              tone={session ? "done" : "meta"}
+              tone={session ? "done" : undefined}
               title={
                 session
                   ? "A Revit session is attached: composition and semantic issues are live."
@@ -538,7 +538,7 @@ export function SpecEditor({
               </TooltipHint>
             ) : (
               <FactChip
-                tone={options.word ? "meta" : "caution"}
+                tone={options.word ? undefined : "caution"}
                 dashed={!options.word}
                 title={
                   options.word

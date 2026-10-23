@@ -1,7 +1,7 @@
 /** Build consumes a frozen saved file through the shared action journal. Original IDs and output paths survive lost responses; unknown requires original-ID recovery. */
 import { actionReceiptSchema, familyProjectionSchema } from "@pe/agent-contracts";
-import { ArmingStrip, type ArmingState } from "#/components/lang/arming-strip";
-import { OutcomeLine } from "#/components/lang/outcome";
+import { ArmingStrip, type ArmingState } from "@pe/kit/lang/arming-strip";
+import { OutcomeLine } from "@pe/kit/lang/outcome";
 
 /** The commit label, shared by the verb that arms and the strip that commits. */
 const BUILD_ACTION = "build .rfa";

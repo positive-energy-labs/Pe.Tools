@@ -1,3 +1,4 @@
+import { SvgTip } from "@pe/kit/lang/tooltip";
 import { token } from "@pe/kit/lib/token";
 /**
  * THE FIELD — every buildable (opening width × qty) for the active row's stock and borders,
@@ -6,7 +7,7 @@ import { token } from "@pe/kit/lib/token";
  * Ruled 2026-08-25 over free-%-vs-rib and an opening×qty lattice.
  */
 import type { Grille, GrilleInput } from "./math";
-import { frac, pct } from "./math";
+import { frac } from "./math";
 
 type Props = {
   field: Grille[];
@@ -87,7 +88,7 @@ export function FieldChart({ field, active, onPick }: Props) {
                   style={{ cursor: "pointer" }}
                   onClick={() => onPick({ opening: g.opening, openings: g.openings, rib: g.rib })}
                 >
-                  <title>{`${g.openings} × ${frac(g.opening)}″, ${frac(g.rib)}″ ribs → ${pct(g.freeArea)}`}</title>
+                  <SvgTip content={"free area"} />
                 </circle>
               );
             })}

@@ -1,7 +1,7 @@
 import { FactChip } from "@pe/kit/lang/chip";
-import { CoverageBar } from "#/components/lang/coverage-bar";
+import { CoverageBar } from "@pe/kit/lang/coverage-bar";
 import { EmptyState } from "@pe/kit/lang/empty";
-import { Provenance, Section } from "#/components/lang/section";
+import { Provenance, Section } from "@pe/kit/lang/section";
 import { UnrecognizedShape, asNumber, asRecord, asRecords, asString, text } from "#/ops/registry";
 import type { SyntheticViewProps } from "#/lab/synthetic";
 import { MonoAside, SERIES_META, Stat, composition, obs } from "./viz-cycle";

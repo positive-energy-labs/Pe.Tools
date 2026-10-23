@@ -4,7 +4,7 @@
  */
 import { useState } from "react";
 
-import { Switcher } from "#/components/lang/switcher";
+import { Switcher } from "@pe/kit/lang/switcher";
 import { SettingsBody } from "#/machine/body";
 import { MACHINE_SEEDS, type MachineSeed } from "#/open/seeds";
 

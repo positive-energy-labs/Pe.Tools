@@ -1,10 +1,11 @@
 import { Fragment, useState } from "react";
 import { RefreshCw, Save, Upload } from "lucide-react";
 
+import { SelectInRevitIcon, SelectionBoxKey } from "@pe/kit/lang/gesture-glyph";
 import { ActionGroup, Button } from "@pe/kit/lang/button";
 import { PreviewAction } from "@pe/kit/lang/preview-action";
 import { HotkeyCommand, HotkeyHint } from "#/components/lang/hotkey-command";
-import { Section } from "#/components/lang/section";
+import { Section } from "@pe/kit/lang/section";
 
 import { SpecimenFrame } from "./recipe-grid";
 import { SituationAction } from "#/route/situation-verbs";
@@ -80,6 +81,12 @@ function PreviewActionSpecimen() {
 export function LangPressSpecimens() {
   return (
     <>
+      <SpecimenFrame name="Select and Selection Box" importPath="@pe/kit/lang/gesture-glyph">
+        <div className="flex items-center gap-3">
+          <SelectInRevitIcon aria-label="Select" />
+          <SelectionBoxKey />
+        </div>
+      </SpecimenFrame>
       <SpecimenFrame
         name="HotkeyCommand · modifier symbols / written chord / name + chord"
         importPath="#/components/lang/hotkey-command"

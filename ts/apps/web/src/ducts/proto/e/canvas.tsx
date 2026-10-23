@@ -1,11 +1,5 @@
-/**
- * The picture pane: one `Pane` whose strip holds the picture mode (model or schematic, `S` swaps),
- * the layers, and two floaters, the orbit globe (`G`) and the other picture small (a click swaps).
- * The model is the subject system's real meshes (`model-picture.tsx`) with its annotations; the
- * schematic is the one-line. The readout docked top-left (`readout.tsx`) says what is selected: an
- * element's facts and issues, or a ruling's verdicts, never a popover over the picture. A pick, a
- * frame, a look and a gesture each write only their own Page keys.
- */
+/** The model/schematic pane, its fixed readout and floaters. Camera policy belongs to useStage. */
+import { nameOrFallback } from "@pe/kit/lang/subject-text";
 import {
   createContext,
   useContext,
@@ -16,7 +10,6 @@ import {
   type ReactNode,
   type RefObject,
 } from "react";
-import { useRouter } from "@tanstack/react-router";
 import { flushSync } from "react-dom";
 
 import { DUCTS_LAYERS, emptyListSearch, toggleLayer } from "@pe/agent-contracts";
@@ -24,31 +17,27 @@ import { snapshotById } from "@pe/ducts-domain/readiness";
 import { noRunBranches } from "@pe/ducts-domain/no-runs";
 import { systemScope } from "@pe/ducts-domain/system-scope";
 import { TooltipHint } from "@pe/kit/lang/tooltip";
-import { ChevronRight } from "lucide-react";
 import { SelectionBoxButton } from "#/revit/element-menu";
 import { observedElements } from "#/revit/observation";
-import { KeyLegend } from "#/components/lang/kbd";
 import { Pane } from "#/components/lang/pane";
 import { useNativeObservation } from "#/revit/observation";
 import { useScene } from "#/scene/use-scene";
-import { flyTo, useLiveOrbit } from "#/scene/live-orbit";
+import { useLiveOrbit } from "#/scene/live-orbit";
 import type { Bounds } from "#/scene/types";
-import { useSurfaceHost } from "#/navigation/surface-host";
 import { Button } from "@pe/kit/lang/button";
-import { useScopeKeys } from "@pe/kit/keys";
 import { viewportProject } from "#/scene/projection";
 
 import type { Ruling } from "../../annotations";
 import { elementNamer } from "../../claims";
-import { PICTURE_KEYS } from "../../docs";
 import { NodeFactsView, SegmentFactsView } from "../../facts";
 import { labelOfNode, legsOf } from "../../legs";
 import { sceneRequestOf } from "../../manifest";
 import { findingLayers, findingShapes, noRunLayers } from "../../finding-layers";
 import { boundsOfIds, ModelPicture, poseOf, usePictureBounds } from "../../model-picture";
-import { clearPose, subjectPose } from "#/scene/framing";
+import { useStage, stageViewport } from "#/scene/stage-controller";
 import { GoToSubject } from "./go-to";
-import { PictureReadout } from "#/scene/readout";
+import { PictureReadout } from "@pe/kit/lang/readout";
+import { PaneCrumb } from "@pe/kit/lang/pane-crumb";
 import { RunDetail, runOf } from "./run-detail";
 import { DEFAULT_DESIGN_FRICTION_RATE } from "@pe/ducts-domain/equivalent-length";
 import { ProvisionalNote } from "../../provisional";
@@ -241,17 +230,15 @@ function Canvas({
     [page.viewport, bounds, pictureSize, holding],
   );
   const pose = committedPose;
-  // Marks the landing of the next flight `useLiveOrbit` makes to a Page pose (an alias jump).
   const landing = useRef<(() => void) | null>(null);
   const orbit = useLiveOrbit(
     committedPose,
-    (viewport, how) => setPage({ viewport }, { history: how === "gesture" ? "replace" : "push" }),
+    stageViewport(setPage),
     `${native?.session}/${native?.openId}/${page.system}/${page.picture}`,
     page.viewport,
     bounds?.scene,
     landing,
   );
-  // Pea reads the committed pose (`facts.pose`), not the in-progress globe preview.
   useEffect(() => {
     onPose?.(committedPose);
   }, [committedPose, onPose]);
@@ -454,10 +441,6 @@ function Canvas({
         })
       : null;
   };
-  // A pick made on the picture (an element, a pin, an issue, the schematic) keeps the camera
-  // still (kaitpw 2026-10-23); `quiet` tells the alias flight below that this selection is one.
-  const quiet = useRef<{ id: string } | null>(null);
-  const hush = (id: string) => (quiet.current = { id });
   // Showing the pick is local and urgent. Updating the address also renders the tree and rules;
   // let that work follow the readout's first paint. Two RAFs can run only 3 ms apart in headless
   // Chrome, before a visible paint, so the publish waits a frame and then 50 ms.
@@ -467,7 +450,6 @@ function Canvas({
     setShown(id);
     setOpenRuling(null);
     if (id == null) return setPage({ selected: "" }, { history: "push" });
-    hush(String(id));
     requestAnimationFrame(() => {
       if (pendingSelection.current !== id) return;
       selectionPublish.current = setTimeout(() => {
@@ -482,27 +464,27 @@ function Canvas({
     if (!page.selected) setOpenRuling(null);
   }, [page.selected]);
 
-  // Every other way a subject becomes the selection (a footnote, an inbox, tree or rules row, a
-  // search result) is an alias jump: ONE Page write of the subject and the view that shows it with
-  // its neighbours, so the route renders once, as it does for any selection. The camera travels
-  // there the way Back and Forward travel (`useLiveOrbit`); the landing outlines the subject and
-  // offers the way back, and Back is one step to where the eye was.
+  // A named alias jump writes selection and view together; its landing marks the subject.
   const [landed, setLanded] = useState<{ box: DOMRect | null; back: string; n: number } | null>(
     null,
   );
-  const aimed = useRef<{ selected: string; view: string } | null>(null);
   const selectionOf = (id: number) => {
     const leg = sub?.legOf.get(id);
     return new Set(leg ? [id, ...leg.ids] : [id]);
   };
-  const viewOf = (ids: ReadonlySet<number>) => {
-    const target = bounds && picture === "model" ? boundsOfIds(read.meshes, scene, ids) : null;
-    if (!bounds || !target) return null;
-    const at = pictureHost?.querySelector("[data-model-picture]");
-    const rect = at?.getBoundingClientRect();
-    const view = subjectPose(bounds, target, orbit.read(), rect ? rect.width / rect.height : 1);
-    return at ? clearPose(view, target, bounds.scene, at) : view;
-  };
+  const stage = useStage({
+    kind: "orbit",
+    orbit,
+    bounds,
+    host: pictureHost,
+    selectedBounds: boundsOfIds(read.meshes, scene, selected),
+    clearSelection: () => {
+      if (page.selected || pendingSelection.current !== null) pick(null);
+    },
+    onHistoryStep: () => setLanded(null),
+  });
+  const viewOf = (ids: ReadonlySet<number>) =>
+    picture === "model" ? stage.poseOf(boundsOfIds(read.meshes, scene, ids)) : null;
   const markLanding = (ids: ReadonlySet<number>, back: string) => () => {
     const host = pictureHost?.getBoundingClientRect();
     const box = onScreen(boundsOfIds(read.meshes, scene, ids));
@@ -528,102 +510,17 @@ function Canvas({
     const same = String(id) === page.selected;
     setLanded(null);
     if (!view) return same ? undefined : onSelect(id);
-    aimed.current = { selected: String(id), view: JSON.stringify(view) };
     landing.current = markLanding(ids, same ? "the previous view" : backWord());
     setPage(same ? { viewport: view } : { selected: String(id), issue: "", viewport: view }, {
       history: "push",
     });
   };
   if (jump) jump.current = jumpTo;
-  // A flight of our own (history null, Page already moved) for a selection that arrived without its
-  // view: Pea, a cell in another system. Its landing replaces that selection's history entry.
-  const flyToIds = (ids: ReadonlySet<number>, back: string) => {
-    const view = viewOf(ids);
-    if (!view || !bounds) return;
-    flyTo(orbit, view, {
-      history: "replace",
-      scene: bounds.scene,
-      onLand: markLanding(ids, back),
-    });
-  };
-  const seen = useRef({ selected: page.selected, viewport: page.viewport, system: page.system });
-  // A jump into another system waits for that system's picture to finish reading: a pose
-  // committed against the centrelines would be re-read against the meshes' bounds.
-  const owed = useRef<string | null>(null);
-  useEffect(() => {
-    const was = seen.current;
-    seen.current = { selected: page.selected, viewport: page.viewport, system: page.system };
-    const mine = aimed.current;
-    aimed.current = null;
-    if (mine && mine.selected === page.selected && mine.view === JSON.stringify(page.viewport))
-      return; // our own jump: `useLiveOrbit` is flying it and `landing` marks it
-    if (mine) landing.current = null;
-    if (page.selected === was.selected) return;
-    const own = quiet.current;
-    quiet.current = null;
-    owed.current = null;
-    setLanded(null);
-    if (!page.selected) return;
-    if (own?.id === page.selected) return;
-    const crossed = page.system !== was.system && page.viewport === null;
-    if (!crossed && page.viewport !== was.viewport) return;
-    const from = /^\d+$/.test(was.selected) ? nameOf(Number(was.selected)) : null;
-    if (crossed) owed.current = from ?? (was.system || "all systems");
-    else flyToIds(selected, from ?? "the previous view");
-  }, [page.selected, page.viewport, page.system]); // eslint-disable-line react-hooks/exhaustive-deps
-  useEffect(() => {
-    if (owed.current === null || read.pending) return;
-    const back = owed.current;
-    owed.current = null;
-    flyToIds(selected, back);
-  }, [read.pending, read.meshes, scene]); // eslint-disable-line react-hooks/exhaustive-deps
-  const router = useRouter();
-  const surface = useSurfaceHost();
-  const go = (way: "back" | "forward") => {
-    setLanded(null);
-    if (surface.native) surface.navigateNativeHistory(way);
-    else router.history[way]();
-  };
-  const goBack = () => go("back");
-  // View history is the page's history: every jump and named move pushes, a gesture replaces.
-  // Bound here as well as by the browser so the native shell and a headless one step the same
-  // history, once (the default is prevented).
-  const [body, setBody] = useState<HTMLElement | null>(null);
-  useEffect(() => setBody(document.body), []);
-  useScopeKeys(
-    [
-      {
-        hotkey: "Escape",
-        label: "clear the selection",
-        says: "Clear the selection without moving either picture",
-        refusal: page.selected ? null : "nothing is selected",
-        callback: () => {
-          if (page.selected) pick(null);
-        },
-        options: { conflictBehavior: "allow" },
-      },
-      {
-        hotkey: "Alt+ArrowLeft",
-        label: "back",
-        says: "Back to the previous selection and view; the camera travels there",
-        callback: goBack,
-        options: { conflictBehavior: "allow" },
-      },
-      {
-        hotkey: "Alt+ArrowRight",
-        label: "forward",
-        says: "Forward again to the next selection and view",
-        callback: () => go("forward"),
-        options: { conflictBehavior: "allow" },
-      },
-    ],
-    body,
-  );
+  const goBack = () => stage.go("back");
 
   const ruling = (r: Ruling) => {
     clearTimeout(selectionPublish.current);
     pendingSelection.current = null;
-    hush(String(r.at));
     setShown(null);
     const finding =
       r.kind === "claim" ? `claim:${r.claim.id}` : r.kind === "issue" ? r.issue.id : r.finding.id;
@@ -678,74 +575,40 @@ function Canvas({
     priced && page.system && readId != null
       ? runOf(priced, systemScope(snapshot, page.system).groups, readId)
       : null;
-  const title =
-    systemName == null ? (
-      <span className="flex min-w-0 items-center gap-1.5">
-        <span className="truncate">All systems</span>
-      </span>
-    ) : (
-      <span className="flex min-w-0 items-center gap-0.5" data-e-crumb="">
-        {/* Priority when the header strip leaves little room: the system never shrinks, the
-            picked element keeps a few letters, the root crumb gives way first. */}
-        <button
-          type="button"
-          className="veil min-w-0 shrink-[8] truncate rounded-control px-1 text-ink-2 hover:text-ink"
-          aria-label="show every system"
-          onClick={identity.allSystems}
-        >
-          Systems
-        </button>
-        <ChevronRight aria-hidden className="size-3.5 shrink-0 text-ink-2" />
-        {pickedName == null ? (
-          <TooltipHint content={systemName}>
-            <span className="shrink-0 px-1">{systemName}</span>
-          </TooltipHint>
-        ) : (
-          <TooltipHint content={`${systemName} · clear the selection`}>
-            <button
-              type="button"
-              className="veil shrink-0 rounded-control px-1 text-ink-2 hover:text-ink"
-              aria-label={`clear the selection in ${systemName}`}
-              onClick={() => {
-                setPage({ selected: "" }, { history: "push" });
-                const fit = poseOf(null, bounds, pictureSize);
-                if (fit && picture === "model")
-                  flyTo(orbit, fit, {
-                    history: null,
-                    scene: bounds?.scene,
-                    onLand: () => setPage({ viewport: null }, { history: "replace" }),
-                  });
-              }}
-            >
-              {systemName}
-            </button>
-          </TooltipHint>
-        )}
-        {pickedName == null || pickedId == null ? null : (
-          <>
-            <ChevronRight aria-hidden className="size-3.5 shrink-0 text-ink-2" />
-            <TooltipHint content={`${pickedName} · go to it`}>
-              {/* The picked element's name is a Subject: pressing it is the same alias-click as in text. */}
-              <button
-                type="button"
-                className="veil min-w-[6ch] truncate rounded-control px-1"
-                data-e-selected={pickedId}
-                aria-label={`go to ${pickedName}`}
-                onClick={() => subjects?.go?.(pickedId)}
-              >
-                {pickedName}
-              </button>
-            </TooltipHint>
-          </>
-        )}
-      </span>
-    );
+  const title = (
+    <PaneCrumb
+      segments={
+        systemName == null
+          ? [{ label: "All systems" }]
+          : [
+              { label: "Systems", onPress: identity.allSystems },
+              {
+                label: systemName,
+                onPress:
+                  pickedName == null
+                    ? undefined
+                    : () => setPage({ selected: "" }, { history: "push" }),
+              },
+              ...(pickedName == null || pickedId == null
+                ? []
+                : [
+                    {
+                      label: pickedName,
+                      onPress: () => subjects?.go?.(pickedId),
+                      revitIds: [pickedId],
+                    },
+                  ]),
+            ]
+      }
+    />
+  );
 
   const model = (
     <ModelPicture
       read={read}
       bounds={bounds}
       orbit={orbit}
+      stage={stage}
       wheelHost={pictureHost?.closest<HTMLElement>("[data-slot='pane-field']")}
       scene={scene}
       layers={layers}
@@ -761,11 +624,7 @@ function Canvas({
       onIssueHover={onIssueHover}
       pointOf={pointOf}
       issue={page.issue}
-      setPage={(next, move) => {
-        // An issue picked in 3D is a picture pick: the camera stays.
-        if (next.selected) hush(next.selected);
-        setPage(next, move);
-      }}
+      setPage={setPage}
       onPick={pick}
       onRuling={ruling}
       onHover={onHover}
@@ -823,18 +682,21 @@ function Canvas({
             { history: "push" },
           ),
       }}
+      legend={
+        <ScaleLegend
+          encoding={scale.encoding}
+          counts={scale.counts}
+          nameOf={scale.nameOf}
+          // The max's element is named in text: the alias-click, not a picture pick.
+          onSelect={(id) => (subjects?.go ? subjects.go(id) : pick(id))}
+        />
+      }
       floaters={floaters}
     >
       <div
         ref={setPictureHost}
         data-proto="E"
         className="relative flex size-full min-h-0 flex-col"
-        onMouseUp={(e) => {
-          // The mouse's back and forward buttons step the same history as Alt+arrows.
-          if (e.button !== 3 && e.button !== 4) return;
-          e.preventDefault();
-          go(e.button === 3 ? "back" : "forward");
-        }}
         onPointerDownCapture={(e) => {
           if (holding) {
             e.preventDefault();
@@ -894,7 +756,7 @@ function Canvas({
         {/* The plate: what the picture is of and the state it is in, readable without a hover;
             with an element selected, that element (kaitpw 2026-10-23: selection info lives here). */}
         <PictureReadout
-          title={readId == null ? undefined : (nameOf(readId) ?? `element ${readId}`)}
+          title={readId == null ? undefined : nameOrFallback(nameOf(readId))}
           onClear={readId == null ? undefined : () => pick(null)}
           foot={
             landed ? (
@@ -1035,20 +897,6 @@ function Canvas({
             </>
           )}
         </PictureReadout>
-
-        <div
-          data-slot="pane-legend"
-          className="absolute bottom-2 left-2 flex flex-col items-start gap-1"
-        >
-          <ScaleLegend
-            encoding={scale.encoding}
-            counts={scale.counts}
-            nameOf={scale.nameOf}
-            // The max's element is named in text: the alias-click, not a picture pick.
-            onSelect={(id) => (subjects?.go ? subjects.go(id) : pick(id))}
-          />
-          {picture === "model" ? <KeyLegend keys={PICTURE_KEYS} lead={0} /> : null}
-        </div>
       </div>
     </Pane>
   );

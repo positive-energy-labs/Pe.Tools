@@ -8,8 +8,8 @@ import { Button } from "@pe/kit/lang/button";
 import { TooltipHint } from "@pe/kit/lang/tooltip";
 import { LoginLine, ProviderSetup } from "#/machine/pea";
 import type { Provider } from "@pe/agent-contracts";
-import { Switch } from "#/components/lang/switch";
-import { Switcher } from "#/components/lang/switcher";
+import { Switch } from "@pe/kit/lang/switch";
+import { Switcher } from "@pe/kit/lang/switcher";
 import { repairWord, type ProvidersState } from "#/workbench/provider/providers";
 
 /**

@@ -13,7 +13,7 @@ import { Input } from "@pe/kit/lang/input";
 import { SubjectText, SubjectTextContext } from "@pe/kit/lang/subject-text";
 import { useRevitSubjectProps } from "#/revit/element-menu";
 
-import { Surface } from "#/components/lang/surface";
+import { Surface } from "@pe/kit/lang/surface";
 import { frozenDemo } from "#/host/demo-client";
 import { RouteShell, useRoute, useRouteThread } from "#/route";
 import { useChooseTarget } from "#/route/shell";
@@ -21,7 +21,7 @@ import { Situation } from "#/route/situation";
 import { LadderPicker, useDocumentLadder } from "#/route/situation-ladder";
 import { NativeObservationScope, type NativeObservation } from "#/revit/observation";
 import type { Psc1Metadata } from "#/scene/psc1";
-import { PictureReadout } from "#/scene/readout";
+import { PictureReadout } from "@pe/kit/lang/readout";
 import { useSceneArtifact } from "#/scene/use-scene";
 import type { Layer3D } from "#/scene/types";
 

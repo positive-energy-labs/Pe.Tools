@@ -1,8 +1,6 @@
+import { SvgTip } from "@pe/kit/lang/tooltip";
 import { useMemo, type ReactNode } from "react";
-import { useScopeGestures, useScopeKeys } from "@pe/kit/keys";
-import { PLANE_GESTURES } from "#/scene/gestures";
-import { useViewHistory } from "#/scene/view-history";
-import "#/scene/damage.css";
+import { useStage } from "#/scene/stage-controller";
 import type { PlaneViewport } from "@pe/agent-contracts";
 import { Pane } from "#/components/lang/pane";
 import { revitTarget } from "@pe/kit/lang/row";
@@ -10,7 +8,7 @@ import { usePlaneViewport, PLAN_CLICK_PX } from "#/scene/use-plane-viewport";
 import { usePlanMap } from "#/lib/plan-map";
 import { Key } from "#/components/anatomy";
 import { EmptyState } from "@pe/kit/lang/empty";
-import { OutcomeLine } from "#/components/lang/outcome";
+import { OutcomeLine } from "@pe/kit/lang/outcome";
 import { PLAN_REFUSAL, type PlanRefusal } from "#/takeoff/plan-image";
 import { token } from "@pe/kit/lib/token";
 import {
@@ -143,7 +141,7 @@ export function LevelPlan({
   selectedKey: string | null;
   cursor: string | null;
   stateOf: (room: ModelRoom) => RoomState;
-  onSelectZone: (z: ModelZone) => void;
+  onSelectZone: (z: ModelZone | null) => void;
   onHover: (id: string) => void;
   onCursor: (z: ModelZone, guid: string) => void;
 }) {
@@ -170,16 +168,8 @@ export function LevelPlan({
       : { minX: 0, minY: 0, maxX: viewport.width, maxY: viewport.height };
     return { ...viewport, frame, fit };
   }, [bounds, plan]);
-  const {
-    setHost,
-    size,
-    view,
-    move,
-    frame: frameBox,
-    handlers,
-    dragDistance,
-    dragging,
-  } = usePlaneViewport(pageViewport, world?.fit ?? null, onViewport);
+  const viewport = usePlaneViewport(pageViewport, world?.fit ?? null, onViewport);
+  const { setHost, host, size, view, move, handlers, dragDistance, dragging } = viewport;
   // No lease: nothing to publish (`visible` is false), so an empty Page stands in.
   useRouteLease<"takeoffs", Partial<TakeoffPage>>("takeoffs", lease?.page ?? [{}, () => {}], {
     thread: lease?.thread,
@@ -239,31 +229,24 @@ export function LevelPlan({
     [world, drawn, stateOf],
   );
   const map = usePlanMap(view, move, world, size, shapes, plan ?? null);
-  // The one camera move a person names (N1): F frames the selected zone, else fits the level.
   const selectedZone = drawn.find((z) => z.zone.guid === selectedKey) ?? null;
-  useScopeGestures(PLANE_GESTURES);
-  useScopeKeys([
-    {
-      hotkey: "F",
-      label: "frame",
-      says: "Frame the selected zone; with none selected, fit the level",
-      callback: () => {
-        if (!world) return;
-        const b = selectedZone?.zone.bounds;
-        const next = b
-          ? frameBox(
-              boundsOf([
-                world.frame.toViewport([b.minX, b.minY]),
-                world.frame.toViewport([b.maxX, b.maxY]),
-              ]),
-              24,
-            )
-          : frameBox(world.fit);
-        if (next) move(next, "move");
-      },
+  const selectedBox = selectedZone?.zone.bounds;
+  useStage({
+    kind: "plane",
+    host,
+    viewport,
+    bounds: world?.fit ?? null,
+    selectedBounds:
+      selectedBox && world
+        ? boundsOf([
+            world.frame.toViewport([selectedBox.minX, selectedBox.minY]),
+            world.frame.toViewport([selectedBox.maxX, selectedBox.maxY]),
+          ])
+        : null,
+    clearSelection: () => {
+      if (selectedKey) onSelectZone(null);
     },
-  ]);
-  useViewHistory();
+  });
   const pane = { id: "plan", title: "plan", scroll: "clip" as const, flush: true, floaters: [map] };
   if (!bounds || !world)
     return (
@@ -291,7 +274,22 @@ export function LevelPlan({
   const font = span / 95;
   const frame = world.frame;
   return (
-    <Pane {...pane}>
+    <Pane
+      {...pane}
+      legend={
+        <div
+          className="pointer-events-none flex max-w-full flex-wrap items-center gap-x-2 gap-y-0.5 rounded-sm px-2 py-0.5"
+          data-surface="page"
+        >
+          {ROOM_STATES.map((s) => (
+            <Key key={s} tone={stateInk(s)} label={STATE_META[s].label} />
+          ))}
+          <Key tone={ABSENT_INK} label="held residue" seam />
+          <Key tone={CURSOR_INK} label="cursor" />
+          {skipped > 0 && <Key tone={ABSENT_INK} label={`${skipped} off-plan`} seam />}
+        </div>
+      }
+    >
       {above}
       {planRefusal ? (
         <OutcomeLine
@@ -308,7 +306,7 @@ export function LevelPlan({
         ref={setHost}
         data-takeoff-plan=""
         className="relative min-h-0 flex-1 overflow-hidden"
-        style={{ cursor: dragging ? "grabbing" : "grab", touchAction: "none" }}
+        style={{ cursor: dragging ? "grabbing" : "grab" }}
         {...handlers}
         onClickCapture={(event) => {
           if (dragDistance.current >= PLAN_CLICK_PX) {
@@ -329,7 +327,7 @@ export function LevelPlan({
             transformOrigin: "0 0",
           }}
         >
-          <title>Level plan — declared zones, detected rooms, held residue</title>
+          <SvgTip content={"level plan"} />
 
           {plan ? <PlanImageLayer plan={plan} frame={frame} /> : null}
 
@@ -401,7 +399,7 @@ export function LevelPlan({
                         vectorEffect="non-scaling-stroke"
                         onClick={click}
                       >
-                        <title>{`${room.name} — ${room.sqft} sf · ${STATE_META[state].label} (no detected boundary)`}</title>
+                        <SvgTip content={STATE_META[state].label} />
                       </circle>
                     );
                   return (
@@ -420,7 +418,7 @@ export function LevelPlan({
                         strokeWidth={isCursor ? 2.5 : 1}
                         vectorEffect="non-scaling-stroke"
                       >
-                        <title>{`${room.name} — ${room.sqft} sf · ${STATE_META[state].label}`}</title>
+                        <SvgTip content={STATE_META[state].label} />
                       </path>
                       {on && room.sqft > 40 && (
                         <text
@@ -462,18 +460,6 @@ export function LevelPlan({
         {/* Surfaces over the plan claim their own pointer: a press on them never pans or clears. */}
         <div onPointerDown={(e) => e.stopPropagation()} onClick={(e) => e.stopPropagation()}>
           {readout}
-          <div
-            data-slot="pane-legend"
-            className="pointer-events-none absolute bottom-2 left-2 flex max-w-[calc(100%-1rem)] flex-wrap items-center gap-x-2 gap-y-0.5 rounded-sm px-2 py-0.5"
-            data-surface="page"
-          >
-            {ROOM_STATES.map((s) => (
-              <Key key={s} tone={stateInk(s)} label={STATE_META[s].label} />
-            ))}
-            <Key tone={ABSENT_INK} label="held residue" seam />
-            <Key tone={CURSOR_INK} label="cursor" />
-            {skipped > 0 && <Key tone={ABSENT_INK} label={`${skipped} off-plan`} seam />}
-          </div>
         </div>
       </div>
     </Pane>

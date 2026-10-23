@@ -19,9 +19,9 @@ import { exportSeed, type Reading } from "@pe/agent-contracts";
 
 import { FactChip } from "@pe/kit/lang/chip";
 import { Code, stringify } from "@pe/kit/lang/code";
-import { OutcomeLine } from "#/components/lang/outcome";
+import { OutcomeLine } from "@pe/kit/lang/outcome";
 import { Button } from "@pe/kit/lang/button";
-import { Section } from "#/components/lang/section";
+import { Section } from "@pe/kit/lang/section";
 
 import { PageLog } from "./situation-grids";
 import type { RouteAction } from "./manifest";

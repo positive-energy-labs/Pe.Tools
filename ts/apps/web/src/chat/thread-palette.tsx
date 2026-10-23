@@ -1,4 +1,4 @@
-import { threadSearchDefault, type ListSearch } from "@pe/agent-contracts";
+import { threadSearchDefault } from "@pe/agent-contracts";
 import { memo, useEffect, useMemo, useRef, useState } from "react";
 import {
   AlarmClock,
@@ -35,10 +35,10 @@ import {
   type Provider,
   type UpdateThreadRequest,
 } from "@pe/agent-contracts";
-import { Dialog, DialogContent, DialogTitle } from "#/components/lang/dialog";
+import { Dialog, DialogContent, DialogTitle } from "@pe/kit/lang/dialog";
 import { ListPopup } from "@pe/kit/lang/list-popup";
 import { Input } from "@pe/kit/lang/input";
-import { useList, type ListState } from "@pe/kit/lang/collection";
+import { useList, type ListState, type ListPersist } from "@pe/kit/lang/collection";
 import { ListBar, ListView, type ListRowParts } from "@pe/kit/lang/list-view";
 import { Button } from "@pe/kit/lang/button";
 import { ProviderMark } from "#/components/lang/provider-mark";
@@ -592,12 +592,6 @@ function CompactThreadTrail({ thread, now }: { thread: RosterThread; now: number
 }
 
 export type ThreadSort = "recent" | "title";
-export interface ThreadListAddress {
-  scope?: string;
-  search: ListSearch;
-  sort: ThreadSort | "";
-  onChange: (search: ListSearch, sort: ThreadSort | "") => void;
-}
 
 function initialShelfState(current: RosterThread | undefined): ListState<ThreadSort> {
   const closed = SHELF_ORDER.filter((shelf) => {
@@ -677,7 +671,7 @@ export function ThreadsSidebar({
   currentThreadId: string;
   onSelect: (id: string) => void;
   compactRows?: boolean;
-  address?: ThreadListAddress;
+  address?: ListPersist<ThreadSort>;
   /** The page's own list: "/" outside a field lands in its search. */
   primary?: boolean;
   /** The roster has not been read yet: empty means unknown, not "no threads". */
@@ -747,7 +741,7 @@ export function ThreadsSidebar({
   );
   const list = useList<RosterThread, ThreadSort>({
     items: orderedThreads,
-    scope: address?.scope,
+    persist: address,
     keyOf: (thread) => thread.id,
     search: searchThread,
     fields: {
@@ -801,11 +795,9 @@ export function ThreadsSidebar({
       order: SHELF_ORDER.map((key) => SHELF_WORD[key]),
     },
     select: "multi",
-    state: { ...view, ...(address ? { search: address.search, sort: address.sort } : {}) },
+    state: view,
     onState: (next) => {
       setView(next);
-      if (address && (next.search !== address.search || next.sort !== address.sort))
-        address.onChange(next.search, next.sort);
       if (next.closed !== view.closed)
         for (const shelf of SHELF_ORDER) {
           try {

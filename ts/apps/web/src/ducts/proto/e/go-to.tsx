@@ -7,10 +7,10 @@
  * (grilles, units); any other element answers its typed id (the list's create row). Listing all
  * eleven thousand elements of a large model cost a 200 ms open (Chadds, 2026-10-23).
  */
-import { useMemo, useState } from "react";
+import { useMemo, useRef, useState } from "react";
 import { Search } from "lucide-react";
 
-import { useScopeKeys } from "@pe/kit/keys";
+import { useSearchKey } from "@pe/kit/lang/list-view";
 import { ListPopup } from "@pe/kit/lang/list-popup";
 import { NO_SYSTEM, systemScope, systemsOf } from "@pe/ducts-domain/system-scope";
 import type { DuctSnapshot } from "@pe/ducts-domain/types";
@@ -36,7 +36,7 @@ function itemsOf(snapshot: DuctSnapshot, system: string, nameOf: (id: number) =>
       system: here.has(e.id) ? system : into,
       id: e.id,
       name: nameOf(e.id),
-      detail: `${kind} ${into} ${"category" in e ? (e.category ?? "") : "duct"} ${e.id}`,
+      detail: `${kind} ${into} ${"category" in e ? (e.category ?? "") : "duct"}`,
       group: here.has(e.id) ? HERE : ELSEWHERE,
       meta: here.has(e.id) ? kind : `${kind} · ${into}`,
     };
@@ -87,19 +87,19 @@ export function GoToSubject({
     [open, snapshot, system, nameOf],
   );
   const byKey = useMemo(() => new Map(items.map((i) => [i.key, i])), [items]);
-  useScopeKeys([
-    {
-      hotkey: "/",
-      label: "go to",
-      says: "Go to a subject: type a name, family, size, system or element id",
-      callback: () => setOpen(true),
-    },
-  ]);
+  const trigger = useRef<SVGSVGElement>(null);
+  useSearchKey({
+    region: () =>
+      trigger.current?.closest<HTMLElement>("[data-slot=pane]") ??
+      trigger.current?.parentElement ??
+      null,
+    focus: () => setOpen(true),
+  });
   return (
     <ListPopup<Item>
       anchor="trigger"
       face="icon"
-      trigger={<Search aria-hidden />}
+      trigger={<Search ref={trigger} aria-hidden />}
       triggerLabel="go to a subject"
       title="Go to a subject · /"
       open={open}
@@ -131,9 +131,7 @@ export function GoToSubject({
         setOpen(false);
       }}
       createLabel={(text) =>
-        byId(snapshot, text)
-          ? `go to element ${text.trim()}`
-          : `${text.trim()}: no element by that id`
+        byId(snapshot, text) ? "go to matching element" : `${text.trim()}: no element by that id`
       }
       row={(i) => ({ label: i.name, meta: i.meta })}
     />

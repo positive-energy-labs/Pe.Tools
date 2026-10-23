@@ -6,7 +6,7 @@ import type {
 
 import { FactChip } from "@pe/kit/lang/chip";
 import { EmptyState } from "@pe/kit/lang/empty";
-import { OutcomeLine } from "#/components/lang/outcome";
+import { OutcomeLine } from "@pe/kit/lang/outcome";
 import type { Column } from "@pe/kit/table/model";
 import { Table } from "@pe/kit/table/table";
 import { TableFrame } from "#/components/master-table/table-frame";
@@ -103,7 +103,7 @@ export function RuntimeStatusBar({
   return (
     <div className="flex flex-wrap items-center gap-1.5">
       <FactChip
-        tone={status?.updaterRegistered ? "done" : "meta"}
+        tone={status?.updaterRegistered ? "done" : undefined}
         title={
           status?.updaterRegistered
             ? "the host's parameter-link updater is registered and reacting to model changes"
@@ -152,7 +152,7 @@ export function EvaluationView({
           {evaluation.targetElementCount} targets
         </FactChip>
         <FactChip
-          tone={evaluation.changedWriteCount > 0 ? "caution" : "meta"}
+          tone={evaluation.changedWriteCount > 0 ? "caution" : undefined}
           title="writes whose proposed value differs from the current one — what apply would change"
         >
           {evaluation.changedWriteCount} projected writes

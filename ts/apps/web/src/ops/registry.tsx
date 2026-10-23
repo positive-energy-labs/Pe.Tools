@@ -1,4 +1,4 @@
-import { OutcomeLine } from "#/components/lang/outcome";
+import { OutcomeLine } from "@pe/kit/lang/outcome";
 
 export function UnrecognizedShape() {
   return (

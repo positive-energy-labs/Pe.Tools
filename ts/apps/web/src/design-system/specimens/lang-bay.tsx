@@ -6,7 +6,7 @@
 import { useState } from "react";
 import { Square } from "lucide-react";
 
-import { ArmingStrip } from "#/components/lang/arming-strip";
+import { ArmingStrip } from "@pe/kit/lang/arming-strip";
 import { Button } from "@pe/kit/lang/button";
 import { Connectors, type Connection } from "#/components/lang/connector";
 import { PidChip } from "#/components/lang/process";

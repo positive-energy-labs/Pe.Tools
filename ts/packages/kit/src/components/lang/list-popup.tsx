@@ -1,3 +1,4 @@
+import type { Tone } from "../../lib/token";
 /**
  * `<List>` is the inline list (pane body, rail, sidebar); `<ListPopup>` is the same list in a Base UI
  * Popover used for positioning only. Anchors: `trigger`, `caret` (a point in caller-owned text), and
@@ -80,7 +81,7 @@ type ListProps<T> = Omit<CollectionOptions<T>, "target"> & {
 };
 
 /** The words a list says instead of rows: one per status, never a blank. */
-function StatusLine({ children, tone }: { children: ReactNode; tone?: "caution" }) {
+function StatusLine({ children, tone }: { children: ReactNode; tone?: Tone }) {
   return (
     <div className="dl-row" role="status" data-tone={tone} data-pending={tone ? undefined : ""}>
       <span className="dl-row-label">{children}</span>
@@ -386,7 +387,7 @@ function PopupTrigger({
   face?: TriggerFace;
   children: ReactNode;
   "data-derived"?: string;
-  "data-tone"?: string;
+  "data-tone"?: Tone;
 }) {
   return (
     <PopoverTrigger className={TRIGGER_FACE[face]} data-list-trigger={face} {...props}>
@@ -667,5 +668,63 @@ export function CellListSelect<T>({
         </Popover>
       ) : null}
     </>
+  );
+}
+
+import { Dialog, DialogContent } from "./dialog";
+
+/** One destination-picker body; callers supply the catalogue, row anatomy and verbs. */
+export function CommandPalette<T>({
+  open,
+  onOpenChange,
+  presentation = "dialog",
+  anchor,
+  sideOffset = 4,
+  ...list
+}: Parameters<typeof List<T>>[0] & {
+  open: boolean;
+  onOpenChange: (open: boolean) => void;
+  presentation?: "dialog" | "anchored";
+  anchor?: HTMLElement | null;
+  sideOffset?: number;
+}) {
+  const body = (
+    <List<T>
+      {...list}
+      owner={presentation === "anchored" ? (list.owner ?? anchor ?? undefined) : list.owner}
+      onPick={(item, path) => {
+        list.onPick?.(item, path);
+        onOpenChange(false);
+      }}
+      onEscape={() => {
+        list.onEscape?.();
+        onOpenChange(false);
+      }}
+    />
+  );
+  if (presentation === "anchored")
+    return anchor ? (
+      <Popover open={open} onOpenChange={onOpenChange}>
+        <PopoverContent
+          anchor={anchor}
+          sideOffset={sideOffset}
+          initialFocus={false}
+          finalFocus={false}
+          aria-label={list["aria-label"]}
+          data-surface="page"
+          data-command-palette="anchored"
+          className="block w-auto max-w-none overflow-hidden p-1"
+          style={{ width: "min(max(24rem, var(--anchor-width)), calc(100vw - 16px))" }}
+        >
+          {open ? body : null}
+        </PopoverContent>
+      </Popover>
+    ) : null;
+  return (
+    <Dialog open={open} onOpenChange={onOpenChange}>
+      <DialogContent pad="none" showCloseButton={false} aria-label={list["aria-label"]}>
+        {body}
+      </DialogContent>
+    </Dialog>
   );
 }

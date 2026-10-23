@@ -1,13 +1,14 @@
+import { PaneCrumb } from "@pe/kit/lang/pane-crumb";
 import { token } from "@pe/kit/lib/token";
 import { useState, type ReactNode } from "react";
 import { ArtifactFrame } from "@pe/kit/lang/artifact-frame";
 import { fmtNum, StateCell, type StateCellProps } from "@pe/kit/lang/cell";
 import { FactChip } from "@pe/kit/lang/chip";
-import { HelpTip } from "#/components/lang/help";
-import { Switcher } from "#/components/lang/switcher";
+import { TooltipHint } from "@pe/kit/lang/tooltip";
+import { Switcher } from "@pe/kit/lang/switcher";
 import { Button } from "@pe/kit/lang/button";
 import { Pane } from "#/components/lang/pane";
-import { Surface } from "#/components/lang/surface";
+import { Surface } from "@pe/kit/lang/surface";
 import { FC_UNITS } from "#/param-tables/variants/data";
 import type {
   FactKey,
@@ -32,7 +33,6 @@ import {
 import { VariantGridLens } from "./grid-lens";
 import { VariantFomLens } from "./fom-lens";
 import { VariantBodLens } from "./bod-lens";
-import { TooltipHint } from "@pe/kit/lang/tooltip";
 
 /** The address's lens and its push; a module-level hook, so only its readers re-render (N6). */
 export type UseLens = () => readonly [Lens, (lens: Lens) => void];
@@ -251,18 +251,20 @@ export function VariantE({ useLens }: { useLens: UseLens }) {
             className="flex min-h-0 flex-1 flex-col"
             head={
               <span className="flex w-full min-w-0 items-center gap-3">
-                {/* L3: the crumb ellipsizes; the lens and the verb never leave the frame. */}
-                <span className="min-w-0 truncate">
-                  ProjectA_Clone_Aug_11 <span style={muted}>›</span> Mechanical Equipment{" "}
-                  <span style={muted}>›</span> Main House fan coils × PE_* parameters
-                </span>
-                <HelpTip>
+                <PaneCrumb
+                  segments={[
+                    { label: "ProjectA_Clone_Aug_11" },
+                    { label: "Mechanical Equipment" },
+                    { label: "Main House fan coils ? PE_* parameters" },
+                  ]}
+                />
+                <TooltipHint>
                   One substrate, three lenses. The grid is every fan coil × every attribute; the FOM
                   exhibit and the BOD list are saved projections of the same rows and the same
                   authored facts — switching lens re-projects, it never copies. The authored lane
                   below is the write path: edit a design fact and its whole linked column stages,
                   grouped by type, because the parameters live at type scope.
-                </HelpTip>
+                </TooltipHint>
                 <LensSwitcher useLens={useLens} />
                 <span className="ml-auto flex shrink-0 items-center gap-2">
                   <FactChip

@@ -1,4 +1,3 @@
-import { type ListSearch } from "@pe/agent-contracts";
 import { TooltipHint } from "@pe/kit/lang/tooltip";
 /**
  * THROWAWAY (protoui round 3, E2 "tree sidebar"): B's topology (system → runs → legs → elements) as
@@ -6,10 +5,10 @@ import { TooltipHint } from "@pe/kit/lang/tooltip";
  * An element a rule prices carries one verb: jump to its type's rule in the Rules section. There is
  * no per-row rule editor: a rule is global (family:type plus condition), never one fitting's.
  */
-import { useCallback, useEffect, useRef, useState } from "react";
+import { useCallback } from "react";
 import { ListTree } from "lucide-react";
 import { Button } from "@pe/kit/lang/button";
-import { emptyListState, useList, type ListState } from "@pe/kit/lang/collection";
+import { useList, type ListPersist } from "@pe/kit/lang/collection";
 import { ListView, type ListRowParts } from "@pe/kit/lang/list-view";
 import { tokenRef } from "@pe/kit/lib/token";
 import { observedElements, useNativeObservation } from "#/revit/observation";
@@ -120,27 +119,12 @@ const idsOf = (node: TreeNode): number[] => {
 const idOf = (node: TreeNode) => (node.kind === "run" ? node.terminal : node.id);
 const childrenOf = (node: TreeNode) => node.children;
 
-export function SystemTree({
-  ctx,
-  address,
-}: {
-  ctx: TreeCtx;
-  address?: {
-    scope?: string;
-    search: ListSearch;
-    sort: "" | "name";
-    onChange: (search: ListSearch, sort: "" | "name") => void;
-  };
-}) {
+export function SystemTree({ ctx, address }: { ctx: TreeCtx; address?: ListPersist<"name"> }) {
   const observation = useNativeObservation();
   // Every section opens; the critical run opens under the section that holds it (else the first's).
   const crit =
     ctx.trees.flatMap((t) => t.children).find((r) => r.key === ctx.criticalKey) ??
     ctx.trees[0]?.children[0];
-  const [state, setState] = useState<ListState<"name">>(() => ({
-    ...emptyListState<"name">(),
-    open: [...ctx.trees.map((tree) => tree.key), ...(crit ? [crit.key] : [])],
-  }));
   // A run is the path from the unit to one grille: "FC-17 → Price LBP15A Supply 12 X 6, Level 2".
   const runName = useCallback(
     (n: TreeNode) =>
@@ -164,7 +148,7 @@ export function SystemTree({
     [labelOf],
   );
   const list = useList<TreeNode, "name">({
-    scope: address?.scope,
+    persist: address,
     items: ctx.trees,
     keyOf: (node) => node.key,
     tree: { childrenOf },
@@ -178,54 +162,25 @@ export function SystemTree({
     },
     sorts: { name: labelOf },
     select: "single",
-    state: { ...state, search: address?.search ?? state.search, sort: address?.sort ?? state.sort },
-    onState: (next) => {
-      setState(next);
-      if (address && (next.search !== address.search || next.sort !== address.sort))
-        address.onChange(next.search, next.sort);
+    initialState: { open: [...ctx.trees.map((tree) => tree.key), ...(crit ? [crit.key] : [])] },
+    followSelection: {
+      context: `${ctx.trees.map((tree) => tree.key).join("|")}:${ctx.criticalKey ?? ""}`,
+      open: [...ctx.trees.map((tree) => tree.key), ...(crit ? [crit.key] : [])],
+      key: (rows, selected) => {
+        const candidates = rows.filter(
+          ({ item }) =>
+            item.kind !== "system" && ctx.selected != null && idOf(item) === ctx.selected,
+        );
+        return (
+          (
+            candidates.find((row) => row.key === selected[0]) ??
+            candidates.find(({ item }) => item.kind === "element") ??
+            candidates[0]
+          )?.key ?? null
+        );
+      },
     },
     onPick: (node) => ctx.select(idOf(node)),
-  });
-  const pendingReveal = useRef<string | null>(null);
-  const roots = ctx.trees.map((tree) => tree.key).join("|");
-  const context = useRef("");
-  useEffect(() => {
-    const candidates = list.all.filter(
-      ({ item }) => item.kind !== "system" && ctx.selected != null && idOf(item) === ctx.selected,
-    );
-    const selected =
-      candidates.find((row) => row.key === list.state.selected[0]) ??
-      candidates.find(({ item }) => item.kind === "element") ??
-      candidates[0];
-    pendingReveal.current = selected?.key ?? null;
-    const nextContext = `${roots}:${ctx.criticalKey ?? ""}`;
-    const changedContext = context.current !== nextContext;
-    context.current = nextContext;
-    const critical = changedContext
-      ? list.all.find((row) => row.key === ctx.criticalKey)
-      : undefined;
-    list.setState({
-      ...list.state,
-      selected: selected ? [selected.key] : [],
-      open: [
-        ...new Set([
-          ...list.state.open,
-          ...(changedContext ? ctx.trees.map((tree) => tree.key) : []),
-          ...(critical ? [...critical.ancestors, critical.key] : []),
-          ...(selected?.ancestors ?? []),
-        ]),
-      ],
-    });
-    // A route selection or a new system opens context once; manual collapse remains the list's.
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [ctx.selected, roots, ctx.criticalKey]);
-  useEffect(() => {
-    const key = pendingReveal.current;
-    // Core reveal clears excluded queries. Wait until its own filtered rows include the selection.
-    if (key && list.state.selected.includes(key) && list.rows.some((row) => row.key === key)) {
-      pendingReveal.current = null;
-      list.reveal(key);
-    }
   });
   // Stable across a selection: the kit then redraws only the rows whose selected or cursor state moved.
   const row = useCallback(

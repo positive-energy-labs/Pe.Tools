@@ -10,10 +10,10 @@ import { routeAddress } from "@pe/agent-contracts";
 import { usePublishPagePalette } from "#/navigation/route-controls";
 
 import { Pane, PaneSplit } from "#/components/lang/pane";
-import { Switcher } from "#/components/lang/switcher";
+import { Switcher } from "@pe/kit/lang/switcher";
 import { stageChords } from "#/route/keys";
 import { KeysNode } from "@pe/kit/keys";
-import { Surface } from "#/components/lang/surface";
+import { Surface } from "@pe/kit/lang/surface";
 import { previousOf } from "#/readings";
 
 import {

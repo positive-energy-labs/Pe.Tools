@@ -109,6 +109,7 @@ test("critical context opens initially; one selected part reveals, retains nativ
   expect(keyed("Z critical").textContent).toContain("\u25c6");
   expect(keyed("A other").getAttribute("aria-expanded")).toBe("true");
   expect(keyed("part20").getAttribute("aria-selected")).toBe("true");
+  expect(keyed("part20").hasAttribute("data-landed")).toBe(true);
   expect(
     screen.getAllByRole("treeitem").filter((row) => row.getAttribute("aria-selected") === "true"),
   ).toHaveLength(1);

@@ -1,3 +1,4 @@
+import type { Tone } from "../../lib/token";
 /**
  * TABLE — the one grid (the approved reshape, `table-primitive-explainer.md`): rows, columns, the
  * view state (sort, query) and selection. It draws NO chrome: the box, the scope strip,
@@ -93,7 +94,7 @@ export interface TableProps<Row extends RowData> {
   keep?: (row: Row) => boolean;
   /** The word for a row's critical damage (I2: kit `Row` damage), or nothing for a calm row. */
   damage?: (row: Row) => string | null | undefined;
-  gutter?: (row: Row) => { count: number; title: string; tone?: "alarm" | "caution" } | null;
+  gutter?: (row: Row) => { count: number; title: string; tone?: Tone } | null;
   /** Nothing in scope (a filtered-to-nothing table says its own, different story). */
   empty?: ReactNode;
   /** A self-bounded scroll height (a readout in a card); absent, the table fills its parent. */

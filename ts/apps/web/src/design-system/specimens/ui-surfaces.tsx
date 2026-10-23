@@ -1,3 +1,5 @@
+import { Popover, PopoverContent, PopoverTrigger, SubjectBox } from "@pe/kit/lang/popover";
+import { useRef } from "react";
 import { Button } from "@pe/kit/lang/button";
 import { useState } from "react";
 import {
@@ -6,8 +8,8 @@ import {
   DialogHeader,
   DialogTitle,
   dialogRecipe,
-} from "#/components/lang/dialog";
-import { ValueDiff, valueDiffRecipe } from "#/components/lang/value-diff";
+} from "@pe/kit/lang/dialog";
+import { ValueDiff, valueDiffRecipe } from "@pe/kit/lang/value-diff";
 import { Rail } from "@pe/kit/lang/rail";
 import { RecipeGrid, SpecimenFrame } from "./recipe-grid";
 
@@ -29,15 +31,18 @@ export function UiSurfaceSpecimens() {
           />
         </div>
       </SpecimenFrame>
+      <SpecimenFrame name="Subject overlays" importPath="@pe/kit/lang/popover">
+        <OverlaySpecimen />
+      </SpecimenFrame>
       <RecipeGrid
         name="Dialog"
-        importPath="#/components/lang/dialog"
+        importPath="@pe/kit/lang/dialog"
         recipe={dialogRecipe}
         render={() => <DialogSpecimen />}
       />
       <RecipeGrid
         name="ValueDiff"
-        importPath="#/components/lang/value-diff"
+        importPath="@pe/kit/lang/value-diff"
         recipe={valueDiffRecipe}
         render={() => <ValueDiff from="100 VA" to="150 VA" />}
       />
@@ -60,5 +65,29 @@ function DialogSpecimen() {
         </DialogContent>
       </Dialog>
     </>
+  );
+}
+
+function OverlaySpecimen() {
+  const subject = useRef<HTMLDivElement>(null);
+  return (
+    <SubjectBox box={subject}>
+      <div className="flex items-center gap-3">
+        <div ref={subject} className="hairline p-3" data-surface="recess">
+          Subject
+        </div>
+        {["A", "B"].map((name) => (
+          <Popover key={name}>
+            <PopoverTrigger>{name}</PopoverTrigger>
+            <PopoverContent facing aria-label={name}>
+              <ul data-facing-rows>
+                <li>Near</li>
+                <li>Far</li>
+              </ul>
+            </PopoverContent>
+          </Popover>
+        ))}
+      </div>
+    </SubjectBox>
   );
 }

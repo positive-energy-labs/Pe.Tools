@@ -21,7 +21,7 @@ import {
 } from "lucide-react";
 
 import { Button } from "@pe/kit/lang/button";
-import { Kbd } from "#/components/lang/kbd";
+import { KeyHint } from "@pe/kit/lang/key-hint";
 import { List } from "@pe/kit/lang/list-popup";
 import type { Collection } from "@pe/kit/lang/collection";
 import type { VariantMeta } from "./lineup";
@@ -225,7 +225,7 @@ function SecondaryVerbs({ command, act }: { command: Command; act: (label: strin
           {verb}
         </Button>
       ))}
-      <Kbd mute>Tab</Kbd>
+      <KeyHint mute>Tab</KeyHint>
     </span>
   );
 }
@@ -297,7 +297,7 @@ export default function Variant() {
                   {command.state}
                 </span>
                 <span className="inline-flex items-center gap-1 text-ink-mute">
-                  <Kbd mute>Enter</Kbd>
+                  <KeyHint mute>Enter</KeyHint>
                   {command.verb}
                 </span>
               </span>
@@ -310,7 +310,7 @@ export default function Variant() {
               {said}
             </span>
             <span className="flex shrink-0 items-center gap-1.5">
-              <Kbd mute>↑↓</Kbd> move <Kbd mute>Tab</Kbd> more
+              <KeyHint mute>↑↓</KeyHint> move <KeyHint mute>Tab</KeyHint> more
             </span>
           </div>
         }

@@ -1,3 +1,4 @@
+import { ProviderMark } from "#/components/lang/provider-mark";
 /**
  * THROWAWAY protoui variant 2c — "Palette as a rail view": variant 2 plus one rail item, Palette, whose
  * mini sidebar IS the real ThreadsSidebar (every thread, filters, shelves) plus route/Revit/machine
@@ -28,9 +29,7 @@ import {
 
 import { Button } from "@pe/kit/lang/button";
 import { Input } from "@pe/kit/lang/input";
-import { NavigationGroup, NavigationItem } from "#/components/lang/navigation";
-import { ProviderMark } from "#/components/lang/provider-mark";
-import { Row } from "@pe/kit/lang/row";
+import { Row, RowGroupHead } from "@pe/kit/lang/row";
 import { ThreadsSidebar, ThreadSidebarActions } from "#/chat/thread-palette";
 import { demoThreads } from "#/chat/thread-navigation";
 import { emptyChatState } from "@pe/agent-contracts/chat-state";
@@ -57,7 +56,7 @@ type Thread = {
 };
 
 // OWED: the real tray needs an Inbox projection typed from HarnessThreadSummary instead of a
-// second local view model. NavigationItem is real; only these richer review fixtures are local.
+// second local view model. Rows use the kit; these richer review fixtures are local.
 const THREADS: Thread[] = [
   {
     id: "finished",
@@ -160,41 +159,36 @@ function ThreadRoster({
   const attention = THREADS.filter((thread) => thread.activity !== "running");
   const running = THREADS.filter((thread) => thread.activity === "running");
   const row = (thread: Thread) => (
-    <NavigationItem
+    <Row
+      role="button"
+      tabIndex={0}
+      lines={2}
       key={thread.id}
       id={thread.id}
-      title={thread.title}
-      target={thread.target}
-      time={thread.age}
-      mark={<ProviderMark harness={thread.harness} />}
-      meta={`${thread.harness} · fixture`}
-      state={activityWord[thread.activity]}
-      stateTone={
-        thread.activity === "failed"
-          ? "alarm"
-          : thread.activity === "waiting"
-            ? "caution"
-            : undefined
+      label={thread.title}
+      sub={thread.target}
+      meta={
+        <>
+          {activityWord[thread.activity]} / {thread.age}
+        </>
       }
-      activity={thread.activity === "finished" ? undefined : thread.activity}
-      unread={thread.unread}
       active={selected === thread.id}
-      compact={thread.activity === "finished"}
       actions={null}
-      onPick={() => onSelect(thread.id)}
-      onRename={() => undefined}
-      onMenu={() => undefined}
-      onDrop={() => undefined}
+      onClick={() => onSelect(thread.id)}
+      onDoubleClick={() => undefined}
+      onContextMenu={() => undefined}
     />
   );
   return (
     <nav data-navigation="" aria-label="Inbox threads" className="min-h-0 flex-1 overflow-y-auto">
-      <NavigationGroup label="Needs attention" count={attention.length} stack={{ index: 0, of: 2 }}>
+      <section>
+        <RowGroupHead label="Needs attention" count={attention.length} />
         {attention.map(row)}
-      </NavigationGroup>
-      <NavigationGroup label="Running" count={running.length} stack={{ index: 1, of: 2 }}>
+      </section>
+      <section>
+        <RowGroupHead label="Running" count={running.length} />
         {running.map(row)}
-      </NavigationGroup>
+      </section>
     </nav>
   );
 }
@@ -257,33 +251,27 @@ function PalettePane({ selected, onSelect }: { selected: string; onSelect: (id: 
         aria-label="Places and verbs"
         className="hairline-t max-h-[34%] shrink-0 overflow-y-auto"
       >
-        {PALETTE_EXTRAS.map((section, index) => (
-          <NavigationGroup
-            key={section.group}
-            label={section.group}
-            count={section.rows.length}
-            persist={`2c-${section.group}`}
-            stack={{ index, of: PALETTE_EXTRAS.length }}
-            compact
-          >
+        {PALETTE_EXTRAS.map((section) => (
+          <section key={section.group}>
+            <RowGroupHead label={section.group} count={section.rows.length} />
             {section.rows.map(([id, title, target]) => (
-              <NavigationItem
+              <Row
+                role="button"
+                tabIndex={0}
+                lines={2}
                 key={id}
                 id={id}
-                title={title}
-                target={target}
+                label={title}
+                sub={target}
                 meta={null}
-                time={null}
                 active={selected === id}
-                compact
                 actions={null}
-                onPick={() => onSelect(id)}
-                onRename={() => undefined}
-                onMenu={() => undefined}
-                onDrop={() => undefined}
+                onClick={() => onSelect(id)}
+                onDoubleClick={() => undefined}
+                onContextMenu={() => undefined}
               />
             ))}
-          </NavigationGroup>
+          </section>
         ))}
       </nav>
     </>

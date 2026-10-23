@@ -7,7 +7,7 @@ import { useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
 import type { Machine } from "@pe/agent-contracts";
 import type { RecentDocument } from "@pe/host-contracts/pe-revit-contract";
 
-import { Surface } from "#/components/lang/surface";
+import { Surface } from "@pe/kit/lang/surface";
 import { frozenDemo } from "#/host/demo-client";
 import { useSessionEvents } from "#/host/world-log";
 import { machineOf } from "#/machine/model";

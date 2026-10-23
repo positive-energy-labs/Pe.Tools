@@ -1,5 +1,85 @@
 /* Shared grammar: tones, planes, selection, the row, the control frame. A primitive's own CSS lives beside its tsx. */
+.dl-picture-readout {
+  position: absolute;
+  left: 0.5rem;
+  top: 0.5rem;
+  display: flex;
+  flex-direction: column;
+  width: min(22rem, calc(100% - 1rem));
+}
+.dl-picture-readout[data-picture-readout="selection"] {
+  height: min(16rem, 30%);
+}
+.dl-picture-readout > header {
+  display: flex;
+  min-width: 0;
+  align-items: center;
+  gap: 0.25rem;
+  padding-left: 0.375rem;
+  flex-shrink: 0;
+}
+.dl-picture-readout [data-readout-title] {
+  min-width: 0;
+  flex: 1;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-weight: 500;
+}
+.dl-picture-readout > [data-readout-body] {
+  display: flex;
+  min-height: 0;
+  flex: 1;
+  flex-direction: column;
+  gap: 0.25rem;
+  overflow-y: auto;
+  padding: 0.25rem 0.375rem;
+}
+.dl-picture-readout > footer {
+  padding: 0 0.125rem 0.125rem;
+  flex-shrink: 0;
+}
+.dl-pane-crumb {
+  display: flex;
+  min-width: 0;
+  align-items: center;
+  gap: 0.125rem;
+}
+.dl-pane-crumb > svg {
+  width: 0.875rem;
+  height: 0.875rem;
+  flex-shrink: 0;
+  color: var(--pe-ink-2);
+}
+.dl-pane-crumb [data-crumb-segment] {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  padding: 0 0.25rem;
+  border-radius: var(--control-radius);
+}
+.dl-pane-crumb [data-crumb-segment="scope"] {
+  flex-shrink: 8;
+  color: var(--pe-ink-2);
+}
+.dl-pane-crumb [data-crumb-segment="subject"] {
+  flex-shrink: 0;
+}
+.dl-pane-crumb > [data-crumb-segment]:nth-child(3) {
+  /* The subject keeps its name even before a selection adds the third segment. */
+  flex-shrink: 0;
+}
+.dl-pane-crumb [data-crumb-segment="selection"] {
+  min-width: min(6ch, 100%);
+}
 :root {
+  --subject-mark-size: 14px;
+  --subject-mark-edge: var(--pe-ink-2);
+  --subject-mark-ground: var(--pe-page);
+  --subject-mark-ink: var(--pe-ink);
+  --subject-mark-lit-ground: var(--pe-ink);
+  --subject-mark-lit-ink: var(--pe-page);
   --head-h: calc(var(--item-h) * 5);
 }
 /* Tones: call sites declare state; the language owns its rendering. */
@@ -260,13 +340,14 @@ tr.dl-row[data-active] {
   animation: pe-land var(--motion-land) ease-out 1;
 }
 @media (prefers-reduced-motion: reduce) {
-  [data-inbox-group] .dl-row[data-selected],
-  [data-landed] {
+  [data-inbox-group] .dl-row[data-selected] {
     animation: none;
   }
-}
-.dl-row:not(tr)[data-active]::before {
-  content: none;
+  [data-landed] {
+    animation: none;
+    outline-color: var(--pe-ink);
+    background-color: var(--pe-select);
+  }
 }
 .dl-row[data-lines="2"] {
   min-height: calc(var(--item-h) * 2);
@@ -383,47 +464,39 @@ tr.dl-row[data-active] {
   color: var(--pe-ink-2);
   font-style: italic;
 }
-/* Row pseudo-elements draw on div rows only: on a `tr` a ::before or ::after is an anonymous table
-   cell, which pushed the active (rail) table row one column right. */
-/* DAMAGE (I2): the 2D burn. An alarm edge that beats like the 3D burn (scene/damage.ts: lub-dub,
-   1.5 s), a resting wash so a still screenshot still reads it, and the flame + word beside the
-   title (row.tsx). Shape and word, never hue alone; reduced motion holds the edge steady. */
-@keyframes pe-burn {
+/* Damage (I2) belongs to the thing: DOM, table row, cell and SVG share one beat and hue. */
+@keyframes pe-damage-beat {
   0%,
   40%,
   100% {
-    opacity: 0.55;
+    filter: drop-shadow(0 0 1px var(--pe-alarm));
   }
-  10%,
-  27% {
-    opacity: 1;
+  10% {
+    filter: drop-shadow(0 0 5px var(--pe-alarm));
   }
   18% {
-    opacity: 0.7;
+    filter: drop-shadow(0 0 2px var(--pe-alarm));
+  }
+  27% {
+    filter: drop-shadow(0 0 4px var(--pe-alarm));
   }
 }
-.dl-row[data-damage]:not([data-selected], [aria-selected="true"]) {
+[data-damage] {
+  animation: pe-damage-beat 1.5s ease-in-out infinite;
+  outline: 1px solid var(--pe-alarm);
+  outline-offset: -1px;
   background-color: color-mix(in srgb, var(--pe-alarm) 9%, var(--pe-on));
 }
-.dl-row:not(tr)[data-damage]::after,
-tr.dl-row[data-damage] > td:first-child::after {
-  content: "";
-  position: absolute;
-  top: 0;
-  bottom: 0;
-  left: 0;
-  width: 3px;
-  background: var(--pe-alarm);
-  animation: pe-burn 1.5s ease-in-out infinite;
-  pointer-events: none;
-}
-tr.dl-row[data-damage]:not([data-selected], [data-active]) > td {
-  background-color: color-mix(in srgb, var(--pe-alarm) 9%, var(--pe-on));
+svg [data-damage] {
+  stroke: var(--pe-alarm);
+  stroke-opacity: 1;
+  stroke-width: 2.5px;
+  outline: none;
 }
 @media (prefers-reduced-motion: reduce) {
-  .dl-row:not(tr)[data-damage]::after,
-  tr.dl-row[data-damage] > td:first-child::after {
+  [data-damage] {
     animation: none;
+    filter: drop-shadow(0 0 3px var(--pe-alarm));
   }
 }
 .dl-row-burn {
@@ -816,6 +889,8 @@ tr.dl-row[data-damage]:not([data-selected], [data-active]) > td {
   padding-inline: var(--item-mark-pad-x);
 }
 .dl-search input {
+  /* A long placeholder ellipsizes without pushing the frame wider. */
+  text-overflow: ellipsis;
   height: calc(var(--control-h) - 4px);
   min-height: 0;
 }
@@ -827,10 +902,6 @@ tr.dl-row[data-damage]:not([data-selected], [data-active]) > td {
 }
 .dl-search [data-search-field] {
   padding-block: 1px;
-}
-/* A long placeholder ellipsizes inside the field instead of pushing the frame wider. */
-.dl-search input {
-  text-overflow: ellipsis;
 }
 /* THE LOCK SHADE: once a table scrolls sideways, its last locked column casts a shade over the
    rows passing under it. At rest it casts nothing, because nothing is under it. `::before`, because a
@@ -955,14 +1026,6 @@ tr.dl-row[data-damage]:not([data-selected], [data-active]) > td {
    ring; lit (its own token hovered or focused, or `data-lit`) it fills with ink. Hovering
    the prose block that holds them (or `data-lit` on it) draws every rule at full weight; the picture lights the
    same subjects. Geometry is fixed: no state changes a size, so nothing reflows. */
-:root {
-  --subject-mark-size: 14px;
-  --subject-mark-edge: var(--pe-ink-2);
-  --subject-mark-ground: var(--pe-page);
-  --subject-mark-ink: var(--pe-ink);
-  --subject-mark-lit-ground: var(--pe-ink);
-  --subject-mark-lit-ink: var(--pe-page);
-}
 .subject-ref {
   position: relative;
   border-radius: var(--control-radius);
@@ -1044,4 +1107,20 @@ tr.dl-row[data-damage]:not([data-selected], [data-active]) > td {
 }
 .subject-badge[data-lit] > text {
   fill: var(--subject-mark-lit-ink);
+}
+
+/* Observation boundaries do not alter their children's layout. */
+[data-revit-target] {
+  display: contents;
+}
+
+/* The first row stays nearest the anchor when its popup opens above it. */
+[data-facing][data-side="top"] [data-facing-rows] {
+  display: flex;
+  flex-direction: column-reverse;
+}
+
+/* Hints retain a hit surface even inside a pointer-transparent SVG decoration layer. */
+[data-svg-tip] {
+  pointer-events: visiblePainted;
 }

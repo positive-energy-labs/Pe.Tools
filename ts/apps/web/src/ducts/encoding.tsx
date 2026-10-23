@@ -9,9 +9,9 @@
  */
 import type { Blocks } from "@pe/ducts-domain/issues";
 import type { DuctInferenceGrade } from "@pe/agent-contracts";
-import type { DashRole } from "@pe/kit/lib/token";
+import type { DashRole, Tone } from "@pe/kit/lib/token";
 import { token } from "@pe/kit/lib/token";
-import { VERDICT_INK } from "@pe/kit/table/cells";
+import { verdictInk } from "@pe/kit/table/cells";
 import { ISSUE_KINDS } from "./issues";
 import type { DuctSnapshot } from "@pe/ducts-domain/types";
 import type { Claim, Leg } from "./legs";
@@ -94,8 +94,8 @@ export const DASH_CLASS: Record<DashRole, string> = {
 };
 
 /** Missing data is drawn, never blank: a thin dashed mute line says "no value here". */
-const MISSING: Stroke = { ink: VERDICT_INK.mute, width: 1.25, dash: "void" };
-const CLEAN_INK = VERDICT_INK.ink;
+const MISSING: Stroke = { ink: token("ink-mute"), width: 1.25, dash: "void" };
+const CLEAN_INK = token("ink-2");
 const PLAIN: Stroke = { ink: CLEAN_INK, width: 2, dash: null };
 
 /**
@@ -351,7 +351,7 @@ const worstBlocks = (issues: readonly Issue[]): Blocks | null =>
 
 /** One ink per `blocks` class, taken from the class's `ISSUE_KINDS` tone. */
 const blocksInk = (blocks: Blocks) =>
-  VERDICT_INK[Object.values(ISSUE_KINDS).find((info) => info.blocks === blocks)!.color.tone];
+  verdictInk(Object.values(ISSUE_KINDS).find((info) => info.blocks === blocks)!.color.tone);
 
 /**
  * The encodings that need no numbers from the group. Health's two blocking tones sit close under
@@ -413,7 +413,7 @@ const fixed = (): Record<"none" | "health" | "legs" | "provenance", Encoding> =>
       off: {
         word: "off every leg",
         says: "a subject element the cut placed on no leg: a place, or the edge of a gap",
-        stroke: { ink: VERDICT_INK.mute, width: 2, dash: "seam" },
+        stroke: { ink: token("ink-mute"), width: 2, dash: "seam" },
       },
     },
     bin: ({ leg }) => (leg ? "leg" : "off"),
@@ -505,12 +505,12 @@ export const nodeInk = (encoding: Encoding, issues: readonly Issue[]) => {
 };
 
 /** A claim pin's ink by its state, through the same tones an issue wears: proven done, assumed caution, unproven alarm. */
-const CLAIM_TONE: Record<Claim["state"], keyof typeof VERDICT_INK> = {
+const CLAIM_TONE: Record<Claim["state"], Tone> = {
   proven: "done",
   assumed: "caution",
   unproven: "alarm",
 };
-export const claimInk = (claim: Pick<Claim, "state">) => VERDICT_INK[CLAIM_TONE[claim.state]];
+export const claimInk = (claim: Pick<Claim, "state">) => verdictInk(CLAIM_TONE[claim.state]);
 
 /** An inferred break's ink by its grade (`provisional.tsx` tones); a near miss or a confirmed one is plain ink. */
 export const inferredInk = ({
@@ -522,7 +522,7 @@ export const inferredInk = ({
 }) =>
   confirmed || grade === "near-miss"
     ? token("ink-2")
-    : VERDICT_INK[grade === "anomalous" ? "alarm" : "caution"];
+    : verdictInk(grade === "anomalous" ? "alarm" : "caution");
 
 /** An issue marker's ink: its kind's tone, from `ISSUE_KINDS` only. */
-export const issueInk = (issue: Issue) => VERDICT_INK[ISSUE_KINDS[issue.kind].color.tone];
+export const issueInk = (issue: Issue) => verdictInk(ISSUE_KINDS[issue.kind].color.tone);

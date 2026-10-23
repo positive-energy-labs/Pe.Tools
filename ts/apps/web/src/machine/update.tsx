@@ -8,9 +8,9 @@ import type { Machine, Reading } from "@pe/agent-contracts";
 
 import { Button } from "@pe/kit/lang/button";
 import { LegStrip } from "#/components/lang/leg-strip";
-import { OutcomeLine } from "#/components/lang/outcome";
+import { OutcomeLine } from "@pe/kit/lang/outcome";
 import { PidChip } from "#/components/lang/process";
-import { SwitchRow } from "#/components/lang/switch-row";
+import { SwitchRow } from "@pe/kit/lang/switch-row";
 import { dirty, useAction } from "#/readings";
 import { recheckUpdate } from "#/host/install";
 import { hostFetch } from "#/host/runtime";

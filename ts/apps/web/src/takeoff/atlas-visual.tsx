@@ -1,10 +1,12 @@
 import { Suspense } from "react";
+import type { PlaneViewport } from "@pe/agent-contracts";
+import { stageViewport } from "#/scene/stage-controller";
 import { Button } from "@pe/kit/lang/button";
-import { Switcher } from "#/components/lang/switcher";
+import { Switcher } from "@pe/kit/lang/switcher";
 import { LevelPlan } from "#/takeoff/level-plan";
 import { LevelTotals } from "#/takeoff/level-totals";
 import { ZoneFacts } from "#/takeoff/zone-facts";
-import { PictureReadout } from "#/scene/readout";
+import { PictureReadout } from "@pe/kit/lang/readout";
 import { useAtlasWorkspace } from "#/takeoff/atlas-context";
 import { ScopeKeys } from "@pe/kit/keys";
 import { levelsOf } from "#/takeoff/plan-image";
@@ -59,9 +61,9 @@ export function AtlasVisual() {
           },
         }}
         viewport={store.viewport}
-        onViewport={(viewport, how) =>
-          store.setViewport(viewport, how === "move" ? "push" : "replace")
-        }
+        onViewport={stageViewport<PlaneViewport>(({ viewport }, { history }) =>
+          store.setViewport(viewport, history),
+        )}
         above={
           <>
             <ScopeKeys keys={scopeShortcuts} />
@@ -127,7 +129,6 @@ export function AtlasVisual() {
         onCursor={focusRoom}
         readout={
           <PictureReadout
-            hug
             title={selected ? `${selected.zone.key} ${selected.name}` : undefined}
             onClear={selected ? () => selectZone(null) : undefined}
           >

@@ -1,5 +1,5 @@
 // @vitest-environment jsdom
-import { cleanup, fireEvent, render, screen } from "@testing-library/react";
+import { cleanup, fireEvent, render, screen, within } from "@testing-library/react";
 import { useState } from "react";
 import { afterEach, expect, it } from "vite-plus/test";
 import { partitionReviewSchema } from "@pe/agent-contracts";
@@ -75,21 +75,22 @@ it("keeps holes, dispositions and reasons through selection, flagging and export
   }
   render(<Review />);
   for (const label of [
-    /accepted R01/,
-    /held R02 · 0.24 sf · too-small/,
-    /unknown R03/,
-    /void R04 .* low-headroom/,
-    /excluded R05 .* outside/,
+    /accepted unnamed element/,
+    /held unnamed element · 0.24 sf · too-small/,
+    /unknown unnamed element/,
+    /void unnamed element .* low-headroom/,
+    /excluded unnamed element .* outside/,
   ])
     expect(screen.getAllByRole("button", { name: label }).length).toBeGreaterThan(0);
   const held = screen
-    .getAllByRole("button", { name: /held R02.*too-small/ })
+    .getAllByRole("button", { name: /held unnamed element.*too-small/ })
     .find((el) => el.tagName === "path")!;
   expect(held.getAttribute("d")?.match(/Z/g)).toHaveLength(2);
   fireEvent.keyDown(held, { key: "Enter" });
   expect(held.getAttribute("aria-pressed")).toBe("true");
-  fireEvent.click(screen.getByRole("button", { name: "flag R04" }));
-  expect(screen.getByRole("button", { name: "unflag R04" })).toBeTruthy();
+  const voidRow = screen.getByRole("option", { name: /void unnamed element/ });
+  fireEvent.click(within(voidRow).getByRole("button", { name: "flag unnamed element" }));
+  expect(within(voidRow).getByRole("button", { name: "unflag unnamed element" })).toBeTruthy();
   const link = screen.getByRole("link", { name: "export review JSON" });
   const exported = JSON.parse(
     decodeURIComponent(link.getAttribute("href")!.split(",").slice(1).join(",")),

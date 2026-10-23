@@ -2,7 +2,7 @@ import { token } from "@pe/kit/lib/token";
 import { useEffect, useState } from "react";
 import { FactChip } from "@pe/kit/lang/chip";
 import { EmptyState } from "@pe/kit/lang/empty";
-import { Provenance } from "#/components/lang/section";
+import { Provenance } from "@pe/kit/lang/section";
 import { callHostRpc } from "#/host/client";
 import type { Lane } from "#/readings";
 import { DeployBadge, LiveDot } from "#/host/target-ui";

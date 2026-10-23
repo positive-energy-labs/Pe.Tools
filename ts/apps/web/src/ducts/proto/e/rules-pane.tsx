@@ -1,3 +1,5 @@
+import { revitTarget } from "@pe/kit/lang/row";
+import { nameOrFallback } from "@pe/kit/lang/subject-text";
 import { TooltipHint } from "@pe/kit/lang/tooltip";
 /**
  * THROWAWAY (protoui round 3, E2): the Rules section, "the table is the product" (pressure-drop
@@ -156,6 +158,7 @@ export const RulesTree = memo(function RulesTree({
         content={`override: a stated drop on ${nameOf(n.id)} replaces the rule's lookup for this one fitting`}
       >
         <div
+          {...revitTarget([n.id])}
           data-key={nested ? undefined : n.key}
           className={`${COLS} items-baseline ${nested ? "pt-0.5" : "py-1"}`}
           onMouseEnter={() => light([n.id])}
@@ -168,7 +171,7 @@ export const RulesTree = memo(function RulesTree({
             id={n.id}
             held={snapshot.nodes.find((x) => x.id === n.id)?.loss?.revitPressureDropInWg}
             work={work}
-            label={`stated drop on ${n.id}`}
+            label={`stated drop on ${nameOrFallback(nameOf(n.id))}`}
           />
         </div>
       </TooltipHint>
@@ -196,6 +199,7 @@ export const RulesTree = memo(function RulesTree({
           return (
             <li
               key={n.key}
+              {...revitTarget(idsUnder(n.ruleKey))}
               data-key={n.key}
               data-highlighted={focus === n.key ? "" : undefined}
               className="hairline-b py-1 last:border-b-0"
@@ -247,6 +251,7 @@ export const RulesTree = memo(function RulesTree({
               <div
                 key={family ?? `#${first}`}
                 className={`${COLS} items-baseline py-0.5`}
+                {...revitTarget([...ids])}
                 data-e-unruled-family={family ?? undefined}
                 data-e-unruled-ids={[...ids].join(" ")}
                 onMouseEnter={() => light([...ids])}

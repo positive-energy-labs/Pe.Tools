@@ -1,7 +1,6 @@
 import { useRef } from "react";
-import { cn } from "../../lib/utils";
 import { Popover as Primitive } from "@base-ui/react/popover";
-import { PopoverContent, type PopoverContentProps } from "./popover";
+import { Popover, PopoverTrigger, PopoverContent, type PopoverContentProps } from "./popover";
 
 // PreviewCard intentionally hides its body from keyboard and assistive technology.
 // Interactive previews use Popover's hover path and retain its click/keyboard path.
@@ -10,7 +9,7 @@ import { PopoverContent, type PopoverContentProps } from "./popover";
 export function HoverCard({ onOpenChange, ...props }: Primitive.Root.Props) {
   const hovered = useRef(false);
   return (
-    <Primitive.Root
+    <Popover
       {...props}
       onOpenChange={(open, details) => {
         if (!open && details.reason === "trigger-press" && hovered.current) {
@@ -30,15 +29,9 @@ export function HoverCardTrigger({
   ...props
 }: Primitive.Trigger.Props & { kind?: "quiet" | "framed" }) {
   return (
-    <Primitive.Trigger
-      className={(state) =>
-        cn(
-          "dl-button",
-          kind === "framed" && "dl-control",
-          typeof className === "function" ? className(state) : className,
-        )
-      }
-      data-kind={kind}
+    <PopoverTrigger
+      className={className}
+      kind={kind}
       openOnHover
       delay={500}
       closeDelay={200}

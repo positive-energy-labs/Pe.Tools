@@ -32,7 +32,7 @@ function harness(initial, reducer, options = {}) {
     useEffect: (fn) => effects.push(fn),
   };
   const kit = Object.fromEntries(
-    ["ArtifactFrame", "PaneTabs", "Picker", "Input", "Table", "Code", "Mermaid", "Button"].map(
+    ["ArtifactFrame", "Switcher", "Picker", "Input", "Table", "Code", "Mermaid", "Button"].map(
       (key) => [key, key],
     ),
   );

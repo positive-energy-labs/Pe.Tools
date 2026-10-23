@@ -1,4 +1,3 @@
-import { type ListSearch } from "@pe/agent-contracts";
 import {
   useCallback,
   useContext,
@@ -13,14 +12,15 @@ import type { DuctsRouteDocument } from "@pe/agent-contracts";
 import type { LossesWork } from "../../work";
 import type { DuctSnapshot } from "@pe/ducts-domain/types";
 import { Button } from "@pe/kit/lang/button";
-import { HelpTip } from "#/components/lang/help";
+import { TooltipHint } from "@pe/kit/lang/tooltip";
 import { FactChip } from "@pe/kit/lang/chip";
-import { useList, emptyListState, type ListState } from "@pe/kit/lang/collection";
+import { useList, emptyListState, type ListState, type ListPersist } from "@pe/kit/lang/collection";
 import { ListView, type ListRowParts } from "@pe/kit/lang/list-view";
 import { PreviewAction } from "@pe/kit/lang/preview-action";
 import { reviewTransitions, type CellWire } from "#/components/work/band";
 import type { ActionHandle } from "#/route/handle";
-import { SelectInRevitIcon, showInRevit } from "#/revit/element-menu";
+import { showInRevit } from "#/revit/element-menu";
+import { SelectInRevitIcon } from "@pe/kit/lang/gesture-glyph";
 import {
   prepareElements,
   showElementsMessage,
@@ -161,12 +161,7 @@ export function Inbox({
   onPick?: () => void;
   hoveredIssue?: string | null;
   onIssueHover?: (key: string | null) => void;
-  address?: {
-    scope?: string;
-    search: ListSearch;
-    sort: "" | "name" | "status";
-    onChange: (search: ListSearch, sort: "" | "name" | "status") => void;
-  };
+  address?: ListPersist<"name" | "status">;
 }) {
   const observation = useNativeObservation();
   const subjects = useContext(SubjectTextContext);
@@ -334,6 +329,8 @@ export function Inbox({
 
   const spec = useCallback(
     (item: InboxItem): RulingRow => {
+      const blocked = (item.group === "fix" && item.blocks !== false) || item.group === "set";
+      const status = compactStatus(item.status);
       const target = observedElements(observation, item.ids);
       const claim = item.verbs.find((v) => v.kind === "claim");
       const title = claim?.kind === "claim" ? claimLine(claim.claim, nameOf) : item.title;
@@ -370,7 +367,8 @@ export function Inbox({
         stage: item.kind === "proposal" ? "proposed" : undefined,
         stagedBy: item.kind === "proposal" ? "pea" : undefined,
         // The closed row gives the label the width: the status in its compact words.
-        meta: <span data-tone={item.tone}>{compactStatus(item.status)}</span>,
+        damage: blocked ? status : undefined,
+        meta: blocked ? undefined : status,
         actions: () => verbsOf(item, false),
         onMouseEnter: () => {
           // The collapsed row shows its heading: badge what the heading names, tint all it stands for.
@@ -405,11 +403,9 @@ export function Inbox({
           <>
             <div className="flex items-center gap-1 t-small">
               <span>Evidence</span>
-              <HelpTip>
+              <TooltipHint>
                 {compactStatus(item.status) !== item.status ? (
-                  <p data-tone={item.tone} data-inbox-status="">
-                    {item.status}
-                  </p>
+                  <p data-inbox-status="">{item.status}</p>
                 ) : null}
                 {subjects ? (
                   // Evidence help badges the subjects it names; the row itself badges its heading.
@@ -434,7 +430,7 @@ export function Inbox({
                 ) : (
                   <p>{item.title}</p>
                 )}
-              </HelpTip>
+              </TooltipHint>
             </div>
             <div className="flex flex-wrap items-center gap-1" data-inbox-verbs="">
               {verbsOf(item, true)}
@@ -504,19 +500,14 @@ function RulingsList({
   rows: RulingRow[];
   focused: string | null;
   onPick?: () => void;
-  address?: {
-    scope?: string;
-    search: ListSearch;
-    sort: "" | "name" | "status";
-    onChange: (search: ListSearch, sort: "" | "name" | "status") => void;
-  };
+  address?: ListPersist<"name" | "status">;
 }) {
   const [view, setView] = useState<ListState<"name" | "status">>(() => ({
     ...emptyListState(),
     closed: [INBOX_LABELS.diagnostics],
   }));
   const list = useList({
-    scope: address?.scope,
+    persist: address,
     items: rows,
     keyOf: (row) => row.key,
     search: rulingSearch,
@@ -531,11 +522,9 @@ function RulingsList({
       order: INBOX_ORDER.map((key) => INBOX_LABELS[key]),
       collapsible: INBOX_ORDER.map((key) => INBOX_LABELS[key]),
     },
-    state: { ...view, search: address?.search ?? view.search, sort: address?.sort ?? view.sort },
+    state: view,
     onState: (next) => {
       setView(next);
-      if (address && (next.search !== address.search || next.sort !== address.sort))
-        address.onChange(next.search, next.sort);
     },
     stageOf: (row) => row.stage ?? "clean",
     onPick: (row) => {

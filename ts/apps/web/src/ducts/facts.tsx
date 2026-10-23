@@ -1,3 +1,4 @@
+import { revitTarget } from "@pe/kit/lang/row";
 import { TooltipHint } from "@pe/kit/lang/tooltip";
 /**
  * What the drawings say about one element on hover or selection: its size, length and flows, each
@@ -36,7 +37,7 @@ function Issues({ issues: all }: { issues: readonly Issue[] }) {
     <ul>
       {issues.map((issue) => (
         <TooltipHint key={issue.id} content={ISSUE_KINDS[issue.kind].what}>
-          <li>
+          <li {...revitTarget(issue.elementId == null ? [] : [issue.elementId])}>
             <span data-tone={ISSUE_KINDS[issue.kind].color.tone}>
               {ISSUE_KINDS[issue.kind].label}
             </span>{" "}

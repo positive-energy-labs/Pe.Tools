@@ -110,7 +110,7 @@ export function useFamilyIdentityColumns(core: FamilyWorkspaceCore) {
             <Button
               label={`${row.name} geom`}
               onClick={() => setInspect({ kind: "part", slug })}
-              // Row-specific facts only; what a geom row IS lives on the table's HelpTip.
+              // Row-specific facts only; what a geom row IS lives on the table's TooltipHint.
               reason={`${slug}.${property} — a bindable ${row.dataType} dimension that no parameter drives; it is ${literal} for every type. ${dim?.note ?? ""} Click to open ${slug} in the inspector.`}
             >
               <PressContent geometry="block">

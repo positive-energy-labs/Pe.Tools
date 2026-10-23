@@ -1,3 +1,6 @@
+import type { Tone } from "@pe/kit/lib/token";
+import { nameOrFallback } from "@pe/kit/lang/subject-text";
+import { SvgTip } from "@pe/kit/lang/tooltip";
 import type { IssueKind } from "@pe/ducts-domain/issues";
 /**
  * The group as a one-line schematic, fan at the left, registers at the right: the same picture as
@@ -12,7 +15,6 @@ import type { IssueKind } from "@pe/ducts-domain/issues";
  */
 import { useMemo } from "react";
 
-import type { VerdictTone } from "@pe/kit/table/model";
 import { tokenRef } from "@pe/kit/lib/token";
 import {
   chainsOf,
@@ -36,7 +38,7 @@ const LABEL_W = 340;
 const INSET_LABEL_W = 24;
 
 /** A tone's ink role: `mute` is the one tone with no role of its own name. */
-const inkOf = (tone: VerdictTone) => tokenRef(tone === "mute" ? "ink-mute" : tone);
+const inkOf = (tone: Tone | undefined) => tokenRef(tone ?? "ink-mute");
 const issueInk = (kind: IssueKind) => inkOf(ISSUE_KINDS[kind].color.tone);
 
 interface Placed {
@@ -184,7 +186,7 @@ export function Schematic({
         className="cursor-pointer"
         aria-label="root"
       >
-        <title>{tree.rootWord}</title>
+        <SvgTip content={"root"} />
         <rect
           x={4}
           y={rootY - 12}
@@ -195,10 +197,7 @@ export function Schematic({
           className={tree.rooted === "port" ? undefined : "dash-reference"}
         />
         <text x={10} y={rootY} dominantBaseline="central" fill={tokenRef("ink")}>
-          {clip(
-            equipment ? (equipment.family ?? `equipment ${equipment.id}`) : "stand-in root",
-            16,
-          )}
+          {clip(equipment ? nameOrFallback(equipment.family) : "stand-in root", 16)}
         </text>
       </g>
       {layout.placed.map(({ chain, x1, y1, x2, y2 }) => {
@@ -225,9 +224,7 @@ export function Schematic({
             onPointerEnter={() => onHover(chain.members[0]!)}
             onPointerLeave={() => onHover(null)}
           >
-            <title>
-              {`${chain.members.length} element${chain.members.length === 1 ? "" : "s"}: ${chain.members.join(", ")}${chain.members.length > 1 ? " (select to unfold)" : ""}`}
-            </title>
+            <SvgTip content={"chain"} />
             {hot ? (
               <path
                 d={d}
@@ -269,7 +266,7 @@ export function Schematic({
             )}
             {kinds.map((kind, i) => (
               <circle key={kind} cx={x2 - 8 - i * 9} cy={y2 + 9} r={3.5} fill={issueInk(kind)}>
-                <title>{`${ISSUE_KINDS[kind].label}: ${ISSUE_KINDS[kind].what}`}</title>
+                <SvgTip content={ISSUE_KINDS[kind].label} />
               </circle>
             ))}
             <Vertex
@@ -299,7 +296,7 @@ export function Schematic({
             strokeWidth={1.5}
             className="dash-seam"
           >
-            <title>{`${ISSUE_KINDS.loop.label}: ${a} meets ${b} again. ${ISSUE_KINDS.loop.what}`}</title>
+            <SvgTip content={ISSUE_KINDS.loop.label} />
           </path>
         );
       })}
@@ -351,7 +348,7 @@ function Vertex({
         : null;
   return (
     <g data-vertex={id}>
-      <title>{`${id}: ${part.node ? (part.node.partType ?? part.node.kind) : (part.segment?.kind ?? "")}`}</title>
+      <SvgTip content={kind ?? "part"} />
       {hot ? <circle cx={x} cy={y} r={9} fill={tokenRef("select")} /> : null}
       {glow && !hot ? (
         <circle cx={x} cy={y} r={8} fill={tokenRef("ink")} fillOpacity={0.35} />
@@ -392,7 +389,7 @@ function Vertex({
               {ISSUE_KINDS["open-end"].label}
             </text>
           ) : null}
-          <title>{`${issue.id}: ${issue.note}`}</title>
+          <SvgTip content={"open end"} />
         </g>
       ))}
       {extra.map((root, i) => (

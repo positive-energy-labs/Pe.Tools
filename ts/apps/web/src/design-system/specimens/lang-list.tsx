@@ -1,3 +1,5 @@
+import { useList } from "@pe/kit/lang/collection";
+import { PlainList } from "@pe/kit/lang/list-view";
 /**
  * The list grammar's swatch frames: the one Row (its recipe and every state), and the containers
  * that draw it — List inline, ListPopup on a trigger, and the in-cell list. The full comparison of
@@ -13,12 +15,13 @@ import {
   ListPopup,
   ListSegmentInput,
   PopupFrame,
+  CommandPalette,
 } from "@pe/kit/lang/list-popup";
 import { Popover } from "@base-ui/react/popover";
 import { MoreHorizontal } from "lucide-react";
 import { Button } from "@pe/kit/lang/button";
-import { CommandPalette } from "#/components/lang/command-palette";
-import { Row, RowGroupHead, rowRecipe } from "@pe/kit/lang/row";
+
+import { RevitTarget, Row, RowGroupHead, rowRecipe } from "@pe/kit/lang/row";
 import { Table } from "@pe/kit/table/table";
 
 import { RecipeGrid, SpecimenFrame } from "./recipe-grid";
@@ -33,8 +36,17 @@ const common = {
 };
 
 export function LangListSpecimens() {
+  const plain = useList({ ...common, search: (kind) => ({ text: [kind] }) });
   return (
     <>
+      <SpecimenFrame name="PlainList" importPath="@pe/kit/lang/list-view">
+        <PlainList
+          list={plain}
+          aria-label="storage types"
+          row={common.row}
+          empty={{ message: "No storage types", exit: "Read a family" }}
+        />
+      </SpecimenFrame>
       <RecipeGrid
         name="Row"
         importPath="@pe/kit/lang/row"
@@ -51,6 +63,9 @@ export function LangListSpecimens() {
               wrap
             />
             <Row label="selected" selected />
+            <RevitTarget scope={{ document: null, source: "fixture" }}>
+              <Row label="Revit target (fixture: actions refuse)" revitIds={[42]} />
+            </RevitTarget>
             <Row label="active" active />
             <Row label="pending" pending />
             <Row label="failed" failed />
@@ -109,7 +124,7 @@ export function LangListSpecimens() {
           />
         </div>
       </SpecimenFrame>
-      <SpecimenFrame name="CommandPalette" importPath="#/components/lang/command-palette">
+      <SpecimenFrame name="CommandPalette" importPath="@pe/kit/lang/list-popup">
         <PaletteSpecimen />
       </SpecimenFrame>
     </>

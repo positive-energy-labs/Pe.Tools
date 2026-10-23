@@ -1,3 +1,5 @@
+import { RevitTarget } from "@pe/kit/lang/row";
+import { nameOrFallback } from "@pe/kit/lang/subject-text";
 import {
   actionReceiptSchema,
   documentRefSchema,
@@ -8,12 +10,7 @@ import { readRecord } from "@pe/agent-contracts/chat-state";
 import { FactChip } from "@pe/kit/lang/chip";
 import type { RevitElementReference } from "@pe/kit/lang/row";
 import { useRouteDemo } from "#/route/activity";
-import {
-  prepareElements,
-  revitReferences,
-  revitScope,
-  type RevitObservationScope,
-} from "./element-target";
+import { prepareElements, revitReferences, type RevitObservationScope } from "./element-target";
 
 type Reference = RevitElementReference & { label: string };
 const records = (value: unknown): Record<string, unknown>[] =>
@@ -37,7 +34,7 @@ function referencesOf(key: string, data: unknown, request?: unknown): Reference[
         uniqueId:
           typeof expected?.[elementId] === "string" ? (expected[elementId] as string) : null,
         kind: "Element",
-        label: `selected element ${elementId}`,
+        label: `selected ${nameOrFallback()}`,
       }));
   }
   if (key === "revit.resolve.references") {
@@ -69,7 +66,7 @@ function referencesOf(key: string, data: unknown, request?: unknown): Reference[
       elementId: typeof entry.elementId === "number" ? entry.elementId : null,
       uniqueId: typeof entry.elementUniqueId === "string" ? entry.elementUniqueId : null,
       kind: "Element",
-      label: typeof entry.name === "string" ? entry.name : `element ${String(entry.elementId)}`,
+      label: nameOrFallback(typeof entry.name === "string" ? entry.name : null),
     }));
   }
   return [];
@@ -115,7 +112,7 @@ export function NativeReadingReferences({
     if (!reading.success) return null;
     scope = { document: reading.data.target, source: "native" };
     references = [...new Set(reading.data.snapshot.rows.flatMap((row) => row.subjectIds))].map(
-      (elementId) => ({ elementId, kind: "Element", label: `element ${elementId}` }),
+      (elementId) => ({ elementId, kind: "Element", label: nameOrFallback() }),
     );
   } else {
     if (!action && (outer?.ok !== true || outer?.kind !== "op")) return null;
@@ -127,22 +124,24 @@ export function NativeReadingReferences({
   if (scope && typeof documentKey === "string") scope = { ...scope, documentKey };
   if (demo !== null) scope = { document: null, source: "fixture" };
   return (
-    <div className="flex flex-wrap items-center gap-1" {...revitScope(scope)}>
-      {references.slice(0, 50).map((reference, index) => {
-        const prepared = prepareElements({ ids: [], refs: [reference], scope }, false);
-        return (
-          <span key={index} tabIndex={0} {...revitReferences([reference])}>
-            <FactChip
-              title={`${reference.kind ?? "Element"} ${reference.elementId ?? "unknown"}: ${prepared.kind === "refused" ? prepared.message : "right-click or BX in the recorded native lifetime"}`}
-            >
-              {reference.label}
-            </FactChip>
-          </span>
-        );
-      })}
-      {references.length > 50 ? (
-        <span>{references.length - 50} more native references in the raw result</span>
-      ) : null}
-    </div>
+    <RevitTarget scope={scope}>
+      <div className="flex flex-wrap items-center gap-1">
+        {references.slice(0, 50).map((reference, index) => {
+          const prepared = prepareElements({ ids: [], refs: [reference], scope }, false);
+          return (
+            <span key={index} tabIndex={0} {...revitReferences([reference])}>
+              <FactChip
+                title={`${reference.kind ?? "Element"} ${reference.elementId ?? "unknown"}: ${prepared.kind === "refused" ? prepared.message : "right-click or BX in the recorded native lifetime"}`}
+              >
+                {reference.label}
+              </FactChip>
+            </span>
+          );
+        })}
+        {references.length > 50 ? (
+          <span>{references.length - 50} more native references in the raw result</span>
+        ) : null}
+      </div>
+    </RevitTarget>
   );
 }

@@ -1,6 +1,6 @@
 import type { ReactNode } from "react";
 
-import { Section } from "#/components/lang/section";
+import { Section } from "@pe/kit/lang/section";
 import type { RecipeMetadata } from "@pe/kit/lib/tv";
 
 type ImportPath =

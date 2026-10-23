@@ -22,7 +22,7 @@ import {
 
 import { QuestionForm } from "#/chat/question-form";
 import { Button } from "@pe/kit/lang/button";
-import { OutcomeLine } from "#/components/lang/outcome";
+import { OutcomeLine } from "@pe/kit/lang/outcome";
 import { Row } from "@pe/kit/lang/row";
 import { Composer } from "#/components/lang/conversation";
 import { harnessClient } from "#/workbench/provider/harness-client";

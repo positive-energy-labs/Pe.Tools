@@ -1,3 +1,4 @@
+import { SvgTip } from "@pe/kit/lang/tooltip";
 /**
  * The plan's feedback layer (V6 calm): a tools bar with two marks and a note, the drawn marks,
  * one count badge per region with cards, and the card projected beside its room. A draft is
@@ -6,7 +7,7 @@
 import { useEffect, useRef, useState, type ReactNode } from "react";
 
 import { Button } from "@pe/kit/lang/button";
-import { Switcher } from "#/components/lang/switcher";
+import { Switcher } from "@pe/kit/lang/switcher";
 import type { Point2, Viewport2 } from "#/lib/affine-frame";
 import { useScopeKeys } from "@pe/kit/keys";
 import { token } from "@pe/kit/lib/token";
@@ -218,7 +219,7 @@ export function RoomsSketch({
                 const n = list.filter((c) => c.state === state).length;
                 const cell = (
                   <g key={state}>
-                    <title>{CARD_META[state].says}</title>
+                    <SvgTip content={state} />
                     <rect x={x} y={y} width={BADGE.w} height={BADGE.h} fill={ink(state)} />
                     <text
                       x={x + BADGE.w / 2}

@@ -5,6 +5,8 @@ import { useCollection, useList } from "../src/components/lang/collection";
 import { ListView } from "../src/components/lang/list-view";
 import { sideAwayFrom } from "../src/components/lang/popover";
 import { Row } from "../src/components/lang/row";
+import { StateCell } from "../src/components/lang/cell";
+import { nameOrFallback, subjectDocument } from "../src/components/lang/subject-text";
 
 afterEach(() => {
   cleanup();
@@ -26,6 +28,23 @@ test("a damaged row says its damage in words beside the title", () => {
   expect(document.querySelector("[data-damage='no price'] .dl-row-damage")?.textContent).toBe(
     "no price",
   );
+});
+
+test("damage stays on the value at either cell scale", () => {
+  render(
+    <>
+      <StateCell value="" scale="row" damage="no airflow" />
+      <StateCell value="" damage="no price" />
+    </>,
+  );
+  expect(document.querySelectorAll(".dl-cell[data-damage]")).toHaveLength(2);
+});
+
+test("an unknown structured subject retains its identity with the kit fallback and footnote", () => {
+  expect(nameOrFallback("  ")).toBe(nameOrFallback());
+  expect(subjectDocument([{ id: 1234567 }], () => null).references).toEqual([
+    { id: 1234567, name: nameOrFallback(), number: 1 },
+  ]);
 });
 
 test("a list shows no cursor until the pointer or a key puts one there (I4)", () => {

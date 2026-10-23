@@ -2,10 +2,10 @@ import { useMemo, useState } from "react";
 import { Upload } from "lucide-react";
 
 import { ArtifactFrame } from "@pe/kit/lang/artifact-frame";
-import { CellStateKey } from "#/components/lang/cell-key";
+import { CellStateKey } from "@pe/kit/lang/cell";
 import { FactChip, Tag } from "@pe/kit/lang/chip";
-import { HelpTip } from "#/components/lang/help";
-import { Provenance, Section } from "#/components/lang/section";
+import { TooltipHint } from "@pe/kit/lang/tooltip";
+import { Provenance, Section } from "@pe/kit/lang/section";
 import { Button } from "@pe/kit/lang/button";
 import { Table } from "@pe/kit/table/table";
 import { TableFrame } from "#/components/master-table/table-frame";
@@ -73,11 +73,11 @@ export function RealTable() {
     <Section
       label="04 · real table"
       help={
-        <HelpTip>
+        <TooltipHint>
           The product table primitive, unmodified, with the cell grammar as its renderer. Rows never
           grow; click a cell and the readout band under the table speaks its facts. The gap notes
           below are the section's deliverable.
-        </HelpTip>
+        </TooltipHint>
       }
     >
       <h3 className="pt-2 t-head text-ink">The real table</h3>

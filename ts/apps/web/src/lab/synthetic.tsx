@@ -1,6 +1,6 @@
 import { type ComponentType, useCallback, useEffect, useState } from "react";
-import { OutcomeLine } from "#/components/lang/outcome";
-import { Provenance } from "#/components/lang/section";
+import { OutcomeLine } from "@pe/kit/lang/outcome";
+import { Provenance } from "@pe/kit/lang/section";
 import { callHostRpc } from "#/host/client";
 import type { HostSessionScope, OpCallArgs, OpKey } from "@pe/host-contracts/operation-types";
 

@@ -1,3 +1,4 @@
+import { SvgTip } from "@pe/kit/lang/tooltip";
 /**
  * Lines between anchored elements inside one positioned container (the patch bay's cables). An
  * anchor is any element under `container` carrying `data-key` (a `Row`, a table row, a card); a
@@ -217,11 +218,11 @@ export function Connectors({
               />
             ) : null}
             <path d={d} className="dl-connector-line">
-              {link.title ? <title>{link.title}</title> : null}
+              {link.title ? <SvgTip content={"link"} /> : null}
             </path>
             {link.onClick ? (
               <path d={d} className="dl-connector-hit" onClick={link.onClick}>
-                {link.title ? <title>{link.title}</title> : null}
+                {link.title ? <SvgTip content={"link"} /> : null}
               </path>
             ) : null}
             <circle

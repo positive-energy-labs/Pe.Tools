@@ -1,27 +1,13 @@
-/**
- * The model picture: the subject system's real meshes (`Scene3D`, the capture `useScene` reads)
- * under the DOM annotation layer. `page.viewport` null is the fit of the subject; a gesture commits
- * an explicit pose (replace), a named move (F, P) computes one from the current bounds and pushes
- * it once, and F with nothing selected clears to fit. With no meshes yet the annotations still draw
- * over the fit of the subject's centrelines; the camera then turns by the globe only.
- */
+/** The subject's real meshes and annotations. Camera policy belongs to useStage. */
 import { emptyListSearch } from "@pe/agent-contracts";
 import { useContext, useEffect, useMemo, useRef, useState, useSyncExternalStore } from "react";
 
-import { useScopeGestures, useScopeKeys } from "@pe/kit/keys";
 import type { PageMove } from "#/route/manifest";
-import {
-  applyLook,
-  boundsOfInstances,
-  boundsOfPoints,
-  center,
-  frame,
-  type OrbitViewport,
-} from "#/scene/orbit";
-import { clearPose, subjectPose, type PictureBounds } from "#/scene/framing";
+import { boundsOfInstances, boundsOfPoints, frame, type OrbitViewport } from "#/scene/orbit";
+import type { PictureBounds } from "#/scene/framing";
+import type { useStage } from "#/scene/stage-controller";
 import { viewportProject, type Project, type Size } from "#/scene/projection";
-import { ORBIT_GESTURES } from "#/scene/gestures";
-import { flyTo, glideLook, type LiveOrbit } from "#/scene/live-orbit";
+import { type LiveOrbit } from "#/scene/live-orbit";
 import { Scene3D } from "#/scene/scene3d";
 import type { SceneRead } from "#/scene/use-scene";
 import type { Bounds, Layer3D, SceneMeshes } from "#/scene/types";
@@ -83,6 +69,7 @@ export function ModelPicture({
   read,
   bounds,
   orbit,
+  stage,
   wheelHost,
   scene,
   layers,
@@ -106,6 +93,7 @@ export function ModelPicture({
   read: SceneRead;
   bounds: PictureBounds | null;
   orbit: LiveOrbit;
+  stage: ReturnType<typeof useStage>;
   wheelHost?: HTMLElement | null;
   scene: Scene;
   layers: ReadonlySet<string>;
@@ -160,7 +148,6 @@ export function ModelPicture({
     });
   }, [orbit, meshes]);
   const [said, setSaid] = useState<string | null>(null);
-  // A callback ref: the element can arrive after the first commit (a pane revealed later).
   const [host, setHost] = useState<HTMLDivElement | null>(null);
   const [size, setSize] = useState<Size | null>(null);
   useEffect(() => {
@@ -205,75 +192,9 @@ export function ModelPicture({
     [meshes, layers.has("meshes")], // eslint-disable-line react-hooks/exhaustive-deps
   );
 
-  const move = (viewport: OrbitViewport | null) => {
-    if (viewport) return flyTo(orbit, viewport, { scene: bounds?.scene });
-    // Fit can already be the saved Page value while a live gesture has moved away from it: fly to
-    // it, then Page's fit (null) is the one entry, not the fit's coordinates.
-    const fit = poseOf(null, bounds, size);
-    if (fit)
-      flyTo(orbit, fit, {
-        history: null,
-        scene: bounds?.scene,
-        onLand: () => setPage({ viewport: null }, { history: "push" }),
-      });
-  };
-  // Selection changes only the centre of subsequent orbit drags, never the camera's look target.
-  const primary = selected.values().next().value;
-  const orbitPivot = useMemo(() => {
-    const target =
-      meshes && primary !== undefined
-        ? boundsOfInstances(meshes, (i) => i.revitId === primary)
-        : null;
-    return target ? center(target) : null;
-  }, [primary, meshes]);
-
-  // Only an explicit frame moves the camera; the first click no longer displaces the second hit.
-  const frameAt = (key: string | null) => {
-    if (!bounds) return;
-    const target = key && meshes ? boundsOfInstances(meshes, (i) => i.key === key) : null;
-    if (!target) return move(null);
-    const view = subjectPose(bounds, target, orbit.read(), size ? size.width / size.height : 1);
-    flyTo(orbit, host ? clearPose(view, target, bounds.scene, host) : view, {
-      scene: bounds.scene,
-    });
-  };
-
-  useScopeGestures(ORBIT_GESTURES);
-  useScopeKeys([
-    {
-      hotkey: "F",
-      label: "frame",
-      says: "Frame the selection; with nothing selected, fit the system",
-      callback: () => {
-        if (!selected.size) return move(null);
-        const target = boundsOfIds(meshes, scene, selected);
-        if (!bounds || !target) return setSaid("the selection is not in the picture");
-        const view = subjectPose(bounds, target, orbit.read(), size ? size.width / size.height : 1);
-        move(host ? clearPose(view, target, bounds.scene, host) : view);
-      },
-    },
-    {
-      hotkey: "P",
-      label: "plan or isometric",
-      says: "Look straight down (plan), or back to the isometric; the pivot and zoom stay",
-      callback: () =>
-        pose
-          ? move(
-              applyLook((orbit.read() ?? pose).elev >= 89 ? "iso" : "plan", orbit.read() ?? pose),
-            )
-          : setSaid("no pose yet: the picture has nothing to look at"),
-    },
-    {
-      hotkey: "N",
-      label: "look north",
-      says: "Glide to look north. Elevation, zoom and pivot stay",
-      callback: () => {
-        const now = orbit.read();
-        if (!now) return setSaid("no pose yet: the picture has nothing to look at");
-        glideLook(orbit);
-      },
-    },
-  ]);
+  const { orbitPivot } = stage;
+  const frameAt = (key: string | null) =>
+    stage.frameOn(key && meshes ? boundsOfInstances(meshes, (i) => i.key === key) : null);
 
   const status = said
     ? said

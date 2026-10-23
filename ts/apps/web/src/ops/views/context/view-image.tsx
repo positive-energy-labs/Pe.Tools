@@ -8,7 +8,7 @@ import { Link } from "@tanstack/react-router";
 import { captureUrl } from "@pe/agent-contracts";
 
 import { FactChip } from "@pe/kit/lang/chip";
-import { Provenance, Section } from "#/components/lang/section";
+import { Provenance, Section } from "@pe/kit/lang/section";
 import { type OpViewProps, UnrecognizedShape, asRecord } from "#/ops/registry";
 
 export function ViewImageView({ data }: OpViewProps) {
@@ -27,7 +27,7 @@ export function ViewImageView({ data }: OpViewProps) {
             <FactChip title="The sheet the picture was taken from.">{res.sheetNumber}</FactChip>
           ) : null}
           <FactChip
-            tone={sha ? "meta" : "caution"}
+            tone={sha ? undefined : "caution"}
             title={
               sha
                 ? "Revit registered the picture: model corners place its pixels under geometry."

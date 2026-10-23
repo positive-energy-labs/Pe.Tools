@@ -6,7 +6,7 @@
 import { Button } from "@pe/kit/lang/button";
 import { FactChip, Tag } from "@pe/kit/lang/chip";
 import { EmptyState } from "@pe/kit/lang/empty";
-import { OutcomeLine } from "#/components/lang/outcome";
+import { OutcomeLine } from "@pe/kit/lang/outcome";
 import type { Column } from "@pe/kit/table/model";
 import { Table } from "@pe/kit/table/table";
 import { cn } from "@pe/kit/lib/utils";
@@ -91,7 +91,7 @@ export function PlanSheetView({
       <Tag>plan</Tag>
       {sheet ? (
         <FactChip
-          tone={included.length ? "caution" : "meta"}
+          tone={included.length ? "caution" : undefined}
           title="Rows apply will send: the selected rows. Held-back and flagged rows are skipped."
         >
           {included.length} / {sheet.entries.length} included

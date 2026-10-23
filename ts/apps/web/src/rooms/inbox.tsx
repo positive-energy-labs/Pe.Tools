@@ -1,3 +1,4 @@
+import { revitTarget } from "@pe/kit/lang/row";
 /**
  * The feedback inbox (V6 calm): one row per mark or note on the view, in `CARD_STATES` order. A
  * row points (hover pairs its region, click pins its card on the plan); verbs live on the card,
@@ -17,7 +18,7 @@ import { useList, emptyListState } from "@pe/kit/lang/collection";
 import { ListView } from "@pe/kit/lang/list-view";
 import { Pane } from "#/components/lang/pane";
 import { Button } from "@pe/kit/lang/button";
-import { Switcher } from "#/components/lang/switcher";
+import { Switcher } from "@pe/kit/lang/switcher";
 import { tokenRef } from "@pe/kit/lib/token";
 import { CARD_META, CARD_STATES, type Card, type CardState } from "./cards";
 import type { RoomsPage } from "./manifest";
@@ -39,10 +40,10 @@ function Glyph({ state }: { state: CardState }) {
   );
 }
 
-/** The card id, square-bracketed from Pea, round from a person. */
+/** The author is a readable word; the card id stays in its facts. */
 const Tag = ({ card }: { card: Card }) => (
   <TooltipHint content={card.by === "pea" ? "from Pea" : "from a person"}>
-    <span className="face-mono">{card.by === "pea" ? `[${card.id}]` : `(${card.id})`}</span>
+    <span className="face-mono">{card.by === "pea" ? "Pea" : "person"}</span>
   </TooltipHint>
 );
 
@@ -204,7 +205,15 @@ export function FeedbackCard({
 }) {
   const [said, setSaid] = useState<string | null>(null);
   return (
-    <div className="flex gap-2 p-1" data-card={card.id}>
+    <div
+      className="flex gap-2 p-1"
+      data-card={card.id}
+      {...revitTarget(
+        regions
+          .filter((region) => card.guids.includes(region.guid))
+          .map((region) => region.elementId),
+      )}
+    >
       <Thumb card={card} regions={regions} width={96} />
       <div className="flex min-w-0 flex-col gap-1">
         <span className="flex gap-1">
@@ -351,6 +360,9 @@ export function RoomsInbox({
                   <Tag card={card} />
                 </span>
               ),
+              revitIds: regions
+                .filter((region) => card.guids.includes(region.guid))
+                .map((region) => region.elementId),
               label: cardLine(card, labelOf),
               meta: <Thumb card={card} regions={regions} width={32} />,
               onMouseEnter: () => onHover(card.guids[0] ?? null),

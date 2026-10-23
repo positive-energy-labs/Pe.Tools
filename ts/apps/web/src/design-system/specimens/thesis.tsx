@@ -1,4 +1,4 @@
-import { Provenance } from "#/components/lang/section";
+import { Provenance } from "@pe/kit/lang/section";
 
 export function ThesisSpecimen() {
   return (

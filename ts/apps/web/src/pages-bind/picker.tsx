@@ -18,8 +18,8 @@ import { Row } from "@pe/kit/lang/row";
 import { TooltipHint } from "@pe/kit/lang/tooltip";
 import { emptyListState, useList } from "@pe/kit/lang/collection";
 import { ListView } from "@pe/kit/lang/list-view";
-import { Section } from "#/components/lang/section";
-import { Surface } from "#/components/lang/surface";
+import { Section } from "@pe/kit/lang/section";
+import { Surface } from "@pe/kit/lang/surface";
 import { useThreadSummaries } from "#/open/bay";
 import { inventoryOf, previousOf, useInventory } from "#/readings";
 

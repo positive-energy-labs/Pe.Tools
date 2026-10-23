@@ -1,16 +1,9 @@
-/**
- * The rooms plan: Revit's picture of the view (as exported, never redrawn) under one path per
- * zone, room and held region, inked by the region's state, on a pan-zoom canvas. Every room and
- * held region wears a numbered callout whose label is the table's. Click selects, shift-click adds,
- * hover pairs with the table row; a click on empty ground keeps the selection and Esc clears it, as
- * on every stage (SURFACE-PHILOSOPHY N2). The selection's facts sit in the fixed top-left readout;
- * F frames the selection (else fits the view), clear of the readout and the docked legend.
- */
+/** Revit's registered picture under selectable room regions, paired with the table. */
+import { SvgTip } from "@pe/kit/lang/tooltip";
 import { type CSSProperties, type ReactNode, useEffect, useMemo, useRef } from "react";
-import { useScopeGestures, useScopeKeys } from "@pe/kit/keys";
-import { PLANE_GESTURES } from "#/scene/gestures";
-import { PictureReadout } from "#/scene/readout";
-import { useViewHistory } from "#/scene/view-history";
+import type { PlaneViewport } from "@pe/agent-contracts";
+import { useStage, stageViewport } from "#/scene/stage-controller";
+import { PictureReadout } from "@pe/kit/lang/readout";
 import type { RoomsSnapshot } from "@pe/host-contracts/generated";
 
 import { FactChip } from "@pe/kit/lang/chip";
@@ -21,7 +14,7 @@ import { usePlanMap } from "#/lib/plan-map";
 import type { RoomsPage } from "./manifest";
 
 import { EmptyState } from "@pe/kit/lang/empty";
-import { OutcomeLine } from "#/components/lang/outcome";
+import { OutcomeLine } from "@pe/kit/lang/outcome";
 import { boundsOf, contentViewport, fitFrame, type Bounds2, type Point2 } from "#/lib/affine-frame";
 import { token } from "@pe/kit/lib/token";
 import { PlanImageLayer, planCorners, type TakeoffPlanImage } from "#/takeoff/level-plan";
@@ -246,8 +239,14 @@ export function RoomsPlan({
     return { frame, width, height, shapes, fit, pxPerFt: Math.abs(fx - ox) };
   }, [bounds, rows, plan]);
 
+  const viewport = usePlaneViewport(
+    page.viewport,
+    world?.fit ?? null,
+    stageViewport<PlaneViewport>(setPage),
+  );
   const {
     setHost,
+    host,
     size,
     view,
     move,
@@ -255,9 +254,7 @@ export function RoomsPlan({
     dragging,
     dragDistance: dragDist,
     handlers,
-  } = usePlaneViewport(page.viewport, world?.fit ?? null, (viewport, how) =>
-    setPage({ viewport }, { history: how === "move" ? "push" : "replace" }),
-  );
+  } = viewport;
   const layers = page.layers;
   const mapShapes = useMemo(
     () =>
@@ -306,41 +303,23 @@ export function RoomsPlan({
     move(to, "move");
   }, [world, size, zoomKey, zoomTo, move]); // eslint-disable-line react-hooks/exhaustive-deps
 
-  // The one camera move a person names (N1): F frames the selection, else fits the view.
-  useScopeGestures(PLANE_GESTURES);
-  useScopeKeys([
-    {
-      hotkey: "F",
-      label: "frame",
-      says: "Frame the selection; with nothing selected, fit the view",
-      callback: () => {
-        if (!world) return;
-        const boxes = world.shapes
-          .filter((shape) => selected.has(shape.region.guid))
-          .flatMap((shape) => [
-            [shape.box.minX, shape.box.minY] as const,
-            [shape.box.maxX, shape.box.maxY] as const,
-          ]);
-        const to = boxes.length ? frameBox(boundsOf(boxes), ZOOM_PAD_PX) : frameBox(world.fit);
-        if (to) move(to, "move");
-      },
+  const selectedPoints =
+    world?.shapes
+      .filter((shape) => selected.has(shape.region.guid))
+      .flatMap((shape) => [
+        [shape.box.minX, shape.box.minY] as const,
+        [shape.box.maxX, shape.box.maxY] as const,
+      ]) ?? [];
+  useStage({
+    kind: "plane",
+    host,
+    viewport,
+    bounds: world?.fit ?? null,
+    selectedBounds: selectedPoints.length ? boundsOf(selectedPoints) : null,
+    clearSelection: () => {
+      if (selected.size) onSelect(null, false);
     },
-  ]);
-  useViewHistory();
-  // Esc clears at the plan's scope, where a pick leaves focus. ponytail: a document-bound Esc here
-  // kept a stale callback (it fired with an empty selection); bind it wider when a table pick must
-  // clear too.
-  useScopeKeys([
-    {
-      hotkey: "Escape",
-      label: "clear the selection",
-      says: "Clear the selection, without moving the view",
-      refusal: selected.size ? null : "nothing is selected",
-      callback: () => {
-        if (selected.size) onSelect(null, false);
-      },
-    },
-  ]);
+  });
   const picked = world?.shapes.filter((shape) => selected.has(shape.region.guid)) ?? [];
 
   // The lease's one key is the viewport (`roomsAddress.agent`); the rest stays the person's.
@@ -421,7 +400,7 @@ export function RoomsPlan({
       {REGION_STATES.map((state) => (
         <FactChip
           key={state}
-          tone={state === "stale" ? "caution" : "meta"}
+          tone={state === "stale" ? "caution" : undefined}
           title={REGION_INK[state].says}
         >
           <span className="flex items-center gap-1">
@@ -499,13 +478,20 @@ export function RoomsPlan({
   const font = CALLOUT_FONT_PX;
 
   return (
-    <Pane {...pane}>
+    <Pane
+      {...pane}
+      legend={
+        <div data-surface="page" className="max-w-full rounded-sm">
+          {legend}
+        </div>
+      }
+    >
       {notice}
       <div
         ref={setHost}
         data-rooms-plan=""
         className="relative min-h-0 flex-1 overflow-hidden"
-        style={{ cursor: dragging ? "grabbing" : "grab", touchAction: "none" }}
+        style={{ cursor: dragging ? "grabbing" : "grab" }}
         {...handlers}
       >
         <div style={worldStyle}>
@@ -517,9 +503,9 @@ export function RoomsPlan({
             role="img"
             aria-label="rooms plan"
           >
-            <title>Room regions on the plan view</title>
+            <SvgTip content={"room regions"} />
             {plan ? <PlanImageLayer plan={plan} frame={world.frame} /> : null}
-            {world.shapes.map(({ region, label, state, d }) => {
+            {world.shapes.map(({ region, state, d }) => {
               const ink = token(REGION_INK[state].ink!);
               const on = selected.has(region.guid);
               const hot = hovered === region.guid;
@@ -550,7 +536,7 @@ export function RoomsPlan({
                     if (dragDist.current < CLICK_PX) onSelect(region.guid, event.shiftKey);
                   }}
                 >
-                  <title>{`${label} · ${region.sqft.toFixed(0)} sf · ${state}${unassigned(region) ? " · unassigned" : ""}`}</title>
+                  <SvgTip content={state} />
                 </path>
               );
             })}
@@ -658,7 +644,6 @@ export function RoomsPlan({
         <div onPointerDown={(e) => e.stopPropagation()}>
           {picked.length ? (
             <PictureReadout
-              hug
               title={
                 picked.length === 1
                   ? [
@@ -681,13 +666,6 @@ export function RoomsPlan({
               </span>
             </PictureReadout>
           ) : null}
-          <div
-            data-slot="pane-legend"
-            data-surface="page"
-            className="absolute bottom-2 left-2 max-w-[calc(100%-1rem)] rounded-sm"
-          >
-            {legend}
-          </div>
         </div>
       </div>
     </Pane>

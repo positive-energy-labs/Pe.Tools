@@ -8,7 +8,7 @@ import { Button } from "@pe/kit/lang/button";
 import { StateCell, type StateCellProps } from "@pe/kit/lang/cell";
 import { TooltipHint } from "@pe/kit/lang/tooltip";
 import { Verdict } from "@pe/kit/lang/verdict";
-import { Switcher } from "#/components/lang/switcher";
+import { Switcher } from "@pe/kit/lang/switcher";
 import {
   fanOutWord,
   plural,

@@ -1,7 +1,8 @@
+import { TooltipHint } from "@pe/kit/lang/tooltip";
 import { EmptyState } from "@pe/kit/lang/empty";
 import { FactChip } from "@pe/kit/lang/chip";
-import { HelpTip } from "#/components/lang/help";
-import { Switcher } from "#/components/lang/switcher";
+
+import { Switcher } from "@pe/kit/lang/switcher";
 import { Button } from "@pe/kit/lang/button";
 import { Table } from "@pe/kit/table/table";
 import { TableFrame } from "#/components/master-table/table-frame";
@@ -10,7 +11,6 @@ import { Pane } from "#/components/lang/pane";
 import { OVERLAY_LABEL, OVERLAY_TITLE, type PRow } from "#/family/model";
 import { useFamilyWorkspace } from "#/family/workspace-context";
 import { cn } from "@pe/kit/lib/utils";
-import { TooltipHint } from "@pe/kit/lang/tooltip";
 
 export function FamilyWorkspaceTable() {
   const {
@@ -173,7 +173,7 @@ export function FamilyWorkspaceTable() {
           ) : null}
           {/* Region orientation: how to read the counts, what an unbound geom row is, and what
               each of the two bind choices does. Every ghost row's title defers to this. */}
-          <HelpTip>
+          <TooltipHint>
             <p>
               Read left to right: how much of this profile the spec backs, what pea still wants, how
               many geometry dimensions nothing can reach, how many cells save would write, and where
@@ -194,7 +194,7 @@ export function FamilyWorkspaceTable() {
               <b>new</b> parameter KEEPS the literal as that parameter&rsquo;s family value, so the
               geometry does not move at all and only its reachability changes.
             </p>
-          </HelpTip>
+          </TooltipHint>
         </span>
       }
       search

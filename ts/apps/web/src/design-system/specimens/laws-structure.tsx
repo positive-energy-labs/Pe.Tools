@@ -2,8 +2,8 @@ import { ArtifactFrame } from "@pe/kit/lang/artifact-frame";
 import { CELL_STATE_ORDER, StateCell, cellStateLabel } from "@pe/kit/lang/cell";
 import type { StateCellProps } from "@pe/kit/lang/cell";
 import { FactChip, Tag } from "@pe/kit/lang/chip";
-import { HelpTip } from "#/components/lang/help";
-import { OutcomeLine } from "#/components/lang/outcome";
+import { TooltipHint } from "@pe/kit/lang/tooltip";
+import { OutcomeLine } from "@pe/kit/lang/outcome";
 import { Button } from "@pe/kit/lang/button";
 import { CounterExample, Gap, Law } from "#/design-system/exhibit";
 import { PARAM_ROWS, cellProps } from "#/design-system/specimens-data";
@@ -135,14 +135,14 @@ export function StructureLaws({ owner }: { owner: (name: string) => string }) {
       <Law
         name="orientation hides behind a mark"
         owner={owner("orientation hides behind a mark")}
-        ruling="A HelpTip orients a region. A control title explains one control. Explanatory chrome belongs in one of those homes."
+        ruling="A TooltipHint orients a region. A control title explains one control. Explanatory chrome belongs in one of those homes."
       >
         <div className="flex items-center gap-2">
           <Tag>the real table</Tag>
-          <HelpTip>
+          <TooltipHint>
             The product table primitive with StateCell as its renderer. Click a cell to read its
             full facts.
-          </HelpTip>
+          </TooltipHint>
         </div>
         <CounterExample why="a fact chip is for a measured fact, not a paragraph of orientation">
           <FactChip title="Region orientation">

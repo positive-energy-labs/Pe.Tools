@@ -5,7 +5,7 @@ import type { EndpointFailure, HarnessId, Provider } from "@pe/agent-contracts";
 
 import { Input } from "@pe/kit/lang/input";
 import { ListSegmentInput } from "@pe/kit/lang/list-popup";
-import { OutcomeLine } from "#/components/lang/outcome";
+import { OutcomeLine } from "@pe/kit/lang/outcome";
 import { Button } from "@pe/kit/lang/button";
 import {
   loginLine,

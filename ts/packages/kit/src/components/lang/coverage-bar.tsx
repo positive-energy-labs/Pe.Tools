@@ -3,11 +3,11 @@
  * meaning role; width, order and the legend carry meaning, colour only speeds it up. An empty
  * denominator renders nothing: the caller owns its EmptyState.
  */
-import { token } from "@pe/kit/lib/token";
-import { tv } from "@pe/kit/lib/tv";
+import { token } from "../../lib/token";
+import { tv } from "../../lib/tv";
 
-import "@pe/kit/lang/lang.css";
-import { TooltipHint } from "@pe/kit/lang/tooltip";
+import "./lang.css";
+import { TooltipHint } from "./tooltip";
 
 export const coverageBarRecipe = tv({
   slots: {

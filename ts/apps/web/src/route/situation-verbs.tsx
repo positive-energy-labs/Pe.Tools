@@ -3,7 +3,7 @@ import { createContext, useContext, useEffect, useState, type ReactNode } from "
 import { Popover, PopoverContent, PopoverTrigger } from "@pe/kit/lang/popover";
 import type { LucideIcon } from "lucide-react";
 import { FactChip } from "@pe/kit/lang/chip";
-import { Kbd } from "#/components/lang/kbd";
+import { KeyHint } from "@pe/kit/lang/key-hint";
 import { Button } from "@pe/kit/lang/button";
 import { changedInRevit } from "#/readings";
 import type { RouteAction } from "./manifest";
@@ -263,7 +263,7 @@ export function ActionBoard({
                   ) : (
                     "—"
                   )}
-                  {chord ? <Kbd>{chord}</Kbd> : null}
+                  {chord ? <KeyHint>{chord}</KeyHint> : null}
                 </span>
               </div>
             </div>

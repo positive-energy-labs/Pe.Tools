@@ -38,7 +38,6 @@ export function familyVerdicts(
     if (!plan) {
       return {
         word: "unplanned",
-        tone: "mute",
         dim: true,
         note: "no plan compiled yet — the table is scope, not judgment",
       };
@@ -46,18 +45,16 @@ export function familyVerdicts(
     if (!entry) {
       return {
         word: "outside spec",
-        tone: "mute",
         dim: true,
         note: "in scope, but the planned spec does not claim this family",
       };
     }
     const flag = entry.flag;
     // Not a warning about the model and not a refusal — a verdict with nothing behind it.
-    if (flag) return { word: "no actions", tone: "mute", note: flag };
+    if (flag) return { word: "no actions", note: flag };
     return excluded.has(familyName)
       ? {
           word: "excluded",
-          tone: "mute",
           dim: true,
           note: "excluded from apply in the decision queue",
         }

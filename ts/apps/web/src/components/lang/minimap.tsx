@@ -1,3 +1,4 @@
+import { SvgTip } from "@pe/kit/lang/tooltip";
 /**
  * A minimap is a floater kind (ledger 2026-10-21): a small picture of the whole field with the
  * viewport drawn on it; a click writes the viewport (`"move"`), a drag glides it (`"gesture"`).
@@ -192,13 +193,7 @@ const bearing = (v: Vec, step: 45 | 90 = 45) => {
 const poleLabel = (v: Vec, elev: number) =>
   elev === 90 ? "Up" : elev === -90 ? "Down" : bearing(v, 90);
 const stopTitle = (v: Vec, elev: number) =>
-  elev === 90
-    ? "Up: plan, looking straight down"
-    : elev < 0
-      ? "below the floor: elevation stops at 0°"
-      : elev === 0
-        ? `elevation from the ${bearing(v)}, level with the model`
-        : `from the ${bearing(v)}, ${elev}° above`;
+  elev === 90 ? "↑ plan" : elev < 0 ? "↓ floor" : `${bearing(v)} ${elev}°`;
 
 /**
  * The globe: a wire sphere whose three great circles (plan, N-S and E-W) carry 6 poles and 12
@@ -359,7 +354,7 @@ export function OrbitMinimap({
               live.current.move({ ...viewport, yaw: stop.rel ?? viewport.yaw, elev: stop.elev });
           }}
         >
-          <title>{stopTitle(stop.v, stop.elev)}</title>
+          <SvgTip content={stopTitle(stop.v, stop.elev)} />
           <circle r={9} fill="transparent" />
           <circle
             r={stop.pole ? 4 : 2.75}
@@ -432,7 +427,7 @@ export function OrbitMinimap({
           if (!pressed.current?.moved) glideLook(live.current);
         }}
       >
-        <title>Look north: the camera moves to the south</title>
+        <SvgTip content="N · look" />
         <circle r={8} fill={tokenRef("page")} stroke={tokenRef("ink-2")} strokeWidth={1} />
         <text
           y={3.5}

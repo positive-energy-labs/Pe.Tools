@@ -1,4 +1,3 @@
-import { type ListSearch } from "@pe/agent-contracts";
 /**
  * The Inputs section of the sidebar: one named row per unit (flow, role, ESP) and per grille (flow,
  * drop) of the open system, always drawn, never behind an expanded run. These are the Work cells a
@@ -8,9 +7,9 @@ import { type ListSearch } from "@pe/agent-contracts";
 import type { Priced } from "@pe/ducts-domain/pricing";
 import type { SystemScope } from "@pe/ducts-domain/system-scope";
 import type { DuctSnapshot } from "@pe/ducts-domain/types";
-import { useScopeGestures, type ScopeGesture } from "@pe/kit/keys";
-import { useCallback, useEffect, useMemo, useState } from "react";
-import { emptyListState, useList } from "@pe/kit/lang/collection";
+import { ScopeGestures, type ScopeGesture } from "@pe/kit/keys";
+import { useCallback, useMemo } from "react";
+import { useList, type ListPersist } from "@pe/kit/lang/collection";
 import { ListView, type ListRowParts } from "@pe/kit/lang/list-view";
 import { observedElements, useNativeObservation } from "#/revit/observation";
 
@@ -31,12 +30,7 @@ export interface InputsPaneProps {
   light: (ids: readonly number[] | null) => void;
   /** A unit's make-the-fan verbs and last outcome, or null when none is owed (`fansOwedBase`). */
   fanVerbs?: (id: number) => ReactNode;
-  address?: {
-    scope?: string;
-    search: ListSearch;
-    sort: "" | "name";
-    onChange: (search: ListSearch, sort: "" | "name") => void;
-  };
+  address?: ListPersist<"name">;
 }
 
 type InputsScope = Pick<SystemScope, "groups" | "terminals" | "units">;
@@ -61,7 +55,6 @@ const INPUT_KEYS: readonly ScopeGesture[] = [
 ];
 
 export function InputsPane(props: InputsPaneProps) {
-  useScopeGestures(INPUT_KEYS);
   const observation = useNativeObservation();
   const { snapshot, priced, work, scope, nameOf, selected, select, light } = props;
   const { units, terminals } = useMemo(() => inputRowsOf(snapshot, scope), [snapshot, scope]);
@@ -85,9 +78,8 @@ export function InputsPane(props: InputsPaneProps) {
     (item: (typeof items)[number]) => ({ text: [nameOf(item.id), item.kind], ids: [item.id] }),
     [nameOf],
   );
-  const [state, setState] = useState(emptyListState<"name">);
   const list = useList({
-    scope: props.address?.scope,
+    persist: props.address,
     items,
     keyOf: (item) => `${item.kind}:${item.id}`,
     search,
@@ -96,30 +88,9 @@ export function InputsPane(props: InputsPaneProps) {
     },
     sorts: { name: (item) => nameOf(item.id) },
     select: "single",
-    state: {
-      ...state,
-      search: props.address?.search ?? state.search,
-      sort: props.address?.sort ?? state.sort,
-      selected: items
-        .filter((item) => item.id === selected)
-        .map((item) => `${item.kind}:${item.id}`),
-    },
-    onState: (next) => {
-      setState(next);
-      if (
-        props.address &&
-        (next.search !== props.address.search || next.sort !== props.address.sort)
-      )
-        props.address.onChange(next.search, next.sort);
-    },
+    followSelection: { key: (rows) => rows.find((row) => row.item.id === selected)?.key ?? null },
     onPick: (item) => select(item.id),
   });
-  useEffect(() => {
-    const row = list.rows.find((row) => row.item.id === selected);
-    if (row) list.reveal(row.key);
-    // Reveal through the core only when its filtered rows include the route's selection.
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [selected, list.state.search, list.state.sort]);
   const row = useCallback(
     ({ id, kind }: (typeof items)[number]): ListRowParts => {
       if (!ctx) return { label: nameOf(id) };
@@ -170,6 +141,7 @@ export function InputsPane(props: InputsPaneProps) {
     );
   return (
     <div aria-label="inputs" data-e-inputs>
+      <ScopeGestures gestures={INPUT_KEYS} />
       <ListView
         list={list}
         aria-label="inputs"

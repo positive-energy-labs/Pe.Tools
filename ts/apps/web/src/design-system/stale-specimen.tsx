@@ -7,7 +7,7 @@ import {
 
 import { Button } from "@pe/kit/lang/button";
 import { cellFromTrichotomy } from "@pe/kit/lang/cell";
-import { Section } from "#/components/lang/section";
+import { Section } from "@pe/kit/lang/section";
 import { reviewAddresses } from "#/components/work/band";
 import { WorkLines, type WorkTab } from "#/components/work/lines";
 import { StaleResolve } from "#/route/schedules/stale-resolve";

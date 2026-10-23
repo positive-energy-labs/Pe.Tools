@@ -1,26 +1,14 @@
-/**
- * The /space picture: one pane whose strip holds the modes (3D, Top, North, East), the layers and
- * the floaters (the orbit globe, three axis thumbnails). `page.viewport` null is the fit of the
- * mode. Entering an axis keeps the 3D pose it left in a local record; Esc (or the 3D mode, or the
- * shown axis's thumbnail) restores it in one move. A URL that lands in an axis has no record, so
- * that return fits. The cuts draw over the picture as DOM and clip it in the shader.
- *
- * The stage answers like /ducts (SURFACE-PHILOSOPHY N1, N2, I4): a click selects and never moves
- * the camera; the selection is the orbit pivot; only F and double-click frame; Esc in 3D clears the
- * selection; Alt+Left / Alt+Right step the view history; the selection's facts live in the fixed
- * readout at the top left, never in a popover at the pointer.
- */
+/** Space's model, axis cuts and thumbnails; an axis remembers the 3D pose it left. */
 import { useEffect, useMemo, useRef, useState, type ReactNode } from "react";
 
-import { useScopeGestures, useScopeKeys, type Chord } from "@pe/kit/keys";
+import { type Chord } from "@pe/kit/keys";
 import { Button } from "@pe/kit/lang/button";
 import type { FloaterSpec } from "#/components/lang/floater";
 import { OrbitMinimap } from "#/components/lang/minimap";
 import { Pane } from "#/components/lang/pane";
 import type { PageMove } from "#/route/manifest";
-import { clearPose, subjectPose } from "#/scene/framing";
-import { ORBIT_GESTURES } from "#/scene/gestures";
-import { applyLook, boundsOfInstances, center, frame, type OrbitViewport } from "#/scene/orbit";
+import { useStage, stageViewport } from "#/scene/stage-controller";
+import { boundsOfInstances, center, frame, type OrbitViewport } from "#/scene/orbit";
 import {
   AXIS_LABEL,
   PLANE_AXES,
@@ -29,10 +17,7 @@ import {
   type PlaneViewport,
 } from "#/scene/plane";
 import type { Psc1Metadata } from "#/scene/psc1";
-import { flyTo, glideLook, useLiveOrbit } from "#/scene/live-orbit";
-import { useViewHistory } from "#/scene/view-history";
-import { STAGE_KEYS } from "#/scene/stage-keys";
-import { KeyLegend, type LegendKey } from "#/components/lang/kbd";
+import { useLiveOrbit } from "#/scene/live-orbit";
 import { Scene3D } from "#/scene/scene3d";
 import type { Layer3D, Pick, SceneMeshes } from "#/scene/types";
 
@@ -47,13 +32,6 @@ type SetPage = (next: Partial<SpacePage>, move?: PageMove<SpacePage>) => void;
 const MODE_LABEL = { "3d": "3D", top: "Top", north: "North", east: "East" } as const;
 const THUMB = { width: 176, height: 112 } as const;
 const push = { history: "push" } as const;
-/** The stage's keys plus this picture's own: the modes, and Esc's other meaning in an axis. */
-const SPACE_KEYS: readonly LegendKey[] = [
-  ...STAGE_KEYS,
-  { keys: ["1"], does: "3D (2 Top, 3 North, 4 East: the axis pictures)" },
-  { keys: ["Esc"], does: "in an axis picture, back to the 3D pose you left" },
-];
-
 /** The pane's own size, measured; null until it has one. */
 function useSize(host: HTMLElement | null) {
   const [size, setSize] = useState<{ width: number; height: number } | null>(null);
@@ -124,7 +102,7 @@ export function SpacePicture({
   const under = returnPose.current ?? (bounds ? frame(bounds) : null);
   const orbit = useLiveOrbit(
     axis ? under : pose,
-    (viewport, how) => setPage({ viewport }, { history: how === "gesture" ? "replace" : "push" }),
+    stageViewport(setPage),
     `${page.scene}/${page.ids.join(",")}/${page.mode}`,
     page.viewport,
   );
@@ -141,84 +119,35 @@ export function SpacePicture({
     if (next !== "3d") return setPage({ mode: next }, push);
     setPage({ mode: "3d", viewport: returnPose.current }, push);
   };
-  // Selection changes only the centre of later orbit drags, never the camera's look target.
   const selectedBounds = useMemo(
     () =>
       meshes && page.selected ? boundsOfInstances(meshes, (i) => i.key === page.selected) : null,
     [meshes, page.selected],
   );
-  const orbitPivot = useMemo(
-    () => (selectedBounds ? center(selectedBounds) : null),
-    [selectedBounds],
-  );
-  /** The camera moves a person names: a subject in context, clear of the readout, else the fit.
-   * ponytail: an axis picture only fits; frame a subject there when someone asks for it. */
-  const frameOn = (target: typeof selectedBounds) => {
-    if (!bounds) return;
-    if (axis) return setPage({ viewport: null }, push);
-    if (!target) return flyTo(orbit, frame(bounds), { scene: bounds });
-    const view = subjectPose(
-      { scene: bounds, subject: bounds },
-      target,
-      orbit.read(),
-      size ? size.width / size.height : 1,
-    );
-    flyTo(orbit, host ? clearPose(view, target, bounds, host) : view, { scene: bounds });
-  };
+  const stage = useStage({
+    kind: "orbit",
+    orbit,
+    host,
+    bounds: bounds && { scene: bounds, subject: bounds },
+    selectedBounds,
+    clearSelection: () => {
+      if (page.selected || page.row !== null) setPage({ selected: null, row: null }, push);
+    },
+    // Pending N1 ruling: preserve Space's axis Escape-to-3D behavior explicitly.
+    spaceAxisException: axis
+      ? {
+          label: "return to 3D",
+          escape: () => toMode("3d"),
+          frame: () => setPage({ viewport: null }, push),
+        }
+      : null,
+  });
+  const { frameOn, orbitPivot } = stage;
   if (alias)
     alias.current = (key) => {
       if (key !== page.selected) setPage({ selected: key, row: null }, push);
       frameOn(meshes ? boundsOfInstances(meshes, (i) => i.key === key) : null);
     };
-  useScopeGestures(ORBIT_GESTURES);
-  useScopeKeys([
-    {
-      hotkey: "F",
-      label: "frame",
-      says: "Frame the selection; with nothing selected, fit the scene",
-      callback: () => frameOn(selectedBounds),
-    },
-    {
-      hotkey: "P",
-      label: "plan or isometric",
-      says: "Look straight down (plan), or back to the isometric; the pivot and zoom stay",
-      available: () => axis === null,
-      callback: () => {
-        const now = orbit.read();
-        if (now) flyTo(orbit, applyLook(now.elev >= 89 ? "iso" : "plan", now), { scene: bounds });
-      },
-    },
-    {
-      hotkey: "N",
-      label: "look north",
-      says: "Glide to look north. Elevation, zoom and pivot stay",
-      available: () => axis === null,
-      callback: () => glideLook(orbit),
-    },
-  ]);
-  useViewHistory();
-  // Esc binds on the document: a pick from the facts leaves focus there and must still clear.
-  // In an axis Esc returns to 3D (the 2026-10-22 ruling; kaitpw's verdict against N1 is pending).
-  const [body, setBody] = useState<HTMLElement | null>(null);
-  useEffect(() => setBody(document.body), []);
-  useScopeKeys(
-    [
-      {
-        hotkey: "Escape",
-        label: axis ? "return to 3D" : "clear the selection",
-        says: axis
-          ? "Leave the axis picture for the 3D pose you left (a fit when there is none)"
-          : "Clear the selection; the next orbit uses the view centre, without moving the camera",
-        refusal: axis || page.selected || page.row !== null ? null : "nothing is selected",
-        callback: () => {
-          if (axis) return toMode("3d");
-          if (page.selected || page.row !== null) setPage({ selected: null, row: null }, push);
-        },
-        options: { conflictBehavior: "allow" },
-      },
-    ],
-    body,
-  );
 
   // The cuts, validated together; a URL can carry one that crosses itself, which clips nothing.
   const cut = useMemo((): { polygons: Polygons; error: string | null } | null => {
@@ -435,9 +364,7 @@ export function SpacePicture({
             orbitPivot={orbitPivot}
             wheelHost={host}
             plane={plane}
-            onPlane={(viewport, how) =>
-              setPage({ viewport }, { history: how === "gesture" ? "replace" : "push" })
-            }
+            onPlane={stageViewport(setPage)}
             thumbs={thumbs}
             selected={selected}
             hidden={hidden}
@@ -469,11 +396,6 @@ export function SpacePicture({
           />
         ) : null}
         {readout}
-        {meshes ? (
-          <div data-slot="pane-legend" className="absolute bottom-2 left-2">
-            <KeyLegend keys={SPACE_KEYS} lead={0} />
-          </div>
-        ) : null}
         {status || cut?.error ? (
           <p
             role="status"

@@ -4,7 +4,7 @@
  * hues; a refusal is `aria-disabled` and greyed, its reason in a Tooltip (never drawn).
  * Painted in lang.css. A Row with `depth` is a tree node; ListView nests them.
  */
-import { useState, type CSSProperties, type ReactNode } from "react";
+import { createContext, useContext, useState, type CSSProperties, type ReactNode } from "react";
 import { ChevronRight, Flame } from "lucide-react";
 
 import { tv } from "../../lib/tv";
@@ -12,6 +12,36 @@ import { TooltipHint } from "./tooltip";
 import type { StateCellProps } from "./cell-state";
 
 import "./lang.css";
+
+const landings = new WeakMap<HTMLElement, ReturnType<typeof setTimeout>>();
+
+/** A named arrival scrolls nearest and marks once; focus is reserved for editing destinations. */
+export function land(el: HTMLElement, { focus = false }: { focus?: boolean } = {}) {
+  clearTimeout(landings.get(el));
+  el.scrollIntoView?.({ block: "nearest", behavior: "instant" });
+  if (focus)
+    (el.querySelector<HTMLElement>("input, select, textarea, button, [tabindex]") ?? el).focus({
+      preventScroll: true,
+    });
+  el.removeAttribute("data-landed");
+  // Restart the CSS animation even for two consecutive arrivals on the same element.
+  void el.offsetWidth;
+  el.setAttribute("data-landed", "");
+  const duration =
+    getComputedStyle(el).getPropertyValue("--motion-land").trim() ||
+    getComputedStyle(document.documentElement).getPropertyValue("--motion-land").trim();
+  const ms = parseFloat(duration) * (duration.endsWith("ms") ? 1 : 1000);
+  landings.set(
+    el,
+    setTimeout(
+      () => {
+        el.removeAttribute("data-landed");
+        landings.delete(el);
+      },
+      Number.isFinite(ms) ? ms : 0,
+    ),
+  );
+}
 
 export const rowRecipe = tv({
   slots: {
@@ -70,6 +100,40 @@ export const revitTarget = (
   "data-revit-ids": ids?.length ? ids.join(",") : undefined,
   "data-revit-refs": refs?.length ? JSON.stringify(refs) : undefined,
 });
+
+/** A displayed observation's scope, including explicit null boundaries. */
+const RevitScopeContext = createContext<object | null>(null);
+
+/** Layout-transparent target boundary; ids can never be declared without their scope. */
+export function RevitTarget({
+  ids,
+  refs,
+  scope,
+  children,
+}: {
+  ids?: readonly number[];
+  refs?: readonly RevitElementReference[];
+  scope: object | null;
+  children: ReactNode;
+}) {
+  return (
+    <RevitScopeContext value={scope}>
+      <div
+        data-revit-target=""
+        data-revit-scope={JSON.stringify(scope)}
+        {...revitTarget(ids, refs)}
+      >
+        {children}
+      </div>
+    </RevitScopeContext>
+  );
+}
+
+/** Copy the captured scope onto targets, including targets rendered through portals. */
+export function useRevitTarget(ids?: readonly number[], refs?: readonly RevitElementReference[]) {
+  const scope = useContext(RevitScopeContext);
+  return { ...revitTarget(ids, refs), "data-revit-scope": JSON.stringify(scope) };
+}
 
 export type RowProps = RowState & {
   id?: string;
@@ -147,45 +211,15 @@ const rowStateProps = (state: RowState) => ({
   "aria-disabled": state.refusal ? true : undefined,
   "aria-selected": state.selected === undefined ? undefined : state.selected,
   "aria-checked": state.checked,
-  ...revitTarget(state.revitIds, state.revitRefs),
 });
 
 export function Row(props: RowProps) {
-  const {
-    cursor,
-    selected,
-    checked,
-    active,
-    pending,
-    failed,
-    damage,
-    refusal,
-    revitIds,
-    revitRefs,
-    id,
-    role,
-    onClick,
-    onMouseMove,
-  } = props;
-  const states = rowStateProps({
-    stage: props.stage,
-    stagedBy: props.stagedBy,
-    cursor,
-    selected,
-    checked,
-    active,
-    pending,
-    failed,
-    damage,
-    refusal,
-    revitIds,
-    revitRefs,
-  });
+  const { damage, refusal } = props;
   const shared = {
-    id,
-    role,
-    onClick: refusal ? undefined : onClick,
-    onMouseMove,
+    id: props.id,
+    role: props.role,
+    onClick: refusal ? undefined : props.onClick,
+    onMouseMove: props.onMouseMove,
     onMouseEnter: props.onMouseEnter,
     onMouseLeave: props.onMouseLeave,
     "data-key": props["data-key"],
@@ -201,7 +235,8 @@ export function Row(props: RowProps) {
     onDragLeave: props.onDragLeave,
     onDragOver: props.onDragOver,
     onDrop: props.onDrop,
-    ...states,
+    ...rowStateProps(props),
+    ...useRevitTarget(props.revitIds, props.revitRefs),
   };
   if (props.as === "tr") {
     const slots = rowRecipe();

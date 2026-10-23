@@ -1,6 +1,7 @@
+import { RevitTarget } from "@pe/kit/lang/row";
 import { createContext, useContext, type ReactNode } from "react";
 import type { RevitElementReference } from "@pe/kit/lang/row";
-import { revitScope, type ElementTarget, type RevitObservationScope } from "./element-target";
+import { type ElementTarget, type RevitObservationScope } from "./element-target";
 import { documentRefSchema, type DocumentRef } from "@pe/agent-contracts";
 import { createPeClient } from "@pe/agent-contracts/pe-api";
 import { readPeError } from "@pe/host-contracts/pe-api";
@@ -31,9 +32,7 @@ export function NativeObservationScope({
 }) {
   return (
     <Observation value={value}>
-      <div className="contents" {...revitScope(value.scope)}>
-        {children}
-      </div>
+      <RevitTarget scope={value.scope}>{children}</RevitTarget>
     </Observation>
   );
 }

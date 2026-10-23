@@ -16,7 +16,13 @@ import { LineMaterial } from "three/addons/lines/LineMaterial.js";
 import { LineSegments2 } from "three/addons/lines/LineSegments2.js";
 import { BEACON_LAYER, createGlow, GLOW_LAYER } from "./glow";
 import { createOutline, OUTLINE_CHANNEL, OUTLINE_LAYER } from "./outline";
-import { createWheelReader, pointerIntent, wheelPixels, wheelPlane } from "./gestures";
+import {
+  captureGestures,
+  createWheelReader,
+  pointerIntent,
+  wheelPixels,
+  wheelPlane,
+} from "./gestures";
 import { createMeshPicker } from "./picking";
 import { createOrbitControls } from "./orbit-controls";
 import { center, fromControls, rotateAbout, toCamera, type OrbitViewport } from "./orbit";
@@ -30,6 +36,7 @@ import {
   type Size,
 } from "./projection";
 import { inkOf } from "./ink";
+import { setDamageHue } from "./damage";
 import type { IssueState, IssueTarget, Layer3D, SceneInstance, SceneMeshes } from "./types";
 
 /** Opt-in timing marks (`?scenePerf`), including GPU completion rather than a bare RAF tick. */
@@ -105,6 +112,7 @@ export function createRenderer(mount: HTMLElement, meshes: SceneMeshes, wheelHos
   // elements are a warm mid grey between the muted and secondary inks, context recedes toward the
   // ground. Mid-tone on purpose: selection and hover lift toward the ink and stay visible, and the
   // stage's only saturated colour is damage. A theme change repaints the same scene and camera.
+  setDamageHue(inkOf("alarm", mount));
   const ground = inkOf("artifact", mount);
   const ink = inkOf("ink", mount);
   const focusTint = inkOf("ink-mute", mount).lerp(inkOf("ink-2", mount), 0.55);
@@ -450,10 +458,7 @@ export function createRenderer(mount: HTMLElement, meshes: SceneMeshes, wheelHos
     controls.update();
     moves.dispatchEvent({ type: "end" });
   };
-  const preventGesture = (event: Event) => event.preventDefault();
-  wheelHost.addEventListener("wheel", wheel, { passive: false });
-  wheelHost.addEventListener("gesturestart", preventGesture, { passive: false });
-  wheelHost.addEventListener("gesturechange", preventGesture, { passive: false });
+  const releaseGestures = captureGestures(wheelHost, wheel);
   const observer = new ResizeObserver(resize);
   observer.observe(mount);
   resize();
@@ -818,9 +823,7 @@ export function createRenderer(mount: HTMLElement, meshes: SceneMeshes, wheelHos
       window.removeEventListener("pointermove", planeMove);
       window.removeEventListener("pointerup", planeUp);
       canvas.removeEventListener("pointerdown", turnStart, true);
-      wheelHost.removeEventListener("wheel", wheel);
-      wheelHost.removeEventListener("gesturestart", preventGesture);
-      wheelHost.removeEventListener("gesturechange", preventGesture);
+      releaseGestures();
       batch.dispose();
       scene.remove(batch);
       material.dispose();

@@ -37,7 +37,7 @@ test("kit owns its implementation graph without app source or aliases", () => {
 test("the app consumes each instrument and stylesheet from its single kit owner", () => {
   const moved = [
     "components/lang/artifact-frame.tsx",
-    "components/lang/pane-tabs.tsx",
+    "components/lang/switcher.tsx",
     "components/lang/list-popup.tsx",
     "components/lang/input.tsx",
     "components/lang/code.tsx",

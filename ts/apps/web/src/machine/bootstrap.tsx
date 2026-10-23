@@ -3,7 +3,7 @@ import type { ActionReceipt, Machine } from "@pe/agent-contracts";
 import { GENERATED_FROM } from "@pe/host-contracts/pe-revit-contract";
 import { bootstrapBlockers } from "@pe/host-contracts/pe-api";
 import { Button } from "@pe/kit/lang/button";
-import { OutcomeLine } from "#/components/lang/outcome";
+import { OutcomeLine } from "@pe/kit/lang/outcome";
 import { alignRevitBootstrap } from "#/host/machine";
 import { useAction } from "#/readings";
 

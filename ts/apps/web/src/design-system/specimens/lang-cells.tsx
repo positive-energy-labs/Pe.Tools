@@ -1,5 +1,5 @@
-import { CellStateKey, cellStateKeyRecipe } from "#/components/lang/cell-key";
-import { StateCell, stateCellRecipe } from "@pe/kit/lang/cell";
+import { CellStateKey, cellStateKeyRecipe, StateCell, stateCellRecipe } from "@pe/kit/lang/cell";
+
 import { FactChip, FileChip, MentionChip, NarrowChip, Tag, chipRecipe } from "@pe/kit/lang/chip";
 
 import { RecipeGrid } from "./recipe-grid";
@@ -14,6 +14,7 @@ function UnitCellSpecimen({ width }: { width: number }) {
   const item = (value: string, unit: typeof CFM, note: string) => (
     <span className="dl-cells-item">
       <StateCell
+        damage={value === "" ? "no price" : undefined}
         value={value}
         cap="editable"
         scale="row"
@@ -65,7 +66,7 @@ export function LangCellSpecimens() {
       />
       <RecipeGrid
         name="CellStateKey"
-        importPath="#/components/lang/cell-key"
+        importPath="@pe/kit/lang/cell"
         recipe={cellStateKeyRecipe}
         render={() => <CellStateKey />}
       />
@@ -75,11 +76,7 @@ export function LangCellSpecimens() {
         recipe={chipRecipe}
         render={(props) => (
           <div className="flex flex-wrap items-center gap-2">
-            <FactChip
-              tone={props.tone as "meta" | "caution" | "done" | "alarm" | "pea"}
-              dashed={props.state === "seam"}
-              title={`${props.tone} · ${props.state}`}
-            >
+            <FactChip dashed={props.state === "seam"} title={`neutral fact · ${props.state}`}>
               42 written
             </FactChip>
             <NarrowChip

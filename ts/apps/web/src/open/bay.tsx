@@ -25,17 +25,17 @@ import {
   type MachineSession,
 } from "@pe/agent-contracts";
 
-import { ArmingStrip } from "#/components/lang/arming-strip";
+import { ArmingStrip } from "@pe/kit/lang/arming-strip";
 import { ArtifactFrame } from "@pe/kit/lang/artifact-frame";
 import { Button } from "@pe/kit/lang/button";
 import { Connectors, type Connection } from "#/components/lang/connector";
 import { EmptyState } from "@pe/kit/lang/empty";
-import { OutcomeLine } from "#/components/lang/outcome";
+import { OutcomeLine } from "@pe/kit/lang/outcome";
 import { Row } from "@pe/kit/lang/row";
 import { useList } from "@pe/kit/lang/collection";
 import { ListView } from "@pe/kit/lang/list-view";
 import { docKey, heldRowParts, SessionCard, type SessionDocument } from "#/components/lang/session";
-import { Switcher } from "#/components/lang/switcher";
+import { Switcher } from "@pe/kit/lang/switcher";
 import type { QueryCommand } from "@pe/kit/table/model";
 import { queryWords, readClause, useTableState, visibleRows } from "@pe/kit/table/view";
 import { ActionOutcome } from "#/actions/receipt";

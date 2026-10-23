@@ -13,7 +13,7 @@ import { stagedDucts, type DuctClaim, type TrichotomyCellLike } from "@pe/agent-
 import type { Reading } from "@pe/agent-contracts";
 import type { DuctSnapshot } from "@pe/ducts-domain/types";
 
-import { Surface } from "#/components/lang/surface";
+import { Surface } from "@pe/kit/lang/surface";
 import { frozenDemo } from "#/host/demo-client";
 import { SAVED, useDuctSnapshot, useDuctTables, useDuctCatalogs } from "./host";
 import { SCENE_CLAIMS, SCENE_FIXTURE } from "./scene.fixture";

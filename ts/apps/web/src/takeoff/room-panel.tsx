@@ -1,3 +1,4 @@
+import { revitTarget } from "@pe/kit/lang/row";
 import {
   takeoffDecisionAddress,
   takeoffDecisionKey,
@@ -70,7 +71,10 @@ function RoomPanel({
     <Pane id="room" title="room" meta={`${zone.zone.key} · ${zone.zone.lane.label}`}>
       <ScopeKeys keys={shortcuts} />
 
-      <div className="hairline-rows -m-2">
+      <div
+        className="hairline-rows -m-2"
+        {...revitTarget(room.elementId == null ? [] : [room.elementId])}
+      >
         <div className="px-2.5 py-2">
           <h2 className="t-title text-ink">{room.name}</h2>
           <p className="face-mono mt-1 flex flex-wrap items-center gap-x-1.5 text-ink-2">

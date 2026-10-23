@@ -12,7 +12,7 @@ import { useDocumentLadder, LadderPicker } from "./situation-ladder";
 import { usePublishPagePalette } from "#/navigation/route-controls";
 import { KeysNode } from "@pe/kit/keys";
 import type { PodRouteDescriptor } from "@pe/agent-contracts";
-import { CommandPalette } from "#/components/lang/command-palette";
+import { CommandPalette } from "@pe/kit/lang/list-popup";
 import {
   submitAction,
   actionResult,
