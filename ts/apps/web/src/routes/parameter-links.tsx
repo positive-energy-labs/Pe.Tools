@@ -16,7 +16,7 @@ import { routeSearch } from "#/route/route-owner";
 import { FactChip } from "@pe/kit/lang/chip";
 import { OutcomeLine } from "@pe/kit/lang/outcome";
 import { Button } from "@pe/kit/lang/button";
-import { Pane, PaneSplit } from "#/components/lang/pane";
+import { Pane, PaneSplit } from "@pe/kit/lang/pane";
 import { Surface } from "@pe/kit/lang/surface";
 import { EvaluationView, RuntimeStatusBar } from "#/parameter-links/Evaluation";
 import { NativeObservationScope } from "#/revit/observation";

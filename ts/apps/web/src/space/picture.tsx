@@ -1,11 +1,13 @@
+import { GoToPopup } from "@pe/kit/lang/list-popup";
 /** Space's model, axis cuts and thumbnails; an axis remembers the 3D pose it left. */
-import { useEffect, useMemo, useRef, useState, type ReactNode } from "react";
+import { useContext, useEffect, useMemo, useRef, useState, type ReactNode } from "react";
+import { SubjectTextContext } from "@pe/kit/lang/subject-text";
 
 import { type Chord } from "@pe/kit/keys";
 import { Button } from "@pe/kit/lang/button";
-import type { FloaterSpec } from "#/components/lang/floater";
+import type { FloaterSpec } from "@pe/kit/lang/floater";
 import { OrbitMinimap } from "#/components/lang/minimap";
-import { Pane } from "#/components/lang/pane";
+import { Pane, PaneOverlay } from "@pe/kit/lang/pane";
 import type { PageMove } from "#/route/manifest";
 import { useStage, stageViewport } from "#/scene/stage-controller";
 import { boundsOfInstances, center, frame, type OrbitViewport } from "#/scene/orbit";
@@ -23,6 +25,7 @@ import type { Layer3D, Pick, SceneMeshes } from "#/scene/types";
 
 import { CutOverlay, type Framed } from "./cuts";
 import { LAYER_SAYS, SPACE_LAYERS, rowUnder, type SpaceLayer } from "./layers";
+import { pickName } from "./facts";
 import type { SpacePage } from "./manifest";
 import { cutPolygons, packPolygons, retained, type Cuts, type Polygons } from "./state";
 import { useRouteLease } from "#/route/view-bridge";
@@ -57,6 +60,7 @@ export function SpacePicture({
   status,
   onError,
   readout,
+  legend,
   alias,
 }: {
   lease?: { thread: string; ready: boolean; context: Record<string, unknown> };
@@ -70,9 +74,13 @@ export function SpacePicture({
   onError: (message: string | null) => void;
   /** The fixed top-left readout: the scene's summary, or the selection's identity and facts. */
   readout?: ReactNode;
+  legend?: ReactNode;
   /** Filled here: the alias-click a Subject named in text calls. It selects and flies (N4). */
   alias?: { current: ((key: string) => void) | null };
 }) {
+  const subjects = useContext(SubjectTextContext);
+  const [goHover, setGoHover] = useState<string | null>(null);
+  const lit = useMemo(() => (goHover ? new Set([goHover]) : undefined), [goHover]);
   const [host, setHost] = useState<HTMLDivElement | null>(null);
   const size = useSize(host);
   const [framed, setFramed] = useState<Framed | null>(null);
@@ -311,7 +319,7 @@ export function SpacePicture({
           >
             <span className="pointer-events-none relative block" style={THUMB}>
               <canvas ref={thumbRef[a]} className="block size-full" />
-              <span className="absolute left-1 top-1 px-1 t-small" data-surface="page">
+              <span className="block px-1 t-small" data-surface="page">
                 {a === axis ? "3D · Esc" : AXIS_LABEL[a]}
                 {a !== axis && !page.cuts[a].polyline.length ? " · no cut" : ""}
               </span>
@@ -325,11 +333,34 @@ export function SpacePicture({
   return (
     <Pane
       id="space-picture"
+      legend={legend}
       title="Space"
       meta={
         metadata
           ? `${metadata.triangles.toLocaleString()} triangles · ${metadata.elements.length} elements`
           : undefined
+      }
+      actions={
+        <GoToPopup
+          hover={(item) => setGoHover(item?.key ?? null)}
+          items={() =>
+            (metadata?.elements ?? []).map((element) => ({
+              key: spaceElementKey(element.handle),
+              name:
+                (!element.handle.linkInstanceId && subjects?.nameOf(element.handle.elementId)) ||
+                pickName(element.handle),
+              id: element.handle.elementId,
+              revitIds: element.handle.linkInstanceId ? [] : [element.handle.elementId],
+              detail: element.handle.uniqueId,
+            }))
+          }
+          onGo={(item) => {
+            setPage({ selected: item.key, row: null }, push);
+            frameOn(
+              meshes ? boundsOfInstances(meshes, (instance) => instance.key === item.key) : null,
+            );
+          }}
+        />
       }
       flush
       scroll="clip"
@@ -367,6 +398,7 @@ export function SpacePicture({
             onPlane={stageViewport(setPage)}
             thumbs={thumbs}
             selected={selected}
+            lit={lit}
             hidden={hidden}
             isolated={isolated}
             layers={layers}
@@ -397,13 +429,11 @@ export function SpacePicture({
         ) : null}
         {readout}
         {status || cut?.error ? (
-          <p
-            role="status"
-            className="t-small text-ink-2 absolute bottom-2 left-1/2 m-0 -translate-x-1/2"
-            data-space-status=""
-          >
-            {status ?? `cuts clip nothing: ${cut!.error}`}
-          </p>
+          <PaneOverlay label="space status" place="br">
+            <p role="status" className="t-small text-ink-2 m-0" data-space-status="">
+              {status ?? `cuts clip nothing: ${cut!.error}`}
+            </p>
+          </PaneOverlay>
         ) : null}
       </div>
     </Pane>

@@ -1,6 +1,7 @@
 import { useNativeObservation } from "#/revit/observation";
 import { RevitTarget, revitTarget } from "@pe/kit/lang/row";
-import { TooltipHint } from "@pe/kit/lang/tooltip";
+import { useList } from "@pe/kit/lang/collection";
+import { PlainList } from "@pe/kit/lang/list-view";
 /**
  * The per-run panel, the way RHVAC lays one duct out: its straight length, the design loss per
  * 100 ft against its own actual rate, its roughness, the additional SP loss stated on it, and the
@@ -105,6 +106,11 @@ export function RunDetail({
   light: (ids: readonly number[] | null) => void;
 }) {
   const observation = useNativeObservation();
+  const list = useList({
+    items: run.parts,
+    keyOf: (part) => `${part.id}:${run.parts.indexOf(part)}`,
+    search: (part) => ({ text: [nameOf(part.id), part.desc], ids: [part.id] }),
+  });
   const over = run.rate != null && run.rate > designRate;
   return (
     <section
@@ -140,31 +146,24 @@ export function RunDetail({
         </dd>
         <dd className="text-ink-mute">stated drops</dd>
       </dl>
-      <div className="text-ink-2 mt-1.5 grid grid-cols-[1fr_auto_auto] gap-x-3">
-        <span>fittings</span>
-        <span className="text-right">eq ft</span>
-        <span className="text-right">SP loss</span>
-      </div>
-      {run.parts.length ? (
-        <ul className="grid grid-cols-[1fr_auto_auto] gap-x-3" data-e-parts="">
-          {run.parts.map((part, i) => (
-            <li key={`${part.id}:${i}`} className="contents" onMouseEnter={() => light([part.id])}>
-              <RevitTarget ids={[part.id]} scope={observation.scope}>
-                <TooltipHint content={part.desc}>
-                  <span className="truncate">
-                    {nameOf(part.id)}
-                    {part.stated ? <span className="text-ink-mute"> · stated</span> : null}
-                  </span>
-                </TooltipHint>
-                <span className="face-mono text-right">{fmtFt(part.eqFt)}</span>
-                <span className="face-mono text-right">{fmt(part.dp, 4)}</span>
-              </RevitTarget>
-            </li>
-          ))}
-        </ul>
-      ) : (
-        <p className="text-ink-mute">no fitting before the next duct</p>
-      )}
+      <RevitTarget scope={observation.scope}>
+        <div data-e-parts="">
+          <PlainList
+            list={list}
+            aria-label="run fittings"
+            columns={{ label: "fittings", meta: "eq ft · SP loss" }}
+            empty={{ message: "no fittings", exit: "Select another run" }}
+            row={(part) => ({
+              label: nameOf(part.id),
+              aside: part.stated ? "stated" : undefined,
+              title: part.desc,
+              revitIds: [part.id],
+              onMouseEnter: () => light([part.id]),
+              meta: `${fmtFt(part.eqFt)} · ${fmt(part.dp, 4)}`,
+            })}
+          />
+        </div>
+      </RevitTarget>
     </section>
   );
 }

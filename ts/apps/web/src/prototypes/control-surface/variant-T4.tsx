@@ -174,7 +174,7 @@ export default function Variant() {
               <>
                 <div className="t-prose mb-1">Write 3 schedules in HCB-48 Mechanical</div>
                 <pre
-                  data-surface="recess"
+                  data-surface="support"
                   className="t-small face-mono overflow-auto rounded-control p-2"
                 >
                   {APPROVAL_ARGS}
@@ -187,7 +187,7 @@ export default function Variant() {
                   HCB-48 family <span className="face-mono text-ink-2">22 changes</span>
                 </div>
                 <div
-                  data-surface="recess"
+                  data-surface="support"
                   className="t-small face-mono flex flex-col gap-0.5 rounded-control p-2"
                 >
                   {PROPOSAL_LINES.map((l) => (

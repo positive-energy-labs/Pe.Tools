@@ -1,3 +1,4 @@
+import { reachProps } from "./reach";
 /**
  * The cell: one grammar for a value at any scale (table td, card line, key specimen).
  * Body fill is only a pea proposal or locked; bold is only unsaved; one squiggle wins; icons
@@ -282,6 +283,7 @@ export function StateCell(props: StateCellProps) {
     return (
       <TooltipHint content={cellFactsText(props) ?? undefined}>
         <span
+          {...reachProps()}
           ref={rootRef}
           tabIndex={ownHost ? 0 : undefined}
           className={slots.base()}
@@ -463,6 +465,7 @@ export function StateCell(props: StateCellProps) {
             </span>
           ) : null}
           <span
+            {...reachProps()}
             className={slots.base()}
             data-body={read.body ?? undefined}
             data-damage={props.damage || undefined}

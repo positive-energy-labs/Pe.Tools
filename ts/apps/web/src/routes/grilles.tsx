@@ -25,7 +25,7 @@ import { useMemo, type SetStateAction } from "react";
 
 import { FactChip } from "@pe/kit/lang/chip";
 import { Button } from "@pe/kit/lang/button";
-import { Pane, PaneSplit } from "#/components/lang/pane";
+import { Pane, PaneSplit } from "@pe/kit/lang/pane";
 import { Surface } from "@pe/kit/lang/surface";
 import { FieldChart, stepField } from "#/grilles/chart";
 import { ExportSheet } from "#/grilles/export";
@@ -114,7 +114,7 @@ function GrillesRoute() {
       }
     >
       {active && !drawingCollapsed && (
-        <div data-surface="artifact" className="h-full overflow-auto">
+        <div data-surface="page" className="h-full overflow-auto">
           <SpecDrawing g={active} set={setAll} px={26} />
         </div>
       )}
@@ -160,7 +160,12 @@ function GrillesRoute() {
   );
 
   const chart = (
-    <Pane flush title="field" meta={`${field.length} buildable`}>
+    <Pane
+      flush
+      title="field"
+      meta={`${field.length} buildable`}
+      legend={<KeyLegend keys={FIELD_KEYS} lead={FIELD_KEYS.length} bind={false} />}
+    >
       {active && (
         <TooltipHint content="Focus, then arrow keys: left/right walk qty, up/down walk opening width">
           <div
@@ -174,7 +179,6 @@ function GrillesRoute() {
             }}
           >
             <FieldChart field={field} active={active} onPick={(p) => set(active.id, p)} />
-            <KeyLegend keys={FIELD_KEYS} lead={FIELD_KEYS.length} bind={false} className="mx-1" />
           </div>
         </TooltipHint>
       )}

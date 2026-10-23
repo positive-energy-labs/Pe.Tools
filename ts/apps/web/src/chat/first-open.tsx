@@ -169,7 +169,7 @@ function OwnAppDoor({ host }: { host: string }) {
               {copied === snippet.app ? "copied" : "copy"}
             </Button>
           </div>
-          <pre className="face-mono overflow-auto rounded-sm px-2 py-1" data-surface="recess">
+          <pre className="face-mono overflow-auto rounded-sm px-2 py-1" data-surface="support">
             {snippet.text}
           </pre>
         </div>

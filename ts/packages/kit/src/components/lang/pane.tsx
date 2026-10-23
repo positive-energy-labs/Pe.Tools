@@ -1,10 +1,23 @@
 import { TooltipHint } from "@pe/kit/lang/tooltip";
-import { Component, Suspense, useRef, type Key, type ReactNode } from "react";
+import {
+  Children,
+  Component,
+  Fragment,
+  Suspense,
+  createContext,
+  isValidElement,
+  useContext,
+  useRef,
+  useState,
+  type Key,
+  type ReactNode,
+} from "react";
 
-import { reportFault } from "#/host/diagnostics";
+import { createPortal } from "react-dom";
+import { ButtonGroup } from "./button-group";
 
-import { Floater } from "#/components/lang/floater";
-import { PaneStrip, type PaneStripProps } from "#/components/lang/pane-strip";
+import { Floater, type FloaterSpec } from "@pe/kit/lang/floater";
+import { PaneStrip, type PaneStripProps } from "@pe/kit/lang/pane-strip";
 import { KeyScope, useDeclaredGestures } from "@pe/kit/keys";
 import { KeyLegend } from "@pe/kit/lang/key-hint";
 import { POINTER_WORD } from "@pe/kit/lang/gesture-glyph";
@@ -13,6 +26,41 @@ import { tv, type VariantProps } from "@pe/kit/lib/tv";
 
 import { Rail } from "@pe/kit/lang/rail";
 import "@pe/kit/lang/pane.css";
+
+const PaneFaultContext = createContext<((error: unknown) => void) | undefined>(undefined);
+/** The application supplies its diagnostics sink once; kit has no host dependency. */
+export function PaneFaultProvider({
+  onFault,
+  children,
+}: {
+  onFault: (error: unknown) => void;
+  children: ReactNode;
+}) {
+  return <PaneFaultContext value={onFault}>{children}</PaneFaultContext>;
+}
+const PaneOverlayContext = createContext<HTMLElement | null | undefined>(undefined);
+/** Nested furniture joins the pane field so floaters yield in one DOM order. */
+export function PaneOverlay({
+  label,
+  place = "tl",
+  children,
+}: {
+  label: string;
+  place?: FloaterSpec["place"];
+  children: ReactNode;
+}) {
+  const field = useContext(PaneOverlayContext);
+  const overlay = (
+    <Floater spec={{ key: label, label, place, open: true, render: () => children }} />
+  );
+  return field === undefined ? overlay : field ? createPortal(overlay, field) : null;
+}
+const hasContent = (node: ReactNode): boolean =>
+  Children.toArray(node).some((child) =>
+    isValidElement<{ children?: ReactNode }>(child) && child.type === Fragment
+      ? hasContent(child.props.children)
+      : child !== "",
+  );
 
 function PaneGestureLegend({
   host,
@@ -29,27 +77,26 @@ function PaneGestureLegend({
   );
   if (!gestures.length && children == null) return null;
   return (
-    <div
-      data-slot="pane-legend"
-      className="absolute bottom-2 left-2 flex flex-col items-start gap-1"
-    >
-      {children}
-      {gestures.length ? (
-        <KeyLegend
-          lead={0}
-          keys={gestures.map(({ keys, pointer, label }) => ({
-            keys,
-            pointer: pointer && POINTER_WORD[pointer],
-            does: label,
-          }))}
-        />
-      ) : null}
-    </div>
+    <PaneOverlay label="picture legend" place="bl">
+      <div data-slot="pane-legend" className="flex flex-col items-start gap-1">
+        {children}
+        {gestures.length ? (
+          <KeyLegend
+            lead={0}
+            keys={gestures.map(({ keys, pointer, label }) => ({
+              keys,
+              pointer: pointer && POINTER_WORD[pointer],
+              does: label,
+            }))}
+          />
+        ) : null}
+      </div>
+    </PaneOverlay>
   );
 }
 
 // A pane is a header, a scrolling body and an error boundary; it is also a key scope, so a child's
-// `useScopeKeys` binds while focus is inside it. No `title` and no `tabs` draws no header.
+// `useScopeKeys` binds while focus is inside it. Empty chrome draws no header.
 export const paneRecipe = tv({
   slots: {
     root: "relative flex size-full min-h-0 min-w-0 flex-col overflow-visible",
@@ -72,6 +119,8 @@ export const paneRecipe = tv({
 
 interface PaneProps extends VariantProps<typeof paneRecipe>, PaneStripProps {
   legend?: ReactNode;
+  /** Corner furniture shares drag, shrink and yield with the pane floaters. */
+  overlay?: ReactNode;
   id?: string;
   title?: ReactNode;
   /** The title is the thing shown (a thread, a schedule), drawn as the page heading. */
@@ -96,6 +145,8 @@ export class PaneErrorBoundary extends Component<
   { children: ReactNode; what?: ReactNode; onRetry?: () => void },
   { failed: boolean; message: string }
 > {
+  static contextType = PaneFaultContext;
+  declare context: React.ContextType<typeof PaneFaultContext>;
   state = { failed: false, message: "" };
 
   static getDerivedStateFromError(error: unknown) {
@@ -104,7 +155,7 @@ export class PaneErrorBoundary extends Component<
 
   // The pane boundary owns its fault; an inner boundary that caught first owns its own.
   componentDidCatch(error: unknown) {
-    reportFault({ code: "pane.failed" }, error);
+    this.context?.(error);
   }
 
   render() {
@@ -148,28 +199,34 @@ export function Pane({
   modes,
   floaters,
   legend,
+  overlay,
   layers,
   children,
 }: PaneProps) {
   const { root, body } = paneRecipe({ scroll, flush });
   const rootRef = useRef<HTMLElement>(null);
+  const [field, setField] = useState<HTMLDivElement | null>(null);
   const strip =
-    modes != null || floaters != null || layers != null ? (
+    (modes?.options.length ?? 0) > 0 ||
+    (floaters?.length ?? 0) > 0 ||
+    (layers?.options.length ?? 0) > 0 ? (
       <PaneStrip modes={modes} floaters={floaters} layers={layers} />
     ) : null;
   const heading = (
     <>
-      {tabs ?? (
+      {hasContent(tabs) ? (
+        tabs
+      ) : hasContent(title) ? (
         <h2 data-slot="pane-title" data-heading={name ? "name" : undefined}>
           {title}
         </h2>
-      )}
-      {tabs == null && meta != null && (
+      ) : null}
+      {!hasContent(tabs) && hasContent(meta) && (
         <TooltipHint content={typeof meta === "string" ? meta : undefined}>
           <span className="face-mono t-small min-w-0 truncate text-ink-mute">{meta}</span>
         </TooltipHint>
       )}
-      {help != null && (
+      {hasContent(help) && (
         <span className="shrink-0 self-center">
           <TooltipHint>{help}</TooltipHint>
         </span>
@@ -214,7 +271,7 @@ export function Pane({
         }}
         className={root()}
       >
-        {(title != null || tabs != null) && (
+        {[title, meta, actions, leadingActions, tabs, help, strip].some(hasContent) && (
           <div data-slot="pane-header" data-title-align={titleAlign} className="shrink-0">
             <Rail
               lead={
@@ -225,13 +282,9 @@ export function Pane({
               }
               center={titleAlign === "center" ? heading : undefined}
               trail={
-                actions != null || strip != null ? (
+                hasContent(actions) || strip != null ? (
                   <div data-slot="pane-actions" className="flex shrink-0 items-center">
-                    {actions != null && (
-                      <span data-slot="pane-action-group" className="flex items-center gap-1">
-                        {actions}
-                      </span>
-                    )}
+                    {hasContent(actions) && <ButtonGroup>{actions}</ButtonGroup>}
                     {strip}
                   </div>
                 ) : undefined
@@ -239,11 +292,22 @@ export function Pane({
             />
           </div>
         )}
-        <div data-slot="pane-field" className="relative flex min-h-0 min-w-0 flex-1 flex-col">
-          {paneBody}
-          {floaters?.map((spec) => (spec.open ? <Floater key={spec.key} spec={spec} /> : null))}
-          <PaneGestureLegend host={rootRef}>{legend}</PaneGestureLegend>
-        </div>
+        <PaneOverlayContext value={field}>
+          <div
+            ref={setField}
+            data-slot="pane-field"
+            className="relative flex min-h-0 min-w-0 flex-1 flex-col"
+          >
+            {paneBody}
+            {hasContent(overlay) ? (
+              <PaneOverlay label="pane overlay" place="tr">
+                {overlay}
+              </PaneOverlay>
+            ) : null}
+            {floaters?.map((spec) => (spec.open ? <Floater key={spec.key} spec={spec} /> : null))}
+            <PaneGestureLegend host={rootRef}>{legend}</PaneGestureLegend>
+          </div>
+        </PaneOverlayContext>
       </section>
     </KeyScope>
   );

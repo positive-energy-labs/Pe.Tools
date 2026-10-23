@@ -5,7 +5,7 @@ import { Button } from "@pe/kit/lang/button";
 import { Table } from "@pe/kit/table/table";
 import { TableFrame } from "#/components/master-table/table-frame";
 import { fmtNum } from "@pe/kit/table/model";
-import { Pane, PaneSplit } from "#/components/lang/pane";
+import { Pane, PaneSplit } from "@pe/kit/lang/pane";
 import { RoomPanelFromStore } from "#/takeoff/room-panel";
 import type { AtlasRow as Row } from "#/takeoff/controller";
 import { useAtlasWorkspace } from "#/takeoff/atlas-context";

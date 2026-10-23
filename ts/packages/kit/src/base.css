@@ -117,6 +117,79 @@
   --z-modal: 50;
   --z-notice: 60;
   --z-dev: 9999;
+
+  /* Revit facsimile tokens (consumed only by src/revit/revit.css). A deliberate foreign body: the
+     explainers compose fake Revit UI without images, so Revit's light-theme chrome lives here, the
+     one file allowed to name a colour. Not house style; never consume --rv-* elsewhere. */
+  /* Sampled from Revit 2025 on Windows 11 at 200%; --rv-hair is one device pixel on a 2x screen. */
+  --rv-font: "Segoe UI", "Segoe UI Variable", Tahoma, system-ui, sans-serif;
+  --rv-type: 12px;
+  /* 8pt, GDI-hinted to 10.5px at 200%; 9pt is --rv-type. */
+  --rv-type-small: 10.5px;
+  --rv-type-instruction: 16px;
+  --rv-type-tiny: 11px;
+  --rv-type-cmd: 14px;
+  --rv-hair: 0.5px;
+  --rv-radius: 2px;
+  --rv-window-radius: 8px;
+  --rv-chrome: #f0f0f0;
+  --rv-chrome-2: #e5e5e5;
+  --rv-chrome-3: #d9d9d9;
+  --rv-caption: #f2f2f9;
+  --rv-frame: #afafaf;
+  --rv-paper: #ffffff;
+  --rv-line: #adadad;
+  --rv-line-soft: #dcdcdc;
+  --rv-ink: #000000;
+  --rv-ink-2: #444444;
+  --rv-ink-mute: #6d6d6d;
+  --rv-ink-off: #838383;
+  --rv-ink-faint: #8a8a8a;
+  --rv-blue: #0063b1;
+  --rv-instruction: #003399;
+  --rv-focus: #0078d4;
+  --rv-focus-deep: #006bbe;
+  --rv-check: #005fb8;
+  --rv-select: #cce8ff;
+  --rv-select-line: #99d1ff;
+  --rv-hover: #e5f3ff;
+  --rv-button: #fdfdfd;
+  --rv-button-line: #d0d0d0;
+  --rv-button-base: #bababa;
+  --rv-button-off: #f9f9f9;
+  --rv-button-off-line: #e9e9e9;
+  --rv-field-line: #ececec;
+  --rv-field-base: #838383;
+  --rv-combo-off: #fafafa;
+  --rv-combo-off-line: #eaeaea;
+  --rv-chevron-off: #acacac;
+  --rv-list-line: #828790;
+  --rv-well-outer: #a0a0a0;
+  --rv-well-inner: #696969;
+  --rv-well-light: #e3e3e3;
+  --rv-tree-select: #0078d4;
+  --rv-tree-dot: #a0a0a0;
+  --rv-tree-box: #919191;
+  --rv-tree-box-fill: #e4e4e4;
+  --rv-tree-minus: #4b63a7;
+  --rv-grid-line: #6d6d6d;
+  --rv-band: #99b4d1;
+  --rv-scroll-thumb: #858585;
+  --rv-tool-off: #a0a0a0;
+  --rv-grip: #c8c8c8;
+  /* explainer marks drawn over the facsimile (change rings, note badges); not a Revit colour */
+  --rv-mark: #e8590c;
+  --rv-type-caption: 14px;
+  --rv-warning: #f6c000;
+  --rv-cmd-arrow: #2c9d3b;
+  --rv-error: #c42b1c;
+  --rv-ribbon-modify: #dbe9c6;
+  --rv-ribbon-modify-line: #b9cf9a;
+  --rv-file: #1f6fc0;
+  --rv-number: #1d5a9e;
+  --rv-glyph: #5a7fa8;
+  --rv-glyph-2: #8ea9c9;
+  --rv-shadow: rgb(0 0 0 / 25%);
 }
 
 /* The tray's compact scale (owner verdict S2, 2026-10-14). surface-host marks <html data-shell>.
@@ -137,7 +210,6 @@
   --item-pad-x: 6px;
   --control-pad-x: 4px;
 }
-
 @layer base {
   [data-pe],
   [data-pe] * {
@@ -167,10 +239,6 @@
   :where([data-pe], [data-pe] *) {
     scrollbar-width: thin;
     scrollbar-color: transparent transparent;
-  }
-
-  [data-pe] :hover {
-    scrollbar-color: color-mix(in srgb, var(--pe-ink) 22%, transparent) transparent;
   }
 
   [data-pe].dark {
@@ -220,10 +288,6 @@
   [data-pe] a {
     color: var(--pe-nav);
     text-underline-offset: 2px;
-  }
-
-  [data-pe] a:hover {
-    text-decoration: underline;
   }
 
   [data-pe] code {
@@ -289,13 +353,6 @@
   --pe-on: var(--pe-recess);
 }
 
-[data-pe] .veil:hover {
-  background-image: var(--fill-veil);
-}
-[data-pe] .veil:active {
-  background-image: var(--fill-press);
-}
-
 [data-pe] .hairline {
   outline: 1px solid var(--pe-line-2);
   outline-offset: 0;
@@ -333,6 +390,7 @@
     transform: rotate(360deg);
   }
 }
+
 /* Broken lines — three roles, one authority. No second dash authority exists; a drawing
    serialized without a stylesheet reads these same values through `lib/token.ts`.
      seam       declared, with nothing real behind it. The one UI broken edge.
@@ -477,19 +535,6 @@
   font-weight: var(--weight-regular);
   color: var(--pe-ink-2);
 }
-/* A column head's trigger: a plain label at rest, the control frame only when touched. The border
-   is reserved transparent and the padding fixed, so the label never moves; the pad less the
-   border puts the label on the body cells' inset. */
-[data-pe] .dl-button[data-colhead-trigger] {
-  height: var(--item-h);
-  padding: 0 calc(var(--item-pad-x) - 1px);
-  border-color: transparent;
-  background-color: transparent;
-}
-[data-pe] .dl-button[data-colhead-trigger]:is(:hover, :focus-visible, [data-popup-open]) {
-  border-color: var(--pe-line-2);
-  background-color: color-mix(in srgb, var(--pe-line) 20%, transparent);
-}
 [data-pe] .face-mono {
   font-family: var(--font-mono);
   font-variant-numeric: tabular-nums;
@@ -513,79 +558,4 @@
 }
 [data-pe] .t-sentence::first-letter {
   text-transform: uppercase;
-}
-
-/* Revit facsimile tokens (consumed only by src/revit/revit.css). A deliberate foreign body: the
-   explainers compose fake Revit UI without images, so Revit's light-theme chrome lives here, the
-   one file allowed to name a colour. Not house style; never consume --rv-* elsewhere. */
-:root {
-  /* Sampled from Revit 2025 on Windows 11 at 200%; --rv-hair is one device pixel on a 2x screen. */
-  --rv-font: "Segoe UI", "Segoe UI Variable", Tahoma, system-ui, sans-serif;
-  --rv-type: 12px;
-  /* 8pt, GDI-hinted to 10.5px at 200%; 9pt is --rv-type. */
-  --rv-type-small: 10.5px;
-  --rv-type-instruction: 16px;
-  --rv-type-tiny: 11px;
-  --rv-type-cmd: 14px;
-  --rv-hair: 0.5px;
-  --rv-radius: 2px;
-  --rv-window-radius: 8px;
-  --rv-chrome: #f0f0f0;
-  --rv-chrome-2: #e5e5e5;
-  --rv-chrome-3: #d9d9d9;
-  --rv-caption: #f2f2f9;
-  --rv-frame: #afafaf;
-  --rv-paper: #ffffff;
-  --rv-line: #adadad;
-  --rv-line-soft: #dcdcdc;
-  --rv-ink: #000000;
-  --rv-ink-2: #444444;
-  --rv-ink-mute: #6d6d6d;
-  --rv-ink-off: #838383;
-  --rv-ink-faint: #8a8a8a;
-  --rv-blue: #0063b1;
-  --rv-instruction: #003399;
-  --rv-focus: #0078d4;
-  --rv-focus-deep: #006bbe;
-  --rv-check: #005fb8;
-  --rv-select: #cce8ff;
-  --rv-select-line: #99d1ff;
-  --rv-hover: #e5f3ff;
-  --rv-button: #fdfdfd;
-  --rv-button-line: #d0d0d0;
-  --rv-button-base: #bababa;
-  --rv-button-off: #f9f9f9;
-  --rv-button-off-line: #e9e9e9;
-  --rv-field-line: #ececec;
-  --rv-field-base: #838383;
-  --rv-combo-off: #fafafa;
-  --rv-combo-off-line: #eaeaea;
-  --rv-chevron-off: #acacac;
-  --rv-list-line: #828790;
-  --rv-well-outer: #a0a0a0;
-  --rv-well-inner: #696969;
-  --rv-well-light: #e3e3e3;
-  --rv-tree-select: #0078d4;
-  --rv-tree-dot: #a0a0a0;
-  --rv-tree-box: #919191;
-  --rv-tree-box-fill: #e4e4e4;
-  --rv-tree-minus: #4b63a7;
-  --rv-grid-line: #6d6d6d;
-  --rv-band: #99b4d1;
-  --rv-scroll-thumb: #858585;
-  --rv-tool-off: #a0a0a0;
-  --rv-grip: #c8c8c8;
-  /* explainer marks drawn over the facsimile (change rings, note badges); not a Revit colour */
-  --rv-mark: #e8590c;
-  --rv-type-caption: 14px;
-  --rv-warning: #f6c000;
-  --rv-cmd-arrow: #2c9d3b;
-  --rv-error: #c42b1c;
-  --rv-ribbon-modify: #dbe9c6;
-  --rv-ribbon-modify-line: #b9cf9a;
-  --rv-file: #1f6fc0;
-  --rv-number: #1d5a9e;
-  --rv-glyph: #5a7fa8;
-  --rv-glyph-2: #8ea9c9;
-  --rv-shadow: rgb(0 0 0 / 25%);
 }

@@ -1,5 +1,5 @@
 import { NativeObservationScope } from "#/revit/observation";
-import { PaneSplit } from "#/components/lang/pane";
+import { PaneSplit } from "@pe/kit/lang/pane";
 import { OutcomeLine } from "@pe/kit/lang/outcome";
 import { Surface } from "@pe/kit/lang/surface";
 import { AtlasNavigation } from "#/takeoff/atlas-navigation";

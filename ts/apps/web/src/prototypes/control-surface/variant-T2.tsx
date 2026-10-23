@@ -31,7 +31,7 @@ export default function Variant() {
               HCB-48 family <span className="face-mono text-ink-2">22 changes</span>
             </div>
             <div
-              data-surface="recess"
+              data-surface="support"
               className="t-small face-mono flex flex-col gap-0.5 rounded-control p-2"
             >
               {PROPOSAL_LINES.map((l) => (
@@ -60,7 +60,7 @@ export default function Variant() {
             <Who what="approval requested" onClose={() => hide("b")} />
             <div className="t-prose">Pea wants to write 3 schedules.</div>
             <pre
-              data-surface="recess"
+              data-surface="support"
               className="t-small face-mono overflow-auto rounded-control p-2"
             >
               {APPROVAL_ARGS}

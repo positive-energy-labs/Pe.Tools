@@ -10,6 +10,7 @@ import { useLayoutEffect, useRef, useState, type ReactNode } from "react";
 
 import { useScopeKeys, useScopeLive, type Chord, type ScopeKey } from "@pe/kit/keys";
 import { Button } from "@pe/kit/lang/button";
+import { ButtonGroup } from "./button-group";
 import { Popover, PopoverContent, PopoverTrigger } from "@pe/kit/lang/popover";
 
 import type { FloaterSpec } from "./floater";
@@ -172,9 +173,7 @@ export function PaneStrip({ modes, floaters, layers }: PaneStripProps) {
       {floaters &&
         floaters.length > 0 &&
         (fold < 2 ? (
-          <span role="group" aria-label="floaters" className="flex items-center gap-1">
-            {floaterButtons}
-          </span>
+          <ButtonGroup label="floaters">{floaterButtons}</ButtonGroup>
         ) : (
           <Folded
             label="floaters"
@@ -185,9 +184,7 @@ export function PaneStrip({ modes, floaters, layers }: PaneStripProps) {
         ))}
       {layers &&
         (fold < 1 ? (
-          <span role="group" aria-label="layers" className="flex items-center gap-1">
-            {layerButtons}
-          </span>
+          <ButtonGroup label="layers">{layerButtons}</ButtonGroup>
         ) : (
           <Folded label="layers" count={`${layers.value.length}/${layers.options.length}`}>
             {layerButtons}

@@ -1,5 +1,5 @@
 import { useList } from "@pe/kit/lang/collection";
-import { PlainList } from "@pe/kit/lang/list-view";
+import { ListView, PlainList } from "@pe/kit/lang/list-view";
 /**
  * The list grammar's swatch frames: the one Row (its recipe and every state), and the containers
  * that draw it — List inline, ListPopup on a trigger, and the in-cell list. The full comparison of
@@ -13,6 +13,7 @@ import {
   ListChips,
   ListInput,
   ListPopup,
+  GoToPopup,
   ListSegmentInput,
   PopupFrame,
   CommandPalette,
@@ -26,6 +27,10 @@ import { Table } from "@pe/kit/table/table";
 
 import { RecipeGrid, SpecimenFrame } from "./recipe-grid";
 
+const VAST_ROWS = Array.from({ length: 1000 }, (_, index) => ({
+  key: String(index),
+  name: `Row ${index + 1}`,
+}));
 const KINDS = ["String", "Integer", "Double", "ElementId"];
 const common = {
   items: KINDS,
@@ -36,9 +41,33 @@ const common = {
 };
 
 export function LangListSpecimens() {
+  const vast = useList({
+    items: VAST_ROWS,
+    keyOf: (item) => item.key,
+    search: (item) => ({ text: [item.name] }),
+    groups: { of: (item) => `Section ${Math.floor(Number(item.key) / 250) + 1}` },
+  });
   const plain = useList({ ...common, search: (kind) => ({ text: [kind] }) });
   return (
     <>
+      <SpecimenFrame name="ListView - 1000 rows - minimap" importPath="@pe/kit/lang/minimap">
+        <ListView
+          list={vast}
+          aria-label="1000 rows"
+          maxHeight="calc(var(--item-h) * 12)"
+          row={(item) => ({
+            label: item.name,
+            damage: Number(item.key) % 137 === 0 ? "Needs repair" : undefined,
+          })}
+          empty={{ message: "No rows", exit: "Clear search" }}
+        />
+      </SpecimenFrame>
+      <SpecimenFrame name="GoToPopup" importPath="@pe/kit/lang/list-popup">
+        <GoToPopup
+          items={() => KINDS.map((name, id) => ({ key: name, name, id }))}
+          onGo={() => {}}
+        />
+      </SpecimenFrame>
       <SpecimenFrame name="PlainList" importPath="@pe/kit/lang/list-view">
         <PlainList
           list={plain}

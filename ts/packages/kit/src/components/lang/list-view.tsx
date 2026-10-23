@@ -3,6 +3,8 @@ import { useVirtualizer } from "@tanstack/react-virtual";
 import {
   memo,
   useEffect,
+  useCallback,
+  useMemo,
   useLayoutEffect,
   useRef,
   useState,
@@ -13,6 +15,7 @@ import {
 } from "react";
 import { ChevronDown, ChevronRight, ChevronUp } from "lucide-react";
 
+import { Minimap, MINIMAP_FROM, type MinimapRange, type MinimapMark } from "./gutter-minimap";
 import { Button } from "./button";
 import { type ListController, type ListItem } from "./collection";
 import { EmptyState } from "./empty";
@@ -165,6 +168,46 @@ function ListRenderer<T, Sort extends string>(props: ListViewProps<T, Sort> & { 
       .getElementById(list.collection.rowProps(list.collection.cursor).id)
       ?.scrollIntoView?.({ block: "nearest" });
   }, [request]);
+  const overview = useMemo(() => {
+    const rows: ListItem<T>[] = [];
+    const marks: MinimapMark[] = [];
+    const offsets = new Map<string, number>();
+    for (const section of list.sections) {
+      offsets.set(section.key, rows.length);
+      if (section.label) marks.push({ index: rows.length, head: true });
+      if (!section.closed) rows.push(...section.rows);
+    }
+    if (rows.length >= MINIMAP_FROM)
+      rows.forEach((item, index) => {
+        const damage = row(item.item).damage;
+        if (damage || item.branch)
+          marks.push({ index, damage: damage ?? undefined, head: item.branch });
+      });
+    return { rows, marks, offsets };
+  }, [list.sections, row]);
+  const [ranges, setRanges] = useState<Record<string, MinimapRange | null>>({});
+  const [mapHeight, setMapHeight] = useState(0);
+  const reportRange = useCallback((key: string, range: MinimapRange | null, height: number) => {
+    setMapHeight(height);
+    setRanges((old) =>
+      old[key]?.start === range?.start && old[key]?.end === range?.end
+        ? old
+        : { ...old, [key]: range },
+    );
+  }, []);
+  const inView = list.sections.flatMap((section) => {
+    const range = ranges[section.key];
+    const offset = overview.offsets.get(section.key) ?? 0;
+    return range && !section.closed
+      ? [{ start: range.start + offset, end: range.end + offset }]
+      : [];
+  });
+  const mapRange = inView.length
+    ? {
+        start: Math.min(...inView.map((range) => range.start)),
+        end: Math.max(...inView.map((range) => range.end)),
+      }
+    : null;
   const label = props["aria-label"];
   // Rows render through this ref, so a memoized row that skipped a render still acts on today's list.
   const live = useRef(list);
@@ -182,6 +225,19 @@ function ListRenderer<T, Sort extends string>(props: ListViewProps<T, Sort> & { 
       className={`relative min-h-0 min-w-0 w-full${maxHeight ? "" : " shrink-0"}`}
       style={maxHeight ? { maxHeight, overflowY: "auto" } : undefined}
     >
+      {!props.plain && (
+        <Minimap
+          count={overview.rows.length}
+          range={mapRange}
+          scroller={scroller}
+          height={mapHeight}
+          marks={overview.marks}
+          onJump={(index) => {
+            const item = overview.rows[index];
+            if (item) list.reveal(item.key);
+          }}
+        />
+      )}
       {props.bar !== false ? <ListBar list={list} label={label} primary={props.primary} /> : null}
       {props.columns ? (
         <div className="dl-row-colhead" role="presentation" data-tree-columns="">
@@ -224,6 +280,7 @@ function ListRenderer<T, Sort extends string>(props: ListViewProps<T, Sort> & { 
             <button
               type="button"
               data-list-section-head=""
+              data-surface="artifact"
               aria-expanded={!section.closed}
               aria-disabled={!section.collapsible || undefined}
               onClick={(event) => {
@@ -253,6 +310,8 @@ function ListRenderer<T, Sort extends string>(props: ListViewProps<T, Sort> & { 
               plain={props.plain}
               live={live}
               rows={section.rows}
+              sectionKey={section.key}
+              reportRange={overview.rows.length >= MINIMAP_FROM ? reportRange : undefined}
               row={row}
               scroller={scroller}
               estimate={estimate}
@@ -271,6 +330,8 @@ function ListRenderer<T, Sort extends string>(props: ListViewProps<T, Sort> & { 
 
 type SectionBodyProps<T, Sort extends string> = {
   plain?: boolean;
+  sectionKey: string;
+  reportRange?: (key: string, range: MinimapRange | null, height: number) => void;
   list: ListController<T, Sort>;
   live: RefObject<ListController<T, Sort>>;
   rows: readonly ListItem<T>[];
@@ -411,6 +472,8 @@ const ListItemView = memo(
 ) as typeof ListItemViewInner;
 
 function VirtualSectionBody<T, Sort extends string>({
+  sectionKey,
+  reportRange,
   list,
   live,
   rows,
@@ -463,6 +526,19 @@ function VirtualSectionBody<T, Sort extends string>({
     scrollPaddingStart: headroom,
     scrollPaddingEnd: headroom,
   });
+  const entries = virtual.getVirtualItems();
+  const range = virtual.range;
+  const offset = virtual.scrollOffset ?? 0;
+  const height = virtual.scrollRect?.height ?? 0;
+  const visible =
+    margin !== null && offset + height > margin && offset < margin + virtual.getTotalSize();
+  useLayoutEffect(() => {
+    reportRange?.(
+      sectionKey,
+      visible && range ? { start: range.startIndex, end: range.endIndex } : null,
+      height,
+    );
+  }, [sectionKey, reportRange, visible, range?.startIndex, range?.endIndex, height]);
   useLayoutEffect(() => landRequest(list, landed));
   const requestedKey = list.collection.cursor;
   const cursorIndex = rows.findIndex((item) => item.key === requestedKey);
@@ -479,7 +555,7 @@ function VirtualSectionBody<T, Sort extends string>({
       className="relative w-full shrink-0"
       style={{ height: virtual.getTotalSize() }}
     >
-      {virtual.getVirtualItems().map((entry) => {
+      {entries.map((entry) => {
         const item = rows[entry.index]!;
         return (
           <div

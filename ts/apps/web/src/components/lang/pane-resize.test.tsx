@@ -3,7 +3,7 @@ import { useState } from "react";
 import { act, cleanup, fireEvent, render, screen } from "@testing-library/react";
 import { afterEach, expect, test, vi } from "vite-plus/test";
 
-import { PaneSplit } from "./pane-resize";
+import { PaneSplit } from "@pe/kit/lang/pane-resize";
 
 afterEach(() => {
   cleanup();

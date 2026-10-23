@@ -1,3 +1,5 @@
+import { useList } from "@pe/kit/lang/collection";
+import { ListView } from "@pe/kit/lang/list-view";
 import { useAtomValue } from "@effect/atom-react";
 import { Key } from "#/components/anatomy";
 import type { ContextBreakdown, ContextItem } from "@pe/agent-contracts/chat-state";
@@ -16,21 +18,16 @@ import {
 } from "../world-cache";
 import { Button } from "@pe/kit/lang/button";
 import {
-  BLAST_BASE,
-  BLAST_TONE,
   CACHE_BASE,
   CACHE_TONE,
   CacheBadge,
-  PILL_BASE,
   PILL_LABEL,
-  PILL_TONE,
   PLAIN_CAP,
   WORLD_ROW,
   fmtTok,
   tone,
 } from "./cap";
 import { whySentence } from "./bar";
-import { PressContent } from "@pe/kit/anatomy/press-content";
 import { Code } from "@pe/kit/lang/code";
 import { TooltipHint } from "@pe/kit/lang/tooltip";
 
@@ -213,17 +210,13 @@ export function SessionStrip({
                     </p>
                   ) : null}
                   {inspect && layer.items.length > 0 ? (
-                    <ul className="m-0 grid list-none gap-[5px] p-0">
-                      {layer.items.map((item, index) => (
-                        <ItemRow
-                          key={index}
-                          item={item}
-                          open={openItems.has(`${layer.id}:${index}`)}
-                          onToggle={() => toggleItem(`${layer.id}:${index}`)}
-                          blast={changed ? blast : null}
-                        />
-                      ))}
-                    </ul>
+                    <ContextItems
+                      items={layer.items}
+                      prefix={layer.id}
+                      openItems={openItems}
+                      onToggle={toggleItem}
+                      blast={changed ? blast : null}
+                    />
                   ) : null}
                 </div>
               ) : null}
@@ -246,63 +239,50 @@ export function SessionStrip({
   );
 }
 
-function ItemRow({
-  item,
-  open,
+function ContextItems({
+  items,
+  prefix,
+  openItems,
   onToggle,
   blast,
 }: {
-  item: ContextItem;
-  open: boolean;
-  onToggle: () => void;
+  items: readonly ContextItem[];
+  prefix: string;
+  openItems: ReadonlySet<string>;
+  onToggle: (key: string) => void;
   blast: Blast | null;
 }) {
-  const hasBody = Boolean(item.body);
+  const list = useList({
+    items,
+    keyOf: (item) => `${prefix}:${items.indexOf(item)}`,
+    search: (item) => ({ text: [item.name, item.src] }),
+    onPick: (item) => onToggle(`${prefix}:${items.indexOf(item)}`),
+    refusalOf: (item) => (item.body ? null : `${item.name} has no body to show.`),
+  });
   return (
-    <li className="overflow-hidden [&>button]:w-full">
-      <Button
-        label={item.name}
-        refusal={hasBody ? null : `${item.name} has no body to show.`}
-        onClick={() => hasBody && onToggle()}
-      >
-        <PressContent geometry="baseline">
-          <span className="min-w-0 flex-1 t-small face-mono">
-            <span className="block overflow-hidden text-ellipsis whitespace-nowrap">
-              {item.name}
-            </span>
-            {item.src ? (
-              <span className="mt-0.5 block overflow-hidden text-ellipsis whitespace-nowrap">
-                {item.src}
-              </span>
-            ) : null}
-          </span>
-          <span className="ml-auto flex items-center gap-1.5 whitespace-nowrap t-small face-mono">
-            {blast ? (
-              <span
-                className={cn(
-                  BLAST_BASE,
-                  !BLAST_TONE[blast] && "hairline-x-faint hairline-y-faint text-ink-2",
-                )}
-                data-tone={BLAST_TONE[blast]}
-                data-wash={BLAST_TONE[blast] ? "" : undefined}
-              >
-                {BLAST_LABEL[blast]}
-              </span>
-            ) : null}
-            {item.state ? (
-              <span className={`${PILL_BASE} ${PILL_TONE[item.state]}`}>
-                {PILL_LABEL[item.state]}
-              </span>
-            ) : null}
-            {item.tokens != null ? <span>{fmtTok(item.tokens)}</span> : null}
-            {hasBody ? (
-              <span className={cn("transition-transform", open && "rotate-90")}>▸</span>
-            ) : null}
-          </span>
-        </PressContent>
-      </Button>
-      {open && item.body ? <Code code={item.body} lang="plaintext" wrap /> : null}
-    </li>
+    <ListView
+      list={list}
+      aria-label="context items"
+      empty={{ message: "No context items", exit: "Send a message" }}
+      row={(item) => {
+        const open = openItems.has(`${prefix}:${items.indexOf(item)}`);
+        return {
+          label: item.name,
+          aside: item.src,
+          active: open,
+          wrap: true,
+          meta: (
+            <>
+              {blast ? `${BLAST_LABEL[blast]} · ` : ""}
+              {item.state ? `${PILL_LABEL[item.state]} · ` : ""}
+              {item.tokens != null ? fmtTok(item.tokens) : ""}
+            </>
+          ),
+          lines: open && item.body ? 2 : 1,
+          sub: open && item.body ? <Code code={item.body} lang="plaintext" wrap /> : undefined,
+        };
+      }}
+    />
   );
 }
 

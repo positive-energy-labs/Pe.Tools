@@ -1,3 +1,9 @@
+import { useList } from "@pe/kit/lang/collection";
+import { PlainList, ListView } from "@pe/kit/lang/list-view";
+import { LeaderDiagram } from "@pe/kit/lang/leader-diagram";
+import { Table } from "@pe/kit/table/table";
+import type { Column } from "@pe/kit/table/model";
+import { ReadCell } from "@pe/kit/table/cells";
 import { TooltipHint } from "@pe/kit/lang/tooltip";
 /**
  * THROWAWAY (protoui round 3, E2): the loss bar the tree draws, and its one-line legend.
@@ -9,7 +15,6 @@ import {
   createContext,
   Fragment,
   useContext,
-  useLayoutEffect,
   useMemo,
   useRef,
   useState,
@@ -20,8 +25,6 @@ import type { DuctSnapshot } from "@pe/ducts-domain/types";
 import type { Priced } from "@pe/ducts-domain/pricing";
 import { tableOf } from "@pe/ducts-domain/pricing";
 import { Button } from "@pe/kit/lang/button";
-import { Input } from "@pe/kit/lang/input";
-import { SearchControl } from "@pe/kit/lang/search-control";
 import type { LossesWork } from "../../work";
 import { assignFamilyRule } from "./rule-assignment";
 import { barRows, ruleConditions, selectedBarRow, type BarRow } from "./bar-model";
@@ -229,6 +232,12 @@ export function systemIssues(s: {
  * content. Each line opens the system, where its inbox rows are. The picture's plate wears the same mark.
  */
 export function SystemMark({ issues, open }: { issues: readonly SystemIssue[]; open: () => void }) {
+  const list = useList({
+    items: issues,
+    keyOf: (issue) => issue.says,
+    search: (issue) => ({ text: [issue.says] }),
+    onPick: open,
+  });
   const worst = issues.find((i) => i.tone === "alarm") ?? issues[0];
   if (!worst) return null;
   return (
@@ -254,21 +263,14 @@ export function SystemMark({ issues, open }: { issues: readonly SystemIssue[]; o
         </span>
       </PopoverTrigger>
       <PopoverContent facing className="w-72">
-        <ul className="flex flex-col gap-1" data-e-issues="" data-facing-rows>
-          {issues.map((issue) => (
-            <li key={issue.says}>
-              <button
-                type="button"
-                className="veil flex w-full items-baseline gap-1.5 rounded-control px-1 py-0.5 text-left"
-                data-tone={issue.tone}
-                onClick={open}
-              >
-                <span className="mt-1 inline-block size-1.5 shrink-0 rounded-full bg-current" />
-                <span className="text-ink">{issue.says}</span>
-              </button>
-            </li>
-          ))}
-        </ul>
+        <div data-e-issues="" data-facing-rows>
+          <PlainList
+            list={list}
+            aria-label="system issues"
+            empty={{ message: "No issues", exit: "Open the system" }}
+            row={(issue) => ({ label: issue.says, wrap: true })}
+          />
+        </div>
       </PopoverContent>
     </Popover>
   );
@@ -359,12 +361,9 @@ function BreakdownList({
   barW: number;
 }) {
   const context = useContext(RuleContext);
-  const root = useRef<HTMLDivElement>(null);
-  const bar = useRef<HTMLSpanElement>(null);
   const side = usePopoverSide();
   const [expanded, setExpanded] = useState(false);
   const [selected, setSelected] = useState<{ key: string; ids: readonly number[] } | null>(null);
-  const [leaders, setLeaders] = useState<{ key: string; d: string }[]>([]);
   const entries = useMemo(
     () => barRows(split, scale, context?.nodes ?? new Map()),
     [split, scale, context?.nodes],
@@ -400,52 +399,96 @@ function BreakdownList({
   const rows = flip ? [...bare, ...ordered] : [...ordered, ...bare];
   const barCol = Math.min(144, Math.max(96, barW));
 
-  useLayoutEffect(() => {
-    const box = root.current;
-    if (!box) return;
-    const measure = () => {
-      const origin = box.getBoundingClientRect();
-      const track = bar.current?.getBoundingClientRect();
-      if (!track) return;
-      const y0 = (flip ? track.top : track.bottom) - origin.top;
-      const x0 = track.left - origin.left;
-      setLeaders(
-        rows.flatMap((row) => {
-          const tr = box.querySelector(`[data-loss-row="${CSS.escape(row.key)}"]`);
-          if (!tr || !row.at.length) return [];
-          const rect = tr.getBoundingClientRect();
-          const y = rect.top + rect.height / 2 - origin.top;
-          return [
-            {
-              key: row.key,
-              d: row.at
-                .map(
-                  (at) =>
-                    `M${x0 + at * track.width} ${y0} V${y} H${barLeft ? x0 + track.width : x0}`,
-                )
-                .join(" "),
-            },
-          ];
-        }),
-      );
-    };
-    measure();
-    const watch = new ResizeObserver(measure);
-    watch.observe(box);
-    return () => watch.disconnect();
-  }, [split, scale, side, expanded, barCol, selected]);
-
-  const track = (
-    <span
-      ref={bar}
-      className="relative block h-3 w-full"
-      style={{ backgroundColor: tokenRef("line") }}
-    >
-      <SplitFill split={split} scale={scale} hint={false} />
-    </span>
-  );
-  const number = "face-mono tabular-nums text-right px-1 align-middle";
-  const zone = <td aria-hidden className="p-1" />;
+  const choose = (row: BarRow) =>
+    row.key === "other" ? setExpanded(true) : setSelected({ key: row.key, ids: row.ids });
+  const columns: Column<BarRow>[] = [
+    {
+      key: "loss",
+      label: "in-wg",
+      right: true,
+      width: "w-20",
+      cell: (row) => (
+        <ReadCell
+          value={`${row.dp > 0 || !row.unpriced ? fmt(row.dp, LOSS_PLACES) : "\u2014"}${row.dp > 0 && row.unpriced ? "+?" : ""}`}
+        />
+      ),
+    },
+    {
+      key: "share",
+      label: "%",
+      right: true,
+      width: "w-14",
+      cell: (row) => (
+        <ReadCell value={row.dp > 0 || !row.unpriced ? row.share.toFixed(1) : "\u2014"} />
+      ),
+    },
+    {
+      key: "count",
+      label: "count",
+      right: true,
+      width: "w-12",
+      cell: (row) => <ReadCell value={row.count} />,
+    },
+    {
+      key: "group",
+      label: "loss group",
+      cell: (row) => (
+        <>
+          <Button
+            label={row.key === "other" ? row.label : `Edit rule for ${row.label}`}
+            onClick={() => choose(row)}
+          >
+            <span className="whitespace-normal text-left">{row.label}</span>
+          </Button>
+          {row.unpriced ? (
+            <span className="block" data-tone="caution">
+              {row.unpriced} unpriced
+            </span>
+          ) : null}
+        </>
+      ),
+    },
+    {
+      key: "rule",
+      label: "ASHRAE / rule",
+      cell: (row) => (
+        <>
+          <span className="face-mono">{row.tables.join(", ")}</span>
+          <span className="block">{row.words}</span>
+        </>
+      ),
+    },
+    {
+      key: "conditions",
+      label: "conditions / inputs",
+      cell: (row) => (
+        <>
+          {row.conditions.length ? (
+            row.conditions.map((condition) => (
+              <span
+                key={condition}
+                className={
+                  row.rules.some((rule) => {
+                    const state = ruleConditions(rule, row);
+                    return state.words === condition && state.inactive;
+                  })
+                    ? "block text-ink-2"
+                    : "block"
+                }
+              >
+                {condition}
+              </span>
+            ))
+          ) : (
+            <span className="text-ink-2">not applicable</span>
+          )}
+          {row.rules.some((rule) => ruleConditions(rule, row).inactive) ? (
+            <span className="text-ink-2">geometry condition bypassed</span>
+          ) : null}
+        </>
+      ),
+    },
+  ];
   return (
     <div
       className="flex flex-wrap items-start gap-3"
@@ -454,157 +497,41 @@ function BreakdownList({
       data-e-flip={flip || undefined}
     >
       <div className="min-w-0 flex-1 basis-[760px]">
-        <p className="text-ink-2 mb-1">
-          full width = <span className="face-mono text-ink">{fmt(scale)}</span> in-wg · select a
-          group to edit its rule
-        </p>
-        <div ref={root} className="relative" data-e-groups="">
-          <table
-            aria-label="Loss groups and pricing rules"
-            className="w-full table-fixed text-left"
-          >
-            <colgroup>
-              {barLeft ? <col style={{ width: barCol }} /> : null}
-              <col className="w-[64px]" />
-              <col className="w-[44px]" />
-              <col className="w-[38px]" />
-              <col />
-              <col />
-              <col />
-              {!barLeft ? <col style={{ width: barCol }} /> : null}
-            </colgroup>
-            <thead className="hairline-b text-ink-2">
-              <tr>
-                {barLeft ? (
-                  <th scope="col" className="p-1">
-                    {!flip ? track : <span className="sr-only">Bar leaders</span>}
-                  </th>
-                ) : null}
-                <th scope="col" className="px-1 text-right">
-                  in-wg
-                </th>
-                <th scope="col" className="px-1 text-right">
-                  %
-                </th>
-                <th scope="col" className="px-1 text-right">
-                  count
-                </th>
-                <th scope="col" className="px-2">
-                  loss group
-                </th>
-                <th scope="col" className="px-2">
-                  ASHRAE / rule
-                </th>
-                <th scope="col" className="px-2">
-                  conditions / inputs
-                </th>
-                {!barLeft ? (
-                  <th scope="col" className="p-1">
-                    {!flip ? track : <span className="sr-only">Bar leaders</span>}
-                  </th>
-                ) : null}
-              </tr>
-            </thead>
-            <tbody className="hairline-rows">
-              {rows.map((row) => (
-                <tr
-                  key={row.key}
-                  data-loss-row={row.key}
-                  data-e-group-key={row.label}
-                  data-selected={current?.key === row.key || undefined}
-                  onMouseEnter={light ? () => light(row.ids) : undefined}
-                  onMouseLeave={light ? () => light(back ?? null) : undefined}
-                  onClick={() =>
-                    row.key === "other"
-                      ? setExpanded(true)
-                      : setSelected({ key: row.key, ids: row.ids })
-                  }
-                >
-                  {barLeft ? zone : null}
-                  <td className={number} data-loss-value="">
-                    {row.dp > 0 || !row.unpriced ? fmt(row.dp, LOSS_PLACES) : "—"}
-                    {row.dp > 0 && row.unpriced ? "+?" : ""}
-                  </td>
-                  <td className={number}>
-                    {row.dp > 0 || !row.unpriced ? row.share.toFixed(1) : "—"}
-                  </td>
-                  <td className={number}>{row.count}</td>
-                  <th scope="row" className="px-2 py-1 text-left font-normal break-words">
-                    <Button
-                      label={row.key === "other" ? row.label : `Edit rule for ${row.label}`}
-                      onClick={() =>
-                        row.key === "other"
-                          ? setExpanded(true)
-                          : setSelected({ key: row.key, ids: row.ids })
-                      }
-                    >
-                      <span className="whitespace-normal text-left">{row.label}</span>
-                    </Button>
-                    {row.unpriced ? (
-                      <span className="block" data-tone="caution">
-                        {row.unpriced} unpriced
-                      </span>
-                    ) : null}
-                  </th>
-                  <td className="px-2 py-1 align-middle break-words">
-                    <span className="face-mono">{row.tables.join(", ")}</span>
-                    <span className="block">{row.words}</span>
-                  </td>
-                  <td className="px-2 py-1 align-middle break-words">
-                    {row.conditions.length ? (
-                      row.conditions.map((condition) => (
-                        <span
-                          key={condition}
-                          className={`block ${
-                            row.rules.some((rule) => {
-                              const state = ruleConditions(rule, row);
-                              return state.words === condition && state.inactive;
-                            })
-                              ? "text-ink-2"
-                              : ""
-                          }`}
-                        >
-                          {condition}
-                        </span>
-                      ))
-                    ) : (
-                      <span className="text-ink-2">not applicable</span>
-                    )}
-                    {row.rules.some((rule) => ruleConditions(rule, row).inactive) ? (
-                      <span className="text-ink-2">geometry condition bypassed</span>
-                    ) : null}
-                  </td>
-                  {!barLeft ? zone : null}
-                </tr>
-              ))}
-            </tbody>
-            {flip ? (
-              <tfoot>
-                <tr>
-                  {barLeft ? <td className="p-1">{track}</td> : null}
-                  <td colSpan={6} />
-                  {!barLeft ? <td className="p-1">{track}</td> : null}
-                </tr>
-              </tfoot>
-            ) : null}
-          </table>
-          <svg
-            className="pointer-events-none absolute inset-0 size-full overflow-visible"
-            aria-hidden
-            data-e-leaders=""
-          >
-            {leaders.map((line) => (
-              <path
-                key={line.key}
-                d={line.d}
-                fill="none"
-                stroke={tokenRef("ink-2")}
-                strokeWidth={1}
-                strokeDasharray={line.key === "other" ? "2 2" : undefined}
-              />
-            ))}
-          </svg>
-        </div>
+        <LeaderDiagram
+          label="Loss groups and pricing rules"
+          width={barCol}
+          bottom={flip}
+          right={!barLeft}
+          track={
+            <span className="relative block h-3 w-full">
+              <SplitFill split={split} scale={scale} hint={false} />
+            </span>
+          }
+          items={rows.map((row) => ({ key: row.key, at: row.at, dashed: row.key === "other" }))}
+        >
+          <Table
+            rows={rows}
+            columns={columns}
+            rowKey={(row) => row.key}
+            label="Loss groups and pricing rules"
+            visibleKeys={rows.map((row) => row.key)}
+            activeKey={current?.key}
+            onRowClick={choose}
+            onRowHover={light ? (row) => light(row?.ids ?? back ?? null) : undefined}
+            revitIds={(row) => row.ids}
+            keep={() => true}
+            damage={(row) =>
+              split.rows.some((loss) => row.ids.includes(loss.id) && loss.error)
+                ? "blocked loss"
+                : undefined
+            }
+            caption={
+              <>
+                <span className="face-mono">{fmt(scale)}</span> in-wg
+              </>
+            }
+          />
+        </LeaderDiagram>
         {expanded && small.length > 1 ? (
           <Button
             label="Collapse small loss groups"
@@ -625,7 +552,6 @@ function BreakdownList({
 }
 
 function RulePick({ row, work, priced }: { row: BarRow; work: LossesWork; priced: Priced | null }) {
-  const [search, setSearch] = useState("");
   const [family, setFamily] = useState(row.families[0] ?? "");
   const [error, setError] = useState<string | null>(null);
   const [pending, setPending] = useState(false);
@@ -642,11 +568,17 @@ function RulePick({ row, work, priced }: { row: BarRow; work: LossesWork; priced
       setPending(false);
     }
   };
-  const choices = row.candidates.filter((rule) =>
-    `${priced ? tableOf(priced, rule.key) : rule.table} ${rule.family} ${rule.type} ${rule.cond}`
-      .toLowerCase()
-      .includes(search.toLowerCase()),
-  );
+  const choices = useList({
+    items: row.candidates,
+    keyOf: (rule) => rule.key,
+    search: (rule) => ({
+      text: [priced ? tableOf(priced, rule.key) : rule.table, rule.family, rule.type, rule.cond],
+    }),
+    onPick: (rule) => {
+      if (!pending) void pick(rule.key);
+    },
+    refusalOf: () => (pending ? "Assigning rule" : null),
+  });
   return (
     <aside
       aria-label="ASHRAE rule picker"
@@ -688,52 +620,34 @@ function RulePick({ row, work, priced }: { row: BarRow; work: LossesWork; priced
               </Button>
             </div>
           ) : null}
-          <SearchControl>
-            <Input
-              surface="embedded"
-              aria-label="Search applicable ASHRAE rules"
-              placeholder="table, rule, condition…"
-              value={search}
-              onChange={(event) => setSearch(event.target.value)}
-            />
-          </SearchControl>
-          <ul
+          <ListView
+            list={choices}
             aria-label="Applicable ASHRAE rules"
-            className="max-h-64 overflow-y-auto hairline-rows mt-1"
-          >
-            {choices.map((rule) => {
+            maxHeight="16rem"
+            empty={{ message: "No applicable rules", exit: "Choose another family" }}
+            row={(rule) => {
               const condition = ruleConditions(rule, row);
               const active = staged
                 ? staged === rule.key
                 : row.rules.some((current) => current.key === rule.key);
-              return (
-                <li key={rule.key} className="py-1" data-selected={active || undefined}>
-                  <Button
-                    label={`Use ${priced ? tableOf(priced, rule.key) : rule.table} ${rule.family} ${rule.type} ${rule.cond}`}
-                    pressed={active}
-                    busy={pending}
-                    onClick={() => void pick(rule.key)}
-                  >
-                    <span className="face-mono">
-                      {priced ? tableOf(priced, rule.key) : rule.table}
-                    </span>{" "}
-                    · {rule.family} {active ? " · current" : ""}
-                  </Button>
-                  <p className={condition.inactive ? "text-ink-2" : undefined}>
-                    {condition.words}
-                    {condition.inactive ? " · not matched" : ""}
-                  </p>
-                  {condition.actual ? <p className="text-ink-2">{condition.actual}</p> : null}
-                  <p className="text-ink-2">{rule.basis}</p>
-                </li>
-              );
-            })}
-            {!choices.length ? (
-              <li className="py-2 text-ink-2">
-                No matching rules. Clear the search to see applicable rules.
-              </li>
-            ) : null}
-          </ul>
+              return {
+                label: `${priced ? tableOf(priced, rule.key) : rule.table} · ${rule.family}${active ? " · current" : ""}`,
+                active,
+                lines: 2,
+                wrap: true,
+                sub: (
+                  <>
+                    <p className={condition.inactive ? "text-ink-2" : undefined}>
+                      {condition.words}
+                      {condition.inactive ? " · not matched" : ""}
+                    </p>
+                    {condition.actual ? <p className="text-ink-2">{condition.actual}</p> : null}
+                    <p className="text-ink-2">{rule.basis}</p>
+                  </>
+                ),
+              };
+            }}
+          />
         </>
       )}
       {error ? (

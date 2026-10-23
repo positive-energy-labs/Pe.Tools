@@ -1,4 +1,5 @@
 import {
+  isValidElement,
   useCallback,
   useEffect,
   useLayoutEffect,
@@ -274,8 +275,6 @@ interface PaneSplitProps {
   /** A side that stays mounted and takes no track: its pane keeps its state while it is not drawn. */
   hide?: "start" | "end";
   grow?: boolean;
-  /** The supporting side takes the recessed ground. Resized horizontal rails default to it. */
-  secondary?: "start" | "end" | false;
 }
 
 const NO_RESIZE: PaneSizeSpec = { defaultSize: 0, minSize: 0 };
@@ -289,7 +288,7 @@ export const paneSplitRecipe = tv({
 });
 
 /** Binary compositional escape hatch. Null sides retain their wrappers but consume no track. */
-export function PaneSplit({ axis, start, end, resize, hide, grow, secondary }: PaneSplitProps) {
+export function PaneSplit({ axis, start, end, resize, hide, grow }: PaneSplitProps) {
   const rootRef = useRef<HTMLDivElement>(null);
   const state = usePaneSize(resize ?? NO_RESIZE);
   const [stacked, setStacked] = useState(false);
@@ -377,9 +376,12 @@ export function PaneSplit({ axis, start, end, resize, hide, grow, secondary }: P
         )}
         {/* A collapsed side under a rail stays mounted, so its pane keeps its state. */}
         <div
-          data-pane-secondary={
-            bothSides && side === (secondary ?? (axis === "horizontal" ? resize?.target : false))
-              ? ""
+          data-surface={
+            bothSides &&
+            (resize
+              ? side === resize.target
+              : !(isValidElement<{ grow?: boolean }>(child) && child.props.grow))
+              ? "support"
               : undefined
           }
           className={

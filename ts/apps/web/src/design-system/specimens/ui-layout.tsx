@@ -1,5 +1,5 @@
-import { Pane, PaneSplit, paneRecipe } from "#/components/lang/pane";
-import { PaneResizeHandle, paneSplitRecipe } from "#/components/lang/pane-resize";
+import { Pane, PaneSplit, paneRecipe } from "@pe/kit/lang/pane";
+import { PaneResizeHandle, paneSplitRecipe } from "@pe/kit/lang/pane-resize";
 import { Switch, switchRecipe } from "@pe/kit/lang/switch";
 import { Tooltip, TooltipTrigger, TooltipContent } from "@pe/kit/lang/tooltip";
 import { Surface } from "@pe/kit/lang/surface";
@@ -15,7 +15,7 @@ export function UiLayoutSpecimens() {
       </SpecimenFrame>
       <RecipeGrid
         name="Pane"
-        importPath="#/components/lang/pane"
+        importPath="@pe/kit/lang/pane"
         recipe={paneRecipe}
         render={(props) => (
           <div className="h-32 w-56">
@@ -27,7 +27,7 @@ export function UiLayoutSpecimens() {
       />
       <RecipeGrid
         name="PaneSplit"
-        importPath="#/components/lang/pane-resize"
+        importPath="@pe/kit/lang/pane-resize"
         recipe={paneSplitRecipe}
         render={(props) => (
           <div className="h-24 w-64">
@@ -40,7 +40,7 @@ export function UiLayoutSpecimens() {
           </div>
         )}
       />
-      <SpecimenFrame name="PaneResizeHandle" importPath="#/components/lang/pane-resize">
+      <SpecimenFrame name="PaneResizeHandle" importPath="@pe/kit/lang/pane-resize">
         <div className="h-20">
           <PaneResizeHandle
             axis="horizontal"

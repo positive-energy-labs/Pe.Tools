@@ -1,3 +1,6 @@
+import { ButtonGroup } from "@pe/kit/lang/button-group";
+import { Button } from "@pe/kit/lang/button";
+import { Crosshair, X } from "lucide-react";
 import { useLiveOrbit } from "#/scene/live-orbit";
 /**
  * The pane strip specimen (ledger 2026-10-21): one pane with two modes, two floaters (a plane
@@ -8,9 +11,9 @@ import { useCallback, useState } from "react";
 import { PictureReadout } from "@pe/kit/lang/readout";
 import { PaneCrumb } from "@pe/kit/lang/pane-crumb";
 
-import { Floater } from "#/components/lang/floater";
-import { Pane } from "#/components/lang/pane";
-import { PaneStrip } from "#/components/lang/pane-strip";
+import { Floater } from "@pe/kit/lang/floater";
+import { Pane, PaneOverlay } from "@pe/kit/lang/pane";
+import { PaneStrip } from "@pe/kit/lang/pane-strip";
 import {
   canvasColor,
   OrbitMinimap,
@@ -92,7 +95,7 @@ function PaneStripAnatomy() {
     render: () => "a corner surface; Esc inside closes it",
   };
   return (
-    <SpecimenFrame name="PaneStrip and Floater, alone" importPath="#/components/lang/floater">
+    <SpecimenFrame name="PaneStrip and Floater, alone" importPath="@pe/kit/lang/floater">
       <div className="flex flex-wrap items-start gap-4">
         {/* No chords here: the pane above owns S, M, G and 1-3. */}
         <PaneStrip
@@ -100,7 +103,7 @@ function PaneStripAnatomy() {
           floaters={[corner]}
           layers={{ value: ["grid"], options: unbound(LAYERS), onToggle: () => {} }}
         />
-        <div className="relative h-24 w-64" data-surface="recess">
+        <div className="relative h-24 w-64" data-surface="support">
           {open ? <Floater spec={corner} /> : null}
         </div>
       </div>
@@ -126,6 +129,16 @@ function PaneStripWidths() {
             ...(selected ? [{ label: selected }] : []),
           ]}
         />
+      }
+      overlay={
+        <ButtonGroup>
+          <Button icon={Crosshair} label="Select room" onClick={() => setSelected("Room A")}>
+            Select room
+          </Button>
+          <Button icon={X} label="Clear selection" onClick={() => setSelected(undefined)}>
+            Clear selection
+          </Button>
+        </ButtonGroup>
       }
       flush
       scroll="clip"
@@ -168,17 +181,16 @@ function PaneStripWidths() {
             select another room
           </button>
         </PictureReadout>
-        <span
-          data-slot="pane-legend"
-          className="absolute bottom-2 left-2 whitespace-nowrap t-small text-ink-2"
-        >
-          stand-in legend, wide enough to meet the corner at 400 px
-        </span>
+        <PaneOverlay label="stand-in legend" place="bl">
+          <span className="whitespace-nowrap t-small text-ink-2">
+            stand-in legend, wide enough to meet the corner at 400 px
+          </span>
+        </PaneOverlay>
       </div>
     </Pane>
   );
   return (
-    <SpecimenFrame name="Pane strip, narrow and wide" importPath="#/components/lang/pane-strip">
+    <SpecimenFrame name="Pane strip, narrow and wide" importPath="@pe/kit/lang/pane-strip">
       <div className="flex flex-col gap-4">
         <div className="h-48 w-[400px]" data-strip-width="narrow">
           {strip("pane-strip-narrow")}
@@ -214,7 +226,7 @@ export function PaneStripSpecimen() {
   );
   return (
     <>
-      <SpecimenFrame name="Pane strip, Floater, Minimap" importPath="#/components/lang/pane-strip">
+      <SpecimenFrame name="Pane strip, Floater, Minimap" importPath="@pe/kit/lang/pane-strip">
         <div className="h-96 w-full max-w-3xl">
           <Pane
             id="pane-strip-specimen"

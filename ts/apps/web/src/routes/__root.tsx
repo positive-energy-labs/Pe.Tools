@@ -1,3 +1,5 @@
+import { PaneFaultProvider } from "@pe/kit/lang/pane";
+import { reportFault } from "#/host/diagnostics";
 import {
   HeadContent,
   Outlet,
@@ -135,18 +137,20 @@ function RootDocument({ children }: { children: React.ReactNode }) {
       </head>
       <body>
         <RegistryContext.Provider value={appAtomRegistry}>
-          {card ? (
-            <TooltipProvider>{children}</TooltipProvider>
-          ) : (
-            <SurfaceHostProvider>
-              <TooltipProvider>
-                <RemoteDeviceGate>
-                  {children}
-                  <AppUtilities />
-                </RemoteDeviceGate>
-              </TooltipProvider>
-            </SurfaceHostProvider>
-          )}
+          <PaneFaultProvider onFault={(error) => reportFault({ code: "pane.failed" }, error)}>
+            {card ? (
+              <TooltipProvider>{children}</TooltipProvider>
+            ) : (
+              <SurfaceHostProvider>
+                <TooltipProvider>
+                  <RemoteDeviceGate>
+                    {children}
+                    <AppUtilities />
+                  </RemoteDeviceGate>
+                </TooltipProvider>
+              </SurfaceHostProvider>
+            )}
+          </PaneFaultProvider>
         </RegistryContext.Provider>
         <Scripts />
       </body>

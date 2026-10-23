@@ -1,14 +1,11 @@
 /* Shared grammar: tones, planes, selection, the row, the control frame. A primitive's own CSS lives beside its tsx. */
 .dl-picture-readout {
-  position: absolute;
-  left: 0.5rem;
-  top: 0.5rem;
   display: flex;
   flex-direction: column;
-  width: min(22rem, calc(100% - 1rem));
-}
-.dl-picture-readout[data-picture-readout="selection"] {
-  height: min(16rem, 30%);
+  min-width: 0;
+  min-height: 0;
+  width: 100%;
+  height: 100%;
 }
 .dl-picture-readout > header {
   display: flex;
@@ -164,6 +161,17 @@
   border: 1px solid var(--pe-line);
 }
 
+/* Supporting ground and its hairlines are one plane, inherited through nested panes. */
+[data-surface="support"],
+[data-surface="support"] [data-slot="pane"],
+[data-surface="support"] [data-slot="pane-split"] {
+  --pe-surface: light-dark(var(--pe-recess), var(--pe-page));
+  --pe-line: var(--pe-line-dim);
+  --pe-line-2: var(--pe-line-2-dim);
+  --pe-on: var(--pe-surface);
+  background: var(--pe-surface);
+}
+
 :where([data-surface="recess"]) {
   --pe-surface: var(--pe-recess);
 }
@@ -204,7 +212,6 @@
   font-size: var(--type-small-size);
   line-height: var(--type-small-line-height);
 }
-
 @media (min-width: 48rem) {
   :where([data-pe] [data-slot="input"], [data-pe] [data-slot="textarea"]) {
     font-size: var(--type-small-size);
@@ -279,10 +286,7 @@
   text-align: left;
   cursor: pointer;
 }
-[data-list-section-head]:hover {
-  background-image: var(--fill-veil);
-  color: var(--pe-ink);
-}
+
 [data-list-section-head]:active {
   background-image: var(--fill-press);
 }
@@ -328,6 +332,7 @@ tr.dl-row[data-active] {
     background-color: var(--pe-select);
   }
 }
+
 [data-inbox-group] .dl-row[data-selected] {
   outline: 2px solid transparent;
   outline-offset: -2px;
@@ -349,6 +354,7 @@ tr.dl-row[data-active] {
     background-color: var(--pe-select);
   }
 }
+
 .dl-row[data-lines="2"] {
   min-height: calc(var(--item-h) * 2);
 }
@@ -428,11 +434,7 @@ tr.dl-row[data-active] {
 [data-list-trigger="inline"]:not([data-tone]) {
   color: var(--pe-ink-2);
 }
-[data-list-trigger="inline"]:hover,
-[data-list-trigger="inline"][data-popup-open] {
-  background-image: var(--fill-veil);
-  color: var(--pe-ink);
-}
+
 [data-list-trigger="inline"]:active {
   background-image: var(--fill-press);
 }
@@ -481,6 +483,7 @@ tr.dl-row[data-active] {
     filter: drop-shadow(0 0 4px var(--pe-alarm));
   }
 }
+
 [data-damage] {
   animation: pe-damage-beat 1.5s ease-in-out infinite;
   outline: 1px solid var(--pe-alarm);
@@ -499,6 +502,7 @@ svg [data-damage] {
     filter: drop-shadow(0 0 3px var(--pe-alarm));
   }
 }
+
 .dl-row-burn {
   display: flex;
   min-width: 0;
@@ -630,6 +634,7 @@ svg [data-damage] {
     justify-self: end;
   }
 }
+
 .dl-row[data-meta-fill] .dl-row-line {
   grid-template-columns: max-content minmax(0, 1fr);
   gap: calc(var(--space-unit) * 2);
@@ -701,24 +706,8 @@ svg [data-damage] {
 /* L3: hovering the row leaves its facts alone; the verbs take the slot only when the pointer
    reaches the slot itself, keyboard focus is on the row, or the keys hold the list cursor there. */
 @media (hover: hover) {
-  .dl-row:is(:focus-visible, :has(:focus-visible)) .dl-row-actions,
-  [data-list-view]:focus-visible .dl-row[data-cursor] .dl-row-actions,
-  .dl-row-meta:hover > .dl-row-actions,
-  .dl-row-actions:has([aria-expanded="true"]) {
-    visibility: visible;
-  }
-  .dl-row:is(:focus-visible, :has(:focus-visible))
-    .dl-row-meta:has(> .dl-row-actions)
-    > .dl-row-fact,
-  [data-list-view]:focus-visible
-    .dl-row[data-cursor]
-    .dl-row-meta:has(> .dl-row-actions)
-    > .dl-row-fact,
-  .dl-row-meta:hover:has(> .dl-row-actions) > .dl-row-fact,
-  .dl-row-meta:has([aria-expanded="true"]) > .dl-row-fact {
-    visibility: hidden;
-  }
 }
+
 @media (hover: none) {
   .dl-row-actions {
     justify-self: stretch;
@@ -730,6 +719,7 @@ svg [data-damage] {
     aspect-ratio: auto;
   }
 }
+
 .dl-row-sep {
   height: 1px;
   margin: 4px 0;
@@ -829,13 +819,9 @@ svg [data-damage] {
   background-color: color-mix(in srgb, var(--pe-line) 20%, transparent);
   transition: border-color var(--motion-control);
 }
-.dl-control:is(:hover, :focus-visible, :focus-within):not(:disabled, :has(input:disabled)) {
-  border-color: var(--pe-line-2);
-}
+
 /* Where typing goes is unmistakable: the frame takes the secondary ink, a step past hover. */
-.dl-control:focus-within:not(:disabled, :has(input:disabled)) {
-  border-color: var(--pe-ink-2);
-}
+
 .dl-control[aria-invalid="true"] {
   border-color: var(--pe-caution);
 }
@@ -922,6 +908,22 @@ svg [data-damage] {
 }
 /* THE TABLE FOLD (round 12): folded, the query is one line of chips ending "+N more";
    focus or an open picker unfolds it into a drawer across the artifact frame, over the grid. */
+[data-table-fold-slot] {
+  /* Keep the header's query slot when its drawer leaves flow over the grid. */
+  min-height: calc(var(--control-h) + var(--gutter));
+}
+[data-table-fold] {
+  max-width: none;
+  padding: calc((var(--gutter) - 1px) / 2) var(--gutter);
+  border-bottom: 1px solid transparent;
+}
+[data-table-fold] [data-search-field] > :last-child {
+  min-width: min(100%, 12ch);
+}
+[data-table-fold] [data-search-lead] {
+  align-self: flex-start;
+  height: calc(var(--control-h) - 2px);
+}
 [data-table-fold]:not(:focus-within, :has([data-popup-open])) [data-search-field] {
   flex-wrap: nowrap;
   overflow: hidden;
@@ -932,7 +934,6 @@ svg [data-damage] {
 [data-table-fold]:not(:focus-within, :has([data-popup-open])) [data-search-field] > :last-child {
   order: 1;
   flex-shrink: 1;
-  min-width: 12ch;
 }
 [data-table-fold]:not(:focus-within, :has([data-popup-open])) [data-fold-hidden] {
   display: none;
@@ -951,16 +952,9 @@ svg [data-damage] {
   top: 0;
   /* over the grid's sticky head, under every popup */
   z-index: calc(var(--z-popup) - 1);
-  max-width: none;
-  padding: calc(var(--gutter) / 2) var(--gutter);
   background-color: var(--pe-recess);
-  border-bottom: 1px solid var(--pe-line);
+  border-bottom-color: var(--pe-line);
   box-shadow: var(--shadow-float);
-}
-/* Open, the lead stays one control tall at the top while the chips wrap beside it. */
-[data-table-fold]:is(:focus-within, :has([data-popup-open])) [data-search-lead] {
-  align-self: flex-start;
-  height: calc(var(--control-h) - 2px);
 }
 /* A control in the lead segment shares the frame's border: it keeps its press ground, not its own frame. */
 .dl-search [data-search-lead] .dl-control {
@@ -1044,13 +1038,7 @@ svg [data-damage] {
   position: absolute;
   inset: -2px -2px;
 }
-[data-subject-text]:is(:hover, [data-lit]) .subject-ref {
-  text-decoration-color: var(--pe-ink-2);
-}
-.subject-ref:is(:hover, :focus-visible, [data-lit]) {
-  background-image: var(--fill-veil);
-  text-decoration-color: var(--pe-ink);
-}
+
 .subject-ref:active {
   background-image: var(--fill-press);
 }
@@ -1077,15 +1065,7 @@ svg [data-damage] {
   transform: translateY(-0.45em);
   text-decoration: none;
 }
-[data-subject-text]:is(:hover, [data-lit]) .subject-mark {
-  border-color: var(--pe-ink);
-}
-.subject-ref:is(:hover, :focus-visible, [data-lit]) .subject-mark,
-.subject-mark[data-lit] {
-  border-color: var(--subject-mark-lit-ground);
-  background: var(--subject-mark-lit-ground);
-  color: var(--subject-mark-lit-ink);
-}
+
 /* The same mark over the picture: an SVG group holding a circle and its number. */
 /* A badge only draws while its prose block is hovered, so it wears that state's full-ink edge. */
 .subject-badge > circle {
@@ -1123,4 +1103,252 @@ svg [data-damage] {
 /* Hints retain a hit surface even inside a pointer-transparent SVG decoration layer. */
 [data-svg-tip] {
   pointer-events: visiblePainted;
+}
+
+/* N8: one gutter maps row ordinals; the virtualizer supplies its viewport. */
+[data-minimap-owner] {
+  padding-inline-end: calc(var(--space-unit) * 4);
+}
+[data-minimap-host] {
+  position: sticky;
+  inset-inline-start: 0;
+  top: 0;
+  height: 0;
+  z-index: var(--z-sticky);
+  pointer-events: none;
+}
+[data-minimap] {
+  position: absolute;
+  inset-inline-end: calc(var(--space-unit) * -4);
+  top: 0;
+  width: calc(var(--space-unit) * 4);
+  background: var(--pe-recess);
+  cursor: crosshair;
+  touch-action: none;
+  user-select: none;
+  pointer-events: auto;
+}
+[data-minimap]:focus-visible {
+  outline: 1px solid var(--pe-ink);
+}
+[data-minimap] > i {
+  position: absolute;
+  inset-inline: 0;
+  height: 1px;
+  background: var(--pe-line-2);
+  pointer-events: none;
+}
+[data-minimap-viewport] {
+  position: absolute;
+  inset-inline: 0;
+  min-height: 2px;
+  border: 1px solid var(--pe-ink-2);
+  background: var(--pe-select);
+  pointer-events: none;
+}
+
+/* REACH START: the only physical and shared reach paint in kit. */
+[data-reach="rest"] {
+  transition: outline-color var(--motion-control);
+}
+[data-reach]:not(:disabled, [aria-disabled="true"]):is([data-reach="reach"]) {
+  background-image: var(--fill-veil);
+  --dl-cell-ring: inset 0 0 0 1px var(--pe-line-2);
+}
+[data-reach]:not(:disabled, [aria-disabled="true"]):is([data-reach="hover"], :hover) {
+  background-image: var(--fill-press);
+  --dl-cell-ring: inset 0 0 0 1px var(--pe-ink-2);
+}
+[data-reach]:not(:disabled, [aria-disabled="true"]):is(
+    [data-reach="focus"],
+    :focus-visible,
+    :focus-within
+  ) {
+  outline: 2px solid var(--pe-ink);
+  outline-offset: -2px;
+}
+[data-svg-tip]:is(
+  [data-reach="reach"],
+  [data-reach="hover"],
+  [data-reach="focus"],
+  :hover,
+  :focus-visible
+) {
+  filter: drop-shadow(0 0 2px var(--pe-ink-2));
+}
+@layer base {
+  [data-pe] :hover {
+    scrollbar-color: color-mix(in srgb, var(--pe-ink) 22%, transparent) transparent;
+  }
+}
+@layer base {
+  [data-pe] a:hover {
+    text-decoration: underline;
+  }
+}
+[data-pe] .veil:hover {
+  background-image: var(--fill-veil);
+}
+[data-pe] .dl-button[data-colhead-trigger]:is(:hover, :focus-visible, [data-popup-open]) {
+  border-color: var(--pe-line-2);
+  background-color: color-mix(in srgb, var(--pe-line) 20%, transparent);
+}
+.dl-button:is(.dl-control, [data-kind="quiet"]:hover, [aria-pressed="true"]) {
+  color: var(--pe-ink);
+}
+.dl-button[data-kind="nav"]:hover:not(:disabled, [aria-disabled="true"]) {
+  background-color: var(--pe-select);
+  color: var(--pe-ink);
+  text-decoration: underline 2px;
+  text-underline-offset: 3px;
+}
+.dl-button:hover:not(:disabled, [aria-disabled="true"]) {
+  background-image: var(--fill-veil);
+}
+.dl-cell:hover > .dl-acts,
+.dl-cell:focus-within > .dl-acts,
+.dl-cell[data-focus] > .dl-acts,
+.dl-cell[aria-busy="true"] > .dl-acts {
+  display: inline-flex;
+}
+.dl-verdict:hover,
+.dl-verdict:focus-visible {
+  background-image: var(--fill-veil);
+}
+.dl-cell[data-unit]:not([data-body]):hover,
+.dl-cell[data-unit]:not([data-body]):focus-within,
+.dl-cells-item > .dl-cell:not([data-body]):hover,
+.dl-cells-item > .dl-cell:not([data-body]):focus-within {
+  --dl-cell-ring: inset 0 0 0 1px var(--pe-ink-2);
+}
+@container dl-cells (max-width: 24rem) {
+  .dl-cells-item:hover .dl-cells-note,
+  .dl-cells-item:focus-within .dl-cells-note {
+    visibility: visible;
+  }
+}
+[data-list-section-head]:hover {
+  background-image: var(--fill-veil);
+  color: var(--pe-ink);
+}
+[data-list-trigger="inline"]:hover,
+[data-list-trigger="inline"][data-popup-open] {
+  background-image: var(--fill-veil);
+  color: var(--pe-ink);
+}
+@media (hover: hover) {
+  .dl-row:is(:focus-visible, :has(:focus-visible)) .dl-row-actions,
+  [data-list-view]:focus-visible .dl-row[data-cursor] .dl-row-actions,
+  .dl-row-meta:hover > .dl-row-actions,
+  .dl-row-actions:has([aria-expanded="true"]) {
+    visibility: visible;
+  }
+}
+@media (hover: hover) {
+  .dl-row:is(:focus-visible, :has(:focus-visible))
+    .dl-row-meta:has(> .dl-row-actions)
+    > .dl-row-fact,
+  [data-list-view]:focus-visible
+    .dl-row[data-cursor]
+    .dl-row-meta:has(> .dl-row-actions)
+    > .dl-row-fact,
+  .dl-row-meta:hover:has(> .dl-row-actions) > .dl-row-fact,
+  .dl-row-meta:has([aria-expanded="true"]) > .dl-row-fact {
+    visibility: hidden;
+  }
+}
+.dl-control:is(:hover, :focus-visible, :focus-within):not(:disabled, :has(input:disabled)) {
+  border-color: var(--pe-line-2);
+}
+[data-subject-text]:is(:hover, [data-lit]) .subject-ref {
+  text-decoration-color: var(--pe-ink-2);
+}
+.subject-ref:is(:hover, :focus-visible, [data-lit]) {
+  background-image: var(--fill-veil);
+  text-decoration-color: var(--pe-ink);
+}
+[data-subject-text]:is(:hover, [data-lit]) .subject-mark {
+  border-color: var(--pe-ink);
+}
+.subject-ref:is(:hover, :focus-visible, [data-lit]) .subject-mark,
+.subject-mark[data-lit] {
+  border-color: var(--subject-mark-lit-ground);
+  background: var(--subject-mark-lit-ground);
+  color: var(--subject-mark-lit-ink);
+}
+[data-list-trigger="icon"]:is(:hover, [data-reach="hover"]),
+[data-reach][aria-label="What is this?"]:is(:hover, [data-reach="hover"]) {
+  color: var(--pe-ink);
+}
+.dl-control:focus-within:not(:disabled, :has(input:disabled)) {
+  border-color: var(--pe-ink-2);
+}
+[data-reach]:active:not(:disabled, [aria-disabled="true"]),
+[data-pe] .veil:active {
+  background-image: var(--fill-press);
+}
+/* REACH END */
+
+/* Segment-to-label geometry has one owner, whether the labels are words or table rows. */
+.dl-leader-diagram {
+  position: relative;
+  display: grid;
+  grid-template-columns: var(--leader-width) minmax(0, 1fr);
+  column-gap: var(--item-pad-x);
+  color: var(--pe-ink-2);
+}
+.dl-leader-track {
+  display: flex;
+  min-height: var(--item-pad-x);
+  grid-column: 1;
+  grid-row: 1;
+  align-self: start;
+  background: var(--pe-line);
+}
+.dl-leader-body {
+  grid-column: 2;
+  grid-row: 2;
+  min-width: 0;
+  color: var(--pe-ink);
+}
+.dl-leader-diagram[data-bottom] .dl-leader-track {
+  grid-row: 3;
+}
+.dl-leader-diagram[data-right] {
+  grid-template-columns: minmax(0, 1fr) var(--leader-width);
+}
+.dl-leader-diagram[data-right] .dl-leader-track {
+  grid-column: 2;
+}
+.dl-leader-diagram[data-right] .dl-leader-body {
+  grid-column: 1;
+}
+.dl-leader-label {
+  display: flex;
+  justify-content: space-between;
+  gap: var(--item-pad-x);
+  min-height: var(--item-h);
+  align-items: baseline;
+}
+.dl-leader-lines {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  overflow: visible;
+  pointer-events: none;
+}
+.dl-leader-lines path {
+  fill: none;
+  stroke: currentColor;
+  stroke-width: 1;
+}
+.dl-leader-lines [data-dashed] {
+  stroke-dasharray: 2 2;
+}
+
+.dl-leader-segment {
+  display: block;
+  background: currentColor;
+  box-shadow: inset -1px 0 0 var(--pe-page);
 }

@@ -1,3 +1,4 @@
+import { useSceneReach } from "#/scene/reach";
 /**
  * The picture pane's two floaters: the orbit globe (`G`, the camera's minimap, drawing the subject's
  * centrelines in unit-sphere space) and the other picture small, where a click swaps the two.
@@ -5,7 +6,7 @@
 import { useMemo, useState, type ReactNode } from "react";
 
 import { Button } from "@pe/kit/lang/button";
-import type { FloaterSpec } from "#/components/lang/floater";
+import type { FloaterSpec } from "@pe/kit/lang/floater";
 import { OrbitMinimap } from "#/components/lang/minimap";
 import type { OrbitViewport } from "#/scene/orbit";
 import type { LiveOrbit } from "#/scene/live-orbit";
@@ -38,6 +39,18 @@ export function usePictureFloaters({
   /** The schematic, small. */
   small: () => ReactNode;
 }): FloaterSpec[] {
+  const { hovered } = useSceneReach();
+  const lit = useMemo(
+    () =>
+      new Set(
+        hovered == null
+          ? []
+          : (meshes?.instances
+              .filter((instance) => instance.revitId === hovered)
+              .map((instance) => instance.key) ?? []),
+      ),
+    [hovered, meshes],
+  );
   const [globe, setGlobe] = useState(true);
   const [corner, setCorner] = useState(true);
   // The globe draws the subject's centrelines in unit-sphere space, scaled from its own radius.
@@ -50,6 +63,10 @@ export function usePictureFloaters({
       f.segment.polyline.map((p) => p.map((v, j) => (v - c[j]!) * k)),
     );
   }, [bounds, scene]);
+  const litLines = useMemo(
+    () => lines?.filter((_, index) => scene.segments[index]?.segment.id === hovered),
+    [lines, scene, hovered],
+  );
   return [
     {
       key: "globe",
@@ -61,7 +78,7 @@ export function usePictureFloaters({
       onOpenChange: setGlobe,
       render: () =>
         pose ? (
-          <OrbitMinimap orbit={orbit} lines={lines} />
+          <OrbitMinimap orbit={orbit} lines={lines} litLines={litLines} />
         ) : (
           <p className="t-small text-ink-2 m-0 p-2">no pose yet</p>
         ),
@@ -86,7 +103,7 @@ export function usePictureFloaters({
             {picture === "model" ? (
               small()
             ) : meshes && pose ? (
-              <Scene3D className="size-full" meshes={meshes} orbit={orbit} />
+              <Scene3D className="size-full" meshes={meshes} orbit={orbit} lit={lit} />
             ) : (
               <span className="t-small text-ink-2 m-auto">model</span>
             )}

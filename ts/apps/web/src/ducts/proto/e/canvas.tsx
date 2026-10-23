@@ -1,3 +1,5 @@
+import { useSceneReach } from "#/scene/reach";
+import { ButtonGroup } from "@pe/kit/lang/button-group";
 /** The model/schematic pane, its fixed readout and floaters. Camera policy belongs to useStage. */
 import { nameOrFallback } from "@pe/kit/lang/subject-text";
 import {
@@ -19,7 +21,7 @@ import { systemScope } from "@pe/ducts-domain/system-scope";
 import { TooltipHint } from "@pe/kit/lang/tooltip";
 import { SelectionBoxButton } from "#/revit/element-menu";
 import { observedElements } from "#/revit/observation";
-import { Pane } from "#/components/lang/pane";
+import { Pane } from "@pe/kit/lang/pane";
 import { useNativeObservation } from "#/revit/observation";
 import { useScene } from "#/scene/use-scene";
 import { useLiveOrbit } from "#/scene/live-orbit";
@@ -156,8 +158,8 @@ function Canvas({
   claims,
   onVerdict,
   work,
-  hovered,
-  onHover,
+  hovered: fallbackHovered,
+  onHover: fallbackOnHover,
   lit,
   issueScope,
   annotated,
@@ -174,6 +176,10 @@ function Canvas({
   onSelect,
   onPose,
 }: ProtoProps & ECanvasExtra & { snapshot: NonNullable<ProtoProps["snapshot"]> }) {
+  const { hovered, onHover } = useSceneReach({
+    hovered: fallbackHovered,
+    onHover: fallbackOnHover,
+  });
   const observation = useNativeObservation();
   const index = useMemo(() => indexOf(snapshot, priced), [snapshot, priced]);
   const labelOf = useMemo(() => labelOfNode(snapshot), [snapshot]);
@@ -640,7 +646,7 @@ function Canvas({
       scroll="clip"
       flush
       actions={
-        <span className="inline-flex items-center gap-1">
+        <ButtonGroup>
           {pickedId != null ? (
             <SelectionBoxButton target={observedElements(observation, [pickedId])} />
           ) : null}
@@ -657,7 +663,7 @@ function Canvas({
             }}
           />
           <EncodingPicker value={scale.encoding.key} onPick={(key) => setPage({ encoding: key })} />
-        </span>
+        </ButtonGroup>
       }
       modes={{
         label: "picture",

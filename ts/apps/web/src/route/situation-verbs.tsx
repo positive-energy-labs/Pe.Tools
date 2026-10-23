@@ -1,3 +1,4 @@
+import { ButtonGroup } from "@pe/kit/lang/button-group";
 /** The Situation's verb row: each verb button with its flag, and the board that stands them up. */
 import { createContext, useContext, useEffect, useState, type ReactNode } from "react";
 import { Popover, PopoverContent, PopoverTrigger } from "@pe/kit/lang/popover";
@@ -212,8 +213,8 @@ export function ActionBoard({
       </Button>
     </span>
   );
-  return (
-    <div className="pe-action-board hairline-t" data-expanded={open}>
+  const board = (
+    <>
       {head}
       {meter}
       {verbs.map(([name, action]) => {
@@ -221,7 +222,7 @@ export function ActionBoard({
         const chord = chords?.[name] ?? action.chord;
         return (
           <div key={name} className="pe-action-board-item">
-            <span className="flex justify-start">
+            <span className="flex min-w-0 justify-start">
               <SituationAction
                 handle={handle}
                 name={name}
@@ -270,6 +271,11 @@ export function ActionBoard({
           </div>
         );
       })}
+    </>
+  );
+  return (
+    <div className="pe-action-board hairline-t" data-expanded={open}>
+      {open ? board : <ButtonGroup>{board}</ButtonGroup>}
     </div>
   );
 }

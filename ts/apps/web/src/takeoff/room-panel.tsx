@@ -1,3 +1,5 @@
+import { useList } from "@pe/kit/lang/collection";
+import { PlainList } from "@pe/kit/lang/list-view";
 import { revitTarget } from "@pe/kit/lang/row";
 import {
   takeoffDecisionAddress,
@@ -11,7 +13,7 @@ import { FactChip } from "@pe/kit/lang/chip";
 import { StateDot } from "@pe/kit/table/cells";
 import { fmtNum } from "@pe/kit/table/model";
 import { Button } from "@pe/kit/lang/button";
-import { Pane } from "#/components/lang/pane";
+import { Pane } from "@pe/kit/lang/pane";
 import { ScopeKeys, type ScopeKey } from "@pe/kit/keys";
 import { TakeoffEditCell, TakeoffProposalRows } from "#/takeoff/proposals";
 import type { Verdict } from "#/takeoff/atlas";
@@ -67,6 +69,16 @@ function RoomPanel({
     .map((f) => ({ flag: f, verb: decided[takeoffDecisionKey(room.guid, f)] }))
     .filter((x): x is { flag: string; verb: Verdict } => x.verb !== undefined);
 
+  const flags = useList({
+    items: open,
+    keyOf: (flag) => flag,
+    search: (flag) => ({ text: [flag, FLAG_MEANING[flag]] }),
+  });
+  const decisions = useList({
+    items: localDecisions,
+    keyOf: (d) => d.flag,
+    search: (d) => ({ text: [d.flag, d.verb] }),
+  });
   return (
     <Pane id="room" title="room" meta={`${zone.zone.key} · ${zone.zone.lane.label}`}>
       <ScopeKeys keys={shortcuts} />
@@ -146,45 +158,43 @@ function RoomPanel({
         {open.length > 0 && (
           <div className="px-2.5 py-2">
             <p className="t-small t-upper mb-1">open calls — {open.length}</p>
-            <ul className="space-y-2">
-              {open.map((flag) => (
-                <li key={flag}>
-                  <p className="face-mono" data-tone="alarm">
-                    {flag}
-                  </p>
-                  <p className="face-mono text-ink-2">{FLAG_MEANING[flag] ?? "no blurb"}</p>
-
-                  <span className="mt-0.5 flex gap-1">
-                    <Button
-                      kind={live ? "commit" : "framed"}
-                      label="accept · a"
-                      refusal={
-                        live && decisionRefusal(room, flag) !== null
-                          ? decideReason(live, room, "accept", flag)
-                          : null
-                      }
-                      reason={decideReason(live, room, "accept", flag)}
-                      onClick={() => onDecide(room, flag, "accept")}
-                    >
-                      accept · a
-                    </Button>
-                    <Button
-                      kind={live ? "commit" : "framed"}
-                      label="dismiss · d"
-                      refusal={
-                        live && decisionRefusal(room, flag) !== null
-                          ? decideReason(live, room, "dismiss", flag)
-                          : null
-                      }
-                      reason={decideReason(live, room, "dismiss", flag)}
-                      onClick={() => onDecide(room, flag, "dismiss")}
-                    >
-                      dismiss · d
-                    </Button>
-                  </span>
-                </li>
-              ))}
-            </ul>
+            <PlainList
+              list={flags}
+              aria-label="room flags"
+              empty={{ message: "No open flags", exit: "Choose another room" }}
+              row={(flag) => ({
+                label: flag,
+                revitIds: room.elementId == null ? [] : [room.elementId],
+                lines: 2,
+                wrap: true,
+                sub: (
+                  <div>
+                    <p className="text-ink-2">{FLAG_MEANING[flag] ?? "no blurb"}</p>
+                    <span className="mt-0.5 flex gap-1">
+                      {(["accept", "dismiss"] as const).map((verb) => {
+                        const label = `${verb} \u00b7 ${verb === "accept" ? "a" : "d"}`;
+                        return (
+                          <Button
+                            key={verb}
+                            kind={live ? "commit" : "framed"}
+                            label={label}
+                            refusal={
+                              live && decisionRefusal(room, flag) !== null
+                                ? decideReason(live, room, verb, flag)
+                                : null
+                            }
+                            reason={decideReason(live, room, verb, flag)}
+                            onClick={() => onDecide(room, flag, verb)}
+                          >
+                            {label}
+                          </Button>
+                        );
+                      })}
+                    </span>
+                  </div>
+                ),
+              })}
+            />
             <div className="mt-1.5">
               {!live ? (
                 <FactChip
@@ -242,22 +252,22 @@ function RoomPanel({
           {localDecisions.length === 0 ? (
             <StatLine truncate={false} label="decisions" value="none written on this room" muted />
           ) : (
-            <>
-              {localDecisions.map((d, i) => (
-                <StatLine
-                  truncate={false}
-                  key={`l${d.flag}`}
-                  label={i === 0 ? "decisions" : ""}
-                  value={`${d.verb} ${d.flag} · this session`}
-                />
-              ))}
-            </>
+            <PlainList
+              list={decisions}
+              aria-label="room decisions"
+              empty={{ message: "No decisions", exit: "Resolve an open flag" }}
+              row={(d) => ({
+                label: `${d.verb} ${d.flag}`,
+                meta: "this session",
+                revitIds: room.elementId == null ? [] : [room.elementId],
+              })}
+            />
           )}
         </div>
 
         <div className="px-2.5 py-2">
           <p className="t-small t-upper mb-1">addressable</p>
-          <p className="face-mono break-all px-1.5 py-1 text-ink-2" data-surface="recess">
+          <p className="face-mono break-all px-1.5 py-1 text-ink-2" data-surface="support">
             {url}
           </p>
         </div>

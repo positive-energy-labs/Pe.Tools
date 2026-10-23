@@ -4,7 +4,7 @@ import { FlaskConical, X } from "lucide-react";
 
 import { FactChip } from "@pe/kit/lang/chip";
 import { Button } from "@pe/kit/lang/button";
-import { Pane } from "#/components/lang/pane";
+import { Pane } from "@pe/kit/lang/pane";
 import { Surface } from "@pe/kit/lang/surface";
 import { GroundedDocView } from "#/grounded-doc/GroundedDocView";
 import { useGroundedDoc } from "#/grounded-doc/engine";

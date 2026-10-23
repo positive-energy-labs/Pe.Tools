@@ -30,7 +30,7 @@ export function SpecText({
     );
   return (
     <div>
-      <div className="hairline-b flex items-center gap-2 px-2 py-1" data-surface="recess">
+      <div className="hairline-b flex items-center gap-2 px-2 py-1">
         <Tag>source</Tag>
         <span className="t-small face-mono min-w-0 flex-1 truncate text-ink-2">
           {spec.fileName}

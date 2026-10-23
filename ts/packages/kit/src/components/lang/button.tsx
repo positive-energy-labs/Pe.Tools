@@ -1,3 +1,4 @@
+import { reachProps } from "./reach";
 import type { Tone } from "../../lib/token";
 /** Every control that acts. `label` is its name (and its tooltip when it draws only a glyph);
  *  `refusal` keeps it focusable, inert, and says why. No children draws an icon-only square. */
@@ -47,11 +48,12 @@ export function Button({
   const tone = toneProp ?? (kind === "commit" && !inert ? "commit" : undefined);
   const Glyph = direction ? NAV_ICON[direction] : icon;
   const iconOnly = children == null || children === false;
-  const tipped = iconOnly || refusal !== undefined || reason != null;
-  const tip = refusal ?? reason ?? (iconOnly ? label : null);
+  const tipped = Glyph != null || iconOnly || refusal !== undefined || reason != null;
+  const tip = refusal ?? reason ?? (Glyph != null || iconOnly ? label : null);
   const named = busy ? `${label}…` : label;
   const button = (
     <button
+      {...reachProps()}
       type={type ?? "button"}
       className={
         kind === "framed" || kind === "commit"

@@ -121,37 +121,39 @@ export function TableFrame<Row extends RowData>({
     capable ||
     Boolean(state.query);
   const controls = boxed && (
-    <div
-      ref={setFoldRoot}
-      data-table-fold=""
-      data-slot="table-query-controls"
-      className="flex min-w-0 max-w-full flex-[1_1_20rem] items-center gap-1"
-    >
-      {filters}
-      <QueryBox
-        lead={
-          capable ? (
-            <QueryWorkbench vocabulary={vocabulary} state={state} onStateChange={onStateChange} />
-          ) : undefined
-        }
-        vocabulary={vocabulary}
-        state={state}
-        onStateChange={onStateChange}
-        draft={draft}
-        onDraft={setDraft}
-        onInput={setQueryInput}
-        placeholder={`search ${counts.shown} of ${counts.total} rows`}
-        command={command}
+    <div data-table-fold-slot="" className="flex min-w-0 max-w-full flex-[1_1_20rem] items-center">
+      <div
+        ref={setFoldRoot}
+        data-table-fold=""
+        data-slot="table-query-controls"
+        className="flex min-w-0 flex-1 items-center gap-1"
       >
-        {chips?.map((chip) => (
-          <NarrowChip
-            key={chip.label}
-            label={chip.label}
-            onRemove={chip.onClear}
-            title="A route-owned filter narrowing this table right now; removing it widens back out."
-          />
-        ))}
-      </QueryBox>
+        {filters}
+        <QueryBox
+          lead={
+            capable ? (
+              <QueryWorkbench vocabulary={vocabulary} state={state} onStateChange={onStateChange} />
+            ) : undefined
+          }
+          vocabulary={vocabulary}
+          state={state}
+          onStateChange={onStateChange}
+          draft={draft}
+          onDraft={setDraft}
+          onInput={setQueryInput}
+          placeholder={`search ${counts.shown} of ${counts.total} rows`}
+          command={command}
+        >
+          {chips?.map((chip) => (
+            <NarrowChip
+              key={chip.label}
+              label={chip.label}
+              onRemove={chip.onClear}
+              title="A route-owned filter narrowing this table right now; removing it widens back out."
+            />
+          ))}
+        </QueryBox>
+      </div>
     </div>
   );
   return (

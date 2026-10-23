@@ -6,7 +6,7 @@ import { usePodRoutes } from "#/route/pod-routes";
 import { useRouteThread } from "#/route/shell";
 import { peClient } from "#/host/pe-client";
 import { Code } from "@pe/kit/lang/code";
-import { PaneErrorBoundary } from "#/components/lang/pane";
+import { PaneErrorBoundary } from "@pe/kit/lang/pane";
 import { message } from "@pe/agent-contracts";
 
 export const Route = createFileRoute("/tool/$key")({ component: PodTool });

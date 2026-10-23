@@ -40,7 +40,7 @@ export function Win({
 }) {
   return (
     <div
-      data-surface="artifact"
+      data-surface="document"
       className="absolute overflow-hidden rounded-[10px] text-ink shadow-[0_18px_60px_rgba(0,0,0,.55)]"
       style={{ right: 12, bottom, width }}
     >

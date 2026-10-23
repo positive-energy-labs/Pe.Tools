@@ -16,9 +16,7 @@
   border-color: transparent;
   background-color: transparent;
 }
-.dl-button:is(.dl-control, [data-kind="quiet"]:hover, [aria-pressed="true"]) {
-  color: var(--pe-ink);
-}
+
 .dl-button.dl-control {
   padding: 0 var(--control-pad-x);
 }
@@ -27,12 +25,7 @@
 }
 /* A nav button is a link: hover and keyboard focus are unmistakable. The select fill (never a hue),
    ink, and a 2px underline on hover; a full-ink 2px outline on focus (the pick mark's weight). */
-.dl-button[data-kind="nav"]:hover:not(:disabled, [aria-disabled="true"]) {
-  background-color: var(--pe-select);
-  color: var(--pe-ink);
-  text-decoration: underline 2px;
-  text-underline-offset: 3px;
-}
+
 .dl-button[data-kind="nav"]:focus-visible {
   background-color: var(--pe-select);
   color: var(--pe-ink);
@@ -63,9 +56,7 @@
   background-color: var(--pe-commit);
   color: var(--pe-on-commit);
 }
-.dl-button:hover:not(:disabled, [aria-disabled="true"]) {
-  background-image: var(--fill-veil);
-}
+
 .dl-button:active:not(:disabled, [aria-disabled="true"]) {
   background-image: var(--fill-press);
 }
@@ -107,4 +98,38 @@
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
+}
+
+/* A column head's trigger: a plain label at rest, the control frame only when touched. The border
+   is reserved transparent and the padding fixed, so the label never moves; the pad less the
+   border puts the label on the body cells' inset. */
+[data-pe] .dl-button[data-colhead-trigger] {
+  height: var(--item-h);
+  padding: 0 calc(var(--item-pad-x) - 1px);
+  border-color: transparent;
+  background-color: transparent;
+}
+
+/* One gap and one line; labels yield before glyphs. */
+.dl-button-group {
+  display: flex;
+  align-items: center;
+  min-width: 0;
+  max-width: 100%;
+  gap: var(--space-unit);
+  flex-wrap: nowrap;
+}
+.dl-button-group > * {
+  min-width: 0;
+  flex-shrink: 1;
+}
+.dl-button-group .dl-button {
+  min-height: var(--control-h);
+}
+.dl-button-group .dl-button:has(svg) {
+  flex: 0 1 auto;
+  min-width: var(--control-h);
+}
+.dl-button-group[data-icon-labels] .dl-button:has(svg) .dl-button-label {
+  display: none;
 }

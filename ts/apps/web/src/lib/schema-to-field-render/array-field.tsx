@@ -93,7 +93,7 @@ export function ArrayField({
         />
       ) : isObjectArray && itemNode?.properties ? (
         <div className="hairline-t">
-          <div className="flex items-center justify-between px-2 py-1" data-surface="artifact">
+          <div className="flex items-center justify-between px-2 py-1" data-surface="document">
             <span className="t-small face-mono t-upper text-ink-2">
               {(Array.isArray(field.value) ? field.value : []).length} items
             </span>

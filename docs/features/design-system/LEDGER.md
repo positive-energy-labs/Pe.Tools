@@ -8,6 +8,11 @@ The one-system design cluster: the design LANGUAGE (raw values in `apps/web/src/
 
 ## Decided
 
+- 2026-10-23, `LeaderDiagram` owns monotone segment-to-label leaders, including composed Table rows; ducts imports it for fan facts and loss breakdowns (house laws 4 and 10).
+- 2026-10-23, N7 reach uses kit `reach.ts` and `[data-reach="rest|reach|hover|focus"]`. The reach block in kit `lang.css` owns hover paint. Rows, subject text and the web scene adapter share the existing scoped channel.
+
+- 2026-10-23, kit-raise N8 and CSS ownership, requested by kaitpw: `useMinimap` at `@pe/kit/lang/minimap` gives `ListView` and `MasterTableBody` one gutter overview at 200 shown rows. The threshold is provisional under M1. Virtual ranges drive the viewport; section/tree heads and `data-damage` drive marks. Pointer and keyboard jumps use `list.reveal()` or the table virtualizer plus `land()`. The 1000-row specimen lives in `lang-list.tsx`. `design-guard.test.ts` checks authored class ownership across its complete CSS entry/import graph. Contextual overrides of shared classes require a file/class reason and stale exceptions fail. Column-header rest rules belong to `button.css`; their interaction paint stays in the single reach block. `REACH_STATE_OVERRIDES` permits only `dl-button`, `dl-cell`, and `dl-verdict` state rules inside that block without assigning another class owner. `lens.css` alone owns `chat-tail-floater`.
+
 - 2026-10-23, kit-raise N4: kit `RevitTarget` requires the displayed observation scope and owns layout-transparent target boundaries. `Row revitIds`, `FactChip revit`, and `SubjectText` tokens inherit that scope through portals. The web root retains the one Selection Box / Select menu; null and non-native scopes still refuse native actions. The specimen is `lang-list.tsx`; `kit-raise.revit-target.guard.test.ts` rejects hand-authored scopes outside the menu/parser.
 
 - 2026-10-23, I5: the subject owns overlay geometry through kit `SubjectBox`; Popover and HoverCard share one open slot, and Escape stays inside that slot (or its active editor). `facing` projects actual placement to row order. SVG marks use kit `SvgTip` with a short word instead of a native title. Consumers include ducts bars, schematics, family views, rooms and takeoff; placement and legibility still require the browser pass.
@@ -670,12 +675,13 @@ These rows are byte-for-byte text from `34bd5e17`. The searchable comment preser
 
 ## Owed
 
+- 2026-10-23, kit-raise minimap browser pass: verify gutter placement, visible damage/head ticks, keyboard/drag landings, and long grouped/tree lists with external scrollers. The implementation slice is restricted to compile and deterministic lanes by WAVE3/WAVE2; no visual or frame-budget claim is made.
+
 - 2026-10-23, system-switch acknowledgement under 100 ms is proven only for three warm production handler-to-two-RAF cases (40.8/42.4/53.5 ms); cold/all-system and native input-to-first-paint bounds remain unproven. See the [production report](../../../.artifacts/runs/final-20261023/REPORT.md).
 - 2026-10-23, parameter-table native acceptance remains unproven: the production route uses an explicit fixture; FOM working prose and reference formatting still need the doctrine pass on real populated state. See the [production report](../../../.artifacts/runs/final-20261023/REPORT.md).
 
 - 2026-10-23, strict production acceptance is not complete for all nine routes: the 25-item route matrix, light screenshots at 1600/1024, dark evidence and explicit unproven cases are in the [production report](../../../.artifacts/runs/final-20261023/REPORT.md); universal menu/link/popup, hue/hairline, zero-shift and per-search proof remains open.
 - 2026-10-23, production Space sparse capture at 1024 has a largely blank main field while four floaters occupy its corners; distinguish framing from occlusion with projected native geometry before choosing a fix. Broader native scene coverage and worker-inclusive memory/long-session soak remain unproven; see the [production report](../../../.artifacts/runs/final-20261023/REPORT.md).
-- 2026-10-23, repo table census fails on raw tables in [bar.tsx](../../../ts/apps/web/src/ducts/proto/e/bar.tsx) and [fan-sections.tsx](../../../ts/apps/web/src/ducts/proto/e/fan-sections.tsx); migrate the data table and settle the leader-diagram primitive without weakening the guard. See the [production report](../../../.artifacts/runs/final-20261023/REPORT.md).
 - 2026-10-23, `pnpm verify` stops on four formatting failures outside the authorized changed-since-77a4439a set: `ts/apps/web/src/navigation/route-controls.tsx`, `ts/packages/ducts-domain/src/loss-breakdown.ts`, `ts/packages/ducts-domain/src/losses.ts`, `ts/pnpm-workspace.yaml`. They remain untouched; full-workspace Knip/host/R24 proof has not run. See the [production report](../../../.artifacts/runs/final-20261023/REPORT.md).
 
 - List-search acceptance: final production Project A tree input measured 12.4 ms median, 25.3 ms worst and 315.2 ms last-key-to-URL including 250 ms debounce. Every search bar, completion/row keyboard parity and assistive technology remain unproven; kaitpw may reopen the provisional rulings. See the [production report](../../../.artifacts/runs/final-20261023/REPORT.md).
