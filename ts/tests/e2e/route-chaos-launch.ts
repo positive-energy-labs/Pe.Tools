@@ -27,7 +27,7 @@ const { values } = parseArgs({
     port: { type: "string" },
     target: { type: "string" },
     seed: { type: "string", default: "20261023" },
-    require: { type: "string", default: "refresh,worker" },
+    require: { type: "string", default: "refresh,reconnect,worker" },
   },
 });
 const testTs = resolve(import.meta.dirname, "../..");

@@ -303,6 +303,7 @@ test("seeded real-user route journey", async () => {
     draftCensus: [] as unknown[],
     reconnectAlerts: [] as { at: number; messages: string[] }[],
     reconnectRecovery: undefined as unknown,
+    routeReturn: undefined as unknown,
     network: [] as {
       method: string;
       url?: string;
@@ -1278,9 +1279,15 @@ test("seeded real-user route journey", async () => {
     );
     await step("route leave/return; Pea draft identity through thread leave/return", async () => {
       const route = await p.url();
+      const routeThread = new URL(route).searchParams.get("thread");
+      const baseline = await state(p);
+      const baselineReadout = await visibleText(p, "[data-picture-readout]");
+      expect(baseline.pictureTitle, "Ducts baseline has a rendered title").not.toBe("");
+      expect(baselineReadout, "Ducts baseline has a rendered readout").not.toBe("");
       const main = await hold(p, '[data-proto="E2"]');
       await button(p, "Open Pea");
       await p.until(async () => new URL(await p.url()).pathname === "/pea", "Pea route");
+      const enteredPeaThread = new URL(await p.url()).searchParams.get("thread");
       const composer = 'textarea[aria-label="Message"]';
       await p.until(() => box(p, composer), "Pea composer", 30_000);
       expect(
@@ -1367,6 +1374,7 @@ test("seeded real-user route journey", async () => {
         );
       }
       const pea = await p.url();
+      const peaThread = new URL(pea).searchParams.get("thread");
       await censusDraft("before Home");
       await button(p, "Home / tool directory");
       await censusDraft("after Home; retained composer may be hidden");
@@ -1392,7 +1400,45 @@ test("seeded real-user route journey", async () => {
       }
       await settled(p);
       expect(await p.url()).toBe(route);
-      expect(await retained(p, main), "Activity retained the Ducts main DOM").toBe(true);
+      const restored = await state(p);
+      const restoredReadout = await visibleText(p, "[data-picture-readout]");
+      const mainRetained = await retained(p, main);
+      // RouteRetention disposes leaves on a thread change. Global Pea can change that address;
+      // only a same-thread visit promises the old DOM object, while both paths restore the URL's reading.
+      const sameThread =
+        routeThread === enteredPeaThread && routeThread === peaThread && !canSwitch;
+      receipt.routeReturn = {
+        routeThread,
+        enteredPeaThread,
+        peaThread,
+        threadSwitchExercised: canSwitch,
+        sameThread,
+        originalMainRetained: mainRetained,
+        baseline: { ...baseline, readout: baselineReadout },
+        restored: { ...restored, readout: restoredReadout },
+      };
+      save();
+      if (sameThread)
+        expect(mainRetained, "same-thread Activity retained the Ducts main DOM").toBe(true);
+      expect(restored.pictureTitle, "returned picture title").toBe(baseline.pictureTitle);
+      expect(restored.crumb, "returned picture identity").toBe(baseline.crumb);
+      expect(restoredReadout, "returned picture readout").toBe(baselineReadout);
+      expect(restored.selected, "returned selection").toBe(baseline.selected);
+      expect(new URL(restored.url).searchParams.get("viewport"), "returned URL pose").toBe(
+        new URL(route).searchParams.get("viewport"),
+      );
+      expect(
+        await p.read<boolean>(
+          `[...document.querySelectorAll(${literal(DRAWING)})].some(${visible})`,
+        ),
+        "returned drawing is visible",
+      ).toBe(true);
+      expect(restored.alerts, "returned route has no alerts").toEqual([]);
+      expect(restored.loading || restored.refreshing, "returned route is settled").toBe(false);
+      expect(
+        restored.armed.filter((action) => !baseline.armed.includes(action)),
+        "route return cannot rearm stale actions",
+      ).toEqual([]);
       await p.send("Runtime.releaseObject", { objectId: main });
       await p.send("Runtime.releaseObject", { objectId: draftReference });
       receipt.coverage.draft = "unsent draft survives route leave/return";

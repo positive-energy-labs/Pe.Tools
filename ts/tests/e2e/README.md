@@ -11,7 +11,7 @@ vp run --no-cache journey:routes
 The launcher starts `src/dev.ts --no-revit --no-tray` through the checkout's installed Node/jiti runtime,
 an isolated product home and local SDK/app-data roots, the canonical source Vite child, and a
 private visible chrome-agent instance on a dynamically selected port. It reads the host service
-receipt and returned browser identity, then runs Vitest with `refresh,worker` required. It never
+receipt and returned browser identity, then runs Vitest with `refresh,reconnect,worker` required. It never
 starts Revit or sends a Pea prompt. The integrated navigation fixture must expose its real demo
 Refresh action. `--seed`, `--require` and `--source` override the default seed, requested coverage
 and served source checkout. `custody.json` and `host.log` live under the dated route-launch run.
@@ -26,7 +26,7 @@ The launcher checks its SHA-256 each second and after cleanup, and fails if it c
 Explicit attached mode borrows the named page/server and leaves their lifecycle to the caller:
 
 ```powershell
-vp run --no-cache journey:routes -- --attached --source C:/path/to/served/Pe.Tools --url 'http://127.0.0.1:5173/ducts?demo=navigation' --port 9255 --target 129DC0038D97FA0AEC5ED4E23D8524D3 --require refresh,worker
+vp run --no-cache journey:routes -- --attached --source C:/path/to/served/Pe.Tools --url 'http://127.0.0.1:5173/ducts?demo=navigation' --port 9255 --target 129DC0038D97FA0AEC5ED4E23D8524D3 --require refresh,reconnect,worker
 ```
 
 `vp run --no-cache test:route-chaos` from `ts` runs the opt-in `route-chaos.config.ts` suite.
@@ -48,7 +48,7 @@ $env:CDP_TARGET = '<full page id>'
 $env:CHAOS_LANE = 'demo'
 $env:E2E_WEB = 'http://127.0.0.1:<actual web port>/ducts?demo=navigation'
 $env:CHAOS_SEED = '20261023'
-$env:CHAOS_REQUIRE = 'refresh'
+$env:CHAOS_REQUIRE = 'refresh,reconnect,worker'
 $env:CHAOS_PRODUCT_ROOT = 'C:/path/to/served/Pe.Tools'
 vp run --no-cache test:route-chaos
 # chrome-agent stop <exact instance name returned by launch>
@@ -80,9 +80,15 @@ copied URL and reloads it, refreshes, goes offline/online, pauses an available p
 and leaves/returns through Pea and its existing thread controls. It never sends a Pea prompt.
 An empty Pea draft is required. Two visible existing threads enable A → B → A draft/transcript
 identity checks. Hidden retained composers are excluded from all reads.
+Same-thread route visits require the original Ducts DOM object. Global Pea or explicit thread
+switches can change the thread address and dispose that leaf; return must restore the exact URL,
+rendered picture/readout, selection and URL pose without alerts, loading or newly armed actions.
+The receipt records both thread addresses, original-node retention and restored reading. This
+does not change the strict DOM/focus/scroll/pose/geometry checks during untouched disruptions.
 
 `CHAOS_REQUIRE` is an explicit comma-separated list of capabilities that must execute: `refresh`,
-`reconnect`, `worker`, `thread`, `arming`. It has no default. Unavailable optional
+`reconnect`, `worker`, `thread`, `arming`. The direct Vitest entry has no default; the launcher
+requires `refresh,reconnect,worker`. Missing `thread` or `arming` remains explicitly partial. Unavailable optional
 capabilities get an `unavailable` step and an explicit `UNPROVEN` coverage entry. A requested
 capability or missing core precondition fails Vitest; there are no skipped tests. `reconnect`
 requires a new observed SSE response after the outage. Offline/online alone cannot satisfy it.
