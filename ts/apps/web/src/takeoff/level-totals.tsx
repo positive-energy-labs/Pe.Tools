@@ -38,7 +38,11 @@ export function LevelTotals({
   const open = Math.abs(residual) >= 1;
 
   return (
-    <div className="flex flex-col gap-1" data-level-totals="" {...mention(memberKey(zones.map((z) => regionKey(z.zone.guid))))}>
+    <div
+      className="flex flex-col gap-1"
+      data-level-totals=""
+      {...mention(memberKey(zones.map((z) => regionKey(z.zone.guid))))}
+    >
       <div className="flex h-1.5 w-full items-stretch gap-px overflow-hidden">
         {ROOM_STATES.map((s) =>
           area[s] > 0 ? (

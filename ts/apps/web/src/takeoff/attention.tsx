@@ -1,11 +1,7 @@
 import * as Atom from "effect/unstable/reactivity/Atom";
 import { RegistryContext } from "@effect/atom-react";
 import { useMemo, type ReactNode } from "react";
-import {
-  elementKey,
-  resolveMembers,
-  type SubjectKey,
-} from "@pe/kit/lang/attention";
+import { elementKey, resolveMembers, type SubjectKey } from "@pe/kit/lang/attention";
 import { AttentionScope } from "#/attention";
 import type { TakeoffsController } from "./controller";
 
@@ -18,13 +14,13 @@ export function TakeoffAttention({
   store,
   children,
 }: {
-  store: TakeoffsController;
+  store: Pick<TakeoffsController, "handle" | "world" | "savedCapture">;
   children: ReactNode;
 }) {
   const target = store.handle.resolution;
   const doc = store.savedCapture
     ? `capture:takeoffs:${store.savedCapture.id}`
-    : target.kind === "resolved" && target.target.kind === "document"
+    : !store.handle.demo && target.kind === "resolved" && target.target.kind === "document"
       ? `${target.target.ref.session}/${target.target.ref.openId}`
       : "fixture:takeoffs:plan";
   const selected = useMemo(

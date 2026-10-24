@@ -268,9 +268,7 @@ export function LevelPlan({
             })),
           ])
         }
-        hover={(item) =>
-          setHovered(registry, item ? { doc, key: regionKey(item.key) } : null)
-        }
+        hover={(item) => setHovered(registry, item ? { doc, key: regionKey(item.key) } : null)}
         onGo={(item) => {
           onSelectZone(item.zone);
           if (item.room) onCursor(item.zone, item.room.guid);
@@ -429,7 +427,9 @@ export function LevelPlan({
               {drawn.map((z) => {
                 const dimmed = shown !== null && !shown.has(z.zone.guid);
                 const on = z.zone.guid === selectedKey;
-                const hot = attention.hovered.has(regionTarget(z.zone)) || attention.lit.has(regionTarget(z.zone));
+                const hot =
+                  attention.hovered.has(regionTarget(z.zone)) ||
+                  attention.lit.has(regionTarget(z.zone));
                 // Monotone (I3): a zone's Revit colour names nothing the label does not; ink only.
                 const ink = token("ink");
                 const [zoneLabelX, zoneLabelY] = frame.toViewport([
@@ -446,7 +446,11 @@ export function LevelPlan({
                       {...revitTarget(z.zone.elementId == null ? [] : [z.zone.elementId])}
                       d={pathD(z.zone.loops, frame)}
                       fillRule="evenodd"
-                      fill={on || hot ? `color-mix(in srgb, ${ink} ${hot ? 14 : 6}%, transparent)` : "transparent"}
+                      fill={
+                        on || hot
+                          ? `color-mix(in srgb, ${ink} ${hot ? 14 : 6}%, transparent)`
+                          : "transparent"
+                      }
                       stroke={ink}
                       strokeWidth={on || hot ? 2 : 1}
                       strokeOpacity={on || hot ? 0.9 : 0.4}
@@ -473,7 +477,9 @@ export function LevelPlan({
                     {z.rooms.map((room) => {
                       const state = stateOf(room);
                       const isCursor = attention.selected.has(regionTarget(room));
-                      const hot = attention.hovered.has(regionTarget(room)) || attention.lit.has(regionTarget(room));
+                      const hot =
+                        attention.hovered.has(regionTarget(room)) ||
+                        attention.lit.has(regionTarget(room));
                       const tone = isCursor ? CURSOR_INK : stateInk(state);
                       const [labelX, labelY] = frame.toViewport(room.label);
                       const click = (e: React.MouseEvent) => {
