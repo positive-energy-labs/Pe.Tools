@@ -71,10 +71,7 @@ function usePaneSize(spec: PaneSizeSpec) {
 
   const resizeTo = (requested: number, containerSize?: number) => {
     const threshold = spec.collapse?.collapseBelow;
-    if (threshold != null && requested < threshold) {
-      spec.collapse?.onCollapsedChange?.(true);
-      return;
-    }
+    if (threshold != null && requested < threshold) return spec.collapse?.onCollapsedChange?.(true);
 
     if (collapsed) spec.collapse?.onCollapsedChange?.(false);
     const next = clampSize(requested, spec, containerSize);
@@ -116,91 +113,88 @@ function usePaneFit(
   }, [ref]);
 }
 
-const KEYBOARD_STEP_PX = 16;
-
 /** Keep drawing buffers and projection observers at their committed layout until release. */
-function holdPictures(split: HTMLElement | null) {
+function holdPictures(
+  split: HTMLElement | null,
+  axis: "horizontal" | "vertical",
+  growth: number,
+  resize: (size: number) => number,
+) {
   const pictures = [...(split?.querySelectorAll<HTMLElement>("[data-picture]") ?? [])]
     .filter((node) => !node.parentElement?.closest("[data-picture]"))
     .flatMap((node) => {
       const { clientWidth: width, clientHeight: height } = node;
       if (!width || !height) return [];
       const style = node.style.cssText;
-      node.style.width = `${width}px`;
-      node.style.height = `${height}px`;
-      node.style.flex = "none";
-      node.style.transformOrigin = "top left";
-      node.dataset.paneResizing = "";
-      return [{ node, width, height, style }];
+      const sign = split?.firstElementChild?.contains(node) ? growth : -growth;
+      return [{ node, width, height, style, sign }];
     });
-  return (finish = false) => {
-    for (const { node, width, height, style } of pictures) {
-      if (finish) {
+  for (const { node, width, height } of pictures) {
+    node.style.cssText += `;width:${width}px;height:${height}px;flex:none;transform-origin:top left`;
+    node.dataset.paneResizing = "";
+  }
+  let frame = 0;
+  return (size?: number) => {
+    if (frame) cancelAnimationFrame(frame);
+    if (size == null) {
+      for (const { node, style } of pictures) {
         node.style.cssText = style;
         delete node.dataset.paneResizing;
-      } else if (node.parentElement) {
-        node.style.scale = `${node.parentElement.clientWidth / width} ${node.parentElement.clientHeight / height}`;
       }
-    }
+    } else
+      frame = requestAnimationFrame(() => {
+        const delta = resize(size);
+        for (const { node, width, height, sign } of pictures)
+          node.style.scale = `${1 + (axis === "horizontal" ? (delta * sign) / width : 0)} ${1 + (axis === "vertical" ? (delta * sign) / height : 0)}`;
+      });
   };
 }
 
 interface PaneResizeHandleProps {
   axis: "horizontal" | "vertical";
-  value: number;
-  startValue?: number;
-  min: number;
-  max?: number;
-  growth: 1 | -1;
+  split: React.RefObject<HTMLDivElement | null>;
+  state: ReturnType<typeof usePaneSize>;
+  spec: PaneSizeSpec & { target: "start" | "end" };
   containerSize: () => number | undefined;
-  onResize: (size: number, containerSize: number | undefined, commit: boolean) => void;
-  onReset: () => void;
 }
 
-// The seam separates pane grounds; hover and focus darken its full length.
-const paneResizeHandleRecipe = tv({
-  slots: {
-    root: "group relative z-raised flex touch-none items-center justify-center outline-none",
-    bar: "bg-line transition-colors duration-control group-hover:bg-ink-2 group-focus-visible:bg-ink-2 group-active:bg-ink motion-reduce:transition-none",
-  },
-  variants: {
-    axis: {
-      horizontal: { root: "h-full w-(--gutter) cursor-col-resize", bar: "h-full w-px" },
-      vertical: { root: "h-(--gutter) w-full cursor-row-resize", bar: "h-px w-full" },
-    },
-  },
-});
-
-export function PaneResizeHandle({
-  axis,
-  value,
-  startValue = value,
-  min,
-  max,
-  growth,
-  containerSize,
-  onResize,
-  onReset,
-}: PaneResizeHandleProps) {
-  const { root, bar } = paneResizeHandleRecipe({ axis });
+function PaneResizeHandle({ axis, split, state, spec, containerSize }: PaneResizeHandleProps) {
+  const value = state.renderedSize,
+    growth = spec.target === "start" ? 1 : -1;
+  const onResize = (requested: number, container: number | undefined, commit: boolean) => {
+    // Restore the committed size before a refused/no-op commit can strand the preview.
+    const size = commit ? value : clampSize(requested, spec, container);
+    split.current?.style.setProperty("--pane-size", `${size}px`);
+    if (commit) state.resizeTo(requested, container);
+    return size;
+  };
   const drag = useRef<{
     point: number;
     size: number;
     latest: number;
+    container: number | undefined;
     paint: ReturnType<typeof holdPictures>;
   } | null>(null);
-  useEffect(() => () => drag.current?.paint(true), []);
+  useEffect(() => () => drag.current?.paint(), []);
   const coordinate = (event: Pick<PointerEvent<HTMLDivElement>, "clientX" | "clientY">) =>
     axis === "horizontal" ? event.clientX : event.clientY;
 
   const onPointerDown = (event: PointerEvent<HTMLDivElement>) => {
     event.preventDefault();
     event.currentTarget.setPointerCapture(event.pointerId);
+    const container = containerSize(),
+      startValue = state.collapsed ? spec.minSize : value;
     drag.current = {
       point: coordinate(event),
       size: startValue,
       latest: startValue,
-      paint: holdPictures(event.currentTarget.closest('[data-slot="pane-split"]')),
+      container,
+      paint: holdPictures(
+        event.currentTarget.closest('[data-slot="pane-split"]'),
+        axis,
+        growth,
+        (size) => onResize(size, container, false) - value,
+      ),
     };
   };
 
@@ -208,18 +202,17 @@ export function PaneResizeHandle({
     if (!drag.current) return;
     const next = drag.current.size + growth * (coordinate(event) - drag.current.point);
     drag.current.latest = next;
-    onResize(next, containerSize(), false);
-    drag.current.paint();
+    drag.current.paint(next);
   };
 
   const finishPointer = (event: PointerEvent<HTMLDivElement>) => {
     if (!drag.current) return;
-    const next = drag.current.latest;
-    drag.current.paint(true);
+    const { latest, container, paint } = drag.current;
+    paint();
     drag.current = null;
     if (event.currentTarget.hasPointerCapture(event.pointerId))
       event.currentTarget.releasePointerCapture(event.pointerId);
-    onResize(next, containerSize(), true);
+    onResize(latest, container, true);
   };
 
   const onKeyDown = (event: KeyboardEvent<HTMLDivElement>) => {
@@ -227,9 +220,9 @@ export function PaneResizeHandle({
     const positive = axis === "horizontal" ? event.key === "ArrowRight" : event.key === "ArrowDown";
     if (!negative && !positive && event.key !== "Home") return;
     event.preventDefault();
-    if (event.key === "Home") return onReset();
+    if (event.key === "Home") return state.reset();
     const direction = positive ? 1 : -1;
-    onResize(value + growth * direction * KEYBOARD_STEP_PX, containerSize(), true);
+    onResize(value + growth * direction * 16, containerSize(), true);
   };
 
   return (
@@ -240,8 +233,8 @@ export function PaneResizeHandle({
         role="separator"
         tabIndex={0}
         aria-orientation={axis === "horizontal" ? "vertical" : "horizontal"}
-        aria-valuemin={min}
-        aria-valuemax={max}
+        aria-valuemin={spec.minSize}
+        aria-valuemax={spec.maxSize}
         aria-valuenow={Math.round(value)}
         data-surface="page"
         aria-label="Resize pane"
@@ -250,10 +243,12 @@ export function PaneResizeHandle({
         onPointerUp={finishPointer}
         onPointerCancel={finishPointer}
         onKeyDown={onKeyDown}
-        onDoubleClick={onReset}
-        className={root()}
+        onDoubleClick={state.reset}
+        className={`group relative z-raised flex touch-none items-center justify-center ${axis === "horizontal" ? "h-full w-(--gutter) cursor-col-resize" : "h-(--gutter) w-full cursor-row-resize"}`}
       >
-        <span className={bar()} />
+        <span
+          className={`bg-line transition-colors duration-control group-hover:bg-ink-2 group-active:bg-ink motion-reduce:transition-none ${axis === "horizontal" ? "h-full w-px" : "h-px w-full"}`}
+        />
         <span
           data-slot="pane-resize-grip"
           data-corner="center"
@@ -280,7 +275,6 @@ const NO_RESIZE: PaneSizeSpec = { defaultSize: 0, minSize: 0 };
 export const paneSplitRecipe = tv({
   base: "grid size-full min-h-0 min-w-0 overflow-visible",
   variants: {
-    axis: { horizontal: "", vertical: "" },
     grow: { true: "min-h-0 flex-1" },
   },
 });
@@ -322,8 +316,7 @@ export function PaneSplit({ axis, start, end, resize, hide, grow }: PaneSplitPro
       resize != null &&
       rect.width > 0 &&
       rect.width < resize.minSize + (resize.minOtherSize ?? 0) + gutter;
-    // A supporting rail yields before the subject loses its minimum width. Splits without a
-    // collapse affordance stack instead, so neither mounted pane becomes a zero-width field.
+    // Yield a supporting rail, or stack when there is no collapse affordance.
     const stack = constrained && resize?.collapse?.title == null;
     setStacked(stack);
     if (constrained && resize?.collapse?.title != null && !state.collapsed)
@@ -342,7 +335,6 @@ export function PaneSplit({ axis, start, end, resize, hide, grow }: PaneSplitPro
         {rail && (
           <div
             data-slot="pane-rail"
-            // A rail lies along its split: upright beside a column, flat under a row.
             className={
               horizontal
                 ? "flex min-h-0 flex-col items-center gap-2 py-2"
@@ -373,7 +365,6 @@ export function PaneSplit({ axis, start, end, resize, hide, grow }: PaneSplitPro
             </span>
           </div>
         )}
-        {/* A collapsed side under a rail stays mounted, so its pane keeps its state. */}
         <div
           data-surface={
             bothSides &&
@@ -402,7 +393,7 @@ export function PaneSplit({ axis, start, end, resize, hide, grow }: PaneSplitPro
       data-slot="pane-split"
       data-axis={horizontal ? "horizontal" : "vertical"}
       data-surface="page"
-      className={paneSplitRecipe({ axis, grow })}
+      className={paneSplitRecipe({ grow })}
       style={gridStyle}
     >
       {renderSide("start", start)}
@@ -413,19 +404,10 @@ export function PaneSplit({ axis, start, end, resize, hide, grow }: PaneSplitPro
         >
           <PaneResizeHandle
             axis={horizontal ? "horizontal" : "vertical"}
-            value={state.renderedSize}
-            startValue={state.collapsed ? resize.minSize : state.renderedSize}
-            min={resize.minSize}
-            max={resize.maxSize}
-            growth={target === "start" ? 1 : -1}
+            split={rootRef}
+            state={state}
+            spec={resize}
             containerSize={measuredContainer}
-            onResize={(requested, container, commit) => {
-              // Motion only paints; restoring on commit also clears a refused/no-op preview.
-              const size = commit ? state.renderedSize : clampSize(requested, resize, container);
-              rootRef.current?.style.setProperty("--pane-size", `${size}px`);
-              if (commit) state.resizeTo(requested, container);
-            }}
-            onReset={state.reset}
           />
         </div>
       )}

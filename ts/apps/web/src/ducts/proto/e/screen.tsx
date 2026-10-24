@@ -54,9 +54,10 @@ import type { LossesWork } from "../../work";
 import { reviewLines, writePreview } from "../../write-review";
 import { buildTree, type TreeNode } from "../b/model";
 import type { systemList } from "../../system-list";
+import type { SystemNote } from "../../system-list-search";
 import type { ProtoProps } from "../props";
 import { DEFAULT_DESIGN_FRICTION_RATE } from "@pe/ducts-domain/equivalent-length";
-import { BarRules, systemIssues, systemRowParts } from "./bar";
+import { BarRules, systemNoteCount, systemRowParts } from "./bar";
 import { DuctSettings } from "./settings";
 import { FanFacts, fanFacts, type FanFact } from "./fan-sections";
 import { ECanvas, OpeningContext } from "./canvas";
@@ -69,7 +70,7 @@ import { SystemTree } from "./tree-sidebar";
 import { useGroupEncoding } from "../encoding/use-encoding";
 
 const NO_GROUPS: readonly string[] = [];
-const NO_FIXES: ReadonlySet<string> = new Set();
+const NO_NOTES: ReadonlyMap<string, SystemNote> = new Map();
 const NO_SYSTEMS: ReturnType<typeof systemList> = [];
 
 const plural = (n: number, word: string) => `${n} ${word}${n === 1 ? "" : "s"}`;
@@ -320,20 +321,20 @@ function LoadedScreenBody({
   const preview = props.work.preview as DuctsApply.Res.Response | null;
   // What heals in Revit is planned over the raw snapshot (the tolerated one has bridged it already).
   const heal = props.analysis?.heal ?? null;
-  const needsFix = props.analysis?.needsFix ?? NO_FIXES;
+  const notes = props.analysis?.notes ?? NO_NOTES;
   // The document at a glance: how many systems price clean, and how many a person must fix first.
   const census = useMemo(() => {
-    const issues = systems.map((s) => systemIssues({ ...s, needsFix: needsFix.has(s.key) }));
+    const issues = systems.map((s) => systemNoteCount(s, notes.get(s.key)).issues);
     return {
       systems: systems.length,
       priced: systems.filter((s) => s.total != null).length,
       fix: issues.filter((i) => i.some((x) => x.tone === "alarm")).length,
     };
-  }, [systems, needsFix]);
+  }, [systems, notes]);
   const chosenRow = useMemo(() => {
     const row = systems.find((s) => s.key === page.system);
-    return row ? { ...row, needsFix: needsFix.has(row.key) } : null;
-  }, [systems, page.system, needsFix]);
+    return row ? { ...row, note: notes.get(row.key) } : null;
+  }, [systems, page.system, notes]);
   const healRun = useMemo(
     () =>
       page.heal && surveyed
@@ -736,7 +737,7 @@ function LoadedScreenBody({
           systems={systems}
           fansOf={fansOf}
           nameOf={nameOf}
-          needsFix={needsFix}
+          notes={notes}
           drawn={drawn}
           page={systemKeys}
           setPage={setPage}
@@ -750,7 +751,7 @@ function LoadedScreenBody({
       systems,
       fansOf,
       nameOf,
-      needsFix,
+      notes,
       drawn,
       systemKeys,
       setPage,
@@ -1109,7 +1110,7 @@ const SystemsList = memo(function SystemsList({
   systems,
   fansOf,
   nameOf,
-  needsFix,
+  notes,
   drawn,
   page,
   setPage,
@@ -1118,7 +1119,7 @@ const SystemsList = memo(function SystemsList({
   /** The system's fans: its hover hint and the head of its breakdown popover. */
   fansOf: (system: ReturnType<typeof systemList>[number]) => FanFact[];
   nameOf: (id: number) => string;
-  needsFix: ReadonlySet<string>;
+  notes: ReadonlyMap<string, SystemNote>;
   drawn: ProtoProps["snapshot"];
   page: Pick<ProtoProps["page"], "epoch" | "system" | "systemSearch" | "systemSort">;
   setPage: ProtoProps["setPage"];
@@ -1168,7 +1169,7 @@ const SystemsList = memo(function SystemsList({
       needsFix: {
         label: "Needs a fix",
         kind: "text",
-        read: (system) => (needsFix.has(system.key) ? "yes" : "no"),
+        read: (system) => ((notes.get(system.key)?.fix ?? 0) > 0 ? "yes" : "no"),
         values: ["yes", "no"],
         labels: new Map([
           ["yes", "Yes"],
@@ -1204,11 +1205,12 @@ const SystemsList = memo(function SystemsList({
         return systemRowParts(
           system,
           () => setPage({ system: system.key, selected: "", issue: "" }),
-          needsFix.has(system.key),
+          notes.get(system.key),
           fans.map((f) => `${nameOf(f.unit)} ${f.role}: ${f.says}`),
           () => <FanFacts facts={fans} nameOf={nameOf} />,
         );
       }}
+      projection={(system) => ({ weight: systemNoteCount(system, notes.get(system.key)).total })}
       empty={{
         message: "No duct systems in this scope",
         exit: "Read a model containing duct systems",

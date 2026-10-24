@@ -342,7 +342,9 @@ function AssistantMoment({
   return (
     <ConversationBody role="assistant">
       {head}
-      <div className="flex min-w-0 flex-col gap-2">
+      {/* `data-blocks`: the lens measures this column's children as the turn's rendered blocks (a
+          collapsed tool run is one), so the rail's notches draw what the transcript draws. */}
+      <div className="flex min-w-0 flex-col gap-2" data-blocks="">
         <PartsBoundary>
           {segments.map((segment) =>
             "run" in segment ? (

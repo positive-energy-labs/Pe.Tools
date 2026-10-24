@@ -94,8 +94,18 @@ export function TurnPeek({
           : { index, enter: !current ? "open" : index > current.index ? "down" : "up" },
       );
     };
+    // A press goes to the turn at its height: the tick it lands on, else the band spanning that y.
+    // Read by y, not by target: the rail captures the pointer for a scrub, so the click lands on
+    // the dial itself, also for a press that began on the funnel.
+    const bandAt = (clientY: number) => {
+      for (const band of dial.querySelectorAll<HTMLElement>('[data-annotation="dial-band"]')) {
+        const r = band.getBoundingClientRect();
+        if (clientY >= r.top && clientY < r.bottom) return Number(band.dataset.index);
+      }
+      return undefined;
+    };
     const onClick = (event: MouseEvent) => {
-      const index = turnAt(event);
+      const index = tickAt(event.clientY)?.index ?? bandAt(event.clientY);
       const turn = index === undefined ? undefined : turnsRef.current[index];
       if (turn) goTo(turn.first);
     };

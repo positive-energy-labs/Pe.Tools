@@ -2,8 +2,43 @@ import { land } from "./land";
 import { useWork } from "./pane";
 import { rowRevit } from "./revit-target";
 import { rowDamage } from "../master-table/model";
+import type { Mark, Span } from "./scroll-project";
+import type { Virtualizer } from "@tanstack/react-virtual";
 
 export const VIRTUAL_FROM = 60;
+/** Rows drawn past the viewport, in viewport heights per side, from the measured row height:
+ *  covers a main-thread stall of 2V / fling speed (V=800px: 400 ms at 4000 px/s). */
+export const OVERSCAN_VIEWPORTS = 2;
+
+type Virtual = Virtualizer<HTMLElement, Element>;
+/** Overscan is a rule, not a count: OVERSCAN_VIEWPORTS of the last pass's average row, per side. */
+export function overscanRows(
+  last: Virtual | null,
+  scroller: HTMLElement | null,
+  count: number,
+  estimate: number,
+) {
+  const viewport = last?.scrollRect?.height ?? scroller?.clientHeight ?? 0;
+  const average = (last && count && last.getTotalSize() / count) || estimate;
+  return Math.max(1, Math.ceil((OVERSCAN_VIEWPORTS * viewport) / average));
+}
+/** Every virtual row's span in scroller pixels: measured where drawn, estimated elsewhere. */
+export function virtualSpans(
+  virtual: Virtual,
+  count: number,
+  margin: number,
+  estimate: number,
+  mark: (index: number) => Mark,
+): Span[] {
+  return Array.from({ length: count }, (_, index) => {
+    const measured = virtual.measurementsCache[index];
+    return {
+      top: measured?.start ?? margin + index * estimate,
+      height: measured?.size ?? estimate,
+      mark: mark(index),
+    };
+  });
+}
 import { startTransition, useEffect, useId, useMemo, useRef, useState } from "react";
 
 import { useScopeKeys, type ScopeKey } from "../../keys";
@@ -670,6 +705,8 @@ export interface ListItem<T> extends Pick<RowState, "revit" | "damage"> {
   ancestors: readonly string[];
   section: string;
   branch: boolean;
+  /** Matched the search itself; a retained ancestor is not a hit. */
+  hit: boolean;
 }
 
 export interface ListSearchable {
@@ -739,6 +776,7 @@ export function listModel<T, Sort extends string>(
         ancestors,
         section: group,
         branch: children.length > 0,
+        hit: false,
       });
       visit(children, [...ancestors, key], group);
     }
@@ -764,8 +802,10 @@ export function listModel<T, Sort extends string>(
   const included = new Set(matching.flatMap((row) => [row.key, ...row.ancestors]));
   const filtering = !!state.search.keywords.trim() || state.search.pills.length > 0 || !!refusal;
   const sort = sortKey ? options.sorts?.[sortKey] : undefined;
+  const matched = new Set(matching.map((row) => row.key));
   const ordered = all
     .filter((row) => included.has(row.key))
+    .map((row) => (filtering && matched.has(row.key) ? { ...row, hit: true } : row))
     .sort((a, b) => {
       // Sorting siblings retains the tree's parent-before-child order below.
       if (!sort) return 0;

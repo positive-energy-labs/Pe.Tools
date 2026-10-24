@@ -1,5 +1,4 @@
 import { reachProps } from "./reach";
-import "./damage-beat";
 import { useWork } from "./pane";
 /**
  * The cell: one grammar for a value at any scale (table td, card line, key specimen).
@@ -25,7 +24,6 @@ import "./cell.css";
 
 export const stateCellRecipe = tv({
   slots: {
-    wrapper: "",
     base: "dl-cell",
     line: "dl-cell-line",
     input: "dl-cell-input",
@@ -452,7 +450,6 @@ export function StateCell(props: StateCellProps) {
       <span
         ref={rootRef}
         tabIndex={ownHost ? 0 : undefined}
-        className={slots.wrapper()}
         aria-busy={pending || undefined}
         onClick={locate}
       >

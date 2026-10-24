@@ -29,6 +29,7 @@
     "./lang/legend": "./src/components/lang/legend.tsx",
     "./lang/list-popup": "./src/components/lang/list-popup.tsx",
     "./lang/minimap": "./src/components/lang/minimap.tsx",
+    "./lang/scroll": "./src/components/lang/scroll.tsx",
     "./lang/list-view": "./src/components/lang/list-view.tsx",
     "./lang/pane-crumb": "./src/components/lang/pane-crumb.tsx",
     "./lang/readout": "./src/components/lang/readout.tsx",

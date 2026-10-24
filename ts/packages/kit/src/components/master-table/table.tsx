@@ -1,7 +1,7 @@
 import type { Ref } from "../lang/attention";
 import type { Tone } from "../../lib/token";
 /** visibleRows owns the view; TableFrame owns chrome. */
-import { useLayoutEffect, useMemo, useRef, useState, type ReactNode } from "react";
+import { useMemo, useRef, useState, type ReactNode } from "react";
 import { useTable, type RowData } from "@tanstack/react-table";
 
 import { cellFactsText, cellStateLabel } from "../lang/cell";
@@ -10,6 +10,7 @@ import { useCollection } from "../lang/collection";
 import type { ListReading } from "../lang/collection";
 import { StatusLine } from "../lang/list-popup";
 import { EmptyState } from "../lang/empty";
+import { Scroll } from "../lang/scroll";
 import { MasterTableBody } from "./master-table-body";
 import { resolveStateColumn } from "./master-table-columns";
 import { MasterTableHeader } from "./master-table-header";
@@ -175,39 +176,16 @@ export function Table<Row extends RowData>({
     shownRows.map((row) => row.id),
   );
 
-  const theadRef = useRef<HTMLTableSectionElement | null>(null);
   const [scroller, setScroller] = useState<HTMLDivElement | null>(null);
-  const [rowTops, setRowTops] = useState<number[]>([]);
-  useLayoutEffect(() => {
-    const thead = theadRef.current;
-    if (!thead) return;
-    const measure = () => {
-      const headerRows = Array.from(thead.rows);
-      if (headerRows.length === 0) return;
-      const base = headerRows[0]!.getBoundingClientRect().top;
-      const next = headerRows.map((row) => row.getBoundingClientRect().top - base);
-      // FOOTGUN: a caller that rebuilds `columns` every render re-runs this effect every render;
-      // setting a fresh array each time is "Maximum update depth exceeded". Set only on change.
-      setRowTops((previous) =>
-        previous.length === next.length && previous.every((top, i) => top === next[i])
-          ? previous
-          : next,
-      );
-    };
-    measure();
-    if (typeof ResizeObserver === "undefined") return;
-    const observer = new ResizeObserver(measure);
-    observer.observe(thead);
-    return () => observer.disconnect();
-  }, [columns]);
 
   return (
     <>
-      <div
+      <Scroll
         ref={setScroller}
         data-table-scroll=""
-        className={maxHeight ? "overflow-auto" : "min-h-0 flex-1 overflow-auto"}
-        style={maxHeight ? { maxHeight } : undefined}
+        axis="both"
+        className={maxHeight ? undefined : "min-h-0 flex-1"}
+        maxHeight={maxHeight}
         // Scrolled sideways, the locked column floats over the rows and casts its shade.
         onScroll={({ currentTarget }) =>
           currentTarget.toggleAttribute("data-scrolled-x", currentTarget.scrollLeft > 0)
@@ -226,11 +204,9 @@ export function Table<Row extends RowData>({
           <MasterTableHeader
             table={table}
             columnByKey={columnByKey}
-            stickyTop={(rowIndex) => rowTops[rowIndex] ?? 0}
             sortCount={table.state.sorting.length}
             gutter={Boolean(gutter)}
             gutterWidth={GUTTER_PX}
-            theadRef={theadRef}
           />
           <MasterTableBody
             table={table}
@@ -276,7 +252,7 @@ export function Table<Row extends RowData>({
             )}
           </div>
         )}
-      </div>
+      </Scroll>
 
       {columns.some((column) => column.readState) && (
         <table.Subscribe

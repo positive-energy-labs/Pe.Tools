@@ -29,6 +29,8 @@ import { Button } from "./button";
 import { tv, type VariantProps } from "../../lib/tv";
 
 import { Rail } from "./rail";
+import { Scroll } from "./scroll";
+import { cn } from "../../lib/utils";
 import { PaneCrumb } from "./pane-crumb";
 import { SubjectBox } from "./popover";
 import "./lang.css";
@@ -139,16 +141,18 @@ export const paneRecipe = tv({
     root: "relative flex size-full min-h-0 min-w-0 flex-col overflow-visible",
     // A column, so a call site docks a region under a scroller without a second scroller.
     body: "relative flex min-h-0 min-w-0 flex-1 flex-col",
+    // The padded field inside the scroller, so the scrollbar strip runs the body's full height.
+    field: "",
   },
   variants: {
     scroll: {
-      auto: { body: "overflow-auto" },
+      auto: {},
       clip: { body: "overflow-hidden" },
       visible: { body: "overflow-visible" },
     },
     flush: {
-      false: { body: "p-(--gutter)" },
-      true: { body: "p-0" },
+      false: { field: "p-(--gutter)" },
+      true: { field: "p-0" },
     },
   },
   defaultVariants: { scroll: "auto", flush: false },
@@ -248,7 +252,7 @@ export function Pane({
     label: teachText(title) || "pane",
     purpose: teachText(help) || undefined,
   });
-  const { root, body } = paneRecipe({ scroll, flush });
+  const { root, body, field: fieldClass } = paneRecipe({ scroll, flush });
   const rootRef = useRef<HTMLElement>(null);
   const [registered, setRegistered] = useState(new Map<object, string>());
   const registerWork = useCallback((key: object, entry: string) => {
@@ -333,19 +337,25 @@ export function Pane({
       )}
     </>
   );
-  const paneBody = (
-    <div data-slot="pane-body" className={body()}>
-      <PaneErrorBoundary key={boundaryKey} what={title} onRetry={onRetry}>
-        <Suspense
-          fallback={
-            <PaneWork label={typeof title === "string" ? `loading ${title}…` : "loading…"} />
-          }
-        >
-          {children}
-        </Suspense>
-      </PaneErrorBoundary>
-    </div>
+  const guarded = (
+    <PaneErrorBoundary key={boundaryKey} what={title} onRetry={onRetry}>
+      <Suspense
+        fallback={<PaneWork label={typeof title === "string" ? `loading ${title}…` : "loading…"} />}
+      >
+        {children}
+      </Suspense>
+    </PaneErrorBoundary>
   );
+  const paneBody =
+    (scroll ?? "auto") === "auto" ? (
+      <Scroll data-slot="pane-body" className={body()} fieldClassName={fieldClass()}>
+        {guarded}
+      </Scroll>
+    ) : (
+      <div data-slot="pane-body" className={cn(body(), fieldClass())}>
+        {guarded}
+      </div>
+    );
   return (
     <TeachRegion value={teachId}>
       <WorkContext value={registerWork}>
@@ -383,7 +393,7 @@ export function Pane({
                       center={titleAlign === "center" ? heading : undefined}
                       trail={
                         hasContent(actions) || strip != null ? (
-                          <div data-slot="pane-actions" className="flex shrink-0 items-center">
+                          <div data-slot="pane-actions" className="flex min-w-0 items-center">
                             {hasContent(actions) && <ButtonGroup>{actions}</ButtonGroup>}
                             {strip}
                           </div>

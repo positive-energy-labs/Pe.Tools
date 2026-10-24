@@ -34,6 +34,7 @@ import { OutcomeLine } from "@pe/kit/lang/outcome";
 import { Row } from "@pe/kit/lang/row";
 import { useList } from "@pe/kit/lang/collection";
 import { ListView } from "@pe/kit/lang/list-view";
+import { Scroll } from "@pe/kit/lang/scroll";
 import { docKey, heldRowParts, SessionCard, type SessionDocument } from "#/components/lang/session";
 import { Switcher } from "@pe/kit/lang/switcher";
 import type { QueryCommand } from "@pe/kit/table/model";
@@ -448,12 +449,9 @@ export function PatchBay({
   );
   const newOwner = draft.owner;
   const sockets = (
-    <div
-      className={
-        layout === "row"
-          ? "flex min-h-0 flex-col gap-2 overflow-y-auto pb-2"
-          : "flex flex-col gap-2 pr-6"
-      }
+    <Scroll
+      className={layout === "row" ? "min-h-0" : "pr-6"}
+      fieldClassName={layout === "row" ? "gap-2 pb-2" : "gap-2"}
       aria-label="Revits on this machine"
     >
       {machine && machine.revit.sessions === null ? (
@@ -550,7 +548,7 @@ export function PatchBay({
         {draft.target === "new" ? strip : null}
       </ArtifactFrame>
       <OutcomeOf outcome={outcome} />
-    </div>
+    </Scroll>
   );
 
   const table = (

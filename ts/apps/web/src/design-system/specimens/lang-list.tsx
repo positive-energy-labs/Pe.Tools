@@ -28,10 +28,12 @@ import { Table } from "@pe/kit/table/table";
 
 import { RecipeGrid, SpecimenFrame } from "./recipe-grid";
 
-const VAST_ROWS = Array.from({ length: 200 }, (_, index) => ({
+// 2000 rows for the scrollbar: 200 damaged (every 10th), notes density rising down the field.
+const VAST_ROWS = Array.from({ length: 2000 }, (_, index) => ({
   key: String(index),
   name: `Row ${index + 1}`,
-  damage: "unpreviewed",
+  damage: index % 10 === 0 ? "unpreviewed" : undefined,
+  notes: index % 7 === 0 ? Math.floor(index / 250) : 0,
 }));
 const MEASURES = listColumns({
   total: { kind: "number", priority: 0 },
@@ -57,22 +59,25 @@ export function LangListSpecimens() {
     items: VAST_ROWS,
     keyOf: (item) => item.key,
     search: (item) => ({ text: [item.name] }),
-    groups: { of: (item) => `Section ${Math.floor(Number(item.key) / 50) + 1}` },
+    groups: { of: (item) => `Section ${Math.floor(Number(item.key) / 500) + 1}` },
+    initialState: { selected: ["1200"] },
   });
   const plain = useList({ ...common, search: (kind) => ({ text: [kind] }) });
   return (
     <>
       <SpecimenFrame
-        name="ListView - sticky search and section stack - 200 damaged rows"
+        name="ListView - projection scrollbar - 2000 rows, 200 damaged, notes density"
         importPath="@pe/kit/lang/list-view"
       >
         <ListView
           list={vast}
-          aria-label="200 damaged rows"
+          aria-label="2000 rows"
           maxHeight="calc(var(--item-h) * 12)"
           columns={{ label: "Name", meta: measures }}
+          projection={(item) => ({ weight: item.notes })}
           row={(item) => ({
             label: `${item.name}: a long run title across a narrow pane`,
+            damage: item.damage,
             meta: measures,
           })}
           empty={{ message: "No rows", exit: "Clear search" }}

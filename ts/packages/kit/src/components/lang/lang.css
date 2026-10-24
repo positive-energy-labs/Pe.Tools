@@ -359,6 +359,9 @@ tr.dl-row {
     height: auto;
     max-width: 100%;
   }
+  [data-table] thead {
+    position: static;
+  }
   [data-table] thead tr {
     display: flex;
     flex-wrap: wrap;
@@ -517,27 +520,7 @@ tr.dl-row[data-active] {
   color: var(--pe-ink-2);
   font-style: italic;
 }
-@keyframes pe-damage-beat {
-  0%,
-  40%,
-  100% {
-    opacity: 0.7;
-  }
-  10%,
-  27% {
-    opacity: 1;
-  }
-  18% {
-    opacity: 0.8;
-  }
-}
-
-/* Dense fields beat once on their damage layer; only virtualized rows/cells beat individually. */
-:root [data-damage]:not(:where([data-damage-surface] *)),
-:root [data-damage-surface] {
-  animation: pe-damage-beat 1.5s ease-in-out infinite;
-  will-change: opacity;
-}
+/* Damage stays loud and static at rest; accelerated opacity still incurred animation style work. */
 :root [data-damage] {
   box-shadow: inset 0 0 3px var(--pe-alarm);
   outline: 1px solid var(--pe-alarm);
@@ -551,13 +534,6 @@ tr.dl-row[data-active] {
   stroke-width: 2.5px;
   outline: none;
 }
-@media (prefers-reduced-motion: reduce) {
-  :root :is([data-damage], [data-damage-surface]) {
-    animation: none;
-    will-change: auto;
-  }
-}
-
 .dl-row-damage {
   display: inline-flex;
   align-items: center;
@@ -853,9 +829,6 @@ tr.dl-row[data-active] {
   background-color: var(--pe-recess);
   box-shadow: var(--shadow-well);
 }
-.dl-search[data-face="bar"]:focus-within {
-  border-bottom-color: var(--pe-line-2);
-}
 .dl-search [data-search-trail] {
   padding-inline: calc(var(--gutter) / 2);
 }
@@ -1099,48 +1072,121 @@ tr.dl-row[data-active] {
   pointer-events: visiblePainted;
 }
 
-/* N8: one gutter maps row ordinals; the virtualizer supplies its viewport. */
-[data-minimap-owner] {
-  padding-inline-end: calc(var(--space-unit) * 4);
+/* The projection scrollbar: `Scroll` owns the box, hides its native bar and reserves the gutter
+   always (L3). The strip is a sticky zero-height host's child, so wheel and touch over it scroll
+   natively. Frame and lit marks ride the scroller's timeline: no main-thread write per frame. */
+[data-scroll] {
+  --scrollbar-w: calc(var(--space-unit) * 2);
+  overflow: auto;
+  scrollbar-width: none;
+  padding-inline-end: var(--scrollbar-w);
+  scroll-timeline:
+    --pe-scroll-y block,
+    --pe-scroll-x inline;
 }
-[data-minimap-host] {
+[data-scroll]::-webkit-scrollbar {
+  display: none;
+}
+[data-scroll][data-axis="both"] {
+  padding-block-end: var(--scrollbar-w);
+}
+[data-scrollbar-host] {
   position: sticky;
   inset-inline-start: 0;
   top: 0;
+  flex: none;
   height: 0;
   z-index: var(--z-sticky);
   pointer-events: none;
 }
-[data-minimap="rows"] {
+[data-scrollbar-host="x"] {
+  top: auto;
+  bottom: 0;
+}
+[data-scrollbar] {
   position: absolute;
-  inset-inline-end: calc(var(--space-unit) * -4);
+  inset-inline-end: calc(-1 * var(--scrollbar-w));
   top: 0;
-  width: calc(var(--space-unit) * 4);
+  width: var(--scrollbar-w);
+  height: var(--scrollbar-h, 0px);
   background: var(--pe-recess);
-  cursor: crosshair;
+  pointer-events: auto;
   touch-action: none;
   user-select: none;
-  pointer-events: auto;
+  visibility: hidden;
 }
-[data-damage-surface="minimap"] {
+[data-scroll][data-scrolls] > [data-scrollbar-host] > [data-scrollbar] {
+  visibility: visible;
+}
+[data-scrollbar] > canvas {
   position: absolute;
   inset: 0;
+  display: block;
+  width: 100%;
+  height: 100%;
   pointer-events: none;
 }
-[data-minimap="rows"] i {
-  position: absolute;
-  inset-inline: 0;
-  height: 1px;
-  background: var(--pe-line-2);
-  pointer-events: none;
+[data-scrollbar-marks=""] {
+  opacity: 0.55;
 }
+[data-scrollbar-marks="lit"] {
+  clip-path: inset(0 0 var(--frame-travel, 0px) 0);
+  animation: pe-scrollbar-lit linear both;
+  animation-timeline: --pe-scroll-y;
+}
+@keyframes pe-scrollbar-lit {
+  from {
+    clip-path: inset(0 0 var(--frame-travel, 0px) 0);
+  }
+  to {
+    clip-path: inset(var(--frame-travel, 0px) 0 0 0);
+  }
+}
+/* One frame mark app-wide: the plane minimap's box wears the same translucent fill. */
+[data-scrollbar-frame],
 [data-minimap-viewport] {
   position: absolute;
-  inset-inline: 0;
+  box-sizing: border-box;
   min-height: 2px;
-  border: 1px solid var(--pe-ink-2);
-  background: var(--pe-select);
+  border: 1px solid color-mix(in srgb, var(--pe-ink-2) 70%, transparent);
+  background: color-mix(in srgb, var(--pe-ink) 12%, transparent);
   pointer-events: none;
+}
+[data-scrollbar-frame] {
+  inset-inline: 0;
+  top: 0;
+  height: var(--frame-h, 0px);
+  will-change: transform;
+  animation: pe-scrollbar-frame linear both;
+  animation-timeline: --pe-scroll-y;
+}
+@keyframes pe-scrollbar-frame {
+  to {
+    transform: translateY(var(--frame-travel, 0px));
+  }
+}
+[data-scrollbar-frame="x"] {
+  inset-inline: auto;
+  inset-inline-start: 0;
+  top: auto;
+  bottom: calc(-1 * var(--scrollbar-w));
+  width: var(--frame-w, 0px);
+  height: var(--scrollbar-w);
+  visibility: hidden;
+  animation-name: pe-scrollbar-frame-x;
+  animation-timeline: --pe-scroll-x;
+}
+[data-scroll][data-scrolls-x] > [data-scrollbar-host="x"] > [data-scrollbar-frame="x"] {
+  visibility: visible;
+}
+@keyframes pe-scrollbar-frame-x {
+  to {
+    transform: translateX(var(--frame-travel-x, 0px));
+  }
+}
+[data-scrollbar][data-dragging] > [data-scrollbar-frame] {
+  border-color: var(--pe-ink);
+  background: color-mix(in srgb, var(--pe-ink) 26%, transparent);
 }
 
 /* REACH START: the only physical and shared reach paint in kit. */
@@ -1150,6 +1196,14 @@ tr.dl-row[data-active] {
 [data-reach]:not(:disabled, [aria-disabled="true"], .subject-ref):is([data-reach="reach"]) {
   background-image: var(--fill-veil);
   --dl-cell-ring: inset 0 0 0 1px var(--pe-line-2);
+}
+[data-scrollbar]:hover > [data-scrollbar-frame] {
+  border-color: var(--pe-ink-2);
+  background: color-mix(in srgb, var(--pe-ink) 18%, transparent);
+  cursor: grab;
+}
+[data-scrollbar]:hover {
+  cursor: default;
 }
 [data-reach]:not(:disabled, [aria-disabled="true"], .subject-ref):is(
     [data-reach="hover"],

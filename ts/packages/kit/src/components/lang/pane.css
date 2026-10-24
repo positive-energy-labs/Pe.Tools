@@ -1,3 +1,8 @@
+@property --pane-size {
+  syntax: "<length>";
+  inherits: false;
+  initial-value: 0px;
+}
 /* Pane: the focused pane (innermost, the one whose keys bind) wears a half-strength hairline drawn
    inside its own edge, so it never spills into a neighbour's gutter. A pane whose body draws its
    own focus ring sets `--pane-halo: transparent`; a custom property never loses to specificity. */
@@ -66,18 +71,56 @@
 [data-slot="pane-header"]:not([data-title-align="center"]) [data-slot="rail-lead"] {
   min-width: min(calc(var(--control-h) * 7), 100%);
 }
-/* The strip's last fold (pane-strip.tsx): its trail drops under the title onto a second line. */
-[data-slot="pane-header"]:has([data-slot="pane-strip"][data-fold="4"]) [data-slot="rail"] {
-  flex-wrap: wrap;
-  height: auto;
-  min-height: var(--rail-h);
+/* One CSS owner decides how much of the rail remains inline. */
+[data-slot="rail-container"] {
+  container: pe-rail / inline-size;
 }
-[data-slot="pane-header"]:has([data-slot="pane-strip"][data-fold="4"]) [data-slot="rail-lead"] {
-  flex-basis: 100%;
-  min-height: var(--rail-h);
+[data-strip-group],
+[data-strip-full] {
+  display: flex;
+  align-items: center;
 }
-[data-slot="pane-header"]:has([data-slot="pane-strip"][data-fold="4"]) [data-slot="pane-actions"] {
-  margin-inline-start: auto;
+[data-strip-folded],
+[data-strip-label="short"] {
+  display: none;
+}
+@container pe-rail (width < 56rem) {
+  [data-strip-group="layers"] > [data-strip-full] {
+    display: none;
+  }
+  [data-strip-group="layers"] > [data-strip-folded] {
+    display: block;
+  }
+}
+@container pe-rail (width < 44rem) {
+  [data-strip-group="floaters"] > [data-strip-full] {
+    display: none;
+  }
+  [data-strip-group="floaters"] > [data-strip-folded] {
+    display: block;
+  }
+}
+@container pe-rail (width < 36rem) {
+  [data-strip-label="full"] {
+    display: none;
+  }
+  [data-strip-label="short"] {
+    display: inline;
+  }
+}
+@container pe-rail (width < 28rem) {
+  [data-slot="rail"]:has([data-slot="pane-strip"]) {
+    flex-wrap: wrap;
+    height: auto;
+    min-height: var(--rail-h);
+  }
+  [data-slot="rail"]:has([data-slot="pane-strip"]) [data-slot="rail-lead"] {
+    flex-basis: 100%;
+    min-height: var(--rail-h);
+  }
+  [data-slot="rail"]:has([data-slot="pane-strip"]) [data-slot="rail-actions"] {
+    margin-inline-start: auto;
+  }
 }
 [data-slot="pane-header"][data-title-align="center"] [data-slot="rail-lead"] {
   align-items: center;

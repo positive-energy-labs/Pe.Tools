@@ -1,4 +1,3 @@
-import { MinimapViewport } from "./minimap-viewport";
 import "./lang.css";
 import { SvgTip } from "./tooltip";
 import { useEffect, useRef, useState, type MouseEvent, type ReactNode } from "react";
@@ -121,7 +120,9 @@ export function PlaneMinimap<V extends PlaneViewport | ScrollViewport>({
           onViewport(at(event), "move");
         }}
       />
-      <MinimapViewport
+      <span
+        aria-hidden
+        data-minimap-viewport=""
         style={{
           left: `${(box.x / extent.width) * 100}%`,
           top: `${(box.y / extent.height) * 100}%`,

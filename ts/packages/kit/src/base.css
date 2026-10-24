@@ -274,24 +274,23 @@
     color: var(--pe-ink-2);
   }
 
-  /* THE focus ring, owned here and nowhere else (kit-census `focus-ring-owner`): 2px ink, drawn inside
-     the box so it never clips, never shifts layout and never fills. Pointer presses show none. A
-     field's ring belongs to its frame, so a frame never carries two. A reach rung of "focus" rings only
-     without DOM focus (a scene or list cursor naming it); DOM focus rings by `:focus-visible` alone. */
-  [data-pe] :is(:focus-visible, [data-reach="focus"]:not(:focus-within, .subject-ref)) {
+  /* THE focus ring (kit-census `focus-ring-owner`): 2px ink inside the box, keyboard focus only. A field's
+     ring is its frame's, a focused list's is its cursor row's (never the whole scrolling container); a
+     reach rung of "focus" rings only without DOM focus. */
+  [data-pe] :focus-visible,
+  [data-pe] [data-reach="focus"]:not(:focus-within, .subject-ref),
+  [data-pe]
+    :is(.dl-control, .dl-composer-box, .dl-cell, .dl-search):has(
+      :is(input, textarea):focus-visible
+    ),
+  [data-pe] [data-list-view]:focus-visible .dl-row[data-cursor] {
     outline: 2px solid var(--pe-ink);
     outline-offset: var(--focus-offset, -2px);
   }
   [data-pe] a:focus-visible {
     --focus-offset: 2px;
   }
-  [data-pe]
-    :is(.dl-control, .dl-composer-box, .dl-cell, .dl-search:not([data-face="bar"])):has(
-      :is(input, textarea):focus-visible
-    ) {
-    outline: 2px solid var(--pe-ink);
-    outline-offset: -2px;
-  }
+  [data-pe] [data-list-view]:focus-visible,
   [data-pe]
     :is(.dl-control, .dl-composer-box, .dl-cell, .dl-search)
     :is(input, textarea):focus-visible {

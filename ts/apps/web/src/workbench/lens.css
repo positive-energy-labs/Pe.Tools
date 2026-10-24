@@ -57,7 +57,7 @@
   pointer-events: none;
   z-index: 7;
 }
-/* ---- The rail: one block per turn, log-scaled, centred in the lane ---- */
+/* ---- The rail: one block per turn, sized by its turn (scale.tsx), centred in the lane ---- */
 /* Centred in the lane, like t3's: the stack grows both ways from the middle of the pane. */
 [data-annotation="dial"] {
   position: absolute;
@@ -154,9 +154,14 @@
 [data-annotation="dial"]:hover [data-annotation="dial-tick"] {
   background: var(--pe-ink-mute);
 }
+/* A scrub in progress: the rail takes the pointer (captured) and shows the grip. */
+[data-annotation="dial"][data-scrub] {
+  cursor: grabbing;
+}
 /* The thumb: a slide rule's cursor over the scale it measures — a hairline square frame centred
    on the bar column, open inside so the bars stay legible, firmer while the pointer is on the
-   rail. It locates; it is not a drag target. */
+   rail. It locates; the rail under it (model.ts) is what a press-and-move scrubs, so the thumb
+   itself takes no pointer. */
 [data-annotation="thumb"] {
   position: absolute;
   left: calc(50% - var(--bar) / 2 - 3px);

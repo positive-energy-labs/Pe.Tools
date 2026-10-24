@@ -4,6 +4,8 @@ import { afterEach, expect, test, vi } from "vite-plus/test";
 
 import { KeyScope, readKeyMeta, readRegistrations } from "@pe/kit/keys";
 
+import { PaneStrip } from "../src/components/lang/pane-strip";
+import { Rail } from "../src/components/lang/rail";
 import { Pane, PictureContext } from "@pe/kit/lang/pane";
 import { PictureReadout } from "@pe/kit/lang/readout";
 import { Popover, PopoverTrigger, SubjectPopoverContent } from "@pe/kit/lang/popover";
@@ -61,8 +63,6 @@ const modes = (onChange = vi.fn()) => ({
 
 test("folded controls teach their choices through the live trigger and withdraw with their owner", async () => {
   renderHook(useTeaching);
-  vi.spyOn(HTMLElement.prototype, "scrollWidth", "get").mockReturnValue(500);
-  vi.spyOn(HTMLElement.prototype, "clientWidth", "get").mockReturnValue(400);
   vi.spyOn(HTMLElement.prototype, "getBoundingClientRect").mockImplementation(
     function (this: HTMLElement) {
       return this.closest('[data-slot="popover-content"], [hidden]')
@@ -99,9 +99,10 @@ test("folded controls teach their choices through the live trigger and withdraw 
     </PictureContext>
   );
   const view = render(page("parallel"));
-  expect(view.container.querySelector('[data-slot="pane-strip"]')?.getAttribute("data-fold")).toBe(
-    "4",
-  );
+  // jsdom has no container layout. Model the compact branch; the browser proves the CSS switch.
+  view.container.querySelector<HTMLElement>(
+    '[data-strip-group="layers"] > [data-strip-full]',
+  )!.hidden = true;
   expect(screen.queryByRole("button", { name: "parallel" })).toBeNull();
   const projection = () =>
     readTeaching().find((f) => f.kind === "modes" && f.label === "projection");
@@ -241,68 +242,14 @@ test("a hidden pane registers nothing", () => {
   ).toEqual([]);
 });
 
-test("an overflowing trail folds layers and floaters into popovers, shortens modes, keeps chords", () => {
-  // jsdom lays nothing out: the trail reports more content than room at every fold.
-  const scroll = vi.spyOn(HTMLElement.prototype, "scrollWidth", "get").mockReturnValue(500);
-  const client = vi.spyOn(HTMLElement.prototype, "clientWidth", "get").mockReturnValue(400);
-  render(
-    <Pane
-      id="canvas"
-      title="canvas"
-      modes={modes()}
-      floaters={[
-        {
-          key: "map",
-          kind: "picture",
-          label: "minimap",
-          chord: "M",
-          place: "br",
-          open: true,
-          onOpenChange: vi.fn(),
-          render: () => null,
-        },
-      ]}
-      layers={{
-        value: ["grid"],
-        onToggle: vi.fn(),
-        options: [{ key: "grid", label: "grid", chord: "G" }],
-      }}
-    >
-      body
-    </Pane>,
+test("strip layout and content changes do not read geometry or computed style", () => {
+  const style = vi.spyOn(window, "getComputedStyle");
+  const width = vi.spyOn(HTMLElement.prototype, "clientWidth", "get");
+  const page = (title: string) => (
+    <Rail lead={<h2 data-slot="pane-title">{title}</h2>} trail={<PaneStrip modes={modes()} />} />
   );
-  scroll.mockRestore();
-  client.mockRestore();
-  expect(screen.getByRole("button", { name: "layers 1/1" })).toBeTruthy();
-  expect(screen.getByRole("button", { name: "floaters 1/1" })).toBeTruthy();
-  expect(screen.queryByRole("group", { name: "layers" })).toBeNull();
-  expect(screen.getByRole("button", { name: "plan" }).textContent).toBe("pplan");
-  expect(screen.getByRole("heading", { name: "canvas" })).toBeTruthy();
-  expect(
-    bound("canvas")
-      .map((k) => k.hotkey)
-      .sort(),
-  ).toEqual(["1", "2", "G", "M"]);
+  const view = render(page("System"));
+  view.rerender(page("A longer system name"));
+  expect(style).not.toHaveBeenCalled();
+  expect(width).not.toHaveBeenCalled();
 });
-
-test.each(["rail-lead", "pane-title"])(
-  "%s overflow folds the strip even when the actions fit",
-  (slot) => {
-    vi.spyOn(HTMLElement.prototype, "scrollWidth", "get").mockImplementation(
-      function (this: HTMLElement) {
-        return this.getAttribute("data-slot") === slot ? 240 : 100;
-      },
-    );
-    vi.spyOn(HTMLElement.prototype, "clientWidth", "get").mockReturnValue(200);
-    const { container } = render(
-      <Pane id="space" title="Space" meta="a long model reading" modes={modes()}>
-        body
-      </Pane>,
-    );
-    expect(container.querySelector("[data-slot='pane-strip']")?.getAttribute("data-fold")).toBe(
-      "4",
-    );
-    expect(screen.getByRole("heading", { name: "Space" })).toBeTruthy();
-    expect(bound("space").map((key) => key.hotkey)).toEqual(["1", "2"]);
-  },
-);

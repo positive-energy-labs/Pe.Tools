@@ -7,6 +7,7 @@ import { useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
 import type { Machine } from "@pe/agent-contracts";
 import type { RecentDocument } from "@pe/host-contracts/pe-revit-contract";
 
+import { Scroll } from "@pe/kit/lang/scroll";
 import { Surface } from "@pe/kit/lang/surface";
 import { frozenDemo } from "#/host/demo-client";
 import { useSessionEvents } from "#/host/world-log";
@@ -51,9 +52,10 @@ export function OpenPage() {
   const current = handle.readings.machine.state === "ready";
   return (
     <Surface head={<RouteShell manifest={openManifest} handle={handle} />}>
-      <div
+      <Scroll
         ref={container}
-        className="flex min-h-0 min-w-0 flex-1 flex-col gap-2 overflow-y-auto"
+        className="min-h-0 min-w-0 flex-1"
+        fieldClassName="gap-2"
         data-testid="open-route"
         aria-busy={!current && handle.readings.machine.state !== "failed"}
       >
@@ -80,7 +82,7 @@ export function OpenPage() {
             )
           }
         />
-      </div>
+      </Scroll>
     </Surface>
   );
 }

@@ -4,6 +4,7 @@ import { Copy, RotateCcw } from "lucide-react";
 import { useCopy } from "@pe/kit/lib/use-copy";
 import { useList } from "@pe/kit/lang/collection";
 import { ListView } from "@pe/kit/lang/list-view";
+import { Scroll } from "@pe/kit/lang/scroll";
 import { Button } from "@pe/kit/lang/button";
 import type { HarnessThreadSummary } from "@pe/agent-contracts";
 import { peClient } from "#/host/pe-client";
@@ -336,7 +337,7 @@ export function Ledger({
       {head ?? <h2 className="role-titlebar m-0 px-2 py-1">{presentation.label}</h2>}
       {presentation.counters && <Counters rows={ledger.rows} />}
       {ledger.refusal && <p className="m-0 px-2 py-1 text-ink-2">{ledger.refusal}</p>}
-      <div className="min-h-0 flex-1 overflow-auto">
+      <Scroll className="min-h-0 flex-1">
         {ledger.props.status === "pending" ? (
           <p role="status">Reading activity...</p>
         ) : ledger.props.status === "failed" ? (
@@ -360,7 +361,7 @@ export function Ledger({
             />
           </>
         )}
-      </div>
+      </Scroll>
     </section>
   );
 }

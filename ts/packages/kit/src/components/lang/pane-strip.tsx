@@ -2,11 +2,11 @@
  * The pane's one strip (ledger 2026-10-21): modes as one segmented control (exclusive), floaters as
  * toggle buttons that show open or closed, layers as toggle chips. Every option's chord binds
  * through `useScopeKeys` on the pane's own scope node, so Help lists it; a hidden pane binds none.
- * When the header's trail overflows, the strip folds: layers into one popover, then floaters into
+ * The rail's container queries fold the strip: layers into one popover, then floaters into
  * one, then mode labels to their first letter, and last the trail drops under the title (pane.css),
  * so a breadcrumb title is never cut to a letter. Chords bind the same folded or not.
  */
-import { useLayoutEffect, useRef, useState, type ReactNode } from "react";
+import { useEffect, useRef, useState, type ReactNode } from "react";
 
 import { useScopeKeys, useScopeLive, type Chord, type ScopeKey } from "../../keys";
 import { Button } from "./button";
@@ -44,60 +44,20 @@ export interface PaneStripProps {
   layers?: PaneLayers;
 }
 
-/** 0 whole; 1 layers folded; 2 floaters folded too; 3 mode labels shortened too; 4 on its own line. */
-const FOLDS = 4;
-
-/** The title lane must keep this many controls' heights (about a three-part breadcrumb). */
-const TITLE_ROOM = 7;
-
-/**
- * The title takes priority over the trail: fold controls while either lane or the title itself
- * is clipped. Only a width change unfolds them, so changing selection cannot expand the trail.
- */
-function crowded(strip: HTMLElement) {
-  const trail = strip.closest<HTMLElement>("[data-slot='rail-actions']") ?? strip.parentElement;
-  const rail = strip.closest<HTMLElement>("[data-slot='rail']");
-  const lane = rail?.querySelector<HTMLElement>("[data-slot='rail-lead']");
-  const title = lane?.querySelector<HTMLElement>("[data-slot='pane-title']");
-  const room = title
-    ? parseFloat(getComputedStyle(title).getPropertyValue("--control-h")) * TITLE_ROOM
-    : 0;
-  return (
-    (trail != null && trail.scrollWidth > trail.clientWidth) ||
-    (lane != null && lane.scrollWidth > lane.clientWidth) ||
-    (title != null && title.scrollWidth > title.clientWidth) ||
-    (lane != null && lane.clientWidth < room)
-  );
-}
-
-/** Folds one step per layout while the header is crowded; a resize starts over at whole. */
-function useFold() {
-  const ref = useRef<HTMLDivElement>(null);
-  const [fold, setFold] = useState(0);
-  // A width change starts over; content changes can only make more room for identity.
-  useLayoutEffect(() => {
-    if (ref.current && fold < FOLDS && crowded(ref.current)) setFold(fold + 1);
-  });
-  useLayoutEffect(() => {
-    const rail = ref.current?.closest("[data-slot='rail']");
-    if (!rail || typeof ResizeObserver === "undefined") return;
-    // Width only: the last fold changes the rail's height, which must not unfold it again.
-    let width = rail.clientWidth;
-    const observer = new ResizeObserver(() => {
-      if (rail.clientWidth === width) return;
-      width = rail.clientWidth;
-      setFold(0);
-    });
-    observer.observe(rail);
-    return () => observer.disconnect();
-  }, []);
-  return [ref, fold] as const;
-}
-
 function Folded({ label, count, children }: { label: string; count: string; children: ReactNode }) {
   const owner = useRef<HTMLButtonElement>(null);
+  const [open, setOpen] = useState(false);
+  // CSS owns folding; close a popup when its trigger leaves the visible layout.
+  useEffect(() => {
+    if (!open || !owner.current || typeof IntersectionObserver === "undefined") return;
+    const observer = new IntersectionObserver(([entry]) => {
+      if (!entry?.isIntersecting) setOpen(false);
+    });
+    observer.observe(owner.current);
+    return () => observer.disconnect();
+  }, [open]);
   return (
-    <Popover>
+    <Popover open={open} onOpenChange={setOpen}>
       <PopoverTrigger ref={owner} kind="framed" className="t-small">
         {label} <span className="face-mono">{count}</span>
       </PopoverTrigger>
@@ -139,7 +99,6 @@ export function PaneStrip({
       })) ?? []),
     ],
   });
-  const [ref, fold] = useFold();
   const bind = (option: StripOption, run: () => void): ScopeKey[] =>
     option.chord == null
       ? []
@@ -182,54 +141,65 @@ export function PaneStrip({
     </Button>
   ));
   return (
-    <div ref={ref} data-slot="pane-strip" data-fold={fold} className="flex shrink-0 items-center">
+    <div data-slot="pane-strip" className="flex shrink-0 items-center">
       {modes && (
-        <Switcher
-          ariaLabel={modes.label ?? "mode"}
-          value={modes.value}
-          onChange={modes.onChange}
-          options={modes.options.map((o) => ({
-            value: o.key,
-            label:
-              fold < 3 ? (
-                o.label
-              ) : (
+        <span data-strip-modes="">
+          <Switcher
+            ariaLabel={modes.label ?? "mode"}
+            value={modes.value}
+            onChange={modes.onChange}
+            options={modes.options.map((o) => ({
+              value: o.key,
+              label: (
                 <>
-                  <span aria-hidden>{o.label.slice(0, 1)}</span>
+                  <span data-strip-label="full" aria-hidden>
+                    {o.label}
+                  </span>
+                  <span data-strip-label="short" aria-hidden>
+                    {o.label.slice(0, 1)}
+                  </span>
                   <span className="sr-only">{o.label}</span>
                 </>
               ),
-            title: fold < 3 ? (o.says ?? o.label) : o.says ? `${o.label}: ${o.says}` : o.label,
-          }))}
-        />
+              title: o.says ? `${o.label}: ${o.says}` : o.label,
+            }))}
+          />
+        </span>
       )}
-      {floaters &&
-        floaters.length > 0 &&
-        (fold < 2 ? (
-          <ButtonGroup label="floaters">{floaterButtons}</ButtonGroup>
-        ) : (
-          <Folded
-            label="floaters"
-            count={`${floaters.filter((f) => f.open).length}/${floaters.length}`}
-          >
-            {floaterButtons}
-          </Folded>
-        ))}
-      {(layers || projection) &&
-        (fold < 1 ? (
-          <ButtonGroup label="layers">
-            {projection}
-            {layerButtons}
-          </ButtonGroup>
-        ) : (
-          <Folded
-            label="layers"
-            count={layers ? `${layers.value.length}/${layers.options.length}` : ""}
-          >
-            {projection}
-            {layerButtons}
-          </Folded>
-        ))}
+      {floaters && floaters.length > 0 && (
+        <div data-strip-group="floaters">
+          <div data-strip-full="">
+            <ButtonGroup label="floaters">{floaterButtons}</ButtonGroup>
+          </div>
+          <div data-strip-folded="">
+            <Folded
+              label="floaters"
+              count={`${floaters.filter((f) => f.open).length}/${floaters.length}`}
+            >
+              {floaterButtons}
+            </Folded>
+          </div>
+        </div>
+      )}
+      {(layers || projection) && (
+        <div data-strip-group="layers">
+          <div data-strip-full="">
+            <ButtonGroup label="layers">
+              {projection}
+              {layerButtons}
+            </ButtonGroup>
+          </div>
+          <div data-strip-folded="">
+            <Folded
+              label="layers"
+              count={layers ? `${layers.value.length}/${layers.options.length}` : ""}
+            >
+              {projection}
+              {layerButtons}
+            </Folded>
+          </div>
+        </div>
+      )}
     </div>
   );
 }
