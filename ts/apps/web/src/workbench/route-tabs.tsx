@@ -2,6 +2,7 @@ import { Plus, X } from "lucide-react";
 import { routeAddress, type ThreadTab } from "@pe/agent-contracts";
 import { Button } from "@pe/kit/lang/button";
 import { TooltipHint } from "@pe/kit/lang/tooltip";
+import "./route-tabs.css";
 
 function tabTitle(tab: ThreadTab) {
   const at = routeAddress(tab.route);
@@ -38,20 +39,21 @@ export function RouteTabs({
   onClose: (tab: ThreadTab) => void;
 }) {
   return (
-    <span role="group" aria-label="Thread Places" className="flex min-w-0 items-center">
+    <span role="group" aria-label="Thread Places" className="flex min-w-0 shrink items-center">
       {tabs.map((tab) => {
         const name = tabTitle(tab);
         return (
           <span
             key={tab.id}
-            className="inline-flex min-w-0 items-center [&>:last-child]:opacity-0 focus-within:[&>:last-child]:opacity-100 hover:[&>:last-child]:opacity-100"
+            // Layout and the hover-revealed close live in route-tabs.css.
+            className="flex min-w-0 items-center"
           >
             {/* A hint only when the label is cut. ponytail: the cut is guessed from length
                 against the 24ch cap; measure the span on reach if wide glyphs ever cut a
                 shorter name. */}
             <TooltipHint content={name.length > TAB_CH ? name : ""}>
               <Button label={name} pressed={active === tab.id} onClick={() => onSelect(tab)}>
-                <span className="block truncate" style={{ maxWidth: `${TAB_CH}ch` }}>
+                <span className="block min-w-0 truncate" style={{ maxWidth: `${TAB_CH}ch` }}>
                   {name}
                 </span>
               </Button>
