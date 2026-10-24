@@ -4,6 +4,7 @@ import { useState, type ReactNode } from "react";
 import type { TrichotomyCellLike } from "@pe/agent-contracts";
 import { useList } from "@pe/kit/lang/collection";
 import { ListView, type ListRowParts } from "@pe/kit/lang/list-view";
+import { Scroll } from "@pe/kit/lang/scroll";
 import { Button } from "@pe/kit/lang/button";
 import { StateCell, type StateCellProps } from "@pe/kit/lang/cell";
 import { TooltipHint } from "@pe/kit/lang/tooltip";
@@ -155,15 +156,21 @@ export function WorkLines({
         </span>
       </div>
       {above}
-      <ListView
-        list={list}
-        aria-label="pending cells"
-        empty={{
-          message: "No pending cells in this tab",
-          exit: "Choose another tab or edit a cell",
-        }}
-        row={(line) => lineParts(line, store, wire, setOutcome)}
-      />
+      {/* Exception to "a list scrolls in its own Scroll": both callers sit in the head's Work slot,
+          which still scrolls natively (route/situation.tsx, phase 2). This Scroll grows to its
+          content, so the list draws every line; ponytail: fine at per-parameter line counts, and
+          it goes when that slot becomes the Scroll. */}
+      <Scroll>
+        <ListView
+          list={list}
+          aria-label="pending cells"
+          empty={{
+            message: "No pending cells in this tab",
+            exit: "Choose another tab or edit a cell",
+          }}
+          row={(line) => lineParts(line, store, wire, setOutcome)}
+        />
+      </Scroll>
     </section>
   );
 }
