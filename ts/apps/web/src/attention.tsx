@@ -90,7 +90,12 @@ export function useIssueHover() {
   const registry = useContext(RegistryContext);
   return useCallback(
     (key: string | null) => {
-      if (doc) setHovered(registry, key == null ? null : { doc, key: `issue:${key}` });
+      if (!doc) return;
+      if (key === null) {
+        const current = registry.get(hovered);
+        if (current?.doc !== doc || !current.key.startsWith("issue:")) return;
+      }
+      setHovered(registry, key === null ? null : { doc, key: `issue:${key}` });
     },
     [doc, registry],
   );

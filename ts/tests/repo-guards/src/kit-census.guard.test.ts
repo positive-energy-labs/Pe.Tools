@@ -218,13 +218,8 @@ const RULES: Rule[] = [
     roots: [W + "**/*.tsx"], allow: [
       { glob: W + "{ducts/schematic,family/anatomy-model-views,space/cuts,rooms/plan,takeoff/level-plan}.tsx", reason: "SVG hit-testing projects geometry to domain identity; it does not paint hover locally." },
       ...allow({
-        "ducts/annotations.tsx": "Segment/issue proxies synchronize subject badges.",
-        "ducts/claims.tsx": "Claim geometry lights its underlying part.",
-        "ducts/proto/e/bar.tsx": "Aggregate bars light multiple domain elements.",
+        "scene/footnotes.tsx": "The reusable footnote layer writes citation focus and travel grace; delegated Subject markup owns hover.",
         "ducts/proto/e/inbox.tsx": "Issue dwell and subject-numbering ownership include expanded detail.",
-        "ducts/proto/e/tree-sidebar.tsx": "Ancestors light every descendant element.",
-        "ducts/proto/e/rules-pane.tsx": "Rules light their governed set.",
-        "ducts/proto/e/run-detail.tsx": "Run and fitting rows light underlying elements.",
         "family/anatomy.tsx": "Part geometry focus differs from native element identity.",
         "family/doc-pane.tsx": "Evidence engine owns document hover.",
         "grounded-doc/view/page-pane.tsx": "Page geometry synchronizes evidence blocks.",
@@ -232,7 +227,6 @@ const RULES: Rule[] = [
         "machine/notice.tsx": "Reading a notice pauses expiry.",
         "open/bay.tsx": "Pointer chooses the file preview.",
         "workbench/lens/peek.tsx": "Travel funnel and linger timing keep the popover reachable.",
-        "rooms/inbox.tsx": "Room GUID identity is not a numeric Revit id.",
       }),
     ], cannotSee: "Event aliases, hit-test correctness and computed paint." },
   { id: "focus-ring-owner", doctrine: "L3",

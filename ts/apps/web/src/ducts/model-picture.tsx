@@ -138,7 +138,6 @@ export function ModelPicture({
   };
   const hoverIssue = (target: IssueTarget | null) => {
     onIssueHover(target?.key ?? null);
-    if (!target) onHover(null);
   };
   // Meshes move natively during a gesture; DOM annotations re-project only at release.
   const held = useRef<OrbitViewport | null>(null);
