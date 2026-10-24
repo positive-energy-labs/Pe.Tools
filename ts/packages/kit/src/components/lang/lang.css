@@ -287,6 +287,9 @@
 [data-list-section] {
   display: contents;
 }
+[data-list-view][data-list-single] > [data-list-section] {
+  display: block;
+}
 /* The filter bar sits on artifact ground, darker than its pane: its hairlines take the dimmed step. */
 [data-list-bar] {
   position: sticky;
@@ -636,9 +639,6 @@ svg [data-damage] {
   gap: 6px;
 }
 /* Column cells stay on the title line. Less important measures yield before the label. */
-[data-list-view] .dl-row {
-  scroll-margin-top: var(--list-headroom);
-}
 [data-list-view] {
   container: list / inline-size;
 }
@@ -1420,5 +1420,33 @@ svg [data-damage] {
   [data-slot="floater"][data-folded]
     > :is([data-slot="floater-grip"], [data-slot="floater-resize"]) {
     display: none;
+  }
+}
+
+/* Search yields words before the editable text, including picked scope filters. */
+[data-list-search] {
+  container: list-search / inline-size;
+  --search-input-min: 12ch;
+}
+[data-list-search] input {
+  min-inline-size: 8ch;
+}
+[data-list-search] [data-search-field] {
+  min-inline-size: calc(8ch + var(--item-h));
+}
+@container list-search (max-width: 360px) {
+  [data-list-pill] .dl-button-label,
+  [data-list-search-label],
+  [data-search-trail] .dl-button-label,
+  [data-search-trail] [data-list-trigger] > svg,
+  [data-list-filter-count] {
+    display: none;
+  }
+  [data-list-pill] .dl-button,
+  [data-search-trail] :is(.dl-button, [data-list-trigger]) {
+    inline-size: var(--item-h);
+    flex: none;
+    justify-content: center;
+    padding-inline: 0;
   }
 }

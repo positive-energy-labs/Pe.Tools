@@ -18,7 +18,8 @@ import {
   type ListOptions,
 } from "../src/components/lang/collection";
 import { type ListSearch } from "@pe/agent-contracts";
-import { ListBar, ListView, PlainList, useSearchKey } from "../src/components/lang/list-view";
+import { ListView, PlainList, useSearchKey } from "../src/components/lang/list-view";
+import type { ListViewProps } from "../src/components/lang/list-view";
 import { List, ListPopup } from "../src/components/lang/list-popup";
 import { land } from "../src/components/lang/land";
 import { readGestures, readKeyMeta, readRegistrations } from "../src/keys";
@@ -29,48 +30,84 @@ const search = (keywords = "", pills: Record<string, string> = {}): ListSearch =
   pills: Object.entries(pills).map(([field, value]) => ({ field, op: "=", value })),
 });
 
-test("a separate search row measures sticky headroom and retains slash targeting", () => {
-  const height = vi.spyOn(HTMLElement.prototype, "offsetHeight", "get").mockReturnValue(38);
-  let resize: () => void = () => {};
-  vi.stubGlobal(
-    "ResizeObserver",
-    class {
-      constructor(private notify: () => void) {}
-      observe(element: Element) {
-        if (element.matches("[data-list-search]")) resize = this.notify;
-      }
-      disconnect() {}
-    },
-  );
-  function Fixture() {
-    const list = useList({ ...options, items: items.slice(0, 2) });
-    return (
-      <>
-        <ListBar list={list} label="separate" />
-        <ListView
-          list={list}
-          aria-label="separate"
-          row={(item) => ({ label: item.name })}
-          empty={{ message: "Empty", exit: "Add a row" }}
-        />
-      </>
+test.each([
+  [220, 145, "1", false],
+  [96, 49, "0", false],
+  [220, 145, "1", true],
+  [96, 49, "0", true],
+])(
+  "sticky capacity at %ipx reserves %ipx and uses stack=%s (external=%s)",
+  (height, reserved, stack, external) => {
+    const resizes = new Set<() => void>();
+    vi.stubGlobal(
+      "ResizeObserver",
+      class {
+        constructor(private notify: () => void) {}
+        observe(el: Element) {
+          if (el.hasAttribute("data-list-view") || el.hasAttribute("data-test-port"))
+            resizes.add(this.notify);
+        }
+        disconnect() {}
+      },
     );
-  }
-  render(<Fixture />);
-  const body = screen.getByRole("listbox", { name: "separate" });
-  expect(body.style.getPropertyValue("--list-search-height")).toBe("38px");
+    const portHeight = vi
+      .spyOn(HTMLElement.prototype, "clientHeight", "get")
+      .mockReturnValue(Number(height));
+    vi.spyOn(HTMLElement.prototype, "offsetHeight", "get").mockImplementation(
+      function (this: HTMLElement) {
+        return this.hasAttribute("data-list-bar") ? 25 : 24;
+      },
+    );
+    const scroll = vi.fn();
+    Object.defineProperty(HTMLElement.prototype, "scrollIntoView", {
+      configurable: true,
+      value: scroll,
+    });
+    render(
+      <div data-test-port="" style={{ overflowY: "auto" }}>
+        <TestList
+          name="capacity"
+          maxHeight={external ? undefined : `${height}px`}
+          reveal="10003"
+          config={{
+            items: items.slice(0, 30),
+            groups: { of: (item) => String(Math.floor((Number(item.id) - 10000) / 6)) },
+          }}
+        />
+      </div>,
+    );
+    const list = screen.getByRole("listbox", { name: "capacity" });
+    const port = external ? list.parentElement! : list;
+    expect(port.style.getPropertyValue("--list-headroom")).toBe(`${reserved}px`);
+    expect(port.style.scrollPaddingTop).toBe("var(--list-headroom)");
+    expect(list.style.getPropertyValue("--list-stack")).toBe(stack);
+    expect(list.hasAttribute("data-list-single")).toBe(stack === "0");
+    expect(list.querySelector<HTMLElement>("[data-list-section-head]")!.style.bottom).toBe("");
+    fireEvent.click(screen.getByText("Reveal"));
+    expect(scroll).toHaveBeenCalled();
+    portHeight.mockReturnValue(400);
+    act(() => resizes.forEach((resize) => resize()));
+    expect(list.style.getPropertyValue("--list-stack")).toBe("1");
+  },
+);
+
+test("narrow search keeps editable pills and Filter/Sort as named icon controls", () => {
+  render(
+    <TestList
+      name="narrow"
+      config={{
+        items: items.slice(0, 12),
+        state: { ...emptyListState<"loss" | "name">(), search: search("", { kind: "Supply" }) },
+      }}
+    />,
+  );
+  expect(screen.getByRole("button", { name: "Filter narrow" }).querySelector("svg")).not.toBeNull();
   expect(
     screen
-      .getByRole("combobox", { name: "Search separate" })
-      .closest("[data-list-search]")
-      ?.hasAttribute("data-list-bar"),
-  ).toBe(true);
-  height.mockReturnValue(62);
-  act(() => resize());
-  expect(body.style.getPropertyValue("--list-search-height")).toBe("62px");
-  body.focus();
-  fireEvent.keyDown(body, { key: "/", code: "Slash" });
-  expect(document.activeElement).toBe(screen.getByRole("combobox", { name: "Search separate" }));
+      .getByRole("button", { name: /^Sort narrow/ })
+      .querySelector("svg.lucide-arrow-down-wide-narrow"),
+  ).not.toBeNull();
+  expect(screen.getByRole("button", { name: "Kind: Supply" }).querySelector("svg")).not.toBeNull();
 });
 
 afterEach(() => {
@@ -184,6 +221,36 @@ const options: ListOptions<Item, "loss" | "name"> = {
   },
   stageOf: (item) => item.stage,
 };
+
+function TestList({
+  name,
+  config,
+  plain,
+  reveal,
+  row = (item) => ({ label: item.name }),
+  ...props
+}: Pick<ListViewProps<Item>, "maxHeight" | "sectionProps"> & {
+  name: string;
+  config?: Partial<ListOptions<Item, "loss" | "name">>;
+  plain?: boolean;
+  reveal?: string;
+  row?: ListViewProps<Item, "loss" | "name">["row"];
+}) {
+  const list = useList({ ...options, items: items.slice(0, 8), ...config });
+  const View = plain ? PlainList : ListView;
+  return (
+    <>
+      {reveal && <button onClick={() => list.reveal(reveal)}>Reveal</button>}
+      <View
+        {...props}
+        list={list}
+        aria-label={name}
+        row={row}
+        empty={{ message: "Empty", exit: "Read rows" }}
+      />
+    </>
+  );
+}
 
 test("literal words AND across fields, IDs are exact, and pills narrow before separate sorting", () => {
   const model = listModel(options, {
@@ -320,18 +387,7 @@ test("unknown versions, fields and operators refuse instead of broadening", () =
 });
 
 test("completion is explicit, cancels losslessly, previews token removal, and replaces pills", async () => {
-  function Harness() {
-    const list = useList({ ...options, items: items.slice(0, 8) });
-    return (
-      <ListView
-        list={list}
-        aria-label="completion"
-        row={(item) => ({ label: item.name })}
-        empty={{ message: "Empty", exit: "Read rows" }}
-      />
-    );
-  }
-  render(<Harness />);
+  render(<TestList name="completion" />);
   const input = screen.getByRole("combobox", { name: "Search completion" });
   input.focus();
   fireEvent.change(input, { target: { value: "System kind" } });
@@ -370,18 +426,7 @@ test("completion is explicit, cancels losslessly, previews token removal, and re
 });
 
 test("a typed word completes as a ghost, Tab or → takes it, and Backspace reopens the last pill", () => {
-  function Harness() {
-    const list = useList({ ...options, items: items.slice(0, 8) });
-    return (
-      <ListView
-        list={list}
-        aria-label="ghost"
-        row={(item) => ({ label: item.name })}
-        empty={{ message: "Empty", exit: "Read rows" }}
-      />
-    );
-  }
-  render(<Harness />);
+  render(<TestList name="ghost" />);
   const input = screen.getByRole("combobox", { name: "Search ghost" });
   const removeSupply = () =>
     screen.queryByRole("button", { name: 'Remove the "Kind: Supply" narrowing' });
@@ -423,18 +468,7 @@ test("a stable row callback lets a selection redraw only the rows it touched", (
     drawn.push(item.id);
     return { label: item.name };
   };
-  function Harness() {
-    const list = useList({ ...options, items: items.slice(0, 8) });
-    return (
-      <ListView
-        list={list}
-        aria-label="memo"
-        row={row}
-        empty={{ message: "Empty", exit: "Read rows" }}
-      />
-    );
-  }
-  render(<Harness />);
+  render(<TestList name="memo" row={row} />);
   fireEvent.click(screen.getByText("System 1"));
   drawn.length = 0;
   fireEvent.click(screen.getByText("System 3"));
@@ -443,18 +477,7 @@ test("a stable row callback lets a selection redraw only the rows it touched", (
 
 test("Filter preserves keywords, exposes disabled zero values, and Enter never picks a data row", () => {
   const picked = vi.fn();
-  function Harness() {
-    const list = useList({ ...options, items: items.slice(0, 8), onPick: picked });
-    return (
-      <ListView
-        list={list}
-        aria-label="button search"
-        row={(item) => ({ label: item.name })}
-        empty={{ message: "Empty", exit: "Read rows" }}
-      />
-    );
-  }
-  render(<Harness />);
+  render(<TestList name="button search" config={{ onPick: picked }} />);
   const input = screen.getByRole("combobox", { name: "Search button search" });
   fireEvent.change(input, { target: { value: "air:" } });
   expect(input.getAttribute("aria-expanded")).toBe("false");
@@ -506,18 +529,9 @@ test("a pill publishes immediately once; scope change and unmount cancel delayed
 
 test("tiny lists render through the same rows without ResizeObserver or viewport geometry", () => {
   vi.stubGlobal("ResizeObserver", undefined);
-  function Harness() {
-    const list = useList({ ...options, items: items.slice(0, 3) });
-    return (
-      <PlainList
-        list={list}
-        aria-label="tiny systems"
-        row={(item) => ({ label: item.name })}
-        empty={{ message: "No systems", exit: "Read a model" }}
-      />
-    );
-  }
-  const { container } = render(<Harness />);
+  const { container } = render(
+    <TestList name="tiny systems" plain config={{ items: items.slice(0, 3) }} />,
+  );
   expect(screen.getAllByRole("option")).toHaveLength(3);
   expect(container.querySelector("[data-index]")).toBeNull();
 });
@@ -532,28 +546,20 @@ test("small-list keyboard and repeated reveal scroll the mounted row with the ne
       scrolled.push(this.dataset.key!);
     },
   });
-  function Harness() {
-    const list = useList({ ...options, items: items.slice(0, 40) });
-    return (
-      <>
-        <button onClick={() => list.reveal("10039")}>Reveal last</button>
-        <ListView
-          list={list}
-          maxHeight="100px"
-          aria-label="small systems"
-          row={(item) => ({ label: item.name })}
-          empty={{ message: "No systems", exit: "Read a model" }}
-        />
-      </>
-    );
-  }
-  render(<Harness />);
+  render(
+    <TestList
+      name="small systems"
+      maxHeight="100px"
+      reveal="10039"
+      config={{ items: items.slice(0, 40) }}
+    />,
+  );
   const region = screen.getByRole("listbox", { name: "small systems" });
   act(() => region.focus());
   fireEvent.keyDown(region, { key: "End" });
   expect(scrolled.at(-1)).toBe("10039");
   const count = scrolled.length;
-  fireEvent.click(screen.getByRole("button", { name: "Reveal last" }));
+  fireEvent.click(screen.getByRole("button", { name: "Reveal" }));
   expect(scrolled).toHaveLength(count + 1);
   expect(scrolled.at(-1)).toBe("10039");
   expect(document.querySelector('[data-key="10039"]')?.hasAttribute("data-landed")).toBe(true);
@@ -578,23 +584,17 @@ test("renderer mounts a bounded viewport, exposes drop targets and distinguishes
     new DOMRect(0, 0, 400, 120),
   );
   const drop = vi.fn();
-  function Harness() {
-    const list = useList({
-      ...options,
-      groups: { of: (item) => String(Math.floor((Number(item.id) - 10000) / 40)) },
-    });
-    return (
-      <ListView
-        list={list}
-        aria-label="test systems"
-        maxHeight="120px"
-        row={(item) => ({ label: item.name })}
-        sectionProps={() => ({ onDrop: drop })}
-        empty={{ message: "No systems", exit: "Read a model" }}
-      />
-    );
-  }
-  const { container } = render(<Harness />);
+  const { container } = render(
+    <TestList
+      name="test systems"
+      maxHeight="120px"
+      config={{
+        items,
+        groups: { of: (item) => String(Math.floor((Number(item.id) - 10000) / 40)) },
+      }}
+      sectionProps={() => ({ onDrop: drop })}
+    />,
+  );
   const drawn = screen.getAllByRole("option");
   expect(drawn.length).toBeGreaterThan(0);
   expect(drawn.length).toBeLessThan(355);
@@ -697,18 +697,7 @@ test("an external combobox inside another row retains collection keys and ListBa
   unmount();
   host.remove();
   const pick = vi.fn();
-  function Harness() {
-    const list = useList({ ...options, items: items.slice(0, 8), onPick: pick });
-    return (
-      <ListView
-        list={list}
-        aria-label="query keys"
-        row={(item) => ({ label: item.name })}
-        empty={{ message: "No rows", exit: "Read rows" }}
-      />
-    );
-  }
-  render(<Harness />);
+  render(<TestList name="query keys" config={{ onPick: pick }} />);
   const query = screen.getByRole("combobox", { name: "Search query keys" });
   query.focus();
   fireEvent.keyDown(query, { key: "ArrowDown" });
@@ -721,18 +710,7 @@ test("an external combobox inside another row retains collection keys and ListBa
 test("after Enter commits completion, ArrowDown enters filtered rows and Escape keeps its layers", () => {
   const picked = vi.fn();
   const data = items.slice(0, 8).map((item) => ({ ...item, name: `${item.kind} ${item.name}` }));
-  function Fixture() {
-    const list = useList({ ...options, items: data, onPick: picked });
-    return (
-      <ListView
-        list={list}
-        aria-label="committed search"
-        row={(item) => ({ label: item.name })}
-        empty={{ message: "Empty", exit: "Read rows" }}
-      />
-    );
-  }
-  render(<Fixture />);
+  render(<TestList name="committed search" config={{ items: data, onPick: picked }} />);
   const input = screen.getByRole("combobox", { name: "Search committed search" });
   input.focus();
   fireEvent.change(input, { target: { value: "System" } });
@@ -764,18 +742,7 @@ test("after Enter commits completion, ArrowDown enters filtered rows and Escape 
 });
 
 test("list help declares pointer behavior and keeps cursor keys registered once", () => {
-  function Fixture() {
-    const list = useList({ ...options, items: items.slice(0, 2) });
-    return (
-      <ListView
-        list={list}
-        aria-label="gesture list"
-        row={(item) => ({ label: item.name })}
-        empty={{ message: "Empty", exit: "Add a row" }}
-      />
-    );
-  }
-  const view = render(<Fixture />);
+  const view = render(<TestList name="gesture list" config={{ items: items.slice(0, 2) }} />);
   const gestures = readGestures();
   expect(gestures).toEqual(
     expect.arrayContaining([
