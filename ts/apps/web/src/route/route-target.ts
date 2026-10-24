@@ -247,6 +247,23 @@ export function useRouteTarget(
       ? (found.values.find((doc) => doc.openId === ref.openId)?.address ?? null)
       : null;
   }, [resolution, inventoryResult]);
+  // Work identity alone: the live Address, else a known raw Address (a `?target` Address, or a
+  // named request pinned or held by the head) so a closed document's Work stays readable. Never a
+  // remembered title, and never an open/session ref reread as a new lifetime. Nothing native,
+  // no action and no binding reads this; they stay on `resolution`.
+  const workAddress = useMemo((): Address | null => {
+    if (resolvedAddress || seed) return resolvedAddress;
+    const chosen = parseTarget(target);
+    const request =
+      chosen?.kind === "request" ? chosen.request : chosen ? null : (headTargets[0] ?? null);
+    const raw =
+      chosen?.kind === "address"
+        ? chosen.address
+        : request?.kind === "named" && (chosen || headTargets.length === 1)
+          ? request.address
+          : null;
+    return addressSchema.safeParse(raw).data ?? null;
+  }, [resolvedAddress, seed, target, headTargets]);
   const head = headRequest && headResult ? { thread: headRequest.thread, ...scope } : null;
   const targetProvenance: TargetProvenance = seed
     ? { source: "seed" }
@@ -262,6 +279,7 @@ export function useRouteTarget(
     bindingLost,
     bindingLostRef,
     resolvedAddress,
+    workAddress,
     targetProvenance,
   };
 }

@@ -16,6 +16,7 @@ import {
   type Mention,
   type PromptAttachment,
   type Seed,
+  type ThreadWorkSnapshot,
 } from "@pe/agent-contracts";
 import { CHECKOUT_HOT, MACHINE_SEEDS } from "#/open/seeds";
 
@@ -608,3 +609,47 @@ export const CHAT_SEEDS = {
 
 /** Chat's draft belongs to `createChatPageStore`; the route manifest owns no Page fields. */
 export type ChatPage = Record<string, never>;
+
+/** `?demo=` Work for `demoThreads`: none, one document with two Works, three documents with one
+ *  closed, and a closed document whose Work is unfinished. Typed as the contract, so the real
+ *  snapshot replaces it in `threadWorksOf`. Ids are opaque handles, never shown. */
+export const CHAT_SEED_THREAD_WORK = {
+  observedAt: at(37).toISOString(),
+  threads: [
+    { threadId: "fixture-local", documents: [], works: [] },
+    {
+      threadId: "demo-review",
+      documents: [{ id: "doc-ops", name: "Operations Demo.rvt", availability: "open" }],
+      works: [
+        { id: "w-1", documentId: "doc-ops", route: "ducts", intent: "duct resize", unfinished: 2 },
+        {
+          id: "w-2",
+          documentId: "doc-ops",
+          route: "schedules",
+          intent: "schedule marks",
+          unfinished: 1,
+        },
+      ],
+    },
+    {
+      threadId: "fixture-running",
+      documents: [
+        { id: "doc-l2", name: "Level 2.rvt", availability: "open" },
+        { id: "doc-l3", name: "Level 3.rvt", availability: "open" },
+        { id: "doc-plant", name: "Plant Room.rvt", availability: "closed" },
+      ],
+      works: [
+        { id: "w-3", documentId: "doc-l2", route: "ducts", intent: "supply path", unfinished: 0 },
+      ],
+    },
+    {
+      threadId: "fixture-ended",
+      documents: [{ id: "doc-l1", name: "Level 1.rvt", availability: "closed" }],
+      works: [
+        { id: "w-4", documentId: "doc-l1", route: "ducts", intent: "duct resize", unfinished: 4 },
+      ],
+    },
+  ],
+  observations: ["Work for archived threads was not read"],
+  truncated: false,
+} satisfies ThreadWorkSnapshot;

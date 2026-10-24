@@ -10,16 +10,6 @@
   text-overflow: ellipsis;
   white-space: nowrap;
 }
-.pe-thread-target {
-  display: inline-block;
-  min-width: 0;
-  max-width: 35%;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-  font-size: var(--type-small-size);
-  transform: translateY(0.12em);
-}
 .pe-thread-trail {
   display: inline-flex;
   flex: none;

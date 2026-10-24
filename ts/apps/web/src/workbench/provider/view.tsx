@@ -71,6 +71,7 @@ export function WorkbenchProvider({ children }: { children: ReactNode }) {
   const store = useRouteOwner(() =>
     createChatPageStore({
       registry: appAtomRegistry,
+      local: typeof location !== "undefined" && new URLSearchParams(location.search).has("demo"),
       search: {
         ...search,
         mode: "mode" in search && typeof search.mode === "string" ? search.mode : "threads",
@@ -79,13 +80,25 @@ export function WorkbenchProvider({ children }: { children: ReactNode }) {
         patch: (partial, replace = false) => {
           const pea = routeAddress("pea");
           const before = pea.read(router.state.location.search).page;
-          const rule =
-            "thread" in partial
-              ? null
-              : pea.history(before, { ...before, ...partial } as typeof before);
+          const move = "thread" in partial;
+          const rule = move
+            ? null
+            : pea.history(before, { ...before, ...partial } as typeof before);
+          // A thread move opens its conversation with the tools collapsed: only the sidebar's
+          // own fields follow it, never a tool's Page, target or Work.
           return navigate({
-            to: ".",
-            search: (previous: Record<string, unknown>) => ({ ...previous, ...partial }),
+            to: move ? pea.path : ".",
+            search: (previous: Record<string, unknown>) =>
+              !move
+                ? { ...previous, ...partial }
+                : {
+                    threadSearch: previous.threadSearch,
+                    threadSort: previous.threadSort,
+                    demo: previous.demo,
+                    target: undefined,
+                    work: undefined,
+                    ...partial,
+                  },
             replace: replace || rule === "replace",
           });
         },
