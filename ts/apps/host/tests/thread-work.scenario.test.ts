@@ -374,6 +374,35 @@ test("HTTP and one Reading retain named unfinished Work after target removal, cl
       ).json(),
     );
     expect(afterSaveAs.matches).toEqual([{ threadId: id, tabId: addressTab }]);
+    const beforeAmbiguous = await fileBytes();
+    expect(
+      (
+        await tab({
+          op: "put",
+          id: randomUUID(),
+          route: "schedules",
+          link: routeAddress("schedules").link(
+            { workspaceId: "office-schedule" },
+            { target: "C:/Models/SaveAs.rvt" },
+          ),
+        })
+      ).status,
+    ).toBe(200);
+    const ambiguousSchedule = workResumeSchema.parse(
+      await (
+        await app.fetch(
+          new Request(`http://host/pe/work-resume?id=${encodeURIComponent(workKey(schedule))}`),
+        )
+      ).json(),
+    );
+    expect(ambiguousSchedule.url).toBeNull();
+    expect(ambiguousSchedule.reason).toContain("no unique remembered document binding");
+    expect(ambiguousSchedule.matches).toEqual([]);
+    const preservedSchedule = await (
+      await app.fetch(new Request("http://host/pe/route-state/schedules?work=office-schedule"))
+    ).json();
+    expect(preservedSchedule.doc.cells["1::2"].staged.value).toBe("Reviewed schedule value");
+    expect(await fileBytes()).toEqual(beforeAmbiguous);
   } finally {
     abort.abort();
     await threads.close();

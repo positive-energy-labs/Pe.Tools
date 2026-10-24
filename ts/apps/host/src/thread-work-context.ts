@@ -48,6 +48,7 @@ function rememberDocument(
   context: ThreadWorkContext,
   input: { address: Address | null; ref: DocumentRef | null; name?: string },
 ): { context: ThreadWorkContext; document: ThreadWorkContext["documents"][number] | null } {
+  // Save As keeps the old Address's context: one open lifetime is not authority to merge two files.
   const matches = context.documents.filter(
     (doc) =>
       (input.address !== null && doc.address !== null && sameAddress(doc.address, input.address)) ||
