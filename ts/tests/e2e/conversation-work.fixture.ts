@@ -6,8 +6,10 @@ import { pathToFileURL } from "node:url";
 export const CONVERSATION_THREADS = {
   office: "cac00000-0000-4000-8000-000000000001",
   empty: "cac00000-0000-4000-8000-000000000002",
+  unsaved: "cac00000-0000-4000-8000-000000000003",
 };
 export const OFFICE_ADDRESS = "C:/Models/Office.rvt";
+export const UNSAVED_REF = { session: "closed-session", openId: "unsaved-open" };
 
 export async function workEvidence(home: string) {
   const dir = join(resolve(home), ".local-state", "state", "route-work");
@@ -45,6 +47,7 @@ export async function seedConversationWork(homeInput: string, artifactInput: str
   const paths = await import("../../apps/host/src/product-paths.ts");
   await mkdir(artifactDir, { recursive: true });
   const scope = bindWork("ducts", address(OFFICE_ADDRESS));
+  const unsavedScope = bindWork("ducts", null, undefined, UNSAVED_REF);
   const workspace = new RouteWorkspace({
     registrations: createRouteRegistrations(),
     store: fileRouteDocumentStore(paths.productRouteWorkPath()),
@@ -73,25 +76,30 @@ export async function seedConversationWork(homeInput: string, artifactInput: str
       ],
     ],
   ] as const) {
-    const result = await workspace.apply(
-      scope,
-      "ducts",
-      actor,
-      patches.map((patch) => ({ ...patch, path: [...patch.path] })),
-      revision,
-    );
-    if (!result.ok) throw Error(`Seed Work refused: ${JSON.stringify(result)}`);
+    for (const key of [scope, unsavedScope]) {
+      const result = await workspace.apply(
+        key,
+        "ducts",
+        actor,
+        patches.map((patch) => ({ ...patch, path: [...patch.path] })),
+        revision,
+      );
+      if (!result.ok) throw Error(`Seed Work refused: ${JSON.stringify(result)}`);
+    }
   }
   const census = await workspace.instances();
-  if (census.works.length !== 1 || census.works[0]?.unfinished !== 3)
-    throw Error("Seed did not produce exactly three unique unfinished cells");
+  if (census.works.length !== 2 || census.works.some((work) => work.unfinished !== 3))
+    throw Error("Seed did not produce two real Works with three unique unfinished cells each");
   const at = "2026-10-24T00:00:00.000Z";
   const workUrl = `/ducts?target=${encodeURIComponent(OFFICE_ADDRESS)}`;
   const retainedPage = "Office retained page";
   const placeId = "cac00000-0000-4000-8000-000000000011";
-  const placeUrl = `${workUrl}&system=${encodeURIComponent(retainedPage)}`;
+  // Real older Places carry only an exact open ref; the Work producer carries no `from`.
+  const placeUrl = `/ducts?target=${encodeURIComponent(JSON.stringify({ kind: "open", ref: { session: "closed-session", openId: "closed-open" } }))}&system=${encodeURIComponent(retainedPage)}`;
+  const unsavedUrl = `/ducts?target=${encodeURIComponent(JSON.stringify({ kind: "open", ref: UNSAVED_REF }))}`;
   for (const [kind, id] of Object.entries(CONVERSATION_THREADS)) {
     const office = kind === "office";
+    const unsaved = kind === "unsaved";
     const dir = join(paths.productHarnessThreadsPath(), id);
     await mkdir(dir, { recursive: true });
     await writeFile(
@@ -102,7 +110,11 @@ export async function seedConversationWork(homeInput: string, artifactInput: str
           harness: "codex",
           providerId: "codex",
           providerName: "Codex",
-          title: office ? "Size the office" : "Conversation without Work",
+          title: office
+            ? "Size the office"
+            : unsaved
+              ? "Inspect unsaved design"
+              : "Conversation without Work",
           createdAt: at,
           updatedAt: at,
           modelId: null,
@@ -124,7 +136,16 @@ export async function seedConversationWork(homeInput: string, artifactInput: str
                   at,
                 },
               ]
-            : [],
+            : unsaved
+              ? [
+                  {
+                    id: "cac00000-0000-4000-8000-000000000013",
+                    route: "ducts",
+                    link: unsavedUrl,
+                    at,
+                  },
+                ]
+              : [],
           workContext: {
             documents: office
               ? [
@@ -135,7 +156,16 @@ export async function seedConversationWork(homeInput: string, artifactInput: str
                     refs: [{ session: "closed-session", openId: "closed-open" }],
                   },
                 ]
-              : [],
+              : unsaved
+                ? [
+                    {
+                      id: "unsaved-document",
+                      name: "Unsaved design",
+                      address: null,
+                      refs: [UNSAVED_REF],
+                    },
+                  ]
+                : [],
             works: [],
           },
         },
@@ -154,6 +184,8 @@ export async function seedConversationWork(homeInput: string, artifactInput: str
     placeUrl,
     placeId,
     retainedPage,
+    unsavedWorkId: workKey(unsavedScope),
+    unsavedUrl,
     address: OFFICE_ADDRESS,
     unfinished: 3,
     evidence: await workEvidence(home),

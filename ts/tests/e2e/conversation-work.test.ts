@@ -3,7 +3,8 @@ import { mkdir, readFile, writeFile } from "node:fs/promises";
 import { join, resolve } from "node:path";
 import { expect, test } from "vite-plus/test";
 import { connect, type Page } from "./cdp.ts";
-import { workEvidence, CONVERSATION_THREADS } from "./conversation-work.fixture.ts";
+import { workEvidence, CONVERSATION_THREADS, UNSAVED_REF } from "./conversation-work.fixture.ts";
+import { address, sameAddress } from "../../packages/agent-contracts/src/index.ts";
 
 const visible = `(e) => e.getClientRects().length > 0 && getComputedStyle(e).visibility !== 'hidden'`;
 const wait = (ms: number) => new Promise((done) => setTimeout(done, ms));
@@ -177,17 +178,10 @@ test("real conversation Work cutover retains authored cells, draft, Places and o
       p.read<string>(
         `[...document.querySelectorAll('textarea[aria-label="Message"],input[aria-label="Message"]')].find(${visible})?.value ?? ''`,
       );
-    const headTargets = async () => {
+    const headTargets = async (thread = CONVERSATION_THREADS.office) => {
       const meta = JSON.parse(
         await readFile(
-          join(
-            seed.productHome,
-            ".local-state",
-            "state",
-            "harness-threads",
-            CONVERSATION_THREADS.office,
-            "meta.json",
-          ),
+          join(seed.productHome, ".local-state", "state", "harness-threads", thread, "meta.json"),
           "utf8",
         ),
       );
@@ -245,7 +239,10 @@ test("real conversation Work cutover retains authored cells, draft, Places and o
     await step("Work opens closed saved Ducts and draft survives Places collapse", async () => {
       await p.clickAt('textarea[aria-label="Message"],input[aria-label="Message"]');
       await p.type(message);
-      await p.click("Open Ducts");
+      await p.click(
+        "Open Ducts",
+        `[data-thread-sidebar] [data-key="${CONVERSATION_THREADS.office}"]`,
+      );
       await p.until(
         async () => new URL(await p.url()).pathname === "/ducts",
         "saved Work URL opens",
@@ -264,6 +261,13 @@ test("real conversation Work cutover retains authored cells, draft, Places and o
       expect(historyState.__peRouteTab?.id, "Work press preserves the exact saved Place id").toBe(
         seed.placeId,
       );
+      expect(
+        sameAddress(
+          address(new URL(await p.url()).searchParams.get("target")!),
+          address(seed.address),
+        ),
+        "a legacy open-ref Place rebases to the Work's stable Address",
+      ).toBe(true);
       await p.until(
         async () => /closed|reconnect|not open|choose.*document/i.test(await p.text()),
         "closed-document reconnect state",
@@ -372,7 +376,8 @@ test("real conversation Work cutover retains authored cells, draft, Places and o
       ).toBeLessThanOrEqual(8);
       const after = await workEvidence(seed.productHome);
       expect(after).toEqual(initial);
-      const flows = after[0]!.record.value.doc.flows;
+      const flows = after.find((work) => work.record.targetKey === seed.workId)!.record.value.doc
+        .flows;
       expect(Object.keys(flows).sort()).toEqual(["1001", "1002", "1003"]);
       expect(flows["1002"].staged.value.cfm).toBe(200);
       expect(flows["1002"].proposal.value.cfm).toBe(220);
@@ -383,6 +388,37 @@ test("real conversation Work cutover retains authored cells, draft, Places and o
         leasePublications: publications.length,
       };
     });
+    await step(
+      "closed unsaved Work stays visible and bound only to its original lifetime",
+      async () => {
+        await pickThread("Unsaved design");
+        await p.until(
+          async () =>
+            new URL(await p.url()).pathname === "/pea" &&
+            new URL(await p.url()).searchParams.get("thread") === CONVERSATION_THREADS.unsaved,
+          "unsaved-document conversation opens without its tool",
+        );
+        await p.click(
+          "Open Ducts",
+          `[data-thread-sidebar] [data-key="${CONVERSATION_THREADS.unsaved}"]`,
+        );
+        await p.until(
+          async () => new URL(await p.url()).pathname === "/ducts",
+          "retained unsaved Work opens",
+        );
+        const target = new URL(await p.url()).searchParams.get("target");
+        expect(JSON.parse(target!)).toEqual({ kind: "open", ref: UNSAVED_REF });
+        await p.waitText("Work is kept, read-only, while its document is closed.");
+        await p.waitText("3 unfinished");
+        await headTargets(CONVERSATION_THREADS.unsaved);
+        expect(await workEvidence(seed.productHome)).toEqual(initial);
+        receipt.coverage.unsaved = {
+          target: JSON.parse(target!),
+          workId: seed.unsavedWorkId,
+          nativeTargets: [],
+        };
+      },
+    );
     expect(
       network.filter(
         (event) =>
