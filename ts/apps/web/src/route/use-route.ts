@@ -120,10 +120,13 @@ export function useRoute<W, R extends string, P, A extends string>(
     bindingLostRef,
     resolvedAddress,
     workAddress,
+    workOpen,
     targetProvenance,
   } = useRouteTarget(manifest, owner.registry, seed, target, options.thread);
-  // Readable Work whose document is not live: shown, never armed (no writer, no action).
-  const closedWork = !seed && workAddress !== null && resolvedAddress === null;
+  // Readable Work whose document is not live (a known Address or exact open ref, no native
+  // document): shown, never armed (no writer, no action, no native scope).
+  const closedWork =
+    !seed && ((workAddress !== null && resolvedAddress === null) || workOpen !== null);
   const work =
     typeof requestedWork === "function" ? requestedWork(page, workAddress) : requestedWork;
   const boundDocument =
@@ -134,11 +137,11 @@ export function useRoute<W, R extends string, P, A extends string>(
   // An unsaved document has no Address, so its Work keys by the one lifetime it belongs to. The
   // ref rides along once the Address exists too, so the host carries that Work over on Save As.
   const key: WorkKey = useMemo(
-    () => bindWork(manifest.key, workAddress, work, boundDocument ?? undefined),
-    // eslint-disable-next-line react-hooks/exhaustive-deps -- boundDocument is identified by boundRef
-    [manifest.key, workAddress, work, boundRef],
+    () => bindWork(manifest.key, workAddress, work, boundDocument ?? workOpen ?? undefined),
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- refs are identified by their JSON
+    [manifest.key, workAddress, work, boundRef, JSON.stringify(workOpen)],
   );
-  /** An unsaved document's Work: keyed by this lifetime, and gone when it ends. */
+  /** An unsaved document's Work: keyed by its lifetime, and retained read-only once it closes. */
   const ephemeral = key.binding === "open";
   // A target-owned Work declaration cannot fall back to the shared `route/target:` key while its
   // Address is unresolved. Host/file Work and explicit named workspaces intentionally use null.
