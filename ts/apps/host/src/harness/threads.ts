@@ -431,7 +431,9 @@ export function createHarnessThreads(options: HarnessThreadsOptions) {
         context = rememberTarget(context, request, label, options.observeDocument).context;
       for (const tab of meta.tabs)
         context = rememberPlace(context, tab.route, tab.link, options.observeDocument);
-      meta.workContext = context;
+      // An absent, empty context adds no evidence. Preserve the old archive's bytes.
+      if (meta.workContext !== undefined || context.documents.length || context.works.length)
+        meta.workContext = context;
     }
     const t: Thread = {
       meta,
