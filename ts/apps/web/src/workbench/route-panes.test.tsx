@@ -219,7 +219,7 @@ test("a Work no tab holds opens its url as a new Place, never another Work's tab
 test("every Place carries its own named close, in the tab order", async () => {
   await mount();
   for (const name of ["Ducts · S1", "Ducts · SA", "Ducts · SB", "Ducts · SO"]) {
-    const close = screen.getByRole("button", { name: `Close ${name}`, exact: true });
+    const close = screen.getByRole("button", { name: `Close ${name}` });
     expect(close.tabIndex).not.toBe(-1);
     close.focus();
     expect(document.activeElement).toBe(close);
