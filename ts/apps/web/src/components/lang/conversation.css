@@ -95,18 +95,10 @@
 .dl-composer-box {
   position: relative;
   border: 1px solid var(--pe-line);
-  outline: 3px solid transparent;
   /* Chrome is one rung; only the message text reads at prose. */
   font-size: var(--type-small-size);
   line-height: var(--type-small-line-height);
-  transition:
-    border-color var(--motion-control),
-    outline-color var(--motion-control);
-}
-/* Focus is a ring of the hairline, never a hue. */
-.dl-composer-box:focus-within {
-  border-color: var(--pe-line-2);
-  outline-color: color-mix(in srgb, var(--pe-line-2) 22%, transparent);
+  transition: border-color var(--motion-control);
 }
 /* Work and the draft stack above the controls. Outcomes stay under Send. */
 .dl-composer-box {

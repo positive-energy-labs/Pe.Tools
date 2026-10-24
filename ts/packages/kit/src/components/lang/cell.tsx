@@ -25,8 +25,8 @@ import "./cell.css";
 
 export const stateCellRecipe = tv({
   slots: {
-    wrapper: "focus-visible:outline focus-visible:outline-line-2",
-    base: "dl-cell focus-visible:outline focus-visible:outline-line-2",
+    wrapper: "",
+    base: "dl-cell",
     line: "dl-cell-line",
     input: "dl-cell-input",
     unsettled: "dl-sq",

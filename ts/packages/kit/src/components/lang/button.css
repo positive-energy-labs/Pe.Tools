@@ -1,4 +1,4 @@
-/* Button: one rule family. Hover is the veil, focus the house outline, refusal italic muted ink. */
+/* Button: one rule family. Hover is the veil, focus the one kit ring (base.css), refusal italic muted ink. */
 .dl-button {
   display: inline-flex;
   min-width: 0;
@@ -22,13 +22,6 @@
 }
 .dl-button[data-kind="nav"] {
   color: var(--pe-nav);
-}
-/* A nav button is a link: hover and keyboard focus are unmistakable. The select fill (never a hue),
-   ink, and a 2px underline on hover; a full-ink 2px outline on focus (the pick mark's weight). */
-
-.dl-button[data-kind="nav"]:focus-visible {
-  background-color: var(--pe-select);
-  color: var(--pe-ink);
 }
 /* Pressed is the house selection fill. It must out-rank the resting grounds above (`.dl-control`
    and the transparent unframed ground), which the zero-specificity selection rule in lang.css loses to. */
@@ -59,12 +52,6 @@
 
 .dl-button:active:not(:disabled, [aria-disabled="true"]) {
   background-image: var(--fill-press);
-}
-/* One focus ring for every button: the house outline (2px ink), never a hairline. A 1px --pe-line-2
-   ring measured 1.6:1 on the dark page and read as no focus at all (reach audit, 2026-10-23). */
-.dl-button:focus-visible {
-  outline: 2px solid var(--pe-ink);
-  outline-offset: 1px;
 }
 .dl-button:is(:disabled, [aria-disabled="true"]) {
   cursor: not-allowed;

@@ -161,11 +161,6 @@
   color: var(--pe-ink-mute);
   font-style: italic;
 }
-.dl-cell:has(.dl-cell-input:focus-visible) {
-  box-shadow:
-    var(--dl-cell-ring, 0 0 transparent),
-    inset 0 0 0 1px var(--pe-line-2);
-}
 
 /* Refusal note: absolutely positioned so the row never grows; dismiss-on-click, and it suppresses
    mousedown so it cannot steal the caret from the input under it. */

@@ -59,6 +59,8 @@
 }
 .pe-appbar-route-search:is(:focus-within, [data-selected]) {
   width: 14rem;
+}
+.pe-appbar-route-search[data-selected] {
   background-color: var(--pe-select);
   box-shadow: inset 0 0 0 1px var(--pe-line-2);
 }
