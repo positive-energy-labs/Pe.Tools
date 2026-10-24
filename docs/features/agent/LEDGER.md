@@ -169,6 +169,7 @@ restated here.
 
 ## Owed
 
+- 2026-10-24, remove the dependency residue at `C:/Users/kaitp/.t3/worktrees/Pe.Tools/t3-8cbc72a5` after automatic approval review permits cleanup. Git retirement removed its registration but left files. The cleanup action was rejected without a reason. Child handoffs and SSR custody evidence are copied to `.artifacts/handoffs/turn-names-child-evidence/` in the conversation-work checkout; no child process remains.
 - 2026-10-23, production thread switching still exceeds the strict 50 ms task bar: warm median acknowledgement 83.2 ms and worst task 81 ms over three actual switches; cold restoration into the all-systems Ducts route reaches 1596 ms. Thread/Places persistence is refused on the borrowed read-only lane, so full persisted navigation remains unproven. See the [production report](../../../.artifacts/runs/final-20261023/REPORT.md).
 - Retained proof residue from the folded harness chronology: first-open with no ready provider, actual pointer operation of the provider ladder, open-login and a real stalled-turn waiting marker need current surface acceptance. Audit `47c37fb2`'s inlineColor restamp (47 against observed 51) against the current design guard before closing its unexplained four-count deficit. Historical package/session successes do not settle these cases.
 
