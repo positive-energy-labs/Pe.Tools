@@ -385,8 +385,8 @@ function ChatSurface({ target, docked = false }: ChatShellProps) {
             openThread(id);
             if (close) store.actions.setSideOpen(false);
           }}
-          onWork={(id, route, resumed) => {
-            void store.actions.openWork(id, route, resumed);
+          onWork={(id, route, resumed, closed) => {
+            void store.actions.openWork(id, route, resumed, closed);
             if (close) store.actions.setSideOpen(false);
           }}
           onFork={(id, providerId) => void forkThread(providerId, id)}

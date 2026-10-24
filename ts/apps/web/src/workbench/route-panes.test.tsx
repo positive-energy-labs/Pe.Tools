@@ -11,6 +11,7 @@ import {
   useRouterState,
 } from "@tanstack/react-router";
 import { address, routeAddress, type ThreadTab, type WorkKey } from "@pe/agent-contracts";
+import { RegistryContext } from "@effect/atom-react";
 import { appAtomRegistry } from "#/route/route-owner";
 import { createChatPageStore } from "./store";
 import { RouteDock, dockWidths } from "./route-panes";
@@ -102,7 +103,11 @@ async function mount() {
     history: createMemoryHistory({ initialEntries: ["/pea?thread=T"] }),
   });
   await router.load();
-  render(<RouterProvider router={router} />);
+  render(
+    <RegistryContext.Provider value={appAtomRegistry}>
+      <RouterProvider router={router} />
+    </RegistryContext.Provider>,
+  );
   await screen.findByRole("button", { name: TAB });
   return router;
 }
@@ -292,4 +297,42 @@ test.each([
 
 test("below Pea, its folded sidebar, the seam and the tools' floor, the dock stacks", () => {
   expect(dockWidths(1266, 16, 643, 8).stackBelow).toBe(1267);
+});
+
+test("a Work pressed on a closed document shows what is kept and how to reconnect", async () => {
+  const router = await mount();
+  await act(() =>
+    store.actions.openWork(
+      "T",
+      "ducts",
+      {
+        ...resume({ binding: "address", route: "ducts", target: DOC_A }),
+        reason: "Office host said so",
+      },
+      {
+        documentId: "doc-office",
+        document: "Office.rvt",
+        intent: "Size the office",
+        unfinished: 3,
+      },
+    ),
+  );
+  await waitFor(() => expect(router.state.location.pathname).toBe("/ducts"));
+  const band = document.querySelector<HTMLElement>("[data-closed-work]")!;
+  expect(band.textContent).toContain("Office.rvt is closed");
+  expect(band.textContent).toContain("3 unfinished");
+  expect(band.textContent).toContain("Size the office");
+  expect(band.textContent).toContain("Office host said so");
+  // The route thread's strict browser assertion, matched by the surface itself.
+  expect(band.textContent).toMatch(/closed|reconnect|not open|choose.*document/i);
+  expect(screen.getByRole("button", { name: "Open the document in Revit" })).toBeTruthy();
+  // An open document's Work press clears it.
+  await act(() =>
+    store.actions.openWork(
+      "T",
+      "ducts",
+      resume({ binding: "address", route: "ducts", target: DOC_B }),
+    ),
+  );
+  await waitFor(() => expect(document.querySelector("[data-closed-work]")).toBeNull());
 });
