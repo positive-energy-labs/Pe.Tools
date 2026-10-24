@@ -4,6 +4,7 @@ import {
   APP_ROUTES,
   addressSchema,
   documentRefSchema,
+  documentRequestSchema,
   harnessThreadSummarySchema,
   routeAt,
   sameAddress,
@@ -15,6 +16,8 @@ import {
   type NavigationSnapshot,
   type NavigationWork,
   type WorkKey,
+  type ThreadTab,
+  type Address,
 } from "@pe/agent-contracts";
 import type { RouteWorkspace } from "@pe/runtime";
 import { sameDocumentRef, type ThreadWorkContext } from "./thread-work-context.ts";
@@ -133,12 +136,11 @@ export async function readThreadWork(
   return snapshot;
 }
 
-/** Explicit Work navigation keeps its saved address even when native execution is unavailable. */
-export async function resumeWork(
+async function resumeDestination(
   workspace: RouteWorkspace,
   id: string,
   sources?: NavigationSources,
-): Promise<WorkResume | null> {
+): Promise<Omit<WorkResume, "matches"> | null> {
   const census = await workspace.instances();
   if (!census.available) throw new Error("Persisted Work discovery is unavailable");
   const work = census.works.find((item) => item.id === id);
@@ -216,6 +218,82 @@ export async function resumeWork(
       : `${path}?${new URLSearchParams(Object.entries(carry).filter((entry): entry is [string, string] => entry[1] !== undefined))}`,
     reason: null,
   };
+}
+
+/** Match canonical Places using owner evidence, never a title or a guessed replacement lifetime. */
+async function matchingPlaces(
+  scope: WorkKey,
+  sources?: NavigationSources,
+): Promise<WorkResume["matches"]> {
+  if (!sources) return [];
+  const [threadResult, documentResult] = await Promise.allSettled([
+    sources.threads().then((value) => z.array(harnessThreadSummarySchema).parse(value)),
+    sources.documents().then((value) => z.array(documentSchema).parse(value)),
+  ]);
+  if (threadResult.status !== "fulfilled") return [];
+  const contexts = sources.contexts?.() ?? [];
+  const current = documentResult.status === "fulfilled" ? documentResult.value : [];
+  const openAddress = (ref: z.infer<typeof documentRefSchema>): Address | null => {
+    const known = contexts.flatMap(({ context }) =>
+      (context?.documents ?? []).flatMap((doc) =>
+        doc.address && doc.refs.some((held) => sameDocumentRef(held, ref)) ? [doc.address] : [],
+      ),
+    );
+    const live = current.filter((doc) => sameDocumentRef(doc, ref));
+    known.push(...live.flatMap((doc) => (doc.address ? [doc.address] : [])));
+    const at = known[0];
+    return at &&
+      known.every((other) => sameAddress(at, other)) &&
+      live.every((doc) => doc.address !== null && sameAddress(at, doc.address))
+      ? at
+      : null;
+  };
+  const holds = (tab: ThreadTab): boolean => {
+    if (tab.route !== scope.route) return false;
+    const { page, carry } = routeAddress(tab.route).read(
+      Object.fromEntries(new URL(tab.link, "http://place.invalid").searchParams),
+    );
+    const workspace =
+      carry.work ||
+      ("workspaceId" in page && typeof page.workspaceId === "string"
+        ? page.workspaceId
+        : undefined);
+    if (scope.binding === "workspace") return workspace === scope.work;
+    if (workspace) return false;
+    if (scope.binding === "host") return !carry.target;
+    let at = addressSchema.safeParse(carry.target).data ?? null;
+    let ref: z.infer<typeof documentRefSchema> | null = null;
+    if (!at && carry.target) {
+      try {
+        const request = documentRequestSchema.safeParse(JSON.parse(carry.target)).data;
+        if (request?.kind === "named") at = request.address;
+        else if (request?.kind === "open") ref = request.ref;
+      } catch {
+        return false;
+      }
+    }
+    if (scope.binding === "open") return sameDocumentRef(ref, scope.open);
+    at ??= ref ? openAddress(ref) : null;
+    return at !== null && sameAddress(at, scope.target);
+  };
+  return threadResult.value.flatMap((thread) =>
+    thread.tabs.filter(holds).map((tab) => ({ threadId: thread.id, tabId: tab.id })),
+  );
+}
+
+/** Saved Work and a matching Place remain readable without current native authority. */
+export async function resumeWork(
+  workspace: RouteWorkspace,
+  id: string,
+  sources?: NavigationSources,
+): Promise<WorkResume | null> {
+  const destination = await resumeDestination(workspace, id, sources);
+  return (
+    destination && {
+      ...destination,
+      matches: destination.url ? await matchingPlaces(destination.key, sources) : [],
+    }
+  );
 }
 
 const documentRoutes: Readonly<Record<string, string | undefined>> = Object.fromEntries(
