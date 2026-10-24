@@ -40,7 +40,7 @@ test("real conversation Work cutover retains authored cells, draft, Places and o
     productDirty: git(
       "status",
       "--porcelain",
-      "--untracked-files=no",
+      "--untracked-files=all",
       "--",
       "ts/apps",
       "ts/packages",
