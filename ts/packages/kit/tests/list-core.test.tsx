@@ -48,6 +48,7 @@ test.each([
           if (["data-list-view", "data-test-port", "data-scroll"].some((a) => el.hasAttribute(a)))
             resizes.add(this.notify);
         }
+        unobserve() {}
         disconnect() {}
       },
     );

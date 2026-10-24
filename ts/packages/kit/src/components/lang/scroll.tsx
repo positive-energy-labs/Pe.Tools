@@ -12,8 +12,9 @@ import {
 } from "react";
 
 import { cn } from "../../lib/utils";
+import { subscribeTheme } from "../../theme";
 import { canvasColor } from "./minimap";
-import { paint, project, type Ink, type Span } from "./scroll-project";
+import { paint, project, type Ink, type Mark, type Span } from "./scroll-project";
 import "./lang.css";
 
 export type { Mark, Span, Tone } from "./scroll-project";
@@ -24,10 +25,25 @@ export type { Mark, Span, Tone } from "./scroll-project";
  * scroller pixels through `useProjection`; the frame rides a CSS scroll timeline (one passive
  * transform write per frame where the engine lacks it) and never a React commit.
  */
+/**
+ * A projection source. `data` spans come from item data (virtual rows) and are read when drawing.
+ * `dom` sources are bodies that draw every element: their rects are read only in the observer
+ * callback and cached in `placed`; drawing maps the cache through `mark`, never reading layout.
+ */
+type Source =
+  | { kind: "data"; read: () => readonly Span[] }
+  | {
+      kind: "dom";
+      elements: () => Iterable<Element>;
+      mark: (element: Element) => Mark;
+      placed: { element: Element; top: number; height: number }[];
+    };
 interface Registry {
   element: HTMLElement;
-  sources: Map<object, () => readonly Span[]>;
+  sources: Map<object, Source>;
   invalidate(): void;
+  /** A dom source changed: place its elements at the observer's next delivery. */
+  remeasure(): void;
   /** `--item-h` of this scroller, read once: a virtual list's estimate before rows measure. */
   rowHeight(): number;
 }
@@ -53,35 +69,51 @@ export function assertScrollOwner(el: HTMLElement, owner: HTMLElement | null, wh
   }
 }
 
-/** Publish spans to the enclosing scrollbar; `spans` is read when projecting, never per scroll. */
-export function useProjection(spans: (() => readonly Span[]) | null, version: unknown) {
+function useSource(source: Source, version: unknown) {
   const registry = useContext(ScrollContext);
   const key = useRef({});
-  const read = useRef(spans);
-  read.current = spans;
+  const latest = useRef(source);
+  latest.current = source;
   useLayoutEffect(() => {
     if (!registry) return;
     const token = key.current;
-    registry.sources.set(token, () => read.current?.() ?? []);
+    // Registered once; it reads the latest render's callbacks, and a dom source keeps its places.
+    registry.sources.set(
+      token,
+      latest.current.kind === "dom"
+        ? {
+            kind: "dom",
+            elements: () => (latest.current.kind === "dom" ? latest.current.elements() : []),
+            mark: (element) => (latest.current.kind === "dom" ? latest.current.mark(element) : {}),
+            placed: [],
+          }
+        : {
+            kind: "data",
+            read: () => (latest.current.kind === "data" ? latest.current.read() : []),
+          },
+    );
     return () => {
       registry.sources.delete(token);
       registry.invalidate();
     };
   }, [registry]);
-  useLayoutEffect(() => registry?.invalidate(), [registry, version]);
+  useLayoutEffect(
+    () => (source.kind === "dom" ? registry?.remeasure() : registry?.invalidate()),
+    [registry, version],
+  );
+}
+/** Publish data spans (no layout reads) to the enclosing scrollbar, read when drawing. */
+export function useProjection(spans: (() => readonly Span[]) | null, version: unknown) {
+  useSource({ kind: "data", read: () => spans?.() ?? [] }, version);
 }
 
-/** Spans of elements inside a scroller, read from layout: for bodies that draw every row. */
-export function domSpans(
-  scroller: HTMLElement,
-  elements: Iterable<Element>,
-  mark: (element: Element) => Span["mark"],
-): Span[] {
-  const origin = scroller.getBoundingClientRect().top - scroller.scrollTop + scroller.clientTop;
-  return Array.from(elements, (element) => {
-    const rect = element.getBoundingClientRect();
-    return { top: rect.top - origin, height: rect.height, mark: mark(element) };
-  });
+/** Publish elements drawn in the scroller; their places are read by the observer, not a frame. */
+export function useDomProjection(
+  elements: (() => Iterable<Element>) | null,
+  mark: (element: Element) => Mark,
+  version: unknown,
+) {
+  useSource({ kind: "dom", elements: () => elements?.() ?? [], mark, placed: [] }, version);
 }
 
 const TIMELINE = typeof CSS !== "undefined" && !!CSS.supports?.("animation-timeline: scroll()");
@@ -133,7 +165,11 @@ function attach(el: HTMLElement, parts: Parts, sources: Registry["sources"]) {
     const ctx = marks.getContext("2d");
     if (!ctx || !bins || !ink) return;
     const all = function* () {
-      for (const read of sources.values()) yield* read();
+      for (const source of sources.values())
+        if (source.kind === "data") yield* source.read();
+        else
+          for (const { element, top, height } of source.placed)
+            yield { top, height, mark: source.mark(element) };
     };
     paint(ctx, project(all(), scrollH, bins), width, ink);
     const litCtx = lit.getContext("2d");
@@ -143,6 +179,30 @@ function attach(el: HTMLElement, parts: Parts, sources: Registry["sources"]) {
   const invalidate = () => {
     // A seam drag holds its panes; the observer delivers the final size at release.
     if (!raf && !el.closest("[data-pane-resizing]")) raf = requestAnimationFrame(draw);
+  };
+  let placing = true;
+  // Dom sources' rects, read in the observer callback only, before any write.
+  const place = () => {
+    placing = false;
+    let origin: number | undefined;
+    for (const source of sources.values()) {
+      if (source.kind !== "dom") continue;
+      source.placed.length = 0;
+      for (const element of source.elements()) {
+        origin ??= el.getBoundingClientRect().top - el.scrollTop + el.clientTop;
+        const rect = element.getBoundingClientRect();
+        source.placed.push({ element, top: rect.top - origin, height: rect.height });
+      }
+    }
+  };
+  const resolveInk = () => {
+    const ctx = marks.getContext("2d");
+    ink = ctx && {
+      alarm: canvasColor(ctx, "alarm"),
+      caution: canvasColor(ctx, "caution"),
+      ink: canvasColor(ctx, "ink"),
+      line: canvasColor(ctx, "line-2"),
+    };
   };
   const geometry = () => {
     // Reads first, then write only what changed: a write before the next observer's read (or a
@@ -160,7 +220,10 @@ function attach(el: HTMLElement, parts: Parts, sources: Registry["sources"]) {
       console.error("Scroll: a native scrollbar gutter came back on", el);
     top = el.scrollTop;
     left = el.scrollLeft;
+    const placed = placing;
+    if (placing) place();
     if (
+      !placed &&
       ink &&
       nextH === clientH &&
       nextScrollH === scrollH &&
@@ -194,15 +257,7 @@ function attach(el: HTMLElement, parts: Parts, sources: Registry["sources"]) {
       if (canvas.width !== width) canvas.width = width;
       if (canvas.height !== bins) canvas.height = bins;
     }
-    // ponytail: ink resolves once per mount; a theme toggle keeps it (owed: a theme subscription).
-    const ctx = ink ? null : marks.getContext("2d");
-    if (ctx)
-      ink = {
-        alarm: canvasColor(ctx, "alarm"),
-        caution: canvasColor(ctx, "caution"),
-        ink: canvasColor(ctx, "ink"),
-        line: canvasColor(ctx, "line-2"),
-      };
+    if (!ink) resolveInk();
     if (!TIMELINE) follow();
     invalidate();
   };
@@ -220,11 +275,30 @@ function attach(el: HTMLElement, parts: Parts, sources: Registry["sources"]) {
   const observer = typeof ResizeObserver === "undefined" ? null : new ResizeObserver(geometry);
   observer?.observe(el);
   if (field) observer?.observe(field);
-  // The observer's first delivery is the initial geometry; without one (jsdom), measure now.
-  if (!observer) geometry();
+  // The observer's first delivery is the initial geometry; without one (jsdom), measure now, and
+  // dom sources stay unplaced: there is no post-layout moment to read them in.
+  if (!observer) {
+    placing = false;
+    geometry();
+  }
+  // Re-observing makes the observer deliver once after the next layout: dom sources are placed
+  // there, never in a frame callback.
+  const remeasure = () => {
+    if (!observer) return;
+    placing = true;
+    observer.unobserve(el);
+    observer.observe(el);
+  };
+  // The theme listener runs in the toggle's event, not a frame: ink resolves once per change.
+  const unsubscribe = subscribeTheme(() => {
+    resolveInk();
+    invalidate();
+  });
   return {
     invalidate,
+    remeasure,
     detach() {
+      unsubscribe();
       observer?.disconnect();
       el.removeEventListener("scroll", onScroll);
       el.removeEventListener("scrollend", onScrollEnd);
@@ -263,7 +337,7 @@ export function Scroll({
     xFrame: null,
     field: null,
   });
-  const sources = useRef(new Map<object, () => readonly Span[]>()).current;
+  const sources = useRef(new Map<object, Source>()).current;
   const controller = useRef<ReturnType<typeof attach> | null>(null);
   const registry = useMemo<Registry | null>(() => {
     if (!element) return null;
@@ -273,6 +347,7 @@ export function Scroll({
       element,
       sources,
       invalidate: () => controller.current?.invalidate(),
+      remeasure: () => controller.current?.remeasure(),
       rowHeight: () =>
         (row ||= parseFloat(getComputedStyle(element).getPropertyValue("--item-h")) || 20),
     };

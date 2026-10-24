@@ -1,5 +1,6 @@
 import type { ReactNode } from "react";
 
+import { Scroll } from "@pe/kit/lang/scroll";
 import { Section } from "@pe/kit/lang/section";
 import type { RecipeMetadata } from "@pe/kit/lib/tv";
 
@@ -61,7 +62,10 @@ export function SpecimenFrame({
   return (
     <Section label={name}>
       <code className="t-small face-mono text-ink-mute">{importPath}</code>
-      <div className="overflow-x-auto py-2 t-small face-mono text-ink">{children}</div>
+      {/* Wide specimens scroll sideways, and a list in a frame owns this Scroll. */}
+      <Scroll axis="both" className="py-2 t-small face-mono text-ink" fieldClassName="block">
+        {children}
+      </Scroll>
     </Section>
   );
 }

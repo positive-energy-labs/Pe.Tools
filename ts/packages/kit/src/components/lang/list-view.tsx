@@ -22,8 +22,8 @@ import {
 } from "./collection";
 import {
   assertScrollOwner,
-  domSpans,
   Scroll,
+  useDomProjection,
   useProjection,
   useRowHeight,
   useScroller,
@@ -129,15 +129,9 @@ function ListRenderer<T, Sort extends string>(props: ListViewProps<T, Sort> & { 
     if (props.plain || !root || process.env.NODE_ENV === "production") return;
     assertScrollOwner(root, owned, `ListView "${props["aria-label"]}"`);
   }, [root, owned, props.plain]);
-  useProjection(
-    () =>
-      root && scroller
-        ? domSpans(
-            scroller,
-            root.querySelectorAll(":scope > section > [data-list-section-home]"),
-            () => ({ tick: true }),
-          )
-        : [],
+  useDomProjection(
+    root ? () => root.querySelectorAll(":scope > section > [data-list-section-home]") : null,
+    () => ({ tick: true }),
     list.sections,
   );
   useLayoutEffect(() => {
@@ -356,16 +350,17 @@ function SectionBody<T, Sort extends string>(props: SectionBodyProps<T, Sort>) {
 
 function PlainSectionBody<T, Sort extends string>(props: SectionBodyProps<T, Sort>) {
   const body = useRef<HTMLDivElement>(null);
-  const { list, rows, projection, scroller } = props;
+  const { list, rows, projection } = props;
   const version = useMarkVersion(props);
-  useProjection(() => {
-    if (props.plain || !body.current || !scroller) return [];
-    const byKey = new Map(rows.map((item) => [item.key, item]));
-    return domSpans(scroller, body.current.querySelectorAll(":scope > [data-key]"), (el) => {
+  const byKey = useMemo(() => new Map(rows.map((item) => [item.key, item])), [rows]);
+  useDomProjection(
+    props.plain ? null : () => body.current?.querySelectorAll(":scope > [data-key]") ?? [],
+    (el) => {
       const item = byKey.get((el as HTMLElement).dataset.key ?? "");
       return item ? markOf(list, item, projection) : {};
-    });
-  }, version);
+    },
+    version,
+  );
   return (
     <div ref={body} data-list-body="" role="presentation">
       {props.rows.map((item) => (
