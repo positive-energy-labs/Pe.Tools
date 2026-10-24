@@ -18,7 +18,7 @@ type Rule = {
   allow: Allow[];
   max?: Record<string, number>;
   asOf?: string;
-  select?: "classes" | "hover-css" | "reach" | "reading-rows";
+  select?: "classes" | "hover-css" | "focus-css" | "reach" | "reading-rows";
   exclude?: string[];
   cannotSee: string;
 };
@@ -235,6 +235,17 @@ const RULES: Rule[] = [
         "rooms/inbox.tsx": "Room GUID identity is not a numeric Revit id.",
       }),
     ], cannotSee: "Event aliases, hit-test correctness and computed paint." },
+  { id: "focus-ring-owner", doctrine: "L3",
+    pattern: /(?:^|;)\s*(?:outline(?:-[\w-]+)?|box-shadow|--dl-cell-ring)\s*:(?!\s*(?:none|var\(--shadow-))/g,
+    roots: [K + "**/*.css", W + "**/*.css"], select: "focus-css", allow: [
+      { glob: K + "base.css", reason: "The one focus ring owner." },
+      { glob: K + "components/lang/pane.css", reason: "The active-pane halo marks scope, not a focused control." },
+      { glob: W + "chat/chat-shell.css", reason: "Hides the pane halo where the composer box already rings." },
+    ], cannotSee: "Nested CSS, inline styles and outline set from script." },
+  { id: "focus-ring-classes", doctrine: "L3",
+    pattern: /(?:^|\s)(?:group-|peer-)?focus(?:-visible|-within)?:(?:outline(?!-none)|ring|shadow|border)\S*/g,
+    roots: [K + "**/*.tsx", W + "**/*.tsx"], allow: [],
+    cannotSee: "Class strings assembled at runtime; the CSS row sees stylesheets only." },
   { id: "kit-reach-block", doctrine: "N7", pattern: /:hover/g,
     roots: [K + "**/*.css"], select: "reach", allow: [], cannotSee: "Cascade precedence and runtime reach transitions." },
   { id: "t-prose-ratchet", doctrine: "I6", pattern: /\bt-prose\b/g,
@@ -432,7 +443,8 @@ it.each(RULES)("$id ($doctrine)", (rule) => {
       }
       source = source.replace(REACH_BLOCK, "");
     }
-    if (rule.select === "hover-css") source = source.replace(/\/\*[\s\S]*?\*\//g, "");
+    if (rule.select === "hover-css" || rule.select === "focus-css")
+      source = source.replace(/\/\*[\s\S]*?\*\//g, "");
     const values =
       rule.select === "reading-rows"
         ? unadaptedReadings(source)
@@ -442,7 +454,11 @@ it.each(RULES)("$id ($doctrine)", (rule) => {
             ? [...source.matchAll(/([^{}]+)\{([^{}]*)\}/g)]
                 .filter((m) => /:(?:hover|focus(?:-visible|-within)?)/.test(m[1]!))
                 .map((m) => m[2]!)
-            : [source];
+            : rule.select === "focus-css"
+              ? [...source.matchAll(/([^{}]+)\{([^{}]*)\}/g)]
+                  .filter((m) => /:focus|data-reach="focus"/.test(m[1]!))
+                  .map((m) => m[2]!)
+              : [source];
     const hits = values.flatMap((value) => [...value.matchAll(rule.pattern)].map(() => value));
     let allowed = 0;
     for (const hit of hits) {

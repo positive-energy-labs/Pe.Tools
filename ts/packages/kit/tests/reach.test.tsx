@@ -102,14 +102,16 @@ test("pressing a reference uses focus reach and its popup shares the lighting gr
 });
 
 test("focus and landing are outline-only, and reference contact never fills or boxes the word", () => {
-  const css = readFileSync(createRequire(import.meta.url).resolve("@pe/kit/lang/lang.css"), "utf8");
+  const resolve = (id: string) => readFileSync(createRequire(import.meta.url).resolve(id), "utf8");
+  const css = resolve("@pe/kit/lang/lang.css");
   const rules = [...css.matchAll(/([^{}]+)\{([^{}]*)\}/g)];
-  const focus = rules.filter(
-    ([, selector]) =>
-      selector!.includes('[data-reach="focus"]') && selector!.includes("[data-reach]:"),
+  // The one focus ring lives in base.css (kit-census `focus-ring-owner`); lang.css paints none.
+  const focus = [...resolve("@pe/kit/base.css").matchAll(/([^{}]+)\{([^{}]*)\}/g)].filter(
+    ([, selector]) => selector!.includes('[data-reach="focus"]'),
   );
   expect(focus).toHaveLength(1);
   expect(focus[0]![2]).toContain("outline: 2px solid");
+  expect(rules.filter(([, selector]) => selector!.includes("[data-reach]:"))).not.toEqual([]);
   const landed = rules.filter(([, selector]) => selector!.trim() === "[data-landed]");
   for (const [, , body] of [...focus, ...landed])
     expect(body).not.toMatch(/background(?:-\w+)?\s*:/);

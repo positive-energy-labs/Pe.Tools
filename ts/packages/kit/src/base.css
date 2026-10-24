@@ -274,9 +274,28 @@
     color: var(--pe-ink-2);
   }
 
-  [data-pe] :focus-visible {
+  /* THE focus ring, owned here and nowhere else (kit-census `focus-ring-owner`): 2px ink, drawn inside
+     the box so it never clips, never shifts layout and never fills. Pointer presses show none. A
+     field's ring belongs to its frame, so a frame never carries two. A reach rung of "focus" rings only
+     without DOM focus (a scene or list cursor naming it); DOM focus rings by `:focus-visible` alone. */
+  [data-pe] :is(:focus-visible, [data-reach="focus"]:not(:focus-within, .subject-ref)) {
     outline: 2px solid var(--pe-ink);
-    outline-offset: 2px;
+    outline-offset: var(--focus-offset, -2px);
+  }
+  [data-pe] a:focus-visible {
+    --focus-offset: 2px;
+  }
+  [data-pe]
+    :is(.dl-control, .dl-composer-box, .dl-cell, .dl-search:not([data-face="bar"])):has(
+      :is(input, textarea):focus-visible
+    ) {
+    outline: 2px solid var(--pe-ink);
+    outline-offset: -2px;
+  }
+  [data-pe]
+    :is(.dl-control, .dl-composer-box, .dl-cell, .dl-search)
+    :is(input, textarea):focus-visible {
+    outline: none;
   }
 
   /* Tailwind's preflight gives a bare button the arrow; anything pressable shows the hand unless
