@@ -143,7 +143,22 @@ function RootDocument({ children }: { children: React.ReactNode }) {
             ) : (
               <SurfaceHostProvider>
                 <TooltipProvider>
-                  <RemoteDeviceGate>
+                  <RemoteDeviceGate
+                    name="Positive Energy Tools"
+                    guidance={
+                      <div className="flex max-w-3xl flex-col gap-3">
+                        <p>
+                          Choose a tool, choose its document, then review the data and proposed
+                          changes before applying them.
+                        </p>
+                        <p>
+                          Once connected, Tutorial (Alt+/) explains the current tool and its
+                          controls. Document access waits for the host connection and device
+                          pairing.
+                        </p>
+                      </div>
+                    }
+                  >
                     {children}
                     <AppUtilities />
                   </RemoteDeviceGate>

@@ -338,6 +338,7 @@ const RULES: Rule[] = [
     roots: [W + "**/*.tsx"], allow: allow({
       "components/lang/leg-strip.tsx": "Fixed receipt-stage chips have no picks or navigation.",
       "ducts/docs.tsx": "Tutorial prose has no row navigation.",
+      "ducts/introduction.tsx": "Shared public tutorial prose has no row navigation.",
       "ducts/proto/e/preview-lines.tsx": "Static proposed-change and refusal text has no picks.",
       "lib/schema-to-field-render/field-metadata.tsx": "Static validation messages have no picks.",
     }), cannotSee: "Rows built by helpers; ListReading is the wave-4 kit reading name." },

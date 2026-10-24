@@ -13,6 +13,7 @@ import { Table } from "@pe/kit/table/table";
 import QRCode from "qrcode";
 import type { DeviceListing, Pairing } from "@pe/host-contracts/pe-api";
 import { peClient } from "#/host/pe-client";
+import { LoadingContext } from "#/route/loading-context";
 
 const message = (error: unknown) => (error instanceof Error ? error.message : String(error));
 const LocalDevice = createContext(true);
@@ -391,26 +392,50 @@ function pairingCode(input: string): string {
   }
 }
 
-export function RemoteDeviceGate({ children }: { children: ReactNode }) {
+export function RemoteDeviceGate({
+  name,
+  guidance,
+  children,
+}: {
+  name: string;
+  guidance: ReactNode;
+  children: ReactNode;
+}) {
   const [state, setState] = useState<{
     environmentId: string;
     paired: boolean;
     local: boolean;
   } | null>(null);
   const [error, setError] = useState<string | null>(null);
+  const [attempt, setAttempt] = useState(0);
   useEffect(() => {
+    let current = true;
     void peClient
       .call("device.environment", {})
-      .then(setState)
-      .catch((error) => setError(message(error)));
-  }, []);
-  if (error)
+      .then((next) => current && setState(next))
+      .catch((error) => current && setError(message(error)));
+    return () => {
+      current = false;
+    };
+  }, [attempt]);
+  if (!state)
     return (
-      <p role="alert" className="p-6">
-        {error}
-      </p>
+      <LoadingContext name={name} says="Connecting to this host…" error={error}>
+        {error ? (
+          <Button
+            label="Retry host connection"
+            onClick={() => {
+              setError(null);
+              setAttempt((value) => value + 1);
+            }}
+          >
+            Retry connection
+          </Button>
+        ) : null}
+        {guidance}
+        <noscript>Enable JavaScript to connect. This public guide remains readable.</noscript>
+      </LoadingContext>
     );
-  if (!state) return <p className="p-6">Connecting to this host…</p>;
   if (!state.local && !state.paired)
     return (
       <DevicePairing
