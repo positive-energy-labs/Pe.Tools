@@ -599,6 +599,7 @@ export function createHarnessThreads(options: HarnessThreadsOptions) {
           complete = false;
           continue;
         }
+        if (refs.has(refKey(ref))) continue;
         const trial = turnElementNamesSnapshotSchema.safeParse({
           thread: t.meta.id,
           turnId,
@@ -2191,10 +2192,12 @@ export function createHarnessThreads(options: HarnessThreadsOptions) {
     },
     /** Read-only context projection; no Work read, native call, or new authority. */
     workContexts: () =>
-      [...threads.values()].map((t) => ({
-        threadId: t.meta.id,
-        context: readWorkContext(t.meta.workContext),
-      })),
+      [...threads.values()]
+        .sort((a, b) => b.meta.updatedAt.localeCompare(a.meta.updatedAt))
+        .map((t) => ({
+          threadId: t.meta.id,
+          context: readWorkContext(t.meta.workContext),
+        })),
     launchScheduled: (input: import("../scheduled-tasks.ts").ScheduledLaunch) => {
       const providerId =
         input.selection?.providerId ??

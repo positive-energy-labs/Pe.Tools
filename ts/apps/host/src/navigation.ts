@@ -8,11 +8,16 @@ import {
   routeAt,
   sameAddress,
   targetsLabel,
+  workKey,
+  READING_MAX_FRAME_BYTES,
+  type ThreadWorkSnapshot,
+  type WorkResume,
   type NavigationSnapshot,
   type NavigationWork,
   type WorkKey,
 } from "@pe/agent-contracts";
 import type { RouteWorkspace } from "@pe/runtime";
+import { sameDocumentRef, type ThreadWorkContext } from "./thread-work-context.ts";
 
 const documentSchema = documentRefSchema.extend({ address: addressSchema.nullable() });
 type NavigationDocument = z.infer<typeof documentSchema>;
@@ -20,6 +25,139 @@ export interface NavigationSources {
   threads(): Promise<unknown>;
   documents(): Promise<unknown>;
   routes?(): Promise<Record<string, string>>;
+  contexts?(): readonly { threadId: string; context: ThreadWorkContext | null }[];
+  subscribe?(notify: () => void): () => void;
+}
+
+/** Joins existing Work to remembered connections. No body read, carry-over, or native authority. */
+export async function readThreadWork(
+  workspace: RouteWorkspace,
+  sources?: NavigationSources,
+): Promise<ThreadWorkSnapshot> {
+  const observations: string[] = [];
+  const [workResult, contextResult, documentResult] = await Promise.allSettled([
+    workspace.instances(),
+    Promise.resolve().then(() => sources?.contexts?.() ?? null),
+    sources ? sources.documents().then((value) => z.array(documentSchema).parse(value)) : null,
+  ]);
+  const census = workResult.status === "fulfilled" ? workResult.value : null;
+  const contexts = contextResult.status === "fulfilled" ? contextResult.value : null;
+  const documents = documentResult.status === "fulfilled" ? documentResult.value : null;
+  if (!contexts) observations.push("Remembered thread connections are unavailable.");
+  if (!census?.available) observations.push("Persisted Work discovery is unavailable.");
+  if (census?.unindexed)
+    observations.push(`${census.unindexed} older Work files have no discoverable identity.`);
+  const unreadable =
+    (census?.unreadable ?? 0) + (census?.works.filter((w) => w.state !== "ready").length ?? 0);
+  if (unreadable)
+    observations.push(
+      `${unreadable} saved Work records could not be inspected; they were left unchanged.`,
+    );
+  if (!documents) observations.push("Current document availability is unknown.");
+  if (contexts?.some(({ context }) => context === null))
+    observations.push(
+      "Some remembered thread connections could not be read; they were left unchanged.",
+    );
+  const snapshot: ThreadWorkSnapshot = {
+    observedAt: new Date().toISOString(),
+    observations,
+    truncated: Boolean(census?.truncated || (contexts?.length ?? 0) > 200),
+    threads: (contexts ?? []).slice(0, 200).map(({ threadId, context }) => ({
+      threadId,
+      documents: (context?.documents ?? []).map((doc) => ({
+        id: doc.id,
+        name: doc.name,
+        availability:
+          documents === null
+            ? ("unknown" as const)
+            : documents.some((open) =>
+                  doc.address !== null
+                    ? open.address !== null && sameAddress(doc.address, open.address)
+                    : doc.refs.some((ref) => sameDocumentRef(ref, open)),
+                )
+              ? ("open" as const)
+              : ("closed" as const),
+      })),
+      works: (census?.works ?? []).flatMap((work) => {
+        if (work.state !== "ready" || work.unfinished === 0 || !context) return [];
+        const scope = work.scope;
+        const matches = context.documents.filter((doc) =>
+          scope.binding === "address"
+            ? doc.address !== null && sameAddress(doc.address, scope.target)
+            : scope.binding === "open"
+              ? doc.refs.some((ref) => sameDocumentRef(ref, scope.open))
+              : false,
+        );
+        const explicit = context.works.some((key) => workKey(key) === work.id);
+        if (!matches.length && !explicit) return [];
+        return [
+          {
+            id: work.id,
+            documentId: matches.length === 1 ? matches[0]!.id : null,
+            route: work.route,
+            intent: work.title,
+            unfinished: work.unfinished,
+          },
+        ];
+      }),
+    })),
+  };
+  // The batch shares the normal Reading frame limit; an oversized row cannot blank every row.
+  let remaining = READING_MAX_FRAME_BYTES - 8192;
+  snapshot.threads = snapshot.threads.filter((thread) => {
+    const bytes = Buffer.byteLength(JSON.stringify(thread));
+    if (bytes > remaining) {
+      snapshot.truncated = true;
+      return false;
+    }
+    remaining -= bytes;
+    return true;
+  });
+  if (snapshot.truncated)
+    observations.push(
+      "This is a bounded Work snapshot; additional stored items were not included.",
+    );
+  return snapshot;
+}
+
+/** Explicit Work navigation keeps its saved address even when native execution is unavailable. */
+export async function resumeWork(
+  workspace: RouteWorkspace,
+  id: string,
+  sources?: NavigationSources,
+): Promise<WorkResume | null> {
+  const census = await workspace.instances();
+  if (!census.available) throw new Error("Persisted Work discovery is unavailable");
+  const work = census.works.find((item) => item.id === id);
+  if (!work) return null;
+  const routes = (await sources?.routes?.()) ?? {};
+  const path = routes[work.route] ?? documentRoutes[work.route];
+  if (work.state !== "ready" || !path)
+    return {
+      id,
+      key: work.scope,
+      url: null,
+      reason:
+        work.state === "unreadable"
+          ? "Saved Work is unreadable and was left unchanged."
+          : "This Work's tool is not currently registered. The saved Work was left unchanged.",
+    };
+  const target =
+    work.scope.binding === "address"
+      ? work.scope.target
+      : work.scope.binding === "open"
+        ? JSON.stringify({ kind: "open", ref: work.scope.open })
+        : undefined;
+  const at = routeAt(path);
+  const carry = { target, work: work.scope.binding === "workspace" ? work.scope.work : undefined };
+  return {
+    id,
+    key: work.scope,
+    url: at
+      ? routeAddress(at).link({}, carry)
+      : `${path}?${new URLSearchParams(Object.entries(carry).filter((entry): entry is [string, string] => entry[1] !== undefined))}`,
+    reason: null,
+  };
 }
 
 const documentRoutes: Readonly<Record<string, string | undefined>> = Object.fromEntries(

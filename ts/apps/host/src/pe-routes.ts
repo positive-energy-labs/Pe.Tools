@@ -44,6 +44,8 @@ import {
   type Capability,
   type CapabilityCatalog,
   type WorkKey,
+  type TurnElementNamesRequest,
+  type TurnElementNamesObservation,
   type Caller,
   HOST_LOG_PAGE_MAX,
 } from "@pe/agent-contracts";
@@ -62,6 +64,8 @@ import {
 } from "./harness/user-shell.ts";
 import {
   observeResources,
+  OwnerReads,
+  resourceSnapshot,
   resourceResponse,
   RouteViewStore,
   RouteWorkspace,
@@ -107,7 +111,12 @@ import { HostLifecycle, resolveHostVersion } from "./host-lifecycle.ts";
 import { bindActionWorkspace } from "./takeoff-actions.ts";
 import { familySpecAsset, familySpecHandlers } from "./family-spec.ts";
 import { fileRouteDocumentStore } from "./route-document-store.ts";
-import { readNavigation, type NavigationSources } from "./navigation.ts";
+import {
+  readNavigation,
+  readThreadWork,
+  resumeWork,
+  type NavigationSources,
+} from "./navigation.ts";
 import {
   captureDirectory,
   capturePackage,
@@ -146,6 +155,7 @@ export interface PeRoutesOptions {
   store: RouteDocumentStore;
   heads: ThreadHeadSource;
   navigation?: NavigationSources;
+  turnElementNames?: (request: TurnElementNamesRequest) => Promise<TurnElementNamesObservation>;
   capabilityCatalog?: { read(scope?: HostSessionScope): Promise<CapabilityCatalog> };
   contributionRead?: (key: string, sha256?: string) => unknown;
   observeHostResource?: ResourceObserver;
@@ -234,7 +244,25 @@ export function createPeRoutes(options: PeRoutesOptions) {
       })
     : null;
   const views = new RouteViewStore();
-  const resources = observeResources(work, options.heads, options.observeHostResource);
+  const workReads = new OwnerReads();
+  const resources = observeResources(work, options.heads, (request, publish, after) => {
+    if (request.kind !== "thread-work")
+      return options.observeHostResource?.(request, publish, after) ?? (() => {});
+    const key = readingKey(request);
+    return workReads.observe(
+      key,
+      () => readThreadWork(work, options.navigation),
+      (notify) => {
+        const releaseWork = work.subscribe(() => notify());
+        const releaseContext = options.navigation?.subscribe?.(notify);
+        return () => {
+          releaseWork();
+          releaseContext?.();
+        };
+      },
+      (result) => publish(resourceSnapshot(key, result)),
+    );
+  });
   const observeBase = options.markReadings ? options.markReadings(resources) : resources;
   const observe: ResourceObserver = (request, publish, after) => {
     const release = observeBase(request, publish, after);
@@ -359,6 +387,38 @@ export function createPeRoutes(options: PeRoutesOptions) {
         return json(await readNavigation(work, options.navigation));
       } catch (error) {
         return json({ error: message(error) }, 502);
+      }
+    }
+    if (method === "GET" && declared.id === "thread-work.get") {
+      try {
+        return json(await readThreadWork(work, options.navigation));
+      } catch (error) {
+        return json({ error: message(error) }, 502);
+      }
+    }
+    if (method === "GET" && declared.id === "work.resume") {
+      const id = url.searchParams.get("id");
+      if (!id || id.length > 16384) return json({ error: "Expected a saved Work id" }, 400);
+      try {
+        const resumed = await resumeWork(work, id, options.navigation);
+        return resumed
+          ? json(resumed)
+          : json({ error: "Saved Work was not found; nothing was changed" }, 404);
+      } catch (error) {
+        return json({ error: message(error) }, 502);
+      }
+    }
+    if (declared.id === "turn.element-names") {
+      if (!options.turnElementNames)
+        return json({ error: "Turn element names are unavailable" }, 503);
+      try {
+        const input = peRoutes["turn.element-names"].body.parse(await request.json());
+        return json(await options.turnElementNames(input));
+      } catch (error) {
+        return json(
+          { error: message(error) },
+          error instanceof z.ZodError || error instanceof SyntaxError ? 400 : 409,
+        );
       }
     }
     if (method === "GET" && declared.id === "capabilities.find") {
@@ -968,7 +1028,35 @@ export function makeHostPeRoutes(
     mcpServer: (context) => peaMcpServer(sourceRoot, hostBaseUrl, context),
     receiptFact: receiptThreads.accept,
     pluginHook: content.lifecycle.emit,
+    // Cached bridge metadata only. Remembered labels/addresses never admit a native operation.
+    observeDocument: (request) => {
+      if (!bridge) return null;
+      const matches = Effect.runSync(bridge.list).flatMap((session) =>
+        session.connected && session.sessionId
+          ? (session.state?.openDocuments ?? []).flatMap((doc) => {
+              const address = addressSchema.safeParse(doc.address).data ?? null;
+              const matching =
+                request.kind === "open"
+                  ? session.sessionId === request.ref.session && doc.openId === request.ref.openId
+                  : session.sessionId === request.session &&
+                    address !== null &&
+                    sameAddress(address, request.address);
+              return matching
+                ? [
+                    {
+                      ref: { session: session.sessionId!, openId: doc.openId },
+                      address,
+                      name: doc.title,
+                    },
+                  ]
+                : [];
+            })
+          : [],
+      );
+      return matches.length === 1 ? matches[0]! : null;
+    },
   });
+  const stopWorkContext = bridge?.subscribe(() => threads.refreshWorkContexts());
   const scheduler = createScheduledTasks({
     path: join(productRoot(), "state", hostOwnership.serviceName, "scheduled-tasks.json"),
     receipts: telemetry.journal,
@@ -1065,7 +1153,21 @@ export function makeHostPeRoutes(
     },
     store: fileRouteDocumentStore(productRouteWorkPath()),
     heads: threads.heads,
+    turnElementNames: (request) =>
+      threads.readTurnElementNames(request, (operation, input, ref) => {
+        if (!bridge) return Promise.reject(new Error("No Revit bridge is available"));
+        return Effect.runPromise(bridge.invoke(operation, input, ref.session, ref.openId));
+      }),
     navigation: {
+      contexts: threads.workContexts,
+      subscribe: (notify) => {
+        const releaseThreads = threads.observe({ kind: "threads" }, () => notify());
+        const releaseBridge = bridge?.subscribe(() => notify());
+        return () => {
+          releaseThreads?.();
+          releaseBridge?.();
+        };
+      },
       routes: async () =>
         Object.fromEntries(
           (await podRoutes.list())
@@ -1080,7 +1182,7 @@ export function makeHostPeRoutes(
         return response.json();
       },
       documents: async () => {
-        if (!bridge) return [];
+        if (!bridge) throw new Error("No Revit bridge metadata is available");
         const sessions = await Effect.runPromise(bridge.list);
         return sessions.flatMap((session) =>
           session.connected && session.sessionId
@@ -1125,6 +1227,7 @@ export function makeHostPeRoutes(
     close: async () => {
       podRoutes.close();
       stopOperationHooks();
+      stopWorkContext?.();
       await content.lifecycle.close();
       bindPackageLifecycle(undefined);
     },
