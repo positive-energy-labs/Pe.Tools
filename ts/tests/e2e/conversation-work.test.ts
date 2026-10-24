@@ -91,6 +91,29 @@ test("real conversation Work cutover retains authored cells, draft, Places and o
         "PRECONDITION: real isolated source runtime required; parent 54026 and demo are protected",
       );
     if (receipt.productDirty) throw Error("PRECONDITION: product source has uncommitted changes");
+    const custody = JSON.parse(await readFile(join(dir, "custody.json"), "utf8"));
+    if (custody.mode !== "owned-source-no-revit-no-tray" || !custody.hostSource)
+      throw Error(
+        "PRECONDITION: fresh owned host source provenance is required, not only a client build header",
+      );
+    expect(custody.hostSource).toEqual({
+      commit: head,
+      productDirty: "",
+      entry: "ts/apps/host/src/dev.ts",
+      loader: "jiti/register",
+    });
+    const hostService = JSON.parse(await readFile(custody.service, "utf8"));
+    expect(hostService.pid).toBe(custody.hostPid);
+    expect(resolve(hostService.sourceRoot).toLowerCase()).toBe(source.toLowerCase());
+    receipt.coverage.hostSource = {
+      commit: custody.hostSource.commit,
+      entry: custody.hostSource.entry,
+      loader: custody.hostSource.loader,
+      pid: hostService.pid,
+      sourceRoot: hostService.sourceRoot,
+      processStartUtc: hostService.processStartUtc,
+      instanceId: hostService.instanceId,
+    };
     const seed = JSON.parse(await readFile(join(dir, "seed.json"), "utf8"));
     expect(resolve(seed.productHome)).toBe(resolve(process.env.PE_TOOLS_PRODUCT_HOME));
     const initial = await workEvidence(seed.productHome);
@@ -358,6 +381,11 @@ test("real conversation Work cutover retains authored cells, draft, Places and o
     expect(network.some((event) => event.stream && event.url?.includes("/pe/resources"))).toBe(
       true,
     );
+    expect(git("rev-parse", "HEAD"), "source HEAD stayed fixed throughout the drive").toBe(head);
+    expect(
+      git("status", "--porcelain", "--untracked-files=all", "--", "ts/apps", "ts/packages"),
+      "product source stayed committed throughout the drive",
+    ).toBe("");
     receipt.result = "PROVEN_BROWSER_SOURCE";
   } catch (error) {
     receipt.result = String((error as Error).message).startsWith("PRECONDITION:")

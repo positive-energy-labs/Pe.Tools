@@ -41,6 +41,12 @@ const receipt = {
   source,
   startedAt: new Date().toISOString(),
   mode: "owned-source-no-revit-no-tray",
+  hostSource: {
+    commit: "",
+    productDirty: "",
+    entry: "ts/apps/host/src/dev.ts",
+    loader: "jiti/register",
+  },
   hostPid: 0,
   service: "",
   web: "",
@@ -101,6 +107,18 @@ async function exited(child: ChildProcess, milliseconds: number) {
   });
 }
 try {
+  receipt.hostSource.commit = (
+    await exec("git", ["rev-parse", "HEAD"], { cwd: source, windowsHide: true })
+  ).stdout.trim();
+  receipt.hostSource.productDirty = (
+    await exec(
+      "git",
+      ["status", "--porcelain", "--untracked-files=all", "--", "ts/apps", "ts/packages"],
+      { cwd: source, windowsHide: true },
+    )
+  ).stdout.trim();
+  if (receipt.hostSource.productDirty)
+    throw Error("UNPROVEN_STARTUP: product source must be committed before starting the host");
   await seedConversationWork(home, dir);
   await mkdir(env.LOCALAPPDATA!, { recursive: true });
   await mkdir(env.APPDATA!, { recursive: true });
