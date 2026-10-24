@@ -64,7 +64,9 @@ export function RouteDock({
         hide={tools ? undefined : "end"}
         resize={{
           target: "end",
-          defaultSize: narrow ? 320 : 720,
+          // The width a tool had beside the old 400px Pea dock at 1280: narrower folds a table
+          // head past its query (demo-lane families). ponytail: a tuned default, owed a rule.
+          defaultSize: narrow ? 320 : 880,
           minSize: narrow ? 180 : 360,
           minOtherSize: narrow ? 200 : 360,
           persist: narrow ? undefined : "pe.toolsWidth",
