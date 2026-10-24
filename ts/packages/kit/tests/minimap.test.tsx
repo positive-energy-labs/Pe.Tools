@@ -81,26 +81,18 @@ test("a vast ListView maps its virtual range and a midpoint press lands at row 5
   });
   Object.defineProperty(HTMLElement.prototype, "scrollTo", { configurable: true, value: scroll });
   const captures = new WeakSet<HTMLElement>();
-  Object.defineProperties(HTMLElement.prototype, {
-    setPointerCapture: {
-      configurable: true,
-      value: function (this: HTMLElement) {
-        captures.add(this);
-      },
+  for (const [name, value] of Object.entries({
+    setPointerCapture(this: HTMLElement) {
+      captures.add(this);
     },
-    hasPointerCapture: {
-      configurable: true,
-      value: function (this: HTMLElement) {
-        return captures.has(this);
-      },
+    hasPointerCapture(this: HTMLElement) {
+      return captures.has(this);
     },
-    releasePointerCapture: {
-      configurable: true,
-      value: function (this: HTMLElement) {
-        captures.delete(this);
-      },
+    releasePointerCapture(this: HTMLElement) {
+      captures.delete(this);
     },
-  });
+  }))
+    Object.defineProperty(HTMLElement.prototype, name, { configurable: true, value });
   const view = render(<Fixture count={1000} />);
   const minimap = view.container.querySelector<HTMLElement>("[data-minimap]")!;
   expect(minimap).toBeTruthy();
