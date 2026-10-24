@@ -15,6 +15,7 @@ import { AtlasProvider } from "#/takeoff/atlas-context";
 import { AtlasWorkspace } from "#/takeoff/atlas-workspace";
 import { useAtlasColumns } from "#/takeoff/atlas-columns";
 import { planView, useOwnerCrops, usePlanImage } from "#/takeoff/plan-image";
+import { TakeoffAttention } from "./attention";
 
 export type Verdict = "accept" | "dismiss";
 
@@ -125,10 +126,6 @@ function useAtlasModel({ store, headRail, sidePanel, readoutBand }: AtlasProps) 
       store.actions.chooseRoom(row.room.guid, selected ? undefined : row.zone.zone.lane.label);
     },
     [selected, store],
-  );
-  const hoverTableRow = useCallback(
-    (row: Row | null) => store.actions.hover(row?.room.guid ?? ""),
-    [store],
   );
 
   const cursorRow = rows.find((r) => r.room.guid === cursor) ?? null;
@@ -245,7 +242,6 @@ function useAtlasModel({ store, headRail, sidePanel, readoutBand }: AtlasProps) 
     selected,
     setTableState,
     selectTableRow,
-    hoverTableRow,
     levelZones,
     visibleRows,
     cursorRow,
@@ -268,8 +264,10 @@ export type AtlasModel = ReturnType<typeof useAtlasModel>;
 export function Atlas(props: AtlasProps) {
   const model = useAtlasModel(props);
   return (
-    <AtlasProvider value={model}>
-      <AtlasWorkspace />
-    </AtlasProvider>
+    <TakeoffAttention store={props.store}>
+      <AtlasProvider value={model}>
+        <AtlasWorkspace />
+      </AtlasProvider>
+    </TakeoffAttention>
   );
 }

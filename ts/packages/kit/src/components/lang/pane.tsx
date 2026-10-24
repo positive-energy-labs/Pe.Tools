@@ -1,3 +1,5 @@
+import { RegistryContext } from "@effect/atom-react";
+import { AttentionDocument, picture as pictureAtom } from "./attention";
 import { TooltipHint } from "./tooltip";
 import {
   Children,
@@ -30,7 +32,6 @@ import { Rail } from "./rail";
 import { Scroll } from "./scroll";
 import { cn } from "../../lib/utils";
 import { PaneCrumb } from "./pane-crumb";
-import { useReachChannel } from "./reach";
 import { SubjectBox } from "./popover";
 import "./lang.css";
 import "./pane.css";
@@ -265,7 +266,8 @@ export function Pane({
   }, []);
   const work = [...registered.values()];
   const stage = useContext(PictureContext);
-  const reach = useReachChannel();
+  const attentionDoc = useContext(AttentionDocument) ?? "";
+  const registry = useContext(RegistryContext);
   const [identity, setIdentity] = useState<ReadoutIdentity>({});
   const register = useCallback((next: ReadoutIdentity) => {
     setIdentity(next);
@@ -280,12 +282,12 @@ export function Pane({
   // The channel also reaches sibling panes, whose popovers must clear this picture.
   useEffect(() => {
     if (!picture) return;
-    reach.set((state) => ({ ...state, picture: pictureBox }));
-    return () =>
-      reach.set((state) =>
-        state.picture === pictureBox ? { ...state, picture: null, hovered: null } : state,
-      );
-  }, [picture, reach, pictureBox]);
+    registry.set(pictureAtom(attentionDoc), { box: pictureBox });
+    return () => {
+      if (registry.get(pictureAtom(attentionDoc)).box === pictureBox)
+        registry.set(pictureAtom(attentionDoc), { box: null });
+    };
+  }, [picture, registry, attentionDoc, pictureBox]);
   const crumb = picture ? (
     <PaneCrumb
       segments={[

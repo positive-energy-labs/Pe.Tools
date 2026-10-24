@@ -1,23 +1,10 @@
-import { nameOrFallback } from "@pe/kit/lang/subject-text";
-/**
- * Claim text and verdict patches, with element links that select and section-box the {3D} view.
- * A verdict is the person's answer on one claim; `verdictPatches` stages it into the claim's Work
- * cell, the same path the assumptions editor uses. An element id in a claim's text reads as that
- * element's name (`claimParts`): hovering it lights the element in the drawing, clicking it selects
- * it in Revit. Pea writes ids; the route names them.
- */
+/** Claim verdicts and names. SubjectText owns prose references and attention. */
 import {
   transitionPatches,
   type DuctsRouteDocument,
   type RouteStatePatch,
 } from "@pe/agent-contracts";
 
-import { TooltipHint } from "@pe/kit/lang/tooltip";
-import { RevitTarget } from "@pe/kit/lang/revit-target";
-import { showInRevit } from "#/revit/element-menu";
-import type { ShowElementsResult } from "#/revit/element-target";
-import { observedElements, useNativeObservation } from "#/revit/observation";
-import { tokenRef } from "@pe/kit/lib/token";
 import { snapshotById } from "@pe/ducts-domain/readiness";
 import type { DuctSnapshot } from "@pe/ducts-domain/types";
 import type { Claim, Place } from "./legs";
@@ -96,94 +83,4 @@ export function elementNamer(snapshot: DuctSnapshot, subject: SubjectDrawn | nul
     const size = segment.size.replaceAll('"', "″").replaceAll("ø", "").trim();
     return `${size ? `${size} ` : ""}${segment.kind}`;
   };
-}
-
-/** An element id resolved in a claim's text; `dot` when the prose just before already names it. */
-export type ClaimPart = string | { id: number; name: string; dot: boolean };
-
-/** How far back (chars) the prose is searched for the name's last word before a dot stands in. */
-const NAMED_BEFORE = 30;
-
-/**
- * A claim's text cut into prose and resolved ids: every 7–9 digit number `nameOf` knows becomes its
- * name, or a dot when the 30 chars before it already hold the name's last word ("end cap 14107111").
- * A number `nameOf` does not know stays prose.
- */
-export function claimParts(text: string, nameOf: (id: number) => string | null): ClaimPart[] {
-  const parts: ClaimPart[] = [];
-  let at = 0;
-  for (const match of text.matchAll(/\b\d{7,9}\b/g)) {
-    const id = Number(match[0]);
-    const name = nameOf(id);
-    if (!name) continue;
-    if (match.index > at) parts.push(text.slice(at, match.index));
-    const word = name.trim().split(/\s+/).at(-1)!.toLowerCase();
-    const before = text.slice(Math.max(0, match.index - NAMED_BEFORE), match.index).toLowerCase();
-    parts.push({ id, name, dot: before.includes(word) });
-    at = match.index + match[0].length;
-  }
-  if (at < text.length) parts.push(text.slice(at));
-  return parts;
-}
-
-type ClaimHandlers = {
-  onHover: (id: number | null) => void;
-  onPick: (id: number) => void;
-  onShown: (result: ShowElementsResult) => void;
-};
-
-/** One resolved id in a claim's text: a button that lights its element on hover and selects it on click. */
-function ClaimElement({
-  part,
-  onHover,
-  onPick,
-  onShown,
-}: { part: Exclude<ClaimPart, string> } & ClaimHandlers) {
-  const observation = useNativeObservation();
-  const target = observedElements(observation, [part.id]);
-  const native = observation.scope?.source === "native" && observation.scope.document !== null;
-  return (
-    <TooltipHint
-      content={`${nameOrFallback(part.name)}: ${native ? "click to select it in Revit" : "click to select it in the drawing"}`}
-    >
-      <RevitTarget ids={target.ids} refs={target.refs} scope={observation.scope}>
-        <button
-          type="button"
-          data-claim-element={part.id}
-          aria-label={nameOrFallback(part.name)}
-          className="subject-ref"
-          onMouseEnter={() => onHover(part.id)}
-          onMouseLeave={() => onHover(null)}
-          onFocus={() => onHover(part.id)}
-          onBlur={() => onHover(null)}
-          onClick={(e) => {
-            e.stopPropagation();
-            if (!native) return onPick(part.id);
-            void showInRevit(target, true).then(onShown);
-          }}
-        >
-          {part.dot ? (
-            <span
-              aria-hidden
-              className="inline-block size-1.5 rounded-full align-middle"
-              style={{ backgroundColor: tokenRef("ink-2") }}
-            />
-          ) : (
-            part.name
-          )}
-        </button>
-      </RevitTarget>
-    </TooltipHint>
-  );
-}
-
-/** A claim's prose with every resolved id as a `ClaimElement`. */
-export function ClaimText({ parts, ...handlers }: { parts: readonly ClaimPart[] } & ClaimHandlers) {
-  return parts.map((part, i) =>
-    typeof part === "string" ? (
-      <span key={i}>{part}</span>
-    ) : (
-      <ClaimElement key={i} part={part} {...handlers} />
-    ),
-  );
 }

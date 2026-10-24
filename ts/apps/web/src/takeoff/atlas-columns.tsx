@@ -1,5 +1,7 @@
 import { takeoffEditKey } from "@pe/agent-contracts";
-import { useMemo } from "react";
+import { useContext, useMemo } from "react";
+import { AttentionDocument, useAttention } from "@pe/kit/lang/attention";
+import { regionTarget } from "./attention";
 import { FactChip } from "@pe/kit/lang/chip";
 import { ReadCell, TextCell } from "@pe/kit/table/cells";
 import { CellListSelect } from "@pe/kit/lang/list-popup";
@@ -42,9 +44,11 @@ function RoomNameCell({
   onCommit: (value: string) => void;
 }) {
   const entity = store.entity(row.room.guid);
+  const attention = useAttention(useContext(AttentionDocument) ?? "");
+  const key = regionTarget(row.room);
   const state = [
-    entity.hovered ? "hovered" : null,
-    entity.selected ? "table selection" : null,
+    attention.hovered.has(key) ? "hovered" : null,
+    attention.selected.has(key) ? "table selection" : null,
     entity.dirty ? "staged" : null,
     entity.conflict ? "authority changed" : null,
   ].filter(Boolean);

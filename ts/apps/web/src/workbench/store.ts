@@ -39,6 +39,8 @@ type Setter<A> = A | ((previous: A) => A);
 export function createChatPageStore(deps: {
   registry: AtomRegistry.AtomRegistry;
   search: ChatSearch;
+  /** `?demo=`: tab writes stay in this browser and never reach a host thread. */
+  local?: boolean;
 }) {
   let tabs: {
     promote: (from: string, owner: string, current: () => boolean) => Promise<void>;
@@ -49,6 +51,7 @@ export function createChatPageStore(deps: {
       duplicate?: boolean,
       keep?: boolean,
     ) => Promise<boolean>;
+    work: (thread: string, route: string, link?: string) => Promise<void>;
   } | null = null;
   const drafts = new Map<string, ThreadTab[]>();
   const draftTabs = (thread: string) => {
@@ -97,6 +100,7 @@ export function createChatPageStore(deps: {
   return {
     registry: deps.registry,
     search: deps.search,
+    local: deps.local ?? false,
     atoms: {
       sideOpen,
       planIntent,
@@ -177,6 +181,12 @@ export function createChatPageStore(deps: {
         set("plan-refused", planRefusal, { route: plugin, message }),
       openThread: (thread: string, replace = false) =>
         deps.search.patch({ thread, prompt: undefined, turn: undefined }, replace),
+      /** A Work press: that thread's tool, its Page restored when the thread holds a tab there. */
+      openWork: (thread: string, route: string, link?: string) => {
+        planGeneration++;
+        deps.registry.set(planIntent, null);
+        return tabs?.work(thread, route, link) ?? Promise.resolve();
+      },
     },
     runAction: core.runAction,
     dispose() {

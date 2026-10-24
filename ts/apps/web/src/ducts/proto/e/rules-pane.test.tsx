@@ -42,7 +42,6 @@ test("rule rows keep native ids and editable cells keep their arrow and Enter ke
       focus={null}
       onFocus={onFocus}
       nameOf={(id) => `Fitting ${id}`}
-      light={vi.fn()}
     />,
   );
   const row = document.querySelector('[data-key="elbow-mitered"]')!;

@@ -39,12 +39,9 @@ test("a null viewport fits without a write, wheel preserves its cursor point, an
         planRefusal={null}
         planError={null}
         empty={null}
-        selected={new Set()}
-        hovered={null}
         zoomTo={page.focus ? [rows[1]!.region.guid] : []}
         focusMissing={[]}
         onSelect={() => {}}
-        onHover={() => {}}
         trace={{ data: null, none: "no trace" }}
         page={page}
         setPage={(next, move) => {

@@ -13,7 +13,14 @@ const wire = vi.hoisted(() => ({
   feedback: vi.fn(),
   copy: vi.fn(),
 }));
-vi.mock("@effect/atom-react", () => ({ useAtomValue: () => wire.pin }));
+vi.mock("@effect/atom-react", async (original) => {
+  const actual = await original<typeof import("@effect/atom-react")>();
+  return {
+    ...actual,
+    useAtomValue: (atom: Parameters<typeof actual.useAtomValue>[0]) =>
+      atom === null ? wire.pin : actual.useAtomValue(atom),
+  };
+});
 vi.mock("./thread-view", () => ({
   useCurrentThreadView: () => ({
     atoms: { openCallKey: null },

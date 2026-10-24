@@ -1,4 +1,6 @@
-import { Suspense } from "react";
+import { Suspense, useContext } from "react";
+import { AttentionDocument } from "@pe/kit/lang/attention";
+import { regionKey } from "./attention";
 import { FactChip } from "@pe/kit/lang/chip";
 import { EmptyState } from "@pe/kit/lang/empty";
 import { Button } from "@pe/kit/lang/button";
@@ -13,6 +15,7 @@ import { useAtlasWorkspace } from "#/takeoff/atlas-context";
 import { ScopeKeys } from "@pe/kit/keys";
 
 export function AtlasTable() {
+  const doc = useContext(AttentionDocument) ?? "";
   const {
     store,
     world,
@@ -26,7 +29,6 @@ export function AtlasTable() {
     visibleKeys,
     setTableState,
     selectTableRow,
-    hoverTableRow,
     visibleRows,
     cursorRow,
     decide,
@@ -117,7 +119,7 @@ export function AtlasTable() {
                 activeKey={cursor}
                 visibleKeys={visibleKeys}
                 onRowClick={selectTableRow}
-                onRowHover={hoverTableRow}
+                subject={(row) => ({ doc, key: regionKey(row.room.guid) })}
                 // A call blocks sync and export until a person decides (I2): the kit burn.
                 gutter={gutter}
                 empty={

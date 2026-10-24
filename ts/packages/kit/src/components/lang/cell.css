@@ -96,7 +96,7 @@
   content: none;
 }
 /* a SEAM (no real element behind it) keeps the dashed edge: "typed but unproven", nothing else. */
-.dl-cell[data-seam] {
+.dl-cell[data-seam]:not(:has(:focus-visible)) {
   --dl-cell-ring: none;
   outline: 1px dashed var(--pe-line-2);
   outline-offset: -1px;

@@ -488,6 +488,14 @@ function ToolRunFold({
 function Part({ part }: { part: Exclude<ChatPart, CallPart> }): ReactNode {
   switch (part.type) {
     case "text":
+      // TODO(chat mentions, deferred; wire only when the route thread exports it): resolve Pea's bare
+      // element ids with `readTurnElementNames(pinned, request, nativeRead, previous?)`. Its snapshot is
+      // `{ thread, turnId, targets: DocumentRef[], complete }`. Resolve only against the exact refs of
+      // `prompt.targetDocuments`, never `prompt.targets` (a named DocumentRequest) or the live head. A
+      // legacy named-only turn stays plain text, never resolved against a newer session. Results
+      // (resolved, ambiguous, unresolved) freeze per turn. `complete: false` means a target failed at
+      // delivery: treat every id in that turn as possibly non-unique. Unresolved or ambiguous ids stay
+      // plain text with no affordance, and links are not pe://.
       return <Markdown text={part.text} />;
     case "image":
     case "file":

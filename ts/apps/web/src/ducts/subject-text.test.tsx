@@ -6,7 +6,9 @@ import snapshot from "./fixtures/synthetic-snapshot.json";
 import { subjectNamer } from "./subject-text";
 import { SubjectText, subjectDocument } from "@pe/kit/lang/subject-text";
 import { SubjectTextContext } from "@pe/kit/lang/reach";
-import { reachStore } from "@pe/kit/lang/reach";
+import { makeAtomRegistry } from "#/route/route-owner";
+import { TestAttention } from "#/test-attention";
+import { citation } from "@pe/kit/lang/attention";
 
 afterEach(cleanup);
 const names = new Map([
@@ -79,31 +81,33 @@ test("names use a grille's mark, fitting size and part, then type, without inven
 });
 
 test("block hover lights all references; token hover/focus narrows and exit restores; press goes; unmount clears", () => {
-  const light = vi.fn();
-  const clear = vi.fn();
+  const registry = makeAtomRegistry();
   const go = vi.fn();
   const { container, unmount } = render(
-    <SubjectTextContext.Provider value={{ nameOf, light, clear, go, reach: reachStore() }}>
-      <SubjectText text="10368760 ends at 12317607:0 facing 12317611:0" />
-    </SubjectTextContext.Provider>,
+    <TestAttention registry={registry}>
+      <SubjectTextContext.Provider value={{ doc: "test", nameOf, go }}>
+        <SubjectText text="10368760 ends at 12317607:0 facing 12317611:0" />
+      </SubjectTextContext.Provider>
+    </TestAttention>,
   );
   const block = container.querySelector("[data-subject-text]")!;
   fireEvent.mouseEnter(block);
-  expect(light.mock.lastCall?.[0].map((r: { id: number }) => r.id)).toEqual([...names.keys()]);
+  expect(registry.get(citation)?.refs.map((r) => Number(r.key.slice(2)))).toEqual([
+    ...names.keys(),
+  ]);
   const token = screen.getByRole("button", { name: "go to 14×10 duct port 0, reference 2" });
   fireEvent.mouseEnter(token);
-  expect(light.mock.lastCall?.[1]).toBe(12317607);
+  expect(registry.get(citation)?.focus?.key ?? null).toBe("e:12317607");
   fireEvent.mouseLeave(token);
-  expect(light.mock.lastCall?.[1]).toBeNull();
+  expect(registry.get(citation)?.focus?.key ?? null).toBeNull();
   fireEvent.focus(token);
-  expect(light.mock.lastCall?.[1]).toBe(12317607);
+  expect(registry.get(citation)?.focus?.key ?? null).toBe("e:12317607");
   fireEvent.click(token);
   expect(go).toHaveBeenCalledExactlyOnceWith(12317607);
   fireEvent.mouseLeave(block);
-  expect(clear).toHaveBeenCalled();
-  clear.mockClear();
+
   unmount();
-  expect(clear).toHaveBeenCalledOnce();
+  expect(registry.get(citation)).toBeNull();
 });
 
 test("a shared numbering lights only the subjects this text names", () => {

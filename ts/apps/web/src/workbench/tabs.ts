@@ -14,6 +14,7 @@ import {
   type ThreadTabRequest,
 } from "@pe/agent-contracts";
 import { peClient } from "#/host/pe-client";
+import { focusQuiet } from "@pe/kit/lib/utils";
 import { previousOf, useReading } from "#/readings";
 import { useSurfaceHost } from "#/navigation/surface-host";
 import { useWorkbench } from "./provider";
@@ -38,12 +39,21 @@ const focus = (thread: string, id: string | null) => {
 };
 
 /** Only registered shareable fields and explicit target/work survive in a durable Place. */
-function place(route: RouteKey, search: Record<string, unknown>, target: DocumentRequest | null) {
+function place(
+  route: RouteKey,
+  search: Record<string, unknown>,
+  target: DocumentRequest | null,
+  local: boolean,
+) {
   const { page, carry } = routeAddress(route).read(search);
-  return routeAddress(route).link(page, {
+  const link = routeAddress(route).link(page, {
     target: carry.target ?? (target ? JSON.stringify(target) : undefined),
     work: carry.work,
   });
+  // A `?demo=` seed rides its fixture Place, which stays in this browser (`store.local`).
+  return local && typeof search.demo === "string"
+    ? `${link}${link.includes("?") ? "&" : "?"}demo=${encodeURIComponent(search.demo)}`
+    : link;
 }
 
 /** The route a tab holds at `pathname`: any but Pea's own page. */
@@ -58,7 +68,6 @@ type TabHistory = {
   __pePromotedThread?: string;
   __peMintedThread?: string;
   __peRouteTab?: { thread: string; id: string; route: RouteKey };
-  __peChat?: boolean;
 };
 const historyOf = (state: unknown) => state as TabHistory;
 
@@ -85,7 +94,9 @@ export function useRouteTabs() {
       return null;
     }
   })();
-  const link = route ? place(route, location.search, head ? soleRequest(head) : null) : null;
+  const link = route
+    ? place(route, location.search, head ? soleRequest(head) : null, store.local)
+    : null;
   const [snapshot, setSnapshot] = useState<Snapshot>({ thread: "", tabs: [], ready: false });
   const [failure, setFailure] = useState<string | null>(null);
   const [retry, setRetry] = useState(0);
@@ -187,7 +198,11 @@ export function useRouteTabs() {
           if (current && !current()) return null;
           written.current.add(body.id);
           let summary: { tabs: ThreadTab[] };
-          if (local || routeThreadIssue(owner, router.state.location.state) === "minted") {
+          if (
+            local ||
+            store.local ||
+            routeThreadIssue(owner, router.state.location.state) === "minted"
+          ) {
             const prior = store.actions.draftTabs(owner);
             let tabs: ThreadTab[];
             if (body.op === "close") tabs = prior.filter((tab) => tab.id !== body.id);
@@ -311,7 +326,6 @@ export function useRouteTabs() {
               route: routeAt(url.pathname) ?? undefined,
             }
           : undefined,
-        __peChat: id === null,
         __peMintedThread:
           issued || routeThreadIssue(owner, previous) === "minted" ? owner : undefined,
       }),
@@ -325,20 +339,6 @@ export function useRouteTabs() {
     if (epoch === navigationEpoch.current && liveThread.current === thread)
       await navigate(thread, tab.link, tab.id, replace);
   };
-  useEffect(() => {
-    if (
-      route ||
-      legacy ||
-      location.pathname !== "/pea" ||
-      !thread ||
-      !shown.ready ||
-      historyOf(location.state).__peChat
-    )
-      return;
-    const previous = tabs.find((tab) => tab.id === readFocus(thread)) ?? tabs[0];
-    if (previous) void select(previous, true).catch(fail);
-  }, [thread, route, legacy, location.pathname, shown.ready]);
-
   const open = async <R extends RouteKey>(
     targetRoute: R,
     page?: LinkPage<R>,
@@ -415,6 +415,26 @@ export function useRouteTabs() {
     () =>
       store.actions.connectTabs({
         open,
+        // A Work press may name another thread: its saved tab restores the Page, or the route opens.
+        work: async (owner, workRoute, resumed) => {
+          const epoch = ++navigationEpoch.current;
+          try {
+            await flush();
+            const saved = (
+              owner === thread ? tabs : threads.find((t) => t.id === owner)?.tabs
+            )?.find((tab) => tab.route === workRoute);
+            if (epoch !== navigationEpoch.current) return;
+            await navigate(
+              owner,
+              resumed ?? saved?.link ?? routeAddress(workRoute as RouteKey).link(),
+              saved?.id ?? null,
+            );
+            // The press was outside the tools: focus lands on the tool it opened, not the press.
+            focusQuiet(document.querySelector<HTMLElement>('[data-pane-id="tools"]'));
+          } catch (error) {
+            fail(error);
+          }
+        },
         promote: async (from, owner, current) => {
           const location = router.state.location;
           const route = tabRouteAt(location.pathname);
@@ -427,7 +447,7 @@ export function useRouteTabs() {
                 op: "put",
                 id,
                 route,
-                link: place(route, location.search, head ? soleRequest(head) : null),
+                link: place(route, location.search, head ? soleRequest(head) : null, store.local),
               },
               current,
               true,
@@ -459,7 +479,7 @@ export function useRouteTabs() {
           setSnapshot({ thread: owner, tabs: saved, ready: true });
         },
       }),
-    [store, thread, link, tabs, pinned, carry.target, carry.work],
+    [store, thread, threads, link, tabs, pinned, carry.target, carry.work],
   );
 
   return {
@@ -474,6 +494,11 @@ export function useRouteTabs() {
       ? "This old workspace group link is unavailable; open a route and choose its exact subject."
       : failure,
     select: (tab: ThreadTab) => select(tab).catch(fail),
+    /** Expand the collapsed tools on the tab this browser last showed. */
+    resume: () => {
+      const last = tabs.find((tab) => tab.id === readFocus(thread)) ?? tabs[0];
+      if (last) void select(last).catch(fail);
+    },
     chat: async () => {
       const epoch = ++navigationEpoch.current;
       store.actions.cancelPlan();

@@ -19,8 +19,12 @@ const quiet = () => {
   vi.spyOn(HTMLCanvasElement.prototype, "getContext").mockReturnValue(null);
   vi.stubGlobal(
     "ResizeObserver",
+    // A real observer delivers once on observe; geometry arrives only through it.
     class {
-      observe() {}
+      constructor(private callback: (entries: []) => void) {}
+      observe() {
+        this.callback([]);
+      }
       unobserve() {}
       disconnect() {}
     },
@@ -131,8 +135,12 @@ test("a list that scrolls in a box other than its Scroll throws in development",
 test("a projection reads item data: it never builds rows, and damage in the data reaches the strip", async () => {
   vi.stubGlobal(
     "ResizeObserver",
+    // A real observer delivers once on observe; geometry arrives only through it.
     class {
-      observe() {}
+      constructor(private callback: (entries: []) => void) {}
+      observe() {
+        this.callback([]);
+      }
       unobserve() {}
       disconnect() {}
     },
@@ -169,4 +177,37 @@ test("a projection reads item data: it never builds rows, and damage in the data
   );
   await waitFor(() => expect(fills.length).toBeGreaterThan(0));
   expect(row.mock.calls.length).toBeLessThan(items.length / 2);
+});
+
+test("an observer delivery that changes nothing here writes nothing (a seam drag's width frames)", () => {
+  let deliver = () => {};
+  vi.stubGlobal(
+    "ResizeObserver",
+    class {
+      constructor(private callback: (entries: []) => void) {
+        deliver = () => this.callback([]);
+      }
+      observe() {
+        this.callback([]);
+      }
+      unobserve() {}
+      disconnect() {}
+    },
+  );
+  vi.spyOn(HTMLCanvasElement.prototype, "getContext").mockImplementation(
+    function (this: HTMLCanvasElement) {
+      return { canvas: this, clearRect() {}, fillRect() {}, drawImage() {} } as never;
+    },
+  );
+  vi.spyOn(HTMLElement.prototype, "clientHeight", "get").mockReturnValue(200);
+  vi.spyOn(HTMLElement.prototype, "scrollHeight", "get").mockReturnValue(2000);
+  render(
+    <Scroll>
+      <p>row</p>
+    </Scroll>,
+  );
+  const writes = vi.spyOn(CSSStyleDeclaration.prototype, "setProperty");
+  const styles = vi.spyOn(window, "getComputedStyle");
+  deliver();
+  expect([writes.mock.calls.length, styles.mock.calls.length]).toEqual([0, 0]);
 });

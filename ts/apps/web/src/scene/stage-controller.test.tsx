@@ -1,9 +1,11 @@
 // @vitest-environment jsdom
-import { act, cleanup, fireEvent, render, renderHook, screen } from "@testing-library/react";
+import { act, cleanup, fireEvent, render, screen } from "@testing-library/react";
 import { afterEach, expect, it, vi } from "vite-plus/test";
 import { createLiveOrbit } from "@pe/kit/lang/live-orbit";
 import { PictureStage, useStage, stageViewport, projectBounds } from "./stage-controller";
-import { useStageReach } from "./reach";
+import { makeAtomRegistry } from "#/route/route-owner";
+import { TestAttention } from "#/test-attention";
+import { mention } from "@pe/kit/lang/attention";
 import { Row } from "@pe/kit/lang/row";
 import { revitTarget } from "@pe/kit/lang/revit-target";
 import { frame } from "./orbit";
@@ -16,26 +18,26 @@ vi.mock("./view-history", () => ({ useViewHistory: () => vi.fn() }));
 afterEach(cleanup);
 
 it("plane marks and rows share native identity without route hover handlers", () => {
+  const registry = makeAtomRegistry();
   const view = render(
-    <>
+    <TestAttention registry={registry}>
       <Row label="region" revit={[42]} />
       <div data-testid="picture">
         <svg>
-          <path {...revitTarget([42])} d="M0 0L1 1" />
+          <path {...mention({ doc: "test", key: "e:42" })} {...revitTarget([42])} d="M0 0L1 1" />
         </svg>
       </div>
-    </>,
+    </TestAttention>,
   );
-  renderHook(() => useStageReach(view.getByTestId("picture")));
   const row = view.getByText("region").closest(".dl-row")!;
   const mark = view.container.querySelector("path[data-revit-ids]")!;
-  fireEvent.mouseEnter(row);
+  fireEvent.pointerOver(row);
   expect(mark.getAttribute("data-reach")).toBe("hover");
-  fireEvent.mouseLeave(row);
+  fireEvent.pointerOver(view.getByTestId("picture"));
   expect(mark.getAttribute("data-reach")).toBe("rest");
   fireEvent.pointerOver(mark);
   expect(row.getAttribute("data-reach")).toBe("hover");
-  fireEvent.pointerLeave(view.getByTestId("picture"));
+  fireEvent.pointerLeave(view.container.firstElementChild!);
   expect(row.getAttribute("data-reach")).toBe("rest");
 });
 

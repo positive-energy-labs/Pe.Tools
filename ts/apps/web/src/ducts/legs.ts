@@ -17,7 +17,7 @@ export type Claim = Omit<DuctClaim, "ids"> & { id: string; at: number[] };
 export const claimsOf = (cells: Readonly<Record<string, DuctClaim>>): Claim[] =>
   Object.entries(cells).map(([id, { ids, ...rest }]) => ({ id, at: ids, ...rest }));
 
-export interface Subject {
+export interface Run {
   ids: readonly number[];
   claims: readonly Claim[];
   onVerdict: (claim: Claim, verdict: NonNullable<Claim["verdict"]>) => void;

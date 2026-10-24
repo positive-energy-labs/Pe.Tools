@@ -12,6 +12,8 @@ import { spaceElementKey, type Reading } from "@pe/agent-contracts";
 import { Input } from "@pe/kit/lang/input";
 import { SubjectText } from "@pe/kit/lang/subject-text";
 import { SubjectTextContext } from "@pe/kit/lang/reach";
+import { RegistryContext } from "@effect/atom-react";
+import { AttentionRoot } from "#/attention";
 import { useRevitSubjectProps } from "#/revit/element-menu";
 
 import { Surface } from "@pe/kit/lang/surface";
@@ -228,6 +230,7 @@ export function SpaceRoute({ url = true }: { url?: boolean } = {}) {
   );
   const subjects = useMemo(
     () => ({
+      doc: doc ? `${doc.session}/${doc.openId}` : "fixture:space",
       nameOf: (id: number) => hostKeys.get(id)?.name ?? null,
       refProps,
       go: (id: number) => {
@@ -235,7 +238,7 @@ export function SpaceRoute({ url = true }: { url?: boolean } = {}) {
         if (key) alias.current?.(key);
       },
     }),
-    [hostKeys, refProps],
+    [doc, hostKeys, refProps],
   );
   const sentence = (
     <>
@@ -269,123 +272,130 @@ export function SpaceRoute({ url = true }: { url?: boolean } = {}) {
   );
 
   return (
-    <NativeObservationScope value={nativeObservation}>
-      <Surface
-        head={
-          <RouteShell
-            manifest={manifest}
-            handle={handle}
-            situation={
-              <Situation
+    <RegistryContext value={handle.registry}>
+      <AttentionRoot doc={subjects.doc}>
+        <NativeObservationScope value={nativeObservation}>
+          <Surface
+            head={
+              <RouteShell
+                manifest={manifest}
                 handle={handle}
-                target={{
-                  session: ladder.sessionWord,
-                  document: demo ? "scene fixture" : ladder.docWord,
-                }}
-                sentence={sentence}
-                ledger={[
-                  ["scene", page.scene ? `${page.scene.slice(0, 12)}…` : demo ? "fixture" : "none"],
-                  [
-                    "captured",
-                    metadata
-                      ? `${metadata.stamp.builtUtc} · epoch ${metadata.stamp.epoch} · ${metadata.stamp.fresh ? "fresh" : "stale"}`
-                      : "none",
-                  ],
-                  ["source", demo ? "fixture" : "host"],
-                ]}
+                situation={
+                  <Situation
+                    handle={handle}
+                    target={{
+                      session: ladder.sessionWord,
+                      document: demo ? "scene fixture" : ladder.docWord,
+                    }}
+                    sentence={sentence}
+                    ledger={[
+                      [
+                        "scene",
+                        page.scene ? `${page.scene.slice(0, 12)}…` : demo ? "fixture" : "none",
+                      ],
+                      [
+                        "captured",
+                        metadata
+                          ? `${metadata.stamp.builtUtc} · epoch ${metadata.stamp.epoch} · ${metadata.stamp.fresh ? "fresh" : "stale"}`
+                          : "none",
+                      ],
+                      ["source", demo ? "fixture" : "host"],
+                    ]}
+                  />
+                }
               />
             }
-          />
-        }
-      >
-        {error && (
-          <p role="alert" data-tone="alarm" className="px-2 m-0">
-            {error}
-          </p>
-        )}
-        <div className="flex min-h-0 flex-1">
-          <SpacePicture
-            lease={{
-              thread,
-              ready: !!scene && membersReady,
-              context: {
-                source: demo ? "fixture" : "artifact",
-                scene: demo ? "fixture:space" : page.scene,
-                boundDocument: doc,
-                hostDocumentKey: metadata?.stamp.hostDocumentKey,
-                epoch: metadata?.stamp.epoch,
-                builtUtc: metadata?.stamp.builtUtc,
-                frame: metadata?.stamp.frame,
-              },
-            }}
-            meshes={meshes}
-            metadata={metadata}
-            page={page}
-            setPage={setPage}
-            layers={layers}
-            status={status}
-            onError={setError}
-            alias={alias}
-            legend={
-              on.has("boxes") && rows ? (
-                <EncodingLegend
-                  encoding={page.encoding}
-                  legend={legend}
-                  onEncoding={(encoding) => setPage({ encoding })}
-                />
-              ) : null
-            }
-            readout={
-              metadata ? (
-                <PictureReadout
-                  title={picked ?? undefined}
-                  onClear={
-                    picked
-                      ? () => setPage({ selected: null, row: null }, { history: "push" })
-                      : undefined
-                  }
-                >
-                  {picked ? (
-                    <PickFacts
-                      page={page}
-                      element={element}
-                      instance={instance}
-                      partition={partition}
-                      actions={actions}
+          >
+            {error && (
+              <p role="alert" data-tone="alarm" className="px-2 m-0">
+                {error}
+              </p>
+            )}
+            <div className="flex min-h-0 flex-1">
+              <SpacePicture
+                lease={{
+                  thread,
+                  ready: !!scene && membersReady,
+                  context: {
+                    source: demo ? "fixture" : "artifact",
+                    scene: demo ? "fixture:space" : page.scene,
+                    boundDocument: doc,
+                    hostDocumentKey: metadata?.stamp.hostDocumentKey,
+                    epoch: metadata?.stamp.epoch,
+                    builtUtc: metadata?.stamp.builtUtc,
+                    frame: metadata?.stamp.frame,
+                  },
+                }}
+                meshes={meshes}
+                metadata={metadata}
+                page={page}
+                setPage={setPage}
+                layers={layers}
+                status={status}
+                onError={setError}
+                alias={alias}
+                legend={
+                  on.has("boxes") && rows ? (
+                    <EncodingLegend
+                      encoding={page.encoding}
+                      legend={legend}
+                      onEncoding={(encoding) => setPage({ encoding })}
                     />
-                  ) : (
-                    <SceneSummary metadata={metadata} demo={demo} actions={actions} />
-                  )}
-                </PictureReadout>
-              ) : null
-            }
-          />
-          {side ? (
-            <aside
-              className="flex w-80 shrink-0 flex-col gap-3 overflow-auto p-2 hairline-l"
-              aria-label="Space facts"
-            >
-              {page.mode !== "3d" && meshes ? (
-                <CutControls
-                  axis={page.mode}
-                  cuts={page.cuts}
-                  bounds={meshes.bounds}
-                  onCuts={(cuts, how) => {
-                    try {
-                      cutPolygons(cuts, meshes.bounds);
-                    } catch (e) {
-                      return setError((e as Error).message);
-                    }
-                    setError(null);
-                    setPage({ cuts }, { history: how });
-                  }}
-                />
+                  ) : null
+                }
+                readout={
+                  metadata ? (
+                    <PictureReadout
+                      title={picked ?? undefined}
+                      onClear={
+                        picked
+                          ? () => setPage({ selected: null, row: null }, { history: "push" })
+                          : undefined
+                      }
+                    >
+                      {picked ? (
+                        <PickFacts
+                          page={page}
+                          element={element}
+                          instance={instance}
+                          partition={partition}
+                          actions={actions}
+                        />
+                      ) : (
+                        <SceneSummary metadata={metadata} demo={demo} actions={actions} />
+                      )}
+                    </PictureReadout>
+                  ) : null
+                }
+              />
+              {side ? (
+                <aside
+                  className="flex w-80 shrink-0 flex-col gap-3 overflow-auto p-2 hairline-l"
+                  aria-label="Space facts"
+                >
+                  {page.mode !== "3d" && meshes ? (
+                    <CutControls
+                      axis={page.mode}
+                      cuts={page.cuts}
+                      bounds={meshes.bounds}
+                      onCuts={(cuts, how) => {
+                        try {
+                          cutPolygons(cuts, meshes.bounds);
+                        } catch (e) {
+                          return setError((e as Error).message);
+                        }
+                        setError(null);
+                        setPage({ cuts }, { history: how });
+                      }}
+                    />
+                  ) : null}
+                  <AnswerForms on={on} page={page} actions={actions} />
+                </aside>
               ) : null}
-              <AnswerForms on={on} page={page} actions={actions} />
-            </aside>
-          ) : null}
-        </div>
-      </Surface>
-    </NativeObservationScope>
+            </div>
+          </Surface>
+        </NativeObservationScope>
+      </AttentionRoot>
+    </RegistryContext>
   );
 }

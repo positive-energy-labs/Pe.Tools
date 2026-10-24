@@ -5,7 +5,7 @@
  * host caller all live in `useRoute`; action semantics live in `takeoff/actions.ts`. This file
  * projects the document into Takeoffs views and owns cleanup when target or scope changes.
  */
-import { useCallback, useMemo, useState } from "react";
+import { useCallback, useMemo } from "react";
 import type {
   CandidateRegion,
   PlaneViewport,
@@ -287,8 +287,6 @@ export function useTakeoffsController(options: {
     },
     [setPage, page.level],
   );
-  // Hover is shared by the table and plan, but lasts only for this controller mount.
-  const [hover, setHover] = useState("");
 
   const observation = handle.readings.snapshot as Reading<TakeoffObservation> | undefined;
   const projectSnapshot = (): Reading<TakeoffSnapshot> => {
@@ -390,8 +388,6 @@ export function useTakeoffsController(options: {
       const edit = staged[id];
       const room = authority.zones.flatMap((zone) => zone.rooms).find((r) => r.guid === id);
       return {
-        hovered: hover === id,
-        selected: navigation.room === id || navigation.zone === id,
         bound: room?.elementId !== null && room !== undefined,
         decided: Object.keys(decisions).some((key) => takeoffDecisionAddress(key).roomGuid === id),
         staged: edit ?? null,
@@ -402,7 +398,7 @@ export function useTakeoffsController(options: {
           JSON.stringify(edit.base) !== JSON.stringify(roomEdit(room)),
       };
     },
-    [staged, authority, hover, navigation.room, navigation.zone, decisions],
+    [staged, authority, decisions],
   );
 
   const stageEdit = useCallback(
@@ -470,7 +466,6 @@ export function useTakeoffsController(options: {
         });
         setNavigation({ level: "", zone: null, room: null });
       },
-      hover: setHover,
       openPanel: (panel: "sync" | null) =>
         setPage({ panel, ...(panel === null ? { syncReview: null } : {}) }),
       patchAdopt: (
