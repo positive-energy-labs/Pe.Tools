@@ -575,7 +575,7 @@ test("real conversation Work cutover retains authored cells, draft, Places and o
             new URL(await p.url()).searchParams.get("thread") === CONVERSATION_THREADS.unsaved,
           "unsaved-document conversation opens without its tool",
         );
-      await openWork(CONVERSATION_THREADS.unsaved);
+        await openWork(CONVERSATION_THREADS.unsaved);
         await p.until(
           async () => new URL(await p.url()).pathname === "/ducts",
           "retained unsaved Work opens",
