@@ -3,6 +3,7 @@ import { callerSchema } from "./caller.ts";
 import { mentionSchema } from "./mention.ts";
 import { documentRequestSchema, threadHeadSchema } from "./target.ts";
 import { routeKeys } from "./route-address.ts";
+import { turnElementNameSchema, turnElementNamesSnapshotSchema } from "./turn-element-names.ts";
 
 /**
  * The harness-thread wire (ADR 0015: the harness drives; Pea is tools and UI).
@@ -229,8 +230,35 @@ export const promptTargetSchema = z.object({
 });
 export type PromptTarget = z.infer<typeof promptTargetSchema>;
 
+const turnChunkFields = {
+  seq: z.number().int().positive(),
+  at: z.iso.datetime(),
+  /** The delivered prompt event owns the turn and thread identity. */
+  promptSeq: z.number().int().positive(),
+  part: z.number().int().nonnegative().max(255),
+  parts: z.number().int().positive().max(256),
+};
+/** Exact delivery-time pins. Every part is required before a name read can run. */
+export const turnElementTargetsEventSchema = z.strictObject({
+  ...turnChunkFields,
+  kind: z.literal("turn_element_targets"),
+  complete: z.boolean(),
+  targets: turnElementNamesSnapshotSchema.unwrap().shape.targets,
+});
+/** One cumulative observation, byte-chunked by the thread owner, never a second transcript. */
+export const turnElementNamesEventSchema = z.strictObject({
+  ...turnChunkFields,
+  kind: z.literal("turn_element_names"),
+  readId: z.uuid(),
+  digest: z.string().regex(/^[a-f0-9]{64}$/),
+  observedAt: z.iso.datetime(),
+  entries: z.array(turnElementNameSchema).max(256),
+});
+
 /** Append-only per-thread record. `seq` is 1-based and dense per thread. */
 export const harnessEventSchema = z.discriminatedUnion("kind", [
+  turnElementTargetsEventSchema,
+  turnElementNamesEventSchema,
   z.object({
     seq: z.number(),
     at: z.string(),
@@ -241,6 +269,13 @@ export const harnessEventSchema = z.discriminatedUnion("kind", [
     mentions: z.array(mentionSchema).optional(),
     /** The thread's targets as of delivery; absent when it targeted none. */
     targets: z.array(promptTargetSchema).optional(),
+    /** Absent on legacy prompts. Exact refs live in the immediately following chunk group. */
+    elementNames: z
+      .object({
+        targetParts: z.number().int().positive().max(256),
+        targetDigest: z.string().regex(/^[a-f0-9]{64}$/),
+      })
+      .optional(),
   }),
   /** `turnId` is null for updates the harness sends outside a turn (commands, mode, session info). */
   z.object({
