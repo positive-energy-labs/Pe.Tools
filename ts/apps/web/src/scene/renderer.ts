@@ -237,6 +237,7 @@ export function createRenderer(mount: HTMLElement, meshes: SceneMeshes, wheelHos
   mark("geometry", { meshes: byId.length, multiDraw: renderer.extensions.has("WEBGL_multi_draw") });
 
   let frame = 0;
+  let sizePending = false;
   let size: Size = { width: 1, height: 1 };
   /** Told after a frame whose camera or size moved, so DOM over the canvas follows it. */
   let onFrame: ((project: Project, size: Size, ray: Ray) => void) | null = null;
@@ -312,6 +313,9 @@ export function createRenderer(mount: HTMLElement, meshes: SceneMeshes, wheelHos
   const render = () => {
     frame ||= requestAnimationFrame(() => {
       frame = 0;
+      // A pane drag scales the retained picture; observers and animation resume at release.
+      if (mount.closest("[data-pane-resizing]")) return render();
+      if (sizePending) measure();
       const started = performance.now();
       if (measuring) {
         renderer.info.autoReset = false;
@@ -365,9 +369,12 @@ export function createRenderer(mount: HTMLElement, meshes: SceneMeshes, wheelHos
     };
     requestAnimationFrame(complete);
   };
-  const resize = () => {
+  const measure = () => {
+    sizePending = false;
     if (mount.clientWidth === 0 || mount.clientHeight === 0) return;
-    size = { width: mount.clientWidth, height: mount.clientHeight };
+    const next = { width: mount.clientWidth, height: mount.clientHeight };
+    if (next.width === size.width && next.height === size.height) return;
+    size = next;
     renderer.setSize(size.width, size.height, false);
     glow.setSize(size.width, size.height);
     outline.setSize(size.width, size.height);
@@ -375,6 +382,10 @@ export function createRenderer(mount: HTMLElement, meshes: SceneMeshes, wheelHos
     resizeCamera(camera, size.width / size.height);
     if (plane) place(plane.axis, plane.viewport, size);
     thumbsStale = true;
+  };
+  // Resize clears WebGL: measure and draw in the same frame, never in ResizeObserver delivery.
+  const resize = () => {
+    sizePending = true;
     render();
   };
   controls.addEventListener("change", render);

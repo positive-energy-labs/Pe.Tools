@@ -36,6 +36,10 @@ const RULES: Rule[] = [
   { id: "message-bubble-themed-ground", doctrine: "L4", pattern: /data-surface="document"/g,
     roots: [W + "components/lang/conversation.tsx"], allow: [],
     cannotSee: "Computed colours or overrides elsewhere; mounted MessageBubble tests pin its plane and the browser checks both themes." },
+  { id: "pane-buffer-resize-in-frame", doctrine: "N6",
+    pattern: /const resize = \(\) => \{(?:(?!\n  \};)[\s\S])*?renderer\.setSize/g,
+    roots: [W + "scene/renderer.ts"], allow: [],
+    cannotSee: "Aliases, GPU completion or visible flashes; the size-consumer regression and native rAF buffer readback cover those paths." },
   { id: "list-heads-top-only", doctrine: "N3", pattern: /\bbottom:\s*/g,
     roots: [K + "components/lang/list-view.tsx"], allow: [], cannotSee: "Computed edge aliases or browser hit tests; SS4 requires the parent drive." },
 
