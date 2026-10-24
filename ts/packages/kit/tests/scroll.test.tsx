@@ -19,8 +19,12 @@ const quiet = () => {
   vi.spyOn(HTMLCanvasElement.prototype, "getContext").mockReturnValue(null);
   vi.stubGlobal(
     "ResizeObserver",
+    // A real observer delivers once on observe; geometry arrives only through it.
     class {
-      observe() {}
+      constructor(private callback: (entries: []) => void) {}
+      observe() {
+        this.callback([]);
+      }
       unobserve() {}
       disconnect() {}
     },
@@ -131,8 +135,12 @@ test("a list that scrolls in a box other than its Scroll throws in development",
 test("a projection reads item data: it never builds rows, and damage in the data reaches the strip", async () => {
   vi.stubGlobal(
     "ResizeObserver",
+    // A real observer delivers once on observe; geometry arrives only through it.
     class {
-      observe() {}
+      constructor(private callback: (entries: []) => void) {}
+      observe() {
+        this.callback([]);
+      }
       unobserve() {}
       disconnect() {}
     },

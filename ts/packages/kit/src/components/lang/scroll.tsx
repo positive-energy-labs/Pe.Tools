@@ -13,7 +13,7 @@ import {
 
 import { cn } from "../../lib/utils";
 import { canvasColor } from "./minimap";
-import { paint, project, type Span } from "./scroll-project";
+import { paint, project, type Ink, type Span } from "./scroll-project";
 import "./lang.css";
 
 export type { Mark, Span, Tone } from "./scroll-project";
@@ -98,15 +98,25 @@ type Parts = {
 function attach(el: HTMLElement, parts: Parts, sources: Registry["sources"]) {
   const { strip, marks, lit, frame, xFrame, field } = parts;
   if (!strip || !marks || !lit || !frame) throw new Error("Scroll mounted without its scrollbar");
+  // Layout is read only in the ResizeObserver callback (after layout) and offsets only in the
+  // scroll handlers; frame callbacks draw from these cached numbers, so a seam drag that has just
+  // written a pane size never pays a forced layout here.
+  let clientH = 0;
+  let scrollH = 0;
+  let clientW = 0;
+  let scrollW = 0;
+  let top = 0;
+  let left = 0;
+  let width = 1;
   let bins = 0;
   let travel = 0;
   let travelX = 0;
+  let ink: Ink | null = null;
   let raf = 0;
   let following = 0;
-  const dpr = () => window.devicePixelRatio || 1;
   const fraction = () => {
-    const max = el.scrollHeight - el.clientHeight;
-    return max > 0 ? Math.min(1, Math.max(0, el.scrollTop / max)) : 0;
+    const max = scrollH - clientH;
+    return max > 0 ? Math.min(1, Math.max(0, top / max)) : 0;
   };
   const follow = () => {
     following = 0;
@@ -114,38 +124,30 @@ function attach(el: HTMLElement, parts: Parts, sources: Registry["sources"]) {
     frame.style.transform = `translateY(${y}px)`;
     lit.style.clipPath = `inset(${y}px 0 ${travel - y}px 0)`;
     if (xFrame) {
-      const max = el.scrollWidth - el.clientWidth;
-      xFrame.style.transform = `translateX(${max > 0 ? (el.scrollLeft / max) * travelX : 0}px)`;
+      const max = scrollW - clientW;
+      xFrame.style.transform = `translateX(${max > 0 ? (left / max) * travelX : 0}px)`;
     }
   };
   const draw = () => {
     raf = 0;
-    const width = Math.round(strip.clientWidth * dpr()) || 1;
-    for (const canvas of [marks, lit]) {
-      if (canvas.width !== width) canvas.width = width;
-      if (canvas.height !== bins) canvas.height = bins;
-    }
     const ctx = marks.getContext("2d");
-    if (!ctx || !bins) return;
+    if (!ctx || !bins || !ink) return;
     const all = function* () {
       for (const read of sources.values()) yield* read();
     };
-    paint(ctx, project(all(), el.scrollHeight, bins), width, {
-      alarm: canvasColor(ctx, "alarm"),
-      caution: canvasColor(ctx, "caution"),
-      ink: canvasColor(ctx, "ink"),
-      line: canvasColor(ctx, "line-2"),
-    });
+    paint(ctx, project(all(), scrollH, bins), width, ink);
     const litCtx = lit.getContext("2d");
     litCtx?.clearRect(0, 0, width, bins);
     litCtx?.drawImage(marks, 0, 0);
   };
   const invalidate = () => {
-    if (!raf) raf = requestAnimationFrame(draw);
+    // A seam drag holds its panes; the observer delivers the final size at release.
+    if (!raf && !el.closest("[data-pane-resizing]")) raf = requestAnimationFrame(draw);
   };
   const geometry = () => {
-    const clientH = el.clientHeight;
-    const scrollH = el.scrollHeight;
+    clientH = el.clientHeight;
+    scrollH = el.scrollHeight;
+    top = el.scrollTop;
     const scrolls = scrollH > clientH + 1;
     el.toggleAttribute("data-scrolls", scrolls);
     const frameH = scrolls ? Math.max(2, (clientH * clientH) / scrollH) : clientH;
@@ -154,8 +156,9 @@ function attach(el: HTMLElement, parts: Parts, sources: Registry["sources"]) {
     strip.style.setProperty("--frame-h", `${frameH}px`);
     strip.style.setProperty("--frame-travel", `${travel}px`);
     if (xFrame) {
-      const clientW = el.clientWidth;
-      const scrollW = el.scrollWidth;
+      clientW = el.clientWidth;
+      scrollW = el.scrollWidth;
+      left = el.scrollLeft;
       const scrollsX = scrollW > clientW + 1;
       el.toggleAttribute("data-scrolls-x", scrollsX);
       const frameW = scrollsX ? Math.max(2, (clientW * clientW) / scrollW) : clientW;
@@ -168,21 +171,40 @@ function attach(el: HTMLElement, parts: Parts, sources: Registry["sources"]) {
       el.offsetWidth - el.clientWidth - 2 * el.clientLeft > 0
     )
       console.error("Scroll: a native scrollbar gutter came back on", el);
+    const dpr = window.devicePixelRatio || 1;
+    width = Math.round(strip.clientWidth * dpr) || 1;
+    bins = Math.round(clientH * dpr);
+    for (const canvas of [marks, lit]) {
+      if (canvas.width !== width) canvas.width = width;
+      if (canvas.height !== bins) canvas.height = bins;
+    }
+    // ponytail: ink resolves on resize, not on a theme toggle (owed: a theme subscription).
+    const ctx = marks.getContext("2d");
+    ink = ctx && {
+      alarm: canvasColor(ctx, "alarm"),
+      caution: canvasColor(ctx, "caution"),
+      ink: canvasColor(ctx, "ink"),
+      line: canvasColor(ctx, "line-2"),
+    };
     if (!TIMELINE) follow();
-    bins = Math.round(clientH * dpr());
     invalidate();
   };
   const onScroll = () => {
+    top = el.scrollTop;
+    left = el.scrollLeft;
     if (!following) following = requestAnimationFrame(follow);
   };
-  const onScrollEnd = () =>
+  const onScrollEnd = () => {
+    top = el.scrollTop;
     strip.setAttribute("aria-valuenow", String(Math.round(100 * fraction())));
+  };
   if (!TIMELINE) el.addEventListener("scroll", onScroll, { passive: true });
   el.addEventListener("scrollend", onScrollEnd);
   const observer = typeof ResizeObserver === "undefined" ? null : new ResizeObserver(geometry);
   observer?.observe(el);
   if (field) observer?.observe(field);
-  geometry();
+  // The observer's first delivery is the initial geometry; without one (jsdom), measure now.
+  if (!observer) geometry();
   return {
     invalidate,
     detach() {
