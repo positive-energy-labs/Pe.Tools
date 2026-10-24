@@ -36,6 +36,9 @@ const RULES: Rule[] = [
   { id: "list-search-input-floor", doctrine: "N3", pattern: /^(?![\s\S]*\[data-list-search\] input\s*\{[^}]*min-inline-size:\s*8ch;)[\s\S]/g,
     roots: [K + "components/lang/lang.css"], allow: [], cannotSee: "Computed pixel widths or clipped controls; browser CH2/SS1 remains required." },
 
+  { id: "claim-title-not-sentence", doctrine: "I6", pattern: /title:\s*(?:\w+\.)*claim\.text\b|\bclaimLine\(/g,
+    roots: [W + "ducts/**/*.{ts,tsx}"], allow: [],
+    cannotSee: "Aliased text fields, computed titles or sentence-like authored titles; D18 mounted proof covers the claim schema and row hint." },
   { id: "chat-new-action-has-words", doctrine: "L1", pattern: /<Button\b[^>]*\bicon=\{Plus\}[^>]*\/>|<button\b[^>]*>\s*\+\s*<\/button>/g,
     roots: [W + "chat/**/*.tsx"], allow: [],
     cannotSee: "Aliased plus icons, computed children or CSS-hidden text; thread-palette tests check the labelled pane action." },

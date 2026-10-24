@@ -38,7 +38,7 @@ import type { Claim } from "../../legs";
 import { inboxWriteRows, type WriteVerbs, type RulingRow } from "./inbox-write";
 import { PreviewLines } from "./preview-lines";
 import { SlotPicker } from "./slot-picker";
-import { InboxClaim, claimLine } from "./inbox-claim";
+import { ClaimText, claimParts } from "../../claims";
 import { SubjectText, subjectDocument } from "@pe/kit/lang/subject-text";
 import { SubjectTextContext } from "@pe/kit/lang/reach";
 import { RuleAssignment } from "./rule-assignment";
@@ -323,9 +323,9 @@ export function Inbox({
       const status = compactStatus(item.status);
       const target = observedElements(observation, item.ids);
       const claim = item.verbs.find((v) => v.kind === "claim");
-      const title = claim?.kind === "claim" ? claimLine(claim.claim, nameOf) : item.title;
+      const title = item.title;
       const description = subjectDocument(
-        item.parts ?? [claim?.kind === "claim" ? claim.claim.text : (item.note ?? item.title)],
+        item.parts ?? [item.note ?? item.title],
         subjects?.nameOf ?? (() => null),
         item.parts ? [] : item.ids,
       );
@@ -382,29 +382,25 @@ export function Inbox({
                 {compactStatus(item.status) !== item.status ? (
                   <p data-inbox-status="">{item.status}</p>
                 ) : null}
-                {subjects ? (
-                  // Evidence help badges the subjects it names; the row itself badges its heading.
-                  <p
-                    onMouseMove={(e) => {
-                      e.stopPropagation();
-                      subjects.light?.(description.references, null, item.key, item.ids);
-                    }}
-                  >
+                <p
+                  onMouseMove={(e) => {
+                    e.stopPropagation();
+                    subjects?.light?.(description.references, null, item.key, item.ids);
+                  }}
+                >
+                  {subjects ? (
                     <SubjectText document={description} owner={item.key} />
-                  </p>
-                ) : claim?.kind === "claim" ? (
-                  <InboxClaim
-                    claim={claim.claim}
-                    nameOf={nameOf}
-                    light={light}
-                    onSelect={onSelect}
-                    onShown={setNativeResult}
-                  />
-                ) : item.note ? (
-                  <p>{item.note}</p>
-                ) : (
-                  <p>{item.title}</p>
-                )}
+                  ) : claim?.kind === "claim" ? (
+                    <ClaimText
+                      parts={claimParts(claim.claim.text, nameOf)}
+                      onHover={(id) => light(id == null ? null : [id])}
+                      onPick={onSelect}
+                      onShown={setNativeResult}
+                    />
+                  ) : (
+                    (item.note ?? item.title)
+                  )}
+                </p>
               </TooltipHint>
             </div>
             <div className="flex flex-wrap items-center gap-1" data-inbox-verbs="">

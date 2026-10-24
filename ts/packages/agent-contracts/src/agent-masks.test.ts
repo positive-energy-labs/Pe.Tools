@@ -116,6 +116,7 @@ it("ducts scene: Pea proposes the subject, claims, label parameter and working p
   const spec = ductsRouteState as unknown as RouteStateSpec<z.ZodType>;
   const envelope: RouteEnvelope<unknown> = { version: 1, revision: 0, doc: spec.schema.parse({}) };
   const claim = {
+    title: "Run accessory",
     text: "the damper is the only accessory on the run",
     ids: [14607308],
     state: "proven",

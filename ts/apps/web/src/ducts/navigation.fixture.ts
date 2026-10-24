@@ -178,6 +178,7 @@ export const NAVIGATION_FIXTURE = {
   subject: null,
   claims: {
     "shared-plenum": {
+      title: "Shared plenum",
       state: "unproven",
       ids: [1002],
       text: "AHU-1's shared plenum serves SA Office and SA Lab; its open fixture port needs review.",

@@ -931,11 +931,11 @@ function checks(input: TriageInput & { claims: readonly Claim[] }): InboxItem[] 
       key: `claim:${claim.id}`,
       group: "check",
       kind: "claim",
-      title: claim.text,
+      title: claim.title,
       status: claim.state,
       tone: "pea",
       ids: claim.at,
-      note: `Pea says this is ${claim.state}`,
+      note: claim.text,
       verbs: [{ kind: "claim", claim }, select(claim.at)],
     }));
   const awaiting = (

@@ -543,7 +543,16 @@ test("a staged subject and plural claim select the whole row without framing; a 
   work = ductsRouteState.schema.parse({
     subject: { g1: { staged: { value: [100, 1, 2, 3, 4] } } },
     claims: {
-      c1: { staged: { value: { text: "Open ends at 1 and 3.", ids: [1, 3], state: "assumed" } } },
+      c1: {
+        staged: {
+          value: {
+            title: "Open ends",
+            text: "Open ends at 1 and 3.",
+            ids: [1, 3],
+            state: "assumed",
+          },
+        },
+      },
     },
     labelParameter: { staged: { value: "Unit Tag" } },
   });
@@ -563,17 +572,21 @@ test("a staged subject and plural claim select the whole row without framing; a 
     return row!;
   });
   const pose = picture.current!.orbit.read();
-  fireEvent.click(within(prefix).getByText(/Open ends at/));
+  fireEvent.click(within(prefix).getByText("Open ends"));
   await waitFor(() => expect([...picture.current!.selected]).toEqual([1, 3]));
   expect(picture.current!.orbit.read()).toEqual(pose);
   expect(drawing.latest!.page.viewport).toBeNull();
   expect(drawing.latest!.page).toMatchObject({ selected: "", issue: "claim:c1" });
-  fireEvent.click(document.querySelector('[data-key="claim:c1"] [data-claim-element="1"]')!);
+  const detail = document.querySelector<HTMLElement>('[data-inbox-detail="claim:c1"]')!;
+  fireEvent.focus(within(detail).getByRole("button", { name: "What is this?" }));
+  const evidence = await screen.findByRole("tooltip");
+  fireEvent.click(evidence.querySelector('[data-claim-element="1"]')!);
   await waitFor(() => expect(drawing.latest!.page.viewport).not.toBeNull());
   expect(drawing.latest!.page.selected).toBe("1");
   fireEvent.click(await screen.findByRole("button", { name: "yes" }));
   await waitFor(() => expect(work.claims.c1?.staged?.value?.verdict).toBe("yes"));
   expect(work.claims.c1?.staged?.value).toMatchObject({
+    title: "Open ends",
     text: "Open ends at 1 and 3.",
     ids: [1, 3],
     verdictBy: "person",

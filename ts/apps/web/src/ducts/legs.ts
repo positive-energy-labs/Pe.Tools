@@ -12,15 +12,7 @@ type Node = DuctSnapshot["nodes"][number];
 type Segment = DuctSnapshot["segments"][number];
 type Element = Node | Segment;
 
-export interface Claim {
-  id: string;
-  state: DuctClaim["state"];
-  at: number[];
-  text: string;
-  verdict?: DuctClaim["verdict"];
-  verdictBy?: string;
-  verdictAt?: string;
-}
+export type Claim = Omit<DuctClaim, "ids"> & { id: string; at: number[] };
 
 export const claimsOf = (cells: Readonly<Record<string, DuctClaim>>): Claim[] =>
   Object.entries(cells).map(([id, { ids, ...rest }]) => ({ id, at: ids, ...rest }));
