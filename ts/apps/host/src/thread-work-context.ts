@@ -15,7 +15,7 @@ import {
   type RouteKey,
 } from "@pe/agent-contracts";
 
-export interface DocumentObservation {
+interface DocumentObservation {
   ref: DocumentRef;
   address: Address | null;
   name: string;
@@ -23,7 +23,7 @@ export interface DocumentObservation {
 export type ObserveDocument = (request: DocumentRequest) => DocumentObservation | null;
 
 /** Remembered context never participates in resolution, native consent, or turn targeting. */
-export const threadWorkContextSchema = z.object({
+const threadWorkContextSchema = z.object({
   documents: z.array(
     z.object({
       id: z.string().min(1),
@@ -32,10 +32,10 @@ export const threadWorkContextSchema = z.object({
       refs: z.array(documentRefSchema),
     }),
   ),
-  works: z.array(workKeySchema),
+  works: z.array(z.object({ key: workKeySchema, documentId: z.string().min(1).nullable() })),
 });
 export type ThreadWorkContext = z.infer<typeof threadWorkContextSchema>;
-export const emptyWorkContext = (): ThreadWorkContext => ({ documents: [], works: [] });
+const emptyWorkContext = (): ThreadWorkContext => ({ documents: [], works: [] });
 export const readWorkContext = (value: unknown): ThreadWorkContext | null =>
   value === undefined
     ? emptyWorkContext()
@@ -131,7 +131,8 @@ export function rememberPlace(
     document?.address ? undefined : document?.refs.at(-1),
   );
   const id = workKey(key);
-  return context.works.some((held) => workKey(held) === id)
+  const documentId = document?.id ?? null;
+  return context.works.some((held) => workKey(held.key) === id && held.documentId === documentId)
     ? context
-    : { ...context, works: [...context.works, key] };
+    : { ...context, works: [...context.works, { key, documentId }] };
 }
