@@ -39,6 +39,7 @@ import { Dialog, DialogContent, DialogTitle } from "@pe/kit/lang/dialog";
 import { ListPopup } from "@pe/kit/lang/list-popup";
 import { Input } from "@pe/kit/lang/input";
 import { useList, type ListState, type ListPersist } from "@pe/kit/lang/collection";
+import { Scroll } from "@pe/kit/lang/scroll";
 import { ListView, type ListRowParts } from "@pe/kit/lang/list-view";
 import { Button } from "@pe/kit/lang/button";
 import { Pane } from "@pe/kit/lang/pane";
@@ -931,7 +932,7 @@ export function ThreadsSidebar({
           {bulkResult}
         </p>
       ) : null}
-      <div data-thread-roster="" className="min-h-0 flex-1 overflow-y-auto">
+      <Scroll data-thread-roster="" className="min-h-0 flex-1">
         <ListView
           list={list}
           aria-label="threads"
@@ -968,7 +969,7 @@ export function ThreadsSidebar({
             };
           }}
         />
-      </div>
+      </Scroll>
     </nav>
   );
 }

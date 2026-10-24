@@ -16,6 +16,7 @@ import type { RoomsSnapshot } from "@pe/host-contracts/generated";
 import type { CellWire } from "#/components/work/band";
 import { useList, emptyListState } from "@pe/kit/lang/collection";
 import { ListView } from "@pe/kit/lang/list-view";
+import { Scroll } from "@pe/kit/lang/scroll";
 import { Pane } from "@pe/kit/lang/pane";
 import { Button } from "@pe/kit/lang/button";
 import { Switcher } from "@pe/kit/lang/switcher";
@@ -343,7 +344,7 @@ export function RoomsInbox({
             ]}
           />
         </div>
-        <div className="min-h-0 flex-1 overflow-auto">
+        <Scroll className="min-h-0 flex-1">
           <ListView
             list={list}
             aria-label="Feedback"
@@ -369,7 +370,7 @@ export function RoomsInbox({
               onMouseLeave: () => onHover(null),
             })}
           />
-        </div>
+        </Scroll>
       </div>
     </Pane>
   );

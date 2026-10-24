@@ -24,6 +24,7 @@ import { ProfileEditor } from "#/parameter-links/ProfileEditor";
 import { ActivityDisclosure } from "@pe/kit/lang/activity";
 import { useList } from "@pe/kit/lang/collection";
 import { ListView } from "@pe/kit/lang/list-view";
+import { Scroll } from "@pe/kit/lang/scroll";
 import {
   applyRefusal,
   isDraftDirty,
@@ -309,7 +310,7 @@ export function ParameterLinksRouteContent({ thread }: { thread?: string } = {})
         }}
         start={
           <Pane title="profile" scroll="clip" flush>
-            <div className="min-w-0 flex-1 overflow-y-auto">
+            <Scroll className="min-w-0 flex-1">
               {route.work.revision === null ? (
                 <OutcomeLine kind="busy" label="hydrating route state" />
               ) : (
@@ -389,7 +390,7 @@ export function ParameterLinksRouteContent({ thread }: { thread?: string } = {})
                   />
                 </>
               )}
-            </div>
+            </Scroll>
           </Pane>
         }
         end={

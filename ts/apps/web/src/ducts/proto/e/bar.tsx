@@ -1,3 +1,4 @@
+import type { SystemNote } from "../../system-list-search";
 import { useList } from "@pe/kit/lang/collection";
 import { PlainList, ListView, listColumns } from "@pe/kit/lang/list-view";
 import { LeaderDiagram } from "@pe/kit/lang/leader-diagram";
@@ -183,6 +184,7 @@ export interface SystemIssue {
  * Everything a system's row has to say beyond its number, worst first, so a dash is never bare.
  * Empty is a priced system in range, with a stated rating, resting on no unruled join.
  */
+
 export function systemIssues(s: {
   total: number | null;
   rating: number | null;
@@ -231,19 +233,46 @@ export function systemIssues(s: {
 }
 
 /**
- * A system's state mark: the worst issue's word (and "+n" for the rest), read without hovering.
+ * One number for the row's chip and the scrollbar's shade (kaitpw: "moving both fix and set into
+ * the notif total"): the issue words plus the Fix and Set rows waiting in the system's scope.
+ */
+export function systemNoteCount(
+  s: Parameters<typeof systemIssues>[0],
+  note: SystemNote | undefined,
+): { issues: SystemIssue[]; total: number } {
+  const issues = systemIssues({ ...s, needsFix: (note?.fix ?? 0) > 0 });
+  return { issues, total: issues.length + (note?.fix ?? 0) + (note?.set ?? 0) };
+}
+
+/**
+ * A system's state mark: the worst issue's word (and "+n" for the rest of its notes), read without hovering.
  * Shape carries severity as well as tone: an alarm is a filled block, a caution an outlined one.
  * Its popover lists the issues and mounts only while open, so hundreds of rows hold no popover
  * content. Each line opens the system, where its inbox rows are. The picture's plate wears the same mark.
  */
-export function SystemMark({ issues, open }: { issues: readonly SystemIssue[]; open: () => void }) {
+export function SystemMark({
+  issues,
+  total,
+  open,
+}: {
+  issues: readonly SystemIssue[];
+  /** `systemNoteCount().total`: the chip's "+n" counts the same notes the scrollbar shades. */
+  total: number;
+  open: () => void;
+}) {
   const list = useList({
     items: issues,
     keyOf: (issue) => issue.says,
     search: (issue) => ({ text: [issue.says] }),
     onPick: open,
   });
-  const worst = issues.find((i) => i.tone === "alarm") ?? issues[0];
+  // Set rows alone are a note without an issue word: the chip says so rather than hiding the shade.
+  const worst: SystemIssue | undefined =
+    issues.find((i) => i.tone === "alarm") ??
+    issues[0] ??
+    (total > 0
+      ? { tone: "caution", word: "set", says: "Set rows wait in this system" }
+      : undefined);
   if (!worst) return null;
   return (
     <Popover>
@@ -264,7 +293,7 @@ export function SystemMark({ issues, open }: { issues: readonly SystemIssue[]; o
           style={{ color: worst.tone === "alarm" ? tokenRef("page") : tokenRef(worst.tone) }}
         >
           {worst.word}
-          {issues.length > 1 ? ` +${issues.length - 1}` : ""}
+          {total > 1 ? ` +${total - 1}` : ""}
         </span>
       </PopoverTrigger>
       <PopoverContent facing className="w-72">
@@ -293,13 +322,13 @@ export function SystemMark({ issues, open }: { issues: readonly SystemIssue[]; o
 export function systemRowParts(
   s: ReturnType<typeof systemList>[number],
   open: () => void,
-  needsFix = false,
+  note: SystemNote | undefined,
   /** The system's fans in words: the row's hover hint carries them. */
   fans: readonly string[] = [],
   /** The popover's head (the same fans as a table), built only while it is open. */
   head?: () => ReactNode,
 ): ListRowParts {
-  const issues = systemIssues({ ...s, needsFix });
+  const { issues, total } = systemNoteCount(s, note);
   const load = fanLoad(s.total, s.rating);
   const over = load.state === "rated" && load.over;
   const scale = load.state === "rated" ? load.available : s.total;
@@ -340,7 +369,7 @@ export function systemRowParts(
             {fmt(s.total)}
             {load.state === "rated" ? ` / ${fmt(load.available, 2)}` : ""}
           </span>
-          <SystemMark issues={issues} open={open} />
+          <SystemMark issues={issues} total={total} open={open} />
         </span>
       </>
     ),

@@ -4,7 +4,7 @@ import { EMPTY_CATALOGS } from "@pe/ducts-domain/catalog";
 import { price, rememberPrice } from "@pe/ducts-domain/pricing";
 import { readiness } from "@pe/ducts-domain/readiness";
 import { healPlan } from "@pe/ducts-domain/heal";
-import { systemsNeedingFix } from "./system-list-search";
+import { systemNotes } from "./system-list-search";
 import { systemList } from "./system-list";
 import { inferJoints } from "@pe/ducts-domain/proximity";
 import { withStoredRulings } from "@pe/ducts-domain/rulings";
@@ -76,7 +76,7 @@ test("worker result has full solve/readiness parity through structured clone, in
     const heal = healPlan(original.snapshot, doc);
     expect(response.result.analysis).toEqual({
       heal,
-      needsFix: systemsNeedingFix(expected, doc, heal),
+      notes: systemNotes(expected, doc, heal),
       systems: systemList(expected.snapshot, expected),
       inference: inferJoints(original.snapshot, 1, withStoredRulings(doc, original.snapshot.store)),
     });

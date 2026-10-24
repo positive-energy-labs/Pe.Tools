@@ -4,9 +4,9 @@ import type { HealPlan } from "@pe/ducts-domain/heal";
 import { survey } from "@pe/ducts-domain/survey";
 import type { DuctSnapshot } from "@pe/ducts-domain/types";
 import fixture from "./fixtures/synthetic-snapshot.json";
-import { systemsNeedingFix } from "./system-list-search";
+import { systemNotes } from "./system-list-search";
 
-test("Needs a fix excludes advisory Heal rows and another system sharing the group", () => {
+test("Fix notes exclude advisory Heal rows and another system sharing the group", () => {
   const snapshot = {
     ...fixture,
     groups: fixture.groups.map((group) => ({ ...group, systemNames: ["SA 1", "Other"] })),
@@ -40,10 +40,12 @@ test("Needs a fix excludes advisory Heal rows and another system sharing the gro
     covered: new Set([finding.id]),
     hard: new Map(),
   };
-  expect([...systemsNeedingFix({ ...base, findings: [finding] }, null, heal)]).toEqual(["SA 1"]);
+  const fixing = (notes: Map<string, { fix: number }>) =>
+    [...notes].filter(([, note]) => note.fix > 0).map(([name]) => name);
+  expect(fixing(systemNotes({ ...base, findings: [finding] }, null, heal))).toEqual(["SA 1"]);
   // The same Heal row still exists, but covers no finding that holds the price.
-  expect([...systemsNeedingFix({ ...base, findings: [] }, null, heal)]).toEqual([]);
-  expect([
-    ...systemsNeedingFix({ ...base, findings: [{ ...finding, kind: "missed-join" }] }, null, null),
-  ]).toEqual([]);
+  expect(fixing(systemNotes({ ...base, findings: [] }, null, heal))).toEqual([]);
+  expect(
+    fixing(systemNotes({ ...base, findings: [{ ...finding, kind: "missed-join" }] }, null, null)),
+  ).toEqual([]);
 });

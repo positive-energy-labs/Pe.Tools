@@ -51,7 +51,7 @@ export function ListBar<T, Sort extends string>({
 }) {
   const input = useRef<HTMLInputElement>(null);
   useSearchKey({
-    region: () => list.target ?? scrollParent(input.current),
+    region: () => list.target,
     available: () => !!input.current,
     focus: () => {
       focusQuiet(input.current);
@@ -554,14 +554,6 @@ const subscribe = (listener: () => void) => {
 };
 const leader = () => targets.values().next().value ?? null;
 const noLeader = () => null;
-
-export function scrollParent(el: HTMLElement | null): HTMLElement | null {
-  for (let p = el?.parentElement ?? null; p; p = p.parentElement) {
-    const overflow = getComputedStyle(p).overflowY;
-    if (overflow === "auto" || overflow === "scroll") return p;
-  }
-  return null;
-}
 
 function pick(): SearchKeyOwner | null {
   const all = [...targets].filter((t) => t.available?.() !== false);

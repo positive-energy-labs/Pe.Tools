@@ -1,4 +1,4 @@
-import { VIRTUAL_FROM } from "../lang/collection";
+import { overscanRows, VIRTUAL_FROM, virtualSpans } from "../lang/collection";
 import type { Tone } from "../../lib/token";
 import {
   createRef,
@@ -18,7 +18,7 @@ import { createPortal } from "react-dom";
 import type { ReactTable, RowData } from "@tanstack/react-table";
 import { defaultRangeExtractor, useVirtualizer, type Range } from "@tanstack/react-virtual";
 
-import { Minimap, type MinimapMark } from "../lang/gutter-minimap";
+import { domSpans, useProjection } from "../lang/scroll";
 import { CellHost } from "../lang/cell";
 import { land } from "../lang/land";
 import { Row } from "../lang/row";
@@ -264,16 +264,18 @@ export function MasterTableBody<Row extends RowData>({
     // eslint-disable-next-line react-hooks/exhaustive-deps
     [pinnedKey],
   );
+  const previous = useRef<ReturnType<typeof useVirtualizer<HTMLElement, Element>> | null>(null);
   const virtual = useVirtualizer({
     count: virtualized ? visibleRows.length : 0,
     getScrollElement: () => scroller,
     estimateSize: () => ROW_ESTIMATE,
     getItemKey: (index) => visibleRows[index]!.id,
-    overscan: 8,
+    overscan: overscanRows(previous.current, scroller, visibleRows.length, ROW_ESTIMATE),
     scrollMargin: margin,
     scrollPaddingStart: headroom,
     rangeExtractor,
   });
+  previous.current = virtual;
   const drawn = virtualized
     ? virtual.getVirtualItems().map((item) => ({
         index: item.index,
@@ -282,18 +284,20 @@ export function MasterTableBody<Row extends RowData>({
       }))
     : visibleRows.map((_, index) => ({ index, start: 0, end: 0 }));
   const damages = visibleRows.map((row) => damage(row.original));
-  const minimapMarks = damages.flatMap((damage, index): MinimapMark[] =>
-    damage ? [{ index, damage }] : [],
-  );
-  const landing = useRef<number | null>(null);
-  useLayoutEffect(() => {
-    if (landing.current === null) return;
-    const row = tbody?.querySelector<HTMLElement>(`tr[data-index="${landing.current}"]`);
-    if (row) {
-      landing.current = null;
-      land(row);
-    }
+  const mark = (index: number) => ({
+    tone: damages[index] ? ("alarm" as const) : undefined,
+    selected: selectedKeys?.has(visibleRows[index]!.id) || activeKey === visibleRows[index]!.id,
   });
+  const version = useMemo(() => ({}), [visibleRows, damage, selectedKeys, activeKey, virtualized]);
+  useProjection(() => {
+    if (!scroller) return [];
+    if (virtualized) return virtualSpans(virtual, visibleRows.length, margin, ROW_ESTIMATE, mark);
+    return tbody
+      ? domSpans(scroller, tbody.querySelectorAll(":scope > tr[data-index]"), (row) =>
+          mark(Number((row as HTMLElement).dataset.index)),
+        )
+      : [];
+  }, version);
   const tail = virtualized ? virtual.getTotalSize() - (drawn.at(-1)?.end ?? 0) : 0;
 
   // N1: the active row is followed into view only when it was named from elsewhere (a link, the
@@ -460,29 +464,6 @@ export function MasterTableBody<Row extends RowData>({
         openContext(cell);
       }}
     >
-      <Minimap
-        count={visibleRows.length}
-        range={
-          virtual.range
-            ? {
-                start: virtual.range.startIndex,
-                end: virtual.range.endIndex,
-              }
-            : null
-        }
-        marks={minimapMarks}
-        scroller={scroller}
-        height={virtual.scrollRect?.height ?? 0}
-        onJump={(index) => {
-          landing.current = index;
-          virtual.scrollToIndex(index, { align: "start" });
-          const row = tbody?.querySelector<HTMLElement>(`tr[data-index="${index}"]`);
-          if (row) {
-            landing.current = null;
-            land(row);
-          }
-        }}
-      />
       {copyFailed?.isConnected &&
         createPortal(<Row role="status" label="Clipboard access failed" />, copyFailed)}
       {createPortal(

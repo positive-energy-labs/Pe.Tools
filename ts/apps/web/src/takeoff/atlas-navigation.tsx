@@ -1,6 +1,7 @@
 import { Suspense } from "react";
 import { emptyListState, useList } from "@pe/kit/lang/collection";
 import { ListView } from "@pe/kit/lang/list-view";
+import { Scroll } from "@pe/kit/lang/scroll";
 import { Pane } from "@pe/kit/lang/pane";
 import { fmtNum } from "@pe/kit/table/model";
 import { onPlan } from "#/takeoff/room-actions";
@@ -38,10 +39,11 @@ export function AtlasNavigation() {
     <Suspense fallback={<div className="t-small t-upper p-2 text-ink-2">reading zones…</div>}>
       <Pane id="zones" flush scroll="clip" title="zones" meta={`${world.zones.length} declared`}>
         <ScopeKeys keys={scopeShortcuts} />
-        <div className="min-h-0 flex-1 overflow-auto">
+        <Scroll className="min-h-0 flex-1">
           <ListView
             list={list}
             aria-label="zones"
+            projection={(z) => ({ tone: zoneStates(z).includes("call") ? "alarm" : undefined })}
             empty={{
               message: "No zones declared",
               exit: "Adopt zones from a zoning-plan view in the Adopt stage",
@@ -67,7 +69,7 @@ export function AtlasNavigation() {
               };
             }}
           />
-        </div>
+        </Scroll>
       </Pane>
     </Suspense>
   );
