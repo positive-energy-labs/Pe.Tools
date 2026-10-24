@@ -5,10 +5,11 @@ import { expect, test } from "vite-plus/test";
 import { connect, CTRL, type Page } from "./cdp.ts";
 
 const SYSTEMS = '[data-list-view][aria-label="systems"]';
+const RULINGS = '[data-list-view][aria-label="rulings"]';
 const PICTURE = "[data-model-picture]";
 const DRAWING =
   '[data-pane-id="e-picture"] canvas[aria-label^="3D model"], [data-pane-id="e-picture"] svg[aria-label="duct tree"]';
-const SEARCH = `${SYSTEMS} input[aria-label="Search systems"]`;
+const SEARCH = `${RULINGS} input[aria-label="Search rulings"]`;
 const ductWrite = (name: string) => /^write(?: [0-9]+)? to Revit$/i.test(name);
 const RECONNECT_REFUSALS = [
   "Thread list is not current; reconnecting.",
@@ -706,42 +707,56 @@ test("seeded real-user route journey", async () => {
       b = options[(index + 1) % options.length]!.key;
       receipt.coverage.systems = JSON.stringify(options);
     });
-    await step("search, filter, Escape and clear through real list controls", async () => {
+    await step("search, filter, Escape and clear through real rulings controls", async () => {
+      if (await box(p, 'button[aria-label^="Expand Rulings" i]'))
+        await click(p, 'button[aria-label^="Expand Rulings" i]');
+      const rulingRows = () =>
+        p.read<string[]>(
+          `[...document.querySelectorAll(${literal(`${RULINGS} [role=option][data-key]`)})].filter(${visible}).map(e => e.getAttribute('data-key'))`,
+        );
+      const firstRuling = await p.until(async () => (await rulingRows())[0], "actual ruling row");
       await fill(p, SEARCH, "chaos-no-such-system-" + seed);
       await p.until(
-        async () => (await rows(p)).length === 0,
+        async () => (await rulingRows()).length === 0,
         "search transition excludes all rows",
       );
       await p.press("Escape");
       await p.until(
-        async () => (await rows(p)).some((row) => row.key === a),
+        async () => (await rulingRows()).includes(firstRuling),
         "Escape clears query and restores rows",
       );
       expect(await fieldValue(p, SEARCH), "Escape clears the typed query").toBe("");
       await fill(p, SEARCH, "chaos-no-such-system-" + seed);
-      await p.until(async () => (await rows(p)).length === 0, "second query excludes all rows");
-      await button(p, "Clear search", SYSTEMS);
       await p.until(
-        async () => (await rows(p)).some((row) => row.key === a),
-        "cleared search restores system A",
+        async () => (await rulingRows()).length === 0,
+        "second query excludes all rows",
       );
-      await button(p, "Filter systems", SYSTEMS);
-      await click(p, '[aria-label="Search filters"] [data-key="field:airType"]');
+      await button(p, "Clear search", RULINGS);
+      await p.until(
+        async () => (await rulingRows()).includes(firstRuling),
+        "cleared search restores the original ruling",
+      );
+      await button(p, "Filter rulings", RULINGS);
+      await click(p, '[aria-label="Search filters"] [data-key="field:kind"]');
       await p.until(
         () => p.count('[aria-label="Filter values"] [role=option]'),
-        "air-type filter values",
+        "ruling-kind filter values",
       );
       await click(p, '[aria-label="Filter values"] [role=option]');
-      await p.until(() => p.count(`${SYSTEMS} [data-list-pill]`), "committed real filter pill");
-      await button(p, "Clear search", SYSTEMS);
+      await p.until(() => p.count(`${RULINGS} [data-list-pill]`), "committed real filter pill");
+      await button(p, "Clear search", RULINGS);
+      await p.until(
+        async () => (await rulingRows()).includes(firstRuling),
+        "clearing the filter restores the original ruling",
+      );
       await p.press("Escape");
     });
     const pickSystem = async (key: string, allowHeld = false) => {
       if (
         !(await box(p, `${SYSTEMS} [role=option][data-key=${literal(key)}]`)) &&
-        (await box(p, "button", "Expand Systems"))
+        (await box(p, 'button[aria-label^="Expand systems" i]'))
       )
-        await button(p, "Expand Systems");
+        await click(p, 'button[aria-label^="Expand systems" i]');
       await click(p, `${SYSTEMS} [role=option][data-key=${literal(key)}]`);
       await subject(p, key, allowHeld);
     };
@@ -754,7 +769,8 @@ test("seeded real-user route journey", async () => {
     });
     await step("open Systems pane; A → B; B → all", async () => {
       // The pane rail reveals the same list without changing the named system.
-      await button(p, "Expand Systems");
+      if (await box(p, 'button[aria-label^="Expand systems" i]'))
+        await click(p, 'button[aria-label^="Expand systems" i]');
       await pickSystem(b);
       await allSystems(p);
       await subject(p, "");
@@ -1538,7 +1554,7 @@ test("seeded real-user route journey", async () => {
           .catch(() => undefined);
       }
       receipt.coverage.exceptions = JSON.stringify(page.errors);
-      page.close();
+      await page.close();
     }
     save();
     console.log(`route-chaos ${receipt.result}: ${dir}`);
