@@ -8,8 +8,16 @@ import { seedConversationWork } from "./conversation-work.fixture.ts";
 const exec = promisify(execFile);
 const ts = resolve(import.meta.dirname, "../..");
 const source = resolve(ts, "..");
-const dir = process.env.CONVERSATION_WORK_ARTIFACT_DIR;
-if (!dir) throw Error("Set CONVERSATION_WORK_ARTIFACT_DIR to an explicit new run directory");
+const dir = resolve(
+  process.env.CONVERSATION_WORK_ARTIFACT_DIR ??
+    join(
+      source,
+      ".artifacts",
+      "runs",
+      `browser-${new Date().toISOString().slice(0, 10).replaceAll("-", "")}-conversation-work`,
+      String(Date.now()),
+    ),
+);
 await mkdir(dir, { recursive: true });
 const home = join(resolve(dir), "home");
 const port = Number(process.env.CONVERSATION_WORK_CHROME_PORT ?? "9304");
@@ -64,6 +72,22 @@ let hostPort = 0;
 let output = "";
 let cancelled = false;
 let chromeAttempted = false;
+let existingChrome = new Set<string>();
+const chromeRows = async (): Promise<{ name: string; port: number }[]> => {
+  const { stdout } = await exec("chrome-agent", ["status"], {
+    env,
+    timeout: 10_000,
+    windowsHide: true,
+  });
+  if (stdout.trim() === "No instances registered. Launch one with: chrome-agent launch") return [];
+  const rows: unknown = JSON.parse(stdout);
+  if (
+    !Array.isArray(rows) ||
+    rows.some((row) => typeof row?.name !== "string" || typeof row?.port !== "number")
+  )
+    throw Error("Unexpected Chrome registry response; no cleanup identity can be inferred");
+  return rows;
+};
 const stopOwned = async (child: ChildProcess) => {
   if (child.exitCode !== null || child.signalCode !== null || !child.pid) return;
   if (process.platform === "win32")
@@ -182,6 +206,7 @@ try {
   await writeFile(join(dir, "startup-response.html"), html);
   if (!ready.ok || !html.includes("<html"))
     throw Error("UNPROVEN_STARTUP: frontend did not serve HTML");
+  existingChrome = new Set((await chromeRows()).map((row) => row.name));
   chromeAttempted = true;
   const launch = await exec(
     "chrome-agent",
@@ -194,7 +219,7 @@ try {
       "--disable-renderer-backgrounding",
       "--disable-backgrounding-occluded-windows",
     ],
-    { timeout: 45_000, windowsHide: true },
+    { env, timeout: 45_000, windowsHide: true },
   );
   const chrome = JSON.parse(launch.stdout);
   if (!chrome.name || chrome.port !== port)
@@ -256,15 +281,13 @@ try {
   }
   if (!receipt.chrome && chromeAttempted) {
     try {
-      const status = await exec("chrome-agent", ["status"], {
-        timeout: 10_000,
-        windowsHide: true,
-      }).catch(() => null);
-      if (status?.stdout.trim().startsWith("["))
-        receipt.chrome =
-          (JSON.parse(status.stdout) as { name: string; port: number }[]).find(
-            (row) => row.port === port,
-          )?.name ?? "";
+      const created = (await chromeRows()).filter(
+        (row) => row.port === port && !existingChrome.has(row.name),
+      );
+      if (created.length > 1) {
+        receipt.cleanup.push("Multiple new Chrome identities; cleanup cannot guess ownership");
+        process.exitCode = 1;
+      } else receipt.chrome = created[0]?.name ?? "";
     } catch (error) {
       receipt.cleanup.push(`Partial Chrome custody read failed: ${String(error)}`);
       process.exitCode = 1;
@@ -272,6 +295,7 @@ try {
   }
   if (receipt.chrome)
     await exec("chrome-agent", ["stop", receipt.chrome], {
+      env,
       timeout: 20_000,
       windowsHide: true,
     }).then(
