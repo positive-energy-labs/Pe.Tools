@@ -54,6 +54,10 @@ export async function readThreadWork(
       `${unreadable} saved Work records could not be inspected; they were left unchanged.`,
     );
   if (!documents) observations.push("Current document availability is unknown.");
+  if (contexts?.some(({ context }) => context?.documents.some((doc) => doc.name === null)))
+    observations.push(
+      "Some older document connections have no remembered name; their conversation titles are retained.",
+    );
   if (contexts?.some(({ context }) => context === null))
     observations.push(
       "Some remembered thread connections could not be read; they were left unchanged.",
@@ -64,20 +68,26 @@ export async function readThreadWork(
     truncated: Boolean(census?.truncated || (contexts?.length ?? 0) > 200),
     threads: (contexts ?? []).slice(0, 200).map(({ threadId, context }) => ({
       threadId,
-      documents: (context?.documents ?? []).map((doc) => ({
-        id: doc.id,
-        name: doc.name,
-        availability:
-          documents === null
-            ? ("unknown" as const)
-            : documents.some((open) =>
-                  doc.address !== null
-                    ? open.address !== null && sameAddress(doc.address, open.address)
-                    : doc.refs.some((ref) => sameDocumentRef(ref, open)),
-                )
-              ? ("open" as const)
-              : ("closed" as const),
-      })),
+      documents: (context?.documents ?? []).flatMap((doc) =>
+        doc.name === null
+          ? []
+          : [
+              {
+                id: doc.id,
+                name: doc.name,
+                availability:
+                  documents === null
+                    ? ("unknown" as const)
+                    : documents.some((open) =>
+                          doc.address !== null
+                            ? open.address !== null && sameAddress(doc.address, open.address)
+                            : doc.refs.some((ref) => sameDocumentRef(ref, open)),
+                        )
+                      ? ("open" as const)
+                      : ("closed" as const),
+              },
+            ],
+      ),
       works: (census?.works ?? []).flatMap((work) => {
         if (work.state !== "ready" || work.unfinished === 0 || !context) return [];
         const scope = work.scope;
@@ -96,7 +106,7 @@ export async function readThreadWork(
         return [
           {
             id: work.id,
-            documentId: matches.length === 1 ? matches[0]!.id : null,
+            documentId: matches.length === 1 && matches[0]!.name !== null ? matches[0]!.id : null,
             route: work.route,
             intent: work.title,
             unfinished: work.unfinished,

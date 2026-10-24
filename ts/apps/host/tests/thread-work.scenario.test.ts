@@ -55,6 +55,29 @@ test("HTTP and one Reading retain named unfinished Work after target removal, cl
       tabs: [],
     }),
   );
+  const unnamed = "z-unlabelled-old-thread";
+  await mkdir(join(root, "threads", unnamed), { recursive: true });
+  const oldMeta = JSON.parse(await readFile(join(dir, "meta.json"), "utf8"));
+  await writeFile(
+    join(root, "threads", unnamed, "meta.json"),
+    JSON.stringify({
+      ...oldMeta,
+      id: unnamed,
+      title: "An older useful conversation",
+      head: {
+        targets: [
+          {
+            request: {
+              kind: "open",
+              ref: { session: "old-closed-session", openId: "opaque-old-handle" },
+            },
+            admission: null,
+          },
+        ],
+        revision: 1,
+      },
+    }),
+  );
   const providers = {
     get: () => ({ id: "codex", harness: "codex", name: "Codex", auth: { kind: "subscription" } }),
     keys: () => [],
@@ -150,6 +173,10 @@ test("HTTP and one Reading retain named unfinished Work after target removal, cl
       ).ok,
     ).toBe(true);
     const snapshot = await read();
+    expect(snapshot.threads.find((item) => item.threadId === unnamed)?.documents).toEqual([]);
+    expect(snapshot.observations).toContain(
+      "Some older document connections have no remembered name; their conversation titles are retained.",
+    );
     const doc = snapshot.threads[0]!.documents[0]!;
     expect(doc).toMatchObject({ name: "Office model", availability: "open" });
     expect(snapshot.threads[0]!.works).toEqual([

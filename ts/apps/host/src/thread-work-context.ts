@@ -27,7 +27,7 @@ const threadWorkContextSchema = z.object({
   documents: z.array(
     z.object({
       id: z.string().min(1),
-      name: z.string().min(1),
+      name: z.string().min(1).nullable(),
       address: addressSchema.nullable(),
       refs: z.array(documentRefSchema),
     }),
@@ -58,7 +58,12 @@ function rememberDocument(
   const held = matches[0];
   const document = {
     id: held?.id ?? randomUUID(),
-    name: input.name?.trim() || held?.name || input.address?.split(/[\\/]/).at(-1) || "Document",
+    // No title evidence means no label. A cloud id or an open lifetime is not a document name.
+    name:
+      input.name?.trim() ||
+      held?.name ||
+      (input.address && /[\\/]/.test(input.address) ? input.address.split(/[\\/]/).at(-1) : null) ||
+      null,
     address: input.address ?? held?.address ?? null,
     refs:
       input.ref && !held?.refs.some((ref) => sameDocumentRef(ref, input.ref))
