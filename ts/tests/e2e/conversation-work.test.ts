@@ -9,7 +9,13 @@ import {
   UNSAVED_REF,
   NAMES_TURN,
 } from "./conversation-work.fixture.ts";
-import { address, sameAddress } from "../../packages/agent-contracts/src/index.ts";
+import {
+  address,
+  sameAddress,
+  documentRequestSchema,
+  readingKey,
+  bindWork,
+} from "../../packages/agent-contracts/src/index.ts";
 
 const visible = `(e) => e.getClientRects().length > 0 && getComputedStyle(e).visibility !== 'hidden'`;
 const wait = (ms: number) => new Promise((done) => setTimeout(done, ms));
@@ -575,19 +581,49 @@ test("real conversation Work cutover retains authored cells, draft, Places and o
             new URL(await p.url()).searchParams.get("thread") === CONVERSATION_THREADS.unsaved,
           "unsaved-document conversation opens without its tool",
         );
+        const opened = Date.now();
         await openWork(CONVERSATION_THREADS.unsaved);
         await p.until(
           async () => new URL(await p.url()).pathname === "/ducts",
           "retained unsaved Work opens",
         );
         const target = new URL(await p.url()).searchParams.get("target");
-        expect(JSON.parse(target!)).toEqual({ kind: "open", ref: UNSAVED_REF });
+        // TanStack JSON-quotes a carry string that itself contains a JSON DocumentRequest.
+        const queryValue = JSON.parse(target!);
+        const request = documentRequestSchema.parse(
+          typeof queryValue === "string" ? JSON.parse(queryValue) : queryValue,
+        );
+        expect(request).toEqual({ kind: "open", ref: UNSAVED_REF });
+        const expectedKey = readingKey({
+          kind: "work",
+          ...bindWork("ducts", null, undefined, UNSAVED_REF),
+        });
+        await p.until(
+          async () =>
+            network.some((event) => {
+              if (
+                event.at < opened ||
+                event.event !== "Network.eventSourceMessageReceived" ||
+                !event.data
+              )
+                return false;
+              const frame = JSON.parse(event.data);
+              return (
+                frame.kind === "snapshot" &&
+                frame.key === expectedKey &&
+                frame.value?.doc?.flows?.["1002"]?.staged?.value?.cfm === 200 &&
+                frame.value.doc.flows["1002"].proposal?.value?.cfm === 220
+              );
+            }),
+          "unsaved Work reading uses the exact original lifetime and retains staged/proposed values",
+        );
         await p.waitText("Work is kept, read-only, while its document is closed.");
         await p.waitText("3 unfinished");
         await headTargets(CONVERSATION_THREADS.unsaved);
         expect(await workEvidence(seed.productHome)).toEqual(initial);
         receipt.coverage.unsaved = {
-          target: JSON.parse(target!),
+          target: request,
+          readingKey: expectedKey,
           workId: seed.unsavedWorkId,
           nativeTargets: [],
         };
