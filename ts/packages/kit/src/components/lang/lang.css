@@ -1,4 +1,3 @@
-/* Shared grammar: tones, planes, selection, the row, the control frame. A primitive's own CSS lives beside its tsx. */
 .dl-picture-readout {
   display: grid;
   grid-template-rows: var(--control-h) minmax(0, 1fr) auto;
@@ -324,9 +323,6 @@
 [data-list-section-head]:active {
   background-image: var(--fill-press);
 }
-[data-list-section-head]:focus-visible {
-  outline-offset: -2px;
-}
 [data-list-section-head] > svg {
   width: 1.2em;
   height: 1.2em;
@@ -507,9 +503,6 @@ tr.dl-row[data-active] {
 .dl-row:active:not([aria-disabled="true"]) {
   background-image: var(--fill-press);
 }
-.dl-row:focus-visible {
-  outline-offset: -2px;
-}
 .dl-row:not(tr)[data-active]::before {
   content: "";
   position: absolute;
@@ -538,10 +531,13 @@ tr.dl-row[data-active] {
   }
 }
 
-/* Document damage outranks primitive rest paint without taking ownership of a primitive class. */
-:root [data-damage] {
+/* Dense fields beat once on their damage layer; only virtualized rows/cells beat individually. */
+:root [data-damage]:not(:where([data-damage-surface] *)),
+:root [data-damage-surface] {
   animation: pe-damage-beat 1.5s ease-in-out infinite;
   will-change: opacity;
+}
+:root [data-damage] {
   box-shadow: inset 0 0 3px var(--pe-alarm);
   outline: 1px solid var(--pe-alarm);
   outline-offset: -1px;
@@ -555,7 +551,7 @@ tr.dl-row[data-active] {
   outline: none;
 }
 @media (prefers-reduced-motion: reduce) {
-  :root [data-damage] {
+  :root :is([data-damage], [data-damage-surface]) {
     animation: none;
     will-change: auto;
   }
@@ -741,9 +737,6 @@ tr.dl-row[data-active] {
   height: 1lh;
   aspect-ratio: 1;
 }
-.dl-row-actions .dl-button:focus-visible {
-  outline-offset: -1px;
-}
 @media (hover: none) {
   .dl-row-actions {
     justify-self: stretch;
@@ -849,9 +842,6 @@ tr.dl-row[data-active] {
   cursor: text;
   background-color: var(--pe-page);
 }
-.dl-search:focus-within {
-  outline: 1px solid var(--pe-ink-2);
-}
 .dl-search[data-face="bar"] {
   box-sizing: border-box;
   min-height: var(--control-h);
@@ -863,7 +853,6 @@ tr.dl-row[data-active] {
   box-shadow: var(--shadow-well);
 }
 .dl-search[data-face="bar"]:focus-within {
-  outline: none;
   border-bottom-color: var(--pe-line-2);
 }
 .dl-search [data-search-trail] {
@@ -1246,14 +1235,6 @@ tr.dl-row[data-active] {
   background-image: var(--fill-press);
   --dl-cell-ring: inset 0 0 0 1px var(--pe-ink-2);
 }
-[data-reach]:not(:disabled, [aria-disabled="true"], .subject-ref):is(
-    [data-reach="focus"],
-    :focus-visible,
-    :focus-within
-  ) {
-  outline: 2px solid var(--pe-ink);
-  outline-offset: -2px;
-}
 :is([data-svg-tip], svg [data-reach]):is(
   [data-reach="reach"],
   [data-reach="hover"],
@@ -1276,7 +1257,7 @@ tr.dl-row[data-active] {
 [data-pe] .veil:hover {
   background-image: var(--fill-veil);
 }
-[data-pe] .dl-button[data-colhead-trigger]:is(:hover, :focus-visible, [data-popup-open]) {
+[data-pe] .dl-button[data-colhead-trigger]:is(:hover, [data-popup-open]) {
   border-color: var(--pe-line-2);
   background-color: color-mix(in srgb, var(--pe-line) 20%, transparent);
 }
@@ -1311,14 +1292,11 @@ tr.dl-row[data-active] {
 .dl-cell[aria-busy="true"] > .dl-acts {
   display: inline-flex;
 }
-.dl-verdict:hover,
-.dl-verdict:focus-visible {
+.dl-verdict:hover {
   background-image: var(--fill-veil);
 }
 .dl-cell[data-unit]:not([data-body]):hover,
-.dl-cell[data-unit]:not([data-body]):focus-within,
-.dl-cells-item > .dl-cell:not([data-body]):hover,
-.dl-cells-item > .dl-cell:not([data-body]):focus-within {
+.dl-cells-item > .dl-cell:not([data-body]):hover {
   --dl-cell-ring: inset 0 0 0 1px var(--pe-ink-2);
 }
 @container dl-cells (max-width: 24rem) {
@@ -1357,7 +1335,7 @@ tr.dl-row[data-active] {
     visibility: hidden;
   }
 }
-.dl-control:is(:hover, :focus-visible, :focus-within):not(:disabled, :has(input:disabled)) {
+.dl-control:hover:not(:disabled, :has(input:disabled)) {
   border-color: var(--pe-line-2);
 }
 [data-subject-text]:is(:hover, [data-lit]) .subject-ref {
@@ -1375,9 +1353,6 @@ tr.dl-row[data-active] {
 [data-list-trigger="icon"]:is(:hover, [data-reach="hover"]),
 [data-reach][aria-label="What is this?"]:is(:hover, [data-reach="hover"]) {
   color: var(--pe-ink);
-}
-.dl-control:focus-within:not(:disabled, :has(input:disabled)) {
-  border-color: var(--pe-ink-2);
 }
 [data-reach]:active:not(:disabled, [aria-disabled="true"], .subject-ref),
 [data-pe] .veil:active {
@@ -1536,4 +1511,12 @@ tr.dl-row[data-active] {
     justify-content: center;
     padding-inline: 0;
   }
+}
+[data-deferred] {
+  content-visibility: auto;
+  contain-intrinsic-size: auto 24rem;
+  min-width: 0;
+}
+[data-deferred="false"] {
+  min-height: 24rem;
 }

@@ -71,10 +71,6 @@
 [data-navigation-item] .dl-row-eyebrow {
   font-weight: var(--weight-regular);
 }
-[data-navigation-item] .dl-row:focus-visible {
-  outline: 1px solid var(--pe-line-2);
-  outline-offset: -1px;
-}
 [data-navigation] {
   width: 100%;
   min-width: 0;
@@ -108,10 +104,6 @@
 }
 [data-navigation-group] > button:hover {
   color: var(--pe-ink);
-}
-[data-navigation-group] > button:focus-visible {
-  outline: 1px solid var(--pe-line-2);
-  outline-offset: -1px;
 }
 /* Inside the roster, heads, rows and the tail pad back to the text edge the roster gave up. */
 [data-navigation-roster] [data-navigation-group] > button {

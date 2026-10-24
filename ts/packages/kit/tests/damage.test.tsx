@@ -13,7 +13,7 @@ test("damage animates only opacity; reduced motion keeps the static mark without
   expect(beat).not.toMatch(/(?:filter|box-shadow|outline)\s*:/);
   expect(beat).toMatch(/opacity\s*:/);
   expect(css).toMatch(
-    /@media \(prefers-reduced-motion: reduce\)[\s\S]*?:root \[data-damage\]\s*\{[^}]*animation: none;[^}]*will-change: auto;/,
+    /@media \(prefers-reduced-motion: reduce\)[\s\S]*?:root :is\(\[data-damage\], \[data-damage-surface\]\)\s*\{[^}]*animation: none;[^}]*will-change: auto;/,
   );
 });
 test.each(["div", "span", "rect"])("late %s damage joins one clock", (tag) => {

@@ -1,11 +1,10 @@
 // @vitest-environment jsdom
-import { act, cleanup, fireEvent, render, screen } from "@testing-library/react";
+import { cleanup, fireEvent, render, screen } from "@testing-library/react";
 import { afterEach, expect, it, vi } from "vite-plus/test";
 import { Pane, PaneFaultProvider, PaneOverlay, PaneSplit } from "../src/components/lang/pane";
 import { PictureReadout } from "../src/components/lang/readout";
 import { Button } from "../src/components/lang/button";
 import { ButtonGroup } from "../src/components/lang/button-group";
-import { X } from "lucide-react";
 
 afterEach(() => {
   cleanup();
@@ -88,41 +87,33 @@ it("a split infers support for a side without grow", () => {
   expect(outer.querySelectorAll(":scope > [data-surface='support']")).toHaveLength(1);
 });
 
-it("button groups collapse glyph labels by available width and restore them when space returns", () => {
-  let resize = () => {};
-  let width = 300;
-  const disconnect = vi.fn();
+it("button groups mount and change labels without measuring or observing geometry", () => {
+  const observe = vi.fn();
   vi.stubGlobal(
     "ResizeObserver",
     class {
-      constructor(callback: () => void) {
-        resize = callback;
+      constructor() {
+        observe();
       }
       observe() {}
-      disconnect = disconnect;
+      disconnect() {}
     },
   );
-  vi.spyOn(HTMLElement.prototype, "clientWidth", "get").mockImplementation(() => width);
-  vi.spyOn(window, "getComputedStyle").mockReturnValue({
-    gap: "4px",
-    getPropertyValue: () => "24px",
-  } as unknown as CSSStyleDeclaration);
-  const { container, unmount } = render(
-    <ButtonGroup>
-      <Button icon={X} label="clear">
-        clear
-      </Button>
+  const style = vi.spyOn(window, "getComputedStyle");
+  const width = vi.spyOn(HTMLElement.prototype, "clientWidth", "get");
+  const { container, rerender } = render(
+    <ButtonGroup label="view">
       <Button label="fit">fit</Button>
     </ButtonGroup>,
   );
-  const group = container.querySelector(".dl-button-group")!;
-  expect(group.hasAttribute("data-icon-labels")).toBe(false);
-  width = 80;
-  act(resize);
-  expect(group.hasAttribute("data-icon-labels")).toBe(true);
-  width = 300;
-  act(resize);
-  expect(group.hasAttribute("data-icon-labels")).toBe(false);
-  unmount();
-  expect(disconnect).toHaveBeenCalled();
+  rerender(
+    <ButtonGroup label="view">
+      <Button label="fit selection">fit selection</Button>
+    </ButtonGroup>,
+  );
+  expect(container.firstElementChild?.getAttribute("aria-label")).toBe("view");
+  expect(container.textContent).toBe("fit selection");
+  expect(style).not.toHaveBeenCalled();
+  expect(width).not.toHaveBeenCalled();
+  expect(observe).not.toHaveBeenCalled();
 });
