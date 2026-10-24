@@ -92,6 +92,7 @@ export function RouteDock({
                 tabs={tabs.tabs}
                 active={active}
                 onSelect={(tab) => void tabs.select(tab)}
+                onClose={(tab) => void tabs.close(tab)}
               />
             }
             actions={
