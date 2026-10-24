@@ -5,7 +5,7 @@ import { NAVIGATION_FIXTURE } from "./navigation.fixture";
 import { SCENE_FIXTURE } from "./scene.fixture";
 import { pricingJob } from "./pricing-job";
 
-test("navigation fixture reaches production pricing with three systems, long lists and a shared finding", () => {
+test("navigation fixture reaches production pricing with eight systems, long lists and a shared finding", () => {
   const { snapshot, grids } = NAVIGATION_FIXTURE;
   const answer = pricingJob()({
     id: 1,
@@ -16,8 +16,13 @@ test("navigation fixture reaches production pricing with three systems, long lis
   const { priced, analysis } = answer.result;
   expect(analysis.systems.map((system) => system.name).sort()).toEqual([
     "EA Lab",
+    "EA Office",
+    "SA East",
     "SA Lab",
+    "SA North",
     "SA Office",
+    "SA South",
+    "SA West",
   ]);
   for (const system of systemsOf(priced.snapshot)) {
     const scope = systemScope(priced.snapshot, system.name);

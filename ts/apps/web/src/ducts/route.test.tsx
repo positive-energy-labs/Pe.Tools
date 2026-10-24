@@ -437,7 +437,7 @@ test("navigation demo prices the production route and moves all to Office to Lab
   );
   try {
     const { router } = await mount("&demo=navigation", false, "slice", "fixture", false);
-    await waitFor(() => expect(drawing.latest?.analysis?.systems).toHaveLength(3));
+    await waitFor(() => expect(drawing.latest?.analysis?.systems).toHaveLength(8));
     expect(screen.getByText(/Navigation fixture \(synthetic/)).toBeTruthy();
     expect(drawing.latest?.doc).toBeNull();
     expect(document.querySelector('[data-proto="E2"]')?.getAttribute("data-native")).toBe("false");

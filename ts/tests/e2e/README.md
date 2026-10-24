@@ -1,6 +1,6 @@
 # e2e lane: one test per acceptance journey (E2E-J1..J6)
 
-## Seeded route journey (Vitest + chrome-agent)
+## Seeded route journey (Vitest + @pe/browser)
 
 From an integrated checkout, the owned demo is one command:
 
@@ -10,7 +10,7 @@ vp run --no-cache journey:routes
 
 The launcher starts `src/dev.ts --no-revit --no-tray` through the checkout's installed Node/jiti runtime,
 an isolated product home and local SDK/app-data roots, the canonical source Vite child, and a
-private visible chrome-agent instance on a dynamically selected port. It reads the host service
+private visible `@pe/browser` session on a dynamically selected port. It reads the host service
 receipt and returned browser identity, then runs Vitest with `refresh,reconnect,worker` required. It never
 starts Revit or sends a Pea prompt. The integrated navigation fixture must expose its real demo
 Refresh action. `--seed`, `--require` and `--source` override the default seed, requested coverage
@@ -31,18 +31,18 @@ vp run --no-cache journey:routes -- --attached --source C:/path/to/served/Pe.Too
 
 `vp run --no-cache test:route-chaos` from `ts` runs the opt-in `route-chaos.config.ts` suite.
 Always pass `--no-cache`: a cached task verdict cannot prove a browser journey.
-It borrows one explicitly named page from a Chrome instance launched by `chrome-agent`.
+It borrows one explicitly named CDP page. The owned launcher uses `@pe/browser`; no Python runtime is required.
 It starts no browser, server, host, Revit session, or inference turn. Stop only the instance and
 server you launched after the run. Keep the tab visible and serve a stable tree: editing the
 served checkout invalidates a run.
 
 ```powershell
 # Runtime owner: start this checkout's server separately using the repo's vp tooling.
-# Choose a free private port. 9255 belongs to the parent integration session.
-chrome-agent launch --port 9264 -- --disable-background-timer-throttling --disable-renderer-backgrounding --disable-backgrounding-occluded-windows
-$env:CDP_PORT = '9264'
-# /json is CDP metadata, never an application-state oracle. Pick the full id of your own page.
-$pages = Invoke-RestMethod "http://127.0.0.1:$env:CDP_PORT/json"
+# Launch owns a disposable profile and returns JSON identity; keep this session id for cleanup.
+$browser = pnpm exec pe-browser launch --visible -- --disable-background-timer-throttling --disable-renderer-backgrounding --disable-backgrounding-occluded-windows | ConvertFrom-Json
+$env:CDP_PORT = ([uri]$browser.endpoint).Port.ToString()
+# CDP target metadata is not an application-state oracle. Pick the full id of your own page.
+$pages = pnpm exec pe-browser targets $browser.id | ConvertFrom-Json
 $pages | Select-Object id, type, url
 $env:CDP_TARGET = '<full page id>'
 $env:CHAOS_LANE = 'demo'
@@ -51,7 +51,7 @@ $env:CHAOS_SEED = '20261023'
 $env:CHAOS_REQUIRE = 'refresh,reconnect,worker'
 $env:CHAOS_PRODUCT_ROOT = 'C:/path/to/served/Pe.Tools'
 vp run --no-cache test:route-chaos
-# chrome-agent stop <exact instance name returned by launch>
+pnpm exec pe-browser stop $browser.id
 ```
 
 The same test supports `CHAOS_LANE=host` with a full `/ducts?target=...` URL and no `demo`

@@ -779,14 +779,46 @@ test("seeded real-user route journey", async () => {
       await settled(p);
       expect((await state(p)).crumb).toBe(before.crumb);
       expect(new URL(await p.url()).searchParams.get("system")).toBe(a);
-      // Focus the selected subject through its real control; Escape alone must preserve its pose.
-      await click(p, '[data-crumb-segment="selection"][data-revit-ids]');
+      // The crumb is a label; the subject picker focuses the same selected element through real controls.
+      const selectedId: unknown = JSON.parse(
+        new URL(copied).searchParams.get("selected") ?? "null",
+      );
+      if (typeof selectedId !== "string")
+        throw Error("copied selection must be a string element id");
+      expect(selectedId, "copied selection is one positive element id").toMatch(/^[1-9]\d*$/);
+      await button(p, "go to a subject", '[data-pane-id="e-picture"]');
+      await fill(p, 'input[aria-label="go to a subject search"]', selectedId);
+      await click(
+        p,
+        `[aria-label="go to a subject"] [role=option][data-key=${literal(`e${selectedId}`)}]`,
+      );
+      const pickerState = () =>
+        p.read<{ expanded: string | null; visible: boolean; focus: string }>(`(() => {
+          const trigger = document.querySelector('[data-pane-id="e-picture"] button[aria-label="go to a subject"]');
+          const input = document.querySelector('input[aria-label="go to a subject search"]');
+          return { expanded: trigger?.getAttribute('aria-expanded') ?? null,
+            visible: !!input?.getClientRects().length,
+            focus: document.activeElement?.outerHTML.slice(0, 500) ?? '' };
+        })()`);
+      const pickerSamples = [{ phase: "after subject pick", ...(await pickerState()) }];
+      receipt.coverage.selectionPicker = JSON.stringify(pickerSamples);
+      save();
+      if (pickerSamples[0]!.expanded === "true")
+        await button(p, "go to a subject", '[data-pane-id="e-picture"]');
+      await p.until(async () => {
+        const state = await pickerState();
+        return state.expanded === "false" && !state.visible;
+      }, "subject picker is closed before selection Escape");
+      pickerSamples.push({ phase: "after picker closed", ...(await pickerState()) });
       expect(
         new URL(await p.url()).searchParams.get("selected"),
         "selection is armed before Escape",
       ).toBe(new URL(copied).searchParams.get("selected"));
       await sleep(350);
       const escapePose = new URL(await p.url()).searchParams.get("viewport");
+      pickerSamples.push({ phase: "before original selection Escape", ...(await pickerState()) });
+      receipt.coverage.selectionPicker = JSON.stringify(pickerSamples);
+      save();
       await p.press("Escape");
       await p.until(
         async () => !new URL(await p.url()).searchParams.get("selected"),
@@ -1217,6 +1249,22 @@ test("seeded real-user route journey", async () => {
         const oldIdentity = await p.read<string>(
           `[...document.querySelectorAll('[data-e-state], [data-e-identity]')].map(e => e.textContent).join(' | ')`,
         );
+        expect(oldIdentity.replace(/[|\s]/g, ""), "held result identity is nonempty").not.toBe("");
+        // The route's public busy ancestor owns snapshot freshness and held pricing (route.tsx).
+        const routeBusy = () =>
+          p.read<{ value: string | null; owner: string | null }>(`(() => {
+            const pane = document.querySelector('[data-pane-id="e-picture"]');
+            const owner = pane?.closest('[aria-busy]');
+            return { value: owner?.getAttribute('aria-busy') ?? null,
+              owner: owner ? owner.outerHTML.slice(0, owner.outerHTML.indexOf('>') + 1) : null };
+          })()`);
+        const sampleBusy = async (phase: string) => {
+          const sample = await routeBusy();
+          receipt.workerProtocol.push({ at: Date.now(), phase, ...sample });
+          save();
+          return sample.value;
+        };
+        expect(await sampleBusy("before worker pause"), "settled route is not busy").toBe("false");
         await p.send("Debugger.enable", {}, workerSession);
         await p.send("Debugger.pause", {}, workerSession);
         receipt.workerProtocol.push({
@@ -1231,7 +1279,11 @@ test("seeded real-user route journey", async () => {
           await button(p, "refresh");
           receipt.workerProtocol.push({ at: Date.now(), command: "trusted Refresh released" });
           await p.until(async () => paused.has(workerSession!), "pricing worker actually paused");
-          await p.until(() => p.count("[data-e-refreshing]"), "held result while worker is paused");
+          await p.until(
+            async () => (await routeBusy()).value === "true",
+            "public route busy while worker is paused",
+          );
+          expect(await sampleBusy("worker paused after trusted Refresh")).toBe("true");
           expect(
             await retained(p, oldDrawing),
             "old drawing remains connected while pricing is paused",
@@ -1263,6 +1315,11 @@ test("seeded real-user route journey", async () => {
           await p.send("Debugger.resume", {}, workerSession);
           await p.send("Runtime.releaseObject", { objectId: oldDrawing });
         }
+        await p.until(
+          async () => (await routeBusy()).value === "false",
+          "public route busy clears after worker resume",
+        );
+        expect(await sampleBusy("after worker resume")).toBe("false");
         await settled(p);
         await subject(p, b);
         const freshReadout = await visibleText(p, "[data-picture-readout]");
@@ -1537,7 +1594,7 @@ test("seeded real-user route journey", async () => {
           .catch(() => undefined);
       }
       receipt.coverage.exceptions = JSON.stringify(page.errors);
-      page.close();
+      await page.close();
     }
     save();
     console.log(`route-chaos ${receipt.result}: ${dir}`);

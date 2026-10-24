@@ -1,23 +1,12 @@
 // One owned demo runtime, or an explicit borrowed browser/server. Never starts Revit.
 import { spawn, execFile, type ChildProcess } from "node:child_process";
 import { promisify, parseArgs } from "node:util";
-import { createServer } from "node:net";
+import { openBrowser, type BrowserSession, type SessionInfo } from "@pe/browser";
 import { mkdir, readFile, readdir, writeFile } from "node:fs/promises";
 import { resolve, join } from "node:path";
 import { createHash } from "node:crypto";
 
 const exec = promisify(execFile);
-function browserStatus(stdout: string): { name: string; port: number }[] {
-  // chrome-agent 0.6.0 emits this successful empty-registry message before its JSON branch.
-  if (stdout.trim() === "No instances registered. Launch one with: chrome-agent launch") return [];
-  const rows: unknown = JSON.parse(stdout);
-  if (
-    !Array.isArray(rows) ||
-    rows.some((row) => typeof row?.name !== "string" || typeof row?.port !== "number")
-  )
-    throw new Error("Unexpected chrome-agent status shape");
-  return rows;
-}
 const { values } = parseArgs({
   args: process.argv.slice(process.argv[2] === "--" ? 3 : 2),
   options: {
@@ -50,6 +39,7 @@ const receipt = {
   hostPort: 0,
   web: "",
   browser: "",
+  browserInfo: undefined as SessionInfo | undefined,
   browserPort: 0,
   target: "",
   documentReady: undefined as
@@ -63,16 +53,14 @@ const receipt = {
 };
 const save = () => writeFile(join(dir, "custody.json"), JSON.stringify(receipt, null, 2));
 const journeyResultPath = join(dir, "journey-result.json");
-const env: NodeJS.ProcessEnv = { ...process.env, PYTHONIOENCODING: "utf-8" };
+const env: NodeJS.ProcessEnv = { ...process.env, PE_BROWSER_HOME: join(dir, "browser-home") };
 let host: ChildProcess | undefined;
 let testProcess: ChildProcess | undefined;
 let hostLog = "";
 let cancelled = false;
 let documentAbort: AbortController | undefined;
 let token = "";
-let browser: { name: string; port: number } | undefined;
-let browserLaunchAttempted = false;
-let existingBrowsers = new Set<string>();
+let browser: BrowserSession | undefined;
 let trayMonitor: ReturnType<typeof setInterval> | undefined;
 const trayHash = async () => {
   const bytes = await readFile(join(source, ".artifacts", "dev-tray", "session.json")).catch(
@@ -128,19 +116,6 @@ async function stopOwned(child: ChildProcess) {
 }
 process.once("SIGINT", interrupt);
 process.once("SIGTERM", interrupt);
-async function freePort() {
-  const server = createServer();
-  await new Promise<void>((done, reject) => {
-    server.once("error", reject);
-    server.listen(0, "127.0.0.1", done);
-  });
-  const address = server.address();
-  if (!address || typeof address === "string") throw new Error("No free Chrome port");
-  await new Promise<void>((done, reject) =>
-    server.close((error) => (error ? reject(error) : done())),
-  );
-  return address.port;
-}
 try {
   let web = values.url;
   let port = Number(values.port);
@@ -252,39 +227,22 @@ try {
       !/<html\b/i.test(html)
     )
       throw new Error(`Source document readiness failed: HTTP ${document.status}`);
-    port = await freePort();
-    receipt.browserPort = port;
-    await save();
-    existingBrowsers = new Set(
-      browserStatus(
-        (await exec("chrome-agent", ["status"], { env, timeout: 15_000, windowsHide: true }))
-          .stdout,
-      ).map((row) => row.name),
-    );
-    browserLaunchAttempted = true;
-    const launched = await exec(
-      "chrome-agent",
-      [
-        "launch",
-        "--port",
-        String(port),
-        "--",
+    browser = await openBrowser({
+      mode: "visible",
+      home: env.PE_BROWSER_HOME,
+      args: [
         "--disable-background-timer-throttling",
         "--disable-renderer-backgrounding",
         "--disable-backgrounding-occluded-windows",
       ],
-      { env, timeout: 45_000, windowsHide: true },
-    );
-    browser = JSON.parse(launched.stdout);
-    if (!browser?.name || browser.port !== port)
-      throw new Error("chrome-agent returned a different browser port");
-    receipt.browser = browser.name;
-    const targets = (await fetch(`http://127.0.0.1:${port}/json`, {
-      signal: AbortSignal.timeout(10_000),
-    }).then((response) => response.json())) as { id: string; type: string }[];
-    const pages = targets.filter((target) => target.type === "page");
-    if (pages.length !== 1) throw new Error("Owned browser must start with one page");
-    target = pages[0]!.id;
+    });
+    port = Number(new URL(browser.info.endpoint).port);
+    receipt.browser = browser.info.id;
+    receipt.browserInfo = browser.info;
+    receipt.browserPort = port;
+    const ownedPage = await browser.page();
+    target = ownedPage.targetId;
+    await ownedPage.release();
   }
   receipt.web = web!;
   receipt.browserPort = port;
@@ -338,27 +296,9 @@ try {
     });
   }
   try {
-    if (!browser && browserLaunchAttempted) {
-      const status = await exec("chrome-agent", ["status"], {
-        env,
-        timeout: 15_000,
-        windowsHide: true,
-      }).catch(() => undefined);
-      browser = status
-        ? browserStatus(status.stdout).find(
-            (row) => row.port === receipt.browserPort && !existingBrowsers.has(row.name),
-          )
-        : undefined;
-      if (browser) receipt.browser = browser.name;
-      else receipt.cleanup.push("No owned Chrome registry row after incomplete launch");
-    }
     if (browser) {
-      await exec("chrome-agent", ["stop", browser.name], {
-        env,
-        timeout: 20_000,
-        windowsHide: true,
-      }).then(
-        () => receipt.cleanup.push(`stopped owned browser ${browser!.name}`),
+      await browser.close().then(
+        () => receipt.cleanup.push(`stopped owned browser ${browser!.info.id}`),
         (error) => {
           receipt.cleanup.push(String(error));
           process.exitCode = 1;

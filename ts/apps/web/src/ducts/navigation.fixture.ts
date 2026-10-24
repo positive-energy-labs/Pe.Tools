@@ -149,6 +149,11 @@ function network(base: number, names: string[], x: number, label: string) {
 const networks = [
   network(1000, ["SA Office", "SA Lab"], 0, "AHU-1"),
   network(4000, ["EA Lab"], 70, "EF-1"),
+  network(10000, ["SA East"], 140, "AHU-2"),
+  network(11000, ["SA West"], 210, "AHU-3"),
+  network(12000, ["SA North"], 280, "AHU-4"),
+  network(13000, ["SA South"], 350, "AHU-5"),
+  network(14000, ["EA Office"], 420, "EF-2"),
 ];
 const snapshot: DuctSnapshot = {
   ...SCENE_FIXTURE.snapshot,
@@ -164,13 +169,15 @@ const snapshot: DuctSnapshot = {
   issues: networks.map((n) => n.issue),
   flows: [],
   layers: [],
-  systems: ["SA Office", "SA Lab", "EA Lab"].map((name, i) => ({
-    id: 9000 + i,
-    name,
-    classification: name.startsWith("EA") ? "Exhaust Air" : "Supply Air",
-    criticalPath: [],
-    sections: [],
-  })),
+  systems: networks
+    .flatMap((n) => n.group.systemNames)
+    .map((name, i) => ({
+      id: 9000 + i,
+      name,
+      classification: name.startsWith("EA") ? "Exhaust Air" : "Supply Air",
+      criticalPath: [],
+      sections: [],
+    })),
 };
 
 export const NAVIGATION_FIXTURE = {
