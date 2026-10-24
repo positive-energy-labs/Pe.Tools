@@ -29,7 +29,7 @@ import {
 } from "@tanstack/react-hotkeys";
 
 import { readTeaching } from "./components/lang/teach";
-import { TeachLive, useTeach, useTeaching } from "./components/lang/use-teach";
+import { TeachLive, useTeach, useTeachingFacts } from "./components/lang/use-teach";
 
 /**
  * Native binding inspection for diagnostics and deterministic tests. Tutorial subscribes to the
@@ -261,7 +261,7 @@ export const readGestures = (): DeclaredGesture[] =>
       : [],
   );
 export function useDeclaredGestures() {
-  const facts = useTeaching();
+  const facts = useTeachingFacts();
   return useMemo(readGestures, [facts]);
 }
 function useScopeGestures(gestures: readonly ScopeGesture[], host?: HTMLElement | null): void {

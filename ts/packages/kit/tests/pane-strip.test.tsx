@@ -1,5 +1,5 @@
 // @vitest-environment jsdom
-import { cleanup, fireEvent, render, screen, waitFor } from "@testing-library/react";
+import { cleanup, fireEvent, render, renderHook, screen, waitFor } from "@testing-library/react";
 import { afterEach, expect, test, vi } from "vite-plus/test";
 
 import { KeyScope, readKeyMeta, readRegistrations } from "@pe/kit/keys";
@@ -9,6 +9,7 @@ import { PictureReadout } from "@pe/kit/lang/readout";
 import { Popover, PopoverTrigger, SubjectPopoverContent } from "@pe/kit/lang/popover";
 import { Switcher } from "@pe/kit/lang/switcher";
 import { readTeaching } from "@pe/kit/lang/teach";
+import { useTeaching } from "@pe/kit/lang/use-teach";
 
 afterEach(() => {
   cleanup();
@@ -59,6 +60,7 @@ const modes = (onChange = vi.fn()) => ({
 });
 
 test("folded controls teach their choices through the live trigger and withdraw with their owner", async () => {
+  renderHook(useTeaching);
   vi.spyOn(HTMLElement.prototype, "scrollWidth", "get").mockReturnValue(500);
   vi.spyOn(HTMLElement.prototype, "clientWidth", "get").mockReturnValue(400);
   vi.spyOn(HTMLElement.prototype, "getBoundingClientRect").mockImplementation(
