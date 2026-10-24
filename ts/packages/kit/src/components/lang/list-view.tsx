@@ -9,7 +9,6 @@ import {
   useState,
   type ReactNode,
   type HTMLAttributes,
-  type CSSProperties,
   type RefObject,
 } from "react";
 import { ChevronDown, ChevronRight, ChevronUp } from "lucide-react";
@@ -22,7 +21,7 @@ import { ScopeGestures } from "../../keys";
 import { OutcomeLine } from "./outcome";
 import { StatusLine } from "./list-popup";
 import { ListBar, scrollParent } from "./list-search";
-export { ListBar, useSearchKey, scrollParent, type SearchKeyOwner } from "./list-search";
+export { useSearchKey, scrollParent, type SearchKeyOwner } from "./list-search";
 import { land } from "./land";
 import { Row, type RowProps } from "./row";
 import "./lang.css";
@@ -86,7 +85,6 @@ export interface ListViewProps<T, Sort extends string = string> {
   > & { "data-dim"?: boolean; "data-tone"?: Tone };
 }
 
-/** One renderer, one common scroller, one measured virtual body per section. No paged tails. */
 export function ListView<T, Sort extends string = string>(props: ListViewProps<T, Sort>) {
   return <ListRenderer {...props} />;
 }
@@ -98,15 +96,43 @@ export function PlainList<T, Sort extends string = string>(props: ListViewProps<
 
 function ListRenderer<T, Sort extends string>(props: ListViewProps<T, Sort> & { plain?: boolean }) {
   const { list, row, empty, maxHeight, detail } = props;
+  const searching = !props.plain && (list.total > 7 || list.filtering || !!list.state.sort);
+  const [headroom, setHeadroom] = useState(0);
   const [root, setRoot] = useState<HTMLDivElement | null>(null);
-  const [scroller, setScroller] = useState<HTMLElement | null>(null);
+  const scroller = maxHeight ? root : (scrollParent(root) ?? root);
   useLayoutEffect(() => {
     list.setTarget(root);
-    setScroller(maxHeight ? root : (scrollParent(root) ?? root));
     return () => list.setTarget(null);
-  }, [root, maxHeight, list.setTarget]);
-  // N1: the view follows the cursor only when the person asked: a key moved it (`steer`) or a
-  // reveal named it. A refresh, resize, hover or a linked pane's cursor never scrolls the list.
+  }, [root, list.setTarget]);
+  useLayoutEffect(() => {
+    if (!root || !scroller) return;
+    const padding = scroller.style.scrollPaddingTop;
+    const reservation = scroller.style.getPropertyValue("--list-headroom");
+    const bar = root.querySelector<HTMLElement>(":scope > [data-list-bar]");
+    const heads = root.querySelectorAll<HTMLElement>(":scope > section > [data-list-section-head]");
+    const measure = () => {
+      const search = bar?.offsetHeight ?? 0;
+      const item = heads[0]?.offsetHeight ?? 0;
+      const stack = scroller.clientHeight - search - heads.length * item >= item;
+      const reserved = search + (stack ? heads.length : Math.min(1, heads.length)) * item;
+      root.toggleAttribute("data-list-single", !stack);
+      root.style.setProperty("--list-stack", stack ? "1" : "0");
+      root.style.setProperty("--list-search-height", `${search}px`);
+      for (const element of new Set([root, scroller]))
+        element.style.setProperty("--list-headroom", `${reserved}px`);
+      scroller.style.scrollPaddingTop = "var(--list-headroom)";
+      setHeadroom(reserved);
+    };
+    measure();
+    const observer = typeof ResizeObserver === "undefined" ? null : new ResizeObserver(measure);
+    for (const element of [scroller, ...(bar ? [bar] : []), ...heads]) observer?.observe(element);
+    return () => {
+      observer?.disconnect();
+      scroller.style.scrollPaddingTop = padding;
+      scroller.style.setProperty("--list-headroom", reservation);
+    };
+  }, [root, scroller, list.sections, searching, list.collection.reading]);
+  // N1: only a key move or named reveal moves the view, never refresh, hover or resize.
   const request = `${list.collection.steer}:${list.revealRequest?.serial ?? 0}`;
   const served = useRef("0:0");
   const landed = useRef(0);
@@ -164,7 +190,6 @@ function ListRenderer<T, Sort extends string>(props: ListViewProps<T, Sort> & { 
       }
     : null;
   const label = props["aria-label"];
-  const searching = !props.plain && (list.total > 7 || list.filtering || !!list.state.sort);
   // Rows render through this ref, so a memoized row that skipped a render still acts on today's list.
   const live = useRef(list);
   live.current = list;
@@ -179,12 +204,7 @@ function ListRenderer<T, Sort extends string>(props: ListViewProps<T, Sort> & { 
       data-list-view=""
       data-columns={props.columns ? "" : undefined}
       className={`relative min-h-0 min-w-0 w-full${maxHeight ? "" : " shrink-0"}`}
-      style={
-        {
-          "--list-headroom": `calc(var(--list-search-height, 0px) + var(--item-h) * ${list.sections.filter((section) => section.label).length})`,
-          ...(maxHeight ? { maxHeight, overflowY: "auto" } : {}),
-        } as CSSProperties
-      }
+      style={maxHeight ? { maxHeight, overflowY: "auto" } : undefined}
     >
       <ScopeGestures
         gestures={[
@@ -260,8 +280,7 @@ function ListRenderer<T, Sort extends string>(props: ListViewProps<T, Sort> & { 
                   );
               }}
               style={{
-                top: `calc(var(--list-search-height, 0px) + var(--item-h) * ${index})`,
-                bottom: `calc(var(--item-h) * ${list.sections.length - index - 1})`,
+                top: `calc(var(--list-search-height, 0px) + var(--item-h) * ${index} * var(--list-stack, 1))`,
               }}
             >
               <ChevronRight aria-hidden />
@@ -281,6 +300,7 @@ function ListRenderer<T, Sort extends string>(props: ListViewProps<T, Sort> & { 
               reportRange={overview.rows.length >= MINIMAP_FROM ? reportRange : undefined}
               row={row}
               scroller={scroller}
+              headroom={headroom}
               detail={detail}
               request={request}
               served={served}
@@ -302,6 +322,7 @@ type SectionBodyProps<T, Sort extends string> = {
   rows: readonly ListItem<T>[];
   row: (item: T) => ListRowParts;
   scroller: HTMLElement | null;
+  headroom: number;
   detail?: (item: T) => ReactNode;
   /** The latest scroll request (key move or reveal) and the last one a body honoured. */
   request: string;
@@ -327,7 +348,6 @@ function SectionBody<T, Sort extends string>(props: SectionBodyProps<T, Sort>) {
   );
 }
 
-/** What a row draws from the list besides its item, as values a memoized row can compare. */
 function rowState<T, Sort extends string>(list: ListController<T, Sort>, item: ListItem<T>) {
   const behavior = list.collection.rowProps(item.key);
   return {
@@ -398,7 +418,6 @@ function ListItemViewInner<T, Sort extends string>({
           content != null ? (
             <>
               {parts.actions}
-              {/* A glyph square like the row's other verbs: a worded verb was clipped to "D…". */}
               <Button
                 label={`${expanded ? "Close" : "Open"} details`}
                 icon={expanded ? ChevronUp : ChevronDown}
@@ -415,9 +434,7 @@ function ListItemViewInner<T, Sort extends string>({
   );
 }
 
-/** A row renders again only when its item, its state or the caller's `row`/`detail` changes. A
- *  caller whose `row` is an inline arrow re-renders every row as before; a `useCallback` row lets a
- *  selection or cursor move redraw only the rows it touched. */
+/** Stable row/detail callbacks let cursor and selection redraw only the rows they changed. */
 const ListItemView = memo(
   ListItemViewInner,
   (a, b) =>
@@ -446,6 +463,7 @@ function VirtualSectionBody<T, Sort extends string>({
   rows,
   row,
   scroller,
+  headroom,
   detail,
   request,
   served,
@@ -454,7 +472,6 @@ function VirtualSectionBody<T, Sort extends string>({
   const body = useRef<HTMLDivElement>(null);
   // Null until measured: a request made as this body mounts waits for its real margin.
   const [margin, setMargin] = useState<number | null>(null);
-  const [headroom, setHeadroom] = useState(0);
   useLayoutEffect(() => {
     const element = body.current;
     if (!element || !scroller) return;
@@ -465,10 +482,6 @@ function VirtualSectionBody<T, Sort extends string>({
           scroller.clientTop +
           scroller.scrollTop,
       );
-      const heads = list.target?.querySelectorAll<HTMLElement>(
-        "[data-list-bar], [data-list-section-head]",
-      );
-      setHeadroom(Array.from(heads ?? []).reduce((height, head) => height + head.offsetHeight, 0));
     };
     measure();
     const observer = new ResizeObserver(measure);
@@ -489,7 +502,6 @@ function VirtualSectionBody<T, Sort extends string>({
     overscan: 6,
     scrollMargin: margin ?? 0,
     scrollPaddingStart: headroom,
-    scrollPaddingEnd: headroom,
   });
   const entries = virtual.getVirtualItems();
   const range = virtual.range;

@@ -28,6 +28,14 @@ const allow = (entries: Record<string, string>): Allow[] =>
 // Filenames use the wave-4 final homes: land.ts, revit-target.tsx and go-to.tsx.
 // prettier-ignore
 const RULES: Rule[] = [
+  { id: "list-heads-top-only", doctrine: "N3", pattern: /\bbottom:\s*/g,
+    roots: [K + "components/lang/list-view.tsx"], allow: [], cannotSee: "Computed edge aliases or browser hit tests; SS4 requires the parent drive." },
+
+  { id: "list-reveal-reserves-scrollport", doctrine: "N3", pattern: /^(?![\s\S]*scrollPaddingTop\s*=\s*"var\(--list-headroom\)")[\s\S]/g,
+    roots: [K + "components/lang/list-view.tsx"], allow: [], cannotSee: "Browser hit tests or nested scrollports; mounted capacity tests cover measured reservation." },
+  { id: "list-search-input-floor", doctrine: "N3", pattern: /^(?![\s\S]*\[data-list-search\] input\s*\{[^}]*min-inline-size:\s*8ch;)[\s\S]/g,
+    roots: [K + "components/lang/lang.css"], allow: [], cannotSee: "Computed pixel widths or clipped controls; browser CH2/SS1 remains required." },
+
   { id: "chat-new-action-has-words", doctrine: "L1", pattern: /<Button\b[^>]*\bicon=\{Plus\}[^>]*\/>|<button\b[^>]*>\s*\+\s*<\/button>/g,
     roots: [W + "chat/**/*.tsx"], allow: [],
     cannotSee: "Aliased plus icons, computed children or CSS-hidden text; thread-palette tests check the labelled pane action." },

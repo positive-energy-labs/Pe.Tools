@@ -19,7 +19,7 @@ export {
   type ListOptions,
   type ListController,
 } from "./components/lang/collection";
-export { ListView, ListBar, type ListRowParts } from "./components/lang/list-view";
+export { ListView, type ListRowParts } from "./components/lang/list-view";
 export { SubjectText, subjectDocument, type SubjectPart } from "./components/lang/subject-text";
 
 export { SubjectTextContext, type SubjectTextScope } from "./components/lang/reach";

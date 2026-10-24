@@ -1,20 +1,18 @@
 import {
   useEffect,
-  useLayoutEffect,
   useSyncExternalStore,
   useMemo,
   useRef,
   useState,
   startTransition,
-  type CSSProperties,
   type ReactNode,
 } from "react";
-import { X } from "lucide-react";
+import { X, Filter, ArrowDownWideNarrow } from "lucide-react";
 import { type ListSearch } from "@pe/agent-contracts";
 import { Button } from "./button";
 import { OutcomeLine } from "./outcome";
 import { useWork } from "./pane";
-import { NarrowChip, chipRecipe } from "./chip";
+import { chipRecipe } from "./chip";
 import { type ListController } from "./collection";
 import { KeyHint } from "./key-hint";
 import { ListPopup } from "./list-popup";
@@ -23,7 +21,6 @@ import { focusQuiet } from "../../lib/utils";
 import { useTeach } from "./use-teach";
 import { useScopeKeys, useScopeLive } from "../../keys";
 
-/** One suggestion: a keyword kept as typed, a value that becomes a pill, or a field to pick from. */
 type Pick = {
   key: string;
   text: string;
@@ -61,20 +58,6 @@ export function ListBar<T, Sort extends string>({
       input.current?.select();
     },
   });
-  const root = useRef<HTMLDivElement>(null);
-  useLayoutEffect(() => {
-    const bar = root.current;
-    const region = list.target ?? bar?.parentElement;
-    if (!bar || !region) return;
-    const measure = () => region.style.setProperty("--list-search-height", `${bar.offsetHeight}px`);
-    measure();
-    const observer = typeof ResizeObserver === "undefined" ? null : new ResizeObserver(measure);
-    observer?.observe(bar);
-    return () => {
-      observer?.disconnect();
-      region.style.removeProperty("--list-search-height");
-    };
-  }, [list.target]);
   const defaultOrder = list.grouped ? "Shelf order" : "Input order";
   useTeach({
     kind: "search",
@@ -95,7 +78,6 @@ export function ListBar<T, Sort extends string>({
   if (echo.source !== keywords) setEcho({ source: keywords, value: keywords });
   const [field, setField] = useState<HTMLInputElement | null>(null);
   const [open, setOpen] = useState(false);
-  // The field menu without a typed word (Filter or a click into an empty box).
   const [browse, setBrowse] = useState(false);
   const [editor, setEditor] = useState<Editor | null>(null);
   const [cursor, setCursor] = useState<string | null>(null);
@@ -203,7 +185,6 @@ export function ListBar<T, Sort extends string>({
           };
         });
     } else if (seenToken && !browse && (open || field === document.activeElement)) {
-      // A closed box still offers its inline ghost; ↓ enters the rows instead of reopening it.
       needle = seenToken[0].toLowerCase();
       const base = { ...list.state.search, keywords: seen.slice(0, seenToken.index).trimEnd() };
       const values = list.facets
@@ -370,27 +351,34 @@ export function ListBar<T, Sort extends string>({
     [suggest, expanded, field, editor, seen],
   );
   return (
-    <div ref={root} data-list-search="" data-list-bar="" data-surface="artifact">
+    <div data-list-search="" data-list-bar="" data-surface="artifact">
       <SearchControl
         face="bar"
         data-list-filter=""
-        // A pill and the word after it share one line in a sidebar; the table keeps its 26ch.
-        style={{ "--search-input-min": "12ch" } as CSSProperties}
         chips={
           pills.length || draft ? (
             <>
               {pills.map((pill, index) => {
-                // The pill being edited holds its place as the draft, so nothing reflows.
                 if (index === editedAt) return draft;
                 const title = `${labelOf(pill.field)}: ${valueLabel(pill.field, pill.value)}`;
                 return (
-                  <span key={pill.field} className="inline-flex items-center" data-list-pill="">
-                    <NarrowChip
+                  <span
+                    key={pill.field}
+                    className={chipRecipe().base()}
+                    data-list-pill=""
+                    data-tone={list.refusal ? "caution" : undefined}
+                  >
+                    <Button
                       label={title}
-                      title="An equality filter; click to change its value, × to remove it"
-                      caution={Boolean(list.refusal)}
-                      onEdit={() => begin(pill.field, false, valueLabel(pill.field, pill.value))}
-                      onRemove={() => list.removePill(pill.field)}
+                      icon={Filter}
+                      onClick={() => begin(pill.field, false, valueLabel(pill.field, pill.value))}
+                    >
+                      {title}
+                    </Button>
+                    <Button
+                      label={`Remove the "${title}" narrowing`}
+                      icon={X}
+                      onClick={() => list.removePill(pill.field)}
                     />
                   </span>
                 );
@@ -404,8 +392,14 @@ export function ListBar<T, Sort extends string>({
             {list.sorts.length ? (
               <ListPopup
                 aria-label={`Sort ${label}`}
+                triggerLabel={`Sort ${label}: ${list.sort || defaultOrder}`}
                 anchor="trigger"
-                trigger={<span>Sort: {list.sort || defaultOrder}</span>}
+                trigger={
+                  <>
+                    <ArrowDownWideNarrow aria-hidden className="size-3" />
+                    <span data-list-search-label="">Sort: {list.sort || defaultOrder}</span>
+                  </>
+                }
                 items={[
                   { key: "", label: defaultOrder },
                   ...list.sorts.map((key) => ({ key, label: key })),
@@ -423,6 +417,7 @@ export function ListBar<T, Sort extends string>({
             {list.facets.length ? (
               <Button
                 label={`Filter ${label}`}
+                icon={Filter}
                 onClick={() => {
                   close();
                   setBrowse(true);
@@ -448,15 +443,7 @@ export function ListBar<T, Sort extends string>({
             aria-expanded={expanded}
             autoComplete="off"
             spellCheck={false}
-            placeholder={
-              editor
-                ? "Choose a value"
-                : pills.length
-                  ? "Search"
-                  : list.facets.length
-                    ? `Search ${label} or filter by ${list.facets.map((each) => each.label.toLowerCase()).join(", ")}`
-                    : `Search ${label}`
-            }
+            placeholder={editor ? "Choose a value" : `Search ${label}`}
             value={typedNow}
             className="w-full min-w-0 truncate bg-transparent outline-none placeholder:text-ink-2"
             onClick={() => {
@@ -510,7 +497,6 @@ export function ListBar<T, Sort extends string>({
                   setEcho({ source: keywords, value: "" });
                   list.setSearch({ ...list.state.search, keywords: "" });
                 } else if (pills.length) list.removePill(pills.at(-1)!.field);
-                // Nothing left to undo: hand the keys back to the rows.
                 else if (list.target) focusQuiet(list.target);
                 else event.currentTarget.blur();
               } else if (event.key === "Backspace" && !typedNow) {
@@ -569,7 +555,6 @@ const subscribe = (listener: () => void) => {
 const leader = () => targets.values().next().value ?? null;
 const noLeader = () => null;
 
-/** The nearest ancestor that scrolls vertically (the pane body a list lives in). */
 export function scrollParent(el: HTMLElement | null): HTMLElement | null {
   for (let p = el?.parentElement ?? null; p; p = p.parentElement) {
     const overflow = getComputedStyle(p).overflowY;
@@ -578,7 +563,6 @@ export function scrollParent(el: HTMLElement | null): HTMLElement | null {
   return null;
 }
 
-/** The filter `/` goes to: the one with focus in its region, then the one under the pointer, then the first live list. */
 function pick(): SearchKeyOwner | null {
   const all = [...targets].filter((t) => t.available?.() !== false);
   const active = document.activeElement;

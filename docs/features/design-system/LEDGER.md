@@ -8,7 +8,7 @@ The one-system design cluster: the design LANGUAGE (raw values in `apps/web/src/
 
 ## Decided
 - 2026-10-23, L1/P1: Chat headers use `Pane` title tabs and grouped actions in desktop and dialog; New thread carries the visible word `new`, and scope stays in the kit list search row.
-- 2026-10-23: List search stays visible by default; kit measures its height so section heads and keyboard arrivals clear it. Chat palette, ducts systems and inbox inherit the same search row.
+- 2026-10-23: List search reserves the measured top stack on the scrollport; headers reduce to one slot before they consume the last row. Input width takes priority over search control words. Chat palette, ducts systems and inbox inherit these defaults.
 - 2026-10-23, N1/N6: `PaneSplit` previews pointer resizing through `--pane-size` and commits size/collapse at release; `PictureStage` isolates unchanged picture inputs from sibling updates. Profiler regressions cover 20 drag steps and sibling composer send; browser camera/focus proof remains owed to the wave-8 integration pass.
 - 2026-10-23, L2/L3: Floater keeps its chosen edge and yields to pane resize affordances; PaneResizeHandle measures its centre before paint and shares one drag seam with two corner grips. Folded popup dimensions come from declared size or measured content, and the positioner flips within the field (wave 8; browser re-check owed).
 - 2026-10-23, N7: Hover travel protects the hull of departure and the actual popup rectangle; tooltip Tab order visits its own references before page controls. Subject presses use hover/focus reach and the existing lighting grace, with outline-only landing and no filled reference pill or word box.
