@@ -10,6 +10,8 @@ Design-language and primitive gaps this cluster hit are owned by the design-syst
 restated here.
 
 ## Decided
+
+- 2026-10-24, kaitpw: closing an unsaved Revit document retains its proposals and staged edits as closed-document Work for inspection. The original exact lifetime remains its identity. A replacement document never inherits that Work or native write authority automatically.
 - 2026-10-24, kaitpw: bare element ids in chat resolve only within the turn's exact pinned document lifetimes; ambiguous or unresolved ids stay plain. Persist each observation with the prompt provenance so old prose cannot silently acquire another element's name after a reopen.
 
 - 2026-10-24, kaitpw: a thread click opens the conversation; a Work click opens its tool. Pea stays left. Connected tools stay right and enter collapsed as one bar of labelled tabs. Explicit expansion restores the tool's Page. Thread summaries show unfinished Work and remembered document names. Closed sessions do not erase that context. Chats without Work retain document choice. Work never grants native write permission, and old Work requires current model validation before apply.

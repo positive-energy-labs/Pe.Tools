@@ -711,7 +711,7 @@ export function createPeRoutes(options: PeRoutesOptions) {
 /**
  * The WorkKey a request names: `?work=<id>` for a standalone workspace, `?target=<address>` for
  * document-scoped Work, neither for the host-only Work. `open=<session>/<openId>` is the exact
- * document lifetime: alone it keys an unsaved document's ephemeral Work; beside a Target it is what
+ * document lifetime: alone it keys an unsaved document's retained Work; beside a Target it is what
  * a Save As migration carries over from.
  */
 function workKey(url: URL, route: string, shape: "read" | "write"): WorkKey | Response {
@@ -1211,7 +1211,6 @@ export function makeHostPeRoutes(
     reportContext: threads.reportContext,
   });
   bindActionWorkspace(routes.workspace);
-  sweepClosedDocuments(bridge, routes.workspace);
   const podRoutes = createPodRoutes(content.lifecycle, { workspace: routes.workspace });
   const fetchRoute = routes.fetch;
   routes.fetch = async (request) => {
@@ -1312,35 +1311,6 @@ export const peRoutesLayer = (
       }
     }),
   );
-
-/**
- * The document-close edge, owned where the fact is: every bridge frame restates which open
- * lifetimes the connected sessions hold, so an addressless Work whose lifetime is no longer listed
- * is swept. The first sweep runs at wiring time, for lifetimes that ended while the host was down.
- */
-function sweepClosedDocuments(bridge: RevitBridge["Service"] | undefined, work: RouteWorkspace) {
-  if (!bridge) return;
-  const sweep = () =>
-    void Effect.runPromise(bridge.list)
-      .then((sessions) =>
-        work.sweepOpen(
-          sessions.flatMap((session) =>
-            session.connected && session.sessionId
-              ? (session.state?.openDocuments ?? []).map((document) => ({
-                  session: session.sessionId as string,
-                  openId: document.openId,
-                }))
-              : [],
-          ),
-          sessions.flatMap((session) =>
-            session.connected && session.sessionId ? [session.sessionId] : [],
-          ),
-        ),
-      )
-      .catch(() => undefined);
-  bridge.subscribe(sweep);
-  sweep();
-}
 
 /** Outside request admission too: every declared HTTP door has the same refusal envelope. */
 export const peApiErrorsLayer = HttpRouter.middleware(

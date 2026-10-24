@@ -29,7 +29,7 @@ test("HTTP and one Reading retain named unfinished Work after target removal, cl
   const dir = join(root, "threads", id);
   const at = address("C:\\Models\\Office.rvt");
   const ref = { session: "first-session", openId: "first-open" };
-  let documents: ({ address: typeof at; name: string } & DocumentRef)[] = [
+  let documents: ({ address: typeof at | null; name: string } & DocumentRef)[] = [
     { ...ref, address: at, name: "Office model" },
   ];
   await mkdir(dir, { recursive: true });
@@ -97,7 +97,7 @@ test("HTTP and one Reading retain named unfinished Work after target removal, cl
       return found.length === 1
         ? {
             ref: { session: found[0]!.session, openId: found[0]!.openId },
-            address: at,
+            address: found[0]!.address,
             name: found[0]!.name,
           }
         : null;
@@ -403,6 +403,107 @@ test("HTTP and one Reading retain named unfinished Work after target removal, cl
     ).json();
     expect(preservedSchedule.doc.cells["1::2"].staged.value).toBe("Reviewed schedule value");
     expect(await fileBytes()).toEqual(beforeAmbiguous);
+
+    // Unsaved Work keeps the exact old lifetime after closure, target removal and restart.
+    const unsavedRef = { session: "unsaved-session", openId: "original-unsaved" };
+    documents = [{ ...unsavedRef, address: null, name: "Unsaved design" }];
+    const setTargets = (targets: unknown[]) =>
+      withInvocationContext({ caller: human }, () =>
+        threads.fetch(
+          new Request(`http://host/pe/scope/${id}`, {
+            method: "PUT",
+            headers: { "content-type": "application/json" },
+            body: JSON.stringify({ targets, expectedRevision: threads.heads.read(id).revision }),
+          }),
+        ),
+      );
+    expect((await setTargets([{ request: { kind: "open", ref: unsavedRef } }])).status).toBe(200);
+    const unsaved = bindWork("ducts", null, undefined, unsavedRef);
+    expect(
+      (
+        await app.workspace.apply(
+          unsaved,
+          "ducts",
+          "human",
+          [
+            {
+              path: ["flows", "11", "staged"],
+              value: { value: { cfm: 110, source: "Retain me" } },
+            },
+          ],
+          0,
+        )
+      ).ok,
+    ).toBe(true);
+    expect(
+      (
+        await app.workspace.apply(
+          unsaved,
+          "ducts",
+          "agent",
+          [
+            {
+              path: ["flows", "12", "proposal"],
+              value: { value: { cfm: 120, source: "Proposal" } },
+            },
+          ],
+          1,
+        )
+      ).ok,
+    ).toBe(true);
+    const unsavedDocument = (await read()).threads[0]!.documents.find(
+      (document) => document.name === "Unsaved design",
+    )!;
+    expect(unsavedDocument.availability).toBe("open");
+    const unsavedBytes = await fileBytes();
+    documents = [];
+    threads.refreshWorkContexts();
+    expect((await setTargets([])).status).toBe(200);
+    await threads.close();
+    threads = createHarnessThreads(options);
+    app = makeApp();
+    // Same name and session, different openId: it is a replacement, not a reconnection.
+    const replacement = { ...unsavedRef, openId: "replacement-unsaved" };
+    documents = [{ ...replacement, address: null, name: "Unsaved design" }];
+    const closed = (await read()).threads[0]!;
+    expect(closed.documents).toContainEqual({ ...unsavedDocument, availability: "closed" });
+    expect(closed.works).toContainEqual({
+      id: workKey(unsaved),
+      documentId: unsavedDocument.id,
+      route: "ducts",
+      intent: "Ducts",
+      unfinished: 2,
+    });
+    const unsavedResume = workResumeSchema.parse(
+      await (
+        await app.fetch(
+          new Request(`http://host/pe/work-resume?id=${encodeURIComponent(workKey(unsaved))}`),
+        )
+      ).json(),
+    );
+    expect(unsavedResume.key).toEqual(unsaved);
+    expect(
+      JSON.parse(new URL(unsavedResume.url!, "http://host").searchParams.get("target")!),
+    ).toEqual({ kind: "open", ref: unsavedRef });
+    const unsavedRead = await (
+      await app.fetch(
+        new Request("http://host/pe/route-state/ducts?open=unsaved-session/original-unsaved"),
+      )
+    ).json();
+    expect(unsavedRead).toMatchObject({
+      revision: 2,
+      doc: {
+        flows: {
+          "11": { staged: { value: { cfm: 110, source: "Retain me" } } },
+          "12": { proposal: { value: { cfm: 120, source: "Proposal" } } },
+        },
+      },
+    });
+    expect(
+      await app.workspace.read(bindWork("ducts", null, undefined, replacement), "ducts"),
+    ).toBeNull();
+    expect(threads.heads.read(id).targets).toEqual([]);
+    expect(await fileBytes()).toEqual(unsavedBytes);
   } finally {
     abort.abort();
     await threads.close();
