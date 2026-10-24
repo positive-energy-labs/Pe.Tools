@@ -7,6 +7,7 @@ import { connect, CTRL, type Page } from "./cdp.ts";
 const SYSTEMS = '[data-list-view][aria-label="systems"]';
 const RULINGS = '[data-list-view][aria-label="rulings"]';
 const PICTURE = "[data-model-picture]";
+const PENDING_PICTURE = `${PICTURE}[data-reading="pending"]`;
 const DRAWING =
   '[data-pane-id="e-picture"] canvas[aria-label^="3D model"], [data-pane-id="e-picture"] svg[aria-label="duct tree"]';
 const SEARCH = `${RULINGS} input[aria-label="Search rulings"]`;
@@ -115,14 +116,25 @@ const visibleText = (page: Page, selector: string) =>
   page.read<string>(
     `[...document.querySelectorAll(${literal(selector)})].find(${visible})?.innerText ?? ''`,
   );
+async function showReadout(page: Page) {
+  if (
+    !(await visibleText(page, "[data-picture-readout]")) &&
+    (await box(page, 'button[aria-label="picture readout"]'))
+  )
+    await click(page, 'button[aria-label="picture readout"]');
+  return page.until(
+    () => visibleText(page, "[data-picture-readout]"),
+    "picture readout visible, including through its folded control",
+  );
+}
 const actionName = (page: Page, word: string) =>
   page.read<string | null>(
     `[...document.querySelectorAll('button')].filter(${visible}).map(e => e.getAttribute('aria-label') || e.innerText.trim()).find(name => new RegExp(${literal(`^${word}(?: [0-9]+)?$`)}).test(name)) ?? null`,
   );
 
 async function stageWork(page: Page, selector: string, value: string) {
-  if (!(await box(page, selector)) && (await box(page, "button", "Expand Inputs")))
-    await button(page, "Expand Inputs");
+  if (!(await box(page, selector)) && (await box(page, 'button[aria-label^="Expand Inputs" i]')))
+    await click(page, 'button[aria-label^="Expand Inputs" i]');
   if (!(await box(page, selector)))
     throw new Error("PRECONDITION: disposable Work editor must be visible and enabled");
   await fill(page, selector, value);
@@ -169,8 +181,8 @@ async function state(page: Page) {
       }),
       armed: [...document.querySelectorAll('button')].filter(shown).filter(e => !e.disabled && e.getAttribute('aria-disabled') !== 'true' && /^(apply|write|heal|make fan)\\b/i.test(e.getAttribute('aria-label') || e.innerText.trim())).map(e => e.getAttribute('aria-label') || e.innerText.trim()),
       alerts: [...document.querySelectorAll('[role="alert"]')].filter(shown).map(e => e.innerText),
-      loading: [...document.querySelectorAll('[data-e-pricing], [data-e-loading], [data-e-opening]')].some(shown),
-      refreshing: [...document.querySelectorAll('[data-e-refreshing], [data-e-capturing]')].some(shown)
+      loading: ![...document.querySelectorAll(${literal(PICTURE)})].some(shown),
+      refreshing: [...document.querySelectorAll(${literal(PENDING_PICTURE)})].some(shown)
     };
   })()`);
 }
@@ -784,16 +796,14 @@ test("seeded real-user route journey", async () => {
         async () => !!new URL(await p.url()).searchParams.get("selected"),
         "tree selection published to URL",
       );
-      await p.until(
-        async () =>
-          !!(await state(p)).selected &&
-          !!(await visibleText(p, '[data-picture-readout="selection"]')),
-        "selected subject rendered in crumb and readout before copying its URL",
-      );
+      await p.until(async () => !!(await state(p)).selected, "selected subject rendered in crumb");
+      await showReadout(p);
+      expect(await visibleText(p, '[data-picture-readout="selection"]')).not.toBe("");
       const copied = await p.url();
       const before = await state(p);
       await p.open(copied);
       await settled(p);
+      await showReadout(p);
       expect(new URL(await p.url()).searchParams.get("selected")).toBe(
         new URL(copied).searchParams.get("selected"),
       );
@@ -804,6 +814,7 @@ test("seeded real-user route journey", async () => {
       expect((await state(p)).crumb).toBe(before.crumb);
       await p.reload();
       await settled(p);
+      await showReadout(p);
       await p.until(
         async () => (await state(p)).crumb === before.crumb,
         "reload renders the same selected readout",
@@ -1245,9 +1256,8 @@ test("seeded real-user route journey", async () => {
           return;
         workerSession = worker![0];
         const oldDrawing = await hold(p, DRAWING);
-        const oldIdentity = await p.read<string>(
-          `[...document.querySelectorAll('[data-e-state], [data-e-identity]')].map(e => e.textContent).join(' | ')`,
-        );
+        const oldIdentity = (await state(p)).pictureTitle;
+        expect(oldIdentity, "old picture names its subject before pausing").not.toBe("");
         await p.send("Debugger.enable", {}, workerSession);
         await p.send("Debugger.pause", {}, workerSession);
         receipt.workerProtocol.push({
@@ -1262,16 +1272,20 @@ test("seeded real-user route journey", async () => {
           await button(p, "refresh");
           receipt.workerProtocol.push({ at: Date.now(), command: "trusted Refresh released" });
           await p.until(async () => paused.has(workerSession!), "pricing worker actually paused");
-          await p.until(() => p.count("[data-e-refreshing]"), "held result while worker is paused");
+          await p.until(
+            () =>
+              p.read<boolean>(
+                `[...document.querySelectorAll(${literal(PENDING_PICTURE)})].some(${visible})`,
+              ),
+            "visible picture is pending while worker is paused",
+          );
           expect(
             await retained(p, oldDrawing),
             "old drawing remains connected while pricing is paused",
           ).toBe(true);
           expect(
-            await p.read<string>(
-              `[...document.querySelectorAll('[data-e-state], [data-e-identity]')].map(e => e.textContent).join(' | ')`,
-            ),
-            "old result identity remains drawn before changing system",
+            (await state(p)).pictureTitle,
+            "old picture subject remains drawn before changing system",
           ).toBe(oldIdentity);
           receipt.workerProtocol.push({
             at: Date.now(),
@@ -1296,10 +1310,15 @@ test("seeded real-user route journey", async () => {
         }
         await settled(p);
         await subject(p, b);
-        const freshReadout = await visibleText(p, "[data-picture-readout]");
+        const freshReadout = await showReadout(p);
         const copied = await p.url();
         await p.open(copied);
         await settled(p);
+        await showReadout(p);
+        await p.until(
+          async () => (await visibleText(p, "[data-picture-readout]")) === freshReadout,
+          "fresh URL renders the same completed worker readout",
+        );
         expect(
           await visibleText(p, "[data-picture-readout]"),
           "late worker delivery agrees with a fresh URL load of persisted Work",
@@ -1311,8 +1330,8 @@ test("seeded real-user route journey", async () => {
     await step("route leave/return; Pea draft identity through thread leave/return", async () => {
       const route = await p.url();
       const routeThread = new URL(route).searchParams.get("thread");
+      const baselineReadout = await showReadout(p);
       const baseline = await state(p);
-      const baselineReadout = await visibleText(p, "[data-picture-readout]");
       expect(baseline.pictureTitle, "Ducts baseline has a rendered title").not.toBe("");
       expect(baselineReadout, "Ducts baseline has a rendered readout").not.toBe("");
       const main = await hold(p, '[data-proto="E2"]');
@@ -1358,6 +1377,8 @@ test("seeded real-user route journey", async () => {
         return evidence;
       };
       await censusDraft("initial visible Pea composer; first-open surface observed");
+      if (required.has("thread") && (await box(p, 'button[aria-label="Expand threads"]')))
+        await click(p, 'button[aria-label="Expand threads"]');
       const threads = await p.read<string[]>(
         `[...document.querySelectorAll('[data-list-view][aria-label="threads"] [role=option][data-key]')].filter(${visible}).map(e => e.getAttribute('data-key'))`,
       );
@@ -1372,6 +1393,8 @@ test("seeded real-user route journey", async () => {
         receipt.coverage.thread =
           "UNPROVEN: omitted from CHAOS_REQUIRE; existing-thread switches not executed";
       const pickThread = async (id: string) => {
+        if (await box(p, 'button[aria-label="Expand threads"]'))
+          await click(p, 'button[aria-label="Expand threads"]');
         await click(
           p,
           `[data-list-view][aria-label="threads"] [role=option][data-key=${literal(id)}]`,
@@ -1431,6 +1454,11 @@ test("seeded real-user route journey", async () => {
       }
       await settled(p);
       expect(await p.url()).toBe(route);
+      await showReadout(p);
+      await p.until(
+        async () => (await state(p)).crumb === baseline.crumb,
+        "returned route renders its original picture readout",
+      );
       const restored = await state(p);
       const restoredReadout = await visibleText(p, "[data-picture-readout]");
       const mainRetained = await retained(p, main);
