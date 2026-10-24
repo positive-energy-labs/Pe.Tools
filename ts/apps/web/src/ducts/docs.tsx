@@ -1,17 +1,16 @@
-/**
- * The ducts tutorial (Alt+/): what the tool does, how it compares with native Revit and
- * Naviate, where every number lives, what an engineer is needed
- * for, the limits, and the catalogue of cases the engine handles. Parts and statuses come from the
- * product map (`@pe/agent-contracts/product-map`); everything else, cases included, is the data
- * in `@pe/agent-contracts/ducts-guide`, which Pea reads too. The record behind each claim is
- * `docs/features/ducts/LEDGER.md` and `WHY-NOT-REVIT.md`.
- *
- * Register: plain, third person, for any engineer or reviewer. "The engineer" is the person using
- * the tool, "Pea" the agent, "the tool" the Ducts page. No second person, no project-specific ids.
+/** Shared Tutorial facts: ducts-guide and product-map; claim evidence: ducts/LEDGER.md and WHY-NOT-REVIT.md.
+ * Third-person prose for engineers; Pea is the agent, the tool is the Ducts page. No project-specific ids.
  */
+import { Table } from "@pe/kit/table/table";
+import type { Column, Verdict } from "@pe/kit/table/model";
 import { mapLink } from "@pe/agent-contracts/product-map";
 import { Legend, Mermaid, PartsTable, chainChart, pathChart } from "#/product-map/diagram";
 import {
+  type DuctsResidency,
+  type DuctsCompareRow,
+  type DuctsProduct,
+  DUCTS_COMPARE,
+  onPeRoadmap,
   DUCTS_ENGINEER_DECIDES,
   DUCTS_LIMITS,
   DUCTS_NOT_ONE_CLICK,
@@ -22,9 +21,41 @@ import {
   DUCTS_SUMMARY,
   DUCTS_WALK,
 } from "@pe/agent-contracts/ducts-guide";
-import { CompareTable } from "./compare-table";
 import { DuctCases } from "./docs-cases";
 const PRESSURE_DROP = mapLink("pressure-drop")!;
+const TONE = { yes: "done", partial: "caution", owed: "nav", no: undefined } as const;
+const PRODUCTS = { revit: "Revit", naviate: "Naviate HVAC&P", pe: "Pe" };
+function verdict(row: DuctsCompareRow, product: DuctsProduct): Verdict {
+  const cell = row[product];
+  return {
+    word: [
+      product === "pe" && row.unproven && "unproven",
+      product === "pe" && onPeRoadmap(row) && "roadmap",
+      `${cell.mark}: ${cell.note}`,
+    ]
+      .filter(Boolean)
+      .join("; "),
+    note: cell.detail ?? cell.note,
+    tone: TONE[cell.mark],
+    dim: !row.lead?.includes(product),
+  };
+}
+const COMPARE_COLUMNS: Column<DuctsCompareRow>[] = [
+  { key: "feature", label: "Feature", cell: (row) => <b>{row.feature}</b> },
+  ...(["revit", "naviate", "pe"] as const).map((key) => ({
+    key,
+    label: PRODUCTS[key],
+    verdict: (row: DuctsCompareRow) => verdict(row, key),
+  })),
+];
+
+const RESIDENCY_COLUMNS: Column<DuctsResidency>[] = [
+  { key: "value", label: "Value", cell: (row) => row.value },
+  { key: "livesIn", label: "Lives in", cell: (row) => row.livesIn },
+  { key: "survivesSave", label: "Survives save", cell: (row) => row.survivesSave },
+  { key: "whoSees", label: "Who sees it", cell: (row) => row.whoSees },
+  { key: "whoWrites", label: "Who writes it", cell: (row) => row.whoWrites },
+];
 
 function DuctsDocs() {
   return (
@@ -40,22 +71,21 @@ function DuctsDocs() {
         ))}
       </ol>
       <p>{DUCTS_NOT_ONE_CLICK}</p>
-      <p className="m-0 t-small">
-        <b>What Pea does</b>
-      </p>
-      <ul className="list-disc pl-5 t-small">
-        {DUCTS_PEA_DOES.map((line) => (
-          <li key={line}>{line}</li>
-        ))}
-      </ul>
-      <p className="m-0 t-small">
-        <b>What Pea never does</b>
-      </p>
-      <ul className="list-disc pl-5 t-small">
-        {DUCTS_PEA_NEVER.map((line) => (
-          <li key={line}>{line}</li>
-        ))}
-      </ul>
+      {(
+        [
+          ["What Pea does", DUCTS_PEA_DOES],
+          ["What Pea never does", DUCTS_PEA_NEVER],
+        ] as const
+      ).map(([title, lines]) => (
+        <section key={title}>
+          <h4 className="m-0 t-small">{title}</h4>
+          <ul className="list-disc pl-5 t-small">
+            {lines.map((line) => (
+              <li key={line}>{line}</li>
+            ))}
+          </ul>
+        </section>
+      ))}
 
       <h3>The picture</h3>
       <p>
@@ -94,26 +124,27 @@ function DuctsDocs() {
       </p>
 
       <h3>Against Revit and Naviate</h3>
-      <CompareTable />
+      {DUCTS_COMPARE.map(({ group, rows }) => (
+        <Table
+          key={group}
+          rows={rows}
+          columns={COMPARE_COLUMNS}
+          rowKey={(row) => row.feature}
+          label={group}
+          caption={group}
+          maxHeight="none"
+        />
+      ))}
 
       <h3>Where every number lives</h3>
       <p>{DUCTS_RESIDENCY_RULE}</p>
-      <div className="grid grid-cols-[1fr_1fr_8rem_1fr_1fr] gap-x-3 gap-y-1 t-small">
-        <b>Value</b>
-        <b>Lives in</b>
-        <b>Survives save</b>
-        <b>Who sees it</b>
-        <b>Who writes it</b>
-        {DUCTS_RESIDENCY.map(({ value, livesIn, survivesSave, whoSees, whoWrites }) => (
-          <div key={value} className="contents">
-            <span>{value}</span>
-            <span>{livesIn}</span>
-            <span>{survivesSave}</span>
-            <span>{whoSees}</span>
-            <span>{whoWrites}</span>
-          </div>
-        ))}
-      </div>
+      <Table
+        rows={DUCTS_RESIDENCY}
+        columns={RESIDENCY_COLUMNS}
+        rowKey={(row) => row.value}
+        label="Where every number lives"
+        maxHeight="none"
+      />
 
       <h3>What the engineer decides</h3>
       <ul className="list-disc pl-5">

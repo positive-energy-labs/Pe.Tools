@@ -1,16 +1,5 @@
 import type { Tone } from "../../lib/token";
-/**
- * TABLE — the one grid (the approved reshape, `table-primitive-explainer.md`): rows, columns, the
- * view state (sort, query) and selection. It draws NO chrome: the box, the scope strip,
- * the search input and the filter chips are `TableFrame`, a wrapper, drawn only when a table wants
- * them. A readout without a frame is simply a `Table` with no `TableFrame` — there is no density
- * flag.
- *
- * Its rows are exactly `visibleRows(rows, columns, state)`, the same pure function every wrapper
- * reads, so the grid and its frame's counts can never disagree. Rows are the kit `Row as="tr"`;
- * selection is the one collection (`useTableSelection` over `useCollection`). TanStack keeps what
- * it is good at here: the column tree, pinning, the focused cell, and the header's sort handlers.
- */
+/** visibleRows owns the view; TableFrame owns chrome. */
 import { useLayoutEffect, useMemo, useRef, useState, type ReactNode } from "react";
 import { useTable, type RowData } from "@tanstack/react-table";
 
@@ -31,7 +20,6 @@ import { useScopeKeys } from "../../keys";
 
 const GUTTER_PX = 18;
 
-/** Row selection: a set of row keys the route owns. */
 export interface TableSelection {
   selected: ReadonlySet<string>;
   onChange: (next: ReadonlySet<string>) => void;
@@ -39,14 +27,9 @@ export interface TableSelection {
   refusal?: (key: string) => string | null | undefined;
 }
 
-/** The shown keys a selection may hold: select-all's reach. */
 export const selectableKeys = (selection: TableSelection, shown: readonly string[]) =>
   selection.refusal ? shown.filter((key) => !selection.refusal!(key)) : shown;
 
-/**
- * The table's selection is the one collection's multi-select over the rows AS SHOWN: click toggles,
- * shift-click extends over the visible order, Escape clears (select-all is the frame's).
- */
 function useTableSelection(selection: TableSelection | undefined, shown: readonly string[]) {
   const collection = useCollection<string>({
     items: shown,
@@ -93,8 +76,7 @@ export interface TableProps<Row extends RowData> {
   rowClassName?: (row: Row) => string | undefined;
   /** The Revit elements represented by each row, served by the root element menu. */
   revit?: (row: Row) => readonly number[];
-  /** Rows kept drawn while scrolled out of view (a long grid draws only the rows in view): the
-   *  rows another surface anchors to, such as a connector's end. */
+  /** Retain offscreen rows that anchor another surface, such as a connector's end. */
   keep?: (row: Row) => boolean;
   gutter?: (row: Row) => { count: number; title: string; tone?: Tone } | null;
   /** Nothing in scope (a filtered-to-nothing table says its own, different story). */
@@ -153,7 +135,6 @@ export function Table<Row extends RowData>({
     () => new Map(columns.map((column) => [column.key, column])),
     [columns],
   );
-  // THE VIEW: the one pure function; the grid draws its answer and nothing else.
   const viewed = useMemo(() => {
     if (visibleKeys === undefined) return visibleRows(rows, columns, state);
     const byKey = new Map(rows.map((row) => [rowKey(row), row]));
@@ -221,6 +202,7 @@ export function Table<Row extends RowData>({
     <>
       <div
         ref={setScroller}
+        data-table-scroll=""
         className={maxHeight ? "overflow-auto" : "min-h-0 flex-1 overflow-auto"}
         style={maxHeight ? { maxHeight } : undefined}
         // Scrolled sideways, the locked column floats over the rows and casts its shade.
@@ -229,14 +211,12 @@ export function Table<Row extends RowData>({
         }
       >
         <table
+          data-table=""
           role="grid"
           aria-label={label}
           aria-rowcount={shownRows.length}
           aria-colcount={columns.length + (gutter ? 1 : 0)}
-          // SEPARATE, not collapsed: a collapsed border belongs to the TABLE, so it does not travel
-          // with a sticky cell — it scrolls out from under the locked column and the header and
-          // leaves the page ground showing as a white seam. Every cell already draws its own
-          // `border-b border-l` with `first:border-l-0`, so nothing doubles (annotation, 2026-08-31).
+          // Separate borders travel with sticky cells; collapsed borders leave seams behind them.
           className="w-full border-separate border-spacing-0 t-small"
         >
           {caption != null && <caption className="px-2 py-1">{caption}</caption>}

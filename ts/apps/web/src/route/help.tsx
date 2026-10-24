@@ -3,7 +3,7 @@ import { Dialog as DialogPrimitive } from "@base-ui/react/dialog";
 import { KeyHint } from "@pe/kit/lang/key-hint";
 import { Button } from "@pe/kit/lang/button";
 import { LeaderDiagram } from "@pe/kit/lang/leader-diagram";
-import { useTeaching } from "@pe/kit/lang/use-teach";
+import { TeachLive, useTeaching } from "@pe/kit/lang/use-teach";
 import { measureRegions, type Teaching, type TeachKey } from "@pe/kit/lang/teach";
 import { useScopeKeys } from "@pe/kit/keys";
 import { GestureKey } from "@pe/kit/lang/gesture-glyph";
@@ -204,7 +204,9 @@ export function RouteHelpButton({ docs, name, utilities = false }: HelpProps) {
           className="fixed inset-0 z-modal outline-none"
         >
           <div data-surface="page" className="absolute inset-0" onClick={() => setOpen(false)} />
-          <HelpBody docs={docs} name={name} utilities={utilities} close={() => setOpen(false)} />
+          <TeachLive value={false}>
+            <HelpBody docs={docs} name={name} utilities={utilities} close={() => setOpen(false)} />
+          </TeachLive>
         </DialogPrimitive.Popup>
       </DialogPrimitive.Portal>
     </DialogPrimitive.Root>
