@@ -28,6 +28,12 @@ const allow = (entries: Record<string, string>): Allow[] =>
 // Filenames use the wave-4 final homes: land.ts, revit-target.tsx and go-to.tsx.
 // prettier-ignore
 const RULES: Rule[] = [
+  { id: "pane-strip-css-fold", doctrine: "L3", pattern: /getComputedStyle|getBoundingClientRect|clientWidth|scrollWidth|useLayoutEffect/g,
+    roots: [K + "components/lang/pane-strip.tsx", K + "components/lang/rail.tsx"], allow: [],
+    cannotSee: "CSS breakpoints, popover ownership or label recovery; browser checks the full/compact/wide sequence." },
+  { id: "table-css-sticky-head", doctrine: "L3", pattern: /rowTops|setRowTops|theadRef|stickyTop/g,
+    roots: [K + "components/master-table/table.tsx", K + "components/master-table/master-table-header.tsx"], allow: [],
+    cannotSee: "Sticky header containment or horizontal pinning; the browser checks multiple row heights and both scroll axes." },
   { id: "teach-observer-owner", doctrine: "N6", pattern: /new\s+MutationObserver\b/g,
     roots: [K + "components/lang/use-teach.ts"], allow: [],
     cannotSee: "Observer aliases or imports, scheduling and reader liveness; the deterministic observer test owns those." },
