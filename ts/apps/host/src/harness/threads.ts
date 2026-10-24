@@ -86,10 +86,19 @@ import { openAdapter, stopChild } from "./adapter.ts";
 import { accessModes, isAuthRefusal, sessionOffer, type Providers } from "./providers.ts";
 import type { PluginHookName, PluginHooks } from "@pe/agent-contracts";
 import { exportThread } from "../thread-export.ts";
+import {
+  readWorkContext,
+  rememberPlace,
+  rememberTarget,
+  type ObserveDocument,
+  type ThreadWorkContext,
+} from "../thread-work-context.ts";
 
 /** The thread wire of ADR 0015; contract and route list in `@pe/agent-contracts` `harness-thread.ts`. */
 
 type Meta = Omit<HarnessThreadSummary, "lastSeq" | "cursor" | "activity" | "head"> & {
+  /** Display/Work relationships survive removal of native target authority. */
+  workContext?: ThreadWorkContext;
   acpSessionId: string | null;
   models: HarnessThreadBody["models"];
   traits: HarnessThreadBody["traits"];
@@ -149,6 +158,8 @@ type Append = HarnessEvent extends infer E
   : never;
 
 export type HarnessThreadsOptions = {
+  /** Current exact observations enrich remembered names; they never rebind a target. */
+  observeDocument?: ObserveDocument;
   /** State directory holding one directory per thread. */
   root: string;
   /** The harness child's cwd: the Pea world root. */
@@ -385,13 +396,24 @@ export function createHarnessThreads(options: HarnessThreadsOptions) {
       meta.providerName ??= options.providers.get(meta.harness)?.name ?? meta.harness;
       meta.traits ??= [];
       meta.traitValues ??= {};
+      const before = JSON.stringify(meta.workContext);
       threads.set(id, fresh(meta, events));
+      // Backfill only observed context. Work documents and native admission stay untouched.
+      if (before !== JSON.stringify(meta.workContext)) writeJson(join(dir, "meta.json"), meta);
     } catch (error) {
       warn(`harness thread ${dir} skipped: it does not parse (${String(error)})`);
     }
   }
 
   function fresh(meta: Meta, events: HarnessEvent[] = []): Thread {
+    let context = readWorkContext(meta.workContext);
+    if (context) {
+      for (const { request, label } of meta.head.targets)
+        context = rememberTarget(context, request, label, options.observeDocument).context;
+      for (const tab of meta.tabs)
+        context = rememberPlace(context, tab.route, tab.link, options.observeDocument);
+      meta.workContext = context;
+    }
     const t: Thread = {
       meta,
       child: null,
@@ -592,6 +614,12 @@ export function createHarnessThreads(options: HarnessThreadsOptions) {
     const t = threads.get(threadId);
     if (t) {
       t.meta.head = head;
+      let context = readWorkContext(t.meta.workContext);
+      if (context) {
+        for (const { request, label } of head.targets)
+          context = rememberTarget(context, request, label, options.observeDocument).context;
+        t.meta.workContext = context;
+      }
       writeMeta(t);
     } else writeJson(headFile(threadId), head);
     for (const listener of headListeners) listener(threadId, head);
@@ -625,6 +653,7 @@ export function createHarnessThreads(options: HarnessThreadsOptions) {
         reason: `Refused at ${door}: a thread targets each document once.`,
       });
     const targets = input.targets.map(({ request, label }): HeadTarget => {
+      label ||= options.observeDocument?.(request)?.name;
       const held = kept(request);
       if (held) return { ...held, ...(label ? { label } : {}) };
       const acquired =
@@ -1543,6 +1572,14 @@ export function createHarnessThreads(options: HarnessThreadsOptions) {
           };
           if (held) tabs[index] = tab;
           else tabs.push(tab);
+          const context = readWorkContext(t.meta.workContext);
+          if (context)
+            t.meta.workContext = rememberPlace(
+              context,
+              route,
+              canonical.link,
+              options.observeDocument,
+            );
         }
         writeMeta(t);
         notifySummaries();
@@ -1873,6 +1910,12 @@ export function createHarnessThreads(options: HarnessThreadsOptions) {
   sweep.unref();
 
   return {
+    /** Read-only context projection; no Work read, native call, or new authority. */
+    workContexts: () =>
+      [...threads.values()].map((t) => ({
+        threadId: t.meta.id,
+        context: readWorkContext(t.meta.workContext),
+      })),
     launchScheduled: (input: import("../scheduled-tasks.ts").ScheduledLaunch) => {
       const providerId =
         input.selection?.providerId ??
