@@ -155,6 +155,7 @@ test("real conversation Work cutover retains authored cells, draft, Places and o
     });
     const url = (path: string) => new URL(path, base).href;
     const pickThread = async (title: string) => {
+      if (await p.has("Expand threads")) await p.click("Expand threads");
       const point = await p.until(
         () =>
           p.read<{ x: number; y: number } | null>(`(() => {
