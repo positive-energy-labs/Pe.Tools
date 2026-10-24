@@ -5,6 +5,7 @@ import {
   type HarnessThreadBody,
   type Mention,
   type PromptAttachment,
+  type PromptTarget,
   type ReadingFrame,
   emptyThreadHead,
   targetsLabel,
@@ -121,6 +122,8 @@ export interface ChatMessage {
   mentions?: Mention[];
   /** A user turn's document, as its prompt event named it (the label), when one was bound. */
   target?: string;
+  /** An assistant turn's documents, pinned from its prompt event: the only ones its prose ids name. */
+  targets?: readonly PromptTarget[];
   /** The assistant row the run is producing now; its last part is the one still moving. */
   running: boolean;
   failure?: Extract<HarnessEvent, { kind: "error" }>["failure"];
@@ -201,13 +204,21 @@ function fold(state: ChatState): Fold {
   const approvals = new Map<string, Approval>();
   const questions = new Map<string, Question>();
   let open: ChatMessage | undefined;
+  let targets: readonly PromptTarget[] | undefined;
   let turn = false;
   let failure: string | undefined;
   let title = state.title;
 
   const assistant = (event: HarnessEvent) => {
     if (open) return open;
-    open = { id: `pea-${event.seq}`, role: "assistant", parts: [], running: true, ...at(event) };
+    open = {
+      id: `pea-${event.seq}`,
+      role: "assistant",
+      parts: [],
+      running: true,
+      ...(targets ? { targets } : {}),
+      ...at(event),
+    };
     rows.push(open);
     return open;
   };
@@ -282,6 +293,7 @@ function fold(state: ChatState): Fold {
         close(false);
         failure = undefined;
         turn = true;
+        targets = event.targets?.length ? event.targets : undefined;
         rows.push({
           id: `you-${event.seq}`,
           role: "user",

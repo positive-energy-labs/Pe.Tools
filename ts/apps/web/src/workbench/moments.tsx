@@ -488,6 +488,8 @@ function ToolRunFold({
 function Part({ part }: { part: Exclude<ChatPart, CallPart> }): ReactNode {
   switch (part.type) {
     case "text":
+      // TODO(route thread: host/readings): element mentions need a names(doc, ids) read. Then render
+      // through subjectDocument against the row's pinned `targets`; an id only one target names links.
       return <Markdown text={part.text} />;
     case "image":
     case "file":

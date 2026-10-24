@@ -96,6 +96,28 @@ const LOG: HarnessEvent[] = z.array(harnessEventSchema).parse([
 const state = (events: HarnessEvent[]): ChatState => ({ ...emptyChatState(), events });
 
 describe("harness event projection", () => {
+  it("pins each assistant turn to the documents its prompt targeted", () => {
+    const target = (openId: string) => ({
+      request: { kind: "open" as const, ref: { session: "s", openId } },
+      label: openId,
+    });
+    const log = z.array(harnessEventSchema).parse([
+      { seq: 1, at, kind: "prompt", turnId: "t1", text: "a", targets: [target("A")] },
+      chunk(2, "agent_message_chunk", "Ends at 7"),
+      { seq: 3, at, kind: "prompt", turnId: "t2", text: "b", targets: [target("B")] },
+      update(4, "t2", {
+        sessionUpdate: "agent_message_chunk",
+        content: { type: "text", text: "7" },
+      }),
+      { seq: 5, at, kind: "prompt", turnId: "t3", text: "c" },
+      update(6, "t3", {
+        sessionUpdate: "agent_message_chunk",
+        content: { type: "text", text: "7" },
+      }),
+    ]);
+    const said = selectMessages(state(log)).filter((m) => m.role === "assistant");
+    expect(said.map((m) => m.targets?.map((t) => t.label))).toEqual([["A"], ["B"], undefined]);
+  });
   it("folds the log into the transcript rows moments.tsx renders", () => {
     const messages = selectMessages(state(LOG));
     const shape = messages.map((message) => ({

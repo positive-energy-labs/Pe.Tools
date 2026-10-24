@@ -7,7 +7,6 @@ export type SubjectTextScope = {
   refProps?: (id: number) => Record<string, string | undefined>;
 };
 export const SubjectTextContext = createContext<SubjectTextScope | null>(null);
-export const REACH_RUNGS = ["rest", "reach", "hover", "focus"] as const;
 export type ReachRung = "rest" | "reach" | "hover" | "focus";
 /** Local control contact. Subject identity is painted by useAttentionScope instead. */
 export function reachProps(rung: ReachRung = "rest") {

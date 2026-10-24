@@ -1,6 +1,6 @@
 import { Row } from "@pe/kit/lang/row";
 import { StateCell } from "@pe/kit/lang/cell";
-import { REACH_RUNGS } from "@pe/kit/lang/reach";
+import type { Rung } from "@pe/kit/lang/attention";
 import { Fragment, useState } from "react";
 import { RefreshCw, Save, Upload } from "lucide-react";
 
@@ -89,7 +89,7 @@ export function LangPressSpecimens() {
         importPath="@pe/kit/lang/attention"
       >
         <div className="grid grid-cols-5 gap-3">
-          {[...REACH_RUNGS, "selected"].map((rung) => (
+          {(["rest", "reach", "hover", "cited", "selected"] satisfies Rung[]).map((rung) => (
             <div
               key={rung}
               ref={(el) => {
