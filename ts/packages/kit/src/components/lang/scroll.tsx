@@ -28,11 +28,30 @@ interface Registry {
   element: HTMLElement;
   sources: Map<object, () => readonly Span[]>;
   invalidate(): void;
+  /** `--item-h` of this scroller, read once: a virtual list's estimate before rows measure. */
+  rowHeight(): number;
 }
 const ScrollContext = createContext<Registry | null>(null);
 
 /** The element that scrolls this subtree, or null outside a `Scroll`. */
 export const useScroller = (): HTMLElement | null => useContext(ScrollContext)?.element ?? null;
+
+/** The enclosing `Scroll`'s row height, for virtual estimates; 20 outside a `Scroll`. */
+export const useRowHeight = (): number => useContext(ScrollContext)?.rowHeight() ?? 20;
+
+/**
+ * Development: a list scrolls in its own `Scroll`. An overflow box between them (a pane under
+ * `scroll="clip"`, a route's own overflow div) would own the scroll the scrollbar maps.
+ */
+export function assertScrollOwner(el: HTMLElement, owner: HTMLElement | null, what: string) {
+  for (let p = el.parentElement; p && p !== owner; p = p.parentElement) {
+    const overflow = getComputedStyle(p).overflowY;
+    if (overflow === "auto" || overflow === "scroll")
+      throw new Error(
+        `${what} scrolls in <${p.tagName.toLowerCase()} class="${p.className}"> instead of its Scroll; render it inside <Scroll> (a Pane body) or give it maxHeight`,
+      );
+  }
+}
 
 /** Publish spans to the enclosing scrollbar; `spans` is read when projecting, never per scroll. */
 export function useProjection(spans: (() => readonly Span[]) | null, version: unknown) {
@@ -207,11 +226,18 @@ export function Scroll({
   });
   const sources = useRef(new Map<object, () => readonly Span[]>()).current;
   const controller = useRef<ReturnType<typeof attach> | null>(null);
-  const registry = useMemo<Registry | null>(
-    () =>
-      element ? { element, sources, invalidate: () => controller.current?.invalidate() } : null,
-    [element, sources],
-  );
+  const registry = useMemo<Registry | null>(() => {
+    if (!element) return null;
+    // ponytail: read once per element; a density toggle keeps the old estimate until rows measure.
+    let row = 0;
+    return {
+      element,
+      sources,
+      invalidate: () => controller.current?.invalidate(),
+      rowHeight: () =>
+        (row ||= parseFloat(getComputedStyle(element).getPropertyValue("--item-h")) || 20),
+    };
+  }, [element, sources]);
   useLayoutEffect(() => {
     if (!element) return;
     controller.current = attach(element, parts.current, sources);

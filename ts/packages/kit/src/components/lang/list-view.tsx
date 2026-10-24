@@ -14,12 +14,20 @@ import { ChevronDown, ChevronRight, ChevronUp } from "lucide-react";
 
 import { Button } from "./button";
 import { OVERSCAN_VIEWPORTS, VIRTUAL_FROM, type ListController, type ListItem } from "./collection";
-import { domSpans, Scroll, useProjection, useScroller, type Mark } from "./scroll";
+import {
+  assertScrollOwner,
+  domSpans,
+  Scroll,
+  useProjection,
+  useRowHeight,
+  useScroller,
+  type Mark,
+} from "./scroll";
 import { EmptyState } from "./empty";
 import { ScopeGestures } from "../../keys";
 import { OutcomeLine } from "./outcome";
 import { StatusLine } from "./list-popup";
-import { ListBar, scrollParent } from "./list-search";
+import { ListBar } from "./list-search";
 export { useSearchKey, type SearchKeyOwner } from "./list-search";
 import { land } from "./land";
 import { Row, type RowProps } from "./row";
@@ -52,15 +60,12 @@ function pressSection(
   if (!home) return;
   const stuck = Math.abs(head.getBoundingClientRect().top - home.getBoundingClientRect().top) > 1;
   if (!stuck || closed) toggle();
+  // A stuck head sits at its sticky top, so the gap to its home is the distance to scroll.
   if (stuck && scroller)
     requestAnimationFrame(() =>
       scroller.scrollTo({
         top:
-          scroller.scrollTop +
-          home.getBoundingClientRect().top -
-          scroller.getBoundingClientRect().top -
-          scroller.clientTop -
-          (parseFloat(getComputedStyle(head).top) || 0),
+          scroller.scrollTop + home.getBoundingClientRect().top - head.getBoundingClientRect().top,
         behavior: "smooth",
       }),
     );
@@ -107,20 +112,16 @@ function ListRenderer<T, Sort extends string>(props: ListViewProps<T, Sort> & { 
   const [headroom, setHeadroom] = useState(0);
   const [root, setRoot] = useState<HTMLDivElement | null>(null);
   const owned = useScroller();
-  const scroller = props.plain ? (scrollParent(root) ?? root) : owned;
+  // The scroller is the `Scroll` context, never an ancestor walk; a plain list outside one
+  // (a popup body) measures against itself.
+  const scroller = owned ?? (props.plain ? root : null);
   useLayoutEffect(() => {
     list.setTarget(root);
     return () => list.setTarget(null);
   }, [root, list.setTarget]);
-  // A list scrolls inside a `Scroll`; its scrollbar is the list's. Resolving to another box (a
-  // pane under `scroll="clip"`, a route's own overflow div, the app root) is a build error.
   useLayoutEffect(() => {
     if (props.plain || !root || process.env.NODE_ENV === "production") return;
-    const actual = scrollParent(root);
-    if (actual && actual !== owned)
-      throw new Error(
-        `ListView "${props["aria-label"]}" scrolls in <${actual.tagName.toLowerCase()} class="${actual.className}"> instead of its Scroll; render it inside <Scroll> (a Pane body) or give it maxHeight`,
-      );
+    assertScrollOwner(root, owned, `ListView "${props["aria-label"]}"`);
   }, [root, owned, props.plain]);
   useProjection(
     () =>
@@ -304,18 +305,19 @@ type SectionBodyProps<T, Sort extends string> = {
   landed: RefObject<number>;
 };
 
-/** Every row's mark: kit channels from the item, the route's weight and tone on top. */
+/**
+ * Every row's mark, from item data only: a projection never builds a row (its JSX and verbs).
+ * Damage a route draws only through `row` reaches the scrollbar through `projection` tone.
+ */
 function markOf<T, Sort extends string>(
   list: ListController<T, Sort>,
   item: ListItem<T>,
-  row: (item: T) => ListRowParts,
   projection?: (item: T) => Pick<Mark, "weight" | "tone">,
 ): Mark {
   const extra = projection?.(item.item);
-  const damage = row(item.item).damage ?? item.damage;
   const behavior = list.collection.rowProps(item.key);
   return {
-    tone: damage ? "alarm" : extra?.tone,
+    tone: item.damage ? "alarm" : extra?.tone,
     weight: extra?.weight,
     tick: item.branch,
     hit: item.hit,
@@ -325,13 +327,13 @@ function markOf<T, Sort extends string>(
 
 /** Re-project when what rows say could have changed; positions are read fresh at project time. */
 function useMarkVersion<T, Sort extends string>(
-  props: Pick<SectionBodyProps<T, Sort>, "list" | "rows" | "row" | "projection">,
+  props: Pick<SectionBodyProps<T, Sort>, "list" | "rows" | "projection">,
 ) {
-  const { list, rows, row, projection } = props;
+  const { list, rows, projection } = props;
   const selected = list.state.selected.join("\u0000");
   const cursor = list.collection.cursor;
   const open = list.state.open.join("\u0000");
-  return useMemo(() => ({}), [rows, row, projection, selected, cursor, open, list.filtering]);
+  return useMemo(() => ({}), [rows, projection, selected, cursor, open, list.filtering]);
 }
 
 function SectionBody<T, Sort extends string>(props: SectionBodyProps<T, Sort>) {
@@ -341,14 +343,14 @@ function SectionBody<T, Sort extends string>(props: SectionBodyProps<T, Sort>) {
 
 function PlainSectionBody<T, Sort extends string>(props: SectionBodyProps<T, Sort>) {
   const body = useRef<HTMLDivElement>(null);
-  const { list, rows, row, projection, scroller } = props;
+  const { list, rows, projection, scroller } = props;
   const version = useMarkVersion(props);
   useProjection(() => {
     if (props.plain || !body.current || !scroller) return [];
     const byKey = new Map(rows.map((item) => [item.key, item]));
     return domSpans(scroller, body.current.querySelectorAll(":scope > [data-key]"), (el) => {
       const item = byKey.get((el as HTMLElement).dataset.key ?? "");
-      return item ? markOf(list, item, row, projection) : {};
+      return item ? markOf(list, item, projection) : {};
     });
   }, version);
   return (
@@ -499,9 +501,7 @@ function VirtualSectionBody<T, Sort extends string>(props: SectionBodyProps<T, S
       .forEach((element) => observer.observe(element));
     return () => observer.disconnect();
   }, [scroller, list.sections.length, list.state.closed, rows.length]);
-  const estimate = scroller
-    ? parseFloat(getComputedStyle(scroller).getPropertyValue("--item-h")) || 20
-    : 20;
+  const estimate = useRowHeight();
   // Overscan is a rule, not a count: OVERSCAN_VIEWPORTS of the measured average row, per side.
   const previous = useRef<ReturnType<typeof useVirtualizer<HTMLElement, Element>> | null>(null);
   const viewport = previous.current?.scrollRect?.height ?? scroller?.clientHeight ?? 0;
@@ -526,7 +526,7 @@ function VirtualSectionBody<T, Sort extends string>(props: SectionBodyProps<T, S
         return {
           top: measured?.start ?? (margin ?? 0) + index * estimate,
           height: measured?.size ?? estimate,
-          mark: markOf(list, item, row, projection),
+          mark: markOf(list, item, projection),
         };
       }),
     version,

@@ -43,6 +43,7 @@ export function AtlasNavigation() {
           <ListView
             list={list}
             aria-label="zones"
+            projection={(z) => ({ tone: zoneStates(z).includes("call") ? "alarm" : undefined })}
             empty={{
               message: "No zones declared",
               exit: "Adopt zones from a zoning-plan view in the Adopt stage",

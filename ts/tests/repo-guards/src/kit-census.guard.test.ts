@@ -50,6 +50,9 @@ const RULES: Rule[] = [
     pattern: /const resize = \(\) => \{(?:(?!\n  \};)[\s\S])*?renderer\.setSize/g,
     roots: [W + "scene/renderer.ts"], allow: [],
     cannotSee: "Aliases, GPU completion or visible flashes; the size-consumer regression and native rAF buffer readback cover those paths." },
+  { id: "list-no-computed-style", doctrine: "N6", pattern: /getComputedStyle/g,
+    roots: [K + "components/lang/list-view.tsx"], allow: [],
+    cannotSee: "Aliased style reads or walks in helpers it imports; the scroll test pins the Scroll context and the production profile measures the walk." },
   { id: "list-heads-top-only", doctrine: "N3", pattern: /\bbottom:\s*/g,
     roots: [K + "components/lang/list-view.tsx"], allow: [], cannotSee: "Computed edge aliases or browser hit tests; SS4 requires the parent drive." },
 

@@ -127,3 +127,46 @@ test("a list that scrolls in a box other than its Scroll throws in development",
     ),
   ).not.toThrow();
 });
+
+test("a projection reads item data: it never builds rows, and damage in the data reaches the strip", async () => {
+  vi.stubGlobal(
+    "ResizeObserver",
+    class {
+      observe() {}
+      unobserve() {}
+      disconnect() {}
+    },
+  );
+  const fills: string[] = [];
+  vi.spyOn(HTMLCanvasElement.prototype, "getContext").mockImplementation(
+    function (this: HTMLCanvasElement) {
+      const ctx = { canvas: this, fillStyle: "", globalAlpha: 1, clearRect() {}, drawImage() {} };
+      return Object.assign(ctx, { fillRect: () => fills.push(ctx.fillStyle) }) as never;
+    },
+  );
+  vi.spyOn(HTMLElement.prototype, "clientHeight", "get").mockReturnValue(200);
+  vi.spyOn(HTMLElement.prototype, "offsetHeight", "get").mockReturnValue(20);
+  const items = Array.from({ length: 1000 }, (_, i) => ({
+    key: String(i),
+    name: `Row ${i}`,
+    damage: i % 10 === 0 ? "unpreviewed" : undefined,
+  }));
+  const row = vi.fn((item: (typeof items)[number]) => ({ label: item.name, damage: item.damage }));
+  function Big() {
+    const list = useList({
+      items,
+      keyOf: (item) => item.key,
+      search: (item) => ({ text: [item.name] }),
+    });
+    return (
+      <ListView list={list} aria-label="big" row={row} empty={{ message: "none", exit: "none" }} />
+    );
+  }
+  render(
+    <Scroll>
+      <Big />
+    </Scroll>,
+  );
+  await waitFor(() => expect(fills.length).toBeGreaterThan(0));
+  expect(row.mock.calls.length).toBeLessThan(items.length / 2);
+});
