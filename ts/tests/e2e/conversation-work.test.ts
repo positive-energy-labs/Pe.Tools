@@ -478,6 +478,7 @@ test("real conversation Work cutover retains authored cells, draft, Places and o
         uploadThroughput: 0,
       });
       await wait(1500);
+      const online = Date.now();
       await p.send("Network.emulateNetworkConditions", {
         offline: false,
         latency: 0,
@@ -488,8 +489,43 @@ test("real conversation Work cutover retains authored cells, draft, Places and o
         async () => network.filter((event) => event.stream).length > streams,
         "shared Reading SSE reconnects",
       );
+      await p.until(async () => {
+        const acquired = new Set(
+          network.filter((event) => event.at >= online && event.stream).map((event) => event.id),
+        );
+        return network.some((event) => {
+          if (
+            !acquired.has(event.id) ||
+            event.event !== "Network.eventSourceMessageReceived" ||
+            !event.data
+          )
+            return false;
+          const frame = JSON.parse(event.data);
+          return (
+            frame.kind === "snapshot" &&
+            frame.value?.threads?.some(
+              (thread: {
+                threadId: string;
+                documents: { name: string }[];
+                works: { id: string; unfinished: number }[];
+              }) =>
+                thread.threadId === CONVERSATION_THREADS.office &&
+                thread.documents.some((doc) => doc.name === "Office model") &&
+                thread.works.some((work) => work.id === seed.workId && work.unfinished === 3),
+            )
+          );
+        });
+      }, "reconnected stream acquires the real Office Work summary");
+      if (await p.has("Expand threads")) await p.click("Expand threads");
       await p.waitText("Office model");
       await p.waitText("3 unfinished");
+      if (await p.count('[role="dialog"]')) {
+        await p.press("Escape");
+        await p.until(
+          async () => (await p.count('[role="dialog"]')) === 0,
+          "threads overlay closes",
+        );
+      }
       await headTargets();
     });
     await step("36 second quiet continuity and immutable Work readback", async () => {
@@ -595,7 +631,7 @@ test("real conversation Work cutover retains authored cells, draft, Places and o
         })
         .catch(() => {});
       receipt.errors.push(...page.errors);
-      page.close();
+      await page.close();
     }
     await save();
   }
