@@ -49,6 +49,18 @@ import { routeAddress, routeAt } from "@pe/agent-contracts";
 
 type ChatShellProps = { target?: string; docked?: boolean };
 
+/** The thread sidebar's default width, and its folded rail. */
+export const SIDEBAR = { size: 300, rail: 32 };
+/** Pea's floor in px: the chat column's reading measure (`--chat-measure` in chat-shell.css: 76ch
+ *  of the prose face at 0.577em a character, plus both gutters), the lens lane on its right, and
+ *  the transcript's two gutters. Read from the same tokens, so density moves it too. */
+export function peaFloor(root: Element = document.documentElement) {
+  const token = (name: string) => parseFloat(getComputedStyle(root).getPropertyValue(name)) || 0;
+  const gutter = token("--gutter");
+  const measure = token("--type-prose-size") * 0.577 * 76 + gutter * 2;
+  return Math.ceil(measure + token("--control-h") + gutter * 4);
+}
+
 export const ChatShell = memo(function ChatShell(props: ChatShellProps) {
   return <CurrentThreadChatSurface {...props} />;
 });
@@ -421,13 +433,15 @@ function ChatSurface({ target, docked = false }: ChatShellProps) {
                 ? undefined
                 : {
                     target: "start",
-                    defaultSize: 300,
+                    defaultSize: SIDEBAR.size,
                     minSize: 240,
+                    // Under pressure the sidebar folds before the transcript loses its measure.
+                    minOtherSize: peaFloor(),
                     persist: "pe.sideWidth",
                     collapse: {
                       collapsed: !sideOpen,
                       onCollapsedChange: (collapsed) => store.actions.setSideOpen(!collapsed),
-                      collapsedSize: 32,
+                      collapsedSize: SIDEBAR.rail,
                       title: "threads",
                     },
                   }

@@ -2,7 +2,7 @@ import { useEffect, useMemo, useState, type ReactNode } from "react";
 import { useAtomValue } from "@effect/atom-react";
 import { useRouterState } from "@tanstack/react-router";
 import { routeAddress } from "@pe/agent-contracts";
-import { ChatShell } from "#/chat/chat-shell";
+import { ChatShell, SIDEBAR, peaFloor } from "#/chat/chat-shell";
 import { EmptyState } from "@pe/kit/lang/empty";
 import { Pane, PaneSplit } from "@pe/kit/lang/pane";
 import { ChatPlanIntent } from "#/route/situation-ladder";
@@ -13,6 +13,32 @@ import { RouteRetention } from "./route-retention";
 
 /** Collapsed tools keep only their header: one bar of labelled tabs. */
 const TOOLS_BAR = { horizontal: 280, vertical: 40 };
+
+/** Pea-primary widths (counsel's rule, re-openable by kaitpw): Pea never drops below its reading
+ *  measure while the tools sit at their default; the tools take what remains, the thread sidebar
+ *  folding first; the tools' floor is the kit's 36rem rung (where a Table stacks its cells).
+ *  Below Pea (sidebar folded) + seam + floor the dock stacks instead of squeezing Pea. */
+export function dockWidths(viewport: number, rem: number, pea: number, gutter: number) {
+  const floor = 36 * rem;
+  const folded = pea + SIDEBAR.rail + gutter;
+  const open = pea + SIDEBAR.size + gutter;
+  const beside = viewport - gutter - open;
+  return {
+    floor,
+    folded,
+    stackBelow: folded + gutter + floor,
+    tools: beside >= floor ? beside : viewport - gutter - folded,
+  };
+}
+const measureDock = () => {
+  const style = getComputedStyle(document.documentElement);
+  return dockWidths(
+    window.innerWidth,
+    parseFloat(style.fontSize) || 16,
+    peaFloor(),
+    parseFloat(style.getPropertyValue("--gutter")) || 8,
+  );
+};
 
 /** Pea starts, connected tools end. The URL is the one state: a tool route expands the tools,
  *  `/pea` collapses them; retained route bodies keep their Page and DOM either way. */
@@ -45,13 +71,14 @@ export function RouteDock({
     if (plan && plan.route !== tabs.route) store.actions.cancelPlan();
   }, [plan, tabs.route, store]);
   const [narrow, setNarrow] = useState(false);
+  const [widths] = useState(measureDock);
   useEffect(() => {
-    const media = window.matchMedia("(max-width: 960px)");
+    const media = window.matchMedia(`(max-width: ${widths.stackBelow - 1}px)`);
     const sync = () => setNarrow(media.matches);
     sync();
     media.addEventListener("change", sync);
     return () => media.removeEventListener("change", sync);
-  }, []);
+  }, [widths.stackBelow]);
   const failure = tabs.failure ?? planRefusal?.message ?? null;
   const tools = Boolean(tabs.route || tabs.tabs.length || failure);
   const active = tabs.active?.id ?? null;
@@ -64,11 +91,9 @@ export function RouteDock({
         hide={tools ? undefined : "end"}
         resize={{
           target: "end",
-          // The width a tool had beside the old 400px Pea dock at 1280: narrower folds a table
-          // head past its query (demo-lane families). ponytail: a tuned default, owed a rule.
-          defaultSize: narrow ? 320 : 880,
-          minSize: narrow ? 180 : 360,
-          minOtherSize: narrow ? 200 : 360,
+          defaultSize: narrow ? 320 : widths.tools,
+          minSize: narrow ? 180 : widths.floor,
+          minOtherSize: narrow ? 200 : widths.folded,
           persist: narrow ? undefined : "pe.toolsWidth",
           collapse: {
             collapsed: !tabs.route,
