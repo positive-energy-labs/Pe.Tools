@@ -161,7 +161,7 @@ async function state(page: Page) {
       visibility: document.visibilityState,
       pictureTitle: [...document.querySelectorAll('[data-pane-id="e-picture"] [data-slot="pane-title"]')].find(shown)?.innerText ?? '',
       crumb: [...document.querySelectorAll('[data-e-crumb], [data-picture-readout]')].filter(shown).map(e => e.innerText).join(' | '),
-      selected: [...document.querySelectorAll('[data-crumb-segment="selection"][data-revit-ids]')].find(shown)?.getAttribute('data-revit-ids') ?? null,
+      selected: [...document.querySelectorAll('[data-crumb-segment="selection"]')].find(shown)?.innerText.trim() || null,
       focus: { tag: active?.tagName, label: active?.getAttribute('aria-label'), id: active?.id ?? '', value: active?.value ?? null, scroll },
       panes: [...document.querySelectorAll('[data-pane-id]')].filter(shown).map(e => {
         const body = e.querySelector('[data-slot="pane-body"]');
@@ -784,6 +784,12 @@ test("seeded real-user route journey", async () => {
         async () => !!new URL(await p.url()).searchParams.get("selected"),
         "tree selection published to URL",
       );
+      await p.until(
+        async () =>
+          !!(await state(p)).selected &&
+          !!(await visibleText(p, '[data-picture-readout="selection"]')),
+        "selected subject rendered in crumb and readout before copying its URL",
+      );
       const copied = await p.url();
       const before = await state(p);
       await p.open(copied);
@@ -791,13 +797,21 @@ test("seeded real-user route journey", async () => {
       expect(new URL(await p.url()).searchParams.get("selected")).toBe(
         new URL(copied).searchParams.get("selected"),
       );
+      await p.until(
+        async () => (await state(p)).crumb === before.crumb,
+        "copied URL renders the same selected readout",
+      );
       expect((await state(p)).crumb).toBe(before.crumb);
       await p.reload();
       await settled(p);
+      await p.until(
+        async () => (await state(p)).crumb === before.crumb,
+        "reload renders the same selected readout",
+      );
       expect((await state(p)).crumb).toBe(before.crumb);
       expect(new URL(await p.url()).searchParams.get("system")).toBe(a);
       // Focus the selected subject through its real control; Escape alone must preserve its pose.
-      await click(p, '[data-crumb-segment="selection"][data-revit-ids]');
+      await click(p, '[data-crumb-segment="selection"]');
       expect(
         new URL(await p.url()).searchParams.get("selected"),
         "selection is armed before Escape",
