@@ -139,6 +139,7 @@ test("a tab press expands the tools on that Place; a Work press restores its Pag
       key: { binding: "host", route: "ducts", target: null },
       url: "/ducts",
       reason: null,
+      matches: [{ threadId: "T", tabId: "tab-ducts" }],
     }),
   );
   await waitFor(() => expect(router.state.location.pathname).toBe("/ducts"));
@@ -149,79 +150,70 @@ test("a tab press expands the tools on that Place; a Work press restores its Pag
   expect(mounts).toBe(1);
 });
 
-const resume = (key: WorkKey, url = "/ducts") => ({ key, url, reason: null });
+// Host-shaped `work.resume` answers: `matches` are the host's Places for this Work, in canonical
+// tab order per thread; the web never derives them.
+const resume = (
+  key: WorkKey,
+  url = "/ducts",
+  matches: { threadId: string; tabId: string }[] = [],
+) => ({ key, url, reason: null, matches });
 const shown = (router: Awaited<ReturnType<typeof mount>>) => ({
   path: router.state.location.pathname,
   system: (router.state.location.search as { system?: string }).system,
   selected: String((router.state.location.search as { selected?: unknown }).selected ?? ""),
+  target: (router.state.location.search as { target?: string }).target,
   tab: (router.state.location.state as { __peRouteTab?: { id: string } }).__peRouteTab?.id ?? null,
 });
+const press = (resumed: ReturnType<typeof resume>) =>
+  act(() => store.actions.openWork("T", "ducts", resumed));
 
-test("two documents on one tool: each Work restores its own tab's Page and id", async () => {
+test("two documents on one tool: each Work's match restores its own tab's Page and id", async () => {
   const router = await mount();
-  const work = (target: typeof DOC_A) =>
-    act(() =>
-      store.actions.openWork(
-        "T",
-        "ducts",
-        // The host's base url never wins over the tab that holds this Work.
-        resume({ binding: "address", route: "ducts", target }, "/ducts?system=base"),
-      ),
-    );
-  await work(DOC_B);
+  // The host's base url never wins over the Place it matched.
+  await press(
+    resume({ binding: "address", route: "ducts", target: DOC_B }, "/ducts?system=base", [
+      { threadId: "T", tabId: "tab-b" },
+    ]),
+  );
   await waitFor(() => expect(shown(router)).toMatchObject({ system: "SB", tab: "tab-b" }));
   expect(shown(router).selected).toBe("202");
-  await work(address(String.raw`c:\JOBS\level a.rvt`));
+  await press(
+    resume({ binding: "address", route: "ducts", target: DOC_A }, "/ducts?system=base", [
+      { threadId: "T", tabId: "tab-a" },
+      { threadId: "T", tabId: "tab-b" },
+    ]),
+  );
+  // Canonical tab order: the first match in this thread.
   await waitFor(() => expect(shown(router)).toMatchObject({ system: "SA", tab: "tab-a" }));
   expect(shown(router).selected).toBe("101");
 });
 
-test("an open document's Work keeps its non-default Page by its exact open lifetime", async () => {
+test("no match, or another thread's Place, opens a new Place in this thread", async () => {
   const router = await mount();
-  await act(() =>
-    store.actions.openWork(
-      "T",
-      "ducts",
-      resume({
-        binding: "address",
-        route: "ducts",
-        target: address("C:/Jobs/Open.rvt"),
-        from: { session: "s1", openId: "o1" },
-      }),
-    ),
-  );
-  await waitFor(() => expect(shown(router)).toMatchObject({ system: "SO", tab: "tab-open" }));
-  expect(shown(router).selected).toBe("303");
-});
-
-test("a Work no tab holds opens its url as a new Place, never another Work's tab", async () => {
-  const router = await mount();
-  await act(() =>
-    store.actions.openWork(
-      "T",
-      "ducts",
-      resume(
-        { binding: "address", route: "ducts", target: address("C:/Jobs/Level C.rvt") },
-        "/ducts?system=SC",
-      ),
-    ),
-  );
+  const key = {
+    binding: "address",
+    route: "ducts",
+    target: address("C:/Jobs/Level C.rvt"),
+  } as const;
+  await press(resume(key, "/ducts?system=SC"));
   await waitFor(() => expect(shown(router)).toMatchObject({ path: "/ducts", system: "SC" }));
   expect(["tab-ducts", "tab-a", "tab-b", "tab-open"]).not.toContain(shown(router).tab);
-  // A different lifetime of an open ref, or a session alone, is not that tab's Work either.
-  await act(() =>
-    store.actions.openWork(
-      "T",
-      "ducts",
-      resume({
-        binding: "open",
-        route: "ducts",
-        target: null,
-        open: { session: "s1", openId: "o2" },
-      }),
+  // A match naming another thread's tab never pulls it here, even when this thread holds that id.
+  await press(resume(key, "/ducts?system=SX", [{ threadId: "OTHER", tabId: "tab-a" }]));
+  await waitFor(() => expect(shown(router).system).toBe("SX"));
+  expect(shown(router).tab).not.toBe("tab-a");
+});
+
+test("a SaveAs ref with two known Addresses gets no match from the host: a new Place", async () => {
+  // The host gives `matches: []` for an open ref whose lifetime knew two Addresses.
+  const router = await mount();
+  await press(
+    resume(
+      { binding: "address", route: "ducts", target: address("C:/Jobs/Saved As.rvt") },
+      "/ducts?system=SAS",
     ),
   );
-  await waitFor(() => expect(shown(router).system).toBeUndefined());
+  await waitFor(() => expect(shown(router).system).toBe("SAS"));
   expect(shown(router).tab).not.toBe("tab-open");
 });
 
@@ -236,16 +228,13 @@ test("every Place carries its own named close, in the tab order", async () => {
   expect(screen.queryByRole("button", { name: "Close this Place" })).toBeNull();
 });
 
-test("parent-r2 receipt: the host's base url never replaces the saved Place's retained Page", async () => {
+test("parent-r2 receipt: the host's base url never replaces the matched Place's retained Page", async () => {
   const router = await mount();
-  await act(() =>
-    store.actions.openWork(
-      "T",
-      "ducts",
-      resume(
-        { binding: "address", route: "ducts", target: address(String.raw`c:\models\office.rvt`) },
-        "/ducts?target=c%3A%5Cmodels%5Coffice.rvt",
-      ),
+  await press(
+    resume(
+      { binding: "address", route: "ducts", target: address(String.raw`c:\models\office.rvt`) },
+      "/ducts?target=c%3A%5Cmodels%5Coffice.rvt",
+      [{ threadId: "T", tabId: "cac00000-0000-4000-8000-000000000011" }],
     ),
   );
   await waitFor(() =>
@@ -257,23 +246,22 @@ test("parent-r2 receipt: the host's base url never replaces the saved Place's re
   );
 });
 
-// KNOWN GAP, waits for the route thread's `WorkResume.matches` ({threadId, tabId}[], host-derived).
-// The producer (`storedWorkKey`, packages/runtime/src/route-workspace.ts:555) decodes an address
-// WorkKey with no `from`, so an exact open-ref Place cannot prove it holds that Work from the key
-// alone. No web-side guess fills it: today this press opens a fresh Place. `test.fails` flips red
-// when the gap closes, so the expectation below becomes the live assertion.
-test.fails("known gap: an address key with no `from` restores the open-ref Place holding its Page", async () => {
+// Was the known gap: the producer's address key carries no `from`, so only the host's `matches`
+// can say this open-ref Place holds the Work. The legacy Place keeps its Page and id, and its
+// binding carry rebases onto the resume's stable Address so the Work stays readable once closed.
+test("an address key with no `from` restores the matched open-ref Place, rebased onto the stable Address", async () => {
   const router = await mount();
-  await act(() =>
-    store.actions.openWork(
-      "T",
-      "ducts",
-      resume({ binding: "address", route: "ducts", target: address(String.raw`c:\jobs\open.rvt`) }),
+  const stable = "/ducts?target=C%3A%2FJobs%2FOpen.rvt";
+  await press(
+    resume(
+      { binding: "address", route: "ducts", target: address(String.raw`c:\jobs\open.rvt`) },
+      stable,
+      [{ threadId: "T", tabId: "tab-open" }],
     ),
   );
-  await waitFor(() => expect(shown(router)).toMatchObject({ system: "SO", tab: "tab-open" }), {
-    timeout: 1500,
-  });
+  await waitFor(() => expect(shown(router)).toMatchObject({ system: "SO", tab: "tab-open" }));
+  expect(shown(router).selected).toBe("303");
+  expect(shown(router).target).toBe("C:/Jobs/Open.rvt");
 });
 
 test.each([
