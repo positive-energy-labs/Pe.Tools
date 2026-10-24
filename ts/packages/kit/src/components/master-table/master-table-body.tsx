@@ -19,7 +19,7 @@ import { createPortal } from "react-dom";
 import type { ReactTable, RowData } from "@tanstack/react-table";
 import { defaultRangeExtractor, useVirtualizer, type Range } from "@tanstack/react-virtual";
 
-import { domSpans, useProjection } from "../lang/scroll";
+import { useDomProjection, useProjection } from "../lang/scroll";
 import { CellHost } from "../lang/cell";
 import { land } from "../lang/land";
 import { Row } from "../lang/row";
@@ -296,15 +296,17 @@ export function MasterTableBody<Row extends RowData>({
     selected: selectedKeys?.has(visibleRows[index]!.id) || activeKey === visibleRows[index]!.id,
   });
   const version = useMemo(() => ({}), [visibleRows, damage, selectedKeys, activeKey, virtualized]);
-  useProjection(() => {
-    if (!scroller) return [];
-    if (virtualized) return virtualSpans(virtual, visibleRows.length, margin, ROW_ESTIMATE, mark);
-    return tbody
-      ? domSpans(scroller, tbody.querySelectorAll(":scope > tr[data-index]"), (row) =>
-          mark(Number((row as HTMLElement).dataset.index)),
-        )
-      : [];
-  }, version);
+  useProjection(
+    virtualized
+      ? () => virtualSpans(virtual, visibleRows.length, margin, ROW_ESTIMATE, mark)
+      : null,
+    version,
+  );
+  useDomProjection(
+    !virtualized && tbody ? () => tbody.querySelectorAll(":scope > tr[data-index]") : null,
+    (row) => mark(Number((row as HTMLElement).dataset.index)),
+    version,
+  );
   const tail = virtualized ? virtual.getTotalSize() - (drawn.at(-1)?.end ?? 0) : 0;
 
   // N1: the active row is followed into view only when it was named from elsewhere (a link, the

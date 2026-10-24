@@ -36,11 +36,14 @@ export function writeTheme(next: ThemeMode) {
   applyTheme();
   notify();
 }
-function subscribeTheme(listener: () => void) {
+/** Called after the resolved theme changes: a toggle, another tab, or the system scheme in auto. */
+export function subscribeTheme(listener: () => void) {
   listeners.add(listener);
   const media = window.matchMedia?.("(prefers-color-scheme: dark)");
   const onMedia = () => {
-    if (readTheme() === "auto") applyTheme();
+    if (readTheme() !== "auto") return;
+    applyTheme();
+    notify();
   };
   const onStorage = (event: StorageEvent) => {
     if (event.storageArea !== window.localStorage || (event.key !== "theme" && event.key !== null))
