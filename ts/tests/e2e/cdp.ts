@@ -1,7 +1,8 @@
 // The whole e2e helper: trusted CDP input on a real control, and reads of the rendered DOM.
 // No element.click(), no handlers, no stores, no fetch. Runtime.evaluate only locates and reads.
-// Browser: your own `chrome-agent launch --headless --port 924x`; pass that port as CDP_PORT.
+// Browser: explicitly owned or consented CDP endpoint; pass its port as CDP_PORT.
 // Hold operators own 9222/9223/9231, so there is no default port.
+import { connectCdp, getTargets } from "@pe/browser";
 import { execSync } from "node:child_process";
 import { mkdirSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
@@ -13,79 +14,30 @@ export async function connect(
   targetId = process.env.CDP_TARGET,
 ) {
   if (!port)
-    throw new Error("PRECONDITION: CDP_PORT (your own chrome-agent's port, 924x) is unset");
-  const targets = (await (
-    await fetch(`http://127.0.0.1:${port}/json`, { signal: AbortSignal.timeout(10_000) })
-  ).json()) as {
-    id: string;
-    type: string;
-    webSocketDebuggerUrl: string;
-  }[];
-  const target = targets.find((t) => t.type === "page" && (!targetId || t.id === targetId));
-  if (!target) throw new Error(`PRECONDITION: no Chrome page target ${targetId ?? "(any)"}`);
-  const ws = new WebSocket(target.webSocketDebuggerUrl);
-  await new Promise<void>((resolve, reject) => {
-    const timer = setTimeout(() => {
-      ws.close();
-      reject(new Error("CDP connection timed out"));
-    }, 10_000);
-    ws.onopen = () => {
-      clearTimeout(timer);
-      resolve();
-    };
-    ws.onerror = () => {
-      clearTimeout(timer);
-      reject(new Error("CDP connection failed"));
-    };
-  });
-  let id = 0;
+    throw new Error("PRECONDITION: CDP_PORT (an explicitly owned or consented browser) is unset");
+  const target = (await getTargets(port)).find(
+    (t) => t.type === "page" && (!targetId || t.id === targetId),
+  );
+  if (!target) {
+    throw new Error(`PRECONDITION: no Chrome page target ${targetId ?? "(any)"}`);
+  }
+  if (!target.webSocketDebuggerUrl)
+    throw new Error(`PRECONDITION: target ${target.id} has no CDP endpoint`);
+  const transport = await connectCdp(target.webSocketDebuggerUrl);
   let loadSerial = 0;
   const errors: string[] = [];
-  const listeners = new Set<
-    (event: { method?: string; params?: any; sessionId?: string }) => void
-  >();
-  const pending = new Map<
-    number,
-    { accept(m: { result?: any; error?: { message: string } }): void; reject(error: Error): void }
-  >();
-  const disconnected = () => {
-    for (const command of pending.values()) command.reject(new Error("CDP socket disconnected"));
-    pending.clear();
-  };
-  ws.onclose = disconnected;
-  ws.onerror = disconnected;
-  ws.onmessage = (e) => {
-    const m = JSON.parse(String(e.data));
-    if (m.method === "Page.loadEventFired") loadSerial++;
-    for (const listener of listeners) listener(m);
-    if (m.method === "Runtime.exceptionThrown")
-      errors.push(
-        m.params.exceptionDetails.exception?.description ?? m.params.exceptionDetails.text,
-      );
-    pending.get(m.id)?.accept(m);
-    pending.delete(m.id);
-  };
+  const unsubscribe = transport.subscribe((event) => {
+    if (event.method === "Page.loadEventFired") loadSerial++;
+    if (event.method === "Runtime.exceptionThrown") {
+      const params = event.params as {
+        exceptionDetails: { exception?: { description?: string }; text: string };
+      };
+      errors.push(params.exceptionDetails.exception?.description ?? params.exceptionDetails.text);
+    }
+  });
+  // Existing interaction helpers deliberately accept dynamic CDP and flattened frame sessions.
   const send = (method: string, params: object = {}, sessionId?: string): Promise<any> =>
-    new Promise((resolve, reject) => {
-      if (ws.readyState !== WebSocket.OPEN) return reject(new Error("CDP socket is not open"));
-      const commandId = ++id;
-      const timer = setTimeout(() => {
-        pending.delete(commandId);
-        reject(new Error(`${method}: CDP command timed out`));
-      }, 15_000);
-      pending.set(commandId, {
-        accept: (m) => {
-          clearTimeout(timer);
-          if (m.error) reject(new Error(`${method}: ${m.error.message}`));
-          else resolve(m.result);
-        },
-        reject: (error) => {
-          clearTimeout(timer);
-          reject(error);
-        },
-      });
-      ws.send(JSON.stringify({ id: commandId, method, params, sessionId }));
-    });
+    transport.sendRaw(method, params as Record<string, unknown>, { sessionId });
   const read = async <T>(expression: string): Promise<T> => {
     const r = await send("Runtime.evaluate", {
       expression,
@@ -111,22 +63,21 @@ export async function connect(
     await send("Network.enable");
     await send("Network.setCacheDisabled", { cacheDisabled: true });
   } catch (error) {
-    disconnected();
-    ws.close();
+    unsubscribe();
+    await transport.close();
     throw error;
   }
   const page = {
     /** Uncaught page exceptions, for evidence dumps only (never an assertion). */
     errors,
     onEvent(listener: (event: { method?: string; params?: any; sessionId?: string }) => void) {
-      listeners.add(listener);
-      return () => listeners.delete(listener);
+      return transport.subscribe(listener);
     },
     send,
     read,
-    close: () => {
-      disconnected();
-      ws.close();
+    close: async () => {
+      unsubscribe();
+      await transport.close();
     },
     text: () => read<string>("document.body.innerText"),
     textOf: (selector: string) =>
@@ -440,7 +391,7 @@ export async function journey(
     );
   }
   await page.dump(dir, "final").catch(() => {});
-  page.close();
+  await page.close();
   writeFileSync(join(dir, "run.log"), log.join("\n") + "\n");
   console.log(log.at(-1));
   process.exitCode = failed ? 1 : 0;

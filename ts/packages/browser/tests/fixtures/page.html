@@ -1,0 +1,132 @@
+<!doctype html>
+<html lang="en">
+  <meta charset="utf-8" /><title>Pe browser native acceptance</title>
+  <style>
+    body {
+      font: 18px system-ui;
+      margin: 24px;
+    }
+    button,
+    input,
+    select {
+      font: inherit;
+      margin: 8px;
+      padding: 8px;
+    }
+    #hover {
+      display: inline-block;
+      padding: 20px;
+      background: #ddd;
+    }
+    #tip {
+      visibility: hidden;
+    }
+    #hover:hover #tip {
+      visibility: visible;
+    }
+    #drag {
+      width: 260px;
+      height: 30px;
+      background: #ace;
+      touch-action: none;
+    }
+    #drop {
+      margin: 20px 0;
+      width: 260px;
+      height: 70px;
+      border: 2px solid;
+    }
+    iframe {
+      width: 600px;
+      height: 120px;
+    }
+    #bottom {
+      margin-top: 1300px;
+    }
+  </style>
+  <h1>Native controls</h1>
+  <form id="form">
+    <label>Name <input id="name" name="name" required /></label>
+    <label><input id="check" type="checkbox" /> Confirm</label>
+    <select id="choice">
+      <option>First</option>
+      <option>Second</option>
+    </select>
+    <button id="submit">Submit</button>
+  </form>
+  <output id="result"></output>
+  <form method="post" action="/sign-in">
+    <button id="sign-in">Sign in as fixture operator</button>
+  </form>
+  <output id="input-trust"></output
+  ><output id="keyboard-trust"></output>
+  <div id="hover">Hover <span id="tip">Visible tooltip</span></div>
+  <label>Drag value <input id="drag" type="range" min="0" max="100" value="50" /></label>
+  <div id="drop">Drop here</div>
+  <button id="dialog">Open dialog</button
+  ><output id="dialog-result"></output>
+  <button id="popup">Open popup</button
+  ><button id="network">Load resource</button>
+  <button id="network-failure">Fail request</button
+  ><output id="network-failure-result"></output>
+  <button id="console-failure">Console error</button
+  ><button id="page-failure">Page error</button>
+  <input id="upload" type="file" /><output id="file-result"></output>
+  <a id="download" href="/download" download="fixture.txt">Download fixture</a>
+  <iframe title="Native frame" src="/frame"></iframe>
+  <button id="bottom">Bottom action</button
+  ><output id="scroll-result"></output>
+  <script>
+    const q = (id) => document.getElementById(id);
+    for (const kind of ["pointerdown", "pointerup", "pointermove"])
+      document.addEventListener(
+        kind,
+        (e) =>
+          (document.documentElement.dataset[kind] = JSON.stringify({
+            id: e.target.id,
+            x: e.clientX,
+            y: e.clientY,
+            buttons: e.buttons,
+            trusted: e.isTrusted,
+          })),
+      );
+    q("form").addEventListener(
+      "input",
+      (e) => (q("input-trust").textContent = `input-trusted=${e.isTrusted}`),
+    );
+    q("form").addEventListener(
+      "keydown",
+      (e) => (q("keyboard-trust").textContent = `keyboard-trusted=${e.isTrusted}`),
+    );
+    q("form").onsubmit = (e) => {
+      e.preventDefault();
+      q("result").textContent =
+        `${q("name").value}|${q("check").checked}|${q("choice").value}|trusted=${e.isTrusted}`;
+      console.log("fixture-submit", q("name").value);
+    };
+    q("dialog").onclick = () => {
+      q("dialog-result").textContent = confirm("Fixture confirmation") ? "accepted" : "dismissed";
+    };
+    q("popup").onclick = () => window.open("/popup", "fixture-popup");
+    q("network").onclick = async () => {
+      const r = await fetch("/resource");
+      q("network").textContent = await r.text();
+    };
+    q("network-failure").onclick = async () => {
+      try {
+        await fetch("/disconnect");
+      } catch {
+        q("network-failure-result").textContent = "Network failed";
+      }
+    };
+    q("console-failure").onclick = () => console.error("fixture-console-fault");
+    q("page-failure").onclick = () => {
+      throw new Error("fixture-page-fault");
+    };
+    q("upload").onchange = () => (q("file-result").textContent = q("upload").files[0]?.name);
+    q("bottom").onclick = (e) =>
+      (q("scroll-result").textContent = `scrolled=${scrollY > 500}|trusted=${e.isTrusted}`);
+    q("drag").oninput = (e) =>
+      (q("drop").textContent = `Dragged|trusted=${e.isTrusted}|value=${q("drag").value}`);
+  </script>
+</html>

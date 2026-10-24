@@ -38,6 +38,9 @@
     "packages/kit": {
       "entry": ["tests/browser.mjs"]
     },
+    "packages/browser": {
+      "entry": ["src/index.ts", "src/cli.ts", "src/keeper.ts", "tests/fixtures/*.ts"]
+    },
     "packages/mcps": {
       "entry": ["src/server.ts"]
     },
