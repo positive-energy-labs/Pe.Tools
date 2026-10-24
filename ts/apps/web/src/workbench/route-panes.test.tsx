@@ -53,11 +53,13 @@ const tabOffice: ThreadTab = {
 };
 const threads = [{ id: "T", tabs: [ducts, tabA, tabB, tabOpen, tabOffice] }];
 vi.mock("./provider", () => ({ useWorkbench: () => ({ store, threads }) }));
-vi.mock("#/chat/chat-shell", () => ({
-  ChatShell: () => <div data-chat-probe="">pea</div>,
-  SIDEBAR: { size: 300, rail: 32 },
-  peaFloor: () => 643,
-}));
+vi.mock("#/chat/chat-shell", async () => {
+  const { createContext, useContext } = await import("react");
+  const ToolsBar = createContext<React.ReactNode>(null);
+  // As the real shell: Pea's header draws the collapsed tools bar.
+  const ChatShell = () => <div data-chat-probe="">{useContext(ToolsBar)}</div>;
+  return { ChatShell, ToolsBar, SIDEBAR: { size: 300, rail: 32 }, peaFloor: () => 643 };
+});
 vi.mock("#/route/situation-ladder", () => ({ ChatPlanIntent: createContext(null) }));
 vi.mock("#/readings", () => ({
   useReading: () => ({ state: "pending" }),
@@ -118,8 +120,12 @@ test("a thread opens its conversation with Pea first and the tools collapsed, no
   await act(() => new Promise((done) => setTimeout(done, 50)));
   expect(router.state.location.pathname).toBe("/pea");
   expect(screen.getByRole("button", { name: TAB }).getAttribute("aria-pressed")).toBe("false");
-  expect(screen.getByText("tools collapsed")).toBeTruthy();
+  // Collapsed is header-only: the labelled Thread Places strip in Pea's header, no tools column,
+  // no placeholder, no tool body.
   const pea = document.querySelector("[data-chat-probe]")!;
+  expect(pea.querySelector('[role="group"][aria-label="Thread Places"]')).toBeTruthy();
+  expect(tools().closest(".hidden")).toBeTruthy();
+  expect(document.body.textContent).not.toMatch(/tools collapsed/i);
   expect(pea.compareDocumentPosition(tools()) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
   expect(mounts).toBe(0);
 });
@@ -129,11 +135,12 @@ test("a tab press expands the tools on that Place; a Work press restores its Pag
   fireEvent.click(screen.getByRole("button", { name: TAB }));
   await waitFor(() => expect(router.state.location.pathname).toBe("/ducts"));
   await waitFor(() => expect(screen.getByText("S1")).toBeTruthy());
-  expect(screen.queryByText("tools collapsed")).toBeNull();
+  expect(tools().closest(".hidden")).toBeNull();
+  expect(tools().querySelector('[role="group"][aria-label="Thread Places"]')).toBeTruthy();
   expect(mounts).toBe(1);
 
   await act(() => router.navigate({ to: "/pea", search: { thread: "T" } } as never));
-  expect(screen.getByText("tools collapsed")).toBeTruthy();
+  expect(tools().closest(".hidden")).toBeTruthy();
   await act(() =>
     store.actions.openWork("T", "ducts", {
       key: { binding: "host", route: "ducts", target: null },
