@@ -1,7 +1,7 @@
 /** Route-owned Situation: the primary lamp and controls join the global bar; the neutral page
  * body lives in its mounted drawer. Hosted and standalone routes keep the same body locally.
  * Sentence, staged Work, commit, verbs and log still project the existing owner exactly once. */
-import { useCallback, useMemo, useState, type ReactNode } from "react";
+import { useMemo, type ReactNode } from "react";
 import type { TrichotomyCellLike } from "@pe/agent-contracts";
 import { PrimaryRouteControls } from "#/navigation/route-controls";
 import {
@@ -12,7 +12,6 @@ import {
   type CellWire,
   type WorkSummary,
 } from "#/components/work/band";
-import { useHostEvents } from "#/readings";
 import { situationCells } from "./cells";
 import { Ladder } from "./ladder";
 import type { ActionHandle, RouteHandle } from "./handle";
@@ -66,39 +65,6 @@ export interface SituationProps {
   palette?: () => void;
 }
 
-/**
- * The receipt for an addressless Work the host swept when its document closed: the host owns that
- * edge and says on the World stream how many Work documents it removed, so the route reports what
- * was deleted rather than the count it last saw staged (2026-09-22, addressless Work is ephemeral).
- */
-function useDiscardReceipt(handle: RouteHandle<any, any, any, any>, enabled = true) {
-  const route = handle.manifest.work?.route ?? null;
-  const open = handle.work.key.open ?? handle.bindingLost?.ref ?? null;
-  const session = open?.session ?? null;
-  const openId = open?.openId ?? null;
-  const [removed, setRemoved] = useState(0);
-  useHostEvents<DiscardEvent>(
-    enabled && !handle.demo && route !== null && session !== null,
-    useCallback(
-      (event) => {
-        if (event.type !== "route_workspace" || event.action !== "discard") return;
-        if (event.route !== route) return;
-        if (event.scope.open?.session !== session || event.scope.open?.openId !== openId) return;
-        setRemoved(event.removed ?? 1);
-      },
-      [route, session, openId],
-    ),
-  );
-  if (removed === 0) return false;
-  return {
-    text:
-      removed === 1
-        ? "unsaved document closed — the Work staged on it was discarded"
-        : `unsaved document closed — the Work staged on it was discarded from ${removed} routes`,
-    dismiss: () => setRemoved(0),
-  };
-}
-
 const NO_CELLS: Record<string, TrichotomyCellLike> = {};
 
 type WorkDraw = (summary: WorkSummary, sentence: ReactNode) => ReactNode;
@@ -107,14 +73,6 @@ type WorkDraw = (summary: WorkSummary, sentence: ReactNode) => ReactNode;
  * aggregate writes (a native patch projected onto the cells it would write, ruling 14).
  */
 type WorkRender = WorkDraw | { draw: WorkDraw; counted: Record<string, TrichotomyCellLike> };
-
-type DiscardEvent = {
-  type?: string;
-  action?: string;
-  route?: string;
-  removed?: number;
-  scope: { open?: { session: string; openId: string } };
-};
 
 export function Situation({
   handle,
@@ -171,7 +129,6 @@ export function Situation({
       // The commit verb is drawn once: in the Work sentence while something is staged, else here.
       !(name === commit && summary.staged > 0),
   ) as [string, ActionHandle][];
-  const receipt = useDiscardReceipt(handle, !inspection);
   const commitAction = !inspection && commit ? handle.actions[commit] : undefined;
   const workLine = (
     <WorkSentence
@@ -278,12 +235,6 @@ export function Situation({
                 <WorkStanding
                   conflict={handle.work.conflict}
                   unresolved={unresolved as string[]}
-                  lifetime={
-                    handle.work.ephemeral && summary.staged
-                      ? "Unsaved document. This Work lives until it closes. Save to keep it."
-                      : undefined
-                  }
-                  receipt={receipt || undefined}
                   reload={handle.work.reload}
                   startFresh={
                     handle.work.startFresh
