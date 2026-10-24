@@ -118,6 +118,33 @@ function usePaneFit(
 
 const KEYBOARD_STEP_PX = 16;
 
+/** Keep drawing buffers and projection observers at their committed layout until release. */
+function holdPictures(split: HTMLElement | null) {
+  const pictures = [...(split?.querySelectorAll<HTMLElement>("[data-picture]") ?? [])]
+    .filter((node) => !node.parentElement?.closest("[data-picture]"))
+    .flatMap((node) => {
+      const { clientWidth: width, clientHeight: height } = node;
+      if (!width || !height) return [];
+      const style = node.style.cssText;
+      node.style.width = `${width}px`;
+      node.style.height = `${height}px`;
+      node.style.flex = "none";
+      node.style.transformOrigin = "top left";
+      node.dataset.paneResizing = "";
+      return [{ node, width, height, style }];
+    });
+  return (finish = false) => {
+    for (const { node, width, height, style } of pictures) {
+      if (finish) {
+        node.style.cssText = style;
+        delete node.dataset.paneResizing;
+      } else if (node.parentElement) {
+        node.style.scale = `${node.parentElement.clientWidth / width} ${node.parentElement.clientHeight / height}`;
+      }
+    }
+  };
+}
+
 interface PaneResizeHandleProps {
   axis: "horizontal" | "vertical";
   value: number;
@@ -130,9 +157,7 @@ interface PaneResizeHandleProps {
   onReset: () => void;
 }
 
-// The handle IS the seam between two panes: a full-length hairline, so two panes on one ground
-// never read as one field (chat polish, 2026-10-11 — the sidebar and the conversation had only an
-// 8px gap and a 32px grip between them). Hover and focus darken the whole seam, not a grip.
+// The seam separates pane grounds; hover and focus darken its full length.
 const paneResizeHandleRecipe = tv({
   slots: {
     root: "group relative z-raised flex touch-none items-center justify-center outline-none",
@@ -158,14 +183,25 @@ export function PaneResizeHandle({
   onReset,
 }: PaneResizeHandleProps) {
   const { root, bar } = paneResizeHandleRecipe({ axis });
-  const drag = useRef<{ point: number; size: number; latest: number } | null>(null);
+  const drag = useRef<{
+    point: number;
+    size: number;
+    latest: number;
+    paint: ReturnType<typeof holdPictures>;
+  } | null>(null);
+  useEffect(() => () => drag.current?.paint(true), []);
   const coordinate = (event: Pick<PointerEvent<HTMLDivElement>, "clientX" | "clientY">) =>
     axis === "horizontal" ? event.clientX : event.clientY;
 
   const onPointerDown = (event: PointerEvent<HTMLDivElement>) => {
     event.preventDefault();
     event.currentTarget.setPointerCapture(event.pointerId);
-    drag.current = { point: coordinate(event), size: startValue, latest: startValue };
+    drag.current = {
+      point: coordinate(event),
+      size: startValue,
+      latest: startValue,
+      paint: holdPictures(event.currentTarget.closest('[data-slot="pane-split"]')),
+    };
   };
 
   const onPointerMove = (event: PointerEvent<HTMLDivElement>) => {
@@ -173,11 +209,13 @@ export function PaneResizeHandle({
     const next = drag.current.size + growth * (coordinate(event) - drag.current.point);
     drag.current.latest = next;
     onResize(next, containerSize(), false);
+    drag.current.paint();
   };
 
   const finishPointer = (event: PointerEvent<HTMLDivElement>) => {
     if (!drag.current) return;
     const next = drag.current.latest;
+    drag.current.paint(true);
     drag.current = null;
     if (event.currentTarget.hasPointerCapture(event.pointerId))
       event.currentTarget.releasePointerCapture(event.pointerId);

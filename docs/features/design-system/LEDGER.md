@@ -7,6 +7,7 @@ The one-system design cluster: the design LANGUAGE (raw values in `apps/web/src/
 **This ledger owns every cross-route design-language and primitive gap.** Route ledgers name their own applications and evidence; they never restate a ruling or a gap that lives here. A rule lives in exactly one home: a type, a check, a swatch specimen, or `.agents/skills/lens.house/SKILL.md`. `docs/design/SURFACE-PHILOSOPHY.md` indexes those homes.
 
 ## Decided
+- 2026-10-23, N6: Pane seam drags hold picture layout and scale its retained contents until release; WebGL size changes and drawing share one frame so ResizeObserver cannot expose a cleared buffer. React commit counts alone do not certify stillness.
 - 2026-10-23, D18, kaitpw: "a title and a sentence is prob the right schema". A Pea claim carries a short title and one sentence. The title shows on the working surface. The sentence shows one hover or one press away. This keeps the zero-sentence rule on the working surface, and claims are not an exception to it. Owner: `ductClaimSchema` in `ts/packages/agent-contracts/src/ducts.ts`.
 - 2026-10-23, L3/P1: Kit `Table` stacks labelled cells below 36rem while retaining header controls and grid navigation; Help documentation uses that table and suppresses its own teaching registrations. TU3 browser re-check remains owed.
 - 2026-10-23, L1/P1: Chat headers use `Pane` title tabs and grouped actions in desktop and dialog; New thread carries the visible word `new`, and scope stays in the kit list search row.

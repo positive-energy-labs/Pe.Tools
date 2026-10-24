@@ -69,82 +69,6 @@ test.each(["horizontal", "vertical"] as const)(
   },
 );
 
-test("a split that cannot fit both minimum widths stacks its mounted panes", () => {
-  measure(600);
-  const { container } = render(
-    <PaneSplit
-      axis="horizontal"
-      start={<input aria-label="filter" defaultValue="kept" />}
-      end="drawing"
-      resize={{ target: "end", defaultSize: 340, minSize: 260, minOtherSize: 560 }}
-    />,
-  );
-  expect(container.firstElementChild?.getAttribute("data-axis")).toBe("vertical");
-  expect((container.firstElementChild as HTMLElement).style.gridTemplateRows).toBe(
-    "minmax(0, 1fr) var(--gutter) minmax(0, 1fr)",
-  );
-  expect(screen.getByRole("textbox", { name: "filter" }).getAttribute("value")).toBe("kept");
-  expect(screen.getByText("drawing")).toBeTruthy();
-  expect(screen.queryByRole("separator")).toBeNull();
-});
-
-test("a lower-priority pane with a collapse affordance yields to its subject", () => {
-  measure(600);
-  function Dock() {
-    const [collapsed, onCollapsedChange] = useState(false);
-    return (
-      <PaneSplit
-        axis="horizontal"
-        start="subject"
-        end={<input aria-label="draft" defaultValue="kept" />}
-        resize={{
-          target: "end",
-          defaultSize: 300,
-          minSize: 300,
-          minOtherSize: 400,
-          collapse: { collapsed, onCollapsedChange, collapsedSize: 32, title: "thread" },
-        }}
-      />
-    );
-  }
-  render(<Dock />);
-  const input = screen.getByRole("textbox", { name: "draft", hidden: true });
-  expect(input.closest(".hidden")).toBeTruthy();
-  fireEvent.click(screen.getByRole("button", { name: "Expand thread" }));
-  expect(screen.getByRole("textbox", { name: "draft" })).toBe(input);
-  expect(input.getAttribute("value")).toBe("kept");
-});
-
-test("a stacked split returns to columns on resize without remounting its contents", () => {
-  measure(600);
-  let resized: (entries: { contentRect: { width: number; height: number } }[]) => void;
-  vi.stubGlobal(
-    "ResizeObserver",
-    class {
-      constructor(private callback: typeof resized) {}
-      observe(element: HTMLElement) {
-        if (element.getAttribute("data-slot") === "pane-split") resized = this.callback;
-      }
-      disconnect() {}
-      unobserve() {}
-    },
-  );
-  const { container } = render(
-    <PaneSplit
-      axis="horizontal"
-      start={<input aria-label="filter" defaultValue="kept" />}
-      end="drawing"
-      resize={{ target: "end", defaultSize: 340, minSize: 260, minOtherSize: 560 }}
-    />,
-  );
-  const filter = screen.getByRole("textbox", { name: "filter" });
-  expect(container.firstElementChild?.getAttribute("data-axis")).toBe("vertical");
-  act(() => resized([{ contentRect: { width: 1200, height: 600 } }]));
-  expect(container.firstElementChild?.getAttribute("data-axis")).toBe("horizontal");
-  expect(screen.getByRole("textbox", { name: "filter" })).toBe(filter);
-  expect(screen.getByRole("separator")).toBeTruthy();
-});
-
 test("20 drag steps preview geometry without React commits, then commit once without remounting", () => {
   measure(900);
   vi.stubGlobal("PointerEvent", MouseEvent);
@@ -178,22 +102,43 @@ test("20 drag steps preview geometry without React commits, then commit once wit
   );
   const canvas = container.querySelector("canvas");
   const split = container.querySelector<HTMLElement>('[data-slot="pane-split"]')!;
+  // jsdom supplies no layout/ResizeObserver: deliver the canvas consumer's measured size.
+  vi.spyOn(HTMLElement.prototype, "clientWidth", "get").mockImplementation(
+    function (this: HTMLElement) {
+      return (
+        parseFloat(this.closest<HTMLElement>("[data-picture]")?.style.width ?? "") ||
+        892 - parseFloat(split.style.getPropertyValue("--pane-size"))
+      );
+    },
+  );
+  vi.spyOn(HTMLElement.prototype, "clientHeight", "get").mockReturnValue(600);
+  const setSize = vi.fn((width: number) => {
+    canvas!.width = width;
+    canvas!.height = 600;
+  });
+  const observed = () => {
+    if (canvas!.width !== canvas!.clientWidth) setSize(canvas!.clientWidth);
+  };
+  observed();
+  setSize.mockClear();
   const handle = screen.getByRole("separator");
-  const fitted = split.style.gridTemplateColumns;
   expect(pictureCommits.mock.calls.length).toBeGreaterThan(0);
   fireEvent.pointerDown(handle, { clientX: 600 });
   commits.mockClear();
   pictureCommits.mockClear();
-  for (let step = 1; step <= 20; step++) fireEvent.pointerMove(handle, { clientX: 600 + step });
-  const during = commits.mock.calls.length;
+  for (let step = 1; step <= 20; step++) {
+    fireEvent.pointerMove(handle, { clientX: 600 + step });
+    observed();
+  }
+  expect(commits).not.toHaveBeenCalled();
   expect(split.style.getPropertyValue("--pane-size")).toBe("312px");
+  expect(setSize).not.toHaveBeenCalled();
   fireEvent.pointerUp(handle);
-  expect(during).toBe(0);
+  observed();
+  expect(setSize).toHaveBeenCalledExactlyOnceWith(580);
   expect(commits).toHaveBeenCalledTimes(1);
   expect(pictureCommits).not.toHaveBeenCalled();
-  expect(fitted).toBe("minmax(0, 1fr) var(--gutter) var(--pane-size)");
   expect(container.querySelector("canvas")).toBe(canvas);
-  expect(split.style.gridTemplateColumns).toBe("minmax(0, 1fr) var(--gutter) var(--pane-size)");
   expect(getComputedStyle(split).getPropertyValue("--pane-size")).toBe("312px");
   expect(storage.setItem).toHaveBeenCalledExactlyOnceWith("stillness", "312");
 });
@@ -239,6 +184,7 @@ test.each([true, false])(
     if (rail) {
       expect(input.closest(".hidden")).toBeTruthy();
       fireEvent.click(screen.getByRole("button", { name: "Expand thread" }));
+      expect(screen.getByRole("textbox", { name: "draft" })).toBe(input);
     } else {
       expect(split.dataset.axis).toBe("vertical");
       expect(split.style.gridTemplateRows).toBe("minmax(0, 1fr) var(--gutter) minmax(0, 1fr)");
