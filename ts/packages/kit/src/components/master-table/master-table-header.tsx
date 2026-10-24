@@ -14,23 +14,19 @@ type Table<Row extends RowData> = ReactTable<MasterTableFeatures, Row, unknown>;
 export function MasterTableHeader<Row extends RowData>({
   table,
   columnByKey,
-  stickyTop,
   sortCount,
   gutter,
   gutterWidth,
-  theadRef,
 }: {
   table: Table<Row>;
   columnByKey: ReadonlyMap<string, ResolvedColumn<Row>>;
-  stickyTop: (rowIndex: number) => number;
   sortCount: number;
   gutter: boolean;
   gutterWidth: number;
-  theadRef: React.RefObject<HTMLTableSectionElement | null>;
 }) {
   const headerGroups = table.getHeaderGroups();
   return (
-    <thead ref={theadRef}>
+    <thead className="sticky top-0 z-sticky">
       {headerGroups.map((headerGroup, rowIndex) => (
         <tr key={headerGroup.id}>
           {gutter && rowIndex === 0 && (
@@ -50,7 +46,6 @@ export function MasterTableHeader<Row extends RowData>({
                 key={header.id}
                 column={column}
                 rowSpan={header.rowSpan}
-                stickyTop={stickyTop(rowIndex)}
                 lockLeft={gutter ? gutterWidth : 0}
                 direction={header.column.getIsSorted()}
                 rank={header.column.getSortIndex()}
@@ -62,8 +57,7 @@ export function MasterTableHeader<Row extends RowData>({
                 key={header.id}
                 colSpan={header.colSpan}
                 rowSpan={header.rowSpan}
-                style={{ top: stickyTop(rowIndex) }}
-                className="role-colhead sticky z-sticky whitespace-nowrap h-(--item-h) shadow-[inset_0_-1px_0_var(--pe-line)] border-l border-line px-(--item-pad-x) py-0 text-left on-recess first:border-l-0"
+                className="role-colhead z-sticky whitespace-nowrap h-(--item-h) shadow-[inset_0_-1px_0_var(--pe-line)] border-l border-line px-(--item-pad-x) py-0 text-left on-recess first:border-l-0"
               >
                 <table.FlexRender header={header} />
               </th>
@@ -78,7 +72,6 @@ export function MasterTableHeader<Row extends RowData>({
 function LeafHeader<Row>({
   column,
   rowSpan,
-  stickyTop,
   lockLeft,
   direction,
   rank,
@@ -87,7 +80,6 @@ function LeafHeader<Row>({
 }: {
   column: Column<Row>;
   rowSpan: number;
-  stickyTop: number;
   lockLeft: number;
   direction: false | "asc" | "desc";
   rank: number;
@@ -103,12 +95,12 @@ function LeafHeader<Row>({
         data-lock={column.lock ? "" : undefined}
         rowSpan={rowSpan}
         style={{
-          top: stickyTop,
           left: column.lock ? lockLeft : undefined,
           zIndex: column.lock ? "calc(var(--z-sticky) + 1)" : undefined,
         }}
         className={cn(
-          "sticky z-sticky h-(--item-h) whitespace-nowrap shadow-[inset_0_-1px_0_var(--pe-line)] border-l border-line p-0 align-middle font-normal on-recess first:border-l-0",
+          "z-sticky h-(--item-h) whitespace-nowrap shadow-[inset_0_-1px_0_var(--pe-line)] border-l border-line p-0 align-middle font-normal on-recess first:border-l-0",
+          column.lock && "sticky",
           column.right ? "text-right" : "text-left",
           column.width,
           column.headerClassName,

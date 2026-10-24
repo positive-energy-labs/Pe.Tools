@@ -381,7 +381,7 @@ export function Pane({
                       center={titleAlign === "center" ? heading : undefined}
                       trail={
                         hasContent(actions) || strip != null ? (
-                          <div data-slot="pane-actions" className="flex shrink-0 items-center">
+                          <div data-slot="pane-actions" className="flex min-w-0 items-center">
                             {hasContent(actions) && <ButtonGroup>{actions}</ButtonGroup>}
                             {strip}
                           </div>
