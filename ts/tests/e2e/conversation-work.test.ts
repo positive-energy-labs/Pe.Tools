@@ -423,13 +423,51 @@ test("real conversation Work cutover retains authored cells, draft, Places and o
       ).toBe(0);
     });
     await step("pasted closed Work URL reads retained Work without native target", async () => {
+      const opened = Date.now();
       await p.open(url(`${seed.workUrl}&thread=${CONVERSATION_THREADS.office}`));
-      await p.until(
-        async () => /closed|reconnect|not open|choose.*document/i.test(await p.text()),
-        "closed Work reconnect state after paste",
-      );
+      const snapshot = await p.until(async () => {
+        const streams = new Set(
+          network
+            .filter(
+              (event) =>
+                event.at >= opened &&
+                event.event === "Network.requestWillBeSent" &&
+                event.url?.includes("/pe/resources"),
+            )
+            .map((event) => event.id),
+        );
+        for (const event of network) {
+          if (
+            event.at < opened ||
+            !streams.has(event.id) ||
+            event.event !== "Network.eventSourceMessageReceived" ||
+            !event.data
+          )
+            continue;
+          const frame = JSON.parse(event.data);
+          if (
+            frame.kind === "snapshot" &&
+            frame.value?.revision === 2 &&
+            frame.value.doc?.flows?.["1001"]?.staged?.value?.source === "human effort"
+          )
+            return frame;
+        }
+        return null;
+      }, "pasted route acquires its actual retained Work through SSE");
       await headTargets();
+      expect(new URL(await p.url()).searchParams.get("system")).toBeNull();
+      expect(
+        await p.read<string[]>(
+          `[...document.querySelectorAll('[data-pane-id="tools"] button[data-tone="commit"], [data-pane-id="tools"] button[data-kind="commit"]')].filter(${visible}).filter(e => !e.disabled && e.getAttribute('aria-disabled') !== 'true' && !e.hasAttribute('data-disabled')).map(e => e.getAttribute('aria-label') || e.textContent)`,
+        ),
+      ).toEqual([]);
       expect(await workEvidence(seed.productHome)).toEqual(initial);
+      receipt.coverage.closedDeepLink = {
+        key: snapshot.key,
+        revision: snapshot.value.revision,
+        nativeTargets: [],
+        enabledCommits: [],
+      };
     });
     await step("offline online recovers shared Work Reading", async () => {
       const streams = network.filter((event) => event.stream).length;
