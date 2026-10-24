@@ -274,11 +274,9 @@
     color: var(--pe-ink-2);
   }
 
-  /* THE focus ring, owned here and nowhere else (kit-census `focus-ring-owner`): 2px ink, drawn inside
-     the box so it never clips, never shifts layout and never fills. Pointer presses show none. A
-     field's ring belongs to its frame, and a focused list's belongs to its cursor row (the active
-     descendant), so a stop never carries two and a scrolling container never rings its whole height.
-     A reach rung of "focus" rings only without DOM focus (a scene or list cursor naming it). */
+  /* THE focus ring (kit-census `focus-ring-owner`): 2px ink inside the box, keyboard focus only. A field's
+     ring is its frame's, a focused list's is its cursor row's (never the whole scrolling container); a
+     reach rung of "focus" rings only without DOM focus. */
   [data-pe] :focus-visible,
   [data-pe] [data-reach="focus"]:not(:focus-within, .subject-ref),
   [data-pe]

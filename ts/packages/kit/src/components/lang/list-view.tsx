@@ -202,8 +202,7 @@ function ListRenderer<T, Sort extends string>(props: ListViewProps<T, Sort> & { 
       tabIndex={0}
       aria-activedescendant={list.collection.inputProps["aria-activedescendant"]}
       onFocus={(event) => {
-        // Keyboard focus lands on a row: the cursor row wears the ring (base.css), never the whole container.
-        // No scroll follows (the move is not steered), and pointer focus keeps a list's cursorless start.
+        // Keyboard focus cursors the first row (the ring's home, base.css) without scrolling; pointer focus keeps no cursor.
         if (event.target !== event.currentTarget || list.collection.cursor) return;
         if (!event.currentTarget.matches(":focus-visible")) return;
         const first = list.collection.visible.find((row) => row.kind !== "head");
