@@ -28,10 +28,10 @@ import { Table } from "@pe/kit/table/table";
 
 import { RecipeGrid, SpecimenFrame } from "./recipe-grid";
 
-const VAST_ROWS = Array.from({ length: 1000 }, (_, index) => ({
+const VAST_ROWS = Array.from({ length: 200 }, (_, index) => ({
   key: String(index),
   name: `Row ${index + 1}`,
-  damage: index % 137 === 0 ? "Needs repair" : null,
+  damage: "unpreviewed",
 }));
 const MEASURES = listColumns({
   total: { kind: "number", priority: 0 },
@@ -57,18 +57,18 @@ export function LangListSpecimens() {
     items: VAST_ROWS,
     keyOf: (item) => item.key,
     search: (item) => ({ text: [item.name] }),
-    groups: { of: (item) => `Section ${Math.floor(Number(item.key) / 250) + 1}` },
+    groups: { of: (item) => `Section ${Math.floor(Number(item.key) / 50) + 1}` },
   });
   const plain = useList({ ...common, search: (kind) => ({ text: [kind] }) });
   return (
     <>
       <SpecimenFrame
-        name="ListView - sticky search and section stack - 1000 rows"
+        name="ListView - sticky search and section stack - 200 damaged rows"
         importPath="@pe/kit/lang/list-view"
       >
         <ListView
           list={vast}
-          aria-label="1000 rows"
+          aria-label="200 damaged rows"
           maxHeight="calc(var(--item-h) * 12)"
           columns={{ label: "Name", meta: measures }}
           row={(item) => ({

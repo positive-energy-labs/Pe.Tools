@@ -31,7 +31,7 @@ export type ListRowParts = Omit<
   "id" | "role" | "cursor" | "selected" | "onClick" | "depth" | "expanded" | "onToggle"
 >;
 
-/** Declare once for a list's header and cells. Higher priorities yield first; CSS owns widths. */
+/** Higher priorities yield first; CSS reserves the title before sizing trailing facts. */
 export function listColumns<K extends string>(
   columns: Record<K, { kind: "number" | "bar" | "mark"; priority: 0 | 1 | 2 }>,
 ) {
@@ -202,7 +202,6 @@ function ListRenderer<T, Sort extends string>(props: ListViewProps<T, Sort> & { 
       tabIndex={0}
       aria-activedescendant={list.collection.inputProps["aria-activedescendant"]}
       data-list-view=""
-      data-columns={props.columns ? "" : undefined}
       className={`relative min-h-0 min-w-0 w-full${maxHeight ? "" : " shrink-0"}`}
       style={maxHeight ? { maxHeight, overflowY: "auto" } : undefined}
     >

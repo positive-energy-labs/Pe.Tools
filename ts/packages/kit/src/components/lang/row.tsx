@@ -1,5 +1,4 @@
 import { reachProps, useReach, useReachSetter } from "./reach";
-/** List item or table row (`as="tr"`). State becomes attributes; lang.css owns its marks. */
 import { useState, type CSSProperties, type ReactNode } from "react";
 import { ChevronRight, Flame } from "lucide-react";
 
@@ -9,6 +8,7 @@ import { rowRevit, useRevitTarget, type RevitElementReference } from "./revit-ta
 import type { StateCellProps } from "./cell-state";
 
 import "./lang.css";
+import "./damage-beat";
 
 export const rowRecipe = tv({
   slots: {
@@ -107,7 +107,6 @@ export type RowProps = RowState & {
       }
   );
 
-/** The states as attributes: the one place a row's state becomes DOM. */
 const rowStateProps = (state: RowState) => ({
   "data-stage": state.stage,
   "data-staged-by": state.stage && state.stage !== "clean" ? (state.stagedBy ?? "pea") : undefined,
@@ -199,17 +198,26 @@ function ListRow({
     setCut([cutText(".dl-row-title"), cutText(".dl-row-fact")].filter(Boolean).join(" · "));
   };
   const slots = rowRecipe({ lines: props.lines ?? 1 });
-  const fact = props.meta != null ? <span className="dl-row-fact">{props.meta}</span> : null;
+  const fact =
+    props.damage || props.meta != null ? (
+      <span className="dl-row-fact">
+        {props.damage ? (
+          <span className="dl-row-damage">
+            <Flame aria-hidden />
+            <span>{props.damage}</span>
+          </span>
+        ) : null}
+        {props.meta}
+      </span>
+    ) : null;
   const tree = props.depth !== undefined;
-  const title = (
-    <span className="dl-row-title">
-      {props.label}
-      {props.aside != null ? <span className="dl-row-aside">{props.aside}</span> : null}
-    </span>
-  );
   return (
     // Beside the list, never above or below: a row's hint covered its neighbour row.
-    <TooltipHint content={props.refusal ?? props.title ?? cut} side="left" keep>
+    <TooltipHint
+      content={props.refusal ?? props.title ?? [props.damage, cut].filter(Boolean).join(" · ")}
+      side="left"
+      keep
+    >
       <div
         {...shared}
         className={slots.base()}
@@ -239,18 +247,10 @@ function ListRow({
         <span className={slots.label()}>
           {props.lines === 3 ? <span className="dl-row-eyebrow">{props.eyebrow}</span> : null}
           <span className="dl-row-line">
-            {props.damage ? (
-              // The word never truncates: the title yields beside it.
-              <span className="dl-row-burn">
-                {title}
-                <span className="dl-row-damage">
-                  <Flame aria-hidden />
-                  {props.damage}
-                </span>
-              </span>
-            ) : (
-              title
-            )}
+            <span className="dl-row-title">
+              {props.label}
+              {props.aside != null ? <span className="dl-row-aside">{props.aside}</span> : null}
+            </span>
             {fact || props.actions != null ? (
               <span className={slots.meta()}>
                 {fact}
@@ -271,9 +271,7 @@ function ListRow({
   );
 }
 
-/** A group's section head, sticky inside its scroll container, drawn as the roster's shelf head:
- *  label, quiet count, a hairline to the edge, no fill. A group named with blank space is an
- *  unnamed section — a menu's verb cluster — and draws as a rule, not a head. */
+/** A blank group label draws a separator; named groups use the sticky shelf head. */
 export function RowGroupHead({ label, count }: { label: ReactNode; count?: number }) {
   if (typeof label === "string" && label.trim() === "")
     return <div className="dl-row-sep" role="separator" />;

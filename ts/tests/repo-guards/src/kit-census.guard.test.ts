@@ -28,6 +28,8 @@ const allow = (entries: Record<string, string>): Allow[] =>
 // Filenames use the wave-4 final homes: land.ts, revit-target.tsx and go-to.tsx.
 // prettier-ignore
 const RULES: Rule[] = [
+  { id: "damage-compositor-motion", doctrine: "I2", pattern: /@keyframes[^{}]*\{(?:(?!\n\})[\s\S])*?\b(?:filter|box-shadow)\s*:/g,
+    roots: [K + "components/lang/lang.css"], allow: [], cannotSee: "Compositor eligibility, frame timing or animation phase; browser traces measure those." },
   { id: "list-heads-top-only", doctrine: "N3", pattern: /\bbottom:\s*/g,
     roots: [K + "components/lang/list-view.tsx"], allow: [], cannotSee: "Computed edge aliases or browser hit tests; SS4 requires the parent drive." },
 

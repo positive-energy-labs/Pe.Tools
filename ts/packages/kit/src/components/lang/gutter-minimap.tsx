@@ -3,6 +3,7 @@ import { memo, useId, useLayoutEffect, useState, type PointerEvent } from "react
 import { createPortal } from "react-dom";
 import { ScopeGestures } from "../../keys";
 import "./lang.css";
+import "./damage-beat";
 
 // M1: 200 is the first useful scale for a gutter overview; recalibrate on real collections.
 export const MINIMAP_FROM = 200;

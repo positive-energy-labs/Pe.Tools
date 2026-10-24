@@ -27,7 +27,7 @@
   /* Meaning */
   --pe-pea: light-dark(#4f7d55, #93ad86);
   --pe-pea-ink: var(--pe-pea);
-  --pe-alarm: light-dark(#a9512f, #d2846b);
+  --pe-alarm: #b3140a;
   --pe-caution: light-dark(#86662a, #c7a466);
   --pe-done: light-dark(#486531, #a7c890);
   --pe-commit: light-dark(#3f6485, #8ea7c0);
