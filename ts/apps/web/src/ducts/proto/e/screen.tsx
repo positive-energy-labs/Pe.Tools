@@ -73,6 +73,8 @@ import { InputsPane } from "./inputs-pane";
 import { RulesTree, ruleOfIds } from "./rules-pane";
 import { SystemTree } from "./tree-sidebar";
 import { useGroupEncoding } from "../encoding/use-encoding";
+import { DuctsIntroduction } from "../../introduction";
+import { LoadingContext } from "#/route/loading-context";
 
 const NO_GROUPS: readonly string[] = [];
 const NO_NOTES: ReadonlyMap<string, SystemNote> = new Map();
@@ -193,18 +195,21 @@ export function EScreen({ props }: { props: ProtoProps }) {
   }, [opening, props.page.system, requested]);
   const shown = useRef(props);
   if (opening == null) shown.current = { ...props, setPage: move };
-  if (!props.snapshot)
+  if (!props.snapshot || props.pricing)
     return (
-      <p className="text-ink-2 p-4" data-e-loading="">
-        {props.empty?.says ?? "reading ducts…"}
-      </p>
-    );
-  if (props.pricing)
-    return (
-      <p className="text-ink-2 p-4" data-e-pricing>
-        read {props.snapshot.document.title} ({props.snapshot.systems.length} systems) · pricing
-        every run…
-      </p>
+      <LoadingContext
+        name="Ducts"
+        says={
+          props.snapshot
+            ? `Read ${props.snapshot.document.title} (${props.snapshot.systems.length} systems) · pricing every run…`
+            : (props.empty?.says ?? "reading ducts…")
+        }
+        error={props.reading.error}
+        busy={props.reading.pending || props.pricing}
+      >
+        {!props.snapshot && props.empty ? <p>{props.empty.exit}</p> : null}
+        <DuctsIntroduction />
+      </LoadingContext>
     );
   return (
     <OpeningContext value={opening}>

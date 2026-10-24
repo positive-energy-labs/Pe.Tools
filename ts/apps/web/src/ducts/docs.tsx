@@ -16,9 +16,8 @@ import {
   DUCTS_PEA_NEVER,
   DUCTS_RESIDENCY,
   DUCTS_RESIDENCY_RULE,
-  DUCTS_SUMMARY,
-  DUCTS_WALK,
 } from "@pe/agent-contracts/ducts-guide";
+import { DuctsIntroduction } from "./introduction";
 import { DuctCases } from "./docs-cases";
 const PRESSURE_DROP = mapLink("pressure-drop")!;
 const TONE = { yes: "done", partial: "caution", owed: "nav", no: undefined } as const;
@@ -56,15 +55,7 @@ const RESIDENCY_COLUMNS: Column<DuctsResidency>[] = [
 export const ductsDocs = (
   <div className="flex flex-col gap-3 [&_p]:max-w-[80ch] [&_ul]:max-w-[80ch] [&_ol]:max-w-[80ch]">
     <Deferred>
-      <p>{DUCTS_SUMMARY}</p>
-      <h3>What it does, in one walk</h3>
-      <ol className="list-decimal pl-5">
-        {DUCTS_WALK.map(({ step, who, body }) => (
-          <li key={step} className="mb-2">
-            <b>{step}</b> <span className="t-small text-ink-mute">({who})</span> {body}
-          </li>
-        ))}
-      </ol>
+      <DuctsIntroduction />
       <p>{DUCTS_NOT_ONE_CLICK}</p>
       {(
         [
