@@ -547,7 +547,6 @@ function RulingsList({
       // `title` is the sort text, not a hint: the row hints only what it cuts short.
       row={row}
       detail={detail}
-      projection={(item) => ({ tone: inboxDamage(item) ? "alarm" : null })}
       empty={{ message: "Nothing to rule on", exit: "Stage a change or ask Pea" }}
     />
   );
