@@ -15,6 +15,7 @@ import remarkGfm from "remark-gfm";
 import { createContext, isValidElement, memo, useContext, useMemo, type ReactNode } from "react";
 
 import { Code } from "@pe/kit/lang/code";
+import { proseIds } from "@pe/kit/lang/subject-text";
 import { cn } from "@pe/kit/lib/utils";
 import { subjectParts, TurnSubjectText, type TurnSubjects } from "./turn-names";
 
@@ -84,6 +85,10 @@ const MARKDOWN_COMPONENTS: Components = {
   ),
 };
 
+// GFM, or pea's tables arrive as a paragraph of pipes. It also buys strikethrough, task lists,
+// and bare autolinks.
+const REMARK_PLUGINS = [remarkGfm];
+
 type Hast = {
   type: string;
   tagName?: string;
@@ -91,28 +96,41 @@ type Hast = {
   children?: Hast[];
   properties?: object;
 };
-/** Text nodes outside code and links: each linked id becomes a `pe-subject` element. */
-const rehypeSubjects = (subjects: TurnSubjects) => () => (tree: Hast) => {
+/** Map every text node outside code and links: the only prose a linked id may live in. */
+const mapProse = (tree: Hast, map: (child: Hast) => Hast[]) => {
   const walk = (node: Hast) => {
     if (!node.children || ["code", "pre", "a"].includes(node.tagName ?? "")) return;
-    node.children = node.children.flatMap((child): Hast[] => {
-      if (child.type !== "text") return (walk(child), [child]);
-      const parts = subjectParts(child.value ?? "", subjects);
-      if (parts.every((part) => typeof part === "string")) return [child];
-      return parts.map((part) =>
-        typeof part === "string"
-          ? { type: "text", value: part }
-          : {
-              type: "element",
-              tagName: "pe-subject",
-              properties: { dataId: String(part.id), dataConnector: part.connector },
-              children: [],
-            },
-      );
-    });
+    node.children = node.children.flatMap((child): Hast[] =>
+      child.type === "text" ? map(child) : (walk(child), [child]),
+    );
   };
   walk(tree);
 };
+/** Each linked id becomes a `pe-subject` element. */
+const rehypeSubjects = (subjects: TurnSubjects) => () => (tree: Hast) =>
+  mapProse(tree, (child) => {
+    const parts = subjectParts(child.value ?? "", subjects);
+    if (parts.every((part) => typeof part === "string")) return [child];
+    return parts.map((part) =>
+      typeof part === "string"
+        ? { type: "text", value: part }
+        : {
+            type: "element",
+            tagName: "pe-subject",
+            properties: { dataId: String(part.id), dataConnector: part.connector },
+            children: [],
+          },
+    );
+  });
+/** The ids in the prose `Markdown` would link: same parse, same spans, so a read never spends
+ * the batch on an id inside code or a link. `ReactMarkdown` is hook-free; this is a plain call. */
+export function linkableIds(text: string) {
+  const ids: number[] = [];
+  const collect = () => (tree: Hast) =>
+    mapProse(tree, (child) => (ids.push(...proseIds(child.value ?? "")), [child]));
+  ReactMarkdown({ children: text, remarkPlugins: REMARK_PLUGINS, rehypePlugins: [collect] });
+  return ids;
+}
 const SubjectsOf = createContext<TurnSubjects | undefined>(undefined);
 function PeSubject(props: { "data-id"?: string; "data-connector"?: string }) {
   const subject = useContext(SubjectsOf)?.get(Number(props["data-id"]));
@@ -122,10 +140,6 @@ function PeSubject(props: { "data-id"?: string; "data-connector"?: string }) {
   ) : null;
 }
 const SUBJECT_COMPONENTS = { ...MARKDOWN_COMPONENTS, "pe-subject": PeSubject } as Components;
-
-// GFM, or pea's tables arrive as a paragraph of pipes. It also buys strikethrough, task lists,
-// and bare autolinks.
-const REMARK_PLUGINS = [remarkGfm];
 
 export const Markdown = memo(function Markdown({
   text,
