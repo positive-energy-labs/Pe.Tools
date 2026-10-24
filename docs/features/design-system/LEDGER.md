@@ -7,6 +7,7 @@ The one-system design cluster: the design LANGUAGE (raw values in `apps/web/src/
 **This ledger owns every cross-route design-language and primitive gap.** Route ledgers name their own applications and evidence; they never restate a ruling or a gap that lives here. A rule lives in exactly one home: a type, a check, a swatch specimen, or `.agents/skills/lens.house/SKILL.md`. `docs/design/SURFACE-PHILOSOPHY.md` indexes those homes.
 
 ## Decided
+- 2026-10-23, L3/P1: Kit `Table` stacks labelled cells below 36rem while retaining header controls and grid navigation; Help documentation uses that table and suppresses its own teaching registrations. TU3 browser re-check remains owed.
 - 2026-10-23, L1/P1: Chat headers use `Pane` title tabs and grouped actions in desktop and dialog; New thread carries the visible word `new`, and scope stays in the kit list search row.
 - 2026-10-23: List search stays visible by default; kit measures its height so section heads and keyboard arrivals clear it. Chat palette, ducts systems and inbox inherit the same search row.
 - 2026-10-23, N1/N6: `PaneSplit` previews pointer resizing through `--pane-size` and commits size/collapse at release; `PictureStage` isolates unchanged picture inputs from sibling updates. Profiler regressions cover 20 drag steps and sibling composer send; browser camera/focus proof remains owed to the wave-8 integration pass.

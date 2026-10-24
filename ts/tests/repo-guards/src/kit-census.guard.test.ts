@@ -28,6 +28,12 @@ const allow = (entries: Record<string, string>): Allow[] =>
 // Filenames use the wave-4 final homes: land.ts, revit-target.tsx and go-to.tsx.
 // prettier-ignore
 const RULES: Rule[] = [
+  { id: "help-table-owner", doctrine: "P1", pattern: /grid-cols-\[|<(?:table|thead|tbody|tr|th|td)\b/g,
+    roots: [W + "ducts/{compare-table,docs}.tsx"], allow: [],
+    cannotSee: "Aliased tables or computed grids; mounted Help tests cover kit cell labels, browser TU3 measures overflow." },
+  { id: "table-narrow-default", doctrine: "L3", pattern: /^(?![\s\S]*@container pe-table \(max-width: 36rem\))[\s\S]/g,
+    roots: [K + "components/lang/lang.css"], allow: [],
+    cannotSee: "Computed layout or intrinsic cell width; browser TU3 measures the whole dialog at 390px." },
   { id: "chat-new-action-has-words", doctrine: "L1", pattern: /<Button\b[^>]*\bicon=\{Plus\}[^>]*\/>|<button\b[^>]*>\s*\+\s*<\/button>/g,
     roots: [W + "chat/**/*.tsx"], allow: [],
     cannotSee: "Aliased plus icons, computed children or CSS-hidden text; thread-palette tests check the labelled pane action." },

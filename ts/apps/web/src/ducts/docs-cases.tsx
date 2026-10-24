@@ -76,7 +76,7 @@ export function DuctCases() {
           <h4 className="m-0">
             {g} · {CASE_GROUPS[g]}
           </h4>
-          <div className="grid grid-cols-[repeat(auto-fill,minmax(20rem,1fr))] gap-3">
+          <div className="grid grid-cols-[repeat(auto-fill,minmax(min(100%,20rem),1fr))] gap-3">
             {DUCT_CASES.filter((c) => c.group === g).map((c) => (
               <CaseCard key={c.number} c={c} />
             ))}

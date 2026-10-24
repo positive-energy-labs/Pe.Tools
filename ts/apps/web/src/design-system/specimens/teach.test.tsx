@@ -1,6 +1,6 @@
 // @vitest-environment jsdom
 import { StrictMode } from "react";
-import { cleanup, render, screen, waitFor, within } from "@testing-library/react";
+import { act, cleanup, fireEvent, render, screen, waitFor, within } from "@testing-library/react";
 import { afterEach, beforeEach, expect, test, vi } from "vite-plus/test";
 import { Pane } from "@pe/kit/lang/pane";
 import { useList } from "@pe/kit/lang/collection";
@@ -10,7 +10,15 @@ import { readTeaching, type Teaching } from "@pe/kit/lang/teach";
 import { TeachRegion, useTeaching } from "@pe/kit/lang/use-teach";
 import { KeyScope, useScopeKeys } from "@pe/kit/keys";
 import { QueryBox } from "@pe/kit/table/query";
-import { HelpWorld } from "#/route/help";
+import { HelpWorld, RouteHelpButton } from "#/route/help";
+import { ductsDocs } from "#/ducts/docs";
+import { DUCTS_COMPARE } from "@pe/agent-contracts/ducts-guide";
+
+vi.mock("#/ducts/docs-cases", () => ({ DuctCases: () => null }));
+vi.mock("#/product-map/diagram", async (original) => ({
+  ...(await original<typeof import("#/product-map/diagram")>()),
+  Mermaid: () => null,
+}));
 
 beforeEach(() => {
   vi.spyOn(HTMLElement.prototype, "getBoundingClientRect").mockImplementation(
@@ -25,6 +33,20 @@ afterEach(() => {
   expect(readTeaching()).toEqual([]);
 });
 const noop = () => {};
+test("Help prose tables use the kit's labelled narrow cells without teaching their own keys", () => {
+  render(<RouteHelpButton name="Ducts" docs={ductsDocs} />);
+  fireEvent.click(screen.getByRole("button", { name: "How this tool works" }));
+  const tables = screen.getAllByRole("grid");
+  expect(tables).toHaveLength(DUCTS_COMPARE.length + 2);
+  tables.forEach((table) => {
+    expect(table.closest("[data-table-scroll]")).toBeTruthy();
+    within(table)
+      .getAllByRole("gridcell")
+      .forEach((cell) => expect(cell.getAttribute("data-column-label")).toBeTruthy());
+  });
+  act(() => within(tables[0]!).getAllByRole("gridcell")[0]!.focus());
+  expect(readTeaching()).toEqual([]);
+});
 const options = [
   { value: "parallel", label: "parallel", title: "Measured" },
   { value: "perspective", label: "perspective", title: "Depth" },

@@ -542,6 +542,7 @@ export function MasterTableBody<Row extends RowData>({
                             ref={hostOf(cell.id)}
                             data-cell-id={cell.id}
                             data-column-key={column.key}
+                            data-column-label={column.label}
                             role="gridcell"
                             tabIndex={
                               selection & 1 || (isEntryCell && table.getFocusedCell() === undefined)
