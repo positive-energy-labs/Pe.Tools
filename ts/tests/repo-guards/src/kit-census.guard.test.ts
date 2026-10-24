@@ -28,6 +28,8 @@ const allow = (entries: Record<string, string>): Allow[] =>
 // Filenames use the wave-4 final homes: land.ts, revit-target.tsx and go-to.tsx.
 // prettier-ignore
 const RULES: Rule[] = [
+  { id: "damage-idle-static", doctrine: "N6", pattern: /@keyframes\s+pe-damage-beat|animation:\s*pe-damage-beat/g,
+    roots: [K + "components/lang/lang.css"], allow: [], cannotSee: "Other idle style writers or browser-engine animation sampling; native invalidation traces identify those." },
   { id: "teach-observer-owner", doctrine: "N6", pattern: /new\s+MutationObserver\b/g,
     roots: [K + "components/lang/use-teach.ts"], allow: [],
     cannotSee: "Observer aliases or imports, scheduling and reader liveness; the deterministic observer test owns those." },

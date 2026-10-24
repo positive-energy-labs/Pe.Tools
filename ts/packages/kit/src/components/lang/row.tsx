@@ -8,7 +8,6 @@ import { rowRevit, useRevitTarget, type RevitElementReference } from "./revit-ta
 import type { StateCellProps } from "./cell-state";
 
 import "./lang.css";
-import "./damage-beat";
 
 export const rowRecipe = tv({
   slots: {
