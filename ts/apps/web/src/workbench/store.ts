@@ -3,6 +3,7 @@ import * as Atom from "effect/unstable/reactivity/Atom";
 import type * as AtomRegistry from "effect/unstable/reactivity/AtomRegistry";
 
 import { createRouteOwner } from "#/route/route-owner";
+import type { Resumed } from "#/chat/thread-work";
 import {
   THREAD_TABS_MAX,
   threadTabSchema,
@@ -51,7 +52,7 @@ export function createChatPageStore(deps: {
       duplicate?: boolean,
       keep?: boolean,
     ) => Promise<boolean>;
-    work: (thread: string, route: string, link?: string) => Promise<void>;
+    work: (thread: string, route: string, resumed?: Resumed) => Promise<void>;
   } | null = null;
   const drafts = new Map<string, ThreadTab[]>();
   const draftTabs = (thread: string) => {
@@ -182,10 +183,10 @@ export function createChatPageStore(deps: {
       openThread: (thread: string, replace = false) =>
         deps.search.patch({ thread, prompt: undefined, turn: undefined }, replace),
       /** A Work press: that thread's tool, its Page restored when the thread holds a tab there. */
-      openWork: (thread: string, route: string, link?: string) => {
+      openWork: (thread: string, route: string, resumed?: Resumed) => {
         planGeneration++;
         deps.registry.set(planIntent, null);
-        return tabs?.work(thread, route, link) ?? Promise.resolve();
+        return tabs?.work(thread, route, resumed) ?? Promise.resolve();
       },
     },
     runAction: core.runAction,
