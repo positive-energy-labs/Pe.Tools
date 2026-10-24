@@ -133,7 +133,7 @@ type ClaimHandlers = {
 };
 
 /** One resolved id in a claim's text: a button that lights its element on hover and selects it on click. */
-export function ClaimElement({
+function ClaimElement({
   part,
   onHover,
   onPick,
