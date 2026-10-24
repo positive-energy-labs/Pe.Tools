@@ -1,0 +1,233 @@
+import { mkdtemp, mkdir, writeFile, readFile, readdir, rm } from "node:fs/promises";
+import { join } from "node:path";
+import { tmpdir } from "node:os";
+import { expect, test } from "vite-plus/test";
+import {
+  address,
+  bindWork,
+  emptyThreadLifecycle,
+  threadWorkSnapshotSchema,
+  workResumeSchema,
+  workKey,
+  sameAddress,
+  type DocumentRef,
+} from "@pe/agent-contracts";
+import { createRouteRegistrations } from "@pe/mcps";
+import { withInvocationContext } from "@pe/runtime/context";
+import { createHarnessThreads, type HarnessThreadsOptions } from "../src/harness/threads.ts";
+import { createPeRoutes } from "../src/pe-routes.ts";
+import { HostLog } from "../src/host-log.ts";
+import { fileRouteDocumentStore } from "../src/route-document-store.ts";
+import { human } from "./callers.ts";
+
+test("HTTP and one Reading retain named unfinished Work after target removal, closure and host restart", async () => {
+  const root = await mkdtemp(join(tmpdir(), "pe-thread-work-"));
+  const id = "retained-conversation";
+  const dir = join(root, "threads", id);
+  const at = address("C:\\Models\\Office.rvt");
+  const ref = { session: "first-session", openId: "first-open" };
+  let documents: ({ address: typeof at; name: string } & DocumentRef)[] = [
+    { ...ref, address: at, name: "Office model" },
+  ];
+  await mkdir(dir, { recursive: true });
+  await writeFile(
+    join(dir, "meta.json"),
+    JSON.stringify({
+      id,
+      harness: "codex",
+      providerId: "codex",
+      providerName: "Codex",
+      title: "Size the office",
+      createdAt: "2026-10-24T00:00:00.000Z",
+      updatedAt: "2026-10-24T00:00:00.000Z",
+      modelId: null,
+      acpSessionId: null,
+      models: [],
+      traits: [],
+      traitValues: {},
+      head: { targets: [{ request: { kind: "open", ref }, admission: null }], revision: 1 },
+      forkOf: null,
+      promptCapabilities: null,
+      lifecycle: emptyThreadLifecycle(),
+      tabs: [],
+    }),
+  );
+  const providers = {
+    get: () => ({ id: "codex", harness: "codex", name: "Codex", auth: { kind: "subscription" } }),
+    keys: () => [],
+  } as unknown as HarnessThreadsOptions["providers"];
+  const options: HarnessThreadsOptions = {
+    root: join(root, "threads"),
+    log: new HostLog(join(root, "log")),
+    worldRoot: root,
+    providers,
+    mcpServer: () => ({ name: "unused", command: "unused", args: [], env: [] }),
+    observeDocument: (request) => {
+      const found = documents.filter((doc) =>
+        request.kind === "open"
+          ? doc.session === request.ref.session && doc.openId === request.ref.openId
+          : doc.session === request.session && doc.address === request.address,
+      );
+      return found.length === 1
+        ? {
+            ref: { session: found[0]!.session, openId: found[0]!.openId },
+            address: at,
+            name: found[0]!.name,
+          }
+        : null;
+    },
+  };
+  let threads = createHarnessThreads(options);
+  const store = fileRouteDocumentStore(join(root, "work"));
+  const makeApp = () =>
+    createPeRoutes({
+      registrations: createRouteRegistrations(),
+      store,
+      heads: threads.heads,
+      navigation: {
+        threads: async () => (await threads.fetch(new Request("http://host/pe/threads"))).json(),
+        documents: async () =>
+          documents.map(({ session, openId, address }) => ({ session, openId, address })),
+        contexts: threads.workContexts,
+        subscribe: (notify) => threads.observe({ kind: "threads" }, () => notify())!,
+      },
+    });
+  let app = makeApp();
+  const read = async () =>
+    threadWorkSnapshotSchema.parse(
+      await (await app.fetch(new Request("http://host/pe/thread-work"))).json(),
+    );
+  const scope = bindWork("ducts", at);
+  const fileBytes = async () =>
+    Promise.all(
+      (await readdir(join(root, "work")))
+        .sort()
+        .map(async (file) => [file, await readFile(join(root, "work", file), "utf8")]),
+    );
+  const abort = new AbortController();
+  try {
+    expect(
+      (
+        await app.workspace.apply(
+          scope,
+          "ducts",
+          "human",
+          [
+            {
+              path: ["flows", "1001", "staged"],
+              value: { value: { cfm: 100, source: "human effort" } },
+            },
+            {
+              path: ["flows", "1002", "staged"],
+              value: { value: { cfm: 200, source: "reviewed" } },
+            },
+          ],
+          0,
+        )
+      ).ok,
+    ).toBe(true);
+    expect(
+      (
+        await app.workspace.apply(
+          scope,
+          "ducts",
+          "agent",
+          [
+            {
+              path: ["flows", "1002", "proposal"],
+              value: { value: { cfm: 220, source: "alternative" } },
+            },
+            {
+              path: ["flows", "1003", "proposal"],
+              value: { value: { cfm: 300, source: "proposal" } },
+            },
+          ],
+          1,
+        )
+      ).ok,
+    ).toBe(true);
+    const snapshot = await read();
+    const doc = snapshot.threads[0]!.documents[0]!;
+    expect(doc).toMatchObject({ name: "Office model", availability: "open" });
+    expect(snapshot.threads[0]!.works).toEqual([
+      { id: workKey(scope), documentId: doc.id, route: "ducts", intent: "Ducts", unfinished: 3 },
+    ]);
+    const saved = await fileBytes();
+    const stream = await app.fetch(
+      new Request(
+        `http://host/pe/resources?keys=${encodeURIComponent(JSON.stringify([{ kind: "thread-work" }]))}`,
+        { signal: abort.signal },
+      ),
+    );
+    const reader = stream.body!.getReader();
+    let buffer = "";
+    const next = async () => {
+      for (;;) {
+        const end = buffer.indexOf("\n\n");
+        if (end >= 0) {
+          const block = buffer.slice(0, end);
+          buffer = buffer.slice(end + 2);
+          const data = /^data: (.*)$/m.exec(block)?.[1];
+          if (data) return JSON.parse(data);
+        } else {
+          const chunk = await reader.read();
+          if (chunk.done) throw Error("stream ended");
+          buffer += new TextDecoder().decode(chunk.value);
+        }
+      }
+    };
+    expect((await next()).value.threads[0].works[0].unfinished).toBe(3);
+    const removed = await withInvocationContext({ caller: human }, () =>
+      threads.fetch(
+        new Request(`http://host/pe/scope/${id}`, {
+          method: "PUT",
+          headers: { "content-type": "application/json" },
+          body: JSON.stringify({ targets: [], expectedRevision: 1 }),
+        }),
+      ),
+    );
+    expect(removed.status).toBe(200);
+    expect(threads.heads.read(id).targets).toEqual([]);
+    expect((await next()).value.threads[0].works[0].unfinished).toBe(3);
+    documents = [];
+    expect((await read()).threads[0]!.documents).toEqual([{ ...doc, availability: "closed" }]);
+    const resume = workResumeSchema.parse(
+      await (
+        await app.fetch(
+          new Request(`http://host/pe/work-resume?id=${encodeURIComponent(workKey(scope))}`),
+        )
+      ).json(),
+    );
+    expect(
+      sameAddress(address(new URL(resume.url!, "http://host").searchParams.get("target")!), at),
+    ).toBe(true);
+    expect(workKey(resume.key)).toBe(workKey(scope));
+    const retained = await (
+      await app.fetch(
+        new Request(`http://host/pe/route-state/ducts?target=${encodeURIComponent(at)}`),
+      )
+    ).json();
+    expect(retained.doc.flows["1001"].staged.value.source).toBe("human effort");
+    expect(retained.doc.flows["1002"].proposal.value.cfm).toBe(220);
+    expect(await fileBytes()).toEqual(saved);
+    abort.abort();
+    await threads.close();
+    threads = createHarnessThreads(options);
+    app = makeApp();
+    expect((await read()).threads[0]).toMatchObject({
+      documents: [{ ...doc, availability: "closed" }],
+      works: [{ unfinished: 3 }],
+    });
+    documents = [
+      { session: "new-session", openId: "new-open", address: at, name: "Office reopened" },
+    ];
+    expect((await read()).threads[0]!.documents).toEqual([doc]);
+    expect(threads.heads.read(id).targets).toEqual([]);
+    expect(await fileBytes()).toEqual(saved);
+    expect((await app.fetch(new Request("http://host/pe/work-resume?id=forged"))).status).toBe(404);
+  } finally {
+    abort.abort();
+    await threads.close();
+    await rm(root, { recursive: true, force: true, maxRetries: 3 });
+  }
+});

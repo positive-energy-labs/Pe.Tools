@@ -208,7 +208,6 @@ test("Pea navigation reads real persisted harness summaries and preserves thread
       lifecycle: emptyThreadLifecycle(),
     }),
   );
-  const before = await bytes(threadDirectory);
   const providers = {
     get: () => ({ id: "codex", harness: "codex", name: "Codex", auth: { kind: "subscription" } }),
     keys: () => [],
@@ -221,6 +220,7 @@ test("Pea navigation reads real persisted harness summaries and preserves thread
     mcpServer: () => ({ name: "unused", command: "unused", args: [], env: [] }),
   };
   const threads = createHarnessThreads(options);
+  const before = await bytes(threadDirectory);
   try {
     const workspace = new RouteWorkspace({
       registrations: [],
