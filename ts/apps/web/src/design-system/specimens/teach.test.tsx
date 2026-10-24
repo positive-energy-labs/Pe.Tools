@@ -23,26 +23,20 @@ vi.mock("@tanstack/react-router", async (original) => ({
   Link: ({ children }: { children: React.ReactNode }) => <a>{children}</a>,
 }));
 let enter: IntersectionObserverCallback[];
-async function reveal() {
-  await act(async () => {
+function reveal() {
+  act(() => {
     for (const run of enter.splice(0))
       run([{ isIntersecting: true } as IntersectionObserverEntry], {} as IntersectionObserver);
-    await new Promise((resolve) => setTimeout(resolve, 50));
+    vi.advanceTimersToNextFrame();
+    vi.advanceTimersToNextFrame();
   });
 }
 beforeEach(() => {
   enter = [];
   diagram.mockClear();
-  vi.stubGlobal(
-    "IntersectionObserver",
-    class {
-      constructor(callback: IntersectionObserverCallback) {
-        enter.push(callback);
-      }
-      observe() {}
-      disconnect() {}
-    },
-  );
+  vi.stubGlobal("IntersectionObserver", function (callback: IntersectionObserverCallback) {
+    return { observe: () => enter.push(callback), disconnect: noop };
+  });
   vi.spyOn(HTMLElement.prototype, "getBoundingClientRect").mockImplementation(
     function (this: HTMLElement) {
       return this.closest("[hidden]") ? new DOMRect() : new DOMRect(0, 0, 400, 600);
@@ -51,22 +45,24 @@ beforeEach(() => {
 });
 afterEach(() => {
   cleanup();
+  vi.useRealTimers();
   vi.restoreAllMocks();
   vi.unstubAllGlobals();
   expect(readTeaching()).toEqual([]);
 });
 const noop = () => {};
-test("Help paints its generated screen before mounting prose, cases or invoking diagrams", async () => {
+test("Help paints its generated screen before mounting prose, cases or invoking diagrams", () => {
+  vi.useFakeTimers({ toFake: ["requestAnimationFrame", "cancelAnimationFrame"] });
   render(<RouteHelpButton name="Ducts" docs={ductsDocs} />);
   fireEvent.click(screen.getByRole("button", { name: "How this tool works" }));
   expect(document.querySelector("[data-teach-legend]")).toBeTruthy();
   expect(document.querySelectorAll("article[id^=case-]")).toHaveLength(0);
   expect(screen.queryAllByRole("grid")).toHaveLength(0);
-  await reveal();
+  reveal();
   expect(document.querySelectorAll("article[id^=case-]")).toHaveLength(0);
   expect(diagram).not.toHaveBeenCalled();
-  await reveal();
-  await reveal();
+  reveal();
+  reveal();
   expect(document.querySelectorAll("article[id^=case-]").length).toBeGreaterThan(0);
   expect(diagram).toHaveBeenCalledTimes(2);
   const tables = screen.getAllByRole("grid");
