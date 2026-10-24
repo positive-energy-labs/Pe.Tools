@@ -4,7 +4,6 @@ import { RegistryContext } from "@effect/atom-react";
 import { Profiler } from "react";
 import { act, cleanup, fireEvent, render, waitFor } from "@testing-library/react";
 import { afterEach, expect, it, vi } from "vite-plus/test";
-import { writeFileSync } from "node:fs";
 import {
   attention,
   citation,
@@ -139,10 +138,6 @@ it("measures 30 subject transitions and repeated pointer motion over 100 actual 
     fireEvent.pointerOver(last);
   }
   expect({ rows, picture, screen }).toEqual({ rows: 0, picture: 0, screen: 0 });
-  writeFileSync(
-    "../../../.artifacts/runs/deterministic-20261024-attention/after.json",
-    JSON.stringify({ transitions, repeatedMoves: { moves: 30, rows, picture, screen } }),
-  );
   view.unmount();
   registry.dispose();
 });
