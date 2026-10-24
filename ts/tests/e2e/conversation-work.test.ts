@@ -193,10 +193,23 @@ test("real conversation Work cutover retains authored cells, draft, Places and o
       expect(meta.head.targets, "reading saved Work must not arm a native target").toEqual([]);
     };
     await step("real startup and canonical sidebar", async () => {
+      const started = Date.now();
       await p.open(url(`/pea?thread=${CONVERSATION_THREADS.empty}`));
       await p.send("Page.bringToFront");
       expect(await p.read("document.visibilityState")).toBe("visible");
       expect(new URL(await p.url()).searchParams.has("demo")).toBe(false);
+      // A cold source Vite graph loads hundreds of modules before the device gate can read.
+      // Keep that startup budget separate from the unchanged interaction/read deadlines below.
+      await p.until(
+        async () => network.some((event) => event.build === head.slice(0, 12)),
+        "cold source client hydration and first host request",
+        90_000,
+      );
+      receipt.coverage.startup = {
+        milliseconds: Date.now() - started,
+        moduleRequests: network.filter((event) => event.event === "Network.requestWillBeSent")
+          .length,
+      };
       await p.waitText("Office model");
       await p.waitText("3 unfinished");
       await p.waitText("Conversation without Work");

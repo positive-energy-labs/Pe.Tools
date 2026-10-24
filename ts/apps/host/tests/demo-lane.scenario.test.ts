@@ -440,7 +440,7 @@ async function landed(page: Page, pattern: RegExp) {
 /** The page log drew a row for the verb whose hover says `says`: the row ends in the label, hover says the rest. */
 async function logged(page: Page, label: string, says: string) {
   // The head's log is folded to its newest row (MAP ruling 21); any tab press opens the column.
-  const situation = page.locator('section[aria-label="Situation"]');
+  const situation = page.locator('section[aria-label="Situation"][data-surface="page"]');
   const allTab = situation.locator('[aria-description="all entries"]');
   if (await allTab.count()) await allTab.first().click();
   // The log is a kit list: a row is whatever element carries the hint, and its time sits after the label.
@@ -735,7 +735,7 @@ test("live /families: retained readback supports repeat and consecutive family p
       .toContain("matrix");
     if (SCRATCH)
       await page
-        .locator('section[aria-label="Situation"]')
+        .locator('section[aria-label="Situation"][data-surface="page"]')
         .screenshot({ path: join(SCRATCH, "families-read.png") });
     // The Situation's Work sentence ("2 cells staged by you, 1 proposed by Pea · …"); none when
     // nothing is pending.
