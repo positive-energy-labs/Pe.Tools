@@ -100,3 +100,12 @@ test("an incomplete snapshot or a failed read leaves every id plain", async () =
   expect(failed.container.querySelectorAll(".subject-ref")).toHaveLength(0);
   expect(host.read).toHaveBeenCalledTimes(2);
 });
+
+test("only ids the prose links are read: never inside inline code or link text", async () => {
+  host.read.mockResolvedValue(observation([]));
+  show([
+    row("pea-1", "Review 1001 and 1002. Example `1003`; [1004](https://example.invalid/element)."),
+  ]);
+  await settle();
+  expect(host.read.mock.calls[0]![0].ids).toEqual([1001, 1002]);
+});

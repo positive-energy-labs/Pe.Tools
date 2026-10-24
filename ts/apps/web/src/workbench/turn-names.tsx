@@ -19,6 +19,7 @@ import {
 } from "@pe/kit/lang/subject-text";
 import { useEffect, useState } from "react";
 import { resolveWorkbenchConfig } from "./config";
+import { linkableIds } from "./prose";
 import { harnessClient } from "./provider/harness-client";
 
 /** A linked id: the exact document it resolved in (an attention doc) and its number in the turn. */
@@ -80,7 +81,7 @@ export function useTurnSubjects(
       const key = `${thread}\u0000${turnId}`;
       let entry = turns.get(key);
       if (!entry) {
-        const ids = [...new Set(proseIds(text))]
+        const ids = [...new Set(linkableIds(text))]
           .filter((id) => id > 0 && Number.isSafeInteger(id))
           .slice(0, TURN_ELEMENT_NAMES_LIMIT);
         if (!ids.length) continue;
