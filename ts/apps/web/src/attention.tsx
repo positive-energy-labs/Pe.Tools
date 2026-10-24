@@ -17,35 +17,6 @@ import {
 export function AttentionScope({
   doc,
   selected,
-  members,
-  children,
-}: {
-  doc: string;
-  selected: Atom.Atom<ReadonlySet<SubjectKey>>;
-  members?: Members;
-  children: ReactNode;
-}) {
-  return (
-    <AttentionMembers doc={doc} selected={selected} members={members}>
-      <AttentionRoot doc={doc}>{children}</AttentionRoot>
-    </AttentionMembers>
-  );
-}
-export function AttentionRoot({ doc, children }: { doc: string; children: ReactNode }) {
-  const [root, setRoot] = useState<HTMLDivElement | null>(null);
-  useAttentionScope(root);
-  return (
-    <AttentionDocument value={doc}>
-      <div ref={setRoot} className="contents">
-        {children}
-      </div>
-    </AttentionDocument>
-  );
-}
-const NONE: Members = new Map();
-export function AttentionMembers({
-  doc,
-  selected,
   members = NONE,
   children,
 }: {
@@ -56,7 +27,19 @@ export function AttentionMembers({
 }) {
   useAttentionDocument(doc, selected);
   useMembers(doc, members);
-  return children;
+  return <AttentionRoot doc={doc}>{children}</AttentionRoot>;
+}
+const NONE: Members = new Map();
+export function AttentionRoot({ doc, children }: { doc: string; children: ReactNode }) {
+  const [root, setRoot] = useState<HTMLDivElement | null>(null);
+  useAttentionScope(root);
+  return (
+    <AttentionDocument value={doc}>
+      <div ref={setRoot} className="contents">
+        {children}
+      </div>
+    </AttentionDocument>
+  );
 }
 
 /** Numeric IDs stop at the native scene adapter; attention itself only carries Subject keys. */

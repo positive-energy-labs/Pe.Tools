@@ -33,8 +33,13 @@ import { noRunParts, subjectNamer } from "../../subject-text";
 import { useRevitSubjectProps } from "#/revit/element-menu";
 import { noRunBranches } from "@pe/ducts-domain/no-runs";
 import { SubjectTextContext } from "@pe/kit/lang/reach";
-import { AttentionRoot, AttentionMembers, useIssueHover, useHoveredIssue } from "#/attention";
-import { elementKey, type SubjectKey } from "@pe/kit/lang/attention";
+import { AttentionRoot, useIssueHover, useHoveredIssue } from "#/attention";
+import {
+  elementKey,
+  useAttentionDocument,
+  useMembers,
+  type SubjectKey,
+} from "@pe/kit/lang/attention";
 import {
   annotatedFindings,
   stageIssues,
@@ -563,6 +568,8 @@ function LoadedScreenBody({
     trees.forEach(walk);
     return map;
   }, [issues, trees]);
+  useAttentionDocument(props.attentionDoc, props.selection);
+  useMembers(props.attentionDoc, membership);
   // The picture annotates the Fix rows' findings, or the Diagnostics kind picked in its key.
   const kindClause = page.rulingSearch.pills.find(
     (pill) => pill.field === "kind" && pill.op === "=",
@@ -1009,7 +1016,7 @@ function LoadedScreenBody({
   );
 
   return (
-    <AttentionMembers doc={props.attentionDoc} members={membership} selected={props.selection}>
+    <>
       <SubjectTextContext.Provider value={subjectContext}>
         <div ref={rootRef} data-proto="E2" className="flex size-full min-h-0">
           <BarRules snapshot={drawn!} work={work} priced={priced}>
@@ -1100,7 +1107,7 @@ function LoadedScreenBody({
           </BarRules>
         </div>
       </SubjectTextContext.Provider>
-    </AttentionMembers>
+    </>
   );
 }
 
