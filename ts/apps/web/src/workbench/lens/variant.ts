@@ -17,7 +17,7 @@ if (typeof window !== "undefined") {
 }
 
 /** The picked variant, or null when none was ever picked in this tab. */
-export function lensVariant(): LensVariant | null {
+function lensVariant(): LensVariant | null {
   if (typeof window === "undefined") return null;
   const v = window.sessionStorage.getItem(KEY);
   return is(v) ? v : null;
