@@ -1035,3 +1035,23 @@ test("a reread retains the same row and selection through pending, failure and r
     expect(screen.queryByText("read failed") !== null).toBe(status === "failed");
   }
 });
+
+test("keyboard focus on a list cursors its first row, so the ring lands on a row and never the whole container", () => {
+  // jsdom never matches :focus-visible, so the modality is stood in for by a flag.
+  let keyboard = false;
+  const matches = Element.prototype.matches;
+  vi.spyOn(Element.prototype, "matches").mockImplementation(function (this: Element, query) {
+    return query === ":focus-visible"
+      ? keyboard && this === document.activeElement
+      : matches.call(this, query);
+  });
+  render(<TestList name="loss rules" />);
+  const list = screen.getByRole("listbox", { name: "loss rules" });
+  act(() => list.focus());
+  expect(list.querySelector("[data-cursor]")).toBeNull();
+  act(() => list.blur());
+  keyboard = true;
+  act(() => list.focus());
+  expect(list.querySelectorAll("[data-cursor]")).toHaveLength(1);
+  vi.restoreAllMocks();
+});
