@@ -187,6 +187,21 @@ test("real conversation Work cutover retains authored cells, draft, Places and o
       p.read<string>(
         `[...document.querySelectorAll('textarea[aria-label="Message"],input[aria-label="Message"]')].find(${visible})?.value ?? ''`,
       );
+    const composerIdentity = async () => {
+      const located = await p.send("Runtime.evaluate", {
+        expression: `[...document.querySelectorAll('textarea[aria-label="Message"],input[aria-label="Message"]')].find(${visible})`,
+        returnByValue: false,
+      });
+      expect(located.exceptionDetails).toBeUndefined();
+      const objectId = located.result.objectId;
+      expect(objectId).toBeTruthy();
+      try {
+        return (await p.send("DOM.describeNode", { objectId })).node.backendNodeId as number;
+      } finally {
+        await p.send("Runtime.releaseObject", { objectId });
+      }
+    };
+    let officeComposer: number;
     const headTargets = async (thread = CONVERSATION_THREADS.office) => {
       const meta = JSON.parse(
         await readFile(
@@ -278,6 +293,7 @@ test("real conversation Work cutover retains authored cells, draft, Places and o
     await step("Work opens closed saved Ducts and draft survives Places collapse", async () => {
       await p.clickAt('textarea[aria-label="Message"],input[aria-label="Message"]');
       await p.type(message);
+      officeComposer = await composerIdentity();
       await p.click(
         "Open Ducts",
         `[data-thread-sidebar] [data-key="${CONVERSATION_THREADS.office}"]`,
@@ -313,6 +329,7 @@ test("real conversation Work cutover retains authored cells, draft, Places and o
       );
       await headTargets();
       expect(await draft()).toBe(message);
+      expect(await composerIdentity()).toBe(officeComposer);
       await p.click("Takeoffs", '[aria-label="Thread Places"]');
       await p.until(
         async () => new URL(await p.url()).pathname === "/takeoffs",
@@ -333,6 +350,7 @@ test("real conversation Work cutover retains authored cells, draft, Places and o
         "tools reopened from Place",
       );
       expect(await draft()).toBe(message);
+      expect(await composerIdentity()).toBe(officeComposer);
     });
     await step("Home and Back preserve the composer", async () => {
       await p.click("Home / tool directory");
@@ -344,6 +362,7 @@ test("real conversation Work cutover retains authored cells, draft, Places and o
       await p.send("Page.navigateToHistoryEntry", { entryId: back.id });
       await p.until(async () => new URL(await p.url()).pathname === "/ducts", "Back restores Work");
       expect(await draft()).toBe(message);
+      expect(await composerIdentity()).toBe(officeComposer);
     });
     await step("another conversation starts with collapsed tools", async () => {
       await pickThread("Conversation without Work");
