@@ -843,7 +843,6 @@ These rows are byte-for-byte text from `34bd5e17`. The searchable comment preser
 
 - 2026-10-23, kit-raise run (waves 2–8, branch `t3/kit-raise`, run folder `.artifacts/runs/kit-raise-20261023`):
   - Refresh marks pending 601 ms late (proof/checklist7.md D11): `ts/apps/web/src/readings.ts:607` `acquire(refresh)` starts acquisition without a synchronous pending mark; the kit chip and readout slot are ready and wait on that line. Owner: readings.
-  - Claim title and sentence (D18, ruled 2026-10-23): the schema change is in flight in wave 9 (`claims` slice). Remove this line when it merges.
   - Purge debt: work +335, camera +284, overlay +278, teach +202, capture +136, tips-fix +422, tutorial +110, floater-geometry +113 net lines; the fold slice recovered ~5. One purge pass over kit pane/button/tooltip/teach owners is owed.
   - Capture rules (Fine retry by bounding-box coverage, nearest-first context, completeness advisory) are compile and synthetic-test proven only; the real-model read (SA 71 flex tubes, context omitted count) waits on the next `pe-revit session hr`.
   - Scene look (context ground, fog steepness, x-ray reserved for the lit subject) is proven for state, not for taste: one real-model eye pass by kaitpw.
