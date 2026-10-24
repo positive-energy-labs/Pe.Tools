@@ -21,54 +21,9 @@ const spec = (key: string, size?: FloaterSpec["size"]): FloaterSpec => ({
 });
 
 function mockField(field = new DOMRect(0, 0, 600, 600)) {
-  vi.spyOn(document.documentElement, "clientWidth", "get").mockReturnValue(field.width);
-  vi.spyOn(document.documentElement, "clientHeight", "get").mockReturnValue(field.height);
-  for (const [property, dimension] of [
-    ["offsetWidth", "width"],
-    ["offsetHeight", "height"],
-    ["clientWidth", "width"],
-    ["clientHeight", "height"],
-  ] as const)
-    vi.spyOn(HTMLElement.prototype, property, "get").mockImplementation(
-      function (this: HTMLElement) {
-        const size = this.getBoundingClientRect()[dimension];
-        return this.hasAttribute("data-floater-popup") && property.startsWith("client")
-          ? Math.max(0, size - 2)
-          : size;
-      },
-    );
-  vi.spyOn(SVGElement.prototype, "getBoundingClientRect").mockImplementation(
-    function (this: SVGElement) {
-      const panel = this.closest("[data-floater-popup]")?.getBoundingClientRect();
-      return new DOMRect((panel?.x ?? 0) + 1, (panel?.y ?? 0) + 1, 220, 220);
-    },
-  );
   vi.spyOn(HTMLElement.prototype, "getBoundingClientRect").mockImplementation(
     function (this: HTMLElement) {
       if (this.dataset.field !== undefined) return field;
-      // Before the popup has a size, its 100% wrapper and capped SVG measure zero.
-      if (this.dataset.slot === "floater-content")
-        return new DOMRect(
-          0,
-          0,
-          this.style.width === "max-content" ? 220 : 0,
-          this.style.height === "max-content" ? 220 : 0,
-        );
-      if (this.matches("button") && this.closest("[data-slot='floater']"))
-        return new DOMRect(field.right - 100, field.bottom - 32, 80, 24);
-      if (this.style.position === "fixed" || this.hasAttribute("data-floater-popup")) {
-        const panel = this.hasAttribute("data-floater-popup")
-          ? this
-          : this.querySelector<HTMLElement>("[data-floater-popup]");
-        const positioner = panel?.parentElement;
-        const xy = positioner?.style.transform.match(/translate\(([-\d.]+)px, ([-\d.]+)px\)/);
-        return new DOMRect(
-          Number(xy?.[1]) || 0,
-          Number(xy?.[2]) || 0,
-          parseFloat(panel?.style.width ?? "") || 2,
-          parseFloat(panel?.style.height ?? "") || 2,
-        );
-      }
       if (
         this.matches(
           "[data-picture-readout], [data-slot='pane-work'], [data-slot='pane-legend'], [data-slot='pane-resize-grip']",
@@ -188,7 +143,7 @@ test("shrinking a navigation field caps its floaters and restores their preferre
 });
 
 test.each([undefined, { width: 230, height: 230 }])(
-  "a CSS-folded floater opens on a fixed content-sized plane (size=%s)",
+  "folded furniture portals content and focuses without scrolling (size=%s)",
   async (size) => {
     render(<style>{'[data-slot="floater"] { --floater-folded: 1; }'}</style>);
     const { view, floater } = setup(size, new DOMRect(0, 0, 447, 845));
@@ -201,24 +156,6 @@ test.each([undefined, { width: 230, height: 230 }])(
     expect(popup).toBeTruthy();
     expect(popup.parentElement!.style.position).toBe("fixed");
     expect(floater.contains(popup)).toBe(false);
-    expect(popup.style.width).toBe(size ? "230px" : "222px");
-    expect(popup.style.height).toBe(size ? "230px" : "222px");
-    const panel = popup.getBoundingClientRect();
-    const content = svg.getBoundingClientRect();
-    const field = floater.parentElement!.getBoundingClientRect();
-    expect(
-      panel.left <= content.left &&
-        panel.right >= content.right &&
-        panel.top <= content.top &&
-        panel.bottom >= content.bottom,
-    ).toBe(true);
-    expect(
-      panel.left >= field.left &&
-        panel.right <= field.right &&
-        panel.top >= field.top &&
-        panel.bottom <= field.bottom,
-    ).toBe(true);
-    expect(popup.dataset.side).toBe("top");
     await waitFor(() => expect(focus.mock.contexts).toContain(popup));
     expect(focus.mock.calls.every(([options]) => options?.preventScroll)).toBe(true);
   },

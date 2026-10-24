@@ -1170,7 +1170,7 @@ svg [data-damage] {
   z-index: var(--z-sticky);
   pointer-events: none;
 }
-[data-minimap] {
+[data-minimap="rows"] {
   position: absolute;
   inset-inline-end: calc(var(--space-unit) * -4);
   top: 0;
@@ -1181,10 +1181,10 @@ svg [data-damage] {
   user-select: none;
   pointer-events: auto;
 }
-[data-minimap]:focus-visible {
+[data-minimap="rows"]:focus-visible {
   outline: 1px solid var(--pe-ink);
 }
-[data-minimap] > i {
+[data-minimap="rows"] > i {
   position: absolute;
   inset-inline: 0;
   height: 1px;

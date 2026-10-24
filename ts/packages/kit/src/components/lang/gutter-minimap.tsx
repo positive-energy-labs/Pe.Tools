@@ -105,7 +105,12 @@ export function Minimap({
   }, [map.visible, scroller, id]);
   if (!map.visible || !host) return null;
   return createPortal(
-    <div data-minimap="" aria-controls={scroller?.id || id} {...map.controls} style={{ height }}>
+    <div
+      data-minimap="rows"
+      aria-controls={scroller?.id || id}
+      {...map.controls}
+      style={{ height }}
+    >
       <ScopeGestures gestures={[{ pointer: "drag", label: "jump to a row" }]} host={host} />
       <MinimapViewport style={map.viewport} />
       <MinimapMarks marks={marks} count={count} />
