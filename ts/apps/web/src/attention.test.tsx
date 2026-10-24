@@ -9,8 +9,8 @@ import {
   citation,
   cite,
   clearCitation,
+  declareMembers,
   elementKey,
-  members,
   rung,
   selection,
   setHovered,
@@ -44,9 +44,14 @@ it("expands runs and issues, isolates documents, reads Page selection and dedupe
   const page = Atom.make({ selected: [] as string[] });
   const selected = Atom.make((get) => new Set<SubjectKey>(get(page).selected.map(elementKey)));
   registry.set(selection("doc"), selected);
-  registry.set(members("doc"), {
-    resolve: (key) => (key === "run:7" || key === "issue:gap" ? ["e:1", "e:2"] : [key]),
-  });
+  declareMembers(
+    registry,
+    "doc",
+    new Map([
+      ["run:7", ["e:1", "e:2"]],
+      ["issue:gap", ["e:1", "e:2"]],
+    ]),
+  );
   const one = rung({ doc: "doc", key: "e:1" });
   const untouched = rung({ doc: "doc", key: "e:99" });
   expect(one).toBe(rung({ doc: "doc", key: "e:1" }));
@@ -70,7 +75,7 @@ it("expands runs and issues, isolates documents, reads Page selection and dedupe
     refs: [{ doc: "doc", key: "e:1", name: "duct", number: 1 }],
     focus: { doc: "doc", key: "e:1" },
   });
-  expect(registry.get(one)).toBe("focus");
+  expect(registry.get(one)).toBe("cited");
   registry.set(page, { selected: ["1"] });
   expect(registry.get(one)).toBe("selected");
   clearCitation(registry, "previous-owner");
@@ -145,14 +150,11 @@ it("measures 30 subject transitions and repeated pointer motion over 100 actual 
 it("the native picture adapter lights every member of a run and nested room group", () => {
   const registry = makeAtomRegistry();
   const selected = Atom.make<ReadonlySet<SubjectKey>>(new Set<SubjectKey>());
-  const resolve = (key: SubjectKey): SubjectKey[] =>
-    key === "run:7"
-      ? ["e:1", "e:2"]
-      : key === "room:guid"
-        ? ["e:3"]
-        : key.startsWith("leg:[")
-          ? ["run:7", "room:guid"]
-          : [key];
+  const resolve = new Map<SubjectKey, SubjectKey[]>([
+    ["run:7", ["e:1", "e:2"]],
+    ["room:guid", ["e:3"]],
+    ["group:7", ["run:7", "room:guid"]],
+  ]);
   function Picture() {
     const state = useElementAttention();
     return <output>{[...state.lit].join(",")}</output>;
@@ -166,7 +168,7 @@ it("the native picture adapter lights every member of a run and nested room grou
   );
   act(() => setHovered(registry, { doc: "group-doc", key: "run:7" }));
   expect(view.container.querySelector("output")?.textContent).toBe("1,2");
-  act(() => setHovered(registry, { doc: "group-doc", key: 'leg:["run:7","room:guid"]' }));
+  act(() => setHovered(registry, { doc: "group-doc", key: "group:7" }));
   expect(view.container.querySelector("output")?.textContent).toBe("1,2,3");
   view.unmount();
   registry.dispose();
@@ -267,10 +269,12 @@ it("rooms table and plan light each other by GUID while clicks and URL/Page sele
       ),
   );
   const rows = roomRows(DEMO_ROOMS.regions, ["Fixture level"]);
-  const members = (key: SubjectKey): SubjectKey[] => {
-    const region = DEMO_ROOMS.regions.find((region) => `room:${region.guid}` === key);
-    return region ? [elementKey(region.elementId)] : [key];
-  };
+  const members = new Map(
+    DEMO_ROOMS.regions.map((region): [SubjectKey, SubjectKey[]] => [
+      `room:${region.guid}`,
+      [elementKey(region.elementId)],
+    ]),
+  );
   const select = vi.fn((guids: ReadonlySet<string>) => pageOwner.setPage({ selected: [...guids] }));
   const view = render(
     <RegistryContext value={registry}>

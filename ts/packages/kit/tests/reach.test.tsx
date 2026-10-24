@@ -17,7 +17,8 @@ import { FactChip } from "../src/components/lang/chip";
 import { Switcher } from "../src/components/lang/switcher";
 import { PaneCrumb } from "../src/components/lang/pane-crumb";
 import { SvgTip, TooltipProvider } from "../src/components/lang/tooltip";
-import { citation, cite, useRung } from "../src/components/lang/attention";
+import { citation, cite, rung } from "../src/components/lang/attention";
+import { useAtomValue } from "@effect/atom-react";
 import { AttentionFixture, kitRegistry } from "./attention-fixture";
 
 afterEach(() => {
@@ -55,7 +56,7 @@ test("pressing a reference uses focus reach and its popup shares the lighting gr
   fireEvent.mouseEnter(reference);
   fireEvent.pointerEnter(reference);
   fireEvent.click(reference);
-  expect(reference.getAttribute("data-reach")).toBe("focus");
+  expect(reference.getAttribute("data-reach")).toBe("cited");
   expect(reference.className).toBe("subject-ref");
   for (const attribute of ["aria-pressed", "data-pressed", "data-lit"])
     expect(reference.hasAttribute(attribute)).toBe(false);
@@ -229,7 +230,7 @@ test("the pointer moving the cursor never scrolls; a key moving it does (N1)", (
 
 const noop = () => {};
 function Mirror() {
-  return <output data-testid="mirror">{useRung({ doc: "kit", key: "e:42" })}</output>;
+  return <output data-testid="mirror">{useAtomValue(rung({ doc: "kit", key: "e:42" }))}</output>;
 }
 
 test("rows and picture subscribers share reach without updating the route", () => {
@@ -268,7 +269,18 @@ test("rows and picture subscribers share reach without updating the route", () =
       focus: { doc: "kit", key: "e:42" },
     }),
   );
-  expect(row.getAttribute("data-reach")).toBe("focus");
+  // A cited footnote is not keyboard focus: the row takes the cited rung, never the ring's.
+  expect(row.getAttribute("data-reach")).toBe("cited");
+  const ring = [
+    ...readFileSync(createRequire(import.meta.url).resolve("@pe/kit/base.css"), "utf8").matchAll(
+      /([^{}]+)\{([^{}]*)\}/g,
+    ),
+  ]
+    .find(([, selector]) => selector!.includes('[data-reach="focus"]'))![1]!
+    .replace(/\[data-pe\]\s*/g, "")
+    .replace(/\/\*[\s\S]*?\*\//g, "")
+    .trim();
+  expect(row.matches(ring)).toBe(false);
   expect(route).toHaveBeenCalledTimes(1);
 });
 

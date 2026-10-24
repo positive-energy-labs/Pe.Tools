@@ -4,7 +4,6 @@ import { AttentionScope } from "#/attention";
 import {
   AttentionDocument,
   elementKey,
-  resolveMembers,
   useAttention,
   type SubjectKey,
 } from "@pe/kit/lang/attention";
@@ -190,13 +189,16 @@ export function RoomsRoute({ url = true }: { url?: boolean } = {}) {
       ),
     [handle.pageState],
   );
-  const members = useMemo(() => {
-    const keys = new Map(
-      snapshot?.regions.map((region) => [`room:${region.guid}`, elementKey(region.elementId)]) ??
-        [],
-    );
-    return (key: SubjectKey) => (keys.has(key) ? [keys.get(key)!] : resolveMembers(key));
-  }, [snapshot]);
+  const members = useMemo(
+    () =>
+      new Map(
+        snapshot?.regions.map((region): [SubjectKey, SubjectKey[]] => [
+          `room:${region.guid}`,
+          [elementKey(region.elementId)],
+        ]) ?? [],
+      ),
+    [snapshot],
+  );
 
   const levels = snapshot?.levels ?? [];
   const level = levels.find((item) => item.views.includes(page.view)) ?? null;

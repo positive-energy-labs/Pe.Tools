@@ -1,7 +1,7 @@
 import * as Atom from "effect/unstable/reactivity/Atom";
 import { RegistryContext } from "@effect/atom-react";
 import { useMemo, type ReactNode } from "react";
-import { elementKey, resolveMembers, type SubjectKey } from "@pe/kit/lang/attention";
+import { elementKey, type SubjectKey } from "@pe/kit/lang/attention";
 import { AttentionScope } from "#/attention";
 import type { TakeoffsController } from "./controller";
 
@@ -33,8 +33,12 @@ export function TakeoffAttention({
   );
   const members = useMemo(() => {
     const regions = store.world.zones.flatMap((zone) => [zone.zone, ...zone.rooms]);
-    const keys = new Map(regions.map((region) => [regionKey(region.guid), regionTarget(region)]));
-    return (key: SubjectKey) => (keys.has(key) ? [keys.get(key)!] : resolveMembers(key));
+    // A region with no Revit room is its own leaf: declaring it as its own member would loop.
+    return new Map(
+      regions
+        .filter((region) => region.elementId !== null)
+        .map((region) => [regionKey(region.guid), [regionTarget(region)]]),
+    );
   }, [store.world]);
   return (
     <RegistryContext value={store.handle.registry}>

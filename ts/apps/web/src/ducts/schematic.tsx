@@ -1,4 +1,10 @@
-import { elementKey, memberKey, useMention } from "@pe/kit/lang/attention";
+import {
+  AttentionDocument,
+  elementKey,
+  useMembers,
+  useMention,
+  type SubjectKey,
+} from "@pe/kit/lang/attention";
 import { useElementAttention } from "#/attention";
 import type { Tone } from "@pe/kit/lib/token";
 import { nameOrFallback } from "@pe/kit/lang/subject-text";
@@ -15,7 +21,7 @@ import type { IssueKind } from "@pe/ducts-domain/issues";
  * The layout is a tidy tree: each vertex's first child continues its row (the longest run first,
  * so it reads straight along the top) and later children hang below.
  */
-import { useMemo, type ReactNode } from "react";
+import { useContext, useMemo, type ReactNode } from "react";
 
 import { tokenRef } from "@pe/kit/lib/token";
 import {
@@ -126,6 +132,8 @@ export interface SchematicProps {
 
 const SELECT_WIDTH = 8;
 
+const chainKey = (chain: Chain): SubjectKey => `chain:${chain.to}`;
+
 export function Schematic({
   readout,
   index,
@@ -154,6 +162,13 @@ export function Schematic({
     return new Set(hit?.members ?? []);
   }, [base, selected]);
   const chains = useMemo(() => (tree ? chainsOf(tree, unfold) : []), [tree, unfold]);
+  useMembers(
+    useContext(AttentionDocument) ?? "",
+    useMemo(
+      () => new Map(chains.map((chain) => [chainKey(chain), chain.members.map(elementKey)])),
+      [chains],
+    ),
+  );
   const layout = useMemo(
     () => (tree ? layoutTree(tree, chains, inset ? INSET_LABEL_W : LABEL_W) : null),
     [tree, chains, inset],
@@ -225,7 +240,7 @@ export function Schematic({
             data-lit={glow ? "" : undefined}
             className="cursor-pointer"
             onClick={() => pick(chain.members[0]!)}
-            {...mark(memberKey(chain.members.map(elementKey)))}
+            {...mark(chainKey(chain))}
           >
             <SvgTip content={"chain"} />
             {hot ? (

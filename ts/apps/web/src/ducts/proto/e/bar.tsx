@@ -1,4 +1,10 @@
-import { AttentionDocument, elementKey, memberKey, useMention } from "@pe/kit/lang/attention";
+import {
+  AttentionDocument,
+  elementKey,
+  useMembers,
+  useMention,
+  type SubjectKey,
+} from "@pe/kit/lang/attention";
 import { useList } from "@pe/kit/lang/collection";
 import { PlainList, ListView, listColumns } from "@pe/kit/lang/list-view";
 import { LeaderDiagram } from "@pe/kit/lang/leader-diagram";
@@ -87,6 +93,18 @@ const PARTS = [
   { key: "terminal", word: "grille", says: "the terminal's own drop" },
 ] as const;
 
+/** A run's loss pieces are keyed by the run's last row (its terminal) and the piece's own key. */
+const splitKey = (split: Split, piece: string): SubjectKey =>
+  `split:${split.rows.at(-1)?.id}/${piece}`;
+function useSplitMembers(split: Split, pieces: readonly { key: string; ids: readonly number[] }[]) {
+  const doc = useContext(AttentionDocument) ?? "";
+  const members = useMemo(
+    () => new Map(pieces.map((piece) => [splitKey(split, piece.key), piece.ids.map(elementKey)])),
+    [split, pieces],
+  );
+  useMembers(doc, members);
+}
+
 /** The bar's one ink; groups are told apart by hairline dividers and, in the popover, leader lines. */
 const INK = "ink-2";
 
@@ -107,6 +125,14 @@ function SplitFill({
 }) {
   const observation = useNativeObservation();
   const mark = useMention();
+  const pieces = useMemo(
+    () => [
+      ...split.groups.map((group) => ({ key: group.key, ids: group.ids })),
+      ...PARTS.map(({ key }) => ({ key: `${key}?`, ids: split[key].ids })),
+    ],
+    [split],
+  );
+  useSplitMembers(split, pieces);
   const tip = (content: string, child: ComponentProps<typeof TooltipHint>["children"]) =>
     hint ? <TooltipHint content={content}>{child}</TooltipHint> : child;
   let at = 0;
@@ -135,7 +161,7 @@ function SplitFill({
                       backgroundColor: tokenRef(INK),
                       boxShadow: `inset -1px 0 0 ${tokenRef("page")}`,
                     }}
-                    {...mark(memberKey(group.ids.map(elementKey)))}
+                    {...mark(splitKey(split, group.key))}
                   />,
                 )}
               </Fragment>
@@ -155,7 +181,7 @@ function SplitFill({
                 data-e-split={`${key}-unpriced`}
                 {...revitTarget(target.ids, target.refs)}
                 style={{ left: `min(${at * 100}%, calc(100% - 6px))`, borderColor: tokenRef(INK) }}
-                {...mark(memberKey(part.ids.map(elementKey)))}
+                {...mark(splitKey(split, `${key}?`))}
               />
             </TooltipHint>
           ) : null;
@@ -384,6 +410,7 @@ function BreakdownList({ split, scale, barW }: { split: Split; scale: number; ba
   const bare = visible.filter((row) => !row.at.length);
   const ordered = barLeft !== flip ? [...led].reverse() : led;
   const rows = flip ? [...bare, ...ordered] : [...ordered, ...bare];
+  useSplitMembers(split, rows);
   const barCol = Math.min(144, Math.max(96, barW));
 
   const choose = (row: BarRow) =>
@@ -505,7 +532,7 @@ function BreakdownList({ split, scale, barW }: { split: Split; scale: number; ba
             visibleKeys={rows.map((row) => row.key)}
             activeKey={current?.key}
             onRowClick={choose}
-            subject={(row) => ({ doc: attentionDoc, key: memberKey(row.ids.map(elementKey)) })}
+            subject={(row) => ({ doc: attentionDoc, key: splitKey(split, row.key) })}
             keep={() => true}
             caption={
               <>

@@ -9,6 +9,7 @@ import {
   useAttention,
   useAttentionDocument,
   useAttentionScope,
+  useMembers,
   type Members,
   type SubjectKey,
 } from "@pe/kit/lang/attention";
@@ -25,7 +26,7 @@ export function AttentionScope({
   children: ReactNode;
 }) {
   return (
-    <AttentionMembers doc={doc} selected={selected} resolve={members}>
+    <AttentionMembers doc={doc} selected={selected} members={members}>
       <AttentionRoot doc={doc}>{children}</AttentionRoot>
     </AttentionMembers>
   );
@@ -41,18 +42,20 @@ export function AttentionRoot({ doc, children }: { doc: string; children: ReactN
     </AttentionDocument>
   );
 }
+const NONE: Members = new Map();
 export function AttentionMembers({
   doc,
   selected,
-  resolve,
+  members = NONE,
   children,
 }: {
   doc: string;
   selected: Atom.Atom<ReadonlySet<SubjectKey>>;
-  resolve?: Members;
+  members?: Members;
   children: ReactNode;
 }) {
-  useAttentionDocument(doc, selected, resolve);
+  useAttentionDocument(doc, selected);
+  useMembers(doc, members);
   return children;
 }
 

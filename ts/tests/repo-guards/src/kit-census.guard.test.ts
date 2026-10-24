@@ -432,7 +432,7 @@ it.each(RULES)("$id ($doctrine)", (rule) => {
       if (blocks.length) {
         expect(path).toBe(K + "components/lang/lang.css");
         expect(blocks).toHaveLength(1);
-        for (const rung of ["rest", "reach", "hover", "focus"])
+        for (const rung of ["rest", "reach", "hover", "cited"])
           expect(blocks[0]).toContain(`data-reach="${rung}"`);
       }
       source = source.replace(REACH_BLOCK, "");

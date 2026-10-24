@@ -1,5 +1,6 @@
 import { fmtNum } from "@pe/kit/table/model";
-import { memberKey, useMention } from "@pe/kit/lang/attention";
+import { useContext, useMemo } from "react";
+import { AttentionDocument, useMembers, useMention } from "@pe/kit/lang/attention";
 import { regionKey } from "./attention";
 import { TooltipHint } from "@pe/kit/lang/tooltip";
 import { ROOM_STATES, STATE_META, stateInk, type RoomState } from "#/takeoff/room-state";
@@ -10,6 +11,9 @@ import type { ModelRoom, ModelZone } from "#/takeoff/world";
  * the person works in), as one bar and one line so it covers as little plan as it can. It replaces
  * a toggled card that covered the plan's corner.
  */
+/** The one level on the plan; its members are that level's zones. */
+const LEVEL = "level:shown";
+
 export function LevelTotals({
   zones,
   stateOf,
@@ -18,6 +22,10 @@ export function LevelTotals({
   stateOf: (room: ModelRoom) => RoomState;
 }) {
   const mention = useMention();
+  useMembers(
+    useContext(AttentionDocument) ?? "",
+    useMemo(() => new Map([[LEVEL, zones.map((z) => regionKey(z.zone.guid))]]), [zones]),
+  );
   const area: Record<RoomState, number> = { call: 0, unreviewed: 0, data: 0, synced: 0 };
   let calls = 0;
   for (const r of zones.flatMap((z) => z.rooms)) {
@@ -38,11 +46,7 @@ export function LevelTotals({
   const open = Math.abs(residual) >= 1;
 
   return (
-    <div
-      className="flex flex-col gap-1"
-      data-level-totals=""
-      {...mention(memberKey(zones.map((z) => regionKey(z.zone.guid))))}
-    >
+    <div className="flex flex-col gap-1" data-level-totals="" {...mention(LEVEL)}>
       <div className="flex h-1.5 w-full items-stretch gap-px overflow-hidden">
         {ROOM_STATES.map((s) =>
           area[s] > 0 ? (

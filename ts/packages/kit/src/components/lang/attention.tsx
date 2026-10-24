@@ -4,26 +4,26 @@ import { RegistryContext, useAtomValue } from "@effect/atom-react";
 import { createContext, useContext, useEffect } from "react";
 import { HOVER_GRACE } from "./hover-grace";
 
-export type SubjectKind = "e" | "run" | "leg" | "system" | "room" | "issue";
-// The payload is opaque. A future link kind can carry a link path without changing Ref.
-export type SubjectKey = `${SubjectKind}:${string}`;
+/**
+ * `<kind>:<short id>`. Kinds are open: each feature declares its own in its module; kit owns only
+ * `e:` (a Revit element id, which kit rows and prose already speak). A plural mark gets a short id
+ * of its own and declares its members with `useMembers`, never a key that spells them out.
+ */
+export type SubjectKey = `${string}:${string}`;
 export type Ref = { doc: string; key: SubjectKey };
 export type SubjectReference = Ref & { name: string; number: number };
 export type Citation = { owner: string; refs: readonly SubjectReference[]; focus: Ref | null };
-export type Rung = "selected" | "focus" | "hover" | "reach" | "rest";
-export type Members = (key: SubjectKey) => readonly SubjectKey[];
-/** Composite hover targets carry Subject keys, so their members can later include link keys. */
-export const memberKey = (keys: readonly SubjectKey[]): SubjectKey =>
-  keys.length === 1 ? keys[0]! : `leg:${JSON.stringify(keys)}`;
-export const resolveMembers: Members = (key) =>
-  key.startsWith("leg:[") ? (JSON.parse(key.slice(4)) as SubjectKey[]) : [key];
-const identity = resolveMembers;
+/** `cited` is the footnote a prose chip points at. It is not keyboard focus: `focus` is that rung's. */
+export type Rung = "selected" | "cited" | "hover" | "reach" | "rest";
 const empty: ReadonlySet<SubjectKey> = new Set();
 const label = (name: string) => Atom.withLabel(`attention/${name}`);
 export const hovered = Atom.make<Ref | null>(null).pipe(Atom.keepAlive, label("hovered"));
 export const citation = Atom.make<Citation | null>(null).pipe(Atom.keepAlive, label("citation"));
-export const members = Atom.family((doc: string) =>
-  Atom.make<{ resolve: Members }>({ resolve: identity }).pipe(label(`${doc}/members`)),
+// Atom.family keys plain objects by identity, so a Ref is serialized for its node.
+const refId = (ref: Ref) => JSON.stringify([ref.doc, ref.key]);
+/** One atom per declared key, so a declaration recomputes only the rungs that read that key. */
+const memberOf = Atom.family((id: string) =>
+  Atom.make<readonly SubjectKey[] | null>(null).pipe(Atom.keepAlive, label(`${id}/members`)),
 );
 /** A reference to Page's derived atom, never a second writable selection. */
 export const selection = Atom.family((doc: string) =>
@@ -79,15 +79,16 @@ export function cite(registry: AtomRegistry.AtomRegistry, value: Citation) {
     return;
   registry.set(citation, value);
 }
-const expand = (keys: Iterable<SubjectKey>, resolve: Members) => {
+/** The leaves under `keys`: transitive and cycle-bounded; an undeclared key is its own leaf. */
+const expand = (get: Atom.AtomContext, doc: string, keys: Iterable<SubjectKey>) => {
   const found = new Set<SubjectKey>();
   const seen = new Set<SubjectKey>();
   const visit = (key: SubjectKey) => {
     if (seen.has(key)) return;
     seen.add(key);
-    const children = resolve(key);
-    if (children.length === 1 && children[0] === key) found.add(key);
-    else children.forEach(visit);
+    const children = get(memberOf(refId({ doc, key })));
+    if (children) children.forEach(visit);
+    else found.add(key);
   };
   for (const key of keys) visit(key);
   return found;
@@ -106,13 +107,14 @@ const citationIn = Atom.family((doc: string) =>
 );
 export const attention = Atom.family((doc: string) =>
   Atom.make((get) => {
-    const resolve = get(members(doc)).resolve;
     const over = get(hoverIn(doc));
     const current = get(citationIn(doc));
     const source = get(selection(doc));
     return {
-      hovered: over ? expand([over], resolve) : empty,
+      hovered: over ? expand(get, doc, [over]) : empty,
       lit: expand(
+        get,
+        doc,
         current
           ? current.focus
             ? current.focus.doc === doc
@@ -120,57 +122,90 @@ export const attention = Atom.family((doc: string) =>
               : []
             : current.refs.filter((ref) => ref.doc === doc).map((ref) => ref.key)
           : [],
-        resolve,
       ),
-      selected: source ? expand(get(source), resolve) : empty,
+      cited: current?.focus?.doc === doc ? expand(get, doc, [current.focus.key]) : empty,
+      selected: source ? expand(get, doc, get(source)) : empty,
       citation: current,
     };
   }).pipe(label(`${doc}/sets`)),
 );
-// Atom.family uses identity for plain objects. Serialize the pair so equivalent Refs share a node.
+/** A ref lights when it or any of its members is selected, cited, hovered or reached. */
 const rungFamily = Atom.family((id: string) => {
-  const ref = JSON.parse(id) as Ref;
+  const [doc, key] = JSON.parse(id) as [string, SubjectKey];
   return Atom.make((get): Rung => {
-    const state = get(attention(ref.doc));
-    const resolve = get(members(ref.doc)).resolve;
-    const targets = expand([ref.key], resolve);
-    const intersects = (set: ReadonlySet<SubjectKey>) => [...targets].some((key) => set.has(key));
+    const state = get(attention(doc));
+    const targets = expand(get, doc, [key]);
+    const intersects = (set: ReadonlySet<SubjectKey>) => [...targets].some((k) => set.has(k));
     if (intersects(state.selected)) return "selected";
-    const focus = state.citation?.focus;
-    if (focus?.doc === ref.doc && intersects(expand([focus.key], resolve))) return "focus";
+    if (intersects(state.cited)) return "cited";
     if (intersects(state.hovered)) return "hover";
     return intersects(state.lit) ? "reach" : "rest";
-  }).pipe(label(`${ref.doc}/${ref.key}/rung`));
+  }).pipe(label(`${doc}/${key}/rung`));
 });
-export const rung = (ref: Ref) => rungFamily(JSON.stringify({ doc: ref.doc, key: ref.key }));
+export const rung = (ref: Ref) => rungFamily(refId(ref));
 export const useAttention = (doc: string) => useAtomValue(attention(doc));
-export const useRung = (ref: Ref) => useAtomValue(rung(ref));
 
-/** Installs one delegated pointer listener. JSX owns identity; this effect alone owns data-reach. */
+export type Members = ReadonlyMap<SubjectKey, readonly SubjectKey[]>;
+/** Declare plural subjects' members; the returned release withdraws them. */
+export function declareMembers(registry: AtomRegistry.AtomRegistry, doc: string, members: Members) {
+  const atoms = [...members].map(([key, keys]) => {
+    const atom = memberOf(refId({ doc, key }));
+    registry.set(atom, keys);
+    return [atom, keys] as const;
+  });
+  return () => {
+    // ponytail: last writer wins; a key two mounted surfaces declare differently keeps the later one.
+    for (const [atom, keys] of atoms) if (registry.get(atom) === keys) registry.set(atom, null);
+  };
+}
+/** Declare plural subjects' members for as long as the declaring surface is mounted. */
+export function useMembers(doc: string, members: Members) {
+  const registry = useContext(RegistryContext);
+  useEffect(() => declareMembers(registry, doc, members), [doc, members, registry]);
+}
+
+/**
+ * Installs one delegated pointer listener. JSX owns identity; this effect alone owns a Subject's
+ * data-reach. Enrollment is incremental: a mutation touches only the nodes it added or removed,
+ * so a virtual list's scroll costs its new rows, not the whole scope.
+ */
 export function useAttentionScope(host: Element | null) {
   const registry = useContext(RegistryContext);
   useEffect(() => {
     if (!host) return;
-    let release: (() => void)[] = [];
+    const enrolled = new Map<Element, { ref: Ref; stop: () => void }>();
     const refOf = (node: Element): Ref | null => {
       const doc = node.getAttribute("data-subject-doc");
       const key = node.getAttribute("data-subject") as SubjectKey | null;
       return doc && key ? { doc, key } : null;
     };
-    const paint = () => {
-      release.forEach((stop) => stop());
-      release = [];
-      const nodes = [...host.querySelectorAll("[data-subject]")];
-      if (host.matches("[data-subject]")) nodes.push(host);
-      for (const node of nodes) {
-        const ref = refOf(node);
-        if (!ref) continue;
-        const atom = rung(ref);
-        const draw = () => node.setAttribute("data-reach", registry.get(atom));
-        release.push(registry.subscribe(atom, draw));
-        draw();
-      }
+    const release = (node: Element) => {
+      enrolled.get(node)?.stop();
+      enrolled.delete(node);
     };
+    const enroll = (node: Element) => {
+      release(node);
+      const ref = refOf(node);
+      if (!ref || !host.contains(node)) return;
+      const atom = rung(ref);
+      const draw = () => node.setAttribute("data-reach", registry.get(atom));
+      enrolled.set(node, { ref, stop: registry.subscribe(atom, draw) });
+      draw();
+    };
+    const subjects = (node: Node) =>
+      node instanceof Element
+        ? [
+            ...(node.matches("[data-subject]") ? [node] : []),
+            ...node.querySelectorAll("[data-subject]"),
+          ]
+        : [];
+    const observer = new MutationObserver((records) => {
+      for (const record of records) {
+        if (record.type === "attributes") enroll(record.target as Element);
+        record.removedNodes.forEach((node) => subjects(node).forEach(release));
+        record.addedNodes.forEach((node) => subjects(node).forEach(enroll));
+      }
+    });
     const hover = (event: Event) => {
       const node = event.target instanceof Element ? event.target.closest("[data-subject]") : null;
       const ref = node && host.contains(node) ? refOf(node) : null;
@@ -178,13 +213,9 @@ export function useAttentionScope(host: Element | null) {
     };
     const leave = () => {
       const current = registry.get(hovered);
-      if (
-        current &&
-        [...host.querySelectorAll("[data-subject]")].some((node) => sameRef(refOf(node), current))
-      )
+      if (current && [...enrolled.values()].some((entry) => sameRef(entry.ref, current)))
         setHovered(registry, null);
     };
-    const observer = new MutationObserver(paint);
     observer.observe(host, {
       childList: true,
       subtree: true,
@@ -193,33 +224,26 @@ export function useAttentionScope(host: Element | null) {
     });
     host.addEventListener("pointerover", hover);
     host.addEventListener("pointerleave", leave);
-    paint();
+    subjects(host).forEach(enroll);
     return () => {
       observer.disconnect();
-      release.forEach((stop) => stop());
+      leave();
+      enrolled.forEach((entry) => entry.stop());
       host.removeEventListener("pointerover", hover);
       host.removeEventListener("pointerleave", leave);
-      leave();
     };
   }, [host, registry]);
 }
 
-/** Bind a route's real Page projection and membership for as long as its document is displayed. */
-export function useAttentionDocument(
-  doc: string,
-  selected: Atom.Atom<ReadonlySet<SubjectKey>>,
-  resolve: Members = identity,
-) {
+/** Bind a route's real Page projection for as long as its document is displayed. */
+export function useAttentionDocument(doc: string, selected: Atom.Atom<ReadonlySet<SubjectKey>>) {
   const registry = useContext(RegistryContext);
   useEffect(() => {
     registry.set(selection(doc), selected);
-    registry.set(members(doc), { resolve });
-    const release = [registry.mount(selection(doc)), registry.mount(members(doc))];
+    const release = registry.mount(selection(doc));
     return () => {
       if (registry.get(selection(doc)) === selected) registry.set(selection(doc), null);
-      if (registry.get(members(doc)).resolve === resolve)
-        registry.set(members(doc), { resolve: identity });
-      release.forEach((stop) => stop());
+      release();
     };
-  }, [doc, selected, resolve, registry]);
+  }, [doc, selected, registry]);
 }

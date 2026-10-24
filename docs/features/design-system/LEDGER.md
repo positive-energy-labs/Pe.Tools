@@ -39,7 +39,7 @@ The one-system design cluster: the design LANGUAGE (raw values in `apps/web/src/
 
 - 2026-10-23, I4: A picture `Pane` derives its crumb from its scope title, `PictureReadout` subject and selection, and `PictureStage` selection state. `PaneCrumb.segments` remains only for a scope the picture cannot know.
 - 2026-10-24, I5: A picture `Pane` supplies its projected selection box, or pane rectangle, through the per-document `picture` atom. `SubjectPopoverContent` uses the existing registry across sibling panes; routes do not provide `SubjectBox`.
-- 2026-10-24, N7: `Scene3D`, ducts schematic/tree/prose and rooms plan/table share the Subject attention atoms. Per-document membership resolves aggregate hover; citation owns footnote numbering. The custom `reachStore` is deleted.
+- 2026-10-24, N7: `Scene3D`, ducts schematic/tree/prose and rooms plan/table share the Subject attention atoms. Subject kinds are open strings each feature declares (kit owns only `e:`); a plural mark has a short id whose members it declares with `useMembers`, the only plural-lighting path (kaitpw). A cited footnote paints `data-reach="cited"`; `focus` stays the keyboard ring's rung. Citation owns footnote numbering. The custom `reachStore` is deleted.
 - 2026-10-23, N6: `listOf` carries a Reading's retained observation and lifecycle into lists and tables; census row `reading-list-adapter` rejects local extraction that drops that lifecycle.
 - 2026-10-23, N4: Row renderers infer native targets from element identity and numeric keys within the captured RevitScope; census row `row-revit-inferred` rejects redundant identity callbacks.
 - 2026-10-23, I2: `rowDamage` owns declared cell/verdict roll-up independently of hidden columns; plan and mesh damage consumers read the row model.

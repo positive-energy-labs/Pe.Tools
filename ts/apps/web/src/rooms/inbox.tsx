@@ -1,5 +1,5 @@
-import { useContext } from "react";
-import { AttentionDocument, memberKey, type SubjectKey } from "@pe/kit/lang/attention";
+import { useContext, useMemo } from "react";
+import { AttentionDocument, useMembers, type SubjectKey } from "@pe/kit/lang/attention";
 import { revitTarget } from "@pe/kit/lang/revit-target";
 /**
  * The feedback inbox (V6 calm): one row per mark or note on the view, in `CARD_STATES` order. A
@@ -288,6 +288,19 @@ export function RoomsInbox({
   };
   const count = (state: CardState) => cards.filter((card) => card.state === state).length;
   const shown = filter === "all" ? cards : cards.filter((card) => card.state === filter);
+  useMembers(
+    attentionDoc,
+    useMemo(
+      () =>
+        new Map(
+          cards.map((card) => [
+            `card:${card.id}` as const,
+            card.guids.map((guid): SubjectKey => `room:${guid}`),
+          ]),
+        ),
+      [cards],
+    ),
+  );
   const list = useList({
     items: shown,
     keyOf: (card) => card.id,
@@ -368,7 +381,7 @@ export function RoomsInbox({
               meta: <Thumb card={card} regions={regions} width={32} />,
               subject: {
                 doc: attentionDoc,
-                key: memberKey(card.guids.map((guid): SubjectKey => `room:${guid}`)),
+                key: `card:${card.id}`,
               },
             })}
           />
