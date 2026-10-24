@@ -3,6 +3,7 @@ import { Dialog as DialogPrimitive } from "@base-ui/react/dialog";
 import { KeyHint } from "@pe/kit/lang/key-hint";
 import { Button } from "@pe/kit/lang/button";
 import { LeaderDiagram } from "@pe/kit/lang/leader-diagram";
+import { Deferred } from "@pe/kit/lang/section";
 import { TeachLive, useTeaching } from "@pe/kit/lang/use-teach";
 import { measureRegions, type Teaching, type TeachKey } from "@pe/kit/lang/teach";
 import { useScopeKeys } from "@pe/kit/keys";
@@ -10,7 +11,6 @@ import { GestureKey } from "@pe/kit/lang/gesture-glyph";
 import { HotkeyCommand } from "#/components/lang/hotkey-command";
 import { startFeedback } from "#/components/feedback-picker";
 import { SettingsHelpTrigger } from "#/machine/navigation";
-
 type HelpProps = { docs?: ReactNode; name: string; utilities?: boolean };
 const HELP_CHORD = { hotkey: "Alt+/", label: "How this tool works" } as const;
 function Details({ facts }: { facts: readonly Teaching[] }) {
@@ -134,7 +134,7 @@ function HelpBody({ docs, name, utilities, close }: HelpProps & { close: () => v
             if ((e.target as HTMLElement).closest("a")) close();
           }}
         >
-          {docs}
+          <Deferred>{docs}</Deferred>
         </div>
       ) : null}
       {utilities ? (
@@ -154,11 +154,8 @@ function HelpBody({ docs, name, utilities, close }: HelpProps & { close: () => v
     </div>
   );
 }
-
 /** Navigation can mount several openers; the newest owns Help. */
 const openers: (() => void)[] = [];
-
-/** AppChrome binds once on the document, including inputs. */
 export function HelpChord() {
   useScopeKeys(
     [
@@ -173,7 +170,6 @@ export function HelpChord() {
   );
   return null;
 }
-
 export function RouteHelpButton({ docs, name, utilities = false }: HelpProps) {
   const [open, setOpen] = useState(false);
   // Focus the page itself, not its first tabbable (a footer button) that would scroll it to the end.

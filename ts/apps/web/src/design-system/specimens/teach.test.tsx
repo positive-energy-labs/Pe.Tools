@@ -13,14 +13,36 @@ import { QueryBox } from "@pe/kit/table/query";
 import { HelpWorld, RouteHelpButton } from "#/route/help";
 import { ductsDocs } from "#/ducts/docs";
 import { DUCTS_COMPARE } from "@pe/agent-contracts/ducts-guide";
-
-vi.mock("#/ducts/docs-cases", () => ({ DuctCases: () => null }));
+const diagram = vi.hoisted(() => vi.fn(() => null));
 vi.mock("#/product-map/diagram", async (original) => ({
   ...(await original<typeof import("#/product-map/diagram")>()),
-  Mermaid: () => null,
+  Mermaid: diagram,
 }));
-
+vi.mock("@tanstack/react-router", async (original) => ({
+  ...(await original<typeof import("@tanstack/react-router")>()),
+  Link: ({ children }: { children: React.ReactNode }) => <a>{children}</a>,
+}));
+let enter: IntersectionObserverCallback[];
+async function reveal() {
+  await act(async () => {
+    for (const run of enter.splice(0))
+      run([{ isIntersecting: true } as IntersectionObserverEntry], {} as IntersectionObserver);
+    await new Promise((resolve) => setTimeout(resolve, 50));
+  });
+}
 beforeEach(() => {
+  enter = [];
+  diagram.mockClear();
+  vi.stubGlobal(
+    "IntersectionObserver",
+    class {
+      constructor(callback: IntersectionObserverCallback) {
+        enter.push(callback);
+      }
+      observe() {}
+      disconnect() {}
+    },
+  );
   vi.spyOn(HTMLElement.prototype, "getBoundingClientRect").mockImplementation(
     function (this: HTMLElement) {
       return this.closest("[hidden]") ? new DOMRect() : new DOMRect(0, 0, 400, 600);
@@ -30,12 +52,23 @@ beforeEach(() => {
 afterEach(() => {
   cleanup();
   vi.restoreAllMocks();
+  vi.unstubAllGlobals();
   expect(readTeaching()).toEqual([]);
 });
 const noop = () => {};
-test("Help prose tables use the kit's labelled narrow cells without teaching their own keys", () => {
+test("Help paints its generated screen before mounting prose, cases or invoking diagrams", async () => {
   render(<RouteHelpButton name="Ducts" docs={ductsDocs} />);
   fireEvent.click(screen.getByRole("button", { name: "How this tool works" }));
+  expect(document.querySelector("[data-teach-legend]")).toBeTruthy();
+  expect(document.querySelectorAll("article[id^=case-]")).toHaveLength(0);
+  expect(screen.queryAllByRole("grid")).toHaveLength(0);
+  await reveal();
+  expect(document.querySelectorAll("article[id^=case-]")).toHaveLength(0);
+  expect(diagram).not.toHaveBeenCalled();
+  await reveal();
+  await reveal();
+  expect(document.querySelectorAll("article[id^=case-]").length).toBeGreaterThan(0);
+  expect(diagram).toHaveBeenCalledTimes(2);
   const tables = screen.getAllByRole("grid");
   expect(tables).toHaveLength(DUCTS_COMPARE.length + 2);
   tables.forEach((table) => {
@@ -92,7 +125,6 @@ function ListFixture({ mode = "parallel", extra = false }: { mode?: string; extr
 function Tutorial() {
   return <HelpWorld facts={useTeaching()} />;
 }
-
 test("ListView publishes real fields; the open tutorial follows modes and fields, and unmount withdraws all facts", () => {
   const page = (mode: string, extra: boolean) => (
     <StrictMode>
@@ -113,7 +145,6 @@ test("ListView publishes real fields; the open tutorial follows modes and fields
   expect(within(tutorial).getByText("perspective · active")).toBeTruthy();
   expect(tutorial.querySelector("[data-teach-search]")?.textContent).toContain("Size");
 });
-
 test("the tutorial preserves three pane rectangles, one leader per pane, and scoped single-item key rows", () => {
   const rects = [
     [20, 50, 200, 600],
@@ -176,7 +207,6 @@ test("the tutorial preserves three pane rectangles, one leader per pane, and sco
     .querySelectorAll("dl > div")
     .forEach((row) => expect(row.querySelectorAll("dt")).toHaveLength(1));
 });
-
 test("zero-box panes withdraw facts without rehoming them; untitled panes use their list name", async () => {
   const view = render(
     <>
@@ -202,7 +232,6 @@ test("zero-box panes withdraw facts without rehoming them; untitled panes use th
   );
   expect(screen.getByRole("heading", { name: "1 System tree" })).toBeTruthy();
 });
-
 test("hidden scopes withdraw keys, modes and regions; key refusal changes remain live", () => {
   function Keys({ refused }: { refused: boolean }) {
     useScopeKeys([
@@ -228,7 +257,6 @@ test("hidden scopes withdraw keys, modes and regions; key refusal changes remain
   view.rerender(page(true, true));
   expect(readTeaching()).toEqual([]);
 });
-
 test("table search teaches only its real fields and operators and removes them on unmount", () => {
   render(
     <QueryBox

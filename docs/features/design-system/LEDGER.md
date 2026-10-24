@@ -7,6 +7,7 @@ The one-system design cluster: the design LANGUAGE (raw values in `apps/web/src/
 **This ledger owns every cross-route design-language and primitive gap.** Route ledgers name their own applications and evidence; they never restate a ruling or a gap that lives here. A rule lives in exactly one home: a type, a check, a swatch specimen, or `.agents/skills/lens.house/SKILL.md`. `docs/design/SURFACE-PHILOSOPHY.md` indexes those homes.
 
 ## Decided
+- 2026-10-24, N6: Help paints its generated legend and miniature before documentation work. Kit `Deferred` mounts sections near the viewport after a paint opportunity and retains visited content; diagram engines load within that boundary. Production timing remains a browser claim.
 - 2026-10-24, kaitpw: "i wanted it on the floaters, not the panes, its looks super stupid on the panes too, for the floaters it should be on the inner bottom corner of a resizable floater (keys should prob not be resizable)". Panes have no corner grips. A resizable floater has one resize grip at the bottom corner that faces the pane interior. The floater kind declares resizability: the globe resizes, the keys floater does not. Supersedes the wave 8 pane corner grips.
 - 2026-10-24, kaitpw: "i kinda liked the older darker red damage better". Damage uses the earlier darker red, as one token for DOM, SVG and the 3D scene.
 - 2026-10-23, I2/L3: Damage uses promoted opacity on one document clock (`damage-beat.ts`); reduced motion keeps static marks. Trailing damage facts truncate and hide before the title loses its 12ch floor. `--pe-alarm` restores the shared `#b3140a` damage red from `55b0df71` in both themes. The swatch carries 200 damaged rows; `damage.test.tsx` and `damage-compositor-motion` guard these rules.
@@ -671,6 +672,7 @@ Rebuilt 2026-10-22 against `a553a15a`; these are decisions and proof boundaries,
 - 2026-10-08, react-grab `freeze()` during feedback picking (halts the note popover); `.pick-mark` in `--pe-line-2` (vanishes); rasterizing `document.body` (drops `<html>` styles, 10px crop error; rasterize `document.documentElement`).
 
 ## Owed
+- Tutorial with Rulings expanded still exceeds the 100 ms paint / 200 ms CPU targets: 208 ms / 1,008 ms after deferred documentation. Re-measure the combined animation and teaching-observer fixes; the animation-only browser control reaches 104 ms / 233 ms. [Production evidence](C:/Users/kaitp/source/repos/Pe.Tools/.artifacts/runs/kit-raise-20261023/wave9/tutorial-lazy.md).
 
 - 2026-10-23, kit-raise guards browser pass: verify subject popover alignment, picture legend/readout docks, held-picture readout freshness, and gesture legends after the wave-4 integration. Compile and source census do not prove geometry or camera feel.
 

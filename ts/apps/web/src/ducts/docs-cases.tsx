@@ -1,15 +1,7 @@
-import { TooltipHint } from "@pe/kit/lang/tooltip";
+import { Deferred } from "@pe/kit/lang/section";
 import { Link } from "@tanstack/react-router";
-import {
-  CASE_GROUPS,
-  DUCT_CASES,
-  type CaseGroup,
-  type DuctCase,
-} from "@pe/agent-contracts/ducts-guide";
+import { CASE_GROUPS, DUCT_CASES, type DuctCase } from "@pe/agent-contracts/ducts-guide";
 import { CaseDrawing, CaseLegend } from "./cases/draw";
-
-const groups = Object.keys(CASE_GROUPS) as CaseGroup[];
-
 function CaseCard({ c }: { c: DuctCase }) {
   return (
     <article
@@ -40,26 +32,21 @@ function CaseCard({ c }: { c: DuctCase }) {
       {c.examples.length ? (
         <p className="m-0 t-small">
           {c.examples.map((e, i) => (
-            <TooltipHint
+            <Link
               key={i}
-              content="Opens on the project the case was recorded from; the ids will not resolve on another document"
+              to="/ducts"
+              search={{ system: e.system ?? "", selected: e.selected ?? "" }}
+              className="mr-3 underline"
             >
-              <Link
-                to="/ducts"
-                search={{ system: e.system ?? "", selected: e.selected ?? "" }}
-                className="mr-3 underline"
-              >
-                {e.system ?? "no system"}
-                {e.selected ? ` · ${e.selected}` : ""}
-              </Link>
-            </TooltipHint>
+              {e.system ?? "no system"}
+              {e.selected ? ` · ${e.selected}` : ""}
+            </Link>
           ))}
         </p>
       ) : null}
     </article>
   );
 }
-
 export function DuctCases() {
   return (
     <>
@@ -68,17 +55,20 @@ export function DuctCases() {
         One card per situation: what it is, what Pe does, why, the code shared by the engine and the
         inbox, and a link to a recorded example. Status: handled, owed (known gap), open (needs a
         ruling), fixed (a defect found during verification). A link opens the case on the page and
-        keeps the current read.
+        keeps the current read. Recorded links belong to their original project; their ids will not
+        resolve on another document.
       </p>
       <CaseLegend />
-      {groups.map((g) => (
+      {Object.entries(CASE_GROUPS).map(([g, label]) => (
         <section key={g} className="flex flex-col gap-2">
           <h4 className="m-0">
-            {g} · {CASE_GROUPS[g]}
+            {g} · {label}
           </h4>
           <div className="grid grid-cols-[repeat(auto-fill,minmax(min(100%,20rem),1fr))] gap-3">
             {DUCT_CASES.filter((c) => c.group === g).map((c) => (
-              <CaseCard key={c.number} c={c} />
+              <Deferred key={c.number}>
+                <CaseCard c={c} />
+              </Deferred>
             ))}
           </div>
         </section>

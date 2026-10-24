@@ -1,13 +1,35 @@
-/**
- * The page-chrome unit: a head (the `t-small t-upper` role) and a hairline, never a box. HelpTip may
- * sit beside the title and an optional right-aligned aside carries counts and controls.
- */
 import { tv } from "../../lib/tv";
-
+import { useEffect, useRef, useState, type ReactNode } from "react";
 import { Rail } from "./rail";
-
 import "./lang.css";
-
+/** Retain visited sections, but never mount off-screen work or run it before a paint. */
+export function Deferred({ children }: { children: ReactNode }) {
+  const ref = useRef<HTMLDivElement>(null);
+  const [ready, setReady] = useState(false);
+  useEffect(() => {
+    let frame = 0;
+    const observer = new IntersectionObserver(
+      (entries) => {
+        if (!entries.some((entry) => entry.isIntersecting)) return;
+        observer.disconnect();
+        frame = requestAnimationFrame(() => {
+          frame = requestAnimationFrame(() => setReady(true));
+        });
+      },
+      { rootMargin: "200px" },
+    );
+    observer.observe(ref.current!);
+    return () => {
+      observer.disconnect();
+      cancelAnimationFrame(frame);
+    };
+  }, []);
+  return (
+    <div ref={ref} data-deferred={ready}>
+      {ready && children}
+    </div>
+  );
+}
 export const sectionRecipe = tv({
   slots: {
     base: "min-w-0",
@@ -16,7 +38,6 @@ export const sectionRecipe = tv({
     provenance: "mt-1.5 mb-0 t-small face-mono tracking-[0.02em] text-ink-2",
   },
 });
-
 export function Section({
   label,
   help,
@@ -26,7 +47,6 @@ export function Section({
   label: string;
   /** Region orientation — a HelpTip node, beside the title it orients. */
   help?: React.ReactNode;
-  /** Right-aligned counts/controls for the head row. */
   aside?: React.ReactNode;
   children: React.ReactNode;
 }) {
@@ -46,11 +66,6 @@ export function Section({
     </section>
   );
 }
-
-/**
- * Provenance: the composed-read honesty line (what was measured, when, what was left out). Mono,
- * secondary ink, never a badge; freshness that matters becomes queue work.
- */
 export function Provenance({ children }: { children: React.ReactNode }) {
   const { provenance } = sectionRecipe();
   return <p className={provenance()}>{children}</p>;
