@@ -1,6 +1,7 @@
 import {
   bindWork,
   pendingProposals,
+  unfinishedCells,
   workKey,
   workKeySchema,
   type WorkKey,
@@ -127,12 +128,14 @@ export class RouteWorkspace {
         const spec = this.#registry.get(record.route)?.spec;
         let revision: number | null = null;
         let proposals = 0;
+        let unfinished = 0;
         let state: "ready" | "unreadable" | "unregistered" = spec ? "unreadable" : "unregistered";
         if (spec) {
           try {
             const envelope = parseEnvelope(record.value, spec);
             revision = envelope.revision;
             proposals = pendingProposals(envelope.doc);
+            unfinished = unfinishedCells(envelope.doc);
             state = "ready";
           } catch {
             // Keep the address discoverable without exposing the unreadable document.
@@ -147,6 +150,7 @@ export class RouteWorkspace {
             revision,
             state,
             proposals,
+            unfinished,
           },
         ];
       });
