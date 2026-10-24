@@ -323,9 +323,12 @@ test("a Work pressed on a closed document shows what is kept and how to reconnec
   expect(band.textContent).toContain("3 unfinished");
   expect(band.textContent).toContain("Size the office");
   expect(band.textContent).toContain("Office host said so");
+  // Saved or never saved: nothing promises the same file reopens.
+  expect(band.textContent).toContain("Work is kept, read-only, while its document is closed.");
+  expect(band.textContent).not.toMatch(/reopen|same file/i);
   // The route thread's strict browser assertion, matched by the surface itself.
   expect(band.textContent).toMatch(/closed|reconnect|not open|choose.*document/i);
-  expect(screen.getByRole("button", { name: "Open the document in Revit" })).toBeTruthy();
+  expect(screen.getByRole("button", { name: "Open or choose a document in Revit" })).toBeTruthy();
   // An open document's Work press clears it.
   await act(() =>
     store.actions.openWork(

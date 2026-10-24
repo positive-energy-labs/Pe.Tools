@@ -170,8 +170,9 @@ export function RouteDock({
   );
 }
 
-/** Retained Work for a closed document: its name, what is kept, the one way back, and the host's
- *  reason. The tool's own verbs stay refused until the document is open. */
+/** Retained Work for a closed document, saved or never saved: its name, what is kept, the one way
+ *  back, and the host's reason. Nothing promises the same file reopens, and the Work never moves
+ *  to a replacement document; the tool's verbs stay refused while it is closed. */
 function ClosedWorkBand({
   closed,
   onOpen,
@@ -181,7 +182,7 @@ function ClosedWorkBand({
 }) {
   return (
     <div data-closed-work="" className="flex shrink-0 flex-col gap-1 p-(--gutter) hairline-b">
-      <EmptyState story="scope" exit="open it in Revit">
+      <EmptyState story="scope" exit="reconnect in Revit">
         {`${closed.document ?? "Its document"} is closed`}
       </EmptyState>
       <span className="flex min-w-0 flex-wrap items-center gap-1">
@@ -189,12 +190,12 @@ function ClosedWorkBand({
           <span className={chipRecipe().base()}>{closed.unfinished} unfinished</span>
         ) : null}
         <span className="min-w-0 truncate">{closed.intent}</span>
-        <Button kind="framed" label="Open the document in Revit" onClick={onOpen}>
+        <Button kind="framed" label="Open or choose a document in Revit" onClick={onOpen}>
           Open in Revit…
         </Button>
       </span>
       <p className="m-0 t-small text-ink-mute">
-        Work is kept; nothing runs until the document is open.
+        Work is kept, read-only, while its document is closed.
       </p>
       {closed.reason ? <p className="m-0 t-small text-ink-mute">{closed.reason}</p> : null}
     </div>
