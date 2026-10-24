@@ -13,7 +13,7 @@ import {
 import { address, routeAddress, type ThreadTab, type WorkKey } from "@pe/agent-contracts";
 import { appAtomRegistry } from "#/route/route-owner";
 import { createChatPageStore } from "./store";
-import { RouteDock } from "./route-panes";
+import { RouteDock, dockWidths } from "./route-panes";
 
 const store = createChatPageStore({
   registry: appAtomRegistry,
@@ -52,7 +52,11 @@ const tabOffice: ThreadTab = {
 };
 const threads = [{ id: "T", tabs: [ducts, tabA, tabB, tabOpen, tabOffice] }];
 vi.mock("./provider", () => ({ useWorkbench: () => ({ store, threads }) }));
-vi.mock("#/chat/chat-shell", () => ({ ChatShell: () => <div data-chat-probe="">pea</div> }));
+vi.mock("#/chat/chat-shell", () => ({
+  ChatShell: () => <div data-chat-probe="">pea</div>,
+  SIDEBAR: { size: 300, rail: 32 },
+  peaFloor: () => 643,
+}));
 vi.mock("#/route/situation-ladder", () => ({ ChatPlanIntent: createContext(null) }));
 vi.mock("#/readings", () => ({
   useReading: () => ({ state: "pending" }),
@@ -265,4 +269,27 @@ test.fails("known gap: an address key with no `from` restores the open-ref Place
   await waitFor(() => expect(shown(router)).toMatchObject({ system: "SO", tab: "tab-open" }), {
     timeout: 1500,
   });
+});
+
+test.each([
+  // viewport, tools default, Pea (sidebar), stacks?
+  [1920, 961, "open"],
+  [1400, 709, "folded"],
+  [1280, 589, "folded"],
+] as const)(
+  "at %ipx Pea keeps its measure and the tools take what remains (%ipx)",
+  (viewport, tools, sidebar) => {
+    // Comfort tokens: Pea's floor 643px (76ch measure + lane + gutters), 16px root, 8px gutter.
+    const widths = dockWidths(viewport, 16, 643, 8);
+    expect(widths.floor).toBe(576);
+    expect(widths.tools).toBe(tools);
+    const pea = viewport - 8 - widths.tools;
+    expect(pea).toBeGreaterThanOrEqual(643 + (sidebar === "open" ? 300 + 8 : 32 + 8));
+    expect(widths.tools).toBeGreaterThanOrEqual(widths.floor);
+    expect(viewport).toBeGreaterThanOrEqual(widths.stackBelow);
+  },
+);
+
+test("below Pea, its folded sidebar, the seam and the tools' floor, the dock stacks", () => {
+  expect(dockWidths(1266, 16, 643, 8).stackBelow).toBe(1267);
 });
