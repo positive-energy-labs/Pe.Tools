@@ -15,7 +15,7 @@ function evidence(svg = false) {
     <>
       <span>Evidence</span>
       {[1, 2, 3].map((n) => (
-        <TooltipHint key={n} content={`Subject ${n}: go to it`}>
+        <TooltipHint key={n} side="right" content={`Subject ${n}: go to it`}>
           <a href={`#subject-${n}`} onClick={() => go(n)}>
             Subject {n}
           </a>
@@ -23,7 +23,7 @@ function evidence(svg = false) {
       ))}
     </>
   );
-  render(
+  const view = render(
     <TooltipProvider delay={0}>
       {svg ? (
         <svg>
@@ -34,87 +34,133 @@ function evidence(svg = false) {
       ) : (
         <TooltipHint>{content}</TooltipHint>
       )}
-      <button>yes</button>
+      <TooltipHint content={undefined}>
+        <button>yes</button>
+      </TooltipHint>
       <TooltipHint content="no: the claim is wrong">
         <button>no</button>
       </TooltipHint>
+      {svg && (
+        <svg>
+          <circle aria-label="round mark" aria-description="original">
+            <SvgTip content="round" />
+          </circle>
+        </svg>
+      )}
     </TooltipProvider>,
   );
-  return {
-    go,
-    trigger: svg
-      ? screen.getByTestId("mark")
-      : screen.getByRole("button", { name: "What is this?" }),
-  };
+  const trigger = svg ? screen.getByTestId("mark") : screen.getByLabelText("What is this?");
+  return { go, unmount: view.unmount, trigger };
 }
 
-async function hover(trigger: Element, x: number, y: number) {
+async function hover(trigger: Element, x: number, y: number, ms = 400) {
   fireEvent.pointerEnter(trigger, { pointerType: "mouse", clientX: x, clientY: y });
   fireEvent.mouseEnter(trigger, { clientX: x, clientY: y });
   fireEvent.mouseMove(trigger, { clientX: x, clientY: y });
-  await act(() => vi.advanceTimersByTime(400));
+  await act(() => vi.advanceTimersByTime(ms));
 }
 
 test.each(
   [
-    { place: "above", box: [926, 142, 384, 50], y: 177, x: [1015.375, 1085.375, 1155.375] },
-    { place: "below", box: [926, 224, 384, 50], y: 259, x: [1015.375, 1085.375, 1155.375] },
-    { place: "left", box: [516, 190, 384, 50], y: 225, x: [605.375, 675.375, 745.375] },
-    { place: "right", box: [972, 190, 384, 50], y: 225, x: [1061.375, 1131.375, 1201.375] },
-  ].flatMap((placement) => [1, 2, 3].map((n) => ({ ...placement, n }))),
+    { place: "above", box: new DOMRect(926, 142, 384, 50) },
+    { place: "below", box: new DOMRect(926, 224, 384, 50) },
+    { place: "left", box: new DOMRect(516, 190, 384, 50) },
+    { place: "right", box: new DOMRect(972, 190, 384, 50) },
+    { place: "reported", box: new DOMRect(952, 198, 384, 50) },
+  ].flatMap((place) =>
+    [false, true].flatMap((svg) => [1, 2, 3].map((n) => ({ ...place, svg, n }))),
+  ),
 )(
-  "$place evidence survives a 150ms diagonal through a sibling hint to footnote $n",
-  async ({ n, box, x, y }) => {
+  "$place reference $n stays reachable through nested hints (SVG=$svg)",
+  async ({ box, svg, n }) => {
     vi.useFakeTimers();
-    const { go, trigger } = evidence();
-    vi.spyOn(trigger, "getBoundingClientRect").mockReturnValue(new DOMRect(926, 198, 20, 20));
+    const anchorBox = new DOMRect(926, 198, 20, 20);
+    vi.spyOn(document.documentElement, "clientWidth", "get").mockReturnValue(1440);
+    vi.spyOn(document.documentElement, "clientHeight", "get").mockReturnValue(900);
+    vi.spyOn(SVGElement.prototype, "getBoundingClientRect").mockReturnValue(anchorBox);
+    const measure = function (this: HTMLElement) {
+      const number = Number(this.textContent?.at(-1));
+      if (this.matches("a"))
+        return new DOMRect(box.left - 12.484375 + number * 70, box.top + 25, 63.71875, 20);
+      const popup = this.getAttribute("role") === "tooltip" ? this : this.firstElementChild;
+      if (popup?.getAttribute("role") === "tooltip") {
+        if (popup.textContent?.startsWith("Evidence")) return box;
+        const transform = popup.parentElement!.style.transform;
+        const xy = transform.match(/translate\(([-\d.]+)px, ([-\d.]+)px\)/);
+        return new DOMRect(Number(xy?.[1]) || 0, Number(xy?.[2]) || 0, 167.7265625, 30.5);
+      }
+      return this.tagName === "BUTTON" ? anchorBox : new DOMRect();
+    };
+    vi.spyOn(HTMLElement.prototype, "getBoundingClientRect").mockImplementation(measure);
+    for (const property of ["offsetWidth", "offsetHeight"] as const)
+      vi.spyOn(HTMLElement.prototype, property, "get").mockImplementation(
+        function (this: HTMLElement) {
+          return measure.call(this)[property === "offsetWidth" ? "width" : "height"];
+        },
+      );
+    const { trigger, go } = evidence(svg);
     await hover(trigger, 936, 208);
     const popup = screen.getByText("Evidence").closest('[role="tooltip"]')!;
-    // R3: actual rendered box above the trigger, even though TooltipHint requests bottom.
-    vi.spyOn(popup, "getBoundingClientRect").mockReturnValue(new DOMRect(...box));
-    const link = screen.getByRole("link", { name: `Subject ${n}` });
-    const end = { x: x[n - 1]!, y };
+    const refs = screen.getAllByRole("link"),
+      ref = refs[n - 1]!;
+    const end = ref.getBoundingClientRect();
+    const inside = (element: Element, x: number, y: number) => {
+      const r = element.getBoundingClientRect();
+      return x >= r.left && x < r.right && y >= r.top && y < r.bottom;
+    };
+    fireEvent.pointerLeave(trigger);
     fireEvent.mouseLeave(trigger, { clientX: 936, clientY: 208 });
-    const sibling = screen.getByRole("button", { name: "no" });
-    for (let step = 1; step <= 3; step++) {
-      const point = {
-        clientX: 936 + ((end.x - 936) * step) / 3,
-        clientY: 208 + ((end.y - 208) * step) / 3,
-      };
-      fireEvent.mouseEnter(sibling, point);
-      fireEvent.mouseMove(sibling, point);
-      await act(() => vi.advanceTimersByTime(50));
-      expect(screen.getByText("Evidence").closest('[role="tooltip"]')).toBe(popup);
+    let hit: Element = trigger;
+    for (let step = 1; step <= 6; step++) {
+      const clientX = 936 + ((end.x + end.width / 2 - 936) * step) / 6;
+      const clientY = 208 + ((end.y + end.height / 2 - 208) * step) / 6;
+      const top = screen
+        .getAllByRole("tooltip")
+        .reverse()
+        .find((el) => inside(el, clientX, clientY));
+      hit =
+        refs.find((el) => top?.contains(el) && inside(el, clientX, clientY)) ??
+        top ??
+        screen.getByRole("button", { name: "no" });
+      fireEvent.mouseEnter(hit, { clientX, clientY });
+      fireEvent.mouseMove(hit, { clientX, clientY });
+      if (inside(popup, clientX, clientY)) fireEvent.pointerEnter(popup, { pointerType: "mouse" });
+      await act(() => vi.advanceTimersByTime(220 / 6));
     }
-    fireEvent.mouseEnter(popup.parentElement!, { clientX: end.x, clientY: end.y });
-    fireEvent.mouseEnter(link, { clientX: end.x, clientY: end.y });
-    fireEvent.mouseMove(link, { clientX: end.x, clientY: end.y });
-    await act(() => vi.advanceTimersByTime(1));
-    await act(() => vi.advanceTimersByTime(950));
-    expect(screen.getByRole("link", { name: `Subject ${n}` })).toBe(link);
-    expect(screen.getByText(`Subject ${n}: go to it`)).toBeTruthy();
-    fireEvent.click(link);
+    for (const hint of screen.getAllByText(/Subject \d: go to it/)) {
+      const r = hint.getBoundingClientRect();
+      for (const sibling of refs) {
+        const s = sibling.getBoundingClientRect();
+        const clear =
+          r.right <= s.left || r.left >= s.right || r.bottom <= s.top || r.top >= s.bottom;
+        expect.soft(clear).toBe(true);
+      }
+    }
+    expect.soft(hit).toBe(ref);
+    // A portal leave is not a geometric departure from the parent.
+    const contactHint = screen.getAllByText(/Subject \d: go to it/).at(-1)!;
+    const point = { clientX: end.x + 32, clientY: end.y + 10 };
+    fireEvent.mouseLeave(popup, { ...point, relatedTarget: contactHint });
+    fireEvent.mouseMove(contactHint, point);
+    fireEvent.mouseLeave(ref, point);
+    await act(() => vi.advanceTimersByTime(1100));
+    expect(screen.getByText("Evidence").closest('[role="tooltip"]')).toBe(popup);
+    expect(screen.getByRole("link", { name: `Subject ${n}` })).toBe(ref);
+    expect(ref.getAttribute("aria-description")).toBe(`Subject ${n}: go to it`);
+    fireEvent.click(ref);
     expect(go).toHaveBeenCalledWith(n);
+    fireEvent.pointerLeave(popup);
+    await hover(screen.getByRole("button", { name: "no" }), 900, 250, 701);
+    expect(screen.queryByText("Evidence")).toBeNull();
+    expect(screen.getByText("no: the claim is wrong")).toBeTruthy();
   },
 );
-
-test("a path away from the measured popup permits a sibling hint", async () => {
-  vi.useFakeTimers();
-  const { trigger } = evidence();
-  await hover(trigger, 936, 208);
-  const popup = screen.getByText("Evidence").closest('[role="tooltip"]')!;
-  vi.spyOn(popup, "getBoundingClientRect").mockReturnValue(new DOMRect(926, 142, 384, 50));
-  fireEvent.mouseLeave(trigger, { clientX: 936, clientY: 208 });
-  await hover(screen.getByRole("button", { name: "no" }), 900, 250);
-  expect(screen.queryByText("Evidence")).toBeNull();
-  expect(screen.getByText("no: the claim is wrong")).toBeTruthy();
-});
 
 test.each([false, true])(
   "keyboard enters Evidence, returns, exits and Escapes (SVG=%s)",
   async (svg) => {
     vi.useFakeTimers();
-    const { trigger } = evidence(svg);
+    const { trigger, unmount } = evidence(svg);
     await act(async () => trigger.focus());
     const links = screen.getAllByRole("link");
     const tabTo = (next: Element, shiftKey = false) => {
@@ -131,45 +177,16 @@ test.each([false, true])(
     await act(() => vi.advanceTimersByTime(701));
     expect(document.activeElement).toBe(trigger);
     expect(screen.queryByText("Evidence")).toBeNull();
+    if (svg) {
+      vi.useRealTimers();
+      const mark = screen.getByLabelText("round mark");
+      expect(mark.getAttribute("tabindex")).toBe("0");
+      await act(async () => mark.dispatchEvent(new FocusEvent("focus")));
+      expect(await screen.findByText("round")).toBeTruthy();
+      expect(mark.getAttribute("aria-description")).toBe("round");
+      expect(document.querySelector("svg title")).toBeNull();
+      unmount();
+      expect(mark.getAttribute("aria-description")).toBe("original");
+    }
   },
 );
-
-test("an explicitly empty hint preserves its existing trigger", () => {
-  render(
-    <TooltipHint content={undefined}>
-      <button>Original action</button>
-    </TooltipHint>,
-  );
-  expect(screen.getByRole("button", { name: "Original action" })).toBeTruthy();
-  expect(screen.queryByRole("button", { name: "What is this?" })).toBeNull();
-});
-
-test("SVG footnotes survive pointer travel and 950ms inside", async () => {
-  vi.useFakeTimers();
-  const { go, trigger } = evidence(true);
-  await hover(trigger, 20, 20);
-  const popup = screen.getByRole("tooltip");
-  const link = screen.getByRole("link", { name: "Subject 1" });
-  fireEvent.pointerLeave(trigger);
-  fireEvent.mouseLeave(trigger, { clientX: 20, clientY: 21 });
-  for (let step = 1; step <= 3; step++) {
-    fireEvent.mouseMove(document.body, { clientX: 20 + step * 10, clientY: 21 + step * 10 });
-    await act(() => vi.advanceTimersByTime(50));
-    expect(screen.getByRole("tooltip")).toBe(popup);
-  }
-  fireEvent.pointerEnter(popup, { pointerType: "mouse" });
-  fireEvent.mouseEnter(popup.parentElement!);
-  fireEvent.pointerEnter(link, { pointerType: "mouse" });
-  fireEvent.mouseEnter(link);
-  fireEvent.mouseMove(link, { clientX: 50, clientY: 51 });
-  await act(() => vi.advanceTimersByTime(1));
-  await act(() => vi.advanceTimersByTime(950));
-  expect(screen.getByRole("link", { name: "Subject 1" })).toBe(link);
-  expect(link.getAttribute("aria-description")).toBe("Subject 1: go to it");
-  fireEvent.click(link);
-  expect(go).toHaveBeenCalledWith(1);
-  fireEvent.pointerLeave(popup);
-  fireEvent.mouseLeave(popup.parentElement!);
-  await act(() => vi.advanceTimersByTime(701));
-  expect(screen.queryByRole("tooltip")).toBeNull();
-});

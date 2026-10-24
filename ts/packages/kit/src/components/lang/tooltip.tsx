@@ -173,17 +173,14 @@ export function TooltipContent({
 }: Omit<Primitive.Popup.Props, "className"> &
   FloatingPosition & { className?: string; anchor?: Element | null }) {
   const description = useContext(Description);
-  const away = useSubjectPosition(anchor ?? description?.anchor ?? null);
-  const surface = useHoverSurface(
-    anchor ?? description?.anchor ?? null,
-    ref,
-    description?.contact,
-    description?.close,
-  );
+  const target = anchor ?? description?.anchor ?? null;
+  const parent = target?.closest('[data-slot="tooltip-content"]');
+  const away = useSubjectPosition(parent ? null : target);
+  const surface = useHoverSurface(target, ref, description?.contact, description?.close);
   return (
     <Primitive.Portal>
       <Primitive.Positioner
-        anchor={anchor}
+        anchor={parent ?? anchor}
         side={away?.side ?? side}
         collisionAvoidance={{ side: "flip", align: "shift", fallbackAxisSide: "start" }}
         align={align}
