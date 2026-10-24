@@ -59,6 +59,7 @@ export function usePictureFloaters({
   return [
     {
       key: "globe",
+      kind: "picture" as const,
       label: "globe",
       chord: "G",
       says: "Show or hide the globe: drag it to turn the camera, click a stop to look from there",
@@ -74,6 +75,7 @@ export function usePictureFloaters({
     },
     {
       key: "corner",
+      kind: "picture" as const,
       label: picture === "model" ? "schematic, small" : "model, small",
       says: "The other picture, small; a click swaps it with the main one",
       place: "br",
@@ -87,8 +89,7 @@ export function usePictureFloaters({
           data-picture-corner={picture === "model" ? "schematic" : "model"}
           onClick={swap}
         >
-          {/* The floater's current size (`--floater-*`, set as the person resizes it) less its padding. */}
-          <span className="pointer-events-none flex h-[calc(var(--floater-h)-8px)] w-[calc(var(--floater-w)-8px)] min-h-0 flex-col overflow-hidden">
+          <span className="pointer-events-none flex size-full min-h-0 flex-col overflow-hidden">
             {picture === "model" ? (
               small()
             ) : meshes && pose ? (

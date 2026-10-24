@@ -26,7 +26,7 @@ function measure(width: number, height = 600) {
 }
 
 test.each(["horizontal", "vertical"] as const)(
-  "fitting %s reserves the subject minimum and centres grips through pre-observer layout changes",
+  "fitting %s reserves the subject minimum and centres the seam grip through pre-observer layout changes",
   (axis) => {
     measure(axis === "horizontal" ? 900 : 600, axis === "horizontal" ? 600 : 900);
     const { container } = render(
@@ -51,7 +51,7 @@ test.each(["horizontal", "vertical"] as const)(
     ).toBe(560);
     const seam = screen.getByRole("separator");
     const handles = [...seam.querySelectorAll<HTMLElement>("[data-slot='pane-resize-grip']")];
-    expect(handles.map((el) => el.dataset.corner)).toEqual(["center", "tr", "bl"]);
+    expect(handles.map((el) => el.dataset.corner)).toEqual(["center"]);
     const offset = handles[0]!.style[axis === "horizontal" ? "top" : "left"];
     expect(
       [600, 567].map((size) => parseFloat(offset) * (offset.endsWith("%") ? size / 100 : 1)),
@@ -65,7 +65,7 @@ test.each(["horizontal", "vertical"] as const)(
       fireEvent.pointerDown(handle, { clientX: 0 });
       fireEvent.pointerUp(handle, { clientX: 0 });
     }
-    expect(capture).toHaveBeenCalledTimes(3);
+    expect(capture).toHaveBeenCalledTimes(1);
   },
 );
 

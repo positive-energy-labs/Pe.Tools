@@ -20,6 +20,7 @@ type Corner = "tl" | "tr" | "bl" | "br";
 
 export interface FloaterSpec {
   key: string;
+  kind: "picture" | "legend";
   label: string;
   chord?: Chord;
   says?: string;
@@ -47,19 +48,12 @@ type At = {
   corner: Corner;
   dy: number;
   folded: boolean;
-  width?: number;
-  height?: number;
 };
 
 const MOVED = "pe:floater-moved";
 
-function useYield(
-  ref: RefObject<HTMLDivElement | null>,
-  place: Corner,
-  preferred?: FloaterSpec["size"],
-  slide = 0,
-) {
-  const [at, setAt] = useState<At>({ corner: place, dy: 0, folded: false, ...preferred });
+function useYield(ref: RefObject<HTMLDivElement | null>, place: Corner, slide = 0) {
+  const [at, setAt] = useState<At>({ corner: place, dy: 0, folded: false });
   useLayoutEffect(() => {
     const own = ref.current;
     const field = own?.parentElement;
@@ -74,19 +68,6 @@ function useYield(
       const f = field.getBoundingClientRect();
       const o = own.getBoundingClientRect();
       const folded = getComputedStyle(own).getPropertyValue("--floater-folded").trim() === "1";
-      const ratio =
-        preferred && f.width > 0 && f.height > 0
-          ? Math.min(
-              1,
-              Math.max(MIN.width, f.width * CAP.width) / preferred.width,
-              Math.max(MIN.height, f.height * CAP.height) / preferred.height,
-            )
-          : 1;
-      const shown = preferred && {
-        width: preferred.width * ratio,
-        height: preferred.height * ratio,
-      };
-      const size = shown && !folded ? new DOMRect(0, 0, shown.width, shown.height) : o;
       const gutter = parseFloat(getComputedStyle(own).getPropertyValue("--gutter")) || 0;
       const furniture = field.closest("[data-slot='pane-split']") ?? field;
       const fixed = [...furniture.querySelectorAll(PANE_OBSTACLES)]
@@ -97,7 +78,7 @@ function useYield(
         .map((el) => el.getBoundingClientRect())
         .concat(fixed);
       const corner = folded ? "br" : place;
-      const r = cornerRect(f, size, gutter, corner);
+      const r = cornerRect(f, o, gutter, corner);
       const offsets = others.map((x) =>
         corner[0] === "t" ? x.bottom + gutter - r.top : x.top - gutter - r.bottom,
       );
@@ -115,15 +96,17 @@ function useYield(
       });
       // No clear slot: stay at the corner. A field too small for its floaters folds them to
       // chips (the fold rule); a floater never vanishes.
-      settle({ corner, dy: dy ?? 0, folded, ...shown });
+      settle({ corner, dy: dy ?? 0, folded });
     };
     const moved = () => requestAnimationFrame(run);
     field.addEventListener(MOVED, moved);
     const observer = typeof ResizeObserver === "undefined" ? null : new ResizeObserver(run);
-    observer?.observe(field);
-    observer?.observe(own);
     const obstacles = () => {
-      field.querySelectorAll(PANE_OBSTACLES).forEach((el) => observer?.observe(el));
+      observer?.disconnect();
+      observer?.observe(field);
+      field
+        .querySelectorAll(`${PANE_OBSTACLES}, :scope > [data-slot='floater']`)
+        .forEach((el) => observer?.observe(el));
       run();
     };
     const children = new MutationObserver(obstacles);
@@ -134,18 +117,18 @@ function useYield(
       observer?.disconnect();
       field.removeEventListener(MOVED, moved);
     };
-  }, [ref, place, preferred?.width, preferred?.height, slide]);
+  }, [ref, place, slide]);
   return at;
 }
 
 const MIN = { width: 64, height: 40 };
-const CAP = { width: 0.4, height: 0.7 };
 const clamp = (v: number, lo: number, hi: number) => Math.max(lo, Math.min(hi, v));
 const CURSOR = { tl: "nwse", br: "nwse", tr: "nesw", bl: "nesw" } as const;
 function drag(
   event: ReactPointerEvent<HTMLElement>,
   own: HTMLElement,
   move: (dx: number, dy: number, field: DOMRect, rect: DOMRect) => void,
+  commit?: () => void,
 ) {
   if (event.button !== 0) return;
   event.stopPropagation();
@@ -158,6 +141,7 @@ function drag(
   const stop = (e: PointerEvent) => {
     e.stopPropagation();
     controller.abort();
+    if (e.type === "pointerup") commit?.();
   };
   target.addEventListener(
     "pointermove",
@@ -187,39 +171,20 @@ export function Floater({ spec }: { spec: FloaterSurfaceSpec }) {
   const popup = useRef<HTMLDivElement>(null);
   const [slide, setSlide] = useState(0);
   const [box, setBox] = useState(spec.size);
-  const at = useYield(ref, spec.place, box, slide);
-  const { folded, width, height } = at;
-  const shown = box && { width, height };
-  const measurePopup = (node: HTMLDivElement | null) => {
-    popup.current = node;
-    if (!node) return;
-    const field = ref.current!.parentElement!.getBoundingClientRect();
-    const content = node.querySelector<HTMLElement>("[data-slot='floater-content']")!;
-    // Break the 100% wrapper / capped SVG cycle before measuring intrinsic content.
-    node.style.width = node.style.height = "";
-    for (const key of ["w", "h"]) node.style.removeProperty(`--floater-content-${key}`);
-    content.style.width = content.style.height = "max-content";
-    const natural = content.getBoundingClientRect();
-    const gutter = parseFloat(getComputedStyle(ref.current!).getPropertyValue("--gutter")) || 0;
-    const size = {
-      width: Math.min(
-        box?.width ?? (content.scrollWidth || natural.width) + node.offsetWidth - node.clientWidth,
-        field.width - 2 * gutter,
-      ),
-      height: Math.min(
-        box?.height ??
-          (content.scrollHeight || natural.height) + node.offsetHeight - node.clientHeight,
-        field.height - 2 * gutter,
-      ),
-    };
-    content.style.width = content.style.height = "";
-    for (const key of ["width", "height"] as const)
-      if (size[key] > 0) {
-        node.style[key] = `${size[key]}px`;
-        node.style.setProperty(`--floater-${key[0]}`, `${size[key]}px`);
-        node.style.setProperty(`--floater-content-${key[0]}`, "100%");
-      }
-  };
+  const storageKey = () =>
+    `pe:floater:${location.pathname}:${ref.current?.closest("[data-pane-id]")?.getAttribute("data-pane-id") ?? ""}:${spec.key}`;
+  useLayoutEffect(() => {
+    try {
+      const saved = JSON.parse(window.localStorage.getItem(storageKey()) ?? "null");
+      if (saved && [saved.width, saved.height].every((n) => Number.isFinite(n) && n > 0))
+        setBox({ width: saved.width, height: saved.height });
+    } catch {
+      /* Storage is optional; furniture remains usable. */
+    }
+  }, [spec.key]);
+  const at = useYield(ref, spec.place, slide);
+  const { folded } = at;
+  const sized = box && { ...box, "--floater-content-w": "100%", "--floater-content-h": "100%" };
   const sliding = (e: ReactPointerEvent<HTMLElement>) => {
     drag(e, ref.current!, (_dx, dy, f, r) => {
       const g = parseFloat(getComputedStyle(ref.current!).getPropertyValue("--gutter")) || 0;
@@ -228,11 +193,29 @@ export function Floater({ spec }: { spec: FloaterSurfaceSpec }) {
   };
   const resizing = (e: ReactPointerEvent<HTMLElement>) => {
     const [h, v] = [at.corner[1] === "r" ? -1 : 1, at.corner[0] === "t" ? 1 : -1];
-    drag(e, ref.current!, (dx, dy, f, r) =>
-      setBox({
-        width: clamp(r.width + h * dx, MIN.width, Math.max(MIN.width, f.width * CAP.width)),
-        height: clamp(r.height + v * dy, MIN.height, Math.max(MIN.height, f.height * CAP.height)),
-      }),
+    let chosen = box;
+    drag(
+      e,
+      ref.current!,
+      (dx, dy, f, r) => {
+        const g = parseFloat(getComputedStyle(ref.current!).getPropertyValue("--gutter")) || 0;
+        chosen = {
+          width: clamp(r.width + h * dx, Math.min(MIN.width, f.width - 2 * g), f.width - 2 * g),
+          height: clamp(
+            r.height + v * dy,
+            Math.min(MIN.height, f.height - 2 * g),
+            f.height - 2 * g,
+          ),
+        };
+        setBox(chosen);
+      },
+      () => {
+        try {
+          window.localStorage.setItem(storageKey(), JSON.stringify(chosen));
+        } catch {
+          /* Best effort. */
+        }
+      },
     );
   };
   return (
@@ -251,19 +234,16 @@ export function Floater({ spec }: { spec: FloaterSurfaceSpec }) {
         }}
         data-slot="floater"
         data-floater={spec.key}
+        data-floater-kind={spec.kind}
         data-place={at.corner}
         data-folded={folded ? "" : undefined}
         data-surface="artifact"
         className="absolute z-popup shadow-float p-1"
         style={{
           ...inset(at.corner, "var(--gutter)"),
-          ...shown,
-          maxWidth: `max(${MIN.width}px, ${CAP.width * 100}%)`,
-          maxHeight: `max(${MIN.height}px, ${CAP.height * 100}%)`,
-          ["--floater-w" as string]: shown && `${shown.width}px`,
-          ["--floater-h" as string]: shown && `${shown.height}px`,
-          ["--floater-content-w" as string]: shown && "100%",
-          ["--floater-content-h" as string]: shown && "100%",
+          ...sized,
+          maxWidth: "calc(100% - 2 * var(--gutter))",
+          maxHeight: "calc(100% - 2 * var(--gutter))",
           translate: at.dy ? `0 ${at.dy}px` : undefined,
         }}
       >
@@ -290,9 +270,11 @@ export function Floater({ spec }: { spec: FloaterSurfaceSpec }) {
               {spec.label}
             </PopoverTrigger>
             <PopoverContent
-              ref={measurePopup}
+              ref={popup}
+              style={sized}
               aria-label={spec.label}
               data-floater-popup=""
+              data-floater-kind={spec.kind}
               collisionBoundary={ref.current?.parentElement ?? undefined}
               collisionAvoidance={{ side: "flip", align: "shift" }}
               initialFocus={(type) => (type === "keyboard" ? popup.current : false)}
@@ -311,16 +293,18 @@ export function Floater({ spec }: { spec: FloaterSurfaceSpec }) {
         >
           <span className="pointer-events-none absolute left-1/2 top-1/2 h-px w-6 -translate-x-1/2 bg-line-2 transition-colors duration-control group-hover:bg-ink-2 group-active:bg-ink motion-reduce:transition-none" />
         </div>
-        <div
-          data-slot="floater-resize"
-          aria-label={`resize ${spec.label}`}
-          className="absolute z-10 size-2.5 touch-none"
-          style={{
-            ...inset(opposite[at.corner], "0px"),
-            cursor: `${CURSOR[at.corner]}-resize`,
-          }}
-          onPointerDown={resizing}
-        />
+        {spec.kind === "picture" && (
+          <div
+            data-slot="floater-resize"
+            aria-label={`resize ${spec.label}`}
+            className={`absolute z-10 size-2.5 touch-none border-line-2 ${at.corner[1] === "r" ? "border-l" : "border-r"} ${at.corner[0] === "t" ? "border-b" : "border-t"}`}
+            style={{
+              ...inset(opposite[at.corner], "0px"),
+              cursor: `${CURSOR[at.corner]}-resize`,
+            }}
+            onPointerDown={resizing}
+          />
+        )}
       </div>
     </KeyScope>
   );

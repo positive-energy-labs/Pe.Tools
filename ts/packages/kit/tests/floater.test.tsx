@@ -1,8 +1,17 @@
 // @vitest-environment jsdom
-import { act, cleanup, fireEvent, render, waitFor } from "@testing-library/react";
-import { afterEach, expect, test, vi } from "vite-plus/test";
+import { cleanup, fireEvent, render, waitFor } from "@testing-library/react";
+import { afterEach, beforeEach, expect, test, vi } from "vite-plus/test";
 
 import { Floater, type FloaterSpec } from "@pe/kit/lang/floater";
+
+const stored = new Map<string, string>();
+beforeEach(() => {
+  stored.clear();
+  vi.stubGlobal("localStorage", {
+    getItem: (key: string) => stored.get(key) ?? null,
+    setItem: (key: string, value: string) => stored.set(key, value),
+  });
+});
 
 afterEach(() => {
   cleanup();
@@ -12,6 +21,7 @@ afterEach(() => {
 
 const spec = (key: string, size?: FloaterSpec["size"]): FloaterSpec => ({
   key,
+  kind: "picture",
   label: key,
   place: "tr",
   size,
@@ -103,8 +113,20 @@ function setup(size?: FloaterSpec["size"], field?: DOMRect) {
   return { view, outerPointer, floater, rect, grip, resize };
 }
 
-test("a floater without size slides and resizes from the content box at gesture start", () => {
+test("a picture restores its chosen size after remount", () => {
+  stored.set(
+    `pe:floater:${location.pathname}::globe`,
+    JSON.stringify({ width: 190, height: 140, position: "fixed" }),
+  );
+  const { floater } = setup();
+  expect([floater.style.width, floater.style.height]).toEqual(["190px", "140px"]);
+  expect(floater.style.position).toBe("");
+});
+
+test("picture grips face inward, clamp to the field and persist only the chosen size", () => {
   const { floater, grip, resize, rect, outerPointer } = setup();
+  expect(resize.style.left).toBe("0px");
+  expect(resize.style.bottom).toBe("0px");
   pointer(grip, "pointerdown", 400, 10);
   pointer(grip, "pointermove", 400, 90);
   pointer(grip, "pointerup", 400, 90);
@@ -113,33 +135,24 @@ test("a floater without size slides and resizes from the content box at gesture 
   // Content can arrive after mounting. Its first measured box still obeys the field's caps.
   rect.mockReturnValue(new DOMRect(100, 10, 490, 500));
   pointer(resize, "pointerdown", 100, 510);
-  pointer(resize, "pointermove", 90, 520);
-  pointer(resize, "pointerup", 90, 520);
-  expect([floater.style.width, floater.style.height]).toEqual(["240px", "420px"]);
+  pointer(resize, "pointermove", -1000, 2000);
+  expect(stored.size).toBe(0);
+  pointer(resize, "pointerup", -1000, 2000);
+  expect([floater.style.width, floater.style.height]).toEqual(["600px", "600px"]);
+  expect(resize.className).toContain("border-l");
+  const saved = [...stored.values()][0];
+  expect(JSON.parse(saved!)).toEqual({ width: 600, height: 600 });
+  cleanup();
+  const restored = setup().floater;
+  expect([restored.style.width, restored.style.height]).toEqual(["600px", "600px"]);
   expect(floater.style.getPropertyValue("--floater-content-w")).toBe("100%");
   expect(outerPointer).not.toHaveBeenCalled();
-});
-
-test("shrinking a navigation field caps its floaters and restores their preferred size on growth", () => {
-  const observers: (() => void)[] = [];
-  vi.stubGlobal(
-    "ResizeObserver",
-    class {
-      constructor(callback: () => void) {
-        observers.push(callback);
-      }
-      observe() {}
-      disconnect() {}
-    },
-  );
-  const { floater } = setup({ width: 230, height: 230 });
-  const field = vi.spyOn(floater.parentElement!, "getBoundingClientRect");
-  field.mockReturnValue(new DOMRect(0, 0, 280, 500));
-  act(() => observers.forEach((run) => run()));
-  expect([floater.style.width, floater.style.height]).toEqual(["112px", "112px"]);
-  field.mockReturnValue(new DOMRect(0, 0, 600, 600));
-  act(() => observers.forEach((run) => run()));
-  expect([floater.style.width, floater.style.height]).toEqual(["230px", "230px"]);
+  cleanup();
+  const minimum = setup().resize;
+  pointer(minimum, "pointerdown", 0, 0);
+  pointer(minimum, "pointermove", 2000, -2000);
+  pointer(minimum, "pointerup", 2000, -2000);
+  expect(JSON.parse([...stored.values()][0]!)).toEqual({ width: 64, height: 40 });
 });
 
 test.each([undefined, { width: 230, height: 230 }])(
@@ -158,5 +171,23 @@ test.each([undefined, { width: 230, height: 230 }])(
     expect(floater.contains(popup)).toBe(false);
     await waitFor(() => expect(focus.mock.contexts).toContain(popup));
     expect(focus.mock.calls.every(([options]) => options?.preventScroll)).toBe(true);
+  },
+);
+
+test.each(["tl", "tr", "bl", "br"] as const)(
+  "legend has no resize target; %s picture grip faces inward",
+  (place) => {
+    mockField();
+    const view = render(
+      <div data-field="">
+        <Floater spec={{ ...spec("keys"), kind: "legend" }} />
+        <Floater spec={{ ...spec("left"), place }} />
+      </div>,
+    );
+    expect(view.queryByLabelText("resize keys")).toBeNull();
+    const grip = view.getByLabelText("resize left");
+    expect(grip.style[place[1] === "l" ? "right" : "left"]).toBe("0px");
+    expect(grip.style[place[0] === "t" ? "bottom" : "top"]).toBe("0px");
+    expect(grip.className).toContain(place[1] === "l" ? "border-r" : "border-l");
   },
 );

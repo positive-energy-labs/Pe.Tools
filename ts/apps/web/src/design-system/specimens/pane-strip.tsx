@@ -94,6 +94,7 @@ function PaneStripAnatomy() {
   const [open, setOpen] = useState(true);
   const corner = {
     key: "anatomy",
+    kind: "legend" as const,
     label: "corner",
     place: "tl" as const,
     open,
@@ -216,6 +217,7 @@ export function PaneStripSpecimen() {
             floaters={[
               {
                 key: "minimap",
+                kind: "picture" as const,
                 label: "minimap",
                 chord: "M",
                 says: "The whole field with the view drawn on it; a click moves the view.",
@@ -236,6 +238,7 @@ export function PaneStripSpecimen() {
               },
               {
                 key: "globe",
+                kind: "picture" as const,
                 label: "globe",
                 chord: "G",
                 says: "The orbit camera; a stop click turns the view to it.",

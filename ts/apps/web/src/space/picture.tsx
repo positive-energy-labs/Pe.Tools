@@ -262,6 +262,7 @@ export function SpacePicture({
   const floaters: FloaterSpec[] = [
     {
       key: "globe",
+      kind: "picture" as const,
       label: "globe",
       chord: "G",
       says: "Show or hide the globe: drag it to turn the 3D camera, click a stop to look from there",
@@ -273,6 +274,7 @@ export function SpacePicture({
     ...PLANE_AXES.map(
       (a): FloaterSpec => ({
         key: a,
+        kind: "picture",
         label: `${AXIS_LABEL[a]} thumbnail`,
         says:
           a === axis
@@ -290,8 +292,8 @@ export function SpacePicture({
             data-space-thumb={a}
             onClick={() => toMode(a === axis ? "3d" : a)}
           >
-            <span className="pointer-events-none relative block" style={THUMB}>
-              <canvas ref={thumbRef[a]} className="block size-full" />
+            <span className="pointer-events-none relative flex size-full flex-col">
+              <canvas ref={thumbRef[a]} className="block min-h-0 w-full flex-1" />
               <span className="block px-1 t-small" data-surface="page">
                 {a === axis ? "3D · Esc" : AXIS_LABEL[a]}
                 {a !== axis && !page.cuts[a].polyline.length ? " · no cut" : ""}

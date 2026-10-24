@@ -68,6 +68,7 @@ function ListFixture({ mode = "parallel", extra = false }: { mode?: string; extr
       floaters={[
         {
           key: "schematic",
+          kind: "picture",
           label: "schematic",
           place: "br",
           open: false,

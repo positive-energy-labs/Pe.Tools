@@ -1423,13 +1423,25 @@ svg [data-damage] {
   padding: 4px 8px;
 }
 [data-floater-popup] {
+  display: grid;
+  grid-template: minmax(0, 1fr) / minmax(0, 1fr);
   width: max-content;
   height: max-content;
   max-width: var(--available-width);
   overflow: hidden;
   padding: 0;
 }
-[data-floater-popup] svg {
+[data-slot="floater-content"] {
+  min-width: 0;
+  min-height: 0;
+  width: var(--floater-content-w, auto);
+  height: var(--floater-content-h, auto);
+}
+[data-floater-kind="picture"] > [data-slot="floater-content"] > button {
+  width: 100%;
+  height: 100%;
+}
+[data-slot="floater-content"] :is(svg, canvas, [data-minimap="plane"]) {
   max-width: 100%;
   max-height: 100%;
 }
@@ -1439,6 +1451,9 @@ svg [data-damage] {
 }
 [data-slot="floater"] {
   --floater-folded: 0;
+}
+[data-slot="floater"]:focus-within {
+  z-index: calc(var(--z-popup) + 1);
 }
 @container pane-field (max-width: 28rem) or (max-height: 22rem) {
   [data-slot="floater"] {

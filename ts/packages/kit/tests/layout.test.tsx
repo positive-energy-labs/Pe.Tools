@@ -46,7 +46,7 @@ it("nested picture furniture joins the same field, and readout wheel and clear b
   expect(floaters).toHaveLength(3);
   expect(floaters.every((node) => node.parentElement === field)).toBe(true);
   expect(field.querySelectorAll("[data-slot='floater-grip']")).toHaveLength(3);
-  expect(field.querySelectorAll("[data-slot='floater-resize']")).toHaveLength(3);
+  expect(field.querySelectorAll("[data-slot='floater-resize']")).toHaveLength(0);
   const body = field.querySelector<HTMLElement>("[data-readout-body]")!;
   const wheel = new WheelEvent("wheel", { deltaY: 20, bubbles: true, cancelable: true });
   fireEvent(body, wheel);

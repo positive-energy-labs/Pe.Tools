@@ -1,4 +1,3 @@
-import { Floater, type FloaterSpec } from "@pe/kit/lang/floater";
 import { reachStore } from "@pe/kit/lang/reach";
 import { SubjectTextContext } from "@pe/kit/lang/reach";
 import { Row } from "@pe/kit/lang/row";
@@ -91,7 +90,7 @@ test("globe preview uses total displacement before a prop echo and commits only 
 const extent = { width: 4000, height: 3000 };
 const viewportSize = { width: 800, height: 600 };
 
-test("a click on a plane minimap centres a scroll viewport there, inside the field", () => {
+test("a resized plane minimap maps rendered pixels into the field", () => {
   const onViewport = vi.fn();
   const view = render(
     <PlaneMinimap
@@ -103,10 +102,11 @@ test("a click on a plane minimap centres a scroll viewport there, inside the fie
     />,
   );
   const canvas = view.container.querySelector("canvas")!;
-  fireEvent.click(canvas, { clientX: 130, clientY: 97.5 });
+  canvas.getBoundingClientRect = () => new DOMRect(0, 0, 200, 150);
+  fireEvent.click(canvas, { clientX: 100, clientY: 75 });
   expect(onViewport).toHaveBeenLastCalledWith({ kind: "scroll", top: 1200, left: 1600 }, "move");
   // A click in the far corner stops at the field's edge.
-  fireEvent.click(canvas, { clientX: 260, clientY: 195 });
+  fireEvent.click(canvas, { clientX: 200, clientY: 150 });
   expect(onViewport).toHaveBeenLastCalledWith({ kind: "scroll", top: 2400, left: 3200 }, "move");
 });
 
@@ -129,7 +129,7 @@ test("a click on a plane minimap centres a plane viewport there at its own scale
   );
   // The box shows the visible field: 800/2 by 600/2 field units at the thumbnail scale.
   const box = view.container.querySelector<HTMLElement>("[data-minimap-viewport]")!;
-  expect([box.style.width, box.style.height]).toEqual(["26px", "19.5px"]);
+  expect([box.style.width, box.style.height]).toEqual(["10%", "10%"]);
 });
 
 test("a globe stop click writes that stop's yaw and elevation as a move; below the floor refuses", () => {
@@ -198,64 +198,4 @@ test("the kit row channel lights the globe through the one scene adapter without
   expect(path.getAttribute("d")).toBe("");
   expect(orbit.read()).toEqual(viewport);
   expect(commit).not.toHaveBeenCalled();
-});
-
-const floaterViewport: OrbitViewport = {
-  kind: "orbit",
-  yaw: 30,
-  elev: 30,
-  zoom: 1,
-  pivot: [0, 0, 0],
-};
-const floaterPointer = (el: Element, type: string, x: number, y: number) =>
-  fireEvent(el, new MouseEvent(type, { bubbles: true, button: 0, clientX: x, clientY: y }));
-
-function setupFloater(size?: FloaterSpec["size"]) {
-  const onViewport = vi.fn();
-  const orbit = createLiveOrbit(floaterViewport, onViewport);
-  const outerPointer = vi.fn();
-  const view = render(
-    <div onPointerDown={outerPointer} onPointerMove={outerPointer} onPointerUp={outerPointer}>
-      <Floater
-        spec={{
-          key: "globe",
-          label: "globe",
-          place: "tr",
-          size,
-          open: true,
-          onOpenChange: vi.fn(),
-          render: () => <OrbitMinimap orbit={orbit} />,
-        }}
-      />
-    </div>,
-  );
-  const floater = view.getByRole("region", { name: "globe" });
-  vi.spyOn(floater.parentElement!, "getBoundingClientRect").mockReturnValue(
-    new DOMRect(0, 0, 600, 600),
-  );
-  const rect = vi
-    .spyOn(floater, "getBoundingClientRect")
-    .mockReturnValue(new DOMRect(360, 10, 230, 230));
-  const grip = view.getByLabelText("move globe");
-  const resize = view.getByLabelText("resize globe");
-  grip.setPointerCapture = resize.setPointerCapture = vi.fn();
-  return { view, orbit, onViewport, outerPointer, floater, rect, grip, resize };
-}
-
-test("explicit sizes keep responsive caps and resize handles leave globe orbit dragging intact", () => {
-  const { view, orbit, onViewport, floater, resize } = setupFloater({ width: 230, height: 230 });
-  floaterPointer(resize, "pointerdown", 360, 240);
-  floaterPointer(resize, "pointermove", -1000, 1000);
-  floaterPointer(resize, "pointerup", -1000, 1000);
-  expect([floater.style.width, floater.style.height]).toEqual(["240px", "420px"]);
-  expect(onViewport).not.toHaveBeenCalled();
-  const globe = view.getByRole("group", { name: "orbit globe" });
-  floaterPointer(globe, "pointerdown", 400, 100);
-  floaterPointer(globe, "pointermove", 450, 125);
-  floaterPointer(globe, "pointerup", 450, 125);
-  expect(orbit.read()).toEqual({ ...floaterViewport, yaw: 10, elev: 40 });
-  expect(onViewport).toHaveBeenCalledExactlyOnceWith(
-    { ...floaterViewport, yaw: 10, elev: 40 },
-    "gesture",
-  );
 });
