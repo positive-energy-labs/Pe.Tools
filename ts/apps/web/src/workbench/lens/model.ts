@@ -15,7 +15,6 @@ import { intentAt, scrollTopForIntent } from "../model";
 import type { Geom } from "./scale";
 import { FOCAL, railLayout, type RailLayout } from "./scale";
 import { toMoments } from "./moments";
-import { useLensVariant } from "./variant";
 import type { ChatState } from "@pe/agent-contracts/chat-state";
 
 /** Within this many px of the bottom, the view counts as at the bottom and follows. */
@@ -60,9 +59,6 @@ export function useLensModel({ state }: { state: ChatState }) {
   const geomRef = useRef<Geom[]>([]);
 
   const view = useCurrentThreadView();
-
-  // TEMPORARY (protoui wave 10): the slot-sizing rule under trial; `today` when nothing is picked.
-  const variant = useLensVariant() ?? "today";
 
   // The position intent lives in the store (`lensIntent`); follow is derived from it. The store
   // is per thread (WorkbenchProvider is keyed on it), so nothing here resets on a thread switch.
@@ -198,18 +194,16 @@ export function useLensModel({ state }: { state: ChatState }) {
         if (!el) continue;
         const bottom = el.offsetTop + el.offsetHeight;
         // The moment's rendered blocks: its `data-blocks` column's children (a collapsed tool run is
-        // one child), else the moment itself. Measured only for the variants that read them.
+        // one child), else the moment itself.
         const blocks: number[] = [];
-        if (variant === "blocks" || variant === "marks") {
-          const column = el.querySelector("[data-blocks]");
-          if (column) {
-            const origin = el.getBoundingClientRect().top - el.offsetTop;
-            for (const block of column.children)
-              if (block.getAttribute("data-annotation") !== "streaming-caret")
-                blocks.push(block.getBoundingClientRect().top - origin);
-          }
-          if (blocks.length === 0) blocks.push(el.offsetTop);
+        const column = el.querySelector("[data-blocks]");
+        if (column) {
+          const origin = el.getBoundingClientRect().top - el.offsetTop;
+          for (const block of column.children)
+            if (block.getAttribute("data-annotation") !== "streaming-caret")
+              blocks.push(block.getBoundingClientRect().top - origin);
         }
+        if (blocks.length === 0) blocks.push(el.offsetTop);
         const g = byTurn.get(moment.turn);
         if (g) {
           g.height = bottom - g.top;
@@ -220,17 +214,16 @@ export function useLensModel({ state }: { state: ChatState }) {
             turn: moment.turn,
             top: el.offsetTop,
             height: el.offsetHeight,
-            blocks: blocks.length ? blocks : [el.offsetTop],
+            blocks,
           });
       }
       geom = [...byTurn.values()];
       geomRef.current = geom;
       // The dial is a scrollbar's stand-in: a thread that fits the lane has nowhere to go.
       frame.toggleAttribute("data-scrolls", scroller.scrollHeight > scroller.clientHeight + 1);
-      frame.dataset.lens = variant;
       // The rail centres in the lane and stops short of the pane head and the composer.
       const lane = dial.parentElement ?? scroller;
-      map = railLayout(geom, scroller.scrollHeight, lane.clientHeight - RAIL_MARGIN * 2, variant);
+      map = railLayout(geom, scroller.scrollHeight, lane.clientHeight - RAIL_MARGIN * 2);
       dial.style.height = `${map.height}px`;
       const bottoms = new Map<number, number>();
       for (const g of geom) {
@@ -239,7 +232,7 @@ export function useLensModel({ state }: { state: ChatState }) {
         const box = map.bands.get(g.key)!;
         band.style.top = `${box.top}px`;
         band.style.height = `${box.height}px`;
-        // `marks`: a page-coloured hairline cuts the bar at each rendered block's top, so the slot
+        // A page-coloured hairline cuts the bar at each rendered block's top, so the slot
         // reads as its blocks. One gradient per band; no extra DOM.
         const notches = map.notches.get(g.key);
         band.style.backgroundImage = notches?.length
@@ -306,61 +299,24 @@ export function useLensModel({ state }: { state: ChatState }) {
     };
     scroller.addEventListener("scroll", onScroll, { passive: true });
 
-    // Drag-to-scrub: a press on the rail that moves drags the thumb through the rail's own map
-    // (`inv`), so inside a slot the pointer lands proportionally inside that turn. A press on the
-    // thumb keeps its grip offset; elsewhere the thumb centres under the pointer. The scroller is
-    // written directly per move (no React render); the click that would follow a scrub is swallowed
-    // ahead of the peek's click, so a scrub never also jumps.
-    let drag: { offset: number; startY: number; moved: boolean } | null = null;
-    let swallowClick = false;
-    const railY = (event: PointerEvent) => event.clientY - dial.getBoundingClientRect().top;
-    const onDown = (event: PointerEvent) => {
-      if (event.button !== 0) return;
-      const y = railY(event);
-      const thumb = thumbRef.current;
-      const top = parseFloat(thumb?.style.top ?? "") || 0;
-      const height = parseFloat(thumb?.style.height ?? "") || 0;
-      const onThumb = y >= top && y <= top + height;
-      drag = { offset: onThumb ? y - top : height / 2, startY: event.clientY, moved: false };
-      dial.setPointerCapture(event.pointerId);
-    };
-    const onMove = (event: PointerEvent) => {
-      if (!drag) return;
-      if (!drag.moved && Math.abs(event.clientY - drag.startY) < 3) return;
-      drag.moved = true;
-      dial.dataset.scrub = "";
-      landedRef.current = true;
-      scroller.scrollTop = map.inv(railY(event) - drag.offset);
-    };
-    const onUp = () => {
-      if (!drag) return;
-      swallowClick = drag.moved;
-      drag = null;
-      delete dial.dataset.scrub;
-    };
-    const onClickCapture = (event: MouseEvent) => {
-      if (!swallowClick) return;
-      swallowClick = false;
-      event.stopImmediatePropagation();
-    };
-    dial.addEventListener("pointerdown", onDown);
-    dial.addEventListener("pointermove", onMove);
-    dial.addEventListener("pointerup", onUp);
-    dial.addEventListener("pointercancel", onUp);
-    dial.addEventListener("click", onClickCapture, true);
+    const unscrub = scrubRail(
+      dial,
+      scroller,
+      thumbRef,
+      () => map,
+      () => {
+        landedRef.current = true;
+      },
+    );
 
     return () => {
       ro.disconnect();
       scroller.removeEventListener("scroll", onScroll);
-      dial.removeEventListener("pointerdown", onDown);
-      dial.removeEventListener("pointermove", onMove);
-      dial.removeEventListener("pointerup", onUp);
-      dial.removeEventListener("pointercancel", onUp);
-      dial.removeEventListener("click", onClickCapture, true);
+      unscrub();
       cancelAnimationFrame(raf);
     };
     // Unrelated route renders do not remeasure chat. Content, mounting and resize still do.
-  }, [moments, measureRevision, loading, intent, setIntent, variant]);
+  }, [moments, measureRevision, loading, intent, setIntent]);
   // An empty thread is a claim; while the body loads it is not known (the composer head says so).
   const showEmpty = !loading && moments.length === 0;
   return {
@@ -380,5 +336,71 @@ export function useLensModel({ state }: { state: ChatState }) {
     registerMoment,
     goTo,
     awayFromTail,
+  };
+}
+
+/**
+ * Drag-to-scrub: a press on the rail that moves drags the thumb through the rail's own map (`inv`),
+ * so inside a slot the pointer lands proportionally inside that turn. A press on the thumb keeps its
+ * grip offset; elsewhere the thumb centres under the pointer. The scroller is written directly per
+ * move (no React render); the click that would follow a scrub is swallowed ahead of the peek's
+ * click, so a scrub never also jumps. A press without a move is that click: the peek resolves it to
+ * the turn at its height (peek.tsx). The funnel of an open peek is part of the press area; it exists
+ * only while a peek is open, so the transcript never loses a press.
+ */
+export function scrubRail(
+  dial: HTMLElement,
+  scroller: HTMLElement,
+  thumbRef: { current: HTMLElement | null },
+  map: () => RailLayout,
+  onScrub: () => void,
+): () => void {
+  const lane = dial.parentElement ?? dial;
+  let drag: { offset: number; startY: number; moved: boolean } | null = null;
+  let swallowClick = false;
+  const railY = (event: PointerEvent) => event.clientY - dial.getBoundingClientRect().top;
+  const onDown = (event: PointerEvent) => {
+    const press = (event.target as Element).closest(
+      '[data-annotation="dial"], [data-annotation="peek-funnel"]',
+    );
+    if (event.button !== 0 || !press) return;
+    const y = railY(event);
+    const thumb = thumbRef.current;
+    const top = parseFloat(thumb?.style.top ?? "") || 0;
+    const height = parseFloat(thumb?.style.height ?? "") || 0;
+    const onThumb = y >= top && y <= top + height;
+    drag = { offset: onThumb ? y - top : height / 2, startY: event.clientY, moved: false };
+    dial.setPointerCapture(event.pointerId);
+  };
+  const onMove = (event: PointerEvent) => {
+    if (!drag) return;
+    if (!drag.moved && Math.abs(event.clientY - drag.startY) < 3) return;
+    drag.moved = true;
+    dial.dataset.scrub = "";
+    onScrub();
+    scroller.scrollTop = map().inv(railY(event) - drag.offset);
+  };
+  const onUp = () => {
+    if (!drag) return;
+    swallowClick = drag.moved;
+    drag = null;
+    delete dial.dataset.scrub;
+  };
+  const onClickCapture = (event: MouseEvent) => {
+    if (!swallowClick) return;
+    swallowClick = false;
+    event.stopImmediatePropagation();
+  };
+  lane.addEventListener("pointerdown", onDown);
+  dial.addEventListener("pointermove", onMove);
+  dial.addEventListener("pointerup", onUp);
+  dial.addEventListener("pointercancel", onUp);
+  dial.addEventListener("click", onClickCapture, true);
+  return () => {
+    lane.removeEventListener("pointerdown", onDown);
+    dial.removeEventListener("pointermove", onMove);
+    dial.removeEventListener("pointerup", onUp);
+    dial.removeEventListener("pointercancel", onUp);
+    dial.removeEventListener("click", onClickCapture, true);
   };
 }
