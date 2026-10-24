@@ -177,6 +177,10 @@ test("real conversation Work cutover retains authored cells, draft, Places and o
       for (const type of ["mouseMoved", "mousePressed", "mouseReleased"])
         await p.send("Input.dispatchMouseEvent", { type, ...point, button: "left", clickCount: 1 });
     };
+    const openWork = async (thread: string) => {
+      if (await p.has("Expand threads")) await p.click("Expand threads");
+      await p.click("Open Ducts", `[data-thread-sidebar] [data-key="${thread}"]`);
+    };
     const toolsCollapsed = async () =>
       new URL(await p.url()).pathname === "/pea" &&
       (await p.read<boolean>(
@@ -298,10 +302,7 @@ test("real conversation Work cutover retains authored cells, draft, Places and o
       await p.clickAt('textarea[aria-label="Message"],input[aria-label="Message"]');
       await p.type(message);
       officeComposer = await composerIdentity();
-      await p.click(
-        "Open Ducts",
-        `[data-thread-sidebar] [data-key="${CONVERSATION_THREADS.office}"]`,
-      );
+      await openWork(CONVERSATION_THREADS.office);
       await p.until(
         async () => new URL(await p.url()).pathname === "/ducts",
         "saved Work URL opens",
@@ -574,10 +575,7 @@ test("real conversation Work cutover retains authored cells, draft, Places and o
             new URL(await p.url()).searchParams.get("thread") === CONVERSATION_THREADS.unsaved,
           "unsaved-document conversation opens without its tool",
         );
-        await p.click(
-          "Open Ducts",
-          `[data-thread-sidebar] [data-key="${CONVERSATION_THREADS.unsaved}"]`,
-        );
+      await openWork(CONVERSATION_THREADS.unsaved);
         await p.until(
           async () => new URL(await p.url()).pathname === "/ducts",
           "retained unsaved Work opens",
