@@ -1,27 +1,20 @@
 /* THE TOOLS TAB STRIP (Thread Places), in Pea's header while collapsed, in the tools pane's
    header while expanded. Places give way before they overlap: a label ellipsizes, its close
    keeps its size, and the close shows on hover or focus (it stays in the tab order). */
-
-/* In a header's action group the strip takes the room the rail gives it, not the group's 12rem
-   intrinsic size, so the Places shrink inside the slot instead of spilling over its neighbours. */
-.dl-button-group:has(> [role="group"][aria-label="Thread Places"]) {
-  container-type: normal;
-  contain-intrinsic-inline-size: none;
-}
-[role="group"][aria-label="Thread Places"] > * {
+[data-slot="route-tabs"] > * {
   display: flex;
   min-width: 0;
   flex-shrink: 1;
   align-items: center;
 }
-[role="group"][aria-label="Thread Places"] button {
+[data-slot="route-tabs"] button {
   min-width: 0;
   max-width: 100%;
 }
-[role="group"][aria-label="Thread Places"] > * > :last-child button {
+[data-slot="route-tabs"] > * > :last-child button {
   flex-shrink: 0;
   opacity: 0;
 }
-[role="group"][aria-label="Thread Places"] > :is(:hover, :focus-within) > :last-child button {
+[data-slot="route-tabs"] > :is(:hover, :focus-within) > :last-child button {
   opacity: 1;
 }

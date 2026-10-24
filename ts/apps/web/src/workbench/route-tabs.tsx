@@ -39,7 +39,12 @@ export function RouteTabs({
   onClose: (tab: ThreadTab) => void;
 }) {
   return (
-    <span role="group" aria-label="Thread Places" className="flex min-w-0 shrink items-center">
+    <span
+      role="group"
+      aria-label="Thread Places"
+      data-slot="route-tabs"
+      className="flex min-w-0 shrink items-center"
+    >
       {tabs.map((tab) => {
         const name = tabTitle(tab);
         return (
