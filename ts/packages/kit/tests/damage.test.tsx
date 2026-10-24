@@ -4,16 +4,34 @@ import { createRequire } from "node:module";
 import { cleanup, fireEvent, render } from "@testing-library/react";
 import { afterEach, expect, test } from "vite-plus/test";
 import { Row } from "../src/components/lang/row";
+import { Minimap } from "../src/components/lang/gutter-minimap";
 
 afterEach(cleanup);
 const css = readFileSync(createRequire(import.meta.url).resolve("@pe/kit/lang/lang.css"), "utf8");
+test.each([200, 1000])(
+  "%i damaged minimap marks share one beat and leave healthy heads static",
+  (count) => {
+    const scroller = document.createElement("div");
+    const props = { count, range: { start: 0, end: 10 }, scroller, height: 200, onJump() {} };
+    const marks = Array.from({ length: count }, (_, index) => ({ index, damage: "unpreviewed" }));
+    const view = render(<Minimap {...props} marks={[...marks, { index: count, head: true }]} />);
+    const surface = scroller.querySelector("[data-damage-surface]")!;
+    expect(scroller.querySelectorAll("[data-damage-surface]")).toHaveLength(1);
+    expect(surface.querySelectorAll("[data-damage]")).toHaveLength(count);
+    expect(scroller.querySelectorAll('[data-minimap="rows"] > i')).toHaveLength(1);
+    expect(surface.querySelector("[data-minimap-viewport]")).toBeNull();
+    expect(css).toContain("[data-damage]:not(:where([data-damage-surface] *))");
+    view.rerender(<Minimap {...props} marks={[{ index: 0, head: true }]} />);
+    expect(scroller.querySelector("[data-damage-surface]")).toBeNull();
+  },
+);
 test("damage animates only opacity; reduced motion keeps the static mark without promoted layers", () => {
   expect(document.documentElement.style.getPropertyValue("--pe-alarm")).toBe("#b3140a");
   const beat = css.match(/@keyframes pe-damage-beat\s*\{[\s\S]*?\n\}/)![0];
   expect(beat).not.toMatch(/(?:filter|box-shadow|outline)\s*:/);
   expect(beat).toMatch(/opacity\s*:/);
   expect(css).toMatch(
-    /@media \(prefers-reduced-motion: reduce\)[\s\S]*?:root \[data-damage\]\s*\{[^}]*animation: none;[^}]*will-change: auto;/,
+    /@media \(prefers-reduced-motion: reduce\)[\s\S]*?:root :is\(\[data-damage\], \[data-damage-surface\]\)\s*\{[^}]*animation: none;[^}]*will-change: auto;/,
   );
 });
 test.each(["div", "span", "rect"])("late %s damage joins one clock", (tag) => {
