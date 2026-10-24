@@ -154,9 +154,27 @@
 [data-annotation="dial"]:hover [data-annotation="dial-tick"] {
   background: var(--pe-ink-mute);
 }
+/* TEMPORARY (protoui wave 10): the variant pill, deliberately alien so it reads as not-the-design. */
+[data-lens-variant] {
+  position: fixed;
+  bottom: 6px;
+  left: 50%;
+  translate: -50% 0;
+  z-index: 99;
+  padding: 1px 8px;
+  font: 11px var(--font-mono);
+  background: #ffe600;
+  color: #000;
+  pointer-events: none;
+}
+/* A scrub in progress: the rail takes the pointer (captured) and shows the grip. */
+[data-annotation="dial"][data-scrub] {
+  cursor: grabbing;
+}
 /* The thumb: a slide rule's cursor over the scale it measures — a hairline square frame centred
    on the bar column, open inside so the bars stay legible, firmer while the pointer is on the
-   rail. It locates; it is not a drag target. */
+   rail. It locates; the rail under it (model.ts) is what a press-and-move scrubs, so the thumb
+   itself takes no pointer. */
 [data-annotation="thumb"] {
   position: absolute;
   left: calc(50% - var(--bar) / 2 - 3px);

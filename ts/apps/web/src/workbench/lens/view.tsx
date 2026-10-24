@@ -8,7 +8,29 @@ import { EmptyState, emptyMark } from "@pe/kit/lang/empty";
 import { toTurns } from "./moments";
 import { TurnPeek } from "./peek";
 import { useLensModel } from "./model";
+import { cycleLensVariant, useLensVariant } from "./variant";
 import type { ChatState } from "@pe/agent-contracts/chat-state";
+
+/** TEMPORARY (protoui wave 10): Alt+L cycles the slot-sizing variants; the pill names the one on
+ *  screen. Shown only once a variant was picked (`?lens=` or Alt+L); the default screen is clean. */
+function LensVariantSwitch() {
+  const variant = useLensVariant();
+  useEffect(() => {
+    const onKey = (event: KeyboardEvent) => {
+      if (!event.altKey || event.key.toLowerCase() !== "l") return;
+      event.preventDefault();
+      cycleLensVariant();
+    };
+    window.addEventListener("keydown", onKey);
+    return () => window.removeEventListener("keydown", onKey);
+  }, []);
+  if (!variant) return null;
+  return (
+    <div data-lens-variant="" role="status">
+      lens: {variant} · Alt+L
+    </div>
+  );
+}
 
 export function Lens({ state }: { state: ChatState }) {
   const {
@@ -132,6 +154,7 @@ export function Lens({ state }: { state: ChatState }) {
         </div>
         <TurnPeek turns={turns} laneRef={laneRef} dialRef={dialRef} goTo={goTo} />
       </div>
+      <LensVariantSwitch />
       {awayFromTail ? (
         <div className="chat-tail-floater">
           <Button
