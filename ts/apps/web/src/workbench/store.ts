@@ -49,6 +49,7 @@ export function createChatPageStore(deps: {
       duplicate?: boolean,
       keep?: boolean,
     ) => Promise<boolean>;
+    work: (thread: string, route: string, link?: string) => Promise<void>;
   } | null = null;
   const drafts = new Map<string, ThreadTab[]>();
   const draftTabs = (thread: string) => {
@@ -177,6 +178,12 @@ export function createChatPageStore(deps: {
         set("plan-refused", planRefusal, { route: plugin, message }),
       openThread: (thread: string, replace = false) =>
         deps.search.patch({ thread, prompt: undefined, turn: undefined }, replace),
+      /** A Work press: that thread's tool, its Page restored when the thread holds a tab there. */
+      openWork: (thread: string, route: string, link?: string) => {
+        planGeneration++;
+        deps.registry.set(planIntent, null);
+        return tabs?.work(thread, route, link) ?? Promise.resolve();
+      },
     },
     runAction: core.runAction,
     dispose() {

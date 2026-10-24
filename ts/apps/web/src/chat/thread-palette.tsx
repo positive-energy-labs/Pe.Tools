@@ -78,6 +78,16 @@ import {
   type ThreadAction,
 } from "./thread-navigation";
 import { TooltipHint } from "@pe/kit/lang/tooltip";
+import { chipRecipe } from "@pe/kit/lang/chip";
+import type { ThreadWork } from "@pe/agent-contracts";
+import {
+  documentsLabel,
+  leadWork,
+  partialWork,
+  resumeWork,
+  useThreadWorks,
+  workHint,
+} from "./thread-work";
 
 /** What the roster holds: stored summaries, read against the live inventory by the shell. */
 type RosterThread = StoredThreadSummary & TargetRead;
@@ -558,10 +568,10 @@ function ThreadTime({ thread, now }: { thread: RosterThread; now: number }) {
 }
 
 const STAMP = new Intl.DateTimeFormat(undefined, { dateStyle: "short", timeStyle: "short" });
-const rowHint = (thread: RosterThread) =>
+// Names only: a session or open id never reaches the row, its hint included.
+const rowHint = (thread: RosterThread, work: ThreadWork | undefined) =>
   [
-    thread.title,
-    exactTargets(thread.head),
+    work ? workHint(work, thread.title) : thread.title,
     [thread.providerName, thread.modelId].filter(Boolean).join(" "),
     STAMP.format(new Date(thread.updatedAt)),
   ]
@@ -579,12 +589,6 @@ const ThreadActions = memo(ThreadActionsMenu, (before, after) => {
   const keys = Object.keys(was) as (keyof typeof was)[];
   return keys.length === Object.keys(now).length && keys.every((key) => was[key] === now[key]);
 });
-
-function CompactThreadTarget({ thread }: { thread: RosterThread }) {
-  return thread.head.targets.length ? (
-    <span className="pe-thread-target">{targetLabel(thread)}</span>
-  ) : null;
-}
 
 function CompactThreadTrail({ thread, now }: { thread: RosterThread; now: number }) {
   return (
@@ -664,6 +668,7 @@ export function ThreadsSidebar({
   threads,
   currentThreadId,
   onSelect,
+  onWork,
   address,
   compactRows: compactRowsOverride,
   searchSerial = 0,
@@ -673,6 +678,8 @@ export function ThreadsSidebar({
   threads: RosterThread[];
   currentThreadId: string;
   onSelect: (id: string) => void;
+  /** A Work press opens its tool; the row's own press only opens the conversation. */
+  onWork?: (id: string, route: string, link?: string) => void;
   compactRows?: boolean;
   address?: ListPersist<ThreadSort>;
   /** The page's own list: "/" outside a field lands in its search. */
@@ -688,6 +695,14 @@ export function ThreadsSidebar({
       navRef.current?.querySelector<HTMLInputElement>("[data-list-bar] input")?.focus();
   }, [searchSerial]);
   const host = useSurfaceHost();
+  const works = useThreadWorks();
+  const partial = partialWork(works.snapshot);
+  const pressWork = async (thread: string, work: ThreadWork, item: ThreadWork["works"][number]) => {
+    const closed =
+      work.documents.find((document) => document.id === item.documentId)?.availability ===
+      "closed";
+    onWork?.(thread, item.route, closed ? (await resumeWork(item.id))?.link : undefined);
+  };
   const compactRows = compactRowsOverride ?? host.surface === "tray";
   const [view, setView] = useState(() =>
     initialShelfState(threads.find((thread) => thread.id === currentThreadId)),
@@ -849,17 +864,20 @@ export function ThreadsSidebar({
   const rowParts = (thread: RosterThread): ListRowParts => {
     const shelf = shelfOf(thread, now);
     const reorder = shelf === "active" || shelf === "pinned";
+    const work = works.of.get(thread.id);
+    const lead = leadWork(work);
+    // The remembered documents lead; the conversation title stands in when there are none.
+    const title = documentsLabel(work) ?? thread.title;
     return {
       label: compactRows ? (
         <span className="pe-thread-label">
-          <span className="pe-thread-title">{thread.title}</span>
-          <CompactThreadTarget thread={thread} />
+          <span className="pe-thread-title">{title}</span>
         </span>
       ) : (
-        thread.title
+        title
       ),
-      // L1: a second line only when it names a target; the harness mark rides the first.
-      lines: compactRows || !thread.head.targets.length ? 1 : 2,
+      // L1: a second line only when it holds Work; the harness mark rides the first.
+      lines: compactRows || !lead ? 1 : 2,
       active: thread.id === currentThreadId,
       meta: (
         <span className="pe-thread-trail">
@@ -869,10 +887,26 @@ export function ThreadsSidebar({
         </span>
       ),
       sub:
-        compactRows || !thread.head.targets.length ? undefined : (
-          <span className="pe-thread-sub min-w-0 truncate">{targetLabel(thread)}</span>
+        compactRows || !work || !lead ? undefined : (
+          <span className="pe-thread-sub">
+            <Button
+              label={`Open ${lead.intent}`}
+              onClick={(event) => {
+                event.stopPropagation();
+                void pressWork(thread.id, work, lead);
+              }}
+            >
+              {lead.unfinished ? (
+                <span className={chipRecipe().base()}>{lead.unfinished} unfinished</span>
+              ) : null}
+              <span className="min-w-0 truncate">
+                {lead.intent}
+                {work.works.length > 1 ? ` +${work.works.length - 1}` : ""}
+              </span>
+            </Button>
+          </span>
         ),
-      title: rowHint(thread),
+      title: rowHint(thread, work),
       onDoubleClick: () => setMenuId(thread.id),
       onContextMenu: (event) => {
         event.preventDefault();
@@ -970,6 +1004,13 @@ export function ThreadsSidebar({
           }}
         />
       </Scroll>
+      {partial ? (
+        <TooltipHint content={partial.hint}>
+          <p className="m-0 px-(--gutter) t-small text-ink-mute" data-thread-work-partial="">
+            {partial.line}
+          </p>
+        </TooltipHint>
+      ) : null}
     </nav>
   );
 }
@@ -1051,12 +1092,3 @@ const STATE_WORD: Record<ThreadActivity, string> = {
   failed: "Failed",
   idle: "Idle",
 };
-
-/** The exact target a row's short label stands for: its path, or the session and open id. */
-function exactTarget(target: DocumentRequest): string {
-  return target.kind === "named" ? target.address : `${target.ref.session} · ${target.ref.openId}`;
-}
-
-/** Every exact target of a thread, for the row's hover. */
-const exactTargets = (head: RosterThread["head"]) =>
-  head.targets.map((target) => exactTarget(target.request)).join("\n");

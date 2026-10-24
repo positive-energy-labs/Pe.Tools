@@ -163,17 +163,18 @@ function ChatSurface({ target, docked = false }: ChatShellProps) {
       });
   };
   const [viewportNarrow, setViewportNarrow] = useState(false);
-  const narrow = docked || compact || viewportNarrow;
+  // Expanding the tools never folds the sidebar: Pea's text holds still beside them.
+  const narrow = compact || viewportNarrow;
   useEffect(() => {
     const media = window.matchMedia("(max-width: 720px)");
     const changed = () => {
       setViewportNarrow(media.matches);
-      if (docked || compact || media.matches) store.actions.setSideOpen(false);
+      if (compact || media.matches) store.actions.setSideOpen(false);
     };
     changed();
     media.addEventListener("change", changed);
     return () => media.removeEventListener("change", changed);
-  }, [docked, compact, store]);
+  }, [compact, store]);
   // The route, re-declared with this thread and the provider's verbs bound.
   const manifest = useMemo(
     () =>
@@ -370,6 +371,10 @@ function ChatSurface({ target, docked = false }: ChatShellProps) {
           currentThreadId={currentThreadId || chat.id}
           onSelect={(id) => {
             openThread(id);
+            if (close) store.actions.setSideOpen(false);
+          }}
+          onWork={(id, route, link) => {
+            void store.actions.openWork(id, route, link);
             if (close) store.actions.setSideOpen(false);
           }}
           onFork={(id, providerId) => void forkThread(providerId, id)}

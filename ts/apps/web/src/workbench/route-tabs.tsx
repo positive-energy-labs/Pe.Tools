@@ -1,7 +1,7 @@
 import { Plus, X } from "lucide-react";
 import { routeAddress, type ThreadTab } from "@pe/agent-contracts";
 import { Button } from "@pe/kit/lang/button";
-import { TooltipHint } from "@pe/kit/lang/tooltip";
+import { Switcher } from "@pe/kit/lang/switcher";
 
 function tabTitle(tab: ThreadTab) {
   const at = routeAddress(tab.route);
@@ -21,14 +21,32 @@ function tabTitle(tab: ThreadTab) {
   return `${at.title}${typeof subject === "string" && subject ? ` · ${subject}` : ""}`;
 }
 
-/** Each button names one durable Place; the route body is the existing standalone outlet. */
+/** The tools pane's header: one labelled tab per durable Place; none pressed while collapsed. */
 export function RouteTabs({
+  tabs,
+  active,
+  onSelect,
+}: {
+  tabs: readonly ThreadTab[];
+  active: string | null;
+  onSelect: (tab: ThreadTab) => void;
+}) {
+  return (
+    <Switcher
+      ariaLabel="Thread Places"
+      value={active ?? ""}
+      onChange={(id) => onSelect(tabs.find((tab) => tab.id === id)!)}
+      options={tabs.map((tab) => ({ value: tab.id, label: tabTitle(tab), title: tabTitle(tab) }))}
+    />
+  );
+}
+
+/** Verbs on the shown Place, and the strip's refusal when Places cannot be saved. */
+export function RouteTabActions({
   tabs,
   active,
   failure,
   onRetry,
-  onSelect,
-  onClose,
   onChat,
   onDuplicate,
   onCloseActive,
@@ -37,55 +55,36 @@ export function RouteTabs({
   active: string | null;
   failure: string | null;
   onRetry: () => void;
-  onSelect: (tab: ThreadTab) => void;
-  onClose: (tab: ThreadTab) => void;
   onChat: () => void;
   onDuplicate: (() => void) | null;
   onCloseActive: () => void;
 }) {
   return (
-    <div
-      className="flex shrink-0 items-center gap-1 overflow-x-auto hairline-b px-2 py-1"
-      aria-label="Thread Places"
-    >
-      {failure && tabs.length === 0 && (
-        <Button label="Discard unavailable link and open chat" onClick={onChat}>
-          Open chat
-        </Button>
-      )}
-      {tabs.map((tab) => (
-        <div key={tab.id} className="flex shrink-0 items-center">
-          <TooltipHint content={tab.link}>
-            <Button
-              label={tabTitle(tab)}
-              aria-pressed={active === tab.id}
-              onClick={() => onSelect(tab)}
-            >
-              {tabTitle(tab)}
-            </Button>
-          </TooltipHint>
-          <Button icon={X} label={`Close ${tabTitle(tab)}`} onClick={() => onClose(tab)} />
-        </div>
-      ))}
-      {active && !tabs.some((tab) => tab.id === active) && (
-        <>
-          <span data-tone="caution">Place not saved</span>
-          <Button icon={X} label="Close unsaved Place" onClick={onCloseActive} />
-        </>
-      )}
-      {onDuplicate && (
-        <Button icon={Plus} label="Open another Place on this route" onClick={onDuplicate} />
-      )}
+    <>
       {failure && (
         <>
-          <span role="status" data-tone="caution">
+          <span role="status" data-tone="caution" className="t-small min-w-0 truncate">
             {failure}
           </span>
           <Button label="Retry saving Places" onClick={onRetry}>
             Retry
           </Button>
+          {tabs.length === 0 && (
+            <Button label="Discard unavailable link and open chat" onClick={onChat}>
+              Open chat
+            </Button>
+          )}
         </>
       )}
-    </div>
+      {active && !tabs.some((tab) => tab.id === active) && (
+        <span data-tone="caution" className="t-small">
+          Place not saved
+        </span>
+      )}
+      {onDuplicate && (
+        <Button icon={Plus} label="Open another Place on this route" onClick={onDuplicate} />
+      )}
+      {active && <Button icon={X} label="Close this Place" onClick={onCloseActive} />}
+    </>
   );
 }
