@@ -43,7 +43,14 @@ const tabOpen = place("tab-open", "SO", "303", {
   kind: "open",
   ref: { session: "s1", openId: "o1" },
 });
-const threads = [{ id: "T", tabs: [ducts, tabA, tabB, tabOpen] }];
+// The route thread's browser receipt (parent-r2 seed): a raw Address pin with a retained Page.
+const tabOffice: ThreadTab = {
+  id: "cac00000-0000-4000-8000-000000000011",
+  route: "ducts",
+  link: "/ducts?target=C%3A%2FModels%2FOffice.rvt&system=Office%20retained%20page",
+  at: "2026-10-24T00:00:00.000Z",
+};
+const threads = [{ id: "T", tabs: [ducts, tabA, tabB, tabOpen, tabOffice] }];
 vi.mock("./provider", () => ({ useWorkbench: () => ({ store, threads }) }));
 vi.mock("#/chat/chat-shell", () => ({ ChatShell: () => <div data-chat-probe="">pea</div> }));
 vi.mock("#/route/situation-ladder", () => ({ ChatPlanIntent: createContext(null) }));
@@ -218,4 +225,25 @@ test("every Place carries its own named close, in the tab order", async () => {
     expect(document.activeElement).toBe(close);
   }
   expect(screen.queryByRole("button", { name: "Close this Place" })).toBeNull();
+});
+
+test("parent-r2 receipt: the host's base url never replaces the saved Place's retained Page", async () => {
+  const router = await mount();
+  await act(() =>
+    store.actions.openWork(
+      "T",
+      "ducts",
+      resume(
+        { binding: "address", route: "ducts", target: address(String.raw`c:\models\office.rvt`) },
+        "/ducts?target=c%3A%5Cmodels%5Coffice.rvt",
+      ),
+    ),
+  );
+  await waitFor(() =>
+    expect(shown(router)).toMatchObject({
+      path: "/ducts",
+      system: "Office retained page",
+      tab: "cac00000-0000-4000-8000-000000000011",
+    }),
+  );
 });
