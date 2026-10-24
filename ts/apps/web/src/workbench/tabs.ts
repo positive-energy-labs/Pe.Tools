@@ -12,8 +12,6 @@ import {
   type ThreadHead,
   type ThreadTab,
   type ThreadTabRequest,
-  type WorkKey,
-  sameAddress,
 } from "@pe/agent-contracts";
 import { peClient } from "#/host/pe-client";
 import { focusQuiet } from "@pe/kit/lib/utils";
@@ -59,33 +57,16 @@ function place(
     : link;
 }
 
-/** Whether a saved Place holds the Work `key` names: the same named workspace, the same stable
- *  Address (case and separators do not matter), or the exact open lifetime the key carries. A
- *  session key or a title never matches; with no proof the answer is no. */
-function holdsWork(tab: ThreadTab, key: WorkKey): boolean {
-  const { carry } = routeAddress(tab.route).read(
-    Object.fromEntries(new URL(tab.link, "http://tab.invalid").searchParams),
-  );
-  if (key.binding === "workspace") return carry.work === key.work;
-  if (carry.work !== undefined) return false;
+/** A matched Place keeps its Page and id. A legacy open-ref Place also takes the resume's stable
+ *  Address carry, so its Work stays readable once that document closes. */
+function rebased(tab: ThreadTab, url: string | null): string {
+  const at = routeAddress(tab.route);
+  const params = (link: string) =>
+    Object.fromEntries(new URL(link, "http://tab.invalid").searchParams);
+  const { page, carry } = at.read(params(tab.link));
   const target = parseTarget(carry.target);
-  const request = target?.kind === "request" ? target.request : null;
-  const open = request?.kind === "open" ? request.ref : null;
-  const address =
-    target?.kind === "address"
-      ? target.address
-      : request?.kind === "named"
-        ? request.address
-        : null;
-  const sameRef = (ref?: { session: string; openId: string }) =>
-    open !== null &&
-    ref !== undefined &&
-    open.session === ref.session &&
-    open.openId === ref.openId;
-  if (key.binding === "address")
-    return address ? sameAddress(address, key.target) : sameRef(key.from);
-  if (key.binding === "open") return sameRef(key.open);
-  return target === null;
+  if (!url || target?.kind !== "request" || target.request.kind !== "open") return tab.link;
+  return at.link(page, { target: at.read(params(url)).carry.target, work: carry.work });
 }
 
 /** The route a tab holds at `pathname`: any but Pea's own page. */
@@ -453,20 +434,23 @@ export function useRouteTabs() {
           const epoch = ++navigationEpoch.current;
           try {
             await flush();
-            const onRoute = (
-              owner === thread ? tabs : threads.find((t) => t.id === owner)?.tabs
-            )?.filter((tab) => tab.route === workRoute);
-            // Exception to "match by Work identity": `?demo=` asks the host nothing, so it has no
-            // key. Its fixture holds one tab per route and never reaches a host thread.
-            const saved = resumed?.key
-              ? onRoute?.find((tab) => holdsWork(tab, resumed.key!))
+            const own = owner === thread ? tabs : threads.find((t) => t.id === owner)?.tabs;
+            // The host's `matches` name the Places holding this Work, in canonical tab order: the
+            // first in this thread wins. Another thread's Place, or none, means a new Place here.
+            // Exception: `?demo=` asks the host nothing, so it has no matches; its fixture holds
+            // one tab per route and never reaches a host thread.
+            const match = resumed?.matches.find((each) => each.threadId === owner);
+            const saved = resumed
+              ? own?.find((tab) => tab.id === match?.tabId && tab.route === workRoute)
               : store.local
-                ? onRoute?.[0]
+                ? own?.find((tab) => tab.route === workRoute)
                 : undefined;
             if (epoch !== navigationEpoch.current) return;
             await navigate(
               owner,
-              saved?.link ?? resumed?.url ?? routeAddress(workRoute as RouteKey).link(),
+              saved
+                ? rebased(saved, resumed?.url ?? null)
+                : (resumed?.url ?? routeAddress(workRoute as RouteKey).link()),
               saved?.id ?? null,
             );
             // The press was outside the tools: focus lands on the tool it opened, not the press.
