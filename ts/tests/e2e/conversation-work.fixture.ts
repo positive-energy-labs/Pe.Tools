@@ -10,6 +10,7 @@ export const CONVERSATION_THREADS = {
 };
 export const OFFICE_ADDRESS = "C:/Models/Office.rvt";
 export const UNSAVED_REF = { session: "closed-session", openId: "unsaved-open" };
+export const NAMES_TURN = "cac00000-0000-4000-8000-000000000021";
 
 export async function workEvidence(home: string) {
   const dir = join(resolve(home), ".local-state", "state", "route-work");
@@ -39,7 +40,7 @@ export async function seedConversationWork(homeInput: string, artifactInput: str
   process.env.PE_LANE = "dev";
   // Initialize the contract barrel before its consumers; parallel jiti import initialization
   // can expose a half-initialized route catalog through its consumer cycle.
-  const { address, bindWork, emptyThreadLifecycle, workKey } =
+  const { address, bindWork, emptyThreadLifecycle, workKey, harnessEventSchema } =
     await import("../../packages/agent-contracts/src/index.ts");
   const { RouteWorkspace } = await import("../../packages/runtime/src/route-workspace.ts");
   const { createRouteRegistrations } = await import("../../packages/mcps/src/pea/routes.ts");
@@ -173,7 +174,36 @@ export async function seedConversationWork(homeInput: string, artifactInput: str
         2,
       ),
     );
-    await writeFile(join(dir, "events.jsonl"), "");
+    const events = office
+      ? [
+          {
+            seq: 1,
+            at,
+            kind: "prompt",
+            turnId: NAMES_TURN,
+            text: "Inspect the retained elements",
+            targets: [],
+          },
+          {
+            seq: 2,
+            at,
+            kind: "update",
+            turnId: NAMES_TURN,
+            update: {
+              sessionUpdate: "agent_message_chunk",
+              content: {
+                type: "text",
+                text: "Review 1001 and 1002. Example `1003`; [1004](https://example.invalid/element).",
+              },
+            },
+          },
+          { seq: 3, at, kind: "turn_end", turnId: NAMES_TURN, stopReason: "end_turn" },
+        ]
+      : [];
+    await writeFile(
+      join(dir, "events.jsonl"),
+      events.map((event) => JSON.stringify(harnessEventSchema.parse(event)) + "\n").join(""),
+    );
   }
   const fixture = {
     version: 1,

@@ -3,7 +3,12 @@ import { mkdir, readFile, writeFile } from "node:fs/promises";
 import { join, resolve } from "node:path";
 import { expect, test } from "vite-plus/test";
 import { connect, type Page } from "./cdp.ts";
-import { workEvidence, CONVERSATION_THREADS, UNSAVED_REF } from "./conversation-work.fixture.ts";
+import {
+  workEvidence,
+  CONVERSATION_THREADS,
+  UNSAVED_REF,
+  NAMES_TURN,
+} from "./conversation-work.fixture.ts";
 import { address, sameAddress } from "../../packages/agent-contracts/src/index.ts";
 
 const visible = `(e) => e.getClientRects().length > 0 && getComputedStyle(e).visibility !== 'hidden'`;
@@ -132,6 +137,10 @@ test("real conversation Work cutover retains authored cells, draft, Places and o
           id: params.requestId,
           url: params.request.url,
           method: params.request.method,
+          data:
+            new URL(params.request.url).pathname === "/pe/turn-element-names"
+              ? params.request.postData
+              : undefined,
           build: builds[0],
           at: Date.now(),
         });
@@ -234,6 +243,36 @@ test("real conversation Work cutover retains authored cells, draft, Places and o
       );
       await p.until(toolsCollapsed, "tools remain collapsed after thread selection");
       expect(new URL(await p.url()).pathname).toBe("/pea");
+    });
+    await step("settled prose batches its bare ids through the real names read", async () => {
+      const names = () =>
+        network.filter(
+          (event) => event.url && new URL(event.url).pathname === "/pe/turn-element-names",
+        );
+      await p.until(
+        async () =>
+          names().some(
+            (event) => event.event === "Network.responseReceived" && event.status === 200,
+          ),
+        "public names read returns successfully",
+      );
+      const requests = names().filter((event) => event.event === "Network.requestWillBeSent");
+      expect(requests).toHaveLength(1);
+      expect(JSON.parse(requests[0]!.data!)).toEqual({
+        kind: "turn-element-names",
+        thread: CONVERSATION_THREADS.office,
+        turnId: NAMES_TURN,
+        ids: [1001, 1002],
+      });
+      await p.waitText("Review 1001 and 1002.");
+      expect(await p.count("[data-chat-transcript] [data-revit-ids]")).toBe(0);
+      receipt.coverage.turnNames = {
+        ids: [1001, 1002],
+        requests: requests.length,
+        status: 200,
+        unresolvedStayPlain: true,
+        nativeTargets: [],
+      };
     });
     const message = "Unsent office draft retained across tools and history";
     await step("Work opens closed saved Ducts and draft survives Places collapse", async () => {

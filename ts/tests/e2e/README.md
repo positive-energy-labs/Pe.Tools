@@ -5,7 +5,8 @@
 From `ts`, run `vp run --no-cache journey:conversation-work`. It starts its own source host with
 `--no-revit --no-tray`, seeds canonical thread/Work files in an isolated product home, and drives
 Chrome through conversation entry, explicit Work resume, draft/history retention, reconnect and
-a 36-second quiet dwell. It checks the owned host's source custody, served web build and unchanged
+a 36-second quiet dwell. It also checks legacy Place rebasing, closed unsaved Work, and the real
+batched names read for unresolved prose ids. It checks source custody, served web build and unchanged
 Work bytes. Each run creates a dated artifact directory and stops its host and Chrome. Override
 `CONVERSATION_WORK_ARTIFACT_DIR` or `CONVERSATION_WORK_CHROME_PORT` when needed. This proves saved
 Work and browser behavior; it does not prove a native Revit read or write.
