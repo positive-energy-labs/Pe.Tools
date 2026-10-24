@@ -15,6 +15,21 @@ import {
 import { basename, join } from "node:path";
 import { pathToFileURL } from "node:url";
 import {
+  turnElementNamesRequestSchema,
+  turnElementNamesSnapshotSchema,
+  turnElementNamesObservationSchema,
+  type TurnElementNamesRequest,
+  type TurnElementNamesObservation,
+} from "../../../../packages/agent-contracts/src/turn-element-names.ts";
+import {
+  turnElementTargetsEventSchema,
+  turnElementNamesEventSchema,
+} from "../../../../packages/agent-contracts/src/harness-thread.ts";
+import {
+  readTurnElementNames as resolveTurnElementNames,
+  type TurnElementNamesNativeRead,
+} from "../turn-element-names.ts";
+import {
   type ClientSideConnection,
   type ContentBlock,
   PROTOCOL_VERSION,
@@ -57,6 +72,8 @@ import {
   type ThreadHead,
   type HeadTarget,
   type DocumentRequest,
+  type DocumentRef,
+  sameAddress,
   targetKey,
   type TurnState,
   readingKey,
@@ -86,10 +103,19 @@ import { openAdapter, stopChild } from "./adapter.ts";
 import { accessModes, isAuthRefusal, sessionOffer, type Providers } from "./providers.ts";
 import type { PluginHookName, PluginHooks } from "@pe/agent-contracts";
 import { exportThread } from "../thread-export.ts";
+import {
+  readWorkContext,
+  rememberPlace,
+  rememberTarget,
+  type ObserveDocument,
+  type ThreadWorkContext,
+} from "../thread-work-context.ts";
 
 /** The thread wire of ADR 0015; contract and route list in `@pe/agent-contracts` `harness-thread.ts`. */
 
 type Meta = Omit<HarnessThreadSummary, "lastSeq" | "cursor" | "activity" | "head"> & {
+  /** Display/Work relationships survive removal of native target authority. */
+  workContext?: ThreadWorkContext;
   acpSessionId: string | null;
   models: HarnessThreadBody["models"];
   traits: HarnessThreadBody["traits"];
@@ -149,6 +175,8 @@ type Append = HarnessEvent extends infer E
   : never;
 
 export type HarnessThreadsOptions = {
+  /** Current exact observations enrich remembered names; they never rebind a target. */
+  observeDocument?: ObserveDocument;
   /** State directory holding one directory per thread. */
   root: string;
   /** The harness child's cwd: the Pea world root. */
@@ -356,6 +384,8 @@ function writeJson(path: string, value: unknown) {
 
 export function createHarnessThreads(options: HarnessThreadsOptions) {
   const threads = new Map<string, Thread>();
+  /** Synchronization only. Observations and pins are always reconstructed from thread events. */
+  const elementNameReads = new Map<string, Promise<void>>();
   const headListeners = new Set<(threadId: string, head: ThreadHead) => void>();
   const summaryListeners = new Set<() => void>();
   const notifySummaries = () => {
@@ -385,13 +415,26 @@ export function createHarnessThreads(options: HarnessThreadsOptions) {
       meta.providerName ??= options.providers.get(meta.harness)?.name ?? meta.harness;
       meta.traits ??= [];
       meta.traitValues ??= {};
+      const before = JSON.stringify(meta.workContext);
       threads.set(id, fresh(meta, events));
+      // Backfill only observed context. Work documents and native admission stay untouched.
+      if (before !== JSON.stringify(meta.workContext)) writeJson(join(dir, "meta.json"), meta);
     } catch (error) {
       warn(`harness thread ${dir} skipped: it does not parse (${String(error)})`);
     }
   }
 
   function fresh(meta: Meta, events: HarnessEvent[] = []): Thread {
+    let context = readWorkContext(meta.workContext);
+    if (context) {
+      for (const { request, label } of meta.head.targets)
+        context = rememberTarget(context, request, label, options.observeDocument).context;
+      for (const tab of meta.tabs)
+        context = rememberPlace(context, tab.route, tab.link, options.observeDocument);
+      // An absent, empty context adds no evidence. Preserve the old archive's bytes.
+      if (meta.workContext !== undefined || context.documents.length || context.works.length)
+        meta.workContext = context;
+    }
     const t: Thread = {
       meta,
       child: null,
@@ -482,9 +525,14 @@ export function createHarnessThreads(options: HarnessThreadsOptions) {
       .keys()
       .reduce((text, key) => text.replaceAll(key, `…${key.slice(-4)}`), line);
     const full = JSON.parse(redacted) as HarnessEvent;
+    if (
+      (full.kind === "turn_element_targets" || full.kind === "turn_element_names") &&
+      Buffer.byteLength(redacted) >= HARNESS_EVENT_MAX_BYTES
+    )
+      throw Error("Turn element event exceeds the byte bound");
+    appendFileSync(join(options.root, t.meta.id, "events.jsonl"), `${redacted}\n`);
     t.events.push(full);
     projectActivity(t, full);
-    appendFileSync(join(options.root, t.meta.id, "events.jsonl"), `${redacted}\n`);
     options.log.append({ kind: "thread", thread: t.meta.id, event: full });
     options.receiptFact?.(t.meta.id, t.meta.title, full);
     if (
@@ -502,6 +550,231 @@ export function createHarnessThreads(options: HarnessThreadsOptions) {
     if (full.kind !== "update" || full.update.sessionUpdate === "config_option_update")
       notifySummaries();
     return full;
+  }
+
+  const elementDigest = (value: unknown) =>
+    createHash("sha256").update(JSON.stringify(value)).digest("hex");
+  const refKey = (ref: DocumentRef) => JSON.stringify([ref.session, ref.openId]);
+  const elementEventFits = (event: Append) =>
+    Buffer.byteLength(
+      JSON.stringify({ ...event, seq: Number.MAX_SAFE_INTEGER, at: new Date().toISOString() }),
+    ) < HARNESS_EVENT_MAX_BYTES;
+
+  function elementChunks<A>(
+    values: readonly A[],
+    event: (values: A[], part: number, parts: number) => Append,
+  ): Append[] {
+    const chunks: A[][] = [[]];
+    for (const value of values) {
+      const tail = chunks.at(-1)!;
+      if (!elementEventFits(event([...tail, value], 255, 256))) {
+        if (!tail.length) throw Error("One turn element entry exceeds the byte bound");
+        chunks.push([value]);
+        if (!elementEventFits(event([value], 255, 256)))
+          throw Error("One turn element entry exceeds the byte bound");
+      } else tail.push(value);
+    }
+    if (chunks.length > 256) throw Error("Too many turn element chunks");
+    return chunks.map((chunk, part) => event(chunk, part, chunks.length));
+  }
+
+  function pinElementTargets(
+    t: Thread,
+    turnId: string,
+    requests: readonly { request: DocumentRequest }[],
+  ) {
+    const refs = new Map<string, DocumentRef>();
+    let complete = true;
+    for (const { request } of requests) {
+      try {
+        const seen = request.kind === "named" ? options.observeDocument?.(request) : null;
+        const ref =
+          request.kind === "open"
+            ? request.ref
+            : seen &&
+                seen.ref.session === request.session &&
+                seen.address &&
+                sameAddress(seen.address, request.address)
+              ? seen.ref
+              : null;
+        if (!ref) {
+          complete = false;
+          continue;
+        }
+        if (refs.has(refKey(ref))) continue;
+        const trial = turnElementNamesSnapshotSchema.safeParse({
+          thread: t.meta.id,
+          turnId,
+          targets: [...refs.values(), ref],
+          complete,
+        });
+        if (!trial.success) {
+          complete = false;
+          continue;
+        }
+        refs.set(refKey(ref), { ...ref });
+      } catch {
+        // Metadata is optional display evidence. Its failure cannot fail delivery or grant scope.
+        complete = false;
+      }
+    }
+    return { targets: [...refs.values()], complete };
+  }
+
+  function orderedElementParts<A extends { seq: number; part: number; parts: number }>(
+    parts: A[],
+    label: string,
+  ): A[] {
+    if (
+      !parts.length ||
+      parts.length !== parts[0]!.parts ||
+      parts.some(
+        (part, index) =>
+          part.part !== index ||
+          part.parts !== parts.length ||
+          part.seq !== parts[0]!.seq + index ||
+          Buffer.byteLength(JSON.stringify(part)) >= HARNESS_EVENT_MAX_BYTES,
+      )
+    )
+      throw Error(`Incomplete or invalid ${label} chunks`);
+    return parts;
+  }
+
+  function elementState(t: Thread, prompt: Extract<HarnessEvent, { kind: "prompt" }>) {
+    let pins: { targets: readonly DocumentRef[]; complete: boolean };
+    if (prompt.elementNames) {
+      const parts = orderedElementParts(
+        t.events
+          .filter(
+            (event) => event.kind === "turn_element_targets" && event.promptSeq === prompt.seq,
+          )
+          .map((event) => turnElementTargetsEventSchema.parse(event)),
+        "turn target",
+      );
+      pins = { targets: parts.flatMap((part) => part.targets), complete: parts[0]!.complete };
+      if (
+        parts.length !== prompt.elementNames.targetParts ||
+        parts[0]!.seq !== prompt.seq + 1 ||
+        parts.some((part) => part.complete !== pins.complete) ||
+        elementDigest(pins) !== prompt.elementNames.targetDigest
+      )
+        throw Error("Turn target provenance does not match its prompt");
+    } else {
+      // Legacy named requests must never resolve against today's metadata.
+      const targets = (prompt.targets ?? []).flatMap(({ request }) =>
+        request.kind === "open" ? [request.ref] : [],
+      );
+      const parsed = turnElementNamesSnapshotSchema.safeParse({
+        thread: t.meta.id,
+        turnId: prompt.turnId,
+        targets,
+        complete: targets.length === (prompt.targets?.length ?? 0),
+      });
+      pins = parsed.success ? parsed.data : { targets: [], complete: false };
+    }
+    const snapshot = turnElementNamesSnapshotSchema.parse({
+      ...pins,
+      thread: t.meta.id,
+      turnId: prompt.turnId,
+    });
+    let previous: TurnElementNamesObservation | undefined;
+    const groups = new Map<string, z.infer<typeof turnElementNamesEventSchema>[]>();
+    for (const event of t.events) {
+      if (event.kind !== "turn_element_names" || event.promptSeq !== prompt.seq) continue;
+      if (Buffer.byteLength(JSON.stringify(event)) >= HARNESS_EVENT_MAX_BYTES)
+        throw Error("Oversize stored element observation");
+      const parsed = turnElementNamesEventSchema.parse(event);
+      const group = groups.get(parsed.readId) ?? [];
+      group.push(parsed);
+      groups.set(parsed.readId, group);
+    }
+    for (const group of groups.values()) {
+      const parts = orderedElementParts(group, "element observation");
+      const first = parts[0]!;
+      const entries = parts.flatMap((part) => part.entries);
+      if (
+        first.seq <= prompt.seq ||
+        parts.some(
+          (part) => part.digest !== first.digest || part.observedAt !== first.observedAt,
+        ) ||
+        elementDigest({ observedAt: first.observedAt, entries }) !== first.digest
+      )
+        throw Error("Element observation digest does not match its chunks");
+      const observation = turnElementNamesObservationSchema.parse({
+        snapshot,
+        observedAt: first.observedAt,
+        entries,
+      });
+      const byId = new Map(observation.entries.map((entry) => [entry.elementId, entry]));
+      if (
+        byId.size !== entries.length ||
+        observation.entries.some(
+          (entry) =>
+            entry.state === "resolved" &&
+            !snapshot.targets.some((ref) => refKey(ref) === refKey(entry.target)),
+        ) ||
+        previous?.entries.some(
+          (entry) => JSON.stringify(byId.get(entry.elementId)) !== JSON.stringify(entry),
+        )
+      )
+        throw Error("Stored element observation changed an earlier resolution");
+      previous = observation;
+    }
+    return { snapshot, previous };
+  }
+
+  function readTurnElementNames(
+    input: TurnElementNamesRequest,
+    nativeRead: TurnElementNamesNativeRead,
+  ): Promise<TurnElementNamesObservation> {
+    const request = turnElementNamesRequestSchema.parse(input);
+    const key = JSON.stringify([request.thread, request.turnId]);
+    const result = (elementNameReads.get(key) ?? Promise.resolve()).then(async () => {
+      const t = threads.get(request.thread);
+      if (!t || t.stopped) throw Error("No available harness thread for element names");
+      const prompts = t.events.filter(
+        (event) => event.kind === "prompt" && event.turnId === request.turnId,
+      );
+      if (prompts.length !== 1)
+        throw Error("Element names require one delivered prompt for this turn");
+      const prompt = prompts[0] as Extract<HarnessEvent, { kind: "prompt" }>;
+      const { snapshot, previous } = elementState(t, prompt);
+      if (
+        previous &&
+        request.ids.every((id) => previous.entries.some((entry) => entry.elementId === id))
+      )
+        return previous;
+      const observation = await resolveTurnElementNames(snapshot, request, nativeRead, previous);
+      if (t.stopped || threads.get(request.thread) !== t)
+        throw Error("Harness thread closed during element name read");
+      const readId = randomUUID();
+      const digest = elementDigest({
+        observedAt: observation.observedAt,
+        entries: observation.entries,
+      });
+      const chunks = elementChunks(observation.entries, (entries, part, parts) => ({
+        kind: "turn_element_names",
+        promptSeq: prompt.seq,
+        readId,
+        part,
+        parts,
+        digest,
+        observedAt: observation.observedAt,
+        entries,
+      }));
+      for (const chunk of chunks) append(t, chunk);
+      // Read back the committed owner events, including redaction and chunk validation.
+      return elementState(t, prompt).previous!;
+    });
+    const settled = result.then(
+      () => {},
+      () => {},
+    );
+    elementNameReads.set(key, settled);
+    void settled.then(() => {
+      if (elementNameReads.get(key) === settled) elementNameReads.delete(key);
+    });
+    return result;
   }
 
   function isActivity(event: HarnessEvent) {
@@ -592,6 +865,12 @@ export function createHarnessThreads(options: HarnessThreadsOptions) {
     const t = threads.get(threadId);
     if (t) {
       t.meta.head = head;
+      let context = readWorkContext(t.meta.workContext);
+      if (context) {
+        for (const { request, label } of head.targets)
+          context = rememberTarget(context, request, label, options.observeDocument).context;
+        t.meta.workContext = context;
+      }
       writeMeta(t);
     } else writeJson(headFile(threadId), head);
     for (const listener of headListeners) listener(threadId, head);
@@ -625,6 +904,7 @@ export function createHarnessThreads(options: HarnessThreadsOptions) {
         reason: `Refused at ${door}: a thread targets each document once.`,
       });
     const targets = input.targets.map(({ request, label }): HeadTarget => {
+      label ||= options.observeDocument?.(request)?.name;
       const held = kept(request);
       if (held) return { ...held, ...(label ? { label } : {}) };
       const acquired =
@@ -1151,10 +1431,21 @@ export function createHarnessThreads(options: HarnessThreadsOptions) {
     t.running = turnId;
     // The head as of delivery is the document this turn runs against; the record names it itself.
     const head = readHead(t.meta.id);
+    const pins = pinElementTargets(t, turnId, head.targets);
+    const promptSeq = t.events.length + 1;
+    const targetChunks = elementChunks(pins.targets, (targets, part, parts) => ({
+      kind: "turn_element_targets",
+      promptSeq,
+      part,
+      parts,
+      complete: pins.complete,
+      targets,
+    }));
     append(t, {
       kind: "prompt",
       turnId,
       text,
+      elementNames: { targetParts: targetChunks.length, targetDigest: elementDigest(pins) },
       ...(attachments ? { attachments } : {}),
       ...(mentions ? { mentions } : {}),
       ...(head.targets.length
@@ -1166,6 +1457,7 @@ export function createHarnessThreads(options: HarnessThreadsOptions) {
           }
         : {}),
     });
+    for (const chunk of targetChunks) append(t, chunk);
     arm(t);
     let outcome = "failed";
     try {
@@ -1543,6 +1835,14 @@ export function createHarnessThreads(options: HarnessThreadsOptions) {
           };
           if (held) tabs[index] = tab;
           else tabs.push(tab);
+          const context = readWorkContext(t.meta.workContext);
+          if (context)
+            t.meta.workContext = rememberPlace(
+              context,
+              route,
+              canonical.link,
+              options.observeDocument,
+            );
         }
         writeMeta(t);
         notifySummaries();
@@ -1873,6 +2173,33 @@ export function createHarnessThreads(options: HarnessThreadsOptions) {
   sweep.unref();
 
   return {
+    readTurnElementNames,
+    /** Current metadata enriches remembered context without changing targets or admissions. */
+    refreshWorkContexts: () => {
+      let changed = false;
+      for (const t of threads.values()) {
+        let context = readWorkContext(t.meta.workContext);
+        if (!context) continue;
+        const before = JSON.stringify(context);
+        for (const { request, label } of t.meta.head.targets)
+          context = rememberTarget(context, request, label, options.observeDocument).context;
+        for (const tab of t.meta.tabs)
+          context = rememberPlace(context, tab.route, tab.link, options.observeDocument);
+        if (JSON.stringify(context) === before) continue;
+        t.meta.workContext = context;
+        writeMeta(t);
+        changed = true;
+      }
+      if (changed) notifySummaries();
+    },
+    /** Read-only context projection; no Work read, native call, or new authority. */
+    workContexts: () =>
+      [...threads.values()]
+        .sort((a, b) => b.meta.updatedAt.localeCompare(a.meta.updatedAt))
+        .map((t) => ({
+          threadId: t.meta.id,
+          context: readWorkContext(t.meta.workContext),
+        })),
     launchScheduled: (input: import("../scheduled-tasks.ts").ScheduledLaunch) => {
       const providerId =
         input.selection?.providerId ??

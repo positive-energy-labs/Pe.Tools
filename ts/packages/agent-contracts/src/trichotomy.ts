@@ -49,6 +49,18 @@ export function pendingProposals(doc: unknown): number {
   );
 }
 
+/** Unfinished cells, including human-staged effort; two occupied rungs remain one cell. */
+export function unfinishedCells(doc: unknown): number {
+  if (Array.isArray(doc)) return doc.reduce<number>((sum, item) => sum + unfinishedCells(item), 0);
+  if (!isRecord(doc)) return 0;
+  const own = doc.proposal != null || doc.staged != null ? 1 : 0;
+  return Object.entries(doc).reduce<number>(
+    (sum, [key, value]) =>
+      sum + (key === "proposal" || key === "staged" ? 0 : unfinishedCells(value)),
+    own,
+  );
+}
+
 /*
  * What a rung writes. Every route sets values, and an empty value is a value. Deleting the
  * addressed property is opt-in per route, kept only where a shipped consumer stages it (rulings

@@ -442,7 +442,10 @@ export function QueryBox({
         value={draft}
         ghost={open && ghostPick ? ghostPick.label.slice(needle.length) : ""}
       >
+        {/* Below the input: unfolded, the query's own chips wrap above it, and a hint on top
+            covered their remove presses (demo-lane /families History, narrow tool). */}
         <TooltipHint
+          side="bottom"
           content={
             command
               ? "Words search every field; a field name starts a condition; ! negates. An arrow (→ or ->) ends the query and names what to do with the rows it keeps."

@@ -96,6 +96,11 @@ const LOG: HarnessEvent[] = z.array(harnessEventSchema).parse([
 const state = (events: HarnessEvent[]): ChatState => ({ ...emptyChatState(), events });
 
 describe("harness event projection", () => {
+  it("keys each assistant row by the turn that wrote it", () => {
+    const said = selectMessages(state(LOG)).filter((m) => m.role === "assistant");
+    expect(said.map((m) => m.turnId)).toEqual(said.map(() => expect.stringMatching(/^t\d$/)));
+    expect(said[0]!.turnId).toBe("t1");
+  });
   it("folds the log into the transcript rows moments.tsx renders", () => {
     const messages = selectMessages(state(LOG));
     const shape = messages.map((message) => ({

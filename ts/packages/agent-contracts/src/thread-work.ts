@@ -1,4 +1,5 @@
 import { z } from "zod";
+import { workKeySchema } from "./route-state.ts";
 
 /** A remembered document connection is display context, never native execution authority. */
 export const threadWorkSchema = z.strictObject({
@@ -31,3 +32,14 @@ export const threadWorkSnapshotSchema = z.strictObject({
   truncated: z.boolean(),
 });
 export type ThreadWorkSnapshot = z.infer<typeof threadWorkSnapshotSchema>;
+
+/** A saved Work address is readable without a current native target. This grants no action. */
+export const workResumeSchema = z.strictObject({
+  id: z.string().min(1),
+  key: workKeySchema,
+  url: z.string().startsWith("/").nullable(),
+  reason: z.string().nullable(),
+  /** Matching canonical Places in thread tab order; browser-local activity is not persisted. */
+  matches: z.array(z.strictObject({ threadId: z.string().min(1), tabId: z.string().min(1) })),
+});
+export type WorkResume = z.infer<typeof workResumeSchema>;

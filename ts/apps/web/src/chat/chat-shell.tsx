@@ -1,6 +1,17 @@
 import type { ListSearch } from "@pe/agent-contracts";
 import { useNavigate, useRouterState } from "@tanstack/react-router";
-import { memo, useCallback, useEffect, useMemo, useRef, useState } from "react";
+import {
+  createContext,
+  memo,
+  useCallback,
+  useEffect,
+  useLayoutEffect,
+  useMemo,
+  useRef,
+  useState,
+  useContext,
+  type ReactNode,
+} from "react";
 import { useRouteSearchSlice } from "#/route/activity";
 import { useAtomRefresh, useAtomValue } from "@effect/atom-react";
 import { NewThreadButton, ThreadsSidebar, ThreadPane } from "#/chat/thread-palette";
@@ -48,6 +59,21 @@ import { useThreadPresence } from "#/machine/os-notices";
 import { routeAddress, routeAt } from "@pe/agent-contracts";
 
 type ChatShellProps = { target?: string; docked?: boolean };
+
+/** Collapsed tools: their labelled tab strip, drawn at the right end of Pea's header bar. */
+export const ToolsBar = createContext<ReactNode>(null);
+
+/** The thread sidebar's default width, and its folded rail. */
+export const SIDEBAR = { size: 300, rail: 32 };
+/** Pea's floor in px: the chat column's reading measure (`--chat-measure` in chat-shell.css: 76ch
+ *  of the prose face at 0.577em a character, plus both gutters), the lens lane on its right, and
+ *  the transcript's two gutters. Read from the same tokens, so density moves it too. */
+export function peaFloor(root: Element = document.documentElement) {
+  const token = (name: string) => parseFloat(getComputedStyle(root).getPropertyValue(name)) || 0;
+  const gutter = token("--gutter");
+  const measure = token("--type-prose-size") * 0.577 * 76 + gutter * 2;
+  return Math.ceil(measure + token("--control-h") + gutter * 4);
+}
 
 export const ChatShell = memo(function ChatShell(props: ChatShellProps) {
   return <CurrentThreadChatSurface {...props} />;
@@ -267,6 +293,7 @@ function ChatSurface({ target, docked = false }: ChatShellProps) {
     })),
   ]);
 
+  const toolsBar = useContext(ToolsBar);
   const runStatus = selectRunStatus(chat);
   const silentFor = selectWaitingSeconds(chat);
   const status = {
@@ -316,7 +343,12 @@ function ChatSurface({ target, docked = false }: ChatShellProps) {
               />
             ) : null
           }
-          actions={<ChatCluster handle={handle} situation={situation} />}
+          actions={
+            <>
+              <ChatCluster handle={handle} situation={situation} />
+              {toolsBar}
+            </>
+          }
           boundaryKey={shown.thread}
           onRetry={retryBody}
         >
@@ -373,8 +405,8 @@ function ChatSurface({ target, docked = false }: ChatShellProps) {
             openThread(id);
             if (close) store.actions.setSideOpen(false);
           }}
-          onWork={(id, route, link) => {
-            void store.actions.openWork(id, route, link);
+          onWork={(id, route, resumed, closed) => {
+            void store.actions.openWork(id, route, resumed, closed);
             if (close) store.actions.setSideOpen(false);
           }}
           onFork={(id, providerId) => void forkThread(providerId, id)}
@@ -412,55 +444,106 @@ function ChatSurface({ target, docked = false }: ChatShellProps) {
           no generic route head: its global Situation observes the composer owners. */}
       <RouteShell manifest={manifest} handle={handle} situation={<></>}>
         <PageSurface>
-          <PaneSplit
-            axis="horizontal"
-            grow
-            hide={narrow ? "start" : undefined}
-            resize={
-              narrow
-                ? undefined
-                : {
-                    target: "start",
-                    defaultSize: 300,
-                    minSize: 240,
-                    persist: "pe.sideWidth",
-                    collapse: {
-                      collapsed: !sideOpen,
-                      onCollapsedChange: (collapsed) => store.actions.setSideOpen(!collapsed),
-                      collapsedSize: 32,
-                      title: "threads",
-                    },
-                  }
-            }
-            start={threadPane(false)}
-            end={
-              activity ? (
-                <Ledger
-                  presentation={LEDGER_PRESENTATIONS.tray}
-                  head={
-                    <p className="m-0 flex justify-end px-2 py-1 hairline-b">
-                      <Button label="Start a new Pea thread" onClick={() => void newThread()}>
-                        New thread
-                      </Button>
-                    </p>
-                  }
-                />
-              ) : (
-                chatColumn
-              )
-            }
-          />
+          <ThreadsSplit
+            narrow={narrow}
+            sideOpen={sideOpen}
+            setSideOpen={store.actions.setSideOpen}
+            threads={threadPane}
+          >
+            {activity ? (
+              <Ledger
+                presentation={LEDGER_PRESENTATIONS.tray}
+                head={
+                  <p className="m-0 flex justify-end px-2 py-1 hairline-b">
+                    <Button label="Start a new Pea thread" onClick={() => void newThread()}>
+                      New thread
+                    </Button>
+                  </p>
+                }
+              />
+            ) : (
+              chatColumn
+            )}
+          </ThreadsSplit>
         </PageSurface>
       </RouteShell>
+    </main>
+  );
+}
 
-      {narrow && sideOpen ? (
-        <Dialog open onOpenChange={(open) => store.actions.setSideOpen(open)}>
+/** The thread sidebar beside Pea's column. Under pressure it folds to its rail before the column
+ *  loses its measure, and an explicit "Expand threads" then opens it as an overlay: a person's
+ *  expand always wins and is never silently refolded. Narrow or compact shells use the overlay. */
+export function ThreadsSplit({
+  narrow,
+  sideOpen,
+  setSideOpen,
+  threads,
+  children,
+}: {
+  narrow: boolean;
+  sideOpen: boolean;
+  setSideOpen: (open: boolean) => void;
+  threads: (close: boolean) => ReactNode;
+  children: ReactNode;
+}) {
+  const root = useRef<HTMLDivElement>(null);
+  const [squeezed, setSqueezed] = useState(false);
+  const latest = useRef({ squeezed, setSideOpen });
+  latest.current = { squeezed, setSideOpen };
+  useLayoutEffect(() => {
+    const element = root.current;
+    if (!element) return;
+    // The split's own constraint: the sidebar's minimum, a seam, and Pea's reading floor.
+    const fits = (width: number) => width >= 240 + 8 + peaFloor();
+    const check = (width: number) => {
+      const next = !fits(width);
+      // Squeezed by space, not by the person: an open sidebar folds, it never pops an overlay.
+      if (next && !latest.current.squeezed) latest.current.setSideOpen(false);
+      setSqueezed(next);
+    };
+    check(element.getBoundingClientRect().width);
+    if (typeof ResizeObserver === "undefined") return;
+    const observer = new ResizeObserver(([entry]) => check(entry!.contentRect.width));
+    observer.observe(element);
+    return () => observer.disconnect();
+  }, []);
+  const overlay = narrow || squeezed;
+  return (
+    <div ref={root} className="flex size-full min-h-0 min-w-0">
+      <PaneSplit
+        axis="horizontal"
+        grow
+        hide={narrow ? "start" : undefined}
+        resize={
+          narrow
+            ? undefined
+            : {
+                target: "start",
+                defaultSize: SIDEBAR.size,
+                minSize: 240,
+                // Under pressure the sidebar folds before the transcript loses its measure.
+                minOtherSize: peaFloor(),
+                persist: "pe.sideWidth",
+                collapse: {
+                  collapsed: squeezed || !sideOpen,
+                  onCollapsedChange: (collapsed) => setSideOpen(!collapsed),
+                  collapsedSize: SIDEBAR.rail,
+                  title: "threads",
+                },
+              }
+        }
+        start={threads(false)}
+        end={children}
+      />
+      {overlay && sideOpen ? (
+        <Dialog open onOpenChange={setSideOpen}>
           <DialogContent>
             <DialogTitle hidden>Threads</DialogTitle>
-            <div className="h-[75dvh] min-h-0 min-w-0">{threadPane(true)}</div>
+            <div className="h-[75dvh] min-h-0 min-w-0">{threads(true)}</div>
           </DialogContent>
         </Dialog>
       ) : null}
-    </main>
+    </div>
   );
 }

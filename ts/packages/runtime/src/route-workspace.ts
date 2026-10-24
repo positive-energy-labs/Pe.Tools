@@ -1,6 +1,7 @@
 import {
   bindWork,
   pendingProposals,
+  unfinishedCells,
   workKey,
   workKeySchema,
   type WorkKey,
@@ -41,14 +42,12 @@ export interface RouteWorkspaceEvent {
   scope: WorkKey;
   actor: RouteActor;
   route: string;
-  action: "apply" | "command" | "start-fresh" | "discard";
+  action: "apply" | "command" | "start-fresh";
   revision: number;
   command?: string;
   patchCount?: number;
   ok: boolean;
   error?: string;
-  /** `discard` only: how many Work documents that sweep removed for the closed lifetime. */
-  removed?: number;
 }
 
 export interface RouteDocumentStore {
@@ -69,6 +68,7 @@ export interface RouteWorkspaceOptions {
 }
 
 const ENVELOPE_VERSION = 1;
+// Retired close-sweep metadata contains no authored Work. Keep it out of the census.
 const OPEN_REGISTER = { targetKey: "open-work", route: "register" };
 // ponytail: fixed cap keeps every envelope read small; revisit only when a real command needs larger replay results.
 /** Store, order, crash barrier, and publication shell around the pure route-document machine. */
@@ -127,12 +127,14 @@ export class RouteWorkspace {
         const spec = this.#registry.get(record.route)?.spec;
         let revision: number | null = null;
         let proposals = 0;
+        let unfinished = 0;
         let state: "ready" | "unreadable" | "unregistered" = spec ? "unreadable" : "unregistered";
         if (spec) {
           try {
             const envelope = parseEnvelope(record.value, spec);
             revision = envelope.revision;
             proposals = pendingProposals(envelope.doc);
+            unfinished = unfinishedCells(envelope.doc);
             state = "ready";
           } catch {
             // Keep the address discoverable without exposing the unreadable document.
@@ -147,6 +149,7 @@ export class RouteWorkspace {
             revision,
             state,
             proposals,
+            unfinished,
           },
         ];
       });
@@ -450,76 +453,20 @@ export class RouteWorkspace {
     const { store } = this.options;
     const targetKey = workKey(scope);
     const raw = await store.getState({ targetKey, route });
-    const ephemeral =
+    const openWork =
       scope.binding === "address" && scope.from
         ? bindWork(scope.route, null, undefined, scope.from)
         : null;
-    if (raw != null || !ephemeral) return raw;
-    const carried = await store.getState({ targetKey: workKey(ephemeral), route });
+    if (raw != null || !openWork) return raw;
+    const carried = await store.getState({ targetKey: workKey(openWork), route });
     if (carried == null) return null;
     await store.setState({ targetKey, route, value: carried });
-    await store.setState({ targetKey: workKey(ephemeral), route, value: null });
+    await store.setState({ targetKey: workKey(openWork), route, value: null });
     return carried;
   }
 
-  /**
-   * The open document lifetimes the connected sessions still hold. Every addressless Work this
-   * workspace wrote for a lifetime its own session no longer lists ended with its document, so it
-   * is removed and its `discard` published with the count the sweep removed. A session missing
-   * from `live` is left alone: a detached bridge is not a closed document.
-   */
-  async sweepOpen(
-    live: readonly OpenRef[],
-    connectedSessions = live.map((open) => open.session),
-  ): Promise<number> {
-    return this.#serialized(async () => {
-      const sessions = new Set(connectedSessions);
-      const alive = new Set(live.map(lifetime));
-      const keys = await this.#registeredOpenWork();
-      const keep: typeof keys = [];
-      const discarded: typeof keys = [];
-      const counts = new Map<string, number>();
-      for (const scope of keys) {
-        if (alive.has(lifetime(scope.open)) || !sessions.has(scope.open.session)) {
-          keep.push(scope);
-          continue;
-        }
-        const input = { targetKey: workKey(scope), route: scope.route };
-        if ((await this.options.store.getState(input)) == null) continue;
-        await this.options.store.setState({ ...input, value: null });
-        discarded.push(scope);
-        const id = lifetime(scope.open);
-        counts.set(id, (counts.get(id) ?? 0) + 1);
-      }
-      if (keep.length !== keys.length)
-        await this.options.store.setState({ ...OPEN_REGISTER, value: keep });
-      for (const scope of discarded)
-        await this.#publish({
-          type: "route_workspace",
-          scope,
-          route: scope.route,
-          actor: "human",
-          action: "discard",
-          revision: 0,
-          ok: true,
-          removed: counts.get(lifetime(scope.open))!,
-        });
-      return discarded.length;
-    });
-  }
-
-  async #registeredOpenWork() {
-    return z
-      .array(workKeySchema.options[1])
-      .parse((await this.options.store.getState(OPEN_REGISTER)) ?? []);
-  }
-
   async #persist(scope: WorkKey, route: string, envelope: RouteEnvelope<unknown>): Promise<void> {
-    if (scope.binding === "open") {
-      const keys = await this.#registeredOpenWork();
-      if (!keys.some((key) => workKey(key) === workKey(scope)))
-        await this.options.store.setState({ ...OPEN_REGISTER, value: [...keys, scope] });
-    }
+    // Closing a native lifetime changes availability, never the user's authored Work.
     await this.options.store.setState({
       targetKey: workKey(scope),
       route,
@@ -584,11 +531,6 @@ function readable(raw: unknown, spec: RouteStateSpec<z.ZodType>): boolean {
     return false;
   }
 }
-
-/** One open document lifetime, the scope an addressless Work is keyed by. */
-type OpenRef = { readonly session: string; readonly openId: string };
-
-const lifetime = (open: OpenRef) => `${open.session}/${open.openId}`;
 
 const aside = (route: string, slot: number) => `${route}${START_FRESH_ASIDE}${slot}`;
 

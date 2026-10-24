@@ -229,7 +229,7 @@ const open = {
 } as const;
 const path = "http://host/pe/route-state/test?open=session/closed";
 
-test("HTTP Work written before workspace recreation is swept by the next workspace", async () => {
+test("HTTP addressless Work survives workspace recreation and Save As carries it once", async () => {
   const directory = await mkdtemp(join(tmpdir(), "pe-work-"));
   try {
     const store = fileRouteDocumentStore(join(directory, "work"));
@@ -247,30 +247,28 @@ test("HTTP Work written before workspace recreation is swept by the next workspa
     );
     expect(await written.json()).toMatchObject({ ok: true, revision: 1 });
     const restarted = new RouteWorkspace({ registrations, store });
-    expect(await restarted.sweepOpen([open.open])).toBe(0);
-    expect(await restarted.sweepOpen([])).toBe(0);
-    expect(await restarted.sweepOpen([{ session: "session", openId: "still-open" }])).toBe(1);
-    expect(await restarted.sweepOpen([{ session: "session", openId: "still-open" }])).toBe(0);
-    expect(await restarted.read(open, "test")).toBeNull();
+    expect(await restarted.read(open, "test")).toMatchObject({ revision: 1, doc: { count: 7 } });
     const read = await asHuman(app)(new Request(path));
-    expect(await read.json()).toMatchObject({ revision: 0, doc: { count: 0 } });
+    expect(await read.json()).toMatchObject({ revision: 1, doc: { count: 7 } });
+    expect(
+      await restarted.read({ ...open, open: { ...open.open, openId: "replacement" } }, "test"),
+    ).toBeNull();
 
-    // Save As moves the bytes; closing the original lifetime cannot discard the addressed Work.
+    // Save As still moves these exact lifetime bytes onto the stable Address.
     const apply = () =>
       new Request(path.replace("?", "/apply?"), {
         method: "POST",
         headers: { "content-type": "application/json" },
-        body: JSON.stringify({ expectedRevision: 0, patches: [{ path: ["count"], value: 9 }] }),
+        body: JSON.stringify({ expectedRevision: 1, patches: [{ path: ["count"], value: 9 }] }),
       });
     expect(await (await asHuman(app)(apply())).json()).toMatchObject({ ok: true });
     const addressed = `${path}&target=${encodeURIComponent("C:\\Models\\Saved.rvt")}`;
     expect(await (await asHuman(app)(new Request(addressed))).json()).toMatchObject({
-      revision: 1,
+      revision: 2,
       doc: { count: 9 },
     });
-    expect(await restarted.sweepOpen([{ session: "session", openId: "still-open" }])).toBe(0);
     expect(await (await asHuman(app)(new Request(addressed))).json()).toMatchObject({
-      revision: 1,
+      revision: 2,
       doc: { count: 9 },
     });
   } finally {
@@ -280,7 +278,7 @@ test("HTTP Work written before workspace recreation is swept by the next workspa
   }
 });
 
-test("host HTTP publishes one discard when a bridge frame closes the last document", async () => {
+test("host HTTP preserves addressless Work through close and replacement bridge frames", async () => {
   const directory = await mkdtemp(join(tmpdir(), "pe-sweep-"));
   const previousLocalAppData = process.env.LOCALAPPDATA;
   process.env.LOCALAPPDATA = directory;
@@ -288,7 +286,8 @@ test("host HTTP publishes one discard when a bridge frame closes the last docume
   let sessions = [
     { connected: true, sessionId: "session", state: { openDocuments: [{ openId: "closed" }] } },
   ] as unknown as BridgeSessionView[];
-  const frames: Array<{ kind: string; value?: { type?: string; action?: string } }> = [];
+  const frames: Array<{ kind: string; value?: { kind?: string; type?: string; action?: string } }> =
+    [];
   try {
     await Effect.runPromise(
       Effect.scoped(
@@ -346,16 +345,23 @@ test("host HTTP publishes one discard when a bridge frame closes the last docume
                     listener({ kind: "state-sync", sessionId: "session" });
                 };
                 emit();
-                const discards = () =>
-                  frames.filter(
-                    (frame) =>
-                      frame.value?.type === "route_workspace" && frame.value.action === "discard",
-                  );
-                await expect.poll(() => discards().length).toBe(1);
+                const closes = () => frames.filter((frame) => frame.value?.kind === "state-sync");
+                await expect.poll(() => closes().length).toBe(1);
+                sessions = [
+                  {
+                    ...sessions[0],
+                    state: { ...sessions[0]!.state, openDocuments: [{ openId: "replacement" }] },
+                  },
+                ] as unknown as BridgeSessionView[];
                 emit();
+                await expect.poll(() => closes().length).toBe(2);
                 const read = await asHuman(host)(new Request(path));
-                expect(await read.json()).toMatchObject({ revision: 0, doc: { count: 0 } });
-                expect(discards()).toHaveLength(1);
+                expect(await read.json()).toMatchObject({ revision: 1, doc: { count: 7 } });
+                const replacement = await asHuman(host)(
+                  new Request(path.replace("session/closed", "session/replacement")),
+                );
+                expect(await replacement.json()).toMatchObject({ revision: 0, doc: { count: 0 } });
+                expect(frames.filter((frame) => frame.value?.action === "discard")).toEqual([]);
               } finally {
                 await reader.cancel();
                 await collecting;

@@ -611,8 +611,8 @@ export const CHAT_SEEDS = {
 export type ChatPage = Record<string, never>;
 
 /** `?demo=` Work for `demoThreads`: none, one document with two Works, three documents with one
- *  closed, and a closed document whose Work is unfinished. Typed as the contract, so the real
- *  snapshot replaces it in `threadWorksOf`. Ids are opaque handles, never shown. */
+ *  closed, and a closed document whose Work is unfinished. Demo only; outside it the
+ *  `thread-work` Reading is the source. Ids are opaque handles, never shown. */
 export const CHAT_SEED_THREAD_WORK = {
   observedAt: at(37).toISOString(),
   threads: [

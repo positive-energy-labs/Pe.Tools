@@ -1,26 +1,36 @@
 import { useMemo, useState } from "react";
-import type { ThreadWork, ThreadWorkSnapshot } from "@pe/agent-contracts";
+import {
+  threadWorkSnapshotSchema,
+  type Reading,
+  type ThreadWork,
+  type ThreadWorkSnapshot,
+  type WorkResume,
+} from "@pe/agent-contracts";
 import { CHAT_SEED_THREAD_WORK } from "#/chat/seeds";
+import { peClient } from "#/host/pe-client";
+import { previousOf, useReading } from "#/readings";
 
-/** The one swap point: the batch snapshot the sidebar reads, fed by the `?demo=` fixture.
- *  TODO(route thread: batch ThreadWork Reading on the resources stream): its request kind and
- *  door are theirs to name; the navigation HTTP projection is not this source. */
-const threadWorksOf = (reading: { threadWorks?: ThreadWorkSnapshot } | undefined) =>
-  reading?.threadWorks ?? null;
+/** The one swap point: the `thread-work` Reading's last good snapshot, checked at the boundary.
+ *  Nothing yet (or a malformed payload) is null, and rows keep their conversation titles. */
+const threadWorksOf = (reading: Reading<unknown>): ThreadWorkSnapshot | null =>
+  threadWorkSnapshotSchema.safeParse(previousOf(reading)).data ?? null;
 
-/** One snapshot for the whole sidebar, indexed by thread; rows look up, never read. */
+/** One snapshot for the whole sidebar, indexed by thread; rows look up, never read. `?demo=` keeps
+ *  its fixture and asks the host nothing. */
 export function useThreadWorks() {
   // `?demo=` is read once at mount, as the workbench reads its seed.
   const [demo] = useState(
     () => typeof location !== "undefined" && new URLSearchParams(location.search).has("demo"),
   );
-  const snapshot = threadWorksOf(demo ? { threadWorks: CHAT_SEED_THREAD_WORK } : undefined);
+  const reading = useReading(demo ? null : { kind: "thread-work" });
+  const snapshot = demo ? CHAT_SEED_THREAD_WORK : threadWorksOf(reading);
   return useMemo(
     () => ({
+      demo,
       snapshot,
       of: new Map(snapshot?.threads.map((work) => [work.threadId, work])),
     }),
-    [snapshot],
+    [demo, snapshot],
   );
 }
 
@@ -65,13 +75,32 @@ export const partialWork = (snapshot: ThreadWorkSnapshot | null) =>
       }
     : null;
 
-/** The frozen `work.resume` answer this row needs; the contract's `WorkResume` replaces it. */
-type Resume = { url: string | null; reason: string | null };
-
 /** A Work on a closed document resumes its retained or reconnect state, never the live session:
  *  Address Work answers its durable `url` even closed; unknown or unreadable Work answers `url:
- *  null` and a truthful `reason`. TODO(route thread contracts cherry-pick): the body becomes
- *  `return peClient.call("work.resume", { query: { id: workId } });` (GET /pe/work-resume). */
-export async function resumeWork(_workId: string): Promise<Resume> {
-  return { url: null, reason: null };
+ *  null` and a truthful `reason`. A refusal (404 for an unknown id) is that reason too, so the
+ *  row stays pressable and says why in its hint. */
+/** A pressed Work whose document is closed: what the tool shows while it waits to reconnect. */
+export type ClosedWork = {
+  documentId: string | null;
+  document: string | null;
+  intent: string;
+  unfinished: number;
+};
+
+export type Resumed = Pick<WorkResume, "url" | "reason" | "matches"> & {
+  key: WorkResume["key"] | null;
+};
+export async function resumeWork(workId: string): Promise<Resumed> {
+  try {
+    return await peClient.call("work.resume", { query: { id: workId } });
+  } catch (error) {
+    const said = (error as { problem?: { error?: unknown } }).problem?.error;
+    return {
+      key: null,
+      url: null,
+      matches: [],
+      reason:
+        typeof said === "string" ? said : error instanceof Error ? error.message : String(error),
+    };
+  }
 }

@@ -14,6 +14,7 @@ import type {
   ReadingRequest,
   UpdateThreadRequest,
   PutTarget,
+  TurnElementNamesRequest,
 } from "@pe/agent-contracts";
 import { followThread } from "@pe/agent-contracts/chat-state";
 import type { z } from "zod";
@@ -74,6 +75,9 @@ export function harnessClient(origin: string) {
       client.call("thread.model", { params: { id }, body: { modelId } }),
     trait: (id: string, traitId: string, value: string | boolean) =>
       client.call("thread.trait", { params: { id }, body: { id: traitId, value } }),
+    /** One batch per settled turn; the host pins the documents, the web sends only ids. */
+    turnElementNames: (body: TurnElementNamesRequest) =>
+      client.call("turn.element-names", { body }),
   };
 }
 

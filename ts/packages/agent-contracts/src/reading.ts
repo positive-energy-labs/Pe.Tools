@@ -155,6 +155,8 @@ export type HoldingsReadingResult =
 export type SdkReading = z.infer<typeof sdkReadingSchema>;
 
 export const readingRequestSchema = z.discriminatedUnion("kind", [
+  /** Every thread's remembered documents and unfinished Work, one owner-backed batch. */
+  z.strictObject({ kind: z.literal("thread-work") }),
   ductsSnapshotReadingSchema,
   ductsTablesReadingSchema,
   z.strictObject({ kind: z.literal("machine") }),

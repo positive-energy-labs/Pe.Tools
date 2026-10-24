@@ -264,6 +264,24 @@ export function useRouteTarget(
           : null;
     return addressSchema.safeParse(raw).data ?? null;
   }, [resolvedAddress, seed, target, headTargets]);
+  // The same rule for an exact open request (a `?target` pin, or the head's only target): it names
+  // its own lifetime's saved Work, read-only, while native resolution says choose. The ref is
+  // used as given, never re-resolved, so it never stands for a new lifetime.
+  const workOpen = useMemo(() => {
+    // Only once native resolution has answered "choose" (closed, gone): never while it is still
+    // checking, when the same ref may yet resolve live and must stay armed.
+    if (seed || resolution.kind !== "choose") return null;
+    const chosen = parseTarget(target);
+    const request =
+      chosen?.kind === "request"
+        ? chosen.request
+        : chosen
+          ? null
+          : headTargets.length === 1
+            ? headTargets[0]!
+            : null;
+    return request?.kind === "open" ? request.ref : null;
+  }, [seed, resolution, target, headTargets]);
   const head = headRequest && headResult ? { thread: headRequest.thread, ...scope } : null;
   const targetProvenance: TargetProvenance = seed
     ? { source: "seed" }
@@ -280,6 +298,7 @@ export function useRouteTarget(
     bindingLostRef,
     resolvedAddress,
     workAddress,
+    workOpen,
     targetProvenance,
   };
 }

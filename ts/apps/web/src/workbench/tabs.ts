@@ -20,6 +20,7 @@ import { useSurfaceHost } from "#/navigation/surface-host";
 import { useWorkbench } from "./provider";
 import { routeThreadIssue } from "./store";
 import { soleRequest } from "#/chat/thread-navigation";
+import { parseTarget } from "#/route/route-target";
 
 const focusKey = (thread: string) => `pe.tab.${thread}`;
 const readFocus = (thread: string) => {
@@ -54,6 +55,18 @@ function place(
   return local && typeof search.demo === "string"
     ? `${link}${link.includes("?") ? "&" : "?"}demo=${encodeURIComponent(search.demo)}`
     : link;
+}
+
+/** A matched Place keeps its Page and id. A legacy open-ref Place also takes the resume's stable
+ *  Address carry, so its Work stays readable once that document closes. */
+function rebased(tab: ThreadTab, url: string | null): string {
+  const at = routeAddress(tab.route);
+  const params = (link: string) =>
+    Object.fromEntries(new URL(link, "http://tab.invalid").searchParams);
+  const { page, carry } = at.read(params(tab.link));
+  const target = parseTarget(carry.target);
+  if (!url || target?.kind !== "request" || target.request.kind !== "open") return tab.link;
+  return at.link(page, { target: at.read(params(url)).carry.target, work: carry.work });
 }
 
 /** The route a tab holds at `pathname`: any but Pea's own page. */
@@ -415,18 +428,29 @@ export function useRouteTabs() {
     () =>
       store.actions.connectTabs({
         open,
-        // A Work press may name another thread: its saved tab restores the Page, or the route opens.
+        // A Work press may name another thread. The tab that holds that Work restores its own Page
+        // and id; with none, the resumed url (or the bare route) opens as a new Place.
         work: async (owner, workRoute, resumed) => {
           const epoch = ++navigationEpoch.current;
           try {
             await flush();
-            const saved = (
-              owner === thread ? tabs : threads.find((t) => t.id === owner)?.tabs
-            )?.find((tab) => tab.route === workRoute);
+            const own = owner === thread ? tabs : threads.find((t) => t.id === owner)?.tabs;
+            // The host's `matches` name the Places holding this Work, in canonical tab order: the
+            // first in this thread wins. Another thread's Place, or none, means a new Place here.
+            // Exception: `?demo=` asks the host nothing, so it has no matches; its fixture holds
+            // one tab per route and never reaches a host thread.
+            const match = resumed?.matches.find((each) => each.threadId === owner);
+            const saved = resumed
+              ? own?.find((tab) => tab.id === match?.tabId && tab.route === workRoute)
+              : store.local
+                ? own?.find((tab) => tab.route === workRoute)
+                : undefined;
             if (epoch !== navigationEpoch.current) return;
             await navigate(
               owner,
-              resumed ?? saved?.link ?? routeAddress(workRoute as RouteKey).link(),
+              saved
+                ? rebased(saved, resumed?.url ?? null)
+                : (resumed?.url ?? routeAddress(workRoute as RouteKey).link()),
               saved?.id ?? null,
             );
             // The press was outside the tools: focus lands on the tool it opened, not the press.

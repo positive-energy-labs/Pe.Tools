@@ -24,6 +24,12 @@ export type SubjectDocument = {
   references: NumberedElement[];
 };
 
+/** A bare element id in prose, optionally `id:connector`; never part of a word or a decimal. */
+const PROSE_ID = /(?<![\w.])\d+(?::\d+)?(?!\w|\.\d)/g;
+/** The element ids prose names, in order, by the same rule `subjectDocument` resolves them. */
+export const proseIds = (text: string) =>
+  [...text.matchAll(PROSE_ID)].map((match) => Number(match[0].split(":")[0]));
+
 /** Structured references first; numbers in free prose resolve only when the route knows them. */
 export function subjectDocument(
   source: readonly SubjectPart[],
@@ -50,7 +56,7 @@ export function subjectDocument(
       continue;
     }
     let at = 0;
-    for (const match of part.matchAll(/(?<![\w.])\d+(?::\d+)?(?!\w|\.\d)/g)) {
+    for (const match of part.matchAll(PROSE_ID)) {
       const [id, connector] = match[0].split(":").map(Number);
       if (!nameOf(id!)) continue;
       parts.push(part.slice(at, match.index));
