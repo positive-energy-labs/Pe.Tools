@@ -858,6 +858,12 @@ These rows are byte-for-byte text from `34bd5e17`. The searchable comment preser
 
 ### Guards, proof and housekeeping
 
+- 2026-10-24, projection scrollbar (wave 10, `.artifacts/runs/kit-raise-20261023/wave10/rail.md`):
+  - Fling frames hold p95 near 34 ms at every overscan (0.5, 1, 2 viewports), so overscan does not bound them. A cause hunt is owed; candidates are PaneStrip measurement and tooltip trees.
+  - `route/situation.tsx:275` Work slot hosts a list outside a `Scroll`; `components/work/lines.tsx` wraps it as an interim. Owner: route. The slot becomes a `Scroll`.
+  - The `data-damage-surface` selector and its census row are unused after the gutter minimap deletion; delete both.
+  - Phase 2: the chat lens bar (one slot per turn, its own rule) and 38 ad hoc scrollers across 35 web files move onto `Scroll`; census in rail.md.
+
 - 2026-10-23, kit-raise run (waves 2–8, branch `t3/kit-raise`, run folder `.artifacts/runs/kit-raise-20261023`):
   - Refresh marks pending 601 ms late (proof/checklist7.md D11): `ts/apps/web/src/readings.ts:607` `acquire(refresh)` starts acquisition without a synchronous pending mark; the kit chip and readout slot are ready and wait on that line. Owner: readings.
   - Purge debt: work +335, camera +284, overlay +278, teach +202, teach-observer +161, capture +136, tips-fix +422, tutorial +110, floater-geometry +113 net lines; the fold slice recovered ~5. One purge pass over kit pane/button/tooltip/teach owners is owed.
