@@ -91,7 +91,12 @@ export function Lens({ state }: { state: ChatState }) {
               </EmptyState>
             </div>
           ) : null}
-          <Moments messages={messages} register={registerMoment} harness={state.harness} />
+          <Moments
+            messages={messages}
+            register={registerMoment}
+            harness={state.harness}
+            thread={state.id}
+          />
         </div>
       </div>
       {/* The lane: outside the scroller, so only the transcript scrolls. It spans the chat's

@@ -57,6 +57,7 @@ import {
 } from "#/components/lang/conversation";
 import { TooltipHint } from "@pe/kit/lang/tooltip";
 import { NativeReadingReferences } from "#/revit/reading-references";
+import { useTurnSubjects, type TurnSubjects } from "./turn-names";
 
 type RegisterMoment = (id: string, el: HTMLElement | null) => void;
 
@@ -115,6 +116,8 @@ interface MomentProps {
   turn: number;
   harness: string;
   register: RegisterMoment;
+  /** The turn's linked element ids; they freeze once read, so their count keys the memo. */
+  subjects?: TurnSubjects;
   /** Equal keys draw equal pixels: the memo boundary compares this, not object identity. */
   contentKey: string;
 }
@@ -125,6 +128,7 @@ function contentKey(
   continues: boolean,
   turn: number,
   harness: string,
+  subjects: TurnSubjects | undefined,
 ): string {
   // An assistant row draws its segments, which carry runs continued from later messages.
   const parts =
@@ -145,6 +149,7 @@ function contentKey(
     continues,
     message.role === "user" ? turn : "",
     harness,
+    subjects?.size ?? "",
     parts.join(";"),
   ].join("#");
 }
@@ -155,13 +160,17 @@ export const Moments = memo(function Moments({
   messages,
   register,
   harness,
+  thread,
 }: {
   messages: ChatMessage[];
   register: RegisterMoment;
+  /** The thread the turns belong to; without it, element ids stay plain text. */
+  thread?: string;
   /** The thread's harness: one thread is one ACP session on one harness, so it answered every Pea turn. */
   harness: string;
 }) {
   const groups = transcriptSegments(messages);
+  const subjectsOf = useTurnSubjects(thread, messages);
   let turn = 0;
   return messages.flatMap((message, index) => {
     if (message.role === "user") turn += 1;
@@ -172,6 +181,7 @@ export const Moments = memo(function Moments({
     // as one block, not N banners.
     const continues = messages[index - 1]?.role === message.role;
     const shownTurn = Math.max(1, turn);
+    const subjects = message.role === "assistant" ? subjectsOf(message.turnId) : undefined;
     return [
       <Moment
         key={message.id}
@@ -181,14 +191,23 @@ export const Moments = memo(function Moments({
         turn={shownTurn}
         harness={harness}
         register={register}
-        contentKey={contentKey(message, segments, continues, shownTurn, harness)}
+        subjects={subjects}
+        contentKey={contentKey(message, segments, continues, shownTurn, harness, subjects)}
       />,
     ];
   });
 });
 
 const Moment = memo(
-  function Moment({ message, segments, continues, turn, harness, register }: MomentProps) {
+  function Moment({
+    message,
+    segments,
+    continues,
+    turn,
+    harness,
+    register,
+    subjects,
+  }: MomentProps) {
     // A host line (the harness session restarted): one quiet sentence, no head, no copy.
     if (message.role === "system")
       return (
@@ -215,7 +234,7 @@ const Moment = memo(
         {message.role === "user" ? (
           <UserMoment message={message} head={head} />
         ) : (
-          <AssistantMoment message={message} head={head} segments={segments} />
+          <AssistantMoment message={message} head={head} segments={segments} subjects={subjects} />
         )}
       </MomentSection>
     );
@@ -333,10 +352,12 @@ function AssistantMoment({
   message,
   head,
   segments,
+  subjects,
 }: {
   message: ChatMessage;
   head: ReactNode;
   segments: Segment[];
+  subjects?: TurnSubjects;
 }) {
   const { running } = message;
   return (
@@ -350,7 +371,7 @@ function AssistantMoment({
             "run" in segment ? (
               <ToolGroup key={segment.key} run={segment.run} />
             ) : (
-              <Part key={segment.index} part={segment.part} />
+              <Part key={segment.index} part={segment.part} subjects={subjects} />
             ),
           )}
         </PartsBoundary>
@@ -485,18 +506,17 @@ function ToolRunFold({
   );
 }
 
-function Part({ part }: { part: Exclude<ChatPart, CallPart> }): ReactNode {
+function Part({
+  part,
+  subjects,
+}: {
+  part: Exclude<ChatPart, CallPart>;
+  subjects?: TurnSubjects;
+}): ReactNode {
   switch (part.type) {
     case "text":
-      // TODO(chat mentions, deferred; wire only when the route thread exports it): resolve Pea's bare
-      // element ids with `readTurnElementNames(pinned, request, nativeRead, previous?)`. Its snapshot is
-      // `{ thread, turnId, targets: DocumentRef[], complete }`. Resolve only against the exact refs of
-      // `prompt.targetDocuments`, never `prompt.targets` (a named DocumentRequest) or the live head. A
-      // legacy named-only turn stays plain text, never resolved against a newer session. Results
-      // (resolved, ambiguous, unresolved) freeze per turn. `complete: false` means a target failed at
-      // delivery: treat every id in that turn as possibly non-unique. Unresolved or ambiguous ids stay
-      // plain text with no affordance, and links are not pe://.
-      return <Markdown text={part.text} />;
+      // Bare element ids link only through the turn's frozen, host-pinned names (turn-names.tsx).
+      return <Markdown text={part.text} subjects={subjects} />;
     case "image":
     case "file":
       return <Attachment part={part} />;
