@@ -36,6 +36,8 @@ const RULES: Rule[] = [
     cannotSee: "CSS container sizing and visible label recovery; layout tests pin no geometry subscription and browser checks wide/narrow/wide." },
   { id: "damage-bounded-surfaces", doctrine: "I2", pattern: /:root \[data-damage\]\s*\{[^}]*\banimation\s*:\s*(?!none\b)\S[^;}]*/g,
     roots: [K + "components/lang/lang.css"], allow: [], cannotSee: "Grouped mark structure, composited layers or latency; damage.test.tsx and native production traces cover those." },
+  { id: "tutorial-defers-prose", doctrine: "N6", pattern: /^(?![\s\S]*<Deferred>\{docs\}<\/Deferred>)[\s\S]/g,
+    roots: [W + "route/help.tsx"], allow: [], cannotSee: "Intersection delivery, the first paint or CPU; the mounted Help regression and production trace cover those." },
   { id: "damage-mask-depth", doctrine: "I2", pattern: /new THREE\.MeshBasicMaterial\(\{(?![^}]*SURFACE_DEPTH)[^}]*\}\)/gs,
     roots: [W + "scene/damage.ts"], allow: [],
     cannotSee: "Aliased constructors or a weakened SURFACE_DEPTH value; material tests pin the offset, browser poses prove coverage." },

@@ -1,6 +1,4 @@
-/** Shared Tutorial facts: ducts-guide and product-map; claim evidence: ducts/LEDGER.md and WHY-NOT-REVIT.md.
- * Third-person prose for engineers; Pea is the agent, the tool is the Ducts page. No project-specific ids.
- */
+import { Deferred } from "@pe/kit/lang/section";
 import { Table } from "@pe/kit/table/table";
 import type { Column, Verdict } from "@pe/kit/table/model";
 import { mapLink } from "@pe/agent-contracts/product-map";
@@ -48,7 +46,6 @@ const COMPARE_COLUMNS: Column<DuctsCompareRow>[] = [
     verdict: (row: DuctsCompareRow) => verdict(row, key),
   })),
 ];
-
 const RESIDENCY_COLUMNS: Column<DuctsResidency>[] = [
   { key: "value", label: "Value", cell: (row) => row.value },
   { key: "livesIn", label: "Lives in", cell: (row) => row.livesIn },
@@ -56,12 +53,10 @@ const RESIDENCY_COLUMNS: Column<DuctsResidency>[] = [
   { key: "whoSees", label: "Who sees it", cell: (row) => row.whoSees },
   { key: "whoWrites", label: "Who writes it", cell: (row) => row.whoWrites },
 ];
-
-function DuctsDocs() {
-  return (
-    <div className="flex flex-col gap-3 [&>p]:max-w-[80ch] [&>ul]:max-w-[80ch] [&>ol]:max-w-[80ch]">
+export const ductsDocs = (
+  <div className="flex flex-col gap-3 [&_p]:max-w-[80ch] [&_ul]:max-w-[80ch] [&_ol]:max-w-[80ch]">
+    <Deferred>
       <p>{DUCTS_SUMMARY}</p>
-
       <h3>What it does, in one walk</h3>
       <ol className="list-decimal pl-5">
         {DUCTS_WALK.map(({ step, who, body }) => (
@@ -86,56 +81,42 @@ function DuctsDocs() {
           </ul>
         </section>
       ))}
-
-      <h3>The picture</h3>
-      <p>
-        The picture key pairs each mark with a short name and a count. Hover or focus a row for its
-        meaning. Sequential scales show breaks for this system, and the maximum links to its
-        element. A plain segment means no reading is selected; choose a reading above the drawing's
-        right edge. No values means no element in this system has a value for that reading. Alt+/
-        opens this tutorial.
-      </p>
-      <p>
-        The model picture is the chosen system's own geometry, captured from Revit: every duct,
-        fitting, terminal and unit of every network the system is in, with the walls and other
-        elements around it when the context layer is on. Leg totals, place names, gaps and the
-        numbered findings ride over it and follow the camera. The centrelines layer draws the
-        network Pe priced inside the meshes, so a short run or a node is easy to pick. The globe in
-        the corner turns the camera and names the direction; the other corner holds the schematic,
-        and a click on it swaps the two. Each move is one step Back can undo; dragging the camera is
-        not.
-      </p>
-
-      <h3>Rules and findings</h3>
-      <p>
-        Each rule pairs a fitting family and type with a geometry condition. Choosing its table
-        reprices every matching instance. Unassigned families have no pricing rule; the engineer can
-        assign a rule to the family or enter a stated drop for an individual fitting. An override
-        replaces the table lookup for that fitting. None staged means no rule, drop, catalog link,
-        flow, role or unit ESP is waiting to be applied.
-      </p>
-      <p>
-        Findings are grouped into Fix, Set, Check and Diagnostics. Opening a row exposes its
-        actions. Evidence help holds the full finding, its subjects and the reason for its status.
-        Hovering a named subject in that help lights the same subject on the picture. Heal preview
-        checks repairs in Revit and rolls them back. Apply commits the passing repairs in one
-        transaction; a failed check refuses and rolls back that repair. A ruling on an open end or
-        an inferred join changes the route calculation without changing Revit.
-      </p>
-
+    </Deferred>
+    {[
+      [
+        "The picture",
+        "The picture key pairs each mark with a short name and a count. Hover or focus a row for its meaning. Sequential scales show breaks for this system, and the maximum links to its element. A plain segment means no reading is selected; choose a reading above the drawing's right edge. No values means no element in this system has a value for that reading. Alt+/ opens this tutorial.",
+        "The model picture is the chosen system's own geometry, captured from Revit: every duct, fitting, terminal and unit of every network the system is in, with the walls and other elements around it when the context layer is on. Leg totals, place names, gaps and the numbered findings ride over it and follow the camera. The centrelines layer draws the network Pe priced inside the meshes, so a short run or a node is easy to pick. The globe in the corner turns the camera and names the direction; the other corner holds the schematic, and a click on it swaps the two. Each move is one step Back can undo; dragging the camera is not.",
+      ],
+      [
+        "Rules and findings",
+        "Each rule pairs a fitting family and type with a geometry condition. Choosing its table reprices every matching instance. Unassigned families have no pricing rule; the engineer can assign a rule to the family or enter a stated drop for an individual fitting. An override replaces the table lookup for that fitting. None staged means no rule, drop, catalog link, flow, role or unit ESP is waiting to be applied.",
+        "Findings are grouped into Fix, Set, Check and Diagnostics. Opening a row exposes its actions. Evidence help holds the full finding, its subjects and the reason for its status. Hovering a named subject in that help lights the same subject on the picture. Heal preview checks repairs in Revit and rolls them back. Apply commits the passing repairs in one transaction; a failed check refuses and rolls back that repair. A ruling on an open end or an inferred join changes the route calculation without changing Revit.",
+      ],
+    ].map(([title, ...paragraphs]) => (
+      <Deferred key={title}>
+        <h3>{title}</h3>
+        {paragraphs.map((text) => (
+          <p key={text}>{text}</p>
+        ))}
+      </Deferred>
+    ))}
+    <Deferred>
       <h3>Against Revit and Naviate</h3>
       {DUCTS_COMPARE.map(({ group, rows }) => (
-        <Table
-          key={group}
-          rows={rows}
-          columns={COMPARE_COLUMNS}
-          rowKey={(row) => row.feature}
-          label={group}
-          caption={group}
-          maxHeight="none"
-        />
+        <Deferred key={group}>
+          <Table
+            rows={rows}
+            columns={COMPARE_COLUMNS}
+            rowKey={(row) => row.feature}
+            label={group}
+            caption={group}
+            maxHeight="none"
+          />
+        </Deferred>
       ))}
-
+    </Deferred>
+    <Deferred>
       <h3>Where every number lives</h3>
       <p>{DUCTS_RESIDENCY_RULE}</p>
       <Table
@@ -145,21 +126,25 @@ function DuctsDocs() {
         label="Where every number lives"
         maxHeight="none"
       />
-
-      <h3>What the engineer decides</h3>
-      <ul className="list-disc pl-5">
-        {DUCTS_ENGINEER_DECIDES.map((line) => (
-          <li key={line}>{line}</li>
-        ))}
-      </ul>
-
-      <h3>Limits</h3>
-      <ul className="list-disc pl-5">
-        {DUCTS_LIMITS.map((line) => (
-          <li key={line}>{line}</li>
-        ))}
-      </ul>
-
+    </Deferred>
+    <Deferred>
+      {(
+        [
+          ["What the engineer decides", DUCTS_ENGINEER_DECIDES],
+          ["Limits", DUCTS_LIMITS],
+        ] as const
+      ).map(([title, lines]) => (
+        <section key={title}>
+          <h3>{title}</h3>
+          <ul className="list-disc pl-5">
+            {lines.map((line) => (
+              <li key={line}>{line}</li>
+            ))}
+          </ul>
+        </section>
+      ))}
+    </Deferred>
+    <Deferred>
       <h3>The parts of a duct path</h3>
       <Legend />
       <Mermaid chart={pathChart(PRESSURE_DROP)} />
@@ -169,10 +154,9 @@ function DuctsDocs() {
         Each link is its own route. They share only Revit element ids.
       </p>
       <Mermaid chart={chainChart()} />
-
+    </Deferred>
+    <Deferred>
       <DuctCases />
-    </div>
-  );
-}
-
-export const ductsDocs = <DuctsDocs />;
+    </Deferred>
+  </div>
+);
