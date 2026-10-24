@@ -575,26 +575,31 @@ const SCENE_SUBJECT: number[] = ROWS.map((row) => row.id).filter((id) => !OMITTE
 
 export const SCENE_CLAIMS: Record<string, DuctClaim> = {
   c1: {
+    title: "Unit and return",
     state: "assumed",
     ids: [14577391, 13760867],
     text: "The intended unit is MUAS-1 and the route ends at FC-23's return inlet.",
   },
   c2: {
+    title: "Attic run",
     state: "proven",
     ids: [13819016, 13820267, 13819246],
     text: "The run goes up into the attic and back down to the main-level return.",
   },
   c3: {
+    title: "Intake gap",
     state: "unproven",
     ids: [14122436, 14107111],
     text: "The intake is not connected in the model: duct 14122436 ends open 1.6 in short of end cap 14107111 on the plenum 14106988 that feeds louver 14088043; joined by proximity, it needs a ruling.",
   },
   c4: {
+    title: "Branched network",
     state: "assumed",
     ids: [14515917, 14343729],
     text: "This is a branched network: two takeoffs on the trunk feed ERVs 6105264 and 6953852.",
   },
   c5: {
+    title: "Flow direction",
     state: "unproven",
     ids: [14577391],
     text: "Flow direction needs confirmation: MUAS-1's intake-side port is Out and the silencer-side port is In.",

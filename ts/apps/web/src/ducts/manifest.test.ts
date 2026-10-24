@@ -234,7 +234,14 @@ test("selection follows displayed merged networks while foreign claims and unrel
   const reading = {
     snapshot: raw,
     drawn,
-    claims: { c2: { text: "Other system", ids: [200], state: "assumed" as const } },
+    claims: {
+      c2: {
+        title: "Other system",
+        text: "Another system serves this unit.",
+        ids: [200],
+        state: "assumed" as const,
+      },
+    },
   };
   const bound = bindDuctsManifest(() => reading);
   const page = manifest.page!.parse({ system: "SA" });

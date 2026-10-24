@@ -34,7 +34,9 @@ describe("salvageDuctsWork", () => {
     const out = salvageDuctsWork({
       claims: {
         c: {
-          proposal: { value: { text: "x", ids: [1], state: "assumed", verdict: "yes" } },
+          proposal: {
+            value: { title: "Run", text: "x", ids: [1], state: "assumed", verdict: "yes" },
+          },
         },
       },
       flows: { "2": flow },

@@ -30,10 +30,7 @@ export const VERDICTS: readonly { value: Verdict; word: string; says: string }[]
   { value: "not-this", word: "not this", says: "the claim is about the wrong place" },
 ];
 
-/**
- * The patches one verdict press makes: the claim's cell staged with the verdict, who gave it and
- * when. The web has no user identity yet, so the judge is "person" (the manifest's word for the human).
- */
+/** Stage the complete claim and verdict; without web identity the judge is "person". */
 export const verdictPatches = (
   doc: DuctsRouteDocument | null,
   claim: Claim,
@@ -44,6 +41,7 @@ export const verdictPatches = (
     kind: "stage",
     rung: {
       value: {
+        title: claim.title,
         text: claim.text,
         ids: claim.at,
         state: claim.state,

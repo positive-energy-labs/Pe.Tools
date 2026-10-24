@@ -144,7 +144,7 @@ export function RulingBody({
     return (
       <div className="flex flex-col gap-2" data-ruling={r.n}>
         <p>
-          <span className="face-mono">{r.n}</span> Pea claim · {r.claim.state}
+          <span className="face-mono">{r.n}</span> {r.claim.title} · {r.claim.state}
         </p>
         <p>
           {subjects ? (

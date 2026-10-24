@@ -28,6 +28,9 @@ const allow = (entries: Record<string, string>): Allow[] =>
 // Filenames use the wave-4 final homes: land.ts, revit-target.tsx and go-to.tsx.
 // prettier-ignore
 const RULES: Rule[] = [
+  { id: "claim-title-not-sentence", doctrine: "I6", pattern: /title:\s*(?:\w+\.)*claim\.text\b|\bclaimLine\(/g,
+    roots: [W + "ducts/**/*.{ts,tsx}"], allow: [],
+    cannotSee: "Aliased text fields, computed titles or sentence-like authored titles; D18 mounted proof covers the claim schema and row hint." },
   { id: "chat-new-action-has-words", doctrine: "L1", pattern: /<Button\b[^>]*\bicon=\{Plus\}[^>]*\/>|<button\b[^>]*>\s*\+\s*<\/button>/g,
     roots: [W + "chat/**/*.tsx"], allow: [],
     cannotSee: "Aliased plus icons, computed children or CSS-hidden text; thread-palette tests check the labelled pane action." },

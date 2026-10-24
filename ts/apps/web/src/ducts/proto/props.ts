@@ -7,8 +7,7 @@ import type { ActionHandle } from "#/route/handle";
 import type { PageMove } from "#/route/manifest";
 
 import type { DuctsPage } from "../manifest";
-import type { Claim } from "../legs";
-import type { Subject } from "../legs";
+import type { Claim, Subject } from "../legs";
 import type { PricingResult } from "../pricing-job";
 
 export interface ProtoProps {
