@@ -43,6 +43,12 @@ it("damage keeps mesh and row identity, beats, flashes once, and holds still for
   const layer = damageLayer(meshes, instance, targets, ["no-flow:7"]);
   const group = new THREE.Group();
   layer.build(group);
+  for (const child of group.children as THREE.Mesh[])
+    expect(child.material).toMatchObject({
+      polygonOffset: true,
+      polygonOffsetFactor: -1,
+      polygonOffsetUnits: -4,
+    });
   const p = [0, 0, 0],
     q = [1, 1, 1];
   const lines = markLines([[p, q]], alarm, { dash: { size: 2, gap: 3 } });

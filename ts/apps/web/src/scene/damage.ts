@@ -14,7 +14,6 @@ import type {
   SceneMeshes,
 } from "./types";
 
-/** The one critical-damage hue: the only saturated colour on the stage, so it never needs a key. */
 const CORE = new THREE.Color();
 const RIM = new THREE.Color();
 const HOT = new THREE.Color();
@@ -25,14 +24,12 @@ export function setDamageHue(alarm: THREE.Color) {
 }
 const PERIOD = 1.5;
 
-/** A lub-dub: two eased beats then rest, 0..1. Gaussian bumps, so every edge is smooth. */
 export function heartbeat(seconds: number) {
   const p = (((seconds % PERIOD) + PERIOD) % PERIOD) / PERIOD;
   const bump = (at: number, width: number) => Math.exp(-(((p - at) / width) ** 2));
   return Math.min(1, bump(0.1, 0.055) + 0.55 * bump(0.27, 0.06));
 }
 
-/** Energy per rung: a resting floor that never goes dark, and how much of the beat rides on it. */
 const FLOOR: Record<IssueState, number> = { rest: 0.45, reach: 0.65, hover: 1, focus: 1.05 };
 const BEAT: Record<IssueState, number> = { rest: 0.55, reach: 0.55, hover: 0.35, focus: 0.35 };
 const STEADY = 0.5;
@@ -61,7 +58,6 @@ varying vec3 vNormal;
 varying vec3 vView;
 #include <fog_pars_fragment>
 void main() {
-  // Fresnel: grazing faces (the silhouette) burn brightest, so the form reads, not a flat decal.
   float f = pow(1.0 - abs(dot(normalize(vNormal), normalize(vView))), 2.0);
   vec3 color = mix(core, rim, f) * (0.55 + energy * 0.75);
   gl_FragColor = vec4(color, alpha * (0.42 + 0.58 * f));
@@ -70,6 +66,8 @@ void main() {
 
 type Uniforms = Record<"core" | "rim", { value: THREE.Color }> &
   Record<"energy" | "alpha", { value: number }>;
+// Skin and coverage mask must both clear base depth; mask holes otherwise leak glow across faces.
+const SURFACE_DEPTH = { polygonOffset: true, polygonOffsetFactor: -1, polygonOffsetUnits: -4 };
 const skin = () =>
   new THREE.ShaderMaterial({
     uniforms: {
@@ -84,14 +82,11 @@ const skin = () =>
     transparent: true,
     depthWrite: false,
     fog: true,
-    polygonOffset: true,
-    polygonOffsetFactor: -1,
-    polygonOffsetUnits: -4,
+    ...SURFACE_DEPTH,
     toneMapped: false,
     side: THREE.DoubleSide,
   });
 
-/** Match damage row identities to native meshes; linked instances need their own captured references. */
 export function damageLayers(
   meshes: SceneMeshes,
   rows: readonly {
@@ -108,20 +103,18 @@ export function damageLayers(
     const blockers = rows
       .filter((row) => rowDamage(row) && row.ids.includes(instance.revitId!))
       .sort((a, b) => a.ids.length - b.ids.length || (a.priority ?? 0) - (b.priority ?? 0));
-    return blockers.length
-      ? [
-          damageLayer(
-            meshes,
-            instance,
-            blockers.map((row) => ({ key: row.key, elementId: instance.revitId! })),
-            blockers.flatMap((row) => row.findings),
-          ),
-        ]
-      : [];
+    if (!blockers.length) return [];
+    return [
+      damageLayer(
+        meshes,
+        instance,
+        blockers.map((row) => ({ key: row.key, elementId: instance.revitId! })),
+        blockers.flatMap((row) => row.findings),
+      ),
+    ];
   });
 }
 
-/** Damage rides real mesh geometry; reduced motion holds the beat and skips hit/landing flashes. */
 export function damageLayer(
   meshes: SceneMeshes,
   instance: SceneInstance,
@@ -150,10 +143,9 @@ export function damageLayer(
       group.position.copy(origin);
       const face = new THREE.Mesh(geometry, skin());
       face.renderOrder = 8;
-      // The full-resolution mask follows the real silhouette, without edge/point surrogates.
       const halo = new THREE.Mesh(
         geometry,
-        new THREE.MeshBasicMaterial({ color: RIM, side: THREE.DoubleSide }),
+        new THREE.MeshBasicMaterial({ color: RIM, side: THREE.DoubleSide, ...SURFACE_DEPTH }),
       );
       halo.layers.set(GLOW_LAYER);
       group.add(face, halo);
@@ -164,8 +156,7 @@ export function damageLayer(
         THREE.Mesh<THREE.BufferGeometry, THREE.MeshBasicMaterial>,
       ];
       const still = at.reducedMotion;
-      const age = at.seconds - (born.get(key) ?? -Infinity);
-      const strike = still ? 0 : flash(age);
+      const strike = still ? 0 : flash(at.seconds - (born.get(key) ?? -Infinity));
       const swell = still ? 0 : landing(at.landed);
       const beat = still ? STEADY : heartbeat(at.seconds);
       const energy = FLOOR[at.state] + BEAT[at.state] * beat + 1.6 * strike + 0.8 * swell;
@@ -178,7 +169,6 @@ export function damageLayer(
       // Selection yields the skin's interior to the neutral selection fill.
       u.alpha.value = at.selected ? DAMAGE_ALPHA * 0.4 : DAMAGE_ALPHA;
       u.rim.value.copy(RIM).lerp(HOT, Math.min(1, heat + strike * 0.7));
-      // The glow mask is half-float: a source above 1 spreads a stronger halo.
       halo.material.color.copy(RIM).multiplyScalar(0.5 + 0.9 * energy);
       return !still;
     },
