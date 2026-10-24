@@ -28,6 +28,13 @@ const allow = (entries: Record<string, string>): Allow[] =>
 // Filenames use the wave-4 final homes: land.ts, revit-target.tsx and go-to.tsx.
 // prettier-ignore
 const RULES: Rule[] = [
+  { id: "pane-size-is-local", doctrine: "N6", pattern: /^(?![\s\S]*@property --pane-size\s*\{[^}]*inherits:\s*false;)[\s\S]/g,
+    roots: [K + "components/lang/pane.css"], allow: [],
+    cannotSee: "Property registration support or cascade cost; native production traces measure the inherited-style fan-out." },
+  { id: "pane-drag-no-layout-reads", doctrine: "N6",
+    pattern: /node\.parentElement\.client(?:Width|Height)|const onPointerMove = (?:(?!\n  \};)[\s\S])*?(?:containerSize\(|getComputedStyle|getBoundingClientRect|clientWidth|clientHeight)/g,
+    roots: [K + "components/lang/pane-resize.tsx"], allow: [],
+    cannotSee: "Aliased reads or other callees; the drag regression spies on geometry through the queued frame and production traces measure style/layout." },
   { id: "teach-observer-owner", doctrine: "N6", pattern: /new\s+MutationObserver\b/g,
     roots: [K + "components/lang/use-teach.ts"], allow: [],
     cannotSee: "Observer aliases or imports, scheduling and reader liveness; the deterministic observer test owns those." },

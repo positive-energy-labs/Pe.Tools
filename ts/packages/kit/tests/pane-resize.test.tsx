@@ -10,6 +10,7 @@ afterEach(() => {
   cleanup();
   vi.restoreAllMocks();
   vi.unstubAllGlobals();
+  vi.useRealTimers();
 });
 
 function measure(width: number, height = 600) {
@@ -57,20 +58,12 @@ test.each(["horizontal", "vertical"] as const)(
       [600, 567].map((size) => parseFloat(offset) * (offset.endsWith("%") ? size / 100 : 1)),
     ).toEqual([300, 283.5]);
     expect(handles.every((el) => el.parentElement === seam)).toBe(true);
-    const capture = vi.fn();
-    seam.setPointerCapture = capture;
-    seam.releasePointerCapture = vi.fn();
-    seam.hasPointerCapture = () => true;
-    for (const handle of handles) {
-      fireEvent.pointerDown(handle, { clientX: 0 });
-      fireEvent.pointerUp(handle, { clientX: 0 });
-    }
-    expect(capture).toHaveBeenCalledTimes(1);
   },
 );
 
 test("20 drag steps preview geometry without React commits, then commit once without remounting", () => {
   measure(900);
+  vi.useFakeTimers();
   vi.stubGlobal("PointerEvent", MouseEvent);
   const storage = { getItem: () => null, setItem: vi.fn() };
   vi.stubGlobal("localStorage", storage);
@@ -102,16 +95,18 @@ test("20 drag steps preview geometry without React commits, then commit once wit
   );
   const canvas = container.querySelector("canvas");
   const split = container.querySelector<HTMLElement>('[data-slot="pane-split"]')!;
+  const picture = container.querySelector<HTMLElement>("[data-picture]")!;
   // jsdom supplies no layout/ResizeObserver: deliver the canvas consumer's measured size.
-  vi.spyOn(HTMLElement.prototype, "clientWidth", "get").mockImplementation(
-    function (this: HTMLElement) {
-      return (
-        parseFloat(this.closest<HTMLElement>("[data-picture]")?.style.width ?? "") ||
-        892 - parseFloat(split.style.getPropertyValue("--pane-size"))
-      );
-    },
-  );
-  vi.spyOn(HTMLElement.prototype, "clientHeight", "get").mockReturnValue(600);
+  const widthReads = vi
+    .spyOn(HTMLElement.prototype, "clientWidth", "get")
+    .mockImplementation(
+      () =>
+        parseFloat(picture.style.width) ||
+        892 - parseFloat(split.style.getPropertyValue("--pane-size")),
+    );
+  const heightReads = vi.spyOn(HTMLElement.prototype, "clientHeight", "get").mockReturnValue(600);
+  const computedReads = vi.spyOn(window, "getComputedStyle");
+  const rectReads = vi.mocked(HTMLElement.prototype.getBoundingClientRect);
   const setSize = vi.fn((width: number) => {
     canvas!.width = width;
     canvas!.height = 600;
@@ -123,16 +118,23 @@ test("20 drag steps preview geometry without React commits, then commit once wit
   setSize.mockClear();
   const handle = screen.getByRole("separator");
   expect(pictureCommits.mock.calls.length).toBeGreaterThan(0);
-  fireEvent.pointerDown(handle, { clientX: 600 });
+  fireEvent.pointerDown(handle.firstElementChild!, { clientX: 600 });
+  expect(handle.setPointerCapture).toHaveBeenCalledOnce();
   commits.mockClear();
   pictureCommits.mockClear();
   for (let step = 1; step <= 20; step++) {
+    for (const read of [widthReads, heightReads, computedReads, rectReads]) read.mockClear();
     fireEvent.pointerMove(handle, { clientX: 600 + step });
+    act(() => vi.advanceTimersToNextFrame());
+    expect(
+      [widthReads, heightReads, computedReads, rectReads].map((read) => read.mock.calls.length),
+    ).toEqual([0, 0, 0, 0]);
     observed();
   }
   expect(commits).not.toHaveBeenCalled();
   expect(split.style.getPropertyValue("--pane-size")).toBe("312px");
   expect(setSize).not.toHaveBeenCalled();
+  expect(parseFloat(picture.style.scale)).toBeCloseTo(580 / 560);
   fireEvent.pointerUp(handle);
   observed();
   expect(setSize).toHaveBeenCalledExactlyOnceWith(580);
