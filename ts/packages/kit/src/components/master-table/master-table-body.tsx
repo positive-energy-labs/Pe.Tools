@@ -1,4 +1,4 @@
-import { OVERSCAN_VIEWPORTS, VIRTUAL_FROM } from "../lang/collection";
+import { overscanRows, VIRTUAL_FROM, virtualSpans } from "../lang/collection";
 import type { Tone } from "../../lib/token";
 import {
   createRef,
@@ -264,19 +264,13 @@ export function MasterTableBody<Row extends RowData>({
     // eslint-disable-next-line react-hooks/exhaustive-deps
     [pinnedKey],
   );
-  // Overscan is a rule, not a count: OVERSCAN_VIEWPORTS of the measured average row, per side.
   const previous = useRef<ReturnType<typeof useVirtualizer<HTMLElement, Element>> | null>(null);
-  const viewport = previous.current?.scrollRect?.height ?? scroller?.clientHeight ?? 0;
-  const average =
-    previous.current && visibleRows.length
-      ? previous.current.getTotalSize() / visibleRows.length
-      : ROW_ESTIMATE;
   const virtual = useVirtualizer({
     count: virtualized ? visibleRows.length : 0,
     getScrollElement: () => scroller,
     estimateSize: () => ROW_ESTIMATE,
     getItemKey: (index) => visibleRows[index]!.id,
-    overscan: Math.max(1, Math.ceil((OVERSCAN_VIEWPORTS * viewport) / (average || ROW_ESTIMATE))),
+    overscan: overscanRows(previous.current, scroller, visibleRows.length, ROW_ESTIMATE),
     scrollMargin: margin,
     scrollPaddingStart: headroom,
     rangeExtractor,
@@ -297,15 +291,7 @@ export function MasterTableBody<Row extends RowData>({
   const version = useMemo(() => ({}), [visibleRows, damage, selectedKeys, activeKey, virtualized]);
   useProjection(() => {
     if (!scroller) return [];
-    if (virtualized)
-      return visibleRows.map((_, index) => {
-        const measured = virtual.measurementsCache[index];
-        return {
-          top: measured?.start ?? margin + index * ROW_ESTIMATE,
-          height: measured?.size ?? ROW_ESTIMATE,
-          mark: mark(index),
-        };
-      });
+    if (virtualized) return virtualSpans(virtual, visibleRows.length, margin, ROW_ESTIMATE, mark);
     return tbody
       ? domSpans(scroller, tbody.querySelectorAll(":scope > tr[data-index]"), (row) =>
           mark(Number((row as HTMLElement).dataset.index)),

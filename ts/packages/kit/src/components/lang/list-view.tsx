@@ -13,7 +13,13 @@ import {
 import { ChevronDown, ChevronRight, ChevronUp } from "lucide-react";
 
 import { Button } from "./button";
-import { OVERSCAN_VIEWPORTS, VIRTUAL_FROM, type ListController, type ListItem } from "./collection";
+import {
+  overscanRows,
+  VIRTUAL_FROM,
+  virtualSpans,
+  type ListController,
+  type ListItem,
+} from "./collection";
 import {
   assertScrollOwner,
   domSpans,
@@ -502,17 +508,13 @@ function VirtualSectionBody<T, Sort extends string>(props: SectionBodyProps<T, S
     return () => observer.disconnect();
   }, [scroller, list.sections.length, list.state.closed, rows.length]);
   const estimate = useRowHeight();
-  // Overscan is a rule, not a count: OVERSCAN_VIEWPORTS of the measured average row, per side.
   const previous = useRef<ReturnType<typeof useVirtualizer<HTMLElement, Element>> | null>(null);
-  const viewport = previous.current?.scrollRect?.height ?? scroller?.clientHeight ?? 0;
-  const average =
-    previous.current && rows.length ? previous.current.getTotalSize() / rows.length : estimate;
   const virtual = useVirtualizer({
     count: rows.length,
     getScrollElement: () => scroller,
     estimateSize: () => estimate,
     getItemKey: (index) => rows[index]!.key,
-    overscan: Math.max(1, Math.ceil((OVERSCAN_VIEWPORTS * viewport) / (average || estimate))),
+    overscan: overscanRows(previous.current, scroller, rows.length, estimate),
     scrollMargin: margin ?? 0,
     scrollPaddingStart: headroom,
   });
@@ -521,14 +523,9 @@ function VirtualSectionBody<T, Sort extends string>(props: SectionBodyProps<T, S
   const version = useMarkVersion(props);
   useProjection(
     () =>
-      rows.map((item, index) => {
-        const measured = virtual.measurementsCache[index];
-        return {
-          top: measured?.start ?? (margin ?? 0) + index * estimate,
-          height: measured?.size ?? estimate,
-          mark: markOf(list, item, projection),
-        };
-      }),
+      virtualSpans(virtual, rows.length, margin ?? 0, estimate, (index) =>
+        markOf(list, rows[index]!, projection),
+      ),
     version,
   );
   useLayoutEffect(() => landRequest(list, landed));

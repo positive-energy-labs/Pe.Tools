@@ -2,11 +2,43 @@ import { land } from "./land";
 import { useWork } from "./pane";
 import { rowRevit } from "./revit-target";
 import { rowDamage } from "../master-table/model";
+import type { Mark, Span } from "./scroll-project";
+import type { Virtualizer } from "@tanstack/react-virtual";
 
 export const VIRTUAL_FROM = 60;
 /** Rows drawn past the viewport, in viewport heights per side, from the measured row height:
  *  covers a main-thread stall of 2V / fling speed (V=800px: 400 ms at 4000 px/s). */
 export const OVERSCAN_VIEWPORTS = 2;
+
+type Virtual = Virtualizer<HTMLElement, Element>;
+/** Overscan is a rule, not a count: OVERSCAN_VIEWPORTS of the last pass's average row, per side. */
+export function overscanRows(
+  last: Virtual | null,
+  scroller: HTMLElement | null,
+  count: number,
+  estimate: number,
+) {
+  const viewport = last?.scrollRect?.height ?? scroller?.clientHeight ?? 0;
+  const average = (last && count && last.getTotalSize() / count) || estimate;
+  return Math.max(1, Math.ceil((OVERSCAN_VIEWPORTS * viewport) / average));
+}
+/** Every virtual row's span in scroller pixels: measured where drawn, estimated elsewhere. */
+export function virtualSpans(
+  virtual: Virtual,
+  count: number,
+  margin: number,
+  estimate: number,
+  mark: (index: number) => Mark,
+): Span[] {
+  return Array.from({ length: count }, (_, index) => {
+    const measured = virtual.measurementsCache[index];
+    return {
+      top: measured?.start ?? margin + index * estimate,
+      height: measured?.size ?? estimate,
+      mark: mark(index),
+    };
+  });
+}
 import { startTransition, useEffect, useId, useMemo, useRef, useState } from "react";
 
 import { useScopeKeys, type ScopeKey } from "../../keys";
