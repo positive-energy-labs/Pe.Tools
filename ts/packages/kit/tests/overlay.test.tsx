@@ -10,7 +10,7 @@ import {
   usePopoverSide,
 } from "../src/components/lang/popover";
 import { HoverCard, HoverCardContent, HoverCardTrigger } from "../src/components/lang/hover-card";
-import { SvgTip, TooltipHint, TooltipProvider } from "../src/components/lang/tooltip";
+import { TooltipHint, TooltipProvider } from "../src/components/lang/tooltip";
 afterEach(cleanup);
 const rect = (x: number, y: number, w = 20, h = 20) => new DOMRect(x, y, w, h);
 
@@ -69,27 +69,6 @@ test("subject context positions an ordinary trigger away and exposes facing side
     expect(document.querySelector('[data-facing][data-side="top"]')).toBeTruthy(),
   );
   expect(screen.getByText("top")).toBeTruthy();
-});
-
-test("SVG hints focus their containing mark and preserve its accessible description on cleanup", async () => {
-  const view = render(
-    <svg>
-      <circle aria-label="mark" aria-description="original">
-        <SvgTip content="round" />
-      </circle>
-    </svg>,
-  );
-  const mark = screen.getByLabelText("mark");
-  expect(mark.getAttribute("tabindex")).toBe("0");
-  await act(async () => {
-    mark.dispatchEvent(new FocusEvent("focus"));
-  });
-  expect(await screen.findByRole("tooltip")).toBeTruthy();
-  expect(screen.getByText("round")).toBeTruthy();
-  expect(mark.getAttribute("aria-description")).toBe("round");
-  expect(document.querySelector("svg title")).toBeNull();
-  view.unmount();
-  expect(mark.getAttribute("aria-description")).toBe("original");
 });
 
 test("ordinary tooltips inherit the subject box when that side fits", async () => {

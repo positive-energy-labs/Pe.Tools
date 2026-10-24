@@ -55,8 +55,14 @@ export function useHoverSurface(
       from = { x: event.clientX, y: event.clientY };
       until = Date.now() + HOVER_GRACE;
     };
+    const inside = ({ clientX: x, clientY: y }: MouseEvent) => {
+      const { left, right, top, bottom } = popup.getBoundingClientRect();
+      return x >= left && x < right && y >= top && y < bottom;
+    };
     const protect = (event: MouseEvent) => {
+      contact?.(popup, inside(event));
       if (event.target instanceof Node && popup.parentElement?.contains(event.target)) {
+        contact?.(popup, true);
         from = null;
         return;
       }
@@ -69,8 +75,7 @@ export function useHoverSurface(
     };
     // A sibling's warm tooltip otherwise replaces this one before its close grace expires.
     const events = ["mouseover", "mouseenter", "mousemove"] as const;
-    const enterPopup = () => contact?.(popup, true);
-    const leavePopup = () => contact?.(popup, false);
+    const leavePopup = (event: MouseEvent) => contact?.(popup, inside(event));
     const keydown = (event: KeyboardEvent) => {
       const escape = event.key === "Escape";
       if (
@@ -100,7 +105,6 @@ export function useHoverSurface(
       focusQuiet(next);
       if (escape || (next !== anchor && !popup.contains(next))) close?.();
     };
-    popup.addEventListener("mouseenter", enterPopup);
     popup.addEventListener("mouseleave", leavePopup);
     popup.addEventListener("keydown", keydown, true);
     anchor.addEventListener("mouseleave", leave);
@@ -108,7 +112,6 @@ export function useHoverSurface(
     popup.ownerDocument.addEventListener("keydown", keydown);
     return () => {
       contact?.(null, false);
-      popup.removeEventListener("mouseenter", enterPopup);
       popup.removeEventListener("mouseleave", leavePopup);
       popup.removeEventListener("keydown", keydown, true);
       anchor.removeEventListener("mouseleave", leave);
