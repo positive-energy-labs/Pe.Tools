@@ -157,11 +157,11 @@ interface PaneResizeHandleProps {
   onReset: () => void;
 }
 
-// The seam separates pane grounds; hover and focus darken its full length.
+// The seam separates pane grounds; hover darkens its full length, keyboard focus wears the kit ring.
 const paneResizeHandleRecipe = tv({
   slots: {
-    root: "group relative z-raised flex touch-none items-center justify-center outline-none",
-    bar: "bg-line transition-colors duration-control group-hover:bg-ink-2 group-focus-visible:bg-ink-2 group-active:bg-ink motion-reduce:transition-none",
+    root: "group relative z-raised flex touch-none items-center justify-center",
+    bar: "bg-line transition-colors duration-control group-hover:bg-ink-2 group-active:bg-ink motion-reduce:transition-none",
   },
   variants: {
     axis: {

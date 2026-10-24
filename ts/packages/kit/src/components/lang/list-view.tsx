@@ -201,6 +201,14 @@ function ListRenderer<T, Sort extends string>(props: ListViewProps<T, Sort> & { 
       aria-label={label}
       tabIndex={0}
       aria-activedescendant={list.collection.inputProps["aria-activedescendant"]}
+      onFocus={(event) => {
+        // Keyboard focus lands on a row: the cursor row wears the ring (base.css), never the whole container.
+        // No scroll follows (the move is not steered), and pointer focus keeps a list's cursorless start.
+        if (event.target !== event.currentTarget || list.collection.cursor) return;
+        if (!event.currentTarget.matches(":focus-visible")) return;
+        const first = list.collection.visible.find((row) => row.kind !== "head");
+        if (first) list.collection.setCursor(first.key);
+      }}
       data-list-view=""
       className={`relative min-h-0 min-w-0 w-full${maxHeight ? "" : " shrink-0"}`}
       style={maxHeight ? { maxHeight, overflowY: "auto" } : undefined}

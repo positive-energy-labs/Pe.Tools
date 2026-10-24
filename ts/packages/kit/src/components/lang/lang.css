@@ -852,9 +852,6 @@ tr.dl-row[data-active] {
   background-color: var(--pe-recess);
   box-shadow: var(--shadow-well);
 }
-.dl-search[data-face="bar"]:focus-within {
-  border-bottom-color: var(--pe-line-2);
-}
 .dl-search [data-search-trail] {
   padding-inline: calc(var(--gutter) / 2);
 }
