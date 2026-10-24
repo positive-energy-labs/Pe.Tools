@@ -144,11 +144,11 @@ test("real conversation Work cutover retains authored cells, draft, Places and o
         await p.send("Input.dispatchMouseEvent", { type, ...point, button: "left", clickCount: 1 });
     };
     const toolsCollapsed = async () =>
-      ((await p.url()).includes("/pea") && (await p.has("tools collapsed").catch(() => false))) ||
-      (new URL(await p.url()).pathname === "/pea" &&
-        (await p
-          .textOf('[data-pane-id="tools"]')
-          .then((text) => text.includes("tools collapsed"))));
+      new URL(await p.url()).pathname === "/pea" &&
+      /tools collapsed/i.test(await p.textOf('[data-pane-id="tools"]')) &&
+      (await p.read<boolean>(
+        `[...document.querySelectorAll('[data-pane-id="tools"] [data-route-tab]')].every(e => !e.getClientRects().length)`,
+      ));
     const draft = () =>
       p.read<string>(
         `[...document.querySelectorAll('textarea[aria-label="Message"],input[aria-label="Message"]')].find(${visible})?.value ?? ''`,
