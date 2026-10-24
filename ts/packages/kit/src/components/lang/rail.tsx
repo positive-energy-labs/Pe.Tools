@@ -5,7 +5,7 @@ import "./lang.css";
 
 /**
  * One line at `--rail-h`. The lanes scroll horizontally only: `overflow-x: auto` alone computes
- * `overflow-y: auto`, so anything taller than the rail made the rail scroll vertically and clip.
+ * a vertical overflow box, so anything taller than the rail made the rail scroll vertically and clip.
  * The head rung's line box (24px × 1.2 = 28.8px) is taller than `--rail-h` (24px); base.css lets
  * a rail whose lead holds a `t-head` grow to the head's line box instead of clipping it.
  */

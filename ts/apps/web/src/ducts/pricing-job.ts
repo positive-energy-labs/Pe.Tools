@@ -8,7 +8,7 @@ import type { PricingDelta } from "./pricing-delta";
 import { healPlan, rememberHealPlan } from "@pe/ducts-domain/heal";
 import { inferJoints, rememberInference } from "@pe/ducts-domain/proximity";
 import { withStoredRulings } from "@pe/ducts-domain/rulings";
-import { systemsNeedingFix } from "./system-list-search";
+import { systemNotes, type SystemNote } from "./system-list-search";
 import { systemList } from "./system-list";
 
 interface PricingBase {
@@ -27,7 +27,7 @@ export interface PricingResult {
   ready: ReturnType<typeof readiness>;
   analysis: {
     heal: ReturnType<typeof healPlan>;
-    needsFix: ReadonlySet<string>;
+    notes: ReadonlyMap<string, SystemNote>;
     systems: ReturnType<typeof systemList>;
     inference: ReturnType<typeof inferJoints>;
   };
@@ -63,7 +63,7 @@ export function pricingJob() {
           ready: readiness(base.snapshot, request.doc),
           analysis: {
             heal,
-            needsFix: systemsNeedingFix(priced, request.doc, heal),
+            notes: systemNotes(priced, request.doc, heal),
             systems: systemList(priced.snapshot, priced),
             inference: inferJoints(
               base.snapshot,

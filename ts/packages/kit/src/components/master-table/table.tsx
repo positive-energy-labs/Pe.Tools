@@ -9,6 +9,7 @@ import { useCollection } from "../lang/collection";
 import type { ListReading } from "../lang/collection";
 import { StatusLine } from "../lang/list-popup";
 import { EmptyState } from "../lang/empty";
+import { Scroll } from "../lang/scroll";
 import { MasterTableBody } from "./master-table-body";
 import { resolveStateColumn } from "./master-table-columns";
 import { MasterTableHeader } from "./master-table-header";
@@ -200,11 +201,12 @@ export function Table<Row extends RowData>({
 
   return (
     <>
-      <div
+      <Scroll
         ref={setScroller}
         data-table-scroll=""
-        className={maxHeight ? "overflow-auto" : "min-h-0 flex-1 overflow-auto"}
-        style={maxHeight ? { maxHeight } : undefined}
+        axis="both"
+        className={maxHeight ? undefined : "min-h-0 flex-1"}
+        maxHeight={maxHeight}
         // Scrolled sideways, the locked column floats over the rows and casts its shade.
         onScroll={({ currentTarget }) =>
           currentTarget.toggleAttribute("data-scrolled-x", currentTarget.scrollLeft > 0)
@@ -272,7 +274,7 @@ export function Table<Row extends RowData>({
             )}
           </div>
         )}
-      </div>
+      </Scroll>
 
       {columns.some((column) => column.readState) && (
         <table.Subscribe

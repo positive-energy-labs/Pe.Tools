@@ -48,7 +48,8 @@ import { EncodingPicker } from "../encoding/picker";
 import { ScaleLegend } from "../encoding/scale-legend";
 import type { GroupEncoding } from "../encoding/use-encoding";
 import type { ProtoProps } from "../props";
-import { BarPopover, fmtFt, SystemMark, systemIssues } from "./bar";
+import { BarPopover, fmtFt, SystemMark, systemNoteCount } from "./bar";
+import type { SystemNote } from "../../system-list-search";
 import type { Split } from "../../loss-split";
 import type { systemList } from "../../system-list";
 import type { StageIssue } from "../../inbox-rows";
@@ -105,7 +106,7 @@ export interface ECanvasExtra {
   /** What the picture is of at a glance: the chosen system's row (identity and state) or the
    * document's census, the system a switch is opening, and whether the read is refreshing. */
   identity: {
-    system: (ReturnType<typeof systemList>[number] & { needsFix: boolean }) | null;
+    system: (ReturnType<typeof systemList>[number] & { note: SystemNote | undefined }) | null;
     census: { systems: number; priced: number; fix: number };
     refreshing: boolean;
     /** Opens the system's tree, where its issues stand. */
@@ -405,7 +406,9 @@ function Canvas({
       ? Number(page.selected)
       : null;
   const subjects = useContext(SubjectTextContext);
-  const systemState = identity.system ? systemIssues(identity.system) : [];
+  const systemState = identity.system
+    ? systemNoteCount(identity.system, identity.system.note)
+    : { issues: [], total: 0 };
   const readId = pickedId;
   const segFacts = readId == null ? null : scene.segments.find((f) => f.segment.id === readId);
   const nodeFacts = readId == null ? null : scene.nodes.find((f) => f.node.id === readId);
@@ -499,9 +502,13 @@ function Canvas({
                 </span>
               ) : (
                 <span data-e-state="">
-                  {systemState.length ? (
+                  {systemState.total ? (
                     <>
-                      <SystemMark issues={systemState} open={identity.open} />{" "}
+                      <SystemMark
+                        issues={systemState.issues}
+                        total={systemState.total}
+                        open={identity.open}
+                      />{" "}
                     </>
                   ) : null}
                   {solved?.fan == null ? (

@@ -1,7 +1,13 @@
-import { MinimapViewport } from "./minimap-viewport";
 import "./lang.css";
 import { SvgTip } from "./tooltip";
-import { useEffect, useRef, useState, type MouseEvent, type ReactNode } from "react";
+import {
+  useEffect,
+  useRef,
+  useState,
+  type CSSProperties,
+  type MouseEvent,
+  type ReactNode,
+} from "react";
 
 import { tokenRef } from "../../lib/token";
 
@@ -20,6 +26,11 @@ interface MinimapProps<V> {
 type Size = { width: number; height: number };
 
 const THUMB = 260;
+
+/** The viewport's box on a minimap: one frame mark, shared with the kit scrollbar's CSS. */
+function MinimapViewport({ style }: { style: CSSProperties }) {
+  return <span aria-hidden data-minimap-viewport="" style={style} />;
+}
 
 /**
  * A role's colour for a canvas `paint`. Tokens are `light-dark(...)`, which a canvas fillStyle

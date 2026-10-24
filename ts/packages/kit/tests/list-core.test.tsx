@@ -21,6 +21,7 @@ import { type ListSearch } from "@pe/agent-contracts";
 import { ListView, PlainList, useSearchKey } from "../src/components/lang/list-view";
 import type { ListViewProps } from "../src/components/lang/list-view";
 import { List, ListPopup } from "../src/components/lang/list-popup";
+import { Scroll } from "../src/components/lang/scroll";
 import { land } from "../src/components/lang/land";
 import { readGestures, readKeyMeta, readRegistrations } from "../src/keys";
 
@@ -44,7 +45,7 @@ test.each([
       class {
         constructor(private notify: () => void) {}
         observe(el: Element) {
-          if (el.hasAttribute("data-list-view") || el.hasAttribute("data-test-port"))
+          if (["data-list-view", "data-test-port", "data-scroll"].some((a) => el.hasAttribute(a)))
             resizes.add(this.notify);
         }
         disconnect() {}
@@ -63,21 +64,21 @@ test.each([
       configurable: true,
       value: scroll,
     });
-    render(
-      <div data-test-port="" style={{ overflowY: "auto" }}>
-        <TestList
-          name="capacity"
-          maxHeight={external ? undefined : `${height}px`}
-          reveal="10003"
-          config={{
-            items: items.slice(0, 30),
-            groups: { of: (item) => String(Math.floor((Number(item.id) - 10000) / 6)) },
-          }}
-        />
-      </div>,
+    const capacity = (
+      <TestList
+        name="capacity"
+        maxHeight={external ? undefined : `${height}px`}
+        reveal="10003"
+        config={{
+          items: items.slice(0, 30),
+          groups: { of: (item) => String(Math.floor((Number(item.id) - 10000) / 6)) },
+        }}
+      />
     );
+    // External: the pane body's `Scroll` owns the box; internal: `maxHeight` gives the list its own.
+    render(external ? <Scroll data-test-port="">{capacity}</Scroll> : capacity);
     const list = screen.getByRole("listbox", { name: "capacity" });
-    const port = external ? list.parentElement! : list;
+    const port = list.closest<HTMLElement>("[data-scroll]")!;
     expect(port.style.getPropertyValue("--list-headroom")).toBe(`${reserved}px`);
     expect(port.style.scrollPaddingTop).toBe("var(--list-headroom)");
     expect(list.style.getPropertyValue("--list-stack")).toBe(stack);

@@ -2,7 +2,6 @@ import type { Tone } from "../../lib/token";
 import { useVirtualizer } from "@tanstack/react-virtual";
 import {
   memo,
-  useCallback,
   useMemo,
   useLayoutEffect,
   useRef,
@@ -13,15 +12,15 @@ import {
 } from "react";
 import { ChevronDown, ChevronRight, ChevronUp } from "lucide-react";
 
-import { Minimap, MINIMAP_FROM, type MinimapRange, type MinimapMark } from "./gutter-minimap";
 import { Button } from "./button";
-import { VIRTUAL_FROM, type ListController, type ListItem } from "./collection";
+import { OVERSCAN_VIEWPORTS, VIRTUAL_FROM, type ListController, type ListItem } from "./collection";
+import { domSpans, Scroll, useProjection, useScroller, type Mark } from "./scroll";
 import { EmptyState } from "./empty";
 import { ScopeGestures } from "../../keys";
 import { OutcomeLine } from "./outcome";
 import { StatusLine } from "./list-popup";
 import { ListBar, scrollParent } from "./list-search";
-export { useSearchKey, scrollParent, type SearchKeyOwner } from "./list-search";
+export { useSearchKey, type SearchKeyOwner } from "./list-search";
 import { land } from "./land";
 import { Row, type RowProps } from "./row";
 import "./lang.css";
@@ -72,8 +71,10 @@ export interface ListViewProps<T, Sort extends string = string> {
   row: (item: T) => ListRowParts;
   "aria-label": string;
   empty: { message: string; exit: string };
-  /** Omit when the surrounding pane already owns scrolling. */
+  /** Omit when the surrounding `Scroll` (a pane body) already owns scrolling. */
   maxHeight?: string;
+  /** What a row says on the scrollbar beyond its damage, selection, hits and heads. */
+  projection?: (item: T) => Pick<Mark, "weight" | "tone">;
   columns?: { label: ReactNode; meta?: ReactNode };
   /** Open state is the same data-owned `open` used for tree expansion. */
   detail?: (item: T) => ReactNode;
@@ -86,7 +87,13 @@ export interface ListViewProps<T, Sort extends string = string> {
 }
 
 export function ListView<T, Sort extends string = string>(props: ListViewProps<T, Sort>) {
-  return <ListRenderer {...props} />;
+  return props.maxHeight ? (
+    <Scroll maxHeight={props.maxHeight} className="w-full">
+      <ListRenderer {...props} />
+    </Scroll>
+  ) : (
+    <ListRenderer {...props} />
+  );
 }
 
 /** Small collections share rows, keys and sections without search chrome or virtualization. */
@@ -99,11 +106,33 @@ function ListRenderer<T, Sort extends string>(props: ListViewProps<T, Sort> & { 
   const searching = !props.plain && (list.total > 7 || list.filtering || !!list.state.sort);
   const [headroom, setHeadroom] = useState(0);
   const [root, setRoot] = useState<HTMLDivElement | null>(null);
-  const scroller = maxHeight ? root : (scrollParent(root) ?? root);
+  const owned = useScroller();
+  const scroller = props.plain ? (scrollParent(root) ?? root) : owned;
   useLayoutEffect(() => {
     list.setTarget(root);
     return () => list.setTarget(null);
   }, [root, list.setTarget]);
+  // A list scrolls inside a `Scroll`; its scrollbar is the list's. Resolving to another box (a
+  // pane under `scroll="clip"`, a route's own overflow div, the app root) is a build error.
+  useLayoutEffect(() => {
+    if (props.plain || !root || process.env.NODE_ENV === "production") return;
+    const actual = scrollParent(root);
+    if (actual && actual !== owned)
+      throw new Error(
+        `ListView "${props["aria-label"]}" scrolls in <${actual.tagName.toLowerCase()} class="${actual.className}"> instead of its Scroll; render it inside <Scroll> (a Pane body) or give it maxHeight`,
+      );
+  }, [root, owned, props.plain]);
+  useProjection(
+    () =>
+      root && scroller
+        ? domSpans(
+            scroller,
+            root.querySelectorAll(":scope > section > [data-list-section-home]"),
+            () => ({ tick: true }),
+          )
+        : [],
+    list.sections,
+  );
   useLayoutEffect(() => {
     if (!root || !scroller) return;
     const padding = scroller.style.scrollPaddingTop;
@@ -149,46 +178,6 @@ function ListRenderer<T, Sort extends string>(props: ListViewProps<T, Sort> & { 
     if (revealing) return;
     land(document.getElementById(list.collection.rowProps(list.collection.cursor).id));
   }, [request]);
-  const overview = useMemo(() => {
-    const rows: ListItem<T>[] = [];
-    const marks: MinimapMark[] = [];
-    const offsets = new Map<string, number>();
-    for (const section of list.sections) {
-      offsets.set(section.key, rows.length);
-      if (section.label) marks.push({ index: rows.length, head: true });
-      if (!section.closed) rows.push(...section.rows);
-    }
-    if (rows.length >= MINIMAP_FROM)
-      rows.forEach((item, index) => {
-        const damage = row(item.item).damage ?? item.damage;
-        if (damage || item.branch)
-          marks.push({ index, damage: damage ?? undefined, head: item.branch });
-      });
-    return { rows, marks, offsets };
-  }, [list.sections, row]);
-  const [ranges, setRanges] = useState<Record<string, MinimapRange | null>>({});
-  const [mapHeight, setMapHeight] = useState(0);
-  const reportRange = useCallback((key: string, range: MinimapRange | null, height: number) => {
-    setMapHeight(height);
-    setRanges((old) =>
-      old[key]?.start === range?.start && old[key]?.end === range?.end
-        ? old
-        : { ...old, [key]: range },
-    );
-  }, []);
-  const inView = list.sections.flatMap((section) => {
-    const range = ranges[section.key];
-    const offset = overview.offsets.get(section.key) ?? 0;
-    return range && !section.closed
-      ? [{ start: range.start + offset, end: range.end + offset }]
-      : [];
-  });
-  const mapRange = inView.length
-    ? {
-        start: Math.min(...inView.map((range) => range.start)),
-        end: Math.max(...inView.map((range) => range.end)),
-      }
-    : null;
   const label = props["aria-label"];
   // Rows render through this ref, so a memoized row that skipped a render still acts on today's list.
   const live = useRef(list);
@@ -203,7 +192,6 @@ function ListRenderer<T, Sort extends string>(props: ListViewProps<T, Sort> & { 
       aria-activedescendant={list.collection.inputProps["aria-activedescendant"]}
       data-list-view=""
       className={`relative min-h-0 min-w-0 w-full${maxHeight ? "" : " shrink-0"}`}
-      style={maxHeight ? { maxHeight, overflowY: "auto" } : undefined}
     >
       <ScopeGestures
         gestures={[
@@ -211,19 +199,6 @@ function ListRenderer<T, Sort extends string>(props: ListViewProps<T, Sort> & { 
           { pointer: "hover", label: "move the cursor" },
         ]}
       />
-      {!props.plain && (
-        <Minimap
-          count={overview.rows.length}
-          range={mapRange}
-          scroller={scroller}
-          height={mapHeight}
-          marks={overview.marks}
-          onJump={(index) => {
-            const item = overview.rows[index];
-            if (item) list.reveal(item.key);
-          }}
-        />
-      )}
       {searching ? <ListBar list={list} label={label} /> : null}
       {props.columns ? (
         <div className="dl-row-colhead" role="presentation" data-tree-columns="">
@@ -296,8 +271,8 @@ function ListRenderer<T, Sort extends string>(props: ListViewProps<T, Sort> & { 
               live={live}
               rows={section.rows}
               sectionKey={section.key}
-              reportRange={overview.rows.length >= MINIMAP_FROM ? reportRange : undefined}
               row={row}
+              projection={props.projection}
               scroller={scroller}
               headroom={headroom}
               detail={detail}
@@ -315,8 +290,8 @@ function ListRenderer<T, Sort extends string>(props: ListViewProps<T, Sort> & { 
 type SectionBodyProps<T, Sort extends string> = {
   plain?: boolean;
   sectionKey: string;
-  reportRange?: (key: string, range: MinimapRange | null, height: number) => void;
   list: ListController<T, Sort>;
+  projection?: (item: T) => Pick<Mark, "weight" | "tone">;
   live: RefObject<ListController<T, Sort>>;
   rows: readonly ListItem<T>[];
   row: (item: T) => ListRowParts;
@@ -329,10 +304,55 @@ type SectionBodyProps<T, Sort extends string> = {
   landed: RefObject<number>;
 };
 
+/** Every row's mark: kit channels from the item, the route's weight and tone on top. */
+function markOf<T, Sort extends string>(
+  list: ListController<T, Sort>,
+  item: ListItem<T>,
+  row: (item: T) => ListRowParts,
+  projection?: (item: T) => Pick<Mark, "weight" | "tone">,
+): Mark {
+  const extra = projection?.(item.item);
+  const damage = row(item.item).damage ?? item.damage;
+  const behavior = list.collection.rowProps(item.key);
+  return {
+    tone: damage ? "alarm" : extra?.tone,
+    weight: extra?.weight,
+    tick: item.branch,
+    hit: item.hit,
+    selected: behavior.selected || behavior.cursor,
+  };
+}
+
+/** Re-project when what rows say could have changed; positions are read fresh at project time. */
+function useMarkVersion<T, Sort extends string>(
+  props: Pick<SectionBodyProps<T, Sort>, "list" | "rows" | "row" | "projection">,
+) {
+  const { list, rows, row, projection } = props;
+  const selected = list.state.selected.join("\u0000");
+  const cursor = list.collection.cursor;
+  const open = list.state.open.join("\u0000");
+  return useMemo(() => ({}), [rows, row, projection, selected, cursor, open, list.filtering]);
+}
+
 function SectionBody<T, Sort extends string>(props: SectionBodyProps<T, Sort>) {
   if (!props.plain && props.list.total >= VIRTUAL_FROM) return <VirtualSectionBody {...props} />;
+  return <PlainSectionBody {...props} />;
+}
+
+function PlainSectionBody<T, Sort extends string>(props: SectionBodyProps<T, Sort>) {
+  const body = useRef<HTMLDivElement>(null);
+  const { list, rows, row, projection, scroller } = props;
+  const version = useMarkVersion(props);
+  useProjection(() => {
+    if (props.plain || !body.current || !scroller) return [];
+    const byKey = new Map(rows.map((item) => [item.key, item]));
+    return domSpans(scroller, body.current.querySelectorAll(":scope > [data-key]"), (el) => {
+      const item = byKey.get((el as HTMLElement).dataset.key ?? "");
+      return item ? markOf(list, item, row, projection) : {};
+    });
+  }, version);
   return (
-    <div data-list-body="" role="presentation">
+    <div ref={body} data-list-body="" role="presentation">
       {props.rows.map((item) => (
         <ListItemView
           key={item.key}
@@ -454,20 +474,9 @@ const ListItemView = memo(
     a.refusal === b.refusal,
 ) as typeof ListItemViewInner;
 
-function VirtualSectionBody<T, Sort extends string>({
-  sectionKey,
-  reportRange,
-  list,
-  live,
-  rows,
-  row,
-  scroller,
-  headroom,
-  detail,
-  request,
-  served,
-  landed,
-}: SectionBodyProps<T, Sort>) {
+function VirtualSectionBody<T, Sort extends string>(props: SectionBodyProps<T, Sort>) {
+  const { list, live, rows, row, projection, scroller, headroom, detail, request, served, landed } =
+    props;
   const body = useRef<HTMLDivElement>(null);
   // Null until measured: a request made as this body mounts waits for its real margin.
   const [margin, setMargin] = useState<number | null>(null);
@@ -493,28 +502,35 @@ function VirtualSectionBody<T, Sort extends string>({
   const estimate = scroller
     ? parseFloat(getComputedStyle(scroller).getPropertyValue("--item-h")) || 20
     : 20;
+  // Overscan is a rule, not a count: OVERSCAN_VIEWPORTS of the measured average row, per side.
+  const previous = useRef<ReturnType<typeof useVirtualizer<HTMLElement, Element>> | null>(null);
+  const viewport = previous.current?.scrollRect?.height ?? scroller?.clientHeight ?? 0;
+  const average =
+    previous.current && rows.length ? previous.current.getTotalSize() / rows.length : estimate;
   const virtual = useVirtualizer({
     count: rows.length,
     getScrollElement: () => scroller,
     estimateSize: () => estimate,
     getItemKey: (index) => rows[index]!.key,
-    overscan: 6,
+    overscan: Math.max(1, Math.ceil((OVERSCAN_VIEWPORTS * viewport) / (average || estimate))),
     scrollMargin: margin ?? 0,
     scrollPaddingStart: headroom,
   });
+  previous.current = virtual;
   const entries = virtual.getVirtualItems();
-  const range = virtual.range;
-  const offset = virtual.scrollOffset ?? 0;
-  const height = virtual.scrollRect?.height ?? 0;
-  const visible =
-    margin !== null && offset + height > margin && offset < margin + virtual.getTotalSize();
-  useLayoutEffect(() => {
-    reportRange?.(
-      sectionKey,
-      visible && range ? { start: range.startIndex, end: range.endIndex } : null,
-      height,
-    );
-  }, [sectionKey, reportRange, visible, range?.startIndex, range?.endIndex, height]);
+  const version = useMarkVersion(props);
+  useProjection(
+    () =>
+      rows.map((item, index) => {
+        const measured = virtual.measurementsCache[index];
+        return {
+          top: measured?.start ?? (margin ?? 0) + index * estimate,
+          height: measured?.size ?? estimate,
+          mark: markOf(list, item, row, projection),
+        };
+      }),
+    version,
+  );
   useLayoutEffect(() => landRequest(list, landed));
   const requestedKey = list.collection.cursor;
   const cursorIndex = rows.findIndex((item) => item.key === requestedKey);
