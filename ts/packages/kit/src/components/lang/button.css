@@ -112,6 +112,11 @@
 
 /* One gap and one line; labels yield before glyphs. */
 .dl-button-group {
+  container: button-group / inline-size;
+  /* Containment needs an intrinsic contribution in a parent that hugs its controls. */
+  contain-intrinsic-inline-size: 12rem;
+  width: 100%;
+  flex: 1 1 auto;
   display: flex;
   align-items: center;
   min-width: 0;
@@ -130,6 +135,8 @@
   flex: 0 1 auto;
   min-width: var(--control-h);
 }
-.dl-button-group[data-icon-labels] .dl-button:has(svg) .dl-button-label {
-  display: none;
+@container button-group (width < 12rem) {
+  .dl-button-group .dl-button:has(svg) .dl-button-label {
+    display: none;
+  }
 }
