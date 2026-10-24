@@ -3,6 +3,7 @@
 Rebuilt 2026-10-21 as current truth after the close of the ducts walk; git holds the timeline (the 2026-10-04 to 10-21 lines it squashes are in the pre-rebuild file). The `/ducts` route: pick a Revit system, heal the model, point at the airflow, price ducts and fittings, read total effective length in feet and ESP in in-wg, review pending changes, write. Evidence from the real client model (NDA, named **Project A** everywhere in this repo) stays gitignored under `.artifacts/runs/` and `.artifacts/pages/`; the two runs behind this rebuild are `mine-20261020-ductstory/` (the mined story, first principles, muse) and `close-ducts-v1/` (census, critic, spikes, decode, scratchpad). Why Pe computes instead of Revit: `WHY-NOT-REVIT.md`. The engineer-facing explanation is the route's tutorial (`ts/apps/web/src/ducts/docs.tsx`).
 
 ## Decided
+- 2026-10-23, kaitpw: a claim is `{ title, text, ids, state, verdict? }`. `title` is a short noun phrase that names what the claim asserts. `text` is the one sentence that states it. Pea writes both. The surface shows the title and puts the sentence one hover away. Recorded as D18 in `docs/features/design-system/LEDGER.md`.
 
 - 2026-10-23, kaitpw requires slots to remain pickers everywhere, including airflow SlotPicker in Set rows. The production pass preserves this explicit exception to a literal no-configuration-on-the-working-surface reading of P3.
 

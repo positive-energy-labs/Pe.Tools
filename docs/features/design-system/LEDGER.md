@@ -7,6 +7,7 @@ The one-system design cluster: the design LANGUAGE (raw values in `apps/web/src/
 **This ledger owns every cross-route design-language and primitive gap.** Route ledgers name their own applications and evidence; they never restate a ruling or a gap that lives here. A rule lives in exactly one home: a type, a check, a swatch specimen, or `.agents/skills/lens.house/SKILL.md`. `docs/design/SURFACE-PHILOSOPHY.md` indexes those homes.
 
 ## Decided
+- 2026-10-23, D18, kaitpw: "a title and a sentence is prob the right schema". A Pea claim carries a short title and one sentence. The title shows on the working surface. The sentence shows one hover or one press away. This keeps the zero-sentence rule on the working surface, and claims are not an exception to it. Owner: `ductClaimSchema` in `ts/packages/agent-contracts/src/ducts.ts`.
 - 2026-10-23, L1/P1: Chat headers use `Pane` title tabs and grouped actions in desktop and dialog; New thread carries the visible word `new`, and scope stays in the kit list search row.
 - 2026-10-23: List search stays visible by default; kit measures its height so section heads and keyboard arrivals clear it. Chat palette, ducts systems and inbox inherit the same search row.
 - 2026-10-23, N1/N6: `PaneSplit` previews pointer resizing through `--pane-size` and commits size/collapse at release; `PictureStage` isolates unchanged picture inputs from sibling updates. Profiler regressions cover 20 drag steps and sibling composer send; browser camera/focus proof remains owed to the wave-8 integration pass.
@@ -842,7 +843,7 @@ These rows are byte-for-byte text from `34bd5e17`. The searchable comment preser
 
 - 2026-10-23, kit-raise run (waves 2–8, branch `t3/kit-raise`, run folder `.artifacts/runs/kit-raise-20261023`):
   - Refresh marks pending 601 ms late (proof/checklist7.md D11): `ts/apps/web/src/readings.ts:607` `acquire(refresh)` starts acquisition without a synchronous pending mark; the kit chip and readout slot are ready and wait on that line. Owner: readings.
-  - Claim titles are full sentences on the working surface (D18): the doctrine's zero-sentence rule needs a ruling on whether claims are the one legitimate sentence surface outside Help; no code change until ruled.
+  - Claim title and sentence (D18, ruled 2026-10-23): the schema change is in flight in wave 9 (`claims` slice). Remove this line when it merges.
   - Purge debt: work +335, camera +284, overlay +278, teach +202, capture +136, tips-fix +422, tutorial +110, floater-geometry +113 net lines; the fold slice recovered ~5. One purge pass over kit pane/button/tooltip/teach owners is owed.
   - Capture rules (Fine retry by bounding-box coverage, nearest-first context, completeness advisory) are compile and synthetic-test proven only; the real-model read (SA 71 flex tubes, context omitted count) waits on the next `pe-revit session hr`.
   - Scene look (context ground, fog steepness, x-ray reserved for the lit subject) is proven for state, not for taste: one real-model eye pass by kaitpw.
