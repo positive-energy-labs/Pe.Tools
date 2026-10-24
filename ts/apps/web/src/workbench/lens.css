@@ -57,7 +57,7 @@
   pointer-events: none;
   z-index: 7;
 }
-/* ---- The rail: one block per turn, log-scaled, centred in the lane ---- */
+/* ---- The rail: one block per turn, sized by its turn (scale.tsx), centred in the lane ---- */
 /* Centred in the lane, like t3's: the stack grows both ways from the middle of the pane. */
 [data-annotation="dial"] {
   position: absolute;
@@ -153,19 +153,6 @@
 }
 [data-annotation="dial"]:hover [data-annotation="dial-tick"] {
   background: var(--pe-ink-mute);
-}
-/* TEMPORARY (protoui wave 10): the variant pill, deliberately alien so it reads as not-the-design. */
-[data-lens-variant] {
-  position: fixed;
-  bottom: 6px;
-  left: 50%;
-  translate: -50% 0;
-  z-index: 99;
-  padding: 1px 8px;
-  font: 11px var(--font-mono);
-  background: #ffe600;
-  color: #000;
-  pointer-events: none;
 }
 /* A scrub in progress: the rail takes the pointer (captured) and shows the grip. */
 [data-annotation="dial"][data-scrub] {
