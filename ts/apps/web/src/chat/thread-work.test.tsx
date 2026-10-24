@@ -1,7 +1,8 @@
 // @vitest-environment jsdom
-import { cleanup, fireEvent, render, screen } from "@testing-library/react";
+import { act, cleanup, fireEvent, render, screen } from "@testing-library/react";
 import { afterEach, beforeEach, expect, test, vi } from "vite-plus/test";
-import { threadWorkSnapshotSchema } from "@pe/agent-contracts";
+import { readingKey, threadWorkSnapshotSchema } from "@pe/agent-contracts";
+import { peReadings } from "#/readings";
 import { emptyChatState } from "@pe/agent-contracts/chat-state";
 import { CHAT_SEED_THREAD_WORK } from "./seeds";
 import { demoThreads } from "./thread-navigation";
@@ -16,7 +17,8 @@ vi.mock("./thread-work", async (original) => {
     resumeWork: vi.fn(actual.resumeWork),
   };
 });
-vi.mock("#/host/pe-client", () => ({ peClient: {} }));
+const call = vi.hoisted(() => vi.fn());
+vi.mock("#/host/pe-client", () => ({ peClient: { call } }));
 vi.mock("#/navigation/surface-host", () => ({ useSurfaceHost: () => ({ surface: "web" }) }));
 
 beforeEach(() => {
@@ -33,6 +35,7 @@ beforeEach(() => {
   vi.spyOn(HTMLElement.prototype, "offsetHeight", "get").mockReturnValue(2000);
   HTMLElement.prototype.scrollTo ??= () => {};
   vi.stubGlobal("localStorage", { getItem: () => "open", setItem: vi.fn() });
+  call.mockReset();
 });
 afterEach(() => {
   cleanup();
@@ -128,26 +131,98 @@ test("the sidebar reads one batch however many rows it draws", () => {
   expect(reads.mock.calls.length).toBe(few);
 });
 
-test("a closed Work opens the durable url its resume answers, and only for a closed document", async () => {
-  vi.mocked(work.resumeWork).mockResolvedValueOnce({
-    url: "/ducts?target=C%3A%2FLevel%201.rvt",
-    reason: null,
-  });
-  const { onWork } = mount();
+const pressClosed = () =>
   fireEvent.click(
     row("Level 1.rvt").querySelector<HTMLElement>('button[aria-label="Open duct resize"]')!,
   );
+const hintOf = async (text: string) => {
+  fireEvent.focus(row("Level 1.rvt"));
+  return screen.findAllByText(new RegExp(text), undefined, { timeout: 2000 });
+};
+
+test("a closed Work opens the durable url work.resume answers, and only for a closed document", async () => {
+  call.mockResolvedValueOnce({
+    id: "w-4",
+    key: {},
+    url: "/ducts?target=C%3A%2FL1.rvt",
+    reason: null,
+  });
+  const { onWork } = mount();
+  pressClosed();
   await vi.waitFor(() =>
-    expect(onWork).toHaveBeenCalledWith(
-      "fixture-ended",
-      "ducts",
-      "/ducts?target=C%3A%2FLevel%201.rvt",
-    ),
+    expect(onWork).toHaveBeenCalledWith("fixture-ended", "ducts", "/ducts?target=C%3A%2FL1.rvt"),
   );
-  expect(work.resumeWork).toHaveBeenCalledWith("w-4");
-  vi.mocked(work.resumeWork).mockClear();
+  expect(call).toHaveBeenCalledWith("work.resume", { query: { id: "w-4" } });
+  call.mockClear();
   fireEvent.click(
     row("Operations Demo.rvt").querySelector<HTMLElement>('button[aria-label="Open duct resize"]')!,
   );
-  expect(work.resumeWork).not.toHaveBeenCalled();
+  expect(call).not.toHaveBeenCalled();
+});
+
+test("a null url opens the route for retained state and says the reason in the row hint", async () => {
+  call.mockResolvedValueOnce({ id: "w-4", key: {}, url: null, reason: "Saved Work is unreadable" });
+  const { onWork } = mount();
+  pressClosed();
+  await vi.waitFor(() => expect(onWork).toHaveBeenCalledWith("fixture-ended", "ducts", undefined));
+  expect(await hintOf("Saved Work is unreadable")).not.toHaveLength(0);
+});
+
+test("a 404 for an unknown Work is the reason; the row stays pressable", async () => {
+  call.mockRejectedValue(
+    Object.assign(Error("Route work.resume failed (404)"), {
+      status: 404,
+      problem: { error: "Saved Work was not found; nothing was changed" },
+    }),
+  );
+  const { onWork } = mount();
+  pressClosed();
+  await vi.waitFor(() => expect(onWork).toHaveBeenCalledWith("fixture-ended", "ducts", undefined));
+  expect(await hintOf("Saved Work was not found")).not.toHaveLength(0);
+  pressClosed();
+  await vi.waitFor(() => expect(onWork).toHaveBeenCalledTimes(2));
+});
+
+test("outside demo the sidebar subscribes to one thread-work Reading and draws only its payload", async () => {
+  window.history.replaceState({}, "", "/pea");
+  const accepts: ((frame: never) => void)[] = [];
+  const subscribe = vi.spyOn(peReadings, "subscribe").mockImplementation((request, accept) => {
+    if (request.kind === "thread-work") accepts.push(accept as never);
+    return () => {};
+  });
+  mount();
+  const text = () => screen.getByRole("navigation", { name: "Threads" }).textContent ?? "";
+  // No snapshot yet: conversation titles, and never the fixture.
+  expect(text()).toContain("Draft the BIM handoff notes");
+  for (const fixture of ["Operations Demo.rvt", "Level 1.rvt", "unfinished", "Work partly read"])
+    expect(text()).not.toContain(fixture);
+  const reads = () =>
+    subscribe.mock.calls.filter(([request]) => request.kind === "thread-work").length;
+  expect(reads()).toBe(1);
+  act(() =>
+    accepts.forEach((accept) =>
+      accept({
+        kind: "snapshot",
+        key: readingKey({ kind: "thread-work" }),
+        value: {
+          observedAt: "2026-10-24T12:00:00.000Z",
+          threads: [
+            {
+              threadId: "fixture-local",
+              documents: [{ id: "d", name: "Live Plant.rvt", availability: "open" }],
+              works: [
+                { id: "w", documentId: "d", route: "ducts", intent: "live intent", unfinished: 7 },
+              ],
+            },
+          ],
+          observations: [],
+          truncated: false,
+        },
+      } as never),
+    ),
+  );
+  expect(row("Live Plant.rvt").textContent).toContain("7 unfinished");
+  expect(row("Live Plant.rvt").textContent).toContain("live intent");
+  expect(text()).not.toContain("Operations Demo.rvt");
+  expect(reads()).toBe(1);
 });
