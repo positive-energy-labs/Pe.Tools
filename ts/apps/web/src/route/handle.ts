@@ -88,9 +88,11 @@ export interface RouteHandle<W, R extends string, P, A extends string> {
    * new openId in that session, offered first and never taken for the person (F-X-1).
    */
   readonly bindingLost: BindingLost | null;
-  /** The Page and its setter; `{ history: "replace" }` marks a gesture's move (`PageMove`). */
+  /** The existing owner registry, also used by its derived Page consumers. */
   readonly registry: AtomRegistry.AtomRegistry;
+  /** Canonical Page snapshot; attention derives selection without copying writable state. */
   readonly pageState: Atom.Atom<PageSnapshot<P>>;
+  /** The Page and its setter; `{ history: "replace" }` marks a gesture's move (`PageMove`). */
   readonly page: readonly [P, (next: Partial<P>, move?: PageMove<P>) => void];
   readonly actions: Readonly<Record<A, ActionHandle>>;
   readonly busy: { readonly key: A; readonly seconds: number } | null;

@@ -97,6 +97,11 @@ export function useIssueHover() {
 }
 export function useHoveredIssue() {
   const doc = useContext(AttentionDocument) ?? "";
-  const ref = useAtomValue(hovered);
-  return ref?.doc === doc && ref.key.startsWith("issue:") ? ref.key.slice(6) : null;
+  return useAtomValue(hoveredIssue(doc));
 }
+const hoveredIssue = Atom.family((doc: string) =>
+  Atom.make((get) => {
+    const ref = get(hovered);
+    return ref?.doc === doc && ref.key.startsWith("issue:") ? ref.key.slice(6) : null;
+  }).pipe(Atom.withLabel(`attention/${doc}/hoveredIssue`)),
+);

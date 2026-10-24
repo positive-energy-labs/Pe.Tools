@@ -23,7 +23,7 @@ import { Row } from "@pe/kit/lang/row";
 import { makeAtomRegistry, createRouteOwner } from "#/route/route-owner";
 import { createViewOwner } from "#/route/view-owner";
 import { inspectAtomRegistry } from "#/state/atom-inspect";
-import { AttentionScope, AttentionRoot, useElementAttention } from "#/attention";
+import { AttentionScope, AttentionRoot, useElementAttention, useHoveredIssue } from "#/attention";
 import { Annotations } from "#/ducts/annotations";
 import { DEMO_ROOMS, DEMO_PLAN, DEMO_VIEW } from "#/rooms/demo";
 import { manifest } from "#/rooms/manifest";
@@ -90,7 +90,13 @@ it("measures 30 subject transitions and repeated pointer motion over 100 actual 
   const selected = Atom.make<ReadonlySet<SubjectKey>>(new Set<SubjectKey>());
   let rows = 0,
     picture = 0,
-    screen = 0;
+    screen = 0,
+    inbox = 0;
+  function Inbox() {
+    useHoveredIssue();
+    inbox++;
+    return null;
+  }
   function Picture() {
     useElementAttention();
     picture++;
@@ -107,6 +113,7 @@ it("measures 30 subject transitions and repeated pointer motion over 100 actual 
             </Profiler>
           ))}
           <Picture />
+          <Inbox />
         </SubjectTextContext>
       </AttentionScope>
     );
@@ -116,7 +123,7 @@ it("measures 30 subject transitions and repeated pointer motion over 100 actual 
       <Screen />
     </RegistryContext>,
   );
-  rows = picture = screen = 0;
+  rows = picture = screen = inbox = 0;
   for (let i = 0; i < 30; i++) {
     const row = view.getByText(`subject ${i}`).closest(".dl-row")!;
     fireEvent.pointerOver(row);
@@ -124,6 +131,7 @@ it("measures 30 subject transitions and repeated pointer motion over 100 actual 
   }
   const transitions = { transitions: 30, rows, picture, screen };
   expect(transitions).toEqual({ transitions: 30, rows: 0, picture: 30, screen: 0 });
+  expect(inbox).toBe(0);
   rows = picture = screen = 0;
   const last = view.getByText("subject 29").closest(".dl-row")!;
   for (let i = 0; i < 30; i++) {
