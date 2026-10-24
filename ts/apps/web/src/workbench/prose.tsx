@@ -6,15 +6,17 @@
  * becomes `Code`: frame, language, line count, copy, 64 KB gate (ledger, 2026-09-15). That is
  * why `prose-pre:*` is gone from the class list while inline `code` keeps its hairline box.
  * `react-markdown` hands the `pre` override the real `code` element, `language-*` class and all.
- * No rehype plugin: the head band is a React component with state (copy flips to "copied",
- * "show all" unlatches the gate).
+ * The fence takes no rehype plugin: its head band is a React component with state (copy flips to
+ * "copied", "show all" unlatches the gate). The one plugin splits a turn's linked element ids out
+ * of text (never code or links) so each renders as a Subject token.
  */
 import ReactMarkdown, { type Components, type ExtraProps } from "react-markdown";
 import remarkGfm from "remark-gfm";
-import { createContext, isValidElement, memo, useContext, type ReactNode } from "react";
+import { createContext, isValidElement, memo, useContext, useMemo, type ReactNode } from "react";
 
 import { Code } from "@pe/kit/lang/code";
 import { cn } from "@pe/kit/lib/utils";
+import { subjectParts, TurnSubjectText, type TurnSubjects } from "./turn-names";
 
 const PROSE_CLASS = [
   "prose min-w-0 max-w-none text-ink [overflow-wrap:anywhere]",
@@ -82,6 +84,45 @@ const MARKDOWN_COMPONENTS: Components = {
   ),
 };
 
+type Hast = {
+  type: string;
+  tagName?: string;
+  value?: string;
+  children?: Hast[];
+  properties?: object;
+};
+/** Text nodes outside code and links: each linked id becomes a `pe-subject` element. */
+const rehypeSubjects = (subjects: TurnSubjects) => () => (tree: Hast) => {
+  const walk = (node: Hast) => {
+    if (!node.children || ["code", "pre", "a"].includes(node.tagName ?? "")) return;
+    node.children = node.children.flatMap((child): Hast[] => {
+      if (child.type !== "text") return (walk(child), [child]);
+      const parts = subjectParts(child.value ?? "", subjects);
+      if (parts.every((part) => typeof part === "string")) return [child];
+      return parts.map((part) =>
+        typeof part === "string"
+          ? { type: "text", value: part }
+          : {
+              type: "element",
+              tagName: "pe-subject",
+              properties: { dataId: String(part.id), dataConnector: part.connector },
+              children: [],
+            },
+      );
+    });
+  };
+  walk(tree);
+};
+const SubjectsOf = createContext<TurnSubjects | undefined>(undefined);
+function PeSubject(props: { "data-id"?: string; "data-connector"?: string }) {
+  const subject = useContext(SubjectsOf)?.get(Number(props["data-id"]));
+  const connector = props["data-connector"];
+  return subject ? (
+    <TurnSubjectText subject={subject} connector={connector ? Number(connector) : undefined} />
+  ) : null;
+}
+const SUBJECT_COMPONENTS = { ...MARKDOWN_COMPONENTS, "pe-subject": PeSubject } as Components;
+
 // GFM, or pea's tables arrive as a paragraph of pipes. It also buys strikethrough, task lists,
 // and bare autolinks.
 const REMARK_PLUGINS = [remarkGfm];
@@ -89,16 +130,27 @@ const REMARK_PLUGINS = [remarkGfm];
 export const Markdown = memo(function Markdown({
   text,
   className,
+  subjects,
 }: {
   text: string;
   className?: string;
+  /** A settled chat turn's linked element ids; absent or empty, prose stays plain. */
+  subjects?: TurnSubjects;
 }) {
+  const linked = subjects?.size ? subjects : undefined;
+  const rehype = useMemo(() => (linked ? [rehypeSubjects(linked)] : []), [linked]);
   return (
     <div className={cn(PROSE_CLASS, className)}>
       <MarkdownSource.Provider value={text}>
-        <ReactMarkdown remarkPlugins={REMARK_PLUGINS} components={MARKDOWN_COMPONENTS}>
-          {text}
-        </ReactMarkdown>
+        <SubjectsOf value={linked}>
+          <ReactMarkdown
+            remarkPlugins={REMARK_PLUGINS}
+            rehypePlugins={rehype}
+            components={linked ? SUBJECT_COMPONENTS : MARKDOWN_COMPONENTS}
+          >
+            {text}
+          </ReactMarkdown>
+        </SubjectsOf>
       </MarkdownSource.Provider>
     </div>
   );
