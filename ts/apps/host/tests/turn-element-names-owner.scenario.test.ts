@@ -14,6 +14,8 @@ import { withInvocationContext } from "@pe/runtime/context";
 import { createHarnessThreads } from "../src/harness/threads.ts";
 import { createProviders } from "../src/harness/providers.ts";
 import { HostLog } from "../src/host-log.ts";
+import { createPeRoutes } from "../src/pe-routes.ts";
+import { fileRouteDocumentStore } from "../src/route-document-store.ts";
 import { human } from "./callers.ts";
 import type { ObserveDocument } from "../src/thread-work-context.ts";
 import type { TurnElementNamesNativeRead } from "../src/turn-element-names.ts";
@@ -164,6 +166,25 @@ test("HTTP prompt pins exact refs; concurrent reads persist once and restart fre
     "unresolved",
   ]);
   expect(first.entries[1]).toMatchObject({ uniqueId: "unique-202", name: "Name 202" });
+  const app = createPeRoutes({
+    registrations: [],
+    store: fileRouteDocumentStore(join(home, "work")),
+    heads: h.threads.heads,
+    turnElementNames: (input) => h.threads.readTurnElementNames(input, nativeRead),
+  });
+  const postNames = (input: unknown) =>
+    app.fetch(
+      new Request("http://host/pe/turn-element-names", {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify(input),
+      }),
+    );
+  const beforePost = calls.length;
+  expect(await (await postNames(request(id, turnId, [202]))).json()).toEqual(first);
+  expect(calls.length).toBe(beforePost);
+  expect((await postNames({ ...request(id, turnId, [202]), targets: [a] })).status).toBe(400);
+  expect((await postNames(request(id, randomUUID(), [202]))).status).toBe(409);
   expect(JSON.stringify(h.threads.heads.read(id))).toBe(head);
   const events = (await h.read(id)).events;
   expect(events.filter((event) => event.kind === "turn_element_names")).toHaveLength(1);

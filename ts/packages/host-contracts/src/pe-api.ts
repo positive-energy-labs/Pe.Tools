@@ -153,6 +153,10 @@ export type PeApiSchemas = Record<
   | "putTargetResultSchema"
   | "capabilityCatalogSchema"
   | "navigationSnapshotSchema"
+  | "threadWorkSnapshotSchema"
+  | "workResumeSchema"
+  | "turnElementNamesRequestSchema"
+  | "turnElementNamesObservationSchema"
   | "routeStatePatchSchema"
   | "ductsAnalysisRequestSchema"
   | "ductsAnalysisResponseSchema"
@@ -612,6 +616,33 @@ export function peRouteTable<S extends PeApiSchemas>(schemas: S) {
       "/pe/navigation",
       none,
       navigationSnapshotSchema,
+      "read",
+      "pe",
+      "read",
+    ),
+    "thread-work.get": route(
+      "GET",
+      "/pe/thread-work",
+      none,
+      schemas.threadWorkSnapshotSchema as S["threadWorkSnapshotSchema"],
+      "read",
+      "pe",
+      "read",
+    ),
+    "work.resume": route(
+      "GET",
+      "/pe/work-resume",
+      none,
+      schemas.workResumeSchema as S["workResumeSchema"],
+      "read",
+      "pe",
+      "read",
+    ),
+    "turn.element-names": route(
+      "POST",
+      "/pe/turn-element-names",
+      schemas.turnElementNamesRequestSchema as S["turnElementNamesRequestSchema"],
+      schemas.turnElementNamesObservationSchema as S["turnElementNamesObservationSchema"],
       "read",
       "pe",
       "read",

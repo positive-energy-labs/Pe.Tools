@@ -1,8 +1,7 @@
 import type { RevitDetailElements } from "@pe/host-contracts/generated";
 import { z } from "zod";
-import type { DocumentRef } from "@pe/agent-contracts";
-// Root exports this contract when wiring the Reading and prompt-event owners.
 import {
+  type DocumentRef,
   TURN_ELEMENT_NAMES_LIMIT,
   TURN_ELEMENT_NAME_MAX_LENGTH,
   TURN_ELEMENT_UNIQUE_ID_MAX_LENGTH,
@@ -13,7 +12,7 @@ import {
   type TurnElementNamesObservation,
   type TurnElementNamesRequest,
   type TurnElementNamesSnapshot,
-} from "../../../packages/agent-contracts/src/turn-element-names.ts";
+} from "@pe/agent-contracts";
 
 export const TURN_ELEMENT_NAMES_OPERATION = "revit.detail.elements";
 
