@@ -86,20 +86,27 @@ export function PlaneMinimap<V extends PlaneViewport | ScrollViewport>({
     const rect = event.currentTarget.getBoundingClientRect();
     return centredOn(
       viewport,
-      (event.clientX - rect.left) / k,
-      (event.clientY - rect.top) / k,
+      ((event.clientX - rect.left) / (rect.width || w)) * extent.width,
+      ((event.clientY - rect.top) / (rect.height || h)) * extent.height,
       viewportSize,
       extent,
     );
   };
   return (
-    <div className="relative" style={{ width: w, height: h }} data-minimap="plane">
+    <div
+      className="relative"
+      style={{
+        width: `var(--floater-content-w, ${w}px)`,
+        height: `var(--floater-content-h, ${h}px)`,
+      }}
+      data-minimap="plane"
+    >
       <canvas
         ref={canvas}
         width={w}
         height={h}
         aria-label="field thumbnail; click to move the view"
-        className="block cursor-crosshair touch-none"
+        className="block size-full cursor-crosshair touch-none"
         onPointerDown={(event) => {
           dragged.current = false;
           event.currentTarget.setPointerCapture?.(event.pointerId);
@@ -116,10 +123,12 @@ export function PlaneMinimap<V extends PlaneViewport | ScrollViewport>({
       />
       <MinimapViewport
         style={{
-          left: box.x * k,
-          top: box.y * k,
-          width: Math.max(4, box.width * k),
-          height: Math.max(4, box.height * k),
+          left: `${(box.x / extent.width) * 100}%`,
+          top: `${(box.y / extent.height) * 100}%`,
+          width: `${(box.width / extent.width) * 100}%`,
+          height: `${(box.height / extent.height) * 100}%`,
+          minWidth: 4,
+          minHeight: 4,
         }}
       />
     </div>

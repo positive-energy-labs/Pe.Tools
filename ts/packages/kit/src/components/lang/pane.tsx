@@ -85,7 +85,9 @@ export function PaneOverlay({
 }) {
   const field = useContext(PaneOverlayContext);
   const overlay = (
-    <Floater spec={{ key: label, label, place, open: true, render: () => children }} />
+    <Floater
+      spec={{ key: label, kind: "legend", label, place, open: true, render: () => children }}
+    />
   );
   return field === undefined ? overlay : field ? createPortal(overlay, field) : null;
 }

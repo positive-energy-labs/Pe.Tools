@@ -260,14 +260,6 @@ export function PaneResizeHandle({
           className={`absolute bg-line-2 ${axis === "horizontal" ? "h-(--control-h) w-px" : "h-px w-(--control-h)"}`}
           style={{ top: "50%", left: "50%", translate: "-50% -50%" }}
         />
-        {(["tr", "bl"] as const).map((corner) => (
-          <span
-            key={corner}
-            data-slot="pane-resize-grip"
-            data-corner={corner}
-            className={`absolute size-(--gutter) border-line-2 ${corner === "tr" ? "right-0 top-0 border-r border-t" : "bottom-0 left-0 border-b border-l"}`}
-          />
-        ))}
       </div>
     </TooltipHint>
   );

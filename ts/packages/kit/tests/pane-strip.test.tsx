@@ -164,6 +164,7 @@ test("a chord on a mode, floater or layer registers on the pane's node with its 
       floaters={[
         {
           key: "map",
+          kind: "picture",
           label: "minimap",
           chord: "M",
           says: "Show the whole field.",
@@ -205,6 +206,7 @@ test("an open floater draws over the body and Esc inside it closes it", () => {
       floaters={[
         {
           key: "map",
+          kind: "picture",
           label: "minimap",
           place: "tr",
           open: true,
@@ -249,6 +251,7 @@ test("an overflowing trail folds layers and floaters into popovers, shortens mod
       floaters={[
         {
           key: "map",
+          kind: "picture",
           label: "minimap",
           chord: "M",
           place: "br",

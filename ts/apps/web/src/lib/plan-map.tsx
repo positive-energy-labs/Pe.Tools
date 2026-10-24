@@ -60,6 +60,7 @@ export function usePlanMap(
   );
   return {
     key: "map",
+    kind: "picture" as const,
     label: "map",
     chord: "M",
     place: "br",
