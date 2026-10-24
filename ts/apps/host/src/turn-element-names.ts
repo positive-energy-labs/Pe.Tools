@@ -14,7 +14,7 @@ import {
   type TurnElementNamesSnapshot,
 } from "@pe/agent-contracts";
 
-export const TURN_ELEMENT_NAMES_OPERATION = "revit.detail.elements";
+const TURN_ELEMENT_NAMES_OPERATION = "revit.detail.elements";
 
 /** Dispatch only this declared read to the exact ref. Fail closed on closure or replacement. */
 export type TurnElementNamesNativeRead = (

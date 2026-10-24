@@ -81,14 +81,17 @@ export async function readThreadWork(
       works: (census?.works ?? []).flatMap((work) => {
         if (work.state !== "ready" || work.unfinished === 0 || !context) return [];
         const scope = work.scope;
-        const matches = context.documents.filter((doc) =>
-          scope.binding === "address"
-            ? doc.address !== null && sameAddress(doc.address, scope.target)
-            : scope.binding === "open"
-              ? doc.refs.some((ref) => sameDocumentRef(ref, scope.open))
-              : false,
+        const links = context.works.filter(({ key }) => workKey(key) === work.id);
+        const matches = context.documents.filter(
+          (doc) =>
+            links.some((link) => link.documentId === doc.id) ||
+            (scope.binding === "address"
+              ? doc.address !== null && sameAddress(doc.address, scope.target)
+              : scope.binding === "open"
+                ? doc.refs.some((ref) => sameDocumentRef(ref, scope.open))
+                : false),
         );
-        const explicit = context.works.some((key) => workKey(key) === work.id);
+        const explicit = links.length > 0;
         if (!matches.length && !explicit) return [];
         return [
           {
@@ -132,6 +135,51 @@ export async function resumeWork(
   if (!work) return null;
   const routes = (await sources?.routes?.()) ?? {};
   const path = routes[work.route] ?? documentRoutes[work.route];
+  if (work.scope.binding === "workspace" && work.route === "schedules") {
+    const addresses = (sources?.contexts?.() ?? []).flatMap(({ context }) =>
+      context
+        ? context.works
+            .filter(({ key }) => workKey(key) === id)
+            .flatMap(({ documentId }) =>
+              context.documents
+                .filter((doc) => doc.id === documentId && doc.address !== null)
+                .map((doc) => doc.address!),
+            )
+        : [],
+    );
+    const unique = addresses.filter(
+      (at, index) => addresses.findIndex((other) => sameAddress(other, at)) === index,
+    );
+    return {
+      id,
+      key: work.scope,
+      url:
+        unique.length === 1 && work.state === "ready"
+          ? routeAddress("schedules").link({ workspaceId: work.scope.work }, { target: unique[0]! })
+          : null,
+      reason:
+        unique.length === 1 && work.state === "ready"
+          ? null
+          : "This schedule Work has no unique remembered document binding. It was left unchanged.",
+    };
+  }
+  if (work.scope.binding === "host" && !routes[work.route])
+    return {
+      id,
+      key: work.scope,
+      url: null,
+      reason: "This tool requires a document; its host-only Work has no document binding.",
+    };
+  if (
+    work.scope.binding === "workspace" &&
+    !(routes[work.route] && work.scope.work === "calculator")
+  )
+    return {
+      id,
+      key: work.scope,
+      url: null,
+      reason: "This tool has no URL that resumes this named Work workspace.",
+    };
   if (work.state !== "ready" || !path)
     return {
       id,

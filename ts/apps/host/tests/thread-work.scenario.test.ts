@@ -1,6 +1,7 @@
 import { mkdtemp, mkdir, writeFile, readFile, readdir, rm } from "node:fs/promises";
 import { join } from "node:path";
 import { tmpdir } from "node:os";
+import { randomUUID } from "node:crypto";
 import { expect, test } from "vite-plus/test";
 import {
   address,
@@ -10,10 +11,12 @@ import {
   workResumeSchema,
   workKey,
   sameAddress,
+  routeAddress,
   type DocumentRef,
 } from "@pe/agent-contracts";
 import { createRouteRegistrations } from "@pe/mcps";
 import { withInvocationContext } from "@pe/runtime/context";
+import { peRoutes } from "@pe/agent-contracts/pe-api";
 import { createHarnessThreads, type HarnessThreadsOptions } from "../src/harness/threads.ts";
 import { createPeRoutes } from "../src/pe-routes.ts";
 import { HostLog } from "../src/host-log.ts";
@@ -225,6 +228,78 @@ test("HTTP and one Reading retain named unfinished Work after target removal, cl
     expect(threads.heads.read(id).targets).toEqual([]);
     expect(await fileBytes()).toEqual(saved);
     expect((await app.fetch(new Request("http://host/pe/work-resume?id=forged"))).status).toBe(404);
+    const schedule = bindWork("schedules", null, "office-schedule");
+    expect(
+      (
+        await app.workspace.apply(
+          schedule,
+          "schedules",
+          "human",
+          [{ path: ["cells", "1::2", "staged"], value: { value: "Reviewed schedule value" } }],
+          0,
+        )
+      ).ok,
+    ).toBe(true);
+    const tabId = randomUUID();
+    const tab = async (body: object) =>
+      withInvocationContext({ caller: human }, () =>
+        threads.fetch(
+          new Request(`http://host/pe/threads/${id}/tabs`, {
+            method: peRoutes["thread.tabs"].method,
+            headers: { "content-type": "application/json" },
+            body: JSON.stringify(body),
+          }),
+        ),
+      );
+    expect(
+      (
+        await tab({
+          op: "put",
+          id: tabId,
+          route: "schedules",
+          link: routeAddress("schedules").link({ workspaceId: "office-schedule" }, { target: at }),
+        })
+      ).status,
+    ).toBe(200);
+    expect((await tab({ op: "close", id: tabId })).status).toBe(200);
+    documents = [];
+    await threads.close();
+    threads = createHarnessThreads(options);
+    app = makeApp();
+    expect(
+      (await read()).threads[0]!.works.find((item) => item.id === workKey(schedule)),
+    ).toMatchObject({ documentId: doc.id, unfinished: 1 });
+    const scheduleResume = workResumeSchema.parse(
+      await (
+        await app.fetch(
+          new Request(`http://host/pe/work-resume?id=${encodeURIComponent(workKey(schedule))}`),
+        )
+      ).json(),
+    );
+    const scheduleUrl = new URL(scheduleResume.url!, "http://host");
+    expect(scheduleUrl.searchParams.get("workspaceId")).toBe("office-schedule");
+    expect(sameAddress(address(scheduleUrl.searchParams.get("target")!), at)).toBe(true);
+    const hostOnly = bindWork("ducts", null);
+    expect(
+      (
+        await app.workspace.apply(
+          hostOnly,
+          "ducts",
+          "human",
+          [{ path: ["flows", "99", "staged"], value: { value: { cfm: 99, source: "Unbound" } } }],
+          0,
+        )
+      ).ok,
+    ).toBe(true);
+    const unbound = workResumeSchema.parse(
+      await (
+        await app.fetch(
+          new Request(`http://host/pe/work-resume?id=${encodeURIComponent(workKey(hostOnly))}`),
+        )
+      ).json(),
+    );
+    expect(unbound.url).toBeNull();
+    expect(unbound.reason).toContain("no document binding");
   } finally {
     abort.abort();
     await threads.close();
