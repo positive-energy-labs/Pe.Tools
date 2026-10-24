@@ -699,8 +699,7 @@ export function ThreadsSidebar({
   const partial = partialWork(works.snapshot);
   const pressWork = async (thread: string, work: ThreadWork, item: ThreadWork["works"][number]) => {
     const closed =
-      work.documents.find((document) => document.id === item.documentId)?.availability ===
-      "closed";
+      work.documents.find((document) => document.id === item.documentId)?.availability === "closed";
     onWork?.(thread, item.route, closed ? (await resumeWork(item.id))?.link : undefined);
   };
   const compactRows = compactRowsOverride ?? host.surface === "tray";

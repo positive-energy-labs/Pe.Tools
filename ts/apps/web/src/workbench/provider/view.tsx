@@ -71,6 +71,7 @@ export function WorkbenchProvider({ children }: { children: ReactNode }) {
   const store = useRouteOwner(() =>
     createChatPageStore({
       registry: appAtomRegistry,
+      local: typeof location !== "undefined" && new URLSearchParams(location.search).has("demo"),
       search: {
         ...search,
         mode: "mode" in search && typeof search.mode === "string" ? search.mode : "threads",

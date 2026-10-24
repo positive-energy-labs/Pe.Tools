@@ -75,7 +75,11 @@ export function RouteDock({
           },
         }}
         start={
-          tabs.route || pea ? <ChatShell docked={Boolean(tabs.route)} target={tabs.target} /> : children
+          tabs.route || pea ? (
+            <ChatShell docked={Boolean(tabs.route)} target={tabs.target} />
+          ) : (
+            children
+          )
         }
         end={
           <Pane
@@ -83,7 +87,13 @@ export function RouteDock({
             title="tools"
             scroll="clip"
             flush
-            tabs={<RouteTabs tabs={tabs.tabs} active={active} onSelect={(tab) => void tabs.select(tab)} />}
+            tabs={
+              <RouteTabs
+                tabs={tabs.tabs}
+                active={active}
+                onSelect={(tab) => void tabs.select(tab)}
+              />
+            }
             actions={
               <RouteTabActions
                 tabs={tabs.tabs}

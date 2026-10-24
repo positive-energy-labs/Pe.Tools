@@ -74,7 +74,13 @@ test("rows lead with remembered documents and unfinished Work, never session or 
   // No document: the conversation title stands in.
   expect(row("Draft the BIM handoff notes")).toBeTruthy();
   const text = screen.getByRole("navigation", { name: "Threads" }).textContent ?? "";
-  for (const label of ["pe.app-2", "Closed session", "Closed document", "Document in", "Untargeted"])
+  for (const label of [
+    "pe.app-2",
+    "Closed session",
+    "Closed document",
+    "Document in",
+    "Untargeted",
+  ])
     expect(text).not.toContain(label);
 });
 

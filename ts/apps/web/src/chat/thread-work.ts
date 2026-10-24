@@ -46,7 +46,9 @@ export function workHint(work: ThreadWork, title: string): string {
   return [
     title,
     ...work.documents.map((document) =>
-      document.availability === "open" ? document.name : `${document.name} (${document.availability})`,
+      document.availability === "open"
+        ? document.name
+        : `${document.name} (${document.availability})`,
     ),
     ...work.works.map(
       (item) =>

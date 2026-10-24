@@ -39,6 +39,8 @@ type Setter<A> = A | ((previous: A) => A);
 export function createChatPageStore(deps: {
   registry: AtomRegistry.AtomRegistry;
   search: ChatSearch;
+  /** `?demo=`: tab writes stay in this browser and never reach a host thread. */
+  local?: boolean;
 }) {
   let tabs: {
     promote: (from: string, owner: string, current: () => boolean) => Promise<void>;
@@ -98,6 +100,7 @@ export function createChatPageStore(deps: {
   return {
     registry: deps.registry,
     search: deps.search,
+    local: deps.local ?? false,
     atoms: {
       sideOpen,
       planIntent,

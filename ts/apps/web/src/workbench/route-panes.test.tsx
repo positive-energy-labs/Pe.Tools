@@ -30,7 +30,10 @@ const threads = [{ id: "T", tabs: [ducts] }];
 vi.mock("./provider", () => ({ useWorkbench: () => ({ store, threads }) }));
 vi.mock("#/chat/chat-shell", () => ({ ChatShell: () => <div data-chat-probe="">pea</div> }));
 vi.mock("#/route/situation-ladder", () => ({ ChatPlanIntent: createContext(null) }));
-vi.mock("#/readings", () => ({ useReading: () => ({ state: "pending" }), previousOf: () => undefined }));
+vi.mock("#/readings", () => ({
+  useReading: () => ({ state: "pending" }),
+  previousOf: () => undefined,
+}));
 vi.mock("#/navigation/surface-host", () => ({ useSurfaceHost: () => ({ surface: "web" }) }));
 vi.mock("#/host/pe-client", () => ({
   peClient: { call: vi.fn(async () => ({ tabs: [ducts] })) },
@@ -39,7 +42,9 @@ vi.mock("#/host/pe-client", () => ({
 let mounts = 0;
 function DuctsProbe() {
   useState(() => ++mounts);
-  const system = useRouterState({ select: (state) => (state.location.search as { system?: string }).system });
+  const system = useRouterState({
+    select: (state) => (state.location.search as { system?: string }).system,
+  });
   return <output data-ducts-probe="">{system}</output>;
 }
 

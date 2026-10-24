@@ -351,6 +351,11 @@ export function demoThreads(body: HarnessThreadBody): HarnessThreadSummary[] {
       updatedAt: at(0),
       lifecycle: { ...base.lifecycle, pinned: true },
       activity: { ...base.activity, state: "waiting", pending: 1 },
+      // Two connected tools, each on its own demo seed, so the tools bar has tabs to press.
+      tabs: [
+        { id: "demo-tab-ducts", route: "ducts", link: "/ducts?demo=scene", at: at(1) },
+        { id: "demo-tab-families", route: "families", link: "/families?demo=apply", at: at(2) },
+      ],
     },
     {
       ...base,
