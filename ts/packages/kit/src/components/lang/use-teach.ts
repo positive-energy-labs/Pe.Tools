@@ -10,6 +10,7 @@ import {
   type RefObject,
 } from "react";
 import { readTeaching, registerTeaching, subscribeTeaching, type TeachDescriptor } from "./teach";
+import { registerTeachingMeasure, subscribeMeasuredTeaching, teachingBox } from "./teach-measure";
 
 export const TeachRegion = createContext<string | undefined>(undefined);
 export const TeachLive = createContext(true);
@@ -47,8 +48,8 @@ export function useTeach(
     const owner = region ?? anchor?.closest<HTMLElement>("[data-teach-id]")?.dataset.teachId;
     const pane = document.querySelector<HTMLElement>(`[data-teach-id="${owner}"]`);
     const nodes = [...new Set([anchor, pane])].filter((node) => node != null);
-    let previous = "";
-    let withdraw: (() => void) | undefined;
+    let previous: string | undefined;
+    let withdraw: (() => void) | undefined = registerTeaching({ ...fact, id, region: owner });
     const measure = () => {
       const next = { ...fact, id, region: owner };
       if (next.kind === "region" && pane) {
@@ -56,14 +57,11 @@ export function useTeach(
           pane.querySelector('[data-slot="pane-title"]')?.textContent?.trim() ||
           pane.querySelector("[data-list-view][aria-label]")?.getAttribute("aria-label") ||
           next.label;
-        const { left, top, width, height } = pane.getBoundingClientRect();
+        const { left, top, width, height } = teachingBox(pane);
         next.rect = { left, top, width, height };
       }
       const stamp = nodes.every(
-        (node) =>
-          node.isConnected &&
-          node.getBoundingClientRect().width > 0 &&
-          node.getBoundingClientRect().height > 0,
+        (node) => node.isConnected && teachingBox(node).width > 0 && teachingBox(node).height > 0,
       )
         ? JSON.stringify(next)
         : "";
@@ -72,24 +70,15 @@ export function useTeach(
       withdraw?.();
       withdraw = stamp ? registerTeaching(next) : undefined;
     };
-    measure();
-    const resize = typeof ResizeObserver === "undefined" ? null : new ResizeObserver(measure);
-    nodes.forEach((node) => resize?.observe(node));
-    const mutation = new MutationObserver(measure);
-    mutation.observe(document.body, {
-      subtree: true,
-      childList: true,
-      attributes: true,
-      attributeFilter: ["style", "hidden", "class"],
-      characterData: true,
-    });
+    const unmeasure = registerTeachingMeasure({ nodes, measure });
     return () => {
-      resize?.disconnect();
-      mutation.disconnect();
+      unmeasure();
       withdraw?.();
     };
   }, [id, region, live, value, host]);
   return id;
 }
 export const useTeaching = () =>
+  useSyncExternalStore(subscribeMeasuredTeaching, readTeaching, readTeaching);
+export const useTeachingFacts = () =>
   useSyncExternalStore(subscribeTeaching, readTeaching, readTeaching);

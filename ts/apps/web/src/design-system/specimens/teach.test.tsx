@@ -93,7 +93,7 @@ function Tutorial() {
   return <HelpWorld facts={useTeaching()} />;
 }
 
-test("ListView publishes real fields; the open tutorial follows modes and fields, and unmount withdraws all facts", () => {
+test("ListView publishes real fields; the open tutorial follows modes and fields, and unmount withdraws all facts", async () => {
   const page = (mode: string, extra: boolean) => (
     <StrictMode>
       <ListFixture mode={mode} extra={extra} />
@@ -102,6 +102,7 @@ test("ListView publishes real fields; the open tutorial follows modes and fields
     </StrictMode>
   );
   const view = render(page("parallel", false));
+  await screen.findByRole("heading", { name: "2 Untaught" });
   const tutorial = screen
     .getAllByRole("region", { name: "Systems" })
     .find((node) => !node.hasAttribute("data-slot"))!;
@@ -200,10 +201,10 @@ test("zero-box panes withdraw facts without rehoming them; untitled panes use th
       <Tutorial />
     </>,
   );
-  expect(screen.getByRole("heading", { name: "1 System tree" })).toBeTruthy();
+  expect(await screen.findByRole("heading", { name: "1 System tree" })).toBeTruthy();
 });
 
-test("hidden scopes withdraw keys, modes and regions; key refusal changes remain live", () => {
+test("hidden scopes withdraw keys, modes and regions; key refusal changes remain live", async () => {
   function Keys({ refused }: { refused: boolean }) {
     useScopeKeys([
       { hotkey: "O", label: "projection", refusal: refused ? "capturing" : null, callback: noop },
@@ -222,7 +223,7 @@ test("hidden scopes withdraw keys, modes and regions; key refusal changes remain
     </>
   );
   const view = render(page(false, false));
-  expect(screen.getByText("projection")).toBeTruthy();
+  expect(await screen.findByText("projection")).toBeTruthy();
   view.rerender(page(false, true));
   expect(screen.getByText(/refuses now: capturing/)).toBeTruthy();
   view.rerender(page(true, true));

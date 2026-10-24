@@ -28,6 +28,9 @@ const allow = (entries: Record<string, string>): Allow[] =>
 // Filenames use the wave-4 final homes: land.ts, revit-target.tsx and go-to.tsx.
 // prettier-ignore
 const RULES: Rule[] = [
+  { id: "teach-observer-owner", doctrine: "N6", pattern: /new\s+MutationObserver\b/g,
+    roots: [K + "components/lang/use-teach.ts"], allow: [],
+    cannotSee: "Observer aliases or imports, scheduling and reader liveness; the deterministic observer test owns those." },
   { id: "damage-mask-depth", doctrine: "I2", pattern: /new THREE\.MeshBasicMaterial\(\{(?![^}]*SURFACE_DEPTH)[^}]*\}\)/gs,
     roots: [W + "scene/damage.ts"], allow: [],
     cannotSee: "Aliased constructors or a weakened SURFACE_DEPTH value; material tests pin the offset, browser poses prove coverage." },
