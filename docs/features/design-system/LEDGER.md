@@ -689,6 +689,8 @@ Rebuilt 2026-10-22 against `a553a15a`; these are decisions and proof boundaries,
 - 2026-10-08, react-grab `freeze()` during feedback picking (halts the note popover); `.pick-mark` in `--pe-line-2` (vanishes); rasterizing `document.body` (drops `<html>` styles, 10px crop error; rasterize `document.documentElement`).
 
 ## Owed
+
+- 2026-10-24, prove or refute post-acquisition stream liveness in real Chrome. `PeReadings.open` has a one-shot 30-second acquisition deadline; a healthy quiet stream and an open connection that silently stops delivering data need separate evidence. The quiet route journey proves no reconnect storm, not detection of a silently stalled acquired stream. Keep this distinct from native freshness and write admission.
 - N6: Native production seam dragging still misses the 16.7ms p95 / 100ms style budgets after removing forced move layout. `stillness-r6` measured 33.4ms p95 and 201.4ms style over 20 moves plus the fixed 800ms tail, or 124.7ms style during pointer-down/up; residual owners remain unisolated.
 - Tutorial with Rulings expanded still exceeds the 100 ms paint / 200 ms CPU targets: 208 ms / 1,008 ms after deferred documentation. Re-measure the combined animation and teaching-observer fixes; the animation-only browser control reaches 104 ms / 233 ms. [Production evidence](C:/Users/kaitp/source/repos/Pe.Tools/.artifacts/runs/kit-raise-20261023/wave9/tutorial-lazy.md).
 
