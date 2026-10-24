@@ -390,7 +390,7 @@ export function ComposerPickers({
         : level,
   );
   return (
-    <section aria-label="Situation" className="contents" data-testid="composer-head">
+    <section aria-label="Pea situation" className="contents" data-testid="composer-head">
       <HeadLadder face="icon" />
       <ComposerOpenMode>
         {(header) => (

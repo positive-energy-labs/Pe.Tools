@@ -199,3 +199,32 @@ test.each([true, false])(
     expect(screen.getByRole("separator")).toBeTruthy();
   },
 );
+
+test("an unset other-side floor is the sized side's: too narrow for both stacks, never a sliver", () => {
+  // The entity split (route/entity.tsx): a 320px plan beside the table, in a 570px tool.
+  measure(570);
+  const { container } = render(
+    <PaneSplit
+      axis="horizontal"
+      start="table"
+      end="plan"
+      resize={{ target: "end", defaultSize: 520, minSize: 320 }}
+    />,
+  );
+  const split = container.firstElementChild as HTMLElement;
+  expect(split.dataset.axis).toBe("vertical");
+  // Wide enough for both floors: side by side, and the table keeps 320 of 900.
+  cleanup();
+  vi.restoreAllMocks();
+  measure(900);
+  const wide = render(
+    <PaneSplit
+      axis="horizontal"
+      start="table"
+      end="plan"
+      resize={{ target: "end", defaultSize: 800, minSize: 320 }}
+    />,
+  ).container.firstElementChild as HTMLElement;
+  expect(wide.dataset.axis).toBe("horizontal");
+  expect(parseFloat(getComputedStyle(wide).getPropertyValue("--pane-size"))).toBe(900 - 8 - 320);
+});
