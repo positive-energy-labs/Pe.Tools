@@ -11,6 +11,8 @@ restated here.
 
 ## Decided
 
+- 2026-10-24, kaitpw: a thread click opens the conversation; a Work click opens its tool. Pea stays left. Connected tools stay right and enter collapsed as one bar of labelled tabs. Explicit expansion restores the tool's Page. Thread summaries show unfinished Work and remembered document names. Closed sessions do not erase that context. Chats without Work retain document choice. Work never grants native write permission, and old Work requires current model validation before apply.
+
 - 2026-10-23, kaitpw: authored and staged Work must accumulate visibly, because users must not lose effort when they change a document target or access. Revocation stops an execution attempt before native dispatch; it does not discard Work or receipts. A native write already dispatched may finish. Keep the existing grant-backed cancellation on target removal, including under Full; do not add a second cancellation policy or a global Work manager in this pass.
 
 - 2026-10-22, kaitpw: reads are unconditional, one access switch (the harness `providers.access().guarded`) governs both harness tools and Revit writes, and a thread targets a set of documents with no clock. The targeted document names are the visible consent. Recorded in [ADR 0021](../../adr/0021-one-access-switch-and-document-targets.md); it supersedes the grant clock and chip.
