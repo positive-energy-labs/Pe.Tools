@@ -28,6 +28,9 @@ const allow = (entries: Record<string, string>): Allow[] =>
 // Filenames use the wave-4 final homes: land.ts, revit-target.tsx and go-to.tsx.
 // prettier-ignore
 const RULES: Rule[] = [
+  { id: "message-bubble-themed-ground", doctrine: "L4", pattern: /data-surface="document"/g,
+    roots: [W + "components/lang/conversation.tsx"], allow: [],
+    cannotSee: "Computed colours or overrides elsewhere; mounted MessageBubble tests pin its plane and the browser checks both themes." },
   { id: "list-heads-top-only", doctrine: "N3", pattern: /\bbottom:\s*/g,
     roots: [K + "components/lang/list-view.tsx"], allow: [], cannotSee: "Computed edge aliases or browser hit tests; SS4 requires the parent drive." },
 
@@ -176,6 +179,7 @@ const RULES: Rule[] = [
     ], cannotSee: "Computed classes or browser geometry." },
   { id: "surface-plane-inferred", doctrine: "L4", pattern: /data-surface=["'](?:recess|artifact)["']/g,
     roots: [W + "**/*.tsx"], allow: allow({
+      "components/lang/conversation.tsx": "MessageBubble owns the theme-aware user-message plane; document is light-only paper.",
       "revit/element-menu.tsx": "Native action portal has no pane ancestor from which to infer its plane.",
       "machine/notice.tsx": "Detached notification portal has no pane ancestor.",
       "machine/notice-preview.tsx": "Notification specimen renders the same detached plane.",

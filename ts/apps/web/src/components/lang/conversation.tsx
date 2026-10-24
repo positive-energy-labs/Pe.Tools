@@ -1,5 +1,4 @@
 import { TooltipHint } from "@pe/kit/lang/tooltip";
-/** Transcript and composer presentation; conversation.css owns the look. */
 import { type ComponentProps, type KeyboardEvent, type ReactNode } from "react";
 import { Textarea } from "@pe/kit/lang/input";
 import { ButtonOutcome } from "@pe/kit/lang/button";
@@ -7,9 +6,7 @@ import { ProviderMark } from "./provider-mark";
 import "@pe/kit/lang/lang.css";
 import "./conversation.css";
 
-/** Who spoke, then when, then which turn: the speaker in the reading face (Pea in its identity
- *  ink), the clock and the turn index in the machine face beside it, each a rank quieter. A user
- *  head sits over its bubble. */
+/** Speaker, time and turn index; the user's head sits over their bubble. */
 export function MessageHead({
   role,
   harness,
@@ -55,7 +52,7 @@ export function MessageHead({
 /** What you sent, on the artifact plane: the one enclosed block in the transcript is yours. */
 export function MessageBubble({ children }: { children: ReactNode }) {
   return (
-    <div className="dl-message-bubble" data-surface="document">
+    <div className="dl-message-bubble" data-surface="artifact">
       {children}
     </div>
   );
@@ -88,7 +85,6 @@ export function ToolStatus({
     </span>
   );
 }
-/** The composer's lane: the transcript's measure, then the box. */
 export function ComposerFrame({ children }: { children: ReactNode }) {
   return <div className="dl-composer-frame">{children}</div>;
 }
