@@ -1,3 +1,6 @@
+import * as Atom from "effect/unstable/reactivity/Atom";
+import { RegistryContext } from "@effect/atom-react";
+import { elementKey, type SubjectKey } from "@pe/kit/lang/attention";
 /**
  * /ducts: the Situation over one document's duct networks, and the one shell under it (E2): the
  * system tree over the loss Rules, the drawing, the inbox. The sentence names the document, the
@@ -487,7 +490,25 @@ export function DuctsRoute({ url = true }: { url?: boolean } = {}) {
     }),
     [previewAction, applyAction, healPreviewAction, healAction, fanPreviewAction, fanAction, busy],
   );
+  const attentionDoc =
+    documentKey ?? `fixture:ducts:${demoName ?? snapshot?.document.title ?? "none"}`;
+  const selection = useMemo(
+    () =>
+      Atom.make((get): ReadonlySet<SubjectKey> => {
+        const page = get(handle.pageState).page;
+        return new Set(
+          page.selected && /^\d+$/.test(page.selected)
+            ? [elementKey(page.selected)]
+            : page.issue
+              ? [`issue:${page.issue}` as SubjectKey]
+              : [],
+        );
+      }),
+    [handle.pageState],
+  );
   const shell: ProtoProps = {
+    attentionDoc,
+    selection,
     snapshot: held?.snapshot ?? snapshot,
     priced: held?.priced ?? priced,
     pricing,
@@ -516,64 +537,66 @@ export function DuctsRoute({ url = true }: { url?: boolean } = {}) {
   };
 
   return (
-    <Surface
-      head={
-        <RouteShell
-          manifest={manifest}
-          handle={handle}
-          situation={
-            <Situation
-              handle={handle}
-              work={{
-                counted,
-                draw: (_summary, line) => (
-                  <>
-                    {catalogs.findings.map((finding) => (
-                      <p key={finding} data-tone="caution">
-                        {finding}
-                      </p>
-                    ))}
-                    {line}
-                  </>
-                ),
-              }}
-              target={{
-                session: ladder.sessionWord,
-                document:
-                  demoName === "navigation"
-                    ? "navigation fixture"
-                    : SAVED
-                      ? "saved snapshot"
-                      : demo
-                        ? "scene fixture"
-                        : ladder.docWord,
-              }}
-              sentence={sentence}
-              ledger={[
-                [
-                  "read",
-                  error
-                    ? "failed"
-                    : snapshot
-                      ? `${snapshot.document.elapsedMs} ms`
-                      : pending
-                        ? "reading"
-                        : "none",
-                ],
-                ["source", SAVED ? "saved" : demo ? "fixture" : "host"],
-              ]}
-            />
-          }
-        />
-      }
-    >
-      <NativeObservationScope
-        value={snapshotCurrent && !held ? nativeObservation : NO_NATIVE_OBSERVATION}
+    <RegistryContext value={handle.registry}>
+      <Surface
+        head={
+          <RouteShell
+            manifest={manifest}
+            handle={handle}
+            situation={
+              <Situation
+                handle={handle}
+                work={{
+                  counted,
+                  draw: (_summary, line) => (
+                    <>
+                      {catalogs.findings.map((finding) => (
+                        <p key={finding} data-tone="caution">
+                          {finding}
+                        </p>
+                      ))}
+                      {line}
+                    </>
+                  ),
+                }}
+                target={{
+                  session: ladder.sessionWord,
+                  document:
+                    demoName === "navigation"
+                      ? "navigation fixture"
+                      : SAVED
+                        ? "saved snapshot"
+                        : demo
+                          ? "scene fixture"
+                          : ladder.docWord,
+                }}
+                sentence={sentence}
+                ledger={[
+                  [
+                    "read",
+                    error
+                      ? "failed"
+                      : snapshot
+                        ? `${snapshot.document.elapsedMs} ms`
+                        : pending
+                          ? "reading"
+                          : "none",
+                  ],
+                  ["source", SAVED ? "saved" : demo ? "fixture" : "host"],
+                ]}
+              />
+            }
+          />
+        }
       >
-        <div className="contents" aria-busy={!!snapshot && (!snapshotCurrent || !!held)}>
-          <EScreen props={shell} />
-        </div>
-      </NativeObservationScope>
-    </Surface>
+        <NativeObservationScope
+          value={snapshotCurrent && !held ? nativeObservation : NO_NATIVE_OBSERVATION}
+        >
+          <div className="contents" aria-busy={!!snapshot && (!snapshotCurrent || !!held)}>
+            <EScreen props={shell} />
+          </div>
+        </NativeObservationScope>
+      </Surface>
+    </RegistryContext>
   );
 }

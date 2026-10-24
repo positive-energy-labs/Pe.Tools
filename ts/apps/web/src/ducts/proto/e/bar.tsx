@@ -1,3 +1,10 @@
+import {
+  AttentionDocument,
+  elementKey,
+  useMembers,
+  useMention,
+  type SubjectKey,
+} from "@pe/kit/lang/attention";
 import type { SystemNote } from "../../system-list-search";
 import { useList } from "@pe/kit/lang/collection";
 import { PlainList, ListView, listColumns } from "@pe/kit/lang/list-view";
@@ -87,10 +94,20 @@ const PARTS = [
   { key: "terminal", word: "grille", says: "the terminal's own drop" },
 ] as const;
 
+/** A run's loss pieces are keyed by the run's last row (its terminal) and the piece's own key. */
+const splitKey = (split: Split, piece: string): SubjectKey =>
+  `split:${split.rows.at(-1)?.id}/${piece}`;
+function useSplitMembers(split: Split, pieces: readonly { key: string; ids: readonly number[] }[]) {
+  const doc = useContext(AttentionDocument) ?? "";
+  const members = useMemo(
+    () => new Map(pieces.map((piece) => [splitKey(split, piece.key), piece.ids.map(elementKey)])),
+    [split, pieces],
+  );
+  useMembers(doc, members);
+}
+
 /** The bar's one ink; groups are told apart by hairline dividers and, in the popover, leader lines. */
 const INK = "ink-2";
-
-type Light = (ids: readonly number[] | null) => void;
 
 /**
  * A run's loss as abutting segments against `scale`: one per element group (a duct type, a fitting
@@ -100,18 +117,23 @@ type Light = (ids: readonly number[] | null) => void;
 function SplitFill({
   split,
   scale,
-  light,
-  back,
   hint = true,
 }: {
   split: Split;
   scale: number;
-  light?: Light;
-  back?: readonly number[];
   /** Each segment its own tooltip. The all-systems list draws none: its row's title carries the hint. */
   hint?: boolean;
 }) {
   const observation = useNativeObservation();
+  const mark = useMention();
+  const pieces = useMemo(
+    () => [
+      ...split.groups.map((group) => ({ key: group.key, ids: group.ids })),
+      ...PARTS.map(({ key }) => ({ key: `${key}?`, ids: split[key].ids })),
+    ],
+    [split],
+  );
+  useSplitMembers(split, pieces);
   const tip = (content: string, child: ComponentProps<typeof TooltipHint>["children"]) =>
     hint ? <TooltipHint content={content}>{child}</TooltipHint> : child;
   let at = 0;
@@ -140,8 +162,7 @@ function SplitFill({
                       backgroundColor: tokenRef(INK),
                       boxShadow: `inset -1px 0 0 ${tokenRef("page")}`,
                     }}
-                    onMouseEnter={light ? () => light(group.ids) : undefined}
-                    onMouseLeave={light ? () => light(back ?? null) : undefined}
+                    {...mark(splitKey(split, group.key))}
                   />,
                 )}
               </Fragment>
@@ -161,8 +182,7 @@ function SplitFill({
                 data-e-split={`${key}-unpriced`}
                 {...revitTarget(target.ids, target.refs)}
                 style={{ left: `min(${at * 100}%, calc(100% - 6px))`, borderColor: tokenRef(INK) }}
-                onMouseEnter={light ? () => light(part.ids) : undefined}
-                onMouseLeave={light ? () => light(back ?? null) : undefined}
+                {...mark(splitKey(split, `${key}?`))}
               />
             </TooltipHint>
           ) : null;
@@ -380,21 +400,10 @@ export function systemRowParts(
 const LOSS_PLACES = 4;
 
 /** The table keeps tiny groups behind one expandable row, with each segment still led to it. */
-function BreakdownList({
-  split,
-  scale,
-  light,
-  back,
-  barW,
-}: {
-  split: Split;
-  scale: number;
-  light?: Light;
-  back?: readonly number[];
-  barW: number;
-}) {
+function BreakdownList({ split, scale, barW }: { split: Split; scale: number; barW: number }) {
   const context = useContext(RuleContext);
   const side = usePopoverSide();
+  const attentionDoc = useContext(AttentionDocument) ?? "";
   const [expanded, setExpanded] = useState(false);
   const [selected, setSelected] = useState<{ key: string; ids: readonly number[] } | null>(null);
   const entries = useMemo(
@@ -430,6 +439,7 @@ function BreakdownList({
   const bare = visible.filter((row) => !row.at.length);
   const ordered = barLeft !== flip ? [...led].reverse() : led;
   const rows = flip ? [...bare, ...ordered] : [...ordered, ...bare];
+  useSplitMembers(split, rows);
   const barCol = Math.min(144, Math.max(96, barW));
 
   const choose = (row: BarRow) =>
@@ -551,7 +561,7 @@ function BreakdownList({
             visibleKeys={rows.map((row) => row.key)}
             activeKey={current?.key}
             onRowClick={choose}
-            onRowHover={light ? (row) => light(row?.ids ?? back ?? null) : undefined}
+            subject={(row) => ({ doc: attentionDoc, key: splitKey(split, row.key) })}
             keep={() => true}
             caption={
               <>
@@ -695,16 +705,12 @@ function RulePick({ row, work, priced }: { row: BarRow; work: LossesWork; priced
 export function BarPopover({
   split,
   scale,
-  light,
-  back,
   head,
   className,
   children,
 }: {
   split: Split;
   scale: number;
-  light?: Light;
-  back?: readonly number[];
   /** Drawn above the breakdown, built only while the popover is open. */
   head?: () => ReactNode;
   className?: string;
@@ -733,7 +739,7 @@ export function BarPopover({
         onClick={(event) => event.stopPropagation()}
       >
         {head?.()}
-        <BreakdownList split={split} scale={scale} light={light} back={back} barW={barW} />
+        <BreakdownList split={split} scale={scale} barW={barW} />
       </PopoverContent>
     </Popover>
   );
@@ -774,8 +780,6 @@ export function MetaBar({
   selfFt,
   unpriced = null,
   split = null,
-  light,
-  rowIds,
 }: {
   value: number | null;
   scale: number | null;
@@ -785,8 +789,6 @@ export function MetaBar({
   selfFt?: number | null;
   unpriced?: { word: string; why: string } | null;
   split?: Split | null;
-  light?: Light;
-  rowIds?: readonly number[];
 }) {
   const share = value != null && scale ? Math.min(1, value / scale) : null;
   const own = unpriced
@@ -803,7 +805,7 @@ export function MetaBar({
           <>
             <span className="absolute inset-0" style={{ backgroundColor: tokenRef("line") }} />
             {split && scale ? (
-              <SplitFill split={split} scale={scale} light={light} back={rowIds} />
+              <SplitFill split={split} scale={scale} />
             ) : (
               <span
                 className="absolute inset-y-0 left-0"

@@ -1,10 +1,13 @@
+import { SubjectTextContext, reachProps, type SubjectTextScope } from "./reach";
+import { RegistryContext } from "@effect/atom-react";
 import {
-  useReachState,
-  reachProps,
-  SubjectTextContext,
-  type SubjectTextScope,
-  type SubjectReference,
-} from "./reach";
+  cite,
+  citationOwner,
+  clearCitation,
+  leaveCitation,
+  elementKey,
+  mention,
+} from "./attention";
 import { useContext, useEffect, useId, useRef, type ReactNode } from "react";
 import { useRevitTarget } from "./revit-target";
 import { Tooltip, TooltipTrigger, TooltipContent } from "./tooltip";
@@ -14,10 +17,11 @@ import "./lang.css";
 /** One word for a subject whose snapshot supplies no human name. */
 export const nameOrFallback = (name?: string | null): string => name?.trim() || "unnamed element";
 
+export type NumberedElement = { id: number; name: string; number: number };
 export type SubjectPart = string | { id: number; connector?: number };
 export type SubjectDocument = {
-  parts: (string | (SubjectReference & { connector?: number }))[];
-  references: SubjectReference[];
+  parts: (string | (NumberedElement & { connector?: number }))[];
+  references: NumberedElement[];
 };
 
 /** Structured references first; numbers in free prose resolve only when the route knows them. */
@@ -25,9 +29,9 @@ export function subjectDocument(
   source: readonly SubjectPart[],
   nameOf: (id: number) => string | null,
   ids: readonly number[] = [],
-  numbering: readonly SubjectReference[] = [],
+  numbering: readonly NumberedElement[] = [],
 ): SubjectDocument {
-  const references: SubjectReference[] = [...numbering];
+  const references: NumberedElement[] = [...numbering];
   const parts: SubjectDocument["parts"] = [];
   const seen = new Set<number>();
   const reference = (id: number, connector?: number) => {
@@ -66,10 +70,6 @@ export function subjectDocument(
   return { parts, references: references.filter((r) => seen.has(r.id)) };
 }
 
-/** The lit Subjects under the route's text context; nothing lit outside it. */
-export const useSubjectLighting = () =>
-  useReachState(useContext(SubjectTextContext)?.reach, (state) => state.lighting);
-
 function hasContact(element: HTMLElement | null) {
   if (!element) return false;
   if (element.matches(":hover, :focus-within")) return true;
@@ -95,11 +95,11 @@ export function SubjectText({
 }) {
   const target = useRevitTarget(revit);
   const context = useContext(SubjectTextContext);
+  const registry = useContext(RegistryContext);
   const localOwner = useId();
   const block = useRef<HTMLSpanElement>(null);
-  const owner = blockOwner ?? localOwner;
-  const clear = context?.clear;
-  useEffect(() => () => clear?.(owner), [clear, owner]);
+  const owner = citationOwner(context?.doc ?? "", blockOwner ?? localOwner);
+  useEffect(() => () => clearCitation(registry, owner), [registry, owner]);
   const doc =
     document ??
     subjectDocument(
@@ -112,9 +112,18 @@ export function SubjectText({
     const plain = doc.parts.map((p) => (typeof p === "string" ? p : p.name)).join("");
     return revit?.length ? <span {...target}>{plain}</span> : <>{plain}</>;
   }
-  const light = (id: number | null) => context.light?.(doc.references, id, owner);
+  const light = (id: number | null) =>
+    cite(registry, {
+      owner,
+      refs: doc.references.map(({ id, ...ref }) => ({
+        ...ref,
+        doc: context.doc,
+        key: elementKey(id),
+      })),
+      focus: id == null ? null : { doc: context.doc, key: elementKey(id) },
+    });
   const dismiss = () => {
-    if (!hasContact(block.current)) context.clear?.(owner);
+    if (!hasContact(block.current)) leaveCitation(registry, owner);
   };
   return (
     <span
@@ -138,7 +147,7 @@ export function SubjectText({
               part={part}
               scope={context}
               onHover={(on) => light(on ? part.id : null)}
-              onLeave={() => context.clear?.(owner)}
+              onLeave={() => leaveCitation(registry, owner)}
             />
           ),
       )}
@@ -153,7 +162,7 @@ function SubjectRef({
   onHover,
   onLeave,
 }: {
-  part: SubjectReference & { connector?: number };
+  part: NumberedElement & { connector?: number };
   scope: SubjectTextScope;
   onHover: (on: boolean) => void;
   onLeave: () => void;
@@ -161,16 +170,9 @@ function SubjectRef({
   const target = useRevitTarget([part.id]);
   const reference = useRef<HTMLButtonElement>(null);
   const popup = useRef<HTMLDivElement>(null);
-  const lit = useReachState(scope.reach, (state) => state.lighting.focus === part.id);
   const port = part.connector != null ? ` port ${part.connector}` : "";
   const go = scope.go;
-  const contact = reachProps(
-    lit
-      ? reference.current?.matches(":focus-within") || popup.current?.matches(":focus-within")
-        ? "focus"
-        : "hover"
-      : "rest",
-  );
+  const contact = reachProps();
   const leave = () => {
     if (
       !reference.current?.matches(":hover, :focus-within") &&
@@ -188,6 +190,7 @@ function SubjectRef({
             ref={reference}
             type="button"
             {...contact}
+            {...mention({ doc: scope.doc, key: elementKey(part.id) })}
             className="subject-ref"
             data-claim-element={part.id}
             {...target}
@@ -227,7 +230,6 @@ function SubjectRef({
         onMouseEnter={() => onHover(true)}
         onMouseLeave={leave}
         onFocusCapture={() => {
-          reference.current?.setAttribute("data-reach", "focus");
           onHover(true);
         }}
         onBlurCapture={(e) => {

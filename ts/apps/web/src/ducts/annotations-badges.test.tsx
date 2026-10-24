@@ -11,7 +11,9 @@ import { ElementMenu } from "#/revit/element-menu";
 import { NativeObservationScope } from "#/revit/observation";
 import { Annotations } from "./annotations";
 import { SubjectTextContext } from "@pe/kit/lang/reach";
-import { reachStore } from "@pe/kit/lang/reach";
+import { makeAtomRegistry } from "#/route/route-owner";
+import { TestAttention } from "#/test-attention";
+import { citation, cite, elementKey } from "@pe/kit/lang/attention";
 
 vi.mock("@pe/kit/lib/token", () => ({
   token: () => "currentColor",
@@ -31,36 +33,38 @@ it("a footnote badge sits on a drawn subject (mesh, else ghosted centreline, els
   const points: Record<number, number[]> = { 1: [5, 5, 0], 2: [5, 0, 0], 3: [9, 9, 0] };
   const encoding = { bins: [{ stroke: { ink: "currentColor", width: 1 } }], bin: () => 0 };
   const references = [1, 2, 3].map((id) => ({ id, name: `E${id}`, number: id }));
-  const reach = reachStore();
-  reach.set((state) => ({
-    ...state,
-    lighting: { ids: new Set([1, 2, 3]), references, focus: null, owner: "row" },
-  }));
-  const light = vi.fn();
+  const registry = makeAtomRegistry();
+  cite(registry, {
+    owner: "row",
+    refs: references.map(({ id, ...ref }) => ({ ...ref, doc: "test", key: elementKey(id) })),
+    focus: null,
+  });
   const go = vi.fn();
   const { container } = render(
-    <SubjectTextContext.Provider value={{ nameOf: () => null, reach, light, clear: () => {}, go }}>
-      <Annotations
-        {...({
-          project: (p: readonly number[]) => [p[0]! * 10 + 50, p[1]! * 10 + 50],
-          size: { width: 400, height: 300 },
-          scene: { segments: [{ segment }], nodes: [], subject: null },
-          layers: new Set(),
-          encoding,
-          selected: new Set(),
-          hovered: null,
-          labels: [],
-          meshed: new Set([1]),
-          rulings: [],
-          issue: "",
-          pointOf: (id: number) => points[id] ?? null,
-          onPick() {},
-          onFrame() {},
-          onRuling() {},
-          onHover() {},
-        } as unknown as Parameters<typeof Annotations>[0])}
-      />
-    </SubjectTextContext.Provider>,
+    <TestAttention registry={registry}>
+      <SubjectTextContext.Provider value={{ doc: "test", nameOf: () => null, go }}>
+        <Annotations
+          {...({
+            project: (p: readonly number[]) => [p[0]! * 10 + 50, p[1]! * 10 + 50],
+            size: { width: 400, height: 300 },
+            scene: { segments: [{ segment }], nodes: [], subject: null },
+            layers: new Set(),
+            encoding,
+            selected: new Set(),
+            hovered: null,
+            labels: [],
+            meshed: new Set([1]),
+            rulings: [],
+            issue: "",
+            pointOf: (id: number) => points[id] ?? null,
+            onPick() {},
+            onFrame() {},
+            onRuling() {},
+            onHover() {},
+          } as unknown as Parameters<typeof Annotations>[0])}
+        />
+      </SubjectTextContext.Provider>
+    </TestAttention>,
   );
   const badges = [...container.querySelectorAll("[data-subject-badge]")];
   // 1 has a mesh; 2 is a meshless centreline in the scene (drawn as a ghost); 3 is not drawn at all.
@@ -69,7 +73,7 @@ it("a footnote badge sits on a drawn subject (mesh, else ghosted centreline, els
   expect(badges[1]!.querySelector("path")).not.toBeNull();
   const mark = badges[1]!.querySelector(".subject-badge")!;
   fireEvent.mouseEnter(mark);
-  expect(light).toHaveBeenLastCalledWith(references, 2, "row");
+  expect(registry.get(citation)?.focus).toEqual({ doc: "test", key: "e:2" });
   fireEvent.click(mark);
   expect(go).toHaveBeenCalledWith(2);
 });

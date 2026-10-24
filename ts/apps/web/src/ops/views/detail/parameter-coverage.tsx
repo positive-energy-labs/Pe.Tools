@@ -1,3 +1,4 @@
+import { useNativeObservation } from "#/revit/observation";
 import type {
   RevitMatrixParameterCoverage,
   RevitMatrixScheduleCoverage,
@@ -24,9 +25,11 @@ function Samples({
   handles: readonly { elementId: number; displayName: string }[];
 }) {
   const refProps = useRevitSubjectProps();
+  const document = useNativeObservation().scope?.document;
+  const doc = document ? `${document.session}/${document.openId}` : "unbound:ops";
   const names = new Map(handles.map((h) => [h.elementId, h.displayName]));
   return (
-    <SubjectTextContext value={{ nameOf: (id) => names.get(id) ?? null, refProps }}>
+    <SubjectTextContext value={{ doc, nameOf: (id) => names.get(id) ?? null, refProps }}>
       <Provenance>
         {label}:{" "}
         <SubjectText

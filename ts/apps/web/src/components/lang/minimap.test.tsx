@@ -1,7 +1,9 @@
-import { reachStore } from "@pe/kit/lang/reach";
+import { makeAtomRegistry } from "#/route/route-owner";
+import { TestAttention } from "#/test-attention";
+import { hovered } from "@pe/kit/lang/attention";
 import { SubjectTextContext } from "@pe/kit/lang/reach";
 import { Row } from "@pe/kit/lang/row";
-import { useSceneReach } from "#/scene/reach";
+import { useElementAttention } from "#/attention";
 import { createLiveOrbit } from "@pe/kit/lang/live-orbit";
 // @vitest-environment jsdom
 import { act, cleanup, fireEvent, render } from "@testing-library/react";
@@ -169,7 +171,7 @@ test("the rim N always glides north (eye at 270), keeping elevation, zoom and pi
 });
 
 test("the kit row channel lights the globe through the one scene adapter without moving the camera", () => {
-  const channel = reachStore();
+  const registry = makeAtomRegistry();
   const viewport: OrbitViewport = { kind: "orbit", yaw: 30, elev: 30, zoom: 1, pivot: [0, 0, 0] };
   const commit = vi.fn();
   const orbit = createLiveOrbit(viewport, commit);
@@ -180,21 +182,23 @@ test("the kit row channel lights the globe through the one scene adapter without
     ],
   ];
   function Picture() {
-    const { hovered } = useSceneReach();
+    const { hovered } = useElementAttention();
     return <OrbitMinimap orbit={orbit} lines={line} litLines={hovered === 42 ? line : []} />;
   }
   const view = render(
-    <SubjectTextContext value={{ nameOf: () => "duct", reach: channel }}>
-      <Row label="duct" revit={[42]} />
-      <Picture />
-    </SubjectTextContext>,
+    <TestAttention registry={registry}>
+      <SubjectTextContext value={{ doc: "test", nameOf: () => "duct" }}>
+        <Row label="duct" revit={[42]} />
+        <Picture />
+      </SubjectTextContext>
+    </TestAttention>,
   );
   const path = view.container.querySelector("[data-orbit-mini-reach]")!;
   expect(path.getAttribute("d")).toBe("");
-  fireEvent.mouseEnter(view.container.querySelector(".dl-row")!);
+  fireEvent.pointerOver(view.container.querySelector(".dl-row")!);
   expect(path.getAttribute("d")).toContain("L");
-  expect(channel.get().hovered).toBe(42);
-  fireEvent.mouseLeave(view.container.querySelector(".dl-row")!);
+  expect(registry.get(hovered)?.key).toBe("e:42");
+  fireEvent.pointerOver(view.container.firstElementChild!);
   expect(path.getAttribute("d")).toBe("");
   expect(orbit.read()).toEqual(viewport);
   expect(commit).not.toHaveBeenCalled();

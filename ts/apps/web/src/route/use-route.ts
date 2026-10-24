@@ -532,6 +532,8 @@ export function useRoute<W, R extends string, P, A extends string>(
     readings,
     inventory: seededReadings ? (seededReadings.inventory ?? { state: "absent" }) : inventoryResult,
     bindingLost,
+    registry: owner.registry,
+    pageState: owner.view.state,
     page: [page, setPage] as const,
     actions,
     busy,

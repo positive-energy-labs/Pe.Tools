@@ -1,22 +1,20 @@
 /** Picture findings share domain identity and numbering with the inbox. */
-import { useContext, useMemo, useState } from "react";
+import { useMemo } from "react";
 
 import { healPlan, healFindings } from "@pe/ducts-domain/heal";
 import { INFERRED_KINDS } from "@pe/ducts-domain/proximity";
 import { survey } from "@pe/ducts-domain/survey";
 import type { DuctSnapshot } from "@pe/ducts-domain/types";
 import { Button } from "@pe/kit/lang/button";
-import { showElementsMessage, type ShowElementsResult } from "#/revit/element-target";
 
 import type { Label, Ruling } from "../../annotations";
-import { ClaimText, claimParts, VERDICTS } from "../../claims";
+import { VERDICTS } from "../../claims";
 import { FindingsList, ISSUE_KINDS } from "../../issues";
 import type { Claim } from "../../legs";
 import type { Scene } from "../../scene";
 import type { ProtoProps } from "../props";
 import { fmtFt } from "./bar";
 import { SubjectText } from "@pe/kit/lang/subject-text";
-import { SubjectTextContext } from "@pe/kit/lang/reach";
 
 /** Cumulative effective length from the fan to each element, in equivalent feet, along priced paths. */
 function cumulativeOf(priced: ProtoProps["priced"]): Map<number, number> {
@@ -127,19 +125,11 @@ export function useMarks({
 
 export function RulingBody({
   r,
-  nameOfId,
   onVerdict,
-  onHover,
-  onPick,
 }: {
   r: Ruling;
-  nameOfId: (id: number) => string | null;
   onVerdict?: (claim: Claim, verdict: NonNullable<Claim["verdict"]>) => void;
-  onHover: (id: number | null) => void;
-  onPick: (id: number) => void;
 }) {
-  const [said, setSaid] = useState<ShowElementsResult | null>(null);
-  const subjects = useContext(SubjectTextContext);
   if (r.kind === "claim")
     return (
       <div className="flex flex-col gap-2" data-ruling={r.n}>
@@ -147,17 +137,7 @@ export function RulingBody({
           <span className="face-mono">{r.n}</span> {r.claim.title} · {r.claim.state}
         </p>
         <p>
-          {subjects ? (
-            <SubjectText text={r.claim.text} revit={r.claim.at} />
-          ) : (
-            <ClaimText
-              parts={claimParts(r.claim.text, nameOfId)}
-              onHover={onHover}
-              onPick={onPick}
-              onShown={setSaid}
-            />
-          )}
-          {said ? <span className="text-ink-2"> · {showElementsMessage(said)}</span> : null}
+          <SubjectText text={r.claim.text} revit={r.claim.at} />
         </p>
         <span className="flex gap-1" role="group" aria-label="verdict">
           {VERDICTS.map((v) => (

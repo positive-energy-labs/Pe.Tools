@@ -1,3 +1,11 @@
+import {
+  AttentionDocument,
+  elementKey,
+  useMembers,
+  useMention,
+  type SubjectKey,
+} from "@pe/kit/lang/attention";
+import { useElementAttention } from "#/attention";
 import type { Tone } from "@pe/kit/lib/token";
 import { nameOrFallback } from "@pe/kit/lang/subject-text";
 import { SvgTip } from "@pe/kit/lang/tooltip";
@@ -13,7 +21,7 @@ import type { IssueKind } from "@pe/ducts-domain/issues";
  * The layout is a tidy tree: each vertex's first child continues its row (the longest run first,
  * so it reads straight along the top) and later children hang below.
  */
-import { useMemo, type ReactNode } from "react";
+import { useContext, useMemo, type ReactNode } from "react";
 
 import { tokenRef } from "@pe/kit/lib/token";
 import {
@@ -116,28 +124,27 @@ export interface SchematicProps {
   /** The model's encoding: an edge wears the stroke of its first segment under it. */
   encoding: Encoding;
   /** Element ids selected; an edge holding one is ringed, and a fold holding one unfolds. */
-  selected: ReadonlySet<number>;
   /** Element ids lit by a hover anywhere (a row, the model, a claim); drawn heavy. */
-  lit: ReadonlySet<number>;
   onSelect: (id: number | null) => void;
-  onHover: (id: number | null) => void;
   /** `main` is the whole picture; `inset` the corner, unlabelled, scaled to its box. */
   size?: "main" | "inset";
 }
 
 const SELECT_WIDTH = 8;
 
+const chainKey = (chain: Chain): SubjectKey => `chain:${chain.to}`;
+
 export function Schematic({
   readout,
   index,
   group,
   encoding,
-  selected,
-  lit,
   onSelect,
-  onHover,
   size = "main",
 }: SchematicProps) {
+  const mark = useMention();
+  const { selected, lit: cited, hovered } = useElementAttention();
+  const lit = new Set([...cited, ...(hovered == null ? [] : [hovered])]);
   const inset = size === "inset";
   const { snapshot } = index;
   const tree = useMemo(() => (group ? groupTree(snapshot, group) : null), [snapshot, group]);
@@ -155,6 +162,13 @@ export function Schematic({
     return new Set(hit?.members ?? []);
   }, [base, selected]);
   const chains = useMemo(() => (tree ? chainsOf(tree, unfold) : []), [tree, unfold]);
+  useMembers(
+    useContext(AttentionDocument) ?? "",
+    useMemo(
+      () => new Map(chains.map((chain) => [chainKey(chain), chain.members.map(elementKey)])),
+      [chains],
+    ),
+  );
   const layout = useMemo(
     () => (tree ? layoutTree(tree, chains, inset ? INSET_LABEL_W : LABEL_W) : null),
     [tree, chains, inset],
@@ -226,8 +240,7 @@ export function Schematic({
             data-lit={glow ? "" : undefined}
             className="cursor-pointer"
             onClick={() => pick(chain.members[0]!)}
-            onPointerEnter={() => onHover(chain.members[0]!)}
-            onPointerLeave={() => onHover(null)}
+            {...mark(chainKey(chain))}
           >
             <SvgTip content={"chain"} />
             {hot ? (

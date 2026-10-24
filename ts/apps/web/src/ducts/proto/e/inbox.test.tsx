@@ -46,7 +46,9 @@ test("D18 requires a short claim title and keeps its sentence in the Evidence hi
   fireEvent.pointerEnter(hint, { pointerType: "mouse" });
   fireEvent.mouseEnter(hint);
   fireEvent.mouseMove(hint);
-  expect(within(await screen.findByRole("tooltip")).getByText(value.text)).toBeTruthy();
+  expect(
+    within(await screen.findByRole("tooltip")).getByText(value.text, { exact: false }),
+  ).toBeTruthy();
 });
 
 const item = (over: Partial<InboxItem> & Pick<InboxItem, "key" | "group">): InboxItem => ({
@@ -173,7 +175,6 @@ function mount(
       work={{ doc: over.doc ?? null, revision: 0, write, store: over.store ?? null }}
       nameOf={String}
       onVerdict={null}
-      light={() => {}}
       onSelect={() => {}}
       onFocusCell={over.onFocusCell ?? (() => {})}
       write={{
@@ -457,7 +458,9 @@ test("open findings keep compact state and actions, with full evidence in focusa
   fireEvent.focus(within(detail).getByRole("button", { name: "What is this?" }));
   const help = await screen.findByRole("tooltip");
   expect(within(help).getByText("possible missed join")).toBeTruthy();
-  expect(within(help).getByText("Facing open ends need inspection in Revit.")).toBeTruthy();
+  expect(
+    within(help).getByText("Facing open ends need inspection in Revit.", { exact: false }),
+  ).toBeTruthy();
 });
 
 test("a person's row pick carries its identity, while automatic reveal does not pick", () => {

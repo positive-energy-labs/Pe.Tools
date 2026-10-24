@@ -1,6 +1,6 @@
 import { Row } from "@pe/kit/lang/row";
 import { StateCell } from "@pe/kit/lang/cell";
-import { REACH_RUNGS } from "@pe/kit/lang/reach";
+import type { Rung } from "@pe/kit/lang/attention";
 import { Fragment, useState } from "react";
 import { RefreshCw, Save, Upload } from "lucide-react";
 
@@ -84,13 +84,16 @@ function PreviewActionSpecimen() {
 export function LangPressSpecimens() {
   return (
     <>
-      <SpecimenFrame name="Reach ? rest / reach / hover / focus" importPath="@pe/kit/lang/reach">
-        <div className="grid grid-cols-4 gap-3">
-          {REACH_RUNGS.map((rung) => (
+      <SpecimenFrame
+        name="Attention: rest / reach / hover / focus / selected"
+        importPath="@pe/kit/lang/attention"
+      >
+        <div className="grid grid-cols-5 gap-3">
+          {(["rest", "reach", "hover", "cited", "selected"] satisfies Rung[]).map((rung) => (
             <div
               key={rung}
               ref={(el) => {
-                el?.querySelectorAll("[data-reach]").forEach((target) =>
+                el?.querySelectorAll(".dl-row, .dl-cell, button").forEach((target) =>
                   target.setAttribute("data-reach", rung),
                 );
               }}

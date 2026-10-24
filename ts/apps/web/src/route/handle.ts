@@ -1,3 +1,6 @@
+import type * as Atom from "effect/unstable/reactivity/Atom";
+import type * as AtomRegistry from "effect/unstable/reactivity/AtomRegistry";
+import type { PageSnapshot } from "./view-owner";
 /** The handle a route gets back from `useRoute`: its resolution, Work, Readings, Page and one handle per action. */
 import type { Reading, RouteStatePatch, TargetResolution, WorkKey } from "@pe/agent-contracts";
 import type { useThreadScope } from "#/chat/scope";
@@ -85,6 +88,10 @@ export interface RouteHandle<W, R extends string, P, A extends string> {
    * new openId in that session, offered first and never taken for the person (F-X-1).
    */
   readonly bindingLost: BindingLost | null;
+  /** The existing owner registry, also used by its derived Page consumers. */
+  readonly registry: AtomRegistry.AtomRegistry;
+  /** Canonical Page snapshot; attention derives selection without copying writable state. */
+  readonly pageState: Atom.Atom<PageSnapshot<P>>;
   /** The Page and its setter; `{ history: "replace" }` marks a gesture's move (`PageMove`). */
   readonly page: readonly [P, (next: Partial<P>, move?: PageMove<P>) => void];
   readonly actions: Readonly<Record<A, ActionHandle>>;

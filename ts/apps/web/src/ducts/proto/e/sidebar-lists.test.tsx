@@ -6,17 +6,10 @@ const search = (keywords = "", pills: Record<string, string> = {}) =>
   });
 // @vitest-environment jsdom
 import { useState } from "react";
-import {
-  act,
-  cleanup,
-  fireEvent,
-  render,
-  renderHook,
-  screen,
-  waitFor,
-  within,
-} from "@testing-library/react";
-import { useReachChannel } from "@pe/kit/lang/reach";
+import { act, cleanup, fireEvent, render, screen, waitFor, within } from "@testing-library/react";
+import { makeAtomRegistry } from "#/route/route-owner";
+import { TestAttention } from "#/test-attention";
+import { hovered } from "@pe/kit/lang/attention";
 import { afterEach, expect, test, vi } from "vite-plus/test";
 import type { FanResult } from "@pe/ducts-domain/losses";
 import type { Priced } from "@pe/ducts-domain/pricing";
@@ -75,7 +68,6 @@ const context = (over: Partial<TreeCtx> = {}): TreeCtx => ({
   scale: 1,
   grilleName: (row) => row.name,
   ruleOf: new Map([[20, "rule20"]]),
-  light: vi.fn(),
   select: vi.fn(),
   jumpToRule: vi.fn(),
   reading: null,
@@ -110,10 +102,13 @@ const toggle = (key: string) => fireEvent.click(keyed(key).querySelector(".dl-ro
 test("critical context opens initially; one selected part reveals, retains native refs, hover and rule jump", () => {
   const ctx = context({ selected: 20 });
   const ref = { elementId: 20, uniqueId: "part-twenty", documentKey: "model" };
+  const registry = makeAtomRegistry();
   render(
-    <NativeObservationScope value={{ scope: null, references: [ref] }}>
-      <SystemTree ctx={ctx} />
-    </NativeObservationScope>,
+    <TestAttention registry={registry}>
+      <NativeObservationScope value={{ scope: null, references: [ref] }}>
+        <SystemTree ctx={ctx} />
+      </NativeObservationScope>
+    </TestAttention>,
   );
   expect(keyed("Z critical").getAttribute("aria-expanded")).toBe("true");
   expect(keyed("Z critical").textContent).toContain("\u25c6");
@@ -126,8 +121,8 @@ test("critical context opens initially; one selected part reveals, retains nativ
   expect(JSON.parse(keyed("part20").getAttribute("data-revit-refs")!)).toEqual([ref]);
   expect(document.querySelector("[data-tree-columns]")).not.toBeNull();
   expect(screen.getByRole("tree").getAttribute("aria-activedescendant")).toBe(keyed("part20").id);
-  fireEvent.mouseEnter(keyed("part20"));
-  expect(ctx.light).toHaveBeenLastCalledWith([20]);
+  fireEvent.pointerOver(keyed("part20"));
+  expect(registry.get(hovered)).toEqual({ doc: "test", key: "e:20" });
   fireEvent.click(within(keyed("part20")).getByRole("button", { name: "jump to its type's rule" }));
   expect(ctx.jumpToRule).toHaveBeenCalledWith("rule20");
   expect(ctx.select).not.toHaveBeenCalled();
@@ -204,10 +199,14 @@ const inputs = (over: Partial<InputsPaneProps> = {}): InputsPaneProps => ({
 });
 
 test("inputs preserve scoped order and selection, while editing and fan verbs stay isolated from list activation", () => {
-  const reach = renderHook(() => useReachChannel()).result.current;
+  const registry = makeAtomRegistry();
   const verb = vi.fn();
   const props = inputs({ selected: 20, fanVerbs: () => <button onClick={verb}>make fan</button> });
-  render(<InputsPane {...props} />);
+  render(
+    <TestAttention registry={registry}>
+      <InputsPane {...props} />
+    </TestAttention>,
+  );
   expect(screen.getAllByRole("option").map((row) => row.getAttribute("data-key"))).toEqual([
     "unit:1",
     "grille:20",
@@ -233,10 +232,10 @@ test("inputs preserve scoped order and selection, while editing and fan verbs st
   expect(props.select).not.toHaveBeenCalled();
   fireEvent.click(within(keyed("unit:1")).getByText("Name 1"));
   expect(props.select).toHaveBeenCalledWith(1);
-  fireEvent.mouseEnter(keyed("grille:10"));
-  expect(reach.get().hovered).toBe(10);
-  fireEvent.mouseLeave(keyed("grille:10"));
-  expect(reach.get().hovered).toBeNull();
+  fireEvent.pointerOver(keyed("grille:10"));
+  expect(registry.get(hovered)?.key ?? null).toBe("e:10");
+  fireEvent.pointerOver(document.body.querySelector(".contents")!);
+  expect(registry.get(hovered)?.key ?? null).toBeNull();
 });
 
 test("inputs use address grammar/name order and retain the unpriced waiting state", async () => {

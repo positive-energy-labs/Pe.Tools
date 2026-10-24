@@ -1,4 +1,5 @@
-import { reachProps, useReach } from "./reach";
+import { elementKey, useMention } from "./attention";
+import { reachProps } from "./reach";
 import type { Tone } from "../../lib/token";
 /**
  * Two chips: `FactChip` is a machine-measured state fact (no press), `NarrowChip` a removable
@@ -49,12 +50,13 @@ interface FactChipProps {
 /** A state fact, machine-measured, so mono. Not a control — it has no press. */
 export function FactChip({ children, tone, dashed, title, revit }: FactChipProps) {
   const target = useRevitTarget(revit);
-  const rung = useReach(revit?.[0]);
+  const mark = useMention();
   const { base, label } = chipRecipe({ state: dashed ? "seam" : "solid" });
   return (
     <TooltipHint content={title}>
       <span
-        {...reachProps(rung)}
+        {...reachProps()}
+        {...mark(revit?.[0] == null ? null : elementKey(revit[0]))}
         {...target}
         className={base()}
         data-tone={tone}

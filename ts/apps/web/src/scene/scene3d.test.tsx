@@ -1,3 +1,5 @@
+import { makeAtomRegistry } from "#/route/route-owner";
+import { TestAttention } from "#/test-attention";
 // @vitest-environment jsdom
 import { act, fireEvent, render } from "@testing-library/react";
 import { expect, it, vi } from "vite-plus/test";
@@ -82,12 +84,13 @@ it("keeps camera gestures local and meshes mounted across native re-reads", () =
       <Row label="linked row" revit={[42]} />
     </>
   );
-  const view = render(draw());
+  const registry = makeAtomRegistry();
+  const view = render(<TestAttention registry={registry}>{draw()}</TestAttention>);
   expect(view.getByText("picture state")).toBeTruthy();
   const row = view.getByText("linked row").closest(".dl-row")!;
-  fireEvent.mouseEnter(row);
+  fireEvent.pointerOver(row);
   expect(renderer.current.paint.mock.lastCall[3]).toEqual(new Set(["mesh42"]));
-  fireEvent.mouseLeave(row);
+  fireEvent.pointerOver(view.container.firstElementChild!);
   expect(renderer.current.paint.mock.lastCall[3]).toEqual(new Set());
   picking.current = { instance: meshes.instances[0]!, point: [0, 0, 0] };
   fireEvent.pointerMove(renderer.current.canvas);
@@ -148,7 +151,7 @@ it("keeps camera gestures local and meshes mounted across native re-reads", () =
   expect(setViewport).toHaveBeenCalledTimes(1);
   const beforeSelection = orbit.read();
   setViewport.mockClear();
-  view.rerender(draw([10, 20, 30]));
+  view.rerender(<TestAttention registry={registry}>{draw([10, 20, 30])}</TestAttention>);
   expect(renderer.current.setOrbitPivot).toHaveBeenLastCalledWith([10, 20, 30]);
   expect(orbit.read()).toBe(beforeSelection);
   expect(setViewport).not.toHaveBeenCalled();

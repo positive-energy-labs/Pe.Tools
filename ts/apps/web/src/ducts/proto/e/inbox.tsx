@@ -1,3 +1,5 @@
+import { RegistryContext } from "@effect/atom-react";
+import { cite, citation, citationOwner, elementKey, leaveCitation } from "@pe/kit/lang/attention";
 import { useCallback, useContext, useMemo, useRef, useState, type ReactNode } from "react";
 import { Ban, Check, Eye, EyeOff, Fan, Link, Pencil, X, type LucideIcon } from "lucide-react";
 import type { DuctsRouteDocument } from "@pe/agent-contracts";
@@ -38,7 +40,6 @@ import type { Claim } from "../../legs";
 import { inboxWriteRows, type WriteVerbs, type RulingRow } from "./inbox-write";
 import { PreviewLines } from "./preview-lines";
 import { SlotPicker } from "./slot-picker";
-import { ClaimText, claimParts } from "../../claims";
 import { SubjectText, subjectDocument } from "@pe/kit/lang/subject-text";
 import { SubjectTextContext } from "@pe/kit/lang/reach";
 import { RuleAssignment } from "./rule-assignment";
@@ -123,7 +124,6 @@ export function Inbox({
   work,
   nameOf,
   onVerdict,
-  light,
   onSelect,
   onFocusCell,
   write,
@@ -133,14 +133,12 @@ export function Inbox({
   focused,
   onPick,
   hoveredIssue,
-  onIssueHover,
   address,
 }: {
   groups: Record<Exclude<InboxGroup, "write">, readonly InboxItem[]>;
   work: InboxWork;
   nameOf: (id: number) => string;
   onVerdict: ((claim: Claim, verdict: Verdict) => void) | null;
-  light: (ids: readonly number[] | null) => void;
   onSelect: (id: number | null) => void;
   /** Select the element and focus its cell on the tree. */
   onFocusCell: (cell: CellRef) => void;
@@ -154,11 +152,11 @@ export function Inbox({
   /** A row's identity selects every subject it carries. */
   onPick: (key: string) => void;
   hoveredIssue?: string | null;
-  onIssueHover?: (key: string | null) => void;
   address?: ListPersist<"name" | "status">;
 }) {
   const observation = useNativeObservation();
   const subjects = useContext(SubjectTextContext);
+  const registry = useContext(RegistryContext);
   const [nativeResult, setNativeResult] = useState<ShowElementsResult | null>(null);
   const [selecting, setSelecting] = useState(false);
   const cellOf = useCallback(
@@ -322,7 +320,6 @@ export function Inbox({
       const damage = inboxDamage(item);
       const status = compactStatus(item.status);
       const target = observedElements(observation, item.ids);
-      const claim = item.verbs.find((v) => v.kind === "claim");
       const title = item.title;
       const description = subjectDocument(
         item.parts ?? [item.note ?? item.title],
@@ -335,19 +332,28 @@ export function Inbox({
         [],
         description.references,
       );
+      const owner = citationOwner(subjects?.doc ?? "", item.key);
       // The row badges what its heading names; what its own text lit since (a token, the open
       // description) stays while the pointer is in the row, and a pending clear is cancelled.
       const relight = () => {
-        const lit = subjects!.reach!.get().lighting;
-        subjects!.light?.(
-          lit.owner === item.key ? lit.references : heading.references,
-          null,
-          item.key,
-          item.ids,
-        );
+        const lit = registry.get(citation);
+        if (!subjects) return;
+        cite(registry, {
+          owner,
+          focus: null,
+          refs:
+            lit?.owner === owner
+              ? lit.refs
+              : heading.references.map(({ id, ...ref }) => ({
+                  ...ref,
+                  doc: subjects.doc,
+                  key: elementKey(id),
+                })),
+        });
       };
       return {
         key: item.key,
+        subject: subjects ? { doc: subjects.doc, key: `issue:${item.key}` } : undefined,
         search: { text: [title, item.status, item.kind, item.note], ids: item.ids },
         kind: diagnosticKind(item),
         group: item.group,
@@ -362,12 +368,9 @@ export function Inbox({
         actions: () => verbsOf(item, false),
         onMouseEnter: () => {
           if (subjects) relight();
-          else light(item.ids);
-          onIssueHover?.(item.key);
         },
         onMouseLeave: () => {
-          if (subjects) subjects.clear?.(item.key);
-          else light(null);
+          if (subjects) leaveCitation(registry, owner);
         },
         onMouseMove: () => {
           if (subjects) relight();
@@ -385,21 +388,19 @@ export function Inbox({
                 <p
                   onMouseMove={(e) => {
                     e.stopPropagation();
-                    subjects?.light?.(description.references, null, item.key, item.ids);
+                    if (subjects)
+                      cite(registry, {
+                        owner,
+                        focus: null,
+                        refs: description.references.map(({ id, ...ref }) => ({
+                          ...ref,
+                          doc: subjects.doc,
+                          key: elementKey(id),
+                        })),
+                      });
                   }}
                 >
-                  {subjects ? (
-                    <SubjectText document={description} owner={item.key} />
-                  ) : claim?.kind === "claim" ? (
-                    <ClaimText
-                      parts={claimParts(claim.claim.text, nameOf)}
-                      onHover={(id) => light(id == null ? null : [id])}
-                      onPick={onSelect}
-                      onShown={setNativeResult}
-                    />
-                  ) : (
-                    (item.note ?? item.title)
-                  )}
+                  <SubjectText document={description} owner={item.key} />
                 </p>
               </TooltipHint>
             </div>
@@ -410,7 +411,7 @@ export function Inbox({
         ),
       };
     },
-    [observation, nameOf, subjects, verbsOf, light, onIssueHover, onSelect],
+    [registry, observation, nameOf, subjects, verbsOf, onSelect],
   );
 
   const baseRows = useMemo(
@@ -438,14 +439,7 @@ export function Inbox({
   }, [baseRows, groups, selected, focused, hoveredIssue]);
   return (
     <>
-      <div
-        onMouseLeave={() => {
-          // With Subjects, each row's own clear (with its grace) ends the lighting, so the pointer
-          // can carry it out to the picture's badges; an immediate wipe here would beat it.
-          if (!subjects) light(null);
-          onIssueHover?.(null);
-        }}
-      >
+      <div>
         <RulingsList rows={rows} focused={focused} address={address} onPick={onPick} />
       </div>
       {nativeResult ? (

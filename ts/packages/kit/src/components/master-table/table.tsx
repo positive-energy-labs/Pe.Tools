@@ -1,3 +1,4 @@
+import type { Ref } from "../lang/attention";
 import type { Tone } from "../../lib/token";
 /** visibleRows owns the view; TableFrame owns chrome. */
 import { useMemo, useRef, useState, type ReactNode } from "react";
@@ -76,6 +77,7 @@ export interface TableProps<Row extends RowData> {
   onRowHover?: (row: Row | null) => void;
   rowClassName?: (row: Row) => string | undefined;
   /** The Revit elements represented by each row, served by the root element menu. */
+  subject?: (row: Row) => Ref;
   revit?: (row: Row) => readonly number[];
   /** Retain offscreen rows that anchor another surface, such as a connector's end. */
   keep?: (row: Row) => boolean;
@@ -107,6 +109,7 @@ export function Table<Row extends RowData>({
   onRowClick,
   onRowHover,
   rowClassName,
+  subject,
   revit,
   keep,
   gutter,
@@ -211,6 +214,7 @@ export function Table<Row extends RowData>({
             columnByKey={columnByKey}
             activeKey={activeKey}
             rowClassName={rowClassName}
+            subject={subject}
             revit={revit}
             damage={(row) => rowDamage(row, rawColumns)}
             keep={keep}

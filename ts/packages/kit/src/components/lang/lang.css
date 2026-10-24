@@ -154,6 +154,7 @@
   [aria-expanded="true"]:not(textarea, input, [role="treeitem"]),
   [aria-pressed="true"],
   [data-selected],
+  [data-reach="selected"],
   [data-highlighted],
   .on-select
 ) {
@@ -170,7 +171,7 @@
   pointer-events: none;
 }
 
-:where(svg [aria-selected="true"], svg [data-selected]) {
+:where(svg [aria-selected="true"], svg [data-selected], svg [data-reach="selected"]) {
   fill: var(--pe-select);
 }
 
@@ -1204,14 +1205,18 @@ tr.dl-row[data-active] {
 [data-scrollbar]:hover {
   cursor: default;
 }
-[data-reach]:not(:disabled, [aria-disabled="true"], .subject-ref):is([data-reach="hover"], :hover) {
+[data-reach]:not(:disabled, [aria-disabled="true"], .subject-ref):is(
+    [data-reach="hover"],
+    [data-reach="cited"],
+    :hover
+  ) {
   background-image: var(--fill-press);
   --dl-cell-ring: inset 0 0 0 1px var(--pe-ink-2);
 }
 :is([data-svg-tip], svg [data-reach]):is(
   [data-reach="reach"],
   [data-reach="hover"],
-  [data-reach="focus"],
+  [data-reach="cited"],
   :hover,
   :focus-visible
 ) {
@@ -1314,13 +1319,13 @@ tr.dl-row[data-active] {
 [data-subject-text]:is(:hover, [data-lit]) .subject-ref {
   text-decoration-color: var(--pe-ink-2);
 }
-.subject-ref:is(:hover, :focus-visible, [data-reach="hover"], [data-reach="focus"]) {
+.subject-ref:is(:hover, :focus-visible, [data-reach="hover"], [data-reach="cited"]) {
   text-decoration-color: var(--pe-ink);
 }
 [data-subject-text]:is(:hover, [data-lit]) .subject-mark {
   border-color: var(--pe-ink);
 }
-.subject-ref:is(:hover, :focus-visible, [data-reach="hover"], [data-reach="focus"]) .subject-mark {
+.subject-ref:is(:hover, :focus-visible, [data-reach="hover"], [data-reach="cited"]) .subject-mark {
   border-color: var(--pe-ink);
 }
 [data-list-trigger="icon"]:is(:hover, [data-reach="hover"]),

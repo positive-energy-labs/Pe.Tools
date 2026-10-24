@@ -1,7 +1,15 @@
+import { RegistryContext } from "@effect/atom-react";
+import {
+  AttentionDocument,
+  elementKey,
+  mention,
+  setHovered,
+  useAttention,
+} from "@pe/kit/lang/attention";
 import { GoToPopup } from "@pe/kit/lang/go-to";
 /** Revit's registered picture under selectable room regions, paired with the table. */
 import { SvgTip } from "@pe/kit/lang/tooltip";
-import { type CSSProperties, type ReactNode, useEffect, useMemo, useRef } from "react";
+import { useContext, type CSSProperties, type ReactNode, useEffect, useMemo, useRef } from "react";
 import type { PlaneViewport } from "@pe/agent-contracts";
 import { PictureStage, stageViewport } from "#/scene/stage-controller";
 import { PictureReadout } from "@pe/kit/lang/readout";
@@ -147,12 +155,9 @@ export function RoomsPlan({
   planRefusal,
   planError,
   empty,
-  selected,
-  hovered,
   zoomTo,
   focusMissing,
   onSelect,
-  onHover,
   trace,
   page,
   setPage,
@@ -170,20 +175,27 @@ export function RoomsPlan({
   planError: string | null;
   /** Why nothing can be drawn yet (no document, no view, snapshot failed); null = draw. */
   empty: { says: string; exit: string } | null;
-  selected: ReadonlySet<string>;
-  hovered: string | null;
   /** Region guids the URL's `focus` names: the view zooms to their union once they are drawn. */
   zoomTo: readonly string[];
   /** Labels the URL's `focus` names that no region wears. */
   focusMissing: readonly string[];
   /** A click selects one region; a shift-click adds or removes it (merge takes two or more). */
   onSelect: (guid: string | null, add: boolean) => void;
-  onHover: (guid: string | null) => void;
   /** `rooms.trace` for the drawn view; `none` names why there is nothing to draw. */
   trace: TraceRead;
   page: RoomsPage;
   setPage: (next: Partial<RoomsPage>, move?: { history: "push" | "replace" }) => void;
 }) {
+  const doc = useContext(AttentionDocument) ?? "";
+  const registry = useContext(RegistryContext);
+  const attention = useAttention(doc);
+  const selected = new Set(
+    rows
+      .filter((row) => attention.selected.has(elementKey(row.region.elementId)))
+      .map((row) => row.region.guid),
+  );
+  const onHover = (guid: string | null) =>
+    setHovered(registry, guid == null ? null : { doc, key: `room:${guid}` });
   const bounds = useMemo(() => {
     const points: Point2[] = rows.flatMap((row) => loopOf(row.region.outer));
     if (plan) points.push(...planCorners(plan));
@@ -547,7 +559,9 @@ export function RoomsPlan({
                 {world.shapes.map(({ region, state, d }) => {
                   const ink = token(REGION_INK[state].ink!);
                   const on = selected.has(region.guid);
-                  const hot = hovered === region.guid;
+                  const hot =
+                    attention.hovered.has(elementKey(region.elementId)) ||
+                    attention.lit.has(elementKey(region.elementId));
                   const width = on ? 3 : 2;
                   return (
                     <path
@@ -568,8 +582,7 @@ export function RoomsPlan({
                         strokeWidth: `calc(var(--sw) * ${width}px)`,
                         cursor: "pointer",
                       }}
-                      onMouseEnter={() => onHover(region.guid)}
-                      onMouseLeave={() => onHover(null)}
+                      {...mention({ doc, key: `room:${region.guid}` })}
                       onClick={(event) => {
                         event.stopPropagation();
                         if (dragDist.current < CLICK_PX) onSelect(region.guid, event.shiftKey);
@@ -598,7 +611,11 @@ export function RoomsPlan({
               >
                 {callouts.map((callout) => {
                   const on = selected.has(callout.guid);
-                  const hot = hovered === callout.guid;
+                  const region = rows.find((row) => row.region.guid === callout.guid)?.region;
+                  const hot =
+                    !!region &&
+                    (attention.hovered.has(elementKey(region.elementId)) ||
+                      attention.lit.has(elementKey(region.elementId)));
                   const [ax, ay] = callout.anchor;
                   const [px, py] = callout.pin;
                   const textX = px + callout.pinWidth / 2 + 8;
@@ -611,8 +628,7 @@ export function RoomsPlan({
                       ])}
                       data-callout={callout.label}
                       style={{ pointerEvents: "auto", cursor: "pointer" }}
-                      onMouseEnter={() => onHover(callout.guid)}
-                      onMouseLeave={() => onHover(null)}
+                      {...mention({ doc, key: `room:${callout.guid}` })}
                       onClick={(event) => {
                         event.stopPropagation();
                         if (dragDist.current < CLICK_PX) onSelect(callout.guid, event.shiftKey);
