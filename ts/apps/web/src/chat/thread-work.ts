@@ -68,8 +68,13 @@ export const partialWork = (snapshot: ThreadWorkSnapshot | null) =>
       }
     : null;
 
-/** A Work on a closed document resumes its retained or reconnect state, never the live session.
- *  TODO(route thread): their Work-id resume lookup replaces this stub; null means "open the route". */
-export async function resumeWork(_workId: string): Promise<{ link: string } | null> {
-  return null;
+/** The frozen `work.resume` answer this row needs; the contract's `WorkResume` replaces it. */
+type Resume = { url: string | null; reason: string | null };
+
+/** A Work on a closed document resumes its retained or reconnect state, never the live session:
+ *  Address Work answers its durable `url` even closed; unknown or unreadable Work answers `url:
+ *  null` and a truthful `reason`. TODO(route thread contracts cherry-pick): the body becomes
+ *  `return peClient.call("work.resume", { query: { id: workId } });` (GET /pe/work-resume). */
+export async function resumeWork(_workId: string): Promise<Resume> {
+  return { url: null, reason: null };
 }

@@ -674,10 +674,14 @@ export function ThreadsSidebar({
   const host = useSurfaceHost();
   const works = useThreadWorks();
   const partial = partialWork(works.snapshot);
+  // Why a closed Work could not resume, said once in its row's hint; the row stays pressable.
+  const [unresumed, setUnresumed] = useState<ReadonlyMap<string, string>>(new Map());
   const pressWork = async (thread: string, work: ThreadWork, item: ThreadWork["works"][number]) => {
     const closed =
       work.documents.find((document) => document.id === item.documentId)?.availability === "closed";
-    onWork?.(thread, item.route, closed ? (await resumeWork(item.id))?.link : undefined);
+    const resumed = closed ? await resumeWork(item.id) : null;
+    if (resumed?.reason) setUnresumed((was) => new Map(was).set(thread, resumed.reason!));
+    onWork?.(thread, item.route, resumed?.url ?? undefined);
   };
   const compactRows = compactRowsOverride ?? host.surface === "tray";
   const [view, setView] = useState(() =>
@@ -870,7 +874,7 @@ export function ThreadsSidebar({
             </Button>
           </span>
         ),
-      title: rowHint(thread, work),
+      title: [rowHint(thread, work), unresumed.get(thread.id)].filter(Boolean).join(" · "),
       onDoubleClick: () => setMenuId(thread.id),
       onContextMenu: (event) => {
         event.preventDefault();

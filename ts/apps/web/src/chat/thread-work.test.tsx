@@ -10,7 +10,11 @@ import * as work from "./thread-work";
 
 vi.mock("./thread-work", async (original) => {
   const actual = await original<typeof import("./thread-work")>();
-  return { ...actual, useThreadWorks: vi.fn(actual.useThreadWorks) };
+  return {
+    ...actual,
+    useThreadWorks: vi.fn(actual.useThreadWorks),
+    resumeWork: vi.fn(actual.resumeWork),
+  };
 });
 vi.mock("#/host/pe-client", () => ({ peClient: {} }));
 vi.mock("#/navigation/surface-host", () => ({ useSurfaceHost: () => ({ surface: "web" }) }));
@@ -122,4 +126,28 @@ test("the sidebar reads one batch however many rows it draws", () => {
   mount(roster());
   expect(roster().length).toBeGreaterThan(4);
   expect(reads.mock.calls.length).toBe(few);
+});
+
+test("a closed Work opens the durable url its resume answers, and only for a closed document", async () => {
+  vi.mocked(work.resumeWork).mockResolvedValueOnce({
+    url: "/ducts?target=C%3A%2FLevel%201.rvt",
+    reason: null,
+  });
+  const { onWork } = mount();
+  fireEvent.click(
+    row("Level 1.rvt").querySelector<HTMLElement>('button[aria-label="Open duct resize"]')!,
+  );
+  await vi.waitFor(() =>
+    expect(onWork).toHaveBeenCalledWith(
+      "fixture-ended",
+      "ducts",
+      "/ducts?target=C%3A%2FLevel%201.rvt",
+    ),
+  );
+  expect(work.resumeWork).toHaveBeenCalledWith("w-4");
+  vi.mocked(work.resumeWork).mockClear();
+  fireEvent.click(
+    row("Operations Demo.rvt").querySelector<HTMLElement>('button[aria-label="Open duct resize"]')!,
+  );
+  expect(work.resumeWork).not.toHaveBeenCalled();
 });
