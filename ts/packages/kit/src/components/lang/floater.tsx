@@ -195,9 +195,10 @@ export function Floater({ spec }: { spec: FloaterSurfaceSpec }) {
     if (!node) return;
     const field = ref.current!.parentElement!.getBoundingClientRect();
     const content = node.querySelector<HTMLElement>("[data-slot='floater-content']")!;
-    // Percentage SVG dimensions need the popup box, so measure intrinsic content first.
+    // Break the 100% wrapper / capped SVG cycle before measuring intrinsic content.
     node.style.width = node.style.height = "";
     for (const key of ["w", "h"]) node.style.removeProperty(`--floater-content-${key}`);
+    content.style.width = content.style.height = "max-content";
     const natural = content.getBoundingClientRect();
     const gutter = parseFloat(getComputedStyle(ref.current!).getPropertyValue("--gutter")) || 0;
     const size = {
@@ -211,6 +212,7 @@ export function Floater({ spec }: { spec: FloaterSurfaceSpec }) {
         field.height - 2 * gutter,
       ),
     };
+    content.style.width = content.style.height = "";
     for (const key of ["width", "height"] as const)
       if (size[key] > 0) {
         node.style[key] = `${size[key]}px`;

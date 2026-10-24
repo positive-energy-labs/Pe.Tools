@@ -20,9 +20,9 @@ const spec = (key: string, size?: FloaterSpec["size"]): FloaterSpec => ({
   render: () => <svg aria-label="globe picture" width="220" height="220" />,
 });
 
-function mockField() {
-  vi.spyOn(document.documentElement, "clientWidth", "get").mockReturnValue(600);
-  vi.spyOn(document.documentElement, "clientHeight", "get").mockReturnValue(600);
+function mockField(field = new DOMRect(0, 0, 600, 600)) {
+  vi.spyOn(document.documentElement, "clientWidth", "get").mockReturnValue(field.width);
+  vi.spyOn(document.documentElement, "clientHeight", "get").mockReturnValue(field.height);
   for (const [property, dimension] of [
     ["offsetWidth", "width"],
     ["offsetHeight", "height"],
@@ -31,21 +31,31 @@ function mockField() {
   ] as const)
     vi.spyOn(HTMLElement.prototype, property, "get").mockImplementation(
       function (this: HTMLElement) {
-        return this.getBoundingClientRect()[dimension];
+        const size = this.getBoundingClientRect()[dimension];
+        return this.hasAttribute("data-floater-popup") && property.startsWith("client")
+          ? Math.max(0, size - 2)
+          : size;
       },
     );
   vi.spyOn(SVGElement.prototype, "getBoundingClientRect").mockImplementation(
     function (this: SVGElement) {
       const panel = this.closest("[data-floater-popup]")?.getBoundingClientRect();
-      return new DOMRect(panel?.x ?? 0, panel?.y ?? 0, 220, 220);
+      return new DOMRect((panel?.x ?? 0) + 1, (panel?.y ?? 0) + 1, 220, 220);
     },
   );
   vi.spyOn(HTMLElement.prototype, "getBoundingClientRect").mockImplementation(
     function (this: HTMLElement) {
-      if (this.dataset.field !== undefined) return new DOMRect(0, 0, 600, 600);
-      if (this.dataset.slot === "floater-content") return new DOMRect(0, 0, 220, 220);
+      if (this.dataset.field !== undefined) return field;
+      // Before the popup has a size, its 100% wrapper and capped SVG measure zero.
+      if (this.dataset.slot === "floater-content")
+        return new DOMRect(
+          0,
+          0,
+          this.style.width === "max-content" ? 220 : 0,
+          this.style.height === "max-content" ? 220 : 0,
+        );
       if (this.matches("button") && this.closest("[data-slot='floater']"))
-        return new DOMRect(500, 568, 80, 24);
+        return new DOMRect(field.right - 100, field.bottom - 32, 80, 24);
       if (this.style.position === "fixed" || this.hasAttribute("data-floater-popup")) {
         const panel = this.hasAttribute("data-floater-popup")
           ? this
@@ -55,8 +65,8 @@ function mockField() {
         return new DOMRect(
           Number(xy?.[1]) || 0,
           Number(xy?.[2]) || 0,
-          parseFloat(panel?.style.width ?? "") || 0,
-          parseFloat(panel?.style.height ?? "") || 0,
+          parseFloat(panel?.style.width ?? "") || 2,
+          parseFloat(panel?.style.height ?? "") || 2,
         );
       }
       if (
@@ -71,8 +81,8 @@ function mockField() {
       const width = parseFloat(this.style.width) || 100;
       const height = parseFloat(this.style.height) || 100;
       return new DOMRect(
-        corner[1] === "r" ? 600 - width : 0,
-        (corner[0] === "b" ? 600 - height : 0) + dy,
+        corner[1] === "r" ? field.right - width : field.left,
+        (corner[0] === "b" ? field.bottom - height : field.top) + dy,
         width,
         height,
       );
@@ -116,8 +126,8 @@ test.each(["sibling", "pane-legend", "data-picture-readout", "pane-work", "pane-
 const pointer = (el: Element, type: string, x: number, y: number) =>
   fireEvent(el, new MouseEvent(type, { bubbles: true, button: 0, clientX: x, clientY: y }));
 
-function setup(size?: FloaterSpec["size"]) {
-  mockField();
+function setup(size?: FloaterSpec["size"], field?: DOMRect) {
+  mockField(field);
   const outerPointer = vi.fn();
   const view = render(
     <div
@@ -181,7 +191,7 @@ test.each([undefined, { width: 230, height: 230 }])(
   "a CSS-folded floater opens on a fixed content-sized plane (size=%s)",
   async (size) => {
     render(<style>{'[data-slot="floater"] { --floater-folded: 1; }'}</style>);
-    const { view, floater } = setup(size);
+    const { view, floater } = setup(size, new DOMRect(0, 0, 447, 845));
     expect(floater.hasAttribute("data-folded")).toBe(true);
     expect(view.queryByLabelText("globe picture")).toBeNull();
     const focus = vi.spyOn(HTMLElement.prototype, "focus");
@@ -191,8 +201,8 @@ test.each([undefined, { width: 230, height: 230 }])(
     expect(popup).toBeTruthy();
     expect(popup.parentElement!.style.position).toBe("fixed");
     expect(floater.contains(popup)).toBe(false);
-    expect(popup.style.width).toBe(size ? "230px" : "220px");
-    expect(popup.style.height).toBe(size ? "230px" : "220px");
+    expect(popup.style.width).toBe(size ? "230px" : "222px");
+    expect(popup.style.height).toBe(size ? "230px" : "222px");
     const panel = popup.getBoundingClientRect();
     const content = svg.getBoundingClientRect();
     const field = floater.parentElement!.getBoundingClientRect();

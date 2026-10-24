@@ -158,12 +158,6 @@ export function PaneResizeHandle({
   onReset,
 }: PaneResizeHandleProps) {
   const { root, bar } = paneResizeHandleRecipe({ axis });
-  const seam = useRef<HTMLDivElement>(null);
-  const [extent, setExtent] = useState<number | null>(null);
-  usePaneFit(seam, (rect) => {
-    const size = axis === "horizontal" ? rect.height : rect.width;
-    setExtent(size > 0 ? size : null);
-  });
   const drag = useRef<{ point: number; size: number; latest: number } | null>(null);
   const coordinate = (event: Pick<PointerEvent<HTMLDivElement>, "clientX" | "clientY">) =>
     axis === "horizontal" ? event.clientX : event.clientY;
@@ -203,7 +197,6 @@ export function PaneResizeHandle({
   return (
     <TooltipHint content="Drag or use arrow keys to resize · Home or double-click resets">
       <div
-        ref={seam}
         data-slot="pane-resize"
         data-axis={axis}
         role="separator"
@@ -223,28 +216,20 @@ export function PaneResizeHandle({
         className={root()}
       >
         <span className={bar()} />
-        {extent != null && (
-          <>
-            <span
-              data-slot="pane-resize-grip"
-              data-corner="center"
-              className={`absolute bg-line-2 ${axis === "horizontal" ? "h-(--control-h) w-px" : "h-px w-(--control-h)"}`}
-              style={
-                axis === "horizontal"
-                  ? { top: extent / 2, left: "50%", translate: "-50% -50%" }
-                  : { left: extent / 2, top: "50%", translate: "-50% -50%" }
-              }
-            />
-            {(["tr", "bl"] as const).map((corner) => (
-              <span
-                key={corner}
-                data-slot="pane-resize-grip"
-                data-corner={corner}
-                className={`absolute size-(--gutter) border-line-2 ${corner === "tr" ? "right-0 top-0 border-r border-t" : "bottom-0 left-0 border-b border-l"}`}
-              />
-            ))}
-          </>
-        )}
+        <span
+          data-slot="pane-resize-grip"
+          data-corner="center"
+          className={`absolute bg-line-2 ${axis === "horizontal" ? "h-(--control-h) w-px" : "h-px w-(--control-h)"}`}
+          style={{ top: "50%", left: "50%", translate: "-50% -50%" }}
+        />
+        {(["tr", "bl"] as const).map((corner) => (
+          <span
+            key={corner}
+            data-slot="pane-resize-grip"
+            data-corner={corner}
+            className={`absolute size-(--gutter) border-line-2 ${corner === "tr" ? "right-0 top-0 border-r border-t" : "bottom-0 left-0 border-b border-l"}`}
+          />
+        ))}
       </div>
     </TooltipHint>
   );
