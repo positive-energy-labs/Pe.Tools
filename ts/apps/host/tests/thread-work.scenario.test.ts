@@ -119,6 +119,16 @@ test("HTTP and one Reading retain named unfinished Work after target removal, cl
       },
     });
   let app = makeApp();
+  const tab = async (body: object) =>
+    withInvocationContext({ caller: human }, () =>
+      threads.fetch(
+        new Request(`http://host/pe/threads/${id}/tabs`, {
+          method: peRoutes["thread.tabs"].method,
+          headers: { "content-type": "application/json" },
+          body: JSON.stringify(body),
+        }),
+      ),
+    );
   const read = async () =>
     threadWorkSnapshotSchema.parse(
       await (await app.fetch(new Request("http://host/pe/thread-work"))).json(),
@@ -182,6 +192,30 @@ test("HTTP and one Reading retain named unfinished Work after target removal, cl
     expect(snapshot.threads[0]!.works).toEqual([
       { id: workKey(scope), documentId: doc.id, route: "ducts", intent: "Ducts", unfinished: 3 },
     ]);
+    const addressTab = randomUUID(),
+      openTab = randomUUID(),
+      unknownTab = randomUUID();
+    for (const [tabId, target] of [
+      [addressTab, at],
+      [openTab, JSON.stringify({ kind: "open", ref })],
+      [
+        unknownTab,
+        JSON.stringify({
+          kind: "open",
+          ref: { session: "unknown-session", openId: "unknown-open" },
+        }),
+      ],
+    ])
+      expect(
+        (
+          await tab({
+            op: "put",
+            id: tabId,
+            route: "ducts",
+            link: routeAddress("ducts").link({ system: "Retained page" }, { target }),
+          })
+        ).status,
+      ).toBe(200);
     const saved = await fileBytes();
     const stream = await app.fetch(
       new Request(
@@ -232,6 +266,11 @@ test("HTTP and one Reading retain named unfinished Work after target removal, cl
       sameAddress(address(new URL(resume.url!, "http://host").searchParams.get("target")!), at),
     ).toBe(true);
     expect(workKey(resume.key)).toBe(workKey(scope));
+    expect(resume.key).not.toHaveProperty("from");
+    expect(resume.matches).toEqual([
+      { threadId: id, tabId: addressTab },
+      { threadId: id, tabId: openTab },
+    ]);
     const retained = await (
       await app.fetch(
         new Request(`http://host/pe/route-state/ducts?target=${encodeURIComponent(at)}`),
@@ -268,16 +307,6 @@ test("HTTP and one Reading retain named unfinished Work after target removal, cl
       ).ok,
     ).toBe(true);
     const tabId = randomUUID();
-    const tab = async (body: object) =>
-      withInvocationContext({ caller: human }, () =>
-        threads.fetch(
-          new Request(`http://host/pe/threads/${id}/tabs`, {
-            method: peRoutes["thread.tabs"].method,
-            headers: { "content-type": "application/json" },
-            body: JSON.stringify(body),
-          }),
-        ),
-      );
     expect(
       (
         await tab({
@@ -288,6 +317,14 @@ test("HTTP and one Reading retain named unfinished Work after target removal, cl
         })
       ).status,
     ).toBe(200);
+    const scheduledPlace = workResumeSchema.parse(
+      await (
+        await app.fetch(
+          new Request(`http://host/pe/work-resume?id=${encodeURIComponent(workKey(schedule))}`),
+        )
+      ).json(),
+    );
+    expect(scheduledPlace.matches).toEqual([{ threadId: id, tabId }]);
     expect((await tab({ op: "close", id: tabId })).status).toBe(200);
     documents = [];
     await threads.close();
@@ -327,6 +364,16 @@ test("HTTP and one Reading retain named unfinished Work after target removal, cl
     );
     expect(unbound.url).toBeNull();
     expect(unbound.reason).toContain("no document binding");
+    documents = [{ ...ref, address: address("C:/Models/SaveAs.rvt"), name: "Other saved model" }];
+    threads.refreshWorkContexts();
+    const afterSaveAs = workResumeSchema.parse(
+      await (
+        await app.fetch(
+          new Request(`http://host/pe/work-resume?id=${encodeURIComponent(workKey(scope))}`),
+        )
+      ).json(),
+    );
+    expect(afterSaveAs.matches).toEqual([{ threadId: id, tabId: addressTab }]);
   } finally {
     abort.abort();
     await threads.close();

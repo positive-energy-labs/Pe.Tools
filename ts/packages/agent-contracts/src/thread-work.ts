@@ -39,5 +39,7 @@ export const workResumeSchema = z.strictObject({
   key: workKeySchema,
   url: z.string().startsWith("/").nullable(),
   reason: z.string().nullable(),
+  /** Matching canonical Places in thread tab order; browser-local activity is not persisted. */
+  matches: z.array(z.strictObject({ threadId: z.string().min(1), tabId: z.string().min(1) })),
 });
 export type WorkResume = z.infer<typeof workResumeSchema>;
