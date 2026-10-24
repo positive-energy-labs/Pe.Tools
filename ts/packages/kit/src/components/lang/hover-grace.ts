@@ -1,11 +1,4 @@
-import {
-  useEffect,
-  useImperativeHandle,
-  useMemo,
-  useState,
-  type KeyboardEvent,
-  type Ref,
-} from "react";
+import { useEffect, useImperativeHandle, useMemo, useState, type Ref } from "react";
 import { focusQuiet } from "../../lib/utils";
 
 /** One travel window for hover surfaces and the subjects they light. */
@@ -49,6 +42,7 @@ export function useHoverSurface(
   anchor: Element | null,
   ref?: Ref<HTMLDivElement>,
   contact?: (element: HTMLDivElement | null, over: boolean) => void,
+  close?: () => void,
 ) {
   const [popup, attach] = useState<HTMLDivElement | null>(null);
   useImperativeHandle(ref, () => popup!, [popup]);
@@ -77,44 +71,52 @@ export function useHoverSurface(
     const events = ["mouseover", "mouseenter", "mousemove"] as const;
     const enterPopup = () => contact?.(popup, true);
     const leavePopup = () => contact?.(popup, false);
+    const keydown = (event: KeyboardEvent) => {
+      const escape = event.key === "Escape";
+      if (
+        event.defaultPrevented ||
+        event.isComposing ||
+        (!escape && (event.key !== "Tab" || event.currentTarget === popup)) ||
+        event.altKey ||
+        event.ctrlKey ||
+        event.metaKey
+      )
+        return;
+      const active = popup.ownerDocument.activeElement;
+      const entering = anchor.contains(active);
+      if ((!entering && !popup.contains(active)) || (!escape && entering && event.shiftKey)) return;
+      const items = focusables(popup);
+      if (!escape && !items.length) return;
+      const index = items.findIndex((el) => el === active) + (event.shiftKey ? -1 : 1);
+      const page = focusables(popup.ownerDocument).filter(
+        (el) => !el.closest('[data-slot="tooltip-content"]'),
+      );
+      const next =
+        (escape || index < 0 ? anchor : items.at(index)) ??
+        page.at(page.findIndex((el) => el === anchor) + 1);
+      if (!(next instanceof HTMLElement || next instanceof SVGElement)) return;
+      event.preventDefault();
+      event.stopPropagation();
+      focusQuiet(next);
+      if (escape || (next !== anchor && !popup.contains(next))) close?.();
+    };
     popup.addEventListener("mouseenter", enterPopup);
     popup.addEventListener("mouseleave", leavePopup);
+    popup.addEventListener("keydown", keydown, true);
     anchor.addEventListener("mouseleave", leave);
     events.forEach((name) => popup.ownerDocument.addEventListener(name, protect, true));
+    popup.ownerDocument.addEventListener("keydown", keydown);
     return () => {
       contact?.(null, false);
       popup.removeEventListener("mouseenter", enterPopup);
       popup.removeEventListener("mouseleave", leavePopup);
+      popup.removeEventListener("keydown", keydown, true);
       anchor.removeEventListener("mouseleave", leave);
       events.forEach((name) => popup.ownerDocument.removeEventListener(name, protect, true));
+      popup.ownerDocument.removeEventListener("keydown", keydown);
     };
-  }, [anchor, popup, contact]);
-  const onKeyDown = (event: KeyboardEvent<HTMLDivElement>) => {
-    if (
-      event.defaultPrevented ||
-      event.key !== "Tab" ||
-      event.altKey ||
-      event.ctrlKey ||
-      event.metaKey ||
-      !popup
-    )
-      return;
-    const items = focusables(popup);
-    const index = items.findIndex((el) => el === popup.ownerDocument.activeElement);
-    const nextIndex = index + (event.shiftKey ? -1 : 1);
-    let next: Element | null | undefined = nextIndex < 0 ? undefined : items.at(nextIndex);
-    if (!next) {
-      const page = focusables(popup.ownerDocument).filter(
-        (el) => !el.closest('[data-slot="tooltip-content"]'),
-      );
-      next = event.shiftKey ? anchor : page.at(page.findIndex((el) => el === anchor) + 1);
-    }
-    if (!(next instanceof HTMLElement || next instanceof SVGElement)) return;
-    event.preventDefault();
-    event.stopPropagation();
-    focusQuiet(next);
-  };
-  return { ref: attach, onKeyDown };
+  }, [anchor, popup, contact, close]);
+  return attach;
 }
 
 export function useHoverGrace<T>(close: (value: T) => void) {
