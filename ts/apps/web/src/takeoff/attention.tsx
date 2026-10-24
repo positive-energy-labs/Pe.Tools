@@ -1,0 +1,50 @@
+import * as Atom from "effect/unstable/reactivity/Atom";
+import { RegistryContext } from "@effect/atom-react";
+import { useMemo, type ReactNode } from "react";
+import {
+  elementKey,
+  resolveMembers,
+  type SubjectKey,
+} from "@pe/kit/lang/attention";
+import { AttentionScope } from "#/attention";
+import type { TakeoffsController } from "./controller";
+
+// Like /rooms, zones and rooms carry Pe region GUIDs, not Revit UniqueIds.
+export const regionKey = (guid: string): SubjectKey => `room:${guid}`;
+export const regionTarget = (region: { guid: string; elementId: number | null }): SubjectKey =>
+  region.elementId === null ? regionKey(region.guid) : elementKey(region.elementId);
+
+export function TakeoffAttention({
+  store,
+  children,
+}: {
+  store: TakeoffsController;
+  children: ReactNode;
+}) {
+  const target = store.handle.resolution;
+  const doc = store.savedCapture
+    ? `capture:takeoffs:${store.savedCapture.id}`
+    : target.kind === "resolved" && target.target.kind === "document"
+      ? `${target.target.ref.session}/${target.target.ref.openId}`
+      : "fixture:takeoffs:plan";
+  const selected = useMemo(
+    () =>
+      Atom.make((get): ReadonlySet<SubjectKey> => {
+        const { zone, room } = get(store.handle.pageState).page;
+        return new Set([zone, room].filter(Boolean).map(regionKey));
+      }),
+    [store.handle.pageState],
+  );
+  const members = useMemo(() => {
+    const regions = store.world.zones.flatMap((zone) => [zone.zone, ...zone.rooms]);
+    const keys = new Map(regions.map((region) => [regionKey(region.guid), regionTarget(region)]));
+    return (key: SubjectKey) => (keys.has(key) ? [keys.get(key)!] : resolveMembers(key));
+  }, [store.world]);
+  return (
+    <RegistryContext value={store.handle.registry}>
+      <AttentionScope doc={doc} selected={selected} members={members}>
+        {children}
+      </AttentionScope>
+    </RegistryContext>
+  );
+}

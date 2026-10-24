@@ -1,4 +1,6 @@
 import { fmtNum } from "@pe/kit/table/model";
+import { memberKey, useMention } from "@pe/kit/lang/attention";
+import { regionKey } from "./attention";
 import { TooltipHint } from "@pe/kit/lang/tooltip";
 import { ROOM_STATES, STATE_META, stateInk, type RoomState } from "#/takeoff/room-state";
 import type { ModelRoom, ModelZone } from "#/takeoff/world";
@@ -15,6 +17,7 @@ export function LevelTotals({
   zones: ModelZone[];
   stateOf: (room: ModelRoom) => RoomState;
 }) {
+  const mention = useMention();
   const area: Record<RoomState, number> = { call: 0, unreviewed: 0, data: 0, synced: 0 };
   let calls = 0;
   for (const r of zones.flatMap((z) => z.rooms)) {
@@ -35,7 +38,7 @@ export function LevelTotals({
   const open = Math.abs(residual) >= 1;
 
   return (
-    <div className="flex flex-col gap-1" data-level-totals="">
+    <div className="flex flex-col gap-1" data-level-totals="" {...mention(memberKey(zones.map((z) => regionKey(z.zone.guid))))}>
       <div className="flex h-1.5 w-full items-stretch gap-px overflow-hidden">
         {ROOM_STATES.map((s) =>
           area[s] > 0 ? (

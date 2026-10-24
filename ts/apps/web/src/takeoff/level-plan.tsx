@@ -1,6 +1,9 @@
 import { GoToPopup } from "@pe/kit/lang/go-to";
 import { SvgTip } from "@pe/kit/lang/tooltip";
-import { useMemo, type ReactNode } from "react";
+import { useContext, useMemo, type ReactNode } from "react";
+import { RegistryContext } from "@effect/atom-react";
+import { AttentionDocument, mention, setHovered, useAttention } from "@pe/kit/lang/attention";
+import { regionKey, regionTarget } from "./attention";
 import { PictureStage } from "#/scene/stage-controller";
 import type { PlaneViewport } from "@pe/agent-contracts";
 import { Pane } from "@pe/kit/lang/pane";
@@ -110,12 +113,9 @@ export function LevelPlan({
   planNote,
   zones,
   shown,
-  selectedKey,
-  cursor,
   stateOf,
   rows,
   onSelectZone,
-  onHover,
   onCursor,
 }: {
   lease?: {
@@ -141,14 +141,15 @@ export function LevelPlan({
   zones: ModelZone[];
   /** Zones the table's query keeps; the rest dim. null = no query. */
   shown: ReadonlySet<string> | null;
-  selectedKey: string | null;
-  cursor: string | null;
   stateOf: (room: ModelRoom) => RoomState;
   rows: readonly import("./controller").AtlasRow[];
   onSelectZone: (z: ModelZone | null) => void;
-  onHover: (id: string) => void;
   onCursor: (z: ModelZone, guid: string) => void;
 }) {
+  const doc = useContext(AttentionDocument) ?? "";
+  const registry = useContext(RegistryContext);
+  const attention = useAttention(doc);
+  const selectedKey = zones.find((z) => attention.selected.has(regionTarget(z.zone)))?.zone.guid;
   const rowByRoom = useMemo(() => new Map(rows.map((row) => [row.room.guid, row])), [rows]);
   const drawn = useMemo(() => zones.filter(onPlan), [zones]);
   const skipped = zones.length - drawn.length;
@@ -267,7 +268,9 @@ export function LevelPlan({
             })),
           ])
         }
-        hover={(item) => onHover(item?.key ?? "")}
+        hover={(item) =>
+          setHovered(registry, item ? { doc, key: regionKey(item.key) } : null)
+        }
         onGo={(item) => {
           onSelectZone(item.zone);
           if (item.room) onCursor(item.zone, item.room.guid);
@@ -426,6 +429,7 @@ export function LevelPlan({
               {drawn.map((z) => {
                 const dimmed = shown !== null && !shown.has(z.zone.guid);
                 const on = z.zone.guid === selectedKey;
+                const hot = attention.hovered.has(regionTarget(z.zone)) || attention.lit.has(regionTarget(z.zone));
                 // Monotone (I3): a zone's Revit colour names nothing the label does not; ink only.
                 const ink = token("ink");
                 const [zoneLabelX, zoneLabelY] = frame.toViewport([
@@ -436,17 +440,16 @@ export function LevelPlan({
                   <g
                     key={z.zone.key}
                     opacity={dimmed ? 0.15 : 1}
-                    onMouseEnter={() => onHover(z.zone.guid)}
-                    onMouseLeave={() => onHover("")}
+                    {...mention({ doc, key: regionKey(z.zone.guid) })}
                   >
                     <path
                       {...revitTarget(z.zone.elementId == null ? [] : [z.zone.elementId])}
                       d={pathD(z.zone.loops, frame)}
                       fillRule="evenodd"
-                      fill={on ? `color-mix(in srgb, ${ink} 6%, transparent)` : "transparent"}
+                      fill={on || hot ? `color-mix(in srgb, ${ink} ${hot ? 14 : 6}%, transparent)` : "transparent"}
                       stroke={ink}
-                      strokeWidth={on ? 2 : 1}
-                      strokeOpacity={on ? 0.9 : 0.4}
+                      strokeWidth={on || hot ? 2 : 1}
+                      strokeOpacity={on || hot ? 0.9 : 0.4}
                       vectorEffect="non-scaling-stroke"
                       onClick={(e) => {
                         e.stopPropagation();
@@ -469,7 +472,8 @@ export function LevelPlan({
 
                     {z.rooms.map((room) => {
                       const state = stateOf(room);
-                      const isCursor = room.guid === cursor;
+                      const isCursor = attention.selected.has(regionTarget(room));
+                      const hot = attention.hovered.has(regionTarget(room)) || attention.lit.has(regionTarget(room));
                       const tone = isCursor ? CURSOR_INK : stateInk(state);
                       const [labelX, labelY] = frame.toViewport(room.label);
                       const click = (e: React.MouseEvent) => {
@@ -480,6 +484,7 @@ export function LevelPlan({
                         return (
                           <circle
                             key={room.guid}
+                            {...mention({ doc, key: regionKey(room.guid) })}
                             {...revitTarget(room.elementId == null ? [] : [room.elementId])}
                             {...damageMark(rowByRoom.get(room.guid))}
                             cx={labelX}
@@ -487,7 +492,7 @@ export function LevelPlan({
                             r={span / 260}
                             fill={`color-mix(in srgb, ${tone} 45%, transparent)`}
                             stroke={tone}
-                            strokeWidth={isCursor ? 2 : 1}
+                            strokeWidth={isCursor || hot ? 2 : 1}
                             vectorEffect="non-scaling-stroke"
                             onClick={click}
                           >
@@ -497,6 +502,7 @@ export function LevelPlan({
                       return (
                         <g
                           key={room.guid}
+                          {...mention({ doc, key: regionKey(room.guid) })}
                           {...revitTarget(room.elementId == null ? [] : [room.elementId])}
                           onClick={click}
                         >
@@ -504,10 +510,10 @@ export function LevelPlan({
                             {...damageMark(rowByRoom.get(room.guid))}
                             d={pathD([room.outer, ...room.holes], frame)}
                             fillRule="evenodd"
-                            fill={`color-mix(in srgb, ${tone} ${isCursor ? 34 : state === "unreviewed" ? 7 : 13}%, transparent)`}
+                            fill={`color-mix(in srgb, ${tone} ${isCursor ? 34 : hot ? 24 : state === "unreviewed" ? 7 : 13}%, transparent)`}
                             stroke={tone}
                             strokeOpacity={0.85}
-                            strokeWidth={isCursor ? 2.5 : 1}
+                            strokeWidth={isCursor ? 2.5 : hot ? 2 : 1}
                             vectorEffect="non-scaling-stroke"
                           >
                             <SvgTip content={STATE_META[state].label} />
