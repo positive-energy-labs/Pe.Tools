@@ -247,3 +247,22 @@ test("parent-r2 receipt: the host's base url never replaces the saved Place's re
     }),
   );
 });
+
+// KNOWN GAP, waits for the route thread's `WorkResume.matches` ({threadId, tabId}[], host-derived).
+// The producer (`storedWorkKey`, packages/runtime/src/route-workspace.ts:555) decodes an address
+// WorkKey with no `from`, so an exact open-ref Place cannot prove it holds that Work from the key
+// alone. No web-side guess fills it: today this press opens a fresh Place. `test.fails` flips red
+// when the gap closes, so the expectation below becomes the live assertion.
+test.fails("known gap: an address key with no `from` restores the open-ref Place holding its Page", async () => {
+  const router = await mount();
+  await act(() =>
+    store.actions.openWork(
+      "T",
+      "ducts",
+      resume({ binding: "address", route: "ducts", target: address(String.raw`c:\jobs\open.rvt`) }),
+    ),
+  );
+  await waitFor(() => expect(shown(router)).toMatchObject({ system: "SO", tab: "tab-open" }), {
+    timeout: 1500,
+  });
+});
