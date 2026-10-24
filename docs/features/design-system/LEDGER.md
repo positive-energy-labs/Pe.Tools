@@ -859,7 +859,7 @@ These rows are byte-for-byte text from `34bd5e17`. The searchable comment preser
   - Purge debt: work +335, camera +284, overlay +278, teach +202, teach-observer +161, capture +136, tips-fix +422, tutorial +110, floater-geometry +113 net lines; the fold slice recovered ~5. One purge pass over kit pane/button/tooltip/teach owners is owed.
   - Capture rules (Fine retry by bounding-box coverage, nearest-first context, completeness advisory) are compile and synthetic-test proven only; the real-model read (SA 71 flex tubes, context omitted count) waits on the next `pe-revit session hr`.
   - Scene look (context ground, fog steepness, x-ray reserved for the lit subject) is proven for state, not for taste: one real-model eye pass by kaitpw.
-  - `ts/tests/e2e/route-chaos.test.ts` needs `CHAOS_PRODUCT_ROOT`; not run on this branch. `ts/apps/host/tests/dev-takeover.test.ts` fails with ENOTEMPTY on temp-dir cleanup on main b8905f6e too (environmental; host owner).
+  - `ts/tests/e2e/route-chaos.test.ts` needs `CHAOS_PRODUCT_ROOT`; not run on this branch. `ts/apps/host/tests/dev-takeover.test.ts` fails with ENOTEMPTY on temp-dir cleanup on main b8905f6e too (environmental; host owner). Under parallel load (2026-10-24, 52ca87ac) `terminal-context-claim.test.ts` also failed on cleanup with EPERM, and `harness-install.test.ts` read an empty Windows architecture value; a serial `pnpm verify` on the same commit was green. Owner: host.
   - Fold the sibling-certified readout carry forward: done in retain-fix (kit readout slots); the route-chaos journey must be replayed once on main.
   - Worktree residue on disk under `C:/Users/kaitp/.t3/worktrees/Pe.Tools/t3-*` (node_modules locks); git registrations pruned.
 
