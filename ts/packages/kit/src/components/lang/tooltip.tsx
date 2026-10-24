@@ -21,6 +21,7 @@ const Description = createContext<{
   open: boolean;
   anchor: Element | null;
   contact: (element: HTMLDivElement | null, over: boolean) => void;
+  close: () => void;
 } | null>(null);
 
 // After a press, a hint waits for the pointer to move: content that lands under a still pointer
@@ -87,6 +88,7 @@ export function Tooltip({
   open: controlled,
   defaultOpen = false,
   onOpenChange,
+  actionsRef,
   ...props
 }: Primitive.Root.Props) {
   const parent = useContext(Description);
@@ -94,6 +96,9 @@ export function Tooltip({
   const [anchor, setAnchor] = useState<Element | null>(null);
   const [uncontrolled, setOpen] = useState(defaultOpen);
   const open = controlled ?? uncontrolled;
+  const localActions = useRef<Primitive.Root.Actions | null>(null);
+  const actions = actionsRef ?? localActions;
+  const close = useCallback(() => actions.current?.close(), [actions]);
   const held = useRef<{ element: HTMLDivElement | null; over: boolean }>({
     element: null,
     over: false,
@@ -102,9 +107,10 @@ export function Tooltip({
     held.current = { element, over };
   }, []);
   const root = (
-    <Description.Provider value={{ id, open, anchor, contact }}>
+    <Description.Provider value={{ id, open, anchor, contact, close }}>
       <Primitive.Root
         {...props}
+        actionsRef={actions}
         open={open}
         onOpenChange={(next, event) => {
           const focus =
@@ -163,13 +169,17 @@ export function TooltipContent({
   className,
   anchor,
   ref,
-  onKeyDown,
   ...props
 }: Omit<Primitive.Popup.Props, "className"> &
   FloatingPosition & { className?: string; anchor?: Element | null }) {
   const description = useContext(Description);
   const away = useSubjectPosition(anchor ?? description?.anchor ?? null);
-  const surface = useHoverSurface(anchor ?? description?.anchor ?? null, ref, description?.contact);
+  const surface = useHoverSurface(
+    anchor ?? description?.anchor ?? null,
+    ref,
+    description?.contact,
+    description?.close,
+  );
   return (
     <Primitive.Portal>
       <Primitive.Positioner
@@ -193,11 +203,7 @@ export function TooltipContent({
           data-slot="tooltip-content"
           className={cn(floatingSurface, className)}
           {...props}
-          ref={surface.ref}
-          onKeyDown={(event) => {
-            onKeyDown?.(event);
-            surface.onKeyDown(event);
-          }}
+          ref={surface}
         />
       </Primitive.Positioner>
     </Primitive.Portal>
