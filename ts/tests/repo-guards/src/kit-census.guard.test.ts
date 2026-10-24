@@ -25,9 +25,10 @@ type Rule = {
 const allow = (entries: Record<string, string>): Allow[] =>
   Object.entries(entries).map(([glob, reason]) => ({ glob: W + glob, reason }));
 
-// Filenames use the wave-4 final homes: land.ts, revit-target.tsx and go-to.tsx.
 // prettier-ignore
 const RULES: Rule[] = [
+  { id: "tutorial-test-explicit-frames", doctrine: "N6", pattern: /\bsetTimeout\s*\(|await\s+reveal\(/g,
+    roots: [W + "design-system/specimens/teach.test.tsx"], allow: [], cannotSee: "Aliased clocks or frame delivery; the Help test advances fake animation frames after each explicit intersection batch." },
   { id: "pane-strip-css-fold", doctrine: "L3", pattern: /getComputedStyle|getBoundingClientRect|clientWidth|scrollWidth|useLayoutEffect/g,
     roots: [K + "components/lang/pane-strip.tsx", K + "components/lang/rail.tsx"], allow: [],
     cannotSee: "CSS breakpoints, popover ownership or label recovery; browser checks the full/compact/wide sequence." },
@@ -397,6 +398,8 @@ const sources = ["apps", "packages"]
       !/\/(?:prototypes|lab|design-system)\//.test(path) &&
       !path.startsWith(W + "routes/design-system"),
   );
+for (const path of RULES.flatMap((rule) => rule.roots))
+  if (!sources.includes(path) && existsSync(join(ROOT, path))) sources.push(path);
 const bytes = new Map(sources.map((path) => [path, readFileSync(join(ROOT, path), "latin1")]));
 const matches = (path: string, globs: string[]) => globs.some((glob) => matchesGlob(path, glob));
 const selectorMatches = (classes: string, selector: string) =>
