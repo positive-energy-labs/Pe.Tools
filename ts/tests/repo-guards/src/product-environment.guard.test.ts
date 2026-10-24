@@ -38,6 +38,20 @@ const resolvers = new Set([
   "tools/product-paths.ps1",
 ]);
 const allowed: Record<string, { line: string; reason: string }[]> = {
+  "ts/packages/browser/src/platform.ts": [
+    {
+      line: 'process.env.LOCALAPPDATA ?? join(homedir(), "AppData", "Local"),',
+      reason: "Locates Chrome-owned profile data; Pe.Tools browser sessions use productRoot.",
+    },
+    {
+      line: '? join(homedir(), "Library", "Application Support", "Google", "Chrome")',
+      reason: "Locates Chrome-owned macOS profile data, not product storage.",
+    },
+    {
+      line: ': join(process.env.XDG_CONFIG_HOME ?? join(homedir(), ".config"), "google-chrome");',
+      reason: "Locates Chrome-owned Linux profile data, not product storage.",
+    },
+  ],
   "ts/apps/host/src/foreign-addins.ts": [
     {
       line: 'user: join(env.APPDATA ?? "", "Autodesk", "Revit", "Addins"),',
