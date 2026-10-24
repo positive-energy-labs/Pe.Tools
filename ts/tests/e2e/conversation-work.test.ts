@@ -179,9 +179,13 @@ test("real conversation Work cutover retains authored cells, draft, Places and o
     };
     const toolsCollapsed = async () =>
       new URL(await p.url()).pathname === "/pea" &&
-      /tools collapsed/i.test(await p.textOf('[data-pane-id="tools"]')) &&
       (await p.read<boolean>(
-        `[...document.querySelectorAll('[data-pane-id="tools"] [data-route-tab]')].every(e => !e.getClientRects().length)`,
+        `(() => {
+          const root = document.querySelector('section[data-slot="pane"][data-pane-id="tools"]');
+          const strip = [...document.querySelectorAll('[role="group"][aria-label="Thread Places"]')].find(${visible});
+          return root && !root.getClientRects().length && Boolean(strip?.closest('[data-pane-id="transcript"] [data-slot="pane-header"]')) &&
+            [...root.querySelectorAll('[data-route-tab]')].every(e => !e.getClientRects().length);
+        })()`,
       ));
     const draft = () =>
       p.read<string>(
@@ -351,6 +355,46 @@ test("real conversation Work cutover retains authored cells, draft, Places and o
       );
       expect(await draft()).toBe(message);
       expect(await composerIdentity()).toBe(officeComposer);
+    });
+    await step("expanded dock keeps Pea readable at narrow and wide viewports", async () => {
+      const layouts = [];
+      for (const width of [1200, 1920, 1400]) {
+        await p.send("Emulation.setDeviceMetricsOverride", {
+          width,
+          height: 900,
+          deviceScaleFactor: 1,
+          mobile: false,
+        });
+        const axis = width === 1200 ? "vertical" : "horizontal";
+        await p.until(
+          async () =>
+            p.read<boolean>(
+              `document.querySelector('[data-pane-id="tools"]')?.closest('[data-slot="pane-split"]')?.getAttribute('data-axis') === ${JSON.stringify(axis)}`,
+            ),
+          `${width}px dock reaches its ${axis} layout`,
+        );
+        const layout = await p.read<{
+          viewport: number;
+          document: number;
+          composer: number;
+          density: string | null;
+        }>(`(() => {
+          const composer = [...document.querySelectorAll('[data-chat-composer]')].find(${visible});
+          return { viewport: innerWidth, document: document.documentElement.scrollWidth,
+            composer: composer?.getBoundingClientRect().width ?? 0,
+            density: document.documentElement.getAttribute('data-density') };
+        })()`);
+        expect(layout.viewport).toBe(width);
+        expect(Number.isFinite(layout.composer)).toBe(true);
+        expect(layout.composer, "Pea keeps its reading measure").toBeGreaterThanOrEqual(560);
+        expect(layout.document, "the dock introduces no horizontal overflow").toBeLessThanOrEqual(
+          width + 1,
+        );
+        expect(await composerIdentity()).toBe(officeComposer);
+        layouts.push(layout);
+        await p.dump(dir, `viewport-${width}`);
+      }
+      receipt.coverage.layout = layouts;
     });
     await step("Home and Back preserve the composer", async () => {
       await p.click("Home / tool directory");
