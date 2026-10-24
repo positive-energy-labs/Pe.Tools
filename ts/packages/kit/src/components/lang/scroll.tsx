@@ -145,9 +145,35 @@ function attach(el: HTMLElement, parts: Parts, sources: Registry["sources"]) {
     if (!raf && !el.closest("[data-pane-resizing]")) raf = requestAnimationFrame(draw);
   };
   const geometry = () => {
-    clientH = el.clientHeight;
-    scrollH = el.scrollHeight;
+    // Reads first, then write only what changed: a write before the next observer's read (or a
+    // seam drag's per-frame width change that moves nothing here) would force a style recalc.
+    const nextH = el.clientHeight;
+    const nextScrollH = el.scrollHeight;
+    const nextW = xFrame ? el.clientWidth : 0;
+    const nextScrollW = xFrame ? el.scrollWidth : 0;
+    const dpr = window.devicePixelRatio || 1;
+    const nextWidth = Math.round(strip.clientWidth * dpr) || 1;
+    if (
+      process.env.NODE_ENV !== "production" &&
+      el.offsetWidth - el.clientWidth - 2 * el.clientLeft > 0
+    )
+      console.error("Scroll: a native scrollbar gutter came back on", el);
     top = el.scrollTop;
+    left = el.scrollLeft;
+    if (
+      ink &&
+      nextH === clientH &&
+      nextScrollH === scrollH &&
+      nextW === clientW &&
+      nextScrollW === scrollW &&
+      nextWidth === width
+    )
+      return;
+    clientH = nextH;
+    scrollH = nextScrollH;
+    clientW = nextW;
+    scrollW = nextScrollW;
+    width = nextWidth;
     const scrolls = scrollH > clientH + 1;
     el.toggleAttribute("data-scrolls", scrolls);
     const frameH = scrolls ? Math.max(2, (clientH * clientH) / scrollH) : clientH;
@@ -156,9 +182,6 @@ function attach(el: HTMLElement, parts: Parts, sources: Registry["sources"]) {
     strip.style.setProperty("--frame-h", `${frameH}px`);
     strip.style.setProperty("--frame-travel", `${travel}px`);
     if (xFrame) {
-      clientW = el.clientWidth;
-      scrollW = el.scrollWidth;
-      left = el.scrollLeft;
       const scrollsX = scrollW > clientW + 1;
       el.toggleAttribute("data-scrolls-x", scrollsX);
       const frameW = scrollsX ? Math.max(2, (clientW * clientW) / scrollW) : clientW;
@@ -166,26 +189,20 @@ function attach(el: HTMLElement, parts: Parts, sources: Registry["sources"]) {
       xFrame.style.setProperty("--frame-w", `${frameW}px`);
       xFrame.style.setProperty("--frame-travel-x", `${travelX}px`);
     }
-    if (
-      process.env.NODE_ENV !== "production" &&
-      el.offsetWidth - el.clientWidth - 2 * el.clientLeft > 0
-    )
-      console.error("Scroll: a native scrollbar gutter came back on", el);
-    const dpr = window.devicePixelRatio || 1;
-    width = Math.round(strip.clientWidth * dpr) || 1;
     bins = Math.round(clientH * dpr);
     for (const canvas of [marks, lit]) {
       if (canvas.width !== width) canvas.width = width;
       if (canvas.height !== bins) canvas.height = bins;
     }
-    // ponytail: ink resolves on resize, not on a theme toggle (owed: a theme subscription).
-    const ctx = marks.getContext("2d");
-    ink = ctx && {
-      alarm: canvasColor(ctx, "alarm"),
-      caution: canvasColor(ctx, "caution"),
-      ink: canvasColor(ctx, "ink"),
-      line: canvasColor(ctx, "line-2"),
-    };
+    // ponytail: ink resolves once per mount; a theme toggle keeps it (owed: a theme subscription).
+    const ctx = ink ? null : marks.getContext("2d");
+    if (ctx)
+      ink = {
+        alarm: canvasColor(ctx, "alarm"),
+        caution: canvasColor(ctx, "caution"),
+        ink: canvasColor(ctx, "ink"),
+        line: canvasColor(ctx, "line-2"),
+      };
     if (!TIMELINE) follow();
     invalidate();
   };
