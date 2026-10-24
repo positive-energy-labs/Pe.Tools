@@ -156,7 +156,6 @@ export function LangWorkflowSpecimens() {
           />
         ))}
         <WorkStanding
-          lifetime="Unsaved document. This Work lives until it closes. Save to keep it."
           unresolved={["another writer changed this Work; your last write did not land"]}
           conflict
           reload={noop}

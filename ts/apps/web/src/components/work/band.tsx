@@ -29,10 +29,6 @@ import { TooltipHint } from "@pe/kit/lang/tooltip";
 interface WorkStandingProps {
   conflict?: boolean;
   unresolved?: readonly string[];
-  /** One standing line about this Work's own lifetime; not a toast, it stays while it holds. */
-  lifetime?: string;
-  /** What was discarded when a Work's lifetime ended, dismissable and never a confirm. */
-  receipt?: { text: string; dismiss: () => void };
   reload?: () => void;
   /** Offered only on unreadable saved Work: set it aside, untouched, and start an empty one. */
   startFresh?: () => void;
@@ -55,39 +51,18 @@ export const workWord = ({
   }`;
 
 /**
- * A Work's standing lines, none of them cells: its own lifetime, what a closed document
- * discarded, and what is unresolved (a lost write, a conflicting writer, the last refusal).
+ * A Work's standing lines, none of them cells: what is unresolved (a lost write, a conflicting
+ * writer, the last refusal).
  */
 export function WorkStanding({
   conflict,
   unresolved = [],
-  lifetime,
-  receipt,
   reload,
   startFresh,
   startFreshAside,
 }: WorkStandingProps) {
   return (
     <>
-      {lifetime ? (
-        <p className="t-small text-ink-2" role="note">
-          {lifetime}
-        </p>
-      ) : null}
-      {receipt ? (
-        <div
-          className="hairline-t flex flex-wrap items-baseline gap-x-2 gap-y-1 py-1.5 t-prose"
-          role="status"
-        >
-          <span className="w-[9rem] t-small t-upper text-ink-mute">discarded</span>
-          <span>{receipt.text}</span>
-          <span className="ml-auto">
-            <Button kind="framed" label="dismiss" onClick={receipt.dismiss}>
-              dismiss
-            </Button>
-          </span>
-        </div>
-      ) : null}
       {unresolved.length ? (
         <div
           className="hairline-t flex flex-wrap items-baseline gap-x-2 gap-y-1 py-1.5 t-prose"

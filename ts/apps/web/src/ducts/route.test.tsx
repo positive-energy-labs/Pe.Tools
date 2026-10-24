@@ -31,6 +31,7 @@ import { afterEach, beforeEach, expect, test, vi } from "vite-plus/test";
 import { machineFixture } from "../../../../packages/agent-contracts/tests/machine-fixture";
 import type { ProtoProps } from "./proto/props";
 import { useNativeObservation } from "#/revit/observation";
+import { peReadings } from "#/readings";
 import { pricingJob, type PricingRequest, type PricingResponse } from "./pricing-job";
 import type { ModelPicture } from "./model-picture";
 
@@ -407,6 +408,9 @@ async function mount(
     }),
   });
   await router.load();
+  // The last test's atoms hold their keys for the registry's idle TTL, so the shared stream would
+  // stay on that test's transport and state. Reconnect it onto this one's, as a wake does.
+  peReadings.resync();
   const rendered = render(
     <ChatHosted.Provider value={hosted}>
       <RouterProvider router={router} />

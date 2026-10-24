@@ -10,6 +10,7 @@ Design-language and primitive gaps this cluster hit are owned by the design-syst
 restated here.
 
 ## Decided
+- 2026-10-24, kaitpw: bare element ids in chat resolve only within the turn's exact pinned document lifetimes; ambiguous or unresolved ids stay plain. Persist each observation with the prompt provenance so old prose cannot silently acquire another element's name after a reopen.
 
 - 2026-10-24, kaitpw: closing an unsaved Revit document retains its proposals and staged edits as closed-document Work for inspection. The original exact lifetime remains its identity. A replacement document never inherits that Work or native write authority automatically.
 - 2026-10-24, kaitpw: bare element ids in chat resolve only within the turn's exact pinned document lifetimes; ambiguous or unresolved ids stay plain. Persist each observation with the prompt provenance so old prose cannot silently acquire another element's name after a reopen.
