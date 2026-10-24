@@ -44,7 +44,8 @@ const url = urlPage(manifest)!;
 
 let handle: ReturnType<typeof useDuct> | null = null;
 // A `?target` Address pin, as a route passes its chosen target.
-const useDuct = () => useRoute(manifest, { target: DOC });
+let pin: string = DOC;
+const useDuct = () => useRoute(manifest, { target: pin });
 function Probe() {
   handle = useDuct();
   return null;
@@ -72,6 +73,7 @@ const inventorySnapshot = () =>
     },
   }) as never;
 beforeEach(() => {
+  pin = DOC;
   handle = null;
   requests.length = 0;
   vi.spyOn(peReadings, "subscribe").mockImplementation((request, accept) => {
@@ -148,4 +150,26 @@ test("an open document keys, binds and arms exactly as before", async () => {
   );
   expect(handle!.actions.host.refusal).toBeNull();
   expect(handle!.actions.doc.refusal).toBeNull();
+});
+
+test("closed open-bound Work: an exact open pin reads its own lifetime's Work and arms nothing", async () => {
+  open = false;
+  // The exact open request the page was bound to; its document is no longer in the inventory.
+  pin = JSON.stringify({ kind: "open", ref: { session: "s1", openId: "o9" } });
+  await mount();
+  await waitFor(() => expect(handle!.work.current).toBe(true));
+  expect(handle!.resolution.kind).not.toBe("resolved");
+  expect(handle!.work.key).toMatchObject({
+    binding: "open",
+    open: { session: "s1", openId: "o9" },
+  });
+  expect(handle!.work.doc).not.toBeNull();
+  // No native scope and nothing reachable: every action refuses, running one runs nothing.
+  expect(nativeReads()).toHaveLength(0);
+  for (const action of Object.values(handle!.actions)) {
+    expect(action.refusal).not.toBeNull();
+    expect(await act(() => action.run())).not.toBeNull();
+  }
+  expect(run).not.toHaveBeenCalled();
+  expect((await handle!.work.write([]))?.message).toMatch(/closed|no longer open|pick it again/);
 });
