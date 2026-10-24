@@ -14,6 +14,7 @@ import {
   type ThreadTabRequest,
 } from "@pe/agent-contracts";
 import { peClient } from "#/host/pe-client";
+import { focusQuiet } from "@pe/kit/lib/utils";
 import { previousOf, useReading } from "#/readings";
 import { useSurfaceHost } from "#/navigation/surface-host";
 import { useWorkbench } from "./provider";
@@ -428,6 +429,8 @@ export function useRouteTabs() {
               resumed ?? saved?.link ?? routeAddress(workRoute as RouteKey).link(),
               saved?.id ?? null,
             );
+            // The press was outside the tools: focus lands on the tool it opened, not the press.
+            focusQuiet(document.querySelector<HTMLElement>('[data-pane-id="tools"]'));
           } catch (error) {
             fail(error);
           }

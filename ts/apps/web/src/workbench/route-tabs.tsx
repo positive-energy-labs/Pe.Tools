@@ -21,6 +21,8 @@ function tabTitle(tab: ThreadTab) {
   return `${at.title}${typeof subject === "string" && subject ? ` · ${subject}` : ""}`;
 }
 
+const TAB_CH = 24;
+
 /** The tools pane's header: one labelled tab per durable Place; none pressed while collapsed. */
 export function RouteTabs({
   tabs,
@@ -36,7 +38,20 @@ export function RouteTabs({
       ariaLabel="Thread Places"
       value={active ?? ""}
       onChange={(id) => onSelect(tabs.find((tab) => tab.id === id)!)}
-      options={tabs.map((tab) => ({ value: tab.id, label: tabTitle(tab), title: tabTitle(tab) }))}
+      options={tabs.map((tab) => {
+        const name = tabTitle(tab);
+        // A hint only when the label is cut. ponytail: the cut is guessed from length against the
+        // 24ch cap; measure the span on reach if wide glyphs ever cut a shorter name.
+        return {
+          value: tab.id,
+          label: (
+            <span className="block truncate" style={{ maxWidth: `${TAB_CH}ch` }}>
+              {name}
+            </span>
+          ),
+          title: name.length > TAB_CH ? name : "",
+        };
+      })}
     />
   );
 }

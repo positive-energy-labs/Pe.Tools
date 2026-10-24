@@ -39,14 +39,6 @@ export function relativeThreadAge(at: string, now = Date.now()): string {
         ? `${Math.floor(minutes / 60)}h`
         : `${Math.floor(minutes / 1440)}d`;
 }
-const navigationTargetKey = (head: ThreadHead) =>
-  JSON.stringify(
-    head.targets.map(({ request: target }) =>
-      target.kind === "open"
-        ? ["open", target.ref.session, target.ref.openId]
-        : ["named", target.session, target.address],
-    ),
-  );
 /** Which half of a saved target the live inventory lacks: the whole session, or just the document. */
 export type ClosedTarget = "session" | "document";
 /** A thread the roster has read against the live inventory; a saved target is only a request. */
@@ -67,54 +59,16 @@ export function targetClosure(
       ? "document"
       : undefined;
 }
-/**
- * A thread read against the live inventory: whether any of its targets is closed, and labels that
- * say so in words (the exact target stays one hover away). A live document shows its open title.
- */
+/** A thread read against the live inventory: closed when a read inventory proves a target gone. */
 export function readThreadTarget<T extends HarnessThreadSummary>(
   thread: T,
   inventory: TargetInventory,
 ): T & TargetRead {
-  if (!thread.head.targets.length || inventory.kind !== "ready") return thread;
-  let targetClosed: ClosedTarget | undefined;
-  const targets = thread.head.targets.map((target) => {
-    const closure = targetClosure(target.request, inventory);
-    targetClosed ??= closure;
-    const resolution = resolveCallTarget({ needs: "document" }, [target.request], inventory);
-    const ref =
-      resolution.kind === "resolved" && resolution.target.kind === "document"
-        ? resolution.target.ref
-        : null;
-    const sessionDocuments = ref ? inventory.sessions[ref.session] : undefined;
-    const live =
-      sessionDocuments?.kind === "ready"
-        ? sessionDocuments.values.find((document) => document.openId === ref!.openId)
-        : undefined;
-    const closed = closure
-      ? [target.label, closure === "session" ? "Closed session" : "Closed document"]
-          .filter(Boolean)
-          .join(" · ")
-      : undefined;
-    const label = live?.address?.split(/[\\/]/).at(-1) ?? closed;
-    return label ? { ...target, label } : target;
-  });
-  return { ...thread, targetClosed, head: { ...thread.head, targets } };
-}
-/** The one Target-filter option every closed target collapses into. */
-const CLOSED_TARGETS = "closed";
-export const targetFacet = (thread: HarnessThreadSummary & TargetRead) =>
-  thread.targetClosed ? CLOSED_TARGETS : encodeURIComponent(navigationTargetKey(thread.head));
-/** Live targets one by one; closed ones are never listed, only the single "Closed" option. */
-export function targetFacets(threads: (HarnessThreadSummary & TargetRead)[]) {
-  const live = new Map<string, string>();
-  for (const thread of threads)
-    if (!thread.targetClosed) live.set(targetFacet(thread), targetLabel(thread));
-  return [
-    ...[...live].map(([key, label]) => ({ key, label })),
-    ...(threads.some((thread) => thread.targetClosed)
-      ? [{ key: CLOSED_TARGETS, label: "Closed" }]
-      : []),
-  ];
+  if (inventory.kind !== "ready") return thread;
+  const targetClosed = thread.head.targets
+    .map((target) => targetClosure(target.request, inventory))
+    .find(Boolean);
+  return targetClosed ? { ...thread, targetClosed } : thread;
 }
 export const threadOrder = (thread: HarnessThreadSummary) =>
   thread.lifecycle.order ?? -Date.parse(thread.lifecycle.reopenedAt ?? thread.createdAt);

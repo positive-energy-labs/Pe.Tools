@@ -12,7 +12,6 @@ import {
   Download,
   GitFork,
   Hand,
-  ListFilter,
   LoaderCircle,
   Mail,
   MailOpen,
@@ -56,9 +55,6 @@ import { isReady } from "#/workbench/provider/providers";
 import {
   isUnread,
   shelfOf,
-  targetFacet,
-  targetFacets,
-  targetLabel,
   relativeThreadAge,
   threadOrder,
   activityWord,
@@ -155,7 +151,6 @@ function ThreadActionsMenu({
   thread,
   open,
   setOpen,
-  onFilterTarget,
   selection,
   onMany,
   ...verbs
@@ -171,8 +166,6 @@ function ThreadActionsMenu({
     change: (thread: RosterThread) => UpdateThreadRequest,
     of: number,
   ) => void;
-  /** Present (the sidebar), the menu offers to narrow the roster to this thread's target. */
-  onFilterTarget?: () => void;
 }) {
   const [form, setForm] = useState<"rename" | "delete" | "snooze" | null>(null);
   const [title, setTitle] = useState(thread.title);
@@ -263,7 +256,6 @@ function ThreadActionsMenu({
             {
               id: "new-target",
               label: "New thread on this target",
-              sub: count > 1 ? undefined : targetLabel(thread),
               icon: SquarePen,
               group: " ",
               refusal: oneThreadRefusal("New thread", count) ?? verbOf("new-target").refusal,
@@ -286,19 +278,6 @@ function ThreadActionsMenu({
                 label: provider.name,
                 run: () => verbs.onFork(thread.id, provider.id),
               })),
-            },
-          ]
-        : []),
-      ...(onFilterTarget
-        ? [
-            {
-              id: "filter",
-              label: "Filter by target",
-              sub: count > 1 ? undefined : targetLabel(thread),
-              icon: ListFilter,
-              group: "  ",
-              refusal: oneThreadRefusal("Filter", count),
-              run: onFilterTarget,
             },
           ]
         : []),
@@ -359,7 +338,6 @@ function ThreadActionsMenu({
                 {
                   id: "copy:target",
                   label: "Exact target",
-                  sub: targetLabel(thread),
                   run: () => copy(JSON.stringify(soleRequest(thread.head)), "target"),
                 },
               ]
@@ -474,7 +452,6 @@ function ThreadActionsMenu({
                 : "Delete this thread permanently?"}
           </DialogTitle>
           <p>{count > 1 ? `${count} threads` : thread.title}</p>
-          {count > 1 ? null : <p className="t-small text-ink-2">{targetLabel(thread)}</p>}
           {form === "rename" ? (
             <form
               className="flex flex-col gap-3"
@@ -580,12 +557,12 @@ const rowHint = (thread: RosterThread, work: ThreadWork | undefined) =>
 
 /**
  * A row's menu re-renders only when its data changes. The closures the sidebar mints per render
- * (`setOpen`, `onMany`, `onFilterTarget`) close over this row's thread and stable setters, so
+ * (`setOpen`, `onMany`) close over this row's thread and stable setters, so
  * they are not compared; the thread, the open flag, the selection and the verbs are.
  */
 const ThreadActions = memo(ThreadActionsMenu, (before, after) => {
-  const { setOpen: _a, onMany: _b, onFilterTarget: _c, ...was } = before;
-  const { setOpen: _d, onMany: _e, onFilterTarget: _f, ...now } = after;
+  const { setOpen: _a, onMany: _b, ...was } = before;
+  const { setOpen: _d, onMany: _e, ...now } = after;
   const keys = Object.keys(was) as (keyof typeof was)[];
   return keys.length === Object.keys(now).length && keys.every((key) => was[key] === now[key]);
 });
@@ -743,13 +720,8 @@ export function ThreadsSidebar({
   }, [currentThreadId, currentShelfKey]);
   const [menuId, setMenuId] = useState<string | null>(null);
   const [bulkResult, setBulkResult] = useState("");
-  const facets = useMemo(
-    () => ({
-      targets: targetFacets(threads),
-      providers: [
-        ...new Map(threads.map((thread) => [thread.providerId, thread.providerName])).entries(),
-      ],
-    }),
+  const providers = useMemo(
+    () => [...new Map(threads.map((thread) => [thread.providerId, thread.providerName])).entries()],
     [threads],
   );
   const orderedThreads = useMemo(
@@ -762,17 +734,11 @@ export function ThreadsSidebar({
     keyOf: (thread) => thread.id,
     search: searchThread,
     fields: {
-      target: {
-        kind: "text",
-        read: targetFacet,
-        values: facets.targets.map((item) => item.key),
-        labels: new Map(facets.targets.map((item) => [item.key, item.label])),
-      },
       provider: {
         kind: "text",
         read: (thread) => thread.providerId,
-        values: facets.providers.map(([key]) => key),
-        labels: new Map(facets.providers),
+        values: providers.map(([key]) => key),
+        labels: new Map(providers),
       },
       state: {
         kind: "text",
@@ -859,7 +825,6 @@ export function ThreadsSidebar({
     setBulkResult(`${outcomes.filter(Boolean).length} of ${of} threads changed`);
     clearSelection();
   };
-  const filterTarget = (thread: RosterThread) => list.pickPill("target", targetFacet(thread));
   const rowParts = (thread: RosterThread): ListRowParts => {
     const shelf = shelfOf(thread, now);
     const reorder = shelf === "active" || shelf === "pinned";
@@ -938,7 +903,6 @@ export function ThreadsSidebar({
           setOpen={(open) => setMenuId(open ? thread.id : null)}
           selection={list.state.selected.includes(thread.id) ? selectedThreads : undefined}
           onMany={(targets, change, of) => void bulk(targets, change, of)}
-          onFilterTarget={() => filterTarget(thread)}
         />
       ),
     };

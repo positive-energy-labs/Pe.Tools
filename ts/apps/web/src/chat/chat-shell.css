@@ -1,8 +1,20 @@
-/* The transcript and input share one cell; the rail lives in the lens's lane, over the composer. */
+/* The transcript and input share one cell; the rail lives in the lens's lane, over the composer.
+   ONE READING MEASURE, owned here so the transcript and composer inherit it: 76ch of the prose
+   face (Open Sans's "0" advances 0.577em, measured), plus both gutters. That is 586px in comfort
+   and 542px in dense; a line runs about twelve words. It shrinks only below that. */
 .chat-column {
+  --chat-measure: calc(var(--type-prose-size) * 0.577 * 76 + var(--gutter) * 2);
   display: grid;
   grid-template: minmax(0, 1fr) / minmax(0, 1fr);
   position: relative;
+}
+/* Beside connected tools the column holds Pea's start edge instead of centring: expanding the
+   tools takes width from the empty side, so no word moves while the pane still holds the measure.
+   A centred column would move by half the width the tools take. */
+[data-slot="pane-split"]:has(> :not(.hidden) > [data-pane-id="tools"])
+  .chat-column
+  :is([data-annotation="chat"], .dl-composer-frame) {
+  margin-inline: 0 auto;
 }
 .chat-column > [data-chat-transcript] {
   grid-area: 1 / 1;

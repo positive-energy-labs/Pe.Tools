@@ -104,6 +104,8 @@ test("a tab press expands the tools on that Place; a Work press restores its Pag
   await act(() => store.actions.openWork("T", "ducts"));
   await waitFor(() => expect(router.state.location.pathname).toBe("/ducts"));
   expect((router.state.location.search as { system?: string }).system).toBe("S1");
+  // A Work press is outside the tools bar: focus lands on the tool's pane.
+  expect(document.activeElement).toBe(tools());
   expect(document.querySelector("[data-chat-probe]")).toBeTruthy();
   expect(mounts).toBe(1);
 });
