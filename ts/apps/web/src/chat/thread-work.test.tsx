@@ -258,3 +258,36 @@ test("a 404 for an unknown Work is the reason; no key, and the row stays pressab
   pressWork("Level 1.rvt");
   await vi.waitFor(() => expect(onWork).toHaveBeenCalledTimes(2));
 });
+
+test("a thread whose old documents have no remembered name keeps its conversation title", async () => {
+  // 06b732ac drops unnamed documents from the snapshot; its Work stays and names no document.
+  window.history.replaceState({}, "", "/pea");
+  mount();
+  act(() =>
+    live.forEach((accept) =>
+      accept({
+        kind: "snapshot",
+        key: readingKey({ kind: "thread-work" }),
+        value: {
+          observedAt: "2026-10-24T12:00:00.000Z",
+          threads: [
+            {
+              threadId: "fixture-local",
+              documents: [],
+              works: [
+                { id: "w", documentId: "gone", route: "ducts", intent: "old work", unfinished: 2 },
+              ],
+            },
+          ],
+          observations: [
+            "Some older document connections have no remembered name; their conversation titles are retained.",
+          ],
+          truncated: false,
+        },
+      } as never),
+    ),
+  );
+  expect(row("Draft the BIM handoff notes").textContent).toContain("2 unfinished");
+  expect(row("Draft the BIM handoff notes").textContent).toContain("old work");
+  expect(screen.getByText("Work partly read")).toBeTruthy();
+});
