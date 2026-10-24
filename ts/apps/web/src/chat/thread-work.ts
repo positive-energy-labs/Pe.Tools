@@ -79,6 +79,14 @@ export const partialWork = (snapshot: ThreadWorkSnapshot | null) =>
  *  Address Work answers its durable `url` even closed; unknown or unreadable Work answers `url:
  *  null` and a truthful `reason`. A refusal (404 for an unknown id) is that reason too, so the
  *  row stays pressable and says why in its hint. */
+/** A pressed Work whose document is closed: what the tool shows while it waits to reconnect. */
+export type ClosedWork = {
+  documentId: string | null;
+  document: string | null;
+  intent: string;
+  unfinished: number;
+};
+
 export type Resumed = Pick<WorkResume, "url" | "reason"> & { key: WorkResume["key"] | null };
 export async function resumeWork(workId: string): Promise<Resumed> {
   try {

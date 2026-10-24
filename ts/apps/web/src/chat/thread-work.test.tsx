@@ -107,7 +107,9 @@ test("a thread press opens the conversation; a Work press opens the tool", async
     row("Operations Demo.rvt").querySelector<HTMLElement>('button[aria-label="Open duct resize"]')!,
   );
   expect(onSelect).not.toHaveBeenCalled();
-  await vi.waitFor(() => expect(onWork).toHaveBeenCalledWith("demo-review", "ducts", undefined));
+  await vi.waitFor(() =>
+    expect(onWork).toHaveBeenCalledWith("demo-review", "ducts", undefined, undefined),
+  );
 });
 
 test("a demo Work press asks the host nothing and opens its route", async () => {
@@ -115,7 +117,14 @@ test("a demo Work press asks the host nothing and opens its route", async () => 
   fireEvent.click(
     row("Level 1.rvt").querySelector<HTMLElement>('button[aria-label="Open duct resize"]')!,
   );
-  await vi.waitFor(() => expect(onWork).toHaveBeenCalledWith("fixture-ended", "ducts", undefined));
+  await vi.waitFor(() =>
+    expect(onWork).toHaveBeenCalledWith(
+      "fixture-ended",
+      "ducts",
+      undefined,
+      expect.objectContaining({ document: "Level 1.rvt", intent: "duct resize", unfinished: 4 }),
+    ),
+  );
   expect(call).not.toHaveBeenCalled();
 });
 
@@ -209,6 +218,7 @@ test("every live Work press hands the host's key and url to the tool, open docum
       "fixture-ended",
       "ducts",
       expect.objectContaining({ key: KEY, url: "/ducts?target=L1" }),
+      expect.objectContaining({ document: "Level 1.rvt", intent: "duct resize", unfinished: 4 }),
     ),
   );
   expect(call).toHaveBeenCalledWith("work.resume", { query: { id: "w-4" } });
@@ -233,6 +243,7 @@ test("a null url still opens the route and says the reason in the row hint", asy
       "fixture-ended",
       "ducts",
       expect.objectContaining({ key: KEY, url: null }),
+      expect.objectContaining({ document: "Level 1.rvt", intent: "duct resize", unfinished: 4 }),
     ),
   );
   expect(await hintOf("Saved Work is unreadable")).not.toHaveLength(0);
@@ -252,6 +263,7 @@ test("a 404 for an unknown Work is the reason; no key, and the row stays pressab
       "fixture-ended",
       "ducts",
       expect.objectContaining({ key: null, url: null }),
+      expect.objectContaining({ document: "Level 1.rvt", intent: "duct resize", unfinished: 4 }),
     ),
   );
   expect(await hintOf("Saved Work was not found")).not.toHaveLength(0);
