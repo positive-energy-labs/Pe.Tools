@@ -26,10 +26,11 @@ export function useThreadWorks() {
   const snapshot = demo ? CHAT_SEED_THREAD_WORK : threadWorksOf(reading);
   return useMemo(
     () => ({
+      demo,
       snapshot,
       of: new Map(snapshot?.threads.map((work) => [work.threadId, work])),
     }),
-    [snapshot],
+    [demo, snapshot],
   );
 }
 
@@ -78,12 +79,14 @@ export const partialWork = (snapshot: ThreadWorkSnapshot | null) =>
  *  Address Work answers its durable `url` even closed; unknown or unreadable Work answers `url:
  *  null` and a truthful `reason`. A refusal (404 for an unknown id) is that reason too, so the
  *  row stays pressable and says why in its hint. */
-export async function resumeWork(workId: string): Promise<Pick<WorkResume, "url" | "reason">> {
+export type Resumed = Pick<WorkResume, "url" | "reason"> & { key: WorkResume["key"] | null };
+export async function resumeWork(workId: string): Promise<Resumed> {
   try {
     return await peClient.call("work.resume", { query: { id: workId } });
   } catch (error) {
     const said = (error as { problem?: { error?: unknown } }).problem?.error;
     return {
+      key: null,
       url: null,
       reason:
         typeof said === "string" ? said : error instanceof Error ? error.message : String(error),

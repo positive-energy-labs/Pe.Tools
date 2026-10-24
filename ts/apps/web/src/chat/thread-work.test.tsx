@@ -36,7 +36,13 @@ beforeEach(() => {
   HTMLElement.prototype.scrollTo ??= () => {};
   vi.stubGlobal("localStorage", { getItem: () => "open", setItem: vi.fn() });
   call.mockReset();
+  // The thread-work Reading outlives one test in the shared registry: every frame goes to `live`.
+  vi.spyOn(peReadings, "subscribe").mockImplementation((request, accept) => {
+    if (request.kind === "thread-work") live.add(accept as never);
+    return () => {};
+  });
 });
+const live = new Set<(frame: never) => void>();
 afterEach(() => {
   cleanup();
   vi.restoreAllMocks();
@@ -104,12 +110,13 @@ test("a thread press opens the conversation; a Work press opens the tool", async
   await vi.waitFor(() => expect(onWork).toHaveBeenCalledWith("demo-review", "ducts", undefined));
 });
 
-test("a Work press on a closed document goes through the resume lookup and opens its route", async () => {
+test("a demo Work press asks the host nothing and opens its route", async () => {
   const { onWork } = mount();
   fireEvent.click(
     row("Level 1.rvt").querySelector<HTMLElement>('button[aria-label="Open duct resize"]')!,
   );
   await vi.waitFor(() => expect(onWork).toHaveBeenCalledWith("fixture-ended", "ducts", undefined));
+  expect(call).not.toHaveBeenCalled();
 });
 
 test("partial discovery says so once at the list's end", () => {
@@ -131,65 +138,9 @@ test("the sidebar reads one batch however many rows it draws", () => {
   expect(reads.mock.calls.length).toBe(few);
 });
 
-const pressClosed = () =>
-  fireEvent.click(
-    row("Level 1.rvt").querySelector<HTMLElement>('button[aria-label="Open duct resize"]')!,
-  );
-const hintOf = async (text: string) => {
-  fireEvent.focus(row("Level 1.rvt"));
-  return screen.findAllByText(new RegExp(text), undefined, { timeout: 2000 });
-};
-
-test("a closed Work opens the durable url work.resume answers, and only for a closed document", async () => {
-  call.mockResolvedValueOnce({
-    id: "w-4",
-    key: {},
-    url: "/ducts?target=C%3A%2FL1.rvt",
-    reason: null,
-  });
-  const { onWork } = mount();
-  pressClosed();
-  await vi.waitFor(() =>
-    expect(onWork).toHaveBeenCalledWith("fixture-ended", "ducts", "/ducts?target=C%3A%2FL1.rvt"),
-  );
-  expect(call).toHaveBeenCalledWith("work.resume", { query: { id: "w-4" } });
-  call.mockClear();
-  fireEvent.click(
-    row("Operations Demo.rvt").querySelector<HTMLElement>('button[aria-label="Open duct resize"]')!,
-  );
-  expect(call).not.toHaveBeenCalled();
-});
-
-test("a null url opens the route for retained state and says the reason in the row hint", async () => {
-  call.mockResolvedValueOnce({ id: "w-4", key: {}, url: null, reason: "Saved Work is unreadable" });
-  const { onWork } = mount();
-  pressClosed();
-  await vi.waitFor(() => expect(onWork).toHaveBeenCalledWith("fixture-ended", "ducts", undefined));
-  expect(await hintOf("Saved Work is unreadable")).not.toHaveLength(0);
-});
-
-test("a 404 for an unknown Work is the reason; the row stays pressable", async () => {
-  call.mockRejectedValue(
-    Object.assign(Error("Route work.resume failed (404)"), {
-      status: 404,
-      problem: { error: "Saved Work was not found; nothing was changed" },
-    }),
-  );
-  const { onWork } = mount();
-  pressClosed();
-  await vi.waitFor(() => expect(onWork).toHaveBeenCalledWith("fixture-ended", "ducts", undefined));
-  expect(await hintOf("Saved Work was not found")).not.toHaveLength(0);
-  pressClosed();
-  await vi.waitFor(() => expect(onWork).toHaveBeenCalledTimes(2));
-});
-
 test("outside demo the sidebar subscribes to one thread-work Reading and draws only its payload", async () => {
   window.history.replaceState({}, "", "/pea");
-  const accepts: ((frame: never) => void)[] = [];
-  const subscribe = vi.spyOn(peReadings, "subscribe").mockImplementation((request, accept) => {
-    if (request.kind === "thread-work") accepts.push(accept as never);
-    return () => {};
-  });
+  const subscribe = vi.mocked(peReadings.subscribe);
   mount();
   const text = () => screen.getByRole("navigation", { name: "Threads" }).textContent ?? "";
   // No snapshot yet: conversation titles, and never the fixture.
@@ -200,7 +151,7 @@ test("outside demo the sidebar subscribes to one thread-work Reading and draws o
     subscribe.mock.calls.filter(([request]) => request.kind === "thread-work").length;
   expect(reads()).toBe(1);
   act(() =>
-    accepts.forEach((accept) =>
+    live.forEach((accept) =>
       accept({
         kind: "snapshot",
         key: readingKey({ kind: "thread-work" }),
@@ -225,4 +176,85 @@ test("outside demo the sidebar subscribes to one thread-work Reading and draws o
   expect(row("Live Plant.rvt").textContent).toContain("live intent");
   expect(text()).not.toContain("Operations Demo.rvt");
   expect(reads()).toBe(1);
+});
+
+function mountLive() {
+  window.history.replaceState({}, "", "/pea");
+  const pressed = mount();
+  act(() =>
+    live.forEach((accept) =>
+      accept({
+        kind: "snapshot",
+        key: readingKey({ kind: "thread-work" }),
+        value: CHAT_SEED_THREAD_WORK,
+      } as never),
+    ),
+  );
+  return pressed;
+}
+const KEY = { binding: "address", route: "ducts", target: "C:/Review/Level 1.rvt" };
+const pressWork = (doc: string) =>
+  fireEvent.click(row(doc).querySelector<HTMLElement>('button[aria-label="Open duct resize"]')!);
+const hintOf = async (text: string) => {
+  fireEvent.focus(row("Level 1.rvt"));
+  return screen.findAllByText(new RegExp(text), undefined, { timeout: 2000 });
+};
+
+test("every live Work press hands the host's key and url to the tool, open document or closed", async () => {
+  call.mockResolvedValueOnce({ id: "w-4", key: KEY, url: "/ducts?target=L1", reason: null });
+  const { onWork } = mountLive();
+  pressWork("Level 1.rvt");
+  await vi.waitFor(() =>
+    expect(onWork).toHaveBeenCalledWith(
+      "fixture-ended",
+      "ducts",
+      expect.objectContaining({ key: KEY, url: "/ducts?target=L1" }),
+    ),
+  );
+  expect(call).toHaveBeenCalledWith("work.resume", { query: { id: "w-4" } });
+  // An open document asks too: its key is what finds the tab holding that Work's Page.
+  pressWork("Operations Demo.rvt");
+  await vi.waitFor(() =>
+    expect(call).toHaveBeenCalledWith("work.resume", { query: { id: "w-1" } }),
+  );
+});
+
+test("a null url still opens the route and says the reason in the row hint", async () => {
+  call.mockResolvedValueOnce({
+    id: "w-4",
+    key: KEY,
+    url: null,
+    reason: "Saved Work is unreadable",
+  });
+  const { onWork } = mountLive();
+  pressWork("Level 1.rvt");
+  await vi.waitFor(() =>
+    expect(onWork).toHaveBeenCalledWith(
+      "fixture-ended",
+      "ducts",
+      expect.objectContaining({ key: KEY, url: null }),
+    ),
+  );
+  expect(await hintOf("Saved Work is unreadable")).not.toHaveLength(0);
+});
+
+test("a 404 for an unknown Work is the reason; no key, and the row stays pressable", async () => {
+  call.mockRejectedValue(
+    Object.assign(Error("Route work.resume failed (404)"), {
+      status: 404,
+      problem: { error: "Saved Work was not found; nothing was changed" },
+    }),
+  );
+  const { onWork } = mountLive();
+  pressWork("Level 1.rvt");
+  await vi.waitFor(() =>
+    expect(onWork).toHaveBeenCalledWith(
+      "fixture-ended",
+      "ducts",
+      expect.objectContaining({ key: null, url: null }),
+    ),
+  );
+  expect(await hintOf("Saved Work was not found")).not.toHaveLength(0);
+  pressWork("Level 1.rvt");
+  await vi.waitFor(() => expect(onWork).toHaveBeenCalledTimes(2));
 });

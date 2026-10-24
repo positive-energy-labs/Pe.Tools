@@ -81,6 +81,7 @@ import {
   leadWork,
   partialWork,
   resumeWork,
+  type Resumed,
   useThreadWorks,
   workHint,
 } from "./thread-work";
@@ -656,7 +657,7 @@ export function ThreadsSidebar({
   currentThreadId: string;
   onSelect: (id: string) => void;
   /** A Work press opens its tool; the row's own press only opens the conversation. */
-  onWork?: (id: string, route: string, link?: string) => void;
+  onWork?: (id: string, route: string, resumed?: Resumed) => void;
   compactRows?: boolean;
   address?: ListPersist<ThreadSort>;
   /** The page's own list: "/" outside a field lands in its search. */
@@ -676,12 +677,11 @@ export function ThreadsSidebar({
   const partial = partialWork(works.snapshot);
   // Why a closed Work could not resume, said once in its row's hint; the row stays pressable.
   const [unresumed, setUnresumed] = useState<ReadonlyMap<string, string>>(new Map());
-  const pressWork = async (thread: string, work: ThreadWork, item: ThreadWork["works"][number]) => {
-    const closed =
-      work.documents.find((document) => document.id === item.documentId)?.availability === "closed";
-    const resumed = closed ? await resumeWork(item.id) : null;
+  // Every live Work press asks the host which Work it is: its key picks the tab that holds it.
+  const pressWork = async (thread: string, item: ThreadWork["works"][number]) => {
+    const resumed = works.demo ? undefined : await resumeWork(item.id);
     if (resumed?.reason) setUnresumed((was) => new Map(was).set(thread, resumed.reason!));
-    onWork?.(thread, item.route, resumed?.url ?? undefined);
+    onWork?.(thread, item.route, resumed);
   };
   const compactRows = compactRowsOverride ?? host.surface === "tray";
   const [view, setView] = useState(() =>
@@ -861,7 +861,7 @@ export function ThreadsSidebar({
               label={`Open ${lead.intent}`}
               onClick={(event) => {
                 event.stopPropagation();
-                void pressWork(thread.id, work, lead);
+                void pressWork(thread.id, lead);
               }}
             >
               {lead.unfinished ? (
