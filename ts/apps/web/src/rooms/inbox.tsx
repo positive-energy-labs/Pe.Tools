@@ -1,3 +1,5 @@
+import { useContext } from "react";
+import { AttentionDocument, memberKey, type SubjectKey } from "@pe/kit/lang/attention";
 import { revitTarget } from "@pe/kit/lang/revit-target";
 /**
  * The feedback inbox (V6 calm): one row per mark or note on the view, in `CARD_STATES` order. A
@@ -263,7 +265,6 @@ export function RoomsInbox({
   onPin,
   show: filter,
   onShow,
-  onHover,
   markdown,
   snap,
 }: {
@@ -275,11 +276,11 @@ export function RoomsInbox({
   /** The state filter, held in the address beside the pinned card. */
   show: Filter;
   onShow: (show: Filter) => void;
-  onHover: (guid: string | null) => void;
   markdown: () => string;
   /** Downloads the plan picture; answers what it could not include, else null. */
   snap: () => Promise<string | null>;
 }) {
+  const attentionDoc = useContext(AttentionDocument) ?? "";
   const [said, setSaid] = useState<string | null>(null);
   const say = (word: string) => {
     setSaid(word);
@@ -365,8 +366,10 @@ export function RoomsInbox({
                 .map((region) => region.elementId),
               label: cardLine(card, labelOf),
               meta: <Thumb card={card} regions={regions} width={32} />,
-              onMouseEnter: () => onHover(card.guids[0] ?? null),
-              onMouseLeave: () => onHover(null),
+              subject: {
+                doc: attentionDoc,
+                key: memberKey(card.guids.map((guid): SubjectKey => `room:${guid}`)),
+              },
             })}
           />
         </div>

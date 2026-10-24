@@ -1,3 +1,4 @@
+import { sameRef, type Ref } from "../lang/attention";
 import { VIRTUAL_FROM } from "../lang/collection";
 import type { Tone } from "../../lib/token";
 import {
@@ -44,6 +45,7 @@ type Gutter<Row> = (row: Row) => {
 
 interface MasterRowProps<Row extends RowData> {
   row: Row;
+  subject?: Ref;
   revit?: readonly number[];
   /** The row's key, as `data-key`: a `Connectors` anchor and a test handle. */
   rowKey: string;
@@ -77,6 +79,7 @@ function MasterRowView<Row extends RowData>({
   index,
   measure,
   revit,
+  subject,
   active,
   selected,
   refusal,
@@ -102,6 +105,7 @@ function MasterRowView<Row extends RowData>({
       ref={ref}
       data-key={rowKey}
       data-index={index}
+      subject={subject}
       revit={revit}
       active={active}
       selected={selected}
@@ -125,6 +129,7 @@ function MasterRowView<Row extends RowData>({
 const MasterRow = memo(
   MasterRowView,
   (previous, next) =>
+    sameRef(previous.subject ?? null, next.subject ?? null) &&
     previous.row === next.row &&
     previous.rowKey === next.rowKey &&
     previous.index === next.index &&
@@ -152,6 +157,7 @@ export function MasterTableBody<Row extends RowData>({
   activeKey,
   rowClassName,
   revit,
+  subject,
   damage,
   keep,
   onRowClick,
@@ -171,6 +177,7 @@ export function MasterTableBody<Row extends RowData>({
   columnByKey: ReadonlyMap<string, ResolvedColumn<Row>>;
   activeKey?: string | null;
   rowClassName?: (row: Row) => string | undefined;
+  subject?: (row: Row) => Ref;
   revit?: (row: Row) => readonly number[];
   damage: (row: Row) => string | null;
   keep?: (row: Row) => boolean;
@@ -497,6 +504,7 @@ export function MasterTableBody<Row extends RowData>({
           <Fragment key={key}>
             {gap > 0 && <Spacer height={gap} />}
             <MasterRow
+              subject={subject?.(tableRow.original)}
               revit={revit?.(tableRow.original) ?? rowRevit(tableRow.original, key)}
               row={tableRow.original}
               rowKey={key}

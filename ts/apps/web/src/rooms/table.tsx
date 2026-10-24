@@ -1,3 +1,5 @@
+import { useContext } from "react";
+import { AttentionDocument, elementKey, useAttention } from "@pe/kit/lang/attention";
 /**
  * The rooms table: one row per zone, room and held region. Every edit stages a Work cell (`transitionPatches`)
  * against what the region holds in Revit; nothing is written until `apply`.
@@ -109,21 +111,25 @@ export function RoomsTable({
   rows,
   cells,
   wire,
-  selected,
-  hovered,
   onSelect,
-  onHover,
   empty,
 }: {
   rows: readonly RoomRow[];
   cells: Cells;
   wire: CellWire;
-  selected: ReadonlySet<string>;
-  hovered: string | null;
   onSelect: (guids: ReadonlySet<string>) => void;
-  onHover: (guid: string | null) => void;
   empty: { says: string; exit: string };
 }) {
+  const doc = useContext(AttentionDocument) ?? "";
+  const attention = useAttention(doc);
+  const selected = new Set(
+    rows
+      .filter((row) => attention.selected.has(elementKey(row.region.elementId)))
+      .map((row) => row.region.guid),
+  );
+  const hovered =
+    rows.find((row) => attention.hovered.has(elementKey(row.region.elementId)))?.region.guid ??
+    null;
   const columns = useMemo<Column<RoomRow>[]>(() => {
     const zoneLabels = new Map(
       // A zone that flipped to a room is its own zone.
@@ -314,7 +320,7 @@ export function RoomsTable({
         visibleKeys={visibleKeys}
         selection={{ selected, onChange: onSelect }}
         activeKey={hovered}
-        onRowHover={(row) => onHover(row?.region.guid ?? null)}
+        subject={(row) => ({ doc, key: `room:${row.region.guid}` })}
         empty={
           rows.length ? (
             <EmptyState story="filter" exit="clear the search">

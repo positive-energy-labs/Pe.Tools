@@ -1,3 +1,5 @@
+import { useAtomValue } from "@effect/atom-react";
+import { AttentionDocument, picture as pictureAtom } from "./attention";
 import { Popover as Primitive } from "@base-ui/react/popover";
 import {
   createContext,
@@ -10,7 +12,6 @@ import {
   type RefObject,
 } from "react";
 import { cn } from "../../lib/utils";
-import { SubjectTextContext, useReachState } from "./reach";
 
 export const floatingSurface =
   "max-h-(--available-height) overflow-y-auto overscroll-contain t-small text-ink float-surface outline-none";
@@ -179,7 +180,8 @@ export function sideAwayFrom(anchor: DOMRect, subject: DOMRect): Side {
 
 export function useSubjectPosition(anchor: Element | null) {
   const subject = useContext(Subject);
-  const picture = useReachState(useContext(SubjectTextContext)?.reach, (state) => state.picture);
+  const doc = useContext(AttentionDocument) ?? "";
+  const picture = useAtomValue(pictureAtom(doc)).box;
   const source = subject ?? picture;
   const box =
     typeof source === "function"

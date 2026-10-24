@@ -1,3 +1,6 @@
+import type * as Atom from "effect/unstable/reactivity/Atom";
+import type * as AtomRegistry from "effect/unstable/reactivity/AtomRegistry";
+import type { PageSnapshot } from "./view-owner";
 /** The handle a route gets back from `useRoute`: its resolution, Work, Readings, Page and one handle per action. */
 import type { Reading, RouteStatePatch, TargetResolution, WorkKey } from "@pe/agent-contracts";
 import type { useThreadScope } from "#/chat/scope";
@@ -86,6 +89,8 @@ export interface RouteHandle<W, R extends string, P, A extends string> {
    */
   readonly bindingLost: BindingLost | null;
   /** The Page and its setter; `{ history: "replace" }` marks a gesture's move (`PageMove`). */
+  readonly registry: AtomRegistry.AtomRegistry;
+  readonly pageState: Atom.Atom<PageSnapshot<P>>;
   readonly page: readonly [P, (next: Partial<P>, move?: PageMove<P>) => void];
   readonly actions: Readonly<Record<A, ActionHandle>>;
   readonly busy: { readonly key: A; readonly seconds: number } | null;

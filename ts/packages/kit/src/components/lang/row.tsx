@@ -1,4 +1,5 @@
-import { reachProps, useReach, useReachSetter } from "./reach";
+import { mention, elementKey, useMention, type Ref } from "./attention";
+import { reachProps } from "./reach";
 import { useState, type CSSProperties, type ReactNode } from "react";
 import { ChevronRight, Flame } from "lucide-react";
 
@@ -48,6 +49,7 @@ export interface RowState {
 }
 
 export type RowProps = RowState & {
+  subject?: Ref;
   id?: string;
   role?: string;
   title?: string;
@@ -124,21 +126,21 @@ const rowStateProps = (state: RowState) => ({
 export function Row(props: RowProps) {
   props = { ...props, revit: props.revit ?? rowRevit(undefined, props["data-key"]) };
   const { damage, refusal } = props;
-  const rung = useReach(props.revit?.[0]);
-  const setReach = useReachSetter("hovered");
+  const mark = useMention();
   const shared = {
-    ...reachProps(rung),
+    ...reachProps(),
+    ...(props.subject
+      ? mention(props.subject)
+      : mark(props.revit?.[0] == null ? null : elementKey(props.revit[0]))),
     id: props.id,
     role: props.role,
     onClick: refusal ? undefined : props.onClick,
     onMouseMove: props.onMouseMove,
     onMouseEnter: () => {
       props.onMouseEnter?.();
-      if (props.revit?.length) setReach(props.revit[0]!);
     },
     onMouseLeave: () => {
       props.onMouseLeave?.();
-      if (props.revit?.length) setReach(null);
     },
     "data-key": props["data-key"],
     "data-index": props["data-index"],
@@ -195,7 +197,7 @@ function ListRow({
       const el = currentTarget.querySelector<HTMLElement>(selector);
       return el && el.scrollWidth > el.clientWidth ? el.textContent : null;
     };
-    setCut([cutText(".dl-row-title"), cutText(".dl-row-fact")].filter(Boolean).join(" · "));
+    setCut([cutText(".dl-row-title"), cutText(".dl-row-fact")].filter(Boolean).join(" · ") || null);
   };
   const slots = rowRecipe({ lines: props.lines ?? 1 });
   const fact =

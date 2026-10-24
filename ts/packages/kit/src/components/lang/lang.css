@@ -154,6 +154,7 @@
   [aria-expanded="true"]:not(textarea, input, [role="treeitem"]),
   [aria-pressed="true"],
   [data-selected],
+  [data-reach="selected"],
   [data-highlighted],
   .on-select
 ) {
@@ -170,7 +171,7 @@
   pointer-events: none;
 }
 
-:where(svg [aria-selected="true"], svg [data-selected]) {
+:where(svg [aria-selected="true"], svg [data-selected], svg [data-reach="selected"]) {
   fill: var(--pe-select);
 }
 

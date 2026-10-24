@@ -1,3 +1,5 @@
+import { useContext } from "react";
+import { AttentionDocument, elementKey, memberKey } from "@pe/kit/lang/attention";
 import { useList } from "@pe/kit/lang/collection";
 import { PlainList } from "@pe/kit/lang/list-view";
 import { nameOrFallback } from "@pe/kit/lang/subject-text";
@@ -50,7 +52,6 @@ export const RulesTree = memo(function RulesTree({
   focus,
   onFocus,
   nameOf,
-  light,
 }: {
   snapshot: DuctSnapshot;
   priced: Priced;
@@ -62,8 +63,8 @@ export const RulesTree = memo(function RulesTree({
   focus: string | null;
   onFocus: (key: string | null) => void;
   nameOf: (id: number) => string;
-  light: (ids: readonly number[] | null) => void;
 }) {
+  const doc = useContext(AttentionDocument) ?? "";
   const groupOf = useMemo(() => {
     const m = new Map<number, string>();
     for (const n of snapshot.nodes) if (n.groupId) m.set(n.id, n.groupId);
@@ -139,11 +140,7 @@ export const RulesTree = memo(function RulesTree({
     search: (n) => ({ text: [n.family], ids: [...n.ids] }),
   });
   return (
-    <div
-      className="@container flex min-w-0 flex-col"
-      data-e-rules={wide ? "all" : "this"}
-      onMouseLeave={() => light(null)}
-    >
+    <div className="@container flex min-w-0 flex-col" data-e-rules={wide ? "all" : "this"}>
       <PlainList
         list={list}
         aria-label="loss rules"
@@ -163,7 +160,7 @@ export const RulesTree = memo(function RulesTree({
                   />
                 </span>
               ),
-              onMouseEnter: () => light([n.id]),
+              subject: { doc, key: elementKey(n.id) },
             };
           const rule = ruleByKey(n.key);
           const name = rule ? `${rule.family} : ${rule.type}` : n.key;
@@ -183,7 +180,7 @@ export const RulesTree = memo(function RulesTree({
             ),
             meta: `×${n.ids.length}${missing ? ` · ${missing} unpriced` : ""}`,
             lines: 2,
-            onMouseEnter: () => light(n.ids),
+            subject: { doc, key: memberKey(n.ids.map(elementKey)) },
           };
         }}
       />
@@ -203,7 +200,7 @@ export const RulesTree = memo(function RulesTree({
                 label: family ?? nameOf(first!),
                 meta: ids.size ? `×${ids.size}` : undefined,
                 lines: 2,
-                onMouseEnter: () => light([...ids]),
+                subject: { doc, key: memberKey([...ids].map(elementKey)) },
                 sub: (
                   <div
                     data-e-unruled-family={family ?? undefined}

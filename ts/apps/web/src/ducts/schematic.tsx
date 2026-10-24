@@ -1,3 +1,5 @@
+import { elementKey, memberKey, useMention } from "@pe/kit/lang/attention";
+import { useElementAttention } from "#/attention";
 import type { Tone } from "@pe/kit/lib/token";
 import { nameOrFallback } from "@pe/kit/lang/subject-text";
 import { SvgTip } from "@pe/kit/lang/tooltip";
@@ -116,11 +118,8 @@ export interface SchematicProps {
   /** The model's encoding: an edge wears the stroke of its first segment under it. */
   encoding: Encoding;
   /** Element ids selected; an edge holding one is ringed, and a fold holding one unfolds. */
-  selected: ReadonlySet<number>;
   /** Element ids lit by a hover anywhere (a row, the model, a claim); drawn heavy. */
-  lit: ReadonlySet<number>;
   onSelect: (id: number | null) => void;
-  onHover: (id: number | null) => void;
   /** `main` is the whole picture; `inset` the corner, unlabelled, scaled to its box. */
   size?: "main" | "inset";
 }
@@ -132,12 +131,12 @@ export function Schematic({
   index,
   group,
   encoding,
-  selected,
-  lit,
   onSelect,
-  onHover,
   size = "main",
 }: SchematicProps) {
+  const mark = useMention();
+  const { selected, lit: cited, hovered } = useElementAttention();
+  const lit = new Set([...cited, ...(hovered == null ? [] : [hovered])]);
   const inset = size === "inset";
   const { snapshot } = index;
   const tree = useMemo(() => (group ? groupTree(snapshot, group) : null), [snapshot, group]);
@@ -226,8 +225,7 @@ export function Schematic({
             data-lit={glow ? "" : undefined}
             className="cursor-pointer"
             onClick={() => pick(chain.members[0]!)}
-            onPointerEnter={() => onHover(chain.members[0]!)}
-            onPointerLeave={() => onHover(null)}
+            {...mark(memberKey(chain.members.map(elementKey)))}
           >
             <SvgTip content={"chain"} />
             {hot ? (

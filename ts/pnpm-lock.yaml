@@ -422,6 +422,9 @@ importers:
       '@base-ui/react':
         specifier: 'catalog:'
         version: 1.6.0(@types/react@19.2.17)(date-fns@4.4.0)(react-dom@19.2.7(react@19.2.7))(react@19.2.7)
+      '@effect/atom-react':
+        specifier: 4.0.0-beta.92
+        version: 4.0.0-beta.92(effect@4.0.0-beta.92)(react@19.2.7)(scheduler@0.27.0)
       '@pe/agent-contracts':
         specifier: workspace:*
         version: link:../agent-contracts
@@ -443,6 +446,9 @@ importers:
       clsx:
         specifier: ^2.1.1
         version: 2.1.1
+      effect:
+        specifier: 4.0.0-beta.92
+        version: 4.0.0-beta.92
       lucide-react:
         specifier: 1.21.0
         version: 1.21.0(react@19.2.7)

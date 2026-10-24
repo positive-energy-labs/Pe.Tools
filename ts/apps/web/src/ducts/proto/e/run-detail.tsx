@@ -1,3 +1,4 @@
+import { elementKey, useMention } from "@pe/kit/lang/attention";
 import { useNativeObservation } from "#/revit/observation";
 import { RevitTarget, revitTarget } from "@pe/kit/lang/revit-target";
 import { useList } from "@pe/kit/lang/collection";
@@ -98,14 +99,13 @@ export function RunDetail({
   run,
   designRate,
   nameOf,
-  light,
 }: {
   run: RunData;
   designRate: number;
   nameOf: (id: number) => string;
-  light: (ids: readonly number[] | null) => void;
 }) {
   const observation = useNativeObservation();
+  const mark = useMention();
   const list = useList({
     items: run.parts,
     keyOf: (part) => `${part.id}:${run.parts.indexOf(part)}`,
@@ -118,7 +118,7 @@ export function RunDetail({
       {...revitTarget([run.ductId])}
       data-e-run-detail={run.ductId}
       aria-label="run detail"
-      onMouseEnter={() => light([run.ductId])}
+      {...mark(elementKey(run.ductId))}
     >
       <dl className="grid grid-cols-[auto_1fr_auto] gap-x-3">
         <dt className="text-ink-2">length</dt>

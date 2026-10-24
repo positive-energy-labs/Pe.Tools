@@ -386,13 +386,7 @@ export function OrbitMinimap({
       />
       <g data-orbit-stops="far">{dots(false)}</g>
       <g pointerEvents="none" data-orbit-mini="">
-        <path
-          data-orbit-mini-reach=""
-          data-reach="hover"
-          fill="none"
-          stroke={tokenRef("ink")}
-          strokeWidth={3.5}
-        />
+        <path data-orbit-mini-reach="" fill="none" stroke={tokenRef("ink")} strokeWidth={3.5} />
         <path
           data-orbit-mini-lines=""
           fill="none"

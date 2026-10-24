@@ -18,6 +18,7 @@
     "./lang/code": "./src/components/lang/code.tsx",
     "./lang/hover-grace": "./src/components/lang/hover-grace.ts",
     "./lang/declutter": "./src/components/lang/declutter.ts",
+    "./lang/attention": "./src/components/lang/attention.tsx",
     "./lang/reach": "./src/components/lang/reach.ts",
     "./lang/collection": "./src/components/lang/collection.ts",
     "./lang/empty": "./src/components/lang/empty.tsx",
@@ -85,6 +86,7 @@
   },
   "dependencies": {
     "@base-ui/react": "catalog:",
+    "@effect/atom-react": "4.0.0-beta.92",
     "@pe/agent-contracts": "workspace:*",
     "@tanstack/highlight": "catalog:",
     "@tanstack/react-hotkeys": "catalog:",
@@ -92,6 +94,7 @@
     "@tanstack/react-virtual": "catalog:",
     "beautiful-mermaid": "catalog:",
     "clsx": "^2.1.1",
+    "effect": "4.0.0-beta.92",
     "lucide-react": "1.21.0",
     "react": "^19.2.0",
     "react-dom": "^19.2.0",

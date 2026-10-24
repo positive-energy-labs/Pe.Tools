@@ -1,3 +1,4 @@
+import { AttentionDocument, elementKey, memberKey, useMention } from "@pe/kit/lang/attention";
 import { useList } from "@pe/kit/lang/collection";
 import { PlainList, ListView, listColumns } from "@pe/kit/lang/list-view";
 import { LeaderDiagram } from "@pe/kit/lang/leader-diagram";
@@ -89,8 +90,6 @@ const PARTS = [
 /** The bar's one ink; groups are told apart by hairline dividers and, in the popover, leader lines. */
 const INK = "ink-2";
 
-type Light = (ids: readonly number[] | null) => void;
-
 /**
  * A run's loss as abutting segments against `scale`: one per element group (a duct type, a fitting
  * family type, ...), each set off by a hairline of the ground, all in one ink. A segment's
@@ -99,18 +98,15 @@ type Light = (ids: readonly number[] | null) => void;
 function SplitFill({
   split,
   scale,
-  light,
-  back,
   hint = true,
 }: {
   split: Split;
   scale: number;
-  light?: Light;
-  back?: readonly number[];
   /** Each segment its own tooltip. The all-systems list draws none: its row's title carries the hint. */
   hint?: boolean;
 }) {
   const observation = useNativeObservation();
+  const mark = useMention();
   const tip = (content: string, child: ComponentProps<typeof TooltipHint>["children"]) =>
     hint ? <TooltipHint content={content}>{child}</TooltipHint> : child;
   let at = 0;
@@ -139,8 +135,7 @@ function SplitFill({
                       backgroundColor: tokenRef(INK),
                       boxShadow: `inset -1px 0 0 ${tokenRef("page")}`,
                     }}
-                    onMouseEnter={light ? () => light(group.ids) : undefined}
-                    onMouseLeave={light ? () => light(back ?? null) : undefined}
+                    {...mark(memberKey(group.ids.map(elementKey)))}
                   />,
                 )}
               </Fragment>
@@ -160,8 +155,7 @@ function SplitFill({
                 data-e-split={`${key}-unpriced`}
                 {...revitTarget(target.ids, target.refs)}
                 style={{ left: `min(${at * 100}%, calc(100% - 6px))`, borderColor: tokenRef(INK) }}
-                onMouseEnter={light ? () => light(part.ids) : undefined}
-                onMouseLeave={light ? () => light(back ?? null) : undefined}
+                {...mark(memberKey(part.ids.map(elementKey)))}
               />
             </TooltipHint>
           ) : null;
@@ -351,21 +345,10 @@ export function systemRowParts(
 const LOSS_PLACES = 4;
 
 /** The table keeps tiny groups behind one expandable row, with each segment still led to it. */
-function BreakdownList({
-  split,
-  scale,
-  light,
-  back,
-  barW,
-}: {
-  split: Split;
-  scale: number;
-  light?: Light;
-  back?: readonly number[];
-  barW: number;
-}) {
+function BreakdownList({ split, scale, barW }: { split: Split; scale: number; barW: number }) {
   const context = useContext(RuleContext);
   const side = usePopoverSide();
+  const attentionDoc = useContext(AttentionDocument) ?? "";
   const [expanded, setExpanded] = useState(false);
   const [selected, setSelected] = useState<{ key: string; ids: readonly number[] } | null>(null);
   const entries = useMemo(
@@ -522,7 +505,7 @@ function BreakdownList({
             visibleKeys={rows.map((row) => row.key)}
             activeKey={current?.key}
             onRowClick={choose}
-            onRowHover={light ? (row) => light(row?.ids ?? back ?? null) : undefined}
+            subject={(row) => ({ doc: attentionDoc, key: memberKey(row.ids.map(elementKey)) })}
             keep={() => true}
             caption={
               <>
@@ -666,16 +649,12 @@ function RulePick({ row, work, priced }: { row: BarRow; work: LossesWork; priced
 export function BarPopover({
   split,
   scale,
-  light,
-  back,
   head,
   className,
   children,
 }: {
   split: Split;
   scale: number;
-  light?: Light;
-  back?: readonly number[];
   /** Drawn above the breakdown, built only while the popover is open. */
   head?: () => ReactNode;
   className?: string;
@@ -704,7 +683,7 @@ export function BarPopover({
         onClick={(event) => event.stopPropagation()}
       >
         {head?.()}
-        <BreakdownList split={split} scale={scale} light={light} back={back} barW={barW} />
+        <BreakdownList split={split} scale={scale} barW={barW} />
       </PopoverContent>
     </Popover>
   );
@@ -745,8 +724,6 @@ export function MetaBar({
   selfFt,
   unpriced = null,
   split = null,
-  light,
-  rowIds,
 }: {
   value: number | null;
   scale: number | null;
@@ -756,8 +733,6 @@ export function MetaBar({
   selfFt?: number | null;
   unpriced?: { word: string; why: string } | null;
   split?: Split | null;
-  light?: Light;
-  rowIds?: readonly number[];
 }) {
   const share = value != null && scale ? Math.min(1, value / scale) : null;
   const own = unpriced
@@ -774,7 +749,7 @@ export function MetaBar({
           <>
             <span className="absolute inset-0" style={{ backgroundColor: tokenRef("line") }} />
             {split && scale ? (
-              <SplitFill split={split} scale={scale} light={light} back={rowIds} />
+              <SplitFill split={split} scale={scale} />
             ) : (
               <span
                 className="absolute inset-y-0 left-0"

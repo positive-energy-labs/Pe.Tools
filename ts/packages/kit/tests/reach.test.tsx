@@ -2,7 +2,6 @@
 import { act, cleanup, fireEvent, render, screen } from "@testing-library/react";
 import { readFileSync } from "node:fs";
 import { createRequire } from "node:module";
-import { useCallback } from "react";
 import { afterEach, expect, test, vi } from "vite-plus/test";
 import { useCollection, useList } from "../src/components/lang/collection";
 import { ListView, listColumns } from "../src/components/lang/list-view";
@@ -11,14 +10,15 @@ import { Row } from "../src/components/lang/row";
 import { StateCell } from "../src/components/lang/cell";
 import { SubjectTextContext } from "../src/components/lang/reach";
 import { nameOrFallback, subjectDocument, SubjectText } from "../src/components/lang/subject-text";
-import { HOVER_GRACE, useHoverGrace } from "../src/components/lang/hover-grace";
+import { HOVER_GRACE } from "../src/components/lang/hover-grace";
 
 import { Button } from "../src/components/lang/button";
 import { FactChip } from "../src/components/lang/chip";
 import { Switcher } from "../src/components/lang/switcher";
 import { PaneCrumb } from "../src/components/lang/pane-crumb";
 import { SvgTip, TooltipProvider } from "../src/components/lang/tooltip";
-import { reachStore, useReach } from "../src/components/lang/reach";
+import { citation, cite, useRung } from "../src/components/lang/attention";
+import { AttentionFixture, kitRegistry } from "./attention-fixture";
 
 afterEach(() => {
   cleanup();
@@ -28,28 +28,15 @@ afterEach(() => {
 
 test("pressing a reference uses focus reach and its popup shares the lighting grace", async () => {
   vi.useFakeTimers();
-  const reach = reachStore();
+  const registry = kitRegistry();
   const go = vi.fn();
   function Fixture() {
-    const close = useCallback(
-      () => reach.set((s) => ({ ...s, lighting: { ids: new Set(), references: [], focus: null } })),
-      [],
-    );
-    const grace = useHoverGrace<string>(close);
     return (
       <SubjectTextContext
         value={{
           nameOf: () => "FR-2",
-          reach,
+          doc: "kit",
           go,
-          light: (references, focus, owner) => {
-            grace.cancel();
-            reach.set((s) => ({
-              ...s,
-              lighting: { ids: new Set([42]), references, focus, owner },
-            }));
-          },
-          clear: grace.leave,
         }}
       >
         <SubjectText text={["Open end at ", { id: 42 }]} />
@@ -59,7 +46,9 @@ test("pressing a reference uses focus reach and its popup shares the lighting gr
   }
   const view = render(
     <TooltipProvider delay={0}>
-      <Fixture />
+      <AttentionFixture>
+        <Fixture />
+      </AttentionFixture>
     </TooltipProvider>,
   );
   const reference = screen.getByRole("button", { name: "go to FR-2, reference 1" });
@@ -74,7 +63,7 @@ test("pressing a reference uses focus reach and its popup shares the lighting gr
   fireEvent.mouseLeave(reference);
   fireEvent.mouseLeave(view.container.querySelector("[data-subject-text]")!);
   await act(() => vi.advanceTimersByTime(950));
-  expect(reach.get().lighting.focus).toBe(42);
+  expect(registry.get(citation)?.focus?.key ?? null).toBe("e:42");
   fireEvent.mouseEnter(reference);
   fireEvent.mouseMove(reference);
   await act(() => vi.advanceTimersByTime(400));
@@ -90,15 +79,15 @@ test("pressing a reference uses focus reach and its popup shares the lighting gr
   await act(async () => screen.getByRole("button", { name: "outside" }).focus());
   await act(() => vi.advanceTimersByTime(950));
   expect(popup.isConnected).toBe(true);
-  expect(reach.get().lighting.focus).toBe(42);
+  expect(registry.get(citation)?.focus?.key ?? null).toBe("e:42");
   fireEvent.mouseOut(popup, { relatedTarget: screen.getByRole("button", { name: "outside" }) });
   fireEvent.mouseOver(screen.getByRole("button", { name: "outside" }));
   fireEvent.mouseLeave(popup);
   fireEvent.mouseLeave(popup.parentElement!);
   await act(() => vi.advanceTimersByTime(HOVER_GRACE - 1));
-  expect(reach.get().lighting.focus).toBe(42);
+  expect(registry.get(citation)?.focus?.key ?? null).toBe("e:42");
   await act(() => vi.advanceTimersByTime(2));
-  expect(reach.get().lighting.focus).toBeNull();
+  expect(registry.get(citation)?.focus?.key ?? null).toBeNull();
 });
 
 test("focus and landing are outline-only, and reference contact never fills or boxes the word", () => {
@@ -240,31 +229,45 @@ test("the pointer moving the cursor never scrolls; a key moving it does (N1)", (
 
 const noop = () => {};
 function Mirror() {
-  return <output data-testid="mirror">{useReach(42)}</output>;
+  return <output data-testid="mirror">{useRung({ doc: "kit", key: "e:42" })}</output>;
 }
 
 test("rows and picture subscribers share reach without updating the route", () => {
-  const reach = reachStore();
+  const registry = kitRegistry();
   const route = vi.fn();
   function Route() {
     route();
     return (
-      <SubjectTextContext value={{ nameOf: () => "duct", reach }}>
+      <SubjectTextContext value={{ doc: "kit", nameOf: () => "duct" }}>
         <Row label="duct" revit={[42]} />
         <Mirror />
       </SubjectTextContext>
     );
   }
-  render(<Route />);
+  render(
+    <AttentionFixture>
+      <Route />
+    </AttentionFixture>,
+  );
   const row = screen.getByText("duct").closest(".dl-row")!;
   expect(row.getAttribute("data-reach")).toBe("rest");
   act(() =>
-    reach.set((state) => ({ ...state, lighting: { ...state.lighting, ids: new Set([42]) } })),
+    cite(registry, {
+      owner: "row",
+      refs: [{ doc: "kit", key: "e:42", name: "duct", number: 1 }],
+      focus: null,
+    }),
   );
   expect(row.getAttribute("data-reach")).toBe("reach");
-  fireEvent.mouseEnter(row);
+  fireEvent.pointerOver(row);
   expect(screen.getByTestId("mirror").textContent).toBe("hover");
-  act(() => reach.set((state) => ({ ...state, lighting: { ...state.lighting, focus: 42 } })));
+  act(() =>
+    cite(registry, {
+      owner: "row",
+      refs: [{ doc: "kit", key: "e:42", name: "duct", number: 1 }],
+      focus: { doc: "kit", key: "e:42" },
+    }),
+  );
   expect(row.getAttribute("data-reach")).toBe("focus");
   expect(route).toHaveBeenCalledTimes(1);
 });
@@ -290,8 +293,11 @@ test("every target declares reach; the cell unit and padding focus its input", (
       </svg>
     </>,
   );
-  for (const target of view.container.querySelectorAll("button, .dl-cell, [data-svg-tip]"))
+  for (const target of view.container.querySelectorAll("button, .dl-cell, [data-svg-tip]")) {
+    fireEvent.pointerOver(target);
     expect(target.hasAttribute("data-reach")).toBe(true);
+  }
+  fireEvent.pointerOver(screen.getByText("fact").parentElement!);
   expect(screen.getByText("fact").closest("[data-reach]")).toBeTruthy();
   const cell = view.container.querySelector<HTMLElement>(".dl-cell")!;
   const input = cell.querySelector("input")!;

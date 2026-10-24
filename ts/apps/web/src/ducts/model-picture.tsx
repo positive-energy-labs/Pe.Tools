@@ -1,3 +1,5 @@
+import { RegistryContext } from "@effect/atom-react";
+import { holdCitation } from "@pe/kit/lang/attention";
 import { useWork } from "@pe/kit/lang/pane";
 /** The subject's real meshes and annotations. Camera policy belongs to useStage. */
 import { emptyListSearch } from "@pe/agent-contracts";
@@ -24,7 +26,6 @@ import type { SceneRead } from "#/scene/use-scene";
 import type { Bounds, Layer3D, SceneMeshes } from "#/scene/types";
 
 import { CaptionBounds } from "./subject-labels";
-import { SubjectTextContext } from "@pe/kit/lang/reach";
 import { Annotations, type Label, type Ruling } from "./annotations";
 import type { Encoding } from "./encoding";
 import type { DuctsPage } from "./manifest";
@@ -128,7 +129,7 @@ export function ModelPicture({
 }) {
   const stage = useStage();
   const meshes = read.meshes;
-  const subjects = useContext(SubjectTextContext);
+  const registry = useContext(RegistryContext);
   const pickIssue = (target: IssueTarget) => {
     setPage(
       { selected: String(target.elementId), issue: target.key, rulingSearch: emptyListSearch() },
@@ -137,7 +138,7 @@ export function ModelPicture({
   };
   const hoverIssue = (target: IssueTarget | null) => {
     onIssueHover(target?.key ?? null);
-    onHover(target?.elementId ?? null);
+    if (!target) onHover(null);
   };
   // Meshes move natively during a gesture; DOM annotations re-project only at release.
   const held = useRef<OrbitViewport | null>(null);
@@ -216,7 +217,7 @@ export function ModelPicture({
       aria-busy={read.pending || undefined}
       data-reading={read.pending ? "pending" : undefined}
       className="relative min-h-0 flex-1 overflow-hidden"
-      onPointerMove={subjects?.hold}
+      onPointerMove={() => holdCitation(registry)}
     >
       {!read.pending && status && (
         <OutcomeLine kind={read.error ? "error" : "advisory"} label={status} />
@@ -284,7 +285,6 @@ export function ModelPicture({
               labels={labels}
               meshed={meshed}
               issues={issues}
-              onIssueHover={hoverIssue}
               rulings={rulings}
               pointOf={pointOf}
               issue={issue}
@@ -293,7 +293,6 @@ export function ModelPicture({
                 frameAt(meshes?.instances.find((i) => i.revitId === id)?.key ?? null)
               }
               onRuling={onRuling}
-              onHover={onHover}
             />
           </CaptionBounds.Provider>
         </div>

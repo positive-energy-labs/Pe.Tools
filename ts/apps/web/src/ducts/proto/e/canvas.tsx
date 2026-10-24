@@ -1,4 +1,4 @@
-import { useSceneReach } from "#/scene/reach";
+import { useElementAttention } from "#/attention";
 import { ButtonGroup } from "@pe/kit/lang/button-group";
 /** The model/schematic pane, its fixed readout and floaters. Camera policy belongs to useStage. */
 import { nameOrFallback } from "@pe/kit/lang/subject-text";
@@ -58,7 +58,8 @@ import { usePictureFloaters } from "./picture-floaters";
 import { RulingBody, useMarks } from "./rulings";
 import { noRunParts } from "../../subject-text";
 import { SubjectText } from "@pe/kit/lang/subject-text";
-import { SubjectTextContext, useReachState, useReachChannel } from "@pe/kit/lang/reach";
+import { SubjectTextContext } from "@pe/kit/lang/reach";
+import { useHoveredIssue } from "#/attention";
 
 const LAYER_WORDS: Record<
   (typeof DUCTS_LAYERS)[number],
@@ -156,10 +157,8 @@ function Canvas({
   onSelect,
   onPose,
 }: ProtoProps & ECanvasExtra & { snapshot: NonNullable<ProtoProps["snapshot"]> }) {
-  const { hovered, onHover } = useSceneReach();
-  const reach = useReachChannel();
-  const lit = useReachState(reach, (state) => state.lighting.ids);
-  const hoveredIssue = useReachState(reach, (state) => state.issue);
+  const { hovered, onHover, lit } = useElementAttention();
+  const hoveredIssue = useHoveredIssue();
   const observation = useNativeObservation();
   const index = useMemo(() => indexOf(snapshot, priced), [snapshot, priced]);
   const labelOf = useMemo(() => labelOfNode(snapshot), [snapshot]);
@@ -222,8 +221,8 @@ function Canvas({
     setPage({ picture: picture === "model" ? "schematic" : "model" }, { history: "push" });
 
   const sub = scene.subject ?? null;
-  const byId = useMemo(() => snapshotById(snapshot), [snapshot]);
   const nameOfId = useMemo(() => elementNamer(snapshot, sub), [snapshot, sub]);
+  const byId = useMemo(() => snapshotById(snapshot), [snapshot]);
   const pointer = useRef({ x: 0, y: 0 });
   const [openRuling, setOpenRuling] = useState<number | null>(null);
   const pointOf = (id: number): readonly number[] | null => {
@@ -336,10 +335,6 @@ function Canvas({
     const leg = sub?.legOf.get(id);
     return new Set(leg ? [id, ...leg.ids] : [id]);
   }, [page.selected, page.issue, issues, claims, sub]);
-  const litAll = useMemo(
-    () => new Set([...lit, ...(hovered == null ? [] : [hovered])]),
-    [lit, hovered],
-  );
 
   // Where a box in the world sits on screen now, from the live camera; null when off the picture.
   const onScreen = (b: Bounds | null): DOMRect | null => {
@@ -379,10 +374,7 @@ function Canvas({
       index={index}
       group={lead}
       encoding={scale.encoding}
-      selected={selected}
-      lit={litAll}
       onSelect={(id) => pick(id)}
-      onHover={onHover}
       size={size}
       readout={readout}
     />
@@ -574,20 +566,13 @@ function Canvas({
             {readId != null ? (
               <>
                 {ruled && ruled.at === readId ? (
-                  <RulingBody
-                    r={ruled}
-                    nameOfId={nameOfId}
-                    onVerdict={onVerdict}
-                    onHover={onHover}
-                    onPick={pick}
-                  />
+                  <RulingBody r={ruled} onVerdict={onVerdict} />
                 ) : null}
                 {run ? (
                   <RunDetail
                     run={run}
                     designRate={priced?.staged.designFriction ?? DEFAULT_DESIGN_FRICTION_RATE}
                     nameOf={nameOf}
-                    light={(ids) => onHover(ids?.[0] ?? null)}
                   />
                 ) : null}
                 {noRuns.has(readId) ? (

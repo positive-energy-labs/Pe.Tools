@@ -1,4 +1,4 @@
-import { useSceneReach } from "#/scene/reach";
+import { useElementAttention } from "#/attention";
 /**
  * The picture pane's two floaters: the orbit globe (`G`, the camera's minimap, drawing the subject's
  * centrelines in unit-sphere space) and the other picture small, where a click swaps the two.
@@ -39,7 +39,7 @@ export function usePictureFloaters({
   /** The schematic, small. */
   small: () => ReactNode;
 }): FloaterSpec[] {
-  const { hovered } = useSceneReach();
+  const { hovered } = useElementAttention();
   const [globe, setGlobe] = useState(true);
   const [corner, setCorner] = useState(true);
   // The globe draws the subject's centrelines in unit-sphere space, scaled from its own radius.

@@ -1,10 +1,20 @@
+import * as Atom from "effect/unstable/reactivity/Atom";
+import { RegistryContext } from "@effect/atom-react";
+import { AttentionScope } from "#/attention";
+import {
+  AttentionDocument,
+  elementKey,
+  resolveMembers,
+  useAttention,
+  type SubjectKey,
+} from "@pe/kit/lang/attention";
 import { listOf } from "@pe/kit/lang/collection";
 /**
  * /rooms — the Situation over one level's plan view and its Room Regions. The sentence names the
  * document, the level and the view; the body is the plan beside the table, or the route's
  * receipts in History. The snapshot is one host read keyed on the target and `page.epoch`.
  */
-import { useEffect, useMemo, useRef, useState } from "react";
+import { useContext, useEffect, useMemo, useRef } from "react";
 import {
   transitionPatches,
   type ActionReceipt,
@@ -169,7 +179,24 @@ export function RoomsRoute({ url = true }: { url?: boolean } = {}) {
     }),
     [demo, doc, snapshot, trace.data],
   );
-  const [hovered, setHovered] = useState<string | null>(null);
+  const attentionDoc = doc ? `${doc.session}/${doc.openId}` : "fixture:rooms:plan";
+  const selection = useMemo(
+    () =>
+      Atom.make(
+        (get): ReadonlySet<SubjectKey> =>
+          new Set<SubjectKey>(
+            get(handle.pageState).page.selected.map((guid): SubjectKey => `room:${guid}`),
+          ),
+      ),
+    [handle.pageState],
+  );
+  const members = useMemo(() => {
+    const keys = new Map(
+      snapshot?.regions.map((region) => [`room:${region.guid}`, elementKey(region.elementId)]) ??
+        [],
+    );
+    return (key: SubjectKey) => (keys.has(key) ? [keys.get(key)!] : resolveMembers(key));
+  }, [snapshot]);
 
   const levels = snapshot?.levels ?? [];
   const level = levels.find((item) => item.views.includes(page.view)) ?? null;
@@ -241,57 +268,63 @@ export function RoomsRoute({ url = true }: { url?: boolean } = {}) {
             : null;
 
   return (
-    <NativeObservationScope value={nativeObservation}>
-      <Surface
-        head={
-          <RouteShell
-            manifest={manifest}
-            handle={handle}
-            situation={
-              <Situation
+    <RegistryContext value={handle.registry}>
+      <AttentionScope doc={attentionDoc} selected={selection} members={members}>
+        <NativeObservationScope value={nativeObservation}>
+          <Surface
+            head={
+              <RouteShell
+                manifest={manifest}
                 handle={handle}
-                target={{ session: ladder.sessionWord, document: ladder.docWord }}
-                commit="apply"
-                sentence={sentence}
-                ledger={[
-                  [
-                    "read",
-                    error
-                      ? "failed"
-                      : snapshot
-                        ? `epoch ${page.epoch}`
-                        : pending
-                          ? "reading"
-                          : "none",
-                  ],
-                  ["view", page.view || "none"],
-                ]}
+                situation={
+                  <Situation
+                    handle={handle}
+                    target={{ session: ladder.sessionWord, document: ladder.docWord }}
+                    commit="apply"
+                    sentence={sentence}
+                    ledger={[
+                      [
+                        "read",
+                        error
+                          ? "failed"
+                          : snapshot
+                            ? `epoch ${page.epoch}`
+                            : pending
+                              ? "reading"
+                              : "none",
+                      ],
+                      ["view", page.view || "none"],
+                    ]}
+                  />
+                }
               />
             }
-          />
-        }
-      >
-        {page.stage === "history" ? (
-          <RoomsHistory receipts={handle.readings.receipts} />
-        ) : (
-          <RoomsBody
-            lease={lease}
-            snapshot={snapshot}
-            empty={empty}
-            page={page}
-            setPage={setPage}
-            focus={page.focus}
-            plan={demo ? { ...plan, image: { plan: DEMO_PLAN }, error: null } : plan}
-            trace={demo ? DEMO_TRACE : trace}
-            hovered={hovered}
-            setHovered={setHovered}
-            doc={handle.work.doc}
-            wire={{ segment: "edits", revision: handle.work.revision, write: handle.work.write }}
-            applyMark={handle.actions.applyMark}
-          />
-        )}
-      </Surface>
-    </NativeObservationScope>
+          >
+            {page.stage === "history" ? (
+              <RoomsHistory receipts={handle.readings.receipts} />
+            ) : (
+              <RoomsBody
+                lease={lease}
+                snapshot={snapshot}
+                empty={empty}
+                page={page}
+                setPage={setPage}
+                focus={page.focus}
+                plan={demo ? { ...plan, image: { plan: DEMO_PLAN }, error: null } : plan}
+                trace={demo ? DEMO_TRACE : trace}
+                doc={handle.work.doc}
+                wire={{
+                  segment: "edits",
+                  revision: handle.work.revision,
+                  write: handle.work.write,
+                }}
+                applyMark={handle.actions.applyMark}
+              />
+            )}
+          </Surface>
+        </NativeObservationScope>
+      </AttentionScope>
+    </RegistryContext>
   );
 }
 
@@ -304,8 +337,6 @@ function RoomsBody({
   focus,
   plan,
   trace,
-  hovered,
-  setHovered,
   doc,
   wire,
   applyMark,
@@ -318,8 +349,6 @@ function RoomsBody({
   focus: string;
   plan: ReturnType<typeof usePlanImage>;
   trace: TraceRead;
-  hovered: string | null;
-  setHovered: (guid: string | null) => void;
   doc: RoomsRouteDocument | null;
   wire: CellWire;
   applyMark: ActionHandle;
@@ -420,10 +449,7 @@ function RoomsBody({
         rows={rows}
         cells={doc?.edits ?? {}}
         wire={wire}
-        selected={selected}
-        hovered={hovered}
         onSelect={(guids) => setPage({ selected: [...guids] })}
-        onHover={setHovered}
         empty={
           empty ?? {
             says: "no zones or room regions in this document",
@@ -448,8 +474,6 @@ function RoomsBody({
           planRefusal={refusal}
           planError={plan.error}
           empty={empty}
-          selected={selected}
-          hovered={hovered}
           zoomTo={zoomTo}
           focusMissing={snapshot ? focused.missing : []}
           onSelect={(guid, add) => {
@@ -466,18 +490,16 @@ function RoomsBody({
                     : [...page.selected, guid],
             });
           }}
-          onHover={setHovered}
           trace={trace}
           page={page}
           setPage={setPage}
           overlay={
             review
               ? (geo) => (
-                  <RoomsSketch
+                  <AttentionRoomsSketch
                     geo={geo}
                     cards={cards}
                     regions={regions}
-                    hovered={hovered}
                     pinned={pinned}
                     setPinned={setPinned}
                     onClear={() => setPage({ selected: [] })}
@@ -510,7 +532,6 @@ function RoomsBody({
                 onPin={setPinned}
                 show={page.show}
                 onShow={(show) => setPage({ show })}
-                onHover={setHovered}
                 markdown={() => (doc && snapshot ? cardsMarkdown(doc, snapshot) : "")}
                 snap={() => snapPlan(page.view)}
               />
@@ -555,4 +576,11 @@ function RoomsHistory({ receipts }: { receipts: Reading<unknown> }) {
       />
     </Pane>
   );
+}
+
+function AttentionRoomsSketch(props: Omit<React.ComponentProps<typeof RoomsSketch>, "hovered">) {
+  const doc = useContext(AttentionDocument)!;
+  const { hovered } = useAttention(doc);
+  const region = props.regions.find((region) => hovered.has(elementKey(region.elementId)));
+  return <RoomsSketch {...props} hovered={region?.guid ?? null} />;
 }
