@@ -695,11 +695,12 @@ test("seeded real-user route journey", async () => {
     let b = "";
     await step("discover at least two actual system controls", async () => {
       if (await box(p, '[data-pane-id="e-picture"] button', "Systems")) await allSystems(p);
-      const options = await rows(p);
-      if (options.length < 2)
-        throw new Error(
-          `PRECONDITION: all→A→B→all needs two rendered system rows; found ${options.length}. demo=scene baseline has groups: [] and systems: []`,
-        );
+      if (await box(p, 'button[aria-label="Expand systems"]'))
+        await click(p, 'button[aria-label="Expand systems"]');
+      const options = await p.until(async () => {
+        const found = await rows(p);
+        return found.length >= 2 ? found : null;
+      }, "two actual system rows after expanding the responsive systems pane");
       const index = Math.floor(rng() * options.length);
       a = options[index]!.key;
       b = options[(index + 1) % options.length]!.key;
