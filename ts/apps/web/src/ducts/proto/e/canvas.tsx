@@ -645,7 +645,6 @@ function Canvas({
             setPage={setPage}
             onPick={pick}
             onRuling={ruling}
-            onHover={onHover}
           />
         );
         return (

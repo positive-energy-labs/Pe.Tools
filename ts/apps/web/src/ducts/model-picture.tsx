@@ -99,7 +99,6 @@ export function ModelPicture({
   setPage,
   onPick,
   onRuling,
-  onHover,
 }: {
   readout: ReactNode;
   read: SceneRead;
@@ -125,7 +124,6 @@ export function ModelPicture({
   setPage: (next: Partial<DuctsPage>, move?: PageMove<DuctsPage>) => void;
   onPick: (id: number, at: { x: number; y: number }) => void;
   onRuling: (r: Ruling, at: { x: number; y: number }) => void;
-  onHover: (id: number | null) => void;
 }) {
   const stage = useStage();
   const meshes = read.meshes;
