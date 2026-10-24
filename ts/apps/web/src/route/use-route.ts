@@ -254,16 +254,14 @@ export function useRoute<W, R extends string, P, A extends string>(
         : null,
     [spec, slice, key, owner, closedWork],
   );
-  // Authored patches queue so two same-tick edits carry the first accepted revision into the
-  // second write. An explicit revision remains the caller's conflict boundary, rebased only over
-  // this owner's own landed writes: `own` maps each landed write's base to its result, and a bound
-  // write follows that chain, so a revision rendered before the owner's own writes landed still
-  // binds while any foreign write breaks the chain and refuses truthfully. `null` is a bound write
-  // with nothing rendered to bind to.
+  // Authored patches queue, and every write binds over ACKNOWLEDGED revisions: `own` maps each
+  // landed write's base to its result, and a write follows that chain from its base. An explicit
+  // revision is the caller's conflict boundary; an unbound write starts from the observed revision,
+  // which can still trail this owner's own acknowledged write (the Reading re-reads after the ack).
+  // Either way a revision from before the owner's own writes still binds, while any foreign write
+  // breaks the chain and refuses truthfully. `null` is a bound write with nothing rendered to bind to.
   const writeWork = useMemo(() => {
     let queue: Promise<void> = Promise.resolve();
-    let queued = 0;
-    let landed: number | null = null;
     const own = new Map<number, number>();
     return (
       patches: RouteStatePatch[],
@@ -273,7 +271,6 @@ export function useRoute<W, R extends string, P, A extends string>(
       // Hiding refuses new invocations. An admitted action still files its native result in Work.
       if (!admitted && !current())
         return Promise.resolve(refuse("not-ready", "This route tab is hidden"));
-      queued += 1;
       let accepted: { base: number; revision: number } | undefined;
       const result = queue
         .then(async () => {
@@ -289,9 +286,13 @@ export function useRoute<W, R extends string, P, A extends string>(
                 ? refuse("no-target", CLOSED_WORK)
                 : notHydrated;
           }
-          let bound = expectedRevision;
+          const seen = slice && owner.registry.get(slice);
+          // Unhydrated Work stays unbound: the writer refuses it as not hydrated.
+          let bound =
+            expectedRevision ??
+            (seen?.state === "ready" ? (seen.observation.revision ?? 0) : undefined);
           if (bound !== undefined) while (own.has(bound)) bound = own.get(bound)!;
-          return writer.apply(patches, bound ?? landed ?? undefined, (base, revision) => {
+          return writer.apply(patches, bound, (base, revision) => {
             accepted = { base, revision };
           });
         })
@@ -303,17 +304,14 @@ export function useRoute<W, R extends string, P, A extends string>(
             // before the owner's latest render, and an all-own chain back to it is still truthful;
             // a caller bound more than 256 own writes back refuses stale.
             if (own.size > 256) own.delete(own.keys().next().value!);
-            landed = accepted.revision;
           }
           if (refusal) owner.registry.set(owner.failure, refusal);
-          queued -= 1;
-          if (queued === 0) landed = null;
           return refusal;
         });
       queue = result.then(() => undefined);
       return result;
     };
-  }, [writer, owner, seed, current, closedWork]);
+  }, [writer, slice, owner, seed, current, closedWork]);
   const scopeKey = JSON.stringify([boundKey, key]);
   const actionScope = useMemo(() => ({}), [scopeKey]);
   const currentActionScope = useRef(actionScope);
