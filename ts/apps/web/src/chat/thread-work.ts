@@ -2,9 +2,9 @@ import { useMemo, useState } from "react";
 import type { ThreadWork, ThreadWorkSnapshot } from "@pe/agent-contracts";
 import { CHAT_SEED_THREAD_WORK } from "#/chat/seeds";
 
-/** The one swap point: the batch snapshot a navigation read carries.
- *  TODO(route thread): the `{kind:"navigation"}` Reading's `threadWorks` projection lands here;
- *  its final field name is theirs to confirm. Until then only `?demo=` has Work. */
+/** The one swap point: the batch snapshot the sidebar reads, fed by the `?demo=` fixture.
+ *  TODO(route thread: batch ThreadWork Reading on the resources stream): its request kind and
+ *  door are theirs to name; the navigation HTTP projection is not this source. */
 export const threadWorksOf = (reading: { threadWorks?: ThreadWorkSnapshot } | undefined) =>
   reading?.threadWorks ?? null;
 
@@ -23,6 +23,9 @@ export function useThreadWorks() {
     [snapshot],
   );
 }
+
+/** One thread's Work from that same batch; never a request of its own. */
+export const useThreadWork = (threadId: string) => useThreadWorks().of.get(threadId);
 
 /** "Doc A +2"; null when the thread remembers no document (the row keeps its title). */
 export function documentsLabel(work: ThreadWork | undefined): string | null {

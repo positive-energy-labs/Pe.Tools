@@ -110,6 +110,7 @@ test("the sidebar reads one batch however many rows it draws", () => {
   reads.mockClear();
   mount(roster().slice(0, 2));
   const few = reads.mock.calls.length;
+  expect(few).toBeGreaterThan(0);
   cleanup();
   reads.mockClear();
   mount(roster());
