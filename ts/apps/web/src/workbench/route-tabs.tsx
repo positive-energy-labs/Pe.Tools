@@ -1,7 +1,7 @@
 import { Plus, X } from "lucide-react";
 import { routeAddress, type ThreadTab } from "@pe/agent-contracts";
 import { Button } from "@pe/kit/lang/button";
-import { Switcher } from "@pe/kit/lang/switcher";
+import { TooltipHint } from "@pe/kit/lang/tooltip";
 
 function tabTitle(tab: ThreadTab) {
   const at = routeAddress(tab.route);
@@ -23,36 +23,44 @@ function tabTitle(tab: ThreadTab) {
 
 const TAB_CH = 24;
 
-/** The tools pane's header: one labelled tab per durable Place; none pressed while collapsed. */
+/** The tools pane's header: one labelled tab per durable Place, none pressed while collapsed. Each
+ *  Place carries its own named close, shown on hover or focus so the collapsed bar stays a row of
+ *  words; it stays in the tab order. */
 export function RouteTabs({
   tabs,
   active,
   onSelect,
+  onClose,
 }: {
   tabs: readonly ThreadTab[];
   active: string | null;
   onSelect: (tab: ThreadTab) => void;
+  onClose: (tab: ThreadTab) => void;
 }) {
   return (
-    <Switcher
-      ariaLabel="Thread Places"
-      value={active ?? ""}
-      onChange={(id) => onSelect(tabs.find((tab) => tab.id === id)!)}
-      options={tabs.map((tab) => {
+    <span role="group" aria-label="Thread Places" className="flex min-w-0 items-center">
+      {tabs.map((tab) => {
         const name = tabTitle(tab);
-        // A hint only when the label is cut. ponytail: the cut is guessed from length against the
-        // 24ch cap; measure the span on reach if wide glyphs ever cut a shorter name.
-        return {
-          value: tab.id,
-          label: (
-            <span className="block truncate" style={{ maxWidth: `${TAB_CH}ch` }}>
-              {name}
-            </span>
-          ),
-          title: name.length > TAB_CH ? name : "",
-        };
+        return (
+          <span
+            key={tab.id}
+            className="inline-flex min-w-0 items-center [&>:last-child]:opacity-0 focus-within:[&>:last-child]:opacity-100 hover:[&>:last-child]:opacity-100"
+          >
+            {/* A hint only when the label is cut. ponytail: the cut is guessed from length
+                against the 24ch cap; measure the span on reach if wide glyphs ever cut a
+                shorter name. */}
+            <TooltipHint content={name.length > TAB_CH ? name : ""}>
+              <Button label={name} pressed={active === tab.id} onClick={() => onSelect(tab)}>
+                <span className="block truncate" style={{ maxWidth: `${TAB_CH}ch` }}>
+                  {name}
+                </span>
+              </Button>
+            </TooltipHint>
+            <Button icon={X} label={`Close ${name}`} onClick={() => onClose(tab)} />
+          </span>
+        );
       })}
-    />
+    </span>
   );
 }
 
@@ -92,14 +100,16 @@ export function RouteTabActions({
         </>
       )}
       {active && !tabs.some((tab) => tab.id === active) && (
-        <span data-tone="caution" className="t-small">
-          Place not saved
-        </span>
+        <>
+          <span data-tone="caution" className="t-small">
+            Place not saved
+          </span>
+          <Button icon={X} label="Close unsaved Place" onClick={onCloseActive} />
+        </>
       )}
       {onDuplicate && (
         <Button icon={Plus} label="Open another Place on this route" onClick={onDuplicate} />
       )}
-      {active && <Button icon={X} label="Close this Place" onClick={onCloseActive} />}
     </>
   );
 }
