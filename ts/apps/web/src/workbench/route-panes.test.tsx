@@ -33,7 +33,7 @@ const DOC_A = address("C:/Jobs/Level A.rvt"),
 const place = (id: string, system: string, selected: string, target: unknown): ThreadTab => ({
   id,
   route: "ducts",
-  link: routeAddress("ducts").link({ system, selected } as never, {
+  link: routeAddress("ducts").link({ system: [system], selected } as never, {
     target: JSON.stringify(target),
   }),
   at: "2026-10-24T00:00:00.000Z",

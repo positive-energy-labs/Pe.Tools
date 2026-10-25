@@ -16,7 +16,7 @@ import { RevitTarget } from "@pe/kit/lang/revit-target";
  * then the 3D pose kept under it, which the shown axis's thumbnail draws. `thumbs` names 2D
  * canvases this canvas paints each axis into.
  */
-import { useEffect, useMemo, useRef, useState, type ReactNode } from "react";
+import { useEffect, useMemo, useRef, useState, useSyncExternalStore, type ReactNode } from "react";
 import { useElementAttention } from "#/attention";
 import { revitTarget } from "@pe/kit/lang/revit-target";
 import { viewportCodec } from "@pe/agent-contracts";
@@ -27,6 +27,8 @@ import {
   type NativeObservation,
 } from "#/revit/observation";
 import type { LiveOrbit, OrbitGesture } from "@pe/kit/lang/live-orbit";
+import { subscribe as knobsChanged } from "#/knobs/knobs";
+import { LOOK } from "./grounds";
 import { isClick, pickAt } from "./picking";
 import { samePlane, type PlaneAxis, type PlaneViewport } from "./plane";
 import type { Project, Ray, Size } from "./projection";
@@ -53,9 +55,9 @@ export type Scene3DProps = {
   lit?: ReadonlySet<string>;
   hidden?: ReadonlySet<string>;
   isolated?: ReadonlySet<string> | null;
-  layers?: readonly Layer3D[];
-  /** Each instance's tier and colour key; absent = focus is subject, the rest context. */
+  /** Subject, stub or context per instance, and its colour key; absent: focus is the subject. */
   paintOf?: PaintOf;
+  layers?: readonly Layer3D[];
   hoveredIssue?: string | null;
   focusedIssue?: string | null;
   onIssueHover?: (target: IssueTarget | null) => void;
@@ -150,7 +152,7 @@ export function Scene3D(props: Scene3DProps): ReactNode {
     if (!meshes) return;
     let r: SceneRenderer;
     try {
-      r = createRenderer(host.current!, meshes, props.wheelHost ?? host.current!);
+      r = createRenderer(host.current!, meshes, props.wheelHost ?? host.current!, props.paintOf);
     } catch (error) {
       setFailed({ meshes, message: `WebGL unavailable: ${String(error)}` });
       return;
@@ -364,6 +366,14 @@ export function Scene3D(props: Scene3DProps): ReactNode {
   useEffect(() => {
     core.current?.setClip(props.clipVolume);
   }, [props.clipVolume, meshes]);
+  useEffect(() => {
+    core.current?.setPaint(props.paintOf);
+  }, [props.paintOf, meshes]);
+  // Dev knobs re-apply live; in production `LOOK.read()` is the code defaults and never changes.
+  const look = useSyncExternalStore(knobsChanged, LOOK.read, LOOK.read);
+  useEffect(() => {
+    core.current?.setLook(look);
+  }, [look, meshes]);
 
   return (
     <RevitTarget scope={observation.scope}>

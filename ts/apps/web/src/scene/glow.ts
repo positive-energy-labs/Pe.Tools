@@ -47,7 +47,7 @@ export function createGlow(renderer: THREE.WebGLRenderer, occluder: THREE.Materi
     depthWrite: false,
   });
   const composite = new THREE.ShaderMaterial({
-    uniforms: { map: { value: null }, mask: { value: null }, strength: { value: 2.6 } },
+    uniforms: { map: { value: null }, mask: { value: null }, strength: { value: 0 } },
     vertexShader,
     fragmentShader: compositeShader,
     transparent: true,
@@ -56,6 +56,8 @@ export function createGlow(renderer: THREE.WebGLRenderer, occluder: THREE.Materi
   });
   const quad = new FullScreenQuad(blur);
   const clear = new THREE.Color();
+  /** Blur step scale; the steps are 1, 2.5 and 5 px at 1. */
+  let spread = 1;
 
   const pass = (
     from: THREE.WebGLRenderTarget,
@@ -65,12 +67,20 @@ export function createGlow(renderer: THREE.WebGLRenderer, occluder: THREE.Materi
   ) => {
     blur.uniforms.map!.value = from.texture;
     const ratio = renderer.getPixelRatio() / (from === mask ? 1 : 2);
-    blur.uniforms.step!.value.set((x * ratio) / from.width, (y * ratio) / from.height);
+    blur.uniforms.step!.value.set(
+      (x * spread * ratio) / from.width,
+      (y * spread * ratio) / from.height,
+    );
     renderer.setRenderTarget(to);
     quad.render(renderer);
   };
 
   return {
+    /** `LOOK.glow`: halo gain and blur spread. */
+    setLook(look: { strength: number; spread: number }) {
+      composite.uniforms.strength!.value = look.strength;
+      spread = look.spread;
+    },
     setSize(width: number, height: number) {
       const ratio = renderer.getPixelRatio();
       const w = Math.max(1, Math.round(width * ratio));

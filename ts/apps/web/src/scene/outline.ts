@@ -15,9 +15,10 @@ uniform sampler2D mask;
 uniform vec2 texel;
 uniform vec3 ink;
 uniform vec3 casing;
+// Widths in device px per channel (selected, lit, hover); the casing adds casingPx outside.
+uniform vec3 width;
+uniform float casingPx;
 varying vec2 vUv;
-// Widths in device px per channel (selected, lit, hover); the casing adds 1.5 px outside.
-const vec3 width = vec3(2.5, 2.0, 1.25);
 void main() {
   vec3 inside = texture2D(mask, vUv).rgb;
   vec3 ring = vec3(0.0);
@@ -30,9 +31,9 @@ void main() {
       texture2D(mask, vUv + d * width.y).g,
       texture2D(mask, vUv + d * width.z).b));
     outer = max(outer, vec3(
-      texture2D(mask, vUv + d * (width.x + 1.5)).r,
-      texture2D(mask, vUv + d * (width.y + 1.5)).g,
-      texture2D(mask, vUv + d * (width.z + 1.5)).b));
+      texture2D(mask, vUv + d * (width.x + casingPx)).r,
+      texture2D(mask, vUv + d * (width.y + casingPx)).g,
+      texture2D(mask, vUv + d * (width.z + casingPx)).b));
   }
   vec3 line = max(ring - inside, 0.0) * vec3(1.0, 0.9, 0.6);
   vec3 dark = max(outer - max(ring, inside), 0.0) * vec3(0.6, 0.5, 0.3);
@@ -55,6 +56,8 @@ export function createOutline(
       texel: { value: new THREE.Vector2() },
       ink: { value: ink },
       casing: { value: casing },
+      width: { value: new THREE.Vector3() },
+      casingPx: { value: 0 },
     },
     vertexShader,
     fragmentShader,
@@ -65,6 +68,11 @@ export function createOutline(
   const quad = new FullScreenQuad(material);
   const clear = new THREE.Color();
   return {
+    /** Device px per channel and the dark casing outside them (`LOOK.outline`). */
+    setWidths(w: { selected: number; lit: number; hover: number; casing: number }) {
+      material.uniforms.width!.value.set(w.selected, w.lit, w.hover);
+      material.uniforms.casingPx!.value = w.casing;
+    },
     setSize(width: number, height: number) {
       const ratio = renderer.getPixelRatio();
       mask.setSize(Math.max(1, Math.round(width * ratio)), Math.max(1, Math.round(height * ratio)));
