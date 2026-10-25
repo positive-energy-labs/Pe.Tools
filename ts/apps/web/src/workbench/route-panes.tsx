@@ -21,7 +21,7 @@ import { RouteRetention } from "./route-retention";
  *  folding first; the tools' floor is the kit's 36rem rung (where a Table stacks its cells).
  *  Below Pea (sidebar folded) + seam + floor the dock stacks instead of squeezing Pea. */
 /** Under these a side folds to its rail: Pea reads thin, a tool needs room for its table. */
-export const DOCK_FLOOR = { pea: 280, tools: 420 };
+const DOCK_FLOOR = { pea: 280, tools: 420 };
 
 export function dockWidths(viewport: number, rem: number, pea: number, gutter: number) {
   const floor = 36 * rem;
