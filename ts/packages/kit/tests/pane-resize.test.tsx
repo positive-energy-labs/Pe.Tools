@@ -173,9 +173,7 @@ test.each([true, false])(
             defaultSize: 300,
             minSize: 300,
             minOtherSize: 400,
-            collapse: rail
-              ? { collapsed, onCollapsedChange, end: { title: "thread" } }
-              : undefined,
+            collapse: rail ? { collapsed, onCollapsedChange, end: { title: "thread" } } : undefined,
           }}
         />
       );
