@@ -266,7 +266,10 @@ export function createRenderer(mount: HTMLElement, meshes: SceneMeshes, wheelHos
   /** Instance index to batch id, for the veil's subject test. */
   const idOf: number[] = [];
   const bake = () =>
-    setVeilField(veil, bakeVeil(meshes, (i) => paints[idOf[i]!]!.tier !== "context"));
+    setVeilField(
+      veil,
+      bakeVeil(meshes, (i) => paints[idOf[i]!]!.tier !== "context"),
+    );
   mark("geometry-start");
   for (const instance of meshes.instances) {
     const vertices = meshes.positions.slice(
@@ -293,7 +296,11 @@ export function createRenderer(mount: HTMLElement, meshes: SceneMeshes, wheelHos
   mark("geometry", { meshes: byId.length, multiDraw: renderer.extensions.has("WEBGL_multi_draw") });
   bake();
   mark("veil");
-  LOOK.offer("layers", "hidden", [...new Set(meshes.instances.map((i) => i.category))].sort());
+  LOOK.offer(
+    "layers",
+    "hiddenCategories",
+    [...new Set(meshes.instances.map((i) => i.category))].sort(),
+  );
 
   let frame = 0;
   let sizePending = false;
@@ -647,12 +654,10 @@ export function createRenderer(mount: HTMLElement, meshes: SceneMeshes, wheelHos
   let painted: Paint = [undefined, undefined, undefined, undefined];
   const paintNow = (...[selected, hidden, isolated, lit]: Paint) => {
     const next = new Map<number, Mark>();
-    const hiddenCategories = new Set(look.layers.hidden);
+    const hiddenCategories = new Set(look.layers.hiddenCategories);
     byId.forEach(({ key, category }, id) => {
       const shown =
-        !hidden?.has(key) &&
-        (!isolated || isolated.has(key)) &&
-        !hiddenCategories.has(category);
+        !hidden?.has(key) && (!isolated || isolated.has(key)) && !hiddenCategories.has(category);
       batch.setVisibleAt(id, shown);
       const mark: Mark | null = !shown
         ? null

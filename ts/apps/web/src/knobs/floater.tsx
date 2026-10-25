@@ -9,6 +9,7 @@
  * it small. Boundary that still holds: no route renders this, and production never bundles it.
  */
 import { useState, useSyncExternalStore, type CSSProperties, type ReactNode } from "react";
+import { tokenRef } from "@pe/kit/lib/token";
 import {
   changedCount,
   copyText,
@@ -50,12 +51,13 @@ const BUTTON: CSSProperties = {
 /** A kit token role (`viz-1`, `alarm`) as `#rrggbb`, for the colour input's swatch. */
 function hexOf(role: string): string {
   if (/^#[\da-f]{6}$/i.test(role)) return role;
-  const name = role.startsWith("viz-") ? `--${role}` : `--pe-${role}`;
-  const css = getComputedStyle(document.documentElement).getPropertyValue(name).trim();
-  if (!css) return "#808080";
-  const ctx = Object.assign(document.createElement("canvas"), { width: 1, height: 1 }).getContext(
-    "2d",
-  )!;
+  if (role === "theme") return "#808080";
+  const probe = Object.assign(document.createElement("canvas"), { width: 1, height: 1 });
+  probe.style.color = tokenRef(role);
+  document.body.append(probe);
+  const css = getComputedStyle(probe).color;
+  probe.remove();
+  const ctx = probe.getContext("2d")!;
   ctx.fillStyle = css;
   ctx.fillRect(0, 0, 1, 1);
   const [r, g, b] = ctx.getImageData(0, 0, 1, 1).data;
@@ -78,6 +80,7 @@ function Control({ path, knob }: { path: string; knob: Knob }): ReactNode {
       return (
         <>
           <input
+            id={path}
             type="range"
             min={knob.min}
             max={knob.max}
@@ -101,17 +104,19 @@ function Control({ path, knob }: { path: string; knob: Knob }): ReactNode {
       return (
         <>
           <input
+            id={path}
             type="color"
             value={hexOf(value as string)}
             onChange={(e) => write(e.currentTarget.value)}
             style={{ width: 28, height: 16, padding: 0, border: 0, background: "none" }}
           />
-          <span style={{ minWidth: 60 }}>{String(value)}</span>
+          <span style={{ minWidth: 60 }}>{value as string}</span>
         </>
       );
     case "boolean":
       return (
         <input
+          id={path}
           type="checkbox"
           checked={value as boolean}
           onChange={(e) => write(e.currentTarget.checked)}
@@ -120,6 +125,7 @@ function Control({ path, knob }: { path: string; knob: Knob }): ReactNode {
     case "choice":
       return (
         <select
+          id={path}
           value={value as string}
           onChange={(e) => write(e.currentTarget.value)}
           style={{ font: "inherit", color: "#111" }}
@@ -141,9 +147,7 @@ function Control({ path, knob }: { path: string; knob: Knob }): ReactNode {
                 type="checkbox"
                 checked={on.has(option)}
                 onChange={(e) =>
-                  write(
-                    options.filter((o) => (o === option ? e.currentTarget.checked : on.has(o))),
-                  )
+                  write(options.filter((o) => (o === option ? e.currentTarget.checked : on.has(o))))
                 }
               />{" "}
               {option}
@@ -164,7 +168,11 @@ export default function KnobsFloater(): ReactNode {
   const changed = changedCount();
   if (!open)
     return (
-      <button type="button" style={{ ...ALIEN, ...BUTTON, padding: "2px 8px" }} onClick={() => setOpen(true)}>
+      <button
+        type="button"
+        style={{ ...BUTTON, ...ALIEN, padding: "2px 8px" }}
+        onClick={() => setOpen(true)}
+      >
         knobs{changed ? ` · ${changed} changed` : ""}
       </button>
     );
@@ -178,7 +186,14 @@ export default function KnobsFloater(): ReactNode {
   return (
     <div
       data-knobs=""
-      style={{ ...ALIEN, width: 430, maxHeight: "70vh", overflow: "auto", padding: 8 }}
+      style={{
+        ...ALIEN,
+        width: 430,
+        maxWidth: "calc(100vw - 16px)",
+        maxHeight: "70vh",
+        overflow: "auto",
+        padding: 8,
+      }}
     >
       <div style={{ display: "flex", gap: 6, alignItems: "center", marginBottom: 6 }}>
         <strong style={{ flex: 1 }}>knobs · dev only · refresh clears</strong>
@@ -188,7 +203,12 @@ export default function KnobsFloater(): ReactNode {
         <button type="button" style={BUTTON} onClick={() => resetKnob()} disabled={!changed}>
           Reset all
         </button>
-        <button type="button" style={BUTTON} onClick={() => setOpen(false)} aria-label="Close knobs">
+        <button
+          type="button"
+          style={BUTTON}
+          onClick={() => setOpen(false)}
+          aria-label="Close knobs"
+        >
           ×
         </button>
       </div>
@@ -211,7 +231,9 @@ export default function KnobsFloater(): ReactNode {
                   title={path}
                   style={{ display: "flex", alignItems: "center", gap: 6, minHeight: 20 }}
                 >
-                  <span style={{ flex: 1, fontWeight: held ? 700 : 400 }}>{knob.label}</span>
+                  <label htmlFor={path} style={{ flex: 1, fontWeight: held ? 700 : 400 }}>
+                    {knob.label}
+                  </label>
                   <Control path={path} knob={knob} />
                   <span style={knob.cost === "refetch" ? REFETCH : LIVE}>{knob.cost}</span>
                   <button

@@ -44,7 +44,7 @@ it("keeps camera gestures local and meshes mounted across native re-reads", () =
     gestureSize: () => [600, 2],
     setViewport,
     ...Object.fromEntries(
-      "setOrbitPivot setOnFrame reportFrame setPlane setThumbs paint setLayers lightIssue reach hoverElement setClip"
+      "setOrbitPivot setOnFrame reportFrame setPlane setThumbs paint setLayers lightIssue reach hoverElement setClip setLook setPaint"
         .split(" ")
         .map((name) => [name, vi.fn()]),
     ),

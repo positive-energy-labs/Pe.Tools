@@ -43,7 +43,7 @@ export const LOOK = defineKnobs("scene", "ts/apps/web/src/scene/grounds.ts", {
   veil: {
     colour: colour("Context ink", "theme"),
     nearFt: num("Full within (ft)", 1, [0, 20, 0.25]),
-    farFt: num("Gone by (ft)", 14, [1, 64, 0.5]),
+    farFt: num("Far (ft)", 14, [1, 64, 0.5]),
     curve: num("Curve exponent", 2, [0.25, 6, 0.05]),
     maxOpacity: num("Opacity at subject", 0.55, [0, 1, 0.01]),
     minOpacity: num("Opacity far", 0.02, [0, 1, 0.01]),
@@ -82,13 +82,13 @@ export const LOOK = defineKnobs("scene", "ts/apps/web/src/scene/grounds.ts", {
     focusVolume: num("Focus volume alpha", 0.6, [0, 1, 0.01]),
   },
   damage: {
-    colour: colour("Damage ink", "alarm"),
+    colour: colour("Damage ink", "#d32f2f"),
     alpha: num("Damage skin alpha", 0.85, [0, 1, 0.01]),
   },
   layers: {
     // ponytail: hides drawn instances only; the capture still fetches them. Owed: a fetch-side
     // category filter on `revit.detail.space-scene`.
-    hidden: set("Hidden categories"),
+    hiddenCategories: set("Hidden categories"),
   },
 });
 export type Look = ReturnType<typeof LOOK.read>;
@@ -143,9 +143,7 @@ export function sceneGrounds(mount: Element, look: Look) {
     context: inkOr(look.veil.colour, mount, () =>
       inkOf("ink-mute", mount).lerp(ground, 0.65).offsetHSL(0, -1, 0),
     ),
-    palette: Object.values(look.palette).map((value) =>
-      inkOr(value, mount, () => subject.clone()),
-    ),
+    palette: Object.values(look.palette).map((value) => inkOr(value, mount, () => subject.clone())),
     damage: inkOr(look.damage.colour, mount, () => inkOf("alarm", mount)),
     lights: {
       sky: inkOr(look.lights.sky, mount, () => WHITE.clone()),

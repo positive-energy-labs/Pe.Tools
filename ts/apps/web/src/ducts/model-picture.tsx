@@ -23,7 +23,7 @@ import { PaneOverlay } from "@pe/kit/lang/pane";
 import { OutcomeLine } from "@pe/kit/lang/outcome";
 import { Scene3D } from "#/scene/scene3d";
 import type { SceneRead } from "#/scene/use-scene";
-import type { Bounds, Layer3D, SceneMeshes } from "#/scene/types";
+import type { Bounds, Layer3D, PaintOf, SceneMeshes } from "#/scene/types";
 
 import { CaptionBounds } from "./subject-labels";
 import { Annotations, type Label, type Ruling } from "./annotations";
@@ -87,6 +87,7 @@ export function ModelPicture({
   encoding,
   selected,
   lit,
+  paintOf,
   hovered,
   labels,
   rulings,
@@ -111,6 +112,7 @@ export function ModelPicture({
   /** Element ids: the selection (with its leg), and what a hovered row elsewhere lights. */
   selected: ReadonlySet<number>;
   lit: ReadonlySet<number>;
+  paintOf?: PaintOf;
   hovered: number | null;
   labels: readonly Label[];
   rulings: readonly Ruling[];
@@ -229,6 +231,7 @@ export function ModelPicture({
           wheelHost={wheelHost ?? host}
           selected={selectedKeys}
           lit={litKeys}
+          paintOf={paintOf}
           isolated={layers.has("meshes") ? null : NONE}
           layers={findings3d}
           hoveredIssue={hoveredIssue}

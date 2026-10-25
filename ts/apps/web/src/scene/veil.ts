@@ -8,17 +8,18 @@
  * per fragment by world position. Chosen over a per-vertex attribute because a wall is a few huge
  * triangles whose corners are all far from the ducts, so vertex grain cannot light its middle;
  * and over a uniform array of subject boxes because 4 systems plus stubs are thousands of elements
- * and a duct's box is not the duct. Cost: one bake per subject change (seed + 3-pass exact EDT,
- * O(cells)), one texture fetch per fragment, nothing per frame. Limit: a cell is the grain, so the
- * shader treats anything within one cell as touching.
+ * and a duct's box is not the duct. Cost: triangle surface rasterization + 3-pass EDT once per
+ * subject change, one texture fetch per fragment. Distance is approximate within two cells
+ * (surface samples + trilinear interpolation); the shader treats one cell as touching.
  */
 import * as THREE from "three";
 import type { SceneMeshes } from "./types";
 
 /** Distances saturate here (ft); a knob's far edge must stay inside it. */
 export const VEIL_REACH_FT = 64;
-/** Field resolution: about 128³ cells, never finer than half a foot. */
+/** Bounded in volume and on each axis (including long, nearly flat scenes). */
 const MAX_CELLS = 2 ** 21;
+const MAX_AXIS = 256;
 const MIN_CELL_FT = 0.5;
 /** A context instance carries this alpha; the shader replaces it with the veil's opacity. */
 export const CONTEXT_ALPHA = 0;
@@ -61,15 +62,25 @@ function edt1d(f: Float64Array, n: number, d: Float64Array, v: Int32Array, z: Fl
   }
 }
 
-/** Bake d over the scene bounds: zero in cells the subject's triangles touch. No subject: all zero. */
+/** Bake d over the scene bounds. No subject: every cell is at the far edge. */
 export function bakeVeil(meshes: SceneMeshes, isSubject: (index: number) => boolean): VeilField {
-  const b = meshes.bounds;
-  const span = [b.maxX - b.minX, b.maxY - b.minY, b.maxZ - b.minZ].map((s) => Math.max(s, 1e-3));
-  const cellFt = Math.max(MIN_CELL_FT, Math.cbrt((span[0]! * span[1]! * span[2]!) / MAX_CELLS));
-  const dims = span.map((s) => Math.max(1, Math.ceil(s / cellFt))) as [number, number, number];
+  const bounds = meshes.bounds;
+  const span = [
+    bounds.maxX - bounds.minX,
+    bounds.maxY - bounds.minY,
+    bounds.maxZ - bounds.minZ,
+  ].map((s) => Math.max(s, 1e-3));
+  let cellFt = Math.max(MIN_CELL_FT, Math.max(...span) / MAX_AXIS);
+  const dimensions = () =>
+    span.map((s) => Math.max(1, Math.ceil(s / cellFt))) as [number, number, number];
+  let dims = dimensions();
+  while (dims[0] * dims[1] * dims[2] > MAX_CELLS) {
+    cellFt *= 1.05;
+    dims = dimensions();
+  }
   const [nx, ny, nz] = dims;
   const sq = new Float64Array(nx * ny * nz).fill(BIG);
-  const min = [b.minX, b.minY, b.minZ] as const;
+  const min = [bounds.minX, bounds.minY, bounds.minZ] as const;
   const cellOf = (x: number, y: number, z: number) => {
     const i = Math.min(nx - 1, Math.max(0, Math.floor((x - min[0]) / cellFt)));
     const j = Math.min(ny - 1, Math.max(0, Math.floor((y - min[1]) / cellFt)));
@@ -77,30 +88,58 @@ export function bakeVeil(meshes: SceneMeshes, isSubject: (index: number) => bool
     return i + nx * (j + ny * k);
   };
   const p = meshes.positions;
+  const a = new THREE.Vector3(),
+    b = new THREE.Vector3(),
+    c = new THREE.Vector3();
+  const edge = new THREE.Vector3(),
+    temp = new THREE.Vector3();
+  const left = new THREE.Vector3(),
+    right = new THREE.Vector3();
   let seeded = false;
   meshes.instances.forEach((instance, index) => {
     if (!isSubject(index)) return;
     seeded = true;
     const end = (instance.firstVertex + instance.vertexCount) * 3;
     for (let t = instance.firstVertex * 3; t + 9 <= end; t += 9) {
-      const ax = p[t]!, ay = p[t + 1]!, az = p[t + 2]!;
-      const ux = p[t + 3]! - ax, uy = p[t + 4]! - ay, uz = p[t + 5]! - az;
-      const vx = p[t + 6]! - ax, vy = p[t + 7]! - ay, vz = p[t + 8]! - az;
-      // Sample the triangle at half a cell so a long duct face seeds every cell it crosses.
-      const edge = Math.max(Math.hypot(ux, uy, uz), Math.hypot(vx, vy, vz));
-      const n = Math.min(256, Math.ceil(edge / (cellFt / 2)));
-      for (let i = 0; i <= n; i++)
-        for (let j = 0; i + j <= n; j++) {
-          const a = i / Math.max(n, 1), c = j / Math.max(n, 1);
-          sq[cellOf(ax + a * ux + c * vx, ay + a * uy + c * vy, az + a * uz + c * vz)] = 0;
+      a.fromArray(p, t);
+      b.fromArray(p, t + 3);
+      c.fromArray(p, t + 6);
+      // Scan parallel to the longest edge. Work follows surface area, rather than edge² on a
+      // long skinny duct face. Half-cell spacing covers large faces without a sample-count cap.
+      if (
+        b.distanceToSquared(c) > a.distanceToSquared(b) &&
+        b.distanceToSquared(c) > a.distanceToSquared(c)
+      ) {
+        temp.copy(a);
+        a.copy(c);
+        c.copy(temp);
+      } else if (a.distanceToSquared(c) > a.distanceToSquared(b)) {
+        temp.copy(b);
+        b.copy(c);
+        c.copy(temp);
+      }
+      edge.subVectors(b, a);
+      temp.subVectors(c, a);
+      const height = temp.addScaledVector(edge, -temp.dot(edge) / (edge.lengthSq() || 1)).length();
+      const rows = Math.max(1, Math.ceil(height / (cellFt / 2)));
+      for (let row = 0; row <= rows; row++) {
+        left.lerpVectors(a, c, row / rows);
+        right.lerpVectors(b, c, row / rows);
+        const columns = Math.max(1, Math.ceil(left.distanceTo(right) / (cellFt / 2)));
+        for (let col = 0; col <= columns; col++) {
+          temp.lerpVectors(left, right, col / columns);
+          sq[cellOf(temp.x, temp.y, temp.z)] = 0;
         }
+      }
     }
   });
-  if (!seeded) sq.fill(0);
+  if (!seeded) sq.fill(BIG);
   else {
     const longest = Math.max(nx, ny, nz);
-    const f = new Float64Array(longest), d = new Float64Array(longest);
-    const v = new Int32Array(longest), z = new Float64Array(longest + 1);
+    const f = new Float64Array(longest),
+      d = new Float64Array(longest);
+    const v = new Int32Array(longest),
+      z = new Float64Array(longest + 1);
     const pass = (n: number, count: number, at: (line: number, q: number) => number) => {
       for (let line = 0; line < count; line++) {
         for (let q = 0; q < n; q++) f[q] = sq[at(line, q)]!;

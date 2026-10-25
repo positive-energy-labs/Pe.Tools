@@ -3,7 +3,7 @@ import type { LineSegments2 } from "three/addons/lines/LineSegments2.js";
 import { expect, it } from "vite-plus/test";
 import { damageLayers, damageMark, damageLayer, heartbeat, setDamageHue } from "./damage";
 import { landing, markFrame, markLines } from "./marks";
-import { BLACK, WHITE, fogDensity, groundOf, GROUND_MATERIAL } from "./grounds";
+import { BLACK, WHITE, fogDensity, paintOf, tierOf, GROUND_MATERIAL, keySlot } from "./grounds";
 import { SceneMeshes, type LayerFrame, type SceneInstance } from "./types";
 
 const instance: SceneInstance = {
@@ -107,11 +107,20 @@ it.each([WHITE, BLACK])("shared ground colours cannot be corrupted by a material
 });
 
 it("grounds follow capture focus or lighting, with scale-invariant exponential fog", () => {
-  expect([groundOf(false), groundOf(true), groundOf(false, true)]).toEqual([
+  const context = paintOf({ ...instance, focus: false });
+  expect([tierOf(context), tierOf(paintOf(instance)), tierOf(context, true)]).toEqual([
     "context",
     "subject",
     "subject",
   ]);
+  expect(paintOf(instance, () => ({ tier: "stub", key: "SA 7" }))).toEqual({
+    tier: "stub",
+    key: "SA 7",
+  });
+  expect(paintOf(instance, () => undefined)).toEqual({ tier: "subject" });
+  expect(keySlot("SA 7", 6)).toBe(keySlot("SA 7", 6));
+  expect(keySlot("SA 7", 6)).toBeGreaterThanOrEqual(0);
+  expect(keySlot("SA 7", 6)).toBeLessThan(6);
   expect(GROUND_MATERIAL).toMatchObject({ depthTest: true, depthWrite: true });
   const b = { minX: 0, minY: 0, minZ: 0, maxX: 3, maxY: 4, maxZ: 0 };
   const larger = { ...b, maxX: 30, maxY: 40 };

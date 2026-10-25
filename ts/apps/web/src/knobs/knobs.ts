@@ -127,7 +127,7 @@ export function diffText(
       const lines = Object.entries(spec).flatMap(([group, knobs]) =>
         Object.entries(knobs).flatMap(([knob, { default: value }]) => {
           const path = `${name}.${group}.${knob}`;
-          return changed.has(path)
+          return changed.has(path) && !same(changed.get(path), value)
             ? [`${path}: ${show(changed.get(path))} (default ${show(value)})`]
             : [];
         }),
@@ -141,19 +141,19 @@ export const changedCount = () => overrides.size;
 
 /** Declare a module's knobs. `read()` is stable between override changes, and the defaults in production. */
 export function defineKnobs<S extends Spec>(name: string, source: string, spec: S) {
-  const resolve = () =>
+  const resolve = (overridden: boolean) =>
     Object.fromEntries(
       Object.entries(spec).map(([group, knobs]) => [
         group,
         Object.fromEntries(
           Object.entries(knobs).map(([knob, { default: value }]) => {
             const path = `${name}.${group}.${knob}`;
-            return [knob, overrides.has(path) ? overrides.get(path) : value];
+            return [knob, overridden && overrides.has(path) ? overrides.get(path) : value];
           }),
         ),
       ]),
     ) as Values<S>;
-  const defaults = resolve();
+  const defaults = resolve(false);
   let seen = values;
   let current = defaults;
   if (import.meta.env.DEV) {
@@ -166,12 +166,16 @@ export function defineKnobs<S extends Spec>(name: string, source: string, spec: 
       if (!import.meta.env.DEV) return defaults;
       if (seen !== values) {
         seen = values;
-        current = resolve();
+        current = resolve(true);
       }
       return current;
     },
     /** The options a `set` knob offers now (e.g. the categories in the drawn scene). */
-    offer<G extends keyof S & string>(group: G, knob: keyof S[G] & string, options: readonly string[]) {
+    offer<G extends keyof S & string>(
+      group: G,
+      knob: keyof S[G] & string,
+      options: readonly string[],
+    ) {
       if (!import.meta.env.DEV) return;
       const path = `${name}.${group}.${knob}`;
       if (same(offered.get(path), options)) return;

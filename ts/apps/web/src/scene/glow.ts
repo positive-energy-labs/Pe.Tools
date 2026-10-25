@@ -67,7 +67,10 @@ export function createGlow(renderer: THREE.WebGLRenderer, occluder: THREE.Materi
   ) => {
     blur.uniforms.map!.value = from.texture;
     const ratio = renderer.getPixelRatio() / (from === mask ? 1 : 2);
-    blur.uniforms.step!.value.set((x * spread * ratio) / from.width, (y * spread * ratio) / from.height);
+    blur.uniforms.step!.value.set(
+      (x * spread * ratio) / from.width,
+      (y * spread * ratio) / from.height,
+    );
     renderer.setRenderTarget(to);
     quad.render(renderer);
   };

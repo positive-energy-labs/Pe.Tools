@@ -1,4 +1,4 @@
-import { afterEach, expect, it } from "vitest";
+import { afterEach, expect, it } from "vite-plus/test";
 import { bool, colour, defineKnobs, diffText, num, resetKnob, set, setKnob } from "./knobs";
 
 afterEach(() => resetKnob());
@@ -19,6 +19,7 @@ it("copies only knobs that differ from code, grouped by module with their source
   };
   const changed = new Map<string, unknown>([
     ["scene.veil.farFt", 24],
+    ["scene.veil.curve", 2],
     ["scene.lights.sun", "#ffeedd"],
     ["capture.context.paddingFt", 0.1 + 0.2],
   ]);
