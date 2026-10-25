@@ -2,9 +2,7 @@ import { useEffect, useMemo, useState, type ReactNode } from "react";
 import { useAtomValue } from "@effect/atom-react";
 import { useNavigate, useRouterState } from "@tanstack/react-router";
 import { routeAddress } from "@pe/agent-contracts";
-import { ChatShell, SIDEBAR, ToolsBar, peaFloor } from "#/chat/chat-shell";
-import { ChevronRight } from "lucide-react";
-import { focusQuiet } from "@pe/kit/lib/utils";
+import { ChatShell } from "#/chat/chat-shell";
 import { EmptyState } from "@pe/kit/lang/empty";
 import { Button } from "@pe/kit/lang/button";
 import { chipRecipe } from "@pe/kit/lang/chip";
@@ -16,38 +14,10 @@ import { useRouteTabs } from "./tabs";
 import { RouteTabActions, RouteTabs } from "./route-tabs";
 import { RouteRetention } from "./route-retention";
 
-/** Pea-primary widths (counsel's rule, re-openable by kaitpw): Pea never drops below its reading
- *  measure while the tools sit at their default; the tools take what remains, the thread sidebar
- *  folding first; the tools' floor is the kit's 36rem rung (where a Table stacks its cells).
- *  Below Pea (sidebar folded) + seam + floor the dock stacks instead of squeezing Pea. */
 /** Under these a side folds to its rail: Pea reads thin, a tool needs room for its table. */
 export const DOCK_FLOOR = { pea: 280, tools: 420 };
 
-export function dockWidths(viewport: number, rem: number, pea: number, gutter: number) {
-  const floor = 36 * rem;
-  const folded = pea + SIDEBAR.rail + gutter;
-  const open = pea + SIDEBAR.size + gutter;
-  const beside = viewport - gutter - open;
-  return {
-    floor,
-    folded,
-    stackBelow: folded + gutter + floor,
-    tools: beside >= floor ? beside : viewport - gutter - folded,
-  };
-}
-const measureDock = () => {
-  const style = getComputedStyle(document.documentElement);
-  return dockWidths(
-    window.innerWidth,
-    parseFloat(style.fontSize) || 16,
-    peaFloor(),
-    parseFloat(style.getPropertyValue("--gutter")) || 8,
-  );
-};
-
-/** Pea starts, connected tools end. The URL is the one state: a tool route expands the tools,
- *  `/pea` collapses them to their tab strip in Pea's header; retained route bodies stay mounted
- *  under the hidden side, keeping their Page and DOM either way. */
+/** Pea starts, connected tools end. Retained route bodies stay mounted behind the tools rail. */
 export function RouteDock({
   children,
   renderRoute,
@@ -76,18 +46,8 @@ export function RouteDock({
   useEffect(() => {
     if (plan && plan.route !== tabs.route) store.actions.cancelPlan();
   }, [plan, tabs.route, store]);
-  const [narrow, setNarrow] = useState(false);
-  const [widths] = useState(measureDock);
-  // Either side folds to its kit rail under its floor (kaitpw 2026-10-24); the shared seam keeps
-  // the other open. With no tool route the tools are hidden, so Pea is never folded then.
-  const [fold, setFold] = useState<PaneSide | null>(null);
-  useEffect(() => {
-    const media = window.matchMedia(`(max-width: ${widths.stackBelow - 1}px)`);
-    const sync = () => setNarrow(media.matches);
-    sync();
-    media.addEventListener("change", sync);
-    return () => media.removeEventListener("change", sync);
-  }, [widths.stackBelow]);
+  const [fold, setFold] = useState<PaneSide | null>(tabs.route ? null : "end");
+  useEffect(() => setFold(tabs.route ? null : "end"), [tabs.route, tabs.active?.id]);
   const failure = tabs.failure ?? planRefusal?.message ?? null;
   // A Work pressed on a closed document: its tool says what was kept and how to reconnect, while
   // the thread's live Work still finds that document closed.
@@ -111,99 +71,62 @@ export function RouteDock({
       onClose={(tab) => void tabs.close(tab)}
     />
   );
-  // Collapsed, the tools are only this bar in Pea's header: no column, no placeholder. A tab
-  // press there expands them and lands focus on the tool it opened.
-  const bar =
-    !tabs.route && (tabs.tabs.length || failure) ? (
-      <>
-        <RouteTabs
-          tabs={tabs.tabs}
-          active={null}
-          onSelect={(tab) =>
-            void tabs
-              .select(tab)
-              .then(() => focusQuiet(document.querySelector<HTMLElement>('[data-pane-id="tools"]')))
-          }
-          onClose={(tab) => void tabs.close(tab)}
-        />
-        {failure ? (
-          <RouteTabActions
-            tabs={tabs.tabs}
-            active={null}
-            failure={failure}
-            onRetry={tabs.retry}
-            onChat={() => void tabs.chat()}
-            onDuplicate={null}
-            onCloseActive={() => {}}
-          />
-        ) : null}
-      </>
-    ) : null;
   return (
     <ChatPlanIntent.Provider value={intent}>
-      <ToolsBar.Provider value={bar}>
-        {/* Pea and tool pages share this owner so navigation cannot destroy unsent drafts. */}
-        <PaneSplit
-          axis={narrow ? "vertical" : "horizontal"}
-          grow
-          hide={tabs.route ? undefined : "end"}
-          resize={{
-            target: "end",
-            defaultSize: narrow ? 320 : widths.tools,
-            minSize: narrow ? 180 : DOCK_FLOOR.tools,
-            minOtherSize: narrow ? 200 : DOCK_FLOOR.pea,
-            persist: narrow ? undefined : "pe.toolsWidth",
-            collapse: {
-              collapsed: tabs.route ? fold : null,
-              onCollapsedChange: setFold,
-              start: { title: "pea" },
-              end: { title: "tools" },
-            },
-          }}
-          start={
-            tabs.route || pea ? (
-              <ChatShell docked={Boolean(tabs.route)} target={tabs.target} />
-            ) : (
-              children
-            )
-          }
-          end={
-            <Pane
-              id="tools"
-              title="tools"
-              scroll="clip"
-              flush
-              // One strip at a time: here while expanded, in Pea's header while collapsed.
-              tabs={tabs.route ? strip : null}
-              actions={
-                <>
-                  <RouteTabActions
-                    tabs={tabs.tabs}
-                    active={active}
-                    failure={failure}
-                    onRetry={tabs.retry}
-                    onChat={() => void tabs.chat()}
-                    onDuplicate={tabs.active ? () => void tabs.duplicate() : null}
-                    onCloseActive={() => {
-                      if (tabs.active) void tabs.close(tabs.active);
-                    }}
-                  />
-                  <Button
-                    icon={ChevronRight}
-                    label="Collapse tools"
-                    onClick={() => void tabs.chat()}
-                  />
-                </>
-              }
-            >
-              {reconnect ? (
-                <ClosedWorkBand closed={reconnect} onOpen={() => void navigate({ to: "/open" })} />
-              ) : null}
-              <RouteRetention {...tabs} renderRoute={renderRoute} />
-            </Pane>
-          }
-        />
-      </ToolsBar.Provider>
+      {/* Pea and tool pages share this owner so navigation cannot destroy unsent drafts. */}
+      <PaneSplit
+        axis="horizontal"
+        grow
+        resize={{
+          target: "end",
+          defaultSize: 720,
+          minSize: DOCK_FLOOR.tools,
+          minOtherSize: DOCK_FLOOR.pea,
+          persist: "pe.toolsWidth",
+          collapse: {
+            collapsed: fold,
+            onCollapsedChange: setFold,
+            start: { title: "pea" },
+            end: { title: "tools" },
+          },
+        }}
+        start={
+          tabs.route || pea ? (
+            <ChatShell docked={Boolean(tabs.route)} target={tabs.target} />
+          ) : (
+            children
+          )
+        }
+        end={
+          <Pane
+            id="tools"
+            title="tools"
+            scroll="clip"
+            flush
+            tabs={strip}
+            actions={
+              <>
+                <RouteTabActions
+                  tabs={tabs.tabs}
+                  active={active}
+                  failure={failure}
+                  onRetry={tabs.retry}
+                  onChat={() => void tabs.chat()}
+                  onDuplicate={tabs.active ? () => void tabs.duplicate() : null}
+                  onCloseActive={() => {
+                    if (tabs.active) void tabs.close(tabs.active);
+                  }}
+                />
+              </>
+            }
+          >
+            {reconnect ? (
+              <ClosedWorkBand closed={reconnect} onOpen={() => void navigate({ to: "/open" })} />
+            ) : null}
+            <RouteRetention {...tabs} renderRoute={renderRoute} />
+          </Pane>
+        }
+      />
     </ChatPlanIntent.Provider>
   );
 }

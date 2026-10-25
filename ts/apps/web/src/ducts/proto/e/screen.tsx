@@ -21,7 +21,6 @@ import { flushSync } from "react-dom";
 import { survey, unitFlowsIn } from "@pe/ducts-domain/survey";
 import { fansOwedBase, type OwedBase } from "@pe/ducts-domain/fan-assignment";
 import { sectionNames, systemOfGroup, systemScope } from "@pe/ducts-domain/system-scope";
-import { Button } from "@pe/kit/lang/button";
 import { systemSearch } from "@pe/ducts-domain/system-search";
 import { useList, emptyListState } from "@pe/kit/lang/collection";
 import { ListView } from "@pe/kit/lang/list-view";
@@ -950,17 +949,7 @@ function LoadedScreenBody({
   );
   const inboxPane = useMemo(
     () => (
-      <Pane
-        id="e-inbox"
-        title="Rulings"
-        meta={rulingsWord}
-        actions={
-          <Button label="hide rulings" onClick={() => setInboxOpen(false)}>
-            hide
-          </Button>
-        }
-        flush
-      >
+      <Pane id="e-inbox" title="Rulings" meta={rulingsWord} flush>
         {inbox ? (
           <ReachInbox
             groups={inbox}

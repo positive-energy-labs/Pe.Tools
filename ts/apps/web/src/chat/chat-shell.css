@@ -8,14 +8,6 @@
   grid-template: minmax(0, 1fr) / minmax(0, 1fr);
   position: relative;
 }
-/* Beside connected tools the column holds Pea's start edge instead of centring: expanding the
-   tools takes width from the empty side, so no word moves while the pane still holds the measure.
-   A centred column would move by half the width the tools take. */
-[data-slot="pane-split"]:has(> :not(.hidden) > [data-pane-id="tools"])
-  .chat-column
-  :is([data-annotation="chat"], .dl-composer-frame) {
-  margin-inline: 0 auto;
-}
 .chat-column > [data-chat-transcript] {
   grid-area: 1 / 1;
 }
