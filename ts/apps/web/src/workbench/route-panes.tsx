@@ -3,13 +3,13 @@ import { useAtomValue } from "@effect/atom-react";
 import { useNavigate, useRouterState } from "@tanstack/react-router";
 import { routeAddress } from "@pe/agent-contracts";
 import { ChatShell, SIDEBAR, ToolsBar, peaFloor } from "#/chat/chat-shell";
-import { ChevronLeft, ChevronRight } from "lucide-react";
+import { ChevronRight } from "lucide-react";
 import { focusQuiet } from "@pe/kit/lib/utils";
 import { EmptyState } from "@pe/kit/lang/empty";
 import { Button } from "@pe/kit/lang/button";
 import { chipRecipe } from "@pe/kit/lang/chip";
 import { useThreadWorks } from "#/chat/thread-work";
-import { Pane, PaneSplit } from "@pe/kit/lang/pane";
+import { Pane, PaneSplit, type PaneSide } from "@pe/kit/lang/pane";
 import { ChatPlanIntent } from "#/route/situation-ladder";
 import { useWorkbench } from "./provider";
 import { useRouteTabs } from "./tabs";
@@ -20,6 +20,9 @@ import { RouteRetention } from "./route-retention";
  *  measure while the tools sit at their default; the tools take what remains, the thread sidebar
  *  folding first; the tools' floor is the kit's 36rem rung (where a Table stacks its cells).
  *  Below Pea (sidebar folded) + seam + floor the dock stacks instead of squeezing Pea. */
+/** Under these a side folds to its rail: Pea reads thin, a tool needs room for its table. */
+export const DOCK_FLOOR = { pea: 280, tools: 420 };
+
 export function dockWidths(viewport: number, rem: number, pea: number, gutter: number) {
   const floor = 36 * rem;
   const folded = pea + SIDEBAR.rail + gutter;
@@ -75,10 +78,9 @@ export function RouteDock({
   }, [plan, tabs.route, store]);
   const [narrow, setNarrow] = useState(false);
   const [widths] = useState(measureDock);
-  // Pea folds too (kaitpw 2026-10-24: both panes always collapsible). It folds to the kit rail on
-  // the start side while the tools hold the dock; expanding the rail or collapsing the tools opens it.
-  const [peaFolded, setPeaFolded] = useState(false);
-  const folded = peaFolded && Boolean(tabs.route);
+  // Either side folds to its kit rail under its floor (kaitpw 2026-10-24); the shared seam keeps
+  // the other open. With no tool route the tools are hidden, so Pea is never folded then.
+  const [fold, setFold] = useState<PaneSide | null>(null);
   useEffect(() => {
     const media = window.matchMedia(`(max-width: ${widths.stackBelow - 1}px)`);
     const sync = () => setNarrow(media.matches);
@@ -145,27 +147,19 @@ export function RouteDock({
           axis={narrow ? "vertical" : "horizontal"}
           grow
           hide={tabs.route ? undefined : "end"}
-          resize={
-            folded
-              ? {
-                  target: "start",
-                  defaultSize: SIDEBAR.rail,
-                  minSize: SIDEBAR.rail,
-                  collapse: {
-                    collapsed: true,
-                    onCollapsedChange: setPeaFolded,
-                    collapsedSize: SIDEBAR.rail,
-                    title: "pea",
-                  },
-                }
-              : {
-                  target: "end",
-                  defaultSize: narrow ? 320 : widths.tools,
-                  minSize: narrow ? 180 : widths.floor,
-                  minOtherSize: narrow ? 200 : widths.folded,
-                  persist: narrow ? undefined : "pe.toolsWidth",
-                }
-          }
+          resize={{
+            target: "end",
+            defaultSize: narrow ? 320 : widths.tools,
+            minSize: narrow ? 180 : DOCK_FLOOR.tools,
+            minOtherSize: narrow ? 200 : DOCK_FLOOR.pea,
+            persist: narrow ? undefined : "pe.toolsWidth",
+            collapse: {
+              collapsed: tabs.route ? fold : null,
+              onCollapsedChange: setFold,
+              start: { title: "pea" },
+              end: { title: "tools" },
+            },
+          }}
           start={
             tabs.route || pea ? (
               <ChatShell docked={Boolean(tabs.route)} target={tabs.target} />
@@ -194,20 +188,10 @@ export function RouteDock({
                       if (tabs.active) void tabs.close(tabs.active);
                     }}
                   />
-                  {!folded && (
-                    <Button
-                      icon={ChevronLeft}
-                      label="Collapse Pea"
-                      onClick={() => setPeaFolded(true)}
-                    />
-                  )}
                   <Button
                     icon={ChevronRight}
                     label="Collapse tools"
-                    onClick={() => {
-                      setPeaFolded(false);
-                      void tabs.chat();
-                    }}
+                    onClick={() => void tabs.chat()}
                   />
                 </>
               }

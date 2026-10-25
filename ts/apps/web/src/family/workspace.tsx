@@ -225,10 +225,9 @@ function FamilyAuditPanes() {
         minSize: 260,
         minOtherSize: 560,
         collapse: {
-          collapsed: docCollapsed,
-          onCollapsedChange: setDocCollapsed,
-          collapsedSize: 32,
-          title: "Doc",
+          collapsed: docCollapsed ? "end" : null,
+          onCollapsedChange: (side) => setDocCollapsed(side === "end"),
+          end: { title: "Doc" },
         },
       }}
       start={
@@ -240,10 +239,9 @@ function FamilyAuditPanes() {
             defaultSize: 220,
             minSize: 34,
             collapse: {
-              collapsed: anatomyCollapsed,
-              onCollapsedChange: setAnatomyCollapsed,
-              collapsedSize: 34,
-              collapseBelow: 90,
+              collapsed: anatomyCollapsed ? "start" : null,
+              onCollapsedChange: (side) => setAnatomyCollapsed(side === "start"),
+              start: { title: "anatomy", collapseBelow: 90 },
             },
           }}
           start={<FamilyWorkspaceAnatomy />}
