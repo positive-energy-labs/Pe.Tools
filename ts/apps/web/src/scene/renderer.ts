@@ -76,7 +76,7 @@ import {
   type Size,
 } from "./projection";
 import { setDamageHue } from "./damage";
-import { shellEdges, shellLines, surfaceAlpha } from "./surfaces";
+import { routeColour, routeLines, surfaceEdges, shellLines, surfaceAlpha } from "./surfaces";
 import type {
   IssueState,
   IssueTarget,
@@ -399,7 +399,7 @@ export function createRenderer(
     const paint = paints[id]!;
     // Highlighting changes ink only. Promoting a floor to subject made it fully opaque.
     const { tier } = paint;
-    const color = (
+    const color = routeColour(
       paint.surface === "shell"
         ? grounds.shell
         : paint.ink
@@ -408,8 +408,10 @@ export function createRenderer(
             ? grounds.context
             : look.subject.bySystem && paint.key !== undefined
               ? grounds.palette[keySlot(paint.key, grounds.palette.length)]!
-              : grounds.subject
-    ).clone();
+              : grounds.subject,
+      paint,
+      look,
+    );
     if (tier !== "context" && ground.getHSL({ h: 0, s: 0, l: 0 }).l < 0.5)
       color.offsetHSL(0, 0, look.subject.darkLift);
     if (tier === "stub" && paint.surface !== "shell")
@@ -884,7 +886,54 @@ export function createRenderer(
   scene.add(outlined);
   const envelopes = new THREE.Group();
   scene.add(envelopes);
-  const edgesOf = shellEdges(meshes);
+  const edgesOf = surfaceEdges(meshes);
+  const routes = new THREE.Group();
+  scene.add(routes);
+  let routeStamp = "";
+  const rebuildRoutes = () => {
+    const ids = byId.flatMap((_, id) =>
+      paints[id]!.tier === "subject" && paints[id]!.surface !== "shell" && batch.getVisibleAt(id)
+        ? [id]
+        : [],
+    );
+    const stamp = JSON.stringify([
+      ids.map((id) => [id, paints[id]]),
+      look.routes,
+      grounds.subject.getHex(),
+      grounds.palette.map((c) => c.getHex()),
+    ]);
+    if (stamp === routeStamp) return;
+    routeStamp = stamp;
+    while (routes.children.length) {
+      const child = routes.children[0]!;
+      routes.remove(child);
+      disposeTree(child);
+    }
+    const groups = new Map<number, number[]>();
+    for (const id of ids) {
+      const p = paints[id]!;
+      const colour = routeColour(
+        p.ink
+          ? new THREE.Color(p.ink)
+          : look.subject.bySystem && p.key !== undefined
+            ? grounds.palette[keySlot(p.key, grounds.palette.length)]!
+            : grounds.subject,
+        p,
+        look,
+      );
+      const key = colour.getHex();
+      const positions = groups.get(key) ?? [];
+      for (const n of edgesOf(byId[id]!, look.routes.edgeAngle)) positions.push(n);
+      groups.set(key, positions);
+    }
+    for (const [hex, positions] of groups)
+      for (const hidden of [false, true]) {
+        const lines = routeLines(positions, new THREE.Color(hex), look, hidden);
+        applyClip(lines.material);
+        fitLines(lines);
+        routes.add(lines);
+      }
+  };
   const batchIdByKey = new Map(byId.map((instance, id) => [instance.key, id]));
   let envelopeStamp = "";
   const rebuildEnvelopes = () => {
@@ -946,6 +995,7 @@ export function createRenderer(
     });
     marked.clear();
     rebuildEnvelopes();
+    rebuildRoutes();
     selectedIds.clear();
     litIds.clear();
     for (const [id, mark] of next) {

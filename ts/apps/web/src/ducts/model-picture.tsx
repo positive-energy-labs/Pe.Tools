@@ -15,7 +15,7 @@ import {
 
 import type { PageMove } from "#/route/manifest";
 import type { SceneView } from "@pe/agent-contracts";
-import { LOOK } from "#/scene/grounds";
+import { LOOK, paintOf as resolvePaint } from "#/scene/grounds";
 import { subscribe as knobsChanged } from "#/knobs/knobs";
 import { fitSection, sectionVolume, type Section } from "#/scene/section";
 import { SectionControls, SectionHandles } from "#/scene/section-controls";
@@ -35,6 +35,7 @@ import type { Bounds, Layer3D, PaintOf, SceneMeshes } from "#/scene/types";
 import { CaptionBounds } from "./subject-labels";
 import { equipmentPaint, equipmentPorts } from "./paint";
 import { portLayer } from "#/scene/ports";
+import { systemPaint } from "#/scene/surfaces";
 import { Annotations, type Label, type Ruling } from "./annotations";
 import type { Encoding } from "./encoding";
 import type { DuctsPage } from "./manifest";
@@ -144,13 +145,22 @@ export function ModelPicture({
   const stage = useStage();
   const meshes = read.meshes;
   const graph = useMemo(
-    () => ({
-      nodes: scene.nodes.map(({ node }) => node),
-      segments: scene.segments.map(({ segment }) => segment),
-    }),
-    [scene],
+    () =>
+      scene.graphOf(
+        meshes?.instances.flatMap((i) =>
+          i.revitId !== null &&
+          i.linkInstanceId === null &&
+          resolvePaint(i, routePaint).tier !== "context"
+            ? [i.revitId]
+            : [],
+        ) ?? [],
+      ),
+    [scene, meshes, routePaint],
   );
-  const paintOf = useMemo(() => equipmentPaint(graph, routePaint), [graph, routePaint]);
+  const paintOf = useMemo(() => {
+    const paint = equipmentPaint(graph, routePaint);
+    return meshes ? systemPaint(meshes, paint) : paint;
+  }, [graph, meshes, routePaint]);
   const sectionSubject = useMemo(
     () =>
       meshes

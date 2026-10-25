@@ -6,7 +6,7 @@ import { LOOK } from "./grounds";
 import { portLayer, portSegments } from "./ports";
 import { sectionContains } from "./section";
 import { SceneMeshes, type LayerFrame, type PaintOf, type SceneInstance } from "./types";
-import { shellEdges, surfaceAlpha } from "./surfaces";
+import { surfaceEdges, surfaceAlpha } from "./surfaces";
 
 const instance = (id: number, category = "not a duct category"): SceneInstance => ({
   key: String(id),
@@ -80,7 +80,7 @@ it("uses typed equipment identity and admits only explicit references to drawn s
 });
 
 it("uses retained equipment category metadata only for shell treatment when numeric identity is absent", () => {
-  const graph = { nodes: [] };
+  const graph = { nodes: [], segments: [] };
   const paint = equipmentPaint(graph, base);
   expect(paint(instance(99, "Mechanical Equipment"))?.surface).toBe("shell");
   expect(paint({ ...instance(99), categoryId: -2001140 })?.surface).toBe("shell");
@@ -155,7 +155,7 @@ it("keeps the connector ring in its frame and encodes envelopes independently of
   );
   expect(surfaceAlpha({ tier: "stub" }, LOOK.defaults)).toBeLessThan(0);
   expect(surfaceAlpha({ tier: "context", surface: "shell" }, LOOK.defaults)).toBe(0);
-  const edges = shellEdges(meshes);
+  const edges = surfaceEdges(meshes);
   expect(edges(meshes.instances[0]!, 35)).toBe(edges(meshes.instances[0]!, 35));
 });
 

@@ -4,6 +4,7 @@ import { LineSegments2 } from "three/addons/lines/LineSegments2.js";
 import { LineSegmentsGeometry } from "three/addons/lines/LineSegmentsGeometry.js";
 import { LOOK, type Look } from "./grounds";
 import type { Layer3D, Paint } from "./types";
+import { routeColour } from "./surfaces";
 
 /** Facts only: the renderer neither discovers connections nor joins ports inside a shell. */
 export type SurfacePort = {
@@ -66,7 +67,9 @@ export function portLayer(ports: readonly SurfacePort[], look = LOOK.read()): La
         const line = new LineSegments2(
           new LineSegmentsGeometry().setPositions(portSegments(port, look)),
           new LineMaterial({
-            color: port.paint.ink ? new THREE.Color(port.paint.ink) : undefined,
+            color: port.paint.ink
+              ? routeColour(new THREE.Color(port.paint.ink), port.paint, look)
+              : undefined,
             linewidth: look.ports.width,
             opacity: port.paint.tier === "stub" ? look.ports.stubOpacity : look.ports.opacity,
             transparent: true,
@@ -95,6 +98,10 @@ export function portLayer(ports: readonly SurfacePort[], look = LOOK.read()): La
         }
         line.material.linewidth = next.width;
         line.material.opacity = port.paint.tier === "stub" ? next.stubOpacity : next.opacity;
+        if (port.paint.ink)
+          line.material.color.copy(
+            routeColour(new THREE.Color(port.paint.ink), port.paint, at.look ?? look),
+          );
         if (!port.paint.ink && at.ink) line.material.color.copy(at.ink);
         child.visible =
           (at.contains?.(port.at) ?? true) &&

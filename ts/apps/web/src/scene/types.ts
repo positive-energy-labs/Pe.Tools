@@ -45,6 +45,10 @@ export type Paint = {
   readonly key?: string;
   /** Explicit #rrggbb from a domain palette; takes precedence over the hashed key. */
   readonly ink?: string;
+  /** Domain identity within a colour class, independent of the air-type palette key. */
+  readonly system?: string;
+  /** Signed lightness step assigned among drawn systems of the same colour class. */
+  readonly variant?: number;
 };
 export type PaintOf = (instance: SceneInstance) => Paint | undefined;
 

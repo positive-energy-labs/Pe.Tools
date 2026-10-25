@@ -9,6 +9,7 @@ import type { LossResult } from "@pe/ducts-domain/losses";
 import type { Priced } from "@pe/ducts-domain/pricing";
 import { snapshotById } from "@pe/ducts-domain/readiness";
 import type { DuctSnapshot } from "@pe/ducts-domain/types";
+import { drawnGraph, type DuctGraph } from "@pe/ducts-domain/drawn-graph";
 
 type Level = DuctSnapshot["levels"][number];
 
@@ -18,6 +19,8 @@ interface NodeFacts extends EncodingFacts {
 }
 
 export interface Scene {
+  /** Connector facts for retained subject/stub mesh owners, separate from subject annotations. */
+  graphOf: (ids: Iterable<number>) => DuctGraph;
   segments: readonly SegmentFacts[];
   nodes: readonly NodeFacts[];
   /** Issues with a point; each is one marker. */
@@ -143,7 +146,7 @@ export function sceneOf(
       issue.point &&
       keepLevel(index.levelOf(issue)),
   );
-  return { segments, nodes, issues };
+  return { segments, nodes, issues, graphOf: (ids) => drawnGraph(index.snapshot, ids) };
 }
 
 /** The subject scene's authored layers, resolved against the facts, as the drawing reads them. */
@@ -233,6 +236,7 @@ export function subjectScene(
     return { after, before, skipped, line };
   });
   return {
+    graphOf: (ids) => drawnGraph(index.snapshot, ids),
     segments,
     nodes,
     issues: [],

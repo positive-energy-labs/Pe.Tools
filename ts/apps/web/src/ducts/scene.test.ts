@@ -4,7 +4,32 @@ import type { Row } from "@pe/ducts-domain/losses";
 import { price } from "@pe/ducts-domain/pricing";
 import type { DuctSnapshot } from "@pe/ducts-domain/types";
 import saved from "./fixtures/synthetic-snapshot.json";
-import { indexOf, sceneOf } from "./scene";
+import { indexOf, sceneOf, subjectScene } from "./scene";
+import { legsOf } from "./legs";
+
+test("both Scene builders retain stub connector facts without admitting stubs to subject annotations", () => {
+  const raw = structuredClone(saved) as DuctSnapshot;
+  const index = indexOf(raw);
+  const subject = raw.segments[0]!;
+  const adjacent = raw.nodes.find((n) => n.kind === "equipment")!;
+  const ids = [subject.id, adjacent.id, adjacent.id, -1];
+  const scenes = [
+    sceneOf(index, [subject.groupId!], () => true, new Set([subject.id])),
+    subjectScene(
+      index,
+      [subject.id],
+      legsOf(raw, [subject.id], () => null),
+    ),
+  ];
+  for (const scene of scenes) {
+    expect(scene.nodes).toEqual([]);
+    const graph = scene.graphOf(ids);
+    expect(graph.nodes).toEqual([adjacent]);
+    expect(graph.nodes[0]!.connectors).toBe(adjacent.connectors);
+    expect(graph.segments).toEqual([subject]);
+    expect(scene.graphOf([])).toEqual({ nodes: [], segments: [] });
+  }
+});
 
 test("scopes share immutable loss projections, preserving interval sums and alternative legs", () => {
   const raw = structuredClone(saved) as DuctSnapshot;

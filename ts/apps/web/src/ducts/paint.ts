@@ -1,18 +1,21 @@
-import type { DuctSnapshot } from "@pe/ducts-domain/types";
+import type { DuctGraph } from "@pe/ducts-domain/drawn-graph";
 import { paintOf as resolvePaint } from "#/scene/grounds";
 import type { PaintOf, SceneMeshes } from "#/scene/types";
 import type { SurfacePort } from "#/scene/ports";
 
-export type DuctGraph = Pick<DuctSnapshot, "nodes" | "segments">;
 /** Autodesk BuiltInCategory.OST_MechanicalEquipment; PSC1 keeps this stable numeric identity. */
 const EQUIPMENT_CATEGORY_ID = -2001140;
 /** Domain identity and capture category own shell treatment; neither infers connections. */
-export function equipmentPaint(graph: Pick<DuctGraph, "nodes">, base?: PaintOf): PaintOf {
+export function equipmentPaint(graph: DuctGraph, base?: PaintOf): PaintOf {
+  const systems = new Map([...graph.nodes, ...graph.segments].map((e) => [e.id, e.systemName]));
   const ids = new Set(
     graph.nodes.filter((node) => node.kind === "equipment").map((node) => node.id),
   );
   return (instance) => {
-    const paint = resolvePaint(instance, base);
+    const paint = {
+      ...resolvePaint(instance, base),
+      system: instance.revitId === null ? undefined : (systems.get(instance.revitId) ?? undefined),
+    };
     // Saved PSC1 predates numeric categories. Its exact English category is a visual fallback
     // only; port identity still requires the supplied domain graph. Other labels stay unknown.
     const savedEquipment =

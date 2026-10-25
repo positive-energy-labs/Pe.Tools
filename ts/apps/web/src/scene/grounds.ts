@@ -64,6 +64,16 @@ export const LOOK = defineKnobs("scene", "ts/apps/web/src/scene/grounds.ts", {
     minRadiusFt: num("Minimum port radius", 0.12, [0.01, 1, 0.01], "live", "ft"),
     roundSegments: num("Round port segments", 16, [8, 32, 1]),
   },
+  routes: {
+    lightnessStep: num("Same-type lightness separation", 0.55, [0, 0.9, 0.01]),
+    edgeWidth: num("Route edge width", 1, [0, 4, 0.25], "live", "px"),
+    edgeOpacity: num("Route edge alpha", 0.4, [0, 1, 0.05]),
+    hiddenWidth: num("Occluded route width", 1.5, [0, 4, 0.25], "live", "px"),
+    hiddenOpacity: num("Occluded route alpha", 0.85, [0, 1, 0.05]),
+    edgeAngle: num("Route crease angle", 35, [1, 90, 1], "live", "deg"),
+    dashFt: num("Occluded route dash", 0.3, [0.05, 2, 0.05], "live", "ft"),
+    gapFt: num("Occluded route gap", 0.2, [0.05, 2, 0.05], "live", "ft"),
+  },
   camera: {
     yaw: num("Starting bearing", 225, [0, 360, 5], "live", "deg"),
     elev: num("Starting elevation", 32, [5, 85, 1], "live", "deg"),
