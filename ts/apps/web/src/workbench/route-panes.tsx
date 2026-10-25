@@ -3,7 +3,7 @@ import { useAtomValue } from "@effect/atom-react";
 import { useNavigate, useRouterState } from "@tanstack/react-router";
 import { routeAddress } from "@pe/agent-contracts";
 import { ChatShell, SIDEBAR, ToolsBar, peaFloor } from "#/chat/chat-shell";
-import { ChevronRight } from "lucide-react";
+import { ChevronLeft, ChevronRight } from "lucide-react";
 import { focusQuiet } from "@pe/kit/lib/utils";
 import { EmptyState } from "@pe/kit/lang/empty";
 import { Button } from "@pe/kit/lang/button";
@@ -75,6 +75,10 @@ export function RouteDock({
   }, [plan, tabs.route, store]);
   const [narrow, setNarrow] = useState(false);
   const [widths] = useState(measureDock);
+  // Pea folds too (kaitpw 2026-10-24: both panes always collapsible). It folds to the kit rail on
+  // the start side while the tools hold the dock; expanding the rail or collapsing the tools opens it.
+  const [peaFolded, setPeaFolded] = useState(false);
+  const folded = peaFolded && Boolean(tabs.route);
   useEffect(() => {
     const media = window.matchMedia(`(max-width: ${widths.stackBelow - 1}px)`);
     const sync = () => setNarrow(media.matches);
@@ -141,13 +145,27 @@ export function RouteDock({
           axis={narrow ? "vertical" : "horizontal"}
           grow
           hide={tabs.route ? undefined : "end"}
-          resize={{
-            target: "end",
-            defaultSize: narrow ? 320 : widths.tools,
-            minSize: narrow ? 180 : widths.floor,
-            minOtherSize: narrow ? 200 : widths.folded,
-            persist: narrow ? undefined : "pe.toolsWidth",
-          }}
+          resize={
+            folded
+              ? {
+                  target: "start",
+                  defaultSize: SIDEBAR.rail,
+                  minSize: SIDEBAR.rail,
+                  collapse: {
+                    collapsed: true,
+                    onCollapsedChange: setPeaFolded,
+                    collapsedSize: SIDEBAR.rail,
+                    title: "pea",
+                  },
+                }
+              : {
+                  target: "end",
+                  defaultSize: narrow ? 320 : widths.tools,
+                  minSize: narrow ? 180 : widths.floor,
+                  minOtherSize: narrow ? 200 : widths.folded,
+                  persist: narrow ? undefined : "pe.toolsWidth",
+                }
+          }
           start={
             tabs.route || pea ? (
               <ChatShell docked={Boolean(tabs.route)} target={tabs.target} />
@@ -176,10 +194,20 @@ export function RouteDock({
                       if (tabs.active) void tabs.close(tabs.active);
                     }}
                   />
+                  {!folded && (
+                    <Button
+                      icon={ChevronLeft}
+                      label="Collapse Pea"
+                      onClick={() => setPeaFolded(true)}
+                    />
+                  )}
                   <Button
                     icon={ChevronRight}
                     label="Collapse tools"
-                    onClick={() => void tabs.chat()}
+                    onClick={() => {
+                      setPeaFolded(false);
+                      void tabs.chat();
+                    }}
                   />
                 </>
               }

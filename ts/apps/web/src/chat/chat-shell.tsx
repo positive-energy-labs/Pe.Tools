@@ -10,6 +10,7 @@ import {
   useRef,
   useState,
   useContext,
+  type CSSProperties,
   type ReactNode,
 } from "react";
 import { useRouteSearchSlice } from "#/route/activity";
@@ -28,6 +29,7 @@ import {
 } from "@pe/agent-contracts/chat-state";
 import { EmptyState } from "@pe/kit/lang/empty";
 import { Button } from "@pe/kit/lang/button";
+import { TooltipHint } from "@pe/kit/lang/tooltip";
 import { Menu } from "lucide-react";
 import {
   ChatCluster,
@@ -66,13 +68,13 @@ export const ToolsBar = createContext<ReactNode>(null);
 /** The thread sidebar's default width, and its folded rail. */
 export const SIDEBAR = { size: 300, rail: 32 };
 /** Pea's floor in px: the chat column's reading measure (`--chat-measure` in chat-shell.css: 76ch
- *  of the prose face at 0.577em a character, plus both gutters), the lens lane on its right, and
- *  the transcript's two gutters. Read from the same tokens, so density moves it too. */
+ *  of the prose face at 0.577em a character, plus both gutters) between its two side lanes (lens
+ *  and context bar). Read from the same tokens, so density moves it too. */
 export function peaFloor(root: Element = document.documentElement) {
   const token = (name: string) => parseFloat(getComputedStyle(root).getPropertyValue(name)) || 0;
   const gutter = token("--gutter");
   const measure = token("--type-prose-size") * 0.577 * 76 + gutter * 2;
-  return Math.ceil(measure + token("--control-h") + gutter * 4);
+  return Math.ceil(measure + (token("--control-h") + gutter * 2) * 2);
 }
 
 export const ChatShell = memo(function ChatShell(props: ChatShellProps) {
@@ -379,6 +381,12 @@ function ChatSurface({ target, docked = false }: ChatShellProps) {
           refusal={situation.head.refusal ?? status.detail}
         />
       </div>
+      {/* The context bar shares the lens's side column at the composer's height. Docked beside a
+          plugin on a screen wide enough for the thread sidebar, it takes the left column. */}
+      <ContextBar
+        breakdown={breakdown}
+        side={docked && !compact && !viewportNarrow ? "start" : "end"}
+      />
     </div>
   );
 
@@ -468,6 +476,37 @@ function ChatSurface({ target, docked = false }: ChatShellProps) {
         </PageSurface>
       </RouteShell>
     </main>
+  );
+}
+
+/** Context-window use from the harness's latest `usage_update`; an empty track until one arrives. */
+function ContextBar({
+  breakdown,
+  side,
+}: {
+  breakdown: ReturnType<typeof selectBreakdown>;
+  side: "start" | "end";
+}) {
+  const used = breakdown?.totalTokens ?? 0;
+  const size = breakdown?.contextWindow ?? 0;
+  const share = size > 0 ? Math.min(1, used / size) : 0;
+  const hint = breakdown
+    ? `context ${used.toLocaleString()} of ${size.toLocaleString()} tokens (${Math.round(share * 100)}%)`
+    : "context use not reported yet";
+  return (
+    <TooltipHint content={hint}>
+      <div
+        data-chat-context=""
+        data-side={side}
+        role="meter"
+        aria-label="Context window"
+        aria-valuemin={0}
+        aria-valuemax={size || undefined}
+        aria-valuenow={breakdown ? used : undefined}
+        aria-valuetext={hint}
+        style={{ "--context-share": share } as CSSProperties}
+      />
+    </TooltipHint>
   );
 }
 
