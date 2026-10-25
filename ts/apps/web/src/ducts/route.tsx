@@ -110,7 +110,7 @@ export function DuctsRoute({ url = true }: { url?: boolean } = {}) {
           does: undefined,
           needs: "host" as const,
           actor: "any" as const,
-          says: "Recalculate the navigation fixture in the pricing worker; no Revit read or write",
+          says: "Recalculate the fixture in the pricing worker; no Revit read or write",
         },
       },
     };
@@ -586,13 +586,15 @@ export function DuctsRoute({ url = true }: { url?: boolean } = {}) {
                 target={{
                   session: ladder.sessionWord,
                   document:
-                    demoName === "navigation"
-                      ? "navigation fixture"
-                      : SAVED
-                        ? "saved snapshot"
-                        : demo
-                          ? "scene fixture"
-                          : ladder.docWord,
+                    demoName === "colours"
+                      ? "firm colours fixture"
+                      : demoName === "navigation"
+                        ? "navigation fixture"
+                        : SAVED
+                          ? "saved snapshot"
+                          : demo
+                            ? "scene fixture"
+                            : ladder.docWord,
                 }}
                 sentence={sentence}
                 ledger={[

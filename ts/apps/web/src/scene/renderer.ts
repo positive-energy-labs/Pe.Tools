@@ -256,10 +256,10 @@ export function createRenderer(
     const paint = paints[id]!;
     const tier = tierOf(paint, mark !== null);
     const color = (
-      tier === "context"
-        ? grounds.context
-        : paint.ink
-          ? new THREE.Color(paint.ink)
+      paint.ink
+        ? new THREE.Color(paint.ink)
+        : tier === "context"
+          ? grounds.context
           : look.subject.bySystem && paint.key !== undefined
             ? grounds.palette[keySlot(paint.key, grounds.palette.length)]!
             : grounds.subject
