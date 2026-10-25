@@ -138,9 +138,9 @@ it("only the runs to the system's own terminals, its elements and their unit pri
   expect([...ra.prices].sort((a, b) => a - b)).toEqual([1, 3, 5, 20, 100]);
 });
 
-it("several open systems read as one scope: groups in open order, once; the last is active", () => {
+it("several open systems read as one scope: groups in open order, once", () => {
   const both = scopeOf(snapshot, ["SA 1", "RA 1"])!;
-  expect(both.name).toBe("RA 1");
+  expect(both.name).toBe("SA 1 + RA 1");
   expect(both.groups).toEqual(["g1", "g6"]);
   // g1 sits under SA 1, which opened it first, and names RA 1 as shared from there.
   expect(both.shared.get("g1")).toEqual(["RA 1"]);

@@ -21,6 +21,8 @@ export interface NeighbourOptions {
   /** A stub keeps the elements whose far end is this close to the unit, developed ft. */
   stubFt: number;
   hop: Hop;
+  /** Maximum neighbouring networks from one unit, in snapshot order; omitted means no cap. */
+  neighbourCap?: number;
 }
 
 export interface Neighbour {
@@ -64,18 +66,29 @@ export function neighboursOf(
     new Set(
       (elements.get(unit) as DuctSnapshot["nodes"][number] | undefined)?.connectors
         .filter((c) => c.connectedTo && elements.get(c.connectedTo.elementId)?.groupId === group)
-        .map((c) => c.classification ?? "") ?? [],
+        .flatMap((c) =>
+          c.classification && ["SupplyAir", "ReturnAir", "ExhaustAir"].includes(c.classification)
+            ? [c.classification]
+            : [],
+        ) ?? [],
     );
 
   const found: Neighbour[] = [];
   const units = [...new Set(open.flatMap((g) => groups.get(g)?.rootIds ?? []))];
   for (const unit of units) {
+    let count = 0;
     const sides = new Set(
-      open.filter((g) => groups.get(g)?.rootIds.includes(unit)).flatMap((g) => [...portsInto(unit, g)]),
+      open
+        .filter((g) => groups.get(g)?.rootIds.includes(unit))
+        .flatMap((g) => [...portsInto(unit, g)]),
     );
     for (const group of rooting.get(unit) ?? []) {
+      if (count >= (options.neighbourCap ?? Infinity)) break;
       if (opened.has(group)) continue;
-      if (options.hop === "same-classification" && ![...portsInto(unit, group)].some((c) => sides.has(c)))
+      if (
+        options.hop === "same-classification" &&
+        ![...portsInto(unit, group)].some((c) => sides.has(c))
+      )
         continue;
       const tree = groupTree(snapshot, group, unit);
       if (tree.root?.equipment !== unit) continue;
@@ -85,10 +98,9 @@ export function neighboursOf(
       for (let i = 0; i < stub.length; i++)
         for (const child of tree.children.get(stub[i]!) ?? [])
           if ((tree.dist.get(child) ?? Infinity) <= options.stubFt) stub.push(child);
-      const systems = [
-        ...new Set(stub.flatMap((id) => elements.get(id)?.systemName || [])),
-      ];
+      const systems = [...new Set(stub.flatMap((id) => elements.get(id)?.systemName || []))];
       found.push({ group, unit, systems, stub });
+      count++;
     }
   }
   return found;

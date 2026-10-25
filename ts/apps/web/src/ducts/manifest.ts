@@ -21,6 +21,7 @@ import {
   type DuctClaim,
   type DuctsRouteDocument,
   type RouteStatePatch,
+  type OrbitViewport,
 } from "@pe/agent-contracts";
 
 import type { Cells } from "#/route/cells";
@@ -53,7 +54,8 @@ import { sceneRequest } from "#/scene/host";
 import { airflowOptions } from "./airflow";
 import { elementNamer } from "./claims";
 import { espWaits, fanRefusal, fanWords, holding, triage } from "./inbox-rows";
-import { activeSystem, capped } from "./selection";
+import { activeSystem, capped, DUCTS_MULTI } from "./selection";
+import { neighboursOf } from "@pe/ducts-domain/neighbours";
 
 /** What Revit said the staged cells would write, and the Work and snapshot it was asked over. */
 interface DuctsEvaluation {
@@ -130,7 +132,11 @@ function knownSelection(page: DuctsPage, reading: LoadedDuctsReading): boolean {
     Number.isSafeInteger(id) &&
     id > 0 &&
     String(id) === page.selected &&
-    (members.has(id) || (drawn !== null && !!scopeOf(drawn, page.system)?.members.has(id)))
+    (members.has(id) ||
+      (drawn !== null && !!scopeOf(drawn, page.system)?.members.has(id)) ||
+      neighboursOf(snapshot, scopeOf(snapshot, page.system)?.groups ?? [], DUCTS_MULTI).some((n) =>
+        n.stub.includes(id),
+      ))
   );
 }
 
@@ -159,13 +165,26 @@ export function reconcileDuctsMembers(
 }
 
 /** Human, action and Pea moves all validate the normalized candidate against the displayed read. */
-export function bindDuctsManifest(read: () => LoadedDuctsReading | null): typeof manifest {
+export function bindDuctsManifest(
+  read: () => LoadedDuctsReading | null,
+  pose: () => OrbitViewport | null = () => null,
+): typeof manifest {
   return {
     ...manifest,
     transition: (current, patch, origin) => {
-      const normalized = manifest.transition?.(current, patch, origin) ?? { patch };
+      let normalized = manifest.transition?.(current, patch, origin) ?? { patch };
       if ("refusal" in normalized) return normalized;
       if (origin === "url" || origin === "initial") return normalized;
+      const nextSystems = normalized.patch.system;
+      if (
+        patch.system &&
+        !Object.hasOwn(patch, "viewport") &&
+        current.viewport === null &&
+        current.system.some((name) => nextSystems?.includes(name))
+      ) {
+        const viewport = pose();
+        if (viewport) normalized = { patch: { ...normalized.patch, viewport } };
+      }
       const candidate = { ...current, ...normalized.patch };
       const reading = read();
       if (!reading) {
@@ -247,7 +266,7 @@ const pendingOf = (ctx: DuctsCtx) =>
  * system is in, plus every element of the groups the picture draws (`drawn`: the priced survey can
  * merge a system with groups it shares, and the tree and centrelines draw those too; RA 52's raw
  * scope was 6 elements under a 193-part tree), with what is around it when the `context` layer is
- * on; null with no system. Every open system's members go in, and the `stubs` of the networks one
+ * on; an empty selection includes the document. Every open system's members go in, and the `stubs` of the networks one
  * unit away. One capture per subject, never per render (the call keys on this request).
  */
 export const sceneRequestOf = (
@@ -256,12 +275,12 @@ export const sceneRequestOf = (
   drawn: readonly string[] = [],
   stubs: Iterable<number> = [],
 ) => {
-  const scope = snapshot && scopeOf(snapshot, page.system);
-  if (!snapshot || !scope) return null;
+  if (!snapshot) return null;
+  const scope = scopeOf(snapshot, page.system);
   const groups = new Set(drawn);
   const ids = [
     ...new Set([
-      ...scope.members,
+      ...(scope?.members ?? [...snapshot.nodes, ...snapshot.segments].map((e) => e.id)),
       ...[...snapshot.nodes, ...snapshot.segments]
         .filter((e) => e.groupId && groups.has(e.groupId))
         .map((e) => e.id),
@@ -371,7 +390,12 @@ const groupOf = (input: unknown) => (input as { group?: string } | undefined)?.g
 const healTargetOf = (ctx: DuctsCtx, input: unknown): string => {
   currentPricing(ctx);
   const named = groupOf(input);
-  if (named) return named;
+  if (named) {
+    const active = activeSystem(ctx.page);
+    if (active && !systemScope(snapshotOf(ctx), active).groups.includes(named))
+      throw Error(`Open this network's system last to heal it; active system is ${active}`);
+    return named;
+  }
   const run = ctx.page.heal;
   return healTarget(
     snapshotOf(ctx),
@@ -412,7 +436,13 @@ const offeredFanOf = (ctx: DuctsCtx) => {
 /** The pair a fan verb acts on: the one it names, else the chosen system's offered fan. */
 const fanTarget = (ctx: DuctsCtx, input: unknown) => {
   const named = pairOf(input);
-  if (named) return named;
+  if (named) {
+    if (
+      snapshotOf(ctx).systems.find((s) => s.id === named.systemId)?.name !== activeSystem(ctx.page)
+    )
+      throw Error("Open this system last to make its fan");
+    return named;
+  }
   const { unitId, systemId } = offeredFanOf(ctx);
   return { unitId, systemId };
 };
@@ -598,6 +628,7 @@ export const manifest = defineRoute<
   transition: (current, patch) => {
     // Pea and the address are capped here too; the page's own picks already are.
     const system = Object.hasOwn(patch, "system") ? capped(patch.system ?? []) : current.system;
+    const activeChanged = activeSystem({ system }) !== activeSystem(current);
     // Only a move that keeps none of the open systems is a new subject: the camera, selection and
     // row reset then. Opening or closing one beside the others keeps them (a selection a close
     // drops out of view clears in `bindDuctsManifest`, which holds the reading).
@@ -611,6 +642,7 @@ export const manifest = defineRoute<
         : current.selected;
     return {
       patch: {
+        ...(activeChanged ? { evaluation: null, heal: null, fan: null } : {}),
         ...(switched ? { selected: "", viewport: null } : {}),
         ...(switched || selected !== current.selected ? { issue: "" } : {}),
         ...patch,

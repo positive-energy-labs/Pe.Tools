@@ -53,7 +53,7 @@ import {
   type InboxItem,
 } from "../../inbox-rows";
 import { groupLabels } from "@pe/ducts-domain/words";
-import { scopeOf } from "@pe/ducts-domain/system-scope";
+import { scopeOf, systemScope } from "@pe/ducts-domain/system-scope";
 import { stagedEsp } from "@pe/ducts-domain/staged";
 import { previewFresh } from "../../manifest";
 import type { LossesWork } from "../../work";
@@ -274,13 +274,21 @@ function LoadedScreenBody({
   // The subject is a Revit system: every group it is in, over the snapshot that was priced.
   // Several open systems are one scope: their groups in open order, a shared one once.
   const scope = useMemo(() => (drawn ? scopeOf(drawn, page.system) : null), [drawn, page.system]);
+  const active = activeSystem(page);
+  const activeScope = useMemo(
+    () => (drawn && active ? systemScope(drawn, active) : null),
+    [drawn, active],
+  );
   const groups = scope?.groups ?? NO_GROUPS;
   // The drawing indexes the raw snapshot: a group the survey merged away is drawn by its raw id too.
   const drawGroups = useMemo(() => {
     const raw = snapshot ? scopeOf(snapshot, page.system)?.groups : undefined;
     if (!raw) return groups;
-    return raw.every((g) => groups.includes(g)) ? groups : [...new Set([...groups, ...raw])];
-  }, [snapshot, page.system, groups]);
+    const merged = [...snapshot.nodes, ...snapshot.segments].flatMap((e) =>
+      e.groupId && scope?.members.has(e.id) ? [e.groupId] : [],
+    );
+    return [...new Set([...groups, ...raw, ...merged])];
+  }, [snapshot, page.system, groups, scope]);
   // One hop: the networks a unit of a drawn group also roots, drawn as stubs near that unit.
   const neighbours = useMemo(
     () => (snapshot && scope ? neighboursOf(snapshot, drawGroups, DUCTS_MULTI) : NO_NEIGHBOURS),
@@ -486,10 +494,10 @@ function LoadedScreenBody({
     (id: number) => {
       // Only the open system is offered: the system comes from the page, the unit from the row.
       const verbs = (owedBase.get(id) ?? [])
-        .filter((a) => !scope || a.system === scope.name)
+        .filter((a) => a.system === active)
         .flatMap((a) => fanVerbs(a, nameOf, { run: page.fan, epoch: page.epoch }));
       const split = [...(owedBase.split ?? [])].find(
-        ([system, units]) => (!scope || system === scope.name) && units.includes(id),
+        ([system, units]) => system === active && units.includes(id),
       );
       if (!verbs.length && split)
         return (
@@ -520,7 +528,7 @@ function LoadedScreenBody({
         </span>
       );
     },
-    [owedBase, scope, nameOf, page.fan, page.epoch, fanHandles],
+    [owedBase, active, nameOf, page.fan, page.epoch, fanHandles],
   );
   // The Write popover holds only a preview that still describes this Work and snapshot.
   const writeHeld = useMemo(
@@ -694,12 +702,18 @@ function LoadedScreenBody({
   );
   // The section whose run leads the system: its fan and TEL head the pane.
   const leadGroup =
-    tree?.find((t) => critical && t.children.includes(critical))?.key ??
-    groups.find((g) => scope?.pricing.has(g)) ??
-    groups[0] ??
-    "";
+    activeScope?.groups.reduce<string | null>(
+      (best, g) =>
+        best == null ||
+        (priced?.next.byGroup[g]?.fan ?? -Infinity) > (priced?.next.byGroup[best]?.fan ?? -Infinity)
+          ? g
+          : best,
+      null,
+    ) ?? "";
   // Any group of the system with an implausible row: its ESP is a partial sum, so none is shown.
-  const blockedLoss = groups.some((g) => (priced?.next.byGroup[g]?.implausible.length ?? 0) > 0);
+  const blockedLoss = (activeScope?.groups ?? []).some(
+    (g) => (priced?.next.byGroup[g]?.implausible.length ?? 0) > 0,
+  );
   const fansOf = useCallback(
     (system: ReturnType<typeof systemList>[number]) => fanFacts(priced, system.groups, nameOf),
     [priced, nameOf],
@@ -748,7 +762,7 @@ function LoadedScreenBody({
                     key={system}
                     label={`open ${system}`}
                     data-e-connected-system={system}
-                    onPress={() => setPage({ system: withSystem(page.system, system) })}
+                    onClick={() => setPage({ system: withSystem(page.system, system) })}
                   >
                     {`${system} · via ${units.map(nameOf).join(", ")}`}
                   </Button>

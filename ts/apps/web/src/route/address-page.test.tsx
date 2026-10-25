@@ -110,7 +110,7 @@ test("a Ducts URL atomically restores system, selection and pose before its evid
     expect(owner.read().page).toMatchObject(restored);
     expect(owner.read().page.selected).toBe("200");
     expect(owner.read().page.viewport).not.toBeNull();
-    expect(owner.move({ system: "C" })).toMatchObject({ code: "not-ready" });
+    expect(owner.move({ system: ["C"] })).toMatchObject({ code: "not-ready" });
   } finally {
     owner.dispose();
     route.dispose();

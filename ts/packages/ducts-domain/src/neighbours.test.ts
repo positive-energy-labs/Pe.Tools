@@ -23,7 +23,14 @@ const conn = (index: number, classification: string, to: [number, number] | null
   connectedTo: to ? { elementId: to[0], connector: to[1] } : null,
 });
 /** A straight run of ducts in one group, the first on the unit's `port`. */
-const run = (group: string, system: string, cls: string, port: number, ids: number[], ft: number[]) =>
+const run = (
+  group: string,
+  system: string,
+  cls: string,
+  port: number,
+  ids: number[],
+  ft: number[],
+) =>
   ids.map(
     (id, k): Segment => ({
       id,
@@ -110,4 +117,23 @@ it("an open group is never a neighbour, and stubFt bounds the stub", () => {
     ["gE", [31]],
   ]);
   expect(neighboursOf(snapshot, [], { stubFt: 10, hop: "all" })).toEqual([]);
+});
+
+it("caps neighbouring groups per unit after filtering, without changing open groups", () => {
+  expect(
+    neighboursOf(snapshot, ["gS"], { stubFt: 10, hop: "all", neighbourCap: 1 }).map((n) => n.group),
+  ).toEqual(["gF"]);
+  expect(neighboursOf(snapshot, ["gS"], { stubFt: 10, hop: "all", neighbourCap: 0 })).toEqual([]);
+});
+
+it("unknown connector classifications cannot establish a common airstream", () => {
+  const unknown = {
+    ...snapshot,
+    nodes: snapshot.nodes.map((n) => ({
+      ...n,
+      connectors: n.connectors.map((c) => ({ ...c, classification: null })),
+    })),
+  };
+  expect(neighboursOf(unknown, ["gS"], { stubFt: 10, hop: "same-classification" })).toEqual([]);
+  expect(neighboursOf(unknown, ["gS"], { stubFt: 10, hop: "all" })).toHaveLength(3);
 });

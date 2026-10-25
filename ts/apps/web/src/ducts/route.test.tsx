@@ -453,10 +453,10 @@ test("navigation demo prices the production route and moves all to Office to Lab
     await waitFor(() => expect(flights.length).toBeGreaterThan(before));
     await waitFor(() => expect(drawing.latest!.priced).not.toBeNull());
     expect(await drawing.latest!.actions.apply.run()).toMatchObject({ code: "not-ready" });
-    for (const system of ["SA Office", "SA Lab", ""]) {
+    for (const system of [["SA Office"], ["SA Office", "SA Lab"], []]) {
       act(() => drawing.latest!.setPage({ system }));
       await waitFor(() => expect(router.state.location.search).toMatchObject({ system }));
-      expect(drawing.latest?.page.system).toBe(system);
+      expect(drawing.latest?.page.system).toEqual(system);
     }
     expect(requests).toEqual([]);
   } finally {

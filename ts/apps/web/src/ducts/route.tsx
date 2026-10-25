@@ -13,7 +13,7 @@ import { elementKey, type SubjectKey } from "@pe/kit/lang/attention";
  */
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { stagedDucts, type DuctClaim, type TrichotomyCellLike } from "@pe/agent-contracts";
-import type { Reading } from "@pe/agent-contracts";
+import type { Reading, OrbitViewport } from "@pe/agent-contracts";
 import type { DuctSnapshot } from "@pe/ducts-domain/types";
 import { EMPTY_CATALOGS } from "@pe/ducts-domain/catalog";
 
@@ -85,8 +85,12 @@ export function DuctsRoute({ url = true }: { url?: boolean } = {}) {
     () => demo?.claims ?? SCENE_CLAIMS,
   );
   const loadedReading = useRef<LoadedDuctsReading | null>(null);
+  const shownPose = useRef<OrbitViewport | null>(null);
   const manifest = useMemo(() => {
-    const bound = bindDuctsManifest(() => loadedReading.current);
+    const bound = bindDuctsManifest(
+      () => loadedReading.current,
+      () => shownPose.current,
+    );
     if (demoName !== "navigation") return bound;
     return {
       ...bound,
@@ -300,7 +304,7 @@ export function DuctsRoute({ url = true }: { url?: boolean } = {}) {
   const ready = pricingState.observation?.result.ready ?? {};
   const groups = snapshot?.groups ?? [];
   const levels = snapshot?.levels ?? [];
-  const onPose = useDuctsViewBridge({
+  const reportPose = useDuctsViewBridge({
     thread,
     url,
     page,
@@ -525,7 +529,10 @@ export function DuctsRoute({ url = true }: { url?: boolean } = {}) {
     claimCells: demoClaims,
     page,
     setPage,
-    onPose,
+    onPose: (pose) => {
+      shownPose.current = pose;
+      reportPose(pose);
+    },
     onSelect,
     onSelectClaim,
     work,

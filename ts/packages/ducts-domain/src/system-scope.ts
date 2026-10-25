@@ -195,8 +195,8 @@ const unions = new WeakMap<object, Map<string, SystemScope>>();
 /**
  * The open systems over a snapshot as one scope; none open is the whole document (null). Groups
  * run in open order, de-duplicated, so a shared group shows once, under the first system that
- * opened it, and `shared` names its other systems from there. `name` is the active system, the
- * last opened: the verbs that need one system (write, heal, fan) read it.
+ * opened it, and `shared` names its other systems from there. `name` labels the union; actions
+ * that need one active system derive it at the page boundary.
  */
 export function scopeOf(snapshot: DuctSnapshot, systems: readonly string[]): SystemScope | null {
   if (!systems.length) return null;
@@ -218,7 +218,7 @@ export function scopeOf(snapshot: DuctSnapshot, systems: readonly string[]): Sys
       if (others) shared.set(g, others);
     }
   const scope: SystemScope = {
-    name: systems.at(-1)!,
+    name: systems.join(" + "),
     groups: [...placed],
     pricing: union((s) => s.pricing),
     shared,

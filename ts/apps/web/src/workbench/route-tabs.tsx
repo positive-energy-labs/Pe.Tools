@@ -11,7 +11,9 @@ function tabTitle(tab: ThreadTab) {
   );
   const subject =
     "system" in page
-      ? page.system
+      ? Array.isArray(page.system)
+        ? page.system.join(" + ")
+        : page.system
       : "path" in page
         ? page.path
         : "schedule" in page
