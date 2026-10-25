@@ -186,7 +186,7 @@ function Canvas({
   const opened = useMemo(() => {
     const groupSet = new Set(groups);
     return new Set([
-      ...(scope?.members ?? []),
+      ...(scope?.members ?? [...snapshot.nodes, ...snapshot.segments].map((e) => e.id)),
       ...[...snapshot.nodes, ...snapshot.segments]
         .filter((e) => e.groupId && groupSet.has(e.groupId))
         .map((e) => e.id),

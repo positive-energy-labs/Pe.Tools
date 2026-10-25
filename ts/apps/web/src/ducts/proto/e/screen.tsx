@@ -702,6 +702,14 @@ function LoadedScreenBody({
     [drawn, snapshot, chosen, groups, scope, page.system, pick, setPage],
   );
   // The section whose run leads the system: its fan and TEL head the pane.
+  const activeCritical =
+    tree
+      ?.flatMap((t) => t.children)
+      .filter((r) => r.terminal != null && activeScope?.terminals.has(r.terminal))
+      .reduce<TreeNode | null>(
+        (best, r) => (r.total != null && (best?.total == null || r.total > best.total) ? r : best),
+        null,
+      ) ?? null;
   const leadGroup =
     activeScope?.groups.reduce<string | null>(
       (best, g) =>
@@ -1141,13 +1149,13 @@ function LoadedScreenBody({
                           refreshing: props.reading.refreshing,
                           open: () => pick("right"),
                           breakdown:
-                            (critical?.split ?? tree?.[0]?.split) && scale
+                            activeCritical?.split && activeCritical.total
                               ? {
-                                  split: (critical?.split ?? tree?.[0]?.split)!,
-                                  scale,
+                                  split: activeCritical.split,
+                                  scale: activeCritical.total,
                                   fans: () => (
                                     <FanFacts
-                                      facts={fanFacts(priced, groups, nameOf)}
+                                      facts={fanFacts(priced, activeScope?.groups ?? [], nameOf)}
                                       nameOf={nameOf}
                                     />
                                   ),
