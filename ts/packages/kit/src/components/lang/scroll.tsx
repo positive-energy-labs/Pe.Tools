@@ -129,7 +129,7 @@ type Parts = {
 
 function attach(el: HTMLElement, parts: Parts, sources: Registry["sources"]) {
   const { strip, marks, lit, frame, xFrame, field } = parts;
-  if (!strip || !marks || !lit || !frame) throw new Error("Scroll mounted without its scrollbar");
+  if (!strip || !marks || !frame) throw new Error("Scroll mounted without its scrollbar");
   // Layout is read only in the ResizeObserver callback (after layout) and offsets only in the
   // scroll handlers; frame callbacks draw from these cached numbers, so a seam drag that has just
   // written a pane size never pays a forced layout here.
@@ -154,7 +154,7 @@ function attach(el: HTMLElement, parts: Parts, sources: Registry["sources"]) {
     following = 0;
     const y = fraction() * travel;
     frame.style.transform = `translateY(${y}px)`;
-    lit.style.clipPath = `inset(${y}px 0 ${travel - y}px 0)`;
+    if (lit) lit.style.clipPath = `inset(${y}px 0 ${travel - y}px 0)`;
     if (xFrame) {
       const max = scrollW - clientW;
       xFrame.style.transform = `translateX(${max > 0 ? (left / max) * travelX : 0}px)`;
@@ -172,7 +172,7 @@ function attach(el: HTMLElement, parts: Parts, sources: Registry["sources"]) {
             yield { top, height, mark: source.mark(element) };
     };
     paint(ctx, project(all(), scrollH, bins), width, ink);
-    const litCtx = lit.getContext("2d");
+    const litCtx = lit?.getContext("2d");
     litCtx?.clearRect(0, 0, width, bins);
     litCtx?.drawImage(marks, 0, 0);
   };
@@ -253,7 +253,7 @@ function attach(el: HTMLElement, parts: Parts, sources: Registry["sources"]) {
       xFrame.style.setProperty("--frame-travel-x", `${travelX}px`);
     }
     bins = Math.round(clientH * dpr);
-    for (const canvas of [marks, lit]) {
+    for (const canvas of lit ? [marks, lit] : [marks]) {
       if (canvas.width !== width) canvas.width = width;
       if (canvas.height !== bins) canvas.height = bins;
     }
@@ -315,6 +315,12 @@ export interface ScrollProps extends Omit<ComponentProps<"div">, "children"> {
   maxHeight?: string;
   /** Tables also draw a frame-only strip for the inline axis. */
   axis?: "block" | "both";
+  /**
+   * Redraw the marks inside the frame at full ink: for a few variable-size items (chat turns), where
+   * the lit blocks say which items are in view. A list of many same-size rows leaves it off; its
+   * frame alone shows the viewport.
+   */
+  lit?: boolean;
 }
 
 export function Scroll({
@@ -323,6 +329,7 @@ export function Scroll({
   fieldClassName,
   maxHeight,
   axis = "block",
+  lit = false,
   style,
   ref,
   ...rest
@@ -359,7 +366,7 @@ export function Scroll({
       controller.current?.detach();
       controller.current = null;
     };
-  }, [element, sources]);
+  }, [element, sources, lit]);
   const press = (event: ReactPointerEvent<HTMLDivElement>) => {
     if (event.button !== 0 || !element) return;
     const strip = event.currentTarget;
@@ -426,13 +433,15 @@ export function Scroll({
             data-scrollbar-marks=""
             aria-hidden
           />
-          <canvas
-            ref={(node) => {
-              parts.current.lit = node;
-            }}
-            data-scrollbar-marks="lit"
-            aria-hidden
-          />
+          {lit ? (
+            <canvas
+              ref={(node) => {
+                parts.current.lit = node;
+              }}
+              data-scrollbar-marks="lit"
+              aria-hidden
+            />
+          ) : null}
           <span
             ref={(node) => {
               parts.current.frame = node;

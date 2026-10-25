@@ -84,7 +84,7 @@ test("the frame follows scroll without a React commit, and the strip holds no pe
   fireEvent.scroll(scroller);
   await waitFor(() => expect(frame.style.transform).toBe("translateY(90px)"));
   expect(commits.mock.calls.length).toBe(before);
-  expect(strip.querySelectorAll("*")).toHaveLength(3);
+  expect(strip.querySelectorAll("*")).toHaveLength(2);
   expect(strip.getAttribute("tabindex")).toBeNull();
 });
 
@@ -178,6 +178,60 @@ test("a projection reads item data: it never builds rows, and damage in the data
   );
   await waitFor(() => expect(fills.length).toBeGreaterThan(0));
   expect(row.mock.calls.length).toBeLessThan(items.length / 2);
+});
+
+test("the pointer's cursor draws no strip mark: only a selection does", async () => {
+  vi.stubGlobal(
+    "ResizeObserver",
+    class {
+      constructor(private callback: (entries: []) => void) {}
+      observe() {
+        this.callback([]);
+      }
+      unobserve() {}
+      disconnect() {}
+    },
+  );
+  // A full-width fill is the selected bar (no weight or tone here); ticks are half width.
+  const bars: number[] = [];
+  vi.spyOn(HTMLCanvasElement.prototype, "getContext").mockImplementation(
+    function (this: HTMLCanvasElement) {
+      const ctx = { canvas: this, fillStyle: "", globalAlpha: 1, clearRect() {}, drawImage() {} };
+      return Object.assign(ctx, {
+        fillRect: (_x: number, _y: number, w: number) => w === 1 && bars.push(w),
+      }) as never;
+    },
+  );
+  vi.spyOn(HTMLElement.prototype, "clientHeight", "get").mockReturnValue(200);
+  const items = Array.from({ length: 5 }, (_, i) => ({ key: String(i), name: `Row ${i}` }));
+  function Small() {
+    const list = useList({
+      items,
+      keyOf: (item) => item.key,
+      search: (item) => ({ text: [item.name] }),
+      select: "single",
+    });
+    return (
+      <ListView
+        list={list}
+        aria-label="small"
+        row={(item) => ({ label: item.name })}
+        empty={{ message: "none", exit: "none" }}
+      />
+    );
+  }
+  const view = render(
+    <Scroll>
+      <Small />
+    </Scroll>,
+  );
+  const row = view.container.querySelector('[data-key="3"]')!;
+  fireEvent.mouseMove(row);
+  await waitFor(() => expect(row.hasAttribute("data-cursor")).toBe(true));
+  await new Promise((resolve) => requestAnimationFrame(resolve));
+  expect(bars).toEqual([]);
+  fireEvent.click(row);
+  await waitFor(() => expect(bars.length).toBeGreaterThan(0));
 });
 
 test("an observer delivery that changes nothing here writes nothing (a seam drag's width frames)", () => {

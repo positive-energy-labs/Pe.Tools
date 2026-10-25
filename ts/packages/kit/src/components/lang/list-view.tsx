@@ -322,13 +322,14 @@ function markOf<T, Sort extends string>(
   projection?: (item: T) => Pick<Mark, "weight" | "tone">,
 ): Mark {
   const extra = projection?.(item.item);
-  const behavior = list.collection.rowProps(item.key);
+  // The cursor (the pointer's row) draws no mark: the frame already shows where the eye is, and a
+  // pointer-moved cursor outlives the pointer, so it read as some other hover's row.
   return {
     tone: item.damage ? "alarm" : extra?.tone,
     weight: extra?.weight,
     tick: item.branch,
     hit: item.hit,
-    selected: behavior.selected || behavior.cursor,
+    selected: list.collection.rowProps(item.key).selected,
   };
 }
 
@@ -338,9 +339,8 @@ function useMarkVersion<T, Sort extends string>(
 ) {
   const { list, rows, projection } = props;
   const selected = list.state.selected.join("\u0000");
-  const cursor = list.collection.cursor;
   const open = list.state.open.join("\u0000");
-  return useMemo(() => ({}), [rows, projection, selected, cursor, open, list.filtering]);
+  return useMemo(() => ({}), [rows, projection, selected, open, list.filtering]);
 }
 
 function SectionBody<T, Sort extends string>(props: SectionBodyProps<T, Sort>) {
