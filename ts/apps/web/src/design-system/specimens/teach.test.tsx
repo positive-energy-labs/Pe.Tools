@@ -193,9 +193,9 @@ test("the tutorial preserves three pane rectangles, one leader per pane, and sco
     expect(Number(pane.getAttribute("height")) / 2).toBe(height / 2);
   });
   expect([...container.querySelectorAll("path")].map((path) => path.getAttribute("d"))).toEqual([
-    "M200 150 L100 16",
-    "M300 112.5 L100 16",
-    "M300 262.5 L100 16",
+    "M222.2222222222222 375 L111.1111111111111 40",
+    "M333.3333333333333 281.25 L111.1111111111111 40",
+    "M333.3333333333333 656.25 L111.1111111111111 40",
   ]);
   expect(screen.queryByText("3-0")).toBeNull();
   const legend = container.querySelector("[data-teach-legend]")!;

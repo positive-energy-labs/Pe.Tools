@@ -73,7 +73,9 @@ import { InputsPane } from "./inputs-pane";
 import { RulesTree, ruleOfIds } from "./rules-pane";
 import { SystemTree } from "./tree-sidebar";
 import { useGroupEncoding } from "../encoding/use-encoding";
-import { DuctsIntroduction } from "../../introduction";
+import { DUCTS_LAYOUT, DUCTS_REGIONS, DUCTS_TEACHING } from "./teaching";
+import { TeachingLayoutView } from "@pe/kit/lang/teaching-layout";
+import { HelpWorld } from "#/route/help";
 import { LoadingContext } from "#/route/loading-context";
 
 const NO_GROUPS: readonly string[] = [];
@@ -209,7 +211,7 @@ export function EScreen({ props }: { props: ProtoProps }) {
         busy={props.reading.pending || props.pricing}
       >
         {!props.snapshot && props.empty ? <p>{props.empty.exit}</p> : null}
-        <DuctsIntroduction />
+        <HelpWorld facts={DUCTS_TEACHING} />
       </LoadingContext>
     );
   return (
@@ -741,7 +743,8 @@ function LoadedScreenBody({
     () => (
       <Pane
         id="e-systems"
-        title="Systems"
+        title={DUCTS_REGIONS.systems.label}
+        help={DUCTS_REGIONS.systems.purpose}
         meta={`${census.systems} · ${census.priced} priced · ${census.fix} need a fix`}
         scroll="auto"
         flush
@@ -775,9 +778,9 @@ function LoadedScreenBody({
       [false, true].map((wide) => (
         <Pane
           id={wide ? "e-rules-all" : "e-rules"}
-          title={wide ? "All-systems rules" : "This system's rules"}
+          title={wide ? DUCTS_REGIONS.rules.label : "This system's rules"}
           meta={wide ? "every system" : (scope?.name ?? "")}
-          help="A rule is a fitting type (family : type) plus a geometry condition. Its table is the one choice a person makes; Pe re-looks-up every instance under it. A fitting with a stated drop is an override under its type."
+          help={DUCTS_REGIONS.rules.purpose}
           scroll="auto"
           flush
         >
@@ -874,31 +877,27 @@ function LoadedScreenBody({
   );
   const noSystem = chosen ? undefined : "choose a system first";
   const left = (
-    <PaneSplit
-      axis="vertical"
-      start={
-        <Halves
-          side={side}
-          onSide={pick}
-          left={{ title: "Systems", pane: systemsPane }}
-          right={{ title: scope?.name ?? "System", pane: systemPane, refusal: noSystem }}
-        />
-      }
-      end={
-        <Halves
-          side={side}
-          onSide={pick}
-          left={{ title: "All-systems rules", pane: rulesPanes[1] }}
-          right={{ title: "This system's rules", pane: rulesPanes[0], refusal: noSystem }}
-        />
-      }
-      resize={{
-        target: "end",
-        defaultSize: 176,
-        minSize: 64,
-        minOtherSize: 200,
-        persist: "proto-e-stack",
+    <TeachingLayoutView
+      layout={DUCTS_LAYOUT.start}
+      panes={{
+        systems: (
+          <Halves
+            side={side}
+            onSide={pick}
+            left={{ title: "Systems", pane: systemsPane }}
+            right={{ title: scope?.name ?? "System", pane: systemPane, refusal: noSystem }}
+          />
+        ),
+        rules: (
+          <Halves
+            side={side}
+            onSide={pick}
+            left={{ title: "All-systems rules", pane: rulesPanes[1] }}
+            right={{ title: "This system's rules", pane: rulesPanes[0], refusal: noSystem }}
+          />
+        ),
       }}
+      resize={{ stack: { minSize: 64, minOtherSize: 200, persist: "proto-e-stack" } }}
     />
   );
 
@@ -952,7 +951,8 @@ function LoadedScreenBody({
     () => (
       <Pane
         id="e-inbox"
-        title="Rulings"
+        title={DUCTS_REGIONS.rulings.label}
+        help={DUCTS_REGIONS.rulings.purpose}
         meta={rulingsWord}
         actions={
           <Button label="hide rulings" onClick={() => setInboxOpen(false)}>
@@ -1025,84 +1025,79 @@ function LoadedScreenBody({
         <div ref={rootRef} data-proto="E2" className="flex size-full min-h-0">
           <BarRules snapshot={drawn!} work={work} priced={priced}>
             <DuctSettings work={work} rate={designRate} snapshot={snapshot} scope={scope} />
-            <PaneSplit
-              axis="horizontal"
+            <TeachingLayoutView
+              layout={DUCTS_LAYOUT}
+              panes={{
+                stack: left,
+                picture: (
+                  <div className="relative size-full min-w-0">
+                    <ECanvas
+                      {...props}
+                      onIssueHover={setHoveredIssue}
+                      issueScope={issueScope}
+                      annotated={annotated}
+                      issues={issues}
+                      scale={encoded}
+                      nameOf={nameOf}
+                      jump={jump}
+                      groups={drawGroups}
+                      lead={leadGroup}
+                      identity={{
+                        system: chosenRow,
+                        census,
+                        refreshing: props.reading.refreshing,
+                        open: () => pick("right"),
+                        breakdown:
+                          (critical?.split ?? tree?.[0]?.split) && scale
+                            ? {
+                                split: (critical?.split ?? tree?.[0]?.split)!,
+                                scale,
+                                fans: () => (
+                                  <FanFacts
+                                    facts={fanFacts(priced, groups, nameOf)}
+                                    nameOf={nameOf}
+                                  />
+                                ),
+                              }
+                            : null,
+                        allSystems: () => setPage({ system: "", selected: "", issue: "" }),
+                      }}
+                    />
+                  </div>
+                ),
+                rulings: inboxPane,
+              }}
               resize={{
-                target: "start",
-                defaultSize: 420,
-                minSize: 280,
-                maxSize: 760,
-                // The picture keeps 360 beside the inbox rail; a tight screen starts with the sidebar a rail.
-                minOtherSize: 392,
-                persist: "proto-e-sidebar",
-                collapse: {
-                  collapsed: sidebarCollapsed ? "start" : null,
-                  onCollapsedChange: (folded) => {
-                    if (folded !== "start") setPanePriority("sidebar");
-                    setTreeCollapsed(folded === "start");
+                sidebar: {
+                  minSize: 280,
+                  maxSize: 760,
+                  // The picture keeps 360 beside the inbox rail; a tight screen starts with the sidebar a rail.
+                  minOtherSize: 392,
+                  persist: "proto-e-sidebar",
+                  collapse: {
+                    collapsed: sidebarCollapsed ? "start" : null,
+                    onCollapsedChange: (folded) => {
+                      if (folded !== "start") setPanePriority("sidebar");
+                      setTreeCollapsed(folded === "start");
+                    },
+                    start: { title: scope?.name ?? "systems", collapseBelow: 200 },
                   },
-                  start: { title: scope?.name ?? "systems", collapseBelow: 200 },
+                },
+                drawing: {
+                  minSize: 260,
+                  maxSize: 520,
+                  minOtherSize: width > 0 && width < TIGHT_PX ? 240 : 360,
+                  persist: "proto-e-inbox",
+                  collapse: {
+                    collapsed: inboxShown ? null : "end",
+                    onCollapsedChange: (folded) => {
+                      if (folded !== "end") setPanePriority("inbox");
+                      setInboxOpen(folded !== "end");
+                    },
+                    end: { title: `Rulings · ${toRule}`, collapseBelow: 200 },
+                  },
                 },
               }}
-              start={left}
-              end={
-                <PaneSplit
-                  axis="horizontal"
-                  resize={{
-                    target: "end",
-                    defaultSize: 340,
-                    minSize: 260,
-                    maxSize: 520,
-                    minOtherSize: width > 0 && width < TIGHT_PX ? 240 : 360,
-                    persist: "proto-e-inbox",
-                    collapse: {
-                      collapsed: inboxShown ? null : "end",
-                      onCollapsedChange: (folded) => {
-                        if (folded !== "end") setPanePriority("inbox");
-                        setInboxOpen(folded !== "end");
-                      },
-                      end: { title: `Rulings · ${toRule}`, collapseBelow: 200 },
-                    },
-                  }}
-                  start={
-                    <div className="relative size-full min-w-0">
-                      <ECanvas
-                        {...props}
-                        onIssueHover={setHoveredIssue}
-                        issueScope={issueScope}
-                        annotated={annotated}
-                        issues={issues}
-                        scale={encoded}
-                        nameOf={nameOf}
-                        jump={jump}
-                        groups={drawGroups}
-                        lead={leadGroup}
-                        identity={{
-                          system: chosenRow,
-                          census,
-                          refreshing: props.reading.refreshing,
-                          open: () => pick("right"),
-                          breakdown:
-                            (critical?.split ?? tree?.[0]?.split) && scale
-                              ? {
-                                  split: (critical?.split ?? tree?.[0]?.split)!,
-                                  scale,
-                                  fans: () => (
-                                    <FanFacts
-                                      facts={fanFacts(priced, groups, nameOf)}
-                                      nameOf={nameOf}
-                                    />
-                                  ),
-                                }
-                              : null,
-                          allSystems: () => setPage({ system: "", selected: "", issue: "" }),
-                        }}
-                      />
-                    </div>
-                  }
-                  end={inboxPane}
-                />
-              }
             />
           </BarRules>
         </div>

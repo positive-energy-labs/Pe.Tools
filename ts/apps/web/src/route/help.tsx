@@ -38,7 +38,15 @@ function Details({ facts }: { facts: readonly Teaching[] }) {
     if (f.kind === "modes" || f.kind === "views")
       for (const o of f.options) {
         const state =
-          f.kind === "views" ? (o.active ? "shown" : "available") : o.active ? "active" : "";
+          f.source === "reference"
+            ? ""
+            : f.kind === "views"
+              ? o.active
+                ? "shown"
+                : "available"
+              : o.active
+                ? "active"
+                : "";
         rows.set(`${f.kind === "views" ? "views" : f.id}:${o.key}`, {
           term: (
             <span
@@ -85,7 +93,16 @@ export function HelpWorld({ facts }: { facts: readonly Teaching[] }) {
   const global = facts.filter((f) => f.kind === "keys" && !f.region);
   const scopes = [...new Set(global.flatMap((f) => (f.kind === "keys" ? [f.scope] : [])))];
   return (
-    <div className="px-4 sm:px-8">
+    <div
+      className="px-4 sm:px-8"
+      data-teach-source={facts.some((f) => f.source === "reference") ? "reference" : "measured"}
+    >
+      {facts.some((f) => f.source === "reference") ? (
+        <p className="mb-4 t-small text-ink-2">
+          Reference layout · controls described here take effect once loaded. Current visibility and
+          availability are not yet measured.
+        </p>
+      ) : null}
       <div
         data-teach-legend=""
         className="mb-6 grid max-w-5xl grid-cols-[repeat(auto-fit,minmax(min(100%,20rem),1fr))] gap-4"
@@ -110,6 +127,11 @@ export function HelpWorld({ facts }: { facts: readonly Teaching[] }) {
               <h2 className="t-small t-upper">
                 {i + 1} {r.label}
               </h2>
+              {facts.map((f) =>
+                f.kind === "region" && f.id === r.key && f.purpose ? (
+                  <p key={f.id}>{f.purpose}</p>
+                ) : null,
+              )}
               <Details facts={facts.filter((f) => f.region === r.key)} />
             </section>
           ))}

@@ -38,6 +38,7 @@ export function LeaderDiagram(props: Props) {
     if (!box || !source) return;
     const measure = () => {
       const origin = box.getBoundingClientRect();
+      if (picture && (!origin.width || !origin.height)) return;
       const track = source.getBoundingClientRect();
       if (picture) source.style.setProperty("--leader-scale", String(track.width / picture.width));
       const x = track.left - origin.left;
@@ -59,10 +60,12 @@ export function LeaderDiagram(props: Props) {
           ?.getBoundingClientRect();
         const end = rect.top + rect.height / 2 - origin.top;
         const facesRight = region && rect.left >= region.right;
+        const point = (x: number, y: number) =>
+          picture ? `${(x / origin.width) * 1000} ${(y / origin.height) * 1000}` : `${x} ${y}`;
         path.setAttribute(
           "d",
           region
-            ? `M${(facesRight ? region.right : region.left) - origin.left} ${region.top + region.height / 2 - origin.top} L${(facesRight ? rect.left : rect.right) - origin.left} ${rect.top + Math.min(16, rect.height / 2) - origin.top}`
+            ? `M${point((facesRight ? region.right : region.left) - origin.left, region.top + region.height / 2 - origin.top)} L${point((facesRight ? rect.left : rect.right) - origin.left, rect.top + Math.min(16, rect.height / 2) - origin.top)}`
             : (item.at ?? [])
                 .map(
                   (at) =>
@@ -169,16 +172,38 @@ export function LeaderDiagram(props: Props) {
               </div>
             ))}
         </div>
-        <svg aria-hidden className={`dl-leader-lines ${picture ? "@max-[60rem]:hidden" : ""}`}>
-          {items.map((item) => (
+        <svg
+          aria-hidden
+          viewBox={picture ? "0 0 1000 1000" : undefined}
+          preserveAspectRatio="none"
+          className={`dl-leader-lines ${picture ? "@max-[60rem]:hidden" : ""}`}
+        >
+          {items.map((item, i) => (
             <path
               key={item.key}
               data-leader-line={item.key}
               data-dashed={item.dashed || undefined}
+              vectorEffect="non-scaling-stroke"
+              // SSR leaders use the declared grid's normalized tracks; measured endpoints replace them.
+              d={picture ? referenceLeader(picture, item.key, i, items.length) : undefined}
             />
           ))}
         </svg>
       </div>
     </div>
   );
+}
+
+function referenceLeader(
+  picture: NonNullable<Props["picture"]>,
+  key: string,
+  index: number,
+  count: number,
+) {
+  const region = picture.regions.find((r) => r.key === key);
+  if (!region) return undefined;
+  const right = index % 2 === 1;
+  const x = 250 + ((region.left + (right ? region.width : 0)) / picture.width) * 500;
+  const y = 250 + ((region.top + region.height / 2) / picture.height) * 500;
+  return `M${x} ${y} L${right ? 1000 : 0} ${((Math.floor(index / 2) + 0.5) / Math.ceil(count / 2)) * 1000}`;
 }

@@ -5,14 +5,25 @@ import {
   useContext,
   useEffect,
   useId,
+  useMemo,
   useSyncExternalStore,
   type ReactNode,
   type RefObject,
 } from "react";
-import { readTeaching, registerTeaching, subscribeTeaching, type TeachDescriptor } from "./teach";
+import {
+  readTeaching,
+  registerTeaching,
+  subscribeTeaching,
+  type TeachDescriptor,
+  type Teaching,
+} from "./teach";
 import { registerTeachingMeasure, subscribeMeasuredTeaching, teachingBox } from "./teach-measure";
 
 export const TeachRegion = createContext<string | undefined>(undefined);
+export const TeachPage = createContext<string | undefined>(undefined);
+const EMPTY: readonly Teaching[] = [];
+export const TeachReference = createContext<readonly Teaching[]>(EMPTY);
+const serverTeaching = () => EMPTY;
 export const TeachLive = createContext(true);
 /** Folded controls teach through their visible trigger, even while the popup is closed. */
 export const TeachOwner = createContext<RefObject<HTMLElement | null> | undefined>(undefined);
@@ -37,6 +48,7 @@ export function useTeach(
 ) {
   const id = useId();
   const parent = useContext(TeachRegion);
+  const page = useContext(TeachPage);
   host = useContext(TeachOwner) ?? host;
   const live = useContext(TeachLive) && enabled;
   const region = descriptor?.kind === "region" ? id : parent;
@@ -49,9 +61,9 @@ export function useTeach(
     const pane = document.querySelector<HTMLElement>(`[data-teach-id="${owner}"]`);
     const nodes = [...new Set([anchor, pane])].filter((node) => node != null);
     let previous: string | undefined;
-    let withdraw: (() => void) | undefined = registerTeaching({ ...fact, id, region: owner });
+    let withdraw: (() => void) | undefined = registerTeaching({ ...fact, id, region: owner, page });
     const measure = () => {
-      const next = { ...fact, id, region: owner };
+      const next = { ...fact, id, region: owner, page };
       if (next.kind === "region" && pane) {
         next.label =
           pane.querySelector('[data-slot="pane-title"]')?.textContent?.trim() ||
@@ -75,10 +87,23 @@ export function useTeach(
       unmeasure();
       withdraw?.();
     };
-  }, [id, region, live, value, host]);
+  }, [id, region, live, value, host, page]);
   return id;
 }
-export const useTeaching = () =>
-  useSyncExternalStore(subscribeMeasuredTeaching, readTeaching, readTeaching);
+export function useTeaching() {
+  const page = useContext(TeachPage);
+  const reference = useContext(TeachReference);
+  const all = useSyncExternalStore(subscribeMeasuredTeaching, readTeaching, serverTeaching);
+  return useMemo(() => {
+    const facts = page == null ? all : all.filter((fact) => fact.page === page);
+    return reference.length &&
+      !facts.some(
+        (fact) =>
+          fact.kind === "region" && fact.rect && fact.rect.width > 0 && fact.rect.height > 0,
+      )
+      ? reference
+      : facts;
+  }, [all, page, reference]);
+}
 export const useTeachingFacts = () =>
-  useSyncExternalStore(subscribeTeaching, readTeaching, readTeaching);
+  useSyncExternalStore(subscribeTeaching, readTeaching, serverTeaching);
