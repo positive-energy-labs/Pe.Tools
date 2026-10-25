@@ -39,7 +39,7 @@ export function virtualSpans(
     };
   });
 }
-import { startTransition, useEffect, useId, useMemo, useRef, useState } from "react";
+import { startTransition, useCallback, useEffect, useId, useMemo, useRef, useState } from "react";
 
 import { useScopeKeys, actionScopeKeys, type ScopeKey } from "../../keys";
 import { LIST_ACTIONS } from "./list-teaching";
@@ -369,8 +369,11 @@ export function useCollection<T>(options: CollectionOptions<T>) {
     if (createOf && text && !rows.some((r) => r.kind === "item" && labelOf(r.item) === text))
       rows.push({ kind: "create", key: `create:${text}`, text });
     return rows;
-    // eslint-disable-next-line react-hooks/exhaustive-deps -- items are identified by the render
   }, [
+    keyOf,
+    labelOf,
+    detailOf,
+    groupOf,
     levelItems,
     query,
     filter,
@@ -649,6 +652,8 @@ export interface ListPersist<Sort extends string = string> {
   onChange: (search: ListSearch, sort: Sort | "") => void;
 }
 
+/** Keep projection readers stable to reuse the model across cursor moves. Changed readers
+ * invalidate it, including closures over document names, field vocabulary or current scope. */
 export interface ListOptions<T, Sort extends string = string> {
   persist?: ListPersist<Sort>;
   /** External selection opens context once; a manual collapse sticks until the next selection. */
@@ -887,6 +892,8 @@ export function listModel<T, Sort extends string>(
   };
 }
 
+const listRowKey = (row: { key: string }) => row.key;
+
 /** The long-list API grows the collection key owner; popups and ladders keep their existing API. */
 export function useList<T, Sort extends string = string>(options: ListOptions<T, Sort>) {
   const [ownState, setOwnState] = useState<ListState<Sort>>(() => ({
@@ -960,39 +967,39 @@ export function useList<T, Sort extends string = string>(options: ListOptions<T,
     visit(options.items);
     return index;
   }, [options.items, options.search, options.tree?.childrenOf]);
-  // The cursor lives in this hook, so a pointer move re-renders it: re-deriving the whole model
-  // (tree walk, search, sort) per hover was O(rows) and handed every consumer new `sections`/`rows`
-  // (re-projecting the scrollbar, re-running the list's headroom layout read). Keyed on data and
-  // list state; callbacks inline at the call site (keyOf, fields, groups.of) must be pure over the
-  // item, while ones that read outside state (stageOf, the active sort) key by identity.
-  const modelKey = [
-    options.items,
-    searchIndex,
-    options.stageOf,
-    state.sort ? options.sorts?.[state.sort] : undefined,
-    state.sort,
-    JSON.stringify(state.search),
-    state.open.join("\u0000"),
-    state.closed.join("\u0000"),
-    options.groups?.order?.join("\u0000"),
-  ];
-  const modelCache = useRef<{ key: unknown[]; model: ReturnType<typeof listModel<T, Sort>> }>(null);
-  if (
-    !modelCache.current ||
-    modelCache.current.key.some((part, index) => !Object.is(part, modelKey[index]))
-  )
-    modelCache.current = { key: modelKey, model: listModel(options, state, searchIndex) };
-  const model = modelCache.current.model;
+  const model = useMemo(
+    () => listModel(options, state, searchIndex),
+    [
+      options.items,
+      options.keyOf,
+      searchIndex,
+      options.fields,
+      options.tree?.childrenOf,
+      options.groups?.of,
+      JSON.stringify(options.groups?.order),
+      JSON.stringify(options.groups?.collapsible),
+      options.stageOf,
+      state.sort ? options.sorts?.[state.sort] : undefined,
+      state.sort,
+      JSON.stringify(state.search),
+      JSON.stringify(state.open),
+      JSON.stringify(state.closed),
+    ],
+  );
   const [target, setTarget] = useState<HTMLElement | null>(null);
   const rows = useMemo(
     () => model.sections.flatMap((section) => (section.closed ? [] : section.rows)),
     [model],
   );
+  const labelOfRow = useCallback(
+    (row: ListItem<T>) => String(searchIndex.get(row.item)?.text[0] ?? row.key),
+    [searchIndex],
+  );
   const collection = useCollection({
     items: rows,
     status: options.status,
-    keyOf: (row) => row.key,
-    labelOf: (row) => String(searchIndex.get(row.item)?.text[0] ?? row.key),
+    keyOf: listRowKey,
+    labelOf: labelOfRow,
     query: "",
     // I4: no phantom cursor on the first row; the cursor appears with the pointer or the keys, so
     // it never reads as the open or selected item.

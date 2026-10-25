@@ -361,15 +361,15 @@ function useReachMarks<T, Sort extends string>(
   const registry = useContext(RegistryContext);
   const redraw = useScrollRedraw();
   const reached = useRef<ReadonlySet<string>>(new Set());
+  const inside = useRef(false);
   // Keyed by the stable `row` (routes memoize it for row memo); an inline one rebuilds the cache.
   const subjects = useMemo(() => new WeakMap<object, Ref | null>(), [row, doc]);
   useEffect(() => {
     if (!doc) return;
-    let inside = false;
     const subjectOf = (item: ListItem<T>): Ref | null => {
       const owner = typeof item.item === "object" && item.item !== null ? item.item : null;
       if (owner && subjects.has(owner)) return subjects.get(owner)!;
-      // Built once per item: the row's subject decides what lights it, as `Row` decides.
+      // TODO: Read subjects from list data so reach projection never builds virtual rows' JSX.
       const parts = row(item.item);
       const revit = parts.revit ?? item.revit ?? rowRevit(undefined, item.key);
       const ref = parts.subject ?? (revit?.[0] == null ? null : { doc, key: elementKey(revit[0]) });
@@ -385,7 +385,7 @@ function useReachMarks<T, Sort extends string>(
               for (const item of section.rows) subjectOf(item);
           });
     const recompute = () => {
-      const lit = inside ? null : litTest(registry, doc);
+      const lit = inside.current ? null : litTest(registry, doc);
       const next = new Set<string>();
       if (lit)
         for (const section of live.current.sections)
@@ -398,11 +398,11 @@ function useReachMarks<T, Sort extends string>(
       redraw?.();
     };
     const enter = () => {
-      inside = true;
+      inside.current = true;
       recompute();
     };
     const leave = () => {
-      inside = false;
+      inside.current = false;
     };
     root?.addEventListener("pointerenter", enter);
     root?.addEventListener("pointerleave", leave);
