@@ -666,6 +666,7 @@ function Canvas({
         );
         const model = (
           <ModelPicture
+            sceneView={page.sceneView}
             paintOf={paintOf}
             contextMode={layers.has("context") ? "all" : "halo"}
             readout={readout}

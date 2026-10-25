@@ -1,5 +1,6 @@
 import { listSearchKey, listSearchCodec } from "../list-search.ts";
 import { z } from "zod";
+import { sceneViewSchema, sceneViewCodec } from "../scene-view.ts";
 import {
   fitViewportCodec,
   layersKey,
@@ -28,6 +29,11 @@ export const DUCTS_LAYERS = [
 ] as const;
 
 const ductsFields = {
+  sceneView: field(
+    sceneViewSchema.default({ preset: "all", section: null }),
+    { url: "replace", agent: "set" },
+    sceneViewCodec,
+  ),
   /**
    * The subject: the open Revit system names, oldest first, each read across every group it is in;
    * the last is the active one the write, heal and fan verbs act on. Empty = the whole document.

@@ -1,9 +1,34 @@
 import { afterEach, expect, it, vi } from "vite-plus/test";
-import { bool, choice, colour, defineKnobs, diffText, num, resetKnob, set, setKnob } from "./knobs";
+import {
+  bool,
+  choice,
+  colour,
+  defineKnobs,
+  diffText,
+  num,
+  offeredLabel,
+  offeredOf,
+  resetKnob,
+  set,
+  setKnob,
+} from "./knobs";
 
 afterEach(() => {
   resetKnob();
   vi.unstubAllEnvs();
+});
+
+it("offers readable labels while storing stable category IDs", () => {
+  const knobs = defineKnobs("category-labels", "knobs.test.ts", {
+    layers: { hidden: set("Hidden") },
+  });
+  knobs.offer("layers", "hidden", ["-2000011"], { "-2000011": "Murs" });
+  expect(offeredOf("category-labels.layers.hidden")).toEqual(["-2000011"]);
+  expect(offeredLabel("category-labels.layers.hidden", "-2000011")).toBe("Murs");
+  knobs.set("layers", "hidden", ["-2000011"]);
+  expect(knobs.read().layers.hidden).toEqual(["-2000011"]);
+  knobs.offer("layers", "hidden", ["-2000011"], { "-2000011": "Walls" });
+  expect(offeredLabel("category-labels.layers.hidden", "-2000011")).toBe("Walls");
 });
 
 it("copies only knobs that differ from code, grouped by module with their source", () => {

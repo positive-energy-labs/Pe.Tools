@@ -13,6 +13,7 @@ const instance: SceneInstance = {
   uniqueId: "unit",
   linkInstanceId: null,
   category: "Mechanical Equipment",
+  categoryId: null,
   focus: true,
   firstVertex: 0,
   vertexCount: 3,

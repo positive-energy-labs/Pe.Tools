@@ -29,6 +29,7 @@ import {
 import type { LiveOrbit, OrbitGesture } from "@pe/kit/lang/live-orbit";
 import { subscribe as knobsChanged } from "#/knobs/knobs";
 import { LOOK } from "./grounds";
+import { presetLook, type ScenePreset } from "./presets";
 import { fitDistance, type OrbitViewport } from "./orbit";
 import { isClick, pickAt } from "./picking";
 import { samePlane, type PlaneAxis, type PlaneViewport } from "./plane";
@@ -60,6 +61,7 @@ export type Scene3DProps = {
   paintOf?: PaintOf;
   /** All captured context by default; halo hides it beyond the subject-distance falloff. */
   contextMode?: ContextMode;
+  preset?: ScenePreset;
   layers?: readonly Layer3D[];
   hoveredIssue?: string | null;
   focusedIssue?: string | null;
@@ -71,7 +73,7 @@ export type Scene3DProps = {
   onDoubleClick?: (pick: Pick | null, event: MouseEvent) => void;
   /** False for a hit the caller has cut away; picking and the element menu look past it. */
   clip?: (hit: Pick) => boolean;
-  /** The shader side of the caller's cuts, packed relative to the bounds centre. */
+  /** Shared drawing/picking clip: polygons relative to bounds centre, section in world feet. */
   clipVolume?: ClipVolume | null;
   /** After each rendered frame whose camera or size moved: world feet to canvas px. */
   onProject?: (project: Project, size: Size, ray: Ray, moving: boolean) => void;
@@ -419,9 +421,10 @@ export function Scene3D(props: Scene3DProps): ReactNode {
   }, [props.contextMode, meshes]);
   // Dev knobs re-apply live; in production `LOOK.read()` is the code defaults and never changes.
   const look = useSyncExternalStore(knobsChanged, LOOK.read, LOOK.read);
+  const shownLook = useMemo(() => presetLook(look, props.preset ?? "all"), [look, props.preset]);
   useEffect(() => {
-    core.current?.setLook(look);
-  }, [look, meshes]);
+    core.current?.setLook(shownLook);
+  }, [shownLook, meshes]);
 
   return (
     <RevitTarget scope={observation.scope}>

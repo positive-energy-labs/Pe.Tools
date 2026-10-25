@@ -1,29 +1,36 @@
 import type { Look } from "./grounds";
 import type { Tier } from "./types";
+import { CATEGORY_IDS } from "./categories";
 
-// PSC1 currently carries Revit display names, not stable BuiltInCategory IDs.
-// Unknown names remain visible in "all" and are excluded from positive presets.
-const WALLS = new Set(["Walls", "Curtain Panels", "Curtain Wall Mullions"]);
-const STRUCTURAL = new Set([
-  "Structural Columns",
-  "Structural Framing",
-  "Structural Foundations",
-  "Floors",
+const WALLS = new Set<number>([
+  CATEGORY_IDS.walls,
+  CATEGORY_IDS.curtainPanels,
+  CATEGORY_IDS.curtainMullions,
 ]);
-const LIGHTING = new Set(["Lighting Fixtures", "Lighting Devices"]);
+const STRUCTURAL = new Set<number>([
+  CATEGORY_IDS.structuralColumns,
+  CATEGORY_IDS.structuralFraming,
+  CATEGORY_IDS.structuralFoundations,
+  CATEGORY_IDS.floors,
+]);
+const LIGHTING = new Set<number>([CATEGORY_IDS.lightingFixtures, CATEGORY_IDS.lightingDevices]);
 
 /** Context presets cannot remove an opened system or its one-hop stubs. */
-export function contextVisible(category: string, tier: Tier, layers: Look["layers"]): boolean {
+export function contextVisible(
+  categoryId: number | null,
+  tier: Tier,
+  layers: Look["layers"],
+): boolean {
   if (tier !== "context") return true;
-  if (layers.hiddenCategories.includes(category)) return false;
-  if (!layers.lighting && LIGHTING.has(category)) return false;
+  if (categoryId !== null && layers.hiddenCategories.includes(String(categoryId))) return false;
+  if (!layers.lighting && categoryId !== null && LIGHTING.has(categoryId)) return false;
   switch (layers.context) {
     case "all":
       return true;
     case "walls":
-      return WALLS.has(category);
+      return categoryId !== null && WALLS.has(categoryId);
     case "structural":
-      return STRUCTURAL.has(category);
+      return categoryId !== null && STRUCTURAL.has(categoryId);
     case "none":
       return false;
   }

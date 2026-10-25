@@ -1,5 +1,8 @@
 import { describe, expect, it } from "vite-plus/test";
 import { decodeScene, type Psc1Metadata } from "./psc1";
+import { CATEGORY_IDS } from "./categories";
+import { contextVisible } from "./context";
+import { LOOK } from "./grounds";
 
 const BOX = { minX: 0, minY: 0, minZ: 0, maxX: 1, maxY: 1, maxZ: 1 };
 const handle = (elementId: number, linkInstanceId: number | null = null) =>
@@ -19,8 +22,22 @@ const metadata = (patch: Partial<Psc1Metadata> = {}): Psc1Metadata =>
     bounds: BOX,
     triangles: 2,
     elements: [
-      { handle: handle(1), firstVertex: 0, vertexCount: 3, focus: true, bounds: BOX },
-      { handle: handle(2, 7), firstVertex: 3, vertexCount: 3, focus: false, bounds: BOX },
+      {
+        handle: handle(1),
+        categoryId: -2008000,
+        firstVertex: 0,
+        vertexCount: 3,
+        focus: true,
+        bounds: BOX,
+      },
+      {
+        handle: handle(2, 7),
+        categoryId: CATEGORY_IDS.walls,
+        firstVertex: 3,
+        vertexCount: 3,
+        focus: false,
+        bounds: BOX,
+      },
     ],
     ...patch,
   }) as Psc1Metadata;
@@ -53,6 +70,7 @@ describe("PSC1 decode", () => {
         documentKey: "doc-a",
         linkInstanceId: null,
         uniqueId: "u-1",
+        categoryId: -2008000,
         category: "Ducts",
         focus: true,
         firstVertex: 0,
@@ -62,8 +80,43 @@ describe("PSC1 decode", () => {
         key: JSON.stringify(["doc-a", 7, "u-2"]),
         revitId: null,
         linkInstanceId: 7,
+        categoryId: CATEGORY_IDS.walls,
       }),
     ]);
+  });
+  it("carries category identity through translated and misleading display labels", () => {
+    const meta = metadata();
+    meta.elements[0] = {
+      ...meta.elements[0]!,
+      categoryId: CATEGORY_IDS.walls,
+      handle: { ...handle(1), category: "Murs" },
+    };
+    meta.elements[1] = {
+      ...meta.elements[1]!,
+      categoryId: 123456,
+      handle: { ...handle(2, 7), category: "Walls" },
+    };
+    const { meshes } = decodeScene(psc1(meta));
+    const [wall, unknown] = meshes.instances;
+    const layers = { ...LOOK.defaults.layers, context: "walls" as const };
+    expect(wall?.category).toBe("Murs");
+    expect(contextVisible(wall!.categoryId, "context", layers)).toBe(true);
+    expect(unknown?.category).toBe("Walls");
+    expect(contextVisible(unknown!.categoryId, "context", layers)).toBe(false);
+  });
+  it("normalizes absent or null category metadata without inferring IDs from names", () => {
+    const meta = metadata();
+    delete meta.elements[0]!.categoryId;
+    meta.elements[1]!.categoryId = null;
+    const { meshes } = decodeScene(psc1(meta));
+    expect(meshes.instances.map((instance) => instance.categoryId)).toEqual([null, null]);
+  });
+  it("rejects malformed category identity in artifact metadata", () => {
+    for (const categoryId of ["-2000011", 1.5, Number.MAX_SAFE_INTEGER + 1]) {
+      const meta = metadata();
+      Object.assign(meta.elements[0]!, { categoryId });
+      expect(() => decodeScene(psc1(meta))).toThrow("category id");
+    }
   });
   it("refuses what is not a PSC1 scene in the host frame", () => {
     expect(() => decodeScene(psc1(metadata(), 18, 0))).toThrow("Not a PSC1");

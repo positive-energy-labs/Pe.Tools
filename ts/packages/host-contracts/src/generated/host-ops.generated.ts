@@ -5948,6 +5948,7 @@ export namespace RevitDetailSpaceScene {
       vertexCount: number;
       bounds: Aabb;
       focus: boolean;
+      categoryId?: number | null;
     }
     /**
      * The address of one element. Enough for the host to select it.

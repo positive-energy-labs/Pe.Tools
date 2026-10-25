@@ -120,6 +120,7 @@ for (const [i, duct] of snapshot.segments.entries()) {
     linkInstanceId: null,
     uniqueId: `colour-${duct.id}`,
     category: "Ducts",
+    categoryId: null,
     focus: true,
     firstVertex,
     vertexCount: vertices.length / 3 - firstVertex,

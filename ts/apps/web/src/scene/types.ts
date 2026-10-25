@@ -25,6 +25,8 @@ export type SceneInstance = {
   documentKey: string;
   linkInstanceId: number | null;
   uniqueId: string;
+  /** Revit category identity; null when the capture has no category metadata. */
+  categoryId: number | null;
   category: string;
   /** The element the capture was asked for, as opposed to context around it. */
   focus: boolean;

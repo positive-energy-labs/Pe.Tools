@@ -47,6 +47,9 @@ export function decodeScene(buffer: ArrayBuffer): { metadata: Psc1Metadata; mesh
     )
       throw Error("Invalid element vertex range");
     nextVertex += e.vertexCount;
+    const categoryId = e.categoryId ?? null;
+    if (categoryId !== null && !Number.isSafeInteger(categoryId))
+      throw Error("Invalid scene category id");
     const h = e.handle,
       link = h.linkInstanceId ?? null;
     return {
@@ -56,6 +59,7 @@ export function decodeScene(buffer: ArrayBuffer): { metadata: Psc1Metadata; mesh
       documentKey: h.documentKey,
       linkInstanceId: link,
       uniqueId: h.uniqueId,
+      categoryId,
       category: h.category,
       focus: e.focus,
       firstVertex: e.firstVertex,

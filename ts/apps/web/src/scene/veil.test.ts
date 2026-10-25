@@ -40,6 +40,7 @@ const instance: SceneInstance = {
   linkInstanceId: null,
   uniqueId: "triangle",
   category: "Ducts",
+  categoryId: null,
   focus: true,
   firstVertex: 0,
   vertexCount: 3,

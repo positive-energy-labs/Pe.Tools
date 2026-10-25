@@ -11,6 +11,7 @@ import {
   knobModules,
   knobVersion,
   offeredOf,
+  offeredLabel,
   overrideOf,
   resetKnob,
   setKnob,
@@ -183,7 +184,7 @@ function Control({ path, knob }: { path: string; knob: Knob }): ReactNode {
                   write(options.filter((o) => (o === option ? e.currentTarget.checked : on.has(o))))
                 }
               />{" "}
-              {option}
+              {offeredLabel(path, option)}
             </label>
           ))}
         </span>

@@ -75,6 +75,7 @@ const modules = new Map<string, KnobModule>();
 /** `module.group.knob` → value; a value equal to its default is never stored. */
 const overrides = new Map<string, unknown>();
 const offered = new Map<string, readonly string[]>();
+const optionLabels = new Map<string, Readonly<Record<string, string>>>();
 const listeners = new Set<() => void>();
 /** Bumps on override changes only: readers keep one stable object between them. */
 const revisions = new Map<string, number>();
@@ -94,6 +95,8 @@ export const knobVersion = () => version;
 export const knobModules = (): readonly KnobModule[] => [...modules.values()];
 export const overrideOf = (path: string) => overrides.get(path);
 export const offeredOf = (path: string) => offered.get(path) ?? [];
+export const offeredLabel = (path: string, value: string) =>
+  optionLabels.get(path)?.[value] ?? value;
 
 const same = (a: unknown, b: unknown) => JSON.stringify(a) === JSON.stringify(b);
 const knobAt = (path: string) => {
@@ -197,7 +200,7 @@ export function defineKnobs<S extends Spec>(name: string, source: string, spec: 
   }
   return {
     defaults,
-    read(): Values<S> {
+    read(this: void): Values<S> {
       if (!import.meta.env.DEV) return defaults;
       const revision = revisions.get(name) ?? 0;
       if (seen !== revision) {
@@ -218,11 +221,13 @@ export function defineKnobs<S extends Spec>(name: string, source: string, spec: 
       group: G,
       knob: { [K in keyof S[G]]: S[G][K] extends SetKnob ? K : never }[keyof S[G]] & string,
       options: readonly string[],
+      labels: Readonly<Record<string, string>> = {},
     ) {
       if (!import.meta.env.DEV) return;
       const path = `${name}.${group}.${knob}`;
-      if (same(offered.get(path), options)) return;
+      if (same(offered.get(path), options) && same(optionLabels.get(path), labels)) return;
       offered.set(path, options);
+      optionLabels.set(path, labels);
       emit();
     },
   };

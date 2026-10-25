@@ -95,6 +95,7 @@ describe("subject camera bounds", () => {
       documentKey: "fixture",
       linkInstanceId: null,
       category: "Ducts",
+      categoryId: null,
       vertexCount: 3,
     };
     const meshes = new SceneMeshes(

@@ -1,4 +1,5 @@
 import * as THREE from "three";
+import { SCENE_PRESETS } from "@pe/agent-contracts";
 import { bool, choice, colour, defineKnobs, num, set } from "#/knobs/knobs";
 import { inkOf } from "./ink";
 import type { Bounds, IssueState, LayerFrame, Paint, PaintOf, SceneInstance } from "./types";
@@ -106,10 +107,15 @@ export const LOOK = defineKnobs("scene", "ts/apps/web/src/scene/grounds.ts", {
     alpha: num("Damage skin alpha", 0.85, [0, 1, 0.01]),
   },
   layers: {
+    preset: choice("Picture preset preview", "page", ["page", ...SCENE_PRESETS]),
     context: choice("Context preset", "all", ["all", "walls", "structural", "none"]),
     lighting: bool("Lighting fixtures", true),
     // TODO: Filter capture by stable category IDs; these controls only filter drawn context.
     hiddenCategories: set("Hidden context categories"),
+  },
+  section: {
+    paddingFt: num("Section padding", 3, [0, 30, 0.25], "live", "ft"),
+    cap: choice("Cut faces", "solid", ["solid", "open"]),
   },
 });
 export type Look = ReturnType<typeof LOOK.read>;

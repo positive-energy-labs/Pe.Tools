@@ -64,6 +64,7 @@ it("keeps camera gestures local and meshes mounted across native re-reads", () =
         documentKey: "doc",
         linkInstanceId: null,
         category: "test",
+        categoryId: null,
         focus: true,
         firstVertex: 0,
         vertexCount: 3,

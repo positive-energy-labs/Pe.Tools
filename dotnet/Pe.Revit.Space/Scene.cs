@@ -11,7 +11,7 @@ public sealed record SceneRequest(
     bool FocusOnly = false
 );
 
-public sealed record SceneElement(Handle Handle, int FirstVertex, int VertexCount, Aabb Bounds, bool Focus);
+public sealed record SceneElement(Handle Handle, int FirstVertex, int VertexCount, Aabb Bounds, bool Focus, long? CategoryId);
 public sealed record SceneSource(string DocumentKey, long? LinkInstanceId, IReadOnlyList<double> SourceToHost);
 public sealed record SceneUnavailableElement(long ElementId, string? UniqueId, string? Category, string Reason);
 public sealed record SceneMetadata(string Format, Stamp Stamp, Aabb Bounds, int Triangles,
@@ -74,7 +74,8 @@ public static class Scene {
                 continue;
             }
             if (kept.Count == 0) continue;
-            elements.Add(new SceneElement(x.Partition.HandleFor(x.Row), triangles * 3, kept.Count * 3, elementBounds, isFocus));
+            var categoryId = x.Partition.Doc.GetElement(x.Row.ElementId.ToElementId())?.Category?.Id.Value();
+            elements.Add(new SceneElement(x.Partition.HandleFor(x.Row), triangles * 3, kept.Count * 3, elementBounds, isFocus, categoryId));
             foreach (var t in kept) {
                 writer.Write(t.A.X); writer.Write(t.A.Y); writer.Write(t.A.Z);
                 writer.Write(t.B.X); writer.Write(t.B.Y); writer.Write(t.B.Z);

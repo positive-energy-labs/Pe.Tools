@@ -23,6 +23,7 @@ function fixture() {
       linkInstanceId: id === 1 ? 42 : null,
       uniqueId: String(id),
       category: "Duct",
+      categoryId: null,
       focus: true,
       firstVertex: id * 36,
       vertexCount: 36,

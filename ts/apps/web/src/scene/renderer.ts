@@ -1,8 +1,8 @@
 /** Scene3D's imperative renderer. Batch vertices are bounds-centred to preserve float32 fidelity;
  * camera poses, layers and picks stay in world feet. One swappable orbit camera (perspective or
  * parallel) drives OrbitControls; an axis picture swaps in an orthographic camera that only pans
- * and zooms. Thumbnails reuse this context only when stale. Space owns cut geometry; only packed
- * polygons cross into the material shader. */
+ * and zooms. Thumbnails reuse this context only when stale. Callers author polygon cuts or typed
+ * world-foot sections; drawing and picking consume the same clip volume. */
 import * as THREE from "three";
 import { LineMaterial } from "three/addons/lines/LineMaterial.js";
 import { LineSegments2 } from "three/addons/lines/LineSegments2.js";
@@ -38,6 +38,8 @@ import {
 } from "./gestures";
 import { createMeshPicker } from "./picking";
 import { contextVisible } from "./context";
+import { clipContains, rebaseCaps, sectionPlanes, type Section } from "./section";
+import { sectionCaps } from "./section-caps";
 import { createOrbitControls } from "./orbit-controls";
 import {
   center,
@@ -93,9 +95,15 @@ const mark = (phase: string, detail: Record<string, unknown> = {}) => {
   if (timing()) performance.mark(`scene:${phase}`, { detail });
 };
 
-/** Up to three extruded even-odd polygons whose intersection is kept, packed two points per vec4.
- * Frames (u, v): 0 = (x, y), 1 = (-x, z), 2 = (y, z), batch-local (relative to `origin`). */
-export type ClipVolume = { data: Float32Array; counts: number[]; keepInside: boolean[] };
+/** Up to three extruded even-odd polygons plus an optional world-foot section. Polygon frames
+ * (u, v): 0 = (x, y), 1 = (-x, z), 2 = (y, z), batch-local (relative to `origin`). */
+export type ClipVolume = {
+  data: Float32Array;
+  counts: number[];
+  keepInside: boolean[];
+  section?: Section;
+  preview?: boolean;
+};
 export type ContextMode = "halo" | "all";
 /** Context alone in the first pass; the normal camera layers draw ducts and annotations after it. */
 const CONTEXT_LAYER = 5;
@@ -107,12 +115,18 @@ varying vec3 vClipPosition;
 uniform vec4 clipPolygon[${(3 * CLIP_POINTS) / 2}];
 uniform int clipCount[3];
 uniform int clipKeep[3];
+uniform vec4 sectionPlane[6];
+uniform int sectionCount;
 vec2 clipPoint(int a, int i) {
   vec4 q = clipPolygon[a * ${CLIP_POINTS / 2} + i / 2];
   return (i % 2 == 0) ? q.xy : q.zw;
 }
 vec2 frameOf(int a, vec3 p) { return a == 0 ? p.xy : a == 1 ? vec2(-p.x, p.z) : p.yz; }
 void sceneClip() {
+  for (int i = 0; i < 6; i++) {
+    if (i >= sectionCount) break;
+    if (dot(sectionPlane[i].xyz, vClipPosition) + sectionPlane[i].w < -0.000001) discard;
+  }
   for (int a = 0; a < 3; a++) {
     int n = clipCount[a];
     if (n < 3) continue;
@@ -308,20 +322,28 @@ export function createRenderer(
     clipPolygon: { value: new Float32Array(3 * CLIP_POINTS * 2) as Float32Array },
     clipCount: { value: [0, 0, 0] },
     clipKeep: { value: [1, 1, 1] },
+    sectionPlane: { value: new Float32Array(24) },
+    sectionCount: { value: 0 },
   };
+  let clipVolume: ClipVolume | null | undefined;
+  const caps = new Map<number, THREE.Mesh<THREE.BufferGeometry, THREE.MeshLambertMaterial>>();
+  let capStamp = "";
   const material = new THREE.MeshLambertMaterial({ ...GROUND_MATERIAL, side: THREE.DoubleSide });
-  material.onBeforeCompile = (shader) => {
-    Object.assign(shader.uniforms, uniforms);
-    shader.vertexShader = `varying vec3 vClipPosition;\n${shader.vertexShader}`.replace(
-      "#include <project_vertex>",
-      "#include <project_vertex>\nvClipPosition = transformed;",
-    );
-    shader.fragmentShader = `${clipping}\n${shader.fragmentShader}`.replace(
-      "#include <clipping_planes_fragment>",
-      "#include <clipping_planes_fragment>\nsceneClip();",
-    );
+  const applyClip = (target: THREE.Material) => {
+    target.onBeforeCompile = (shader) => {
+      Object.assign(shader.uniforms, uniforms);
+      shader.vertexShader = `varying vec3 vClipPosition;\n${shader.vertexShader}`.replace(
+        "#include <project_vertex>",
+        "#include <project_vertex>\nvClipPosition = transformed;",
+      );
+      shader.fragmentShader = `${clipping}\n${shader.fragmentShader}`.replace(
+        "#include <clipping_planes_fragment>",
+        "#include <clipping_planes_fragment>\nsceneClip();",
+      );
+    };
+    target.customProgramCacheKey = () => "scene3d-clip-batch-v2";
   };
-  material.customProgramCacheKey = () => "scene3d-clip-batch-v1";
+  applyClip(material);
   const veil = veilUniforms();
   veilMaterial(material, veil, true);
   const batch = new THREE.BatchedMesh(
@@ -387,6 +409,11 @@ export function createRenderer(
             ? look.depth.translucentOpacity
             : look.subject.opacity;
     batch.setColorAt(id, new THREE.Vector4(color.r, color.g, color.b, alpha));
+    const cap = caps.get(id);
+    if (cap) {
+      cap.material.color.copy(color);
+      cap.material.opacity = alpha;
+    }
   };
   /** Instance index to batch id, for the veil's subject test. */
   const idOf: number[] = [];
@@ -428,9 +455,14 @@ export function createRenderer(
       ...new Set(
         meshes.instances
           .filter((_, n) => paints[idOf[n]!]!.tier === "context")
-          .map((i) => i.category),
+          .flatMap((i) => (i.categoryId === null ? [] : [String(i.categoryId)])),
       ),
     ].sort(),
+    Object.fromEntries(
+      meshes.instances
+        .filter((i) => i.categoryId !== null)
+        .map((i) => [String(i.categoryId), i.category]),
+    ),
   );
 
   let frame = 0;
@@ -478,10 +510,16 @@ export function createRenderer(
     shown.layers.set(CONTEXT_LAYER);
     veil.scenePass.value = 0;
     material.depthWrite = false;
+    caps.forEach((cap) => {
+      cap.material.depthWrite = false;
+    });
     renderer.render(scene, shown);
     shown.layers.mask = mask;
     veil.scenePass.value = 1;
     material.depthWrite = !look.depth.everythingTranslucent;
+    caps.forEach((cap, id) => {
+      cap.material.depthWrite = paints[id]!.tier !== "context" && !look.depth.everythingTranslucent;
+    });
     renderer.autoClear = false;
     renderer.render(scene, shown);
     renderer.autoClear = autoClear;
@@ -825,12 +863,14 @@ export function createRenderer(
   let painted: Paint = [undefined, undefined, undefined, undefined];
   const paintNow = (...[selected, hidden, isolated, lit]: Paint) => {
     const next = new Map<number, Mark>();
-    byId.forEach(({ key, category }, id) => {
+    byId.forEach(({ key, categoryId }, id) => {
       const shown =
         !hidden?.has(key) &&
         (!isolated || isolated.has(key)) &&
-        contextVisible(category, paints[id]!.tier, look.layers);
+        contextVisible(categoryId, paints[id]!.tier, look.layers);
       batch.setVisibleAt(id, shown);
+      const cap = caps.get(id);
+      if (cap) cap.visible = shown && !clipVolume?.preview;
       const mark: Mark | null = !shown
         ? null
         : selected?.has(key)
@@ -879,6 +919,7 @@ export function createRenderer(
           side: THREE.DoubleSide,
         }),
       );
+      applyClip(mesh.material);
       mesh.layers.set(OUTLINE_LAYER);
       mesh.frustumCulled = false;
       outlined.add(mesh);
@@ -890,6 +931,57 @@ export function createRenderer(
   const pick = createMeshPicker(batch, byId, (i) =>
     paintOf(i, paintBy).tier === "context" ? 0 : 1,
   );
+  const rebuildCaps = () => {
+    const stamp = JSON.stringify([clipVolume?.section, look.section.cap]);
+    if (clipVolume?.preview) {
+      caps.forEach((cap) => {
+        cap.visible = false;
+      });
+      return;
+    }
+    if (stamp === capStamp) {
+      caps.forEach((cap, id) => {
+        cap.visible = batch.getVisibleAt(id);
+      });
+      return;
+    }
+    capStamp = stamp;
+    caps.forEach((cap) => {
+      scene.remove(cap);
+      cap.geometry.dispose();
+      cap.material.dispose();
+    });
+    caps.clear();
+    if (!clipVolume?.section || look.section.cap === "open") return;
+    for (const cut of sectionCaps(meshes, clipVolume.section)) {
+      const id = byId.indexOf(cut.instance);
+      if (id < 0) continue;
+      const positions = rebaseCaps(cut.positions, clipVolume.section, origin.toArray());
+      const geometry = new THREE.BufferGeometry().setAttribute(
+        "position",
+        new THREE.BufferAttribute(positions, 3),
+      );
+      geometry.computeVertexNormals();
+      const capMaterial = new THREE.MeshLambertMaterial({
+        ...GROUND_MATERIAL,
+        side: THREE.DoubleSide,
+        polygonOffset: true,
+        polygonOffsetFactor: -1,
+        polygonOffsetUnits: -1,
+      });
+      applyClip(capMaterial);
+      veilMaterial(capMaterial, veil, true);
+      const cap = new THREE.Mesh(geometry, capMaterial);
+      cap.position.copy(origin);
+      cap.visible = batch.getVisibleAt(id);
+      if (paints[id]!.tier === "context") cap.layers.set(CONTEXT_LAYER);
+      scene.add(cap);
+      caps.set(id, cap);
+      tint(id, marked.get(id) ?? null);
+    }
+  };
+  const capRay = new THREE.Raycaster();
+  capRay.layers.enableAll();
   return {
     canvas,
     gestureSize: () => [size.height, viewHeight(camera, controls.target)] as const,
@@ -898,7 +990,8 @@ export function createRenderer(
     /** The camera the picture shows now: the orbit's, or the plane's. */
     active,
     pick(ray: THREE.Ray, clip?: (hit: Pick) => boolean) {
-      return pick(ray, (hit) => {
+      const kept = (hit: Pick) => {
+        if (!clipContains(clipVolume, hit.point, origin.toArray())) return false;
         if (veil.veilHalo.value && paintOf(hit.instance, paintBy).tier === "context") {
           const distance = veilDistance(field, hit.point);
           if (distance >= veil.veilFar.value) return false;
@@ -908,7 +1001,26 @@ export function createRenderer(
           if (opacity < 0.004) return false;
         }
         return clip?.(hit) ?? true;
-      });
+      };
+      let hit = pick(ray, kept);
+      capRay.ray.copy(ray);
+      for (const [id, cap] of caps) {
+        if (!cap.visible) continue;
+        const point = capRay.intersectObject(cap, false)[0]?.point;
+        if (!point) continue;
+        const next: Pick = { instance: byId[id]!, point: point.toArray() };
+        if (!kept(next)) continue;
+        const rank = paints[id]!.tier === "context" ? 0 : 1;
+        const prior = hit ? (paintOf(hit.instance, paintBy).tier === "context" ? 0 : 1) : -1;
+        if (
+          rank > prior ||
+          (rank === prior &&
+            point.distanceToSquared(ray.origin) <
+              new THREE.Vector3(...hit!.point).distanceToSquared(ray.origin))
+        )
+          hit = next;
+      }
+      return hit;
     },
     pickIssue(at: { clientX: number; clientY: number }): IssueTarget | null {
       const rect = canvas.getBoundingClientRect();
@@ -1037,6 +1149,7 @@ export function createRenderer(
         next.camera.panMargin !== look.camera.panMargin;
       look = next;
       applyLook();
+      rebuildCaps();
       if (changedBounds) returnInside();
     },
     /** Purely visual: no capture or distance-field bake when a context layer changes. */
@@ -1063,14 +1176,29 @@ export function createRenderer(
         returnInside();
       }
       byId.forEach((_, id) => tint(id, marked.get(id) ?? null));
+      caps.forEach((cap, id) => cap.layers.set(paints[id]!.tier === "context" ? CONTEXT_LAYER : 0));
       paintNow(...painted);
       thumbsStale = true;
       render();
     },
     setClip(volume: ClipVolume | null | undefined) {
-      uniforms.clipPolygon.value = volume?.data ?? new Float32Array(3 * CLIP_POINTS * 2);
+      clipVolume = volume;
+      uniforms.clipPolygon.value = volume?.data.length
+        ? volume.data
+        : new Float32Array(3 * CLIP_POINTS * 2);
       uniforms.clipCount.value = volume?.counts ?? [0, 0, 0];
       uniforms.clipKeep.value = (volume?.keepInside ?? [true, true, true]).map(Number);
+      const planes = sectionPlanes(volume?.section ?? null);
+      uniforms.sectionCount.value = planes.length;
+      const packed = new Float32Array(24);
+      planes.forEach((p, i) =>
+        packed.set(
+          [p[0]!, p[1]!, p[2]!, p[3]! + p[0]! * origin.x + p[1]! * origin.y + p[2]! * origin.z],
+          i * 4,
+        ),
+      );
+      uniforms.sectionPlane.value = packed;
+      rebuildCaps();
       thumbsStale = true;
       render();
     },

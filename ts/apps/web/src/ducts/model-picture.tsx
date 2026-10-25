@@ -14,6 +14,11 @@ import {
 } from "react";
 
 import type { PageMove } from "#/route/manifest";
+import type { SceneView } from "@pe/agent-contracts";
+import { LOOK } from "#/scene/grounds";
+import { subscribe as knobsChanged } from "#/knobs/knobs";
+import { fitSection, sectionVolume, type Section } from "#/scene/section";
+import { SectionControls, SectionHandles } from "#/scene/section-controls";
 import { boundsOfInstances, boundsOfPoints, frame, type OrbitViewport } from "#/scene/orbit";
 import type { PictureBounds } from "#/scene/framing";
 import { useStage } from "#/scene/stage-controller";
@@ -89,6 +94,7 @@ export function ModelPicture({
   lit,
   paintOf,
   contextMode,
+  sceneView,
   hovered,
   labels,
   rulings,
@@ -115,6 +121,7 @@ export function ModelPicture({
   lit: ReadonlySet<number>;
   paintOf?: PaintOf;
   contextMode?: "halo" | "all";
+  sceneView: SceneView;
   hovered: number | null;
   labels: readonly Label[];
   rulings: readonly Ruling[];
@@ -131,6 +138,33 @@ export function ModelPicture({
 }) {
   const stage = useStage();
   const meshes = read.meshes;
+  const sectionSubject = useMemo(
+    () =>
+      meshes
+        ? (boundsOfInstances(meshes, (i) => (paintOf ? paintOf(i)?.tier === "subject" : i.focus)) ??
+          bounds?.subject ??
+          null)
+        : (bounds?.subject ?? null),
+    [meshes, paintOf, bounds],
+  );
+  const look = useSyncExternalStore(knobsChanged, LOOK.read, LOOK.read);
+  const preset = look.layers.preset === "page" ? sceneView.preset : look.layers.preset;
+  const [sectionDraft, setSectionDraft] = useState<Section | undefined>();
+  const section = sectionDraft ?? sceneView.section;
+  const clipVolume = useMemo(() => {
+    const cut =
+      section ??
+      (look.layers.preset === "nearby-structure" && sectionSubject
+        ? fitSection(sectionSubject, look.section.paddingFt)
+        : null);
+    const volume = sectionVolume(cut);
+    return volume && { ...volume, preview: sectionDraft !== undefined };
+  }, [section, sectionSubject, look.layers.preset, look.section.paddingFt, sectionDraft]);
+  const shownView = { preset, section: clipVolume?.section ?? null };
+  const commitSection = (next: Section) => {
+    setSectionDraft(undefined);
+    setPage({ sceneView: { ...sceneView, section: next } }, { history: "replace" });
+  };
   const registry = useContext(RegistryContext);
   const pickIssue = (target: IssueTarget) => {
     setPage(
@@ -234,7 +268,9 @@ export function ModelPicture({
           selected={selectedKeys}
           lit={litKeys}
           paintOf={paintOf}
-          contextMode={contextMode}
+          contextMode={preset === "nearby-structure" ? "halo" : contextMode}
+          preset={preset}
+          clipVolume={clipVolume}
           isolated={layers.has("meshes") ? null : NONE}
           layers={findings3d}
           hoveredIssue={hoveredIssue}
@@ -256,6 +292,28 @@ export function ModelPicture({
         />
       ) : (
         readout
+      )}
+      {meshes && sectionSubject && (
+        <PaneOverlay label="section and context" place="tr">
+          <SectionControls
+            view={shownView}
+            subject={sectionSubject}
+            padding={look.section.paddingFt}
+            onChange={(next) => {
+              setSectionDraft(undefined);
+              setPage({ sceneView: next }, { history: "push" });
+            }}
+          />
+        </PaneOverlay>
+      )}
+      {meshes && sectionSubject && overlay && shownView.section && (
+        <SectionHandles
+          section={shownView.section}
+          subject={sectionSubject}
+          project={overlay.project}
+          onPreview={setSectionDraft}
+          onCommit={commitSection}
+        />
       )}
       {read.omittedElements || read.unavailableElements ? (
         <PaneOverlay label="scene completeness" place="br">

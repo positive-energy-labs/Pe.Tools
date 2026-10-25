@@ -10,6 +10,7 @@ test("clips crossing triangles at the duct cut and keeps element identity and un
     linkInstanceId: null,
     uniqueId: String(id),
     category: "duct",
+    categoryId: null,
     focus: true,
     firstVertex,
     vertexCount: 3,
