@@ -4,7 +4,7 @@ import { TestAttention } from "#/test-attention";
 import { act, fireEvent, render } from "@testing-library/react";
 import { expect, it, vi } from "vite-plus/test";
 import { SceneMeshes } from "./types";
-import type { OrbitViewport } from "./orbit";
+import { fitDistance, type OrbitViewport } from "./orbit";
 import { createLiveOrbit } from "@pe/kit/lang/live-orbit";
 import { OrbitMinimap } from "@pe/kit/lang/minimap";
 import { Scene3D } from "./scene3d";
@@ -43,6 +43,8 @@ it("keeps camera gestures local and meshes mounted across native re-reads", () =
     viewport: () => pose,
     gestureSize: () => [600, 2],
     setViewport,
+    limitViewport: (v: OrbitViewport) => v,
+    recoverViewport: vi.fn(),
     ...Object.fromEntries(
       "setOrbitPivot setOnFrame reportFrame setPlane setThumbs paint setLayers lightIssue reach hoverElement setClip setLook setPaint setContextMode"
         .split(" ")
@@ -71,11 +73,11 @@ it("keeps camera gestures local and meshes mounted across native re-reads", () =
   const onViewport = vi.fn();
   const onPick = vi.fn();
   const orbit = createLiveOrbit(initial, onViewport);
-  const draw = (pivot?: readonly number[], contextMode?: "halo" | "all") => (
+  const draw = (pivot?: readonly number[], contextMode?: "halo" | "all", shown = meshes) => (
     <>
       <Scene3D
         readout={<span>picture state</span>}
-        meshes={meshes}
+        meshes={shown}
         orbit={orbit}
         onPick={onPick}
         orbitPivot={pivot}
@@ -195,6 +197,22 @@ it("keeps camera gestures local and meshes mounted across native re-reads", () =
     moves.dispatchEvent(new Event("end"));
   });
   expect(onViewport).toHaveBeenCalledExactlyOnceWith(pose, "gesture");
+  const beforeCapture = orbit.read()!;
+  const biggerCapture = new SceneMeshes(
+    meshes.positions,
+    { minX: -100, minY: -100, minZ: -100, maxX: 100, maxY: 100, maxZ: 100 },
+    meshes.instances,
+  );
+  view.rerender(
+    <TestAttention registry={registry}>{draw(undefined, "all", biggerCapture)}</TestAttention>,
+  );
+  expect(renderer.current.recoverViewport).toHaveBeenLastCalledWith(
+    {
+      ...beforeCapture,
+      zoom: (beforeCapture.zoom * fitDistance(biggerCapture.bounds)) / fitDistance(meshes.bounds),
+    },
+    null,
+  );
   view.unmount();
   type PictureProps = { capture: SceneRead; document?: string };
   function Picture({ capture, document = "native/doc" }: PictureProps) {

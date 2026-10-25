@@ -9,9 +9,24 @@ import {
   planeCentre,
   toFrame,
   zoomPlane,
+  boundPlane,
 } from "./plane";
+import { cameraBounds } from "./orbit";
 
 const bounds = { minX: -2, minY: -2, minZ: -100, maxX: 8, maxY: 9, maxZ: 100 };
+
+it("clamps an axis camera's extent and centre after zooming, panning or restoring", () => {
+  const size = { width: 800, height: 500 };
+  const limits = cameraBounds(bounds, 2, 0.25);
+  for (const axis of PLANE_AXES) {
+    const v = boundPlane(axis, { kind: "plane", scale: 0.0001, tx: -1e6, ty: 1e6 }, size, limits);
+    expect(Math.max(size.width, size.height) / v.scale).toBeCloseTo(limits.reach, 8);
+    const [u, w] = planeCentre(v, size);
+    const rect = frameRect(axis, limits.pan);
+    expect(u).toBeCloseTo(rect.u1, 8);
+    expect(w).toBeCloseTo(rect.v1, 8);
+  }
+});
 
 describe("axis planes", () => {
   it("maps each axis frame right-handed and back, and frames the scene bounds per axis", () => {

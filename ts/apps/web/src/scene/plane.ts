@@ -11,6 +11,7 @@ import type { PlaneViewport } from "@pe/agent-contracts";
 
 import type { Bounds2, Viewport2 } from "#/lib/affine-frame";
 import type { Bounds } from "./types";
+import type { CameraBounds } from "./orbit";
 
 export type { PlaneViewport };
 export type PlaneAxis = "top" | "north" | "east";
@@ -93,6 +94,22 @@ export const planeCentre = (v: PlaneViewport, size: Viewport2): [number, number]
   (size.width / 2 - v.tx) / v.scale,
   (v.ty - size.height / 2) / v.scale,
 ];
+
+/** Axis views obey the same subject extent and pan box as the parallel orbit. */
+export function boundPlane(
+  axis: PlaneAxis,
+  v: PlaneViewport,
+  size: Viewport2,
+  limits: CameraBounds | null,
+): PlaneViewport {
+  if (!limits) return v;
+  const rect = frameRect(axis, limits.pan);
+  const [u, w] = planeCentre(v, size);
+  const scale = Math.max(v.scale, Math.max(size.width, size.height) / limits.reach);
+  const tx = size.width / 2 - Math.max(rect.u0, Math.min(rect.u1, u)) * scale;
+  const ty = size.height / 2 + Math.max(rect.v0, Math.min(rect.v1, w)) * scale;
+  return scale === v.scale && tx === v.tx && ty === v.ty ? v : { ...v, scale, tx, ty };
+}
 
 /** Zoom by `k` about canvas px (x, y), which stays over the same frame point. */
 export const zoomPlane = (v: PlaneViewport, k: number, x: number, y: number): PlaneViewport => ({

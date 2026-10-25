@@ -10,10 +10,107 @@ import {
   fromControls,
   rotateAbout,
   toCamera,
+  cameraBounds,
+  boundOrbit,
+  boundsIncludingView,
+  mixCameraBounds,
+  HALF_FOV_TAN,
+  boundsOfInstances,
   type OrbitViewport,
 } from "./orbit";
+import { SceneMeshes } from "./types";
+import { paintOf } from "./grounds";
 
 const bounds = { minX: 100, minY: 200, minZ: 0, maxX: 140, maxY: 230, maxZ: 12 };
+
+describe("subject camera bounds", () => {
+  const subject = { minX: -10, maxX: 10, minY: -2, maxY: 2, minZ: 0, maxZ: 2 };
+  const scene = { minX: -1000, maxX: 1000, minY: -1000, maxY: 1000, minZ: -100, maxZ: 100 };
+  const limits = cameraBounds(subject, 2, 0.25);
+  const view: OrbitViewport = { kind: "orbit", yaw: 25, elev: 30, zoom: 0.01, pivot: [7, 3, 1] };
+
+  it("clamps perspective distance from the subject centre, including an offset orbit target", () => {
+    const v = boundOrbit(view, scene, limits);
+    const eye = new Vector3(...toCamera(v, scene).position);
+    expect(eye.distanceTo(new Vector3(...limits.center))).toBeCloseTo(limits.reach, 8);
+    expect(v.pivot).toEqual(view.pivot);
+    expect([v.yaw, v.elev]).toEqual([view.yaw, view.elev]);
+    expect(boundOrbit({ ...v, zoom: v.zoom * 2 }, scene, limits).zoom).toBe(v.zoom * 2);
+  });
+
+  it("clamps the parallel picture's longest full extent in landscape and portrait", () => {
+    for (const aspect of [0.4, 2.5]) {
+      const v = boundOrbit({ ...view, projection: "parallel" }, scene, limits, aspect);
+      const extent = (2 * fitDistance(scene) * HALF_FOV_TAN * Math.max(1, aspect)) / v.zoom;
+      expect(extent).toBeCloseTo(limits.reach, 8);
+      // Enlarging only the captured context cannot enlarge the allowed world extent.
+      const small = boundOrbit({ ...view, projection: "parallel" }, subject, limits, aspect);
+      expect(
+        (2 * fitDistance(subject) * HALF_FOV_TAN * Math.max(1, aspect)) / small.zoom,
+      ).toBeCloseTo(extent, 8);
+    }
+  });
+
+  it("clamps panning to the subject plus the margin, including very large attempted pans", () => {
+    const v = boundOrbit(
+      { ...view, projection: "parallel", pivot: [-1e6, 1e6, 1e6] },
+      scene,
+      limits,
+    );
+    expect(v.pivot).toEqual([limits.pan.minX, limits.pan.maxY, limits.pan.maxZ]);
+    const perspective = boundOrbit(
+      { ...view, pivot: [1e6, -1e6, 1e6] },
+      scene,
+      cameraBounds(subject, 1, 1),
+    );
+    expect(
+      new Vector3(...toCamera(perspective, scene).position).distanceTo(
+        new Vector3(...limits.center),
+      ),
+    ).toBeLessThanOrEqual(limits.reach / 2 + 1e-7);
+  });
+
+  it("returns from an old view continuously when a smaller subject takes over", () => {
+    const from = boundsIncludingView(limits, view, scene, 1);
+    expect(boundOrbit(view, scene, from).zoom).toBeCloseTo(view.zoom, 12);
+    const middle = boundOrbit(view, scene, mixCameraBounds(from, limits, 0.5));
+    const end = boundOrbit(view, scene, limits);
+    expect(middle.zoom).toBeGreaterThan(view.zoom);
+    expect(middle.zoom).toBeLessThan(end.zoom);
+    expect(mixCameraBounds(from, limits, 1)).toEqual(limits);
+  });
+
+  it("measures focus without paintOf, and includes painted stubs while excluding huge context", () => {
+    const base = {
+      revitId: 1,
+      uniqueId: "fixture",
+      documentKey: "fixture",
+      linkInstanceId: null,
+      category: "Ducts",
+      vertexCount: 3,
+    };
+    const meshes = new SceneMeshes(
+      new Float32Array([
+        0, 0, 0, 2, 0, 0, 0, 2, 0, 10, 0, 0, 12, 0, 0, 10, 2, 0, -1000, -1000, 0, 1000, 0, 0, 0,
+        1000, 0,
+      ]),
+      scene,
+      [
+        { ...base, key: "subject", focus: true, firstVertex: 0 },
+        { ...base, key: "stub", focus: false, firstVertex: 3 },
+        { ...base, key: "context", focus: false, firstVertex: 6 },
+      ],
+    );
+    expect(boundsOfInstances(meshes, (i) => paintOf(i).tier !== "context")?.maxX).toBe(2);
+    const viewed = boundsOfInstances(
+      meshes,
+      (i) =>
+        paintOf(i, (i) => ({ tier: i.key === "stub" ? "stub" : i.focus ? "subject" : "context" }))
+          .tier !== "context",
+    );
+    expect(viewed).toEqual({ minX: 0, minY: 0, minZ: 0, maxX: 12, maxY: 2, maxZ: 0 });
+  });
+});
 it("a system fit contains every corner in portrait and landscape navigation panes", () => {
   for (const size of [
     { width: 280, height: 845 },

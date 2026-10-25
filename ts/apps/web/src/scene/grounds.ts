@@ -44,6 +44,11 @@ export const LOOK = defineKnobs("scene", "ts/apps/web/src/scene/grounds.ts", {
     translucentOpacity: num("Translucent duct opacity", 0.45, [0.05, 0.99, 0.01]),
     rim: num("Duct rim contrast", 0.18, [0, 0.8, 0.01]),
   },
+  camera: {
+    zoomOutFactor: num("Zoom-out × subject diagonal", 2, [1, 5, 0.1]),
+    panMargin: num("Pan margin × subject diagonal", 0.25, [0, 1, 0.05]),
+    returnMs: num("Camera return (ms)", 380, [100, 1000, 10]),
+  },
   palette: Object.fromEntries(
     SYSTEM_PALETTE.map((role, i) => [`s${i + 1}`, colour(`System ink ${i + 1}`, role)]),
   ),

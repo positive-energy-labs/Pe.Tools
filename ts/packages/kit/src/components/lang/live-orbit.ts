@@ -46,11 +46,15 @@ export function createLiveOrbit(
     commit(pose, how);
   };
   let gesture: OrbitGesture | null = null;
+  let constraint: ((pose: OrbitViewport) => OrbitViewport) | null = null;
+  const constrained = (pose: OrbitViewport | null) => pose && (constraint?.(pose) ?? pose);
   const listeners = new Set<() => void>();
   const update = (next: OrbitViewport | null) => {
-    if (equal(value, next)) return;
+    next = constrained(next);
+    if (equal(value, next)) return false;
     value = next;
     listeners.forEach((notify) => notify());
+    return true;
   };
   return {
     read: () => value,
@@ -62,7 +66,17 @@ export function createLiveOrbit(
       };
     },
     /** Wake subscribers without a new pose: a flight has ended, so held views read the live one. */
-    notify: () => listeners.forEach((notify) => notify()),
+    notify: () => {
+      if (!update(value)) listeners.forEach((notify) => notify());
+    },
+    /** The mounted picture owns camera policy; every gesture, flight and Page restore shares it. */
+    constrain(limit: (pose: OrbitViewport) => OrbitViewport) {
+      constraint = limit;
+      update(value);
+      return () => {
+        if (constraint === limit) constraint = null;
+      };
+    },
     begin: (height = 600, span = 2 / (value?.zoom ?? 1)): OrbitGesture | null =>
       (gesture = value ? { from: value, height: Math.max(height, 1), span } : null),
     owns: (token: OrbitGesture | null) => token !== null && gesture === token,
@@ -92,12 +106,14 @@ export function createLiveOrbit(
       update(token.from);
     },
     move(next: OrbitViewport, how: Move = "move") {
+      next = constrained(next)!;
       gesture = null;
       update(next);
       publish(next, how);
     },
     /** An external Page pose. `fly`, when given and both poses exist, travels there instead of jumping. */
     accept(next: OrbitViewport | null, fly?: (to: OrbitViewport) => void) {
+      next = constrained(next);
       const echo = pending.findIndex((pose) => samePage(pose, next));
       if (echo >= 0) {
         pending.splice(0, echo + 1);
@@ -111,6 +127,7 @@ export function createLiveOrbit(
       update(next);
     },
     restore(next: OrbitViewport | null) {
+      next = constrained(next);
       pending = [];
       published = next;
       gesture = null;

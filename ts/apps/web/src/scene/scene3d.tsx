@@ -29,6 +29,7 @@ import {
 import type { LiveOrbit, OrbitGesture } from "@pe/kit/lang/live-orbit";
 import { subscribe as knobsChanged } from "#/knobs/knobs";
 import { LOOK } from "./grounds";
+import { fitDistance, type OrbitViewport } from "./orbit";
 import { isClick, pickAt } from "./picking";
 import { samePlane, type PlaneAxis, type PlaneViewport } from "./plane";
 import type { Project, Ray, Size } from "./projection";
@@ -144,6 +145,12 @@ export function Scene3D(props: Scene3DProps): ReactNode {
   const latest = useRef({ ...props, observation, onHover });
   latest.current = { ...props, observation, onHover };
   const core = useRef<SceneRenderer | null>(null);
+  const previousView = useRef<{
+    orbit: LiveOrbit;
+    meshes: SceneMeshes;
+    viewport: OrbitViewport;
+    plane: PlaneViewport | null;
+  } | null>(null);
   const publishedPlane = useRef<PlaneViewport | null>(null);
   const gesturing = useRef(false);
   const [failed, setFailed] = useState<{ meshes: SceneMeshes; message: string } | null>(null);
@@ -166,6 +173,39 @@ export function Scene3D(props: Scene3DProps): ReactNode {
     const { canvas, moves } = r;
     const wheelHost = props.wheelHost ?? host.current!;
     const orbit = props.orbit;
+    const previous = previousView.current;
+    previousView.current = null;
+    const incoming = orbit.read();
+    if (
+      previous?.orbit === orbit &&
+      incoming &&
+      viewportCodec.encode(incoming) === viewportCodec.encode(previous.viewport)
+    ) {
+      // Zoom is relative to capture bounds. Preserve world framing when context or subject meshes change.
+      const kept = {
+        ...incoming,
+        zoom: (incoming.zoom * fitDistance(meshes.bounds)) / fitDistance(previous.meshes.bounds),
+      };
+      r.recoverViewport(
+        kept,
+        props.plane && previous.plane && samePlane(props.plane.viewport, previous.plane)
+          ? props.plane
+          : null,
+      );
+      orbit.restore(kept);
+    }
+    const unconstrain = orbit.constrain(r.limitViewport);
+    const boundsChanged = ({ settled }: { settled: boolean }) => {
+      orbit.notify();
+      const pose = orbit.read();
+      if (!settled) return;
+      const p = r.plane();
+      if (p) {
+        publishedPlane.current = p;
+        latest.current.onPlane?.(p, "gesture");
+      } else if (pose) orbit.move(pose, "gesture");
+    };
+    moves.addEventListener("bounds", boundsChanged);
     let token: OrbitGesture | null = null;
     let applying = false;
     const follow = () => {
@@ -327,8 +367,11 @@ export function Scene3D(props: Scene3DProps): ReactNode {
       canvas.removeEventListener("contextmenu", contextMenu);
       canvas.removeEventListener("dblclick", doubleClick);
       unfollow();
+      moves.removeEventListener("bounds", boundsChanged);
       if (over) latest.current.onHover(null);
       orbit.cancel(token);
+      previousView.current = { orbit, meshes, viewport: r.viewport(), plane: r.plane() };
+      unconstrain();
       moves.removeEventListener("start", start);
       moves.removeEventListener("change", change);
       moves.removeEventListener("end", end);

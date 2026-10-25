@@ -41,6 +41,118 @@ export const center = (b: Bounds): Vec3 => [
   (b.minZ + b.maxZ) / 2,
 ];
 
+export type CameraBounds = {
+  center: Vec3;
+  /** Perspective eye-to-subject-centre radius, or the parallel picture's longest full extent. */
+  reach: number;
+  pan: Bounds;
+};
+
+/** A subject's diagonal and box centre do not change when captured context gets larger. */
+export function cameraBounds(
+  subject: Bounds,
+  zoomOutFactor: number,
+  panMargin: number,
+): CameraBounds {
+  const size = Math.max(
+    Math.hypot(
+      subject.maxX - subject.minX,
+      subject.maxY - subject.minY,
+      subject.maxZ - subject.minZ,
+    ),
+    1e-3,
+  );
+  const margin = size * Math.max(0, panMargin);
+  return {
+    center: center(subject),
+    reach: size * Math.max(1, zoomOutFactor),
+    pan: {
+      minX: subject.minX - margin,
+      maxX: subject.maxX + margin,
+      minY: subject.minY - margin,
+      maxY: subject.maxY + margin,
+      minZ: subject.minZ - margin,
+      maxZ: subject.maxZ + margin,
+    },
+  };
+}
+
+/** Keep the bearing and clamp the orbit ray against the sphere around the subject, not the pivot. */
+export function boundOrbit(
+  v: OrbitViewport,
+  scene: Bounds,
+  limits: CameraBounds | null,
+  aspect = 1,
+): OrbitViewport {
+  if (!limits) return v;
+  const p = new Vector3(...v.pivot).clamp(
+    new Vector3(limits.pan.minX, limits.pan.minY, limits.pan.minZ),
+    new Vector3(limits.pan.maxX, limits.pan.maxY, limits.pan.maxZ),
+  );
+  const fit = fitDistance(scene);
+  let distance: number;
+  if (v.projection === "parallel") {
+    distance = limits.reach / (2 * HALF_FOV_TAN * Math.max(1, aspect));
+  } else {
+    const c = new Vector3(...limits.center);
+    const q = p.clone().sub(c);
+    // A pivot outside the eye's sphere can have no positive orbit-ray intersection.
+    const inside = limits.reach * (1 - 1e-9);
+    if (q.lengthSq() > inside * inside) p.copy(c).add(q.setLength(inside));
+    const pose = toCamera({ ...v, zoom: 1, pivot: [0, 0, 0] }, scene);
+    const direction = new Vector3(...pose.position).normalize();
+    const along = q.dot(direction);
+    distance = -along + Math.sqrt(Math.max(0, along * along + limits.reach ** 2 - q.lengthSq()));
+  }
+  const pivot = p.toArray() as Vec3;
+  const zoom = Math.max(v.zoom, fit / Math.max(distance, 1e-9));
+  return zoom === v.zoom && pivot.every((n, i) => n === v.pivot[i]) ? v : { ...v, zoom, pivot };
+}
+
+/** Start a new subject's return at the current view; shrink these limits smoothly to its own. */
+export function boundsIncludingView(
+  limits: CameraBounds,
+  v: OrbitViewport,
+  scene: Bounds,
+  aspect: number,
+): CameraBounds {
+  const pose = toCamera(v, scene);
+  const reach =
+    v.projection === "parallel"
+      ? (2 * fitDistance(scene) * HALF_FOV_TAN * Math.max(1, aspect)) / v.zoom
+      : Math.max(
+          new Vector3(...pose.position).distanceTo(new Vector3(...limits.center)),
+          new Vector3(...v.pivot).distanceTo(new Vector3(...limits.center)) / (1 - 1e-9) + 1e-6,
+        );
+  return {
+    ...limits,
+    reach: Math.max(limits.reach, reach),
+    pan: {
+      minX: Math.min(limits.pan.minX, v.pivot[0]),
+      maxX: Math.max(limits.pan.maxX, v.pivot[0]),
+      minY: Math.min(limits.pan.minY, v.pivot[1]),
+      maxY: Math.max(limits.pan.maxY, v.pivot[1]),
+      minZ: Math.min(limits.pan.minZ, v.pivot[2]),
+      maxZ: Math.max(limits.pan.maxZ, v.pivot[2]),
+    },
+  };
+}
+
+export function mixCameraBounds(from: CameraBounds, to: CameraBounds, t: number): CameraBounds {
+  if (t === 1) return to;
+  const mix = (a: number, b: number) => a + (b - a) * t;
+  return {
+    center: to.center,
+    reach: mix(from.reach, to.reach),
+    pan: Object.fromEntries(
+      Object.entries(to.pan).map(([key, value]) => [
+        key,
+        mix(from.pan[key as keyof Bounds], value),
+      ]),
+    ) as Bounds,
+  };
+}
+
 /** Fit the bounds' sphere inside the smaller field of view, including portrait panes. */
 export function fitDistance(b: Bounds, aspect = 1) {
   const radius = Math.max(Math.hypot(b.maxX - b.minX, b.maxY - b.minY, b.maxZ - b.minZ) / 2, 0.5);

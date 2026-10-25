@@ -4,6 +4,30 @@ import { viewportCodec } from "@pe/agent-contracts";
 import type { OrbitViewport } from "@pe/agent-contracts";
 
 const initial: OrbitViewport = { kind: "orbit", yaw: 0, elev: 30, zoom: 1, pivot: [0, 0, 0] };
+test("a mounted picture constrains every writer and publishes the bounded pose", () => {
+  const commit = vi.fn();
+  const orbit = createLiveOrbit(initial, commit);
+  let minimum = 2;
+  const release = orbit.constrain((v) => ({ ...v, zoom: Math.max(minimum, v.zoom) }));
+  expect(orbit.read()?.zoom).toBe(2);
+  const token = orbit.begin();
+  orbit.preview(token, { ...initial, zoom: 0.01 });
+  orbit.end(token, "move");
+  expect(orbit.read()?.zoom).toBe(2);
+  orbit.move({ ...initial, yaw: 10 });
+  expect(commit.mock.lastCall?.[0].zoom).toBe(2);
+  orbit.restore(initial);
+  expect(orbit.read()?.zoom).toBe(2);
+  const fly = vi.fn();
+  orbit.accept({ ...initial, yaw: 20 }, fly);
+  expect(fly.mock.lastCall?.[0].zoom).toBe(2);
+  minimum = 3;
+  orbit.notify();
+  expect(orbit.read()?.zoom).toBe(3);
+  release();
+  orbit.move(initial);
+  expect(orbit.read()?.zoom).toBe(1);
+});
 test("a click nudge publishes nothing; a released drag beyond three pixels publishes once", () => {
   const commit = vi.fn();
   const orbit = createLiveOrbit(initial, commit);

@@ -38,8 +38,29 @@ import {
 } from "./gestures";
 import { createMeshPicker } from "./picking";
 import { createOrbitControls } from "./orbit-controls";
-import { center, fromControls, rotateAbout, toCamera, type OrbitViewport } from "./orbit";
-import { fitPlane, frameRect, fromFrame, type PlaneAxis, type PlaneViewport } from "./plane";
+import {
+  center,
+  fromControls,
+  rotateAbout,
+  boundsOfInstances,
+  cameraBounds,
+  boundOrbit,
+  boundsIncludingView,
+  mixCameraBounds,
+  fitDistance,
+  HALF_FOV_TAN,
+  type CameraBounds,
+  type OrbitViewport,
+} from "./orbit";
+import {
+  fitPlane,
+  frameRect,
+  fromFrame,
+  boundPlane,
+  planeCentre,
+  type PlaneAxis,
+  type PlaneViewport,
+} from "./plane";
 import {
   newCamera,
   placeCamera,
@@ -189,7 +210,9 @@ export function createRenderer(
   canvas.addEventListener("pointerdown", turnStart, true);
   controls.addEventListener("end", turnEnd);
   controls.addEventListener("change", () => {
+    if (constraining) return;
     if (rotating && orbitPivot) rotateAbout(camera, controls.target, orbitPivot, beforeTurn);
+    enforceCamera();
     beforeTurn.copy(camera.quaternion);
   });
   // OrbitControls cancels every contextmenu, which would starve the app's element menu (it skips a
@@ -199,12 +222,80 @@ export function createRenderer(
     (controls as unknown as { _onContextMenu: EventListener })._onContextMenu,
   );
   /** Every camera gesture, orbit or plane, as OrbitControls names them: start, change, end. */
-  const moves = new THREE.EventDispatcher<Record<"start" | "change" | "end", object>>();
+  const moves = new THREE.EventDispatcher<
+    Record<"start" | "change" | "end", object> & { bounds: { settled: boolean } }
+  >();
   for (const type of ["start", "change", "end"] as const)
     controls.addEventListener(type, () => moves.dispatchEvent({ type }));
   const ortho = new THREE.OrthographicCamera(-1, 1, 1, -1, 0.01, 1);
   let plane: { axis: PlaneAxis; viewport: PlaneViewport } | null = null;
   const active = (): THREE.Camera => (plane ? ortho : camera);
+  let subjectBounds = boundsOfInstances(meshes, (i) => paintOf(i, initialPaint).tier !== "context");
+  let limits = subjectBounds
+    ? cameraBounds(subjectBounds, look.camera.zoomOutFactor, look.camera.panMargin)
+    : null;
+  let returning: { from: CameraBounds; to: CameraBounds; started: number } | null = null;
+  let constraining = false;
+  const aspect = () => Math.max(mount.clientWidth, 1) / Math.max(mount.clientHeight, 1);
+  const limitViewport = (v: OrbitViewport) => boundOrbit(v, bounds, limits, aspect());
+  const placeViewport = (v: OrbitViewport) => {
+    constraining = true;
+    if ((v.projection === "parallel") !== camera instanceof THREE.OrthographicCamera) {
+      camera = newCamera(aspect(), v.projection);
+      controls.object = camera;
+    }
+    placeCamera(camera, v, bounds, aspect());
+    controls.target.fromArray(v.pivot);
+    controls.update();
+    constraining = false;
+  };
+  function enforceCamera() {
+    if (constraining) return;
+    const now = fromControls(controls, bounds);
+    const next = limitViewport(now);
+    if (
+      Math.abs(Math.log(next.zoom / now.zoom)) < 1e-10 &&
+      next.pivot.every((n, i) => Math.abs(n - now.pivot[i]!) < 1e-8)
+    )
+      return;
+    placeViewport(next);
+  }
+  const returnInside = (v = fromControls(controls, bounds)) => {
+    if (!subjectBounds) return;
+    const to = cameraBounds(subjectBounds, look.camera.zoomOutFactor, look.camera.panMargin);
+    const at = { width: Math.max(mount.clientWidth, 1), height: Math.max(mount.clientHeight, 1) };
+    const planeOutside = plane && boundPlane(plane.axis, plane.viewport, at, to) !== plane.viewport;
+    if (boundOrbit(v, bounds, to, aspect()) === v && !planeOutside) {
+      limits = to;
+      returning = null;
+      return;
+    }
+    let from = boundsIncludingView(to, v, bounds, aspect());
+    if (plane) {
+      const [u, w] = planeCentre(plane.viewport, at);
+      const rect = frameRect(plane.axis, subjectBounds);
+      from = boundsIncludingView(
+        from,
+        {
+          ...v,
+          projection: "parallel",
+          zoom:
+            (2 *
+              fitDistance(bounds) *
+              HALF_FOV_TAN *
+              Math.max(1, aspect()) *
+              plane.viewport.scale) /
+            Math.max(at.width, at.height),
+          pivot: fromFrame(plane.axis, u, w, (rect.w0 + rect.w1) / 2),
+        },
+        bounds,
+        aspect(),
+      );
+    }
+    limits = from;
+    returning = { from, to, started: performance.now() };
+    render();
+  };
 
   const uniforms = {
     clipPolygon: { value: new Float32Array(3 * CLIP_POINTS * 2) as Float32Array },
@@ -341,6 +432,7 @@ export function createRenderer(
   };
   /** The orthographic camera showing `v` over a canvas of `at`, from the frame's +w side. */
   const place = (axis: PlaneAxis, v: PlaneViewport, at: Size) => {
+    v = boundPlane(axis, v, at, limits);
     const r = frameRect(axis, bounds);
     const depth = r.w1 - r.w0 + Math.max(r.u1 - r.u0, r.v1 - r.v0) + 10;
     const u = (at.width / 2 - v.tx) / v.scale,
@@ -393,7 +485,7 @@ export function createRenderer(
         drawScene(camera);
         resizeCamera(camera, size.width / size.height);
       } else {
-        place(axis, fitPlane(axis, bounds, at), at);
+        place(axis, fitPlane(axis, subjectBounds ?? bounds, at), at);
         drawScene(ortho);
       }
       // The drawing buffer is still this frame's: copy its bottom-left corner out before compositing.
@@ -421,6 +513,19 @@ export function createRenderer(
       if (mount.closest("[data-pane-resizing]")) return render();
       if (sizePending) measure();
       const started = performance.now();
+      let boundsSettled: boolean | null = null;
+      if (returning) {
+        const t = Math.min(1, (started - returning.started) / look.camera.returnMs);
+        limits = mixCameraBounds(returning.from, returning.to, 1 - (1 - t) ** 3);
+        if (t === 1) returning = null;
+        boundsSettled = t === 1;
+      }
+      enforceCamera();
+      if (plane) {
+        plane.viewport = boundPlane(plane.axis, plane.viewport, size, limits);
+        place(plane.axis, plane.viewport, size);
+      }
+      if (boundsSettled !== null) moves.dispatchEvent({ type: "bounds", settled: boundsSettled });
       if (measuring) {
         renderer.info.autoReset = false;
         renderer.info.reset();
@@ -450,7 +555,7 @@ export function createRenderer(
       if (outlined.children.length) outline.render(scene, active());
       if (measuring) fence(started);
       tell();
-      if (animate) render();
+      if (animate || returning) render();
     });
   };
   const fence = (started: number) => {
@@ -506,11 +611,16 @@ export function createRenderer(
     const v = plane.viewport;
     plane = {
       ...plane,
-      viewport: {
-        ...v,
-        tx: v.tx + event.clientX - panning.x,
-        ty: v.ty + event.clientY - panning.y,
-      },
+      viewport: boundPlane(
+        plane.axis,
+        {
+          ...v,
+          tx: v.tx + event.clientX - panning.x,
+          ty: v.ty + event.clientY - panning.y,
+        },
+        size,
+        limits,
+      ),
     };
     panning = { ...panning, x: event.clientX, y: event.clientY };
     place(plane.axis, plane.viewport, size);
@@ -527,12 +637,17 @@ export function createRenderer(
     const rect = canvas.getBoundingClientRect();
     plane = {
       ...plane,
-      viewport: wheelPlane(
-        plane.viewport,
-        reading(event),
-        event,
-        event.clientX - rect.left,
-        event.clientY - rect.top,
+      viewport: boundPlane(
+        plane.axis,
+        wheelPlane(
+          plane.viewport,
+          reading(event),
+          event,
+          event.clientX - rect.left,
+          event.clientY - rect.top,
+        ),
+        size,
+        limits,
       ),
     };
     place(plane.axis, plane.viewport, size);
@@ -837,15 +952,20 @@ export function createRenderer(
       orbitPivot = pivot;
     },
     setViewport(v: OrbitViewport) {
-      if ((v.projection === "parallel") !== camera instanceof THREE.OrthographicCamera) {
-        camera = newCamera(size.width / size.height, v.projection);
-        controls.object = camera;
-      }
-      placeCamera(camera, v, bounds, size.width / size.height);
-      const pose = toCamera(v, bounds);
-      controls.target.fromArray(pose.target);
-      controls.update();
+      placeViewport(limitViewport(v));
       if (plane) thumbsStale = true;
+      render();
+    },
+    limitViewport,
+    /** Preserve an existing picture across mesh replacement, then ease into the new subject. */
+    recoverViewport(
+      v: OrbitViewport,
+      priorPlane: { axis: PlaneAxis; viewport: PlaneViewport } | null = null,
+    ) {
+      plane = priorPlane;
+      controls.enabled = !plane;
+      returnInside(v);
+      placeViewport(limitViewport(v));
       render();
     },
     /** The plane picture's pose, or null while the orbit is shown. */
@@ -853,7 +973,9 @@ export function createRenderer(
     /** Show an axis orthographically (orbit controls off), or null for the orbit. */
     setPlane(next: { axis: PlaneAxis; viewport: PlaneViewport } | null) {
       if (next?.axis !== plane?.axis) thumbsStale = true;
-      plane = next;
+      plane = next
+        ? { ...next, viewport: boundPlane(next.axis, next.viewport, size, limits) }
+        : null;
       controls.enabled = !plane;
       if (plane) place(plane.axis, plane.viewport, size);
       render();
@@ -889,8 +1011,12 @@ export function createRenderer(
     /** Re-apply a changed look (the dev knobs) without rebuilding the scene. */
     setLook(next: Look) {
       if (next === look) return;
+      const changedBounds =
+        next.camera.zoomOutFactor !== look.camera.zoomOutFactor ||
+        next.camera.panMargin !== look.camera.panMargin;
       look = next;
       applyLook();
+      if (changedBounds) returnInside();
     },
     /** Purely visual: no capture or distance-field bake when a context layer changes. */
     setContextMode(mode: ContextMode = "all") {
@@ -908,7 +1034,13 @@ export function createRenderer(
         changedSubject ||= (paint.tier === "context") !== (paints[id]!.tier === "context");
         paints[id] = paint;
       });
-      if (changedSubject) bake();
+      if (changedSubject) {
+        bake();
+        // An empty subject retains the last meaningful bound; context never supplies one.
+        subjectBounds =
+          boundsOfInstances(meshes, (i) => paintOf(i, paintBy).tier !== "context") ?? subjectBounds;
+        returnInside();
+      }
       byId.forEach((_, id) => tint(id, marked.get(id) ?? null));
       thumbsStale = true;
       render();
