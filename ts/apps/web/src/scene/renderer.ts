@@ -20,7 +20,6 @@ import {
 } from "./grounds";
 import {
   bakeVeil,
-  CONTEXT_ALPHA,
   falloff,
   setVeilField,
   setVeilLook,
@@ -77,6 +76,7 @@ import {
   type Size,
 } from "./projection";
 import { setDamageHue } from "./damage";
+import { shellEdges, shellLines, surfaceAlpha } from "./surfaces";
 import type {
   IssueState,
   IssueTarget,
@@ -107,6 +107,7 @@ export type ClipVolume = {
 export type ContextMode = "halo" | "all";
 /** Context alone in the first pass; the normal camera layers draw ducts and annotations after it. */
 const CONTEXT_LAYER = 5;
+const SHELL_LAYER = 6;
 /** Points per axis polygon the shader reads; `space/state.ts` packs its cuts against it. */
 export const CLIP_POINTS = 64;
 
@@ -363,7 +364,11 @@ export function createRenderer(
   batch.position.copy(origin);
   batch.layers.enable(OCCLUDER_LAYER);
   batch.layers.enable(CONTEXT_LAYER);
-  for (const light of [hemisphere, sun]) light.layers.enable(CONTEXT_LAYER);
+  batch.layers.enable(SHELL_LAYER);
+  for (const light of [hemisphere, sun]) {
+    light.layers.enable(CONTEXT_LAYER);
+    light.layers.enable(SHELL_LAYER);
+  }
   scene.add(batch);
   const glow = createGlow(renderer, material);
   /** What a look change re-applies besides instance tints: ground, lights, fog, veil, passes. */
@@ -395,28 +400,22 @@ export function createRenderer(
     // Highlighting changes ink only. Promoting a floor to subject made it fully opaque.
     const { tier } = paint;
     const color = (
-      paint.ink
-        ? new THREE.Color(paint.ink)
-        : tier === "context"
-          ? grounds.context
-          : look.subject.bySystem && paint.key !== undefined
-            ? grounds.palette[keySlot(paint.key, grounds.palette.length)]!
-            : grounds.subject
+      paint.surface === "shell"
+        ? grounds.shell
+        : paint.ink
+          ? new THREE.Color(paint.ink)
+          : tier === "context"
+            ? grounds.context
+            : look.subject.bySystem && paint.key !== undefined
+              ? grounds.palette[keySlot(paint.key, grounds.palette.length)]!
+              : grounds.subject
     ).clone();
     if (tier !== "context" && ground.getHSL({ h: 0, s: 0, l: 0 }).l < 0.5)
       color.offsetHSL(0, 0, look.subject.darkLift);
+    if (tier === "stub" && paint.surface !== "shell")
+      color.lerp(ground, look.subject.stubGroundMix);
     if (mark) color.lerp(ink, look.fill[mark]);
-    const alpha =
-      tier === "context"
-        ? CONTEXT_ALPHA
-        : tier === "stub"
-          ? -Math.min(
-              look.subject.stubOpacity,
-              look.depth.everythingTranslucent ? look.depth.translucentOpacity : 1,
-            )
-          : look.depth.everythingTranslucent
-            ? look.depth.translucentOpacity
-            : look.subject.opacity;
+    const alpha = surfaceAlpha(paint, look);
     batch.setColorAt(id, new THREE.Vector4(color.r, color.g, color.b, alpha));
     const cap = caps.get(id);
     if (cap) {
@@ -538,6 +537,10 @@ export function createRenderer(
       cap.material.depthWrite = false;
     });
     renderer.render(scene, shown);
+    shown.layers.set(SHELL_LAYER);
+    veil.scenePass.value = 2;
+    renderer.autoClear = false;
+    renderer.render(scene, shown);
     shown.layers.mask = mask;
     veil.scenePass.value = 1;
     material.depthWrite = !look.depth.everythingTranslucent;
@@ -617,6 +620,12 @@ export function createRenderer(
         animate =
           layer.frame(group, {
             look,
+            contains: (point) => clipContains(clipVolume, point, origin.toArray()),
+            shown: (key) => {
+              const id = batchIdByKey.get(key);
+              return id !== undefined && batch.getVisibleAt(id);
+            },
+            ink,
             seconds,
             reducedMotion: motion.matches,
             state,
@@ -873,6 +882,34 @@ export function createRenderer(
   const outlined = new THREE.Group();
   outlined.position.copy(origin);
   scene.add(outlined);
+  const envelopes = new THREE.Group();
+  scene.add(envelopes);
+  const edgesOf = shellEdges(meshes);
+  const batchIdByKey = new Map(byId.map((instance, id) => [instance.key, id]));
+  let envelopeStamp = "";
+  const rebuildEnvelopes = () => {
+    const ids = byId.flatMap((_, id) =>
+      paints[id]!.surface === "shell" && paints[id]!.tier !== "context" && batch.getVisibleAt(id)
+        ? [id]
+        : [],
+    );
+    const stamp = JSON.stringify([ids, look.shell, grounds.shell.getHex()]);
+    if (stamp === envelopeStamp) return;
+    envelopeStamp = stamp;
+    while (envelopes.children.length) {
+      const child = envelopes.children[0]!;
+      envelopes.remove(child);
+      disposeTree(child);
+    }
+    if (!ids.length) return;
+    const positions: number[] = [];
+    for (const id of ids)
+      for (const n of edgesOf(byId[id]!, look.shell.edgeAngle)) positions.push(n);
+    const lines = shellLines(positions, grounds.shell, look);
+    applyClip(lines.material);
+    fitLines(lines);
+    envelopes.add(lines);
+  };
   const marked = new Map<number, Mark>();
   /** Revit ids of the selected elements, for marks standing on them. */
   const selectedIds = new Set<number>();
@@ -908,6 +945,7 @@ export function createRenderer(
       if (mark !== (marked.get(id) ?? null)) tint(id, mark);
     });
     marked.clear();
+    rebuildEnvelopes();
     selectedIds.clear();
     litIds.clear();
     for (const [id, mark] of next) {
@@ -1003,6 +1041,7 @@ export function createRenderer(
       cap.position.copy(origin);
       cap.visible = batch.getVisibleAt(id);
       if (paints[id]!.tier === "context") cap.layers.set(CONTEXT_LAYER);
+      else if (paints[id]!.surface === "shell") cap.layers.set(SHELL_LAYER);
       scene.add(cap);
       caps.set(id, cap);
       tint(id, marked.get(id) ?? null);
@@ -1207,7 +1246,15 @@ export function createRenderer(
         returnInside();
       }
       byId.forEach((_, id) => tint(id, marked.get(id) ?? null));
-      caps.forEach((cap, id) => cap.layers.set(paints[id]!.tier === "context" ? CONTEXT_LAYER : 0));
+      caps.forEach((cap, id) =>
+        cap.layers.set(
+          paints[id]!.tier === "context"
+            ? CONTEXT_LAYER
+            : paints[id]!.surface === "shell"
+              ? SHELL_LAYER
+              : 0,
+        ),
+      );
       paintNow(...painted);
       thumbsStale = true;
       render();

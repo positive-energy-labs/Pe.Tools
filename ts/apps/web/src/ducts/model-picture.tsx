@@ -33,6 +33,8 @@ import type { SceneRead } from "#/scene/use-scene";
 import type { Bounds, Layer3D, PaintOf, SceneMeshes } from "#/scene/types";
 
 import { CaptionBounds } from "./subject-labels";
+import { equipmentPaint, equipmentPorts } from "./paint";
+import { portLayer } from "#/scene/ports";
 import { Annotations, type Label, type Ruling } from "./annotations";
 import type { Encoding } from "./encoding";
 import type { DuctsPage } from "./manifest";
@@ -95,7 +97,7 @@ export function ModelPicture({
   encoding,
   selected,
   lit,
-  paintOf,
+  paintOf: routePaint,
   contextMode,
   sceneView,
   hovered,
@@ -141,6 +143,14 @@ export function ModelPicture({
 }) {
   const stage = useStage();
   const meshes = read.meshes;
+  const graph = useMemo(
+    () => ({
+      nodes: scene.nodes.map(({ node }) => node),
+      segments: scene.segments.map(({ segment }) => segment),
+    }),
+    [scene],
+  );
+  const paintOf = useMemo(() => equipmentPaint(graph, routePaint), [graph, routePaint]);
   const sectionSubject = useMemo(
     () =>
       meshes
@@ -151,6 +161,13 @@ export function ModelPicture({
     [meshes, paintOf, bounds],
   );
   const look = useSyncExternalStore(knobsChanged, LOOK.read, LOOK.read);
+  const pictureLayers = useMemo(
+    () =>
+      meshes
+        ? [...findings3d, portLayer(equipmentPorts(graph, meshes, paintOf), look)]
+        : findings3d,
+    [graph, meshes, paintOf, findings3d, look],
+  );
   const preset = look.layers.preset === "page" ? sceneView.preset : look.layers.preset;
   const [sectionDraft, setSectionDraft] = useState<Section | undefined>();
   const section = sectionDraft ?? sceneView.section;
@@ -294,7 +311,7 @@ export function ModelPicture({
           preset={preset}
           clipVolume={clipVolume}
           isolated={layers.has("meshes") ? null : NONE}
-          layers={findings3d}
+          layers={pictureLayers}
           hoveredIssue={hoveredIssue}
           focusedIssue={issue}
           onIssueHover={hoverIssue}

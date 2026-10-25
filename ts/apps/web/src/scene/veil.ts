@@ -25,8 +25,6 @@ export const VEIL_REACH_FT = 64;
 const MAX_CELLS = 2 ** 21;
 const MAX_AXIS = 256;
 const MIN_CELL_FT = 0.5;
-/** A context instance carries this alpha; the shader replaces it with the veil's opacity. */
-export const CONTEXT_ALPHA = 0;
 
 /** 1 at the subject (d ≤ near), 0 at and past far, a steep power curve between. */
 export function falloff(d: number, nearFt: number, farFt: number, curve: number): number {
@@ -185,6 +183,8 @@ export function bakeVeil(meshes: SceneMeshes, isSubject: (index: number) => bool
 }
 
 export type VeilLook = {
+  interior?: number;
+  silhouettePower?: number;
   nearFt: number;
   farFt: number;
   curve: number;
@@ -224,6 +224,8 @@ export function veilUniforms() {
     veilGround: { value: new THREE.Color() },
     veilHalo: { value: false },
     veilBrightness: { value: 0 },
+    veilInterior: { value: 1 },
+    veilSilhouettePower: { value: 3 },
     scenePass: { value: 1 },
     subjectRim: { value: 0 },
     stubFadeFt: { value: 10 },
@@ -254,6 +256,8 @@ export function setVeilLook(u: VeilUniforms, look: VeilLook, ground: THREE.Color
   u.veilDesaturate.value = look.desaturate;
   u.veilFog.value = look.fog;
   u.veilBrightness.value = look.brightness;
+  u.veilInterior.value = look.interior ?? 1;
+  u.veilSilhouettePower.value = look.silhouettePower ?? 3;
   ground.getRGB(u.veilGround.value as unknown as THREE.RGB, THREE.SRGBColorSpace);
 }
 
@@ -266,6 +270,7 @@ uniform float veilMinOpacity, veilMaxOpacity, veilDesaturate, veilFog;
 uniform vec3 veilGround;
 uniform bool veilHalo;
 uniform float veilBrightness;
+uniform float veilInterior, veilSilhouettePower;
 #ifdef VEIL_TIER
 uniform int scenePass;
 uniform float subjectRim;
@@ -279,10 +284,14 @@ void veil(inout vec4 c) {
   float t = pow(1.0 - clamp((d - veilNear) / max(veilFar - veilNear, 1e-3), 0.0, 1.0), veilCurve);
 #ifdef VEIL_TIER
   bool context = c.a == 0.0;
-  if (context != (scenePass == 0)) discard;
+  bool shell = c.a > 1.0;
+  if ((context && scenePass != 0) || (shell && scenePass != 2) || (!context && !shell && scenePass != 1)) discard;
+  float facing = abs(dot(normalize(sceneNormal), normalize(sceneView)));
+  if (shell) c.a -= 1.0;
   if (context) {
     if (veilHalo && d >= veilFar) discard;
     c.a = veilHalo ? veilMaxOpacity * t : mix(veilMinOpacity, veilMaxOpacity, t);
+    c.a *= mix(veilInterior, 1.0, pow(1.0 - facing, veilSilhouettePower));
     c.rgb = mix(c.rgb, vec3(dot(c.rgb, vec3(0.2126, 0.7152, 0.0722))), veilDesaturate * (1.0 - t));
     c.rgb *= 1.0 + veilBrightness * t;
     if (c.a < 0.004) discard;
@@ -302,7 +311,7 @@ void veil(inout vec4 c) {
 /**
  * The fog chunks carry the world point, then three's optional camera-depth fog.
  * `tiered` is the batch: a context
- * instance (alpha `CONTEXT_ALPHA`) takes its opacity from d. Idempotent.
+ * instance (alpha zero) takes its opacity from d. Idempotent.
  */
 export function veilMaterial(material: THREE.Material, u: VeilUniforms, tiered = false) {
   if (!(material as { fog?: boolean }).fog || material.userData.veiled) return;

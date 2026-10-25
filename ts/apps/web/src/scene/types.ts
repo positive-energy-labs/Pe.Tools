@@ -40,6 +40,8 @@ export type Tier = "subject" | "stub" | "context";
 /** `key` groups instances that share a colour, e.g. a Revit system name. */
 export type Paint = {
   readonly tier: Tier;
+  /** Neutral outline-first envelope, supplied by the domain adapter. */
+  readonly surface?: "shell";
   readonly key?: string;
   /** Explicit #rrggbb from a domain palette; takes precedence over the hashed key. */
   readonly ink?: string;
@@ -85,6 +87,10 @@ export type IssueTarget = { key: string; elementId: number };
  * the issue open (picked here or in the inbox). */
 export type IssueState = ReachRung;
 export type LayerFrame = {
+  ink?: THREE.Color;
+  /** Current section/polygon and instance visibility, shared with mesh drawing. */
+  contains?: (point: readonly number[]) => boolean;
+  shown?: (key: string) => boolean;
   /** The renderer's current look, shared with every material and mark. */
   look?: Look;
   seconds: number;
