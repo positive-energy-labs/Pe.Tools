@@ -1,10 +1,10 @@
 import * as THREE from "three";
+import { bool, colour, defineKnobs, num, set } from "#/knobs/knobs";
 import { inkOf } from "./ink";
-import type { Bounds, IssueState, LayerFrame } from "./types";
+import type { Bounds, IssueState, LayerFrame, Paint, PaintOf, SceneInstance, Tier } from "./types";
 
 export const WHITE = Object.freeze(new THREE.Color(1, 1, 1));
 export const BLACK = Object.freeze(new THREE.Color(0, 0, 0));
-export const LIGHT = { sky: 0xfff8ee, floor: 0x403a30, sun: 0xfffaf2 };
 /** Mask colours encode channels, not visible hues. */
 export const OUTLINE_CHANNEL = {
   selected: new THREE.Color(1, 0, 0),
@@ -12,13 +12,6 @@ export const OUTLINE_CHANNEL = {
   hover: new THREE.Color(0, 0, 1),
 } as const;
 export const FILL = { hover: 0.22, lit: 0.4, selected: 0.6 };
-export const MARK_ALPHA: Record<IssueState, readonly [casing: number, volume: number]> = {
-  rest: [0.35, 0.28],
-  reach: [0.5, 0.4],
-  hover: [0.7, 0.55],
-  focus: [0.75, 0.6],
-};
-export const DAMAGE_ALPHA = 0.85;
 export const GROUND_MATERIAL = {
   color: WHITE,
   transparent: true,
@@ -26,27 +19,143 @@ export const GROUND_MATERIAL = {
   depthWrite: true,
   forceSinglePass: true,
 };
-export const groundOf = (focus: boolean, lit = false) => (focus || lit ? "subject" : "context");
+
+/**
+ * Categorical system inks, cycled by a stable hash of the paint key. The one table to replace with
+ * Revit view-template colours (a `#rrggbb` per slot; a kit token role resolves per theme).
+ */
+export const SYSTEM_PALETTE = ["viz-1", "viz-2", "viz-3", "viz-4", "viz-5", "viz-6"] as const;
+
+/**
+ * The scene's look, one typed spec: every default a judgment call is here, and each is a dev knob
+ * (`#/knobs`). A colour of "theme" is derived below from kit tokens; a role name is that token.
+ * M1: these guess until kaitpw tunes them on real use.
+ */
+export const LOOK = defineKnobs("scene", "ts/apps/web/src/scene/grounds.ts", {
+  subject: {
+    colour: colour("Subject ink", "theme"),
+    bySystem: bool("Colour by system", true),
+    stubOpacity: num("Stub opacity", 0.45, [0.05, 1, 0.01]),
+  },
+  palette: Object.fromEntries(
+    SYSTEM_PALETTE.map((role, i) => [`s${i + 1}`, colour(`System ink ${i + 1}`, role)]),
+  ),
+  veil: {
+    colour: colour("Context ink", "theme"),
+    nearFt: num("Full within (ft)", 1, [0, 20, 0.25]),
+    farFt: num("Gone by (ft)", 14, [1, 64, 0.5]),
+    curve: num("Curve exponent", 2, [0.25, 6, 0.05]),
+    maxOpacity: num("Opacity at subject", 0.55, [0, 1, 0.01]),
+    minOpacity: num("Opacity far", 0.02, [0, 1, 0.01]),
+    desaturate: num("Desaturate far", 1, [0, 1, 0.01]),
+    fog: num("Fog to ground far", 0.6, [0, 1, 0.01]),
+  },
+  fog: {
+    depth: bool("Camera-depth fog", false),
+    density: num("Depth fog × diagonal", 0.45, [0, 3, 0.05]),
+  },
+  lights: {
+    sky: colour("Hemisphere sky", "#fff8ee"),
+    floor: colour("Hemisphere floor", "#403a30"),
+    sun: colour("Sun", "#fffaf2"),
+    hemisphere: num("Hemisphere intensity", 1.15, [0, 4, 0.05]),
+    sunIntensity: num("Sun intensity", 1.55, [0, 4, 0.05]),
+  },
+  outline: {
+    selected: num("Selected width (px)", 2.5, [0, 8, 0.25]),
+    lit: num("Lit width (px)", 2, [0, 8, 0.25]),
+    hover: num("Hover width (px)", 1.25, [0, 8, 0.25]),
+    casing: num("Casing (px)", 1.5, [0, 6, 0.25]),
+  },
+  glow: {
+    strength: num("Damage halo strength", 2.6, [0, 8, 0.1]),
+    spread: num("Damage halo spread", 1, [0.25, 4, 0.05]),
+  },
+  marks: {
+    restCasing: num("Rest casing alpha", 0.35, [0, 1, 0.01]),
+    restVolume: num("Rest volume alpha", 0.28, [0, 1, 0.01]),
+    reachCasing: num("Reach casing alpha", 0.5, [0, 1, 0.01]),
+    reachVolume: num("Reach volume alpha", 0.4, [0, 1, 0.01]),
+    hoverCasing: num("Hover casing alpha", 0.7, [0, 1, 0.01]),
+    hoverVolume: num("Hover volume alpha", 0.55, [0, 1, 0.01]),
+    focusCasing: num("Focus casing alpha", 0.75, [0, 1, 0.01]),
+    focusVolume: num("Focus volume alpha", 0.6, [0, 1, 0.01]),
+  },
+  damage: {
+    colour: colour("Damage ink", "alarm"),
+    alpha: num("Damage skin alpha", 0.85, [0, 1, 0.01]),
+  },
+  layers: {
+    // ponytail: hides drawn instances only; the capture still fetches them. Owed: a fetch-side
+    // category filter on `revit.detail.space-scene`.
+    hidden: set("Hidden categories"),
+  },
+});
+export type Look = ReturnType<typeof LOOK.read>;
+
+export const markAlpha = (state: IssueState): readonly [casing: number, volume: number] => {
+  const m = LOOK.read().marks;
+  return {
+    rest: [m.restCasing, m.restVolume],
+    reach: [m.reachCasing, m.reachVolume],
+    hover: [m.hoverCasing, m.hoverVolume],
+    focus: [m.focusCasing, m.focusVolume],
+  }[state] as [number, number];
+};
+export const damageAlpha = () => LOOK.read().damage.alpha;
+
+/** Without a `paintOf`: the captured focus is the subject, everything else context. */
+export const paintOf = (instance: SceneInstance, of?: PaintOf): Paint =>
+  of?.(instance) ?? { tier: instance.focus ? "subject" : "context" };
+/** A lit or marked context element draws as subject so the mark reads. */
+export const tierOf = (paint: Paint, lit = false): Tier =>
+  lit && paint.tier === "context" ? "subject" : paint.tier;
 export const isLit = (at: LayerFrame) =>
   !!at.selected || !!at.lit || at.state === "hover" || at.state === "focus";
 
-/** Read the stage token once per theme, shared by its clear colour and fog. */
-export function sceneGrounds(mount: Element) {
+/** FNV-1a: the same key draws the same ink in every capture and session. */
+export const keySlot = (key: string, slots: number) => {
+  let h = 0x811c9dc5;
+  for (let i = 0; i < key.length; i++) h = Math.imul(h ^ key.charCodeAt(i), 0x01000193);
+  return (h >>> 0) % slots;
+};
+
+/** `#rrggbb` as is; any other word but "theme" is a kit token role. */
+const inkOr = (value: string, mount: Element, theme: () => THREE.Color) =>
+  /^#[\da-f]{6}$/i.test(value)
+    ? new THREE.Color(value)
+    : value === "theme"
+      ? theme()
+      : inkOf(value, mount);
+
+/** Read the stage tokens once per theme or look, shared by its clear colour, veil and fog. */
+export function sceneGrounds(mount: Element, look: Look) {
   const ground = inkOf("artifact", mount),
     ink = inkOf("ink", mount);
-  const subject = inkOf("ink-mute", mount).lerp(inkOf("ink-2", mount), 0.55);
-  if (ground.getHSL({ h: 0, s: 0, l: 0 }).l > 0.5) subject.lerp(ground, 0.35);
+  const subject = inkOr(look.subject.colour, mount, () => {
+    const mix = inkOf("ink-mute", mount).lerp(inkOf("ink-2", mount), 0.55);
+    return ground.getHSL({ h: 0, s: 0, l: 0 }).l > 0.5 ? mix.lerp(ground, 0.35) : mix;
+  });
   return {
     ground,
     ink,
-    subject: { color: subject, opacity: 1 },
-    context: {
-      color: inkOf("ink-mute", mount).lerp(ground, 0.65).offsetHSL(0, -1, 0),
-      opacity: 0.18,
+    subject,
+    context: inkOr(look.veil.colour, mount, () =>
+      inkOf("ink-mute", mount).lerp(ground, 0.65).offsetHSL(0, -1, 0),
+    ),
+    palette: Object.values(look.palette).map((value) =>
+      inkOr(value, mount, () => subject.clone()),
+    ),
+    damage: inkOr(look.damage.colour, mount, () => inkOf("alarm", mount)),
+    lights: {
+      sky: inkOr(look.lights.sky, mount, () => WHITE.clone()),
+      floor: inkOr(look.lights.floor, mount, () => WHITE.clone()),
+      sun: inkOr(look.lights.sun, mount, () => WHITE.clone()),
     },
   };
 }
+export type Grounds = ReturnType<typeof sceneGrounds>;
 
 /** Exponential squared falloff is invariant under a uniform change of model units/size. */
-export const fogDensity = (b: Bounds) =>
-  0.45 / Math.max(Math.hypot(b.maxX - b.minX, b.maxY - b.minY, b.maxZ - b.minZ), 1e-6);
+export const fogDensity = (b: Bounds, k = 0.45) =>
+  k / Math.max(Math.hypot(b.maxX - b.minX, b.maxY - b.minY, b.maxZ - b.minZ), 1e-6);

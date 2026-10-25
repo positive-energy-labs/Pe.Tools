@@ -11,12 +11,23 @@ import { createOutline, OUTLINE_LAYER } from "./outline";
 import {
   FILL,
   fogDensity,
-  groundOf,
   GROUND_MATERIAL,
-  LIGHT,
+  keySlot,
+  LOOK,
   OUTLINE_CHANNEL,
+  paintOf,
   sceneGrounds,
+  tierOf,
+  type Look,
 } from "./grounds";
+import {
+  bakeVeil,
+  CONTEXT_ALPHA,
+  setVeilField,
+  setVeilLook,
+  veilMaterial,
+  veilUniforms,
+} from "./veil";
 import {
   captureGestures,
   createWheelReader,
@@ -39,9 +50,16 @@ import {
   type Ray,
   type Size,
 } from "./projection";
-import { inkOf } from "./ink";
 import { setDamageHue } from "./damage";
-import type { IssueState, IssueTarget, Layer3D, SceneInstance, SceneMeshes } from "./types";
+import type {
+  IssueState,
+  IssueTarget,
+  Layer3D,
+  Paint as InstancePaint,
+  PaintOf,
+  SceneInstance,
+  SceneMeshes,
+} from "./types";
 
 /** Opt-in timing marks (`?scenePerf`), including GPU completion rather than a bare RAF tick. */
 const timing = () =>
@@ -108,8 +126,9 @@ export function createRenderer(mount: HTMLElement, meshes: SceneMeshes, wheelHos
   mark("build-start", { instances: meshes.instances.length });
   const renderer = new THREE.WebGLRenderer({ antialias: true });
   renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
-  setDamageHue(inkOf("alarm", mount));
-  let grounds = sceneGrounds(mount);
+  let look: Look = LOOK.read();
+  let grounds = sceneGrounds(mount, look);
+  // Shared by reference with the outline pass and the fog: re-tinted in place, never replaced.
   const { ground, ink } = grounds;
   renderer.setClearColor(ground);
   const canvas = renderer.domElement;
@@ -125,9 +144,9 @@ export function createRenderer(mount: HTMLElement, meshes: SceneMeshes, wheelHos
   const bounds = meshes.bounds;
   const origin = new THREE.Vector3(...center(bounds));
   const scene = new THREE.Scene();
-  scene.fog = new THREE.FogExp2(ground, fogDensity(bounds));
-  scene.add(new THREE.HemisphereLight(LIGHT.sky, LIGHT.floor, 1.15));
-  const sun = new THREE.DirectionalLight(LIGHT.sun, 1.55);
+  const hemisphere = new THREE.HemisphereLight();
+  scene.add(hemisphere);
+  const sun = new THREE.DirectionalLight();
   sun.position.set(1, -1, 3);
   scene.add(sun);
   let camera = newCamera();
@@ -195,6 +214,8 @@ export function createRenderer(mount: HTMLElement, meshes: SceneMeshes, wheelHos
     );
   };
   material.customProgramCacheKey = () => "scene3d-clip-batch-v1";
+  const veil = veilUniforms();
+  veilMaterial(material, veil, true);
   const batch = new THREE.BatchedMesh(
     meshes.instances.length,
     meshes.positions.length / 3,
@@ -206,13 +227,46 @@ export function createRenderer(mount: HTMLElement, meshes: SceneMeshes, wheelHos
   batch.layers.enable(OCCLUDER_LAYER);
   scene.add(batch);
   const glow = createGlow(renderer, material);
-  const byId: SceneInstance[] = [];
-  const tint = (id: number, instance: SceneInstance, mark: Mark | null = null) => {
-    const preset = grounds[groundOf(instance.focus, mark !== null)];
-    const color = preset.color.clone();
-    if (mark) color.lerp(ink, FILL[mark]);
-    batch.setColorAt(id, new THREE.Vector4(color.r, color.g, color.b, preset.opacity));
+  /** What a look change re-applies besides instance tints: ground, lights, fog, veil, passes. */
+  const applyStage = () => {
+    setDamageHue(grounds.damage);
+    renderer.setClearColor(ground);
+    hemisphere.color.copy(grounds.lights.sky);
+    hemisphere.groundColor.copy(grounds.lights.floor);
+    hemisphere.intensity = look.lights.hemisphere;
+    sun.color.copy(grounds.lights.sun);
+    sun.intensity = look.lights.sunIntensity;
+    // Camera-depth fog is optional and off by default; the veil is the element-anchored fog.
+    scene.fog = look.fog.depth
+      ? new THREE.FogExp2(ground, fogDensity(bounds, look.fog.density))
+      : null;
+    setVeilLook(veil, look.veil, ground);
+    outline.setWidths(look.outline);
+    glow.setLook(look.glow);
   };
+  applyStage();
+  const byId: SceneInstance[] = [];
+  let paintBy: PaintOf | undefined;
+  const paints: InstancePaint[] = [];
+  const tint = (id: number, mark: Mark | null = null) => {
+    const paint = paints[id]!;
+    const tier = tierOf(paint, mark !== null);
+    const color = (
+      tier === "context"
+        ? grounds.context
+        : look.subject.bySystem && paint.key !== undefined
+          ? grounds.palette[keySlot(paint.key, grounds.palette.length)]!
+          : grounds.subject
+    ).clone();
+    if (mark) color.lerp(ink, FILL[mark]);
+    const alpha =
+      tier === "context" ? CONTEXT_ALPHA : tier === "stub" ? look.subject.stubOpacity : 1;
+    batch.setColorAt(id, new THREE.Vector4(color.r, color.g, color.b, alpha));
+  };
+  /** Instance index to batch id, for the veil's subject test. */
+  const idOf: number[] = [];
+  const bake = () =>
+    setVeilField(veil, bakeVeil(meshes, (i) => paints[idOf[i]!]!.tier !== "context"));
   mark("geometry-start");
   for (const instance of meshes.instances) {
     const vertices = meshes.positions.slice(
@@ -230,11 +284,16 @@ export function createRenderer(mount: HTMLElement, meshes: SceneMeshes, wheelHos
     geometry.computeBoundingSphere();
     geometry.computeBoundingBox();
     const id = batch.addInstance(batch.addGeometry(geometry));
-    tint(id, instance);
     byId[id] = instance;
+    idOf.push(id);
+    paints[id] = paintOf(instance);
+    tint(id);
     geometry.dispose();
   }
   mark("geometry", { meshes: byId.length, multiDraw: renderer.extensions.has("WEBGL_multi_draw") });
+  bake();
+  mark("veil");
+  LOOK.offer("layers", "hidden", [...new Set(meshes.instances.map((i) => i.category))].sort());
 
   let frame = 0;
   let sizePending = false;
@@ -485,17 +544,18 @@ export function createRenderer(mount: HTMLElement, meshes: SceneMeshes, wheelHos
   let glowing = false;
   const motion = window.matchMedia("(prefers-reduced-motion: reduce)");
   motion.addEventListener("change", render);
-  const theme = new MutationObserver(() => {
-    grounds = sceneGrounds(mount);
-    ground.copy(grounds.ground);
-    ink.copy(grounds.ink);
-    scene.fog!.color.copy(ground);
-    setDamageHue(inkOf("alarm", mount));
-    renderer.setClearColor(ground);
-    byId.forEach((instance, id) => tint(id, instance, marked.get(id) ?? null));
+  /** The one re-apply path: a theme change or a look change re-reads grounds and re-tints. */
+  const applyLook = () => {
+    const next = sceneGrounds(mount, look);
+    ground.copy(next.ground);
+    ink.copy(next.ink);
+    grounds = { ...next, ground, ink };
+    applyStage();
+    byId.forEach((_, id) => tint(id, marked.get(id) ?? null));
     thumbsStale = true;
     paintNow(...painted);
-  });
+  };
+  const theme = new MutationObserver(applyLook);
   theme.observe(document.documentElement, {
     attributes: true,
     attributeFilter: ["class", "style", "data-theme"],
@@ -587,8 +647,12 @@ export function createRenderer(mount: HTMLElement, meshes: SceneMeshes, wheelHos
   let painted: Paint = [undefined, undefined, undefined, undefined];
   const paintNow = (...[selected, hidden, isolated, lit]: Paint) => {
     const next = new Map<number, Mark>();
-    byId.forEach(({ key }, id) => {
-      const shown = !hidden?.has(key) && (!isolated || isolated.has(key));
+    const hiddenCategories = new Set(look.layers.hidden);
+    byId.forEach(({ key, category }, id) => {
+      const shown =
+        !hidden?.has(key) &&
+        (!isolated || isolated.has(key)) &&
+        !hiddenCategories.has(category);
       batch.setVisibleAt(id, shown);
       const mark: Mark | null = !shown
         ? null
@@ -600,7 +664,7 @@ export function createRenderer(mount: HTMLElement, meshes: SceneMeshes, wheelHos
               ? "hover"
               : null;
       if (mark) next.set(id, mark);
-      if (mark !== (marked.get(id) ?? null)) tint(id, byId[id]!, mark);
+      if (mark !== (marked.get(id) ?? null)) tint(id, mark);
     });
     marked.clear();
     selectedIds.clear();
@@ -765,6 +829,22 @@ export function createRenderer(mount: HTMLElement, meshes: SceneMeshes, wheelHos
       hoveredElement = key;
       paintNow(...painted);
     },
+    /** Re-apply a changed look (the dev knobs) without rebuilding the scene. */
+    setLook(next: Look) {
+      if (next === look) return;
+      look = next;
+      applyLook();
+    },
+    /** Who is subject, stub or context, and each subject's colour key; re-bakes the veil. */
+    setPaint(next: PaintOf | undefined) {
+      if (next === paintBy) return;
+      paintBy = next;
+      byId.forEach((instance, id) => (paints[id] = paintOf(instance, paintBy)));
+      bake();
+      byId.forEach((_, id) => tint(id, marked.get(id) ?? null));
+      thumbsStale = true;
+      render();
+    },
     setClip(volume: ClipVolume | null | undefined) {
       uniforms.clipPolygon.value = volume?.data ?? new Float32Array(3 * CLIP_POINTS * 2);
       uniforms.clipCount.value = volume?.counts ?? [0, 0, 0];
@@ -792,6 +872,10 @@ export function createRenderer(mount: HTMLElement, meshes: SceneMeshes, wheelHos
         const group = new THREE.Group();
         group.name = layer.key;
         layer.build(group);
+        group.traverse((object) => {
+          if (object instanceof THREE.Mesh || object instanceof THREE.Line)
+            for (const m of [object.material].flat() as THREE.Material[]) veilMaterial(m, veil);
+        });
         scene.add(group);
         layers.set(layer.key, { layer, group });
         if (layer.targets?.length) reachOf.set(layer.key, segmentsOf(group));
@@ -821,6 +905,7 @@ export function createRenderer(mount: HTMLElement, meshes: SceneMeshes, wheelHos
       batch.dispose();
       scene.remove(batch);
       material.dispose();
+      veil.veilField.value.dispose();
       disposeTree(scene);
       glow.dispose();
       outline.dispose();

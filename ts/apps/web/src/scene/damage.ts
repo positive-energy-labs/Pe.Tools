@@ -4,7 +4,7 @@ import { rowDamage } from "@pe/kit/table/model";
 export const damageMark = (row: unknown) => ({ "data-damage": rowDamage(row) || undefined });
 import { GLOW_LAYER } from "./glow";
 import { landing } from "./marks";
-import { DAMAGE_ALPHA, isLit, WHITE } from "./grounds";
+import { damageAlpha, isLit, WHITE } from "./grounds";
 import type {
   IssueState,
   IssueTarget,
@@ -74,7 +74,7 @@ const skin = () =>
       core: { value: CORE.clone() },
       rim: { value: RIM.clone() },
       energy: { value: 0 },
-      alpha: { value: DAMAGE_ALPHA },
+      alpha: { value: damageAlpha() },
       ...THREE.UniformsUtils.clone(THREE.UniformsLib.fog),
     } satisfies Uniforms,
     vertexShader,
@@ -167,7 +167,7 @@ export function damageLayer(
       u.core.value.copy(CORE);
       u.energy.value = energy;
       // Selection yields the skin's interior to the neutral selection fill.
-      u.alpha.value = at.selected ? DAMAGE_ALPHA * 0.4 : DAMAGE_ALPHA;
+      u.alpha.value = damageAlpha() * (at.selected ? 0.4 : 1);
       u.rim.value.copy(RIM).lerp(HOT, Math.min(1, heat + strike * 0.7));
       halo.material.color.copy(RIM).multiplyScalar(0.5 + 0.9 * energy);
       return !still;

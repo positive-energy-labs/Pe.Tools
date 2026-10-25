@@ -4,7 +4,7 @@ import { LineMaterial } from "three/addons/lines/LineMaterial.js";
 import { LineSegments2 } from "three/addons/lines/LineSegments2.js";
 import { LineSegmentsGeometry } from "three/addons/lines/LineSegmentsGeometry.js";
 import type { IssueState, LayerFrame } from "./types";
-import { BLACK, isLit, MARK_ALPHA, WHITE } from "./grounds";
+import { BLACK, isLit, markAlpha, WHITE } from "./grounds";
 
 type Edge = readonly [readonly number[], readonly number[]];
 
@@ -70,7 +70,7 @@ export function markVolume(geometry: THREE.BufferGeometry, color: THREE.Color): 
 
 export function markFrame(group: THREE.Object3D, at: LayerFrame): boolean {
   const swell = at.reducedMotion ? 0 : landing(at.landed);
-  const [casingAlpha, volumeAlpha] = MARK_ALPHA[at.state];
+  const [casingAlpha, volumeAlpha] = markAlpha(at.state);
   group.traverse((object) => {
     if (object instanceof THREE.Mesh)
       for (const material of [object.material].flat()) material.depthTest = !isLit(at);
