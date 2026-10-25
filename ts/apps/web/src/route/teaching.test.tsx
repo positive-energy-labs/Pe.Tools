@@ -157,7 +157,7 @@ test("SSR never reads the process-global mounted registry and hydrates the same 
   withdraw();
   expect(html).not.toContain("Another request");
   expect(html).toContain("data-leader-map");
-  expect(html).toMatch(/data-leader-line="[^"]+"[^>]*d="M/);
+  expect(html).toMatch(/data-leader-reference-line="[^"]+"[^>]*d="M/);
   const errors = vi.spyOn(console, "error").mockImplementation(() => {});
   const container = document.createElement("div");
   container.innerHTML = html;

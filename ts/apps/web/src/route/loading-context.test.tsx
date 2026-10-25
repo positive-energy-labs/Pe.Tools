@@ -26,7 +26,7 @@ test("the static shell renders caller-owned public guidance without a host or pr
   );
   expect(generic).toContain("data-leader-map");
   expect(generic).toContain("Workspace");
-  expect(generic).toMatch(/data-leader-line="[^"]+"[^>]*d="M/);
+  expect(generic).toMatch(/data-leader-reference-line="[^"]+"[^>]*d="M/);
   expect(generic).not.toContain("How Ducts works");
   expect(generic).not.toContain("Protected document facts");
   const ducts = renderToStaticMarkup(

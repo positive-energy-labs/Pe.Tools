@@ -39,6 +39,9 @@ export function LeaderDiagram(props: Props) {
     const measure = () => {
       const origin = box.getBoundingClientRect();
       if (picture && (!origin.width || !origin.height)) return;
+      source
+        .querySelectorAll("[data-leader-reference]")
+        .forEach((node) => node.setAttribute("visibility", "hidden"));
       const track = source.getBoundingClientRect();
       if (picture) source.style.setProperty("--leader-scale", String(track.width / picture.width));
       const x = track.left - origin.left;
@@ -110,7 +113,7 @@ export function LeaderDiagram(props: Props) {
           {picture ? (
             <svg
               data-leader-map=""
-              className="block w-full"
+              className="block w-full overflow-visible"
               aria-label="Page layout"
               viewBox={`0 0 ${picture.width} ${picture.height}`}
             >
@@ -145,6 +148,34 @@ export function LeaderDiagram(props: Props) {
                   </text>
                 </svg>
               ))}
+              <g data-leader-reference="" aria-hidden>
+                {picture.regions.map((r, i) => {
+                  const right = i % 2 === 1;
+                  const x = r.left + (right ? r.width : 0);
+                  const y = r.top + r.height / 2;
+                  const end = x + (right ? 24 : -24);
+                  return (
+                    <g key={r.key}>
+                      <path
+                        data-leader-reference-line={r.key}
+                        d={`M${x} ${y} H${end}`}
+                        fill="none"
+                        className="stroke-line-2"
+                        vectorEffect="non-scaling-stroke"
+                      />
+                      <text
+                        x={end}
+                        y={y}
+                        dy="-.35em"
+                        textAnchor={right ? "start" : "end"}
+                        fill="currentColor"
+                      >
+                        {i + 1}
+                      </text>
+                    </g>
+                  );
+                })}
+              </g>
             </svg>
           ) : (
             (track ??
@@ -178,32 +209,16 @@ export function LeaderDiagram(props: Props) {
           preserveAspectRatio="none"
           className={`dl-leader-lines ${picture ? "@max-[60rem]:hidden" : ""}`}
         >
-          {items.map((item, i) => (
+          {items.map((item) => (
             <path
               key={item.key}
               data-leader-line={item.key}
               data-dashed={item.dashed || undefined}
               vectorEffect="non-scaling-stroke"
-              // SSR leaders use the declared grid's normalized tracks; measured endpoints replace them.
-              d={picture ? referenceLeader(picture, item.key, i, items.length) : undefined}
             />
           ))}
         </svg>
       </div>
     </div>
   );
-}
-
-function referenceLeader(
-  picture: NonNullable<Props["picture"]>,
-  key: string,
-  index: number,
-  count: number,
-) {
-  const region = picture.regions.find((r) => r.key === key);
-  if (!region) return undefined;
-  const right = index % 2 === 1;
-  const x = 250 + ((region.left + (right ? region.width : 0)) / picture.width) * 500;
-  const y = 250 + ((region.top + region.height / 2) / picture.height) * 500;
-  return `M${x} ${y} L${right ? 1000 : 0} ${((Math.floor(index / 2) + 0.5) / Math.ceil(count / 2)) * 1000}`;
 }

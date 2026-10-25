@@ -192,7 +192,9 @@ test("the tutorial preserves three pane rectangles, one leader per pane, and sco
     expect(Number(pane.getAttribute("width")) / 2).toBe(width / 2);
     expect(Number(pane.getAttribute("height")) / 2).toBe(height / 2);
   });
-  expect([...container.querySelectorAll("path")].map((path) => path.getAttribute("d"))).toEqual([
+  expect(
+    [...container.querySelectorAll("[data-leader-line]")].map((path) => path.getAttribute("d")),
+  ).toEqual([
     "M222.2222222222222 375 L111.1111111111111 40",
     "M333.3333333333333 281.25 L111.1111111111111 40",
     "M333.3333333333333 656.25 L111.1111111111111 40",
