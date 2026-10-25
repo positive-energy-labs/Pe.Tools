@@ -157,6 +157,18 @@ export const actionScopeKeys = (actions: readonly ActionDefinition[]): ScopeKey[
     })),
   );
 
+/** Reference facts use the action's bindings without registering or invoking anything. */
+export const actionTeaching = (
+  actions: readonly Pick<ActionDefinition, "id" | "label" | "description" | "bindings">[],
+) =>
+  actions.flatMap((action) =>
+    (action.bindings ?? []).map((key) => ({
+      keys: [formatForDisplay(key)],
+      label: action.label,
+      says: action.description,
+    })),
+  );
+
 const UNMOUNTED: RefObject<HTMLElement | null> = { current: null };
 
 /**

@@ -1,3 +1,4 @@
+import { SHELL_REGIONS } from "#/route/teaching";
 import { useEffect, useRef, useState, type CSSProperties } from "react";
 import { useCanGoBack, useRouter, useRouterState } from "@tanstack/react-router";
 import {
@@ -357,7 +358,7 @@ export function AppBar() {
         )}
         <nav
           ref={bar}
-          aria-label="Global navigation"
+          aria-label={SHELL_REGIONS.navigation.label}
           className="pe-appbar"
           data-surface="page"
           data-overlay={host.overlay}

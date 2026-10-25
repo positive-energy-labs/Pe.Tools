@@ -15,7 +15,7 @@ import { RouteTabActions, RouteTabs } from "./route-tabs";
 import { RouteRetention } from "./route-retention";
 
 /** Under these a side folds to its rail: Pea reads thin, a tool needs room for its table. */
-export const DOCK_FLOOR = { pea: 280, tools: 420 };
+const DOCK_FLOOR = { pea: 280, tools: 420 };
 
 /** Pea starts, connected tools end. Retained route bodies stay mounted behind the tools rail. */
 export function RouteDock({
