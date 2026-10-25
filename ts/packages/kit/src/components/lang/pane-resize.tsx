@@ -90,11 +90,7 @@ function usePaneSize(spec: PaneSizeSpec & { target: PaneSide }) {
   const current = useRef(spec);
   current.current = spec;
   // Container fitting never persists: a small window must not overwrite the chosen size.
-  const fit = useCallback((containerSize?: number) => {
-    if (containerSize != null) setAvailable(containerSize);
-    setInternalSize((size) => clampSize(size, current.current, containerSize));
-  }, []);
-  useEffect(() => fit(), [fit, spec.minSize, spec.maxSize]);
+  const fit = useCallback((containerSize: number) => setAvailable(containerSize), []);
   useLayoutEffect(() => {
     if (collapsed !== chosen) current.current.collapse?.onCollapsedChange(collapsed);
   }, [collapsed, chosen]);
@@ -135,7 +131,7 @@ function usePaneSize(spec: PaneSizeSpec & { target: PaneSide }) {
   return {
     collapsed,
     other,
-    renderedSize: clampSize(internalSize, spec),
+    renderedSize: clampSize(internalSize, spec, available),
     fold,
     expand,
     focus: (side: PaneSide) => {

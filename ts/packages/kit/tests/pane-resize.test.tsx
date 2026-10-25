@@ -227,6 +227,39 @@ test("an unset other-side floor is the sized side's: too narrow for both stacks,
   expect(parseFloat(getComputedStyle(wide).getPropertyValue("--pane-size"))).toBe(900 - 8 - 320);
 });
 
+test("container fitting restores the preferred size when room returns without persisting the fit", () => {
+  measure(1200);
+  let resized: (entries: { contentRect: DOMRect }[]) => void;
+  vi.stubGlobal(
+    "ResizeObserver",
+    class {
+      constructor(callback: typeof resized) {
+        resized = callback;
+      }
+      observe() {}
+      disconnect() {}
+    },
+  );
+  const storage = { getItem: () => "600", setItem: vi.fn() };
+  vi.stubGlobal("localStorage", storage);
+  const view = render(
+    <PaneSplit
+      axis="horizontal"
+      start="subject"
+      end="support"
+      resize={{ target: "end", defaultSize: 500, minSize: 280, minOtherSize: 280, persist: "fit" }}
+    />,
+  );
+  const split = view.container.firstElementChild as HTMLElement;
+  const width = (value: number) =>
+    act(() => resized([{ contentRect: new DOMRect(0, 0, value, 600) }]));
+  width(700);
+  expect(split.style.getPropertyValue("--pane-size")).toBe("412px");
+  width(1200);
+  expect(split.style.getPropertyValue("--pane-size")).toBe("600px");
+  expect(storage.setItem).not.toHaveBeenCalled();
+});
+
 test("either side folds only to its rail under its floor, and the seam keeps the other open", () => {
   // The Pea dock (workbench/route-panes.tsx): Pea folds under 280, the tools under 420.
   measure(1200);

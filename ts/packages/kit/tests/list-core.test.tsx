@@ -31,6 +31,51 @@ const search = (keywords = "", pills: Record<string, string> = {}): ListSearch =
   pills: Object.entries(pills).map(([field, value]) => ({ field, op: "=", value })),
 });
 
+test("same-item rerenders refresh field closures and facet vocabulary with stable other readers", () => {
+  const data = [{ id: "one", name: "One" }];
+  const searchItem = (item: (typeof data)[number]) => ({ text: [item.name] });
+  const keyOf = (item: (typeof data)[number]) => item.id;
+  const hook = renderHook(
+    ({ current }) =>
+      useList({
+        items: data,
+        search: searchItem,
+        keyOf,
+        fields: {
+          scope: { kind: "text", read: () => current, values: [current], label: current },
+        },
+        state: { ...emptyListState(), search: search("", { scope: "new" }) },
+      }),
+    { initialProps: { current: "old" } },
+  );
+  expect(hook.result.current.shown).toBe(0);
+  hook.rerender({ current: "new" });
+  expect(hook.result.current.shown).toBe(1);
+  expect(hook.result.current.facets[0]!.label).toBe("new");
+  expect(hook.result.current.valuesFor("scope").map((value) => value.value)).toEqual(["new"]);
+});
+
+test("a popup re-filters and regroups unchanged items when its readers change", () => {
+  const data = ["one"];
+  const hook = renderHook(
+    ({ name }) =>
+      useCollection({
+        items: data,
+        keyOf: () => name,
+        labelOf: () => name,
+        detailOf: () => name,
+        groupOf: () => name,
+        query: "new",
+        filter: "words",
+        target: null,
+      }),
+    { initialProps: { name: "old" } },
+  );
+  expect(hook.result.current.status).toBe("no-match");
+  hook.rerender({ name: "new" });
+  expect(hook.result.current.visible.map((row) => row.key)).toEqual(["head:new", "new"]);
+});
+
 test.each([
   [220, 145, "1", false],
   [96, 49, "0", false],
