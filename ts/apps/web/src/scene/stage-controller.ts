@@ -14,7 +14,7 @@ import {
   useSyncExternalStore,
   type ReactNode,
 } from "react";
-import { ScopeGestures, type ScopeKey } from "@pe/kit/keys";
+import { ScopeGestures, actionScopeKeys, type ScopeKey } from "@pe/kit/keys";
 import type { PlaneViewport } from "@pe/agent-contracts";
 import type { PictureBounds } from "./framing";
 import { viewportProject, type Project } from "./projection";
@@ -25,6 +25,8 @@ import type { Bounds } from "./types";
 import { useViewHistory } from "./view-history";
 import type { Bounds2 } from "#/lib/affine-frame";
 import type { usePlaneViewport } from "./use-plane-viewport";
+
+import { STAGE_ACTIONS } from "./stage-teaching";
 
 type HistoryMove = { history: "push" | "replace" };
 /** World bounds in client pixels, shared by placement, framing and landing marks. */
@@ -117,28 +119,22 @@ function useStageBindings(options: OrbitStage | PlaneStage) {
     const pose = poseOf(target);
     if (pose) flyTo(options.orbit, pose, { scene: options.bounds?.scene });
   };
-  const keys: ScopeKey[] = [
+  const keys = actionScopeKeys([
     {
-      hotkey: "F",
-      label: "frame",
-      says: "Frame the selection; with nothing selected, fit the picture",
-      callback: () => frameOn(options.kind === "orbit" ? options.selectedBounds : null),
+      ...STAGE_ACTIONS.frame,
+      invoke: () => frameOn(options.kind === "orbit" ? options.selectedBounds : null),
     },
     ...(options.kind === "orbit"
-      ? ([
+      ? [
           {
-            hotkey: "O",
-            label: "perspective or parallel",
-            says: "Switch projection, keeping the look-at and framing",
+            ...STAGE_ACTIONS.projection,
             available: () => !options.axis,
-            callback: () => setProjection(projection === "parallel" ? "perspective" : "parallel"),
+            invoke: () => setProjection(projection === "parallel" ? "perspective" : "parallel"),
           },
           {
-            hotkey: "P",
-            label: "plan or isometric",
-            says: "Look down or isometric, keeping pivot and zoom",
+            ...STAGE_ACTIONS.look,
             available: () => !options.axis,
-            callback: () => {
+            invoke: () => {
               const now = options.orbit.read();
               if (now)
                 flyTo(options.orbit, applyLook(now.elev >= 89 ? "iso" : "plan", now), {
@@ -147,17 +143,15 @@ function useStageBindings(options: OrbitStage | PlaneStage) {
             },
           },
           {
-            hotkey: "N",
-            label: "look north",
-            says: "Look north, keeping elevation, pivot and zoom",
+            ...STAGE_ACTIONS.north,
             available: () => !options.axis,
-            callback: () => {
+            invoke: () => {
               glideLook(options.orbit);
             },
           },
-        ] satisfies ScopeKey[])
+        ]
       : []),
-  ];
+  ]);
   const escape: ScopeKey = {
     hotkey: "Escape",
     label: options.kind === "orbit" && options.axis ? options.axis.label : "clear the selection",

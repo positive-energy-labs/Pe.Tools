@@ -1,3 +1,7 @@
+import { useEffect, useState } from "react";
+import { TeachPage, TeachReference, TeachTarget } from "@pe/kit/lang/use-teach";
+import { HelpWorld } from "#/route/help";
+import { referenceTeaching, STARTUP_TEACHING, SHELL_REGIONS } from "#/route/teaching";
 import { PaneFaultProvider } from "@pe/kit/lang/pane";
 import { reportFault } from "#/host/diagnostics";
 import {
@@ -94,7 +98,10 @@ export function RootComponent() {
                     data-app-content
                   >
                     <SituationPinnedControl />
-                    <div className="min-h-0 min-w-0 flex-1">
+                    <div
+                      aria-label={SHELL_REGIONS.workspace.label}
+                      className="min-h-0 min-w-0 flex-1"
+                    >
                       <RouteDock renderRoute={renderSurfaceRoute}>
                         <SurfaceOutlet />
                       </RouteDock>
@@ -119,7 +126,7 @@ function SurfaceOutlet({ children }: { children?: React.ReactNode }) {
   const scope = useRouteActivity();
   const pathname = scope?.pathname ?? pathnameNow;
   if (host.shell.routes === "all" || appRouteMount(pathname, host.surface))
-    return children ?? <Outlet />;
+    return <TeachPage value={pathname}>{children ?? <Outlet />}</TeachPage>;
   return (
     <div className="flex flex-col gap-3 p-3">
       <p>{appRouteByPath(pathname)?.label ?? "This tool"} opens in a full window.</p>
@@ -131,6 +138,10 @@ function SurfaceOutlet({ children }: { children?: React.ReactNode }) {
 }
 
 function RootDocument({ children }: { children: React.ReactNode }) {
+  const pathname = useRouterState({ select: (state) => state.location.pathname });
+  const [hydrated, setHydrated] = useState(false);
+  useEffect(() => setHydrated(true), []);
+  const reference = hydrated ? referenceTeaching(pathname) : STARTUP_TEACHING;
   const card = useRouterState({ select: (state) => state.location.search.shell === "card" });
   return (
     <html lang="en" data-pe data-pe-app suppressHydrationWarning>
@@ -146,25 +157,17 @@ function RootDocument({ children }: { children: React.ReactNode }) {
             ) : (
               <SurfaceHostProvider>
                 <TooltipProvider>
-                  <RemoteDeviceGate
-                    name="Positive Energy Tools"
-                    guidance={
-                      <div className="flex max-w-3xl flex-col gap-3">
-                        <p>
-                          Choose a tool, choose its document, then review the data and proposed
-                          changes before applying them.
-                        </p>
-                        <p>
-                          Once connected, Tutorial (Alt+/) explains the current tool and its
-                          controls. Document access waits for the host connection and device
-                          pairing.
-                        </p>
-                      </div>
-                    }
-                  >
-                    {children}
-                    <AppUtilities />
-                  </RemoteDeviceGate>
+                  <TeachTarget value={pathname}>
+                    <TeachReference value={reference}>
+                      <RemoteDeviceGate
+                        name="Positive Energy Tools"
+                        guidance={<HelpWorld facts={reference} />}
+                      >
+                        {children}
+                        <AppUtilities />
+                      </RemoteDeviceGate>
+                    </TeachReference>
+                  </TeachTarget>
                 </TooltipProvider>
               </SurfaceHostProvider>
             )}

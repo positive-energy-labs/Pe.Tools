@@ -57,6 +57,7 @@ import type { Split } from "../../loss-split";
 import type { systemList } from "../../system-list";
 import type { StageIssue } from "../../inbox-rows";
 import { damageLayers } from "#/scene/damage";
+import { DUCTS_PICTURE_MODES, DUCTS_LAYER_OPTIONS, DUCTS_REGIONS } from "./teaching";
 import { land } from "@pe/kit/lang/land";
 import { usePictureFloaters } from "./picture-floaters";
 import { RulingBody, useMarks } from "./rulings";
@@ -65,17 +66,6 @@ import { SubjectText } from "@pe/kit/lang/subject-text";
 import { SubjectTextContext } from "@pe/kit/lang/reach";
 import { useHoveredIssue } from "#/attention";
 
-const LAYER_WORDS: Record<
-  (typeof DUCTS_LAYERS)[number],
-  { label: string; chord?: "M" | "C" | "L" }
-> = {
-  meshes: { label: "meshes", chord: "M" },
-  context: { label: "context", chord: "C" },
-  centrelines: { label: "centrelines", chord: "L" },
-  "no-run": { label: "branches with no run" },
-  labels: { label: "labels" },
-  findings: { label: "findings" },
-};
 const fmt = (n: number | null | undefined, d = 3) => (n == null ? "—" : n.toFixed(d));
 
 /** The system a switch is opening ("" = every system) while the held screen still draws the last. */
@@ -692,6 +682,7 @@ function Canvas({
           <Pane
             picture
             id="e-picture"
+            help={DUCTS_REGIONS.picture.purpose}
             title={
               <Button label="All systems" onClick={identity.allSystems}>
                 Systems
@@ -716,19 +707,16 @@ function Canvas({
               value: picture,
               onChange: (key) => setPage({ picture: key as typeof picture }, { history: "push" }),
               // `S` sits on the other picture, so the one chord always swaps.
-              options: (["model", "schematic"] as const).map((key) => ({
-                key,
-                label: key,
-                chord: key === picture ? undefined : "S",
-                says: `The ${key} large, the other in the corner`,
+              options: DUCTS_PICTURE_MODES.map((option) => ({
+                ...option,
+                chord: option.key === picture ? undefined : "S",
               })),
             }}
             layers={{
               value: page.layers,
-              options: DUCTS_LAYERS.map((key) => ({
-                key,
-                ...LAYER_WORDS[key],
-                busy: key === "context" && read.pending,
+              options: DUCTS_LAYER_OPTIONS.map((option) => ({
+                ...option,
+                busy: option.key === "context" && read.pending,
               })),
               onToggle: (key) =>
                 setPage(

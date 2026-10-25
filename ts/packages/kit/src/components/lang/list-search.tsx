@@ -19,6 +19,7 @@ import { ListPopup } from "./list-popup";
 import { CompletionGhost, Matched, SearchControl } from "./search-control";
 import { focusQuiet } from "../../lib/utils";
 import { useTeach } from "./use-teach";
+import { LIST_SEARCH_SYNTAX, SEARCH_FOCUS_SYNTAX } from "./list-teaching";
 import { useScopeKeys, useScopeLive } from "../../keys";
 
 type Pick = {
@@ -67,11 +68,7 @@ export function ListBar<T, Sort extends string>({
       operators: ["is"],
       examples: [`Filter, choose ${field.label}, choose a value`],
     })),
-    syntax: [
-      "Words search row text and exact element ids",
-      "Pick a field, then a value; filters are ANDed",
-      "Tab completes; Backspace edits the last filter",
-    ],
+    syntax: LIST_SEARCH_SYNTAX,
   });
   const keywords = list.state.search.keywords;
   const [echo, setEcho] = useState({ source: keywords, value: keywords });
@@ -570,7 +567,7 @@ function pick(): SearchKeyOwner | null {
 export function useSearchKey(owner: SearchKeyOwner) {
   const live = useScopeLive();
   useTeach(
-    { kind: "search", label: "Search", fields: [], syntax: ["/ focuses this search"] },
+    { kind: "search", label: "Search", fields: [], syntax: SEARCH_FOCUS_SYNTAX },
     owner.available?.() !== false,
   );
   const latest = useRef(owner);

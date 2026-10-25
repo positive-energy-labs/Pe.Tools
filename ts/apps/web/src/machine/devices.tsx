@@ -438,10 +438,13 @@ export function RemoteDeviceGate({
     );
   if (!state.local && !state.paired)
     return (
-      <DevicePairing
-        environmentId={state.environmentId}
-        connected={() => window.location.reload()}
-      />
+      <>
+        {guidance}
+        <DevicePairing
+          environmentId={state.environmentId}
+          connected={() => window.location.reload()}
+        />
+      </>
     );
   return <LocalDevice.Provider value={state.local}>{children}</LocalDevice.Provider>;
 }

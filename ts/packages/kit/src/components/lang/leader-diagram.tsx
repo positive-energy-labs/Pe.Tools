@@ -38,6 +38,10 @@ export function LeaderDiagram(props: Props) {
     if (!box || !source) return;
     const measure = () => {
       const origin = box.getBoundingClientRect();
+      if (picture && (!origin.width || !origin.height)) return;
+      source
+        .querySelectorAll("[data-leader-reference]")
+        .forEach((node) => node.setAttribute("visibility", "hidden"));
       const track = source.getBoundingClientRect();
       if (picture) source.style.setProperty("--leader-scale", String(track.width / picture.width));
       const x = track.left - origin.left;
@@ -59,10 +63,12 @@ export function LeaderDiagram(props: Props) {
           ?.getBoundingClientRect();
         const end = rect.top + rect.height / 2 - origin.top;
         const facesRight = region && rect.left >= region.right;
+        const point = (x: number, y: number) =>
+          picture ? `${(x / origin.width) * 1000} ${(y / origin.height) * 1000}` : `${x} ${y}`;
         path.setAttribute(
           "d",
           region
-            ? `M${(facesRight ? region.right : region.left) - origin.left} ${region.top + region.height / 2 - origin.top} L${(facesRight ? rect.left : rect.right) - origin.left} ${rect.top + Math.min(16, rect.height / 2) - origin.top}`
+            ? `M${point((facesRight ? region.right : region.left) - origin.left, region.top + region.height / 2 - origin.top)} L${point((facesRight ? rect.left : rect.right) - origin.left, rect.top + Math.min(16, rect.height / 2) - origin.top)}`
             : (item.at ?? [])
                 .map(
                   (at) =>
@@ -107,7 +113,7 @@ export function LeaderDiagram(props: Props) {
           {picture ? (
             <svg
               data-leader-map=""
-              className="block w-full"
+              className="block w-full overflow-visible"
               aria-label="Page layout"
               viewBox={`0 0 ${picture.width} ${picture.height}`}
             >
@@ -142,6 +148,34 @@ export function LeaderDiagram(props: Props) {
                   </text>
                 </svg>
               ))}
+              <g data-leader-reference="" aria-hidden>
+                {picture.regions.map((r, i) => {
+                  const right = i % 2 === 1;
+                  const x = r.left + (right ? r.width : 0);
+                  const y = r.top + r.height / 2;
+                  const end = x + (right ? 24 : -24);
+                  return (
+                    <g key={r.key}>
+                      <path
+                        data-leader-reference-line={r.key}
+                        d={`M${x} ${y} H${end}`}
+                        fill="none"
+                        className="stroke-line-2"
+                        vectorEffect="non-scaling-stroke"
+                      />
+                      <text
+                        x={end}
+                        y={y}
+                        dy="-.35em"
+                        textAnchor={right ? "start" : "end"}
+                        fill="currentColor"
+                      >
+                        {i + 1}
+                      </text>
+                    </g>
+                  );
+                })}
+              </g>
             </svg>
           ) : (
             (track ??
@@ -169,12 +203,18 @@ export function LeaderDiagram(props: Props) {
               </div>
             ))}
         </div>
-        <svg aria-hidden className={`dl-leader-lines ${picture ? "@max-[60rem]:hidden" : ""}`}>
+        <svg
+          aria-hidden
+          viewBox={picture ? "0 0 1000 1000" : undefined}
+          preserveAspectRatio="none"
+          className={`dl-leader-lines ${picture ? "@max-[60rem]:hidden" : ""}`}
+        >
           {items.map((item) => (
             <path
               key={item.key}
               data-leader-line={item.key}
               data-dashed={item.dashed || undefined}
+              vectorEffect="non-scaling-stroke"
             />
           ))}
         </svg>

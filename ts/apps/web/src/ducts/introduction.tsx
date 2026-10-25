@@ -1,6 +1,6 @@
 import { DUCTS_SUMMARY, DUCTS_WALK } from "@pe/agent-contracts/ducts-guide";
 
-/** Public guidance can render before admission; mounted controls supply their own Teaching facts. */
+/** Documentation narrative; loading and Tutorial's map use HelpWorld. */
 export function DuctsIntroduction() {
   return (
     <section aria-label="How Ducts works" className="flex max-w-3xl flex-col gap-3">
