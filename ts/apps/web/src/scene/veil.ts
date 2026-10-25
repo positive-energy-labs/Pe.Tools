@@ -1,6 +1,6 @@
 /**
  * The veil: context opacity follows d = the world
- * distance from a fragment to the nearest subject geometry (tier `subject` or `stub`). One rule,
+ * distance from a fragment to the nearest opened subject geometry. One rule,
  * camera-independent: orbiting or zooming never changes it. Ground fog and brightness are optional.
  * `falloff` is the rule; the shader
  * mirrors it.
@@ -226,6 +226,8 @@ export function veilUniforms() {
     veilBrightness: { value: 0 },
     scenePass: { value: 1 },
     subjectRim: { value: 0 },
+    stubFadeFt: { value: 10 },
+    stubEndAlpha: { value: 0.06 },
   };
 }
 export type VeilUniforms = ReturnType<typeof veilUniforms>;
@@ -267,14 +269,16 @@ uniform float veilBrightness;
 #ifdef VEIL_TIER
 uniform int scenePass;
 uniform float subjectRim;
+uniform float stubFadeFt, stubEndAlpha;
 varying vec3 sceneNormal, sceneView;
+varying float sceneContinuation;
 #endif
 varying vec3 veilPoint;
 void veil(inout vec4 c) {
   float d = max(0.0, texture(veilField, (veilPoint - veilMin) / veilSize).r * veilReach - veilCell);
   float t = pow(1.0 - clamp((d - veilNear) / max(veilFar - veilNear, 1e-3), 0.0, 1.0), veilCurve);
 #ifdef VEIL_TIER
-  bool context = c.a <= 0.0;
+  bool context = c.a == 0.0;
   if (context != (scenePass == 0)) discard;
   if (context) {
     if (veilHalo && d >= veilFar) discard;
@@ -284,6 +288,11 @@ void veil(inout vec4 c) {
     if (c.a < 0.004) discard;
     c.rgb = mix(c.rgb, veilGround, veilFog * (1.0 - t));
   } else {
+    // Negative batch alpha carries the stub tier without spending another vertex attribute.
+    if (c.a < 0.0) {
+      float fade = min(1.0 - smoothstep(0.0, stubFadeFt, d), smoothstep(0.0, stubFadeFt, sceneContinuation));
+      c.a = -c.a * mix(stubEndAlpha, 1.0, fade);
+    }
     // Face interiors darken slightly against their rim; this survives the all-translucent view.
     c.rgb *= 1.0 - subjectRim * abs(dot(normalize(sceneNormal), normalize(sceneView)));
   }
@@ -309,15 +318,16 @@ export function veilMaterial(material: THREE.Material, u: VeilUniforms, tiered =
         "#include <fog_vertex>\nveilPoint = (inverse(viewMatrix) * mvPosition).xyz;",
       );
     if (tiered)
-      shader.vertexShader = `varying vec3 sceneNormal, sceneView;\n${shader.vertexShader}`
-        .replace(
-          "#include <defaultnormal_vertex>",
-          "#include <defaultnormal_vertex>\nsceneNormal = transformedNormal;",
-        )
-        .replace(
-          "#include <project_vertex>",
-          "#include <project_vertex>\nsceneView = isOrthographic ? vec3(0.0, 0.0, 1.0) : -mvPosition.xyz;",
-        );
+      shader.vertexShader =
+        `attribute float continuationDistance;\nvarying float sceneContinuation;\nvarying vec3 sceneNormal, sceneView;\n${shader.vertexShader}`
+          .replace(
+            "#include <defaultnormal_vertex>",
+            "#include <defaultnormal_vertex>\nsceneNormal = transformedNormal;",
+          )
+          .replace(
+            "#include <project_vertex>",
+            "#include <project_vertex>\nsceneContinuation = continuationDistance;\nsceneView = isOrthographic ? vec3(0.0, 0.0, 1.0) : -mvPosition.xyz;",
+          );
     shader.fragmentShader = `${tiered ? "#define VEIL_TIER\n" : ""}${shader.fragmentShader}`
       .replace("#include <fog_pars_fragment>", `#include <fog_pars_fragment>\n${parsFragment}`)
       .replace("#include <fog_fragment>", "veil(gl_FragColor);\n#include <fog_fragment>");

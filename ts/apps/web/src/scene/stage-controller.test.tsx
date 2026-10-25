@@ -51,7 +51,10 @@ it("projected bounds use client coordinates and refuse points behind the camera"
 
 it("sibling send preserves picture and focus; projection controls and history remain live", () => {
   const commits = vi.fn();
-  const pose = frame({ minX: 0, minY: 0, minZ: 0, maxX: 10, maxY: 20, maxZ: 30 });
+  const pose = {
+    ...frame({ minX: 0, minY: 0, minZ: 0, maxX: 10, maxY: 20, maxZ: 30 }),
+    projection: "perspective" as const,
+  };
   const publish = vi.fn();
   const orbit = createLiveOrbit(pose, stageViewport(publish));
   const clearSelection = () => {};
@@ -104,7 +107,7 @@ it("sibling send preserves picture and focus; projection controls and history re
   expect(commits).not.toHaveBeenCalled();
   const parallel = screen.getByRole("button", { name: "parallel" });
   fireEvent.click(parallel);
-  const next = { ...pose, projection: "parallel" };
+  const next = { ...pose, projection: "parallel" as const };
   expect(orbit.read()).toEqual(next);
   expect(publish).toHaveBeenCalledExactlyOnceWith({ viewport: next }, { history: "push" });
   expect(parallel.getAttribute("aria-pressed")).toBe("true");
@@ -112,6 +115,6 @@ it("sibling send preserves picture and focus; projection controls and history re
   expect(parallel.getAttribute("aria-pressed")).toBe("false");
   parallel.focus();
   fireEvent.keyDown(view.container.querySelector("section")!, { key: "o", code: "KeyO" });
-  expect(orbit.read()).toEqual(next);
+  expect(orbit.read()).toEqual(viewportCodec.decode(viewportCodec.encode(next)));
   expect(publish).toHaveBeenCalledTimes(2);
 });

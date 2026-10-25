@@ -61,5 +61,6 @@ export function clipMeshes(meshes: SceneMeshes, cuts: ReadonlyMap<number, readon
     new Float32Array(positions),
     positions.length ? bounds : meshes.bounds,
     instances,
+    cuts,
   );
 }

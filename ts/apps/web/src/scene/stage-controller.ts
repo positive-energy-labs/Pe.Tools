@@ -105,7 +105,7 @@ function useStageBindings(options: OrbitStage | PlaneStage) {
     const aspect = rect?.height ? rect.width / rect.height : 1;
     const view = target
       ? subjectPose(bounds, target, orbit.read(), aspect)
-      : frame(bounds.scene, bounds.subject, orbit.read() ?? undefined, aspect);
+      : frame(bounds.scene, bounds.subject, orbit.read() ?? undefined, aspect, bounds.points?.());
     return host ? clearPose(view, target ?? bounds.subject, bounds.scene, host) : view;
   };
   const frameOn = (target: Bounds | null) => {

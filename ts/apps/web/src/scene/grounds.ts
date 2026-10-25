@@ -39,6 +39,8 @@ export const LOOK = defineKnobs("scene", "ts/apps/web/src/scene/grounds.ts", {
     opacity: num("Subject opacity", 0.98, [0.05, 1, 0.01]),
     bySystem: bool("Colour by system", true),
     stubOpacity: num("Stub opacity", 0.35, [0.05, 1, 0.01]),
+    stubFadeFt: num("Stub fade reach", 10, [1, 50, 0.5], "live", "ft"),
+    stubEndAlpha: num("Stub fade floor × opacity", 0.06, [0, 1, 0.01]),
     darkLift: num("Dark-stage colour lift", 0.16, [0, 0.3, 0.01]),
   },
   depth: {
@@ -47,6 +49,9 @@ export const LOOK = defineKnobs("scene", "ts/apps/web/src/scene/grounds.ts", {
     rim: num("Duct rim contrast", 0.18, [0, 0.8, 0.01]),
   },
   camera: {
+    yaw: num("Starting bearing", 225, [0, 360, 5], "live", "deg"),
+    elev: num("Starting elevation", 32, [5, 85, 1], "live", "deg"),
+    frameFill: num("Subject frame fill", 0.82, [0.3, 0.95, 0.01]),
     zoomOutFactor: num("Zoom-out × subject diagonal", 2, [1, 5, 0.1]),
     panMargin: num("Pan margin × subject diagonal", 0.25, [0, 1, 0.05]),
     returnMs: num("Camera return", 380, [100, 1000, 10], "live", "ms"),
@@ -62,11 +67,11 @@ export const LOOK = defineKnobs("scene", "ts/apps/web/src/scene/grounds.ts", {
   veil: {
     colour: colour("Context ink", "theme"),
     themeGroundMix: num("Context mix toward ground", 0.25, [0, 1, 0.01]),
-    nearFt: num("Full within", 1, [0, 20, 0.25], "live", "ft"),
-    farFt: num("Far distance", 12, [1, 64, 0.5], "live", "ft"),
-    curve: num("Curve exponent", 2.5, [0.25, 6, 0.05]),
-    maxOpacity: num("Opacity at subject", 0.24, [0.01, CONTEXT_OPACITY_LIMIT, 0.01]),
-    minOpacity: num("Opacity far", 0.015, [0.01, CONTEXT_OPACITY_LIMIT, 0.005]),
+    nearFt: num("Full within", 0, [0, 20, 0.25], "live", "ft"),
+    farFt: num("Far distance", 8, [1, 64, 0.5], "live", "ft"),
+    curve: num("Curve exponent", 4, [0.25, 8, 0.05]),
+    maxOpacity: num("Opacity at subject", 0.18, [0.01, CONTEXT_OPACITY_LIMIT, 0.01]),
+    minOpacity: num("Opacity far", 0.004, [0, CONTEXT_OPACITY_LIMIT, 0.001]),
     desaturate: num("Desaturate far", 1, [0, 1, 0.01]),
     fog: num("Fog to ground far", 0, [0, 1, 0.01]),
     brightness: num("Brightness near ducts", 0, [0, 1, 0.01]),
@@ -116,6 +121,14 @@ export const LOOK = defineKnobs("scene", "ts/apps/web/src/scene/grounds.ts", {
   section: {
     paddingFt: num("Section padding", 3, [0, 30, 0.25], "live", "ft"),
     cap: choice("Cut faces", "solid", ["solid", "open"]),
+  },
+  captions: {
+    charPx: num("Caption glyph advance", 7, [5, 12, 0.25], "live", "px"),
+    rowPx: num("Caption line height", 16, [12, 28, 1], "live", "px"),
+    gapPx: num("Caption clearance", 6, [0, 24, 1], "live", "px"),
+    leaderPx: num("Continuation leader reach", 52, [12, 160, 2], "live", "px"),
+    leaderMaxPx: num("Continuation leader search", 208, [52, 416, 4], "live", "px"),
+    markPx: num("Continuation end mark", 7, [3, 16, 1], "live", "px"),
   },
 });
 export type Look = ReturnType<typeof LOOK.read>;

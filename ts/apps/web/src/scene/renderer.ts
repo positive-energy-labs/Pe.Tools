@@ -319,6 +319,7 @@ export function createRenderer(
   };
 
   const uniforms = {
+    sceneOrigin: { value: origin },
     clipPolygon: { value: new Float32Array(3 * CLIP_POINTS * 2) as Float32Array },
     clipCount: { value: [0, 0, 0] },
     clipKeep: { value: [1, 1, 1] },
@@ -330,18 +331,24 @@ export function createRenderer(
   let capStamp = "";
   const material = new THREE.MeshLambertMaterial({ ...GROUND_MATERIAL, side: THREE.DoubleSide });
   const applyClip = (target: THREE.Material) => {
-    target.onBeforeCompile = (shader) => {
+    if (target.userData.sceneClipped) return;
+    target.userData.sceneClipped = true;
+    const before = target.onBeforeCompile;
+    target.onBeforeCompile = (shader, renderer) => {
+      before.call(target, shader, renderer);
       Object.assign(shader.uniforms, uniforms);
-      shader.vertexShader = `varying vec3 vClipPosition;\n${shader.vertexShader}`.replace(
-        "#include <project_vertex>",
-        "#include <project_vertex>\nvClipPosition = transformed;",
-      );
+      shader.vertexShader =
+        `uniform vec3 sceneOrigin;\nvarying vec3 vClipPosition;\n${shader.vertexShader}`.replace(
+          "#include <fog_vertex>",
+          "#include <fog_vertex>\nvClipPosition = (inverse(viewMatrix) * mvPosition).xyz - sceneOrigin;",
+        );
       shader.fragmentShader = `${clipping}\n${shader.fragmentShader}`.replace(
-        "#include <clipping_planes_fragment>",
-        "#include <clipping_planes_fragment>\nsceneClip();",
+        "#include <fog_fragment>",
+        "sceneClip();\n#include <fog_fragment>",
       );
     };
-    target.customProgramCacheKey = () => "scene3d-clip-batch-v2";
+    const key = target.customProgramCacheKey.bind(target);
+    target.customProgramCacheKey = () => `${key()}|scene-clip-world-v3`;
   };
   applyClip(material);
   const veil = veilUniforms();
@@ -374,6 +381,8 @@ export function createRenderer(
       : null;
     setVeilLook(veil, look.veil, ground);
     veil.subjectRim.value = look.depth.rim;
+    veil.stubFadeFt.value = look.subject.stubFadeFt;
+    veil.stubEndAlpha.value = look.subject.stubEndAlpha;
     outline.setWidths(look.outline);
     glow.setLook(look.glow);
   };
@@ -401,7 +410,7 @@ export function createRenderer(
       tier === "context"
         ? CONTEXT_ALPHA
         : tier === "stub"
-          ? Math.min(
+          ? -Math.min(
               look.subject.stubOpacity,
               look.depth.everythingTranslucent ? look.depth.translucentOpacity : 1,
             )
@@ -419,7 +428,7 @@ export function createRenderer(
   const idOf: number[] = [];
   let field: VeilField;
   const bake = () => {
-    field = bakeVeil(meshes, (i) => paints[idOf[i]!]!.tier !== "context");
+    field = bakeVeil(meshes, (i) => paints[idOf[i]!]!.tier === "subject");
     setVeilField(veil, field);
   };
   mark("geometry-start");
@@ -435,6 +444,21 @@ export function createRenderer(
     }
     const geometry = new THREE.BufferGeometry();
     geometry.setAttribute("position", new THREE.BufferAttribute(vertices, 3));
+    const cuts = instance.revitId === null ? [] : (meshes.cuts.get(instance.revitId) ?? []);
+    const continuation = new Float32Array(vertices.length / 3).fill(1e6);
+    for (const cut of cuts) {
+      const normal = new THREE.Vector3()
+        .fromArray(cut.at)
+        .sub(new THREE.Vector3().fromArray(cut.from))
+        .normalize();
+      const end = new THREE.Vector3().fromArray(cut.at);
+      const point = new THREE.Vector3();
+      for (let n = 0; n < continuation.length; n++) {
+        point.fromArray(meshes.positions, (instance.firstVertex + n) * 3);
+        continuation[n] = Math.min(continuation[n]!, Math.abs(point.sub(end).dot(normal)));
+      }
+    }
+    geometry.setAttribute("continuationDistance", new THREE.BufferAttribute(continuation, 1));
     geometry.computeVertexNormals();
     geometry.computeBoundingSphere();
     geometry.computeBoundingBox();
@@ -961,6 +985,10 @@ export function createRenderer(
         "position",
         new THREE.BufferAttribute(positions, 3),
       );
+      geometry.setAttribute(
+        "continuationDistance",
+        new THREE.BufferAttribute(new Float32Array(positions.length / 3).fill(1e6), 1),
+      );
       geometry.computeVertexNormals();
       const capMaterial = new THREE.MeshLambertMaterial({
         ...GROUND_MATERIAL,
@@ -1044,7 +1072,9 @@ export function createRenderer(
       for (const { layer, group } of layers.values()) {
         if (!layer.targets?.length) continue;
         group.updateMatrixWorld(true);
-        const hit = issueRay.intersectObject(group, true)[0];
+        const hit = issueRay
+          .intersectObject(group, true)
+          .find((hit) => clipContains(clipVolume, hit.point.toArray(), origin.toArray()));
         if (!hit || hit.distance >= nearest) continue;
         nearest = hit.distance;
         picked =
@@ -1166,7 +1196,7 @@ export function createRenderer(
       let changedSubject = false;
       byId.forEach((instance, id) => {
         const paint = paintOf(instance, paintBy);
-        changedSubject ||= (paint.tier === "context") !== (paints[id]!.tier === "context");
+        changedSubject ||= paint.tier !== paints[id]!.tier;
         paints[id] = paint;
       });
       if (changedSubject) {
@@ -1225,7 +1255,10 @@ export function createRenderer(
         layer.build(group);
         group.traverse((object) => {
           if (object instanceof THREE.Mesh || object instanceof THREE.Line)
-            for (const m of [object.material].flat() as THREE.Material[]) veilMaterial(m, veil);
+            for (const m of [object.material].flat() as THREE.Material[]) {
+              applyClip(m);
+              veilMaterial(m, veil);
+            }
         });
         scene.add(group);
         layers.set(layer.key, { layer, group });

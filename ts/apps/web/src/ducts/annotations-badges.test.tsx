@@ -22,7 +22,7 @@ vi.mock("@pe/kit/lib/token", () => ({
 }));
 afterEach(cleanup);
 
-it("stub names are bold DOM captions and toggle independently of effective-length labels", () => {
+it("stub names have leaders and kit mono typography and toggle independently of effective-length labels", () => {
   const registry = makeAtomRegistry();
   const props: Parameters<typeof Annotations>[0] = {
     project: (p) => [p[0]!, p[1]!],
@@ -50,9 +50,11 @@ it("stub names are bold DOM captions and toggle independently of effective-lengt
       <Annotations {...props} />
     </TestAttention>,
   );
-  expect(container.querySelector("[data-stub-label] text")?.getAttribute("font-weight")).toBe(
-    "bold",
+  expect(container.querySelector("[data-stub-label] text")?.getAttribute("font-weight")).toBeNull();
+  expect(container.querySelector("[data-stub-label] text")?.getAttribute("class")).toBe(
+    "face-mono",
   );
+  expect(container.querySelector("[data-stub-label] path")).not.toBeNull();
   expect(container.querySelector("[data-loss-label]")).toBeNull();
   rerender(
     <TestAttention registry={registry}>

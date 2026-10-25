@@ -210,20 +210,19 @@ describe("orbit viewport ↔ camera", () => {
 
 describe("frame and looks", () => {
   it("frame centres the target, keeps the direction, and zooms against the scene's bounds", () => {
-    expect(frame(bounds, bounds, { yaw: 30, elev: 10 })).toEqual({
+    expect(frame(bounds, bounds, { yaw: 30, elev: 10 })).toMatchObject({
       kind: "orbit",
       yaw: 30,
       elev: 10,
-      zoom: 1,
       pivot: [120, 215, 6],
     });
-    expect(frame(bounds).yaw).toBe(-45);
-    expect(frame(bounds).elev).toBeCloseTo(35.264, 3);
+    expect(frame(bounds).yaw).toBe(225);
+    expect(frame(bounds).elev).toBe(32);
     const part = boundsOfPoints([
       [100, 200, 0],
       [110, 207.5, 3],
     ])!;
-    expect(frame(bounds, part).zoom).toBeCloseTo(4, 6);
+    expect(frame(bounds, part).zoom / frame(bounds).zoom).toBeCloseTo(4, 6);
   });
   it("a look keeps pivot and zoom; plan and iso keep the yaw, a cardinal sets it", () => {
     const shown: OrbitViewport = { kind: "orbit", yaw: 12, elev: 20, zoom: 3, pivot: [1, 2, 3] };

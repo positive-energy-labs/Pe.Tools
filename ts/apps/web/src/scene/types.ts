@@ -51,13 +51,23 @@ export class SceneMeshes {
   // FOOTGUN: React's development prop inspector enumerates public geometry on each update.
   #positions: Float32Array;
   #instances: readonly SceneInstance[];
+  #cuts: ReadonlyMap<number, readonly { from: readonly number[]; at: readonly number[] }[]>;
   constructor(
     positions: Float32Array,
     readonly bounds: Bounds,
     instances: readonly SceneInstance[],
+    /** Retained continuation boundaries from the developed-length stub clip, in world feet. */
+    cuts: ReadonlyMap<
+      number,
+      readonly { from: readonly number[]; at: readonly number[] }[]
+    > = new Map(),
   ) {
     this.#positions = positions;
     this.#instances = instances;
+    this.#cuts = cuts;
+  }
+  get cuts() {
+    return this.#cuts;
   }
   get positions(): Float32Array {
     return this.#positions;

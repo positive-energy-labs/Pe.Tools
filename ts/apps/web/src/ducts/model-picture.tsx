@@ -21,8 +21,10 @@ import { fitSection, sectionVolume, type Section } from "#/scene/section";
 import { SectionControls, SectionHandles } from "#/scene/section-controls";
 import { boundsOfInstances, boundsOfPoints, frame, type OrbitViewport } from "#/scene/orbit";
 import type { PictureBounds } from "#/scene/framing";
+import { framingPoints, captionObstacles } from "#/scene/framing";
 import { useStage } from "#/scene/stage-controller";
-import { viewportProject, type Project, type Size } from "#/scene/projection";
+import { sectionProject, viewportProject, type Project, type Size } from "#/scene/projection";
+import { continuationAnchor, ContinuationMarks } from "#/scene/continuations";
 import { type LiveOrbit } from "@pe/kit/lang/live-orbit";
 import { PaneOverlay } from "@pe/kit/lang/pane";
 import { OutcomeLine } from "@pe/kit/lang/outcome";
@@ -63,6 +65,7 @@ export function usePictureBounds(meshes: SceneMeshes | null, scene: Scene): Pict
       return {
         scene: meshes.bounds,
         subject: boundsOfInstances(meshes, (i) => i.focus) ?? meshes.bounds,
+        points: () => framingPoints(meshes),
       };
     const own = boundsOfPoints(centrelinePoints(scene));
     return own && { scene: own, subject: own };
@@ -77,8 +80,8 @@ export const poseOf = (
 ): OrbitViewport | null =>
   viewport?.kind === "orbit"
     ? viewport
-    : bounds
-      ? frame(bounds.scene, bounds.subject, undefined, size ? size.width / size.height : 1)
+    : bounds && size
+      ? frame(bounds.scene, bounds.subject, undefined, size.width / size.height, bounds.points?.())
       : null;
 
 export function ModelPicture({
@@ -212,6 +215,25 @@ export function ModelPicture({
     : pose && bounds && size
       ? { project: viewportProject(pose, bounds.scene, size), size }
       : null;
+  const annotationProject = overlay && sectionProject(overlay.project, shownView.section);
+  const captionField = useMemo(
+    () =>
+      overlay &&
+      annotationProject && {
+        ...overlay.size,
+        obstacles: meshes ? captionObstacles(meshes, annotationProject, paintOf) : [],
+      },
+    [overlay, shownView.section, meshes, paintOf],
+  ); // eslint-disable-line react-hooks/exhaustive-deps
+  const captionLabels = useMemo(
+    () =>
+      meshes
+        ? labels.map((label) =>
+            label.stub ? { ...label, at: continuationAnchor(meshes, label.ids, label.at) } : label,
+          )
+        : labels,
+    [meshes, labels],
+  );
 
   const keysOf = useMemo(() => {
     const out = new Map<number, string[]>();
@@ -321,20 +343,26 @@ export function ModelPicture({
           />
         </PaneOverlay>
       ) : null}
-      {overlay ? (
+      {overlay && annotationProject ? (
         <div
           ref={fade}
           className="pointer-events-none absolute inset-0 transition-opacity duration-150 data-flying:opacity-0"
         >
-          <CaptionBounds.Provider value={overlay.size}>
+          <CaptionBounds.Provider value={captionField}>
+            {meshes && (
+              <svg className="pointer-events-none absolute inset-0 size-full">
+                <ContinuationMarks meshes={meshes} project={annotationProject} />
+              </svg>
+            )}
             <Annotations
               {...overlay}
+              project={annotationProject}
               scene={scene}
               layers={layers}
               encoding={encoding}
               selected={selected}
               hovered={hovered}
-              labels={labels}
+              labels={captionLabels}
               meshed={meshed}
               issues={issues}
               rulings={rulings}

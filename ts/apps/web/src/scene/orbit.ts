@@ -5,6 +5,7 @@
  */
 import type { Bounds, SceneInstance, SceneMeshes } from "./types";
 import { Quaternion, Vector3, type Camera } from "three";
+import { LOOK } from "./grounds";
 
 import { orbitLooks, type OrbitLook, type OrbitViewport } from "@pe/agent-contracts";
 export type { OrbitLook, OrbitViewport };
@@ -219,9 +220,6 @@ export const applyLook = (look: OrbitLook, pose: OrbitViewport): OrbitViewport =
   return { ...pose, yaw: turn.yaw ?? pose.yaw, elev: turn.elev };
 };
 
-/** The direction a fit looks from when nothing else says: the iso from the south-east. */
-const FIT_FROM = { yaw: -45, elev: orbitLooks.iso.elev };
-
 /**
  * `target` filling the view, seen from `from`. Zoom is measured against `scene`, the bounds the
  * camera is built on (`toCamera`), so a frame of a few elements inside a larger capture is close.
@@ -229,16 +227,59 @@ const FIT_FROM = { yaw: -45, elev: orbitLooks.iso.elev };
 export function frame(
   scene: Bounds,
   target: Bounds = scene,
-  from: Pick<OrbitViewport, "yaw" | "elev" | "projection"> = FIT_FROM,
+  from: Pick<OrbitViewport, "yaw" | "elev" | "projection"> = {
+    yaw: LOOK.read().camera.yaw,
+    elev: LOOK.read().camera.elev,
+    projection: "parallel",
+  },
   aspect = 1,
+  points?: Iterable<readonly number[]>,
 ): OrbitViewport {
+  const yaw = from.yaw * RAD;
+  const elev = Math.min(ELEV_LIMIT, Math.max(-ELEV_LIMIT, from.elev)) * RAD;
+  let pivot = center(target);
+  const right = [-Math.sin(yaw), Math.cos(yaw), 0];
+  const up = [-Math.sin(elev) * Math.cos(yaw), -Math.sin(elev) * Math.sin(yaw), Math.cos(elev)];
+  const eye = [Math.cos(elev) * Math.cos(yaw), Math.cos(elev) * Math.sin(yaw), Math.sin(elev)];
+  const vertices =
+    points ??
+    [target.minX, target.maxX].flatMap((x) =>
+      [target.minY, target.maxY].flatMap((y) => [target.minZ, target.maxZ].map((z) => [x, y, z])),
+    );
+  let distance = 0.5;
+  const extents = { x0: Infinity, x1: -Infinity, y0: Infinity, y1: -Infinity };
+  for (const p of vertices) {
+    const q = p.map((n, i) => n - pivot[i]!);
+    const dot = (v: number[]) => q.reduce((sum, n, i) => sum + n * v[i]!, 0);
+    const x = dot(right),
+      y = dot(up);
+    extents.x0 = Math.min(extents.x0, x);
+    extents.x1 = Math.max(extents.x1, x);
+    extents.y0 = Math.min(extents.y0, y);
+    extents.y1 = Math.max(extents.y1, y);
+    const extent = Math.max(Math.abs(dot(right)) / Math.max(aspect, 0.001), Math.abs(dot(up)));
+    distance = Math.max(
+      distance,
+      extent / (HALF_FOV_TAN * LOOK.read().camera.frameFill) +
+        (from.projection === "parallel" ? 0 : dot(eye)),
+    );
+  }
+  if (from.projection === "parallel" && Number.isFinite(extents.x0)) {
+    distance =
+      Math.max((extents.x1 - extents.x0) / Math.max(aspect, 0.001), extents.y1 - extents.y0, 1) /
+      (2 * HALF_FOV_TAN * LOOK.read().camera.frameFill);
+    pivot = pivot.map(
+      (n, i) =>
+        n + (right[i]! * (extents.x0 + extents.x1)) / 2 + (up[i]! * (extents.y0 + extents.y1)) / 2,
+    ) as Vec3;
+  }
   return {
     kind: "orbit",
     projection: from.projection,
     yaw: from.yaw,
     elev: from.elev,
-    zoom: fitDistance(scene) / fitDistance(target, aspect),
-    pivot: center(target),
+    zoom: fitDistance(scene) / distance,
+    pivot,
   };
 }
 

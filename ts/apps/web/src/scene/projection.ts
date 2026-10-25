@@ -5,10 +5,41 @@
 import * as THREE from "three";
 import { HALF_FOV_TAN, ORBIT_FOV, toCamera, type OrbitViewport } from "./orbit";
 import type { Bounds } from "./types";
+import { sectionContains, sectionPlanes, type Section } from "./section";
 
 export type Size = { width: number; height: number };
 /** A world point to px from the canvas's top-left; null behind the camera. */
-export type Project = (point: readonly number[]) => [number, number] | null;
+export type Project = ((point: readonly number[]) => [number, number] | null) & {
+  lines?: (line: readonly (readonly number[])[]) => readonly (readonly (readonly number[])[])[];
+};
+
+/** Clip annotation anchors and line segments against the same inward world planes as meshes. */
+export function sectionProject(project: Project, section: Section | null): Project {
+  if (!section) return project;
+  const planes = sectionPlanes(section);
+  return Object.assign(
+    (point: readonly number[]) => (sectionContains(section, point) ? project(point) : null),
+    {
+      lines: (line: readonly (readonly number[])[]) =>
+        line.slice(1).flatMap((b, i) => {
+          const a = line[i]!;
+          let lo = 0,
+            hi = 1;
+          for (const p of planes) {
+            const side = (v: readonly number[]) =>
+              p[3]! + v.reduce((sum, n, axis) => sum + n * p[axis]!, 0);
+            const da = side(a),
+              db = side(b);
+            if (da < 0 && db < 0) return [];
+            if (da < 0) lo = Math.max(lo, da / (da - db));
+            if (db < 0) hi = Math.min(hi, da / (da - db));
+          }
+          const at = (t: number) => a.map((n, axis) => n + (b[axis]! - n) * t);
+          return lo <= hi ? [[at(lo), at(hi)]] : [];
+        }),
+    },
+  );
+}
 
 type OrbitCamera = THREE.PerspectiveCamera | THREE.OrthographicCamera;
 export function newCamera(
