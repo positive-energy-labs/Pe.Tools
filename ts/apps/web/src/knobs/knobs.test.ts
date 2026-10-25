@@ -1,7 +1,10 @@
-import { afterEach, expect, it } from "vite-plus/test";
+import { afterEach, expect, it, vi } from "vite-plus/test";
 import { bool, colour, defineKnobs, diffText, num, resetKnob, set, setKnob } from "./knobs";
 
-afterEach(() => resetKnob());
+afterEach(() => {
+  resetKnob();
+  vi.unstubAllEnvs();
+});
 
 it("copies only knobs that differ from code, grouped by module with their source", () => {
   const scene = {
@@ -48,4 +51,10 @@ it("reads overrides over defaults, stays stable between changes, and forgets a r
   setKnob("test.a.on", false);
   resetKnob("test.a.hidden");
   expect(knobs.read()).toEqual(first);
+  setKnob("test.a.on", true);
+  vi.stubEnv("DEV", false);
+  expect(knobs.read()).toEqual(first);
+  expect(defineKnobs("test", "knobs.test.ts", { a: { on: bool("On", false) } }).read()).toEqual({
+    a: { on: false },
+  });
 });
