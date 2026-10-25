@@ -4,11 +4,7 @@ import { createRequire } from "node:module";
 import { act, cleanup, fireEvent, render, waitFor } from "@testing-library/react";
 import { RegistryContext } from "@effect/atom-react";
 import { Profiler } from "react";
-import {
-  declareMembers,
-  elementKey,
-  setHovered,
-} from "../src/components/lang/attention";
+import { declareMembers, elementKey, setHovered } from "../src/components/lang/attention";
 import { AttentionFixture, kitRegistry } from "./attention-fixture";
 import { afterEach, expect, test, vi } from "vite-plus/test";
 import { useList } from "../src/components/lang/collection";
