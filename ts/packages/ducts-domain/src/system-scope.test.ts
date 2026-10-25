@@ -6,7 +6,7 @@
  */
 import { expect, it } from "vite-plus/test";
 
-import { systemScope } from "./system-scope.ts";
+import { scopeOf, sectionsOf, systemScope } from "./system-scope.ts";
 import type { DuctSnapshot } from "./types.ts";
 
 type Node = DuctSnapshot["nodes"][number];
@@ -136,4 +136,20 @@ it("only the runs to the system's own terminals, its elements and their unit pri
   const ra = systemScope(snapshot, "RA 1");
   // RA 1's run leaves the AHU through SA 1's trunk: the shared trunk prices both.
   expect([...ra.prices].sort((a, b) => a - b)).toEqual([1, 3, 5, 20, 100]);
+});
+
+it("several open systems read as one scope: groups in open order, once; the last is active", () => {
+  const both = scopeOf(snapshot, ["SA 1", "RA 1"])!;
+  expect(both.name).toBe("RA 1");
+  expect(both.groups).toEqual(["g1", "g6"]);
+  // g1 sits under SA 1, which opened it first, and names RA 1 as shared from there.
+  expect(both.shared.get("g1")).toEqual(["RA 1"]);
+  expect([...both.terminals].sort()).toEqual([10, 11, 20]);
+  expect(scopeOf(snapshot, ["RA 1", "SA 1"])!.groups).toEqual(["g1", "g6"]);
+  expect(scopeOf(snapshot, [])).toBeNull();
+  expect(scopeOf(snapshot, ["SA 1"])).toBe(systemScope(snapshot, "SA 1"));
+  expect([...sectionsOf(snapshot, ["RA 1", "SA 1"])]).toEqual([
+    ["g1", "RA 1 · AHU-1"],
+    ["g6", "SA 1 · no fan"],
+  ]);
 });

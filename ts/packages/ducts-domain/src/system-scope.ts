@@ -176,6 +176,57 @@ export function sectionNames(
   );
 }
 
-/** The chosen system over a snapshot; no system chosen is the whole document (null). */
-export const scopeOf = (snapshot: DuctSnapshot, system: string) =>
-  system ? systemScope(snapshot, system) : null;
+/**
+ * Each open system's section names, in open order: a group two open systems share is named once,
+ * by the first system that opened it.
+ */
+export function sectionsOf(
+  snapshot: Pick<DuctSnapshot, "groups" | "nodes">,
+  systems: readonly string[],
+): Map<string, string> {
+  const names = new Map<string, string>();
+  for (const system of systems)
+    for (const [g, label] of sectionNames(snapshot, system)) if (!names.has(g)) names.set(g, label);
+  return names;
+}
+
+const unions = new WeakMap<object, Map<string, SystemScope>>();
+
+/**
+ * The open systems over a snapshot as one scope; none open is the whole document (null). Groups
+ * run in open order, de-duplicated, so a shared group shows once, under the first system that
+ * opened it, and `shared` names its other systems from there. `name` is the active system, the
+ * last opened: the verbs that need one system (write, heal, fan) read it.
+ */
+export function scopeOf(snapshot: DuctSnapshot, systems: readonly string[]): SystemScope | null {
+  if (!systems.length) return null;
+  if (systems.length === 1) return systemScope(snapshot, systems[0]!);
+  const cache = unions.get(snapshot) ?? unions.set(snapshot, new Map()).get(snapshot)!;
+  const key = systems.join("\n");
+  const hit = cache.get(key);
+  if (hit) return hit;
+  const scopes = systems.map((name) => systemScope(snapshot, name));
+  const union = <T>(pick: (scope: SystemScope) => Iterable<T>) =>
+    new Set(scopes.flatMap((scope) => [...pick(scope)]));
+  const shared = new Map<string, readonly string[]>();
+  const placed = new Set<string>();
+  for (const scope of scopes)
+    for (const g of scope.groups) {
+      if (placed.has(g)) continue;
+      placed.add(g);
+      const others = scope.shared.get(g);
+      if (others) shared.set(g, others);
+    }
+  const scope: SystemScope = {
+    name: systems.at(-1)!,
+    groups: [...placed],
+    pricing: union((s) => s.pricing),
+    shared,
+    terminals: union((s) => s.terminals),
+    units: union((s) => s.units),
+    prices: union((s) => s.prices),
+    members: union((s) => s.members),
+  };
+  cache.set(key, scope);
+  return scope;
+}
