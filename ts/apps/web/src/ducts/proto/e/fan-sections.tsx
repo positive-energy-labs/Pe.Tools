@@ -10,11 +10,12 @@ import { useNativeObservation } from "#/revit/observation";
  * breakdown popover and on each unit's Inputs row.
  */
 import type { Priced } from "@pe/ducts-domain/pricing";
-import type { FanResult } from "@pe/ducts-domain/losses";
+import { worstRun, type FanResult } from "@pe/ducts-domain/losses";
 
 import { fmtFt } from "./bar";
 
 export interface FanFact {
+  key: string;
   unit: number;
   /** "largest fan" with several fans in its group, else "fan". */
   role: string;
@@ -30,10 +31,15 @@ export function fanFacts(
   priced: Priced | null,
   groups: readonly string[],
   nameOf: (id: number) => string,
+  terminals?: ReadonlySet<number>,
 ): FanFact[] {
   return groups.flatMap((g) => {
     const fans: readonly FanResult[] = priced?.next.byGroup[g]?.fans ?? [];
-    return fans.map((f, k) => {
+    return fans.flatMap((f, k) => {
+      const run = priced && terminals ? worstRun(priced.next, [g], terminals, f.unit) : null;
+      if (terminals && !run) return [];
+      const esp = run?.total ?? f.esp;
+      const tel = run?.tel ?? f.tel;
       const where =
         fans.length < 2
           ? ""
@@ -43,13 +49,14 @@ export function fanFacts(
               ? " · meets no larger fan"
               : ` · to ${nameOf(f.junction)}${f.viaJunction ? ", then the trunk" : ""}`;
       return {
+        key: `${g}:${f.unit}`,
         unit: f.unit,
         end: where.slice(3),
-        esp: f.esp,
+        esp,
         cfm: f.cfm,
-        tel: f.tel,
+        tel,
         role: fans.length > 1 && k === 0 ? "largest fan" : "fan",
-        says: `${f.cfm ?? "no"} cfm · TEL ${fmtFt(f.tel)} ft · ESP ${f.esp.toFixed(3)} in-wg${where}`,
+        says: `${f.cfm ?? "no"} cfm · TEL ${fmtFt(tel)} ft · ESP ${esp.toFixed(3)} in-wg${where}`,
       };
     });
   });
@@ -72,7 +79,7 @@ export function FanFacts({
         const share = scale > 0 ? fact.esp / scale : 0;
         return (
           <LeaderDiagram
-            key={fact.unit}
+            key={fact.key}
             label={nameOf(fact.unit)}
             items={[
               {

@@ -1,7 +1,7 @@
 /**
  * The /ducts subject is a Revit system, never a group (pressure-drop ledger, 2026-10-21). A system
- * spans every group it is in (`groups[].systemNames`); a group that carries several systems shows
- * under each, shared. What blocks the system is only what prices it: the runs from a fan to the
+ * spans every group it is in (`groups[].systemNames`). Shared groups are sections, not membership:
+ * only owned elements and shared pricing paths belong to the subject. What blocks it is the runs from a fan to the
  * system's terminals, the system's own elements (its open ends), and the units on those runs.
  * Everything else inside a shared group is the other systems' and never blocks this one.
  */
@@ -86,7 +86,7 @@ export interface SystemScope {
   units: ReadonlySet<number>;
   /** What can block the system: its runs (fan to its terminals), its own elements, its units. */
   prices: ReadonlySet<number>;
-  /** Every element of every group the system is in, roots included: what the page shows. */
+  /** Owned elements and shared fan-to-terminal paths, including their units. */
   members: ReadonlySet<number>;
 }
 
@@ -99,13 +99,11 @@ export function systemScope(snapshot: DuctSnapshot, name: string): SystemScope {
   if (hit) return hit;
   const groups = groupsOfSystem(snapshot, name);
   const ids = new Set(groups.map((g) => g.id));
-  const members = new Set<number>();
   const own = new Set<number>();
   const terminals = new Set<number>();
   const pricing = new Set<string>();
   for (const e of [...snapshot.nodes, ...snapshot.segments]) {
     if (!e.groupId || !ids.has(e.groupId)) continue;
-    members.add(e.id);
     if (!ownedBy(name, e.systemName)) continue;
     own.add(e.id);
     pricing.add(e.groupId);
@@ -114,7 +112,6 @@ export function systemScope(snapshot: DuctSnapshot, name: string): SystemScope {
   const units = new Set<number>();
   const prices = new Set(own);
   for (const g of groups) {
-    for (const r of g.rootIds) members.add(r);
     if (!pricing.has(g.id)) continue;
     const tree = groupTree(snapshot, g.id);
     for (const t of tree.terminals)
@@ -139,7 +136,7 @@ export function systemScope(snapshot: DuctSnapshot, name: string): SystemScope {
     terminals,
     units,
     prices,
-    members,
+    members: prices,
   };
   cache.set(name, scope);
   return scope;

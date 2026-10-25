@@ -222,7 +222,7 @@ export interface LossResult {
       implausible: number[];
       /** The fan's standing: provisional when any path in the group is. */
       provisional: Provisional;
-      /** One entry per fan when several fans root the group, largest design flow first; else empty. */
+      /** One entry per fan, largest design flow first; empty only with no fan. */
       fans: FanResult[];
     }
   >;
@@ -478,7 +478,7 @@ export function computeLosses(
     const lead = group.rootIds.length > 1 ? fans[0]?.unit : undefined;
     const tree = groupTree(snapshot, group.id, lead);
     const below = flowBelow(tree, overrides, noteCross);
-    const sections = fans.length > 1 ? fanSections(tree, fans) : [];
+    const sections = fanSections(tree, fans);
     const others = new Set(sections.slice(1).flatMap((s) => s.owned));
     const runPaths = new Map<number, number[]>();
     let fan = 0;
@@ -1026,7 +1026,14 @@ export function worstRun(
   result: LossResult,
   groups: readonly string[],
   terminals: ReadonlySet<number>,
-): { total: number; tel: number | null; terminal: number; unit: number | null } | null {
+  unitId?: number,
+): {
+  total: number;
+  tel: number | null;
+  terminal: number;
+  unit: number | null;
+  rows: Row[];
+} | null {
   const runs = groups.flatMap((g) => {
     const solved = result.byGroup[g];
     const own = [...terminals].flatMap((t) => {
@@ -1035,20 +1042,25 @@ export function worstRun(
       const unit =
         solved?.fans.slice(1).find((f) => f.owned.includes(t))?.unit ?? solved?.fans[0]?.unit;
       return [
-        { total: p.total, tel: p.tel, terminal: t, unit: unit ?? solved?.criticalFan ?? null },
+        {
+          total: p.total,
+          tel: p.tel,
+          terminal: t,
+          unit: unit ?? solved?.criticalFan ?? null,
+          rows: p.rows,
+        },
       ];
     });
     const via = (solved?.fans ?? []).flatMap((f) =>
       f.viaJunction && f.critical != null && terminals.has(f.critical)
-        ? [{ total: f.esp, tel: f.tel, terminal: f.critical, unit: f.unit }]
+        ? [{ total: f.esp, tel: f.tel, terminal: f.critical, unit: f.unit, rows: f.rows }]
         : [],
     );
     return [...own, ...via];
   });
-  return runs.reduce<(typeof runs)[number] | null>(
-    (a, b) => (a == null || b.total > a.total ? b : a),
-    null,
-  );
+  return runs
+    .filter((r) => unitId == null || r.unit === unitId)
+    .reduce<(typeof runs)[number] | null>((a, b) => (a == null || b.total > a.total ? b : a), null);
 }
 
 export interface Fanout {

@@ -5,7 +5,7 @@
  */
 import { expect, it } from "vite-plus/test";
 
-import { neighboursOf } from "./neighbours.ts";
+import { neighboursOf, cutLine, enteredLine } from "./neighbours.ts";
 import type { DuctSnapshot } from "./types.ts";
 
 type Segment = DuctSnapshot["segments"][number];
@@ -40,7 +40,10 @@ const run = (
       size: '6"ø',
       diameterIn: 6,
       lengthFt: ft[k]!,
-      polyline: [],
+      polyline: [
+        [0, 0, 0],
+        [ft[k]!, 0, 0],
+      ],
       groupId: group,
       systemName: system,
       roughness: { valueFt: 0.0003, provenance: "revit-default" },
@@ -96,34 +99,38 @@ const snapshot = {
 } as unknown as DuctSnapshot;
 
 it("keeps to the open port's airstream by default", () => {
-  expect(neighboursOf(snapshot, ["gS"], { stubFt: 10, hop: "same-classification" })).toEqual([
-    { group: "gF", unit: 100, systems: ["FA 1"], stub: [11, 12] },
+  expect(
+    neighboursOf(snapshot, new Set([100, 1, 2]), { stubFt: 10, hop: "same-classification" }),
+  ).toEqual([
+    {
+      group: "gF",
+      unit: 100,
+      systems: ["FA 1"],
+      stub: [11, 12, 13],
+      cuts: [{ id: 13, from: [0, 0, 0], at: [2, 0, 0] }],
+    },
   ]);
 });
 
-it("hop all crosses the core, and a long element on the port is the whole stub", () => {
-  const found = neighboursOf(snapshot, ["gS"], { stubFt: 10, hop: "all" });
+it("hop all crosses the core and clips the long element on the port", () => {
+  const found = neighboursOf(snapshot, new Set([100, 1, 2]), { stubFt: 10, hop: "all" });
+  expect(found.find((n) => n.group === "gE")!.cuts).toEqual([
+    { id: 31, from: [0, 0, 0], at: [10, 0, 0] },
+  ]);
   expect(found.map((n) => [n.group, n.stub])).toEqual([
-    ["gF", [11, 12]],
+    ["gF", [11, 12, 13]],
     ["gR", [21, 22]],
     ["gE", [31]],
   ]);
 });
 
 it("an open group is never a neighbour, and stubFt bounds the stub", () => {
-  const found = neighboursOf(snapshot, ["gS", "gF"], { stubFt: 4, hop: "all" });
+  const found = neighboursOf(snapshot, new Set([100, 1, 2, 11, 12, 13]), { stubFt: 4, hop: "all" });
   expect(found.map((n) => [n.group, n.stub])).toEqual([
-    ["gR", [21]],
+    ["gR", [21, 22]],
     ["gE", [31]],
   ]);
-  expect(neighboursOf(snapshot, [], { stubFt: 10, hop: "all" })).toEqual([]);
-});
-
-it("caps neighbouring groups per unit after filtering, without changing open groups", () => {
-  expect(
-    neighboursOf(snapshot, ["gS"], { stubFt: 10, hop: "all", neighbourCap: 1 }).map((n) => n.group),
-  ).toEqual(["gF"]);
-  expect(neighboursOf(snapshot, ["gS"], { stubFt: 10, hop: "all", neighbourCap: 0 })).toEqual([]);
+  expect(neighboursOf(snapshot, new Set(), { stubFt: 10, hop: "all" })).toEqual([]);
 });
 
 it("unknown connector classifications cannot establish a common airstream", () => {
@@ -134,6 +141,37 @@ it("unknown connector classifications cannot establish a common airstream", () =
       connectors: n.connectors.map((c) => ({ ...c, classification: null })),
     })),
   };
-  expect(neighboursOf(unknown, ["gS"], { stubFt: 10, hop: "same-classification" })).toEqual([]);
-  expect(neighboursOf(unknown, ["gS"], { stubFt: 10, hop: "all" })).toHaveLength(3);
+  expect(
+    neighboursOf(unknown, new Set([100, 1, 2]), { stubFt: 10, hop: "same-classification" }),
+  ).toEqual([]);
+  expect(neighboursOf(unknown, new Set([100, 1, 2]), { stubFt: 10, hop: "all" })).toHaveLength(3);
+});
+
+it("walks shared-group boundaries at a plenum from its port, never its box centre", () => {
+  const shared = {
+    ...snapshot,
+    nodes: snapshot.nodes.map((n) => ({ ...n, kind: "fitting" as const, point: [999, 999, 999] })),
+    segments: snapshot.segments.map((s) => ({ ...s, groupId: "one-shared-network" })),
+  };
+  const found = neighboursOf(shared, new Set([100, 1, 2]), { stubFt: 10, hop: "all" });
+  expect(found.map((n) => n.systems)).toEqual([["FA 1"], ["EX 1"], ["EX 2"]]);
+  expect(found.find((n) => n.systems.includes("EX 2"))!.cuts[0]!.at).toEqual([10, 0, 0]);
+  expect(found.every((n) => n.stub.every((id) => ![100, 1, 2].includes(id)))).toBe(true);
+  expect(neighboursOf(shared, new Set([100, 1, 2]), { stubFt: 0, hop: "all" })).toEqual([]);
+});
+
+it("measures a cut around the duct bends and reverses from the entering connector", () => {
+  const duct = {
+    ...snapshot.segments[0]!,
+    polyline: [
+      [0, 0, 0],
+      [6, 0, 0],
+      [6, 8, 0],
+    ],
+  };
+  expect(cutLine(enteredLine(duct, [6, 8, 0]), 10)).toEqual([
+    [6, 8, 0],
+    [6, 0, 0],
+    [4, 0, 0],
+  ]);
 });

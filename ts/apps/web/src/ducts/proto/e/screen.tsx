@@ -18,7 +18,6 @@ import {
   type ReactNode,
 } from "react";
 import type { DuctsApply } from "@pe/host-contracts/generated";
-import { flushSync } from "react-dom";
 import { survey, unitFlowsIn } from "@pe/ducts-domain/survey";
 import { fansOwedBase, type OwedBase } from "@pe/ducts-domain/fan-assignment";
 import { sectionsOf, systemOfGroup } from "@pe/ducts-domain/system-scope";
@@ -68,7 +67,7 @@ import { DEFAULT_DESIGN_FRICTION_RATE } from "@pe/ducts-domain/equivalent-length
 import { BarRules, systemNoteCount, systemRowParts } from "./bar";
 import { DuctSettings } from "./settings";
 import { FanFacts, fanFacts, type FanFact } from "./fan-sections";
-import { ECanvas, OpeningContext } from "./canvas";
+import { ECanvas } from "./canvas";
 import { grilleLabels } from "./labels";
 import { FanButton, Inbox, type FanVerbs } from "./inbox";
 import type { WriteVerbs } from "./inbox-write";
@@ -159,56 +158,6 @@ function Halves({
  * screen says so instead of holding the first paint.
  */
 export function EScreen({ props }: { props: ProtoProps }) {
-  // A system switch re-renders every pane for about a second. The body is held at its last props
-  // until a frame has painted the picture plate's "opening …" line (`OpeningContext`), then renders
-  // the new system. `useDeferredValue` was tried: React ran the deferred pass before the paint.
-  const [system, setSystem] = useState(openKey(props.page.system));
-  const [requested, setRequested] = useState<string | null>(null);
-  const opening =
-    requested ?? (system === openKey(props.page.system) ? null : openKey(props.page.system));
-  const latest = useRef(props);
-  latest.current = props;
-  const flight = useRef<{ frame?: number; timer?: number; pending?: boolean }>({});
-  useEffect(
-    () => () => {
-      cancelAnimationFrame(flight.current.frame ?? 0);
-      clearTimeout(flight.current.timer);
-    },
-    [],
-  );
-  const move = useCallback<ProtoProps["setPage"]>((next, how) => {
-    if (next.system === undefined) return latest.current.setPage(next, how);
-    if (flight.current.pending) return;
-    if (openKey(next.system) === openKey(latest.current.page.system))
-      return latest.current.setPage(next, how);
-    flight.current.pending = true;
-    // Paint acknowledgement before the route/router compute the next system. Refuse repeat picks.
-    flushSync(() => setRequested(openKey(next.system!)));
-    flight.current.frame = requestAnimationFrame(() => {
-      flight.current.frame = undefined;
-      flight.current.timer = window.setTimeout(() => {
-        flight.current.timer = undefined;
-        latest.current.setPage(next, how);
-      }, 0);
-    });
-  }, []);
-  useEffect(() => {
-    if (opening == null || (requested != null && openKey(props.page.system) !== requested)) return;
-    let timer = 0;
-    const frame = requestAnimationFrame(() => {
-      timer = window.setTimeout(() => {
-        setSystem(openKey(props.page.system));
-        setRequested(null);
-        flight.current.pending = false;
-      }, 0);
-    });
-    return () => {
-      cancelAnimationFrame(frame);
-      clearTimeout(timer);
-    };
-  }, [opening, props.page.system, requested]);
-  const shown = useRef(props);
-  if (opening == null) shown.current = { ...props, setPage: move };
   if (!props.snapshot || props.pricing)
     return (
       <LoadingContext
@@ -226,22 +175,8 @@ export function EScreen({ props }: { props: ProtoProps }) {
       </LoadingContext>
     );
   return (
-    <OpeningContext value={opening}>
-      <HeldBody props={shown.current.snapshot ? shown.current : props} />
-    </OpeningContext>
-  );
-}
-
-const HeldBody = memo(EScreenBody);
-
-function EScreenBody({ props }: { props: ProtoProps }) {
-  if (!props.snapshot)
-    return <p className="text-ink-2 p-4">{props.empty?.says ?? "reading ducts…"}</p>;
-  return (
     <AttentionRoot doc={props.attentionDoc}>
-      <LoadedScreenBody
-        props={props as ProtoProps & { snapshot: NonNullable<ProtoProps["snapshot"]> }}
-      />
+      <LoadedScreenBody props={{ ...props, snapshot: props.snapshot }} />
     </AttentionRoot>
   );
 }
@@ -287,6 +222,13 @@ function LoadedScreenBody({
     [drawn, active],
   );
   const groups = scope?.groups ?? NO_GROUPS;
+  const displayMembers = useMemo(
+    () =>
+      scope && snapshot
+        ? new Set([...scope.members, ...scopeOf(snapshot, page.system)!.members])
+        : undefined,
+    [scope, snapshot, page.system],
+  );
   // The drawing indexes the raw snapshot: a group the survey merged away is drawn by its raw id too.
   const drawGroups = useMemo(() => {
     const raw = snapshot ? scopeOf(snapshot, page.system)?.groups : undefined;
@@ -303,24 +245,22 @@ function LoadedScreenBody({
     if (next.length !== page.system.length) setPage({ system: next });
   }, [multi.systemCap, page.system, setPage]);
   const neighbours = useMemo(
-    () => (snapshot && scope ? neighboursOf(snapshot, drawGroups, multi) : NO_NEIGHBOURS),
-    [snapshot, scope, drawGroups, multi],
+    () => (snapshot && scope ? neighboursOf(snapshot, displayMembers!, multi) : NO_NEIGHBOURS),
+    [snapshot, scope, displayMembers, multi],
   );
   // A system a stub carries that no open network shows already, once, with the units joining it.
   const connected = useMemo(() => {
-    const shown = new Set(
-      (drawn?.groups ?? []).filter((g) => groups.includes(g.id)).flatMap((g) => g.systemNames),
-    );
+    const shown = new Set(page.system);
     const via = new Map<string, number[]>();
     for (const n of neighbours)
       for (const system of n.systems)
         if (!shown.has(system) && !via.get(system)?.includes(n.unit))
           via.set(system, [...(via.get(system) ?? []), n.unit]);
     return [...via].map(([system, units]) => ({ system, units }));
-  }, [neighbours, drawn, groups]);
+  }, [neighbours, page.system]);
   const systems = props.analysis?.systems ?? NO_SYSTEMS;
   // Each group an open system is in is its own section, named by the system and its units; a group
-  // that carries other systems says so, and shows whole.
+  // that carries other systems says so; only the open systems' members draw.
   const sections = useMemo(
     () => (drawn && scope ? sectionsOf(drawn, page.system) : new Map<string, string>()),
     [drawn, scope, page.system],
@@ -334,7 +274,7 @@ function LoadedScreenBody({
     [sections, scope],
   );
   const trees = useMemo(
-    () => (drawn && scope ? buildTree(drawn, priced, doc, groups, sectionOf) : []),
+    () => (drawn && scope ? buildTree(drawn, priced, doc, groups, sectionOf, scope.members) : []),
     [drawn, priced, doc, scope, groups, sectionOf],
   );
   const issueScope = useMemo(
@@ -731,12 +671,18 @@ function LoadedScreenBody({
       null,
     ) ?? "";
   // Any group of the system with an implausible row: its ESP is a partial sum, so none is shown.
-  const blockedLoss = (activeScope?.groups ?? []).some(
-    (g) => (priced?.next.byGroup[g]?.implausible.length ?? 0) > 0,
+  const blockedLoss = (activeScope?.groups ?? []).some((g) =>
+    priced?.next.byGroup[g]?.implausible.some((id) => activeScope!.prices.has(id)),
   );
   const fansOf = useCallback(
-    (system: ReturnType<typeof systemList>[number]) => fanFacts(priced, system.groups, nameOf),
-    [priced, nameOf],
+    (system: ReturnType<typeof systemList>[number]) =>
+      fanFacts(
+        priced,
+        system.groups,
+        nameOf,
+        drawn ? systemScope(drawn, system.name).terminals : undefined,
+      ),
+    [priced, nameOf, drawn],
   );
   jumpToRuleNow.current = (key) => {
     setRuleFocus(key);
@@ -1115,6 +1061,7 @@ function LoadedScreenBody({
                       nameOf={nameOf}
                       jump={jump}
                       groups={drawGroups}
+                      members={displayMembers}
                       neighbours={neighbours}
                       lead={leadGroup}
                       identity={{
@@ -1129,7 +1076,12 @@ function LoadedScreenBody({
                                 scale: activeCritical.total,
                                 fans: () => (
                                   <FanFacts
-                                    facts={fanFacts(priced, activeScope?.groups ?? [], nameOf)}
+                                    facts={fanFacts(
+                                      priced,
+                                      activeScope?.groups ?? [],
+                                      nameOf,
+                                      activeScope?.terminals,
+                                    )}
                                     nameOf={nameOf}
                                   />
                                 ),

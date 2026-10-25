@@ -63,8 +63,13 @@ export function InputsPane(props: InputsPaneProps) {
   );
   // A unit that is a fan reads as one, with its own section's TEL and ESP beside its cells.
   const fans = useMemo(
-    () => new Map(fanFacts(priced, scope.groups, nameOf).map((f) => [f.unit, f])),
-    [priced, scope.groups, nameOf],
+    () =>
+      new Map(
+        fanFacts(priced, scope.groups, nameOf, scope.terminals)
+          .sort((a, b) => a.esp - b.esp)
+          .map((f) => [f.unit, f]),
+      ),
+    [priced, scope.groups, scope.terminals, nameOf],
   );
   const items = useMemo(
     () => [

@@ -1,106 +1,127 @@
-/**
- * One hop: the duct networks a unit joins to the open ones. A unit is never in a group; it roots
- * every group it has a port into (`rootIds`), so the groups an open group's units also root, and
- * that are not open, are its neighbours, joined through that unit. Each shows as a stub: the
- * elements near the unit, not the whole network.
- *
- * A heat-recovery unit roots both airstreams (an ERV's fresh-air and exhaust sides sit on one
- * box; neighbour census 2026-10-24, RV-26), so by default a hop keeps to the airstream: the unit's
- * port into the neighbour must carry the classification of a port into an open group. That drops
- * a dehumidifier's or air handler's return-to-supply hop too; `hop: "all"` takes every port.
- *
- * Shared groups already show whole (ledger 2026-10-21), so nothing here partitions inside one.
- */
-import { groupTree } from "./topology.ts";
 import type { DuctSnapshot } from "./types.ts";
 
-/** Which of a unit's ports a hop may leave by: any, or only those of an open port's classification. */
 export type Hop = "same-classification" | "all";
-
 export interface NeighbourOptions {
-  /** A stub keeps the elements whose far end is this close to the unit, developed ft. */
   stubFt: number;
   hop: Hop;
-  /** Maximum neighbouring networks from one unit, in snapshot order; omitted means no cap. */
-  neighbourCap?: number;
 }
 
+/** A cut perpendicular to a duct's centreline. Keep the side toward `from`. */
+export interface StubCut {
+  id: number;
+  from: number[];
+  at: number[];
+}
 export interface Neighbour {
-  /** The neighbour group: rooted by `unit` too, and not open. */
   group: string;
-  /** The unit that joins it to an open group. */
+  /** The connecting subject element: equipment, plenum, fitting or shared duct. */
   unit: number;
-  /** The stub's own Revit system names, in stub order. */
   systems: string[];
-  /** The element on the unit's port, then every element whose far end is within `stubFt` of it. */
   stub: number[];
+  cuts: StubCut[];
 }
 
-type Element = { id: number; groupId?: string | null; systemName?: string | null };
+type Element = DuctSnapshot["nodes"][number] | DuctSnapshot["segments"][number];
+const distance = (a: number[], b: number[]) => Math.hypot(...a.map((v, i) => v - b[i]!));
 
-const elementIndexes = new WeakMap<DuctSnapshot, Map<number, Element>>();
-const elementsOf = (snapshot: DuctSnapshot) => {
-  let index = elementIndexes.get(snapshot);
-  if (!index) {
-    index = new Map<number, Element>();
-    for (const e of [...snapshot.nodes, ...snapshot.segments]) index.set(e.id, e);
-    elementIndexes.set(snapshot, index);
+/** The duct centreline from its entering connector, independent of Revit's curve orientation. */
+export function enteredLine(element: Element, point: number[]): number[][] {
+  if (!("polyline" in element) || element.polyline.length < 2) return [];
+  const line = element.polyline;
+  return distance(point, line[0]!) <= distance(point, line.at(-1)!) ? line : [...line].reverse();
+}
+
+/** A prefix measured along the actual polyline, including the interpolated crossing point. */
+export function cutLine(line: readonly number[][], ft: number): number[][] {
+  if (!line.length) return [];
+  const out = [line[0]!];
+  for (let i = 1; i < line.length; i++) {
+    const a = line[i - 1]!,
+      b = line[i]!;
+    const length = distance(a, b);
+    if (length > ft) {
+      out.push(a.map((v, k) => v + ((b[k]! - v) * ft) / length));
+      break;
+    }
+    out.push(b);
+    ft -= length;
   }
-  return index;
-};
+  return out;
+}
 
-/** The neighbours of the open groups, one per (group, unit), in open-group then root order. */
+/**
+ * Walk connector edges out of the subject, including boundaries inside shared groups. Never use
+ * mesh bounds to infer connectivity. Stop at the next equipment and at the developed-length cut.
+ */
 export function neighboursOf(
   snapshot: DuctSnapshot,
-  open: readonly string[],
+  open: ReadonlySet<number>,
   options: NeighbourOptions,
 ): Neighbour[] {
-  const opened = new Set(open);
-  const elements = elementsOf(snapshot);
-  const groups = new Map(snapshot.groups.map((g) => [g.id, g]));
-  const rooting = new Map<number, string[]>();
-  for (const g of snapshot.groups)
-    for (const u of g.rootIds) (rooting.get(u) ?? rooting.set(u, []).get(u)!).push(g.id);
-  // The classifications of a unit's ports into one group.
-  const portsInto = (unit: number, group: string) =>
-    new Set(
-      (elements.get(unit) as DuctSnapshot["nodes"][number] | undefined)?.connectors
-        .filter((c) => c.connectedTo && elements.get(c.connectedTo.elementId)?.groupId === group)
-        .flatMap((c) =>
-          c.classification && ["SupplyAir", "ReturnAir", "ExhaustAir"].includes(c.classification)
-            ? [c.classification]
-            : [],
-        ) ?? [],
-    );
-
+  if (!open.size || options.stubFt <= 0) return [];
+  const elements = new Map([...snapshot.nodes, ...snapshot.segments].map((e) => [e.id, e]));
   const found: Neighbour[] = [];
-  const units = [...new Set(open.flatMap((g) => groups.get(g)?.rootIds ?? []))];
-  for (const unit of units) {
-    let count = 0;
+  for (const id of open) {
+    const boundary = elements.get(id);
+    if (!boundary) continue;
     const sides = new Set(
-      open
-        .filter((g) => groups.get(g)?.rootIds.includes(unit))
-        .flatMap((g) => [...portsInto(unit, g)]),
+      boundary.connectors
+        .filter((c) => c.connectedTo && open.has(c.connectedTo.elementId))
+        .map((c) => c.classification),
     );
-    for (const group of rooting.get(unit) ?? []) {
-      if (count >= (options.neighbourCap ?? Infinity)) break;
-      if (opened.has(group)) continue;
+    for (const port of boundary.connectors) {
+      const peer = port.connectedTo;
+      if (!peer || open.has(peer.elementId)) continue;
       if (
+        boundary.kind === "equipment" &&
         options.hop === "same-classification" &&
-        ![...portsInto(unit, group)].some((c) => sides.has(c))
+        (!port.classification || !sides.has(port.classification))
       )
         continue;
-      const tree = groupTree(snapshot, group, unit);
-      if (tree.root?.equipment !== unit) continue;
-      // ponytail: whole elements, not clipped geometry: a stub ends at the last element whose far
-      // end is inside stubFt, plus the one on the port however long it is.
-      const stub = [tree.root.element];
-      for (let i = 0; i < stub.length; i++)
-        for (const child of tree.children.get(stub[i]!) ?? [])
-          if ((tree.dist.get(child) ?? Infinity) <= options.stubFt) stub.push(child);
-      const systems = [...new Set(stub.flatMap((id) => elements.get(id)?.systemName || []))];
-      found.push({ group, unit, systems, stub });
-      count++;
+      const first = elements.get(peer.elementId);
+      if (!first?.groupId) continue;
+      const stub = new Set<number>();
+      const cuts = new Map<number, StubCut>();
+      const reached = new Map<string, number>();
+      const queue = [{ id: peer.elementId, port: peer.connector, ft: 0 }];
+      while (queue.length) {
+        queue.sort((a, b) => b.ft - a.ft);
+        const step = queue.pop()!;
+        const key = `${step.id}:${step.port}`;
+        if (
+          open.has(step.id) ||
+          step.ft >= options.stubFt ||
+          (reached.get(key) ?? Infinity) <= step.ft
+        )
+          continue;
+        reached.set(key, step.ft);
+        const element = elements.get(step.id);
+        const entry = element?.connectors.find((c) => c.index === step.port);
+        if (!element || !entry) continue;
+        stub.add(element.id);
+        if (element.kind === "equipment") continue;
+        const remaining = options.stubFt - step.ft;
+        const line = enteredLine(element, entry.point);
+        const length = "lengthFt" in element ? element.lengthFt : 0;
+        if (length > remaining && line.length > 1) {
+          const prefix = cutLine(line, remaining);
+          cuts.set(element.id, { id: element.id, from: prefix.at(-2)!, at: prefix.at(-1)! });
+          continue;
+        }
+        for (const exit of element.connectors) {
+          if (exit === entry || !exit.connectedTo) continue;
+          const ft = step.ft + (length || distance(entry.point, exit.point));
+          queue.push({ id: exit.connectedTo.elementId, port: exit.connectedTo.connector, ft });
+        }
+      }
+      if (!stub.size) continue;
+      found.push({
+        group: first.groupId,
+        unit: id,
+        systems: [...new Set([...stub].flatMap((s) => elements.get(s)?.systemName || []))],
+        stub: [...stub],
+        cuts: [...cuts.values()],
+      });
     }
   }
   return found;

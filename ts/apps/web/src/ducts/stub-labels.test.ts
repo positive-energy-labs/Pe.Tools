@@ -9,9 +9,9 @@ test("stub names deduplicate by system and connecting unit, and anchor on their 
   const a = office[0]!,
     b = office[1]!;
   const neighbours = [
-    { group: "one", unit: 1000, systems: [], stub: [a.id, b.id, lab.id] },
-    { group: "duplicate", unit: 1000, systems: [], stub: [b.id] },
-    { group: "other-unit", unit: 4000, systems: [], stub: [a.id] },
+    { group: "one", unit: 1000, systems: [], cuts: [], stub: [a.id, b.id, lab.id] },
+    { group: "duplicate", unit: 1000, systems: [], cuts: [], stub: [b.id] },
+    { group: "other-unit", unit: 4000, systems: [], cuts: [], stub: [a.id] },
   ];
   const labels = stubLabels(snapshot, neighbours, new Set([lab.id]));
   expect(labels.map((label) => label.key)).toEqual(["stub:1000:SA Office", "stub:4000:SA Office"]);

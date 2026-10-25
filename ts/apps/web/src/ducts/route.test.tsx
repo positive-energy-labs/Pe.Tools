@@ -541,6 +541,18 @@ test("picture layers choose the shared context mode and remove system colour key
     key: "supply",
     ink: "#0569a5",
   });
+  // Scope mutation cannot depend on rendering an animation frame.
+  const frame = vi.spyOn(window, "requestAnimationFrame").mockImplementation(() => 0);
+  try {
+    fireEvent.click(
+      screen
+        .getAllByRole("button", { name: 'Remove the "SA active" narrowing', hidden: true })
+        .at(-1)!,
+    );
+    await waitFor(() => expect(drawing.latest!.page.system).toEqual([]));
+  } finally {
+    frame.mockRestore();
+  }
 });
 
 test("a native tree selection keeps the camera and address pose; F frames and Escape keeps it", async () => {

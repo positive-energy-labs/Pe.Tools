@@ -9,7 +9,7 @@
  */
 import type { DuctsRouteDocument } from "@pe/agent-contracts";
 import type { Priced } from "@pe/ducts-domain/pricing";
-import type { FanResult, Provisional, Row } from "@pe/ducts-domain/losses";
+import { worstRun, type FanResult, type Provisional, type Row } from "@pe/ducts-domain/losses";
 import { groupTree, runsOf } from "@pe/ducts-domain/topology";
 import type { DuctSnapshot } from "@pe/ducts-domain/types";
 
@@ -111,6 +111,7 @@ export function buildTree(
   work: DuctsRouteDocument | null,
   only: readonly string[] = [],
   sectionName?: (group: string) => string,
+  members?: ReadonlySet<number>,
 ): TreeNode[] {
   const nameOf = elementNamer(snapshot, null);
   const name = (id: number) => nameOf(id) ?? "element not in snapshot";
@@ -126,16 +127,28 @@ export function buildTree(
       snapshot,
       group.id,
       group.rootIds.length > 1 ? solved?.fans[0]?.unit : undefined,
+      members,
     );
-    const peCritical = solved?.critical ?? null;
+    const scopedRun =
+      priced && members ? worstRun(priced.next, [group.id], new Set(tree.terminals)) : null;
+    const peCritical = members ? (scopedRun?.terminal ?? null) : (solved?.critical ?? null);
     const longest = tree.longest.at(-1) ?? null;
-    const fan = solved?.fan ?? null;
+    const fan = members
+      ? solved?.implausible.some((id) => members.has(id))
+        ? null
+        : (scopedRun?.total ?? null)
+      : (solved?.fan ?? null);
     const rootId = tree.root?.equipment ?? tree.root?.element ?? null;
     const rootName = rootId == null ? "no air mover" : name(rootId);
     const fans = solved?.fans ?? [];
     // The worst fan's run crosses its junction: that run is its own row, and it holds the ◆.
-    const viaCritical = fans.find((f) => f.unit === solved?.criticalFan && f.viaJunction) ?? null;
-    const viaRuns = fans.filter((f) => f.viaJunction && f.critical != null);
+    const viaCritical =
+      fans.find(
+        (f) => f.unit === (members ? scopedRun?.unit : solved?.criticalFan) && f.viaJunction,
+      ) ?? null;
+    const viaRuns = fans.filter(
+      (f) => f.viaJunction && f.critical != null && (!members || members.has(f.critical)),
+    );
     const ownerOf = (terminal: number) =>
       fans.slice(1).find((f) => f.owned.includes(terminal))?.unit ?? rootId;
     type RunLoss = { total: number; tel: number | null; rows: Row[]; provisional: Provisional };

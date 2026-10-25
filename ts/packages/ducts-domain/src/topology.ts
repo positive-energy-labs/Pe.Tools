@@ -109,27 +109,40 @@ function groupIndex(snapshot: DuctSnapshot): GroupIndex {
  * write. `rootAt` names a unit: the tree is rooted at its lowest port into the group (a fan's own
  * section, `fan-sections.ts`); a unit with no port in the group falls back to the rule below.
  */
-export function groupTree(snapshot: DuctSnapshot, groupId: string, rootAt?: number): GroupTree {
+export function groupTree(
+  snapshot: DuctSnapshot,
+  groupId: string,
+  rootAt?: number,
+  members?: ReadonlySet<number>,
+): GroupTree {
   const by = groupIndex(snapshot);
+  if (members) return buildTree(by, groupId, rootAt, members);
   const key = rootAt == null ? groupId : `${groupId}@${rootAt}`;
   let tree = by.trees.get(key);
   if (!tree) by.trees.set(key, (tree = buildTree(by, groupId, rootAt)));
   return tree;
 }
 
-function buildTree(by: GroupIndex, groupId: string, rootAt?: number): GroupTree {
+function buildTree(
+  by: GroupIndex,
+  groupId: string,
+  rootAt?: number,
+  members?: ReadonlySet<number>,
+): GroupTree {
   const group = by.groups.get(groupId);
   const parts = new Map<number, Part>();
   for (const node of by.nodes.get(groupId) ?? [])
-    parts.set(node.id, { id: node.id, node, segment: null, lengthFt: 0, cfm: null });
+    if (!members || members.has(node.id))
+      parts.set(node.id, { id: node.id, node, segment: null, lengthFt: 0, cfm: null });
   for (const segment of by.segments.get(groupId) ?? [])
-    parts.set(segment.id, {
-      id: segment.id,
-      node: null,
-      segment,
-      lengthFt: segment.lengthFt,
-      cfm: by.flows.get(segment.id) ?? null,
-    });
+    if (!members || members.has(segment.id))
+      parts.set(segment.id, {
+        id: segment.id,
+        node: null,
+        segment,
+        lengthFt: segment.lengthFt,
+        cfm: by.flows.get(segment.id) ?? null,
+      });
   const connectors = (part: Part): Connector[] =>
     part.node?.connectors ?? part.segment?.connectors ?? [];
 

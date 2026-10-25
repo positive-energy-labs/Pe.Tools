@@ -349,8 +349,12 @@ export function DuctsRoute({ url = true }: { url?: boolean } = {}) {
     const worst = worstRun(priced.next, scope.groups, scope.terminals);
     return {
       // A group with an implausible row has no price: no fan static, never a partial sum.
-      blocked: [...scope.groups].some((g) => (priced.next.byGroup[g]?.implausible.length ?? 0) > 0),
-      fan: [...scope.groups].some((g) => (priced.next.byGroup[g]?.implausible.length ?? 0) > 0)
+      blocked: scope.groups.some((g) =>
+        priced.next.byGroup[g]?.implausible.some((id) => scope.prices.has(id)),
+      ),
+      fan: scope.groups.some((g) =>
+        priced.next.byGroup[g]?.implausible.some((id) => scope.prices.has(id)),
+      )
         ? null
         : (worst?.total ?? null),
       provisional: paths.find((p) => p.provisional)?.provisional ?? null,

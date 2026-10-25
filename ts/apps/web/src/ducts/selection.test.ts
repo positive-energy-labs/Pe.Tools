@@ -26,7 +26,7 @@ test("selection opens in order, closes membership, and evicts the oldest over th
 
 test("selection knobs change admission and disclose the capture cost", () => {
   const spec = knobModules().find((module) => module.name === "ducts")!.spec.selection!;
-  expect(Object.keys(spec)).toEqual(["systemCap", "stubFt", "hop", "neighbourCap"]);
+  expect(Object.keys(spec)).toEqual(["systemCap", "stubFt", "hop"]);
   expect(Object.values(spec).every((knob) => knob.cost === "refetch")).toBe(true);
   setKnob("ducts.selection.systemCap", 2);
   expect(capped(["A", "B", "C"])).toEqual(["B", "C"]);
@@ -75,7 +75,7 @@ test("paint uses each element's own system, subject wins over stub, and context 
   const paint = paintOfDucts(snapshot, open, new Set([outside.id, office.id]));
   const instance = (id: number | null) => ({ revitId: id, focus: true }) as SceneInstance;
   expect(paint(instance(office.id))).toEqual({ tier: "subject", key: "supply", ink: "#0569a5" });
-  expect(paint(instance(lab.id))).toEqual({ tier: "subject", key: "supply", ink: "#0569a5" });
+  expect(paint(instance(lab.id))).toBeUndefined();
   expect(paint(instance(outside.id))).toEqual({ tier: "stub", key: "exhaust", ink: "#fea665" });
   expect(paint(instance(999999))).toBeUndefined();
   expect(paint(instance(null))).toBeUndefined();

@@ -3,14 +3,12 @@ import { ButtonGroup } from "@pe/kit/lang/button-group";
 /** The model/schematic pane, its fixed readout and floaters. Camera policy belongs to useStage. */
 import { nameOrFallback } from "@pe/kit/lang/subject-text";
 import {
-  createContext,
   useContext,
   useEffect,
   useMemo,
   useRef,
   useState,
   type ReactNode,
-  type ComponentProps,
   type RefObject,
 } from "react";
 
@@ -18,6 +16,7 @@ import { DUCTS_LAYERS, emptyListSearch, toggleLayer } from "@pe/agent-contracts"
 import { snapshotById } from "@pe/ducts-domain/readiness";
 import { noRunBranches } from "@pe/ducts-domain/no-runs";
 import { scopeOf, systemScope } from "@pe/ducts-domain/system-scope";
+import { clipMeshes } from "#/scene/clip";
 import { worstRun } from "@pe/ducts-domain/losses";
 import type { Neighbour } from "@pe/ducts-domain/neighbours";
 import { TooltipHint } from "@pe/kit/lang/tooltip";
@@ -72,25 +71,12 @@ import { frozenDemo } from "#/host/demo-client";
 
 const fmt = (n: number | null | undefined, d = 3) => (n == null ? "—" : n.toFixed(d));
 
-/** The system a switch is opening ("" = every system) while the held screen still draws the last. */
-export const OpeningContext = createContext<string | null>(null);
-
-// Keep the opening acknowledgement below the expensive picture/capture builders.
-function DuctsReadout(props: ComponentProps<typeof PictureReadout>) {
-  const opening = useContext(OpeningContext);
-  return (
-    <PictureReadout
-      {...props}
-      pending={opening == null ? props.pending : `opening ${opening || "every system"}`}
-    />
-  );
-}
-
 export interface ECanvasExtra {
   issues: readonly StageIssue[];
   onIssueHover: (key: string | null) => void;
   /** The open systems' groups (stable, `scopeOf`); the picture draws every one. */
   groups: readonly string[];
+  members?: ReadonlySet<number>;
   /** The networks one unit away (`neighboursOf`): their stubs join the capture, painted `stub`. */
   neighbours: readonly Neighbour[];
   /** The group whose fan the header reads: the system's largest; the schematic draws it. */
@@ -148,6 +134,7 @@ function Canvas({
   issues,
   onIssueHover,
   groups,
+  members,
   neighbours,
   lead,
   scale,
@@ -172,25 +159,18 @@ function Canvas({
             subject.ids,
             legsOf(snapshot, subject.ids, labelOf, subject.work ?? null),
           )
-        : sceneOf(index, groups, () => true),
-    [index, snapshot, subject, labelOf, groups],
+        : sceneOf(index, groups, () => true, members),
+    [index, snapshot, subject, labelOf, groups, members],
   );
   const native = observation.scope?.source === "native" ? observation.scope.document : null;
-  // Neighbour stubs never come from an open group, so none of them is already a subject.
-  const opened = useMemo(() => {
-    const groupSet = new Set(groups);
-    return new Set([
-      ...(scope?.members ?? [...snapshot.nodes, ...snapshot.segments].map((e) => e.id)),
-      ...[...snapshot.nodes, ...snapshot.segments]
-        .filter((e) => e.groupId && groupSet.has(e.groupId))
-        .map((e) => e.id),
-      ...snapshot.groups.filter((g) => groupSet.has(g.id)).flatMap((g) => g.rootIds),
-    ]);
-  }, [snapshot, scope, groups]);
+  const opened = useMemo(
+    () => members ?? new Set([...snapshot.nodes, ...snapshot.segments].map((e) => e.id)),
+    [snapshot, members],
+  );
   const stubs = useMemo(() => stubIdsOf(neighbours, opened), [neighbours, opened]);
   const request = useMemo(
-    () => sceneRequestOf(snapshot, page, groups, stubs),
-    [snapshot, page.system, page.layers, groups, stubs],
+    () => sceneRequestOf(snapshot, page, members, stubs),
+    [snapshot, page.system, page.layers, members, stubs],
   ); // eslint-disable-line react-hooks/exhaustive-deps
   const systemColours = page.layers.includes("system-colours");
   const colours = coloursOf(work.doc);
@@ -203,10 +183,23 @@ function Canvas({
     [snapshot, neighbours, opened],
   );
   const captured = useScene(request, native, page.epoch);
+  const capturedMeshes = useMemo(() => {
+    if (!captured.meshes) return null;
+    const cuts = new Map<number, (typeof neighbours)[number]["cuts"]>();
+    for (const id of stubs) {
+      const branches = neighbours.filter((n) => n.stub.includes(id));
+      if (branches.every((n) => n.cuts.some((cut) => cut.id === id)))
+        cuts.set(
+          id,
+          branches.flatMap((n) => n.cuts.filter((cut) => cut.id === id)),
+        );
+    }
+    return clipMeshes(captured.meshes, cuts);
+  }, [captured.meshes, neighbours, stubs]);
   const capture =
     import.meta.env.DEV && frozenDemo() === "colours"
       ? { ...captured, meshes: COLOURS_FIXTURE.meshes }
-      : captured;
+      : { ...captured, meshes: capturedMeshes };
   const pictureKey = doc && request ? `${doc.session}/${doc.openId}` : null;
   const { read, holding } = usePictureRead(
     capture,
@@ -342,7 +335,9 @@ function Canvas({
     priced && activeScope ? worstRun(priced.next, activeScope.groups, activeScope.terminals) : null;
   const groupSolve = groupId ? priced?.next.byGroup[groupId] : null;
   const solved = groupSolve && {
-    fan: activeScope?.groups.some((g) => (priced?.next.byGroup[g]?.implausible.length ?? 0) > 0)
+    fan: activeScope?.groups.some((g) =>
+      priced?.next.byGroup[g]?.implausible.some((id) => activeScope.prices.has(id)),
+    )
       ? null
       : (worst?.total ?? null),
     critical: worst?.terminal ?? null,
@@ -410,6 +405,7 @@ function Canvas({
     <Schematic
       index={index}
       groups={groups}
+      members={members}
       encoding={scale.encoding}
       onSelect={(id) => pick(id)}
       size={size}
@@ -516,7 +512,7 @@ function Canvas({
         const goBack = () => stage.go("back");
 
         const readout = (
-          <DuctsReadout
+          <PictureReadout
             subject={systemName ?? undefined}
             title={readId == null ? undefined : nameOrFallback(nameOf(readId))}
             pending={read.pending ? "refreshing" : undefined}
@@ -666,7 +662,7 @@ function Canvas({
                 </TooltipHint>
               </>
             )}
-          </DuctsReadout>
+          </PictureReadout>
         );
         const model = (
           <ModelPicture

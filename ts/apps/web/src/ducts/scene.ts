@@ -109,10 +109,13 @@ export function sceneOf(
   index: DuctIndex,
   groups: readonly string[],
   keepLevel: (levelId: number | null) => boolean,
+  members?: ReadonlySet<number>,
 ): Scene {
   const segments: SegmentFacts[] = groups
     .flatMap((group) => index.segmentsOf.get(group) ?? [])
-    .filter((segment) => keepLevel(segment.levelId ?? null))
+    .filter(
+      (segment) => (!members || members.has(segment.id)) && keepLevel(segment.levelId ?? null),
+    )
     .map((segment) => ({
       segment,
       derivedCfm: index.flows.get(segment.id) ?? null,
@@ -125,7 +128,7 @@ export function sceneOf(
       groups.flatMap((group) => index.nodesOf.get(group) ?? []).map((node) => [node.id, node]),
     ).values(),
   ]
-    .filter((node) => keepLevel(node.levelId ?? null))
+    .filter((node) => (!members || members.has(node.id)) && keepLevel(node.levelId ?? null))
     .map((node) => ({
       node,
       issues: index.issuesOf.get(node.id) ?? [],
@@ -136,6 +139,7 @@ export function sceneOf(
     (issue) =>
       issue.groupId != null &&
       drawn.has(issue.groupId) &&
+      (!members || issue.elementId == null || members.has(issue.elementId)) &&
       issue.point &&
       keepLevel(index.levelOf(issue)),
   );

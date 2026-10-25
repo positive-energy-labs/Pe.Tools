@@ -14,9 +14,8 @@ import { choice, defineKnobs, num } from "#/knobs/knobs";
 
 /**
  * The multi-system defaults, each a judgment call kaitpw re-rules once he has felt it.
- * All four are refetch knobs because each changes the captured element set.
- * `neighbourCap` bounds networks per unit. Four preserves every observed hop (Chadds max 3);
- * the default classification filter already reduces that max to 2.
+ * Each can change the captured element set. Equipment hops keep to the same classification by
+ * default; plenums and shared ducts use their physical connections.
  */
 export const DUCTS_MULTI = defineKnobs("ducts", "ts/apps/web/src/ducts/selection.ts", {
   selection: {
@@ -28,7 +27,6 @@ export const DUCTS_MULTI = defineKnobs("ducts", "ts/apps/web/src/ducts/selection
       ["same-classification", "all"],
       "refetch",
     ),
-    neighbourCap: num("Neighbours per unit", 4, [0, 12, 1], "refetch"),
   },
 });
 

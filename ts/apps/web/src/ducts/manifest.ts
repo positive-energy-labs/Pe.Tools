@@ -136,7 +136,7 @@ function knownSelection(page: DuctsPage, reading: LoadedDuctsReading): boolean {
       (drawn !== null && !!scopeOf(drawn, page.system)?.members.has(id)) ||
       neighboursOf(
         snapshot,
-        scopeOf(snapshot, page.system)?.groups ?? [],
+        scopeOf(snapshot, page.system)?.members ?? new Set<number>(),
         DUCTS_MULTI.read().selection,
       ).some((n) => n.stub.includes(id)))
   );
@@ -263,29 +263,19 @@ const currentPricing = (ctx: DuctsCtx) => {
 const pendingOf = (ctx: DuctsCtx) =>
   pendingCount(ctx.work.doc, observed<DuctSnapshot>(ctx, "ducts")?.store);
 
-/**
- * The `revit.detail.space-scene` request for the picture: every element of every group the chosen
- * system is in, plus every element of the groups the picture draws (`drawn`: the priced survey can
- * merge a system with groups it shares, and the tree and centrelines draw those too; RA 52's raw
- * scope was 6 elements under a 193-part tree), with what is around it when either `halo` or `context`
- * is on; an empty selection includes the document. Every open system's members go in, and the `stubs` of the networks one
- * unit away. One capture per subject, never per render (the call keys on this request).
- */
+/** Capture scoped raw and priced members plus connector-derived stubs; context is a separate layer. */
 export const sceneRequestOf = (
   snapshot: DuctSnapshot | null,
   page: Pick<DuctsPage, "system" | "layers">,
-  drawn: readonly string[] = [],
+  drawn: Iterable<number> = [],
   stubs: Iterable<number> = [],
 ) => {
   if (!snapshot) return null;
   const scope = scopeOf(snapshot, page.system);
-  const groups = new Set(drawn);
   const ids = [
     ...new Set([
       ...(scope?.members ?? [...snapshot.nodes, ...snapshot.segments].map((e) => e.id)),
-      ...[...snapshot.nodes, ...snapshot.segments]
-        .filter((e) => e.groupId && groups.has(e.groupId))
-        .map((e) => e.id),
+      ...drawn,
       ...stubs,
     ]),
   ].filter((id) => id > 0);

@@ -121,6 +121,7 @@ export interface SchematicProps {
   index: DuctIndex;
   /** The opened groups, in section order; shared groups appear once. */
   groups: readonly string[];
+  members?: ReadonlySet<number>;
   /** The model's encoding: an edge wears the stroke of its first segment under it. */
   encoding: Encoding;
   /** Element ids selected; an edge holding one is ringed, and a fold holding one unfolds. */
@@ -138,6 +139,7 @@ export function Schematic({
   readout,
   index,
   groups,
+  members,
   encoding,
   onSelect,
   size = "main",
@@ -148,15 +150,15 @@ export function Schematic({
   const inset = size === "inset";
   const { snapshot } = index;
   const trees = useMemo(
-    () => groups.map((group) => groupTree(snapshot, group)),
-    [snapshot, groups],
+    () => groups.map((group) => groupTree(snapshot, group, undefined, members)),
+    [snapshot, groups, members],
   );
   const facts = useMemo(() => {
     const out = new Map<number, EncodingFacts>();
-    const scene = sceneOf(index, groups, () => true);
+    const scene = sceneOf(index, groups, () => true, members);
     for (const f of scene.segments) out.set(f.segment.id, f);
     return out;
-  }, [index, groups]);
+  }, [index, groups, members]);
   // The chain a selected fold member sits in unfolds: its members become vertices.
   const base = useMemo(() => trees.flatMap((tree) => chainsOf(tree)), [trees]);
   const unfold = useMemo(() => {

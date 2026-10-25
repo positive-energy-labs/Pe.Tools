@@ -208,7 +208,7 @@ test("run bare, the fan verbs act on the chosen system's offered fan, in the pag
   expect(verb("fan").labelNow!(ctxOf(doc) as never)).toBe("make the fan");
 });
 
-test("selection follows displayed merged networks while foreign claims and unrelated elements stay scoped", () => {
+test("a merged group alone never admits an unopened system or its claims", () => {
   const foreign = {
     ...snapshot.nodes[1]!,
     id: 200,
@@ -245,8 +245,11 @@ test("selection follows displayed merged networks while foreign claims and unrel
   };
   const bound = bindDuctsManifest(() => reading);
   const page = manifest.page!.parse({ system: ["SA"] });
-  expect(bound.transition!(page, { selected: "200" }, "page")).not.toHaveProperty("refusal");
-  expect(reconcileDuctsMembers({ ...page, selected: "200" }, reading)).toEqual({});
+  expect(bound.transition!(page, { selected: "200" }, "page")).toHaveProperty("refusal");
+  expect(reconcileDuctsMembers({ ...page, selected: "200" }, reading)).toEqual({
+    selected: "",
+    issue: "",
+  });
   expect(reconcileDuctsMembers({ ...page, selected: "200" }, { ...reading, drawn: null })).toEqual(
     {},
   );

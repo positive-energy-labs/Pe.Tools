@@ -131,7 +131,8 @@ it("only the runs to the system's own terminals, its elements and their unit pri
   expect([...sa.prices].sort((a, b) => a - b)).toEqual([1, 3, 4, 6, 10, 11, 100]);
   expect(sa.prices.has(5)).toBe(false);
   expect(sa.prices.has(20)).toBe(false);
-  expect(sa.members.has(20)).toBe(true);
+  expect(sa.members.has(20)).toBe(false);
+  expect(sa.members).toBe(sa.prices);
   expect([...sa.units]).toEqual([100]);
   const ra = systemScope(snapshot, "RA 1");
   // RA 1's run leaves the AHU through SA 1's trunk: the shared trunk prices both.

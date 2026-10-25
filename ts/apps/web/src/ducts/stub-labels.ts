@@ -20,7 +20,8 @@ export function stubLabels(
         if (!before.ids.includes(id)) labels.set(key, { ...before, ids: [...before.ids, id] });
         continue;
       }
-      const line = "polyline" in element ? element.polyline : null;
+      const cut = neighbour.cuts.find((cut) => cut.id === id);
+      const line = cut ? [cut.from, cut.at] : "polyline" in element ? element.polyline : null;
       const at = line
         ? line.length === 2
           ? line[0]!.map((v, i) => (v + line[1]![i]!) / 2)
