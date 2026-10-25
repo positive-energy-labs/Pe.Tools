@@ -35,7 +35,7 @@ function CaseCard({ c }: { c: DuctCase }) {
             <Link
               key={i}
               to="/ducts"
-              search={{ system: e.system ?? "", selected: e.selected ?? "" }}
+              search={{ system: e.system ? [e.system] : [], selected: e.selected ?? "" }}
               className="mr-3 underline"
             >
               {e.system ?? "no system"}

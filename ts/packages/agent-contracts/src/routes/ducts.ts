@@ -5,7 +5,6 @@ import {
   layersKey,
   modeKey,
   orbitLooks,
-  subjectKey,
   viewportCodec,
   viewportKey,
   viewportSchema,
@@ -26,8 +25,11 @@ export const DUCTS_LAYERS = [
 ] as const;
 
 const ductsFields = {
-  /** The subject: a Revit system name, read across every group it is in; empty = the whole document. */
-  system: field(subjectKey(), { url: "push", agent: "set" }),
+  /**
+   * The subject: the open Revit system names, oldest first, each read across every group it is in;
+   * the last is the active one the write, heal and fan verbs act on. Empty = the whole document.
+   */
+  system: field(z.array(z.string().max(200)).default([]), { url: "push", agent: "set" }),
   /** A level id; empty = every level. */
   level: field(text(), { url: "push", agent: "set" }),
   /** The selected element id; empty = none. */
@@ -101,9 +103,9 @@ const ductsWords = z.object({
 });
 
 /**
- * `system` is the page's subject, a Revit system name: the person's word resolves to the one
- * system the lease's facts name exactly (any case), else the one whose name holds it. A system
- * spans every duct network it is in; the page shows them all.
+ * `system` is the page's subject, the Revit system names the person named, comma separated: each
+ * word resolves to the one system the lease's facts name exactly (any case), else the one whose
+ * name holds it. A system spans every duct network it is in; the page shows them all.
  */
 function resolveDucts(input: Record<string, unknown>, facts: Record<string, unknown>) {
   const patch = { ...input } as Record<string, string>;
@@ -116,21 +118,28 @@ function resolveDucts(input: Record<string, unknown>, facts: Record<string, unkn
       error: `the Ducts page takes ${keys.join(", ")}, not ${stray.join(", ")}; name the system`,
     };
   if (patch.system?.trim()) {
-    const word = patch.system.trim().toLowerCase();
-    const exact = systems.filter((system) => system.name.toLowerCase() === word);
-    const near = systems.filter((system) => system.name.toLowerCase().includes(word));
-    const found = exact.length ? exact : near;
-    if (found.length !== 1)
-      return {
-        ok: false as const,
-        error: found.length
-          ? `'${patch.system}' names ${found.length} systems (${found
-              .slice(0, 12)
-              .map((system) => system.name)
-              .join(", ")}); name one`
-          : `no system named '${patch.system}' on this page; read route:ducts.view for the system names`,
-      };
-    patch.system = found[0]!.name;
+    const named: string[] = [];
+    for (const said of patch.system
+      .split(",")
+      .map((word) => word.trim())
+      .filter(Boolean)) {
+      const word = said.toLowerCase();
+      const exact = systems.filter((system) => system.name.toLowerCase() === word);
+      const near = systems.filter((system) => system.name.toLowerCase().includes(word));
+      const found = exact.length ? exact : near;
+      if (found.length !== 1)
+        return {
+          ok: false as const,
+          error: found.length
+            ? `'${said}' names ${found.length} systems (${found
+                .slice(0, 12)
+                .map((system) => system.name)
+                .join(", ")}); name one`
+            : `no system named '${said}' on this page; read route:ducts.view for the system names`,
+        };
+      if (!named.includes(found[0]!.name)) named.push(found[0]!.name);
+    }
+    patch.system = named.join(",");
   }
   if (patch.level && !levels.some((level) => level.id === patch.level))
     return { ok: false as const, error: `unknown level '${patch.level}'` };
@@ -176,7 +185,7 @@ export const ductsAddress = {
   agent: {
     finds: [...DUCTS_FINDS, "system", "level"],
     policy:
-      "Move the Ducts page in the person's open browser. Its subject: system (a Revit system name such as SA 19, as the person said it; it resolves against the view's system names), level and selected element id; an empty string clears the key. The page shows every duct network the system is in. Set the system only when the person named it, and never pick a system they did not name. Its picture: encoding, layers (comma separated: meshes, context, centrelines, no-run, labels, findings; no-run highlights branches on no fan-to-terminal run and is on by default; empty = none), picture (model or schematic), and either look (plan, iso, north, south, east or west: the shown picture turned about its pivot) or viewport (orbit:projection:yaw,elev,zoom@x,y,z (projection is perspective or parallel) in feet; empty fits the subject). issue selects one finding by id. Each set is one step the person can go Back from. No Work or Revit read.",
+      "Move the Ducts page in the person's open browser. Its subject: system (the Revit system names the person named, comma separated, such as SA 19 or SA 19,RA 1, as the person said them; each resolves against the view's system names; the last is the active one the write, heal and fan verbs act on, and the page keeps only its newest few, closing the oldest), level and selected element id; an empty string clears the key. The page shows every duct network each system is in, and the systems one unit away as short stubs. Set only the systems the person named, and never add one they did not name. Its picture: encoding, layers (comma separated: meshes, context, centrelines, no-run, labels, findings; no-run highlights branches on no fan-to-terminal run and is on by default; empty = none), picture (model or schematic), and either look (plan, iso, north, south, east or west: the shown picture turned about its pivot) or viewport (orbit:projection:yaw,elev,zoom@x,y,z (projection is perspective or parallel) in feet; empty fits the subject). issue selects one finding by id. Each set is one step the person can go Back from. No Work or Revit read.",
     words: ductsWords,
     resolve: resolveDucts,
   },

@@ -212,7 +212,7 @@ test("HTTP and one Reading retain named unfinished Work after target removal, cl
             op: "put",
             id: tabId,
             route: "ducts",
-            link: routeAddress("ducts").link({ system: "Retained page" }, { target }),
+            link: routeAddress("ducts").link({ system: ["Retained page"] }, { target }),
           })
         ).status,
       ).toBe(200);
