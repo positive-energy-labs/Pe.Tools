@@ -69,6 +69,18 @@ export const DUCT_PARAMETER_KEYS = [
 ] as const;
 export type DuctParameterKey = (typeof DUCT_PARAMETER_KEYS)[number];
 
+export const DUCT_AIR_TYPES = ["supply", "return", "exhaust", "fresh", "unknown"] as const;
+export type DuctAirType = (typeof DUCT_AIR_TYPES)[number];
+const ductInk = z.string().regex(/^#[\da-f]{6}$/i, "Use a six-digit hex colour, such as #0569a5");
+export const ductSystemColoursSchema = z.strictObject({
+  supply: ductInk,
+  return: ductInk,
+  exhaust: ductInk,
+  fresh: ductInk,
+  unknown: ductInk,
+});
+export type DuctSystemColours = z.infer<typeof ductSystemColoursSchema>;
+
 const dropSchema = z.strictObject({
   inWg: z.number().nonnegative(),
   /** Where the number came from: a catalog page, a submittal, "rule of thumb". */
@@ -385,6 +397,8 @@ export const ductsDocumentSchema = z
      * FR); Pea has no write to it and Revit never receives it.
      */
     designFriction: trichotomyCellSchema(z.number().positive()).default({}),
+    /** Person-owned picture palette. Persisted with ducts Work; never included in Revit apply. */
+    systemColours: trichotomyCellSchema(ductSystemColoursSchema).default({}),
   })
   .superRefine((doc, ctx) => {
     for (const [key, cell] of Object.entries(doc.claims))

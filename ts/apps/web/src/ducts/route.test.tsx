@@ -528,7 +528,8 @@ test("picture layers choose the shared context mode and remove system colour key
   await waitFor(() => expect(picture.current?.contextMode).toBe("halo"));
   expect(picture.current!.paintOf!(instance)).toEqual({
     tier: "subject",
-    key: "SA",
+    key: "supply",
+    ink: "#0569a5",
   });
   act(() => drawing.latest!.setPage({ layers: ["meshes", "halo", "context"] }));
   await waitFor(() => expect(picture.current?.contextMode).toBe("all"));
@@ -537,7 +538,8 @@ test("picture layers choose the shared context mode and remove system colour key
   await waitFor(() => expect(picture.current?.contextMode).toBe("halo"));
   expect(picture.current!.paintOf!(instance)).toEqual({
     tier: "subject",
-    key: "SA",
+    key: "supply",
+    ink: "#0569a5",
   });
 });
 

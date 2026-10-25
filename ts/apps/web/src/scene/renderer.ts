@@ -258,9 +258,11 @@ export function createRenderer(
     const color = (
       tier === "context"
         ? grounds.context
-        : look.subject.bySystem && paint.key !== undefined
-          ? grounds.palette[keySlot(paint.key, grounds.palette.length)]!
-          : grounds.subject
+        : paint.ink
+          ? new THREE.Color(paint.ink)
+          : look.subject.bySystem && paint.key !== undefined
+            ? grounds.palette[keySlot(paint.key, grounds.palette.length)]!
+            : grounds.subject
     ).clone();
     if (mark) color.lerp(ink, look.fill[mark]);
     const alpha =

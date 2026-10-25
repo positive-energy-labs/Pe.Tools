@@ -65,6 +65,9 @@ import { SubjectText } from "@pe/kit/lang/subject-text";
 import { SubjectTextContext } from "@pe/kit/lang/reach";
 import { useHoveredIssue } from "#/attention";
 import { stubLabels } from "../../stub-labels";
+import { coloursOf } from "../../colours";
+import { COLOURS_FIXTURE } from "../../colours.fixture";
+import { frozenDemo } from "#/host/demo-client";
 
 const LAYER_WORDS: Record<
   (typeof DUCTS_LAYERS)[number],
@@ -203,15 +206,20 @@ function Canvas({
     [snapshot, page.system, page.layers, groups, stubs],
   ); // eslint-disable-line react-hooks/exhaustive-deps
   const systemColours = page.layers.includes("system-colours");
+  const colours = coloursOf(work.doc);
   const paintOf = useMemo(
-    () => paintOfDucts(snapshot, opened, stubs, systemColours),
-    [snapshot, opened, stubs, systemColours],
+    () => paintOfDucts(snapshot, opened, stubs, systemColours, colours),
+    [snapshot, opened, stubs, systemColours, colours],
   );
   const stubNames = useMemo(
     () => stubLabels(snapshot, neighbours, opened),
     [snapshot, neighbours, opened],
   );
-  const capture = useScene(request, native, page.epoch);
+  const captured = useScene(request, native, page.epoch);
+  const capture =
+    import.meta.env.DEV && frozenDemo() === "colours"
+      ? { ...captured, meshes: COLOURS_FIXTURE.meshes }
+      : captured;
   const pictureKey = doc && request ? `${doc.session}/${doc.openId}` : null;
   const { read, holding } = usePictureRead(
     capture,

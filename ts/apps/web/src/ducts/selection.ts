@@ -7,6 +7,9 @@
 import type { Neighbour, Hop } from "@pe/ducts-domain/neighbours";
 import type { DuctSnapshot } from "@pe/ducts-domain/types";
 import type { Paint, PaintOf, Tier } from "#/scene/types";
+import type { DuctSystemColours } from "@pe/agent-contracts";
+import { airTypesOf } from "@pe/ducts-domain/air-types";
+import { FIRM_COLOURS } from "./colours";
 import { choice, defineKnobs, num } from "#/knobs/knobs";
 
 /**
@@ -53,28 +56,24 @@ export const stubIdsOf = (neighbours: readonly Neighbour[], open: ReadonlySet<nu
   new Set(neighbours.flatMap((n) => n.stub).filter((id) => !open.has(id)));
 
 /**
- * The picture's paint: opened elements are `subject`, neighbours are `stub`, both keyed by the
- * element's OWN Revit system name, so a shared
- * network shows where systems change (kaitpw 2026-10-24: "i cant tell when systems change. like in
- * revit we have a view template that colors them"). The URL layer owns whether keys exist;
- * LOOK.subject.bySystem remains a dev-only master palette override. Anything else is context.
+ * Each element uses its own air type and the person's palette. The URL layer owns whether colour
+ * is supplied; a multi-stream equipment box is unknown rather than borrowing one port's colour.
  */
 export function paintOfDucts(
   snapshot: DuctSnapshot,
   opened: ReadonlySet<number>,
   stubs: ReadonlySet<number>,
   systemColours = true,
+  colours: Readonly<DuctSystemColours> = FIRM_COLOURS,
 ): PaintOf {
-  const systemOf = new Map<number, string>();
-  for (const e of [...snapshot.nodes, ...snapshot.segments])
-    if (e.systemName) systemOf.set(e.id, e.systemName);
+  const types = airTypesOf(snapshot);
   return (instance) => {
     const id = instance.revitId;
     const tier: Tier | null =
       id != null && opened.has(id) ? "subject" : id != null && stubs.has(id) ? "stub" : null;
     if (!tier) return undefined;
-    const key = !systemColours || id == null ? undefined : systemOf.get(id);
-    const paint: Paint = key ? { tier, key } : { tier };
+    const key = id == null ? "unknown" : (types.get(id) ?? "unknown");
+    const paint: Paint = systemColours ? { tier, key, ink: colours[key] } : { tier };
     return paint;
   };
 }
