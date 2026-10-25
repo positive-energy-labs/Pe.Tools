@@ -21,7 +21,7 @@ export type NumberKnob = Base<number> & { kind: "number"; min: number; max: numb
 /** `#rrggbb`, or a word naming where the default comes from (a kit token role, or "theme"). */
 export type ColourKnob = Base<string> & { kind: "colour" };
 export type BooleanKnob = Base<boolean> & { kind: "boolean" };
-export type ChoiceKnob = Base<string> & { kind: "choice"; options: readonly string[] };
+type ChoiceKnob = Base<string> & { kind: "choice"; options: readonly string[] };
 /** Several of a set whose options the running page offers (`offer`). */
 export type SetKnob = Base<readonly string[]> & { kind: "set" };
 export type Knob = NumberKnob | ColourKnob | BooleanKnob | ChoiceKnob | SetKnob;
@@ -46,13 +46,6 @@ export const bool = (label: string, value: boolean): BooleanKnob => ({
   kind: "boolean",
   label,
   default: value,
-  cost: "live",
-});
-export const choice = (label: string, value: string, options: readonly string[]): ChoiceKnob => ({
-  kind: "choice",
-  label,
-  default: value,
-  options,
   cost: "live",
 });
 export const set = (label: string, value: readonly string[] = []): SetKnob => ({

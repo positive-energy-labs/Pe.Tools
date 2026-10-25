@@ -23,7 +23,7 @@ export const GROUND_MATERIAL = {
  * Categorical system inks, cycled by a stable hash of the paint key. The one table to replace with
  * Revit view-template colours (a `#rrggbb` per slot; a kit token role resolves per theme).
  */
-export const SYSTEM_PALETTE = ["viz-1", "viz-2", "viz-3", "viz-4", "viz-5", "viz-6"] as const;
+const SYSTEM_PALETTE = ["viz-1", "viz-2", "viz-3", "viz-4", "viz-5", "viz-6"] as const;
 
 /**
  * The scene's look, one typed spec: every default a judgment call is here, and each is a dev knob
@@ -152,7 +152,6 @@ export function sceneGrounds(mount: Element, look: Look) {
     },
   };
 }
-export type Grounds = ReturnType<typeof sceneGrounds>;
 
 /** Exponential squared falloff is invariant under a uniform change of model units/size. */
 export const fogDensity = (b: Bounds, k = 0.45) =>
