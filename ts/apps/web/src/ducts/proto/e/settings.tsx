@@ -5,12 +5,15 @@ import { TooltipHint } from "@pe/kit/lang/tooltip";
  * page body. The loss Rules are not here: they are the sidebar's bottom pane (`screen.tsx`).
  * The design friction rate is a person-owned Work cell (`designFriction`, in-wg per 100 ft; Pea has
  * no write to it and Revit never receives it). The parameter slots say which Revit parameter each
- * input is read from; the two airflow slots are reassignable here (each candidate with its coverage
+ * input is read from. The system-colour palette is another person-owned Work cell, used only by
+ * the picture and never sent to Revit. The two airflow slots are reassignable here (each candidate with its coverage
  * in the open system, the document when none), the same choice as the inbox's Set row. The other
  * slots are shown, not yet chosen here.
  */
-import { Fragment } from "react";
-import { transitionPatches } from "@pe/agent-contracts";
+import { Fragment, useState } from "react";
+import { DUCT_AIR_TYPES, transitionPatches, type DuctAirType } from "@pe/agent-contracts";
+import { Input } from "@pe/kit/lang/input";
+import { OutcomeLine } from "@pe/kit/lang/outcome";
 import { DEFAULT_DESIGN_FRICTION_RATE } from "@pe/ducts-domain/equivalent-length";
 import type { SystemScope } from "@pe/ducts-domain/system-scope";
 import type { DuctSnapshot } from "@pe/ducts-domain/types";
@@ -21,6 +24,7 @@ import { PrimaryRouteControls } from "#/navigation/route-controls";
 import { airflowOptions, airflowPatches, slotWord, type AirflowOf } from "../../airflow";
 import type { LossesWork } from "../../work";
 import { SlotPicker } from "./slot-picker";
+import { coloursOf } from "../../colours";
 
 const KEY = "designFriction";
 
@@ -102,8 +106,71 @@ export function DuctSettings({
             </Fragment>
           ))}
         </div>
+        <SystemColours work={work} />
       </section>
     </PrimaryRouteControls>
+  );
+}
+
+const AIR_WORDS: Record<DuctAirType, string> = {
+  supply: "Supply air",
+  return: "Return air",
+  exhaust: "Exhaust air",
+  fresh: "Fresh / outdoor air",
+  unknown: "Unknown / mixed",
+};
+
+/** One person-owned Work cell, like designFriction; this palette never reaches Revit. */
+export function SystemColours({ work }: { work: LossesWork }) {
+  const colours = coloursOf(work.doc);
+  const cell = work.doc?.systemColours ?? {};
+  const [refusal, setRefusal] = useState<string | null>(null);
+  const change = async (type: DuctAirType, ink: string) => {
+    try {
+      const result = await work.write(
+        transitionPatches([], "systemColours", cell, {
+          kind: "stage",
+          rung: { value: { ...colours, [type]: ink } },
+        }),
+      );
+      setRefusal(result?.message ?? null);
+    } catch (error) {
+      setRefusal(error instanceof Error ? error.message : String(error));
+    }
+  };
+  return (
+    <section
+      className="hairline-t flex flex-col gap-1 pt-2"
+      aria-label="System colours"
+      data-system-colours=""
+    >
+      <div className="flex items-baseline justify-between gap-2">
+        <h3 className="t-small">System colours</h3>
+        <span className="t-small text-ink-2">{cell.staged ? "yours" : "unproven defaults"}</span>
+      </div>
+      <div className={LINES}>
+        {DUCT_AIR_TYPES.map((type) => (
+          <Fragment key={type}>
+            <label className="text-ink-2" htmlFor={`duct-colour-${type}`}>
+              {AIR_WORDS[type]}
+            </label>
+            <span className="flex items-center gap-2">
+              <span className="w-[7ch] shrink-0">
+                <Input
+                  type="color"
+                  id={`duct-colour-${type}`}
+                  aria-label={`${AIR_WORDS[type]} colour`}
+                  value={colours[type]}
+                  onChange={(e) => void change(type, e.currentTarget.value)}
+                />
+              </span>
+              <span className="face-mono">{colours[type]}</span>
+            </span>
+          </Fragment>
+        ))}
+      </div>
+      {refusal && <OutcomeLine kind="refused" label={refusal} />}
+    </section>
   );
 }
 

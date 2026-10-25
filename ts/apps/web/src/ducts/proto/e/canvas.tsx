@@ -65,6 +65,10 @@ import { noRunParts } from "../../subject-text";
 import { SubjectText } from "@pe/kit/lang/subject-text";
 import { SubjectTextContext } from "@pe/kit/lang/reach";
 import { useHoveredIssue } from "#/attention";
+import { stubLabels } from "../../stub-labels";
+import { coloursOf } from "../../colours";
+import { COLOURS_FIXTURE } from "../../colours.fixture";
+import { frozenDemo } from "#/host/demo-client";
 
 const fmt = (n: number | null | undefined, d = 3) => (n == null ? "—" : n.toFixed(d));
 
@@ -188,8 +192,21 @@ function Canvas({
     () => sceneRequestOf(snapshot, page, groups, stubs),
     [snapshot, page.system, page.layers, groups, stubs],
   ); // eslint-disable-line react-hooks/exhaustive-deps
-  const paintOf = useMemo(() => paintOfDucts(snapshot, opened, stubs), [snapshot, opened, stubs]);
-  const capture = useScene(request, native, page.epoch);
+  const systemColours = page.layers.includes("system-colours");
+  const colours = coloursOf(work.doc);
+  const paintOf = useMemo(
+    () => paintOfDucts(snapshot, opened, stubs, systemColours, colours),
+    [snapshot, opened, stubs, systemColours, colours],
+  );
+  const stubNames = useMemo(
+    () => stubLabels(snapshot, neighbours, opened),
+    [snapshot, neighbours, opened],
+  );
+  const captured = useScene(request, native, page.epoch);
+  const capture =
+    import.meta.env.DEV && frozenDemo() === "colours"
+      ? { ...captured, meshes: COLOURS_FIXTURE.meshes }
+      : captured;
   const pictureKey = doc && request ? `${doc.session}/${doc.openId}` : null;
   const { read, holding } = usePictureRead(
     capture,
@@ -654,6 +671,7 @@ function Canvas({
         const model = (
           <ModelPicture
             paintOf={paintOf}
+            contextMode={layers.has("context") ? "all" : "halo"}
             readout={readout}
             read={read}
             bounds={bounds}
@@ -665,7 +683,7 @@ function Canvas({
             selected={selected}
             lit={lit}
             hovered={hovered}
-            labels={labels}
+            labels={[...stubNames, ...labels]}
             rulings={marks}
             findings3d={stageLayers}
             issues={issues}
@@ -716,7 +734,7 @@ function Canvas({
               value: page.layers,
               options: DUCTS_LAYER_OPTIONS.map((option) => ({
                 ...option,
-                busy: option.key === "context" && read.pending,
+                busy: (option.key === "context" || option.key === "halo") && read.pending,
               })),
               onToggle: (key) =>
                 setPage(

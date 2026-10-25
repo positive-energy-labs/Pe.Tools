@@ -45,6 +45,8 @@ export type Label = {
   text: string;
   priced: boolean;
   ids: readonly number[];
+  /** A neighbouring system's name, independently toggled by `stub-labels`. */
+  stub?: boolean;
 };
 
 type Point = { x: number; y: number };
@@ -251,17 +253,19 @@ export function Annotations({
           </g>
         );
       })}
-      {layers.has("labels") ? (
+      {layers.has("labels") || layers.has("stub-labels") ? (
         <SubjectLabels
-          sub={sub}
+          sub={layers.has("labels") ? sub : undefined}
           project={project}
           bounds={bounds}
           obstacles={obstacles}
           hovered={focus ?? hovered}
-          extra={labels.flatMap((label) => {
-            const xy = project(label.at);
-            return xy ? [{ ...label, x: xy[0] + 8, y: xy[1] + 14 }] : [];
-          })}
+          extra={labels
+            .filter((label) => layers.has(label.stub ? "stub-labels" : "labels"))
+            .flatMap((label) => {
+              const xy = project(label.at);
+              return xy ? [{ ...label, x: xy[0] + 8, y: xy[1] + 14 }] : [];
+            })}
         />
       ) : null}
       {layers.has("findings")

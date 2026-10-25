@@ -13,6 +13,7 @@ import {
   useMemo,
   useRef,
   useState,
+  useSyncExternalStore,
   type ComponentProps,
   type ReactNode,
 } from "react";
@@ -27,6 +28,7 @@ import { systemSearch } from "@pe/ducts-domain/system-search";
 import { useList, emptyListState } from "@pe/kit/lang/collection";
 import { ListView } from "@pe/kit/lang/list-view";
 import { Pane } from "@pe/kit/lang/pane";
+import { Scroll } from "@pe/kit/lang/scroll";
 import { PaneSplit } from "@pe/kit/lang/pane-resize";
 
 import { airflowOptions } from "../../airflow";
@@ -78,7 +80,9 @@ import { DUCTS_LAYOUT, DUCTS_REGIONS, DUCTS_TEACHING } from "./teaching";
 import { TeachingLayoutView } from "@pe/kit/lang/teaching-layout";
 import { HelpWorld } from "#/route/help";
 import { LoadingContext } from "#/route/loading-context";
-import { activeSystem, DUCTS_MULTI, toggleSystem, withSystem } from "../../selection";
+import { activeSystem, capped, DUCTS_MULTI, toggleSystem, withSystem } from "../../selection";
+import { subscribe as knobsChanged } from "#/knobs/knobs";
+import { OpenSystems } from "./open-systems";
 
 const NO_GROUPS: readonly string[] = [];
 const NO_NEIGHBOURS: readonly Neighbour[] = [];
@@ -293,9 +297,14 @@ function LoadedScreenBody({
     return [...new Set([...groups, ...raw, ...merged])];
   }, [snapshot, page.system, groups, scope]);
   // One hop: the networks a unit of a drawn group also roots, drawn as stubs near that unit.
+  const multi = useSyncExternalStore(knobsChanged, DUCTS_MULTI.read, DUCTS_MULTI.read).selection;
+  useEffect(() => {
+    const next = capped(page.system);
+    if (next.length !== page.system.length) setPage({ system: next });
+  }, [multi.systemCap, page.system, setPage]);
   const neighbours = useMemo(
-    () => (snapshot && scope ? neighboursOf(snapshot, drawGroups, DUCTS_MULTI) : NO_NEIGHBOURS),
-    [snapshot, scope, drawGroups],
+    () => (snapshot && scope ? neighboursOf(snapshot, drawGroups, multi) : NO_NEIGHBOURS),
+    [snapshot, scope, drawGroups, multi],
   );
   // A system a stub carries that no open network shows already, once, with the units joining it.
   const connected = useMemo(() => {
@@ -734,53 +743,54 @@ function LoadedScreenBody({
     pick("right");
   };
   const designRate = priced?.staged.designFriction ?? DEFAULT_DESIGN_FRICTION_RATE;
-  // The tree is the whole pane (kaitpw 2026-10-23: the header block "only takes up space", the
-  // selected row's footer "obscures the tree"): the system's name and way back live in the picture
-  // title, its state in the plate, its fans in the breakdown popover and on Inputs' unit rows, and
-  // the selection's facts in the picture.
+  // The 2026-10-24 open-system chips supersede the 2026-10-23 no-header ruling. The header
+  // carries scope and exits only; selected element facts remain in the picture.
   const treePane = useMemo(
     () =>
       tree ? (
-        <Pane id="e-sidebar" scroll="auto" flush>
-          <div className="min-w-0 shrink-0">
-            <SystemTree
-              key={scope?.name}
-              address={{
-                scope: `${openKey(page.system)}:${page.epoch}`,
-                search: page.treeSearch,
-                sort: page.treeSort,
-                onChange: (treeSearch, treeSort) =>
-                  setPage({ treeSearch, treeSort }, { history: "replace" }),
-              }}
-              ctx={{
-                trees: tree,
-                scale,
-                criticalKey: critical?.key ?? null,
-                grilleName,
-                selected,
-                ruleOf,
-                select,
-                jumpToRule,
-                reading,
-                designRate,
-              }}
-            />
-            {connected.length ? (
-              <div data-e-connected="" className="flex flex-col items-start py-1">
-                <p className="t-small text-ink-2 px-(--item-mark-pad-x) py-1">Connected</p>
-                {connected.map(({ system, units }) => (
-                  <Button
-                    key={system}
-                    label={`open ${system}`}
-                    data-e-connected-system={system}
-                    onClick={() => setPage({ system: withSystem(page.system, system) })}
-                  >
-                    {`${system} · via ${units.map(nameOf).join(", ")}`}
-                  </Button>
-                ))}
-              </div>
-            ) : null}
-          </div>
+        <Pane id="e-sidebar" scroll="clip" flush>
+          <OpenSystems system={page.system} onChange={(system) => setPage({ system })} />
+          <Scroll className="min-h-0 flex-1">
+            <div className="min-w-0 shrink-0">
+              <SystemTree
+                key={scope?.name}
+                address={{
+                  scope: `${openKey(page.system)}:${page.epoch}`,
+                  search: page.treeSearch,
+                  sort: page.treeSort,
+                  onChange: (treeSearch, treeSort) =>
+                    setPage({ treeSearch, treeSort }, { history: "replace" }),
+                }}
+                ctx={{
+                  trees: tree,
+                  scale,
+                  criticalKey: critical?.key ?? null,
+                  grilleName,
+                  selected,
+                  ruleOf,
+                  select,
+                  jumpToRule,
+                  reading,
+                  designRate,
+                }}
+              />
+              {connected.length ? (
+                <div data-e-connected="" className="flex flex-col items-start py-1">
+                  <p className="t-small text-ink-2 px-(--item-mark-pad-x) py-1">Connected</p>
+                  {connected.map(({ system, units }) => (
+                    <Button
+                      key={system}
+                      label={`open ${system}`}
+                      data-e-connected-system={system}
+                      onClick={() => setPage({ system: withSystem(page.system, system) })}
+                    >
+                      {`${system} · via ${units.map(nameOf).join(", ")}`}
+                    </Button>
+                  ))}
+                </div>
+              ) : null}
+            </div>
+          </Scroll>
         </Pane>
       ) : null,
     [
@@ -811,18 +821,21 @@ function LoadedScreenBody({
         title={DUCTS_REGIONS.systems.label}
         help={DUCTS_REGIONS.systems.purpose}
         meta={`${census.systems} · ${census.priced} priced · ${census.fix} need a fix`}
-        scroll="auto"
+        scroll="clip"
         flush
       >
-        <SystemsList
-          systems={systems}
-          fansOf={fansOf}
-          nameOf={nameOf}
-          notes={notes}
-          drawn={drawn}
-          page={systemKeys}
-          setPage={setPage}
-        />
+        <OpenSystems system={page.system} onChange={(system) => setPage({ system })} />
+        <Scroll className="min-h-0 flex-1">
+          <SystemsList
+            systems={systems}
+            fansOf={fansOf}
+            nameOf={nameOf}
+            notes={notes}
+            drawn={drawn}
+            page={systemKeys}
+            setPage={setPage}
+          />
+        </Scroll>
       </Pane>
     ),
     [
@@ -835,6 +848,7 @@ function LoadedScreenBody({
       notes,
       drawn,
       systemKeys,
+      page.system,
       setPage,
     ],
   );

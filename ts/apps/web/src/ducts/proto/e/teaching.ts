@@ -9,6 +9,9 @@ const LAYER_WORDS: Record<
   { label: string; chord?: "M" | "C" | "L" }
 > = {
   meshes: { label: "meshes", chord: "M" },
+  "system-colours": { label: "system colours" },
+  "stub-labels": { label: "stub labels" },
+  halo: { label: "proximity halo" },
   context: { label: "context", chord: "C" },
   centrelines: { label: "centrelines", chord: "L" },
   "no-run": { label: "branches with no run" },

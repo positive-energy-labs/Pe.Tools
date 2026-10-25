@@ -22,6 +22,7 @@ import { frozenDemo } from "#/host/demo-client";
 import { SAVED, useDuctSnapshot, useDuctTables, useDuctCatalogs } from "./host";
 import { SCENE_CLAIMS, SCENE_FIXTURE } from "./scene.fixture";
 import { NAVIGATION_FIXTURE } from "./navigation.fixture";
+import { COLOURS_FIXTURE } from "./colours.fixture";
 import { RouteShell, useRoute, useRouteThread } from "#/route";
 import { Ladder } from "#/route/ladder";
 import { useChooseTarget } from "#/route/shell";
@@ -80,7 +81,13 @@ export function DuctsRoute({ url = true }: { url?: boolean } = {}) {
   // subject and claims have the staged cells' shapes, and a verdict press stays in this page.
   const demoName = useMemo(frozenDemo, []);
   const demo =
-    demoName === "navigation" ? NAVIGATION_FIXTURE : demoName === "scene" ? SCENE_FIXTURE : null;
+    demoName === "navigation"
+      ? NAVIGATION_FIXTURE
+      : demoName === "colours"
+        ? COLOURS_FIXTURE
+        : demoName === "scene"
+          ? SCENE_FIXTURE
+          : null;
   const [demoClaims, setDemoClaims] = useState<Record<string, DuctClaim>>(
     () => demo?.claims ?? SCENE_CLAIMS,
   );
@@ -91,7 +98,7 @@ export function DuctsRoute({ url = true }: { url?: boolean } = {}) {
       () => loadedReading.current,
       () => shownPose.current,
     );
-    if (demoName !== "navigation") return bound;
+    if (demoName !== "navigation" && demoName !== "colours") return bound;
     return {
       ...bound,
       // A fixture has no document authority, even with a real target/thread carried in the URL.
@@ -103,7 +110,7 @@ export function DuctsRoute({ url = true }: { url?: boolean } = {}) {
           does: undefined,
           needs: "host" as const,
           actor: "any" as const,
-          says: "Recalculate the navigation fixture in the pricing worker; no Revit read or write",
+          says: "Recalculate the fixture in the pricing worker; no Revit read or write",
         },
       },
     };
@@ -152,8 +159,14 @@ export function DuctsRoute({ url = true }: { url?: boolean } = {}) {
   const pending = demo ? false : read.pending;
   const catalogs = useDuctCatalogs(page.epoch);
   const tables = useDuctTables(demo ? null : (doc?.session ?? null));
-  const grids = demoName === "navigation" ? NAVIGATION_FIXTURE.grids : tables.grids;
-  const catalogTables = demoName === "navigation" ? EMPTY_CATALOGS : catalogs.tables;
+  const grids =
+    demoName === "colours"
+      ? COLOURS_FIXTURE.grids
+      : demoName === "navigation"
+        ? NAVIGATION_FIXTURE.grids
+        : tables.grids;
+  const catalogTables =
+    demoName === "navigation" || demoName === "colours" ? EMPTY_CATALOGS : catalogs.tables;
   // The system's groups (Work's subject cells and claims key on group ids, never shown).
   const systemGroups = useMemo(
     () => (snapshot ? (scopeOf(snapshot, page.system)?.groups ?? []) : []),
@@ -387,8 +400,8 @@ export function DuctsRoute({ url = true }: { url?: boolean } = {}) {
   const sentence = (
     <>
       on{" "}
-      {demoName === "navigation" ? (
-        "Navigation fixture (synthetic; native actions disabled)"
+      {demoName === "navigation" || demoName === "colours" ? (
+        demo!.snapshot.document.title
       ) : SAVED ? (
         "saved snapshot"
       ) : (
@@ -573,13 +586,15 @@ export function DuctsRoute({ url = true }: { url?: boolean } = {}) {
                 target={{
                   session: ladder.sessionWord,
                   document:
-                    demoName === "navigation"
-                      ? "navigation fixture"
-                      : SAVED
-                        ? "saved snapshot"
-                        : demo
-                          ? "scene fixture"
-                          : ladder.docWord,
+                    demoName === "colours"
+                      ? "firm colours fixture"
+                      : demoName === "navigation"
+                        ? "navigation fixture"
+                        : SAVED
+                          ? "saved snapshot"
+                          : demo
+                            ? "scene fixture"
+                            : ladder.docWord,
                 }}
                 sentence={sentence}
                 ledger={[

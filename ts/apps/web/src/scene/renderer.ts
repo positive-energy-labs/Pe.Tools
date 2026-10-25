@@ -363,11 +363,13 @@ export function createRenderer(
     // Highlighting changes ink only. Promoting a floor to subject made it fully opaque.
     const { tier } = paint;
     const color = (
-      tier === "context"
-        ? grounds.context
-        : look.subject.bySystem && paint.key !== undefined
-          ? grounds.palette[keySlot(paint.key, grounds.palette.length)]!
-          : grounds.subject
+      paint.ink
+        ? new THREE.Color(paint.ink)
+        : tier === "context"
+          ? grounds.context
+          : look.subject.bySystem && paint.key !== undefined
+            ? grounds.palette[keySlot(paint.key, grounds.palette.length)]!
+            : grounds.subject
     ).clone();
     if (mark) color.lerp(ink, look.fill[mark]);
     const alpha =

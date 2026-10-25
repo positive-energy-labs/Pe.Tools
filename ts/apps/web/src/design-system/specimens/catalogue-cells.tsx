@@ -137,9 +137,10 @@ function ChipCatalogue() {
         {narrowings.map((label) => (
           <NarrowChip
             key={label}
+            selected={label === narrowings.at(-1)}
             label={label}
             count={label === "needs a person" ? 3 : 1}
-            title="Remove this narrowing to widen the view."
+            title="Remove this narrowing to widen the view. The last narrowing is active."
             onRemove={() => setNarrowings((current) => current.filter((item) => item !== label))}
           />
         ))}
