@@ -6,7 +6,7 @@
  */
 import type { Neighbour, Hop } from "@pe/ducts-domain/neighbours";
 import type { DuctSnapshot } from "@pe/ducts-domain/types";
-import type { PaintOf } from "#/scene/types";
+import type { Paint, PaintOf, Tier } from "#/scene/types";
 
 /**
  * The multi-system defaults, each a judgment call kaitpw re-rules once he has felt it.
@@ -63,10 +63,11 @@ export function paintOfDucts(
     if (e.systemName) systemOf.set(e.id, e.systemName);
   return (instance) => {
     const id = instance.revitId;
-    const tier =
+    const tier: Tier | null =
       id != null && opened.has(id) ? "subject" : id != null && stubs.has(id) ? "stub" : null;
     if (!tier) return undefined;
     const key = id == null ? undefined : systemOf.get(id);
-    return key ? { tier, key } : { tier };
+    const paint: Paint = key ? { tier, key } : { tier };
+    return paint;
   };
 }
