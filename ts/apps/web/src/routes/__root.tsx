@@ -1,5 +1,5 @@
 import { useEffect, useState } from "react";
-import { TeachPage, TeachReference } from "@pe/kit/lang/use-teach";
+import { TeachPage, TeachReference, TeachTarget } from "@pe/kit/lang/use-teach";
 import { HelpWorld } from "#/route/help";
 import { referenceTeaching, STARTUP_TEACHING, SHELL_REGIONS } from "#/route/teaching";
 import { PaneFaultProvider } from "@pe/kit/lang/pane";
@@ -154,7 +154,7 @@ function RootDocument({ children }: { children: React.ReactNode }) {
             ) : (
               <SurfaceHostProvider>
                 <TooltipProvider>
-                  <TeachPage value={pathname}>
+                  <TeachTarget value={pathname}>
                     <TeachReference value={reference}>
                       <RemoteDeviceGate
                         name="Positive Energy Tools"
@@ -164,7 +164,7 @@ function RootDocument({ children }: { children: React.ReactNode }) {
                         <AppUtilities />
                       </RemoteDeviceGate>
                     </TeachReference>
-                  </TeachPage>
+                  </TeachTarget>
                 </TooltipProvider>
               </SurfaceHostProvider>
             )}

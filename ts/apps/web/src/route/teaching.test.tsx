@@ -6,7 +6,7 @@ import { afterEach, expect, test, vi } from "vite-plus/test";
 import { actionScopeKeys, actionTeaching, chordLabel } from "@pe/kit/keys";
 import { declaredTeaching, registerTeaching, type Teaching } from "@pe/kit/lang/teach";
 import { TeachingLayoutView } from "@pe/kit/lang/teaching-layout";
-import { TeachPage, TeachReference, useTeaching } from "@pe/kit/lang/use-teach";
+import { TeachPage, TeachReference, TeachTarget, useTeaching } from "@pe/kit/lang/use-teach";
 import { DUCTS_LAYOUT, DUCTS_TEACHING } from "#/ducts/proto/e/teaching";
 import { STAGE_ACTIONS } from "#/scene/stage-teaching";
 import { HelpWorld } from "./help";
@@ -83,6 +83,26 @@ test("reference projection removes runtime claims even from an accidentally stat
 function Tutorial() {
   return <HelpWorld facts={useTeaching()} />;
 }
+
+test("measured shell panes cannot replace a route's still-loading declaration", () => {
+  const withdraw = registerTeaching({
+    kind: "region",
+    id: "chat",
+    label: "Chat",
+    rect: { left: 0, top: 0, width: 400, height: 600 },
+  });
+  const view = render(
+    <TeachTarget value="/ducts">
+      <TeachReference value={DUCTS_TEACHING}>
+        <Tutorial />
+      </TeachReference>
+    </TeachTarget>,
+  );
+  expect(view.container.querySelector("[data-teach-source=reference]")).toBeTruthy();
+  expect(view.container.textContent).toContain("All-systems rules");
+  expect(view.container.textContent).not.toContain("Chat");
+  act(withdraw);
+});
 test("empty measurements keep the reference; route changes exclude another retained page", () => {
   const a: Teaching = {
     kind: "region",

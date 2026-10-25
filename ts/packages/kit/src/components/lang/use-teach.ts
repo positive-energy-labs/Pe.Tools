@@ -21,6 +21,8 @@ import { registerTeachingMeasure, subscribeMeasuredTeaching, teachingBox } from 
 
 export const TeachRegion = createContext<string | undefined>(undefined);
 export const TeachPage = createContext<string | undefined>(undefined);
+/** The current reader can sit in shell chrome outside the retained route's source boundary. */
+export const TeachTarget = createContext<string | undefined>(undefined);
 const EMPTY: readonly Teaching[] = [];
 export const TeachReference = createContext<readonly Teaching[]>(EMPTY);
 const serverTeaching = () => EMPTY;
@@ -91,7 +93,8 @@ export function useTeach(
   return id;
 }
 export function useTeaching() {
-  const page = useContext(TeachPage);
+  const owner = useContext(TeachPage);
+  const page = useContext(TeachTarget) ?? owner;
   const reference = useContext(TeachReference);
   const all = useSyncExternalStore(subscribeMeasuredTeaching, readTeaching, serverTeaching);
   return useMemo(() => {
@@ -102,7 +105,9 @@ export function useTeaching() {
           fact.kind === "region" && fact.rect && fact.rect.width > 0 && fact.rect.height > 0,
       )
       ? reference
-      : facts;
+      : page == null
+        ? facts
+        : [...all.filter((fact) => fact.page == null && fact.kind === "keys"), ...facts];
   }, [all, page, reference]);
 }
 export const useTeachingFacts = () =>

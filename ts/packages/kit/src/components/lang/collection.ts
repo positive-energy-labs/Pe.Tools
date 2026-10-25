@@ -41,7 +41,8 @@ export function virtualSpans(
 }
 import { startTransition, useEffect, useId, useMemo, useRef, useState } from "react";
 
-import { useScopeKeys, type ScopeKey } from "../../keys";
+import { useScopeKeys, actionScopeKeys, type ScopeKey } from "../../keys";
+import { LIST_ACTIONS } from "./list-teaching";
 import {
   conditionValues,
   passes,
@@ -471,42 +472,34 @@ export function useCollection<T>(options: CollectionOptions<T>) {
 
   const keys: ScopeKey[] = (
     [
-      {
-        hotkey: "ArrowDown",
-        callback: () => moveBy(1),
-        label: "next",
-        says: "move the cursor down",
-      },
-      {
-        hotkey: "ArrowUp",
-        callback: () => moveBy(-1),
-        label: "previous",
-        says: "move the cursor up",
-      },
-      {
-        hotkey: "Home",
-        callback: () => moveBy(-Infinity),
-        label: "first",
-        says: "the first row",
-      },
-      {
-        hotkey: "End",
-        callback: () => moveBy(Infinity),
-        label: "last",
-        says: "the last row",
-      },
-      {
-        hotkey: "Enter",
-        callback: () => pick(cursor),
-        label: "pick",
-        says: "pick the row under the cursor",
-      },
-      {
-        hotkey: "Escape",
-        callback: escape,
-        label: "back",
-        says: "clear the query, go up a level, or close",
-      },
+      ...actionScopeKeys([
+        {
+          ...LIST_ACTIONS.next,
+          invoke: () => {
+            moveBy(1);
+          },
+        },
+        {
+          ...LIST_ACTIONS.previous,
+          invoke: () => {
+            moveBy(-1);
+          },
+        },
+        {
+          ...LIST_ACTIONS.first,
+          invoke: () => {
+            moveBy(-Infinity);
+          },
+        },
+        {
+          ...LIST_ACTIONS.last,
+          invoke: () => {
+            moveBy(Infinity);
+          },
+        },
+        { ...LIST_ACTIONS.pick, invoke: () => pick(cursor) },
+        { ...LIST_ACTIONS.back, invoke: escape },
+      ]),
       ...(options.onTab
         ? [
             {

@@ -1,6 +1,7 @@
 import { DUCTS_LAYERS } from "@pe/agent-contracts";
 import { declaredTeaching, type TeachingLayout } from "@pe/kit/lang/teach";
-import { LIST_SEARCH_SYNTAX, SEARCH_FOCUS_SYNTAX } from "@pe/kit/lang/list-teaching";
+import { LIST_ACTIONS, LIST_SEARCH_SYNTAX, SEARCH_FOCUS_SYNTAX } from "@pe/kit/lang/list-teaching";
+import { actionTeaching } from "@pe/kit/keys";
 import { stageTeaching } from "#/scene/stage-teaching";
 
 const LAYER_WORDS: Record<
@@ -27,19 +28,23 @@ const search = (label: string) => ({
   fields: [],
   syntax: [...SEARCH_FOCUS_SYNTAX, ...LIST_SEARCH_SYNTAX],
 });
+const listControls = (label: string) => [
+  search(label),
+  { kind: "keys" as const, scope: label, items: actionTeaching(Object.values(LIST_ACTIONS)) },
+];
 export const DUCTS_REGIONS = {
   systems: {
     id: "systems",
     label: "Systems",
     purpose: "Choose a system to inspect its tree and Inputs.",
-    controls: [search("systems")],
+    controls: listControls("systems"),
   },
   rules: {
     id: "rules",
     label: "All-systems rules",
     purpose:
       "A rule is a fitting type (family : type) plus a geometry condition. Its table is the one choice a person makes; Pe re-looks-up every instance under it. A fitting with a stated drop is an override under its type.",
-    controls: [search("rules")],
+    controls: listControls("rules"),
   },
   picture: {
     id: "picture",
@@ -55,7 +60,7 @@ export const DUCTS_REGIONS = {
     id: "rulings",
     label: "Rulings",
     purpose: "Review the rows that need a person's ruling before writing changes.",
-    controls: [search("rulings")],
+    controls: listControls("rulings"),
   },
 } as const;
 /** Reference anatomy, with support panes expanded; current folding and geometry are measured. */
