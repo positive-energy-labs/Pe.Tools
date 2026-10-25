@@ -20,6 +20,23 @@ import type { TreeNode } from "../b/model";
 import { SystemTree, type TreeCtx } from "./tree-sidebar";
 import { InputsPane, type InputsPaneProps } from "./inputs-pane";
 import { fanFacts } from "./fan-sections";
+import { Scroll } from "@pe/kit/lang/scroll";
+
+const derivations = vi.hoisted(() => ({ count: 0, all: null as unknown }));
+vi.mock("@pe/kit/lang/collection", async (original) => {
+  const actual = await original<typeof import("@pe/kit/lang/collection")>();
+  return {
+    ...actual,
+    useList: ((options: Parameters<typeof actual.useList>[0]) => {
+      const list = actual.useList(options);
+      if (list.all !== derivations.all) {
+        derivations.count++;
+        derivations.all = list.all;
+      }
+      return list;
+    }) as typeof actual.useList,
+  };
+});
 
 // Cell fixtures exercise the sidebar's event boundary; the Work cell implementations stay unchanged.
 vi.mock("./input-cells", () => ({
@@ -98,6 +115,50 @@ test("typing in a large tree reuses its name index instead of renaming every hid
   vi.unstubAllGlobals();
 });
 const toggle = (key: string) => fireEvent.click(keyed(key).querySelector(".dl-row-twist")!);
+
+test("hovering an expanded 3606-row system tree never re-derives its list", () => {
+  vi.stubGlobal(
+    "ResizeObserver",
+    class {
+      observe() {}
+      unobserve() {}
+      disconnect() {}
+    },
+  );
+  vi.spyOn(HTMLCanvasElement.prototype, "getContext").mockReturnValue(null);
+  vi.spyOn(HTMLElement.prototype, "clientHeight", "get").mockReturnValue(400);
+  vi.spyOn(HTMLElement.prototype, "offsetHeight", "get").mockReturnValue(20);
+  const trees = Array.from({ length: 6 }, (_, group) =>
+    node(
+      `system${group}`,
+      "system",
+      group,
+      Array.from({ length: 600 }, (_, i) => node(`run${group}-${i}`, "run", 100 + group * 600 + i)),
+    ),
+  );
+  const registry = makeAtomRegistry();
+  const view = render(
+    <TestAttention registry={registry}>
+      <Scroll maxHeight="400px">
+        <SystemTree ctx={context({ trees })} />
+      </Scroll>
+    </TestAttention>,
+  );
+  const shown = view.container.querySelectorAll<HTMLElement>("[data-key]");
+  expect(shown.length).toBeGreaterThan(10);
+  const samples = Array.from({ length: 12 }, (_, i) => {
+    const before = derivations.count;
+    const start = performance.now();
+    const row = shown[3 + (i % 8)]!;
+    fireEvent.pointerOver(row);
+    fireEvent.mouseMove(row);
+    expect(row.hasAttribute("data-cursor")).toBe(true);
+    return { ms: performance.now() - start, derivations: derivations.count - before };
+  });
+  process.stdout.write(`ducts-tree-hover ${JSON.stringify({ rows: 3606, samples })}\n`);
+  vi.unstubAllGlobals();
+  expect(samples.map((sample) => sample.derivations)).toEqual(Array(12).fill(0));
+});
 
 test("critical context opens initially; one selected part reveals, retains native refs, hover and rule jump", () => {
   const ctx = context({ selected: 20 });

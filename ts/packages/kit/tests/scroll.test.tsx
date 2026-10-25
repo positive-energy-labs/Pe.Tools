@@ -4,7 +4,7 @@ import { createRequire } from "node:module";
 import { act, cleanup, fireEvent, render, waitFor } from "@testing-library/react";
 import { RegistryContext } from "@effect/atom-react";
 import { Profiler } from "react";
-import { declareMembers, elementKey, setHovered } from "../src/components/lang/attention";
+import { declareMembers, setHovered } from "../src/components/lang/attention";
 import { AttentionFixture, kitRegistry } from "./attention-fixture";
 import { afterEach, expect, test, vi } from "vite-plus/test";
 import { useList } from "../src/components/lang/collection";
@@ -264,10 +264,19 @@ test("rows another surface's hover reaches mark the strip, from row data, withou
   vi.spyOn(HTMLElement.prototype, "offsetHeight", "get").mockReturnValue(20);
   vi.spyOn(HTMLElement.prototype, "scrollHeight", "get").mockReturnValue(40000);
   // Virtual: most rows never mount, so marks must come from item data, not DOM.
-  const items = Array.from({ length: 2000 }, (_, i) => ({ key: String(i + 1), name: `Row ${i}` }));
+  const items = Array.from({ length: 2000 }, (_, i) => ({
+    key: String(i + 1),
+    name: `Row ${i}`,
+    subject: { doc: "kit", key: `part:${i + 1}` as const },
+  }));
   const row = vi.fn((item: (typeof items)[number]) => ({ label: item.name }));
   function Big() {
-    const list = useList({ items, keyOf: (item) => item.key, search: SEARCH });
+    const list = useList({
+      items,
+      keyOf: (item) => item.key,
+      search: SEARCH,
+      subjectOf: (item) => item.subject,
+    });
     return (
       <ListView list={list} aria-label="big" row={row} empty={{ message: "none", exit: "none" }} />
     );
@@ -286,15 +295,20 @@ test("rows another surface's hover reaches mark the strip, from row data, withou
     </RegistryContext>,
   );
   // A 3D group of 60 elements, spread across the list (rows 1..1950 step 33).
-  const members = Array.from({ length: 60 }, (_, i) => elementKey(1 + i * 33));
+  const members = Array.from({ length: 60 }, (_, i) => `part:${1 + i * 33}` as const);
   declareMembers(registry, "kit", new Map([["g:run" as const, members]]));
   await new Promise((resolve) => requestAnimationFrame(resolve));
   await new Promise((resolve) => setTimeout(resolve, 50));
   bars.length = 0;
   const before = commits.mock.calls.length;
+  row.mockClear();
   const started = performance.now();
   act(() => setHovered(registry, { doc: "kit", key: "g:run" }));
   const cold = performance.now() - started;
+  process.stdout.write(
+    `reach-cold ${JSON.stringify({ ms: cold, rowBuilds: row.mock.calls.length })}\n`,
+  );
+  expect(row).not.toHaveBeenCalled();
   expect(commits.mock.calls.length).toBe(before);
   await waitFor(() => expect(bars.length).toBeGreaterThan(0));
   expect(new Set(bars).size).toBeGreaterThanOrEqual(50);
@@ -302,8 +316,8 @@ test("rows another surface's hover reaches mark the strip, from row data, withou
   const again = performance.now();
   act(() => setHovered(registry, { doc: "kit", key: "g:run" }));
   const warm = performance.now() - again;
-  // A loose bound, not a benchmark (jsdom 2026-10-24: the recompute alone took 2-6 ms cold, with
-  // each row's subject built once, and 1-2 ms warm; act() adds the rest). The old per-key rung
+  expect(row).not.toHaveBeenCalled();
+  // A loose bound, not a benchmark; act() adds to the recompute. The old per-key rung
   // atoms (a rung atom read per row) took 450+ ms cold here.
   expect(cold).toBeLessThan(150);
   expect(warm).toBeLessThan(50);
