@@ -24,7 +24,7 @@ import { sectionsOf, systemOfGroup } from "@pe/ducts-domain/system-scope";
 import { neighboursOf, type Neighbour } from "@pe/ducts-domain/neighbours";
 import { Button } from "@pe/kit/lang/button";
 import { systemSearch } from "@pe/ducts-domain/system-search";
-import { useList, emptyListState } from "@pe/kit/lang/collection";
+import { useList, emptyListState, type ListOptions } from "@pe/kit/lang/collection";
 import { ListView } from "@pe/kit/lang/list-view";
 import { Pane } from "@pe/kit/lang/pane";
 import { Scroll } from "@pe/kit/lang/scroll";
@@ -1133,6 +1133,13 @@ function LoadedScreenBody({
   );
 }
 
+type SystemListItem = ReturnType<typeof systemList>[number];
+const systemKey = (system: SystemListItem) => system.key;
+const SYSTEM_SORTS = {
+  name: (system: SystemListItem) => system.name,
+  loss: (system: SystemListItem) => -(system.total ?? -Infinity),
+};
+
 /** Keep query renders below the model, drawing and ruling builders. */
 // Memoized on the Page keys it reads: a selection or a camera move never re-renders 355 rows.
 const SystemsList = memo(function SystemsList({
@@ -1161,12 +1168,8 @@ const SystemsList = memo(function SystemsList({
     }),
     [searchable],
   );
-  const systemListView = useList({
-    scope: String(page.epoch),
-    items: systems,
-    keyOf: (system) => system.key,
-    search,
-    fields: {
+  const fields = useMemo<NonNullable<ListOptions<SystemListItem>["fields"]>>(
+    () => ({
       airType: {
         label: "Air type",
         kind: "text",
@@ -1205,8 +1208,16 @@ const SystemsList = memo(function SystemsList({
           ["no", "No"],
         ]),
       },
-    },
-    sorts: { name: (system) => system.name, loss: (system) => -(system.total ?? -Infinity) },
+    }),
+    [systems, notes],
+  );
+  const systemListView = useList({
+    scope: String(page.epoch),
+    items: systems,
+    keyOf: systemKey,
+    search,
+    fields,
+    sorts: SYSTEM_SORTS,
     state: {
       ...emptyListState<"name" | "loss">(),
       search: page.systemSearch,

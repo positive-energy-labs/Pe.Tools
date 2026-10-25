@@ -304,6 +304,7 @@ export function RoomsInbox({
   );
   const list = useList({
     items: shown,
+    subjectOf: (card) => ({ doc: attentionDoc, key: `card:${card.id}` }),
     keyOf: (card) => card.id,
     search: (card) => ({ text: [cardLine(card, labelOf), card.state] }),
     state: { ...emptyListState(), selected: pinned ? [pinned] : [] },
@@ -380,10 +381,6 @@ export function RoomsInbox({
                 .map((region) => region.elementId),
               label: cardLine(card, labelOf),
               meta: <Thumb card={card} regions={regions} width={32} />,
-              subject: {
-                doc: attentionDoc,
-                key: `card:${card.id}`,
-              },
             })}
           />
         </Scroll>

@@ -72,12 +72,18 @@ function RoomPanel({
   const flags = useList({
     items: open,
     keyOf: (flag) => flag,
-    search: (flag) => ({ text: [flag, FLAG_MEANING[flag]] }),
+    search: (flag) => ({
+      text: [flag, FLAG_MEANING[flag]],
+      ids: room.elementId == null ? [] : [room.elementId],
+    }),
   });
   const decisions = useList({
     items: localDecisions,
     keyOf: (d) => d.flag,
-    search: (d) => ({ text: [d.flag, d.verb] }),
+    search: (d) => ({
+      text: [d.flag, d.verb],
+      ids: room.elementId == null ? [] : [room.elementId],
+    }),
   });
   return (
     <Pane id="room" title="room" meta={`${zone.zone.key} · ${zone.zone.lane.label}`}>
@@ -164,7 +170,6 @@ function RoomPanel({
               empty={{ message: "No open flags", exit: "Choose another room" }}
               row={(flag) => ({
                 label: flag,
-                revit: room.elementId == null ? [] : [room.elementId],
                 lines: 2,
                 sub: (
                   <div>
@@ -258,7 +263,6 @@ function RoomPanel({
               row={(d) => ({
                 label: `${d.verb} ${d.flag}`,
                 meta: "this session",
-                revit: room.elementId == null ? [] : [room.elementId],
               })}
             />
           )}

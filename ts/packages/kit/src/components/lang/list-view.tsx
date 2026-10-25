@@ -34,7 +34,6 @@ import {
   type Mark,
 } from "./scroll";
 import { attention, AttentionDocument, elementKey, litTest, type Ref } from "./attention";
-import { rowRevit } from "./revit-target";
 import { EmptyState } from "./empty";
 import { ScopeGestures } from "../../keys";
 import { OutcomeLine } from "./outcome";
@@ -47,8 +46,8 @@ import "./lang.css";
 
 export type ListRowParts = Omit<
   Extract<RowProps, { as?: "div" }>,
-  "id" | "role" | "cursor" | "selected" | "onClick" | "depth" | "expanded" | "onToggle"
->;
+  "id" | "role" | "cursor" | "selected" | "onClick" | "depth" | "expanded" | "onToggle" | "subject"
+> & { subject?: never };
 
 /** Higher priorities yield first; CSS reserves the title before sizing trailing facts. */
 export function listColumns<K extends string>(
@@ -189,7 +188,7 @@ function ListRenderer<T, Sort extends string>(props: ListViewProps<T, Sort> & { 
   // Rows render through this ref, so a memoized row that skipped a render still acts on today's list.
   const live = useRef(list);
   live.current = list;
-  const reached = useReachMarks(live, row, root, list.sections);
+  const reached = useReachMarks(live, root, list.sections);
   return (
     <div
       ref={setRoot}
@@ -347,13 +346,12 @@ function markOf<T, Sort extends string>(
 
 /**
  * The keys of rows lit by a hover from outside this list, as a ref the strip reads when drawing.
- * Recomputed from row data when attention changes (subjects cached per item, so a virtual list's
- * unmounted rows count without layout), then the strip redraws without a React commit. While the
+ * Recomputed from projected identity when attention changes, so unmounted rows count without
+ * building row content or reading layout. The strip redraws without a React commit. While the
  * pointer is inside the list the hover is the list's own, which draws no mark.
  */
 function useReachMarks<T, Sort extends string>(
   live: RefObject<ListController<T, Sort>>,
-  row: (item: T) => ListRowParts,
   root: HTMLElement | null,
   sections: unknown,
 ) {
@@ -362,35 +360,17 @@ function useReachMarks<T, Sort extends string>(
   const redraw = useScrollRedraw();
   const reached = useRef<ReadonlySet<string>>(new Set());
   const inside = useRef(false);
-  // Keyed by the stable `row` (routes memoize it for row memo); an inline one rebuilds the cache.
-  const subjects = useMemo(() => new WeakMap<object, Ref | null>(), [row, doc]);
   useEffect(() => {
     if (!doc) return;
-    const subjectOf = (item: ListItem<T>): Ref | null => {
-      const owner = typeof item.item === "object" && item.item !== null ? item.item : null;
-      if (owner && subjects.has(owner)) return subjects.get(owner)!;
-      // TODO: Read subjects from list data so reach projection never builds virtual rows' JSX.
-      const parts = row(item.item);
-      const revit = parts.revit ?? item.revit ?? rowRevit(undefined, item.key);
-      const ref = parts.subject ?? (revit?.[0] == null ? null : { doc, key: elementKey(revit[0]) });
-      if (owner) subjects.set(owner, ref);
-      return ref;
-    };
-    // Build every subject once while idle, off the hover path: a 3D hover then only tests keys.
-    const idle =
-      typeof requestIdleCallback === "undefined"
-        ? null
-        : requestIdleCallback(() => {
-            for (const section of live.current.sections)
-              for (const item of section.rows) subjectOf(item);
-          });
     const recompute = () => {
       const lit = inside.current ? null : litTest(registry, doc);
       const next = new Set<string>();
       if (lit)
         for (const section of live.current.sections)
           for (const item of section.rows) {
-            const ref = subjectOf(item);
+            const ref: Ref | null =
+              item.subject ??
+              (item.revit?.[0] == null ? null : { doc, key: elementKey(item.revit[0]) });
             if (ref?.doc === doc && lit(ref.key)) next.add(item.key);
           }
       if (!next.size && !reached.current.size) return;
@@ -409,12 +389,11 @@ function useReachMarks<T, Sort extends string>(
     recompute();
     const stop = registry.subscribe(attention(doc), recompute);
     return () => {
-      if (idle !== null) cancelIdleCallback(idle);
       stop();
       root?.removeEventListener("pointerenter", enter);
       root?.removeEventListener("pointerleave", leave);
     };
-  }, [doc, registry, row, subjects, redraw, root, sections]);
+  }, [doc, registry, redraw, root, sections]);
   return reached;
 }
 
@@ -501,6 +480,7 @@ function ListItemViewInner<T, Sort extends string>({
     <>
       <Row
         {...parts}
+        subject={item.subject}
         revit={parts.revit ?? item.revit}
         damage={parts.damage ?? item.damage}
         id={id}
@@ -556,6 +536,8 @@ const ListItemView = memo(
     a.item.item === b.item.item &&
     a.item.depth === b.item.depth &&
     a.item.branch === b.item.branch &&
+    a.item.subject?.doc === b.item.subject?.doc &&
+    a.item.subject?.key === b.item.subject?.key &&
     a.item.revit?.join(",") === b.item.revit?.join(",") &&
     a.item.damage === b.item.damage &&
     a.row === b.row &&

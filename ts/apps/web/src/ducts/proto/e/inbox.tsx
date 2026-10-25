@@ -454,6 +454,23 @@ export function Inbox({
 }
 
 const rulingSearch = (row: RulingRow) => row.search;
+const RULING_READERS = {
+  keyOf: (row: RulingRow) => row.key,
+  search: rulingSearch,
+  subjectOf: (row: RulingRow) => row.subject,
+  fields: {
+    kind: { kind: "text" as const, read: (row: RulingRow) => row.kind },
+    section: { kind: "text" as const, read: (row: RulingRow) => INBOX_LABELS[row.group] },
+    status: { kind: "text" as const, read: (row: RulingRow) => row.statusText },
+  },
+  sorts: { name: (row: RulingRow) => row.title, status: (row: RulingRow) => row.statusText },
+  groups: {
+    of: (row: RulingRow) => INBOX_LABELS[row.group],
+    order: INBOX_ORDER.map((key) => INBOX_LABELS[key]),
+    collapsible: INBOX_ORDER.map((key) => INBOX_LABELS[key]),
+  },
+  stageOf: (row: RulingRow) => row.stage ?? "clean",
+};
 
 /** Query state must not rebuild every ruling and its action elements. */
 function RulingsList({
@@ -476,6 +493,7 @@ function RulingsList({
     rows.find((row) => row.lit && view.selected.includes(row.key)) ??
     rows.find((row) => row.lit);
   const list = useList({
+    ...RULING_READERS,
     persist: address,
     followSelection: {
       key: desired?.key ?? null,
@@ -483,24 +501,10 @@ function RulingsList({
       open: desired ? [desired.key] : [],
     },
     items: rows,
-    keyOf: (row) => row.key,
-    search: rulingSearch,
-    fields: {
-      kind: { kind: "text", read: (row) => row.kind },
-      section: { kind: "text", read: (row) => INBOX_LABELS[row.group] },
-      status: { kind: "text", read: (row) => row.statusText },
-    },
-    sorts: { name: (row) => row.title, status: (row) => row.statusText },
-    groups: {
-      of: (row) => INBOX_LABELS[row.group],
-      order: INBOX_ORDER.map((key) => INBOX_LABELS[key]),
-      collapsible: INBOX_ORDER.map((key) => INBOX_LABELS[key]),
-    },
     state: view,
     onState: (next) => {
       setView(next);
     },
-    stageOf: (row) => row.stage ?? "clean",
     onPick: (row) => {
       onPick(row.key);
       setView((previous) => ({
@@ -513,6 +517,7 @@ function RulingsList({
   const row = useCallback(
     ({
       key: _key,
+      subject: _subject,
       actions,
       detail: _detail,
       title: _title,

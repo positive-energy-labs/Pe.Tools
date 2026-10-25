@@ -29,6 +29,7 @@ export function AtlasNavigation() {
     // Levels in the world's order, each once: many view lanes share a level.
     items: levels.flatMap((label) => filteredZones.filter((z) => z.zone.lane.label === label)),
     keyOf: (z) => z.zone.guid,
+    subjectOf: (z) => ({ doc, key: regionKey(z.zone.guid) }),
     search: (z) => ({
       text: [z.zone.key, z.name, z.zone.lane.label, z.stage, ...z.tags],
       ids: z.zone.elementId == null ? [] : [z.zone.elementId],
@@ -56,7 +57,6 @@ export function AtlasNavigation() {
               const calls = states.filter((s) => s === "call").length;
               const off = !onPlan(z);
               return {
-                subject: { doc, key: regionKey(z.zone.guid) },
                 lead: <ZoneThumb zone={z.zone} className="size-5" />,
                 label: (
                   <span className="truncate">

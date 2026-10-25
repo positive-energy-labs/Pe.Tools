@@ -2,10 +2,12 @@ import { PreviewAction } from "@pe/kit/lang/preview-action";
 import type { ReactNode } from "react";
 import type { ListRowParts } from "@pe/kit/lang/list-view";
 import type { ListSearchable } from "@pe/kit/lang/collection";
+import type { Ref } from "@pe/kit/lang/attention";
 import { compactStatus, STALE_WORDS, type InboxGroup, type PreviewState } from "../../inbox-rows";
 
-export type RulingRow = Omit<ListRowParts, "actions"> & {
+export type RulingRow = Omit<ListRowParts, "actions" | "subject"> & {
   key: string;
+  subject?: Ref;
   title: string;
   group: InboxGroup;
   kind: string;

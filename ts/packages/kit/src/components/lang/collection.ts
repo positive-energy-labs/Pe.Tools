@@ -1,6 +1,7 @@
 import { land } from "./land";
 import { useWork } from "./pane";
 import { rowRevit } from "./revit-target";
+import type { Ref } from "./attention";
 import { rowDamage } from "../master-table/model";
 import type { Mark, Span } from "./scroll-project";
 import type { Virtualizer } from "@tanstack/react-virtual";
@@ -674,6 +675,8 @@ export interface ListOptions<T, Sort extends string = string> {
     ids?: readonly number[];
   };
   fields?: Readonly<Record<string, QueryRead<T> & { label?: string }>>;
+  /** Data identity shared by mounted rows and reach marks, without building row content. */
+  subjectOf?: (item: T) => Ref | undefined;
   /** Changes cancel pending writes and unfinished completion, even if the search stayed identical. */
   scope?: string;
   sorts?: Readonly<Record<Sort, (item: T) => string | number | undefined>>;
@@ -697,6 +700,7 @@ export interface ListOptions<T, Sort extends string = string> {
 }
 
 export interface ListItem<T> extends Pick<RowState, "revit" | "damage"> {
+  subject?: Ref;
   key: string;
   item: T;
   depth: number;
@@ -763,6 +767,7 @@ export function listModel<T, Sort extends string>(
       const children = options.tree?.childrenOf(item) ?? [];
       const group = section ?? options.groups?.of(item) ?? "";
       all.push({
+        subject: options.subjectOf?.(item),
         revit:
           rowRevit(item) ??
           (searchIndex?.get(item) ?? options.search(item)).ids ??
@@ -974,6 +979,7 @@ export function useList<T, Sort extends string = string>(options: ListOptions<T,
       options.keyOf,
       searchIndex,
       options.fields,
+      options.subjectOf,
       options.tree?.childrenOf,
       options.groups?.of,
       JSON.stringify(options.groups?.order),
