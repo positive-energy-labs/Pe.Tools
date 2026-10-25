@@ -59,6 +59,9 @@ test("face keyboard input commits and Escape cancels a preview without changing 
   fireEvent.keyDown(handle, { key: "Escape" });
   expect(onPreview).toHaveBeenLastCalledWith(undefined);
   expect(onCommit).not.toHaveBeenCalled();
+  for (const modifier of ["altKey", "ctrlKey", "metaKey"])
+    fireEvent.keyDown(handle, { key: "ArrowLeft", [modifier]: true });
+  expect(onCommit).not.toHaveBeenCalled();
 });
 
 test("face dragging previews immediately and commits only at release; cancellation discards it", () => {

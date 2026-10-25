@@ -245,6 +245,7 @@ export function SectionHandles({
               onPointerCancel={(e) => end(e, true)}
               onLostPointerCapture={(e) => end(e, true)}
               onKeyDown={(e) => {
+                if (e.altKey || e.ctrlKey || e.metaKey) return;
                 if (!["ArrowLeft", "ArrowDown", "ArrowRight", "ArrowUp", "Escape"].includes(e.key))
                   return;
                 e.preventDefault();
