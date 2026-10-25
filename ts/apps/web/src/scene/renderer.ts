@@ -47,6 +47,7 @@ import {
   boundOrbit,
   boundsIncludingView,
   mixCameraBounds,
+  cameraReturnProgress,
   fitDistance,
   HALF_FOV_TAN,
   type CameraBounds,
@@ -234,7 +235,12 @@ export function createRenderer(
   let limits = subjectBounds
     ? cameraBounds(subjectBounds, look.camera.zoomOutFactor, look.camera.panMargin)
     : null;
-  let returning: { from: CameraBounds; to: CameraBounds; started: number } | null = null;
+  let returning: {
+    from: CameraBounds;
+    to: CameraBounds;
+    elapsed: number;
+    last: number | null;
+  } | null = null;
   let constraining = false;
   const aspect = () => Math.max(mount.clientWidth, 1) / Math.max(mount.clientHeight, 1);
   const limitViewport = (v: OrbitViewport) => boundOrbit(v, bounds, limits, aspect());
@@ -293,7 +299,7 @@ export function createRenderer(
       );
     }
     limits = from;
-    returning = { from, to, started: performance.now() };
+    returning = { from, to, elapsed: 0, last: null };
     render();
   };
 
@@ -515,7 +521,7 @@ export function createRenderer(
       const started = performance.now();
       let boundsSettled: boolean | null = null;
       if (returning) {
-        const t = Math.min(1, (started - returning.started) / look.camera.returnMs);
+        const t = cameraReturnProgress(returning, started, look.camera.returnMs);
         limits = mixCameraBounds(returning.from, returning.to, 1 - (1 - t) ** 3);
         if (t === 1) returning = null;
         boundsSettled = t === 1;

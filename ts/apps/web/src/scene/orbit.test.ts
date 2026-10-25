@@ -14,6 +14,7 @@ import {
   boundOrbit,
   boundsIncludingView,
   mixCameraBounds,
+  cameraReturnProgress,
   HALF_FOV_TAN,
   boundsOfInstances,
   type OrbitViewport,
@@ -24,6 +25,13 @@ import { paintOf } from "./grounds";
 const bounds = { minX: 100, minY: 200, minZ: 0, maxX: 140, maxY: 230, maxZ: 12 };
 
 describe("subject camera bounds", () => {
+  it("a stalled frame cannot skip the camera return", () => {
+    const clock = { elapsed: 0, last: null as number | null };
+    expect(cameraReturnProgress(clock, 650, 380)).toBe(0);
+    expect(cameraReturnProgress(clock, 1650, 380)).toBeCloseTo(34 / 380);
+    for (let at = 1666; at < 2100; at += 16) cameraReturnProgress(clock, at, 380);
+    expect(cameraReturnProgress(clock, 2100, 380)).toBe(1);
+  });
   const subject = { minX: -10, maxX: 10, minY: -2, maxY: 2, minZ: 0, maxZ: 2 };
   const scene = { minX: -1000, maxX: 1000, minY: -1000, maxY: 1000, minZ: -100, maxZ: 100 };
   const limits = cameraBounds(subject, 2, 0.25);

@@ -153,6 +153,17 @@ export function mixCameraBounds(from: CameraBounds, to: CameraBounds, t: number)
   };
 }
 
+/** A busy frame delays the return instead of skipping the travel that locates the new subject. */
+export function cameraReturnProgress(
+  clock: { elapsed: number; last: number | null },
+  at: number,
+  duration: number,
+): number {
+  clock.elapsed += clock.last === null ? 0 : Math.min(Math.max(0, at - clock.last), 34);
+  clock.last = at;
+  return Math.min(1, clock.elapsed / duration);
+}
+
 /** Fit the bounds' sphere inside the smaller field of view, including portrait panes. */
 export function fitDistance(b: Bounds, aspect = 1) {
   const radius = Math.max(Math.hypot(b.maxX - b.minX, b.maxY - b.minY, b.maxZ - b.minZ) / 2, 0.5);
