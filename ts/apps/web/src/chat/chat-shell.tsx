@@ -56,6 +56,8 @@ import { ThreadBody } from "#/workbench/lens/thread-body";
 import { ComposerBank } from "#/chat/composer-bank";
 import { useThreadPresence } from "#/machine/os-notices";
 import { routeAddress, routeAt } from "@pe/agent-contracts";
+import { TeachPage, TeachReference } from "@pe/kit/lang/use-teach";
+import { STARTUP_TEACHING } from "#/route/teaching";
 
 type ChatShellProps = { target?: string; docked?: boolean };
 
@@ -75,7 +77,13 @@ function peaFloor(root: Element = document.documentElement) {
 }
 
 export const ChatShell = memo(function ChatShell(props: ChatShellProps) {
-  return <CurrentThreadChatSurface {...props} />;
+  return (
+    <TeachPage value="/pea">
+      <TeachReference value={STARTUP_TEACHING}>
+        <CurrentThreadChatSurface {...props} />
+      </TeachReference>
+    </TeachPage>
+  );
 });
 
 function CurrentThreadChatSurface(props: ChatShellProps) {

@@ -94,7 +94,8 @@ export function useTeach(
 }
 export function useTeaching() {
   const owner = useContext(TeachPage);
-  const page = useContext(TeachTarget) ?? owner;
+  const target = useContext(TeachTarget);
+  const page = owner ?? target;
   const reference = useContext(TeachReference);
   const all = useSyncExternalStore(subscribeMeasuredTeaching, readTeaching, serverTeaching);
   return useMemo(() => {

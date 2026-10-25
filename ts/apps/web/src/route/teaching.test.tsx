@@ -141,6 +141,55 @@ test("empty measurements keep the reference; route changes exclude another retai
   expect(view.container.textContent).toContain("All-systems rules");
 });
 
+test("a local chat tutorial owns its measured facts while tool chrome keeps the current tool", () => {
+  const withdrawals = [
+    registerTeaching({
+      kind: "region",
+      id: "tool",
+      label: "Measured ducts",
+      page: "/ducts",
+      rect: { left: 0, top: 0, width: 500, height: 300 },
+    }),
+    registerTeaching({
+      kind: "region",
+      id: "chat",
+      label: "Measured Pea",
+      page: "/pea",
+      rect: { left: 500, top: 0, width: 400, height: 300 },
+    }),
+  ];
+  const view = render(
+    <TeachTarget value="/ducts">
+      <TeachReference value={DUCTS_TEACHING}>
+        <div data-reader="tool">
+          <Tutorial />
+        </div>
+        <TeachPage value="/pea">
+          <TeachReference value={STARTUP_TEACHING}>
+            <div data-reader="chat">
+              <Tutorial />
+            </div>
+          </TeachReference>
+        </TeachPage>
+      </TeachReference>
+    </TeachTarget>,
+  );
+  expect(view.container.querySelector('[data-reader="tool"]')!.textContent).toContain(
+    "Measured ducts",
+  );
+  expect(view.container.querySelector('[data-reader="chat"]')!.textContent).toContain(
+    "Measured Pea",
+  );
+  expect(view.container.querySelector('[data-reader="chat"]')!.textContent).not.toContain(
+    "Measured ducts",
+  );
+  act(() => withdrawals.forEach((withdraw) => withdraw()));
+  expect(view.container.querySelector('[data-reader="chat"]')!.textContent).toContain("Workspace");
+  expect(view.container.querySelector('[data-reader="chat"]')!.textContent).not.toContain(
+    "All-systems rules",
+  );
+});
+
 test("SSR never reads the process-global mounted registry and hydrates the same map without warnings", async () => {
   const withdraw = registerTeaching({
     kind: "region",
