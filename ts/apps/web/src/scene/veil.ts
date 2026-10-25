@@ -155,7 +155,10 @@ export function bakeVeil(meshes: SceneMeshes, isSubject: (index: number) => bool
   }
   const data = new Uint8Array(sq.length);
   for (let i = 0; i < sq.length; i++)
-    data[i] = Math.min(255, Math.round(((Math.sqrt(sq[i]!) * cellFt) / VEIL_REACH_FT) * 255));
+    data[i] = Math.min(
+      255,
+      Math.round(((Math.sqrt(sq[i]!) * cellFt) / (VEIL_REACH_FT + cellFt)) * 255),
+    );
   return { data, dims, min, cellFt };
 }
 
@@ -207,6 +210,8 @@ export function setVeilField(u: VeilUniforms, field: VeilField) {
   u.veilMin.value.set(...field.min);
   u.veilSize.value.set(nx * field.cellFt, ny * field.cellFt, nz * field.cellFt);
   u.veilCell.value = field.cellFt;
+  // Keep the far edge beyond the one-cell contact correction, even on very large scenes.
+  u.veilReach.value = VEIL_REACH_FT + field.cellFt;
 }
 
 /** `ground` is the stage colour already in the output colour space, as three's own fog uniform. */

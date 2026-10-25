@@ -43,7 +43,7 @@ it("bakes distance to triangle interiors, excludes context, and bounds a flat fi
         field.dims[0] *
           (Math.floor(y / field.cellFt) + field.dims[1] * Math.floor(z / field.cellFt))
     ]! *
-      VEIL_REACH_FT) /
+      (VEIL_REACH_FT + field.cellFt)) /
     255;
   // The middle of a broad face is near even though it is far from all three vertices.
   expect(at(5, 5, 0)).toBe(0);
@@ -56,4 +56,7 @@ it("bakes distance to triangle interiors, excludes context, and bounds a flat fi
   );
   expect(Math.max(...flat.dims)).toBeLessThanOrEqual(256);
   expect(flat.data.length).toBeLessThanOrEqual(2 ** 21);
+  expect((flat.data[0]! / 255) * (VEIL_REACH_FT + flat.cellFt) - flat.cellFt).toBeCloseTo(
+    VEIL_REACH_FT,
+  );
 });
