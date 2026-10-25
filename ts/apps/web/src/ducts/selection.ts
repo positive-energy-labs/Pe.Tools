@@ -56,7 +56,8 @@ export const stubIdsOf = (neighbours: readonly Neighbour[], open: ReadonlySet<nu
  * The picture's paint: opened elements are `subject`, neighbours are `stub`, both keyed by the
  * element's OWN Revit system name, so a shared
  * network shows where systems change (kaitpw 2026-10-24: "i cant tell when systems change. like in
- * revit we have a view template that colors them"). Anything else is undefined: context.
+ * revit we have a view template that colors them"). The URL layer owns whether keys exist;
+ * LOOK.subject.bySystem remains a dev-only master palette override. Anything else is context.
  */
 export function paintOfDucts(
   snapshot: DuctSnapshot,

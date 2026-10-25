@@ -34,6 +34,7 @@ import { useNativeObservation } from "#/revit/observation";
 import { peReadings } from "#/readings";
 import { pricingJob, type PricingRequest, type PricingResponse } from "./pricing-job";
 import type { ModelPicture } from "./model-picture";
+import type { SceneInstance } from "#/scene/types";
 
 const picture = vi.hoisted(() => ({ current: null as Parameters<typeof ModelPicture>[0] | null }));
 vi.mock("./model-picture", async (original) => {
@@ -520,6 +521,25 @@ test("a changed document fences a pending read after changing targets and return
   ).not.toContain("999999");
   // Two document-picker transitions and a fenced read exceed 15 s on a busy test machine.
 }, 30_000);
+
+test("picture layers choose the shared context mode and remove system colour keys", async () => {
+  const instance = { revitId: 1 } as SceneInstance;
+  await mount();
+  await waitFor(() => expect(picture.current?.contextMode).toBe("halo"));
+  expect(picture.current!.paintOf!(instance)).toEqual({
+    tier: "subject",
+    key: "SA",
+  });
+  act(() => drawing.latest!.setPage({ layers: ["meshes", "halo", "context"] }));
+  await waitFor(() => expect(picture.current?.contextMode).toBe("all"));
+  expect(picture.current!.paintOf!(instance)).toEqual({ tier: "subject" });
+  act(() => drawing.latest!.setPage({ layers: ["meshes", "halo", "system-colours"] }));
+  await waitFor(() => expect(picture.current?.contextMode).toBe("halo"));
+  expect(picture.current!.paintOf!(instance)).toEqual({
+    tier: "subject",
+    key: "SA",
+  });
+});
 
 test("a native tree selection keeps the camera and address pose; F frames and Escape keeps it", async () => {
   const view = await mount();
