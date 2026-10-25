@@ -21,6 +21,7 @@ import {
   type DuctClaim,
   type DuctsRouteDocument,
   type RouteStatePatch,
+  type OrbitViewport,
 } from "@pe/agent-contracts";
 
 import type { Cells } from "#/route/cells";
@@ -53,6 +54,8 @@ import { sceneRequest } from "#/scene/host";
 import { airflowOptions } from "./airflow";
 import { elementNamer } from "./claims";
 import { espWaits, fanRefusal, fanWords, holding, triage } from "./inbox-rows";
+import { activeSystem, capped, DUCTS_MULTI } from "./selection";
+import { neighboursOf } from "@pe/ducts-domain/neighbours";
 
 /** What Revit said the staged cells would write, and the Work and snapshot it was asked over. */
 interface DuctsEvaluation {
@@ -113,16 +116,16 @@ export type LoadedDuctsReading = {
 function knownSelection(page: DuctsPage, reading: LoadedDuctsReading): boolean {
   if (!page.selected) return true;
   const { snapshot, drawn, claims } = reading;
-  const members = page.system
-    ? systemScope(snapshot, page.system).members
-    : new Set([
-        ...snapshot.nodes.map((node) => node.id),
-        ...snapshot.segments.map((segment) => segment.id),
-        ...snapshot.groups.flatMap((group) => group.rootIds),
-      ]);
+  const members =
+    scopeOf(snapshot, page.system)?.members ??
+    new Set([
+      ...snapshot.nodes.map((node) => node.id),
+      ...snapshot.segments.map((segment) => segment.id),
+      ...snapshot.groups.flatMap((group) => group.rootIds),
+    ]);
   // Claims and price blockers stay on the raw system. Selection also admits the neighbouring
   // elements the priced tree and capture actually draw (RA 52's merged network, for example).
-  const scopedClaims = page.system ? claimsForGroup(claims, [...members]) : claims;
+  const scopedClaims = page.system.length ? claimsForGroup(claims, [...members]) : claims;
   if (Object.hasOwn(scopedClaims, page.selected)) return true;
   const id = Number(page.selected);
   return (
@@ -130,9 +133,16 @@ function knownSelection(page: DuctsPage, reading: LoadedDuctsReading): boolean {
     id > 0 &&
     String(id) === page.selected &&
     (members.has(id) ||
-      (!!page.system && drawn !== null && systemScope(drawn, page.system).members.has(id)))
+      (drawn !== null && !!scopeOf(drawn, page.system)?.members.has(id)) ||
+      neighboursOf(snapshot, scopeOf(snapshot, page.system)?.groups ?? [], DUCTS_MULTI).some((n) =>
+        n.stub.includes(id),
+      ))
   );
 }
+
+/** The open systems the reading has no group for. */
+const unknownSystems = (page: Pick<DuctsPage, "system">, snapshot: DuctSnapshot) =>
+  page.system.filter((name) => groupsOfSystem(snapshot, name).length === 0);
 
 /** Forgiving URL/initial restoration waits for evidence; the route replaces the address once. */
 export function reconcileDuctsMembers(
@@ -140,8 +150,14 @@ export function reconcileDuctsMembers(
   reading: LoadedDuctsReading | null,
 ): Partial<DuctsPage> {
   if (!reading) return {};
-  if (page.system && groupsOfSystem(reading.snapshot, page.system).length === 0)
-    return { system: ductsPageSchema.parse({}).system, selected: "", issue: "", viewport: null };
+  const unknown = unknownSystems(page, reading.snapshot);
+  if (unknown.length)
+    return {
+      system: page.system.filter((name) => !unknown.includes(name)),
+      selected: "",
+      issue: "",
+      viewport: null,
+    };
   // A deep link can name a shared-network element absent from the raw system. Keep it until the
   // priced topology is ready to prove membership; clearing here loses a valid copied selection.
   if (!reading.drawn) return {};
@@ -149,13 +165,26 @@ export function reconcileDuctsMembers(
 }
 
 /** Human, action and Pea moves all validate the normalized candidate against the displayed read. */
-export function bindDuctsManifest(read: () => LoadedDuctsReading | null): typeof manifest {
+export function bindDuctsManifest(
+  read: () => LoadedDuctsReading | null,
+  pose: () => OrbitViewport | null = () => null,
+): typeof manifest {
   return {
     ...manifest,
     transition: (current, patch, origin) => {
-      const normalized = manifest.transition?.(current, patch, origin) ?? { patch };
+      let normalized = manifest.transition?.(current, patch, origin) ?? { patch };
       if ("refusal" in normalized) return normalized;
       if (origin === "url" || origin === "initial") return normalized;
+      const nextSystems = normalized.patch.system;
+      if (
+        patch.system &&
+        !Object.hasOwn(patch, "viewport") &&
+        current.viewport === null &&
+        current.system.some((name) => nextSystems?.includes(name))
+      ) {
+        const viewport = pose();
+        if (viewport) normalized = { patch: { ...normalized.patch, viewport } };
+      }
       const candidate = { ...current, ...normalized.patch };
       const reading = read();
       if (!reading) {
@@ -169,13 +198,21 @@ export function bindDuctsManifest(read: () => LoadedDuctsReading | null): typeof
           };
         return normalized;
       }
-      if (candidate.system && groupsOfSystem(reading.snapshot, candidate.system).length === 0)
+      const unknown = unknownSystems(candidate, reading.snapshot);
+      if (unknown.length)
         return {
           refusal: refuse(
             "not-ready",
-            `System is not in this displayed reading: ${candidate.system}`,
+            `System is not in this displayed reading: ${unknown.join(", ")}`,
           ),
         };
+      // Closing a system can drop the selection out of what is open: it clears, never refuses.
+      if (
+        Object.hasOwn(patch, "system") &&
+        !Object.hasOwn(patch, "selected") &&
+        !knownSelection(candidate, reading)
+      )
+        return { patch: { ...normalized.patch, selected: "", issue: "" } };
       if (!knownSelection(candidate, reading))
         return {
           refusal: refuse(
@@ -229,21 +266,25 @@ const pendingOf = (ctx: DuctsCtx) =>
  * system is in, plus every element of the groups the picture draws (`drawn`: the priced survey can
  * merge a system with groups it shares, and the tree and centrelines draw those too; RA 52's raw
  * scope was 6 elements under a 193-part tree), with what is around it when the `context` layer is
- * on; null with no system. One capture per subject, never per render (the call keys on this request).
+ * on; an empty selection includes the document. Every open system's members go in, and the `stubs` of the networks one
+ * unit away. One capture per subject, never per render (the call keys on this request).
  */
 export const sceneRequestOf = (
   snapshot: DuctSnapshot | null,
   page: Pick<DuctsPage, "system" | "layers">,
   drawn: readonly string[] = [],
+  stubs: Iterable<number> = [],
 ) => {
-  if (!snapshot || !page.system) return null;
+  if (!snapshot) return null;
+  const scope = scopeOf(snapshot, page.system);
   const groups = new Set(drawn);
   const ids = [
     ...new Set([
-      ...systemScope(snapshot, page.system).members,
+      ...(scope?.members ?? [...snapshot.nodes, ...snapshot.segments].map((e) => e.id)),
       ...[...snapshot.nodes, ...snapshot.segments]
         .filter((e) => e.groupId && groups.has(e.groupId))
         .map((e) => e.id),
+      ...stubs,
     ]),
   ].filter((id) => id > 0);
   if (!ids.length) return null;
@@ -264,7 +305,9 @@ const standing = (ctx: DuctsCtx) => {
   if (!snapshot || !grids) return null;
   const priced = currentPricing(ctx);
   // The survey may merge or bridge groups: the scope is read over the snapshot that was priced.
-  const scope = scopeOf(priced.snapshot, ctx.page.system);
+  // The ESP write is the active system's, so only its rows hold it back.
+  const active = activeSystem(ctx.page);
+  const scope = scopeOf(priced.snapshot, active ? [active] : []);
   const { fix, set } = triage({
     snapshot: priced.snapshot,
     scope,
@@ -299,10 +342,10 @@ const built = (ctx: DuctsCtx) => {
   if (snapshot.storeError)
     throw Error(`Pe's provenance store in this model is unreadable: ${snapshot.storeError}`);
   const priced = currentPricing(ctx);
-  // Write scope is the system: every group it is in, as the raw snapshot numbers them.
-  const groups = ctx.page.system ? systemScope(snapshot, ctx.page.system).groups : [];
-  if (ctx.page.system && !groups.length)
-    throw Error(`No duct network in this snapshot carries ${ctx.page.system}`);
+  // Write scope is the active system: every group it is in, as the raw snapshot numbers them.
+  const active = activeSystem(ctx.page);
+  const groups = active ? systemScope(snapshot, active).groups : [];
+  if (active && !groups.length) throw Error(`No duct network in this snapshot carries ${active}`);
   return applyRequest(snapshot, priced, new Date().toISOString(), groups);
 };
 
@@ -347,12 +390,17 @@ const groupOf = (input: unknown) => (input as { group?: string } | undefined)?.g
 const healTargetOf = (ctx: DuctsCtx, input: unknown): string => {
   currentPricing(ctx);
   const named = groupOf(input);
-  if (named) return named;
+  if (named) {
+    const active = activeSystem(ctx.page);
+    if (active && !systemScope(snapshotOf(ctx), active).groups.includes(named))
+      throw Error(`Open this network's system last to heal it; active system is ${active}`);
+    return named;
+  }
   const run = ctx.page.heal;
   return healTarget(
     snapshotOf(ctx),
     ctx.work.doc,
-    ctx.page.system,
+    activeSystem(ctx.page),
     ctx.page.selected,
     run?.mode === "preview" ? run.group : null,
   );
@@ -379,7 +427,7 @@ const offeredFanOf = (ctx: DuctsCtx) => {
     ctx.work.doc,
     observed<Grids>(ctx, "tables"),
     observed<Catalogs>(ctx, "catalogs"),
-    ctx.page.system,
+    activeSystem(ctx.page),
     ctx.page.selected,
     ctx.page.fan,
     elementNamer(snapshot, null),
@@ -388,7 +436,13 @@ const offeredFanOf = (ctx: DuctsCtx) => {
 /** The pair a fan verb acts on: the one it names, else the chosen system's offered fan. */
 const fanTarget = (ctx: DuctsCtx, input: unknown) => {
   const named = pairOf(input);
-  if (named) return named;
+  if (named) {
+    if (
+      snapshotOf(ctx).systems.find((s) => s.id === named.systemId)?.name !== activeSystem(ctx.page)
+    )
+      throw Error("Open this system last to make its fan");
+    return named;
+  }
   const { unitId, systemId } = offeredFanOf(ctx);
   return { unitId, systemId };
 };
@@ -429,12 +483,12 @@ const requestReady = (ctx: DuctsCtx) => {
   if ("no" in tried) return tried.no;
   let bySystem = requestReadiness.get(tried.ok);
   if (!bySystem) requestReadiness.set(tried.ok, (bySystem = new Map()));
-  if (!bySystem.has(ctx.page.system))
+  if (!bySystem.has(activeSystem(ctx.page)))
     bySystem.set(
-      ctx.page.system,
+      activeSystem(ctx.page),
       why(() => requestOf(ctx)),
     );
-  return bySystem.get(ctx.page.system)!;
+  return bySystem.get(activeSystem(ctx.page))!;
 };
 
 /**
@@ -572,17 +626,27 @@ export const manifest = defineRoute<
   readings: { ducts: () => null, tables: () => null, catalogs: () => null, pricing: () => null },
   page: ductsPageSchema,
   transition: (current, patch) => {
-    const systemChanged = Object.hasOwn(patch, "system") && (patch.system ?? "") !== current.system;
+    // Pea and the address are capped here too; the page's own picks already are.
+    const system = Object.hasOwn(patch, "system") ? capped(patch.system ?? []) : current.system;
+    const activeChanged = activeSystem({ system }) !== activeSystem(current);
+    // Only a move that keeps none of the open systems is a new subject: the camera, selection and
+    // row reset then. Opening or closing one beside the others keeps them (a selection a close
+    // drops out of view clears in `bindDuctsManifest`, which holds the reading).
+    const switched =
+      system.join("\n") !== current.system.join("\n") &&
+      !current.system.some((name) => system.includes(name));
     const selected = Object.hasOwn(patch, "selected")
       ? (patch.selected ?? "")
-      : systemChanged
+      : switched
         ? ""
         : current.selected;
     return {
       patch: {
-        ...(systemChanged ? { selected: "", viewport: null } : {}),
-        ...(systemChanged || selected !== current.selected ? { issue: "" } : {}),
+        ...(activeChanged ? { evaluation: null, heal: null, fan: null } : {}),
+        ...(switched ? { selected: "", viewport: null } : {}),
+        ...(switched || selected !== current.selected ? { issue: "" } : {}),
         ...patch,
+        ...(Object.hasOwn(patch, "system") ? { system } : {}),
       },
     };
   },

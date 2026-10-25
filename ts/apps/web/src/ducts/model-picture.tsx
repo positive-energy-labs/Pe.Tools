@@ -23,7 +23,7 @@ import { PaneOverlay } from "@pe/kit/lang/pane";
 import { OutcomeLine } from "@pe/kit/lang/outcome";
 import { Scene3D } from "#/scene/scene3d";
 import type { SceneRead } from "#/scene/use-scene";
-import type { Bounds, Layer3D, SceneMeshes } from "#/scene/types";
+import type { Bounds, Layer3D, SceneMeshes, PaintOf } from "#/scene/types";
 
 import { CaptionBounds } from "./subject-labels";
 import { Annotations, type Label, type Ruling } from "./annotations";
@@ -77,6 +77,7 @@ export const poseOf = (
       : null;
 
 export function ModelPicture({
+  paintOf,
   readout,
   read,
   bounds,
@@ -100,6 +101,7 @@ export function ModelPicture({
   onPick,
   onRuling,
 }: {
+  paintOf?: PaintOf;
   readout: ReactNode;
   read: SceneRead;
   bounds: PictureBounds | null;
@@ -221,6 +223,7 @@ export function ModelPicture({
       )}
       {meshes && pose ? (
         <Scene3D
+          paintOf={paintOf}
           readout={readout}
           className="size-full"
           meshes={meshes}

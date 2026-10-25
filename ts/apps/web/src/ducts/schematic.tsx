@@ -11,8 +11,8 @@ import { nameOrFallback } from "@pe/kit/lang/subject-text";
 import { SvgTip } from "@pe/kit/lang/tooltip";
 import type { IssueKind } from "@pe/ducts-domain/issues";
 /**
- * The group as a one-line schematic, fan at the left, registers at the right: the same picture as
- * the model, drawn as a tree. Straight runs fold into one edge labelled size, developed length and
+ * The opened groups as a forest of one-line schematics, fan at the left, registers at the right.
+ * Each keeps its own root; stacking networks never invents a connection. Straight runs fold into one edge labelled size, developed length and
  * pass-1 cfm; selecting an edge unfolds it. Edges are inked by the drawing's encoding, so a reading
  * (health, velocity, ...) means the same here as on the model. Selection and the hover-lit set come
  * from the caller, so both pictures light together. One component, two slots: `main` is the whole
@@ -119,8 +119,8 @@ const clip = (text: string, n: number) => (text.length > n ? `${text.slice(0, n 
 export interface SchematicProps {
   readout: ReactNode;
   index: DuctIndex;
-  /** The group to draw; empty draws the invitation to choose one. */
-  group: string;
+  /** The opened groups, in section order; shared groups appear once. */
+  groups: readonly string[];
   /** The model's encoding: an edge wears the stroke of its first segment under it. */
   encoding: Encoding;
   /** Element ids selected; an edge holding one is ringed, and a fold holding one unfolds. */
@@ -137,7 +137,7 @@ const chainKey = (chain: Chain): SubjectKey => `chain:${chain.to}`;
 export function Schematic({
   readout,
   index,
-  group,
+  groups,
   encoding,
   onSelect,
   size = "main",
@@ -147,21 +147,27 @@ export function Schematic({
   const lit = new Set([...cited, ...(hovered == null ? [] : [hovered])]);
   const inset = size === "inset";
   const { snapshot } = index;
-  const tree = useMemo(() => (group ? groupTree(snapshot, group) : null), [snapshot, group]);
+  const trees = useMemo(
+    () => groups.map((group) => groupTree(snapshot, group)),
+    [snapshot, groups],
+  );
   const facts = useMemo(() => {
     const out = new Map<number, EncodingFacts>();
-    if (!group) return out;
-    const scene = sceneOf(index, [group], () => true);
+    const scene = sceneOf(index, groups, () => true);
     for (const f of scene.segments) out.set(f.segment.id, f);
     return out;
-  }, [index, group]);
+  }, [index, groups]);
   // The chain a selected fold member sits in unfolds: its members become vertices.
-  const base = useMemo(() => (tree ? chainsOf(tree) : []), [tree]);
+  const base = useMemo(() => trees.flatMap((tree) => chainsOf(tree)), [trees]);
   const unfold = useMemo(() => {
     const hit = base.find((c) => c.members.slice(0, -1).some((id) => selected.has(id)));
     return new Set(hit?.members ?? []);
   }, [base, selected]);
-  const chains = useMemo(() => (tree ? chainsOf(tree, unfold) : []), [tree, unfold]);
+  const walks = useMemo(
+    () => trees.map((tree) => ({ tree, chains: chainsOf(tree, unfold) })),
+    [trees, unfold],
+  );
+  const chains = useMemo(() => walks.flatMap((walk) => walk.chains), [walks]);
   useMembers(
     useContext(AttentionDocument) ?? "",
     useMemo(
@@ -169,24 +175,31 @@ export function Schematic({
       [chains],
     ),
   );
-  const layout = useMemo(
-    () => (tree ? layoutTree(tree, chains, inset ? INSET_LABEL_W : LABEL_W) : null),
-    [tree, chains, inset],
-  );
+  const forest = useMemo(() => {
+    let y = 0;
+    return walks.map(({ tree, chains }) => {
+      const layout = layoutTree(tree, chains, inset ? INSET_LABEL_W : LABEL_W);
+      const placed = { tree, layout, y };
+      y += layout.height;
+      return placed;
+    });
+  }, [walks, inset]);
+  const layout = {
+    width: Math.max(0, ...forest.map((f) => f.layout.width)),
+    height: forest.reduce((sum, f) => sum + f.layout.height, 0),
+  };
 
-  if (!tree || !layout)
+  if (!forest.length)
     return (
       <>
         {readout}
         <p className="text-ink-2 t-small p-3" data-schematic="empty">
-          {group ? "this network has no tree to draw" : "choose a system to see its schematic"}
+          choose a system to see its schematic
         </p>
       </>
     );
 
   const pick = (id: number) => onSelect(selected.has(id) ? null : id);
-  const equipment = snapshot.nodes.find((n) => n.id === tree.root?.equipment);
-  const rootY = layout.placed.find((p) => p.chain.from === null)?.y1 ?? PAD;
   const litHas = (ids: readonly number[]) => ids.some((id) => lit.has(id));
 
   const svg = (
@@ -200,122 +213,136 @@ export function Schematic({
       preserveAspectRatio={inset ? "xMinYMid meet" : undefined}
       className="face-mono t-small"
     >
-      <g
-        onClick={() => tree.root && pick(tree.root.element)}
-        className="cursor-pointer"
-        aria-label="root"
-      >
-        <SvgTip content={"root"} />
-        <rect
-          x={4}
-          y={rootY - 12}
-          width={ROOT_W - 16}
-          height={24}
-          fill={tokenRef("artifact")}
-          stroke={tokenRef(tree.rooted === "port" ? "ink" : "caution")}
-          className={tree.rooted === "port" ? undefined : "dash-reference"}
-        />
-        <text x={10} y={rootY} dominantBaseline="central" fill={tokenRef("ink")}>
-          {clip(equipment ? nameOrFallback(equipment.family) : "stand-in root", 16)}
-        </text>
-      </g>
-      {layout.placed.map(({ chain, x1, y1, x2, y2 }) => {
-        const bend = x1 + 10;
-        const d = `M${x1} ${y1} H${bend} V${y2} H${x2}`;
-        const hot = chain.members.some((id) => selected.has(id));
-        const glow = litHas(chain.members);
-        const lead = chain.members.map((id) => facts.get(id)).find((f) => f != null);
-        const stroke = lead ? strokeOf(encoding, lead) : null;
-        const width = Math.max(1.5, Math.min(stroke?.width ?? 1.5, 8));
-        const issues = chain.members
-          .flatMap((id) => tree.issuesByElement.get(id) ?? [])
-          .filter((i) => i.kind !== "open-end");
-        const kinds = [...new Set(issues.map((i) => i.kind))];
-        const labelX = bend + 6;
+      {forest.map(({ tree, layout, y }, i) => {
+        const equipment = snapshot.nodes.find((n) => n.id === tree.root?.equipment);
+        const rootY = layout.placed.find((p) => p.chain.from === null)?.y1 ?? PAD;
         return (
-          <g
-            key={chain.to}
-            data-element={chain.members[0]}
-            data-selected={hot ? "" : undefined}
-            data-lit={glow ? "" : undefined}
-            className="cursor-pointer"
-            onClick={() => pick(chain.members[0]!)}
-            {...mark(chainKey(chain))}
-          >
-            <SvgTip content={"chain"} />
-            {hot ? (
-              <path
-                d={d}
-                fill="none"
-                stroke={tokenRef("select")}
-                strokeWidth={width + SELECT_WIDTH}
+          <g key={groups[i]} data-schematic-group={groups[i]} transform={`translate(0 ${y})`}>
+            <g
+              onClick={() => tree.root && pick(tree.root.element)}
+              className="cursor-pointer"
+              aria-label="root"
+            >
+              <SvgTip content={"root"} />
+              <rect
+                x={4}
+                y={rootY - 12}
+                width={ROOT_W - 16}
+                height={24}
+                fill={tokenRef("artifact")}
+                stroke={tokenRef(tree.rooted === "port" ? "ink" : "caution")}
+                className={tree.rooted === "port" ? undefined : "dash-reference"}
               />
-            ) : null}
-            {glow ? (
-              <path
-                d={d}
-                fill="none"
-                stroke={tokenRef("ink")}
-                strokeOpacity={0.35}
-                strokeWidth={width + 6}
-              />
-            ) : null}
-            <path
-              d={d}
-              fill="none"
-              stroke={stroke?.ink ?? tokenRef("ink-mute")}
-              strokeWidth={width}
-              className={stroke?.dash ? DASH_CLASS[stroke.dash] : undefined}
-            />
-            {inset ? null : (
-              <>
-                <text x={labelX} y={y2 - 6} fill={tokenRef("ink-2")}>
-                  {[
-                    chain.sizes.slice(0, 2).join("→"),
-                    chain.lengthFt ? `${fmt(chain.lengthFt, 1)} ft` : "",
-                  ]
-                    .filter(Boolean)
-                    .join(" · ")}
-                </text>
-                <text x={labelX} y={y2 + 13} fill={tokenRef("ink")}>
-                  {chain.cfm != null ? `${fmt(chain.cfm)} cfm` : ""}
-                </text>
-              </>
-            )}
-            {kinds.map((kind, i) => (
-              <circle key={kind} cx={x2 - 8 - i * 9} cy={y2 + 9} r={3.5} fill={issueInk(kind)}>
-                <SvgTip content={ISSUE_KINDS[kind].label} />
-              </circle>
-            ))}
-            <Vertex
-              tree={tree}
-              id={chain.to}
-              x={x2}
-              y={y2}
-              hot={selected.has(chain.to)}
-              glow={lit.has(chain.to)}
-              far={tree.longest.at(-1) === chain.to}
-              labelled={!inset}
-            />
+              <text x={10} y={rootY} dominantBaseline="central" fill={tokenRef("ink")}>
+                {clip(equipment ? nameOrFallback(equipment.family) : "stand-in root", 16)}
+              </text>
+            </g>
+            {layout.placed.map(({ chain, x1, y1, x2, y2 }) => {
+              const bend = x1 + 10;
+              const d = `M${x1} ${y1} H${bend} V${y2} H${x2}`;
+              const hot = chain.members.some((id) => selected.has(id));
+              const glow = litHas(chain.members);
+              const lead = chain.members.map((id) => facts.get(id)).find((f) => f != null);
+              const stroke = lead ? strokeOf(encoding, lead) : null;
+              const width = Math.max(1.5, Math.min(stroke?.width ?? 1.5, 8));
+              const issues = chain.members
+                .flatMap((id) => tree.issuesByElement.get(id) ?? [])
+                .filter((i) => i.kind !== "open-end");
+              const kinds = [...new Set(issues.map((i) => i.kind))];
+              const labelX = bend + 6;
+              return (
+                <g
+                  key={chain.to}
+                  data-element={chain.members[0]}
+                  data-selected={hot ? "" : undefined}
+                  data-lit={glow ? "" : undefined}
+                  className="cursor-pointer"
+                  onClick={() => pick(chain.members[0]!)}
+                  {...mark(chainKey(chain))}
+                >
+                  <SvgTip content={"chain"} />
+                  {hot ? (
+                    <path
+                      d={d}
+                      fill="none"
+                      stroke={tokenRef("select")}
+                      strokeWidth={width + SELECT_WIDTH}
+                    />
+                  ) : null}
+                  {glow ? (
+                    <path
+                      d={d}
+                      fill="none"
+                      stroke={tokenRef("ink")}
+                      strokeOpacity={0.35}
+                      strokeWidth={width + 6}
+                    />
+                  ) : null}
+                  <path
+                    d={d}
+                    fill="none"
+                    stroke={stroke?.ink ?? tokenRef("ink-mute")}
+                    strokeWidth={width}
+                    className={stroke?.dash ? DASH_CLASS[stroke.dash] : undefined}
+                  />
+                  {inset ? null : (
+                    <>
+                      <text x={labelX} y={y2 - 6} fill={tokenRef("ink-2")}>
+                        {[
+                          chain.sizes.slice(0, 2).join("→"),
+                          chain.lengthFt ? `${fmt(chain.lengthFt, 1)} ft` : "",
+                        ]
+                          .filter(Boolean)
+                          .join(" · ")}
+                      </text>
+                      <text x={labelX} y={y2 + 13} fill={tokenRef("ink")}>
+                        {chain.cfm != null ? `${fmt(chain.cfm)} cfm` : ""}
+                      </text>
+                    </>
+                  )}
+                  {kinds.map((kind, i) => (
+                    <circle
+                      key={kind}
+                      cx={x2 - 8 - i * 9}
+                      cy={y2 + 9}
+                      r={3.5}
+                      fill={issueInk(kind)}
+                    >
+                      <SvgTip content={ISSUE_KINDS[kind].label} />
+                    </circle>
+                  ))}
+                  <Vertex
+                    tree={tree}
+                    id={chain.to}
+                    x={x2}
+                    y={y2}
+                    hot={selected.has(chain.to)}
+                    glow={lit.has(chain.to)}
+                    far={tree.longest.at(-1) === chain.to}
+                    labelled={!inset}
+                  />
+                </g>
+              );
+            })}
+            {tree.backEdges.map(([a, b]) => {
+              const pa = layout.at.get(a);
+              const pb = layout.at.get(b);
+              if (!pa || !pb) return null;
+              const lift = Math.max(24, Math.abs(pa[1] - pb[1]) / 2);
+              return (
+                <path
+                  key={`${a}-${b}`}
+                  d={`M${pa[0]} ${pa[1]} C${pa[0] + lift} ${pa[1]}, ${pb[0] + lift} ${pb[1]}, ${pb[0]} ${pb[1]}`}
+                  fill="none"
+                  stroke={issueInk("loop")}
+                  strokeWidth={1.5}
+                  className="dash-seam"
+                >
+                  <SvgTip content={ISSUE_KINDS.loop.label} />
+                </path>
+              );
+            })}
           </g>
-        );
-      })}
-      {tree.backEdges.map(([a, b]) => {
-        const pa = layout.at.get(a);
-        const pb = layout.at.get(b);
-        if (!pa || !pb) return null;
-        const lift = Math.max(24, Math.abs(pa[1] - pb[1]) / 2);
-        return (
-          <path
-            key={`${a}-${b}`}
-            d={`M${pa[0]} ${pa[1]} C${pa[0] + lift} ${pa[1]}, ${pb[0] + lift} ${pb[1]}, ${pb[0]} ${pb[1]}`}
-            fill="none"
-            stroke={issueInk("loop")}
-            strokeWidth={1.5}
-            className="dash-seam"
-          >
-            <SvgTip content={ISSUE_KINDS.loop.label} />
-          </path>
         );
       })}
     </svg>

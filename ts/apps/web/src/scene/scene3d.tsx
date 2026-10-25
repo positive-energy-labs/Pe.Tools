@@ -31,7 +31,7 @@ import { isClick, pickAt } from "./picking";
 import { samePlane, type PlaneAxis, type PlaneViewport } from "./plane";
 import type { Project, Ray, Size } from "./projection";
 import { createRenderer, type ClipVolume, type SceneRenderer } from "./renderer";
-import type { IssueTarget, Layer3D, Pick, SceneInstance, SceneMeshes } from "./types";
+import type { IssueTarget, Layer3D, PaintOf, Pick, SceneInstance, SceneMeshes } from "./types";
 
 export type Scene3DProps = {
   /** Fixed picture state; null explicitly shares a parent readout in an inset. */
@@ -54,6 +54,8 @@ export type Scene3DProps = {
   hidden?: ReadonlySet<string>;
   isolated?: ReadonlySet<string> | null;
   layers?: readonly Layer3D[];
+  /** Each instance's tier and colour key; absent = focus is subject, the rest context. */
+  paintOf?: PaintOf;
   hoveredIssue?: string | null;
   focusedIssue?: string | null;
   onIssueHover?: (target: IssueTarget | null) => void;

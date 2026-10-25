@@ -20,7 +20,8 @@ import type { DuctsApply } from "@pe/host-contracts/generated";
 import { flushSync } from "react-dom";
 import { survey, unitFlowsIn } from "@pe/ducts-domain/survey";
 import { fansOwedBase, type OwedBase } from "@pe/ducts-domain/fan-assignment";
-import { sectionNames, systemOfGroup, systemScope } from "@pe/ducts-domain/system-scope";
+import { sectionsOf, systemOfGroup } from "@pe/ducts-domain/system-scope";
+import { neighboursOf, type Neighbour } from "@pe/ducts-domain/neighbours";
 import { Button } from "@pe/kit/lang/button";
 import { systemSearch } from "@pe/ducts-domain/system-search";
 import { useList, emptyListState } from "@pe/kit/lang/collection";
@@ -52,7 +53,7 @@ import {
   type InboxItem,
 } from "../../inbox-rows";
 import { groupLabels } from "@pe/ducts-domain/words";
-import { scopeOf } from "@pe/ducts-domain/system-scope";
+import { scopeOf, systemScope } from "@pe/ducts-domain/system-scope";
 import { stagedEsp } from "@pe/ducts-domain/staged";
 import { previewFresh } from "../../manifest";
 import type { LossesWork } from "../../work";
@@ -75,8 +76,12 @@ import { SystemTree } from "./tree-sidebar";
 import { useGroupEncoding } from "../encoding/use-encoding";
 import { DuctsIntroduction } from "../../introduction";
 import { LoadingContext } from "#/route/loading-context";
+import { activeSystem, DUCTS_MULTI, toggleSystem, withSystem } from "../../selection";
 
 const NO_GROUPS: readonly string[] = [];
+const NO_NEIGHBOURS: readonly Neighbour[] = [];
+/** The open list as one string: what a hold, a side and a list scope key on. */
+const openKey = (open: readonly string[]) => open.join(", ");
 const NO_NOTES: ReadonlyMap<string, SystemNote> = new Map();
 const NO_SYSTEMS: ReturnType<typeof systemList> = [];
 
@@ -151,9 +156,10 @@ export function EScreen({ props }: { props: ProtoProps }) {
   // A system switch re-renders every pane for about a second. The body is held at its last props
   // until a frame has painted the picture plate's "opening …" line (`OpeningContext`), then renders
   // the new system. `useDeferredValue` was tried: React ran the deferred pass before the paint.
-  const [system, setSystem] = useState(props.page.system);
+  const [system, setSystem] = useState(openKey(props.page.system));
   const [requested, setRequested] = useState<string | null>(null);
-  const opening = requested ?? (system === props.page.system ? null : props.page.system);
+  const opening =
+    requested ?? (system === openKey(props.page.system) ? null : openKey(props.page.system));
   const latest = useRef(props);
   latest.current = props;
   const flight = useRef<{ frame?: number; timer?: number; pending?: boolean }>({});
@@ -167,10 +173,11 @@ export function EScreen({ props }: { props: ProtoProps }) {
   const move = useCallback<ProtoProps["setPage"]>((next, how) => {
     if (next.system === undefined) return latest.current.setPage(next, how);
     if (flight.current.pending) return;
-    if (next.system === latest.current.page.system) return latest.current.setPage(next, how);
+    if (openKey(next.system) === openKey(latest.current.page.system))
+      return latest.current.setPage(next, how);
     flight.current.pending = true;
     // Paint acknowledgement before the route/router compute the next system. Refuse repeat picks.
-    flushSync(() => setRequested(next.system!));
+    flushSync(() => setRequested(openKey(next.system!)));
     flight.current.frame = requestAnimationFrame(() => {
       flight.current.frame = undefined;
       flight.current.timer = window.setTimeout(() => {
@@ -180,11 +187,11 @@ export function EScreen({ props }: { props: ProtoProps }) {
     });
   }, []);
   useEffect(() => {
-    if (opening == null || (requested != null && props.page.system !== requested)) return;
+    if (opening == null || (requested != null && openKey(props.page.system) !== requested)) return;
     let timer = 0;
     const frame = requestAnimationFrame(() => {
       timer = window.setTimeout(() => {
-        setSystem(props.page.system);
+        setSystem(openKey(props.page.system));
         setRequested(null);
         flight.current.pending = false;
       }, 0);
@@ -266,20 +273,46 @@ function LoadedScreenBody({
   // fan-setting run out (g8745870: header 0.186, tree critical 0.109). Healing still plans on raw.
   const drawn = priced?.snapshot ?? snapshot;
   // The subject is a Revit system: every group it is in, over the snapshot that was priced.
+  // Several open systems are one scope: their groups in open order, a shared one once.
   const scope = useMemo(() => (drawn ? scopeOf(drawn, page.system) : null), [drawn, page.system]);
+  const active = activeSystem(page);
+  const activeScope = useMemo(
+    () => (drawn && active ? systemScope(drawn, active) : null),
+    [drawn, active],
+  );
   const groups = scope?.groups ?? NO_GROUPS;
   // The drawing indexes the raw snapshot: a group the survey merged away is drawn by its raw id too.
   const drawGroups = useMemo(() => {
-    if (!snapshot || !page.system) return groups;
-    const raw = systemScope(snapshot, page.system).groups;
-    return raw.every((g) => groups.includes(g)) ? groups : [...new Set([...groups, ...raw])];
-  }, [snapshot, page.system, groups]);
+    const raw = snapshot ? scopeOf(snapshot, page.system)?.groups : undefined;
+    if (!raw) return groups;
+    const merged = [...snapshot.nodes, ...snapshot.segments].flatMap((e) =>
+      e.groupId && scope?.members.has(e.id) ? [e.groupId] : [],
+    );
+    return [...new Set([...groups, ...raw, ...merged])];
+  }, [snapshot, page.system, groups, scope]);
+  // One hop: the networks a unit of a drawn group also roots, drawn as stubs near that unit.
+  const neighbours = useMemo(
+    () => (snapshot && scope ? neighboursOf(snapshot, drawGroups, DUCTS_MULTI) : NO_NEIGHBOURS),
+    [snapshot, scope, drawGroups],
+  );
+  // A system a stub carries that no open network shows already, once, with the units joining it.
+  const connected = useMemo(() => {
+    const shown = new Set(
+      (drawn?.groups ?? []).filter((g) => groups.includes(g.id)).flatMap((g) => g.systemNames),
+    );
+    const via = new Map<string, number[]>();
+    for (const n of neighbours)
+      for (const system of n.systems)
+        if (!shown.has(system) && !via.get(system)?.includes(n.unit))
+          via.set(system, [...(via.get(system) ?? []), n.unit]);
+    return [...via].map(([system, units]) => ({ system, units }));
+  }, [neighbours, drawn, groups]);
   const systems = props.analysis?.systems ?? NO_SYSTEMS;
-  // Each group the system is in is its own section, named by the system and its units; a group
+  // Each group an open system is in is its own section, named by the system and its units; a group
   // that carries other systems says so, and shows whole.
   const sections = useMemo(
-    () => (drawn && scope ? sectionNames(drawn, scope.name) : new Map<string, string>()),
-    [drawn, scope],
+    () => (drawn && scope ? sectionsOf(drawn, page.system) : new Map<string, string>()),
+    [drawn, scope, page.system],
   );
   const sectionOf = useCallback(
     (g: string) => {
@@ -343,9 +376,9 @@ function LoadedScreenBody({
     };
   }, [systems, notes]);
   const chosenRow = useMemo(() => {
-    const row = systems.find((s) => s.key === page.system);
+    const row = systems.find((s) => s.key === activeSystem(page));
     return row ? { ...row, note: notes.get(row.key) } : null;
-  }, [systems, page.system, notes]);
+  }, [systems, page.system, notes]); // eslint-disable-line react-hooks/exhaustive-deps
   const healRun = useMemo(
     () =>
       page.heal && surveyed
@@ -462,10 +495,10 @@ function LoadedScreenBody({
     (id: number) => {
       // Only the open system is offered: the system comes from the page, the unit from the row.
       const verbs = (owedBase.get(id) ?? [])
-        .filter((a) => !scope || a.system === scope.name)
+        .filter((a) => a.system === active)
         .flatMap((a) => fanVerbs(a, nameOf, { run: page.fan, epoch: page.epoch }));
       const split = [...(owedBase.split ?? [])].find(
-        ([system, units]) => (!scope || system === scope.name) && units.includes(id),
+        ([system, units]) => system === active && units.includes(id),
       );
       if (!verbs.length && split)
         return (
@@ -496,7 +529,7 @@ function LoadedScreenBody({
         </span>
       );
     },
-    [owedBase, scope, nameOf, page.fan, page.epoch, fanHandles],
+    [owedBase, active, nameOf, page.fan, page.epoch, fanHandles],
   );
   // The Write popover holds only a preview that still describes this Work and snapshot.
   const writeHeld = useMemo(
@@ -508,6 +541,7 @@ function LoadedScreenBody({
   );
   const toRule = inbox ? inbox.fix.length + inbox.set.length + inbox.check.length : 0;
   // A Set row's verb selects the element and focuses its cell once the tree has drawn it.
+  // `system` is the open list's `openKey`.
   const [sideFor, setSideFor] = useState<{ system: string; side: Side }>({
     system: "",
     side: "left",
@@ -601,9 +635,9 @@ function LoadedScreenBody({
   const chosen = tree != null && scope != null;
   // Both panes project one choice, including programmatic landings and system changes.
   const home: Side = chosen ? "right" : "left";
-  const side = chosen && sideFor.system === page.system ? sideFor.side : home;
+  const side = chosen && sideFor.system === openKey(page.system) ? sideFor.side : home;
   const pick = useCallback(
-    (side: Side) => setSideFor({ system: page.system, side }),
+    (side: Side) => setSideFor({ system: openKey(page.system), side }),
     [page.system],
   );
 
@@ -658,23 +692,37 @@ function LoadedScreenBody({
               const node = snapshot.nodes.find((n) => n.id === cell.id);
               const g =
                 node?.groupId ?? snapshot.groups.find((x) => x.rootIds.includes(cell.id))?.id;
-              return g ? systemOfGroup(drawn ?? snapshot, g) : page.system;
+              return g ? withSystem(page.system, systemOfGroup(drawn ?? snapshot, g)) : page.system;
             })();
       setPage({ system: into, selected: String(cell.id), issue: "" });
-      setSideFor({ system: into, side: "right" });
+      setSideFor({ system: openKey(into), side: "right" });
       setInputsOpen(true);
       setCellFocus(cell);
     },
     [drawn, snapshot, chosen, groups, scope, page.system, pick, setPage],
   );
   // The section whose run leads the system: its fan and TEL head the pane.
+  const activeCritical =
+    tree
+      ?.flatMap((t) => t.children)
+      .filter((r) => r.terminal != null && activeScope?.terminals.has(r.terminal))
+      .reduce<TreeNode | null>(
+        (best, r) => (r.total != null && (best?.total == null || r.total > best.total) ? r : best),
+        null,
+      ) ?? null;
   const leadGroup =
-    tree?.find((t) => critical && t.children.includes(critical))?.key ??
-    groups.find((g) => scope?.pricing.has(g)) ??
-    groups[0] ??
-    "";
+    activeScope?.groups.reduce<string | null>(
+      (best, g) =>
+        best == null ||
+        (priced?.next.byGroup[g]?.fan ?? -Infinity) > (priced?.next.byGroup[best]?.fan ?? -Infinity)
+          ? g
+          : best,
+      null,
+    ) ?? "";
   // Any group of the system with an implausible row: its ESP is a partial sum, so none is shown.
-  const blockedLoss = groups.some((g) => (priced?.next.byGroup[g]?.implausible.length ?? 0) > 0);
+  const blockedLoss = (activeScope?.groups ?? []).some(
+    (g) => (priced?.next.byGroup[g]?.implausible.length ?? 0) > 0,
+  );
   const fansOf = useCallback(
     (system: ReturnType<typeof systemList>[number]) => fanFacts(priced, system.groups, nameOf),
     [priced, nameOf],
@@ -696,7 +744,7 @@ function LoadedScreenBody({
             <SystemTree
               key={scope?.name}
               address={{
-                scope: `${page.system}:${page.epoch}`,
+                scope: `${openKey(page.system)}:${page.epoch}`,
                 search: page.treeSearch,
                 sort: page.treeSort,
                 onChange: (treeSearch, treeSort) =>
@@ -715,6 +763,21 @@ function LoadedScreenBody({
                 designRate,
               }}
             />
+            {connected.length ? (
+              <div data-e-connected="" className="flex flex-col items-start py-1">
+                <p className="t-small text-ink-2 px-(--item-mark-pad-x) py-1">Connected</p>
+                {connected.map(({ system, units }) => (
+                  <Button
+                    key={system}
+                    label={`open ${system}`}
+                    data-e-connected-system={system}
+                    onClick={() => setPage({ system: withSystem(page.system, system) })}
+                  >
+                    {`${system} · via ${units.map(nameOf).join(", ")}`}
+                  </Button>
+                ))}
+              </div>
+            ) : null}
           </div>
         </Pane>
       ) : null,
@@ -725,6 +788,8 @@ function LoadedScreenBody({
       page.epoch,
       page.treeSearch,
       page.treeSort,
+      connected,
+      nameOf,
       setPage,
       scale,
       critical?.key,
@@ -816,7 +881,7 @@ function LoadedScreenBody({
           <p className="t-small text-ink-2 px-(--item-mark-pad-x) py-1">flow · ESP · role · drop</p>
           <InputsPane
             address={{
-              scope: `${page.system}:${page.epoch}`,
+              scope: `${openKey(page.system)}:${page.epoch}`,
               search: page.inputSearch,
               sort: page.inputSort,
               onChange: (inputSearch, inputSort) =>
@@ -976,7 +1041,7 @@ function LoadedScreenBody({
             focused={focusKey}
             onPick={(issue) => setPage({ selected: "", issue }, { history: "push" })}
             address={{
-              scope: `${page.system}:${page.epoch}`,
+              scope: `${openKey(page.system)}:${page.epoch}`,
               search: page.rulingSearch,
               sort: page.rulingSort,
               onChange: (rulingSearch, rulingSort) =>
@@ -1076,6 +1141,7 @@ function LoadedScreenBody({
                         nameOf={nameOf}
                         jump={jump}
                         groups={drawGroups}
+                        neighbours={neighbours}
                         lead={leadGroup}
                         identity={{
                           system: chosenRow,
@@ -1083,19 +1149,19 @@ function LoadedScreenBody({
                           refreshing: props.reading.refreshing,
                           open: () => pick("right"),
                           breakdown:
-                            (critical?.split ?? tree?.[0]?.split) && scale
+                            activeCritical?.split && activeCritical.total
                               ? {
-                                  split: (critical?.split ?? tree?.[0]?.split)!,
-                                  scale,
+                                  split: activeCritical.split,
+                                  scale: activeCritical.total,
                                   fans: () => (
                                     <FanFacts
-                                      facts={fanFacts(priced, groups, nameOf)}
+                                      facts={fanFacts(priced, activeScope?.groups ?? [], nameOf)}
                                       nameOf={nameOf}
                                     />
                                   ),
                                 }
                               : null,
-                          allSystems: () => setPage({ system: "", selected: "", issue: "" }),
+                          allSystems: () => setPage({ system: [] }),
                         }}
                       />
                     </div>
@@ -1189,20 +1255,22 @@ const SystemsList = memo(function SystemsList({
       ...emptyListState<"name" | "loss">(),
       search: page.systemSearch,
       sort: page.systemSort,
-      selected: page.system ? [page.system] : [],
+      selected: [...page.system],
     },
     onState: (next) => {
       if (next.search !== page.systemSearch || next.sort !== page.systemSort)
         setPage({ systemSearch: next.search, systemSort: next.sort }, { history: "replace" });
     },
-    onPick: (system) => setPage({ system: system.key, selected: "", issue: "" }),
+    // A pick opens the system beside the others, or closes it when it is open.
+    onPick: (system) => setPage({ system: toggleSystem(page.system, system.key) }),
   });
+  const active = activeSystem(page);
   useEffect(() => {
-    if (systemListView.target && systemListView.rows.some((row) => row.key === page.system))
-      systemListView.reveal(page.system);
-    // The selected system is revealed when its pane mounts; filtering never replaces the query.
+    if (systemListView.target && systemListView.rows.some((row) => row.key === active))
+      systemListView.reveal(active);
+    // The active system is revealed when its pane mounts; filtering never replaces the query.
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [page.system, systemListView.target]);
+  }, [active, systemListView.target]);
   return (
     <ListView
       aria-label="systems"
@@ -1211,7 +1279,7 @@ const SystemsList = memo(function SystemsList({
         const fans = fansOf(system);
         return systemRowParts(
           system,
-          () => setPage({ system: system.key, selected: "", issue: "" }),
+          () => setPage({ system: withSystem(page.system, system.key) }),
           notes.get(system.key),
           fans.map((f) => `${nameOf(f.unit)} ${f.role}: ${f.says}`),
           () => <FanFacts facts={fans} nameOf={nameOf} />,
