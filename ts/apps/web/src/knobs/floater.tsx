@@ -322,7 +322,7 @@ export default function KnobsFloater(): ReactNode {
               marginBottom: 6,
             }}
           >
-            <span title={source} style={{ opacity: 0.5, overflowWrap: "anywhere" }}>
+            <span style={{ opacity: 0.5, overflowWrap: "anywhere" }}>
               {source.split("/").slice(-2).join("/")}
             </span>
             <button
