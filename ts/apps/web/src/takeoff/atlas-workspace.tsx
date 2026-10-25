@@ -74,10 +74,9 @@ export function AtlasWorkspace() {
                 minOtherSize: 220,
                 persist: "pe.takeoffs.plan-height",
                 collapse: {
-                  collapsed: !planOpen,
-                  onCollapsedChange: (collapsed) => setPlanOpen(!collapsed),
-                  collapsedSize: PLAN_CHROME_PX,
-                  collapseBelow: PLAN_MIN_PX + 6,
+                  collapsed: planOpen ? null : "start",
+                  onCollapsedChange: (side) => setPlanOpen(side !== "start"),
+                  start: { title: "plan", collapseBelow: PLAN_MIN_PX + 6 },
                 },
               }}
               start={

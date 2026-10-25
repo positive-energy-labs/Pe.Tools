@@ -17,17 +17,30 @@ import { Button } from "./button";
 import { tv } from "../../lib/tv";
 import { TooltipHint } from "./tooltip";
 
-/** Collapse shrinks the target to `collapsedSize`. With `title` the split draws a rail there (the
- * title rotated under an expand press); without it the pane's own header stays as the affordance. */
-interface PaneCollapseSpec {
-  collapsed: boolean;
-  onCollapsedChange?: (collapsed: boolean) => void;
-  collapsedSize?: number;
+export type PaneSide = "start" | "end";
+
+/** What a folded side becomes: its rail, the title under an expand press. Nothing else. */
+export interface PaneRail {
+  title: string;
+  /** Requested sizes under this fold the side; unset, it is the side's floor (`minSize` for the
+   * sized side, `minOtherSize` for the other). Between the two the side holds at its floor. */
   collapseBelow?: number;
-  title?: string;
   /** The rail stays drawn but its expand press is inert, and says why (nothing to open yet). */
   refusal?: string;
 }
+
+/** Folding is the split's, not the consumer's: one state names the folded side, so the shared
+ * seam always keeps the other open, and either side folds only to its rail. A side folds when a
+ * drag or the container takes it under its floor; the rail's press reopens it. */
+export interface PaneCollapseSpec {
+  collapsed: PaneSide | null;
+  onCollapsedChange: (side: PaneSide | null) => void;
+  start?: PaneRail;
+  end?: PaneRail;
+}
+
+/** A rail is one control plus a gutter (32px comfort), the same box on every split. */
+const RAIL = "calc(var(--control-h) + var(--gutter))";
 
 interface PaneSizeSpec {
   defaultSize: number;
@@ -58,9 +71,10 @@ function storedSize(spec: PaneSizeSpec) {
   }
 }
 
-function usePaneSize(spec: PaneSizeSpec) {
+function usePaneSize(spec: PaneSizeSpec & { target: PaneSide }) {
   const [internalSize, setInternalSize] = useState(() => storedSize(spec));
-  const collapsed = spec.collapse?.collapsed ?? false;
+  const collapsed = spec.collapse?.collapsed ?? null;
+  const other: PaneSide = spec.target === "start" ? "end" : "start";
 
   const current = useRef(spec);
   current.current = spec;
@@ -70,11 +84,22 @@ function usePaneSize(spec: PaneSizeSpec) {
   }, []);
   useEffect(() => fit(), [fit, spec.minSize, spec.maxSize]);
 
+  const fold = (side: PaneSide) => {
+    if (collapsed !== side) spec.collapse?.onCollapsedChange(side);
+  };
   const resizeTo = (requested: number, containerSize?: number) => {
-    const threshold = spec.collapse?.collapseBelow;
-    if (threshold != null && requested < threshold) return spec.collapse?.onCollapsedChange?.(true);
+    const own = spec.collapse?.[spec.target];
+    if (own && requested < (own.collapseBelow ?? spec.minSize)) return fold(spec.target);
+    const rest = spec.collapse?.[other];
+    if (
+      rest &&
+      containerSize != null &&
+      containerSize > 0 &&
+      containerSize - requested < (rest.collapseBelow ?? spec.minOtherSize ?? spec.minSize)
+    )
+      return fold(other);
 
-    if (collapsed) spec.collapse?.onCollapsedChange?.(false);
+    if (collapsed) spec.collapse?.onCollapsedChange(null);
     const next = clampSize(requested, spec, containerSize);
     setInternalSize(next);
     if (spec.persist && typeof window !== "undefined") {
@@ -88,7 +113,9 @@ function usePaneSize(spec: PaneSizeSpec) {
 
   return {
     collapsed,
-    renderedSize: collapsed ? (spec.collapse?.collapsedSize ?? 0) : clampSize(internalSize, spec),
+    other,
+    renderedSize: clampSize(internalSize, spec),
+    fold,
     resizeTo,
     fit,
     reset: () => resizeTo(spec.defaultSize),
@@ -155,7 +182,7 @@ interface PaneResizeHandleProps {
   axis: "horizontal" | "vertical";
   split: React.RefObject<HTMLDivElement | null>;
   state: ReturnType<typeof usePaneSize>;
-  spec: PaneSizeSpec & { target: "start" | "end" };
+  spec: PaneSizeSpec & { target: PaneSide };
   containerSize: () => number | undefined;
 }
 
@@ -184,7 +211,12 @@ function PaneResizeHandle({ axis, split, state, spec, containerSize }: PaneResiz
     event.preventDefault();
     event.currentTarget.setPointerCapture(event.pointerId);
     const container = containerSize(),
-      startValue = state.collapsed ? spec.minSize : value;
+      startValue =
+        state.collapsed === spec.target
+          ? spec.minSize
+          : state.collapsed != null && container != null
+            ? container - (spec.minOtherSize ?? spec.minSize)
+            : value;
     drag.current = {
       point: coordinate(event),
       size: startValue,
@@ -265,13 +297,15 @@ interface PaneSplitProps {
   axis: "horizontal" | "vertical";
   start: ReactNode;
   end: ReactNode;
-  resize?: PaneSizeSpec & { target: "start" | "end" };
-  /** A side that stays mounted and takes no track: its pane keeps its state while it is not drawn. */
-  hide?: "start" | "end";
+  /** `target` is the side the seam sizes; it is layout, never a fold: folding is `collapse`. */
+  resize?: PaneSizeSpec & { target: PaneSide };
+  /** A side whose content is absent but must stay mounted (retained route bodies): it takes no
+   * track and draws nothing. Not a fold; a side present on screen folds only to its rail. */
+  hide?: PaneSide;
   grow?: boolean;
 }
 
-const NO_RESIZE: PaneSizeSpec = { defaultSize: 0, minSize: 0 };
+const NO_RESIZE = { defaultSize: 0, minSize: 0, target: "start" } as const;
 
 export const paneSplitRecipe = tv({
   base: "grid size-full min-h-0 min-w-0 overflow-visible",
@@ -288,13 +322,16 @@ export function PaneSplit({ axis, start, end, resize, hide, grow }: PaneSplitPro
   const horizontal = axis === "horizontal" && !stacked;
   const bothSides = start != null && end != null && hide == null;
   const target = resize?.target ?? "start";
+  const folded = bothSides && !stacked ? state.collapsed : null;
+  const sized = folded == null ? "var(--pane-size)" : folded === target ? RAIL : "minmax(0, 1fr)";
+  const rest = folded != null && folded !== target ? RAIL : "minmax(0, 1fr)";
   const tracks = !bothSides
     ? "minmax(0, 1fr)"
     : resize == null || stacked
       ? "minmax(0, 1fr) var(--gutter) minmax(0, 1fr)"
       : target === "start"
-        ? "var(--pane-size) var(--gutter) minmax(0, 1fr)"
-        : "minmax(0, 1fr) var(--gutter) var(--pane-size)";
+        ? `${sized} var(--gutter) ${rest}`
+        : `${rest} var(--gutter) ${sized}`;
   const gridStyle = {
     "--pane-size": `${state.renderedSize}px`,
     [horizontal ? "gridTemplateColumns" : "gridTemplateRows"]: tracks,
@@ -317,23 +354,24 @@ export function PaneSplit({ axis, start, end, resize, hide, grow }: PaneSplitPro
       resize != null &&
       rect.width > 0 &&
       rect.width < resize.minSize + (resize.minOtherSize ?? resize.minSize) + gutter;
-    // Yield a supporting rail, or stack when there is no collapse affordance.
-    const stack = constrained && resize?.collapse?.title == null;
+    // Fold a side to its rail (the sized side first), or stack when neither side has one.
+    const rails = resize?.collapse;
+    const yields = rails?.[target] ? target : rails?.[state.other] ? state.other : null;
+    const stack = constrained && yields == null;
     setStacked(stack);
-    if (constrained && resize?.collapse?.title != null && !state.collapsed)
-      resize.collapse.onCollapsedChange?.(true);
+    if (constrained && yields != null && state.collapsed == null) state.fold(yields);
     if (!stack) state.fit((axis === "horizontal" ? rect.width : rect.height) - gutter);
   });
 
-  const railTitle = resize?.collapse?.title;
-  const renderSide = (side: "start" | "end", child: ReactNode) => {
-    const rail = railTitle != null && state.collapsed && side === target && child != null;
+  const renderSide = (side: PaneSide, child: ReactNode) => {
+    const spec = resize?.collapse?.[side];
+    const rail = spec != null && folded === side && child != null;
     const style = horizontal
       ? { gridColumn: bothSides ? (side === "start" ? 1 : 3) : 1, gridRow: 1 }
       : { gridColumn: 1, gridRow: bothSides ? (side === "start" ? 1 : 3) : 1 };
     return (
       <>
-        {rail && (
+        {rail && spec && (
           <div
             data-slot="pane-rail"
             className={
@@ -344,7 +382,7 @@ export function PaneSplit({ axis, start, end, resize, hide, grow }: PaneSplitPro
             style={style}
           >
             <Button
-              label={`Expand ${railTitle}`}
+              label={`Expand ${spec.title}`}
               icon={
                 horizontal
                   ? side === "start"
@@ -354,15 +392,15 @@ export function PaneSplit({ axis, start, end, resize, hide, grow }: PaneSplitPro
                     ? ChevronDown
                     : ChevronUp
               }
-              refusal={resize?.collapse?.refusal}
-              onClick={() => resize?.collapse?.onCollapsedChange?.(false)}
+              refusal={spec.refusal}
+              onClick={() => resize?.collapse?.onCollapsedChange(null)}
             />
             <span
               data-slot="pane-rail-title"
               className={`${horizontal ? "[writing-mode:vertical-rl]" : "min-w-0 truncate"} data-[disabled]:text-ink-mute`}
-              data-disabled={resize?.collapse?.refusal != null || undefined}
+              data-disabled={spec.refusal != null || undefined}
             >
-              {railTitle}
+              {spec.title}
             </span>
           </div>
         )}
