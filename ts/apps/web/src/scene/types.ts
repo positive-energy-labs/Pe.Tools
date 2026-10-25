@@ -4,6 +4,7 @@ import type { ReachRung } from "@pe/kit/lang/reach";
  * (`Layer3D`), and what the pointer is over (`Pick`). Coordinates are host internal feet, z up.
  */
 import type * as THREE from "three";
+import type { Look } from "./grounds";
 
 /** Axis-aligned bounds in host internal feet. */
 export type Bounds = {
@@ -67,6 +68,8 @@ export type IssueTarget = { key: string; elementId: number };
  * the issue open (picked here or in the inbox). */
 export type IssueState = ReachRung;
 export type LayerFrame = {
+  /** The renderer's current look, shared with every material and mark. */
+  look?: Look;
   seconds: number;
   reducedMotion: boolean;
   state: IssueState;

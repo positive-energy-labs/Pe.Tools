@@ -70,7 +70,7 @@ export function markVolume(geometry: THREE.BufferGeometry, color: THREE.Color): 
 
 export function markFrame(group: THREE.Object3D, at: LayerFrame): boolean {
   const swell = at.reducedMotion ? 0 : landing(at.landed);
-  const [casingAlpha, volumeAlpha] = markAlpha(at.state);
+  const [casingAlpha, volumeAlpha] = markAlpha(at.state, at.look);
   group.traverse((object) => {
     if (object instanceof THREE.Mesh)
       for (const material of [object.material].flat()) material.depthTest = !isLit(at);

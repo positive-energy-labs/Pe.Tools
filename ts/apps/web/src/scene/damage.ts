@@ -167,7 +167,7 @@ export function damageLayer(
       u.core.value.copy(CORE);
       u.energy.value = energy;
       // Selection yields the skin's interior to the neutral selection fill.
-      u.alpha.value = damageAlpha() * (at.selected ? 0.4 : 1);
+      u.alpha.value = damageAlpha(at.look) * (at.selected ? 0.4 : 1);
       u.rim.value.copy(RIM).lerp(HOT, Math.min(1, heat + strike * 0.7));
       halo.material.color.copy(RIM).multiplyScalar(0.5 + 0.9 * energy);
       return !still;

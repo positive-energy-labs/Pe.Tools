@@ -98,11 +98,14 @@ export const LOOK = defineKnobs("scene", "ts/apps/web/src/scene/grounds.ts", {
 });
 export type Look = ReturnType<typeof LOOK.read>;
 
-export const markAlpha = (state: IssueState): readonly [casing: number, volume: number] => {
-  const m = LOOK.read().marks;
+export const markAlpha = (
+  state: IssueState,
+  look = LOOK.read(),
+): readonly [casing: number, volume: number] => {
+  const m = look.marks;
   return [m[`${state}Casing`], m[`${state}Volume`]];
 };
-export const damageAlpha = () => LOOK.read().damage.alpha;
+export const damageAlpha = (look = LOOK.read()) => look.damage.alpha;
 
 /** Without a `paintOf`: the captured focus is the subject, everything else context. */
 export const paintOf = (instance: SceneInstance, of?: PaintOf): Paint =>
@@ -154,5 +157,5 @@ export function sceneGrounds(mount: Element, look: Look) {
 }
 
 /** Exponential squared falloff is invariant under a uniform change of model units/size. */
-export const fogDensity = (b: Bounds, k = 0.45) =>
+export const fogDensity = (b: Bounds, k = LOOK.defaults.fog.density) =>
   k / Math.max(Math.hypot(b.maxX - b.minX, b.maxY - b.minY, b.maxZ - b.minZ), 1e-6);

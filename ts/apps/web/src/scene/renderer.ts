@@ -402,6 +402,7 @@ export function createRenderer(
         const state = stateOf(layer);
         animate =
           layer.frame(group, {
+            look,
             seconds,
             reducedMotion: motion.matches,
             state,

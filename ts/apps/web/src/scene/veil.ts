@@ -4,7 +4,7 @@
  * camera-independent: orbiting or zooming never changes it. `falloff` is the rule; the shader
  * mirrors it.
  *
- * ponytail: d is a baked 3D distance field (one byte per cell, about 2 M cells at most), sampled
+ * d is a baked 3D distance field (one byte per cell, about 2 M cells at most), sampled
  * per fragment by world position. Chosen over a per-vertex attribute because a wall is a few huge
  * triangles whose corners are all far from the ducts, so vertex grain cannot light its middle;
  * and over a uniform array of subject boxes because 4 systems plus stubs are thousands of elements
@@ -18,6 +18,8 @@ import type { SceneMeshes } from "./types";
 /** Distances saturate here (ft); a knob's far edge must stay inside it. */
 export const VEIL_REACH_FT = 64;
 /** Bounded in volume and on each axis (including long, nearly flat scenes). */
+// ponytail: a bounded distance texture samples broad wall interiors correctly at one fetch per
+// fragment, without per-vertex interpolation misses or a loop over thousands of subject boxes.
 const MAX_CELLS = 2 ** 21;
 const MAX_AXIS = 256;
 const MIN_CELL_FT = 0.5;
