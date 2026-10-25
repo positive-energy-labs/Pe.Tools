@@ -4,6 +4,7 @@ import type { ReachRung } from "@pe/kit/lang/reach";
  * (`Layer3D`), and what the pointer is over (`Pick`). Coordinates are host internal feet, z up.
  */
 import type * as THREE from "three";
+import type { Look } from "./grounds";
 
 /** Axis-aligned bounds in host internal feet. */
 export type Bounds = {
@@ -31,6 +32,12 @@ export type SceneInstance = {
   firstVertex: number;
   vertexCount: number;
 };
+
+/** How the picture treats one instance. Default (no paintOf): focus → subject, else context. */
+export type Tier = "subject" | "stub" | "context";
+/** `key` groups instances that share a colour, e.g. a Revit system name. */
+export type Paint = { readonly tier: Tier; readonly key?: string };
+export type PaintOf = (instance: SceneInstance) => Paint | undefined;
 
 /** A decoded scene: unindexed triangle positions plus one range per element. */
 export class SceneMeshes {
@@ -61,6 +68,8 @@ export type IssueTarget = { key: string; elementId: number };
  * the issue open (picked here or in the inbox). */
 export type IssueState = ReachRung;
 export type LayerFrame = {
+  /** The renderer's current look, shared with every material and mark. */
+  look?: Look;
   seconds: number;
   reducedMotion: boolean;
   state: IssueState;

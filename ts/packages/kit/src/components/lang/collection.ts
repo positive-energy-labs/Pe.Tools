@@ -967,9 +967,34 @@ export function useList<T, Sort extends string = string>(options: ListOptions<T,
     visit(options.items);
     return index;
   }, [options.items, options.search, options.tree?.childrenOf]);
-  const model = listModel(options, state, searchIndex);
+  // The cursor lives in this hook, so a pointer move re-renders it: re-deriving the whole model
+  // (tree walk, search, sort) per hover was O(rows) and handed every consumer new `sections`/`rows`
+  // (re-projecting the scrollbar, re-running the list's headroom layout read). Keyed on data and
+  // list state; callbacks inline at the call site (keyOf, fields, groups.of) must be pure over the
+  // item, while ones that read outside state (stageOf, the active sort) key by identity.
+  const modelKey = [
+    options.items,
+    searchIndex,
+    options.stageOf,
+    state.sort ? options.sorts?.[state.sort] : undefined,
+    state.sort,
+    JSON.stringify(state.search),
+    state.open.join("\u0000"),
+    state.closed.join("\u0000"),
+    options.groups?.order?.join("\u0000"),
+  ];
+  const modelCache = useRef<{ key: unknown[]; model: ReturnType<typeof listModel<T, Sort>> }>(null);
+  if (
+    !modelCache.current ||
+    modelCache.current.key.some((part, index) => !Object.is(part, modelKey[index]))
+  )
+    modelCache.current = { key: modelKey, model: listModel(options, state, searchIndex) };
+  const model = modelCache.current.model;
   const [target, setTarget] = useState<HTMLElement | null>(null);
-  const rows = model.sections.flatMap((section) => (section.closed ? [] : section.rows));
+  const rows = useMemo(
+    () => model.sections.flatMap((section) => (section.closed ? [] : section.rows)),
+    [model],
+  );
   const collection = useCollection({
     items: rows,
     status: options.status,

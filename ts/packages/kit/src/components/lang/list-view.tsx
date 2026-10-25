@@ -1,7 +1,10 @@
 import type { Tone } from "../../lib/token";
 import { useVirtualizer } from "@tanstack/react-virtual";
+import { RegistryContext } from "@effect/atom-react";
 import {
   memo,
+  useContext,
+  useEffect,
   useMemo,
   useLayoutEffect,
   useRef,
@@ -27,8 +30,11 @@ import {
   useProjection,
   useRowHeight,
   useScroller,
+  useScrollRedraw,
   type Mark,
 } from "./scroll";
+import { attention, AttentionDocument, elementKey, litTest, type Ref } from "./attention";
+import { rowRevit } from "./revit-target";
 import { EmptyState } from "./empty";
 import { ScopeGestures } from "../../keys";
 import { OutcomeLine } from "./outcome";
@@ -183,6 +189,7 @@ function ListRenderer<T, Sort extends string>(props: ListViewProps<T, Sort> & { 
   // Rows render through this ref, so a memoized row that skipped a render still acts on today's list.
   const live = useRef(list);
   live.current = list;
+  const reached = useReachMarks(live, row, root, list.sections);
   return (
     <div
       ref={setRoot}
@@ -277,6 +284,7 @@ function ListRenderer<T, Sort extends string>(props: ListViewProps<T, Sort> & { 
               list={list}
               plain={props.plain}
               live={live}
+              reached={reached}
               rows={section.rows}
               sectionKey={section.key}
               row={row}
@@ -301,6 +309,8 @@ type SectionBodyProps<T, Sort extends string> = {
   list: ListController<T, Sort>;
   projection?: (item: T) => Pick<Mark, "weight" | "tone">;
   live: RefObject<ListController<T, Sort>>;
+  /** Rows another surface's hover lights (CSS `data-reach`), held outside React. */
+  reached: RefObject<ReadonlySet<string>>;
   rows: readonly ListItem<T>[];
   row: (item: T) => ListRowParts;
   scroller: HTMLElement | null;
@@ -319,18 +329,93 @@ type SectionBodyProps<T, Sort extends string> = {
 function markOf<T, Sort extends string>(
   list: ListController<T, Sort>,
   item: ListItem<T>,
+  reached: ReadonlySet<string>,
   projection?: (item: T) => Pick<Mark, "weight" | "tone">,
 ): Mark {
   const extra = projection?.(item.item);
   // The cursor (the pointer's row) draws no mark: the frame already shows where the eye is, and a
-  // pointer-moved cursor outlives the pointer, so it read as some other hover's row.
+  // pointer-moved cursor outlives the pointer, so it read as some other hover's row. A row another
+  // surface's hover reaches (a 3D element) does mark: it may be far off screen.
   return {
     tone: item.damage ? "alarm" : extra?.tone,
     weight: extra?.weight,
     tick: item.branch,
     hit: item.hit,
-    selected: list.collection.rowProps(item.key).selected,
+    selected: list.collection.rowProps(item.key).selected || reached.has(item.key),
   };
+}
+
+/**
+ * The keys of rows lit by a hover from outside this list, as a ref the strip reads when drawing.
+ * Recomputed from row data when attention changes (subjects cached per item, so a virtual list's
+ * unmounted rows count without layout), then the strip redraws without a React commit. While the
+ * pointer is inside the list the hover is the list's own, which draws no mark.
+ */
+function useReachMarks<T, Sort extends string>(
+  live: RefObject<ListController<T, Sort>>,
+  row: (item: T) => ListRowParts,
+  root: HTMLElement | null,
+  sections: unknown,
+) {
+  const doc = useContext(AttentionDocument);
+  const registry = useContext(RegistryContext);
+  const redraw = useScrollRedraw();
+  const reached = useRef<ReadonlySet<string>>(new Set());
+  // Keyed by the stable `row` (routes memoize it for row memo); an inline one rebuilds the cache.
+  const subjects = useMemo(() => new WeakMap<object, Ref | null>(), [row, doc]);
+  useEffect(() => {
+    if (!doc) return;
+    let inside = false;
+    const subjectOf = (item: ListItem<T>): Ref | null => {
+      const owner = typeof item.item === "object" && item.item !== null ? item.item : null;
+      if (owner && subjects.has(owner)) return subjects.get(owner)!;
+      // Built once per item: the row's subject decides what lights it, as `Row` decides.
+      const parts = row(item.item);
+      const revit = parts.revit ?? item.revit ?? rowRevit(undefined, item.key);
+      const ref = parts.subject ?? (revit?.[0] == null ? null : { doc, key: elementKey(revit[0]) });
+      if (owner) subjects.set(owner, ref);
+      return ref;
+    };
+    // Build every subject once while idle, off the hover path: a 3D hover then only tests keys.
+    const idle =
+      typeof requestIdleCallback === "undefined"
+        ? null
+        : requestIdleCallback(() => {
+            for (const section of live.current.sections)
+              for (const item of section.rows) subjectOf(item);
+          });
+    const recompute = () => {
+      const lit = inside ? null : litTest(registry, doc);
+      const next = new Set<string>();
+      if (lit)
+        for (const section of live.current.sections)
+          for (const item of section.rows) {
+            const ref = subjectOf(item);
+            if (ref?.doc === doc && lit(ref.key)) next.add(item.key);
+          }
+      if (!next.size && !reached.current.size) return;
+      reached.current = next;
+      redraw?.();
+    };
+    const enter = () => {
+      inside = true;
+      recompute();
+    };
+    const leave = () => {
+      inside = false;
+    };
+    root?.addEventListener("pointerenter", enter);
+    root?.addEventListener("pointerleave", leave);
+    recompute();
+    const stop = registry.subscribe(attention(doc), recompute);
+    return () => {
+      if (idle !== null) cancelIdleCallback(idle);
+      stop();
+      root?.removeEventListener("pointerenter", enter);
+      root?.removeEventListener("pointerleave", leave);
+    };
+  }, [doc, registry, row, subjects, redraw, root, sections]);
+  return reached;
 }
 
 /** Re-project when what rows say could have changed; positions are read fresh at project time. */
@@ -357,7 +442,7 @@ function PlainSectionBody<T, Sort extends string>(props: SectionBodyProps<T, Sor
     props.plain ? null : () => body.current?.querySelectorAll(":scope > [data-key]") ?? [],
     (el) => {
       const item = byKey.get((el as HTMLElement).dataset.key ?? "");
-      return item ? markOf(list, item, projection) : {};
+      return item ? markOf(list, item, props.reached.current, projection) : {};
     },
     version,
   );
@@ -526,7 +611,7 @@ function VirtualSectionBody<T, Sort extends string>(props: SectionBodyProps<T, S
   useProjection(
     () =>
       virtualSpans(virtual, rows.length, margin ?? 0, estimate, (index) =>
-        markOf(list, rows[index]!, projection),
+        markOf(list, rows[index]!, props.reached.current, projection),
       ),
     version,
   );

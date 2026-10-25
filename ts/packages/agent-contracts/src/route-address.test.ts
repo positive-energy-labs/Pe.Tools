@@ -39,6 +39,19 @@ describe("a layers field", () => {
 });
 
 describe("the route address", () => {
+  test("ducts keeps the ordered names Pea was given and refuses ambiguous broadening", () => {
+    const at = routeAddress("ducts");
+    const facts = { systems: [{ name: "SA 1" }, { name: "SA 2" }, { name: "RA 1" }] };
+    expect(at.agent!.resolve!({ system: "ra 1,sa 2" }, facts)).toEqual({
+      ok: true,
+      patch: { system: "RA 1,SA 2" },
+    });
+    expect(at.agent!.resolve!({ system: "SA" }, facts).ok).toBe(false);
+    const page = at.read({ system: "RA 1,SA 2" }).page;
+    expect(page.system).toEqual(["RA 1", "SA 2"]);
+    expect(at.link(page)).toBe("/ducts?system=RA+1%2CSA+2");
+    expect(at.read({ system: "" }).page.system).toEqual([]);
+  });
   test("the thread sidebar query and sort round-trip on Pea and a docked route", () => {
     for (const key of ["pea", "ducts"] as const) {
       const at = routeAddress(key);
@@ -123,7 +136,7 @@ describe("the route address", () => {
     const at = routeAddress(key);
     const { page } = at.read({ system: "SA" });
     // The union of every route's page narrows by its keys; a page of no route is refused.
-    expect("system" in page ? page.system.toUpperCase() : null).toBe("SA");
+    expect("system" in page ? page.system : null).toEqual(["SA"]);
     expect(at.link(page)).toBe("/ducts?system=SA");
     // @ts-expect-error no route links a `bogus` key
     expect(() => at.link({ bogus: true })).toThrow("ducts links carry no 'bogus'");
