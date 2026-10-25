@@ -6,7 +6,8 @@
  *
  * EXCEPTION to SURFACE-PHILOSOPHY P1 ("inputs only through the kit"): this is a dev tool, not a
  * route surface, and the kit has no range or colour primitive. Native `<input>`/`<select>` keep
- * it small. Boundary that still holds: no route renders this, and production never bundles it.
+ * it small. The list census permits this file only. Boundary: no route renders this, and
+ * production never bundles it.
  */
 import { useState, useSyncExternalStore, type CSSProperties, type ReactNode } from "react";
 import { tokenRef } from "@pe/kit/lib/token";
@@ -195,7 +196,18 @@ export default function KnobsFloater(): ReactNode {
         padding: 8,
       }}
     >
-      <div style={{ display: "flex", gap: 6, alignItems: "center", marginBottom: 6 }}>
+      <div
+        style={{
+          position: "sticky",
+          top: 0,
+          zIndex: 1,
+          background: ALIEN.background,
+          display: "flex",
+          gap: 6,
+          alignItems: "center",
+          marginBottom: 6,
+        }}
+      >
         <strong style={{ flex: 1 }}>knobs · dev only · refresh clears</strong>
         <button type="button" style={BUTTON} onClick={copy} disabled={!changed}>
           Copy
