@@ -1,91 +1,83 @@
 # Tutorial before loading
 
-The user approved one map renderer with two fact sources, then asked to build and prove it before changing style. The earlier prose loading experience did not meet that request. `DuctsIntroduction` remains documentation only. No second map renderer, hidden screen mount, metadata solve, new dependency, persisted Work state or fake fact registration was added.
+The user approved one map renderer with two fact sources, then asked to build and prove it before changing style. The earlier prose loading experience did not meet that request. `DuctsIntroduction` remains documentation only.
 
-Implementation commits: `9717cf17aaa06bced2916fdfb6725c4d3a90a68e` (map and shared declarations), `76f6645472153e975d9ebac4d4fa5e738ed28381` (private unused dock export), `0314a8b945f9d98a80c8e2f4327391b9d510f775` (tool-source isolation and shared list actions), and `20ec8e7c529d219d3174fb0ba510e1901ed480ee` (static leader geometry, 2026-10-24 23:15:57 -05:00). The app supplied a clean isolated worktree at `eea0d18c`, three Pane commits after requested `dcdaacd3`; those commits were preserved.
+Implementation: `9717cf17`, `76f66454`, `0314a8b9`, `20ec8e7c`. Integration with main `e764bd1e`: `638539ce`. Current multi-system test fixture: `92f19b49`. Pea ownership correction: `842fd5e71723cc86bb8318e2a27268be7e3e9a0a`.
 
 ## Census and lineage
 
-Before editing, `HelpWorld` already rendered mounted `Teaching[]`; `Pane` declared regions, `useTeach` registered controls, and `teach-measure.ts` measured mounted rectangles. `LeaderDiagram` emitted empty paths until its layout effect. Root admission showed generic prose. `EScreen` used `DuctsIntroduction` during snapshot/pricing, while `ducts/docs.tsx` used it as narrative. No pre-load map source existed.
+Before editing, `HelpWorld` rendered mounted `Teaching[]`; `Pane` declared regions, `useTeach` registered controls, and `teach-measure.ts` measured mounted rectangles. `LeaderDiagram` emitted empty paths until its layout effect. Root admission and Ducts loading used prose. No pre-load map source existed.
 
 | Authority | Reference consumer | Loaded consumer |
 | --- | --- | --- |
-| [DUCTS_LAYOUT and DUCTS_REGIONS](../../../ts/apps/web/src/ducts/proto/e/teaching.ts) | `declaredTeaching` projects split rectangles, labels and purposes | [EScreen](../../../ts/apps/web/src/ducts/proto/e/screen.tsx) renders the same split tree through `TeachingLayoutView`; pane titles/help use the region definitions |
+| [DUCTS_LAYOUT and DUCTS_REGIONS](../../../ts/apps/web/src/ducts/proto/e/teaching.ts) | `declaredTeaching` projects split rectangles, labels and purposes | [EScreen](../../../ts/apps/web/src/ducts/proto/e/screen.tsx) renders that split tree through `TeachingLayoutView`; pane titles/help use the region definitions |
 | [DUCTS_PICTURE_MODES and DUCTS_LAYER_OPTIONS](../../../ts/apps/web/src/ducts/proto/e/teaching.ts) | Picture mode/layer callouts | [ECanvas](../../../ts/apps/web/src/ducts/proto/e/canvas.tsx) supplies the same options to `Pane` |
-| [STAGE_ACTIONS](../../../ts/apps/web/src/scene/stage-teaching.ts) | `actionTeaching` projects labels, descriptions and bindings without registration | [stage-controller.ts](../../../ts/apps/web/src/scene/stage-controller.ts) attaches callbacks and calls `actionScopeKeys` |
+| [STAGE_ACTIONS](../../../ts/apps/web/src/scene/stage-teaching.ts) | `actionTeaching` projects descriptions and bindings without registration | [stage-controller.ts](../../../ts/apps/web/src/scene/stage-controller.ts) attaches callbacks and calls `actionScopeKeys` |
 | [LIST_ACTIONS and search syntax](../../../ts/packages/kit/src/components/lang/list-teaching.ts) | List keys and search callouts | [collection.ts](../../../ts/packages/kit/src/components/lang/collection.ts) and [list-search.tsx](../../../ts/packages/kit/src/components/lang/list-search.tsx) consume those declarations |
 | [ORBIT_GESTURES](../../../ts/apps/web/src/scene/gestures.ts) | Picture gesture callouts | `useStageKeys` and the existing picture gesture implementation |
 | [SHELL_REGIONS](../../../ts/apps/web/src/route/teaching.ts) | Generic public first-paint map | `AppBar` and root workspace use the same identity labels |
 
-The kit contract is [teach.ts](../../../ts/packages/kit/src/components/lang/teach.ts). React split rendering is [teaching-layout.tsx](../../../ts/packages/kit/src/components/lang/teaching-layout.tsx); current registration, page selection and fallback are [use-teach.ts](../../../ts/packages/kit/src/components/lang/use-teach.ts). Both sources reach [HelpWorld](../../../ts/apps/web/src/route/help.tsx) and [LeaderDiagram](../../../ts/packages/kit/src/components/lang/leader-diagram.tsx). The reference specimen sits beside the mounted Tutorial in [pane-strip.tsx](../../../ts/apps/web/src/design-system/specimens/pane-strip.tsx).
-
-Source links above resolve from this file's actual directory. Three parent steps reach the checkout root; four steps would leave this worktree.
+The kit contract is [teach.ts](../../../ts/packages/kit/src/components/lang/teach.ts). Runtime splits use [teaching-layout.tsx](../../../ts/packages/kit/src/components/lang/teaching-layout.tsx); registration, page selection and fallback are in [use-teach.ts](../../../ts/packages/kit/src/components/lang/use-teach.ts). Both sources reach [HelpWorld](../../../ts/apps/web/src/route/help.tsx) and [LeaderDiagram](../../../ts/packages/kit/src/components/lang/leader-diagram.tsx). The reference specimen sits beside mounted Tutorial in [pane-strip.tsx](../../../ts/apps/web/src/design-system/specimens/pane-strip.tsx).
 
 ## Boundaries
 
-- The static SPA artifact has one `index.html`; it cannot know the requested route. It contains the generic public map, including boxes, callouts and nonempty SVG leader paths. Initial hydration uses that same map. An effect then selects Ducts only for `/ducts`; other routes retain the generic map until they have their own declaration.
-- `RemoteDeviceGate` still admits children only for local or paired devices. Root supplies public guidance. Connection errors retain the map and retry; unpaired devices see the map and pairing controls. Public facts contain no document title, selection or current action availability.
-- Declarations are passed directly, never seeded into the mounted registry. Projection removes active/disabled/refusal values. `useTeaching` never reads the process-global registry for its server snapshot.
-- `TeachPage` tags tool sources. `TeachTarget` lets chrome read the current tool without tagging sibling chat panes as tool facts. Reference facts remain while that tool has no measured regions; measured tool facts replace them as one set. Global key facts join only the measured result.
-- Reference geometry shows declared support panes expanded, at a reference viewport. Current fold state, persisted widths, document-specific system names, dynamic search facets, selection and refusal belong to mounted measurements. The initial SVG leaders connect numbered markers to region edges entirely in declared map coordinates; layout effects hide those markers and draw measured leaders to the composed callouts. No label coordinates are guessed before layout. Responsive narrow layouts retain numbered callouts and hide cross-column leaders, as before.
+- One SPA `index.html` cannot know the requested route. It contains the generic public map, including boxes, callouts and nonempty SVG leaders. Initial hydration uses that map. An effect selects Ducts only for `/ducts`; other routes retain generic guidance until they declare their own.
+- `RemoteDeviceGate` still admits children only for local or paired devices. Connection errors retain the map and retry; unpaired devices see the map and pairing controls. Public facts contain no document title, selection or current action availability.
+- Declarations are passed directly, never seeded into the mounted registry. Projection removes active/disabled/refusal values. Server snapshots never read the process-global registry.
+- `TeachPage` tags sources. `TeachTarget` lets chrome read the current tool. A local source takes precedence: [ChatShell](../../../ts/apps/web/src/chat/chat-shell.tsx) owns Pea facts even when docked beside Ducts. Reference facts remain until that source has measured regions; measured facts replace them as one set.
+- Reference geometry expands declared support panes at a reference viewport. Current fold state, persisted widths, document-specific names, dynamic search facets, selection and refusal belong to mounted measurements. Static leaders use declared map coordinates; layout effects replace them with leaders to composed callouts. Narrow layouts retain numbered callouts and hide cross-column leaders.
+- No hidden screen/WebGL mount, metadata solve, new dependency, persisted state, fake registration, feature flag or extra SSR runtime was added. Styling remains for the next user review.
 
 ## Proof
 
-Machine evidence and disposable harnesses: `.artifacts/runs/browser-20261024-tutorial-preload/` in this preserved worktree. The directory README names the question. Logs retain failures as well as successful reruns.
+Evidence and repeat harnesses are in `.artifacts/runs/browser-20261024-tutorial-preload/`. Logs retain failed attempts as well as successful runs. The final browser result is `parent-final-browser/browser-evidence.json`.
 
-- Install: `vp i --frozen-lockfile --prefer-offline`, from `ts`, exited 0; 760 packages, no lockfile changes.
-- Deterministic: 21 focused web tests passed in `final-focused.log`; the three suites affected by the final static-leader change passed all 18 tests in `static-leader-tests.log`. [teaching.test.tsx](../../../ts/apps/web/src/route/teaching.test.tsx) changes shared action/split definitions and checks both projections; it checks runtime-state removal, shell/retained-route exclusion, empty-live fallback, SSR registry isolation and hydration without warnings. [loading-context.test.tsx](../../../ts/apps/web/src/route/loading-context.test.tsx) drives the actual admission and `EScreen` snapshot/pricing/error branches. Existing measured geometry and stage tests passed too.
-- Kit: the first targeted invocation incorrectly forwarded arguments through a compound package script. Its Vitest phase passed all 204 tests, then Node tried to execute the TypeScript file. The corrected package-root command passed 51 tests; command and result are in `list-tests-corrected.log`.
-- `pnpm verify` ran from `ts` with complete Node-captured stdout/stderr. First run stopped at unused exports. Untouched `eea0d18c` independently reproduced `DOCK_FLOOR` in `baseline-knip-eea0d18c.log`; making that constant private changes no behavior. Two later runs were stopped when browser evidence required source-isolation and static-leader corrections; neither is reported as a completed gate. The completed run is `verify-complete.log`: exit 1 at 2026-10-25 04:29:16 UTC. Check, knip, kit build and every non-host package passed; web passed 518 tests with 2 skips. Host passed 543 tests with 1 skip and failed 3 demo browser cases. The gate did not reach guards or R24. The separate final-source guard run passed all 110 tests in `guards.log`; R24 was not run because this change adds no C# behavior.
-- Production artifact: `vp build` from `ts/apps/web` emits `dist/client/index.html`; `build-complete.log` is the final build log (exit 0, 2026-10-25 04:16:36 UTC). Static shell inspection and browser script-disabled capture show usable public anatomy before JavaScript.
-- Browser: T3 preview status/open used an owned explicit tab. Page evaluation worked, but two snapshots timed out at 15 seconds and animation frames did not advance. The alternate browser inventory was empty. The repo's `@pe/browser` then owned a headless Chrome session, saved screenshots and JSON state, and closed it in `finally`. No user browser, host or Revit session was started or stopped.
+- Production artifact: `parent-final-build.log`, exit 0 on `842fd5e7`, 2026-10-25 04:52 UTC.
+- Deterministic: `parent-final-focused.log`, 29 tests across six suites, exit 0 at 04:52:51 UTC. Tests exercise shared action/split definitions, removal of runtime flags, admission and actual `EScreen` loading/error branches, retained-route isolation, SSR registry isolation and hydration. The Pea ownership test first failed (`parent-chat-red.log`), then passed with the fix.
+- Shared list behavior: 51 tests passed in `parent-list.log`. Repo guards: 110 passed in `parent-guards.log`.
+- Final-source complete `pnpm verify`: `parent-verify-serial.log`, exit 0 at 2026-10-25 05:10:12 UTC. This included web (525 passed, two skipped), host (546 passed, one skipped), browser (nine passed), 110 guards, and R24 compilation (zero errors). Check, knip and all package suites passed. The earlier integrated gate also passed (`parent-verify.log`).
+- One earlier final-source run stopped in unchanged browser-package A7 cleanup: Chrome required forced termination (`parent-final-verify.log`). A7 passed in isolation (`parent-browser-a7-isolated.log`) and in the final quiet full gate. No browser implementation was changed to clear that failure.
+- Built browser: all 11 cases passed on `842fd5e7` at 04:54:49 UTC, with no captured hydration warnings/errors and clean owned-browser shutdown. `parent-final-browser-fixed.log` exits 0.
 
-The browser harness serves actual `dist/client` assets. Its injected script holds the environment response or worker submission, records errors/warnings, and supplies an explicitly synthetic local admission. `?demo=navigation` is the existing synthetic route fixture, with native actions disabled. Unimplemented host APIs return harness errors; no request is forwarded to a native host. These delays prove presentation transitions, not model speed.
+The browser harness serves actual `dist/client` assets. Its injected script holds the environment response or worker submission and supplies synthetic local admission. `?demo=navigation` is the existing synthetic route fixture, with native actions disabled. Other host APIs return harness errors; nothing is forwarded to a native host. These holds prove presentation transitions, not model speed.
 
-PROVEN[artifact, `dist/client/index.html` SHA-256 `3e601ebc73f25bcaad05d89047920d315c787145ef298fc11be6d441828820ae`, `20ec8e7c529d219d3174fb0ba510e1901ed480ee`, 2026-10-25 04:16:36 UTC]. PROVEN[browser, owned Chrome fixture harness and `browser-evidence.json`, `20ec8e7c529d219d3174fb0ba510e1901ed480ee`, 2026-10-25 04:17:45–04:17:55 UTC]. The browser assertions check all expected leader paths, early protected-screen absence, and empty warning/error records, including opening Tutorial while pricing is held.
-
-| Browser case | Expected behavior |
+| Browser case | Observed behavior |
 | --- | --- |
-| `pre-javascript.png` | Generic map, two regions and nonempty leaders; application scripts disabled |
+| `pre-javascript.png` | Generic map and nonempty leaders with application scripts disabled |
 | `blocked-host.png` | Ducts reference map; only environment admission requested; protected screen absent |
-| `host-error.png`, `unpaired.png` | Reference map survives failure/pairing; protected screen absent |
-| `no-document.png` | Actual Ducts route keeps its map with no document snapshot |
-| `delayed-pricing.png`, `pricing-tutorial.png` | Actual route and opened Tutorial retain the reference map while the fixture's worker submission is held |
-| `mounted-tutorial.png` | Current measured Tutorial after releasing that worker and opening the route's Tutorial |
-| `other-route.png` | Unsupported `/family` admission uses the generic map, with no Ducts facts |
+| `host-error.png`, `unpaired.png` | Map survives failure/pairing; protected screen absent |
+| `no-document.png` | Actual Ducts route retains its map without a document snapshot |
+| `delayed-pricing.png`, `pricing-tutorial.png` | Route and opened Tutorial retain reference guidance while worker submission is held |
+| `mounted-tutorial.png` | Measured Ducts Tutorial after worker release |
+| `docked-chat-tutorial.png`, `pea-tutorial.png` | Pea owns its Tutorial beside Ducts and on its main route |
+| `other-route.png` | Unsupported `/family` admission uses generic guidance without Ducts facts |
 
-Browser slow native snapshot acquisition has not been exercised. The absent-snapshot branch and its transitions are deterministic-tested on the actual `EScreen`; the built browser covers absent document and delayed pricing. No native mutation, lifecycle operation, host restart or installed-root change was performed. A read-only navigation inventory was inspected, but it was not used as native behavior proof.
+T3 preview evaluation worked, but two snapshots failed with `Preview automation snapshot timed out after 15000ms.` The repo's `@pe/browser` owned the fallback Chrome session. All created browser sessions, preview tabs and the artifact server were closed. No user browser, native host or Revit session was started or stopped.
 
-UNPROVEN[browser slow native snapshot response; not exercised in this bounded presentation run]. The review server and T3 tab were closed; the owned screenshot browser closed in `finally`. The worktree and its evidence remain for parent proof.
+PROVEN[artifact/browser, production SPA in owned fixture harness, `842fd5e7`, 2026-10-25 04:54:49 UTC]. This proves static and hydrated map behavior and transition to measured facts. UNPROVEN[delayed native snapshot acquisition and installed/Revit behavior; no speed or native-runtime claim]. The actual absent-snapshot branch is deterministic-tested; the built browser covers absent document and delayed pricing.
 
-## Gate failure and baseline comparison
+PROVEN[deterministic/compile, complete workspace `pnpm verify` including R24, `842fd5e7`, 2026-10-25 05:10:12 UTC].
 
-The three host cases are Schedules capture/apply, Family capture/apply, and Families retained-readback/repeat plans in [demo-lane.scenario.test.ts](../../../ts/apps/host/tests/demo-lane.scenario.test.ts). All failed before their capture/read click: the button was visible, enabled and stable, but sibling Pea content (`No provider is ready` or `Chat here`) intercepted the pointer. The native apply operation was not the failing assertion.
-
-Untouched `eea0d18c` independently reproduces the Schedules interception in `baseline-schedules-eea0d18c.log` (exit 1, 2026-10-25 04:31:06 UTC). Command from `ts/apps/host`: `vp test run tests/demo-lane.scenario.test.ts --testNamePattern=schedules`. That test starts its own temporary no-Revit host/frontend and closes them. Family and Families were not separately rerun on baseline; their common blocker is an observation from the implementation run, not a claim that their complete workflows pass on baseline. No unrelated chat behavior was changed to make this gate green.
-
-FALSIFIED[browser, host demo capture/read clicks intercepted by sibling Pea content; full workspace gate exits 1]. FALSIFIED[browser baseline, Schedules capture is also intercepted on untouched `eea0d18c`]. PROVEN[deterministic, 110 repo guards and focused Tutorial/list suites, `20ec8e7c529d219d3174fb0ba510e1901ed480ee`, 2026-10-25 04:32:28 UTC]. The saved build and presentation cases remain valid; a fully green `pnpm verify` is not claimed.
+The earlier child gate failed three host demo clicks on its old base; baseline `eea0d18c` also reproduced Schedules interception. Integration with current main resolved those cases, and the complete integrated gate passed. Those historical failures remain in the evidence logs.
 
 ## Repeat
 
-From this checkout, install in `ts`, then run `pnpm verify`. Build with `vp build` in `ts/apps/web`. From the checkout root:
+From `ts`: `pnpm verify`. From `ts/apps/web`: `vp build`.
 
-The focused web command, from `ts`, is `pnpm --filter @pe/web test run src/route/teaching.test.tsx src/route/loading-context.test.tsx src/design-system/specimens/teach.test.tsx src/scene/stage-controller.test.tsx`. The list regression command, from `ts/packages/kit`, is `vp test run tests/list-core.test.tsx`. Do not forward those arguments through kit's compound `test` script.
+From the checkout root, run `node .artifacts/runs/browser-20261024-tutorial-preload/serve.mjs`, then in another terminal `node .artifacts/runs/browser-20261024-tutorial-preload/parent-final-browser-proof.mjs`. Review `http://127.0.0.1:5216/ducts?proof=blocked` or `/ducts?demo=navigation&proof=pricing`. `window.__tutorialProof.releasePricing()` releases the artificial worker hold. Stop the server with Ctrl+C.
 
-Start the disposable artifact server from the checkout root:
-
-```powershell
-node .artifacts/runs/browser-20261024-tutorial-preload/serve.mjs
-```
-
-In another terminal, from the same root:
-
-```powershell
-node .artifacts/runs/browser-20261024-tutorial-preload/browser-proof.mjs
-```
-
-Review `http://127.0.0.1:5216/ducts?proof=blocked`, `/ducts?demo=navigation&proof=pricing`, or `/family?proof=blocked`. For pricing, `window.__tutorialProof.releasePricing()` releases the artificial worker hold. The harness is disposable evidence, not a product feature or a committed review route. Stop its terminal with Ctrl+C. The standard unmodified frontend review command remains `vp preview --port 5216 --strictPort` from `ts/apps/web`; it needs an admitted host for protected content.
+The harness is disposable evidence, not a committed review route. Standard frontend review remains `vp preview --port 5216 --strictPort` from `ts/apps/web` and needs an admitted host for protected content.
 
 ## Change depth
 
-Before documentation: 25 files, +813/-246 lines. Six buckets: kit contract/projection/measurement and shared controls (9); Ducts declaration/runtime consumption (4); web admission/composition (5); scene declarations/consumption (2); specimens/tests (4); private-export gate cleanup (1). Three documentation files bring the delivered file count to 28. No CSS redesign, dependencies, compatibility bridge, feature flag or alternate map renderer. Added shim count: zero. Reference depth is definition → projection → `HelpWorld`; live depth remains primitive → registration/measurement → `HelpWorld`.
+The implementation and tests change 26 source/package files; three documentation files describe the decision and proof. The largest change replaces the existing Ducts split JSX with its shared declaration.
+
+| Change | Shim assessment |
+| --- | --- |
+| Shared layout and control declarations | Structural: actual controls and map consume one authority |
+| Generic startup and Ducts loading composition | Direct use of the existing renderer |
+| Reference rectangles and static leaders | Deliberate reference approximation; current geometry still comes from measurement |
+| Page ownership and empty-server snapshot | Corrects source identity and server isolation |
+| Private unused dock export | Small verification cleanup; no behavior change |
+
+Compatibility shims added: zero. Going deeper would mean declaring other routes' real layouts, not adding another rendering engine. Caching large data and sharing compute across tabs remain separate work.
