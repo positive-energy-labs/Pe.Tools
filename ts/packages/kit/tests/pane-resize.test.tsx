@@ -278,3 +278,66 @@ test("either side folds only to its rail under its floor, and the seam keeps the
     "minmax(0, 1fr) var(--gutter) calc(var(--control-h) + var(--gutter))",
   );
 });
+
+test.each(["start", "end"] as const)(
+  "under both floors the last-focused %s side wins, and rail expansion swaps without remounting",
+  (focused) => {
+    measure(1200);
+    let resized: (entries: { contentRect: DOMRect }[]) => void;
+    vi.stubGlobal(
+      "ResizeObserver",
+      class {
+        constructor(private callback: typeof resized) {}
+        observe(element: HTMLElement) {
+          if (element.dataset.slot === "pane-split") resized = this.callback;
+        }
+        disconnect() {}
+      },
+    );
+    function Dock() {
+      const [collapsed, onCollapsedChange] = useState<"start" | "end" | null>(null);
+      return (
+        <PaneSplit
+          axis="horizontal"
+          start={<input aria-label="pea" defaultValue="unsent" />}
+          end={<input aria-label="tools" defaultValue="retained" />}
+          resize={{
+            target: "end",
+            defaultSize: 600,
+            minSize: 420,
+            minOtherSize: 280,
+            collapse: {
+              collapsed,
+              onCollapsedChange,
+              start: { title: "pea" },
+              end: { title: "tools" },
+            },
+          }}
+        />
+      );
+    }
+    const view = render(<Dock />);
+    const pea = screen.getByRole("textbox", { name: "pea" });
+    const tools = screen.getByRole("textbox", { name: "tools" });
+    fireEvent.focus(focused === "start" ? pea : tools);
+    const width = (value: number) =>
+      act(() => resized([{ contentRect: new DOMRect(0, 0, value, 600) }]));
+    width(708); // The seam plus both floors fits exactly.
+    expect(screen.queryByRole("button", { name: /Expand/ })).toBeNull();
+    width(707);
+    expect((focused === "start" ? tools : pea).closest(".hidden")).toBeTruthy();
+    for (let swap = 0; swap < 4; swap++) {
+      fireEvent.click(screen.getByRole("button", { name: /Expand/ }));
+      expect([pea, tools].filter((input) => !input.closest(".hidden"))).toHaveLength(1);
+      expect(view.container.querySelectorAll('[data-slot="pane-rail"]')).toHaveLength(1);
+      width(500); // A repeated constrained measurement cannot override the person's expansion.
+      expect([pea, tools].filter((input) => !input.closest(".hidden"))).toHaveLength(1);
+    }
+    width(1200);
+    fireEvent.click(screen.getByRole("button", { name: /Expand/ }));
+    expect(screen.getByRole("textbox", { name: "pea" })).toBe(pea);
+    expect(screen.getByRole("textbox", { name: "tools" })).toBe(tools);
+    expect((pea as HTMLInputElement).value).toBe("unsent");
+    expect((tools as HTMLInputElement).value).toBe("retained");
+  },
+);

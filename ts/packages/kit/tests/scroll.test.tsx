@@ -1,14 +1,19 @@
 // @vitest-environment jsdom
 import { readFileSync } from "node:fs";
 import { createRequire } from "node:module";
-import { cleanup, fireEvent, render, waitFor } from "@testing-library/react";
+import { act, cleanup, fireEvent, render, waitFor } from "@testing-library/react";
+import { RegistryContext } from "@effect/atom-react";
 import { Profiler } from "react";
+import { declareMembers, elementKey, setHovered } from "../src/components/lang/attention";
+import { AttentionFixture, kitRegistry } from "./attention-fixture";
 import { afterEach, expect, test, vi } from "vite-plus/test";
 import { useList } from "../src/components/lang/collection";
 import { ListView } from "../src/components/lang/list-view";
 import { Scroll } from "../src/components/lang/scroll";
 import { project } from "../src/components/lang/scroll-project";
 import { writeTheme } from "../src/theme";
+
+const SEARCH = (item: { name: string }) => ({ text: [item.name] });
 
 afterEach(() => {
   cleanup();
@@ -232,6 +237,88 @@ test("the pointer's cursor draws no strip mark: only a selection does", async ()
   expect(bars).toEqual([]);
   fireEvent.click(row);
   await waitFor(() => expect(bars.length).toBeGreaterThan(0));
+});
+
+test("rows another surface's hover reaches mark the strip, from row data, without a commit", async () => {
+  vi.stubGlobal(
+    "ResizeObserver",
+    class {
+      constructor(private callback: (entries: []) => void) {}
+      observe() {
+        this.callback([]);
+      }
+      unobserve() {}
+      disconnect() {}
+    },
+  );
+  const bars: number[] = [];
+  vi.spyOn(HTMLCanvasElement.prototype, "getContext").mockImplementation(
+    function (this: HTMLCanvasElement) {
+      const ctx = { canvas: this, fillStyle: "", globalAlpha: 1, clearRect() {}, drawImage() {} };
+      return Object.assign(ctx, {
+        fillRect: (_x: number, y: number, w: number) => w === 1 && bars.push(y),
+      }) as never;
+    },
+  );
+  vi.spyOn(HTMLElement.prototype, "clientHeight", "get").mockReturnValue(200);
+  vi.spyOn(HTMLElement.prototype, "offsetHeight", "get").mockReturnValue(20);
+  vi.spyOn(HTMLElement.prototype, "scrollHeight", "get").mockReturnValue(40000);
+  // Virtual: most rows never mount, so marks must come from item data, not DOM.
+  const items = Array.from({ length: 2000 }, (_, i) => ({ key: String(i + 1), name: `Row ${i}` }));
+  const row = vi.fn((item: (typeof items)[number]) => ({ label: item.name }));
+  function Big() {
+    const list = useList({ items, keyOf: (item) => item.key, search: SEARCH });
+    return (
+      <ListView list={list} aria-label="big" row={row} empty={{ message: "none", exit: "none" }} />
+    );
+  }
+  const commits = vi.fn();
+  const registry = kitRegistry();
+  const view = render(
+    <RegistryContext value={registry}>
+      <AttentionFixture>
+        <Profiler id="list" onRender={commits}>
+          <Scroll>
+            <Big />
+          </Scroll>
+        </Profiler>
+      </AttentionFixture>
+    </RegistryContext>,
+  );
+  // A 3D group of 60 elements, spread across the list (rows 1..1950 step 33).
+  const members = Array.from({ length: 60 }, (_, i) => elementKey(1 + i * 33));
+  declareMembers(registry, "kit", new Map([["g:run" as const, members]]));
+  await new Promise((resolve) => requestAnimationFrame(resolve));
+  await new Promise((resolve) => setTimeout(resolve, 50));
+  bars.length = 0;
+  const before = commits.mock.calls.length;
+  const started = performance.now();
+  act(() => setHovered(registry, { doc: "kit", key: "g:run" }));
+  const cold = performance.now() - started;
+  expect(commits.mock.calls.length).toBe(before);
+  await waitFor(() => expect(bars.length).toBeGreaterThan(0));
+  expect(new Set(bars).size).toBeGreaterThanOrEqual(50);
+  act(() => setHovered(registry, null));
+  const again = performance.now();
+  act(() => setHovered(registry, { doc: "kit", key: "g:run" }));
+  const warm = performance.now() - again;
+  // A loose bound, not a benchmark (jsdom 2026-10-24: the recompute alone took 2-6 ms cold, with
+  // each row's subject built once, and 1-2 ms warm; act() adds the rest). The old per-key rung
+  // atoms (a rung atom read per row) took 450+ ms cold here.
+  expect(cold).toBeLessThan(150);
+  expect(warm).toBeLessThan(50);
+  // The list's own pointer hover lights its row but draws no mark.
+  act(() => setHovered(registry, null));
+  await new Promise((resolve) => requestAnimationFrame(resolve));
+  bars.length = 0;
+  const list = view.container.querySelector("[data-list-view]")!;
+  fireEvent.pointerEnter(list);
+  const own = view.container.querySelector('[data-key="1"]')!;
+  fireEvent.pointerOver(own);
+  fireEvent.mouseMove(own);
+  await waitFor(() => expect(own.getAttribute("data-reach")).toBe("hover"));
+  await new Promise((resolve) => requestAnimationFrame(resolve));
+  expect(bars).toEqual([]);
 });
 
 test("an observer delivery that changes nothing here writes nothing (a seam drag's width frames)", () => {

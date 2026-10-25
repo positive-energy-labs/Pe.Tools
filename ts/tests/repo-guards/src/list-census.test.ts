@@ -4,7 +4,7 @@
  * Tier 1 counts the old list components' sites in apps/web/src with the census rule
  * (`ix-list-census.md`, "Old-component definition"): old kit imports, list roles written as JSX,
  * native select/datalist, the thread row recipe, and exports of the old names. The three files of
- * the one primitive are the only allowlisted paths.
+ * the one primitive and the explicitly dev-only knobs floater are the allowlisted paths.
  *
  * Tier 2 fails a hand-rolled list: a `.map(` whose RETURNED element is a `<button>`, an `<a>`, the
  * kit's `<Press>`, or a `<div onClick>`, and whose opening tag carries a picked state
@@ -36,6 +36,7 @@ const ALLOWED = new Set([
   "components/lang/row.tsx",
   "components/lang/collection.ts",
   "components/lang/list-popup.tsx",
+  "knobs/floater.tsx", // Dev-only native controls under the 2026-10-24 ruling; never a product list or production bundle.
 ]);
 const OLD =
   /from "(#\/components\/lang\/(pick-list|combobox|command)|(#\/route|\.)\/picker|cmdk|@base-ui\/react\/(combobox|select|menu|autocomplete))"|role="(listbox|option|menu|menuitem)"|<(datalist|select)[ >]|threadRowRecipe\(|export (function|const) (PickList|Picker|Combobox|Command|CellSelect|ThreadList|ThreadPalette)\b/;

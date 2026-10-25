@@ -145,7 +145,7 @@ const verb = (name: string) => (manifest.actions as unknown as Record<string, Ve
 
 beforeEach(() => {
   sent.length = 0;
-  page = (manifest.page as z.ZodType<Page>).parse({ system: "SA" });
+  page = (manifest.page as z.ZodType<Page>).parse({ system: ["SA"] });
 });
 
 const esp = { esp: { "100": { staged: { value: { inWg: 0.5 } } } } };
@@ -203,7 +203,7 @@ test("run bare, the fan verbs act on the chosen system's offered fan, in the pag
     input: { unitId: 100, systemId: 900 },
   });
   expect(verb("fan").ready(ctxOf(doc) as never)).toBeNull();
-  page = { ...page, system: "" };
+  page = { ...page, system: [] };
   expect(verb("fan").ready(ctxOf(doc) as never)).toBe("Choose a system to make its fan");
   expect(verb("fan").labelNow!(ctxOf(doc) as never)).toBe("make the fan");
 });
@@ -244,7 +244,7 @@ test("selection follows displayed merged networks while foreign claims and unrel
     },
   };
   const bound = bindDuctsManifest(() => reading);
-  const page = manifest.page!.parse({ system: "SA" });
+  const page = manifest.page!.parse({ system: ["SA"] });
   expect(bound.transition!(page, { selected: "200" }, "page")).not.toHaveProperty("refusal");
   expect(reconcileDuctsMembers({ ...page, selected: "200" }, reading)).toEqual({});
   expect(reconcileDuctsMembers({ ...page, selected: "200" }, { ...reading, drawn: null })).toEqual(
@@ -268,4 +268,53 @@ test("stale pricing refuses readiness and invocation without dispatch", async ()
   ctx.readings.pricing.observation.input.documentKey = "s/other";
   expect(verb("preview").ready(ctx as never)).toMatch(/Pricing is refreshing/);
   expect(verb("fan-preview").ready(ctx as never)).toMatch(/Pricing is refreshing/);
+});
+
+test("opening and closing beside an earlier system keeps its camera and selection, and disarms previews", () => {
+  const viewport = {
+    kind: "orbit" as const,
+    yaw: 20,
+    elev: 30,
+    zoom: 2,
+    pivot: [0, 0, 0] as [number, number, number],
+  };
+  const current = {
+    ...page,
+    selected: "4",
+    viewport,
+    evaluation: { revision: 1, epoch: 0, response: {} },
+  } as Page;
+  const opened = manifest.transition!(current, { system: ["SA", "RA"] }, "page");
+  expect(opened).toMatchObject({
+    patch: { system: ["SA", "RA"], evaluation: null, heal: null, fan: null },
+  });
+  expect(opened).not.toHaveProperty("patch.viewport");
+  expect(opened).not.toHaveProperty("patch.selected");
+  expect(
+    manifest.transition!({ ...current, system: ["SA", "RA"] }, { system: ["SA"] }, "page"),
+  ).not.toHaveProperty("patch.viewport");
+  expect(manifest.transition!(current, { system: ["Other"] }, "page")).toMatchObject({
+    patch: { selected: "", viewport: null },
+  });
+  const bound = bindDuctsManifest(
+    () => ({ snapshot, drawn: snapshot, claims: {} }),
+    () => viewport,
+  );
+  expect(
+    bound.transition!({ ...page, system: ["SA", "RA"] }, { system: ["SA"] }, "page"),
+  ).toMatchObject({ patch: { viewport } });
+});
+
+test("route transitions cap an ordered list and a write uses only its last system", async () => {
+  expect(manifest.transition!(page, { system: ["A", "B", "C", "D", "SA"] }, "page")).toMatchObject({
+    patch: { system: ["B", "C", "D", "SA"] },
+  });
+  page = { ...page, system: ["Other", "SA"] };
+  answer.value = { counts: { planned: 1, refused: 0 }, items: [] };
+  await verb("preview").run(ctxOf(ductsRouteState.schema.parse(flow)) as never);
+  expect(sent.at(-1)!.input.terminalFlows).toContainEqual({ id: 4, cfm: 100, source: "override" });
+  page = { ...page, system: ["SA", "Other"] };
+  await expect(
+    verb("preview").run(ctxOf(ductsRouteState.schema.parse(flow)) as never),
+  ).rejects.toThrow("No duct network in this snapshot carries Other");
 });

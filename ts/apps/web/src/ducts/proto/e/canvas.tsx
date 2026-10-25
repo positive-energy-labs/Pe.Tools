@@ -17,7 +17,9 @@ import {
 import { DUCTS_LAYERS, emptyListSearch, toggleLayer } from "@pe/agent-contracts";
 import { snapshotById } from "@pe/ducts-domain/readiness";
 import { noRunBranches } from "@pe/ducts-domain/no-runs";
-import { systemScope } from "@pe/ducts-domain/system-scope";
+import { scopeOf, systemScope } from "@pe/ducts-domain/system-scope";
+import { worstRun } from "@pe/ducts-domain/losses";
+import type { Neighbour } from "@pe/ducts-domain/neighbours";
 import { TooltipHint } from "@pe/kit/lang/tooltip";
 import { SelectionBoxButton } from "#/revit/element-menu";
 import { observedElements } from "#/revit/observation";
@@ -34,6 +36,7 @@ import { elementNamer } from "../../claims";
 import { NodeFactsView, SegmentFactsView } from "../../facts";
 import { labelOfNode, legsOf } from "../../legs";
 import { sceneRequestOf } from "../../manifest";
+import { activeSystem, paintOfDucts, stubIdsOf, withSystem } from "../../selection";
 import { findingLayers, findingShapes, noRunLayers } from "../../finding-layers";
 import { boundsOfIds, ModelPicture, poseOf, usePictureBounds } from "../../model-picture";
 import { PictureStage, useStage, stageViewport, projectBounds } from "#/scene/stage-controller";
@@ -82,8 +85,10 @@ function DuctsReadout(props: ComponentProps<typeof PictureReadout>) {
 export interface ECanvasExtra {
   issues: readonly StageIssue[];
   onIssueHover: (key: string | null) => void;
-  /** The system's groups (stable, `systemScope`); the picture draws every one. */
+  /** The open systems' groups (stable, `scopeOf`); the picture draws every one. */
   groups: readonly string[];
+  /** The networks one unit away (`neighboursOf`): their stubs join the capture, painted `stub`. */
+  neighbours: readonly Neighbour[];
   /** The group whose fan the header reads: the system's largest; the schematic draws it. */
   lead: string;
   /** The system's issue ids; null = every issue on a drawn element. */
@@ -139,6 +144,7 @@ function Canvas({
   issues,
   onIssueHover,
   groups,
+  neighbours,
   lead,
   scale,
   nameOf,
@@ -152,6 +158,7 @@ function Canvas({
   const hoveredIssue = useHoveredIssue();
   const observation = useNativeObservation();
   const index = useMemo(() => indexOf(snapshot, priced), [snapshot, priced]);
+  const scope = useMemo(() => scopeOf(snapshot, page.system), [snapshot, page.system]);
   const labelOf = useMemo(() => labelOfNode(snapshot), [snapshot]);
   const scene = useMemo(
     () =>
@@ -165,13 +172,31 @@ function Canvas({
     [index, snapshot, subject, labelOf, groups],
   );
   const native = observation.scope?.source === "native" ? observation.scope.document : null;
+  // Neighbour stubs never come from an open group, so none of them is already a subject.
+  const opened = useMemo(() => {
+    const groupSet = new Set(groups);
+    return new Set([
+      ...(scope?.members ?? [...snapshot.nodes, ...snapshot.segments].map((e) => e.id)),
+      ...[...snapshot.nodes, ...snapshot.segments]
+        .filter((e) => e.groupId && groupSet.has(e.groupId))
+        .map((e) => e.id),
+      ...snapshot.groups.filter((g) => groupSet.has(g.id)).flatMap((g) => g.rootIds),
+    ]);
+  }, [snapshot, scope, groups]);
+  const stubs = useMemo(() => stubIdsOf(neighbours, opened), [neighbours, opened]);
   const request = useMemo(
-    () => sceneRequestOf(snapshot, page, groups),
-    [snapshot, page.system, page.layers, groups],
+    () => sceneRequestOf(snapshot, page, groups, stubs),
+    [snapshot, page.system, page.layers, groups, stubs],
   ); // eslint-disable-line react-hooks/exhaustive-deps
+  const paintOf = useMemo(() => paintOfDucts(snapshot, opened, stubs), [snapshot, opened, stubs]);
   const capture = useScene(request, native, page.epoch);
   const pictureKey = doc && request ? `${doc.session}/${doc.openId}` : null;
-  const { read, holding } = usePictureRead(capture, pictureKey, page.system, identity.refreshing);
+  const { read, holding } = usePictureRead(
+    capture,
+    pictureKey,
+    page.system.join(", "),
+    identity.refreshing,
+  );
   const bounds = usePictureBounds(read.meshes, scene);
   const [pictureHost, setPictureHost] = useState<HTMLDivElement | null>(null);
   const [pictureSize, setPictureSize] = useState<{ width: number; height: number } | null>(null);
@@ -198,7 +223,7 @@ function Canvas({
   const orbit = useLiveOrbit(
     pose,
     stageViewport(setPage),
-    `${pictureKey}/${page.system}/${page.picture}`,
+    `${pictureKey}/${page.picture}`,
     page.viewport,
     bounds?.scene,
     landing,
@@ -235,28 +260,19 @@ function Canvas({
 
   const noRuns = useMemo<ReturnType<typeof noRunBranches>>(
     () =>
-      priced && page.system
+      priced && page.system.length
         ? noRunBranches(
             priced.snapshot,
             priced.next,
-            systemScope(priced.snapshot, page.system),
+            scopeOf(priced.snapshot, page.system)!,
             priced.flows,
           )
         : new Map(),
     [priced, page.system],
   );
   const findings3d = useMemo(
-    () =>
-      findingLayers(
-        findingShapes(
-          snapshot,
-          annotated,
-          work.doc,
-          page.system ? systemScope(snapshot, page.system).members : undefined,
-        ),
-        issues,
-      ),
-    [snapshot, annotated, work.doc, page.system, issues],
+    () => findingLayers(findingShapes(snapshot, annotated, work.doc, scope?.members), issues),
+    [snapshot, annotated, work.doc, scope, issues],
   );
 
   const damage = useMemo(
@@ -293,7 +309,7 @@ function Canvas({
   // Header facts: a system name (never a group id), Pe fan static, critical run total.
   const firstId = subject?.ids[0] ?? scene.segments[0]?.segment.id ?? null;
   const systemName =
-    (page.system || null) ??
+    (page.system.join(" + ") || null) ??
     (firstId == null
       ? null
       : (byId.segments.get(firstId)?.systemName ?? byId.nodes.get(firstId)?.systemName)) ??
@@ -303,9 +319,22 @@ function Canvas({
     (firstId == null
       ? ""
       : (byId.segments.get(firstId)?.groupId ?? byId.nodes.get(firstId)?.groupId ?? ""));
-  const solved = groupId ? priced?.next.byGroup[groupId] : null;
+  const active = activeSystem(page);
+  const activeScope = priced && active ? systemScope(priced.snapshot, active) : null;
+  const worst =
+    priced && activeScope ? worstRun(priced.next, activeScope.groups, activeScope.terminals) : null;
+  const groupSolve = groupId ? priced?.next.byGroup[groupId] : null;
+  const solved = groupSolve && {
+    fan: activeScope?.groups.some((g) => (priced?.next.byGroup[g]?.implausible.length ?? 0) > 0)
+      ? null
+      : (worst?.total ?? null),
+    critical: worst?.terminal ?? null,
+    criticalTel: worst?.tel ?? null,
+    provisional:
+      (worst && priced?.next.paths[worst.terminal]?.provisional) ?? groupSolve.provisional,
+  };
   const criticalName = solved?.critical != null ? nameOf(solved.critical) : null;
-  const scopeTerminals = page.system ? systemScope(snapshot, page.system).terminals : null;
+  const scopeTerminals = activeScope?.terminals ?? null;
   const terminals = scopeTerminals?.size ?? 0;
   const flowless = useMemo(
     () =>
@@ -363,7 +392,7 @@ function Canvas({
   const schematic = (size: "main" | "inset", readout: ReactNode = null) => (
     <Schematic
       index={index}
-      group={lead}
+      groups={groups}
       encoding={scale.encoding}
       onSelect={(id) => pick(id)}
       size={size}
@@ -395,10 +424,7 @@ function Canvas({
   const segFacts = readId == null ? null : scene.segments.find((f) => f.segment.id === readId);
   const nodeFacts = readId == null ? null : scene.nodes.find((f) => f.node.id === readId);
   // How Pe prices the selection's run (was the sidebar's run detail; selection lives here now).
-  const run =
-    priced && page.system && readId != null
-      ? runOf(priced, systemScope(snapshot, page.system).groups, readId)
-      : null;
+  const run = priced && scope && readId != null ? runOf(priced, scope.groups, readId) : null;
 
   const viewOf = (stage: ReturnType<typeof useStage>, ids: ReadonlySet<number>) =>
     picture === "model" ? stage.poseOf(boundsOfIds(read.meshes, scene, ids)) : null;
@@ -438,13 +464,20 @@ function Canvas({
       goTo={(stage) => (
         <GoToSubject
           snapshot={snapshot}
-          system={page.system}
+          systems={page.system}
           nameOf={nameOf}
           onHover={onHover}
           onGo={({ system, id }) => {
-            if (id == null) return setPage({ system, selected: "" }, { history: "push" });
-            if (system !== page.system)
-              return setPage({ system, selected: String(id) }, { history: "push" });
+            if (id == null)
+              return setPage(
+                { system: withSystem(page.system, system), selected: "" },
+                { history: "push" },
+              );
+            if (scope && !scope.members.has(id))
+              return setPage(
+                { system: withSystem(page.system, system), selected: String(id) },
+                { history: "push" },
+              );
             jumpTo(stage, id);
           }}
         />
@@ -620,6 +653,7 @@ function Canvas({
         );
         const model = (
           <ModelPicture
+            paintOf={paintOf}
             readout={readout}
             read={read}
             bounds={bounds}

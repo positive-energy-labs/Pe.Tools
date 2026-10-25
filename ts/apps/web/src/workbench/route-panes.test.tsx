@@ -14,7 +14,7 @@ import { address, routeAddress, type ThreadTab, type WorkKey } from "@pe/agent-c
 import { RegistryContext } from "@effect/atom-react";
 import { appAtomRegistry } from "#/route/route-owner";
 import { createChatPageStore } from "./store";
-import { RouteDock, dockWidths } from "./route-panes";
+import { RouteDock } from "./route-panes";
 
 const store = createChatPageStore({
   registry: appAtomRegistry,
@@ -23,7 +23,7 @@ const store = createChatPageStore({
 const ducts: ThreadTab = {
   id: "tab-ducts",
   route: "ducts",
-  link: routeAddress("ducts").link({ system: "S1" } as never),
+  link: routeAddress("ducts").link({ system: ["S1"] } as never),
   at: "2026-10-24T00:00:00.000Z",
 };
 const TAB = `${routeAddress("ducts").title} · S1`;
@@ -33,7 +33,7 @@ const DOC_A = address("C:/Jobs/Level A.rvt"),
 const place = (id: string, system: string, selected: string, target: unknown): ThreadTab => ({
   id,
   route: "ducts",
-  link: routeAddress("ducts").link({ system, selected } as never, {
+  link: routeAddress("ducts").link({ system: [system], selected } as never, {
     target: JSON.stringify(target),
   }),
   at: "2026-10-24T00:00:00.000Z",
@@ -53,13 +53,7 @@ const tabOffice: ThreadTab = {
 };
 const threads = [{ id: "T", tabs: [ducts, tabA, tabB, tabOpen, tabOffice] }];
 vi.mock("./provider", () => ({ useWorkbench: () => ({ store, threads }) }));
-vi.mock("#/chat/chat-shell", async () => {
-  const { createContext, useContext } = await import("react");
-  const ToolsBar = createContext<React.ReactNode>(null);
-  // As the real shell: Pea's header draws the collapsed tools bar.
-  const ChatShell = () => <div data-chat-probe="">{useContext(ToolsBar)}</div>;
-  return { ChatShell, ToolsBar, SIDEBAR: { size: 300, rail: 32 }, peaFloor: () => 643 };
-});
+vi.mock("#/chat/chat-shell", () => ({ ChatShell: () => <div data-chat-probe="" /> }));
 vi.mock("#/route/situation-ladder", () => ({ ChatPlanIntent: createContext(null) }));
 vi.mock("#/readings", () => ({
   useReading: () => ({ state: "pending" }),
@@ -110,7 +104,7 @@ async function mount() {
       <RouterProvider router={router} />
     </RegistryContext.Provider>,
   );
-  await screen.findByRole("button", { name: TAB });
+  await screen.findByRole("button", { name: "Expand tools" });
   return router;
 }
 const tools = () => document.querySelector<HTMLElement>('[data-pane-id="tools"]')!;
@@ -119,11 +113,12 @@ test("a thread opens its conversation with Pea first and the tools collapsed, no
   const router = await mount();
   await act(() => new Promise((done) => setTimeout(done, 50)));
   expect(router.state.location.pathname).toBe("/pea");
-  expect(screen.getByRole("button", { name: TAB }).getAttribute("aria-pressed")).toBe("false");
-  // Collapsed is header-only: the labelled Thread Places strip in Pea's header, no tools column,
-  // no placeholder, no tool body.
+  expect(screen.getByRole("button", { name: TAB, hidden: true }).getAttribute("aria-pressed")).toBe(
+    "false",
+  );
   const pea = document.querySelector("[data-chat-probe]")!;
-  expect(pea.querySelector('[role="group"][aria-label="Thread Places"]')).toBeTruthy();
+  expect(pea.querySelector('[role="group"][aria-label="Thread Places"]')).toBeNull();
+  expect(screen.getByRole("button", { name: "Expand tools" })).toBeTruthy();
   expect(tools().closest(".hidden")).toBeTruthy();
   expect(document.body.textContent).not.toMatch(/tools collapsed/i);
   expect(pea.compareDocumentPosition(tools()) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
@@ -132,6 +127,7 @@ test("a thread opens its conversation with Pea first and the tools collapsed, no
 
 test("a tab press expands the tools on that Place; a Work press restores its Page without a remount", async () => {
   const router = await mount();
+  fireEvent.click(screen.getByRole("button", { name: "Expand tools" }));
   fireEvent.click(screen.getByRole("button", { name: TAB }));
   await waitFor(() => expect(router.state.location.pathname).toBe("/ducts"));
   await waitFor(() => expect(screen.getByText("S1")).toBeTruthy());
@@ -226,6 +222,7 @@ test("a SaveAs ref with two known Addresses gets no match from the host: a new P
 
 test("every Place carries its own named close, in the tab order", async () => {
   await mount();
+  fireEvent.click(screen.getByRole("button", { name: "Expand tools" }));
   for (const name of ["Ducts · S1", "Ducts · SA", "Ducts · SB", "Ducts · SO"]) {
     const close = screen.getByRole("button", { name: `Close ${name}` });
     expect(close.tabIndex).not.toBe(-1);
@@ -269,29 +266,6 @@ test("an address key with no `from` restores the matched open-ref Place, rebased
   await waitFor(() => expect(shown(router)).toMatchObject({ system: "SO", tab: "tab-open" }));
   expect(shown(router).selected).toBe("303");
   expect(shown(router).target).toBe("C:/Jobs/Open.rvt");
-});
-
-test.each([
-  // viewport, tools default, Pea (sidebar), stacks?
-  [1920, 961, "open"],
-  [1400, 709, "folded"],
-  [1280, 589, "folded"],
-] as const)(
-  "at %ipx Pea keeps its measure and the tools take what remains (%ipx)",
-  (viewport, tools, sidebar) => {
-    // Comfort tokens: Pea's floor 643px (76ch measure + lane + gutters), 16px root, 8px gutter.
-    const widths = dockWidths(viewport, 16, 643, 8);
-    expect(widths.floor).toBe(576);
-    expect(widths.tools).toBe(tools);
-    const pea = viewport - 8 - widths.tools;
-    expect(pea).toBeGreaterThanOrEqual(643 + (sidebar === "open" ? 300 + 8 : 32 + 8));
-    expect(widths.tools).toBeGreaterThanOrEqual(widths.floor);
-    expect(viewport).toBeGreaterThanOrEqual(widths.stackBelow);
-  },
-);
-
-test("below Pea, its folded sidebar, the seam and the tools' floor, the dock stacks", () => {
-  expect(dockWidths(1266, 16, 643, 8).stackBelow).toBe(1267);
 });
 
 test("a Work pressed on a closed document shows what is kept and how to reconnect", async () => {

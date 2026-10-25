@@ -1,7 +1,8 @@
 // @vitest-environment jsdom
 import { useState } from "react";
-import { cleanup, fireEvent, render, screen, within } from "@testing-library/react";
+import { cleanup, fireEvent, render, screen } from "@testing-library/react";
 import { afterEach, beforeEach, expect, test, vi } from "vite-plus/test";
+import type { PaneSide } from "@pe/kit/lang/pane";
 import { ThreadsSplit } from "./chat-shell";
 
 vi.mock("#/navigation/surface-host", () => ({ useSurfaceHost: () => ({ surface: "web" }) }));
@@ -23,30 +24,38 @@ afterEach(() => {
 });
 
 function Dock() {
-  const [open, setOpen] = useState(false);
+  const [collapsed, onCollapsedChange] = useState<PaneSide | null>(null);
   return (
     <ThreadsSplit
-      narrow={false}
-      sideOpen={open}
-      setSideOpen={setOpen}
-      threads={() => (
+      collapsed={collapsed}
+      onCollapsedChange={onCollapsedChange}
+      threads={
         <nav aria-label="Threads">
-          <div role="option" aria-selected={false}>
+          <div role="option" aria-selected={false} onClick={() => onCollapsedChange(null)}>
             Office model
           </div>
         </nav>
-      )}
+      }
     >
-      <div>transcript</div>
+      <input aria-label="draft" defaultValue="kept" />
     </ThreadsSplit>
   );
 }
 
-test("at 1400x900 with tools open, Expand threads leaves the thread rows visible", () => {
+test("under both floors, threads and chat trade one rail while retaining the draft", () => {
   render(<Dock />);
-  // Squeezed: the rail is the affordance, and the inline sidebar stays folded.
+  const draft = screen.getByRole("textbox", { name: "draft" });
+  fireEvent.change(draft, { target: { value: "unsent" } });
   fireEvent.click(screen.getByRole("button", { name: "Expand threads" }));
-  // The person's expand wins: the rows are shown (as an overlay), not silently refolded.
-  const dialog = screen.getByRole("dialog");
-  expect(within(dialog).getByRole("option", { name: "Office model" })).toBeTruthy();
+  expect(screen.getByRole("option", { name: "Office model" })).toBeTruthy();
+  expect(draft.closest(".hidden")).toBeTruthy();
+  expect(screen.queryByRole("dialog")).toBeNull();
+  fireEvent.click(screen.getByRole("button", { name: "Expand chat" }));
+  expect(screen.getByRole("textbox", { name: "draft" })).toBe(draft);
+  expect((draft as HTMLInputElement).value).toBe("unsent");
+  expect(screen.getByRole("option", { name: "Office model" }).closest(".hidden")).toBeTruthy();
+  fireEvent.click(screen.getByRole("button", { name: "Expand threads" }));
+  fireEvent.click(screen.getByRole("option", { name: "Office model" }));
+  expect(draft.closest(".hidden")).toBeNull();
+  expect(screen.getByRole("option", { name: "Office model" }).closest(".hidden")).toBeTruthy();
 });

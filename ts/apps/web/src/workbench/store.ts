@@ -1,4 +1,5 @@
 import type { ChatPluginRoute } from "./chat-plugins";
+import type { PaneSide } from "@pe/kit/lang/pane";
 import * as Atom from "effect/unstable/reactivity/Atom";
 import type * as AtomRegistry from "effect/unstable/reactivity/AtomRegistry";
 
@@ -74,7 +75,7 @@ export function createChatPageStore(deps: {
   };
   let planGeneration = 0;
   const core = createRouteOwner("chat", deps.registry);
-  const expandedPane = core.owned("widget/expanded-pane", Atom.make<"side" | null>("side"));
+  const threadFold = core.owned("widget/thread-fold", Atom.make<PaneSide | null>(null));
   /** The head's commit verb, waiting for its hosted route to run it once (page state, not URL). */
   const planIntent = core.owned(
     "widget/plan-intent",
@@ -85,7 +86,6 @@ export function createChatPageStore(deps: {
     "widget/plan-refusal",
     Atom.make<{ route: ChatPluginRoute; message: string } | null>(null),
   );
-  const sideOpen = Atom.map(expandedPane, (pane) => pane === "side");
   /** The last Work pressed on a closed document, for the tool it opened (page state, not URL). */
   const closedWork = core.owned(
     "widget/closed-work",
@@ -98,17 +98,12 @@ export function createChatPageStore(deps: {
         typeof next === "function" ? (next as (value: A) => A)(previous) : next,
       ),
     );
-  const setPaneOpen = (pane: "side", value: Setter<boolean>) =>
-    set(`set-${pane}`, expandedPane, (previous) => {
-      const open = typeof value === "function" ? value(previous === pane) : value;
-      return open ? pane : previous === pane ? null : previous;
-    });
   return {
     registry: deps.registry,
     search: deps.search,
     local: deps.local ?? false,
     atoms: {
-      sideOpen,
+      threadFold,
       planIntent,
       planRefusal,
       closedWork,
@@ -138,7 +133,10 @@ export function createChatPageStore(deps: {
           /* The replaced URL still names the confirmed owner. */
         }
       },
-      setSideOpen: (value: Setter<boolean>) => setPaneOpen("side", value),
+      setThreadFold: (side: PaneSide | null) => set("fold-threads", threadFold, side),
+      revealThreads: () =>
+        set("reveal-threads", threadFold, (side) => (side === "start" ? null : side)),
+      revealChat: () => set("reveal-chat", threadFold, (side) => (side === "end" ? null : side)),
       setMode: (mode: string) => void deps.search.patch({ mode }),
       connectTabs: (commands: NonNullable<typeof tabs>) => {
         tabs = commands;

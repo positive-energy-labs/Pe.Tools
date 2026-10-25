@@ -8,18 +8,24 @@
  * eleven thousand elements of a large model cost a 200 ms open (Chadds, 2026-10-23).
  */
 import { GoToPopup } from "@pe/kit/lang/go-to";
-import { NO_SYSTEM, systemScope, systemsOf } from "@pe/ducts-domain/system-scope";
+import { NO_SYSTEM, scopeOf, systemsOf } from "@pe/ducts-domain/system-scope";
 import type { DuctSnapshot } from "@pe/ducts-domain/types";
 
 export type GoTarget = { system: string; id: number | null };
 type Item = GoTarget & { key: string; name: string; detail: string; group: string; meta: string };
 
-const HERE = "In this system";
+const HERE = "In open systems";
 const ELSEWHERE = "Elsewhere";
 const SYSTEMS = "Systems";
 
-function itemsOf(snapshot: DuctSnapshot, system: string, nameOf: (id: number) => string): Item[] {
-  const here = system ? systemScope(snapshot, system).members : new Set<number>();
+function itemsOf(
+  snapshot: DuctSnapshot,
+  systems: readonly string[],
+  nameOf: (id: number) => string,
+): Item[] {
+  const here =
+    scopeOf(snapshot, systems)?.members ??
+    new Set([...snapshot.nodes, ...snapshot.segments].map((e) => e.id));
   const systemsOfGroup = new Map(snapshot.groups.map((g) => [g.id, g.systemNames]));
   const tagged = (e: DuctSnapshot["nodes"][number] | DuctSnapshot["segments"][number]) =>
     here.has(e.id) || ("kind" in e && (e.kind === "terminal" || e.kind === "equipment"));
@@ -29,7 +35,7 @@ function itemsOf(snapshot: DuctSnapshot, system: string, nameOf: (id: number) =>
     const kind = ("size" in e ? [e.type, e.size] : [e.family, e.type]).filter(Boolean).join(" · ");
     return {
       key: `e${e.id}`,
-      system: here.has(e.id) ? system : into,
+      system: into,
       id: e.id,
       name: nameOf(e.id),
       detail: `${kind} ${into} ${"category" in e ? (e.category ?? "") : "duct"}`,
@@ -37,7 +43,7 @@ function itemsOf(snapshot: DuctSnapshot, system: string, nameOf: (id: number) =>
       meta: here.has(e.id) ? kind : `${kind} · ${into}`,
     };
   });
-  const systems = systemsOf(snapshot).map(
+  const entries = systemsOf(snapshot).map(
     (s): Item => ({
       key: `s${s.name}`,
       system: s.name,
@@ -48,7 +54,7 @@ function itemsOf(snapshot: DuctSnapshot, system: string, nameOf: (id: number) =>
       meta: s.classification ?? "",
     }),
   );
-  return [...elements, ...systems];
+  return [...elements, ...entries];
 }
 
 /** The element a typed id names, anywhere in the snapshot, as a go-to target. */
@@ -65,21 +71,21 @@ function byId(snapshot: DuctSnapshot, text: string): GoTarget | null {
 
 export function GoToSubject({
   snapshot,
-  system,
+  systems,
   nameOf,
   onGo,
   onHover,
 }: {
   snapshot: DuctSnapshot;
-  system: string;
+  systems: readonly string[];
   nameOf: (id: number) => string;
   onGo: (target: GoTarget) => void;
   onHover: (id: number | null) => void;
 }) {
   return (
     <GoToPopup<Item>
-      items={() => itemsOf(snapshot, system, nameOf)}
-      leadingGroups={system ? [HERE, SYSTEMS, ELSEWHERE] : [SYSTEMS, ELSEWHERE]}
+      items={() => itemsOf(snapshot, systems, nameOf)}
+      leadingGroups={[HERE, SYSTEMS, ELSEWHERE]}
       onGo={onGo}
       hover={(item) => onHover(item?.id ?? null)}
       resolveId={(text) => {

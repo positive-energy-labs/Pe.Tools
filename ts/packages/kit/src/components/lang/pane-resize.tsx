@@ -73,19 +73,39 @@ function storedSize(spec: PaneSizeSpec) {
 
 function usePaneSize(spec: PaneSizeSpec & { target: PaneSide }) {
   const [internalSize, setInternalSize] = useState(() => storedSize(spec));
-  const collapsed = spec.collapse?.collapsed ?? null;
+  const [available, setAvailable] = useState(0);
+  const chosen = spec.collapse?.collapsed ?? null;
   const other: PaneSide = spec.target === "start" ? "end" : "start";
+  const opposite = (side: PaneSide): PaneSide => (side === "start" ? "end" : "start");
+  const lastOpen = useRef(chosen ? opposite(chosen) : other);
+  const previous = useRef(chosen);
+  if (previous.current !== chosen) {
+    lastOpen.current = chosen ? opposite(chosen) : (previous.current ?? lastOpen.current);
+    previous.current = chosen;
+  }
+  const exclusive = available > 0 && available < spec.minSize + (spec.minOtherSize ?? spec.minSize);
+  const paired = spec.collapse?.start != null && spec.collapse.end != null;
+  const collapsed = chosen ?? (exclusive && paired ? opposite(lastOpen.current) : null);
 
   const current = useRef(spec);
   current.current = spec;
   // Container fitting never persists: a small window must not overwrite the chosen size.
   const fit = useCallback((containerSize?: number) => {
+    if (containerSize != null) setAvailable(containerSize);
     setInternalSize((size) => clampSize(size, current.current, containerSize));
   }, []);
   useEffect(() => fit(), [fit, spec.minSize, spec.maxSize]);
+  useLayoutEffect(() => {
+    if (collapsed !== chosen) current.current.collapse?.onCollapsedChange(collapsed);
+  }, [collapsed, chosen]);
 
   const fold = (side: PaneSide) => {
+    lastOpen.current = opposite(side);
     if (collapsed !== side) spec.collapse?.onCollapsedChange(side);
+  };
+  const expand = (side: PaneSide) => {
+    lastOpen.current = side;
+    spec.collapse?.onCollapsedChange(exclusive && paired ? opposite(side) : null);
   };
   const resizeTo = (requested: number, containerSize?: number) => {
     const own = spec.collapse?.[spec.target];
@@ -99,7 +119,8 @@ function usePaneSize(spec: PaneSizeSpec & { target: PaneSide }) {
     )
       return fold(other);
 
-    if (collapsed) spec.collapse?.onCollapsedChange(null);
+    if (exclusive && paired) return expand(spec.target);
+    if (collapsed) expand(collapsed);
     const next = clampSize(requested, spec, containerSize);
     setInternalSize(next);
     if (spec.persist && typeof window !== "undefined") {
@@ -116,6 +137,11 @@ function usePaneSize(spec: PaneSizeSpec & { target: PaneSide }) {
     other,
     renderedSize: clampSize(internalSize, spec),
     fold,
+    expand,
+    focus: (side: PaneSide) => {
+      lastOpen.current = side;
+    },
+    preferredFold: () => opposite(lastOpen.current),
     resizeTo,
     fit,
     reset: () => resizeTo(spec.defaultSize),
@@ -299,9 +325,6 @@ interface PaneSplitProps {
   end: ReactNode;
   /** `target` is the side the seam sizes; it is layout, never a fold: folding is `collapse`. */
   resize?: PaneSizeSpec & { target: PaneSide };
-  /** A side whose content is absent but must stay mounted (retained route bodies): it takes no
-   * track and draws nothing. Not a fold; a side present on screen folds only to its rail. */
-  hide?: PaneSide;
   grow?: boolean;
 }
 
@@ -315,12 +338,12 @@ export const paneSplitRecipe = tv({
 });
 
 /** Binary compositional escape hatch. Null sides retain their wrappers but consume no track. */
-export function PaneSplit({ axis, start, end, resize, hide, grow }: PaneSplitProps) {
+export function PaneSplit({ axis, start, end, resize, grow }: PaneSplitProps) {
   const rootRef = useRef<HTMLDivElement>(null);
   const state = usePaneSize(resize ?? NO_RESIZE);
   const [stacked, setStacked] = useState(false);
   const horizontal = axis === "horizontal" && !stacked;
-  const bothSides = start != null && end != null && hide == null;
+  const bothSides = start != null && end != null;
   const target = resize?.target ?? "start";
   const folded = bothSides && !stacked ? state.collapsed : null;
   const sized = folded == null ? "var(--pane-size)" : folded === target ? RAIL : "minmax(0, 1fr)";
@@ -354,9 +377,16 @@ export function PaneSplit({ axis, start, end, resize, hide, grow }: PaneSplitPro
       resize != null &&
       rect.width > 0 &&
       rect.width < resize.minSize + (resize.minOtherSize ?? resize.minSize) + gutter;
-    // Fold a side to its rail (the sized side first), or stack when neither side has one.
+    // Focus/expansion chooses the survivor; splits without rails can still stack.
     const rails = resize?.collapse;
-    const yields = rails?.[target] ? target : rails?.[state.other] ? state.other : null;
+    const preferred = state.preferredFold();
+    const yields = rails?.[preferred]
+      ? preferred
+      : rails?.[target]
+        ? target
+        : rails?.[state.other]
+          ? state.other
+          : null;
     const stack = constrained && yields == null;
     setStacked(stack);
     if (constrained && yields != null && state.collapsed == null) state.fold(yields);
@@ -393,7 +423,7 @@ export function PaneSplit({ axis, start, end, resize, hide, grow }: PaneSplitPro
                     : ChevronUp
               }
               refusal={spec.refusal}
-              onClick={() => resize?.collapse?.onCollapsedChange(null)}
+              onClick={() => state.expand(side)}
             />
             <span
               data-slot="pane-rail-title"
@@ -414,11 +444,11 @@ export function PaneSplit({ axis, start, end, resize, hide, grow }: PaneSplitPro
               : undefined
           }
           className={
-            child == null || hide === side || rail
-              ? "hidden"
-              : "flex min-h-0 min-w-0 flex-col overflow-visible"
+            child == null || rail ? "hidden" : "flex min-h-0 min-w-0 flex-col overflow-visible"
           }
           style={style}
+          onFocusCapture={() => state.focus(side)}
+          onPointerDownCapture={() => state.focus(side)}
         >
           {child}
         </div>

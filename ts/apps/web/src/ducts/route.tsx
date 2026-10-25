@@ -13,7 +13,7 @@ import { elementKey, type SubjectKey } from "@pe/kit/lang/attention";
  */
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { stagedDucts, type DuctClaim, type TrichotomyCellLike } from "@pe/agent-contracts";
-import type { Reading } from "@pe/agent-contracts";
+import type { Reading, OrbitViewport } from "@pe/agent-contracts";
 import type { DuctSnapshot } from "@pe/ducts-domain/types";
 import { EMPTY_CATALOGS } from "@pe/ducts-domain/catalog";
 
@@ -33,7 +33,8 @@ import { withStoredRulings } from "@pe/ducts-domain/rulings";
 import { usePricing } from "./use-pricing";
 import type { PricingInput } from "./pricing-job";
 import { worstRun } from "@pe/ducts-domain/losses";
-import { systemScope, systemsOf } from "@pe/ducts-domain/system-scope";
+import { scopeOf, systemScope, systemsOf } from "@pe/ducts-domain/system-scope";
+import { activeSystem, toggleSystem } from "./selection";
 import { verdictPatches } from "./claims";
 import { claimsOf, type Claim } from "./legs";
 import { claimsForGroup } from "@pe/ducts-domain/claims";
@@ -84,8 +85,12 @@ export function DuctsRoute({ url = true }: { url?: boolean } = {}) {
     () => demo?.claims ?? SCENE_CLAIMS,
   );
   const loadedReading = useRef<LoadedDuctsReading | null>(null);
+  const shownPose = useRef<OrbitViewport | null>(null);
   const manifest = useMemo(() => {
-    const bound = bindDuctsManifest(() => loadedReading.current);
+    const bound = bindDuctsManifest(
+      () => loadedReading.current,
+      () => shownPose.current,
+    );
     if (demoName !== "navigation") return bound;
     return {
       ...bound,
@@ -151,7 +156,7 @@ export function DuctsRoute({ url = true }: { url?: boolean } = {}) {
   const catalogTables = demoName === "navigation" ? EMPTY_CATALOGS : catalogs.tables;
   // The system's groups (Work's subject cells and claims key on group ids, never shown).
   const systemGroups = useMemo(
-    () => (snapshot && page.system ? systemScope(snapshot, page.system).groups : []),
+    () => (snapshot ? (scopeOf(snapshot, page.system)?.groups ?? []) : []),
     [snapshot, page.system],
   );
   // The subject scene is the person's staged subject, else Pea's proposal, of the system's first
@@ -186,9 +191,9 @@ export function DuctsRoute({ url = true }: { url?: boolean } = {}) {
     [demo, demoClaims, handle.work.doc],
   );
   const claims = useMemo(() => {
-    if (!page.system || !snapshot) return claimsOf(claimCells);
-    const members = [...systemScope(snapshot, page.system).members];
-    return claimsOf(claimsForGroup(claimCells, members));
+    const scope = snapshot && scopeOf(snapshot, page.system);
+    if (!scope) return claimsOf(claimCells);
+    return claimsOf(claimsForGroup(claimCells, [...scope.members]));
   }, [claimCells, page.system, snapshot]);
   const subject = useMemo(
     () =>
@@ -299,7 +304,7 @@ export function DuctsRoute({ url = true }: { url?: boolean } = {}) {
   const ready = pricingState.observation?.result.ready ?? {};
   const groups = snapshot?.groups ?? [];
   const levels = snapshot?.levels ?? [];
-  const onPose = useDuctsViewBridge({
+  const reportPose = useDuctsViewBridge({
     thread,
     url,
     page,
@@ -309,7 +314,8 @@ export function DuctsRoute({ url = true }: { url?: boolean } = {}) {
     membersReady,
   });
   const systems = useMemo(() => (snapshot ? systemsOf(snapshot) : []), [snapshot]);
-  const system = systems.find((item) => item.name === page.system) ?? null;
+  // The header's fan static is one system's: the active one.
+  const system = systems.find((item) => item.name === activeSystem(page)) ?? null;
   const level = levels.find((item) => String(item.id) === page.level) ?? null;
   const readWord =
     !doc && !SAVED && !demo
@@ -393,11 +399,14 @@ export function DuctsRoute({ url = true }: { url?: boolean } = {}) {
         levels={[
           {
             key: "system",
-            label: system
-              ? system.classification
-                ? `${system.name} (${system.classification})`
-                : system.name
-              : null,
+            label:
+              page.system.length > 1
+                ? page.system.join(" + ")
+                : system
+                  ? system.classification
+                    ? `${system.name} (${system.classification})`
+                    : system.name
+                  : null,
             placeholder: "every system",
             // A system by its name, classification and the tags of the units rooting it; never a group id.
             options: snapshot
@@ -415,9 +424,8 @@ export function DuctsRoute({ url = true }: { url?: boolean } = {}) {
                 }))
               : null,
             note: readWord,
-            picked: (id) => id === page.system,
-            pick: (id) =>
-              setPage({ system: id === page.system ? "" : id, selected: "", issue: "" }),
+            picked: (id) => page.system.includes(id),
+            pick: (id) => setPage({ system: toggleSystem(page.system, id) }),
           },
         ]}
         disabled={busy}
@@ -521,7 +529,10 @@ export function DuctsRoute({ url = true }: { url?: boolean } = {}) {
     claimCells: demoClaims,
     page,
     setPage,
-    onPose,
+    onPose: (pose) => {
+      shownPose.current = pose;
+      reportPose(pose);
+    },
     onSelect,
     onSelectClaim,
     work,

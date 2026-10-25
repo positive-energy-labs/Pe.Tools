@@ -13,6 +13,7 @@ import {
   useRouterState,
 } from "@tanstack/react-router";
 import { RegistryContext } from "@effect/atom-react";
+import { lazy, Suspense } from "react";
 
 import { inspectAtomRegistry } from "../state/atom-inspect";
 import { appAtomRegistry, routeSearch } from "../route/route-owner";
@@ -39,6 +40,8 @@ import appCss from "../styles.css?url";
 
 if (import.meta.env.DEV)
   Object.assign(globalThis, { __PE_INSPECT__: inspectAtomRegistry(appAtomRegistry) });
+
+const KnobsFloater = import.meta.env.DEV ? lazy(() => import("#/knobs/floater")) : null;
 
 interface MyRouterContext {}
 
@@ -170,6 +173,11 @@ function RootDocument({ children }: { children: React.ReactNode }) {
             )}
           </PaneFaultProvider>
         </RegistryContext.Provider>
+        {KnobsFloater && (
+          <Suspense fallback={null}>
+            <KnobsFloater />
+          </Suspense>
+        )}
         <Scripts />
       </body>
     </html>
