@@ -70,6 +70,8 @@ export function FactChip({ children, tone, dashed, title, revit }: FactChipProps
 }
 
 interface NarrowChipProps {
+  /** This narrowing is the active member of an ordered scope. */
+  selected?: boolean;
   /** The narrowing itself, e.g. "needs a person" or "type: FDCL-611". */
   label: string;
   /** How many rows this narrowing still admits. Narrowings never hide; they scope. Omitted where
@@ -89,6 +91,7 @@ interface NarrowChipProps {
 
 /** A removable narrowing control. Same shell as a fact, one affordance more. */
 export function NarrowChip({
+  selected,
   label,
   count,
   onRemove,
@@ -103,6 +106,7 @@ export function NarrowChip({
     <TooltipHint content={title}>
       <span
         className={slot.base()}
+        data-selected={selected || undefined}
         data-tone={caution ? "caution" : undefined}
         data-surface="artifact"
       >

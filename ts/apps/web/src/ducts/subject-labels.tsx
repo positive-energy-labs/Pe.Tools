@@ -13,6 +13,7 @@ export type ScreenLabel = {
   text: string;
   ids?: readonly number[];
   priced?: boolean;
+  stub?: boolean;
 };
 export const pathOf = (line: readonly (readonly number[])[], project: Project) => {
   let d = "";
@@ -167,13 +168,18 @@ export function SubjectLabels({
     <g data-subject="">
       {marks}
       {layoutCaptions(labels, bounds, obstacles, hovered).map((label) => (
-        <g key={label.key} data-loss-label={label.text}>
+        <g
+          key={label.key}
+          data-loss-label={label.stub ? undefined : label.text}
+          data-stub-label={label.stub ? label.text : undefined}
+        >
           <text
             x={label.x}
             y={label.y}
             fontSize={10}
             className="face-mono"
-            fill={token(label.priced ? "ink" : "ink-2")}
+            fontWeight={label.stub ? "bold" : undefined}
+            fill={token(label.priced || label.stub ? "ink" : "ink-2")}
             stroke={token("page")}
             strokeWidth={3}
             paintOrder="stroke"

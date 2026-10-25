@@ -134,9 +134,11 @@ function knownSelection(page: DuctsPage, reading: LoadedDuctsReading): boolean {
     String(id) === page.selected &&
     (members.has(id) ||
       (drawn !== null && !!scopeOf(drawn, page.system)?.members.has(id)) ||
-      neighboursOf(snapshot, scopeOf(snapshot, page.system)?.groups ?? [], DUCTS_MULTI).some((n) =>
-        n.stub.includes(id),
-      ))
+      neighboursOf(
+        snapshot,
+        scopeOf(snapshot, page.system)?.groups ?? [],
+        DUCTS_MULTI.read().selection,
+      ).some((n) => n.stub.includes(id)))
   );
 }
 
@@ -265,8 +267,8 @@ const pendingOf = (ctx: DuctsCtx) =>
  * The `revit.detail.space-scene` request for the picture: every element of every group the chosen
  * system is in, plus every element of the groups the picture draws (`drawn`: the priced survey can
  * merge a system with groups it shares, and the tree and centrelines draw those too; RA 52's raw
- * scope was 6 elements under a 193-part tree), with what is around it when the `context` layer is
- * on; an empty selection includes the document. Every open system's members go in, and the `stubs` of the networks one
+ * scope was 6 elements under a 193-part tree), with what is around it when either `halo` or `context`
+ * is on; an empty selection includes the document. Every open system's members go in, and the `stubs` of the networks one
  * unit away. One capture per subject, never per render (the call keys on this request).
  */
 export const sceneRequestOf = (
@@ -290,7 +292,7 @@ export const sceneRequestOf = (
   if (!ids.length) return null;
   return sceneRequest(
     ids.sort((a, b) => a - b),
-    !page.layers.includes("context"),
+    !page.layers.includes("halo") && !page.layers.includes("context"),
   );
 };
 

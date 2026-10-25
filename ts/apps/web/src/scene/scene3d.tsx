@@ -57,6 +57,8 @@ export type Scene3DProps = {
   isolated?: ReadonlySet<string> | null;
   /** Subject, stub or context per instance, and its colour key; absent: focus is the subject. */
   paintOf?: PaintOf;
+  /** Halo uses near falloff; all shows every captured context instance. */
+  contextMode?: "halo" | "all";
   layers?: readonly Layer3D[];
   hoveredIssue?: string | null;
   focusedIssue?: string | null;

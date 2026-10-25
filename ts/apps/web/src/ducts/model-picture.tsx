@@ -88,6 +88,7 @@ export function ModelPicture({
   selected,
   lit,
   paintOf,
+  contextMode,
   hovered,
   labels,
   rulings,
@@ -113,6 +114,7 @@ export function ModelPicture({
   selected: ReadonlySet<number>;
   lit: ReadonlySet<number>;
   paintOf?: PaintOf;
+  contextMode?: "halo" | "all";
   hovered: number | null;
   labels: readonly Label[];
   rulings: readonly Ruling[];
@@ -232,6 +234,7 @@ export function ModelPicture({
           selected={selectedKeys}
           lit={litKeys}
           paintOf={paintOf}
+          contextMode={contextMode}
           isolated={layers.has("meshes") ? null : NONE}
           layers={findings3d}
           hoveredIssue={hoveredIssue}

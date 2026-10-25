@@ -12,8 +12,16 @@ import { routeAddress, routeAt, routeOf } from "./route-address.ts";
 describe("a layers field", () => {
   test("opens on its declared set, and the address stays bare there", () => {
     const ducts = routeAddress("ducts");
-    expect(ducts.defaults.layers).toEqual(["meshes", "no-run", "labels", "findings"]);
-    expect(ducts.write({ layers: ["meshes", "no-run", "labels", "findings"] })).toEqual({
+    expect(ducts.defaults.layers).toEqual([
+      "meshes",
+      "system-colours",
+      "stub-labels",
+      "halo",
+      "no-run",
+      "labels",
+      "findings",
+    ]);
+    expect(ducts.write({ layers: ducts.defaults.layers })).toEqual({
       layers: undefined,
     });
     expect(routeAddress("space").link({ layers: ["meshes", "context", "cuts"] })).toBe("/space");
@@ -31,10 +39,21 @@ describe("a layers field", () => {
   test("an unknown layer name falls to the default", () => {
     expect(routeAddress("ducts").read({ layers: "none" }).page.layers).toEqual([
       "meshes",
+      "system-colours",
+      "stub-labels",
+      "halo",
       "no-run",
       "labels",
       "findings",
     ]);
+  });
+  test("ducts carries each independent context, colour and stub-label toggle in its address", () => {
+    const ducts = routeAddress("ducts");
+    for (const layer of ["system-colours", "stub-labels", "halo", "context"] as const) {
+      const url = ducts.link({ layers: [layer] });
+      expect(url).toBe(`/ducts?layers=${layer}`);
+      expect(ducts.read({ layers: layer }).page.layers).toEqual([layer]);
+    }
   });
 });
 

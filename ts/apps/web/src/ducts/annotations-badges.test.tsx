@@ -22,6 +22,47 @@ vi.mock("@pe/kit/lib/token", () => ({
 }));
 afterEach(cleanup);
 
+it("stub names are bold DOM captions and toggle independently of effective-length labels", () => {
+  const registry = makeAtomRegistry();
+  const props: Parameters<typeof Annotations>[0] = {
+    project: (p) => [p[0]!, p[1]!],
+    size: { width: 400, height: 300 },
+    scene: { segments: [], nodes: [], subject: null } as unknown as Parameters<
+      typeof Annotations
+    >[0]["scene"],
+    layers: new Set(["stub-labels"]),
+    encoding: {} as Parameters<typeof Annotations>[0]["encoding"],
+    selected: new Set(),
+    hovered: null,
+    rulings: [],
+    issue: "",
+    labels: [
+      { key: "stub:1", at: [80, 60, 0], text: "SA 2", ids: [2], priced: false, stub: true },
+      { key: "loss:1", at: [80, 100, 0], text: "Σ 31 eq ft", ids: [1], priced: true },
+    ],
+    pointOf: () => null,
+    onPick() {},
+    onFrame() {},
+    onRuling() {},
+  };
+  const { container, rerender } = render(
+    <TestAttention registry={registry}>
+      <Annotations {...props} />
+    </TestAttention>,
+  );
+  expect(container.querySelector("[data-stub-label] text")?.getAttribute("font-weight")).toBe(
+    "bold",
+  );
+  expect(container.querySelector("[data-loss-label]")).toBeNull();
+  rerender(
+    <TestAttention registry={registry}>
+      <Annotations {...props} layers={new Set(["labels"])} />
+    </TestAttention>,
+  );
+  expect(container.querySelector("[data-stub-label]")).toBeNull();
+  expect(container.querySelector("[data-loss-label]")?.textContent).toContain("Σ 31 eq ft");
+});
+
 it("a footnote badge sits on a drawn subject (mesh, else ghosted centreline, else none); hover lights its token, press goes", () => {
   const segment = {
     id: 2,

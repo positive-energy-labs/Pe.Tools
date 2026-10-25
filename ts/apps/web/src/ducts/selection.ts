@@ -7,23 +7,27 @@
 import type { Neighbour, Hop } from "@pe/ducts-domain/neighbours";
 import type { DuctSnapshot } from "@pe/ducts-domain/types";
 import type { Paint, PaintOf, Tier } from "#/scene/types";
+import { choice, defineKnobs, num } from "#/knobs/knobs";
 
 /**
  * The multi-system defaults, each a judgment call kaitpw re-rules once he has felt it.
- * ponytail: they register as knobs (all four marked `refetch`: each changes the
- * scene request) once `ts/apps/web/src/knobs/` lands (builder S1); until then this is the one place.
+ * All four are refetch knobs because each changes the captured element set.
  * `neighbourCap` bounds networks per unit. Four preserves every observed hop (Chadds max 3);
  * the default classification filter already reduces that max to 2.
  */
-export const DUCTS_MULTI: { systemCap: number; stubFt: number; hop: Hop; neighbourCap: number } = {
-  /** Most systems open at once; opening one past it closes the oldest. */
-  systemCap: 4,
-  /** A neighbour's stub: whole elements whose far end is this close to the shared unit, developed ft. */
-  stubFt: 10,
-  /** Which of a shared unit's ports a hop leaves by (`neighbours.ts`). */
-  hop: "same-classification",
-  neighbourCap: 4,
-};
+export const DUCTS_MULTI = defineKnobs("ducts", "ts/apps/web/src/ducts/selection.ts", {
+  selection: {
+    systemCap: num("Open system cap", 4, [1, 12, 1], "refetch"),
+    stubFt: num("Stub reach (ft)", 10, [0, 50, 1], "refetch"),
+    hop: choice<Hop>(
+      "Equipment hop",
+      "same-classification",
+      ["same-classification", "all"],
+      "refetch",
+    ),
+    neighbourCap: num("Neighbours per unit", 4, [0, 12, 1], "refetch"),
+  },
+});
 
 /** The active system: the most recently opened, the one write, heal and fan act on; "" with none. */
 export const activeSystem = (page: { readonly system: readonly string[] }) =>
@@ -33,7 +37,8 @@ export const activeSystem = (page: { readonly system: readonly string[] }) =>
  * The open list as the page keeps it: each name once, at most `systemCap`.
  * ponytail: a pick past the cap closes the OLDEST open system; the newest stays active.
  */
-export const capped = (open: readonly string[]) => [...new Set(open)].slice(-DUCTS_MULTI.systemCap);
+export const capped = (open: readonly string[]) =>
+  [...new Set(open)].slice(-DUCTS_MULTI.read().selection.systemCap);
 
 /** The open list with `name` opened (it becomes active) or, when it is open, closed. */
 export const toggleSystem = (open: readonly string[], name: string) =>
@@ -57,6 +62,7 @@ export function paintOfDucts(
   snapshot: DuctSnapshot,
   opened: ReadonlySet<number>,
   stubs: ReadonlySet<number>,
+  systemColours = true,
 ): PaintOf {
   const systemOf = new Map<number, string>();
   for (const e of [...snapshot.nodes, ...snapshot.segments])
@@ -66,7 +72,7 @@ export function paintOfDucts(
     const tier: Tier | null =
       id != null && opened.has(id) ? "subject" : id != null && stubs.has(id) ? "stub" : null;
     if (!tier) return undefined;
-    const key = id == null ? undefined : systemOf.get(id);
+    const key = !systemColours || id == null ? undefined : systemOf.get(id);
     const paint: Paint = key ? { tier, key } : { tier };
     return paint;
   };
