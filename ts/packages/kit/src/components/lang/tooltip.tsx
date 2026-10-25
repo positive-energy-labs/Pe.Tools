@@ -222,27 +222,32 @@ export function SvgTip({ content }: { content: ReactNode }) {
     let timer: ReturnType<typeof setTimeout>;
     const enter = () => {
       grace.cancel();
-      mark.setAttribute("data-reach", mark.matches(":focus") ? "focus" : "hover");
+      if (!mark.hasAttribute("data-subject"))
+        mark.setAttribute("data-reach", mark.matches(":focus") ? "focus" : "hover");
       timer = setTimeout(() => setOpen(true), 350);
     };
     const leave = () => {
       clearTimeout(timer);
       grace.leave(false);
-      mark.setAttribute(
-        "data-reach",
-        mark.matches(":focus") ? "focus" : mark.matches(":hover") ? "hover" : "rest",
-      );
+      if (!mark.hasAttribute("data-subject"))
+        mark.setAttribute(
+          "data-reach",
+          mark.matches(":focus") ? "focus" : mark.matches(":hover") ? "hover" : "rest",
+        );
     };
     const focus = () => {
       grace.cancel();
-      mark.setAttribute("data-reach", "focus");
+      if (!mark.hasAttribute("data-subject")) mark.setAttribute("data-reach", "focus");
       setOpen(true);
     };
-    const previous = ["data-svg-tip", "data-reach", "tabindex", "aria-description"].map(
-      (name) => [name, mark.getAttribute(name)] as const,
-    );
+    const previous = [
+      "data-svg-tip",
+      ...(mark.hasAttribute("data-subject") ? [] : ["data-reach"]),
+      "tabindex",
+      "aria-description",
+    ].map((name) => [name, mark.getAttribute(name)] as const);
     mark.setAttribute("data-svg-tip", "");
-    mark.setAttribute("data-reach", "rest");
+    if (!mark.hasAttribute("data-subject")) mark.setAttribute("data-reach", "rest");
     if (!mark.hasAttribute("tabindex")) mark.setAttribute("tabindex", "0");
     if (typeof content === "string") mark.setAttribute("aria-description", content);
     const events = {

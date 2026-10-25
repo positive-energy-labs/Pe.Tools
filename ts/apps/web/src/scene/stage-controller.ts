@@ -25,7 +25,6 @@ import type { Bounds } from "./types";
 import { useViewHistory } from "./view-history";
 import type { Bounds2 } from "#/lib/affine-frame";
 import type { usePlaneViewport } from "./use-plane-viewport";
-import { useStageReach } from "./reach";
 
 type HistoryMove = { history: "push" | "replace" };
 /** World bounds in client pixels, shared by placement, framing and landing marks. */
@@ -210,7 +209,6 @@ export const PictureStage = memo(function PictureStage({
   children: ReactNode | ((stage: NonNullable<ReturnType<typeof useStage>>) => ReactNode);
 }) {
   const bindings = useStageBindings(picture);
-  useStageReach(picture.kind === "plane" ? picture.host : null);
   const latest = useRef(picture);
   latest.current = picture;
   const box = useCallback(() => {

@@ -247,6 +247,41 @@ export function useRouteTarget(
       ? (found.values.find((doc) => doc.openId === ref.openId)?.address ?? null)
       : null;
   }, [resolution, inventoryResult]);
+  // Work identity alone: the live Address, else a known raw Address (a `?target` Address, or a
+  // named request pinned or held by the head) so a closed document's Work stays readable. Never a
+  // remembered title, and never an open/session ref reread as a new lifetime. Nothing native,
+  // no action and no binding reads this; they stay on `resolution`.
+  const workAddress = useMemo((): Address | null => {
+    if (resolvedAddress || seed) return resolvedAddress;
+    const chosen = parseTarget(target);
+    const request =
+      chosen?.kind === "request" ? chosen.request : chosen ? null : (headTargets[0] ?? null);
+    const raw =
+      chosen?.kind === "address"
+        ? chosen.address
+        : request?.kind === "named" && (chosen || headTargets.length === 1)
+          ? request.address
+          : null;
+    return addressSchema.safeParse(raw).data ?? null;
+  }, [resolvedAddress, seed, target, headTargets]);
+  // The same rule for an exact open request (a `?target` pin, or the head's only target): it names
+  // its own lifetime's saved Work, read-only, while native resolution says choose. The ref is
+  // used as given, never re-resolved, so it never stands for a new lifetime.
+  const workOpen = useMemo(() => {
+    // Only once native resolution has answered "choose" (closed, gone): never while it is still
+    // checking, when the same ref may yet resolve live and must stay armed.
+    if (seed || resolution.kind !== "choose") return null;
+    const chosen = parseTarget(target);
+    const request =
+      chosen?.kind === "request"
+        ? chosen.request
+        : chosen
+          ? null
+          : headTargets.length === 1
+            ? headTargets[0]!
+            : null;
+    return request?.kind === "open" ? request.ref : null;
+  }, [seed, resolution, target, headTargets]);
   const head = headRequest && headResult ? { thread: headRequest.thread, ...scope } : null;
   const targetProvenance: TargetProvenance = seed
     ? { source: "seed" }
@@ -262,6 +297,8 @@ export function useRouteTarget(
     bindingLost,
     bindingLostRef,
     resolvedAddress,
+    workAddress,
+    workOpen,
     targetProvenance,
   };
 }

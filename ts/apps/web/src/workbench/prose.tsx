@@ -6,15 +6,18 @@
  * becomes `Code`: frame, language, line count, copy, 64 KB gate (ledger, 2026-09-15). That is
  * why `prose-pre:*` is gone from the class list while inline `code` keeps its hairline box.
  * `react-markdown` hands the `pre` override the real `code` element, `language-*` class and all.
- * No rehype plugin: the head band is a React component with state (copy flips to "copied",
- * "show all" unlatches the gate).
+ * The fence takes no rehype plugin: its head band is a React component with state (copy flips to
+ * "copied", "show all" unlatches the gate). The one plugin splits a turn's linked element ids out
+ * of text (never code or links) so each renders as a Subject token.
  */
 import ReactMarkdown, { type Components, type ExtraProps } from "react-markdown";
 import remarkGfm from "remark-gfm";
-import { createContext, isValidElement, memo, useContext, type ReactNode } from "react";
+import { createContext, isValidElement, memo, useContext, useMemo, type ReactNode } from "react";
 
 import { Code } from "@pe/kit/lang/code";
+import { proseIds } from "@pe/kit/lang/subject-text";
 import { cn } from "@pe/kit/lib/utils";
+import { subjectParts, TurnSubjectText, type TurnSubjects } from "./turn-names";
 
 const PROSE_CLASS = [
   "prose min-w-0 max-w-none text-ink [overflow-wrap:anywhere]",
@@ -86,19 +89,82 @@ const MARKDOWN_COMPONENTS: Components = {
 // and bare autolinks.
 const REMARK_PLUGINS = [remarkGfm];
 
+type Hast = {
+  type: string;
+  tagName?: string;
+  value?: string;
+  children?: Hast[];
+  properties?: object;
+};
+/** Map every text node outside code and links: the only prose a linked id may live in. */
+const mapProse = (tree: Hast, map: (child: Hast) => Hast[]) => {
+  const walk = (node: Hast) => {
+    if (!node.children || ["code", "pre", "a"].includes(node.tagName ?? "")) return;
+    node.children = node.children.flatMap((child): Hast[] =>
+      child.type === "text" ? map(child) : (walk(child), [child]),
+    );
+  };
+  walk(tree);
+};
+/** Each linked id becomes a `pe-subject` element. */
+const rehypeSubjects = (subjects: TurnSubjects) => () => (tree: Hast) =>
+  mapProse(tree, (child) => {
+    const parts = subjectParts(child.value ?? "", subjects);
+    if (parts.every((part) => typeof part === "string")) return [child];
+    return parts.map((part) =>
+      typeof part === "string"
+        ? { type: "text", value: part }
+        : {
+            type: "element",
+            tagName: "pe-subject",
+            properties: { dataId: String(part.id), dataConnector: part.connector },
+            children: [],
+          },
+    );
+  });
+/** The ids in the prose `Markdown` would link: same parse, same spans, so a read never spends
+ * the batch on an id inside code or a link. `ReactMarkdown` is hook-free; this is a plain call. */
+export function linkableIds(text: string) {
+  const ids: number[] = [];
+  const collect = () => (tree: Hast) =>
+    mapProse(tree, (child) => (ids.push(...proseIds(child.value ?? "")), [child]));
+  ReactMarkdown({ children: text, remarkPlugins: REMARK_PLUGINS, rehypePlugins: [collect] });
+  return ids;
+}
+const SubjectsOf = createContext<TurnSubjects | undefined>(undefined);
+function PeSubject(props: { "data-id"?: string; "data-connector"?: string }) {
+  const subject = useContext(SubjectsOf)?.get(Number(props["data-id"]));
+  const connector = props["data-connector"];
+  return subject ? (
+    <TurnSubjectText subject={subject} connector={connector ? Number(connector) : undefined} />
+  ) : null;
+}
+const SUBJECT_COMPONENTS = { ...MARKDOWN_COMPONENTS, "pe-subject": PeSubject } as Components;
+
 export const Markdown = memo(function Markdown({
   text,
   className,
+  subjects,
 }: {
   text: string;
   className?: string;
+  /** A settled chat turn's linked element ids; absent or empty, prose stays plain. */
+  subjects?: TurnSubjects;
 }) {
+  const linked = subjects?.size ? subjects : undefined;
+  const rehype = useMemo(() => (linked ? [rehypeSubjects(linked)] : []), [linked]);
   return (
     <div className={cn(PROSE_CLASS, className)}>
       <MarkdownSource.Provider value={text}>
-        <ReactMarkdown remarkPlugins={REMARK_PLUGINS} components={MARKDOWN_COMPONENTS}>
-          {text}
-        </ReactMarkdown>
+        <SubjectsOf value={linked}>
+          <ReactMarkdown
+            remarkPlugins={REMARK_PLUGINS}
+            rehypePlugins={rehype}
+            components={linked ? SUBJECT_COMPONENTS : MARKDOWN_COMPONENTS}
+          >
+            {text}
+          </ReactMarkdown>
+        </SubjectsOf>
       </MarkdownSource.Provider>
     </div>
   );

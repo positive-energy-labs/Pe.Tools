@@ -56,6 +56,7 @@ test("instance discovery validates actual persisted Work and never reads, create
       revision: 5,
       state: "ready",
       proposals: 0,
+      unfinished: 0,
     },
   ]);
   expect(JSON.stringify(result)).not.toContain("kept-private");

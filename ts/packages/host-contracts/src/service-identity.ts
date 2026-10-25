@@ -32,6 +32,11 @@ export type HostLane = "dev" | "installed";
 export function productRoot(): string {
   if (process.env[productPathNames.productHomeVariable]?.trim())
     return join(productHomePath(), productPathNames.localStateDirectoryName);
+  return osUserProductRoot();
+}
+
+/** OS-user product state namespace, independent of product-home overrides; test isolation still applies. */
+export function osUserProductRoot(): string {
   return insideTestRoot(
     join(
       process.env.LOCALAPPDATA ?? join(homedir(), "AppData", "Local"),

@@ -1,3 +1,5 @@
+import { useContext } from "react";
+import { AttentionDocument, elementKey, useMembers, type SubjectKey } from "@pe/kit/lang/attention";
 import { useList } from "@pe/kit/lang/collection";
 import { PlainList } from "@pe/kit/lang/list-view";
 import { nameOrFallback } from "@pe/kit/lang/subject-text";
@@ -26,6 +28,10 @@ type RuleNode =
   | { kind: "override"; key: string; id: number };
 
 /** Each fitting id's rule key, over every priced path (applied first, then staged). */
+const ruleKey = (rule: string): SubjectKey => `rule:${rule}`;
+const familyKey = (n: { family: string | null; ids: ReadonlySet<number> }): SubjectKey =>
+  `family:${n.family ?? `#${[...n.ids][0]}`}`;
+
 export function ruleOfIds(priced: Priced | null): Map<number, string> {
   const out = new Map<number, string>();
   const walk = (r: LossResult) => {
@@ -50,7 +56,6 @@ export const RulesTree = memo(function RulesTree({
   focus,
   onFocus,
   nameOf,
-  light,
 }: {
   snapshot: DuctSnapshot;
   priced: Priced;
@@ -62,8 +67,8 @@ export const RulesTree = memo(function RulesTree({
   focus: string | null;
   onFocus: (key: string | null) => void;
   nameOf: (id: number) => string;
-  light: (ids: readonly number[] | null) => void;
 }) {
+  const doc = useContext(AttentionDocument) ?? "";
   const groupOf = useMemo(() => {
     const m = new Map<number, string>();
     for (const n of snapshot.nodes) if (n.groupId) m.set(n.id, n.groupId);
@@ -122,6 +127,17 @@ export const RulesTree = memo(function RulesTree({
       if (!byFamily.has(family)) byFamily.set(family, { family, ids: new Set() });
     return [...byFamily.values()].sort((a, b) => b.ids.size - a.ids.size);
   }, [priced, groupOf, groups, wide]);
+  const members = useMemo(
+    () =>
+      new Map<SubjectKey, SubjectKey[]>([
+        ...roots.flatMap((n) =>
+          n.kind === "rule" ? [[ruleKey(n.key), n.ids.map(elementKey)] as const] : [],
+        ),
+        ...unruled.map((n) => [familyKey(n), [...n.ids].map(elementKey)] as const),
+      ]),
+    [roots, unruled],
+  );
+  useMembers(doc, members);
   const list = useList({
     items: roots,
     keyOf: (n) => n.key,
@@ -139,11 +155,7 @@ export const RulesTree = memo(function RulesTree({
     search: (n) => ({ text: [n.family], ids: [...n.ids] }),
   });
   return (
-    <div
-      className="@container flex min-w-0 flex-col"
-      data-e-rules={wide ? "all" : "this"}
-      onMouseLeave={() => light(null)}
-    >
+    <div className="@container flex min-w-0 flex-col" data-e-rules={wide ? "all" : "this"}>
       <PlainList
         list={list}
         aria-label="loss rules"
@@ -163,7 +175,7 @@ export const RulesTree = memo(function RulesTree({
                   />
                 </span>
               ),
-              onMouseEnter: () => light([n.id]),
+              subject: { doc, key: elementKey(n.id) },
             };
           const rule = ruleByKey(n.key);
           const name = rule ? `${rule.family} : ${rule.type}` : n.key;
@@ -183,7 +195,7 @@ export const RulesTree = memo(function RulesTree({
             ),
             meta: `×${n.ids.length}${missing ? ` · ${missing} unpriced` : ""}`,
             lines: 2,
-            onMouseEnter: () => light(n.ids),
+            subject: { doc, key: ruleKey(n.key) },
           };
         }}
       />
@@ -194,7 +206,8 @@ export const RulesTree = memo(function RulesTree({
             list={unassigned}
             aria-label="unassigned families"
             empty={{ message: "No unassigned families", exit: "Read another system" }}
-            row={({ family, ids }) => {
+            row={(n) => {
+              const { family, ids } = n;
               const first = [...ids][0];
               const picked = family
                 ? work.doc?.ruleAssignments?.[family]?.staged?.value?.rule
@@ -203,7 +216,7 @@ export const RulesTree = memo(function RulesTree({
                 label: family ?? nameOf(first!),
                 meta: ids.size ? `×${ids.size}` : undefined,
                 lines: 2,
-                onMouseEnter: () => light([...ids]),
+                subject: { doc, key: familyKey(n) },
                 sub: (
                   <div
                     data-e-unruled-family={family ?? undefined}

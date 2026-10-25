@@ -50,6 +50,8 @@ export * from "./seed.ts";
 export * from "./diagram.ts";
 
 export * from "./harness-thread.ts";
+export * from "./thread-work.ts";
+export * from "./turn-element-names.ts";
 export * from "./host-log.ts";
 
 export * from "./capture.ts";

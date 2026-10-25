@@ -18,16 +18,17 @@ type Rule = {
   allow: Allow[];
   max?: Record<string, number>;
   asOf?: string;
-  select?: "classes" | "hover-css" | "focus-css" | "reach" | "reading-rows";
+  select?: "classes" | "hover-css" | "focus-css" | "state-css" | "reach" | "reading-rows";
   exclude?: string[];
   cannotSee: string;
 };
 const allow = (entries: Record<string, string>): Allow[] =>
   Object.entries(entries).map(([glob, reason]) => ({ glob: W + glob, reason }));
 
-// Filenames use the wave-4 final homes: land.ts, revit-target.tsx and go-to.tsx.
 // prettier-ignore
 const RULES: Rule[] = [
+  { id: "tutorial-test-explicit-frames", doctrine: "N6", pattern: /\bsetTimeout\s*\(|await\s+reveal\(/g,
+    roots: [W + "design-system/specimens/teach.test.tsx"], allow: [], cannotSee: "Aliased clocks or frame delivery; the Help test advances fake animation frames after each explicit intersection batch." },
   { id: "pane-strip-css-fold", doctrine: "L3", pattern: /getComputedStyle|getBoundingClientRect|clientWidth|scrollWidth|useLayoutEffect/g,
     roots: [K + "components/lang/pane-strip.tsx", K + "components/lang/rail.tsx"], allow: [],
     cannotSee: "CSS breakpoints, popover ownership or label recovery; browser checks the full/compact/wide sequence." },
@@ -67,6 +68,10 @@ const RULES: Rule[] = [
     pattern: /const (?:follow|draw) = \(\) => \{(?:(?!\n  \};)[\s\S])*?\b(?:(?:client|offset|scroll)(?:Width|Height|Top|Left)|getBoundingClientRect|getComputedStyle|canvasColor)\b/g,
     roots: [K + "components/lang/scroll.tsx"], allow: [],
     cannotSee: "Reads through helpers the frame callbacks call; pane-resize.test counts layout reads per drag frame and the browser trace counts forced layouts." },
+  { id: "projection-sources-no-layout", doctrine: "N6",
+    pattern: /(?<!function )\buse(?:Dom)?Projection\((?:(?!\n\s*\);)[\s\S])*?\b(?:getBoundingClientRect|getComputedStyle|domSpans|(?:client|offset)(?:Top|Left|Height|Width))\b/g,
+    roots: [K + "**/*.tsx", W + "**/*.tsx"], allow: [],
+    cannotSee: "Reads behind a named helper a source calls; scroll.test counts getBoundingClientRect inside frames on a filter change." },
   { id: "scroll-frame-callbacks", doctrine: "N6", pattern: /requestAnimationFrame\((?!draw\)|follow\))/g,
     roots: [K + "components/lang/scroll.tsx"], allow: [],
     cannotSee: "Other deferred callbacks (timers, microtasks); scroll-frame-no-layout covers the two frame bodies." },
@@ -269,13 +274,8 @@ const RULES: Rule[] = [
     roots: [W + "**/*.tsx"], allow: [
       { glob: W + "{ducts/schematic,family/anatomy-model-views,space/cuts,rooms/plan,takeoff/level-plan}.tsx", reason: "SVG hit-testing projects geometry to domain identity; it does not paint hover locally." },
       ...allow({
-        "ducts/annotations.tsx": "Segment/issue proxies synchronize subject badges.",
-        "ducts/claims.tsx": "Claim geometry lights its underlying part.",
-        "ducts/proto/e/bar.tsx": "Aggregate bars light multiple domain elements.",
+        "scene/footnotes.tsx": "The reusable footnote layer writes citation focus and travel grace; delegated Subject markup owns hover.",
         "ducts/proto/e/inbox.tsx": "Issue dwell and subject-numbering ownership include expanded detail.",
-        "ducts/proto/e/tree-sidebar.tsx": "Ancestors light every descendant element.",
-        "ducts/proto/e/rules-pane.tsx": "Rules light their governed set.",
-        "ducts/proto/e/run-detail.tsx": "Run and fitting rows light underlying elements.",
         "family/anatomy.tsx": "Part geometry focus differs from native element identity.",
         "family/doc-pane.tsx": "Evidence engine owns document hover.",
         "grounded-doc/view/page-pane.tsx": "Page geometry synchronizes evidence blocks.",
@@ -283,7 +283,6 @@ const RULES: Rule[] = [
         "machine/notice.tsx": "Reading a notice pauses expiry.",
         "open/bay.tsx": "Pointer chooses the file preview.",
         "workbench/lens/peek.tsx": "Travel funnel and linger timing keep the popover reachable.",
-        "rooms/inbox.tsx": "Room GUID identity is not a numeric Revit id.",
       }),
     ], cannotSee: "Event aliases, hit-test correctness and computed paint." },
   { id: "focus-ring-owner", doctrine: "L3",
@@ -293,6 +292,15 @@ const RULES: Rule[] = [
       { glob: K + "components/lang/pane.css", reason: "The active-pane halo marks scope, not a focused control." },
       { glob: W + "chat/chat-shell.css", reason: "Hides the pane halo where the composer box already rings." },
     ], cannotSee: "Nested CSS, inline styles and outline set from script." },
+  // Keyboard focus beats every state mark: the ring is layered, so an unlayered static `outline` on a row,
+  // cell or damage mark would cover it. State marks paint edges with box-shadow; only a transient
+  // `animation` (landing) or a rule that yields to focus may use outline.
+  { id: "state-outline-yields-to-focus", doctrine: "L3",
+    pattern: /(?:^|;)\s*outline(?:-[\w-]+)?\s*:(?!\s*none)/g,
+    roots: [K + "**/*.css", W + "**/*.css"], select: "state-css", allow: [
+      { glob: K + "base.css", reason: "The one focus ring owner." },
+    ],
+    cannotSee: "Outline set from script or by utilities; the browser walk of a damaged cursor row pins the paint." },
   { id: "focus-ring-classes", doctrine: "L3",
     pattern: /(?:^|\s)(?:group-|peer-)?focus(?:-visible|-within)?:(?:outline(?!-none)|ring|shadow|border)\S*/g,
     roots: [K + "**/*.tsx", W + "**/*.tsx"], allow: [],
@@ -404,6 +412,8 @@ const sources = ["apps", "packages"]
       !/\/(?:prototypes|lab|design-system)\//.test(path) &&
       !path.startsWith(W + "routes/design-system"),
   );
+for (const path of RULES.flatMap((rule) => rule.roots))
+  if (!sources.includes(path) && existsSync(join(ROOT, path))) sources.push(path);
 const bytes = new Map(sources.map((path) => [path, readFileSync(join(ROOT, path), "latin1")]));
 const matches = (path: string, globs: string[]) => globs.some((glob) => matchesGlob(path, glob));
 const selectorMatches = (classes: string, selector: string) =>
@@ -495,12 +505,12 @@ it.each(RULES)("$id ($doctrine)", (rule) => {
       if (blocks.length) {
         expect(path).toBe(K + "components/lang/lang.css");
         expect(blocks).toHaveLength(1);
-        for (const rung of ["rest", "reach", "hover", "focus"])
+        for (const rung of ["rest", "reach", "hover", "cited"])
           expect(blocks[0]).toContain(`data-reach="${rung}"`);
       }
       source = source.replace(REACH_BLOCK, "");
     }
-    if (rule.select === "hover-css" || rule.select === "focus-css")
+    if (rule.select === "hover-css" || rule.select === "focus-css" || rule.select === "state-css")
       source = source.replace(/\/\*[\s\S]*?\*\//g, "");
     const values =
       rule.select === "reading-rows"
@@ -511,11 +521,24 @@ it.each(RULES)("$id ($doctrine)", (rule) => {
             ? [...source.matchAll(/([^{}]+)\{([^{}]*)\}/g)]
                 .filter((m) => /:(?:hover|focus(?:-visible|-within)?)/.test(m[1]!))
                 .map((m) => m[2]!)
-            : rule.select === "focus-css"
+            : rule.select === "state-css"
               ? [...source.matchAll(/([^{}]+)\{([^{}]*)\}/g)]
-                  .filter((m) => /:focus|data-reach="focus"/.test(m[1]!))
+                  .filter(
+                    (m) =>
+                      /\.dl-row|\.dl-cell|\[data-damage\]/.test(m[1]!) &&
+                      !m[1]!.includes(":not(:has(:focus-visible))") &&
+                      !/animation\s*:/.test(m[2]!),
+                  )
                   .map((m) => m[2]!)
-              : [source];
+              : rule.select === "focus-css"
+                ? [...source.matchAll(/([^{}]+)\{([^{}]*)\}/g)]
+                    .filter((m) =>
+                      /:focus|data-reach="focus"/.test(
+                        m[1]!.replaceAll(":not(:has(:focus-visible))", ""),
+                      ),
+                    )
+                    .map((m) => m[2]!)
+                : [source];
     const hits = values.flatMap((value) => [...value.matchAll(rule.pattern)].map(() => value));
     let allowed = 0;
     for (const hit of hits) {

@@ -10,8 +10,11 @@ const css = readFileSync(createRequire(import.meta.url).resolve("@pe/kit/lang/la
 test("damage stays static at rest, with the same alarm mark for either motion preference", () => {
   expect(document.documentElement.style.getPropertyValue("--pe-alarm")).toBe("#b3140a");
   expect(css).not.toMatch(/@keyframes\s+pe-damage-beat|animation:\s*pe-damage-beat/);
-  expect(css).toContain("box-shadow: inset 0 0 3px var(--pe-alarm)");
-  expect(css).toContain("outline: 1px solid var(--pe-alarm)");
+  // Damage marks with an edge and a glow, never `outline`: keyboard focus owns outline and must win.
+  const mark = css.match(/:root \[data-damage\] \{([^}]*)\}/)![1]!;
+  expect(mark).toContain("inset 0 0 0 1px var(--pe-alarm)");
+  expect(mark).toContain("inset 0 0 3px var(--pe-alarm)");
+  expect(mark.replace(/\/\*[\s\S]*?\*\//g, "")).not.toContain("outline");
   expect(css).toContain("stroke: var(--pe-alarm)");
 });
 test("damage is a yielding trailing fact, with a readable title floor", () => {

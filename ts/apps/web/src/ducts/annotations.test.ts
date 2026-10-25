@@ -1,6 +1,6 @@
 import { layoutCaptions } from "./subject-labels";
 import { expect, it } from "vite-plus/test";
-import { placeChips } from "./annotations";
+import { placeChips } from "../scene/footnotes";
 
 it("footnote chips sit above their anchors, clear each other and the anchors, and stay in the picture", () => {
   const size = { width: 400, height: 300 };

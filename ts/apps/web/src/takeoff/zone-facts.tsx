@@ -1,4 +1,6 @@
 import { FactChip } from "@pe/kit/lang/chip";
+import { useMention } from "@pe/kit/lang/attention";
+import { regionKey } from "./attention";
 import { fmtNum } from "@pe/kit/table/model";
 import { TooltipHint } from "@pe/kit/lang/tooltip";
 import { SENSIBLE_CAP_BTUH } from "#/takeoff/world";
@@ -23,6 +25,7 @@ export function ZoneFacts({
   stateOf: (room: ModelRoom) => RoomState;
   systems: ModelSystem[];
 }) {
+  const mention = useMention();
   const entity = store.entity(zone.zone.guid);
   const states = zone.rooms.map(stateOf);
   const run = zone.runs[zone.runs.length - 1] ?? null;
@@ -36,6 +39,7 @@ export function ZoneFacts({
     <div
       className="flex flex-col gap-0.5"
       data-zone-facts={zone.zone.guid}
+      {...mention(regionKey(zone.zone.guid))}
       data-dirty={entity.dirty || undefined}
       data-conflict={entity.conflict || undefined}
     >

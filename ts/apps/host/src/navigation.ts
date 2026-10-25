@@ -4,15 +4,23 @@ import {
   APP_ROUTES,
   addressSchema,
   documentRefSchema,
+  documentRequestSchema,
   harnessThreadSummarySchema,
   routeAt,
   sameAddress,
   targetsLabel,
+  workKey,
+  READING_MAX_FRAME_BYTES,
+  type ThreadWorkSnapshot,
+  type WorkResume,
   type NavigationSnapshot,
   type NavigationWork,
   type WorkKey,
+  type ThreadTab,
+  type Address,
 } from "@pe/agent-contracts";
 import type { RouteWorkspace } from "@pe/runtime";
+import { sameDocumentRef, type ThreadWorkContext } from "./thread-work-context.ts";
 
 const documentSchema = documentRefSchema.extend({ address: addressSchema.nullable() });
 type NavigationDocument = z.infer<typeof documentSchema>;
@@ -20,6 +28,272 @@ export interface NavigationSources {
   threads(): Promise<unknown>;
   documents(): Promise<unknown>;
   routes?(): Promise<Record<string, string>>;
+  contexts?(): readonly { threadId: string; context: ThreadWorkContext | null }[];
+  subscribe?(notify: () => void): () => void;
+}
+
+/** Joins existing Work to remembered connections. No body read, carry-over, or native authority. */
+export async function readThreadWork(
+  workspace: RouteWorkspace,
+  sources?: NavigationSources,
+): Promise<ThreadWorkSnapshot> {
+  const observations: string[] = [];
+  const [workResult, contextResult, documentResult] = await Promise.allSettled([
+    workspace.instances(),
+    Promise.resolve().then(() => sources?.contexts?.() ?? null),
+    sources ? sources.documents().then((value) => z.array(documentSchema).parse(value)) : null,
+  ]);
+  const census = workResult.status === "fulfilled" ? workResult.value : null;
+  const contexts = contextResult.status === "fulfilled" ? contextResult.value : null;
+  const documents = documentResult.status === "fulfilled" ? documentResult.value : null;
+  if (!contexts) observations.push("Remembered thread connections are unavailable.");
+  if (!census?.available) observations.push("Persisted Work discovery is unavailable.");
+  if (census?.unindexed)
+    observations.push(`${census.unindexed} older Work files have no discoverable identity.`);
+  const unreadable =
+    (census?.unreadable ?? 0) + (census?.works.filter((w) => w.state !== "ready").length ?? 0);
+  if (unreadable)
+    observations.push(
+      `${unreadable} saved Work records could not be inspected; they were left unchanged.`,
+    );
+  if (!documents) observations.push("Current document availability is unknown.");
+  if (contexts?.some(({ context }) => context?.documents.some((doc) => doc.name === null)))
+    observations.push(
+      "Some older document connections have no remembered name; their conversation titles are retained.",
+    );
+  if (contexts?.some(({ context }) => context === null))
+    observations.push(
+      "Some remembered thread connections could not be read; they were left unchanged.",
+    );
+  const snapshot: ThreadWorkSnapshot = {
+    observedAt: new Date().toISOString(),
+    observations,
+    truncated: Boolean(census?.truncated || (contexts?.length ?? 0) > 200),
+    threads: (contexts ?? []).slice(0, 200).map(({ threadId, context }) => ({
+      threadId,
+      documents: (context?.documents ?? []).flatMap((doc) =>
+        doc.name === null
+          ? []
+          : [
+              {
+                id: doc.id,
+                name: doc.name,
+                availability:
+                  documents === null
+                    ? ("unknown" as const)
+                    : documents.some((open) =>
+                          doc.address !== null
+                            ? open.address !== null && sameAddress(doc.address, open.address)
+                            : doc.refs.some((ref) => sameDocumentRef(ref, open)),
+                        )
+                      ? ("open" as const)
+                      : ("closed" as const),
+              },
+            ],
+      ),
+      works: (census?.works ?? []).flatMap((work) => {
+        if (work.state !== "ready" || work.unfinished === 0 || !context) return [];
+        const scope = work.scope;
+        const links = context.works.filter(({ key }) => workKey(key) === work.id);
+        const matches = context.documents.filter(
+          (doc) =>
+            links.some((link) => link.documentId === doc.id) ||
+            (scope.binding === "address"
+              ? doc.address !== null && sameAddress(doc.address, scope.target)
+              : scope.binding === "open"
+                ? doc.refs.some((ref) => sameDocumentRef(ref, scope.open))
+                : false),
+        );
+        const explicit = links.length > 0;
+        if (!matches.length && !explicit) return [];
+        return [
+          {
+            id: work.id,
+            documentId: matches.length === 1 && matches[0]!.name !== null ? matches[0]!.id : null,
+            route: work.route,
+            intent: work.title,
+            unfinished: work.unfinished,
+          },
+        ];
+      }),
+    })),
+  };
+  // The batch shares the normal Reading frame limit; an oversized row cannot blank every row.
+  let remaining = READING_MAX_FRAME_BYTES - 8192;
+  snapshot.threads = snapshot.threads.filter((thread) => {
+    const bytes = Buffer.byteLength(JSON.stringify(thread));
+    if (bytes > remaining) {
+      snapshot.truncated = true;
+      return false;
+    }
+    remaining -= bytes;
+    return true;
+  });
+  if (snapshot.truncated)
+    observations.push(
+      "This is a bounded Work snapshot; additional stored items were not included.",
+    );
+  return snapshot;
+}
+
+async function resumeDestination(
+  workspace: RouteWorkspace,
+  id: string,
+  sources?: NavigationSources,
+): Promise<Omit<WorkResume, "matches"> | null> {
+  const census = await workspace.instances();
+  if (!census.available) throw new Error("Persisted Work discovery is unavailable");
+  const work = census.works.find((item) => item.id === id);
+  if (!work) return null;
+  const routes = (await sources?.routes?.()) ?? {};
+  const path = routes[work.route] ?? documentRoutes[work.route];
+  if (work.scope.binding === "workspace" && work.route === "schedules") {
+    const addresses = (sources?.contexts?.() ?? []).flatMap(({ context }) =>
+      context
+        ? context.works
+            .filter(({ key }) => workKey(key) === id)
+            .flatMap(({ documentId }) =>
+              context.documents
+                .filter((doc) => doc.id === documentId && doc.address !== null)
+                .map((doc) => doc.address!),
+            )
+        : [],
+    );
+    const unique = addresses.filter(
+      (at, index) => addresses.findIndex((other) => sameAddress(other, at)) === index,
+    );
+    return {
+      id,
+      key: work.scope,
+      url:
+        unique.length === 1 && work.state === "ready"
+          ? routeAddress("schedules").link({ workspaceId: work.scope.work }, { target: unique[0]! })
+          : null,
+      reason:
+        unique.length === 1 && work.state === "ready"
+          ? null
+          : "This schedule Work has no unique remembered document binding. It was left unchanged.",
+    };
+  }
+  if (work.scope.binding === "host" && !routes[work.route])
+    return {
+      id,
+      key: work.scope,
+      url: null,
+      reason: "This tool requires a document; its host-only Work has no document binding.",
+    };
+  if (
+    work.scope.binding === "workspace" &&
+    !(routes[work.route] && work.scope.work === "calculator")
+  )
+    return {
+      id,
+      key: work.scope,
+      url: null,
+      reason: "This tool has no URL that resumes this named Work workspace.",
+    };
+  if (work.state !== "ready" || !path)
+    return {
+      id,
+      key: work.scope,
+      url: null,
+      reason:
+        work.state === "unreadable"
+          ? "Saved Work is unreadable and was left unchanged."
+          : "This Work's tool is not currently registered. The saved Work was left unchanged.",
+    };
+  const target =
+    work.scope.binding === "address"
+      ? work.scope.target
+      : work.scope.binding === "open"
+        ? JSON.stringify({ kind: "open", ref: work.scope.open })
+        : undefined;
+  const at = routeAt(path);
+  const carry = { target, work: work.scope.binding === "workspace" ? work.scope.work : undefined };
+  return {
+    id,
+    key: work.scope,
+    url: at
+      ? routeAddress(at).link({}, carry)
+      : `${path}?${new URLSearchParams(Object.entries(carry).filter((entry): entry is [string, string] => entry[1] !== undefined))}`,
+    reason: null,
+  };
+}
+
+/** Match canonical Places using owner evidence, never a title or a guessed replacement lifetime. */
+async function matchingPlaces(
+  scope: WorkKey,
+  sources?: NavigationSources,
+): Promise<WorkResume["matches"]> {
+  if (!sources) return [];
+  const [threadResult, documentResult] = await Promise.allSettled([
+    sources.threads().then((value) => z.array(harnessThreadSummarySchema).parse(value)),
+    sources.documents().then((value) => z.array(documentSchema).parse(value)),
+  ]);
+  if (threadResult.status !== "fulfilled") return [];
+  const contexts = sources.contexts?.() ?? [];
+  const current = documentResult.status === "fulfilled" ? documentResult.value : [];
+  const openAddress = (ref: z.infer<typeof documentRefSchema>): Address | null => {
+    const known = contexts.flatMap(({ context }) =>
+      (context?.documents ?? []).flatMap((doc) =>
+        doc.address && doc.refs.some((held) => sameDocumentRef(held, ref)) ? [doc.address] : [],
+      ),
+    );
+    const live = current.filter((doc) => sameDocumentRef(doc, ref));
+    known.push(...live.flatMap((doc) => (doc.address ? [doc.address] : [])));
+    const at = known[0];
+    return at &&
+      known.every((other) => sameAddress(at, other)) &&
+      live.every((doc) => doc.address !== null && sameAddress(at, doc.address))
+      ? at
+      : null;
+  };
+  const holds = (tab: ThreadTab): boolean => {
+    if (tab.route !== scope.route) return false;
+    const { page, carry } = routeAddress(tab.route).read(
+      Object.fromEntries(new URL(tab.link, "http://place.invalid").searchParams),
+    );
+    const workspace =
+      carry.work ||
+      ("workspaceId" in page && typeof page.workspaceId === "string"
+        ? page.workspaceId
+        : undefined);
+    if (scope.binding === "workspace") return workspace === scope.work;
+    if (workspace) return false;
+    if (scope.binding === "host") return !carry.target;
+    let at = addressSchema.safeParse(carry.target).data ?? null;
+    let ref: z.infer<typeof documentRefSchema> | null = null;
+    if (!at && carry.target) {
+      try {
+        const request = documentRequestSchema.safeParse(JSON.parse(carry.target)).data;
+        if (request?.kind === "named") at = request.address;
+        else if (request?.kind === "open") ref = request.ref;
+      } catch {
+        return false;
+      }
+    }
+    if (scope.binding === "open") return sameDocumentRef(ref, scope.open);
+    at ??= ref ? openAddress(ref) : null;
+    return at !== null && sameAddress(at, scope.target);
+  };
+  return threadResult.value.flatMap((thread) =>
+    thread.tabs.filter(holds).map((tab) => ({ threadId: thread.id, tabId: tab.id })),
+  );
+}
+
+/** Saved Work and a matching Place remain readable without current native authority. */
+export async function resumeWork(
+  workspace: RouteWorkspace,
+  id: string,
+  sources?: NavigationSources,
+): Promise<WorkResume | null> {
+  const destination = await resumeDestination(workspace, id, sources);
+  return (
+    destination && {
+      ...destination,
+      matches: destination.url ? await matchingPlaces(destination.key, sources) : [],
+    }
+  );
 }
 
 const documentRoutes: Readonly<Record<string, string | undefined>> = Object.fromEntries(

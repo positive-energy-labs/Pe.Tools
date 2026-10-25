@@ -1,5 +1,4 @@
-import { declutter, type Box } from "@pe/kit/lang/declutter";
-import { SvgTip } from "@pe/kit/lang/tooltip";
+import { declutter } from "@pe/kit/lang/declutter";
 /**
  * The model picture's annotation layer: real DOM over the meshes, re-projected every frame the
  * camera moves (`Scene3D.onProject`, or a fit with no meshes). Labels, numbered finding marks, the
@@ -13,7 +12,6 @@ import { revitTarget } from "@pe/kit/lang/revit-target";
 import { token } from "@pe/kit/lib/token";
 import type { DuctFinding } from "@pe/agent-contracts";
 import { observedElements, useNativeObservation } from "#/revit/observation";
-import type { IssueTarget } from "#/scene/types";
 import type { StageIssue } from "./inbox-rows";
 import type { Project, Size } from "#/scene/projection";
 
@@ -31,7 +29,9 @@ import type { Claim } from "./legs";
 import type { Scene } from "./scene";
 import { pathOf, SubjectLabels } from "./subject-labels";
 import { reachProps, SubjectTextContext } from "@pe/kit/lang/reach";
-import { useSubjectLighting } from "@pe/kit/lang/subject-text";
+import { Footnotes, useFootnotes, type FootnoteProject } from "#/scene/footnotes";
+import { useElementAttention } from "#/attention";
+import { elementKey, useMention } from "@pe/kit/lang/attention";
 
 export type Ruling =
   | { kind: "claim"; n: number; at: number; claim: Claim }
@@ -51,27 +51,6 @@ type Point = { x: number; y: number };
 
 const GLYPH = 4;
 const PIN = 8;
-/** A footnote chip's diameter: the kit's `.subject-badge` circle. */
-const CHIP = 18;
-const CHIP_BOX = CHIP + 4;
-/** Numbered chips share the kit search with captions and pins, clearing their anchor dots. */
-export function placeChips<T extends Point>(
-  anchors: readonly T[],
-  size: { width: number; height: number },
-  obstacles: readonly Box[] = [],
-) {
-  return declutter(
-    anchors.map((a) => ({
-      ...a,
-      x: a.x - CHIP_BOX / 2,
-      y: a.y - CHIP_BOX / 2 - 24,
-      width: CHIP_BOX,
-      height: CHIP_BOX,
-    })),
-    { x: 0, y: 0, ...size },
-    [...obstacles, ...anchors.map((a) => ({ x: a.x - 4, y: a.y - 4, width: 8, height: 8 }))],
-  );
-}
 const HIT: React.CSSProperties = { pointerEvents: "auto", cursor: "pointer" };
 
 /** Each node kind's glyph, centred on 0,0 in screen px. */
@@ -106,14 +85,12 @@ export function Annotations({
   labels,
   meshed,
   issues = [],
-  onIssueHover,
   rulings,
   pointOf,
   issue,
   onPick,
   onFrame,
   onRuling,
-  onHover,
 }: {
   project: Project;
   size: Size;
@@ -127,7 +104,6 @@ export function Annotations({
    * as a ghost, or no badge when the picture does not hold the element at all. */
   meshed?: ReadonlySet<number>;
   issues?: readonly StageIssue[];
-  onIssueHover?: (target: IssueTarget | null) => void;
   rulings: readonly Ruling[];
   /** A model point for an element: a node's point, or a segment's middle vertex. */
   pointOf: (id: number) => readonly number[] | null;
@@ -136,11 +112,12 @@ export function Annotations({
   onPick: (id: number, at: Point) => void;
   onFrame: (id: number) => void;
   onRuling: (r: Ruling, at: Point) => void;
-  onHover: (id: number | null) => void;
 }) {
   const observation = useNativeObservation();
   const subjects = useContext(SubjectTextContext);
-  const lighting = useSubjectLighting();
+  const { lit, citation } = useElementAttention();
+  const focus = citation?.focus?.key.startsWith("e:") ? Number(citation.focus.key.slice(2)) : null;
+  const mark = useMention();
   const target = (id: number) => {
     const t = observedElements(observation, [id]);
     return revitTarget(t.ids, t.refs);
@@ -148,9 +125,8 @@ export function Annotations({
   const at = (e: { clientX: number; clientY: number }) => ({ x: e.clientX, y: e.clientY });
   const element = (id: number) => ({
     ...target(id),
+    ...mark(elementKey(id)),
     style: HIT,
-    onMouseEnter: () => onHover(id),
-    onMouseLeave: () => onHover(null),
     onClick: (e: React.MouseEvent) => {
       if (e.detail < 2) onPick(id, at(e));
     },
@@ -167,27 +143,25 @@ export function Annotations({
     [scene, project, encoding],
   );
   const halo = (id: number) =>
-    selected.has(id)
-      ? token("select")
-      : id === hovered || lighting.ids.has(id)
-        ? token("veil")
-        : null;
+    selected.has(id) ? token("select") : id === hovered || lit.has(id) ? token("veil") : null;
   const sub = scene.subject;
 
   // Footnote chips are placed together so each can clear the others. A badge sits on a drawn
   // subject: its mesh, else its centreline drawn as a ghost; never on empty space.
   const sceneSegments = new Map(scene.segments.map((f) => [f.segment.id, f.segment.polyline]));
   const sceneNodes = new Set(scene.nodes.map((f) => f.node.id));
-  const anchored = lighting.references.flatMap((ref) => {
-    const drawn = meshed?.has(ref.id) || layers.has("centrelines");
-    const ghost = drawn ? null : sceneSegments.get(ref.id);
-    if (!drawn && !ghost && !sceneNodes.has(ref.id)) return [];
-    const p = pointOf(ref.id);
+  const footnoteProject: FootnoteProject = (ref) => {
+    if (!ref.key.startsWith("e:")) return null;
+    const id = Number(ref.key.slice(2));
+    const drawn = !!meshed?.has(id) || layers.has("centrelines");
+    const ghost = drawn ? null : sceneSegments.get(id);
+    if (!drawn && !ghost && !sceneNodes.has(id)) return null;
+    const p = pointOf(id);
     const xy = p && project(p);
     return xy
-      ? [{ ref, at: { x: xy[0], y: xy[1] }, ghost: ghost ? pathOf(ghost, project) : null, drawn }]
-      : [];
-  });
+      ? { at: { x: xy[0], y: xy[1] }, ghost: ghost ? pathOf(ghost, project) : null, drawn }
+      : null;
+  };
   const bounds = { x: 0, y: 0, ...size };
   const pins = declutter(
     (layers.has("findings") ? rulings : []).flatMap((r) => {
@@ -206,15 +180,7 @@ export function Annotations({
     }),
     bounds,
   );
-  const chips = placeChips(
-    anchored.map((a) => ({ ...a, ...a.at })),
-    size,
-    pins,
-  ).map((box) => ({
-    ...box,
-    box,
-    chip: { x: box.x + box.width / 2, y: box.y + box.height / 2 },
-  }));
+  const { chips } = useFootnotes(footnoteProject, size, pins);
   const obstacles = [...chips.map((c) => c.box), ...pins];
 
   return (
@@ -291,7 +257,7 @@ export function Annotations({
           project={project}
           bounds={bounds}
           obstacles={obstacles}
-          hovered={lighting.focus ?? hovered}
+          hovered={focus ?? hovered}
           extra={labels.flatMap((label) => {
             const xy = project(label.at);
             return xy ? [{ ...label, x: xy[0] + 8, y: xy[1] + 14 }] : [];
@@ -328,8 +294,7 @@ export function Annotations({
                 style={HIT}
                 tabIndex={0}
                 aria-label={`finding ${r.n}`}
-                onMouseEnter={() => onIssueHover?.(issueTarget)}
-                onMouseLeave={() => onIssueHover?.(null)}
+                {...mark(`issue:${issueTarget.key}`)}
                 onClick={(e) => onRuling(r, at(e))}
                 onDoubleClick={() => onFrame(r.at)}
               >
@@ -353,84 +318,12 @@ export function Annotations({
             );
           })
         : null}
-      {chips.map(({ ref, at, chip, ghost, drawn }) => {
-        const active = lighting.focus == null || lighting.focus === ref.id;
-        return (
-          <g
-            key={ref.id}
-            data-subject-badge={ref.id}
-            data-footnote={ref.number}
-            data-emphasized={active}
-            opacity={active ? 1 : 0.35}
-          >
-            {ghost ? (
-              <path
-                d={ghost}
-                fill="none"
-                stroke={token("ink-2")}
-                strokeWidth={3}
-                strokeLinecap="round"
-                className={DASH_CLASS.reference}
-              />
-            ) : !drawn ? (
-              <circle
-                cx={at.x}
-                cy={at.y}
-                r={6}
-                fill="none"
-                stroke={token("ink-2")}
-                strokeWidth={2}
-              />
-            ) : null}
-            {/* The leader: a cased ink line from the chip to a dot on the element. */}
-            <line
-              x1={chip.x}
-              y1={chip.y}
-              x2={at.x}
-              y2={at.y}
-              stroke={token("page")}
-              strokeOpacity={0.75}
-              strokeWidth={3.5}
-            />
-            <line
-              x1={chip.x}
-              y1={chip.y}
-              x2={at.x}
-              y2={at.y}
-              stroke={token("ink")}
-              strokeWidth={1.25}
-            />
-            <circle
-              cx={at.x}
-              cy={at.y}
-              r={2.75}
-              fill={token("ink")}
-              stroke={token("page")}
-              strokeWidth={1.5}
-            />
-            {/* The kit's subject mark: the same chip the text draws after the name, lit together.
-                Hover lights its token in the text; a press goes to the subject, as the token does. */}
-            <g
-              className="subject-badge"
-              data-lit={lighting.focus === ref.id ? "" : undefined}
-              transform={`translate(${chip.x} ${chip.y})`}
-              style={HIT}
-              onMouseEnter={() => subjects?.light?.(lighting.references, ref.id, lighting.owner)}
-              onMouseLeave={() => {
-                subjects?.light?.(lighting.references, null, lighting.owner);
-                if (lighting.owner) subjects?.clear?.(lighting.owner);
-              }}
-              onClick={() => subjects?.go?.(ref.id)}
-            >
-              <SvgTip content={"? go"} />
-              <circle r={CHIP / 2} />
-              <text y={3.5} textAnchor="middle">
-                {ref.number}
-              </text>
-            </g>
-          </g>
-        );
-      })}
+      <Footnotes
+        project={footnoteProject}
+        size={size}
+        obstacles={pins}
+        onGo={(ref) => subjects?.go?.(Number(ref.key.slice(2)))}
+      />
     </svg>
   );
 }

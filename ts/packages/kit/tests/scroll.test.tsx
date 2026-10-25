@@ -8,6 +8,7 @@ import { useList } from "../src/components/lang/collection";
 import { ListView } from "../src/components/lang/list-view";
 import { Scroll } from "../src/components/lang/scroll";
 import { project } from "../src/components/lang/scroll-project";
+import { writeTheme } from "../src/theme";
 
 afterEach(() => {
   cleanup();
@@ -210,4 +211,101 @@ test("an observer delivery that changes nothing here writes nothing (a seam drag
   const styles = vi.spyOn(window, "getComputedStyle");
   deliver();
   expect([writes.mock.calls.length, styles.mock.calls.length]).toEqual([0, 0]);
+});
+
+// Real-observer stand-in: delivers on observe and on demand; records frame-time layout reads.
+function frameHarness() {
+  const callbacks = new Set<(entries: []) => void>();
+  vi.stubGlobal(
+    "ResizeObserver",
+    class {
+      constructor(private callback: (entries: []) => void) {
+        callbacks.add(callback);
+      }
+      observe() {
+        this.callback([]);
+      }
+      unobserve() {}
+      disconnect() {}
+    },
+  );
+  const fills: string[] = [];
+  vi.spyOn(HTMLCanvasElement.prototype, "getContext").mockImplementation(
+    function (this: HTMLCanvasElement) {
+      const ctx = { canvas: this, fillStyle: "", globalAlpha: 1, clearRect() {}, drawImage() {} };
+      return Object.assign(ctx, { fillRect: () => fills.push(ctx.fillStyle) }) as never;
+    },
+  );
+  vi.spyOn(HTMLElement.prototype, "clientHeight", "get").mockReturnValue(200);
+  vi.spyOn(HTMLElement.prototype, "scrollHeight", "get").mockReturnValue(2000);
+  let inFrame = false;
+  const native = window.requestAnimationFrame.bind(window);
+  vi.stubGlobal("requestAnimationFrame", (callback: FrameRequestCallback) =>
+    native((t) => {
+      inFrame = true;
+      try {
+        callback(t);
+      } finally {
+        inFrame = false;
+      }
+    }),
+  );
+  let frameReads = 0;
+  const rect = Element.prototype.getBoundingClientRect;
+  vi.spyOn(Element.prototype, "getBoundingClientRect").mockImplementation(function (this: Element) {
+    if (inFrame) frameReads++;
+    return rect.call(this);
+  });
+  return { fills, frameReads: () => frameReads, deliver: () => callbacks.forEach((c) => c([])) };
+}
+
+function Sections() {
+  const items = Array.from({ length: 30 }, (_, i) => ({ key: String(i), name: `Row ${i}` }));
+  const list = useList({
+    items,
+    keyOf: (item) => item.key,
+    search: (item) => ({ text: [item.name] }),
+    groups: { of: (item) => `Section ${Math.floor(Number(item.key) / 10)}` },
+  });
+  return (
+    <ListView
+      list={list}
+      aria-label="sections"
+      row={(item) => ({ label: item.name })}
+      empty={{ message: "none", exit: "none" }}
+    />
+  );
+}
+
+test("a filter change places section ticks and rows in the observer, never inside a frame", async () => {
+  const harness = frameHarness();
+  const view = render(
+    <Scroll>
+      <Sections />
+    </Scroll>,
+  );
+  await waitFor(() => expect(harness.fills.length).toBeGreaterThan(0));
+  const input = view.container.querySelector<HTMLInputElement>("[data-list-bar] input")!;
+  const before = harness.fills.length;
+  fireEvent.change(input, { target: { value: "Row 1" } });
+  harness.deliver();
+  await waitFor(() => expect(harness.fills.length).toBeGreaterThan(before));
+  expect(harness.frameReads()).toBe(0);
+});
+
+test("a theme toggle re-resolves the strip ink once and repaints", async () => {
+  const harness = frameHarness();
+  render(
+    <Scroll>
+      <Sections />
+    </Scroll>,
+  );
+  await waitFor(() => expect(harness.fills.length).toBeGreaterThan(0));
+  const styles = vi.spyOn(window, "getComputedStyle");
+  const before = harness.fills.length;
+  writeTheme("dark");
+  const canvasReads = styles.mock.calls.filter(([el]) => el instanceof HTMLCanvasElement).length;
+  expect(canvasReads).toBe(4);
+  await waitFor(() => expect(harness.fills.length).toBeGreaterThan(before));
+  writeTheme("auto");
 });

@@ -1,4 +1,6 @@
-import { Suspense } from "react";
+import { Suspense, useContext } from "react";
+import { AttentionDocument } from "@pe/kit/lang/attention";
+import { regionKey } from "./attention";
 import { emptyListState, useList } from "@pe/kit/lang/collection";
 import { ListView } from "@pe/kit/lang/list-view";
 import { Scroll } from "@pe/kit/lang/scroll";
@@ -18,6 +20,7 @@ import type { ModelZone } from "#/takeoff/world";
  * once, beside the plan it describes; the rail no longer repeats it.
  */
 export function AtlasNavigation() {
+  const doc = useContext(AttentionDocument) ?? "";
   const { world, zoneKey, zoneStates, filteredZones, selectZone, scopeShortcuts } =
     useAtlasWorkspace();
   const levels = levelsOf(world.lanes);
@@ -53,6 +56,7 @@ export function AtlasNavigation() {
               const calls = states.filter((s) => s === "call").length;
               const off = !onPlan(z);
               return {
+                subject: { doc, key: regionKey(z.zone.guid) },
                 lead: <ZoneThumb zone={z.zone} className="size-5" />,
                 label: (
                   <span className="truncate">

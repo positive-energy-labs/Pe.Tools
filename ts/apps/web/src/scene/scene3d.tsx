@@ -17,7 +17,7 @@ import { RevitTarget } from "@pe/kit/lang/revit-target";
  * canvases this canvas paints each axis into.
  */
 import { useEffect, useMemo, useRef, useState, type ReactNode } from "react";
-import { useSceneReach } from "./reach";
+import { useElementAttention } from "#/attention";
 import { revitTarget } from "@pe/kit/lang/revit-target";
 import { viewportCodec } from "@pe/agent-contracts";
 import { type ElementTarget } from "#/revit/element-target";
@@ -108,16 +108,30 @@ const ATTRS = Object.keys(revitTarget([0], [{ elementId: 0 }])) as (keyof Return
 >)[];
 
 export function Scene3D(props: Scene3DProps): ReactNode {
-  const { hovered, onHover } = useSceneReach();
+  const { hovered, onHover, lit: subjectLit, selected: subjectSelected } = useElementAttention();
   const lit = useMemo(
     () =>
       new Set([
         ...(props.lit ?? []),
         ...(props.meshes?.instances
-          .filter((instance) => instance.revitId === hovered)
+          .filter(
+            (instance) =>
+              instance.revitId === hovered ||
+              (instance.revitId !== null && subjectLit.has(instance.revitId)),
+          )
           .map((instance) => instance.key) ?? []),
       ]),
-    [props.lit, props.meshes, hovered],
+    [props.lit, props.meshes, hovered, subjectLit],
+  );
+  const selected = useMemo(
+    () =>
+      new Set([
+        ...(props.selected ?? []),
+        ...(props.meshes?.instances
+          .filter((i) => i.revitId !== null && subjectSelected.has(i.revitId))
+          .map((i) => i.key) ?? []),
+      ]),
+    [props.selected, props.meshes, subjectSelected],
   );
   const host = useRef<HTMLDivElement>(null);
   const observation = useNativeObservation();
@@ -226,7 +240,7 @@ export function Scene3D(props: Scene3DProps): ReactNode {
       canvas.style.cursor = issue ? "pointer" : "";
       r.reach(issue ? null : at);
       const instance = pickAt(r, at, latest.current.clip)?.instance;
-      latest.current.onHover(issue?.elementId ?? instance?.revitId ?? null);
+      if (!issue) latest.current.onHover(instance?.revitId ?? null);
       r.hoverElement(issue ? null : (instance?.key ?? null));
       const target = instance ? sceneTarget(latest.current.observation, instance) : null;
       const attributes: Partial<Record<(typeof ATTRS)[number], string>> = target
@@ -337,8 +351,8 @@ export function Scene3D(props: Scene3DProps): ReactNode {
     core.current?.setThumbs(props.thumbs ?? {});
   }, [props.thumbs, meshes]);
   useEffect(() => {
-    core.current?.paint(props.selected, props.hidden, props.isolated, lit);
-  }, [props.selected, props.hidden, props.isolated, lit, meshes]);
+    core.current?.paint(selected, props.hidden, props.isolated, lit);
+  }, [selected, props.hidden, props.isolated, lit, meshes]);
   useEffect(() => {
     core.current?.setLayers(props.layers);
   }, [props.layers, meshes]);

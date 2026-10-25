@@ -351,6 +351,8 @@ const CONTEXTUAL_OVERRIDES: Record<string, string> = {
     "App bar commands and settings align their shortcut trail.",
   "workbench/lens.css:prose-pe": "Transcript prose fits the shared chat reading measure.",
   "workbench/lens.css:dl-composer-frame": "Chat surface composer shares the transcript inset.",
+  "chat/chat-shell.css:dl-composer-frame":
+    "Beside connected tools the composer holds Pea's start edge with the transcript.",
   "workbench/lens.css:dl-composer-box": "Chat surface composer shares the transcript measure.",
   "workbench/lens.css:dl-message-body": "An in-run message aligns with the run lane.",
   "workbench/lens.css:dl-message-bubble": "Chat bubbles use the transcript plane.",

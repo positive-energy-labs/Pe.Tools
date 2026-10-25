@@ -1,8 +1,9 @@
+import { RegistryContext } from "@effect/atom-react";
+import { elementKey, setHovered } from "./attention";
 import { useState, useMemo, useRef, useContext, type ReactNode } from "react";
 import { Search } from "lucide-react";
 import { useSearchKey } from "./list-view";
 import { SubjectTextContext } from "./reach";
-import { useReachSetter } from "./reach";
 import { ListPopup } from "./list-popup";
 
 /** A named subject; ids remain searchable without becoming its visible name. */
@@ -36,11 +37,14 @@ export function GoToPopup<Item extends GoToItem>({
   const items = useMemo(() => (open ? build() : []), [open, build]);
   const byKey = useMemo(() => new Map(items.map((item) => [item.key, item])), [items]);
   const trigger = useRef<SVGSVGElement>(null);
-  const reach = useContext(SubjectTextContext)?.reach;
-  const setHovered = useReachSetter("hovered");
+  const scope = useContext(SubjectTextContext);
+  const registry = useContext(RegistryContext);
   const preview = (item: Item | null) => {
-    if (reach && (item === null || typeof item.id === "number")) {
-      setHovered(typeof item?.id === "number" ? item.id : null);
+    if (scope && (item === null || typeof item.id === "number")) {
+      setHovered(
+        registry,
+        typeof item?.id === "number" ? { doc: scope.doc, key: elementKey(item.id) } : null,
+      );
     } else hover?.(item);
   };
   useSearchKey({

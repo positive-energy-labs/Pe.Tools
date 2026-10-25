@@ -5,10 +5,12 @@ import { expect, test } from "vite-plus/test";
 import { connect, CTRL, type Page } from "./cdp.ts";
 
 const SYSTEMS = '[data-list-view][aria-label="systems"]';
+const RULINGS = '[data-list-view][aria-label="rulings"]';
 const PICTURE = "[data-model-picture]";
+const PENDING_PICTURE = `${PICTURE}[data-reading="pending"]`;
 const DRAWING =
   '[data-pane-id="e-picture"] canvas[aria-label^="3D model"], [data-pane-id="e-picture"] svg[aria-label="duct tree"]';
-const SEARCH = `${SYSTEMS} input[aria-label="Search systems"]`;
+const SEARCH = `${RULINGS} input[aria-label="Search rulings"]`;
 const ductWrite = (name: string) => /^write(?: [0-9]+)? to Revit$/i.test(name);
 const RECONNECT_REFUSALS = [
   "Thread list is not current; reconnecting.",
@@ -114,14 +116,25 @@ const visibleText = (page: Page, selector: string) =>
   page.read<string>(
     `[...document.querySelectorAll(${literal(selector)})].find(${visible})?.innerText ?? ''`,
   );
+async function showReadout(page: Page) {
+  if (
+    !(await visibleText(page, "[data-picture-readout]")) &&
+    (await box(page, 'button[aria-label="picture readout"]'))
+  )
+    await click(page, 'button[aria-label="picture readout"]');
+  return page.until(
+    () => visibleText(page, "[data-picture-readout]"),
+    "picture readout visible, including through its folded control",
+  );
+}
 const actionName = (page: Page, word: string) =>
   page.read<string | null>(
     `[...document.querySelectorAll('button')].filter(${visible}).map(e => e.getAttribute('aria-label') || e.innerText.trim()).find(name => new RegExp(${literal(`^${word}(?: [0-9]+)?$`)}).test(name)) ?? null`,
   );
 
 async function stageWork(page: Page, selector: string, value: string) {
-  if (!(await box(page, selector)) && (await box(page, "button", "Expand Inputs")))
-    await button(page, "Expand Inputs");
+  if (!(await box(page, selector)) && (await box(page, 'button[aria-label^="Expand Inputs" i]')))
+    await click(page, 'button[aria-label^="Expand Inputs" i]');
   if (!(await box(page, selector)))
     throw new Error("PRECONDITION: disposable Work editor must be visible and enabled");
   await fill(page, selector, value);
@@ -160,7 +173,7 @@ async function state(page: Page) {
       visibility: document.visibilityState,
       pictureTitle: [...document.querySelectorAll('[data-pane-id="e-picture"] [data-slot="pane-title"]')].find(shown)?.innerText ?? '',
       crumb: [...document.querySelectorAll('[data-e-crumb], [data-picture-readout]')].filter(shown).map(e => e.innerText).join(' | '),
-      selected: [...document.querySelectorAll('[data-crumb-segment="selection"][data-revit-ids]')].find(shown)?.getAttribute('data-revit-ids') ?? null,
+      selected: [...document.querySelectorAll('[data-crumb-segment="selection"]')].find(shown)?.innerText.trim() || null,
       focus: { tag: active?.tagName, label: active?.getAttribute('aria-label'), id: active?.id ?? '', value: active?.value ?? null, scroll },
       panes: [...document.querySelectorAll('[data-pane-id]')].filter(shown).map(e => {
         const body = e.querySelector('[data-slot="pane-body"]');
@@ -168,8 +181,8 @@ async function state(page: Page) {
       }),
       armed: [...document.querySelectorAll('button')].filter(shown).filter(e => !e.disabled && e.getAttribute('aria-disabled') !== 'true' && /^(apply|write|heal|make fan)\\b/i.test(e.getAttribute('aria-label') || e.innerText.trim())).map(e => e.getAttribute('aria-label') || e.innerText.trim()),
       alerts: [...document.querySelectorAll('[role="alert"]')].filter(shown).map(e => e.innerText),
-      loading: [...document.querySelectorAll('[data-e-pricing], [data-e-loading], [data-e-opening]')].some(shown),
-      refreshing: [...document.querySelectorAll('[data-e-refreshing], [data-e-capturing]')].some(shown)
+      loading: ![...document.querySelectorAll(${literal(PICTURE)})].some(shown),
+      refreshing: [...document.querySelectorAll(${literal(PENDING_PICTURE)})].some(shown)
     };
   })()`);
 }
@@ -695,52 +708,67 @@ test("seeded real-user route journey", async () => {
     let b = "";
     await step("discover at least two actual system controls", async () => {
       if (await box(p, '[data-pane-id="e-picture"] button', "Systems")) await allSystems(p);
-      const options = await rows(p);
-      if (options.length < 2)
-        throw new Error(
-          `PRECONDITION: all→A→B→all needs two rendered system rows; found ${options.length}. demo=scene baseline has groups: [] and systems: []`,
-        );
+      if (await box(p, 'button[aria-label="Expand systems"]'))
+        await click(p, 'button[aria-label="Expand systems"]');
+      const options = await p.until(async () => {
+        const found = await rows(p);
+        return found.length >= 2 ? found : null;
+      }, "two actual system rows after expanding the responsive systems pane");
       const index = Math.floor(rng() * options.length);
       a = options[index]!.key;
       b = options[(index + 1) % options.length]!.key;
       receipt.coverage.systems = JSON.stringify(options);
     });
-    await step("search, filter, Escape and clear through real list controls", async () => {
+    await step("search, filter, Escape and clear through real rulings controls", async () => {
+      if (await box(p, 'button[aria-label^="Expand Rulings" i]'))
+        await click(p, 'button[aria-label^="Expand Rulings" i]');
+      const rulingRows = () =>
+        p.read<string[]>(
+          `[...document.querySelectorAll(${literal(`${RULINGS} [role=option][data-key]`)})].filter(${visible}).map(e => e.getAttribute('data-key'))`,
+        );
+      const firstRuling = await p.until(async () => (await rulingRows())[0], "actual ruling row");
       await fill(p, SEARCH, "chaos-no-such-system-" + seed);
       await p.until(
-        async () => (await rows(p)).length === 0,
+        async () => (await rulingRows()).length === 0,
         "search transition excludes all rows",
       );
       await p.press("Escape");
       await p.until(
-        async () => (await rows(p)).some((row) => row.key === a),
+        async () => (await rulingRows()).includes(firstRuling),
         "Escape clears query and restores rows",
       );
       expect(await fieldValue(p, SEARCH), "Escape clears the typed query").toBe("");
       await fill(p, SEARCH, "chaos-no-such-system-" + seed);
-      await p.until(async () => (await rows(p)).length === 0, "second query excludes all rows");
-      await button(p, "Clear search", SYSTEMS);
       await p.until(
-        async () => (await rows(p)).some((row) => row.key === a),
-        "cleared search restores system A",
+        async () => (await rulingRows()).length === 0,
+        "second query excludes all rows",
       );
-      await button(p, "Filter systems", SYSTEMS);
-      await click(p, '[aria-label="Search filters"] [data-key="field:airType"]');
+      await button(p, "Clear search", RULINGS);
+      await p.until(
+        async () => (await rulingRows()).includes(firstRuling),
+        "cleared search restores the original ruling",
+      );
+      await button(p, "Filter rulings", RULINGS);
+      await click(p, '[aria-label="Search filters"] [data-key="field:kind"]');
       await p.until(
         () => p.count('[aria-label="Filter values"] [role=option]'),
-        "air-type filter values",
+        "ruling-kind filter values",
       );
       await click(p, '[aria-label="Filter values"] [role=option]');
-      await p.until(() => p.count(`${SYSTEMS} [data-list-pill]`), "committed real filter pill");
-      await button(p, "Clear search", SYSTEMS);
+      await p.until(() => p.count(`${RULINGS} [data-list-pill]`), "committed real filter pill");
+      await button(p, "Clear search", RULINGS);
+      await p.until(
+        async () => (await rulingRows()).includes(firstRuling),
+        "clearing the filter restores the original ruling",
+      );
       await p.press("Escape");
     });
     const pickSystem = async (key: string, allowHeld = false) => {
       if (
         !(await box(p, `${SYSTEMS} [role=option][data-key=${literal(key)}]`)) &&
-        (await box(p, "button", "Expand Systems"))
+        (await box(p, 'button[aria-label^="Expand systems" i]'))
       )
-        await button(p, "Expand Systems");
+        await click(p, 'button[aria-label^="Expand systems" i]');
       await click(p, `${SYSTEMS} [role=option][data-key=${literal(key)}]`);
       await subject(p, key, allowHeld);
     };
@@ -753,7 +781,8 @@ test("seeded real-user route journey", async () => {
     });
     await step("open Systems pane; A → B; B → all", async () => {
       // The pane rail reveals the same list without changing the named system.
-      await button(p, "Expand Systems");
+      if (await box(p, 'button[aria-label^="Expand systems" i]'))
+        await click(p, 'button[aria-label^="Expand systems" i]');
       await pickSystem(b);
       await allSystems(p);
       await subject(p, "");
@@ -767,26 +796,71 @@ test("seeded real-user route journey", async () => {
         async () => !!new URL(await p.url()).searchParams.get("selected"),
         "tree selection published to URL",
       );
+      await p.until(async () => !!(await state(p)).selected, "selected subject rendered in crumb");
+      await showReadout(p);
+      expect(await visibleText(p, '[data-picture-readout="selection"]')).not.toBe("");
       const copied = await p.url();
       const before = await state(p);
       await p.open(copied);
       await settled(p);
+      await showReadout(p);
       expect(new URL(await p.url()).searchParams.get("selected")).toBe(
         new URL(copied).searchParams.get("selected"),
+      );
+      await p.until(
+        async () => (await state(p)).crumb === before.crumb,
+        "copied URL renders the same selected readout",
       );
       expect((await state(p)).crumb).toBe(before.crumb);
       await p.reload();
       await settled(p);
+      await showReadout(p);
+      await p.until(
+        async () => (await state(p)).crumb === before.crumb,
+        "reload renders the same selected readout",
+      );
       expect((await state(p)).crumb).toBe(before.crumb);
       expect(new URL(await p.url()).searchParams.get("system")).toBe(a);
-      // Focus the selected subject through its real control; Escape alone must preserve its pose.
-      await click(p, '[data-crumb-segment="selection"][data-revit-ids]');
+      // The crumb is a label; the subject picker focuses the same selected element through real controls.
+      const selectedId: unknown = JSON.parse(
+        new URL(copied).searchParams.get("selected") ?? "null",
+      );
+      if (typeof selectedId !== "string")
+        throw Error("copied selection must be a string element id");
+      expect(selectedId, "copied selection is one positive element id").toMatch(/^[1-9]\d*$/);
+      await button(p, "go to a subject", '[data-pane-id="e-picture"]');
+      await fill(p, 'input[aria-label="go to a subject search"]', selectedId);
+      await click(
+        p,
+        `[aria-label="go to a subject"] [role=option][data-key=${literal(`e${selectedId}`)}]`,
+      );
+      const pickerState = () =>
+        p.read<{ expanded: string | null; visible: boolean; focus: string }>(`(() => {
+          const trigger = document.querySelector('[data-pane-id="e-picture"] button[aria-label="go to a subject"]');
+          const input = document.querySelector('input[aria-label="go to a subject search"]');
+          return { expanded: trigger?.getAttribute('aria-expanded') ?? null,
+            visible: !!input?.getClientRects().length,
+            focus: document.activeElement?.outerHTML.slice(0, 500) ?? '' };
+        })()`);
+      const pickerSamples = [{ phase: "after subject pick", ...(await pickerState()) }];
+      receipt.coverage.selectionPicker = JSON.stringify(pickerSamples);
+      save();
+      if (pickerSamples[0]!.expanded === "true")
+        await button(p, "go to a subject", '[data-pane-id="e-picture"]');
+      await p.until(async () => {
+        const state = await pickerState();
+        return state.expanded === "false" && !state.visible;
+      }, "subject picker is closed before selection Escape");
+      pickerSamples.push({ phase: "after picker closed", ...(await pickerState()) });
       expect(
         new URL(await p.url()).searchParams.get("selected"),
         "selection is armed before Escape",
       ).toBe(new URL(copied).searchParams.get("selected"));
       await sleep(350);
       const escapePose = new URL(await p.url()).searchParams.get("viewport");
+      pickerSamples.push({ phase: "before original selection Escape", ...(await pickerState()) });
+      receipt.coverage.selectionPicker = JSON.stringify(pickerSamples);
+      save();
       await p.press("Escape");
       await p.until(
         async () => !new URL(await p.url()).searchParams.get("selected"),
@@ -1214,9 +1288,23 @@ test("seeded real-user route journey", async () => {
           return;
         workerSession = worker![0];
         const oldDrawing = await hold(p, DRAWING);
-        const oldIdentity = await p.read<string>(
-          `[...document.querySelectorAll('[data-e-state], [data-e-identity]')].map(e => e.textContent).join(' | ')`,
-        );
+        const oldIdentity = (await state(p)).pictureTitle;
+        expect(oldIdentity, "old picture names its subject before pausing").not.toBe("");
+        // The route's public busy ancestor owns snapshot freshness and held pricing (route.tsx).
+        const routeBusy = () =>
+          p.read<{ value: string | null; owner: string | null }>(`(() => {
+            const pane = document.querySelector('[data-pane-id="e-picture"]');
+            const owner = pane?.closest('[aria-busy]');
+            return { value: owner?.getAttribute('aria-busy') ?? null,
+              owner: owner ? owner.outerHTML.slice(0, owner.outerHTML.indexOf('>') + 1) : null };
+          })()`);
+        const sampleBusy = async (phase: string) => {
+          const sample = await routeBusy();
+          receipt.workerProtocol.push({ at: Date.now(), phase, ...sample });
+          save();
+          return sample.value;
+        };
+        expect(await sampleBusy("before worker pause"), "settled route is not busy").toBe("false");
         await p.send("Debugger.enable", {}, workerSession);
         await p.send("Debugger.pause", {}, workerSession);
         receipt.workerProtocol.push({
@@ -1231,16 +1319,21 @@ test("seeded real-user route journey", async () => {
           await button(p, "refresh");
           receipt.workerProtocol.push({ at: Date.now(), command: "trusted Refresh released" });
           await p.until(async () => paused.has(workerSession!), "pricing worker actually paused");
-          await p.until(() => p.count("[data-e-refreshing]"), "held result while worker is paused");
+          await p.until(
+            () =>
+              p.read<boolean>(
+                `[...document.querySelectorAll(${literal(PENDING_PICTURE)})].some(${visible})`,
+              ),
+            "visible picture is pending while worker is paused",
+          );
+          expect(await sampleBusy("worker paused after trusted Refresh")).toBe("true");
           expect(
             await retained(p, oldDrawing),
             "old drawing remains connected while pricing is paused",
           ).toBe(true);
           expect(
-            await p.read<string>(
-              `[...document.querySelectorAll('[data-e-state], [data-e-identity]')].map(e => e.textContent).join(' | ')`,
-            ),
-            "old result identity remains drawn before changing system",
+            (await state(p)).pictureTitle,
+            "old picture subject remains drawn before changing system",
           ).toBe(oldIdentity);
           receipt.workerProtocol.push({
             at: Date.now(),
@@ -1263,12 +1356,22 @@ test("seeded real-user route journey", async () => {
           await p.send("Debugger.resume", {}, workerSession);
           await p.send("Runtime.releaseObject", { objectId: oldDrawing });
         }
+        await p.until(
+          async () => (await routeBusy()).value === "false",
+          "public route busy clears after worker resume",
+        );
+        expect(await sampleBusy("after worker resume")).toBe("false");
         await settled(p);
         await subject(p, b);
-        const freshReadout = await visibleText(p, "[data-picture-readout]");
+        const freshReadout = await showReadout(p);
         const copied = await p.url();
         await p.open(copied);
         await settled(p);
+        await showReadout(p);
+        await p.until(
+          async () => (await visibleText(p, "[data-picture-readout]")) === freshReadout,
+          "fresh URL renders the same completed worker readout",
+        );
         expect(
           await visibleText(p, "[data-picture-readout]"),
           "late worker delivery agrees with a fresh URL load of persisted Work",
@@ -1280,8 +1383,8 @@ test("seeded real-user route journey", async () => {
     await step("route leave/return; Pea draft identity through thread leave/return", async () => {
       const route = await p.url();
       const routeThread = new URL(route).searchParams.get("thread");
+      const baselineReadout = await showReadout(p);
       const baseline = await state(p);
-      const baselineReadout = await visibleText(p, "[data-picture-readout]");
       expect(baseline.pictureTitle, "Ducts baseline has a rendered title").not.toBe("");
       expect(baselineReadout, "Ducts baseline has a rendered readout").not.toBe("");
       const main = await hold(p, '[data-proto="E2"]');
@@ -1327,6 +1430,8 @@ test("seeded real-user route journey", async () => {
         return evidence;
       };
       await censusDraft("initial visible Pea composer; first-open surface observed");
+      if (required.has("thread") && (await box(p, 'button[aria-label="Expand threads"]')))
+        await click(p, 'button[aria-label="Expand threads"]');
       const threads = await p.read<string[]>(
         `[...document.querySelectorAll('[data-list-view][aria-label="threads"] [role=option][data-key]')].filter(${visible}).map(e => e.getAttribute('data-key'))`,
       );
@@ -1341,6 +1446,8 @@ test("seeded real-user route journey", async () => {
         receipt.coverage.thread =
           "UNPROVEN: omitted from CHAOS_REQUIRE; existing-thread switches not executed";
       const pickThread = async (id: string) => {
+        if (await box(p, 'button[aria-label="Expand threads"]'))
+          await click(p, 'button[aria-label="Expand threads"]');
         await click(
           p,
           `[data-list-view][aria-label="threads"] [role=option][data-key=${literal(id)}]`,
@@ -1400,6 +1507,11 @@ test("seeded real-user route journey", async () => {
       }
       await settled(p);
       expect(await p.url()).toBe(route);
+      await showReadout(p);
+      await p.until(
+        async () => (await state(p)).crumb === baseline.crumb,
+        "returned route renders its original picture readout",
+      );
       const restored = await state(p);
       const restoredReadout = await visibleText(p, "[data-picture-readout]");
       const mainRetained = await retained(p, main);
@@ -1537,7 +1649,7 @@ test("seeded real-user route journey", async () => {
           .catch(() => undefined);
       }
       receipt.coverage.exceptions = JSON.stringify(page.errors);
-      page.close();
+      await page.close();
     }
     save();
     console.log(`route-chaos ${receipt.result}: ${dir}`);

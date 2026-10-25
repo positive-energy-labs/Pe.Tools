@@ -3,6 +3,7 @@ import * as Atom from "effect/unstable/reactivity/Atom";
 import type * as AtomRegistry from "effect/unstable/reactivity/AtomRegistry";
 
 import { createRouteOwner } from "#/route/route-owner";
+import type { ClosedWork, Resumed } from "#/chat/thread-work";
 import {
   THREAD_TABS_MAX,
   threadTabSchema,
@@ -39,6 +40,8 @@ type Setter<A> = A | ((previous: A) => A);
 export function createChatPageStore(deps: {
   registry: AtomRegistry.AtomRegistry;
   search: ChatSearch;
+  /** `?demo=`: tab writes stay in this browser and never reach a host thread. */
+  local?: boolean;
 }) {
   let tabs: {
     promote: (from: string, owner: string, current: () => boolean) => Promise<void>;
@@ -49,6 +52,7 @@ export function createChatPageStore(deps: {
       duplicate?: boolean,
       keep?: boolean,
     ) => Promise<boolean>;
+    work: (thread: string, route: string, resumed?: Resumed) => Promise<void>;
   } | null = null;
   const drafts = new Map<string, ThreadTab[]>();
   const draftTabs = (thread: string) => {
@@ -82,6 +86,11 @@ export function createChatPageStore(deps: {
     Atom.make<{ route: ChatPluginRoute; message: string } | null>(null),
   );
   const sideOpen = Atom.map(expandedPane, (pane) => pane === "side");
+  /** The last Work pressed on a closed document, for the tool it opened (page state, not URL). */
+  const closedWork = core.owned(
+    "widget/closed-work",
+    Atom.make<(ClosedWork & { thread: string; route: string; reason: string | null }) | null>(null),
+  );
 
   const set = <A>(verb: string, atom: Atom.Writable<A>, next: Setter<A>) =>
     core.write(verb, atom.label?.[0] ?? "page", () =>
@@ -97,10 +106,12 @@ export function createChatPageStore(deps: {
   return {
     registry: deps.registry,
     search: deps.search,
+    local: deps.local ?? false,
     atoms: {
       sideOpen,
       planIntent,
       planRefusal,
+      closedWork,
     },
     actions: {
       draftTabs,
@@ -177,6 +188,17 @@ export function createChatPageStore(deps: {
         set("plan-refused", planRefusal, { route: plugin, message }),
       openThread: (thread: string, replace = false) =>
         deps.search.patch({ thread, prompt: undefined, turn: undefined }, replace),
+      /** A Work press: that thread's tool, its Page restored when the thread holds a tab there. */
+      openWork: (thread: string, route: string, resumed?: Resumed, closed?: ClosedWork) => {
+        planGeneration++;
+        deps.registry.set(planIntent, null);
+        set(
+          "open-work",
+          closedWork,
+          closed ? { ...closed, thread, route, reason: resumed?.reason ?? null } : null,
+        );
+        return tabs?.work(thread, route, resumed) ?? Promise.resolve();
+      },
     },
     runAction: core.runAction,
     dispose() {

@@ -12,7 +12,6 @@ import {
   Download,
   GitFork,
   Hand,
-  ListFilter,
   LoaderCircle,
   Mail,
   MailOpen,
@@ -56,9 +55,6 @@ import { isReady } from "#/workbench/provider/providers";
 import {
   isUnread,
   shelfOf,
-  targetFacet,
-  targetFacets,
-  targetLabel,
   relativeThreadAge,
   threadOrder,
   activityWord,
@@ -78,6 +74,18 @@ import {
   type ThreadAction,
 } from "./thread-navigation";
 import { TooltipHint } from "@pe/kit/lang/tooltip";
+import { chipRecipe } from "@pe/kit/lang/chip";
+import type { ThreadWork } from "@pe/agent-contracts";
+import {
+  documentsLabel,
+  leadWork,
+  partialWork,
+  resumeWork,
+  type Resumed,
+  type ClosedWork,
+  useThreadWorks,
+  workHint,
+} from "./thread-work";
 
 /** What the roster holds: stored summaries, read against the live inventory by the shell. */
 type RosterThread = StoredThreadSummary & TargetRead;
@@ -145,7 +153,6 @@ function ThreadActionsMenu({
   thread,
   open,
   setOpen,
-  onFilterTarget,
   selection,
   onMany,
   ...verbs
@@ -161,8 +168,6 @@ function ThreadActionsMenu({
     change: (thread: RosterThread) => UpdateThreadRequest,
     of: number,
   ) => void;
-  /** Present (the sidebar), the menu offers to narrow the roster to this thread's target. */
-  onFilterTarget?: () => void;
 }) {
   const [form, setForm] = useState<"rename" | "delete" | "snooze" | null>(null);
   const [title, setTitle] = useState(thread.title);
@@ -253,7 +258,6 @@ function ThreadActionsMenu({
             {
               id: "new-target",
               label: "New thread on this target",
-              sub: count > 1 ? undefined : targetLabel(thread),
               icon: SquarePen,
               group: " ",
               refusal: oneThreadRefusal("New thread", count) ?? verbOf("new-target").refusal,
@@ -276,19 +280,6 @@ function ThreadActionsMenu({
                 label: provider.name,
                 run: () => verbs.onFork(thread.id, provider.id),
               })),
-            },
-          ]
-        : []),
-      ...(onFilterTarget
-        ? [
-            {
-              id: "filter",
-              label: "Filter by target",
-              sub: count > 1 ? undefined : targetLabel(thread),
-              icon: ListFilter,
-              group: "  ",
-              refusal: oneThreadRefusal("Filter", count),
-              run: onFilterTarget,
             },
           ]
         : []),
@@ -349,7 +340,6 @@ function ThreadActionsMenu({
                 {
                   id: "copy:target",
                   label: "Exact target",
-                  sub: targetLabel(thread),
                   run: () => copy(JSON.stringify(soleRequest(thread.head)), "target"),
                 },
               ]
@@ -464,7 +454,6 @@ function ThreadActionsMenu({
                 : "Delete this thread permanently?"}
           </DialogTitle>
           <p>{count > 1 ? `${count} threads` : thread.title}</p>
-          {count > 1 ? null : <p className="t-small text-ink-2">{targetLabel(thread)}</p>}
           {form === "rename" ? (
             <form
               className="flex flex-col gap-3"
@@ -558,10 +547,10 @@ function ThreadTime({ thread, now }: { thread: RosterThread; now: number }) {
 }
 
 const STAMP = new Intl.DateTimeFormat(undefined, { dateStyle: "short", timeStyle: "short" });
-const rowHint = (thread: RosterThread) =>
+// Names only: a session or open id never reaches the row, its hint included.
+const rowHint = (thread: RosterThread, work: ThreadWork | undefined) =>
   [
-    thread.title,
-    exactTargets(thread.head),
+    work ? workHint(work, thread.title) : thread.title,
     [thread.providerName, thread.modelId].filter(Boolean).join(" "),
     STAMP.format(new Date(thread.updatedAt)),
   ]
@@ -570,21 +559,15 @@ const rowHint = (thread: RosterThread) =>
 
 /**
  * A row's menu re-renders only when its data changes. The closures the sidebar mints per render
- * (`setOpen`, `onMany`, `onFilterTarget`) close over this row's thread and stable setters, so
+ * (`setOpen`, `onMany`) close over this row's thread and stable setters, so
  * they are not compared; the thread, the open flag, the selection and the verbs are.
  */
 const ThreadActions = memo(ThreadActionsMenu, (before, after) => {
-  const { setOpen: _a, onMany: _b, onFilterTarget: _c, ...was } = before;
-  const { setOpen: _d, onMany: _e, onFilterTarget: _f, ...now } = after;
+  const { setOpen: _a, onMany: _b, ...was } = before;
+  const { setOpen: _d, onMany: _e, ...now } = after;
   const keys = Object.keys(was) as (keyof typeof was)[];
   return keys.length === Object.keys(now).length && keys.every((key) => was[key] === now[key]);
 });
-
-function CompactThreadTarget({ thread }: { thread: RosterThread }) {
-  return thread.head.targets.length ? (
-    <span className="pe-thread-target">{targetLabel(thread)}</span>
-  ) : null;
-}
 
 function CompactThreadTrail({ thread, now }: { thread: RosterThread; now: number }) {
   return (
@@ -664,6 +647,7 @@ export function ThreadsSidebar({
   threads,
   currentThreadId,
   onSelect,
+  onWork,
   address,
   compactRows: compactRowsOverride,
   searchSerial = 0,
@@ -673,6 +657,8 @@ export function ThreadsSidebar({
   threads: RosterThread[];
   currentThreadId: string;
   onSelect: (id: string) => void;
+  /** A Work press opens its tool; the row's own press only opens the conversation. */
+  onWork?: (id: string, route: string, resumed?: Resumed, closed?: ClosedWork) => void;
   compactRows?: boolean;
   address?: ListPersist<ThreadSort>;
   /** The page's own list: "/" outside a field lands in its search. */
@@ -688,6 +674,29 @@ export function ThreadsSidebar({
       navRef.current?.querySelector<HTMLInputElement>("[data-list-bar] input")?.focus();
   }, [searchSerial]);
   const host = useSurfaceHost();
+  const works = useThreadWorks();
+  const partial = partialWork(works.snapshot);
+  // Why a closed Work could not resume, said once in its row's hint; the row stays pressable.
+  const [unresumed, setUnresumed] = useState<ReadonlyMap<string, string>>(new Map());
+  // Every live Work press asks the host which Work it is: its key picks the tab that holds it.
+  const pressWork = async (thread: string, work: ThreadWork, item: ThreadWork["works"][number]) => {
+    const document = work.documents.find((each) => each.id === item.documentId);
+    const resumed = works.demo ? undefined : await resumeWork(item.id);
+    if (resumed?.reason) setUnresumed((was) => new Map(was).set(thread, resumed.reason!));
+    onWork?.(
+      thread,
+      item.route,
+      resumed,
+      document?.availability === "closed" || (item.documentId && !document)
+        ? {
+            documentId: item.documentId,
+            document: document?.name ?? null,
+            intent: item.intent,
+            unfinished: item.unfinished,
+          }
+        : undefined,
+    );
+  };
   const compactRows = compactRowsOverride ?? host.surface === "tray";
   const [view, setView] = useState(() =>
     initialShelfState(threads.find((thread) => thread.id === currentThreadId)),
@@ -729,13 +738,8 @@ export function ThreadsSidebar({
   }, [currentThreadId, currentShelfKey]);
   const [menuId, setMenuId] = useState<string | null>(null);
   const [bulkResult, setBulkResult] = useState("");
-  const facets = useMemo(
-    () => ({
-      targets: targetFacets(threads),
-      providers: [
-        ...new Map(threads.map((thread) => [thread.providerId, thread.providerName])).entries(),
-      ],
-    }),
+  const providers = useMemo(
+    () => [...new Map(threads.map((thread) => [thread.providerId, thread.providerName])).entries()],
     [threads],
   );
   const orderedThreads = useMemo(
@@ -748,17 +752,11 @@ export function ThreadsSidebar({
     keyOf: (thread) => thread.id,
     search: searchThread,
     fields: {
-      target: {
-        kind: "text",
-        read: targetFacet,
-        values: facets.targets.map((item) => item.key),
-        labels: new Map(facets.targets.map((item) => [item.key, item.label])),
-      },
       provider: {
         kind: "text",
         read: (thread) => thread.providerId,
-        values: facets.providers.map(([key]) => key),
-        labels: new Map(facets.providers),
+        values: providers.map(([key]) => key),
+        labels: new Map(providers),
       },
       state: {
         kind: "text",
@@ -845,21 +843,23 @@ export function ThreadsSidebar({
     setBulkResult(`${outcomes.filter(Boolean).length} of ${of} threads changed`);
     clearSelection();
   };
-  const filterTarget = (thread: RosterThread) => list.pickPill("target", targetFacet(thread));
   const rowParts = (thread: RosterThread): ListRowParts => {
     const shelf = shelfOf(thread, now);
     const reorder = shelf === "active" || shelf === "pinned";
+    const work = works.of.get(thread.id);
+    const lead = leadWork(work);
+    // The remembered documents lead; the conversation title stands in when there are none.
+    const title = documentsLabel(work) ?? thread.title;
     return {
       label: compactRows ? (
         <span className="pe-thread-label">
-          <span className="pe-thread-title">{thread.title}</span>
-          <CompactThreadTarget thread={thread} />
+          <span className="pe-thread-title">{title}</span>
         </span>
       ) : (
-        thread.title
+        title
       ),
-      // L1: a second line only when it names a target; the harness mark rides the first.
-      lines: compactRows || !thread.head.targets.length ? 1 : 2,
+      // L1: a second line only when it holds Work; the harness mark rides the first.
+      lines: compactRows || !lead ? 1 : 2,
       active: thread.id === currentThreadId,
       meta: (
         <span className="pe-thread-trail">
@@ -869,10 +869,26 @@ export function ThreadsSidebar({
         </span>
       ),
       sub:
-        compactRows || !thread.head.targets.length ? undefined : (
-          <span className="pe-thread-sub min-w-0 truncate">{targetLabel(thread)}</span>
+        compactRows || !work || !lead ? undefined : (
+          <span className="pe-thread-sub">
+            <Button
+              label={`Open ${lead.intent}`}
+              onClick={(event) => {
+                event.stopPropagation();
+                void pressWork(thread.id, work, lead);
+              }}
+            >
+              {lead.unfinished ? (
+                <span className={chipRecipe().base()}>{lead.unfinished} unfinished</span>
+              ) : null}
+              <span className="min-w-0 truncate">
+                {lead.intent}
+                {work.works.length > 1 ? ` +${work.works.length - 1}` : ""}
+              </span>
+            </Button>
+          </span>
         ),
-      title: rowHint(thread),
+      title: [rowHint(thread, work), unresumed.get(thread.id)].filter(Boolean).join(" · "),
       onDoubleClick: () => setMenuId(thread.id),
       onContextMenu: (event) => {
         event.preventDefault();
@@ -905,7 +921,6 @@ export function ThreadsSidebar({
           setOpen={(open) => setMenuId(open ? thread.id : null)}
           selection={list.state.selected.includes(thread.id) ? selectedThreads : undefined}
           onMany={(targets, change, of) => void bulk(targets, change, of)}
-          onFilterTarget={() => filterTarget(thread)}
         />
       ),
     };
@@ -970,6 +985,13 @@ export function ThreadsSidebar({
           }}
         />
       </Scroll>
+      {partial ? (
+        <TooltipHint content={partial.hint}>
+          <p className="m-0 px-(--gutter) t-small text-ink-mute" data-thread-work-partial="">
+            {partial.line}
+          </p>
+        </TooltipHint>
+      ) : null}
     </nav>
   );
 }
@@ -1051,12 +1073,3 @@ const STATE_WORD: Record<ThreadActivity, string> = {
   failed: "Failed",
   idle: "Idle",
 };
-
-/** The exact target a row's short label stands for: its path, or the session and open id. */
-function exactTarget(target: DocumentRequest): string {
-  return target.kind === "named" ? target.address : `${target.ref.session} · ${target.ref.openId}`;
-}
-
-/** Every exact target of a thread, for the row's hover. */
-const exactTargets = (head: RosterThread["head"]) =>
-  head.targets.map((target) => exactTarget(target.request)).join("\n");

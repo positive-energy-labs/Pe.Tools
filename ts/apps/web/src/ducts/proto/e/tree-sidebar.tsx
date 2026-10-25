@@ -1,3 +1,5 @@
+import { useContext } from "react";
+import { AttentionDocument } from "@pe/kit/lang/attention";
 import { TooltipHint } from "@pe/kit/lang/tooltip";
 import { useCallback } from "react";
 import { ListTree } from "lucide-react";
@@ -25,7 +27,6 @@ export interface TreeCtx {
   selected: number | null;
   /** Each priced fitting's rule key. */
   ruleOf: ReadonlyMap<number, string>;
-  light: (ids: readonly number[] | null) => void;
   select: (id: number | null) => void;
   jumpToRule: (ruleKey: string) => void;
   /**
@@ -123,6 +124,7 @@ const childrenOf = (node: TreeNode) => node.children;
 
 export function SystemTree({ ctx, address }: { ctx: TreeCtx; address?: ListPersist<"name"> }) {
   const observation = useNativeObservation();
+  const doc = useContext(AttentionDocument);
   // Every section opens; the critical run opens under the section that holds it (else the first's).
   const crit =
     ctx.trees.flatMap((t) => t.children).find((r) => r.key === ctx.criticalKey) ??
@@ -237,8 +239,6 @@ export function SystemTree({ ctx, address }: { ctx: TreeCtx; address?: ListPersi
             self={n.kind === "leg" || n.kind === "element" ? n.self : ""}
             unpriced={n.unpriced}
             split={n.split}
-            light={ctx.light}
-            rowIds={idsOf(n)}
           />
         ),
         actions: ruleKey ? (
@@ -252,12 +252,15 @@ export function SystemTree({ ctx, address }: { ctx: TreeCtx; address?: ListPersi
             }}
           />
         ) : undefined,
-        onMouseEnter: () => ctx.light(idsOf(n)),
+        subject: doc
+          ? { doc, key: n.kind === "element" ? `e:${n.id}` : `${n.kind}:${n.key}` }
+          : undefined,
         revit: target.ids,
         revitRefs: target.refs,
       };
     },
     [
+      doc,
       observation,
       runName,
       ctx.grilleName,
@@ -266,12 +269,11 @@ export function SystemTree({ ctx, address }: { ctx: TreeCtx; address?: ListPersi
       ctx.ruleOf,
       ctx.reading,
       ctx.scale,
-      ctx.light,
       ctx.jumpToRule,
     ],
   );
   return (
-    <div className="min-w-0" onMouseLeave={() => ctx.light(null)}>
+    <div className="min-w-0">
       <ListView
         list={list}
         aria-label="system tree"

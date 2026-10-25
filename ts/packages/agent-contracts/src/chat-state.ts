@@ -121,6 +121,8 @@ export interface ChatMessage {
   mentions?: Mention[];
   /** A user turn's document, as its prompt event named it (the label), when one was bound. */
   target?: string;
+  /** An assistant row's turn: the key the host pins its element names under. */
+  turnId?: string;
   /** The assistant row the run is producing now; its last part is the one still moving. */
   running: boolean;
   failure?: Extract<HarnessEvent, { kind: "error" }>["failure"];
@@ -201,13 +203,22 @@ function fold(state: ChatState): Fold {
   const approvals = new Map<string, Approval>();
   const questions = new Map<string, Question>();
   let open: ChatMessage | undefined;
+  let turnId: string | undefined;
   let turn = false;
   let failure: string | undefined;
   let title = state.title;
 
   const assistant = (event: HarnessEvent) => {
     if (open) return open;
-    open = { id: `pea-${event.seq}`, role: "assistant", parts: [], running: true, ...at(event) };
+    const rowTurn = ("turnId" in event && event.turnId) || turnId;
+    open = {
+      id: `pea-${event.seq}`,
+      role: "assistant",
+      parts: [],
+      running: true,
+      ...(rowTurn ? { turnId: rowTurn } : {}),
+      ...at(event),
+    };
     rows.push(open);
     return open;
   };
@@ -282,6 +293,7 @@ function fold(state: ChatState): Fold {
         close(false);
         failure = undefined;
         turn = true;
+        turnId = event.turnId;
         rows.push({
           id: `you-${event.seq}`,
           role: "user",

@@ -59,11 +59,8 @@ test("takeoffs plane gestures replace the address, minimap moves push, and Back 
         }
         zones={zones}
         shown={null}
-        selectedKey={null}
-        cursor={null}
         stateOf={() => "unreviewed"}
         onSelectZone={() => {}}
-        onHover={() => {}}
         onCursor={() => {}}
       />
     );

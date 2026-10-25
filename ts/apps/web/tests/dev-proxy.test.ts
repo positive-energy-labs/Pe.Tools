@@ -158,7 +158,7 @@ test("borrowed frontend forwards reads with host origin and refuses mutations be
   } finally {
     await vite.close();
     backend.close();
-    rmSync(root, { recursive: true, force: true });
+    rmSync(root, { recursive: true, force: true, maxRetries: 5 });
     vi.unstubAllEnvs();
   }
 });
@@ -391,6 +391,6 @@ test("the real proxy forwards Page documents and assets and still refuses unmark
   } finally {
     await vite.close();
     backend.close();
-    rmSync(root, { recursive: true, force: true });
+    rmSync(root, { recursive: true, force: true, maxRetries: 5 });
   }
 });

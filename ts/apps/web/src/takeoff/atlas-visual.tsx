@@ -121,12 +121,9 @@ export function AtlasVisual() {
         planNote={planImage.note}
         zones={levelZones}
         shown={queriedZones}
-        selectedKey={zoneKey}
-        cursor={cursor}
         stateOf={stateOf}
         rows={store.atlasRows}
         onSelectZone={selectZone}
-        onHover={(id) => store.actions.hover(id)}
         onCursor={focusRoom}
         readout={
           <PictureReadout

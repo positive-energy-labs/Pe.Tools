@@ -425,12 +425,13 @@ test("a thread prompts, parks a permission, cancels, interrupts, renames, and re
   expect(kinds(body.events)).toEqual([
     "session",
     "prompt",
+    "turn_element_targets",
     "update:agent_message_chunk",
     "update:tool_call",
     "turn_end",
   ]);
-  expect(body.events.map((e) => e.seq)).toEqual([1, 2, 3, 4, 5]);
-  expect(body.lastSeq).toBe(5);
+  expect(body.events.map((e) => e.seq)).toEqual([1, 2, 3, 4, 5, 6]);
+  expect(body.lastSeq).toBe(6);
 
   // Permission parks the turn until answered.
   await call("POST", `/pe/threads/${id}/prompt`, { text: "ask permission" });
@@ -461,8 +462,9 @@ test("a thread prompts, parks a permission, cancels, interrupts, renames, and re
     optionId: "yes",
   });
   body = await until(read, id, (b) => turnEnds(b).length === 2);
-  expect(kinds(body.events).slice(5)).toEqual([
+  expect(kinds(body.events).slice(6)).toEqual([
     "prompt",
+    "turn_element_targets",
     "update:agent_message_chunk",
     "update:tool_call",
     "permission_request",
@@ -583,6 +585,7 @@ test("a restarted host expires open asks, ends the open turn, resumes, and keeps
     "permission_resolved",
     "error",
     "prompt",
+    "turn_element_targets",
     "starting",
     "session",
     "model_changed",
@@ -627,6 +630,7 @@ test("a question parks the turn, a fork copies the log, and a lost session re-fe
   body = await until(read, id, (b) => turnEnds(b).length === 1);
   expect(kinds(body.events).slice(1)).toEqual([
     "prompt",
+    "turn_element_targets",
     "update:agent_message_chunk",
     "question_request",
     "question_resolved",

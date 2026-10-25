@@ -10,6 +10,12 @@ Design-language and primitive gaps this cluster hit are owned by the design-syst
 restated here.
 
 ## Decided
+- 2026-10-24, kaitpw: bare element ids in chat resolve only within the turn's exact pinned document lifetimes; ambiguous or unresolved ids stay plain. Persist each observation with the prompt provenance so old prose cannot silently acquire another element's name after a reopen.
+
+- 2026-10-24, kaitpw: closing an unsaved Revit document retains its proposals and staged edits as closed-document Work for inspection. The original exact lifetime remains its identity. A replacement document never inherits that Work or native write authority automatically.
+- 2026-10-24, kaitpw: bare element ids in chat resolve only within the turn's exact pinned document lifetimes; ambiguous or unresolved ids stay plain. Persist each observation with the prompt provenance so old prose cannot silently acquire another element's name after a reopen.
+
+- 2026-10-24, kaitpw: a thread click opens the conversation; a Work click opens its tool. Pea stays left. Connected tools stay right and enter collapsed as one bar of labelled tabs. Explicit expansion restores the tool's Page. Thread summaries show unfinished Work and remembered document names. Closed sessions do not erase that context. Chats without Work retain document choice. Work never grants native write permission, and old Work requires current model validation before apply.
 
 - 2026-10-23, kaitpw: authored and staged Work must accumulate visibly, because users must not lose effort when they change a document target or access. Revocation stops an execution attempt before native dispatch; it does not discard Work or receipts. A native write already dispatched may finish. Keep the existing grant-backed cancellation on target removal, including under Full; do not add a second cancellation policy or a global Work manager in this pass.
 
@@ -164,6 +170,7 @@ restated here.
 
 ## Owed
 
+- 2026-10-24, remove the dependency residue at `C:/Users/kaitp/.t3/worktrees/Pe.Tools/t3-8cbc72a5` after automatic approval review permits cleanup. Git retirement removed its registration but left files. The cleanup action was rejected without a reason. Child handoffs and SSR custody evidence are copied to `.artifacts/handoffs/turn-names-child-evidence/` in the conversation-work checkout; no child process remains.
 - 2026-10-23, production thread switching still exceeds the strict 50 ms task bar: warm median acknowledgement 83.2 ms and worst task 81 ms over three actual switches; cold restoration into the all-systems Ducts route reaches 1596 ms. Thread/Places persistence is refused on the borrowed read-only lane, so full persisted navigation remains unproven. See the [production report](../../../.artifacts/runs/final-20261023/REPORT.md).
 - Retained proof residue from the folded harness chronology: first-open with no ready provider, actual pointer operation of the provider ladder, open-login and a real stalled-turn waiting marker need current surface acceptance. Audit `47c37fb2`'s inlineColor restamp (47 against observed 51) against the current design guard before closing its unexplained four-count deficit. Historical package/session successes do not settle these cases.
 

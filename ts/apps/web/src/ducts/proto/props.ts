@@ -1,3 +1,5 @@
+import type * as Atom from "effect/unstable/reactivity/Atom";
+import type { SubjectKey } from "@pe/kit/lang/attention";
 /** The one props object `route.tsx` hands the shell: the reads, the page, the Work and the selection callbacks. */
 import type { DuctClaim, DuctsRouteDocument, OrbitViewport } from "@pe/agent-contracts";
 import type { price } from "@pe/ducts-domain/pricing";
@@ -7,10 +9,12 @@ import type { ActionHandle } from "#/route/handle";
 import type { PageMove } from "#/route/manifest";
 
 import type { DuctsPage } from "../manifest";
-import type { Claim, Subject } from "../legs";
+import type { Claim, Run } from "../legs";
 import type { PricingResult } from "../pricing-job";
 
 export interface ProtoProps {
+  attentionDoc: string;
+  selection: Atom.Atom<ReadonlySet<SubjectKey>>;
   /** Null only while reading or with no document. */
   snapshot: DuctSnapshot | null;
   /** Pe's priced losses (now/next); null until the ASHRAE tables are read. */
@@ -23,8 +27,8 @@ export interface ProtoProps {
   ready: ReturnType<typeof readiness>;
   /** Document-wide projections share the worker's Work revision; null before the first solve. */
   analysis: PricingResult["analysis"] | null;
-  /** Subject scene (ids + claims + verdict callback); null until a subject exists. */
-  subject: Subject | null;
+  /** Run scene (ids + claims + verdict callback); null until a subject exists. */
+  subject: Run | null;
   /** Stages a person's verdict on a claim; present whether or not a subject exists. */
   onVerdict: (claim: Claim, verdict: NonNullable<Claim["verdict"]>) => void;
   /** The chosen system's claims (every claim when no system is chosen). */
