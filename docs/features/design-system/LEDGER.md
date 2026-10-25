@@ -697,6 +697,7 @@ Rebuilt 2026-10-22 against `a553a15a`; these are decisions and proof boundaries,
 
 ## Owed
 
+- Remove the empty [Tutorial checkout directory](C:/Users/kaitp/.t3/worktrees/Pe.Tools/t3-a02516dd) after the shared tool runtime releases its working-directory handle. Git registration and contents are removed; evidence is copied to the main checkout. The remaining `node_repl.exe` manager also owns a Codex app-server process and was left running (2026-10-25).
 - Tutorial pre-load: repeat the built-browser case with an admitted native snapshot response held in flight; the actual `EScreen` absent-snapshot/error transitions have deterministic proof, and the built app has no-document and delayed-pricing browser proof. See [TUTORIAL-PRELOAD.md](TUTORIAL-PRELOAD.md#proof).
 
 - 2026-10-24, prove or refute post-acquisition stream liveness in real Chrome. `PeReadings.open` has a one-shot 30-second acquisition deadline; a healthy quiet stream and an open connection that silently stops delivering data need separate evidence. The quiet route journey proves no reconnect storm, not detection of a silently stalled acquired stream. Keep this distinct from native freshness and write admission.
