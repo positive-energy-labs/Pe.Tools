@@ -402,7 +402,7 @@ function Canvas({
   const schematic = (size: "main" | "inset", readout: ReactNode = null) => (
     <Schematic
       index={index}
-      group={lead}
+      groups={groups}
       encoding={scale.encoding}
       onSelect={(id) => pick(id)}
       size={size}
