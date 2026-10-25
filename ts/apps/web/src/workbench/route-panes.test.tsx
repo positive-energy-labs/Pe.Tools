@@ -23,7 +23,7 @@ const store = createChatPageStore({
 const ducts: ThreadTab = {
   id: "tab-ducts",
   route: "ducts",
-  link: routeAddress("ducts").link({ system: "S1" } as never),
+  link: routeAddress("ducts").link({ system: ["S1"] } as never),
   at: "2026-10-24T00:00:00.000Z",
 };
 const TAB = `${routeAddress("ducts").title} · S1`;
