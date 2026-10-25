@@ -1,7 +1,8 @@
 /**
- * The veil: context fades, and every fogged material fogs toward the ground, by d = the world
+ * The veil: context opacity follows d = the world
  * distance from a fragment to the nearest subject geometry (tier `subject` or `stub`). One rule,
- * camera-independent: orbiting or zooming never changes it. `falloff` is the rule; the shader
+ * camera-independent: orbiting or zooming never changes it. Ground fog and brightness are optional.
+ * `falloff` is the rule; the shader
  * mirrors it.
  *
  * d is a baked 3D distance field (one byte per cell, about 2 M cells at most), sampled
@@ -13,6 +14,7 @@
  * (surface samples + trilinear interpolation); the shader treats one cell as touching.
  */
 import * as THREE from "three";
+import { CONTEXT_OPACITY_LIMIT } from "./grounds";
 import type { SceneMeshes } from "./types";
 
 /** Distances saturate here (ft); a knob's far edge must stay inside it. */
@@ -38,6 +40,26 @@ export type VeilField = {
   min: readonly [number, number, number];
   cellFt: number;
 };
+
+/** The CPU pick uses the texture's linear sample, including its half-cell centre convention. */
+export function veilDistance(field: VeilField, point: readonly number[]): number {
+  const at = field.dims.map((n, axis) =>
+    Math.max(0, Math.min(n - 1, (point[axis]! - field.min[axis]!) / field.cellFt - 0.5)),
+  );
+  const [nx, ny] = field.dims;
+  let encoded = 0;
+  for (let k = 0; k < 8; k++) {
+    const indices = at.map((v, axis) =>
+      Math.min(field.dims[axis]! - 1, Math.floor(v) + ((k >> axis) & 1)),
+    );
+    const weight = at.reduce(
+      (w, v, axis) => w * ((k >> axis) & 1 ? v - Math.floor(v) : 1 - (v - Math.floor(v))),
+      1,
+    );
+    encoded += field.data[indices[0]! + nx * (indices[1]! + ny * indices[2]!)]! * weight;
+  }
+  return Math.max(0, (encoded / 255) * (VEIL_REACH_FT + field.cellFt) - field.cellFt);
+}
 
 const BIG = 1e12;
 /** Felzenszwalb's exact 1D squared distance transform of `f` (length n) into `d`. */
@@ -170,6 +192,7 @@ export type VeilLook = {
   maxOpacity: number;
   desaturate: number;
   fog: number;
+  brightness: number;
 };
 
 /** One uniform set shared by every veiled material of a renderer. */
@@ -199,6 +222,10 @@ export function veilUniforms() {
     veilDesaturate: { value: 0 },
     veilFog: { value: 0 },
     veilGround: { value: new THREE.Color() },
+    veilHalo: { value: false },
+    veilBrightness: { value: 0 },
+    scenePass: { value: 1 },
+    subjectRim: { value: 0 },
   };
 }
 export type VeilUniforms = ReturnType<typeof veilUniforms>;
@@ -219,10 +246,12 @@ export function setVeilLook(u: VeilUniforms, look: VeilLook, ground: THREE.Color
   u.veilNear.value = look.nearFt;
   u.veilFar.value = Math.min(look.farFt, VEIL_REACH_FT);
   u.veilCurve.value = look.curve;
-  u.veilMinOpacity.value = look.minOpacity;
-  u.veilMaxOpacity.value = look.maxOpacity;
+  // Even crossed knobs cannot make far context stronger or context fully opaque.
+  u.veilMaxOpacity.value = Math.max(0, Math.min(look.maxOpacity, CONTEXT_OPACITY_LIMIT));
+  u.veilMinOpacity.value = Math.max(0, Math.min(look.minOpacity, u.veilMaxOpacity.value));
   u.veilDesaturate.value = look.desaturate;
   u.veilFog.value = look.fog;
+  u.veilBrightness.value = look.brightness;
   ground.getRGB(u.veilGround.value as unknown as THREE.RGB, THREE.SRGBColorSpace);
 }
 
@@ -233,23 +262,37 @@ uniform vec3 veilSize;
 uniform float veilCell, veilReach, veilNear, veilFar, veilCurve;
 uniform float veilMinOpacity, veilMaxOpacity, veilDesaturate, veilFog;
 uniform vec3 veilGround;
+uniform bool veilHalo;
+uniform float veilBrightness;
+#ifdef VEIL_TIER
+uniform int scenePass;
+uniform float subjectRim;
+varying vec3 sceneNormal, sceneView;
+#endif
 varying vec3 veilPoint;
 void veil(inout vec4 c) {
   float d = max(0.0, texture(veilField, (veilPoint - veilMin) / veilSize).r * veilReach - veilCell);
   float t = pow(1.0 - clamp((d - veilNear) / max(veilFar - veilNear, 1e-3), 0.0, 1.0), veilCurve);
 #ifdef VEIL_TIER
-  if (c.a <= 0.0) {
-    c.a = mix(veilMinOpacity, veilMaxOpacity, t);
+  bool context = c.a <= 0.0;
+  if (context != (scenePass == 0)) discard;
+  if (context) {
+    if (veilHalo && d >= veilFar) discard;
+    c.a = veilHalo ? veilMaxOpacity * t : mix(veilMinOpacity, veilMaxOpacity, t);
     c.rgb = mix(c.rgb, vec3(dot(c.rgb, vec3(0.2126, 0.7152, 0.0722))), veilDesaturate * (1.0 - t));
+    c.rgb *= 1.0 + veilBrightness * t;
     if (c.a < 0.004) discard;
+    c.rgb = mix(c.rgb, veilGround, veilFog * (1.0 - t));
+  } else {
+    // Face interiors darken slightly against their rim; this survives the all-translucent view.
+    c.rgb *= 1.0 - subjectRim * abs(dot(normalize(sceneNormal), normalize(sceneView)));
   }
 #endif
-  c.rgb = mix(c.rgb, veilGround, veilFog * (1.0 - t));
 }`;
 
 /**
- * Put a fogged material under the veil: its fog chunks gain the world point and the veil term,
- * then three's own depth fog (only when the scene has one). `tiered` is the batch: a context
+ * The fog chunks carry the world point, then three's optional camera-depth fog.
+ * `tiered` is the batch: a context
  * instance (alpha `CONTEXT_ALPHA`) takes its opacity from d. Idempotent.
  */
 export function veilMaterial(material: THREE.Material, u: VeilUniforms, tiered = false) {
@@ -265,6 +308,16 @@ export function veilMaterial(material: THREE.Material, u: VeilUniforms, tiered =
         "#include <fog_vertex>",
         "#include <fog_vertex>\nveilPoint = (inverse(viewMatrix) * mvPosition).xyz;",
       );
+    if (tiered)
+      shader.vertexShader = `varying vec3 sceneNormal, sceneView;\n${shader.vertexShader}`
+        .replace(
+          "#include <defaultnormal_vertex>",
+          "#include <defaultnormal_vertex>\nsceneNormal = transformedNormal;",
+        )
+        .replace(
+          "#include <project_vertex>",
+          "#include <project_vertex>\nsceneView = isOrthographic ? vec3(0.0, 0.0, 1.0) : -mvPosition.xyz;",
+        );
     shader.fragmentShader = `${tiered ? "#define VEIL_TIER\n" : ""}${shader.fragmentShader}`
       .replace("#include <fog_pars_fragment>", `#include <fog_pars_fragment>\n${parsFragment}`)
       .replace("#include <fog_fragment>", "veil(gl_FragColor);\n#include <fog_fragment>");

@@ -16,16 +16,18 @@ import {
   OUTLINE_CHANNEL,
   paintOf,
   sceneGrounds,
-  tierOf,
   type Look,
 } from "./grounds";
 import {
   bakeVeil,
   CONTEXT_ALPHA,
+  falloff,
   setVeilField,
   setVeilLook,
   veilMaterial,
+  veilDistance,
   veilUniforms,
+  type VeilField,
 } from "./veil";
 import {
   captureGestures,
@@ -56,6 +58,7 @@ import type {
   Layer3D,
   Paint as InstancePaint,
   PaintOf,
+  Pick,
   SceneInstance,
   SceneMeshes,
 } from "./types";
@@ -70,6 +73,9 @@ const mark = (phase: string, detail: Record<string, unknown> = {}) => {
 /** Up to three extruded even-odd polygons whose intersection is kept, packed two points per vec4.
  * Frames (u, v): 0 = (x, y), 1 = (-x, z), 2 = (y, z), batch-local (relative to `origin`). */
 export type ClipVolume = { data: Float32Array; counts: number[]; keepInside: boolean[] };
+export type ContextMode = "halo" | "all";
+/** Context alone in the first pass; the normal camera layers draw ducts and annotations after it. */
+const CONTEXT_LAYER = 5;
 /** Points per axis polygon the shader reads; `space/state.ts` packs its cuts against it. */
 export const CLIP_POINTS = 64;
 
@@ -226,9 +232,11 @@ export function createRenderer(
     0,
     material,
   );
-  // Back-to-front instance sorting preserves context translucency; opaque subject fragments write depth.
+  // Two passes reuse the same batch and its back-to-front instance sort. Context never owns depth.
   batch.position.copy(origin);
   batch.layers.enable(OCCLUDER_LAYER);
+  batch.layers.enable(CONTEXT_LAYER);
+  for (const light of [hemisphere, sun]) light.layers.enable(CONTEXT_LAYER);
   scene.add(batch);
   const glow = createGlow(renderer, material);
   /** What a look change re-applies besides instance tints: ground, lights, fog, veil, passes. */
@@ -245,6 +253,7 @@ export function createRenderer(
       ? new THREE.FogExp2(ground, fogDensity(bounds, look.fog.density))
       : null;
     setVeilLook(veil, look.veil, ground);
+    veil.subjectRim.value = look.depth.rim;
     outline.setWidths(look.outline);
     glow.setLook(look.glow);
   };
@@ -254,7 +263,8 @@ export function createRenderer(
   const paints: InstancePaint[] = [];
   const tint = (id: number, mark: Mark | null = null) => {
     const paint = paints[id]!;
-    const tier = tierOf(paint, mark !== null);
+    // Highlighting changes ink only. Promoting a floor to subject made it fully opaque.
+    const { tier } = paint;
     const color = (
       tier === "context"
         ? grounds.context
@@ -267,17 +277,22 @@ export function createRenderer(
       tier === "context"
         ? CONTEXT_ALPHA
         : tier === "stub"
-          ? look.subject.stubOpacity
-          : look.subject.opacity;
+          ? Math.min(
+              look.subject.stubOpacity,
+              look.depth.everythingTranslucent ? look.depth.translucentOpacity : 1,
+            )
+          : look.depth.everythingTranslucent
+            ? look.depth.translucentOpacity
+            : look.subject.opacity;
     batch.setColorAt(id, new THREE.Vector4(color.r, color.g, color.b, alpha));
   };
   /** Instance index to batch id, for the veil's subject test. */
   const idOf: number[] = [];
-  const bake = () =>
-    setVeilField(
-      veil,
-      bakeVeil(meshes, (i) => paints[idOf[i]!]!.tier !== "context"),
-    );
+  let field: VeilField;
+  const bake = () => {
+    field = bakeVeil(meshes, (i) => paints[idOf[i]!]!.tier !== "context");
+    setVeilField(veil, field);
+  };
   mark("geometry-start");
   for (const instance of meshes.instances) {
     const vertices = meshes.positions.slice(
@@ -347,6 +362,21 @@ export function createRenderer(
   /** Thumbnails: an axis drawn at its fit; the axis shown large draws the 3D pose instead. */
   let thumbs: Partial<Record<PlaneAxis, HTMLCanvasElement | null>> = {};
   let thumbsStale = true;
+  /** Context cannot attenuate a duct, even through arbitrarily many overlapping slabs. */
+  const drawScene = (shown: THREE.Camera) => {
+    const mask = shown.layers.mask;
+    const autoClear = renderer.autoClear;
+    shown.layers.set(CONTEXT_LAYER);
+    veil.scenePass.value = 0;
+    material.depthWrite = false;
+    renderer.render(scene, shown);
+    shown.layers.mask = mask;
+    veil.scenePass.value = 1;
+    material.depthWrite = !look.depth.everythingTranslucent;
+    renderer.autoClear = false;
+    renderer.render(scene, shown);
+    renderer.autoClear = autoClear;
+  };
   const drawThumbs = () => {
     const ratio = renderer.getPixelRatio();
     for (const axis of Object.keys(thumbs) as PlaneAxis[]) {
@@ -360,11 +390,11 @@ export function createRenderer(
       renderer.setViewport(0, 0, at.width, at.height);
       if (plane?.axis === axis) {
         resizeCamera(camera, at.width / at.height);
-        renderer.render(scene, camera);
+        drawScene(camera);
         resizeCamera(camera, size.width / size.height);
       } else {
         place(axis, fitPlane(axis, bounds, at), at);
-        renderer.render(scene, ortho);
+        drawScene(ortho);
       }
       // The drawing buffer is still this frame's: copy its bottom-left corner out before compositing.
       ctx.drawImage(
@@ -415,7 +445,7 @@ export function createRenderer(
       // Update transforms once, including any frame callback's changes, before all passes.
       scene.updateMatrixWorld();
       if (thumbsStale) drawThumbs();
-      renderer.render(scene, active());
+      drawScene(active());
       if (glowing) glow.render(scene, active());
       if (outlined.children.length) outline.render(scene, active());
       if (measuring) fence(started);
@@ -723,6 +753,7 @@ export function createRenderer(
     render();
   };
 
+  const pick = createMeshPicker(batch, byId);
   return {
     canvas,
     gestureSize: () => [size.height, viewHeight(camera, controls.target)] as const,
@@ -730,7 +761,24 @@ export function createRenderer(
     moves,
     /** The camera the picture shows now: the orbit's, or the plane's. */
     active,
-    pick: createMeshPicker(batch, byId),
+    pick(ray: THREE.Ray, clip?: (hit: Pick) => boolean) {
+      return pick(ray, (hit) => {
+        if (veil.veilHalo.value && paintOf(hit.instance, paintBy).tier === "context") {
+          const distance = veilDistance(field, hit.point);
+          if (distance >= veil.veilFar.value) return false;
+          const opacity =
+            veil.veilMaxOpacity.value *
+            falloff(
+              distance,
+              veil.veilNear.value,
+              veil.veilFar.value,
+              veil.veilCurve.value,
+            );
+          if (opacity < 0.004) return false;
+        }
+        return clip?.(hit) ?? true;
+      });
+    },
     pickIssue(at: { clientX: number; clientY: number }): IssueTarget | null {
       const rect = canvas.getBoundingClientRect();
       if (!rect.width || !rect.height) return null;
@@ -848,6 +896,12 @@ export function createRenderer(
       if (next === look) return;
       look = next;
       applyLook();
+    },
+    /** Purely visual: no capture or distance-field bake when a context layer changes. */
+    setContextMode(mode: ContextMode = "all") {
+      veil.veilHalo.value = mode === "halo";
+      thumbsStale = true;
+      render();
     },
     /** Who is subject, stub or context, and each subject's colour key; re-bakes the veil. */
     setPaint(next: PaintOf | undefined) {

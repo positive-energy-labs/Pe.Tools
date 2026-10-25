@@ -44,7 +44,7 @@ it("keeps camera gestures local and meshes mounted across native re-reads", () =
     gestureSize: () => [600, 2],
     setViewport,
     ...Object.fromEntries(
-      "setOrbitPivot setOnFrame reportFrame setPlane setThumbs paint setLayers lightIssue reach hoverElement setClip setLook setPaint"
+      "setOrbitPivot setOnFrame reportFrame setPlane setThumbs paint setLayers lightIssue reach hoverElement setClip setLook setPaint setContextMode"
         .split(" ")
         .map((name) => [name, vi.fn()]),
     ),
@@ -71,7 +71,7 @@ it("keeps camera gestures local and meshes mounted across native re-reads", () =
   const onViewport = vi.fn();
   const onPick = vi.fn();
   const orbit = createLiveOrbit(initial, onViewport);
-  const draw = (pivot?: readonly number[]) => (
+  const draw = (pivot?: readonly number[], contextMode?: "halo" | "all") => (
     <>
       <Scene3D
         readout={<span>picture state</span>}
@@ -79,6 +79,7 @@ it("keeps camera gestures local and meshes mounted across native re-reads", () =
         orbit={orbit}
         onPick={onPick}
         orbitPivot={pivot}
+        contextMode={contextMode}
       />
       <OrbitMinimap orbit={orbit} />
       <Row label="linked row" revit={[42]} />
@@ -86,6 +87,7 @@ it("keeps camera gestures local and meshes mounted across native re-reads", () =
   );
   const registry = makeAtomRegistry();
   const view = render(<TestAttention registry={registry}>{draw()}</TestAttention>);
+  expect(renderer.current.setContextMode).toHaveBeenLastCalledWith(undefined);
   expect(view.getByText("picture state")).toBeTruthy();
   const row = view.getByText("linked row").closest(".dl-row")!;
   fireEvent.pointerOver(row);
@@ -156,6 +158,11 @@ it("keeps camera gestures local and meshes mounted across native re-reads", () =
   expect(orbit.read()).toBe(beforeSelection);
   expect(setViewport).not.toHaveBeenCalled();
   const canvas = renderer.current.canvas;
+  view.rerender(<TestAttention registry={registry}>{draw([10, 20, 30], "halo")}</TestAttention>);
+  expect(renderer.current.setContextMode).toHaveBeenLastCalledWith("halo");
+  expect(renderer.current.canvas).toBe(canvas);
+  view.rerender(<TestAttention registry={registry}>{draw([10, 20, 30], "all")}</TestAttention>);
+  expect(renderer.current.setContextMode).toHaveBeenLastCalledWith("all");
   fireEvent(canvas, new MouseEvent("pointerdown", { button: 0, clientX: 10, clientY: 10 }));
   onViewport.mockClear();
   act(() => {

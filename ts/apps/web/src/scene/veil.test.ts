@@ -1,6 +1,22 @@
 import { expect, it } from "vite-plus/test";
+import * as THREE from "three";
+import { CONTEXT_OPACITY_LIMIT, LOOK } from "./grounds";
 import { SceneMeshes, type SceneInstance } from "./types";
-import { bakeVeil, falloff, VEIL_REACH_FT } from "./veil";
+import { bakeVeil, falloff, setVeilLook, veilDistance, veilUniforms, VEIL_REACH_FT } from "./veil";
+
+it("context opacity cannot become opaque or increase away from ducts when knobs cross", () => {
+  const u = veilUniforms();
+  setVeilLook(u, { ...LOOK.defaults.veil, minOpacity: 1, maxOpacity: 1 }, new THREE.Color());
+  expect(u.veilMaxOpacity.value).toBe(CONTEXT_OPACITY_LIMIT);
+  expect(Math.fround(u.veilMaxOpacity.value)).toBeLessThan(1);
+  setVeilLook(u, { ...LOOK.defaults.veil, minOpacity: 0.9, maxOpacity: 0.2 }, new THREE.Color());
+  expect(u.veilMinOpacity.value).toBe(0.2);
+  expect(u.veilMaxOpacity.value).toBe(0.2);
+  expect(LOOK.defaults.veil.minOpacity).toBeGreaterThan(0);
+  expect(LOOK.defaults.veil.fog).toBe(0);
+  expect(LOOK.defaults.veil.brightness).toBe(0);
+  u.veilField.value.dispose();
+});
 
 it("falls steeply from near to far, clamps outside, and stays finite at a crossed range", () => {
   for (const [d, expected] of [
@@ -49,6 +65,8 @@ it("bakes distance to triangle interiors, excludes context, and bounds a flat fi
   expect(at(5, 5, 0)).toBe(0);
   expect(at(5, 5, 5)).toBeCloseTo(5, 0);
   expect(at(18, 18, 0)).toBeGreaterThan(10);
+  expect(veilDistance(field, [105, 105, 0])).toBe(0);
+  expect(veilDistance(field, [105, 105, 5])).toBeCloseTo(4.25, 0);
   expect(bakeVeil(meshes, () => false).data.every((d) => d === 255)).toBe(true);
   const flat = bakeVeil(
     new SceneMeshes(meshes.positions, { ...bounds, maxX: 100_100, maxZ: 0 }, [instance]),
@@ -59,4 +77,16 @@ it("bakes distance to triangle interiors, excludes context, and bounds a flat fi
   expect((flat.data[0]! / 255) * (VEIL_REACH_FT + flat.cellFt) - flat.cellFt).toBeCloseTo(
     VEIL_REACH_FT,
   );
+});
+
+it("samples a linear texture at cell centres and clamps at its boundaries", () => {
+  const field = {
+    data: new Uint8Array([0, 255]),
+    dims: [2, 1, 1] as const,
+    min: [0, 0, 0] as const,
+    cellFt: 1,
+  };
+  expect(veilDistance(field, [0.5, 0, 0])).toBe(0);
+  expect(veilDistance(field, [1, 0, 0])).toBe(31.5);
+  expect(veilDistance(field, [100, 0, 0])).toBe(VEIL_REACH_FT);
 });

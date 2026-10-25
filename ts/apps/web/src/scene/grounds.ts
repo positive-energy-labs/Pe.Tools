@@ -1,10 +1,12 @@
 import * as THREE from "three";
 import { bool, colour, defineKnobs, num, set } from "#/knobs/knobs";
 import { inkOf } from "./ink";
-import type { Bounds, IssueState, LayerFrame, Paint, PaintOf, SceneInstance, Tier } from "./types";
+import type { Bounds, IssueState, LayerFrame, Paint, PaintOf, SceneInstance } from "./types";
 
 export const WHITE = Object.freeze(new THREE.Color(1, 1, 1));
 export const BLACK = Object.freeze(new THREE.Color(0, 0, 0));
+/** Keep the context ceiling representably translucent after upload to a float32 uniform. */
+export const CONTEXT_OPACITY_LIMIT = 0.95;
 /** Mask colours encode channels, not visible hues. */
 export const OUTLINE_CHANNEL = {
   selected: new THREE.Color(1, 0, 0),
@@ -15,7 +17,7 @@ export const GROUND_MATERIAL = {
   color: WHITE,
   transparent: true,
   depthTest: true,
-  depthWrite: true,
+  depthWrite: false,
   forceSinglePass: true,
 };
 
@@ -33,9 +35,14 @@ const SYSTEM_PALETTE = ["viz-1", "viz-2", "viz-3", "viz-4", "viz-5", "viz-6"] as
 export const LOOK = defineKnobs("scene", "ts/apps/web/src/scene/grounds.ts", {
   subject: {
     colour: colour("Subject ink", "theme"),
-    opacity: num("Subject opacity", 1, [0.05, 1, 0.01]),
+    opacity: num("Subject opacity", 0.85, [0.05, 0.99, 0.01]),
     bySystem: bool("Colour by system", true),
     stubOpacity: num("Stub opacity", 0.45, [0.05, 1, 0.01]),
+  },
+  depth: {
+    everythingTranslucent: bool("Everything translucent", false),
+    translucentOpacity: num("Translucent duct opacity", 0.45, [0.05, 0.99, 0.01]),
+    rim: num("Duct rim contrast", 0.18, [0, 0.8, 0.01]),
   },
   palette: Object.fromEntries(
     SYSTEM_PALETTE.map((role, i) => [`s${i + 1}`, colour(`System ink ${i + 1}`, role)]),
@@ -47,13 +54,15 @@ export const LOOK = defineKnobs("scene", "ts/apps/web/src/scene/grounds.ts", {
   },
   veil: {
     colour: colour("Context ink", "theme"),
+    themeGroundMix: num("Context mix toward ground", 0.25, [0, 1, 0.01]),
     nearFt: num("Full within (ft)", 1, [0, 20, 0.25]),
     farFt: num("Far (ft)", 14, [1, 64, 0.5]),
     curve: num("Curve exponent", 2, [0.25, 6, 0.05]),
-    maxOpacity: num("Opacity at subject", 0.55, [0, 1, 0.01]),
-    minOpacity: num("Opacity far", 0.02, [0, 1, 0.01]),
+    maxOpacity: num("Opacity at subject", 0.4, [0.01, CONTEXT_OPACITY_LIMIT, 0.01]),
+    minOpacity: num("Opacity far", 0.12, [0.01, CONTEXT_OPACITY_LIMIT, 0.01]),
     desaturate: num("Desaturate far", 1, [0, 1, 0.01]),
-    fog: num("Fog to ground far", 0.6, [0, 1, 0.01]),
+    fog: num("Fog to ground far", 0, [0, 1, 0.01]),
+    brightness: num("Brightness near ducts", 0, [0, 1, 0.01]),
   },
   fog: {
     depth: bool("Camera-depth fog", false),
@@ -110,9 +119,6 @@ export const damageAlpha = (look = LOOK.read()) => look.damage.alpha;
 /** Without a `paintOf`: the captured focus is the subject, everything else context. */
 export const paintOf = (instance: SceneInstance, of?: PaintOf): Paint =>
   of?.(instance) ?? { tier: instance.focus ? "subject" : "context" };
-/** A lit or marked context element draws as subject so the mark reads. */
-export const tierOf = (paint: Paint, lit = false): Tier =>
-  lit && paint.tier === "context" ? "subject" : paint.tier;
 export const isLit = (at: LayerFrame) =>
   !!at.selected || !!at.lit || at.state === "hover" || at.state === "focus";
 
@@ -144,7 +150,7 @@ export function sceneGrounds(mount: Element, look: Look) {
     ink,
     subject,
     context: inkOr(look.veil.colour, mount, () =>
-      inkOf("ink-mute", mount).lerp(ground, 0.65).offsetHSL(0, -1, 0),
+      inkOf("ink-mute", mount).lerp(ground, look.veil.themeGroundMix).offsetHSL(0, -1, 0),
     ),
     palette: Object.values(look.palette).map((value) => inkOr(value, mount, () => subject.clone())),
     damage: inkOr(look.damage.colour, mount, () => inkOf("alarm", mount)),

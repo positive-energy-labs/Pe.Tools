@@ -32,7 +32,7 @@ import { LOOK } from "./grounds";
 import { isClick, pickAt } from "./picking";
 import { samePlane, type PlaneAxis, type PlaneViewport } from "./plane";
 import type { Project, Ray, Size } from "./projection";
-import { createRenderer, type ClipVolume, type SceneRenderer } from "./renderer";
+import { createRenderer, type ClipVolume, type ContextMode, type SceneRenderer } from "./renderer";
 import type { IssueTarget, Layer3D, PaintOf, Pick, SceneInstance, SceneMeshes } from "./types";
 
 export type Scene3DProps = {
@@ -57,6 +57,8 @@ export type Scene3DProps = {
   isolated?: ReadonlySet<string> | null;
   /** Subject, stub or context per instance, and its colour key; absent: focus is the subject. */
   paintOf?: PaintOf;
+  /** All captured context by default; halo hides it beyond the subject-distance falloff. */
+  contextMode?: ContextMode;
   layers?: readonly Layer3D[];
   hoveredIssue?: string | null;
   focusedIssue?: string | null;
@@ -369,6 +371,9 @@ export function Scene3D(props: Scene3DProps): ReactNode {
   useEffect(() => {
     core.current?.setPaint(props.paintOf);
   }, [props.paintOf, meshes]);
+  useEffect(() => {
+    core.current?.setContextMode(props.contextMode);
+  }, [props.contextMode, meshes]);
   // Dev knobs re-apply live; in production `LOOK.read()` is the code defaults and never changes.
   const look = useSyncExternalStore(knobsChanged, LOOK.read, LOOK.read);
   useEffect(() => {
