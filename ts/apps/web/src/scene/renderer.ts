@@ -37,6 +37,7 @@ import {
   wheelPlane,
 } from "./gestures";
 import { createMeshPicker } from "./picking";
+import { contextVisible } from "./context";
 import { createOrbitControls } from "./orbit-controls";
 import {
   center,
@@ -371,6 +372,8 @@ export function createRenderer(
             ? grounds.palette[keySlot(paint.key, grounds.palette.length)]!
             : grounds.subject
     ).clone();
+    if (tier !== "context" && ground.getHSL({ h: 0, s: 0, l: 0 }).l < 0.5)
+      color.offsetHSL(0, 0, look.subject.darkLift);
     if (mark) color.lerp(ink, look.fill[mark]);
     const alpha =
       tier === "context"
@@ -421,7 +424,13 @@ export function createRenderer(
   LOOK.offer(
     "layers",
     "hiddenCategories",
-    [...new Set(meshes.instances.map((i) => i.category))].sort(),
+    [
+      ...new Set(
+        meshes.instances
+          .filter((_, n) => paints[idOf[n]!]!.tier === "context")
+          .map((i) => i.category),
+      ),
+    ].sort(),
   );
 
   let frame = 0;
@@ -816,10 +825,11 @@ export function createRenderer(
   let painted: Paint = [undefined, undefined, undefined, undefined];
   const paintNow = (...[selected, hidden, isolated, lit]: Paint) => {
     const next = new Map<number, Mark>();
-    const hiddenCategories = new Set(look.layers.hiddenCategories);
     byId.forEach(({ key, category }, id) => {
       const shown =
-        !hidden?.has(key) && (!isolated || isolated.has(key)) && !hiddenCategories.has(category);
+        !hidden?.has(key) &&
+        (!isolated || isolated.has(key)) &&
+        contextVisible(category, paints[id]!.tier, look.layers);
       batch.setVisibleAt(id, shown);
       const mark: Mark | null = !shown
         ? null
@@ -876,7 +886,10 @@ export function createRenderer(
     render();
   };
 
-  const pick = createMeshPicker(batch, byId);
+  // Match compositing: visible ducts win over translucent context, then nearest within the tier.
+  const pick = createMeshPicker(batch, byId, (i) =>
+    paintOf(i, paintBy).tier === "context" ? 0 : 1,
+  );
   return {
     canvas,
     gestureSize: () => [size.height, viewHeight(camera, controls.target)] as const,
@@ -1050,6 +1063,7 @@ export function createRenderer(
         returnInside();
       }
       byId.forEach((_, id) => tint(id, marked.get(id) ?? null));
+      paintNow(...painted);
       thumbsStale = true;
       render();
     },

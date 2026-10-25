@@ -17,7 +17,13 @@ type Base<T> = {
   /** `refetch`: a change alters a host request and costs a Revit capture. */
   cost: Cost;
 };
-export type NumberKnob = Base<number> & { kind: "number"; min: number; max: number; step: number };
+export type NumberKnob = Base<number> & {
+  kind: "number";
+  min: number;
+  max: number;
+  step: number;
+  unit: string;
+};
 /** `#rrggbb`, or a word naming where the default comes from (a kit token role, or "theme"). */
 export type ColourKnob = Base<string> & { kind: "colour" };
 export type BooleanKnob = Base<boolean> & { kind: "boolean" };
@@ -35,7 +41,8 @@ export const num = (
   value: number,
   [min, max, step]: readonly [number, number, number],
   cost: Cost = "live",
-): NumberKnob => ({ kind: "number", label, default: value, min, max, step, cost });
+  unit = "",
+): NumberKnob => ({ kind: "number", label, default: value, min, max, step, cost, unit });
 export const colour = (label: string, value: string): ColourKnob => ({
   kind: "colour",
   label,
@@ -48,7 +55,7 @@ export const bool = (label: string, value: boolean): BooleanKnob => ({
   default: value,
   cost: "live",
 });
-export const choice = <T extends string>(
+export const choice = <const T extends string>(
   label: string,
   value: T,
   options: readonly T[],
@@ -70,7 +77,8 @@ const overrides = new Map<string, unknown>();
 const offered = new Map<string, readonly string[]>();
 const listeners = new Set<() => void>();
 /** Bumps on override changes only: readers keep one stable object between them. */
-let values = 0;
+const revisions = new Map<string, number>();
+const revise = (name: string) => revisions.set(name, (revisions.get(name) ?? 0) + 1);
 /** Bumps on anything the floater draws (overrides and offered options). */
 let version = 0;
 const emit = () => {
@@ -93,19 +101,46 @@ const knobAt = (path: string) => {
   return modules.get(module!)?.spec[group!]?.[name!];
 };
 
+/** Dynamic controls cross this boundary; typed readers never receive an invalid override. */
+const accepts = (knob: Knob, value: unknown): boolean => {
+  switch (knob.kind) {
+    case "number":
+      return (
+        typeof value === "number" &&
+        Number.isFinite(value) &&
+        value >= knob.min &&
+        value <= knob.max
+      );
+    case "boolean":
+      return typeof value === "boolean";
+    case "colour":
+      return typeof value === "string" && (/^#[\da-f]{6}$/i.test(value) || value === knob.default);
+    case "choice":
+      return typeof value === "string" && knob.options.includes(value);
+    case "set":
+      return Array.isArray(value) && value.every((entry) => typeof entry === "string");
+  }
+};
+
 export function setKnob(path: string, value: unknown) {
   const knob = knobAt(path);
-  if (!knob) return;
+  if (!import.meta.env.DEV || !knob || !accepts(knob, value)) return false;
+  if (same(value, overrides.get(path) ?? knob.default)) return true;
   if (same(value, knob.default)) overrides.delete(path);
-  else overrides.set(path, value);
-  values++;
+  else overrides.set(path, Array.isArray(value) ? Object.freeze([...new Set(value)]) : value);
+  revise(path.split(".")[0]!);
   emit();
+  return true;
 }
-/** One knob back to its code default, or every knob when no path is named. */
+/** A knob, group or module back to code defaults; no path resets every module. */
 export function resetKnob(path?: string) {
-  if (path) overrides.delete(path);
-  else overrides.clear();
-  values++;
+  const keys = [...overrides.keys()].filter(
+    (key) => !path || key === path || key.startsWith(`${path}.`),
+  );
+  const names = new Set(keys.map((key) => key.split(".")[0]!));
+  if (!names.size) return;
+  keys.forEach((key) => overrides.delete(key));
+  names.forEach(revise);
   emit();
 }
 
@@ -147,13 +182,14 @@ export function defineKnobs<S extends Spec>(name: string, source: string, spec: 
         Object.fromEntries(
           Object.entries(knobs).map(([knob, { default: value }]) => {
             const path = `${name}.${group}.${knob}`;
-            return [knob, overridden && overrides.has(path) ? overrides.get(path) : value];
+            const held = overrides.get(path);
+            return [knob, overridden && accepts(spec[group]![knob]!, held) ? held : value];
           }),
         ),
       ]),
     ) as Values<S>;
   const defaults = resolve(false);
-  let seen = values;
+  let seen = -1;
   let current = defaults;
   if (import.meta.env.DEV) {
     modules.set(name, { name, source, spec });
@@ -163,16 +199,24 @@ export function defineKnobs<S extends Spec>(name: string, source: string, spec: 
     defaults,
     read(): Values<S> {
       if (!import.meta.env.DEV) return defaults;
-      if (seen !== values) {
-        seen = values;
+      const revision = revisions.get(name) ?? 0;
+      if (seen !== revision) {
+        seen = revision;
         current = resolve(true);
       }
       return current;
     },
+    set<G extends keyof S & string, K extends keyof S[G] & string>(
+      group: G,
+      knob: K,
+      value: Values<S>[G][K],
+    ) {
+      return setKnob(`${name}.${group}.${knob}`, value);
+    },
     /** The options a `set` knob offers now (e.g. the categories in the drawn scene). */
     offer<G extends keyof S & string>(
       group: G,
-      knob: keyof S[G] & string,
+      knob: { [K in keyof S[G]]: S[G][K] extends SetKnob ? K : never }[keyof S[G]] & string,
       options: readonly string[],
     ) {
       if (!import.meta.env.DEV) return;

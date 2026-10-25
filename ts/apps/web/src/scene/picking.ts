@@ -10,7 +10,11 @@ export const isClick = (down: { x: number; y: number }, up: { clientX: number; c
 /** The renderer's static, unindexed batch has identity instance transforms. Unlike the general
  * BatchedMesh raycast, this needs no normals, UVs, all-hit array or sort: only the nearest kept hit.
  * Read its packed geometry so origin rebasing has exactly the same float32 rounding as drawing. */
-export function createMeshPicker(batch: THREE.BatchedMesh, byId: readonly SceneInstance[]) {
+export function createMeshPicker(
+  batch: THREE.BatchedMesh,
+  byId: readonly SceneInstance[],
+  priority: (instance: SceneInstance) => number = () => 0,
+) {
   const ranges = byId.map((instance, id) => {
     const geometry = batch.getGeometryIdAt(id);
     const range = batch.getGeometryRangeAt(geometry)!;
@@ -33,10 +37,17 @@ export function createMeshPicker(batch: THREE.BatchedMesh, byId: readonly SceneI
   return (ray: THREE.Ray, clip?: (hit: Pick) => boolean): Pick | null => {
     local.copy(ray).applyMatrix4(inverse.copy(batch.matrixWorld).invert());
     let nearest = Infinity;
+    let rank = -Infinity;
     let result: Pick | null = null;
     for (const { instance, id, start, end, box } of ranges) {
+      const nextRank = priority(instance);
+      if (nextRank < rank) continue;
       if (!batch.getVisibleAt(id) || !local.intersectBox(box, hit)) continue;
-      if (!box.containsPoint(local.origin) && local.origin.distanceToSquared(hit) > nearest)
+      if (
+        nextRank === rank &&
+        !box.containsPoint(local.origin) &&
+        local.origin.distanceToSquared(hit) > nearest
+      )
         continue;
       for (let i = start; i < end; i += 3) {
         a.fromBufferAttribute(positions, i);
@@ -44,10 +55,11 @@ export function createMeshPicker(batch: THREE.BatchedMesh, byId: readonly SceneI
         c.fromBufferAttribute(positions, i + 2);
         if (!local.intersectTriangle(a, b, c, false, hit)) continue;
         const distance = local.origin.distanceToSquared(hit);
-        if (distance >= nearest) continue;
+        if (nextRank === rank && distance >= nearest) continue;
         world.copy(hit).applyMatrix4(batch.matrixWorld);
         const pick: Pick = { instance, point: world.toArray() };
         if (clip && !clip(pick)) continue;
+        rank = nextRank;
         nearest = distance;
         result = pick;
       }

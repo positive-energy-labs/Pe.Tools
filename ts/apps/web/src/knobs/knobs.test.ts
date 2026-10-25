@@ -1,5 +1,5 @@
 import { afterEach, expect, it, vi } from "vite-plus/test";
-import { bool, colour, defineKnobs, diffText, num, resetKnob, set, setKnob } from "./knobs";
+import { bool, choice, colour, defineKnobs, diffText, num, resetKnob, set, setKnob } from "./knobs";
 
 afterEach(() => {
   resetKnob();
@@ -57,4 +57,48 @@ it("reads overrides over defaults, stays stable between changes, and forgets a r
   expect(defineKnobs("test", "knobs.test.ts", { a: { on: bool("On", false) } }).read()).toEqual({
     a: { on: false },
   });
+});
+
+it("rejects invalid dynamic edits before typed scene and capture readers see them", () => {
+  const knobs = defineKnobs("validated", "knobs.test.ts", {
+    group: {
+      distance: num("Distance", 10, [0, 64, 0.5], "refetch", "ft"),
+      mode: choice("Mode", "walls", ["walls", "none"]),
+      enabled: bool("Enabled", false),
+      ink: colour("Ink", "alarm"),
+      categories: set("Categories"),
+    },
+  });
+  const first = knobs.read();
+  for (const value of [NaN, Infinity, -1, 65, "20", null])
+    expect(setKnob("validated.group.distance", value)).toBe(false);
+  expect(setKnob("validated.group.mode", "other")).toBe(false);
+  expect(setKnob("validated.group.enabled", 1)).toBe(false);
+  expect(setKnob("validated.group.ink", "invalid-token")).toBe(false);
+  expect(setKnob("validated.group.categories", [3])).toBe(false);
+  expect(knobs.read()).toBe(first);
+  knobs.set("group", "distance", 12);
+  knobs.set("group", "mode", "none");
+  expect(knobs.read().group).toMatchObject({ distance: 12, mode: "none" });
+  const edited = knobs.read();
+  knobs.set("group", "distance", 12);
+  expect(knobs.read()).toBe(edited);
+  vi.stubEnv("DEV", false);
+  expect(knobs.set("group", "distance", 30)).toBe(false);
+  expect(knobs.read()).toBe(knobs.defaults);
+});
+
+it("re-registers defaults without losing valid edits and only invalidates the changed module", () => {
+  const spec = { a: { n: num("N", 2, [0, 8, 1]) }, b: { on: bool("On", false) } };
+  const one = defineKnobs("one", "one.ts", spec);
+  const two = defineKnobs("two", "two.ts", spec);
+  const unchanged = two.read();
+  one.set("a", "n", 5);
+  one.set("b", "on", true);
+  expect(two.read()).toBe(unchanged);
+  expect(defineKnobs("one", "one.ts", spec).read().a.n).toBe(5);
+  resetKnob("one.a");
+  expect(one.read()).toEqual({ a: { n: 2 }, b: { on: true } });
+  resetKnob("one");
+  expect(one.read()).toEqual(one.defaults);
 });
