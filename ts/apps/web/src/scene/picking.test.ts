@@ -34,6 +34,23 @@ function fixture() {
 }
 
 describe("nearest kept mesh picking", () => {
+  it("picks a drawn foreground subject through context, respecting cuts and hidden subjects", () => {
+    const { batch, byId } = fixture();
+    const ray = new THREE.Ray(
+      batch.position.clone().add(new THREE.Vector3(0, 0, 10)),
+      new THREE.Vector3(0, 0, -1),
+    );
+    // The nearest box (2) is context, while boxes 0 and 1 are drawn above context.
+    const pick = createMeshPicker(batch, byId, (i) => (i.key === "2" ? 0 : 1));
+    expect(pick(ray)?.instance).toBe(byId[1]);
+    batch.setVisibleAt(1, false);
+    expect(pick(ray)?.instance).toBe(byId[0]);
+    expect(pick(ray, (p) => p.instance.key !== "0")?.instance).toBe(byId[2]);
+    batch.setVisibleAt(0, false);
+    expect(pick(ray)?.instance).toBe(byId[2]);
+    expect(pick(ray, () => false)).toBeNull();
+    batch.dispose();
+  });
   it("matches Three through hidden elements, back faces, cuts, inside boxes and world rebasing", () => {
     const { batch, byId, pick } = fixture();
     const raycaster = new THREE.Raycaster();

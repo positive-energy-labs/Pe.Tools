@@ -1,5 +1,5 @@
 import * as THREE from "three";
-import { bool, colour, defineKnobs, num, set } from "#/knobs/knobs";
+import { bool, choice, colour, defineKnobs, num, set } from "#/knobs/knobs";
 import { inkOf } from "./ink";
 import type { Bounds, IssueState, LayerFrame, Paint, PaintOf, SceneInstance } from "./types";
 
@@ -30,14 +30,15 @@ const SYSTEM_PALETTE = ["viz-1", "viz-2", "viz-3", "viz-4", "viz-5", "viz-6"] as
 /**
  * The scene's look, one typed spec: every default a judgment call is here, and each is a dev knob
  * (`#/knobs`). A colour of "theme" is derived below from kit tokens; a role name is that token.
- * M1: these guess until kaitpw tunes them on real use.
+ * Starting rationale lives in the design-system ledger; real-model tuning remains re-openable.
  */
 export const LOOK = defineKnobs("scene", "ts/apps/web/src/scene/grounds.ts", {
   subject: {
     colour: colour("Subject ink", "theme"),
-    opacity: num("Subject opacity", 0.85, [0.05, 0.99, 0.01]),
+    opacity: num("Subject opacity", 0.98, [0.05, 1, 0.01]),
     bySystem: bool("Colour by system", true),
-    stubOpacity: num("Stub opacity", 0.45, [0.05, 1, 0.01]),
+    stubOpacity: num("Stub opacity", 0.6, [0.05, 1, 0.01]),
+    darkLift: num("Dark-stage colour lift", 0.08, [0, 0.3, 0.01]),
   },
   depth: {
     everythingTranslucent: bool("Everything translucent", false),
@@ -47,7 +48,7 @@ export const LOOK = defineKnobs("scene", "ts/apps/web/src/scene/grounds.ts", {
   camera: {
     zoomOutFactor: num("Zoom-out × subject diagonal", 2, [1, 5, 0.1]),
     panMargin: num("Pan margin × subject diagonal", 0.25, [0, 1, 0.05]),
-    returnMs: num("Camera return (ms)", 380, [100, 1000, 10]),
+    returnMs: num("Camera return", 380, [100, 1000, 10], "live", "ms"),
   },
   palette: Object.fromEntries(
     SYSTEM_PALETTE.map((role, i) => [`s${i + 1}`, colour(`System ink ${i + 1}`, role)]),
@@ -60,11 +61,11 @@ export const LOOK = defineKnobs("scene", "ts/apps/web/src/scene/grounds.ts", {
   veil: {
     colour: colour("Context ink", "theme"),
     themeGroundMix: num("Context mix toward ground", 0.25, [0, 1, 0.01]),
-    nearFt: num("Full within (ft)", 1, [0, 20, 0.25]),
-    farFt: num("Far (ft)", 14, [1, 64, 0.5]),
-    curve: num("Curve exponent", 2, [0.25, 6, 0.05]),
-    maxOpacity: num("Opacity at subject", 0.4, [0.01, CONTEXT_OPACITY_LIMIT, 0.01]),
-    minOpacity: num("Opacity far", 0.12, [0.01, CONTEXT_OPACITY_LIMIT, 0.01]),
+    nearFt: num("Full within", 1, [0, 20, 0.25], "live", "ft"),
+    farFt: num("Far distance", 12, [1, 64, 0.5], "live", "ft"),
+    curve: num("Curve exponent", 2.5, [0.25, 6, 0.05]),
+    maxOpacity: num("Opacity at subject", 0.32, [0.01, CONTEXT_OPACITY_LIMIT, 0.01]),
+    minOpacity: num("Opacity far", 0.035, [0.01, CONTEXT_OPACITY_LIMIT, 0.005]),
     desaturate: num("Desaturate far", 1, [0, 1, 0.01]),
     fog: num("Fog to ground far", 0, [0, 1, 0.01]),
     brightness: num("Brightness near ducts", 0, [0, 1, 0.01]),
@@ -81,10 +82,10 @@ export const LOOK = defineKnobs("scene", "ts/apps/web/src/scene/grounds.ts", {
     sunIntensity: num("Sun intensity", 1.55, [0, 4, 0.05]),
   },
   outline: {
-    selected: num("Selected width (px)", 2.5, [0, 8, 0.25]),
-    lit: num("Lit width (px)", 2, [0, 8, 0.25]),
-    hover: num("Hover width (px)", 1.25, [0, 8, 0.25]),
-    casing: num("Casing (px)", 1.5, [0, 6, 0.25]),
+    selected: num("Selected width", 2.5, [0, 8, 0.25], "live", "px"),
+    lit: num("Lit width", 2, [0, 8, 0.25], "live", "px"),
+    hover: num("Hover width", 1.5, [0, 8, 0.25], "live", "px"),
+    casing: num("Casing", 1.25, [0, 6, 0.25], "live", "px"),
   },
   glow: {
     strength: num("Damage halo strength", 2.6, [0, 8, 0.1]),
@@ -101,13 +102,14 @@ export const LOOK = defineKnobs("scene", "ts/apps/web/src/scene/grounds.ts", {
     focusVolume: num("Focus volume alpha", 0.6, [0, 1, 0.01]),
   },
   damage: {
-    colour: colour("Damage ink", "#d32f2f"),
+    colour: colour("Damage ink", "alarm"),
     alpha: num("Damage skin alpha", 0.85, [0, 1, 0.01]),
   },
   layers: {
-    // ponytail: hides drawn instances only; the capture still fetches them. Owed: a fetch-side
-    // category filter on `revit.detail.space-scene`.
-    hiddenCategories: set("Hidden categories"),
+    context: choice("Context preset", "all", ["all", "walls", "structural", "none"]),
+    lighting: bool("Lighting fixtures", true),
+    // TODO: Filter capture by stable category IDs; these controls only filter drawn context.
+    hiddenCategories: set("Hidden context categories"),
   },
 });
 export type Look = ReturnType<typeof LOOK.read>;
