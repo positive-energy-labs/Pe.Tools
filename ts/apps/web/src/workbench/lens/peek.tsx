@@ -14,8 +14,8 @@ type Enter = "open" | "up" | "down";
 
 /**
  * The turn peek: hover a turn's tick on the rail and its card opens beside the lane, a funnel
- * drawn from the card to the turn's band. While open, the peek owns the whole column beside the
- * rail: moving up or down never leaves it, only moving sideways into the transcript does. The card
+ * drawn from the card to the turn's band. While open, the peek holds only its own cards (the active
+ * one and its ghosts) plus a gutter of grace; leaving that box in any direction closes it. The card
  * always centres on its turn's tick; past its edge the pointer scrubs the rail 1:1, so the card
  * moves exactly as far as the pointer at any speed. Any click on the card, a ghost, a band or a tick
  * goes to that turn. It never opens mid-drag, so selecting transcript text never meets it.
@@ -33,7 +33,6 @@ export function TurnPeek({
 }) {
   const [peek, setPeek] = useState<{ index: number; enter: Enter } | null>(null);
   const cardRef = useRef<HTMLDivElement>(null);
-  const columnRef = useRef<HTMLDivElement>(null);
   const funnelRef = useRef<SVGPolygonElement>(null);
   const closer = useRef<number>(undefined);
   /** The active card's placed box, lane-relative: inside it the pointer reads, outside it scrubs. */
@@ -50,7 +49,7 @@ export function TurnPeek({
   const close = () => {
     linger();
     closer.current = window.setTimeout(() => {
-      const held = [columnRef.current, funnelRef.current, dialRef.current].some((el) =>
+      const held = [cardRef.current, funnelRef.current, dialRef.current].some((el) =>
         el?.matches(":hover"),
       );
       if (!held) setPeek(null);
@@ -127,7 +126,7 @@ export function TurnPeek({
     const onKey = (event: KeyboardEvent) => {
       const dir = event.key === "ArrowDown" ? 1 : event.key === "ArrowUp" ? -1 : 0;
       if (!dir || event.altKey || event.ctrlKey || event.metaKey || event.shiftKey) return;
-      if (![columnRef.current, dialRef.current].some((el) => el?.matches(":hover"))) return;
+      if (![cardRef.current, dialRef.current].some((el) => el?.matches(":hover"))) return;
       event.preventDefault();
       event.stopPropagation();
       scrub.current = null;
@@ -193,44 +192,46 @@ export function TurnPeek({
       <svg {...annotation("peek-funnel")} aria-hidden="true">
         <polygon ref={funnelRef} onPointerEnter={linger} onPointerLeave={close} />
       </svg>
-      {/* The column: the peek's whole hit area, the lane's full height beside the rail. Vertical
-          travel stays inside it at any speed; the card's position inside it picks the turn. */}
-      <div
-        {...annotation("peek-column")}
-        ref={columnRef}
-        onPointerEnter={linger}
-        onPointerLeave={close}
-        onPointerMove={(event) => {
-          if (!lane || event.buttons !== 0) return;
-          const dial = dialRef.current;
-          if (!dial) return;
-          // Past an edge the pointer scrubs the rail 1:1 from where it crossed; moving back toward
-          // the card never scrubs, it only re-bases, so the card can always be reached and clicked.
-          const y = event.clientY - lane.getBoundingClientRect().top;
-          const { top, bottom } = box.current;
-          if (y >= top && y <= bottom) {
-            scrub.current = null;
-            return;
-          }
-          const dir = y > bottom ? 1 : -1;
-          const ticks = tickYs(dial, lane);
-          const at = ticks[peek.index] ?? y;
-          if (!scrub.current || scrub.current.dir !== dir) scrub.current = { dir, offset: y - at };
-          const target = y - scrub.current.offset;
-          if (dir * (target - at) < 0) {
-            scrub.current.offset = y - at;
-            return;
-          }
-          let nearest = peek.index;
-          ticks.forEach((t, i) => {
-            if (Math.abs(t - target) < Math.abs((ticks[nearest] ?? 0) - target)) nearest = i;
-          });
-          if (dir * (nearest - peek.index) > 0)
-            setPeek({ index: nearest, enter: dir > 0 ? "down" : "up" });
-        }}
-      >
-        {/* The root's box IS the active card; the ghosts hang off its edges. */}
-        <div {...annotation("peek")} ref={cardRef} data-enter={peek.enter}>
+      {/* The column only places the card beside the rail; it takes no pointer. The hit area is the
+          card's own box (ghosts included) plus a gutter of grace, so leaving sideways, or past a
+          ghost, closes the peek. */}
+      <div {...annotation("peek-column")}>
+        <div
+          {...annotation("peek")}
+          ref={cardRef}
+          data-enter={peek.enter}
+          onPointerEnter={linger}
+          onPointerLeave={close}
+          onPointerMove={(event) => {
+            if (!lane || event.buttons !== 0) return;
+            const dial = dialRef.current;
+            if (!dial) return;
+            // Past an edge the pointer scrubs the rail 1:1 from where it crossed; moving back toward
+            // the card never scrubs, it only re-bases, so the card can always be reached and clicked.
+            const y = event.clientY - lane.getBoundingClientRect().top;
+            const { top, bottom } = box.current;
+            if (y >= top && y <= bottom) {
+              scrub.current = null;
+              return;
+            }
+            const dir = y > bottom ? 1 : -1;
+            const ticks = tickYs(dial, lane);
+            const at = ticks[peek.index] ?? y;
+            if (!scrub.current || scrub.current.dir !== dir)
+              scrub.current = { dir, offset: y - at };
+            const target = y - scrub.current.offset;
+            if (dir * (target - at) < 0) {
+              scrub.current.offset = y - at;
+              return;
+            }
+            let nearest = peek.index;
+            ticks.forEach((t, i) => {
+              if (Math.abs(t - target) < Math.abs((ticks[nearest] ?? 0) - target)) nearest = i;
+            });
+            if (dir * (nearest - peek.index) > 0)
+              setPeek({ index: nearest, enter: dir > 0 ? "down" : "up" });
+          }}
+        >
           {prev ? <TurnCard turn={prev} ghost="above" onGo={goTo} /> : null}
           <TurnCard key={turn.first} turn={turn} onGo={goTo} />
           {next ? <TurnCard turn={next} ghost="below" onGo={goTo} /> : null}

@@ -1,9 +1,10 @@
+import type { ReactNode } from "react";
 import { Plus, X } from "lucide-react";
 import { routeAddress, type ThreadTab } from "@pe/agent-contracts";
 import { Button } from "@pe/kit/lang/button";
 import { TooltipHint } from "@pe/kit/lang/tooltip";
 
-function tabTitle(tab: ThreadTab) {
+export function tabTitle(tab: ThreadTab) {
   const at = routeAddress(tab.route);
   const { page } = at.read(
     Object.fromEntries(new URL(tab.link, "http://tab.invalid").searchParams),
@@ -32,6 +33,7 @@ export function RouteTabs({
   onChat,
   onDuplicate,
   onCloseActive,
+  children,
 }: {
   tabs: readonly ThreadTab[];
   active: string | null;
@@ -42,6 +44,8 @@ export function RouteTabs({
   onChat: () => void;
   onDuplicate: (() => void) | null;
   onCloseActive: () => void;
+  /** The dock's own controls, at the strip's far end. */
+  children?: ReactNode;
 }) {
   return (
     <div
@@ -86,6 +90,7 @@ export function RouteTabs({
           </Button>
         </>
       )}
+      {children}
     </div>
   );
 }

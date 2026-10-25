@@ -26,6 +26,25 @@
 .chat-column [data-annotation="lane"] {
   bottom: var(--chat-composer-height, 0px);
 }
+/* The context bar: the side column's foot, the composer's height, the lens's width. It fills from
+   the bottom by the share of the context window used. */
+.chat-column > [data-chat-context] {
+  grid-area: 1 / 1;
+  align-self: end;
+  justify-self: end;
+  width: var(--side-lane);
+  height: var(--chat-composer-height, 0px);
+  padding-block: var(--space-unit) var(--gutter);
+  box-sizing: border-box;
+  z-index: calc(var(--z-sticky) + 1);
+  background:
+    linear-gradient(var(--pe-ink-2) 0 0) center bottom / 4px calc(100% * var(--context-share, 0))
+      no-repeat content-box,
+    linear-gradient(var(--pe-line) 0 0) center / 4px 100% no-repeat content-box;
+}
+.chat-column > [data-chat-context][data-side="start"] {
+  justify-self: start;
+}
 /* N6: a thread switch keeps the last transcript, dimmed under a sweep along the title's hairline,
    until the next body reads. The dim waits a beat so a fast read never flickers; the sweep is
    transform-only. The inert wrapper is `display: contents`, so the dim lands on its children. */

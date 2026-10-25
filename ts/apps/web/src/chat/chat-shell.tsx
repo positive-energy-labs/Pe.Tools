@@ -1,6 +1,6 @@
 import type { ListSearch } from "@pe/agent-contracts";
 import { useNavigate, useRouterState } from "@tanstack/react-router";
-import { memo, useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { memo, useCallback, useEffect, useMemo, useRef, useState, type CSSProperties } from "react";
 import { useRouteSearchSlice } from "#/route/activity";
 import { useAtomRefresh, useAtomValue } from "@effect/atom-react";
 import { NewThreadButton, ThreadsSidebar, ThreadPane } from "#/chat/thread-palette";
@@ -17,6 +17,7 @@ import {
 } from "@pe/agent-contracts/chat-state";
 import { EmptyState } from "@pe/kit/lang/empty";
 import { Button } from "@pe/kit/lang/button";
+import { TooltipHint } from "@pe/kit/lang/tooltip";
 import { Menu } from "lucide-react";
 import {
   ChatCluster,
@@ -346,6 +347,12 @@ function ChatSurface({ target, docked = false }: ChatShellProps) {
           refusal={situation.head.refusal ?? status.detail}
         />
       </div>
+      {/* The context bar shares the lens's side column at the composer's height. Docked beside a
+          plugin on a screen wide enough for the thread sidebar, it takes the left column. */}
+      <ContextBar
+        breakdown={breakdown}
+        side={docked && !compact && !viewportNarrow ? "start" : "end"}
+      />
     </div>
   );
 
@@ -457,5 +464,36 @@ function ChatSurface({ target, docked = false }: ChatShellProps) {
         </Dialog>
       ) : null}
     </main>
+  );
+}
+
+/** Context-window use from the harness's latest `usage_update`; an empty track until one arrives. */
+function ContextBar({
+  breakdown,
+  side,
+}: {
+  breakdown: ReturnType<typeof selectBreakdown>;
+  side: "start" | "end";
+}) {
+  const used = breakdown?.totalTokens ?? 0;
+  const size = breakdown?.contextWindow ?? 0;
+  const share = size > 0 ? Math.min(1, used / size) : 0;
+  const hint = breakdown
+    ? `context ${used.toLocaleString()} of ${size.toLocaleString()} tokens (${Math.round(share * 100)}%)`
+    : "context use not reported yet";
+  return (
+    <TooltipHint content={hint}>
+      <div
+        data-chat-context=""
+        data-side={side}
+        role="meter"
+        aria-label="Context window"
+        aria-valuemin={0}
+        aria-valuemax={size || undefined}
+        aria-valuenow={breakdown ? used : undefined}
+        aria-valuetext={hint}
+        style={{ "--context-share": share } as CSSProperties}
+      />
+    </TooltipHint>
   );
 }

@@ -25,6 +25,8 @@ interface PaneCollapseSpec {
   collapsedSize?: number;
   collapseBelow?: number;
   title?: string;
+  /** What the collapsed pane holds open (its tabs), drawn on the rail under the title. */
+  head?: ReactNode;
   /** The rail stays drawn but its expand press is inert, and says why (nothing to open yet). */
   refusal?: string;
 }
@@ -363,6 +365,14 @@ export function PaneSplit({ axis, start, end, resize, hide, grow }: PaneSplitPro
             >
               {railTitle}
             </span>
+            {resize?.collapse?.head != null && (
+              <div
+                data-slot="pane-rail-head"
+                className={`flex min-h-0 min-w-0 gap-1 overflow-hidden ${horizontal ? "flex-col items-center [writing-mode:vertical-rl]" : "items-center"}`}
+              >
+                {resize.collapse.head}
+              </div>
+            )}
           </div>
         )}
         <div
