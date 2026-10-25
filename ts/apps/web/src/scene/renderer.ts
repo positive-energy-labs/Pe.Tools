@@ -1006,10 +1006,11 @@ export function createRenderer(
       capRay.ray.copy(ray);
       for (const [id, cap] of caps) {
         if (!cap.visible) continue;
-        const point = capRay.intersectObject(cap, false)[0]?.point;
+        const point = capRay
+          .intersectObject(cap, false)
+          .find(({ point }) => kept({ instance: byId[id]!, point: point.toArray() }))?.point;
         if (!point) continue;
         const next: Pick = { instance: byId[id]!, point: point.toArray() };
-        if (!kept(next)) continue;
         const rank = paints[id]!.tier === "context" ? 0 : 1;
         const prior = hit ? (paintOf(hit.instance, paintBy).tier === "context" ? 0 : 1) : -1;
         if (
