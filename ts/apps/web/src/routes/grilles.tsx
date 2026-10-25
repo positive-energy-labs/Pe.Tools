@@ -210,10 +210,9 @@ function GrillesRoute() {
             defaultSize: 420,
             minSize: 34,
             collapse: {
-              collapsed: drawingCollapsed,
-              onCollapsedChange: setDrawingCollapsed,
-              collapsedSize: 34,
-              collapseBelow: 90,
+              collapsed: drawingCollapsed ? "start" : null,
+              onCollapsedChange: (side) => setDrawingCollapsed(side === "start"),
+              start: { title: "drawing", collapseBelow: 90 },
             },
           }}
           start={

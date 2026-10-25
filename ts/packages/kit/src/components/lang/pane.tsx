@@ -435,4 +435,4 @@ export function Pane({
   );
 }
 
-export { PaneSplit } from "./pane-resize";
+export { PaneSplit, type PaneRail, type PaneSide } from "./pane-resize";

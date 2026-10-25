@@ -162,7 +162,7 @@ test.each([true, false])(
       },
     );
     function Dock() {
-      const [collapsed, onCollapsedChange] = useState(false);
+      const [collapsed, onCollapsedChange] = useState<"start" | "end" | null>(null);
       return (
         <PaneSplit
           axis="horizontal"
@@ -174,7 +174,7 @@ test.each([true, false])(
             minSize: 300,
             minOtherSize: 400,
             collapse: rail
-              ? { collapsed, onCollapsedChange, collapsedSize: 32, title: "thread" }
+              ? { collapsed, onCollapsedChange, end: { title: "thread" } }
               : undefined,
           }}
         />
@@ -227,4 +227,56 @@ test("an unset other-side floor is the sized side's: too narrow for both stacks,
   ).container.firstElementChild as HTMLElement;
   expect(wide.dataset.axis).toBe("horizontal");
   expect(parseFloat(getComputedStyle(wide).getPropertyValue("--pane-size"))).toBe(900 - 8 - 320);
+});
+
+test("either side folds only to its rail under its floor, and the seam keeps the other open", () => {
+  // The Pea dock (workbench/route-panes.tsx): Pea folds under 280, the tools under 420.
+  measure(1200);
+  const onCollapsedChange = vi.fn();
+  function Dock({ collapsed }: { collapsed: "start" | "end" | null }) {
+    return (
+      <PaneSplit
+        axis="horizontal"
+        start="pea"
+        end="tools"
+        resize={{
+          target: "end",
+          defaultSize: 600,
+          minSize: 420,
+          minOtherSize: 280,
+          collapse: {
+            collapsed,
+            onCollapsedChange,
+            start: { title: "pea" },
+            end: { title: "tools" },
+          },
+        }}
+      />
+    );
+  }
+  const view = render(<Dock collapsed={null} />);
+  const seam = screen.getByRole("separator");
+  const press = (key: string, times: number) => {
+    for (let i = 0; i < times; i++) fireEvent.keyDown(seam, { key });
+  };
+  // Tools 600: under 420 folds the tools, never a narrower tools column.
+  press("ArrowRight", 12);
+  expect(onCollapsedChange).toHaveBeenLastCalledWith("end");
+  onCollapsedChange.mockClear();
+  // From tools 424: Pea (1192 - tools) under 280 folds Pea.
+  press("ArrowLeft", 31);
+  expect(onCollapsedChange).toHaveBeenLastCalledWith("start");
+  const split = view.container.firstElementChild as HTMLElement;
+  view.rerender(<Dock collapsed="start" />);
+  expect(split.style.gridTemplateColumns).toBe(
+    "calc(var(--control-h) + var(--gutter)) var(--gutter) minmax(0, 1fr)",
+  );
+  expect(screen.getByRole("button", { name: "Expand pea" })).toBeTruthy();
+  expect(screen.queryByRole("button", { name: "Expand tools" })).toBeNull();
+  fireEvent.click(screen.getByRole("button", { name: "Expand pea" }));
+  expect(onCollapsedChange).toHaveBeenLastCalledWith(null);
+  view.rerender(<Dock collapsed="end" />);
+  expect(split.style.gridTemplateColumns).toBe(
+    "minmax(0, 1fr) var(--gutter) calc(var(--control-h) + var(--gutter))",
+  );
 });

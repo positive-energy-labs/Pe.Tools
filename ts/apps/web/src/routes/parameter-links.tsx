@@ -301,11 +301,9 @@ export function ParameterLinksRouteContent({ thread }: { thread?: string } = {})
           maxSize: 760,
           persist: "pe.parameterLinks.evalPane",
           collapse: {
-            collapsed: !rightOpen,
-            onCollapsedChange: (collapsed) => setPage({ rail: collapsed ? "folded" : "open" }),
-            collapsedSize: 40,
-            collapseBelow: 170,
-            title: "evaluation",
+            collapsed: rightOpen ? null : "end",
+            onCollapsedChange: (side) => setPage({ rail: side === "end" ? "folded" : "open" }),
+            end: { title: "evaluation", collapseBelow: 170 },
           },
         }}
         start={
