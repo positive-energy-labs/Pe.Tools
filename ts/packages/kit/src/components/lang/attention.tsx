@@ -143,19 +143,51 @@ const rungFamily = Atom.family((id: string) => {
   }).pipe(label(`${doc}/${key}/rung`));
 });
 export const rung = (ref: Ref) => rungFamily(refId(ref));
+/**
+ * Whether a key is lit (hovered, reached or cited) in `doc` right now, without a rung atom per key:
+ * for a surface that tests many keys at once (a list's scrollbar marks). Null when nothing is lit.
+ */
+export function litTest(registry: AtomRegistry.AtomRegistry, doc: string) {
+  const state = registry.get(attention(doc));
+  const sets = [state.hovered, state.lit, state.cited].filter((set) => set.size);
+  if (!sets.length) return null;
+  // The plain mirror of `memberOf`: reading the family per key would create an atom per row.
+  const plain = declared.get(registry);
+  const seen = new Set<SubjectKey>();
+  const hit = (key: SubjectKey): boolean => {
+    if (seen.has(key)) return false;
+    seen.add(key);
+    const children = plain?.get(refId({ doc, key }));
+    return children ? children.some(hit) : sets.some((set) => set.has(key));
+  };
+  return (key: SubjectKey) => {
+    seen.clear();
+    return hit(key);
+  };
+}
 export const useAttention = (doc: string) => useAtomValue(attention(doc));
 
 export type Members = ReadonlyMap<SubjectKey, readonly SubjectKey[]>;
+/** Declared members per registry, by ref id, written beside `memberOf` for `litTest`. */
+const declared = new WeakMap<AtomRegistry.AtomRegistry, Map<string, readonly SubjectKey[]>>();
 /** Declare plural subjects' members; the returned release withdraws them. */
 export function declareMembers(registry: AtomRegistry.AtomRegistry, doc: string, members: Members) {
+  const plain = declared.get(registry) ?? new Map<string, readonly SubjectKey[]>();
+  declared.set(registry, plain);
   const atoms = [...members].map(([key, keys]) => {
-    const atom = memberOf(refId({ doc, key }));
+    const id = refId({ doc, key });
+    const atom = memberOf(id);
     registry.set(atom, keys);
-    return [atom, keys] as const;
+    plain.set(id, keys);
+    return [id, atom, keys] as const;
   });
   return () => {
     // ponytail: last writer wins; a key two mounted surfaces declare differently keeps the later one.
-    for (const [atom, keys] of atoms) if (registry.get(atom) === keys) registry.set(atom, null);
+    for (const [id, atom, keys] of atoms)
+      if (registry.get(atom) === keys) {
+        registry.set(atom, null);
+        plain.delete(id);
+      }
   };
 }
 /** Declare plural subjects' members for as long as the declaring surface is mounted. */

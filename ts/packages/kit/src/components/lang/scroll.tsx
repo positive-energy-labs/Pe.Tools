@@ -52,6 +52,13 @@ const ScrollContext = createContext<Registry | null>(null);
 /** The element that scrolls this subtree, or null outside a `Scroll`. */
 export const useScroller = (): HTMLElement | null => useContext(ScrollContext)?.element ?? null;
 
+/**
+ * Redraw the strip at the next frame from its sources' current marks, without a React commit or a
+ * layout read: for mark state held outside React (a 3D hover's reach-lit rows).
+ */
+export const useScrollRedraw = (): (() => void) | null =>
+  useContext(ScrollContext)?.invalidate ?? null;
+
 /** The enclosing `Scroll`'s row height, for virtual estimates; 20 outside a `Scroll`. */
 export const useRowHeight = (): number => useContext(ScrollContext)?.rowHeight() ?? 20;
 
