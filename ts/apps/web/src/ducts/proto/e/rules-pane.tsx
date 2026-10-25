@@ -1,4 +1,4 @@
-import { useContext } from "react";
+import { useContext, useCallback } from "react";
 import { AttentionDocument, elementKey, useMembers, type SubjectKey } from "@pe/kit/lang/attention";
 import { useList } from "@pe/kit/lang/collection";
 import { PlainList } from "@pe/kit/lang/list-view";
@@ -140,6 +140,10 @@ export const RulesTree = memo(function RulesTree({
   useMembers(doc, members);
   const list = useList({
     items: roots,
+    subjectOf: useCallback(
+      (n: RuleNode) => ({ doc, key: n.kind === "override" ? elementKey(n.id) : ruleKey(n.key) }),
+      [doc],
+    ),
     keyOf: (n) => n.key,
     search: (n) => {
       if (n.kind === "override") return { text: [nameOf(n.id)], ids: [n.id] };
@@ -151,6 +155,7 @@ export const RulesTree = memo(function RulesTree({
   });
   const unassigned = useList({
     items: unruled,
+    subjectOf: useCallback((n: (typeof unruled)[number]) => ({ doc, key: familyKey(n) }), [doc]),
     keyOf: (n) => n.family ?? `#${[...n.ids][0]}`,
     search: (n) => ({ text: [n.family], ids: [...n.ids] }),
   });
@@ -175,7 +180,6 @@ export const RulesTree = memo(function RulesTree({
                   />
                 </span>
               ),
-              subject: { doc, key: elementKey(n.id) },
             };
           const rule = ruleByKey(n.key);
           const name = rule ? `${rule.family} : ${rule.type}` : n.key;
@@ -195,7 +199,6 @@ export const RulesTree = memo(function RulesTree({
             ),
             meta: `×${n.ids.length}${missing ? ` · ${missing} unpriced` : ""}`,
             lines: 2,
-            subject: { doc, key: ruleKey(n.key) },
           };
         }}
       />
@@ -216,7 +219,6 @@ export const RulesTree = memo(function RulesTree({
                 label: family ?? nameOf(first!),
                 meta: ids.size ? `×${ids.size}` : undefined,
                 lines: 2,
-                subject: { doc, key: familyKey(n) },
                 sub: (
                   <div
                     data-e-unruled-family={family ?? undefined}

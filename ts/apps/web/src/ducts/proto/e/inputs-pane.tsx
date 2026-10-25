@@ -9,7 +9,7 @@ import type { SystemScope } from "@pe/ducts-domain/system-scope";
 import type { DuctSnapshot } from "@pe/ducts-domain/types";
 import { ScopeGestures, type ScopeGesture } from "@pe/kit/keys";
 import { useCallback, useMemo } from "react";
-import { useList, type ListPersist } from "@pe/kit/lang/collection";
+import { useList, type ListPersist, type ListOptions } from "@pe/kit/lang/collection";
 import { ListView, type ListRowParts } from "@pe/kit/lang/list-view";
 import { observedElements, useNativeObservation } from "#/revit/observation";
 
@@ -53,6 +53,14 @@ const INPUT_KEYS: readonly ScopeGesture[] = [
   { pointer: "hover", label: "light it in the picture" },
 ];
 
+type InputRow = { id: number; kind: "unit" | "grille" };
+const INPUT_READERS = {
+  keyOf: (item: InputRow) => `${item.kind}:${item.id}`,
+  fields: {
+    kind: { kind: "text", read: (item: InputRow) => item.kind, values: ["unit", "grille"] },
+  },
+} satisfies Pick<ListOptions<InputRow>, "keyOf" | "fields">;
+
 export function InputsPane(props: InputsPaneProps) {
   const observation = useNativeObservation();
   const { snapshot, priced, work, scope, nameOf, selected, select } = props;
@@ -83,14 +91,11 @@ export function InputsPane(props: InputsPaneProps) {
     [nameOf],
   );
   const list = useList({
+    ...INPUT_READERS,
     persist: props.address,
     items,
-    keyOf: (item) => `${item.kind}:${item.id}`,
     search,
-    fields: {
-      kind: { kind: "text" as const, read: (item) => item.kind, values: ["unit", "grille"] },
-    },
-    sorts: { name: (item) => nameOf(item.id) },
+    sorts: { name: useCallback((item: InputRow) => nameOf(item.id), [nameOf]) },
     select: "single",
     followSelection: { key: (rows) => rows.find((row) => row.item.id === selected)?.key ?? null },
     onPick: (item) => select(item.id),

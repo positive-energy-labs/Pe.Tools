@@ -4,7 +4,7 @@ import { TooltipHint } from "@pe/kit/lang/tooltip";
 import { useCallback } from "react";
 import { ListTree } from "lucide-react";
 import { Button } from "@pe/kit/lang/button";
-import { useList, type ListPersist } from "@pe/kit/lang/collection";
+import { useList, type ListPersist, type ListOptions } from "@pe/kit/lang/collection";
 import { ListView, listColumns, type ListRowParts } from "@pe/kit/lang/list-view";
 import { tokenRef } from "@pe/kit/lib/token";
 import { observedElements, useNativeObservation } from "#/revit/observation";
@@ -121,6 +121,17 @@ const idsOf = (node: TreeNode): number[] => {
 
 const idOf = (node: TreeNode) => (node.kind === "run" ? node.terminal : node.id);
 const childrenOf = (node: TreeNode) => node.children;
+const TREE_READERS = {
+  keyOf: (node: TreeNode) => node.key,
+  tree: { childrenOf },
+  fields: {
+    kind: {
+      kind: "text",
+      read: (node: TreeNode) => node.kind,
+      values: ["system", "run", "leg", "element"],
+    },
+  },
+} satisfies Pick<ListOptions<TreeNode>, "keyOf" | "tree" | "fields">;
 
 export function SystemTree({ ctx, address }: { ctx: TreeCtx; address?: ListPersist<"name"> }) {
   const observation = useNativeObservation();
@@ -152,18 +163,23 @@ export function SystemTree({ ctx, address }: { ctx: TreeCtx; address?: ListPersi
     [labelOf],
   );
   const list = useList<TreeNode, "name">({
+    ...TREE_READERS,
     persist: address,
     items: ctx.trees,
-    keyOf: (node) => node.key,
-    tree: { childrenOf },
     search,
-    fields: {
-      kind: {
-        kind: "text",
-        read: (node) => node.kind,
-        values: ["system", "run", "leg", "element"],
-      },
-    },
+    subjectOf: useCallback(
+      (node: TreeNode) =>
+        doc
+          ? {
+              doc,
+              key:
+                node.kind === "element"
+                  ? (`e:${node.id}` as const)
+                  : (`${node.kind}:${node.key}` as const),
+            }
+          : undefined,
+      [doc],
+    ),
     sorts: { name: labelOf },
     select: "single",
     initialState: { open: [...ctx.trees.map((tree) => tree.key), ...(crit ? [crit.key] : [])] },
@@ -252,15 +268,11 @@ export function SystemTree({ ctx, address }: { ctx: TreeCtx; address?: ListPersi
             }}
           />
         ) : undefined,
-        subject: doc
-          ? { doc, key: n.kind === "element" ? `e:${n.id}` : `${n.kind}:${n.key}` }
-          : undefined,
         revit: target.ids,
         revitRefs: target.refs,
       };
     },
     [
-      doc,
       observation,
       runName,
       ctx.grilleName,
