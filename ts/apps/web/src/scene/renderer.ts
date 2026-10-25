@@ -9,7 +9,6 @@ import { LineSegments2 } from "three/addons/lines/LineSegments2.js";
 import { createGlow, GLOW_LAYER, OCCLUDER_LAYER } from "./glow";
 import { createOutline, OUTLINE_LAYER } from "./outline";
 import {
-  FILL,
   fogDensity,
   GROUND_MATERIAL,
   keySlot,
@@ -121,7 +120,12 @@ const BOX_EDGES = [
 /** Selection/hover/lighting use page ink; only damage carries a hue. */
 type Mark = "hover" | "lit" | "selected";
 
-export function createRenderer(mount: HTMLElement, meshes: SceneMeshes, wheelHost = mount) {
+export function createRenderer(
+  mount: HTMLElement,
+  meshes: SceneMeshes,
+  wheelHost = mount,
+  initialPaint?: PaintOf,
+) {
   const measuring = timing();
   mark("build-start", { instances: meshes.instances.length });
   const renderer = new THREE.WebGLRenderer({ antialias: true });
@@ -246,7 +250,7 @@ export function createRenderer(mount: HTMLElement, meshes: SceneMeshes, wheelHos
   };
   applyStage();
   const byId: SceneInstance[] = [];
-  let paintBy: PaintOf | undefined;
+  let paintBy = initialPaint;
   const paints: InstancePaint[] = [];
   const tint = (id: number, mark: Mark | null = null) => {
     const paint = paints[id]!;
@@ -258,9 +262,13 @@ export function createRenderer(mount: HTMLElement, meshes: SceneMeshes, wheelHos
           ? grounds.palette[keySlot(paint.key, grounds.palette.length)]!
           : grounds.subject
     ).clone();
-    if (mark) color.lerp(ink, FILL[mark]);
+    if (mark) color.lerp(ink, look.fill[mark]);
     const alpha =
-      tier === "context" ? CONTEXT_ALPHA : tier === "stub" ? look.subject.stubOpacity : 1;
+      tier === "context"
+        ? CONTEXT_ALPHA
+        : tier === "stub"
+          ? look.subject.stubOpacity
+          : look.subject.opacity;
     batch.setColorAt(id, new THREE.Vector4(color.r, color.g, color.b, alpha));
   };
   /** Instance index to batch id, for the veil's subject test. */
@@ -289,7 +297,7 @@ export function createRenderer(mount: HTMLElement, meshes: SceneMeshes, wheelHos
     const id = batch.addInstance(batch.addGeometry(geometry));
     byId[id] = instance;
     idOf.push(id);
-    paints[id] = paintOf(instance);
+    paints[id] = paintOf(instance, paintBy);
     tint(id);
     geometry.dispose();
   }
@@ -844,8 +852,13 @@ export function createRenderer(mount: HTMLElement, meshes: SceneMeshes, wheelHos
     setPaint(next: PaintOf | undefined) {
       if (next === paintBy) return;
       paintBy = next;
-      byId.forEach((instance, id) => (paints[id] = paintOf(instance, paintBy)));
-      bake();
+      let changedSubject = false;
+      byId.forEach((instance, id) => {
+        const paint = paintOf(instance, paintBy);
+        changedSubject ||= (paint.tier === "context") !== (paints[id]!.tier === "context");
+        paints[id] = paint;
+      });
+      if (changedSubject) bake();
       byId.forEach((_, id) => tint(id, marked.get(id) ?? null));
       thumbsStale = true;
       render();

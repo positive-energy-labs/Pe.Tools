@@ -11,7 +11,6 @@ export const OUTLINE_CHANNEL = {
   lit: new THREE.Color(0, 1, 0),
   hover: new THREE.Color(0, 0, 1),
 } as const;
-export const FILL = { hover: 0.22, lit: 0.4, selected: 0.6 };
 export const GROUND_MATERIAL = {
   color: WHITE,
   transparent: true,
@@ -34,12 +33,18 @@ export const SYSTEM_PALETTE = ["viz-1", "viz-2", "viz-3", "viz-4", "viz-5", "viz
 export const LOOK = defineKnobs("scene", "ts/apps/web/src/scene/grounds.ts", {
   subject: {
     colour: colour("Subject ink", "theme"),
+    opacity: num("Subject opacity", 1, [0.05, 1, 0.01]),
     bySystem: bool("Colour by system", true),
     stubOpacity: num("Stub opacity", 0.45, [0.05, 1, 0.01]),
   },
   palette: Object.fromEntries(
     SYSTEM_PALETTE.map((role, i) => [`s${i + 1}`, colour(`System ink ${i + 1}`, role)]),
   ),
+  fill: {
+    hover: num("Hover ink mix", 0.22, [0, 1, 0.01]),
+    lit: num("Lit ink mix", 0.4, [0, 1, 0.01]),
+    selected: num("Selected ink mix", 0.6, [0, 1, 0.01]),
+  },
   veil: {
     colour: colour("Context ink", "theme"),
     nearFt: num("Full within (ft)", 1, [0, 20, 0.25]),
@@ -95,12 +100,7 @@ export type Look = ReturnType<typeof LOOK.read>;
 
 export const markAlpha = (state: IssueState): readonly [casing: number, volume: number] => {
   const m = LOOK.read().marks;
-  return {
-    rest: [m.restCasing, m.restVolume],
-    reach: [m.reachCasing, m.reachVolume],
-    hover: [m.hoverCasing, m.hoverVolume],
-    focus: [m.focusCasing, m.focusVolume],
-  }[state] as [number, number];
+  return [m[`${state}Casing`], m[`${state}Volume`]];
 };
 export const damageAlpha = () => LOOK.read().damage.alpha;
 

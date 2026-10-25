@@ -152,7 +152,7 @@ export function Scene3D(props: Scene3DProps): ReactNode {
     if (!meshes) return;
     let r: SceneRenderer;
     try {
-      r = createRenderer(host.current!, meshes, props.wheelHost ?? host.current!);
+      r = createRenderer(host.current!, meshes, props.wheelHost ?? host.current!, props.paintOf);
     } catch (error) {
       setFailed({ meshes, message: `WebGL unavailable: ${String(error)}` });
       return;
