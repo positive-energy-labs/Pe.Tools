@@ -125,16 +125,17 @@ function Halves({
       start={left.pane}
       end={right.pane}
       resize={{
-        target: side === "left" ? "end" : "start",
+        target: "end",
         defaultSize: 32,
         minSize: 32,
         collapse: {
-          collapsed: true,
-          collapsedSize: 32,
-          title: closed.title,
-          refusal: closed.refusal,
-          onCollapsedChange: (collapsed) => {
-            if (!collapsed && closed.refusal == null) onSide(side === "left" ? "right" : "left");
+          collapsed: side === "left" ? "end" : "start",
+          start: { title: left.title, refusal: left.refusal },
+          end: { title: right.title, refusal: right.refusal },
+          // Expanding the rail opens that half and folds the other: one half is always open.
+          onCollapsedChange: (folded) => {
+            if (folded == null && closed.refusal == null)
+              onSide(side === "left" ? "right" : "left");
           },
         },
       }}
@@ -864,11 +865,9 @@ function LoadedScreenBody({
         persist: "proto-e-system-inputs",
         // A rail until asked for, so the tree keeps the sidebar's height; a Set row's cell opens it.
         collapse: {
-          collapsed: !inputsOpen,
-          onCollapsedChange: (collapsed) => setInputsOpen(!collapsed),
-          collapsedSize: 32,
-          collapseBelow: 80,
-          title: `Inputs · ${inputsCount}`,
+          collapsed: inputsOpen ? null : "end",
+          onCollapsedChange: (folded) => setInputsOpen(folded !== "end"),
+          end: { title: `Inputs · ${inputsCount}`, collapseBelow: 80 },
         },
       }}
     />
@@ -1037,14 +1036,12 @@ function LoadedScreenBody({
                 minOtherSize: 392,
                 persist: "proto-e-sidebar",
                 collapse: {
-                  collapsed: sidebarCollapsed,
-                  onCollapsedChange: (collapsed) => {
-                    if (!collapsed) setPanePriority("sidebar");
-                    setTreeCollapsed(collapsed);
+                  collapsed: sidebarCollapsed ? "start" : null,
+                  onCollapsedChange: (folded) => {
+                    if (folded !== "start") setPanePriority("sidebar");
+                    setTreeCollapsed(folded === "start");
                   },
-                  collapsedSize: 32,
-                  collapseBelow: 200,
-                  title: scope?.name ?? "systems",
+                  start: { title: scope?.name ?? "systems", collapseBelow: 200 },
                 },
               }}
               start={left}
@@ -1059,14 +1056,12 @@ function LoadedScreenBody({
                     minOtherSize: width > 0 && width < TIGHT_PX ? 240 : 360,
                     persist: "proto-e-inbox",
                     collapse: {
-                      collapsed: !inboxShown,
-                      onCollapsedChange: (collapsed) => {
-                        if (!collapsed) setPanePriority("inbox");
-                        setInboxOpen(!collapsed);
+                      collapsed: inboxShown ? null : "end",
+                      onCollapsedChange: (folded) => {
+                        if (folded !== "end") setPanePriority("inbox");
+                        setInboxOpen(folded !== "end");
                       },
-                      collapsedSize: 32,
-                      collapseBelow: 200,
-                      title: `Rulings · ${toRule}`,
+                      end: { title: `Rulings · ${toRule}`, collapseBelow: 200 },
                     },
                   }}
                   start={

@@ -65,6 +65,9 @@ type ChatShellProps = { target?: string; docked?: boolean };
 /** Collapsed tools: their labelled tab strip, drawn at the right end of Pea's header bar. */
 export const ToolsBar = createContext<ReactNode>(null);
 
+/** Whether ThreadsSplit is drawing the thread sidebar open beside Pea's column right now. */
+const SidebarShown = createContext(false);
+
 /** The thread sidebar's default width, and its folded rail. */
 export const SIDEBAR = { size: 300, rail: 32 };
 /** Pea's floor in px: the chat column's reading measure (`--chat-measure` in chat-shell.css: 76ch
@@ -382,11 +385,8 @@ function ChatSurface({ target, docked = false }: ChatShellProps) {
         />
       </div>
       {/* The context bar shares the lens's side column at the composer's height. Docked beside a
-          plugin on a screen wide enough for the thread sidebar, it takes the left column. */}
-      <ContextBar
-        breakdown={breakdown}
-        side={docked && !compact && !viewportNarrow ? "start" : "end"}
-      />
+          plugin while the thread sidebar is actually drawn open, it takes the left column. */}
+      <ContextBar breakdown={breakdown} docked={Boolean(docked)} />
     </div>
   );
 
@@ -482,11 +482,13 @@ function ChatSurface({ target, docked = false }: ChatShellProps) {
 /** Context-window use from the harness's latest `usage_update`; an empty track until one arrives. */
 function ContextBar({
   breakdown,
-  side,
+  docked,
 }: {
   breakdown: ReturnType<typeof selectBreakdown>;
-  side: "start" | "end";
+  docked: boolean;
 }) {
+  const shown = useContext(SidebarShown);
+  const side = docked && shown ? "start" : "end";
   const used = breakdown?.totalTokens ?? 0;
   const size = breakdown?.contextWindow ?? 0;
   const share = size > 0 ? Math.min(1, used / size) : 0;
@@ -549,40 +551,41 @@ export function ThreadsSplit({
   }, []);
   const overlay = narrow || squeezed;
   return (
-    <div ref={root} className="flex size-full min-h-0 min-w-0">
-      <PaneSplit
-        axis="horizontal"
-        grow
-        hide={narrow ? "start" : undefined}
-        resize={
-          narrow
-            ? undefined
-            : {
-                target: "start",
-                defaultSize: SIDEBAR.size,
-                minSize: 240,
-                // Under pressure the sidebar folds before the transcript loses its measure.
-                minOtherSize: peaFloor(),
-                persist: "pe.sideWidth",
-                collapse: {
-                  collapsed: squeezed || !sideOpen,
-                  onCollapsedChange: (collapsed) => setSideOpen(!collapsed),
-                  collapsedSize: SIDEBAR.rail,
-                  title: "threads",
-                },
-              }
-        }
-        start={threads(false)}
-        end={children}
-      />
-      {overlay && sideOpen ? (
-        <Dialog open onOpenChange={setSideOpen}>
-          <DialogContent>
-            <DialogTitle hidden>Threads</DialogTitle>
-            <div className="h-[75dvh] min-h-0 min-w-0">{threads(true)}</div>
-          </DialogContent>
-        </Dialog>
-      ) : null}
-    </div>
+    <SidebarShown.Provider value={!overlay && sideOpen}>
+      <div ref={root} className="flex size-full min-h-0 min-w-0">
+        <PaneSplit
+          axis="horizontal"
+          grow
+          hide={narrow ? "start" : undefined}
+          resize={
+            narrow
+              ? undefined
+              : {
+                  target: "start",
+                  defaultSize: SIDEBAR.size,
+                  minSize: 240,
+                  // Under pressure the sidebar folds before the transcript loses its measure.
+                  minOtherSize: peaFloor(),
+                  persist: "pe.sideWidth",
+                  collapse: {
+                    collapsed: squeezed || !sideOpen ? "start" : null,
+                    onCollapsedChange: (side) => setSideOpen(side == null),
+                    start: { title: "threads" },
+                  },
+                }
+          }
+          start={threads(false)}
+          end={children}
+        />
+        {overlay && sideOpen ? (
+          <Dialog open onOpenChange={setSideOpen}>
+            <DialogContent>
+              <DialogTitle hidden>Threads</DialogTitle>
+              <div className="h-[75dvh] min-h-0 min-w-0">{threads(true)}</div>
+            </DialogContent>
+          </Dialog>
+        ) : null}
+      </div>
+    </SidebarShown.Provider>
   );
 }

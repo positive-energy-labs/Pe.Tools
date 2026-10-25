@@ -62,7 +62,6 @@ export function AtlasTable() {
             maxSize: 520,
             minOtherSize: 360,
             persist: "pe.takeoffs.room-panel-width",
-            collapse: { collapsed: cursorRow == null, collapsedSize: 0 },
           }}
           start={
             <TableFrame
