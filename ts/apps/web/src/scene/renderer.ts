@@ -768,12 +768,7 @@ export function createRenderer(
           if (distance >= veil.veilFar.value) return false;
           const opacity =
             veil.veilMaxOpacity.value *
-            falloff(
-              distance,
-              veil.veilNear.value,
-              veil.veilFar.value,
-              veil.veilCurve.value,
-            );
+            falloff(distance, veil.veilNear.value, veil.veilFar.value, veil.veilCurve.value);
           if (opacity < 0.004) return false;
         }
         return clip?.(hit) ?? true;
