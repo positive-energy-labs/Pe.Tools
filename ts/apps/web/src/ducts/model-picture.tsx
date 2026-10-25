@@ -306,15 +306,6 @@ export function ModelPicture({
           />
         </PaneOverlay>
       )}
-      {meshes && sectionSubject && overlay && shownView.section && (
-        <SectionHandles
-          section={shownView.section}
-          subject={sectionSubject}
-          project={overlay.project}
-          onPreview={setSectionDraft}
-          onCommit={commitSection}
-        />
-      )}
       {read.omittedElements || read.unavailableElements ? (
         <PaneOverlay label="scene completeness" place="br">
           <OutcomeLine
@@ -356,6 +347,15 @@ export function ModelPicture({
               onRuling={onRuling}
             />
           </CaptionBounds.Provider>
+          {meshes && sectionSubject && shownView.section && (
+            <SectionHandles
+              section={shownView.section}
+              subject={sectionSubject}
+              project={overlay.project}
+              onPreview={setSectionDraft}
+              onCommit={commitSection}
+            />
+          )}
         </div>
       ) : null}
     </div>
