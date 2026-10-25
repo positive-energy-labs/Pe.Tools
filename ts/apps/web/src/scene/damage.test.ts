@@ -3,7 +3,16 @@ import type { LineSegments2 } from "three/addons/lines/LineSegments2.js";
 import { expect, it } from "vite-plus/test";
 import { damageLayers, damageMark, damageLayer, heartbeat, setDamageHue } from "./damage";
 import { landing, markFrame, markLines } from "./marks";
-import { BLACK, WHITE, fogDensity, paintOf, tierOf, GROUND_MATERIAL, keySlot } from "./grounds";
+import {
+  BLACK,
+  WHITE,
+  fogDensity,
+  paintOf,
+  tierOf,
+  GROUND_MATERIAL,
+  keySlot,
+  LOOK,
+} from "./grounds";
 import { SceneMeshes, type LayerFrame, type SceneInstance } from "./types";
 
 const instance: SceneInstance = {
@@ -94,6 +103,15 @@ it("damage keeps mesh and row identity, beats, flashes once, and holds still for
         !extra.selected && !extra.lit && extra.state !== "hover" && extra.state !== "focus",
       );
   }
+  const look = {
+    ...LOOK.defaults,
+    damage: { ...LOOK.defaults.damage, alpha: 0.2 },
+    marks: { ...LOOK.defaults.marks, restCasing: 0.12 },
+  };
+  layer.frame!(group, at(born + 6, { reducedMotion: true, look }));
+  markFrame(lines, at(born + 6, { reducedMotion: true, look }));
+  expect(skin.material.uniforms.alpha!.value).toBe(0.2);
+  expect((lines.children[0] as LineSegments2).material.opacity).toBe(0.12);
 });
 
 it.each([WHITE, BLACK])("shared ground colours cannot be corrupted by a material", (color) => {

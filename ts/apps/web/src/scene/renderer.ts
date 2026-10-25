@@ -117,7 +117,7 @@ const BOX_EDGES = [
   [2, 6],
   [3, 7],
 ] as const;
-/** Selection/hover/lighting use page ink; only damage carries a hue. */
+/** Selection, hover and lighting lift the base system ink toward page ink. */
 type Mark = "hover" | "lit" | "selected";
 
 export function createRenderer(

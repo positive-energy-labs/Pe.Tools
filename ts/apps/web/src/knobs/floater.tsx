@@ -228,7 +228,7 @@ export default function KnobsFloater(): ReactNode {
               return (
                 <div
                   key={path}
-                  title={path}
+                  data-knob={path}
                   style={{ display: "flex", alignItems: "center", gap: 6, minHeight: 20 }}
                 >
                   <label htmlFor={path} style={{ flex: 1, fontWeight: held ? 700 : 400 }}>
