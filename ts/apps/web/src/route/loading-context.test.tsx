@@ -80,7 +80,7 @@ test.each([
 test("the actual Ducts loading branch keeps one guide through reading, pricing and failure", () => {
   // Deliberately no action callbacks: loading must not mount panes that could invoke them.
   const props = {
-    page: { system: null },
+    page: { system: [] },
     snapshot: null,
     pricing: false,
     empty: { says: "reading ducts…", exit: "wait for the snapshot" },
