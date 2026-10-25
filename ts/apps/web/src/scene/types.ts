@@ -32,6 +32,12 @@ export type SceneInstance = {
   vertexCount: number;
 };
 
+/** How the picture treats one instance. Default (no paintOf): focus → subject, else context. */
+export type Tier = "subject" | "stub" | "context";
+/** `key` groups instances that share a colour, e.g. a Revit system name. */
+export type Paint = { readonly tier: Tier; readonly key?: string };
+export type PaintOf = (instance: SceneInstance) => Paint | undefined;
+
 /** A decoded scene: unindexed triangle positions plus one range per element. */
 export class SceneMeshes {
   // FOOTGUN: React's development prop inspector enumerates public geometry on each update.

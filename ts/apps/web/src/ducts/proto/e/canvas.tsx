@@ -17,7 +17,8 @@ import {
 import { DUCTS_LAYERS, emptyListSearch, toggleLayer } from "@pe/agent-contracts";
 import { snapshotById } from "@pe/ducts-domain/readiness";
 import { noRunBranches } from "@pe/ducts-domain/no-runs";
-import { systemScope } from "@pe/ducts-domain/system-scope";
+import { scopeOf } from "@pe/ducts-domain/system-scope";
+import type { Neighbour } from "@pe/ducts-domain/neighbours";
 import { TooltipHint } from "@pe/kit/lang/tooltip";
 import { SelectionBoxButton } from "#/revit/element-menu";
 import { observedElements } from "#/revit/observation";
@@ -34,6 +35,7 @@ import { elementNamer } from "../../claims";
 import { NodeFactsView, SegmentFactsView } from "../../facts";
 import { labelOfNode, legsOf } from "../../legs";
 import { sceneRequestOf } from "../../manifest";
+import { activeSystem, paintOfDucts, withSystem } from "../../selection";
 import { findingLayers, findingShapes, noRunLayers } from "../../finding-layers";
 import { boundsOfIds, ModelPicture, poseOf, usePictureBounds } from "../../model-picture";
 import { PictureStage, useStage, stageViewport, projectBounds } from "#/scene/stage-controller";
@@ -92,8 +94,10 @@ function DuctsReadout(props: ComponentProps<typeof PictureReadout>) {
 export interface ECanvasExtra {
   issues: readonly StageIssue[];
   onIssueHover: (key: string | null) => void;
-  /** The system's groups (stable, `systemScope`); the picture draws every one. */
+  /** The open systems' groups (stable, `scopeOf`); the picture draws every one. */
   groups: readonly string[];
+  /** The networks one unit away (`neighboursOf`): their stubs join the capture, painted `stub`. */
+  neighbours: readonly Neighbour[];
   /** The group whose fan the header reads: the system's largest; the schematic draws it. */
   lead: string;
   /** The system's issue ids; null = every issue on a drawn element. */
@@ -149,6 +153,7 @@ function Canvas({
   issues,
   onIssueHover,
   groups,
+  neighbours,
   lead,
   scale,
   nameOf,
@@ -175,13 +180,21 @@ function Canvas({
     [index, snapshot, subject, labelOf, groups],
   );
   const native = observation.scope?.source === "native" ? observation.scope.document : null;
+  // Neighbour stubs never come from an open group, so none of them is already a subject.
+  const stubs = useMemo(() => new Set(neighbours.flatMap((n) => n.stub)), [neighbours]);
   const request = useMemo(
-    () => sceneRequestOf(snapshot, page, groups),
-    [snapshot, page.system, page.layers, groups],
+    () => sceneRequestOf(snapshot, page, groups, stubs),
+    [snapshot, page.system, page.layers, groups, stubs],
   ); // eslint-disable-line react-hooks/exhaustive-deps
+  const paintOf = useMemo(() => paintOfDucts(snapshot, stubs), [snapshot, stubs]);
   const capture = useScene(request, native, page.epoch);
   const pictureKey = doc && request ? `${doc.session}/${doc.openId}` : null;
-  const { read, holding } = usePictureRead(capture, pictureKey, page.system, identity.refreshing);
+  const { read, holding } = usePictureRead(
+    capture,
+    pictureKey,
+    page.system.join(", "),
+    identity.refreshing,
+  );
   const bounds = usePictureBounds(read.meshes, scene);
   const [pictureHost, setPictureHost] = useState<HTMLDivElement | null>(null);
   const [pictureSize, setPictureSize] = useState<{ width: number; height: number } | null>(null);
