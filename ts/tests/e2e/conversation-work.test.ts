@@ -475,11 +475,8 @@ test("real conversation Work cutover retains authored cells, draft, Places and o
           new URL(await p.url()).pathname === "/pea",
         "other conversation selected",
       );
-      expect(
-        await p.count(
-          '[aria-label="Places"] [aria-checked="true"],[aria-label="Places"] [aria-selected="true"]',
-        ),
-      ).toBe(0);
+      expect(await p.count('[aria-label="Places"] button[aria-pressed]')).toBeGreaterThan(0);
+      expect(await p.count('[aria-label="Places"] button[aria-pressed="true"]')).toBe(0);
     });
     await step("pasted closed Work URL reads retained Work without native target", async () => {
       const opened = Date.now();
