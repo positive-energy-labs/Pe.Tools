@@ -199,17 +199,26 @@ async function settled(page: Page, allowHeld = false) {
   );
 }
 
-async function subject(page: Page, system: string, allowHeld = false) {
+async function subject(page: Page, system: string | readonly string[], allowHeld = false) {
+  const expected = typeof system === "string" ? (system ? [system] : []) : [...system];
+  if (!allowHeld && expected.length) await showReadout(page);
   await page.until(
     async () => {
-      const s = await state(page);
+      const current = await state(page);
+      const raw = new URL(current.url).searchParams.get("system");
+      const named = raw ? raw.split(",").filter(Boolean) : [];
+      const crumb = await page.read<string[]>(
+        `[...document.querySelectorAll('[data-pane-id="e-picture"] [data-slot="pane-title"] [data-crumb-segment]')].filter(${visible}).map(e => e.innerText.trim())`,
+      );
       return (
-        new URL(s.url).searchParams.get("system") === (system || null) &&
-        !s.loading &&
-        (system ? s.pictureTitle.includes(system) : s.pictureTitle.trim() === "Systems")
+        JSON.stringify(named) === JSON.stringify(expected) &&
+        !current.loading &&
+        (allowHeld ||
+          JSON.stringify(crumb.slice(0, expected.length ? 2 : 1)) ===
+            JSON.stringify(expected.length ? ["Systems", expected.join(" + ")] : ["Systems"]))
       );
     },
-    `URL and picture agree on ${system || "all systems"}`,
+    `URL and rendered picture scope agree on ${expected.join(" + ") || "all systems"}`,
     30_000,
   );
   await settled(page, allowHeld);
@@ -769,8 +778,13 @@ test("seeded real-user route journey", async () => {
         (await box(p, 'button[aria-label^="Expand systems" i]'))
       )
         await click(p, 'button[aria-label^="Expand systems" i]');
+      const raw = new URL(await p.url()).searchParams.get("system");
+      const current = raw ? raw.split(",").filter(Boolean) : [];
+      const expected = current.includes(key)
+        ? current.filter((name) => name !== key)
+        : [...current, key];
       await click(p, `${SYSTEMS} [role=option][data-key=${literal(key)}]`);
-      await subject(p, key, allowHeld);
+      await subject(p, expected, allowHeld);
     };
     await step("all → A; Back → all; Forward → A", async () => {
       await pickSystem(a);
