@@ -370,7 +370,13 @@ test("real conversation Work cutover retains authored cells, draft, Places and o
     await step("Work opens closed saved Ducts and draft survives Places collapse", async () => {
       await p.clickAt('textarea[aria-label="Message"],input[aria-label="Message"]');
       await p.type(message);
+      expect(await draft(), "trusted typing authored the draft before opening Work").toBe(message);
       officeComposer = await composerIdentity();
+      receipt.coverage.draftBeforeWork = {
+        url: await p.url(),
+        value: await draft(),
+        backendNodeId: officeComposer,
+      };
       await openWork(CONVERSATION_THREADS.office);
       await p.until(
         async () => new URL(await p.url()).pathname === "/ducts",

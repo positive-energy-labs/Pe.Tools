@@ -6,7 +6,8 @@ import { connect, CTRL, type Page } from "./cdp.ts";
 
 const SYSTEMS = '[data-list-view][aria-label="systems"]';
 const RULINGS = '[data-list-view][aria-label="rulings"]';
-const PICTURE = "[data-model-picture]";
+// Both picture modes share this freshness owner; schematic mode has no model canvas.
+const PICTURE = '[data-pane-id="e-picture"] [data-proto="E"]';
 const PENDING_PICTURE = `${PICTURE}[data-reading="pending"]`;
 const DRAWING =
   '[data-pane-id="e-picture"] canvas[aria-label^="3D model"], [data-pane-id="e-picture"] svg[aria-label="duct tree"]';
