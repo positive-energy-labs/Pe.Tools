@@ -9,6 +9,7 @@ import {
   waitFor,
 } from "@testing-library/react";
 import { afterEach, expect, test, vi } from "vite-plus/test";
+import { Activity, StrictMode } from "react";
 import {
   emptyListState,
   filterItems,
@@ -23,7 +24,7 @@ import type { ListViewProps } from "../src/components/lang/list-view";
 import { List, ListPopup } from "../src/components/lang/list-popup";
 import { Scroll } from "../src/components/lang/scroll";
 import { land } from "../src/components/lang/land";
-import { readGestures, readKeyMeta, readRegistrations } from "../src/keys";
+import { KeyScope, readGestures, readKeyMeta, readRegistrations } from "../src/keys";
 
 const search = (keywords = "", pills: Record<string, string> = {}): ListSearch => ({
   v: 1,
@@ -886,6 +887,43 @@ test("slash arbitration prioritizes focused regions, leaves text editing alone a
   document.getElementById("second")!.focus();
   fireEvent.keyDown(document.activeElement!, { key: "/", code: "Slash" });
   expect(second).toHaveBeenCalledTimes(2);
+});
+
+test("search ownership survives StrictMode reconnect and Activity restores the retained draft", async () => {
+  const focus = vi.fn();
+  function Owner() {
+    useSearchKey({ region: () => document.getElementById("search-owner"), focus });
+    return <input id="search-owner" aria-label="retained search draft" defaultValue="draft" />;
+  }
+  const draw = (hidden: boolean) => (
+    <StrictMode>
+      <KeyScope id="search-lifetime" hidden={hidden}>
+        <Activity mode={hidden ? "hidden" : "visible"}>
+          <Owner />
+        </Activity>
+      </KeyScope>
+    </StrictMode>
+  );
+  const view = render(draw(false));
+  await act(async () => {});
+  const input = screen.getByRole("textbox", { name: "retained search draft" });
+  fireEvent.change(input, { target: { value: "kept" } });
+  fireEvent.keyDown(document.body, { key: "/", code: "Slash" });
+  expect(focus).toHaveBeenCalledTimes(1);
+  view.rerender(draw(true));
+  await act(async () => {});
+  fireEvent.keyDown(document.body, { key: "/", code: "Slash" });
+  expect(focus).toHaveBeenCalledTimes(1);
+  view.rerender(draw(false));
+  await act(async () => {});
+  expect(screen.getByRole("textbox", { name: "retained search draft" })).toBe(input);
+  expect((input as HTMLInputElement).value).toBe("kept");
+  fireEvent.keyDown(document.body, { key: "/", code: "Slash" });
+  expect(focus).toHaveBeenCalledTimes(2);
+  view.unmount();
+  await act(async () => {});
+  fireEvent.keyDown(document.body, { key: "/", code: "Slash" });
+  expect(focus).toHaveBeenCalledTimes(2);
 });
 
 test("following waits for an excluded query and opens ancestors only once per selection", () => {
