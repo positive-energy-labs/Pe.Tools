@@ -4,6 +4,8 @@ One metric substrate under every Pe.* helper that reads or writes Revit geometry
 
 ## Decided
 
+- 2026-10-25, retain semantic element/issue identities independently of draw objects; batch compatible appearance, perform geometry preparation once per immutable capture, and stop rendering settled animation. Hidden Ducts routes retain UI state but release their picture owner. Pending native reads withhold element actions, not local camera movement. [Whole-Chadds evidence and limits](../ducts/interaction-performance.md#whole-chadds-foundation-2026-10-25).
+
 - 2026-10-22, user permits ending the TypeGPU experiment at the useful evidence boundary. Preserve source, captures and raw results on local branch `archive/typegpu-20261022`, worktree `C:/Users/kaitp/.t3/worktrees/Pe.Tools/archive-typegpu-20261022`; do not adopt a renderer from GPU-pass timing alone. See [evaluation](typegpu-evaluation.md).
 
 - 2026-10-22, user verdict: pursue full TypeGPU product proof and judge the foundation without counting cutover cost. The earlier [bounded evaluation](typegpu-evaluation.md) is evidence, not a settled rejection. Meanwhile `createMeshPicker` specializes the shared static batch's nearest retained hit, preserving Three triangle math and rendered coordinates; [picking proof](../ducts/interaction-performance.md#nearest-retained-picking) records 2,904 matching Chadds rays and 42% less aggregate query time.
@@ -108,6 +110,8 @@ One metric substrate under every Pe.* helper that reads or writes Revit geometry
 - 2026-09-04, a dense distance field as the world (w-voxel); a 0.5 ft cell cannot certify a 2 in clearance, and sparse storage failed on the spike because most bricks sit near a surface. Kept as a route cache policy only.
 
 ## Owed
+
+- Whole-Chadds follow-up: measure the 189 ms gesture-release outlier and retained UI costs under stable runtime; prove browser heap reclamation across hidden routes and extend the resource boundary to Space. Decide an explicit fit policy for distant real elements (6080672), preserving inspectability. Shared native queue contention and host reconnects still prevent a dependable cold/multi-system latency claim; see the [evidence](../ducts/interaction-performance.md#whole-chadds-foundation-2026-10-25).
 
 - 2026-10-22, investigate TypeGPU-assisted automatic duct routing/pathfinding as a separate compute capability, without requiring a renderer cutover. Start with batched swept-volume clearance and route-candidate scoring against real captured geometry; compare a CPU spatial-index implementation with GPU execution including upload/readback, fitting constraints, clearances and numerical agreement. Simple box overlap is only a broad-phase filter, not proof that a duct route fits. Reuse the [TypeGPU experiment](typegpu-evaluation.md); this is an idea to test, not an adopted solver architecture.
 
