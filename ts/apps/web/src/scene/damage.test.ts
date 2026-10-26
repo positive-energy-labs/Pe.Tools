@@ -64,6 +64,12 @@ it("damage batches keep identity, share packed geometry, and yield only the sele
   const batch = createDamageBatch([firstLayer, secondLayer]);
   const draws = batch.group.children as THREE.BatchedMesh[];
   expect(draws).toHaveLength(4);
+  for (const draw of draws)
+    expect(draw.material).toMatchObject({
+      polygonOffset: true,
+      polygonOffsetFactor: -1,
+      polygonOffsetUnits: -4,
+    });
   expect(new Set(draws.map((draw) => draw.geometry)).size).toBe(1);
   const at = (extra: Partial<LayerFrame> = {}): LayerFrame => ({
     seconds: firstLayer.damage!.born + 3,

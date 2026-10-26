@@ -116,6 +116,7 @@ export function damageLayer(
       geometry.computeBoundingSphere();
       const proxy = new THREE.Mesh(
         geometry,
+        // I2's shared surface bias belongs to drawn batches; this raycast proxy stays invisible.
         new THREE.MeshBasicMaterial({ side: THREE.DoubleSide }),
       );
       proxy.visible = false;

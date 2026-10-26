@@ -4,6 +4,13 @@ import { GLOW_LAYER } from "./glow";
 import { isLit } from "./grounds";
 import type { Layer3D, LayerFrame } from "./types";
 
+/** I2: the skin and glow mask share one bias so base-depth competition cannot punch holes. */
+const SURFACE_DEPTH = {
+  polygonOffset: true,
+  polygonOffsetFactor: -1,
+  polygonOffsetUnits: -4,
+};
+
 const vertexShader = /* glsl */ `
 #include <batching_pars_vertex>
 #include <fog_pars_vertex>
@@ -49,6 +56,7 @@ export function createDamageBatch(layers: readonly Layer3D[]) {
   const batches = [false, true].flatMap((lifted) =>
     [false, true].map((glow) => {
       const material = new THREE.ShaderMaterial({
+        ...SURFACE_DEPTH,
         uniforms: {
           core: { value: damageColors.core },
           rim: { value: damageColors.rim },
@@ -62,9 +70,6 @@ export function createDamageBatch(layers: readonly Layer3D[]) {
         depthWrite: glow,
         depthTest: !lifted,
         fog: true,
-        polygonOffset: true,
-        polygonOffsetFactor: -1,
-        polygonOffsetUnits: -4,
         toneMapped: false,
         side: THREE.DoubleSide,
       });
