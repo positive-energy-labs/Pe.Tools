@@ -295,12 +295,11 @@ export function ModelPicture({
       : !meshes
         ? "no meshes: choose a system on a Revit document"
         : null);
-  useWork(read.pending, "capturing meshes… gestures wait");
+  useWork(read.pending, "capturing meshes…");
   return (
     <div
       ref={setHost}
       data-model-picture=""
-      inert={read.pending || undefined}
       aria-busy={read.pending || undefined}
       data-reading={read.pending ? "pending" : undefined}
       className="relative min-h-0 flex-1 overflow-hidden"
@@ -314,6 +313,7 @@ export function ModelPicture({
           readout={readout}
           className="size-full"
           meshes={meshes}
+          pickingEnabled={!read.pending}
           orbit={orbit}
           orbitPivot={stage.orbitPivot}
           wheelHost={wheelHost ?? host}
@@ -375,6 +375,7 @@ export function ModelPicture({
       ) : null}
       {overlay && annotationProject ? (
         <div
+          inert={read.pending || undefined}
           ref={fade}
           className="pointer-events-none absolute inset-0 transition-opacity duration-150 data-flying:opacity-0"
         >

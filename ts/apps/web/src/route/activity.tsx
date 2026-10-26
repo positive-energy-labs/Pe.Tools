@@ -5,6 +5,7 @@ import {
   useMemo,
   useRef,
   useSyncExternalStore,
+  type ReactNode,
 } from "react";
 import { deepEqual, useRouter } from "@tanstack/react-router";
 import { routeAddress, type Carry, type RouteKey, type UrlPage } from "@pe/agent-contracts";
@@ -22,6 +23,12 @@ export interface RouteActivityScope {
 
 export const RouteActivity = createContext<RouteActivityScope | null>(null);
 export const useRouteActivity = () => useContext(RouteActivity);
+
+/** Unlike Activity's retained UI state, heavyweight resource owners must leave the hidden tree. */
+export const RouteVisibility = createContext(true);
+export function VisibleRouteResource({ children }: { children: ReactNode }) {
+  return useContext(RouteVisibility) ? children : null;
+}
 
 const decoded = new WeakMap<object, Map<RouteKey | undefined, Record<string, unknown> & Carry>>();
 function searchOf(search: Record<string, unknown>, route?: RouteKey) {
