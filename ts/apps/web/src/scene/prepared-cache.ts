@@ -1,54 +1,72 @@
 import type { SceneMeshes } from "./types";
 import type { PreparedGeometry } from "./prepare-geometry";
+import { sceneMemory, type SceneFootprint, type SceneMemoryRetention } from "./scene-memory";
 
-const ids = new WeakMap<SceneMeshes, number>();
-let sequence = 0;
-let headroom = 0;
-const entries = new Map<string, { data: PreparedGeometry; bytes: number; optional: boolean }>();
-const bytes = () => [...entries.values()].reduce((n, e) => n + e.bytes, 0);
-
-/** Derived retention uses spare space inside the scene cache's existing admission ceiling.
- * Artifact admission evicts this optional work first; it never narrows an admitted scope. */
-export function preparedHeadroom(available: number) {
-  headroom = Math.min(32 * 1024 * 1024, Math.max(0, available));
-  while (entries.size && bytes() > headroom) entries.delete(entries.keys().next().value!);
-}
-export function preparedKey(meshes: SceneMeshes, semantics: string) {
-  if (!ids.has(meshes)) ids.set(meshes, ++sequence);
-  return `${ids.get(meshes)}:${semantics}`;
-}
-export function preparedGet(key: string) {
-  const entry = entries.get(key);
-  if (entry) {
-    entries.delete(key);
-    entries.set(key, entry);
+const footprints = new WeakMap<PreparedGeometry, SceneFootprint>();
+export function preparedFootprint(data: PreparedGeometry): SceneFootprint {
+  let footprint = footprints.get(data);
+  if (!footprint) {
+    footprint = {
+      buffers: [
+        data.positions.buffer,
+        data.normals.buffer,
+        data.continuation.buffer,
+        data.field.data.buffer,
+        ...data.edges.flatMap((e) => (e ? [e.buffer] : [])),
+      ],
+      heapBytes: JSON.stringify([data.boxes, data.spheres, data.angles]).length * 2,
+    };
+    footprints.set(data, footprint);
   }
-  if (typeof location !== "undefined" && new URLSearchParams(location.search).has("scenePerf"))
-    performance.mark("scene:derived-cache", {
-      detail: {
-        hit: !!entry,
-        bytes: bytes(),
-        headroom,
-        entries: entries.size,
-        itemBytes: entry?.bytes,
+  return footprint;
+}
+
+/** A specialised identity/value store; SceneMemory owns every retention/admission decision. */
+export class PreparedCache {
+  #ids = new WeakMap<SceneMeshes, number>();
+  #sequence = 0;
+  #entries = new Map<string, { data: PreparedGeometry; retention: SceneMemoryRetention }>();
+  constructor(readonly memory = sceneMemory) {}
+
+  key(meshes: SceneMeshes, semantics: string) {
+    if (!this.#ids.has(meshes)) this.#ids.set(meshes, ++this.#sequence);
+    return `${this.#ids.get(meshes)}:${semantics}`;
+  }
+  get(key: string) {
+    const held = this.#entries.get(key);
+    held?.retention.touch();
+    if (typeof location !== "undefined" && new URLSearchParams(location.search).has("scenePerf")) {
+      const retention = this.memory.snapshot().retention;
+      performance.mark("scene:derived-cache", {
+        detail: {
+          hit: !!held,
+          bytes: retention.preparedBytes,
+          headroom: retention.preparedLimitBytes,
+          entries: this.#entries.size,
+        },
+      });
+    }
+    return held?.data;
+  }
+  put(key: string, data: PreparedGeometry, optional = false) {
+    this.delete(key);
+    let retained = true;
+    const retention = this.memory.retain("prepared", preparedFootprint(data), {
+      optional,
+      entryBytes: key.length * 2,
+      evict: () => {
+        retained = false;
+        if (this.#entries.get(key)?.data === data) this.#entries.delete(key);
       },
     });
-  return entry?.data;
+    if (retained) this.#entries.set(key, { data, retention });
+  }
+  delete(key: string) {
+    this.#entries.get(key)?.retention.release();
+  }
+  clear() {
+    for (const key of this.#entries.keys()) this.delete(key);
+  }
 }
-export function preparedPut(key: string, data: PreparedGeometry, optional = false) {
-  const weight =
-    data.positions.byteLength +
-    data.normals.byteLength +
-    data.continuation.byteLength +
-    data.field.data.byteLength +
-    data.edges.reduce((n, e) => n + (e?.byteLength ?? 0), 0) +
-    JSON.stringify([data.boxes, data.spheres, data.angles]).length * 2 +
-    key.length * 2;
-  if (weight > headroom) return;
-  const focusBytes = [...entries.values()].reduce((n, e) => n + (e.optional ? 0 : e.bytes), 0);
-  if (optional && focusBytes + weight > headroom) return;
-  entries.delete(key);
-  while (entries.size && bytes() + weight > headroom)
-    entries.delete([...entries].find(([, e]) => e.optional)?.[0] ?? entries.keys().next().value!);
-  entries.set(key, { data, bytes: weight, optional });
-}
+
+export const preparedCache = new PreparedCache();
