@@ -34,10 +34,11 @@ test("host watch roots follow runtime dependencies, including transitive optiona
   }
 });
 
-test("current checkout leaves kit and browser hot updates out of host restart scope", () => {
+test("current checkout watches runtime packages and leaves kit updates to the frontend", () => {
   const roots = devWatchRoots(new URL("../", import.meta.url)).map((root) => root.pathname);
   expect(roots.some((root) => root.endsWith("/packages/host-contracts/src/"))).toBe(true);
   expect(roots.some((root) => root.endsWith("/packages/runtime/src/"))).toBe(true);
   expect(roots.some((root) => root.endsWith("/packages/kit/src/"))).toBe(false);
-  expect(roots.some((root) => root.endsWith("/packages/browser/src/"))).toBe(false);
+  // MCP skill discovery now consumes the browser guide at runtime.
+  expect(roots.some((root) => root.endsWith("/packages/browser/src/"))).toBe(true);
 });
