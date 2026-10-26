@@ -86,7 +86,7 @@ test("a stable scope starts publishing owner changes after delayed enrollment", 
   try {
     // Unenrolled, it still reads one real snapshot (never a null Page), then freezes until enrolled.
     expect(probe.mode()).toBe("3d");
-    act(() => probe.owner.setPage({ mode: "side" }));
+    act(() => probe.owner.setPage({ mode: "north" }));
     expect(probe.mode()).toBe("3d");
     probe.enroll();
     act(() => probe.owner.setPage({ mode: "top" }));
