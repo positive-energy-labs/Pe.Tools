@@ -1,6 +1,7 @@
 import * as THREE from "three";
 import type { PreparedGeometry } from "./prepare-geometry";
 import type { Paint, SceneInstance, SceneMeshes } from "./types";
+import type { SceneGpuMemory } from "./scene-gpu";
 import { center } from "./orbit";
 
 type Part = {
@@ -20,16 +21,6 @@ export class FaceBatches {
   ) {}
   get parts() {
     return [this.depth, this.translucent].filter((p): p is Part => !!p);
-  }
-  matchesPartition(paints: readonly Paint[]) {
-    return (
-      paints.length === this.addresses.length &&
-      paints.every(
-        (paint, id) =>
-          (paint.tier === "context" || paint.surface === "shell") ===
-          (this.addresses[id]!.part.mesh === this.translucent?.mesh),
-      )
-    );
   }
   getVisibleAt(id: number) {
     const at = this.addresses[id]!;
@@ -100,6 +91,7 @@ export async function prepareFaceBatches(
   material: THREE.Material,
   prior: FaceBatches | undefined,
   check: () => void,
+  memory?: SceneGpuMemory,
 ) {
   const depth: number[] = [],
     translucent: number[] = [];
@@ -124,6 +116,7 @@ export async function prepareFaceBatches(
       0,
       material,
     );
+    const allocation = memory?.own(mesh, "staging");
     mesh.position.fromArray(center(next.bounds));
     const part = { mesh, instances: indices.map((i) => next.instances[i]!) };
     owned.push(part);
@@ -155,6 +148,7 @@ export async function prepareFaceBatches(
       geometry.boundingSphere = new THREE.Sphere(new THREE.Vector3().fromArray(sphere), sphere[3]);
       mesh.addInstance(mesh.addGeometry(geometry));
       geometry.dispose();
+      if (local === 0) allocation?.refresh();
       addresses[index] = { part, local };
       if (performance.now() - started > 8) {
         await pause();
@@ -162,6 +156,7 @@ export async function prepareFaceBatches(
         started = performance.now();
       }
     }
+    allocation?.refresh();
     return part;
   };
   try {

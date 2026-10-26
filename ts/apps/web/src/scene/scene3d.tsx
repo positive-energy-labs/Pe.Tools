@@ -25,28 +25,22 @@ import {
   useState,
   useSyncExternalStore,
   type ReactNode,
-  type RefObject,
 } from "react";
 import { useElementAttention } from "#/attention";
-import { revitTarget } from "@pe/kit/lang/revit-target";
-import { viewportCodec } from "@pe/agent-contracts";
-import { type ElementTarget } from "#/revit/element-target";
-import {
-  observedElements,
-  useNativeObservation,
-  type NativeObservation,
-} from "#/revit/observation";
-import type { LiveOrbit, OrbitGesture } from "@pe/kit/lang/live-orbit";
+import { useNativeObservation } from "#/revit/observation";
+import type { LiveOrbit } from "@pe/kit/lang/live-orbit";
 import { subscribe as knobsChanged } from "#/knobs/knobs";
 import { LOOK } from "./grounds";
 import { presetLook, type ScenePreset } from "./presets";
-import { fitDistance, type OrbitViewport } from "./orbit";
-import { isClick, pickAt } from "./picking";
+import { type OrbitViewport } from "./orbit";
 import { samePlane, type PlaneAxis, type PlaneViewport } from "./plane";
 import type { Project, Ray, Size } from "./projection";
-import { createRenderer, type ClipVolume, type ContextMode, type SceneRenderer } from "./renderer";
-import { SceneMeshes } from "./types";
-import type { Bounds, IssueTarget, Layer3D, PaintOf, Pick, SceneInstance } from "./types";
+import { type ClipVolume, type ContextMode, type SceneRenderer } from "./renderer";
+import type { SceneMeshes } from "./types";
+import { mountViewport, ATTRS } from "./scene-viewport";
+import { SceneController } from "./scene-controller";
+import { scenePlan } from "./scene-plan";
+import type { Bounds, IssueTarget, Layer3D, PaintOf, Pick } from "./types";
 
 export type Scene3DProps = {
   /** Fixed picture state; null explicitly shares a parent readout in an inset. */
@@ -97,328 +91,6 @@ export type Scene3DProps = {
   children?: ReactNode;
 };
 
-/**
- * What the element menu acts on for one drawn element: the displayed observation's captured member,
- * held to the mesh's own UniqueId. A linked element, or one the displayed read never captured,
- * still declares itself so the menu refuses it in words; with no observation the canvas is inert.
- */
-export function sceneTarget(
-  observation: NativeObservation,
-  instance: SceneInstance,
-): ElementTarget | null {
-  if (!observation.scope) return null;
-  if (instance.revitId === null)
-    return {
-      scope: observation.scope,
-      ids: [],
-      refs: [
-        {
-          elementId: null,
-          uniqueId: instance.uniqueId,
-          documentKey: instance.documentKey,
-          linkInstanceIds: instance.linkInstanceId === null ? [] : [instance.linkInstanceId],
-        },
-      ],
-    };
-  const target = observedElements(observation, [instance.revitId]);
-  return {
-    ...target,
-    refs: [...(target.refs ?? []), { elementId: instance.revitId, uniqueId: instance.uniqueId }],
-  };
-}
-
-/** The element menu's attributes, spelled by the one function that owns them. */
-const ATTRS = Object.keys(revitTarget([0], [{ elementId: 0 }])) as (keyof ReturnType<
-  typeof revitTarget
->)[];
-
-type Recovery = {
-  orbit: LiveOrbit;
-  bounds: Bounds;
-  viewport: OrbitViewport;
-  plane: PlaneViewport | null;
-};
-type Latest = Scene3DProps & {
-  observation: NativeObservation;
-  onHover: ReturnType<typeof useElementAttention>["onHover"];
-};
-type ViewportOwner = {
-  host: RefObject<HTMLDivElement | null>;
-  initialBounds: RefObject<Bounds | null>;
-  latest: RefObject<Latest>;
-  core: RefObject<SceneRenderer | null>;
-  focusOwner: RefObject<SceneMeshes | null>;
-  previousView: RefObject<Recovery | null>;
-  publishedPlane: RefObject<PlaneViewport | null>;
-  gesturing: RefObject<boolean>;
-  setFailed: (failure: { meshes: SceneMeshes; message: string }) => void;
-};
-/** Long-lived listeners own mutable refs, never a React render closure containing old captures. */
-function mountViewport({
-  host,
-  initialBounds,
-  latest,
-  core,
-  focusOwner,
-  previousView,
-  publishedPlane,
-  gesturing,
-  setFailed,
-}: ViewportOwner) {
-  if (!initialBounds.current) return;
-  const initial = new SceneMeshes(new Float32Array(), initialBounds.current, []);
-  let r: SceneRenderer;
-  try {
-    r = createRenderer(host.current!, initial, latest.current.wheelHost ?? host.current!);
-  } catch (error) {
-    const meshes = latest.current.meshes;
-    if (meshes) setFailed({ meshes, message: `WebGL unavailable: ${String(error)}` });
-    return;
-  }
-  core.current = r;
-  r.setOnFrame(
-    (project, size, ray) =>
-      focusOwner.current === (latest.current.focusMeshes ?? latest.current.meshes) &&
-      latest.current.onProject?.(project, size, ray, gesturing.current),
-  );
-  const { canvas, moves } = r;
-  const wheelHost = latest.current.wheelHost ?? host.current!;
-  const orbit = latest.current.orbit;
-  const previous = previousView.current;
-  previousView.current = null;
-  const incoming = orbit.read();
-  if (
-    previous?.orbit === orbit &&
-    incoming &&
-    viewportCodec.encode(incoming) === viewportCodec.encode(previous.viewport)
-  ) {
-    // Zoom is relative to capture bounds. Preserve world framing when context or subject meshes change.
-    const kept = {
-      ...incoming,
-      zoom: (incoming.zoom * fitDistance(initial.bounds)) / fitDistance(previous.bounds),
-    };
-    r.recoverViewport(
-      kept,
-      latest.current.plane &&
-        previous.plane &&
-        samePlane(latest.current.plane.viewport, previous.plane)
-        ? latest.current.plane
-        : null,
-    );
-    orbit.restore(kept);
-  }
-  const unconstrain = orbit.constrain(r.limitViewport);
-  const boundsChanged = ({ settled }: { settled: boolean }) => {
-    orbit.notify();
-    const pose = orbit.read();
-    if (!settled) return;
-    const p = r.plane();
-    if (p) {
-      publishedPlane.current = p;
-      latest.current.onPlane?.(p, "gesture");
-    } else if (pose) orbit.move(pose, "gesture");
-  };
-  moves.addEventListener("bounds", boundsChanged);
-  let token: OrbitGesture | null = null;
-  let applying = false;
-  const follow = () => {
-    if (focusOwner.current !== (latest.current.focusMeshes ?? latest.current.meshes)) return;
-    if (orbit.owns(token)) return;
-    const pose = orbit.read();
-    if (!pose) return;
-    if (viewportCodec.encode(r.viewport()) === viewportCodec.encode(pose)) return;
-    applying = true;
-    r.setViewport(pose);
-    applying = false;
-  };
-  const unfollow = orbit.subscribe(follow);
-  follow();
-  const change = () => {
-    if (applying || r.plane()) return;
-    if (orbit.owns(token)) orbit.preview(token, r.viewport());
-    else follow();
-  };
-  const publish = () => {
-    const p = r.plane();
-    if (p) {
-      const want = latest.current.plane?.viewport;
-      if (want && samePlane(p, want)) return;
-      publishedPlane.current = p;
-      return latest.current.onPlane?.(p, "gesture");
-    }
-    orbit.end(token);
-    token = null;
-  };
-  const start = () => {
-    gesturing.current = true;
-    if (!r.plane() && !orbit.owns(token)) token = orbit.begin(...r.gestureSize());
-  };
-  let wheelEnd: ReturnType<typeof setTimeout> | undefined;
-  // FOOTGUN: publishing during a drag navigates the route and reruns domain projections.
-  // LiveOrbit shares motion with the globe; onProject keeps annotations current without Page.
-  const end = () => {
-    if (wheelEnd !== undefined) return;
-    if (!gesturing.current) return;
-    gesturing.current = false;
-    publish();
-    orbit.notify();
-    r.reportFrame();
-  };
-  // Wheel events have no release: OrbitControls ends each tick. Save the burst after quiet,
-  // not each tick; drawing still runs immediately on every controls change.
-  const wheel = () => {
-    clearTimeout(wheelEnd);
-    wheelEnd = setTimeout(() => {
-      wheelEnd = undefined;
-      end();
-    }, 150);
-  };
-  const interruptWheel = () => {
-    clearTimeout(wheelEnd);
-    wheelEnd = undefined;
-  };
-  const cancel = () => {
-    interruptWheel();
-    pointers.clear();
-    orbit.cancel(token);
-    token = null;
-    gesturing.current = false;
-  };
-  wheelHost.addEventListener("wheel", wheel, { capture: true, passive: true });
-  canvas.addEventListener("pointerdown", interruptWheel, true);
-  canvas.addEventListener("pointercancel", cancel, true);
-  moves.addEventListener("start", start);
-  moves.addEventListener("change", change);
-  moves.addEventListener("end", end);
-
-  // The element under the pointer, declared where the element menu looks (absent when none).
-  const aim = (at: PointerEvent | MouseEvent) => {
-    if (
-      latest.current.pickingEnabled === false ||
-      focusOwner.current !== (latest.current.focusMeshes ?? latest.current.meshes)
-    )
-      return pointerLeave();
-    const issue = r.pickIssue(at);
-    latest.current.onIssueHover?.(issue);
-    if (issue) canvas.dataset.issue = issue.key;
-    else delete canvas.dataset.issue;
-    canvas.style.cursor = issue ? "pointer" : "";
-    r.reach(issue ? null : at);
-    const instance = pickAt(r, at, latest.current.clip)?.instance;
-    if (!issue) latest.current.onHover(instance?.revitId ?? null);
-    r.hoverElement(issue ? null : (instance?.key ?? null));
-    const target = instance ? sceneTarget(latest.current.observation, instance) : null;
-    const attributes: Partial<Record<(typeof ATTRS)[number], string>> = target
-      ? revitTarget(target.ids, target.refs)
-      : {};
-    for (const name of ATTRS) {
-      const value = attributes[name];
-      if (value === undefined) canvas.removeAttribute(name);
-      else canvas.setAttribute(name, value);
-    }
-  };
-  let hover = 0;
-  let over: PointerEvent | null = null;
-  let down: { x: number; y: number; button: number } | null = null;
-  const pointers = new Set<number>();
-  let multiPointer = false;
-  const pointerMove = (event: PointerEvent) => {
-    if (event.buttons) return;
-    over = event;
-    hover ||= requestAnimationFrame(() => ((hover = 0), over && aim(over)));
-  };
-  const pointerLeave = () => {
-    over = null;
-    latest.current.onHover(null);
-    latest.current.onIssueHover?.(null);
-    delete canvas.dataset.issue;
-    canvas.style.cursor = "";
-    r.reach(null);
-    r.hoverElement(null);
-    for (const name of ATTRS) canvas.removeAttribute(name);
-  };
-  const pointerDown = (event: PointerEvent) => {
-    if (!pointers.size) multiPointer = false;
-    pointers.add(event.pointerId);
-    multiPointer ||= pointers.size > 1;
-    down = { x: event.clientX, y: event.clientY, button: event.button };
-  };
-  const pointerUp = (event: PointerEvent) => {
-    pointers.delete(event.pointerId);
-    // The same click that picks cannot publish a pose, even around a distant selection pivot.
-    if (!pointers.size && !multiPointer && down && isClick(down, event)) orbit.cancel(token);
-  };
-  // Open facts on click, after the document's outside-press capture. Opening on pointerup lets
-  // the trailing click immediately dismiss the new popover as an outside press.
-  const click = (event: MouseEvent) => {
-    if (
-      latest.current.pickingEnabled === false ||
-      focusOwner.current !== (latest.current.focusMeshes ?? latest.current.meshes)
-    )
-      return;
-    if (event.button !== 0 || down?.button !== 0 || !isClick(down, event)) return;
-    const issue = r.pickIssue(event);
-    if (issue && latest.current.onIssuePick) return latest.current.onIssuePick(issue, event);
-    latest.current.onPick?.(pickAt(r, event, latest.current.clip), event);
-  };
-  const doubleClick = (event: MouseEvent) => {
-    if (
-      latest.current.pickingEnabled === false ||
-      focusOwner.current !== (latest.current.focusMeshes ?? latest.current.meshes)
-    )
-      return;
-    latest.current.onDoubleClick?.(pickAt(r, event, latest.current.clip), event);
-  };
-  // A right-drag was a pan: cancel its menu. A right click passes to the element menu, or is
-  // cancelled when nothing Revit can select is under it.
-  const contextMenu = (event: MouseEvent) => {
-    if (down?.button !== 2 || !isClick(down, event)) return event.preventDefault();
-    aim(event);
-    if (!ATTRS.some((name) => canvas.hasAttribute(name))) event.preventDefault();
-  };
-  canvas.addEventListener("pointermove", pointerMove);
-  canvas.addEventListener("pointerleave", pointerLeave);
-  canvas.addEventListener("pointerdown", pointerDown, true);
-  canvas.addEventListener("pointerup", pointerUp, true);
-  canvas.addEventListener("click", click);
-  canvas.addEventListener("contextmenu", contextMenu);
-  canvas.addEventListener("dblclick", doubleClick);
-  return () => {
-    clearTimeout(wheelEnd);
-    wheelHost.removeEventListener("wheel", wheel, true);
-    canvas.removeEventListener("pointerdown", interruptWheel, true);
-    canvas.removeEventListener("pointercancel", cancel, true);
-    cancelAnimationFrame(hover);
-    canvas.removeEventListener("pointermove", pointerMove);
-    canvas.removeEventListener("pointerleave", pointerLeave);
-    canvas.removeEventListener("pointerdown", pointerDown, true);
-    canvas.removeEventListener("pointerup", pointerUp, true);
-    canvas.removeEventListener("click", click);
-    canvas.removeEventListener("contextmenu", contextMenu);
-    canvas.removeEventListener("dblclick", doubleClick);
-    unfollow();
-    moves.removeEventListener("bounds", boundsChanged);
-    if (over) latest.current.onHover(null);
-    orbit.cancel(token);
-    // Recovery needs six bounds numbers, not a retained copy of a disposed scene's geometry.
-    previousView.current = {
-      orbit,
-      bounds: r.frameBounds(),
-      viewport: r.viewport(),
-      plane: r.plane(),
-    };
-    unconstrain();
-    moves.removeEventListener("start", start);
-    moves.removeEventListener("change", change);
-    moves.removeEventListener("end", end);
-    r.dispose();
-    core.current = null;
-    focusOwner.current = null;
-    publishedPlane.current = null;
-    gesturing.current = false;
-  };
-}
-
 export function Scene3D(props: Scene3DProps): ReactNode {
   const { hovered, onHover, lit: subjectLit, selected: subjectSelected } = useElementAttention();
   const lit = useMemo(
@@ -450,13 +122,21 @@ export function Scene3D(props: Scene3DProps): ReactNode {
   const latest = useRef({ ...props, observation, onHover });
   latest.current = { ...props, observation, onHover };
   const core = useRef<SceneRenderer | null>(null);
-  const focusOwner = useRef<SceneMeshes | null>(null);
-  const membership = useRef<SceneMeshes | null>(null);
-  const [commitVersion, committedFrame] = useState(0);
-  const setCommitted = (mesh: SceneMeshes | null) => {
-    membership.current = mesh;
-    committedFrame((n) => n + 1);
-  };
+  const [controller] = useState(
+    () =>
+      new SceneController((focusChanged) => {
+        const r = core.current;
+        if (!r) return;
+        if (focusChanged && !gesturing.current) {
+          const pose = latest.current.orbit.read();
+          if (pose) r.setViewport(pose);
+          else latest.current.orbit.restore(r.viewport());
+        }
+        r.setClip(latest.current.clipVolume, latest.current.meshes?.bounds);
+      }),
+  );
+  const snapshot = useSyncExternalStore(controller.subscribe, controller.read, controller.read);
+  const commitVersion = snapshot.display;
   const previousView = useRef<{
     orbit: LiveOrbit;
     bounds: Bounds;
@@ -466,18 +146,22 @@ export function Scene3D(props: Scene3DProps): ReactNode {
   const publishedPlane = useRef<PlaneViewport | null>(null);
   const gesturing = useRef(false);
   const [failed, setFailed] = useState<{ meshes: SceneMeshes; message: string } | null>(null);
-  const [paintPending, setPaintPending] = useState(false);
   const meshes = props.meshes;
   const initialBounds = useRef<Bounds | null>(null);
   initialBounds.current ??= meshes?.bounds ?? null;
   const hasBounds = !!initialBounds.current;
   const currentFocus = props.focusMeshes ?? meshes;
-  const focusCurrent = focusOwner.current === currentFocus;
-  const failure = failed?.meshes === meshes ? failed.message : null;
-  useWork(
-    (membership.current !== meshes || paintPending) && !failure,
-    focusCurrent ? "Preparing nearby context..." : "Preparing model...",
-  );
+  const focusCurrent = snapshot.display?.focus === currentFocus;
+  const failure =
+    snapshot.state === "failed"
+      ? snapshot.error
+      : failed?.meshes === meshes
+        ? failed.message
+        : null;
+  const pending =
+    snapshot.state === "preparing" ||
+    (!!meshes && snapshot.display?.plan.meshes !== meshes && !failure);
+  useWork(pending, focusCurrent ? "Preparing nearby context..." : "Preparing model...");
 
   useEffect(
     () =>
@@ -486,7 +170,7 @@ export function Scene3D(props: Scene3DProps): ReactNode {
         initialBounds,
         latest,
         core,
-        focusOwner,
+        controller,
         previousView,
         publishedPlane,
         gesturing,
@@ -499,88 +183,32 @@ export function Scene3D(props: Scene3DProps): ReactNode {
     if (meshes) core.current?.setFrameBounds(meshes.bounds);
   }, [meshes]);
 
-  useEffect(() => {
-    const r = core.current;
-    if (!r) return;
-    if (meshes) r.setFrameBounds(meshes.bounds);
-    r.canvas.hidden = !meshes;
-    r.canvas.style.visibility = meshes ? "" : "hidden";
-    if (meshes) return;
-    const abort = new AbortController();
-    focusOwner.current = null;
-    void r
-      .replaceMeshes(
-        new SceneMeshes(new Float32Array(), initialBounds.current!, []),
-        undefined,
-        abort.signal,
-      )
-      .then(() => {
-        if (!abort.signal.aborted) setCommitted(null);
-      })
-      .catch(() => {});
-    return () => abort.abort();
-  }, [meshes, hasBounds, props.wheelHost]);
+  // React describes the requested view. The controller alone executes its replacement.
+  const look = useSyncExternalStore(knobsChanged, LOOK.read, LOOK.read);
+  const shownLook = useMemo(() => presetLook(look, props.preset ?? "all"), [look, props.preset]);
+  const request = useMemo(
+    () =>
+      meshes && currentFocus
+        ? {
+            focus: scenePlan(currentFocus, props.paintOf, shownLook),
+            context: scenePlan(meshes, props.paintOf, shownLook),
+            appearance: props.paintOf,
+          }
+        : null,
+    [meshes, currentFocus, props.paintOf, shownLook],
+  );
+  useEffect(
+    () => controller.request(request),
+    [controller, request, hasBounds, props.orbit, props.wheelHost],
+  );
 
   useEffect(() => {
-    const r = core.current;
-    if (!r || !currentFocus || focusOwner.current === currentFocus) return;
-    const abort = new AbortController();
-    const before = r.viewport();
-    void r
-      .replaceMeshes(currentFocus, latest.current.paintOf, abort.signal)
-      .then(() => {
-        if (abort.signal.aborted) return;
-        focusOwner.current = currentFocus;
-        if (!gesturing.current) {
-          const pose = props.orbit.read();
-          if (pose && viewportCodec.encode(pose) !== viewportCodec.encode(before))
-            r.setViewport(pose);
-          else props.orbit.restore(r.viewport());
-        }
-        r.setClip(latest.current.clipVolume, latest.current.meshes?.bounds);
-        setCommitted(currentFocus);
-      })
-      .catch((error: unknown) => {
-        if (!abort.signal.aborted)
-          setFailed({
-            meshes: latest.current.meshes ?? currentFocus,
-            message: `Scene preparation failed: ${String(error)}`,
-          });
-      });
-    return () => abort.abort();
-  }, [currentFocus, hasBounds, props.orbit, props.wheelHost, props.paintOf]);
-
-  useEffect(() => {
-    const r = core.current;
-    if (!r || !meshes || focusOwner.current !== currentFocus || membership.current === meshes)
-      return;
-    const abort = new AbortController();
-    void (async () => {
-      // Give the exact focus a frame before optional context allocates its replacement batch.
-      await new Promise<void>((resolve) =>
-        requestAnimationFrame(() => requestAnimationFrame(() => resolve())),
-      );
-      abort.signal.throwIfAborted();
-      await r.replaceMeshes(meshes, latest.current.paintOf, abort.signal, true);
-      abort.signal.throwIfAborted();
-      r.setClip(latest.current.clipVolume, latest.current.meshes?.bounds);
-      setCommitted(meshes);
-    })().catch((error: unknown) => {
-      if (!abort.signal.aborted)
-        setFailed({ meshes, message: `Scene preparation failed: ${String(error)}` });
-    });
-    return () => abort.abort();
-  }, [meshes, currentFocus, commitVersion, props.orbit, props.wheelHost, props.paintOf]);
-
-  useEffect(() => {
-    (focusOwner.current === currentFocus ? core.current : null)?.setOrbitPivot(
-      props.orbitPivot ?? null,
-    );
+    (focusCurrent ? core.current : null)?.setOrbitPivot(props.orbitPivot ?? null);
   }, [props.orbitPivot, meshes, commitVersion, props.wheelHost]);
 
   // The plane follows the same rule; a fit (null viewport) is the route's to compute.
   useEffect(() => {
-    const r = focusOwner.current === currentFocus ? core.current : null;
+    const r = focusCurrent ? core.current : null;
     if (!r || gesturing.current) return;
     const next = props.plane ?? null;
     const own = publishedPlane.current;
@@ -589,80 +217,43 @@ export function Scene3D(props: Scene3DProps): ReactNode {
     r.setPlane(next);
   }, [props.plane, meshes, commitVersion]);
   useEffect(() => {
-    (focusOwner.current === currentFocus ? core.current : null)?.setThumbs(props.thumbs ?? {});
+    (focusCurrent ? core.current : null)?.setThumbs(props.thumbs ?? {});
   }, [props.thumbs, meshes, commitVersion]);
   useEffect(() => {
-    (focusOwner.current === currentFocus ? core.current : null)?.paint(
-      selected,
-      props.hidden,
-      props.isolated,
-      lit,
-    );
+    (focusCurrent ? core.current : null)?.paint(selected, props.hidden, props.isolated, lit);
   }, [selected, props.hidden, props.isolated, lit, meshes, commitVersion]);
   useEffect(() => {
-    (focusOwner.current === currentFocus ? core.current : null)?.setLayers(props.layers);
+    (focusCurrent ? core.current : null)?.setLayers(props.layers);
   }, [props.layers, meshes, commitVersion]);
   useEffect(() => {
-    (focusOwner.current === currentFocus ? core.current : null)?.lightIssue(
+    (focusCurrent ? core.current : null)?.lightIssue(
       props.hoveredIssue ?? null,
       props.focusedIssue ?? null,
     );
   }, [props.hoveredIssue, props.focusedIssue, meshes, commitVersion]);
   useEffect(() => {
-    (focusOwner.current === currentFocus ? core.current : null)?.setClip(
-      props.clipVolume,
-      meshes?.bounds,
-    );
+    (focusCurrent ? core.current : null)?.setClip(props.clipVolume, meshes?.bounds);
   }, [props.clipVolume, meshes, commitVersion]);
   useEffect(() => {
-    const r = focusOwner.current === currentFocus ? core.current : null;
-    if (!r || !meshes || membership.current !== meshes) return;
-    const abort = new AbortController();
-    const pending = r.setPaint(props.paintOf, abort.signal);
-    if (!pending) return;
-    setPaintPending(true);
-    void pending
-      .then(() => {
-        if (abort.signal.aborted) return;
-        r.setClip(latest.current.clipVolume, latest.current.meshes?.bounds);
-        setPaintPending(false);
-        setCommitted(meshes);
-      })
-      .catch((error: unknown) => {
-        if (!abort.signal.aborted) {
-          setPaintPending(false);
-          setFailed({ meshes, message: `Scene preparation failed: ${String(error)}` });
-        }
-      });
-    return () => {
-      abort.abort();
-      setPaintPending(false);
-    };
-  }, [props.paintOf, meshes, commitVersion]);
-  useEffect(() => {
     if (props.contextRadiusFt === undefined)
-      (focusOwner.current === currentFocus ? core.current : null)?.setContextMode(
-        props.contextMode,
-      );
+      (focusCurrent ? core.current : null)?.setContextMode(props.contextMode);
     else
-      (focusOwner.current === currentFocus ? core.current : null)?.setContextMode(
+      (focusCurrent ? core.current : null)?.setContextMode(
         props.contextMode,
         props.contextRadiusFt,
       );
   }, [props.contextMode, props.contextRadiusFt, meshes, commitVersion]);
   // Dev knobs re-apply live; in production `LOOK.read()` is the code defaults and never changes.
-  const look = useSyncExternalStore(knobsChanged, LOOK.read, LOOK.read);
-  const shownLook = useMemo(() => presetLook(look, props.preset ?? "all"), [look, props.preset]);
   useEffect(() => {
-    (focusOwner.current === currentFocus ? core.current : null)?.setLook(shownLook);
+    (focusCurrent ? core.current : null)?.setLook(shownLook);
   }, [shownLook, meshes, commitVersion]);
 
   useEffect(() => {
     if (props.pickingEnabled !== false) return;
-    const canvas = (focusOwner.current === currentFocus ? core.current : null)?.canvas;
+    const canvas = (focusCurrent ? core.current : null)?.canvas;
     if (canvas) for (const name of ATTRS) canvas.removeAttribute(name);
-    (focusOwner.current === currentFocus ? core.current : null)?.reach(null);
-    (focusOwner.current === currentFocus ? core.current : null)?.hoverElement(null);
+    (focusCurrent ? core.current : null)?.reach(null);
+    (focusCurrent ? core.current : null)?.hoverElement(null);
     onHover(null);
     props.onIssueHover?.(null);
   }, [props.pickingEnabled, meshes, commitVersion]); // eslint-disable-line react-hooks/exhaustive-deps
@@ -671,8 +262,8 @@ export function Scene3D(props: Scene3DProps): ReactNode {
     <RevitTarget scope={props.pickingEnabled === false || !focusCurrent ? null : observation.scope}>
       <div
         ref={host}
-        aria-busy={membership.current !== meshes || paintPending || undefined}
-        data-scene-pending={membership.current !== meshes || paintPending ? "" : undefined}
+        aria-busy={pending || undefined}
+        data-scene-pending={pending ? "" : undefined}
         className={`relative min-h-0 overflow-hidden ${props.className ?? ""}`}
       >
         {failure ? <p className="t-small text-ink-2 p-2">{failure}</p> : null}

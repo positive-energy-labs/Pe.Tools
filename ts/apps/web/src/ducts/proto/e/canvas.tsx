@@ -24,7 +24,7 @@ import { SelectionBoxButton } from "#/revit/element-menu";
 import { observedElements } from "#/revit/observation";
 import { PaneWork } from "@pe/kit/lang/pane";
 import { useNativeObservation } from "#/revit/observation";
-import { useDuctScene, usePictureRead } from "#/scene/use-scene";
+import { useDuctScene, usePictureRead } from "#/ducts/scene-read";
 import { useLiveOrbit } from "@pe/kit/lang/live-orbit";
 import type { Bounds } from "#/scene/types";
 import { Button } from "@pe/kit/lang/button";

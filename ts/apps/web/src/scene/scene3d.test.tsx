@@ -8,7 +8,8 @@ import { type OrbitViewport } from "./orbit";
 import { createLiveOrbit } from "@pe/kit/lang/live-orbit";
 import { OrbitMinimap } from "@pe/kit/lang/minimap";
 import { Scene3D } from "./scene3d";
-import { usePictureRead, type SceneRead } from "./use-scene";
+import { usePictureRead } from "#/ducts/scene-read";
+import type { SceneRead } from "./use-scene";
 import { Row } from "@pe/kit/lang/row";
 import type { Pick, PaintOf } from "./types";
 
@@ -19,18 +20,25 @@ vi.mock("./picking", async (original) => ({
 }));
 
 const renderer = vi.hoisted(() => ({ current: null as any }));
+vi.mock("./preparation", () => ({ prepareScene: async () => ({ geometry: {}, release() {} }) }));
 vi.mock("./renderer", () => ({
   createRenderer: (host: HTMLElement, initial: SceneMeshes) => {
     let held = initial;
     renderer.current.meshes = () => held;
+    renderer.current.clear = vi.fn(() => {
+      held = new SceneMeshes(new Float32Array(), initial.bounds, []);
+    });
     let frame = initial.bounds;
     renderer.current.frameBounds = () => frame;
     renderer.current.setFrameBounds = vi.fn((next) => {
       frame = next;
     });
-    renderer.current.replaceMeshes = vi.fn(async (next: SceneMeshes) => {
-      held = next;
-    });
+    renderer.current.stage = vi.fn(async (plan) => ({
+      commit() {
+        held = plan.meshes;
+      },
+      release() {},
+    }));
     host.prepend(renderer.current.canvas);
     return renderer.current;
   },
@@ -56,7 +64,7 @@ it("keeps camera gestures local and the viewport mounted across membership and n
     limitViewport: (v: OrbitViewport) => v,
     recoverViewport: vi.fn(),
     ...Object.fromEntries(
-      "setOrbitPivot setOnFrame reportFrame setPlane setThumbs paint setLayers lightIssue reach hoverElement setClip setLook setPaint setContextMode"
+      "setOrbitPivot setOnFrame reportFrame setPlane setThumbs paint setLayers lightIssue reach hoverElement setClip setLook setAppearance setContextMode clear"
         .split(" ")
         .map((name) => [name, vi.fn()]),
     ),
@@ -233,37 +241,14 @@ it("keeps camera gestures local and the viewport mounted across membership and n
     <TestAttention registry={registry}>{draw(undefined, "all", biggerCapture)}</TestAttention>,
   );
   await act(async () => {});
-  expect(renderer.current.replaceMeshes).toHaveBeenLastCalledWith(
-    biggerCapture,
-    undefined,
-    expect.any(AbortSignal),
-  );
+  expect(renderer.current.meshes()).toBe(biggerCapture);
   expect(renderer.current.canvas).toBe(canvas);
   expect(renderer.current.dispose).not.toHaveBeenCalled();
-  // A structural paint change keeps the old frame explicitly pending. Navigation aborts it;
-  // a late completion must never republish the old membership or leave the new picture pending.
-  let finishPaint!: () => void;
-  renderer.current.setPaint.mockImplementationOnce(
-    () =>
-      new Promise<void>((resolve) => {
-        finishPaint = resolve;
-      }),
-  );
-  const recolour: PaintOf = () => ({ tier: "context" });
-  view.rerender(
-    <TestAttention registry={registry}>
-      {draw(undefined, "all", biggerCapture, true, recolour)}
-    </TestAttention>,
-  );
-  const paintSignal = renderer.current.setPaint.mock.lastCall[1] as AbortSignal;
-  expect(view.container.querySelector("[data-scene-pending]")).toBeTruthy();
+  // Cancellation/failure ownership is tested at the controller boundary; this test exercises
+  // the viewport's actual gesture/retained-native-authority wiring.
   view.rerender(<TestAttention registry={registry}>{draw()}</TestAttention>);
-  expect(paintSignal.aborted).toBe(true);
-  await act(async () => {
-    finishPaint();
-  });
+  await act(async () => {});
   expect(renderer.current.meshes()).toBe(meshes);
-  expect(view.container.querySelector("[data-scene-pending]")).toBeNull();
   view.unmount();
   type PictureProps = { capture: SceneRead; document?: string };
   function Picture({ capture, document = "native/doc" }: PictureProps) {
