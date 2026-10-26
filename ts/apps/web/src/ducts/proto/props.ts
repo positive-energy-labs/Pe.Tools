@@ -55,8 +55,8 @@ export interface ProtoProps {
   };
   /** Empty-state words, or null when the snapshot is drawable. */
   empty: { says: string; exit: string } | null;
-  /** The bound document (session/openId), or null. Unread: element targets come from the
-   * displayed observation (`useNativeObservation`); goes when `route.tsx` stops passing it. */
+  /** Bound document fallback for visual retention while capture readiness is withdrawn.
+   * Element action targets come only from the displayed native observation. */
   doc: { session: string; openId: string } | null;
   /** Loading state of the host reads. `refreshing`: a re-read is in flight or pricing, and the
    * screen draws the last priced read until it lands. */

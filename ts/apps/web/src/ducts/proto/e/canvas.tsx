@@ -210,7 +210,11 @@ function Canvas({
     import.meta.env.DEV && frozenDemo() === "colours"
       ? { ...captured, meshes: COLOURS_FIXTURE.meshes, focusMeshes: COLOURS_FIXTURE.meshes }
       : captured;
-  const pictureKey = doc && request ? `${doc.session}/${doc.openId}` : null;
+  // Capture provenance owns visual retention; the bound document remains its fallback
+  // while pricing withdraws capture readiness. Neither grants native action authority.
+  const pictureDocument = native ?? doc;
+  const pictureKey =
+    pictureDocument && request ? `${pictureDocument.session}/${pictureDocument.openId}` : null;
   const { read, holding } = usePictureRead(
     capture,
     pictureKey,
