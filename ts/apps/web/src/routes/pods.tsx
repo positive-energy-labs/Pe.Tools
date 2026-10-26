@@ -116,7 +116,12 @@ function PodsRoute() {
   const thread = useRouteThread();
   // The live demo lane browses the demo owner's pods through the live path.
   return (
-    <PodsRouteContent target={target} thread={thread} demo={useRouteDemo() ?? undefined} url />
+    <PodsRouteContent
+      target={target}
+      thread={thread ?? undefined}
+      demo={useRouteDemo() ?? undefined}
+      url
+    />
   );
 }
 
@@ -171,7 +176,7 @@ export function PodsRouteContent({
     !!demo,
   );
   useRouteLease("pods", handle.page, {
-    thread: handle.head?.thread,
+    thread: handle.thread ?? undefined,
     url,
     visible,
     context: { member: member ? { pod: row!.id, path: member.path } : null },

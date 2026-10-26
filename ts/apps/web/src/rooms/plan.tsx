@@ -36,7 +36,7 @@ import type { PlanGeo } from "./sketch";
 import { useRouteLease } from "#/route/view-bridge";
 
 export interface RoomsPlanLease {
-  thread: string;
+  thread?: string;
   ready: boolean;
   context: Record<string, unknown>;
 }

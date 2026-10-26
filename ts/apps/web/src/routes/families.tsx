@@ -24,7 +24,7 @@ export const Route = createFileRoute("/families")({
 function FamiliesRoute() {
   const target = useRouteSearchSlice((search) => search.target);
   const thread = useRouteThread();
-  return <FamiliesRouteContent target={target} thread={thread} url />;
+  return <FamiliesRouteContent target={target} thread={thread ?? undefined} url />;
 }
 
 export function FamiliesRouteContent({

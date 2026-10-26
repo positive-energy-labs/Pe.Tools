@@ -29,7 +29,7 @@ export function FamiliesLease({
   }, [pivot, query]);
   const history = store.page.stage === "history";
   useRouteLease("families", store.handle.page, {
-    thread: store.handle.head?.thread,
+    thread: store.handle.thread ?? undefined,
     url,
     visible,
     context: {

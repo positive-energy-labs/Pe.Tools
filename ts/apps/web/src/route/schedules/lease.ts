@@ -46,7 +46,7 @@ export function useScheduleLease(
   const page = handle.page[0];
   const cells = Object.values(handle.work.doc?.cells ?? {});
   useRouteLease("schedules", handle.page, {
-    thread: handle.head?.thread,
+    thread: handle.thread ?? undefined,
     url,
     visible,
     context: {

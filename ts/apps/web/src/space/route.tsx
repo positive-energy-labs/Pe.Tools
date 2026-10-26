@@ -314,7 +314,7 @@ export function SpaceRoute({ url = true }: { url?: boolean } = {}) {
             <div className="flex min-h-0 flex-1">
               <SpacePicture
                 lease={{
-                  thread,
+                  thread: thread ?? undefined,
                   ready: !!scene && membersReady,
                   context: {
                     source: demo ? "fixture" : "artifact",

@@ -22,5 +22,5 @@ export const Route = createFileRoute("/schedules")({
 function SchedulesRoute() {
   const { target } = useRouteSearch("schedules");
   const thread = useRouteThread();
-  return <LiveScheduleGridWorkspace framed target={target ?? null} thread={thread} />;
+  return <LiveScheduleGridWorkspace framed target={target ?? null} thread={thread ?? undefined} />;
 }

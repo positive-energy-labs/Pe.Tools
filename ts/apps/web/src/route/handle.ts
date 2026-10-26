@@ -3,7 +3,7 @@ import type * as AtomRegistry from "effect/unstable/reactivity/AtomRegistry";
 import type { PageSnapshot } from "./view-owner";
 /** The handle a route gets back from `useRoute`: its resolution, Work, Readings, Page and one handle per action. */
 import type { Reading, RouteStatePatch, TargetResolution, WorkKey } from "@pe/agent-contracts";
-import type { useThreadScope } from "#/chat/scope";
+
 import type { ActionFacts } from "./facts";
 import type { PageMove, RouteManifest } from "./manifest";
 import type { Refusal } from "./refusal";
@@ -35,19 +35,10 @@ export interface RouteHandle<W, R extends string, P, A extends string> {
   readonly manifest: RouteManifest<W, R, P, A>;
   readonly resolution: TargetResolution;
   readonly targetProvenance: TargetProvenance;
-  /** The `?target` pin: a view over one document, never written by the route; null reads the head. */
+  /** The `?target` pin: a view over one document, never written by the route; null falls back read-only to the sole user document. */
   readonly chosen: string | null;
-  /** The thread head, the one target store; null on a route that names no thread. */
-  readonly head: {
-    readonly thread: string;
-    /** Move the thread's target; the head refuses when stale or while a turn holds it. */
-    readonly set: ReturnType<typeof useThreadScope>["set"];
-    /** The thread's targets now; a route view resolves one of them. */
-    readonly targets: ReturnType<typeof useThreadScope>["targets"];
-    readonly refusal: string | null;
-    /** The head has been read once; a set before that is refused. */
-    readonly hydrated: boolean;
-  } | null;
+  /** The selected conversation, a view association only; never a target default. */
+  readonly thread: string | null;
   readonly work: {
     readonly key: WorkKey;
     /** Addressless: this Work belongs to one unsaved document's lifetime and dies with it. */

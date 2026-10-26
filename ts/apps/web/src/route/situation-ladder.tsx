@@ -1,5 +1,5 @@
 /** The Situation's document ladder, its picker, and the contexts Chat hands a hosted route. */
-import { createContext, useContext, useEffect, useRef, useState } from "react";
+import { createContext, useContext, useEffect, useState } from "react";
 import {
   machineAttachments,
   type MachineAttachment,
@@ -117,56 +117,14 @@ export function useDocumentLadder(
       : inventory.state === "loading" && !sessions.length
         ? "reading sessions…"
         : undefined;
-  const head = handle.head;
   const pick = (openId: string) => {
     if (!sessionId) return;
     onTarget?.();
     chooseSession(null);
     const ref = { session: sessionId, openId };
     if (binding) binding.bind(ref);
-    else if (head) {
-      const request = { kind: "open", ref } as const;
-      const held = head.targets.some(
-        (target) =>
-          target.request.kind === "open" &&
-          target.request.ref.session === ref.session &&
-          target.request.ref.openId === ref.openId,
-      );
-      const next = held ? head.targets : [...head.targets, { request }];
-      void head.set(next).then((moved) => {
-        if (moved) choose(next.length > 1 ? JSON.stringify(request) : null);
-      });
-    } else choose(JSON.stringify({ kind: "open", ref }));
+    else choose(JSON.stringify({ kind: "open", ref }));
   };
-  // Exactly one session holding exactly one document, and nothing bound: bind it as if picked, once.
-  // Several candidates keep asking. A lost binding is replaced only by the same title reopened (a
-  // Revit restart reopens the same file under a new session), or, when its session is gone and its
-  // title was never seen on this page, by the one document open anywhere; never by a different
-  // document whose title is known to differ. The sentence names what was bound.
-  const onlySession = sessions.length === 1 ? sessions[0]! : null;
-  const onlyDoc = onlySession?.documents?.length === 1 ? onlySession.documents[0]! : null;
-  const sameReopened =
-    !lost || (lost.title != null ? onlyDoc?.title === lost.title : lost.reason === "session-gone");
-  const only =
-    !binding && !hosted && !bound && !head?.targets.length && sameReopened && onlySession && onlyDoc
-      ? { session: onlySession.session, openId: onlyDoc.openId }
-      : null;
-  const autoBound = useRef<string | null>(null);
-  const [auto, setAuto] = useState(false);
-  // A fresh thread's head reads after the inventory; a set before it hydrates is refused, so wait
-  // for it, and release the latch when the set is refused so the next render tries again.
-  const headReady = !head || head.hydrated;
-  useEffect(() => {
-    if (!only || !headReady || autoBound.current === only.openId) return;
-    autoBound.current = only.openId;
-    setAuto(true);
-    onTarget?.();
-    if (head)
-      void head.set([{ request: { kind: "open", ref: only } }]).then((ok) => {
-        if (!ok) autoBound.current = null;
-      });
-    else choose(JSON.stringify({ kind: "open", ref: only }), "replace");
-  }, [only?.session, only?.openId, headReady]);
   const sessionWord = session ? name(session) : null;
   const notLoaded = "Pe.Tools is not loaded in this Revit. Finish the install, then restart Revit.";
   return {
@@ -177,11 +135,10 @@ export function useDocumentLadder(
         : (doc?.title ?? lost?.title ?? null),
     /** The bound document closed: the document word wears the caution tone. */
     lost: lost != null,
-    /** The head's refusal of the last pick (stale head, or a Pea turn holding it). */
-    refusal: binding ? null : (head?.refusal ?? null),
+    refusal: null,
     hosted,
-    /** The binding was made for the person (the only session with the only document); said quietly in the sentence. */
-    autoBound: auto && bound != null,
+    /** No pin: the read-only fallback to the machine's sole user document; said quietly in the sentence. */
+    autoBound: handle.targetProvenance.source === "sole-document" && bound != null,
     levels: hosted
       ? []
       : [

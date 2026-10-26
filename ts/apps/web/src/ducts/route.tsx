@@ -318,7 +318,7 @@ export function DuctsRoute({ url = true }: { url?: boolean } = {}) {
   const groups = snapshot?.groups ?? [];
   const levels = snapshot?.levels ?? [];
   const reportPose = useDuctsViewBridge({
-    thread,
+    thread: thread ?? undefined,
     url,
     page,
     setPage,

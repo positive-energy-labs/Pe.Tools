@@ -25,5 +25,5 @@ export const Route = createFileRoute("/family")({
 function FamilyRoute() {
   const { target } = useRouteSearch("family");
   const thread = useRouteThread();
-  return <FamilyRouteView target={target ?? null} thread={thread} />;
+  return <FamilyRouteView target={target ?? null} thread={thread ?? undefined} />;
 }

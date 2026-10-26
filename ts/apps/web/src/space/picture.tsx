@@ -64,7 +64,7 @@ export function SpacePicture({
   legend,
   alias,
 }: {
-  lease?: { thread: string; ready: boolean; context: Record<string, unknown> };
+  lease?: { thread?: string; ready: boolean; context: Record<string, unknown> };
   meshes: SceneMeshes | null;
   metadata: Psc1Metadata | null;
   page: SpacePage;

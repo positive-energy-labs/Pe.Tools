@@ -1,4 +1,4 @@
-/** Where a route acts: its Target resolved from the thread head or a `?target` pin. */
+/** Where a route acts: its `?target` pin, else read-only the machine's sole user document. */
 import type { BridgeSessionListEntry } from "@pe/host-contracts/operation-types";
 import { useMemo, useRef } from "react";
 import {
@@ -6,20 +6,17 @@ import {
   documentRequestSchema,
   resolveCallTarget,
   sameAddress,
-  threadHeadSchema,
-  headRequests,
-  emptyThreadHead,
+  type Machine,
   type Address,
   type DocumentRequest,
   type ExecutionTarget,
   type Reading,
-  type ReadingRequest,
   type TargetResolution,
 } from "@pe/agent-contracts";
 import * as AtomRegistry from "effect/unstable/reactivity/AtomRegistry";
 import { readingAtom, peReadings, inventoryOf, previousOf, targetInventory } from "#/readings";
 import { type RouteManifest } from "./manifest";
-import { useThreadScope } from "#/chat/scope";
+import { soleUserDocument } from "#/chat/scope";
 import { useOwned } from "./route-owner";
 
 export interface BindingLost {
@@ -76,19 +73,19 @@ export function parseTarget(
 
 export type TargetProvenance =
   | { source: "url-pin"; raw: string }
-  | { source: "thread-head"; thread: string; revision: number; current: boolean }
+  | { source: "sole-document" }
   | { source: "seed" | "none" };
 
 /**
- * The route's Target: the thread head or a `?target` pin, resolved against the live inventory,
- * the bound document that left it (named, never rebound), and the resolved document's Address.
+ * The route's Target: a `?target` pin resolved against the live inventory; with no pin, a read-only
+ * fallback to the machine's sole user document (it writes no URL and moves no thread); else the
+ * route refuses until a document is chosen. The selected conversation never defaults it.
  */
 export function useRouteTarget(
-  manifest: Pick<RouteManifest<any, any, any, any>, "needs" | "readings">,
+  manifest: Pick<RouteManifest<any, any, any, any>, "needs">,
   registry: AtomRegistry.AtomRegistry,
   seed: { target?: ExecutionTarget } | undefined,
   target: string | null,
-  thread: string | undefined,
 ) {
   const inventory = useMemo(
     () => (seed ? null : readingAtom({ kind: "inventory" }, peReadings)),
@@ -97,40 +94,14 @@ export function useRouteTarget(
   const inventoryResult = (useOwned(registry, inventory) ?? {
     state: "absent",
   }) as Reading<unknown>;
-  /**
-   * The route's default Target is whatever the thread head says. A route that declares a
-   * `thread-head` Reading resolves against it; one that does not has no default and refuses until
-   * a document is chosen. No component keeps a second copy (fable law 6).
-   */
-  const headRequest = useMemo(
-    () =>
-      (thread
-        ? { kind: "thread-head", thread: thread }
-        : Object.values(manifest.readings ?? {}).find(
-            (request) =>
-              typeof request !== "function" &&
-              (request as ReadingRequest | undefined)?.kind === "thread-head",
-          )) as Extract<ReadingRequest, { kind: "thread-head" }> | undefined,
-    [manifest.readings, thread],
+  const machineAtom = useMemo(
+    () => (seed || target ? null : readingAtom({ kind: "machine" }, peReadings)),
+    [seed, target],
   );
-  const headAtom = useMemo(
-    () => (!seed && headRequest ? readingAtom(headRequest, peReadings) : null),
-    [headRequest, seed],
-  );
-  const headResult = useOwned(registry, headAtom) as Reading<unknown> | null;
-  const scope = useThreadScope(
-    headRequest?.thread ?? "",
-    headResult !== null,
-    headResult ?? { state: "absent" },
-  );
-  const headTargets = useMemo(
-    () =>
-      headRequests(
-        threadHeadSchema.safeParse(headResult ? previousOf(headResult) : undefined).data ??
-          emptyThreadHead,
-      ),
-    [headResult],
-  );
+  const machineResult = useOwned(registry, machineAtom) as Reading<Machine> | null;
+  const sole = machineResult ? soleUserDocument(previousOf(machineResult) ?? null) : null;
+  const soleKey = JSON.stringify(sole);
+  const fallback = useMemo((): DocumentRequest[] => (sole ? [sole] : []), [soleKey]);
   const resolution: TargetResolution = useMemo(() => {
     // A seed's explicit synthetic Target is its authority; host is the backward-safe absence.
     if (seed)
@@ -143,7 +114,7 @@ export function useRouteTarget(
     // across that gap, or dropping its Readings would trigger another reconnect forever.
     const inventory = targetInventory(inventoryResult as Parameters<typeof targetInventory>[0]);
 
-    // A chosen `?target` beats the thread head; see `parseTarget` for the grammar.
+    // See `parseTarget` for the `?target` grammar.
     const chosen = parseTarget(target);
     if (chosen?.kind === "invalid")
       return {
@@ -177,7 +148,7 @@ export function useRouteTarget(
         request = { kind: "named", session: holders[0]![0], address: chosen.address };
       }
     }
-    const sessionOf = request ?? (headTargets.length === 1 ? headTargets[0]! : null);
+    const sessionOf = request ?? (fallback.length === 1 ? fallback[0]! : null);
     const session = sessionOf?.kind === "open" ? sessionOf.ref.session : sessionOf?.session;
     const needs =
       manifest.needs === "session"
@@ -191,8 +162,8 @@ export function useRouteTarget(
                   : ("document" as const),
           } as const);
     if (needs.needs === "session" && !needs.target) return { kind: "choose", reason: "missing" };
-    return resolveCallTarget(needs as never, request ? [request] : headTargets, inventory);
-  }, [seed, manifest.needs, inventoryResult, headTargets, target]);
+    return resolveCallTarget(needs as never, request ? [request] : fallback, inventory);
+  }, [seed, manifest.needs, inventoryResult, fallback, target]);
 
   // A bound exact document that left the inventory: named, with the title it last had, and the
   // same title reopened in its session offered. Titles seen are remembered for exactly this.
@@ -205,7 +176,7 @@ export function useRouteTarget(
       return null;
     const chosen = parseTarget(target);
     const pinned = chosen?.kind === "request";
-    const request = pinned ? chosen.request : headTargets.length === 1 ? headTargets[0]! : null;
+    const request = pinned ? chosen.request : fallback.length === 1 ? fallback[0]! : null;
     if (request?.kind !== "open") return null;
     const { ref } = request;
     const title = seenTitles.current.get(`${ref.session}/${ref.openId}`) ?? null;
@@ -221,8 +192,7 @@ export function useRouteTarget(
     return {
       ref,
       title,
-      // A `?target` pin is this page's own binding; a Chat head is the thread's (the words the
-      // host's route door uses). Remembered titles only label it; they never rebind.
+      // A `?target` pin is this page's own binding; the sole-document fallback is the machine's. Remembered titles only label it; they never rebind.
       sentence: pinned
         ? `the document this page was bound to closed (${title ?? "untitled"} · ${ref.openId.slice(0, 8)}…); bind it again in the sentence above`
         : `the Chat's document is no longer open — pick it again (${title ?? "untitled"} · ${ref.openId.slice(0, 8)}…)`,
@@ -231,7 +201,7 @@ export function useRouteTarget(
         ? { openId: reopened[0].slice(ref.session.length + 1), title: reopened[1] }
         : null,
     };
-  }, [seed, resolution, target, headTargets, open]);
+  }, [seed, resolution, target, fallback, open]);
   const bindingLostRef = useRef(bindingLost);
   bindingLostRef.current = bindingLost;
 
@@ -248,23 +218,23 @@ export function useRouteTarget(
       : null;
   }, [resolution, inventoryResult]);
   // Work identity alone: the live Address, else a known raw Address (a `?target` Address, or a
-  // named request pinned or held by the head) so a closed document's Work stays readable. Never a
+  // named request pinned or held by the fallback) so a closed document's Work stays readable. Never a
   // remembered title, and never an open/session ref reread as a new lifetime. Nothing native,
   // no action and no binding reads this; they stay on `resolution`.
   const workAddress = useMemo((): Address | null => {
     if (resolvedAddress || seed) return resolvedAddress;
     const chosen = parseTarget(target);
     const request =
-      chosen?.kind === "request" ? chosen.request : chosen ? null : (headTargets[0] ?? null);
+      chosen?.kind === "request" ? chosen.request : chosen ? null : (fallback[0] ?? null);
     const raw =
       chosen?.kind === "address"
         ? chosen.address
-        : request?.kind === "named" && (chosen || headTargets.length === 1)
+        : request?.kind === "named" && (chosen || fallback.length === 1)
           ? request.address
           : null;
     return addressSchema.safeParse(raw).data ?? null;
-  }, [resolvedAddress, seed, target, headTargets]);
-  // The same rule for an exact open request (a `?target` pin, or the head's only target): it names
+  }, [resolvedAddress, seed, target, fallback]);
+  // The same rule for an exact open request (a `?target` pin, or the sole fallback): it names
   // its own lifetime's saved Work, read-only, while native resolution says choose. The ref is
   // used as given, never re-resolved, so it never stands for a new lifetime.
   const workOpen = useMemo(() => {
@@ -277,22 +247,20 @@ export function useRouteTarget(
         ? chosen.request
         : chosen
           ? null
-          : headTargets.length === 1
-            ? headTargets[0]!
+          : fallback.length === 1
+            ? fallback[0]!
             : null;
     return request?.kind === "open" ? request.ref : null;
-  }, [seed, resolution, target, headTargets]);
-  const head = headRequest && headResult ? { thread: headRequest.thread, ...scope } : null;
+  }, [seed, resolution, target, fallback]);
   const targetProvenance: TargetProvenance = seed
     ? { source: "seed" }
     : target
       ? { source: "url-pin", raw: target }
-      : thread
-        ? { source: "thread-head", thread, revision: scope.revision, current: !scope.stale }
+      : fallback.length
+        ? { source: "sole-document" }
         : { source: "none" };
   return {
     inventoryResult,
-    head,
     resolution,
     bindingLost,
     bindingLostRef,

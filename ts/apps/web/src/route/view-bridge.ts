@@ -6,6 +6,7 @@
  * authored Work.
  */
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { useRouterState } from "@tanstack/react-router";
 import {
   routeAddress,
   type RoutePage,
@@ -112,10 +113,26 @@ function useRouteViewBridge<R extends RouteViewRoute>({
   }, []);
   // A generic R defers the address's lease type, so the lease is taken over every leasing route.
   const lease = routeAddress<RouteViewRoute>(route).agent;
+  // The explicit Pea open this rendered Place answers (page-local history, set by the Places'
+  // route-view-open listener); MCP waits for its own id, so an older lease never satisfies it.
+  const openCommandId = useRouterState({
+    select: (state) =>
+      (state.location.state as { __peViewOpenCommandId?: string } | undefined)
+        ?.__peViewOpenCommandId,
+  });
   const addressed = lease.write(page);
   const raw: RouteView | null =
     thread && visible && pageVisible && routeCurrent()
-      ? { route, thread, instance: instance.current, surface, page: addressed, context, facts }
+      ? {
+          route,
+          thread,
+          instance: instance.current,
+          surface,
+          page: addressed,
+          context,
+          facts,
+          ...(surface === "route" && openCommandId ? { openCommandId } : {}),
+        }
       : null;
   const viewKey = JSON.stringify(raw);
   const view = useMemo(() => JSON.parse(viewKey) as RouteView | null, [viewKey]);

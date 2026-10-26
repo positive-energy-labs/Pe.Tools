@@ -1,72 +1,134 @@
-import { useCallback, useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useState } from "react";
+import { z } from "zod";
 import { useRouter, useRouterState } from "@tanstack/react-router";
 import {
   routeAddress,
+  routeViewOpenSchema,
   THREAD_TABS_MAX,
-  documentRequestSchema,
+  threadTabSchema,
   routeAt,
-  type DocumentRequest,
+  sameAddress,
+  type DocumentRef,
   type Carry,
   type LinkPage,
   type RouteKey,
-  type ThreadHead,
+  type RouteViewOpenIntent,
   type ThreadTab,
-  type ThreadTabRequest,
 } from "@pe/agent-contracts";
 import { peClient } from "#/host/pe-client";
 import { focusQuiet } from "@pe/kit/lib/utils";
-import { previousOf, useReading } from "#/readings";
+import { useHostEvents } from "#/readings";
 import { useSurfaceHost } from "#/navigation/surface-host";
+import type { Resumed } from "#/chat/thread-work";
 import { useWorkbench } from "./provider";
-import { routeThreadIssue } from "./store";
-import { soleRequest } from "#/chat/thread-navigation";
 import { parseTarget } from "#/route/route-target";
 
-const focusKey = (thread: string) => `pe.tab.${thread}`;
-const readFocus = (thread: string) => {
+/*
+ * Places (tool tabs) are browser-window-local: sessionStorage only, independent of the selected
+ * conversation (ADR 0022). The host keeps no tab records for web; it learns display context only
+ * through `thread.place`, on three explicit moments: a Work press or a Pea open in a selected real
+ * chat, and a Send while a tool is the current Place.
+ */
+const PLACES = "pe.places";
+const FOCUS = "pe.place.focus";
+const read = (): ThreadTab[] => {
   try {
-    return sessionStorage.getItem(focusKey(thread));
+    return (
+      threadTabSchema
+        .array()
+        .max(THREAD_TABS_MAX)
+        .safeParse(JSON.parse(sessionStorage.getItem(PLACES) ?? "[]")).data ?? []
+    );
+  } catch {
+    return [];
+  }
+};
+const save = (tabs: ThreadTab[]) => {
+  try {
+    sessionStorage.setItem(PLACES, JSON.stringify(tabs));
+  } catch {
+    /* This window keeps its mounted Places. */
+  }
+};
+const readFocus = () => {
+  try {
+    return sessionStorage.getItem(FOCUS);
   } catch {
     return null;
   }
 };
-const focus = (thread: string, id: string | null) => {
+const focus = (id: string | null) => {
   try {
-    if (id) sessionStorage.setItem(focusKey(thread), id);
-    else sessionStorage.removeItem(focusKey(thread));
+    if (id) sessionStorage.setItem(FOCUS, id);
+    else sessionStorage.removeItem(FOCUS);
   } catch {
-    /* The URL still owns the Place if browser storage is unavailable. */
+    /* The URL still owns the Place. */
   }
 };
 
-/** Only registered shareable fields and explicit target/work survive in a durable Place. */
-function place(
-  route: RouteKey,
-  search: Record<string, unknown>,
-  target: DocumentRequest | null,
-  local: boolean,
-) {
+/** Only registered shareable fields and an explicit target/work survive in a Place. */
+function place(route: RouteKey, search: Record<string, unknown>, local: boolean) {
   const { page, carry } = routeAddress(route).read(search);
-  const link = routeAddress(route).link(page, {
-    target: carry.target ?? (target ? JSON.stringify(target) : undefined),
-    work: carry.work,
-  });
-  // A `?demo=` seed rides its fixture Place, which stays in this browser (`store.local`).
+  const link = routeAddress(route).link(page, { target: carry.target, work: carry.work });
+  // A `?demo=` seed rides its fixture Place.
   return local && typeof search.demo === "string"
     ? `${link}${link.includes("?") ? "&" : "?"}demo=${encodeURIComponent(search.demo)}`
     : link;
 }
 
-/** A matched Place keeps its Page and id. A legacy open-ref Place also takes the resume's stable
- *  Address carry, so its Work stays readable once that document closes. */
+const params = (link: string) =>
+  Object.fromEntries(new URL(link, "http://tab.invalid").searchParams);
+
+/** A matched Place keeps its Page and id and takes the resume's stable binding. */
 function rebased(tab: ThreadTab, url: string | null): string {
   const at = routeAddress(tab.route);
-  const params = (link: string) =>
-    Object.fromEntries(new URL(link, "http://tab.invalid").searchParams);
   const { page, carry } = at.read(params(tab.link));
-  const target = parseTarget(carry.target);
-  if (!url || target?.kind !== "request" || target.request.kind !== "open") return tab.link;
-  return at.link(page, { target: at.read(params(url)).carry.target, work: carry.work });
+  return url
+    ? at.link(page, { target: at.read(params(url)).carry.target, work: carry.work })
+    : tab.link;
+}
+
+/** A Place's binding: its canonical `?target` and `?work`; a Place is reused only on an exact one. */
+const bindingOf = (route: RouteKey, link: string) => {
+  const { target, work } = routeAddress(route).read(params(link)).carry;
+  return JSON.stringify([target ?? null, work ?? null]);
+};
+
+const sameRef = (a: DocumentRef, b: DocumentRef) =>
+  a.session === b.session && a.openId === b.openId;
+
+/** Work key semantics: the Place names the same workspace, Address (or a known exact lifetime of
+ *  it), or exact open document as the resumed Work. No route-only guess. */
+function holdsWork(tab: ThreadTab, route: string, resumed: Resumed): boolean {
+  const key = resumed.key;
+  if (tab.route !== route || !key) return false;
+  const { target: raw, work } = routeAddress(tab.route).read(params(tab.link)).carry;
+  if (key.binding === "workspace") return work === key.work;
+  if (work !== undefined) return false;
+  const target = parseTarget(raw);
+  const request = target?.kind === "request" ? target.request : null;
+  const open = request?.kind === "open" ? request.ref : null;
+  switch (key.binding) {
+    case "host":
+      return target === null;
+    case "open":
+      return open !== null && sameRef(open, key.open);
+    case "address": {
+      const address =
+        target?.kind === "address"
+          ? target.address
+          : request?.kind === "named"
+            ? request.address
+            : null;
+      if (address) return sameAddress(address, key.target);
+      return (
+        open !== null &&
+        [...resumed.knownOpenRefs, ...(key.from ? [key.from] : [])].some((ref) =>
+          sameRef(ref, open),
+        )
+      );
+    }
+  }
 }
 
 /** The route a tab holds at `pathname`: any but Pea's own page. */
@@ -75,493 +137,280 @@ const tabRouteAt = (pathname: string) => {
   return route === "pea" ? null : route;
 };
 
-type Active = { thread: string; id: string; route: RouteKey; link: string };
-type Snapshot = { thread: string; tabs: ThreadTab[]; ready: boolean };
 type TabHistory = {
-  __pePromotedThread?: string;
-  __peMintedThread?: string;
-  __peRouteTab?: { thread: string; id: string; route: RouteKey };
+  __peRouteTab?: { id: string; route: RouteKey };
+  /** The explicit Pea open this Place answers; page-local, never in the URL or a Place link. */
+  __peViewOpenCommandId?: string;
 };
-const historyOf = (state: unknown) => state as TabHistory;
+const historyOf = (state: unknown) => (state ?? {}) as TabHistory;
 
-/** Host owns tab records; URL/history and sessionStorage own this browser's focus. */
+/** This window's Places, and the moves between them; the selected `?thread` rides along unchanged. */
 export function useRouteTabs() {
   const { store, threads } = useWorkbench();
   const router = useRouter();
   const surface = useSurfaceHost().surface;
   const location = useRouterState({ select: (state) => state.location });
   const thread = location.search.thread ?? "";
-  const draft = routeThreadIssue(thread, location.state) === "minted";
   const legacy =
     location.pathname === "/pea" &&
     ["plugin", "focus"].some((key) => new URLSearchParams(location.searchStr).has(key));
   const route = tabRouteAt(location.pathname);
-  const headReading = useReading<ThreadHead>(thread ? { kind: "thread-head", thread } : null);
-  const head = previousOf(headReading);
   const carry = routeAddress(route ?? "pea").read(location.search).carry;
-  const pinned = (() => {
-    if (!carry.target) return head ? soleRequest(head) : null;
-    try {
-      return documentRequestSchema.safeParse(JSON.parse(carry.target)).data ?? null;
-    } catch {
-      return null;
-    }
-  })();
-  const link = route
-    ? place(route, location.search, head ? soleRequest(head) : null, store.local)
-    : null;
-  const [snapshot, setSnapshot] = useState<Snapshot>({ thread: "", tabs: [], ready: false });
+  const link = route ? place(route, location.search, store.local) : null;
+  const [tabs, setTabs] = useState<ThreadTab[]>(read);
   const [failure, setFailure] = useState<string | null>(null);
-  const [retry, setRetry] = useState(0);
-  const held = useRef<Active | null>(null);
-  const pending = useRef(new Map<string, Active>());
-  const serial = useRef(Promise.resolve());
-  const written = useRef(new Set<string>());
-  const navigationEpoch = useRef(0);
-  const liveThread = useRef(thread);
-  liveThread.current = thread;
-  const shown = draft
-    ? { thread, tabs: store.actions.draftTabs(thread), ready: true }
-    : snapshot.thread === thread
-      ? snapshot
-      : { thread, tabs: [], ready: false };
-  const tabs = shown.tabs;
-  const known = threads.find((item) => item.id === thread);
-
-  useEffect(() => {
-    if (!thread || known || draft) {
-      setFailure(null);
-      return;
-    }
-    let cancelled = false;
-    void peClient
-      .call("thread.get", { params: { id: thread } })
-      .then((summary) => {
-        if (!cancelled) {
-          setSnapshot({ thread, tabs: summary.tabs, ready: true });
-          setFailure(null);
-        }
-      })
-      .catch((error: unknown) => {
-        if (cancelled) return;
-        setFailure(error instanceof Error ? error.message : String(error));
-      });
-    return () => {
-      cancelled = true;
-    };
-  }, [thread, known?.id, retry, draft]);
-
-  // Summary notifications may change the strip, never this browser's active URL or owner, with one
-  // exception: a tab that arrives from the host while this browser shows the thread's chat is Pea
-  // opening a tool (`route:<tool>.set-view`), so it opens beside the chat.
-  // ponytail: "not written here" stands in for "written by Pea"; a tab the person opens in another
-  // window also opens here. A host-stamped opener on the tab replaces this if that bites.
-  const seen = useRef<{ thread: string; ids: Set<string> } | null>(null);
-  useEffect(() => {
-    if (!known) return;
-    const prior = seen.current?.thread === thread ? seen.current.ids : null;
-    seen.current = { thread, ids: new Set(known.tabs.map((tab) => tab.id)) };
-    setSnapshot({ thread, tabs: known.tabs, ready: true });
-    const arrived = prior
-      ? known.tabs.find((tab) => !prior.has(tab.id) && !written.current.has(tab.id))
-      : undefined;
-    if (arrived && !route && location.pathname === "/pea" && document.visibilityState === "visible")
-      void select(arrived).catch(fail);
-  }, [thread, known?.tabs]);
-
-  if (route && link && thread && shown.ready) {
-    const history = historyOf(location.state).__peRouteTab;
-    const old = held.current;
-    const local = tabs.find((tab) => tab.id === readFocus(thread) && tab.route === route);
-    const matching = tabs.find((tab) => tab.route === route && tab.link === link);
-    const id =
-      history?.thread === thread && history.route === route && history.id
-        ? history.id
-        : old?.thread === thread && old.route === route
-          ? old.id
-          : (local?.id ?? matching?.id ?? crypto.randomUUID());
-    held.current = { thread, id, route, link };
-  } else if (!route || held.current?.thread !== thread) held.current = null;
-  const active =
-    route && held.current?.thread === thread && held.current.route === route ? held.current : null;
-
-  // Tag the initial/deep-link entry too; the Page adapter preserves this state on its own moves.
-  useEffect(() => {
-    if (!active) return;
-    const state = location.state;
-    const tagged = historyOf(state).__peRouteTab;
-    if (tagged?.thread === thread && tagged.id === active.id) return;
-    void router.navigate({
-      to: location.pathname,
-      search: location.search,
-      state: {
-        ...state,
-        __peRouteTab: { thread, id: active.id, route: active.route },
-      },
-      replace: true,
-      ignoreBlocker: true,
-    } as never);
-  }, [router, thread, active?.id, location.pathname, location.search, location.state]);
-
-  const write = useCallback(
-    (owner: string, body: ThreadTabRequest, current?: () => boolean, local = false) => {
-      const task = serial.current
-        .catch(() => {})
-        .then(async () => {
-          if (current && !current()) return null;
-          written.current.add(body.id);
-          let summary: { tabs: ThreadTab[] };
-          if (
-            local ||
-            store.local ||
-            routeThreadIssue(owner, router.state.location.state) === "minted"
-          ) {
-            const prior = store.actions.draftTabs(owner);
-            let tabs: ThreadTab[];
-            if (body.op === "close") tabs = prior.filter((tab) => tab.id !== body.id);
-            else {
-              const existing = prior.some((tab) => tab.id === body.id);
-              if (!existing && prior.length >= THREAD_TABS_MAX)
-                throw Error(`A thread keeps ${THREAD_TABS_MAX} tabs; close one first.`);
-              const next = {
-                id: body.id,
-                route: body.route,
-                link: body.link,
-                at: new Date().toISOString(),
-              };
-              tabs = existing
-                ? prior.map((tab) => (tab.id === body.id ? next : tab))
-                : [...prior, next];
-            }
-            store.actions.saveDraftTabs(owner, tabs);
-            summary = { tabs };
-          } else
-            summary = await peClient.call(
-              "thread.tabs",
-              { params: { id: owner }, body },
-              { keepalive: true },
-            );
-          if (liveThread.current === owner) {
-            setSnapshot({ thread: owner, tabs: summary.tabs, ready: true });
-            setFailure(null);
-          }
-          return summary;
-        });
-      serial.current = task.then(
-        () => {},
-        () => {},
-      );
-      return task;
-    },
-    [router, store],
-  );
-  const flush = useCallback(async () => {
-    // A fixed batch: a newer Place arriving during the await belongs to the next flush.
-    const batch = [...pending.current];
-    for (const [key, next] of batch) {
-      const current = () => pending.current.get(key) === next;
-      const saved = await write(
-        next.thread,
-        { op: "put", id: next.id, route: next.route, link: next.link },
-        current,
-      );
-      if (saved && current()) pending.current.delete(key);
-    }
-  }, [write]);
   const fail = (error: unknown) =>
     setFailure(error instanceof Error ? error.message : String(error));
+  const commit = (next: ThreadTab[]) => {
+    save(next);
+    setTabs(next);
+    return next;
+  };
+  const put = (id: string, tabRoute: RouteKey, tabLink: string) => {
+    const prior = read();
+    const existing = prior.some((tab) => tab.id === id);
+    if (!existing && prior.length >= THREAD_TABS_MAX)
+      throw Error(`This window keeps ${THREAD_TABS_MAX} Places; close one first.`);
+    const next = { id, route: tabRoute, link: tabLink, at: new Date().toISOString() };
+    return commit(existing ? prior.map((tab) => (tab.id === id ? next : tab)) : [...prior, next]);
+  };
 
+  const tagged = historyOf(location.state).__peRouteTab;
+  const active =
+    route && link
+      ? {
+          id:
+            // An explicit history tag, else the exact canonical link, else the focused Place only
+            // when its binding is the URL's. A pasted URL never overwrites another Work's Place.
+            (tagged?.route === route && tabs.some((tab) => tab.id === tagged.id)
+              ? tagged.id
+              : null) ??
+            tabs.find((tab) => tab.route === route && tab.link === link)?.id ??
+            tabs.find(
+              (tab) =>
+                tab.id === readFocus() &&
+                tab.route === route &&
+                bindingOf(route, tab.link) === bindingOf(route, link),
+            )?.id ??
+            null,
+          route,
+          link,
+        }
+      : null;
+
+  // The visible tool is a Place: record its current link and tag history with its id.
   useEffect(() => {
     if (!active) return;
-    focus(thread, active.id);
-    if (tabs.some((tab) => tab.id === active.id && tab.link === active.link)) return;
-    if (draft) {
-      void write(thread, {
-        op: "put",
-        id: active.id,
-        route: active.route,
-        link: active.link,
-      }).catch(fail);
-      return;
+    try {
+      const id = active.id ?? crypto.randomUUID();
+      focus(id);
+      if (!tabs.some((tab) => tab.id === id && tab.link === active.link))
+        put(id, active.route, active.link);
+      if (tagged?.id !== id || tagged.route !== active.route)
+        void router.navigate({
+          to: location.pathname,
+          search: location.search,
+          state: { ...location.state, __peRouteTab: { id, route: active.route } },
+          replace: true,
+          ignoreBlocker: true,
+        } as never);
+    } catch (error) {
+      fail(error);
     }
-    pending.current.set(`${thread}:${active.id}`, { ...active });
-    const timer = setTimeout(() => {
-      void flush().catch(fail);
-    }, 500);
-    return () => clearTimeout(timer);
-  }, [thread, active?.id, active?.link, flush, draft, write]);
+  }, [active?.id, active?.link, active?.route]);
 
-  useEffect(() => {
-    const save = () => {
-      void flush().catch(fail);
-    };
-    const unsubscribe = router.history.subscribe(({ action }) => {
-      if (action.type === "BACK" || action.type === "FORWARD" || action.type === "GO") {
-        navigationEpoch.current++;
-        store.actions.cancelPlan();
-      }
-      save();
-    });
-    window.addEventListener("pagehide", save);
-    return () => {
-      unsubscribe();
-      window.removeEventListener("pagehide", save);
-      save();
-    };
-  }, [router, store, flush]);
-
+  /** Every move keeps the selected `?thread`; an ordinary move clears an explicit open's id. */
   const navigate = async (
-    owner: string,
     destination: string,
     id: string | null,
     replace = false,
-    issued = false,
+    command?: string,
   ) => {
     const url = new URL(destination, "http://tab.invalid");
-    const search = Object.fromEntries(url.searchParams);
-    focus(owner, id);
+    focus(id);
     await router.navigate({
       to: url.pathname,
       search: {
-        ...search,
-        thread: owner,
-        target: search.target,
-        work: search.work,
-        // Local chrome decorates navigation, never the canonical persisted link.
+        ...Object.fromEntries(url.searchParams),
+        thread: router.state.location.search.thread,
         shell: surface === "tray" ? "tray" : undefined,
       },
       state: (previous: Record<string, unknown>) => ({
         ...previous,
-        __peRouteTab: id
-          ? {
-              thread: owner,
-              id,
-              route: routeAt(url.pathname) ?? undefined,
-            }
-          : undefined,
-        __peMintedThread:
-          issued || routeThreadIssue(owner, previous) === "minted" ? owner : undefined,
+        __peRouteTab: id ? { id, route: routeAt(url.pathname) ?? undefined } : undefined,
+        __peViewOpenCommandId: command,
       }),
       replace,
     } as never);
   };
-  const select = async (tab: ThreadTab, replace = false) => {
-    const epoch = ++navigationEpoch.current;
+  /** A real selected chat records the Place it is talking about; drafts and others record nothing. */
+  const recordPlace = (owner: string, tabRoute: RouteKey, tabLink: string) => {
+    if (!owner || store.local || !threads.some((each) => each.id === owner)) return;
+    void peClient
+      .call("thread.place", { params: { id: owner }, body: { route: tabRoute, link: tabLink } })
+      .catch(fail);
+  };
+  const select = (tab: ThreadTab, replace = false) => {
     store.actions.cancelPlan();
-    await flush();
-    if (epoch === navigationEpoch.current && liveThread.current === thread)
-      await navigate(thread, tab.link, tab.id, replace);
+    return navigate(tab.link, tab.id, replace);
   };
   const open = async <R extends RouteKey>(
     targetRoute: R,
     page?: LinkPage<R>,
     explicit?: Pick<Carry, "target" | "work">,
     duplicate = false,
-    /** Land `page` on the route's open tab without resetting the fields it does not name. */
     keep = false,
+    command?: string,
   ) => {
-    const epoch = ++navigationEpoch.current;
-    const sourcePath = router.state.location.pathname;
     if (targetRoute === "pea") {
       setFailure(`This route has no saved Place contract: ${targetRoute}`);
       return false;
     }
     try {
-      if (thread && !shown.ready)
-        throw Error(failure ?? "Thread Places are loading; retry when they are current.");
-      await flush();
-      const owner = thread || crypto.randomUUID();
-      if (!thread) {
-        try {
-          sessionStorage.setItem(`pe.routeThread.${owner}`, "minted");
-        } catch {
-          /* Navigation carries issuance too. */
-        }
-      }
-      const existing = !duplicate && tabs.find((tab) => tab.route === targetRoute);
-      if (!existing && tabs.length >= THREAD_TABS_MAX)
-        throw Error(`A thread keeps ${THREAD_TABS_MAX} tabs; close one first.`);
+      const wanted = bindingOf(
+        targetRoute,
+        routeAddress(targetRoute).link(undefined, {
+          target: explicit?.target ?? carry.target,
+          work: explicit?.work ?? carry.work,
+        }),
+      );
+      // Reuse only the Place with this exact binding (the `?demo=` fixture keeps one per route).
+      const existing =
+        !duplicate &&
+        read().find(
+          (tab) =>
+            tab.route === targetRoute &&
+            (store.local || bindingOf(targetRoute, tab.link) === wanted),
+        );
       const nextLink =
         page === undefined && explicit === undefined && existing
           ? existing.link
           : routeAddress(targetRoute).link(
               keep && existing
                 ? ({
-                    ...routeAddress(targetRoute).read(
-                      Object.fromEntries(new URL(existing.link, "http://tab").searchParams),
-                    ).page,
+                    ...routeAddress(targetRoute).read(params(existing.link)).page,
                     ...page,
                   } as LinkPage<R>)
                 : page,
-              {
-                target:
-                  explicit?.target ?? carry.target ?? (pinned ? JSON.stringify(pinned) : undefined),
-                work: explicit?.work ?? carry.work,
-              },
+              { target: explicit?.target ?? carry.target, work: explicit?.work ?? carry.work },
             );
       const canonical = routeAddress(targetRoute).tab(nextLink);
       if (!canonical.ok) throw Error(canonical.error);
       const id = existing ? existing.id : crypto.randomUUID();
-      await write(
-        owner,
-        { op: "put", id, route: targetRoute, link: canonical.link },
-        undefined,
-        !thread || draft,
-      );
-      if (
-        epoch !== navigationEpoch.current ||
-        router.state.location.pathname !== sourcePath ||
-        (router.state.location.search.thread ?? "") !== thread
-      )
-        return false;
-      await navigate(owner, canonical.link, id, false, !thread || draft);
-      return (
-        router.state.location.pathname === routeAddress(targetRoute).path &&
-        historyOf(router.state.location.state).__peRouteTab?.id === id
-      );
+      put(id, targetRoute, canonical.link);
+      await navigate(canonical.link, id, false, command);
+      return router.state.location.pathname === routeAddress(targetRoute).path;
     } catch (error) {
       fail(error);
       return false;
     }
   };
+
+  // Pea's explicit open, delivered live to the browser showing its conversation. Held even at /pea.
+  const realThread = Boolean(thread) && threads.some((each) => each.id === thread);
+  const onOpen = useCallback(
+    (event: RouteViewOpenIntent) => {
+      if (
+        event.type !== "route-view-open" ||
+        !routeViewOpenSchema.safeParse({ thread: event.thread, link: event.link }).success ||
+        !z.uuid().safeParse(event.commandId).success
+      )
+        return;
+      if (event.thread !== router.state.location.search.thread) return;
+      const at = routeAddress(event.route as RouteKey);
+      const canonical = at.tab(event.link);
+      if (!canonical.ok) return;
+      const { page, carry: explicit } = at.read(params(canonical.link));
+      void open(
+        event.route as RouteKey,
+        page as never,
+        explicit,
+        false,
+        false,
+        event.commandId,
+      ).then(
+        (opened) => opened && recordPlace(event.thread, event.route as RouteKey, canonical.link),
+      );
+    },
+    [router, thread, threads],
+  );
+  useHostEvents(realThread && !store.local, onOpen);
+
   useEffect(
     () =>
       store.actions.connectTabs({
         open,
-        // A Work press may name another thread. The tab that holds that Work restores its own Page
-        // and id; with none, the resumed url (or the bare route) opens as a new Place.
-        work: async (owner, workRoute, resumed) => {
-          const epoch = ++navigationEpoch.current;
+        // A Work press opens this window's Place holding that Work (its Page and id kept), else a
+        // new one at the resumed url. The selected `?thread` stays selected.
+        work: async (_owner, workRoute, resumed) => {
           try {
-            await flush();
-            const own = owner === thread ? tabs : threads.find((t) => t.id === owner)?.tabs;
-            // The host's `matches` name the Places holding this Work, in canonical tab order: the
-            // first in this thread wins. Another thread's Place, or none, means a new Place here.
-            // Exception: `?demo=` asks the host nothing, so it has no matches; its fixture holds
-            // one tab per route and never reaches a host thread.
-            const match = resumed?.matches.find((each) => each.threadId === owner);
-            const saved = resumed
-              ? own?.find((tab) => tab.id === match?.tabId && tab.route === workRoute)
-              : store.local
-                ? own?.find((tab) => tab.route === workRoute)
-                : undefined;
-            if (epoch !== navigationEpoch.current) return;
-            await navigate(
-              owner,
-              saved
-                ? rebased(saved, resumed?.url ?? null)
-                : (resumed?.url ?? routeAddress(workRoute as RouteKey).link()),
-              saved?.id ?? null,
+            const saved = read().find((tab) =>
+              resumed ? holdsWork(tab, workRoute, resumed) : store.local && tab.route === workRoute,
             );
-            // The press was outside the tools: focus lands on the tool it opened, not the press.
+            const destination = saved
+              ? rebased(saved, resumed?.url ?? null)
+              : (resumed?.url ?? routeAddress(workRoute as RouteKey).link());
+            const id = saved?.id ?? crypto.randomUUID();
+            put(id, workRoute as RouteKey, destination);
+            await navigate(destination, id);
+            // The row may belong to another thread: the selected chat stays selected and is the one
+            // that learns this Place.
+            recordPlace(
+              router.state.location.search.thread ?? "",
+              workRoute as RouteKey,
+              destination,
+            );
             focusQuiet(document.querySelector<HTMLElement>('[data-pane-id="tools"]'));
           } catch (error) {
             fail(error);
           }
         },
-        promote: async (from, owner, current) => {
-          const location = router.state.location;
-          const route = tabRouteAt(location.pathname);
-          if (route && from) {
-            const id =
-              historyOf(location.state).__peRouteTab?.id ?? held.current?.id ?? crypto.randomUUID();
-            await write(
-              from,
-              {
-                op: "put",
-                id,
-                route,
-                link: place(route, location.search, head ? soleRequest(head) : null, store.local),
-              },
-              current,
-              true,
-            );
-          }
-          await flush();
-          const saved = store.actions.draftTabs(from);
-          for (const tab of saved) {
-            if (!current()) throw Error("The Place changed before its draft tabs were saved.");
-            await write(owner, { op: "put", id: tab.id, route: tab.route, link: tab.link });
-          }
-          if (!current()) throw Error("The Place changed before its draft was promoted.");
-          const selected = readFocus(from);
-          focus(owner, selected);
+        // First Send promotes the draft in place: the visible tool stays open and visible.
+        promote: async (owner) => {
           await router.navigate({
             to: router.state.location.pathname,
             search: (previous: Record<string, unknown>) => ({ ...previous, thread: owner }),
-            state: (previous: Record<string, unknown>) => ({
-              ...previous,
-              __peMintedThread: undefined,
-              __pePromotedThread: from,
-              __peRouteTab: historyOf(previous).__peRouteTab
-                ? { ...historyOf(previous).__peRouteTab!, thread: owner }
-                : undefined,
-            }),
             replace: true,
           } as never);
-          store.actions.finishDraft(from, owner);
-          setSnapshot({ thread: owner, tabs: saved, ready: true });
+        },
+        // A Send while a tool is the current Place names it to that chat.
+        sent: (owner) => {
+          const at = tabRouteAt(router.state.location.pathname);
+          if (at) recordPlace(owner, at, place(at, router.state.location.search, store.local));
         },
       }),
-    [store, thread, threads, link, tabs, pinned, carry.target, carry.work],
+    [store, thread, threads, carry.target, carry.work],
   );
 
   return {
     thread,
     route,
     tabs,
-    active,
-    ready: shown.ready,
-    promotedFrom: historyOf(location.state).__pePromotedThread,
+    active: active?.id ? { thread, id: active.id, route: active.route, link: active.link } : null,
+    ready: true,
     target: carry.target,
     failure: legacy
       ? "This old workspace group link is unavailable; open a route and choose its exact subject."
       : failure,
     select: (tab: ThreadTab) => select(tab).catch(fail),
-    /** Expand the collapsed tools on the tab this browser last showed. */
+    /** Expand the collapsed tools on the Place this window last showed. */
     resume: () => {
-      const last = tabs.find((tab) => tab.id === readFocus(thread)) ?? tabs[0];
+      const last = tabs.find((tab) => tab.id === readFocus()) ?? tabs[0];
       if (last) void select(last).catch(fail);
     },
-    chat: async () => {
-      const epoch = ++navigationEpoch.current;
-      store.actions.cancelPlan();
-      try {
-        await flush();
-        if (epoch !== navigationEpoch.current || liveThread.current !== thread) return;
-        await navigate(
-          thread,
-          routeAddress("pea").link({}, { target: carry.target, work: carry.work }),
-          null,
-        );
-      } catch (error) {
-        fail(error);
-      }
-    },
+    chat: () =>
+      navigate(
+        routeAddress("pea").link({}, { target: carry.target, work: carry.work }),
+        null,
+      ).catch(fail),
     close: async (tab: Pick<ThreadTab, "id">) => {
-      const epoch = ++navigationEpoch.current;
       store.actions.cancelPlan();
       try {
-        // Closing discards this Place; a refused thirteenth Place must not prevent freeing a slot.
-        if (pending.current.has(`${thread}:${tab.id}`))
-          pending.current.delete(`${thread}:${tab.id}`);
-        else await flush().catch(fail);
-        const result = await write(thread, { op: "close", id: tab.id });
-        if (!result) return;
-        if (pending.current.size) await flush().catch(fail);
-        if (
-          epoch === navigationEpoch.current &&
-          held.current?.id === tab.id &&
-          liveThread.current === thread
-        ) {
-          const next =
-            result.tabs[
-              Math.min(
-                tabs.findIndex((item) => item.id === tab.id),
-                result.tabs.length - 1,
-              )
-            ];
-          await navigate(thread, next?.link ?? routeAddress("pea").link(), next?.id ?? null, true);
+        const index = tabs.findIndex((item) => item.id === tab.id);
+        const rest = commit(read().filter((item) => item.id !== tab.id));
+        if (active?.id === tab.id) {
+          const next = rest[Math.min(index, rest.length - 1)];
+          await navigate(next?.link ?? routeAddress("pea").link(), next?.id ?? null, true);
         }
       } catch (error) {
         fail(error);
@@ -577,9 +426,6 @@ export function useRouteTabs() {
           true,
         );
     },
-    retry: () => {
-      void flush().catch(fail);
-      setRetry((value) => value + 1);
-    },
+    retry: () => setFailure(null),
   };
 }

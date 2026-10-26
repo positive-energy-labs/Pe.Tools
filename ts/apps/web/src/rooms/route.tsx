@@ -155,7 +155,7 @@ export function RoomsRoute({ url = true }: { url?: boolean } = {}) {
   const trace = useRoomsTrace(demo ? null : doc, page.view, page.epoch);
   const snapshotToken = useMemo(() => crypto.randomUUID(), [snapshot]);
   const lease: RoomsPlanLease = {
-    thread,
+    thread: thread ?? undefined,
     ready: !!snapshot && !pending && !error,
     context: {
       source: demo ? "fixture" : "native",

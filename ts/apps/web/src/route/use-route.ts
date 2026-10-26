@@ -57,8 +57,8 @@ export function useRoute<W, R extends string, P, A extends string>(
     work?: string | ((page: P, target: Address | null) => string | undefined);
     page?: Partial<P>;
     provided?: Partial<Record<R, Reading<unknown>>>;
-    /** The thread whose head is this route's default target. */
-    thread?: string;
+    /** The selected conversation: a view association for leases, never a target default. */
+    thread?: string | null;
     /** False where the route does not own the address (a chat pane); a seed never does. */
     url?: boolean;
   } = {},
@@ -114,7 +114,6 @@ export function useRoute<W, R extends string, P, A extends string>(
   const conflictNow = useOwned(owner.registry, owner.conflict) ?? false;
   const {
     inventoryResult,
-    head,
     resolution,
     bindingLost,
     bindingLostRef,
@@ -122,7 +121,7 @@ export function useRoute<W, R extends string, P, A extends string>(
     workAddress,
     workOpen,
     targetProvenance,
-  } = useRouteTarget(manifest, owner.registry, seed, target, options.thread);
+  } = useRouteTarget(manifest, owner.registry, seed, target);
   // Readable Work whose document is not live (a known Address or exact open ref, no native
   // document): shown, never armed (no writer, no action, no native scope).
   const closedWork =
@@ -542,7 +541,7 @@ export function useRoute<W, R extends string, P, A extends string>(
     resolution,
     targetProvenance,
     chosen: target,
-    head,
+    thread: options.thread ?? null,
     work: workHandle,
     readings,
     inventory: seededReadings ? (seededReadings.inventory ?? { state: "absent" }) : inventoryResult,

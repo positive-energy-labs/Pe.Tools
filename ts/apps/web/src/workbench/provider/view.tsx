@@ -1,10 +1,10 @@
 import { useCallback, useEffect, useMemo, useRef, useState, type ReactNode } from "react";
-import { useNavigate, useSearch, useRouter, useRouterState } from "@tanstack/react-router";
+import { useNavigate, useSearch, useRouter } from "@tanstack/react-router";
 import { resolveWorkbenchConfig } from "../config";
 import { selectRunStatus, selectTurnFailure } from "@pe/agent-contracts/chat-state";
-import { previousOf, useHostStatusSlice, useReading } from "#/readings";
+import { previousOf, useHostStatusSlice } from "#/readings";
 import { appAtomRegistry, useRouteOwner } from "#/route/route-owner";
-import { createChatPageStore, routeThreadIssue } from "../store";
+import { createChatPageStore } from "../store";
 import type { StoredThreadSummary, WorkbenchContextValue } from "./thread-summary";
 import { WorkbenchContext } from "./thread-summary";
 import { chatLoading, useThreadStream } from "./thread-stream";
@@ -14,13 +14,7 @@ import * as AsyncResult from "effect/unstable/reactivity/AsyncResult";
 import { CHAT_SEEDS } from "#/chat/seeds";
 import { errorMessage } from "./use-workbench";
 import { EMPTY_HEAD, isReady, useProviders, type HeadDraft } from "./providers";
-import {
-  documentRequestSchema,
-  routeAddress,
-  targetKey,
-  type DocumentRequest,
-  type ThreadHead,
-} from "@pe/agent-contracts";
+import { routeAddress, targetKey, type DocumentRequest } from "@pe/agent-contracts";
 import { demoThreads } from "#/chat/thread-navigation";
 import { mergeThreadRoster, mergeThreadSummary } from "./thread-merge";
 import { emptyPrompt } from "../prompt";
@@ -51,23 +45,7 @@ export function WorkbenchProvider({ children }: { children: ReactNode }) {
     structuralSharing: true,
   });
   const addressedThread = search.thread ?? "";
-  const issue = useRouterState({
-    select: (state) => routeThreadIssue(addressedThread, state.location.state),
-  });
-  const currentThreadId = issue === "minted" ? "" : (issue ?? addressedThread);
-  const draftHead = useReading<ThreadHead>(
-    issue === "minted" ? { kind: "thread-head", thread: addressedThread } : null,
-  );
-  const liveHead = useRef(draftHead);
-  liveHead.current = draftHead;
-  useEffect(() => {
-    if (!issue || issue === "minted") return;
-    void navigate({
-      to: ".",
-      search: (previous: Record<string, unknown>) => ({ ...previous, thread: issue }),
-      replace: true,
-    });
-  }, [issue, navigate]);
+  const currentThreadId = addressedThread;
   const store = useRouteOwner(() =>
     createChatPageStore({
       registry: appAtomRegistry,
@@ -244,39 +222,18 @@ export function WorkbenchProvider({ children }: { children: ReactNode }) {
         : Promise.reject(
             Error("Another draft is being created; wait for its outcome before sending here."),
           );
-    const from = source.search.thread ?? "";
-    if (from !== addressedThread)
-      return Promise.reject(Error("The draft address changed; read it again before sending."));
-    if (from && routeThreadIssue(from, source.state) !== "minted")
-      return Promise.reject(
-        Error("This thread is not a locally issued draft; reopen its existing conversation."),
-      );
+    // Only Pea's composer, on a page with no selected conversation, holds a draft.
+    if (source.search.thread)
+      return Promise.reject(Error("This page already names a conversation; send there instead."));
     if (sendRefusal || !drafted)
       return Promise.reject(Error(sendRefusal ?? "no provider is ready"));
-    if (from && draftHead.state !== "ready")
-      return Promise.reject(
-        Error("The draft target is not current; read it again before sending."),
-      );
-    const head = draftHead.state === "ready" ? draftHead.observation : null;
-    // A minted draft thread keeps its own targets; otherwise the draft's one document seeds it.
-    let initialTargets: { request: DocumentRequest; label?: string }[] =
-      from && chosenTarget === undefined
-        ? head!.targets.map(({ request, label }) => ({ request, ...(label ? { label } : {}) }))
-        : draftTarget
-          ? [{ request: draftTarget }]
-          : [];
+    // Only the composer's visible document seeds the chat; a tool's `?target` never does.
+    const initialTargets: { request: DocumentRequest; label?: string }[] = draftTarget
+      ? [{ request: draftTarget }]
+      : [];
     const current = () =>
-      router.state.location.href === source.href &&
-      navigationEpoch.current === epoch &&
-      (!from ||
-        (liveHead.current.state === "ready" &&
-          liveHead.current.observation.revision === head!.revision));
+      router.state.location.href === source.href && navigationEpoch.current === epoch;
     const promise = (async () => {
-      if (source.search.target) {
-        initialTargets = [
-          { request: documentRequestSchema.parse(JSON.parse(source.search.target)) },
-        ];
-      }
       const created = await client.create(drafted.id);
       try {
         if (!current()) throw Error("The Place changed during creation.");
@@ -300,7 +257,7 @@ export function WorkbenchProvider({ children }: { children: ReactNode }) {
         for (const [id, value] of Object.entries(draft.traits))
           await client.trait(created.id, id, value);
         if (!current()) throw Error("The Place changed during creation.");
-        await store.actions.promoteThread(from, created.id, current);
+        await store.actions.promoteThread(created.id);
         const promoted = router.state.location.href;
         const promotedEpoch = navigationEpoch.current;
         await refreshThreads();
@@ -323,11 +280,8 @@ export function WorkbenchProvider({ children }: { children: ReactNode }) {
     return promise;
   }, [
     client,
-    addressedThread,
-    chosenTarget,
     demo,
     draft,
-    draftHead,
     draftTarget,
     drafted,
     router,
@@ -344,11 +298,13 @@ export function WorkbenchProvider({ children }: { children: ReactNode }) {
       if (empty) throw Error(empty);
       // A send on a running turn is the host's interrupt; the browser never gates on it.
       const ok = await attempt(async () =>
-        client.prompt(currentThreadId || (await createThread()), { ...input, text }),
+        client
+          .prompt(currentThreadId || (await createThread()), { ...input, text })
+          .then(() => store.actions.sent(router.state.location.search.thread ?? "")),
       );
       if (!ok) throw Error("Send failed");
     },
-    [attempt, client, createThread, currentThreadId],
+    [attempt, client, createThread, currentThreadId, router, store],
   );
 
   const onThread = useCallback(

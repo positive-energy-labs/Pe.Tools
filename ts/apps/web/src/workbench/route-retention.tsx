@@ -15,7 +15,6 @@ import { PaneErrorBoundary } from "@pe/kit/lang/pane";
 
 interface RetainedRoute {
   key: string;
-  thread: string;
   id: string | null;
   route: RouteKey;
   source: string;
@@ -63,42 +62,26 @@ const RetainedPane = memo(function RetainedPane({
 /** Retain only visited leaf components. A retained Outlet would follow the active router. */
 export function RouteRetention({
   route,
-  thread,
   active,
   tabs,
   ready,
-  promotedFrom,
   renderRoute,
 }: {
   route: RouteKey | null;
-  thread: string;
   active: { id: string } | null;
   tabs: readonly ThreadTab[];
   ready: boolean;
-  promotedFrom?: string;
   renderRoute: (body: ReactNode) => ReactNode;
 }) {
   const router = useRouter();
   const location = useRouterState({ select: (state) => state.location });
-  const tagged = (
-    location.state as { __peRouteTab?: { id: string; thread: string; route: string } }
-  ).__peRouteTab;
-  // History identifies the initial tab before the thread summary has enrolled its strip.
-  const selectedId =
-    active?.id ?? (tagged?.thread === thread && tagged.route === route ? tagged.id : null);
+  const tagged = (location.state as { __peRouteTab?: { id: string; route: string } } | undefined)
+    ?.__peRouteTab;
+  // Retention keys by this window's Place id. The selected conversation rides the visible entry's
+  // search scope, so a chat switch or first-Send promotion never remounts a body.
+  const selectedId = active?.id ?? (tagged?.route === route ? tagged.id : null);
   const retained = useRef<RetainedRoute[]>([]);
-  const priorThread = retained.current[0]?.thread;
-  const promotion = priorThread !== undefined && promotedFrom === priorThread;
-  const enrollment = priorThread === "" && Boolean(thread);
-  if (priorThread !== undefined && priorThread !== thread && !promotion && !enrollment)
-    retained.current = [];
-  for (const entry of retained.current) {
-    entry.visible = false;
-    if (promotion || enrollment) {
-      entry.thread = thread;
-      entry.scope.search = { ...entry.scope.search, thread };
-    }
-  }
+  for (const entry of retained.current) entry.visible = false;
   retained.current = retained.current.filter((entry) =>
     entry.id
       ? !ready || entry.id === selectedId || tabs.some((tab) => tab.id === entry.id)
@@ -129,7 +112,6 @@ export function RouteRetention({
       };
       const next: RetainedRoute = {
         key: crypto.randomUUID(),
-        thread,
         id: selectedId,
         route,
         source,
@@ -142,14 +124,10 @@ export function RouteRetention({
           current: () => {
             if (!next.visible) return false;
             const at = currentLocation(router);
-            const tab = (at.state as { __peRouteTab?: { id: string; thread: string } })
-              .__peRouteTab;
+            const tab = (at.state as { __peRouteTab?: { id: string } } | undefined)?.__peRouteTab;
             return (
               at.pathname === pathname &&
-              (at.search.thread ?? "") === next.thread &&
-              (tab
-                ? tab.id === next.id && tab.thread === next.thread
-                : router.history.location.state === next.unmarkedEntry)
+              (tab ? tab.id === next.id : router.history.location.state === next.unmarkedEntry)
             );
           },
           retain: (owner) => {

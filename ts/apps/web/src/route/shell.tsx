@@ -7,7 +7,7 @@ import { ButtonGroup } from "@pe/kit/lang/button-group";
  * No connected-or-not lamp: those states left product chrome (host ledger 2026-10-09). Machine
  * state and repair actions live on the canonical Machine route; configuration lives in Settings.
  */
-import { useCallback, useContext, useEffect, useRef, type ReactNode } from "react";
+import { useCallback, useContext, type ReactNode } from "react";
 import { useRouteNavigate, useRouteSearchSlice } from "./activity";
 
 import {
@@ -95,33 +95,11 @@ export function useChooseTarget(): [
 }
 
 /**
- * The route's target context, from `?thread`. An unaddressed route issues a browser-only draft;
- * its first chat send promotes it to a durable host conversation.
+ * The selected conversation, from `?thread`; null when none. A tool route never mints or writes
+ * one: only Pea's composer starts a draft, and its first Send promotes it.
  */
-export function useRouteThread(): string {
-  const navigate = useRouteNavigate();
-  const addressedThread = useRouteSearchSlice((search) => search.thread);
-  const minted = useRef<string | null>(null);
-  if (addressedThread) minted.current = null;
-  else minted.current ??= crypto.randomUUID();
-  const thread = addressedThread ?? minted.current!;
-  useEffect(() => {
-    if (!addressedThread) {
-      // Keep issuance across a target pick or refresh until the host creates the real thread.
-      try {
-        sessionStorage.setItem(`pe.routeThread.${thread}`, "minted");
-      } catch {
-        /* History also carries issuance. */
-      }
-      void navigate({
-        to: ".",
-        search: (previous: Record<string, unknown>) => ({ ...previous, thread }),
-        state: (previous) => ({ ...previous, __peMintedThread: thread }),
-        replace: true,
-      });
-    }
-  }, [navigate, addressedThread, thread]);
-  return thread;
+export function useRouteThread(): string | null {
+  return useRouteSearchSlice((search) => search.thread) ?? null;
 }
 
 export function RouteShell<W, R extends string, P, A extends string>(

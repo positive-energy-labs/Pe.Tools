@@ -87,7 +87,7 @@ export type ClosedWork = {
   unfinished: number;
 };
 
-export type Resumed = Pick<WorkResume, "url" | "reason" | "matches"> & {
+export type Resumed = Pick<WorkResume, "url" | "reason" | "knownOpenRefs"> & {
   key: WorkResume["key"] | null;
 };
 export async function resumeWork(workId: string): Promise<Resumed> {
@@ -98,7 +98,7 @@ export async function resumeWork(workId: string): Promise<Resumed> {
     return {
       key: null,
       url: null,
-      matches: [],
+      knownOpenRefs: [],
       reason:
         typeof said === "string" ? said : error instanceof Error ? error.message : String(error),
     };

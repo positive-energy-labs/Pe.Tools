@@ -24,7 +24,7 @@ function PodTool() {
   if (row && View)
     return (
       <PaneErrorBoundary what="Pod route" key={`${row.key}:${row.sha256}`}>
-        <View thread={thread} visible />
+        <View thread={thread ?? ""} visible />
       </PaneErrorBoundary>
     );
   return (

@@ -38,7 +38,7 @@ export function AtlasVisual() {
     <Suspense fallback={<div className="t-small t-upper p-2 text-ink-2">reading plan…</div>}>
       <LevelPlan
         lease={{
-          thread: store.handle.head?.thread ?? search.thread,
+          thread: store.handle.thread ?? search.thread,
           visible:
             planOpen &&
             !!store.displayedCapture &&
