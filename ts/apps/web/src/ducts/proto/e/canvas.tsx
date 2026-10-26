@@ -244,6 +244,16 @@ function Canvas({
     [page.viewport, bounds, pictureSize],
   );
   const landing = useRef<(() => void) | null>(null);
+  const pictureJump = useRef<((id: number) => void) | null>(null);
+  useEffect(() => {
+    if (!jump) return;
+    const callback = pictureJump.current;
+    jump.current = callback;
+    // The retained route owns selection state, not the disposed picture's geometry closure.
+    return () => {
+      if (jump.current === callback) jump.current = null;
+    };
+  });
   const orbit = useLiveOrbit(
     pose,
     stageViewport(setPage),
@@ -522,7 +532,7 @@ function Canvas({
       }}
     >
       {(stage) => {
-        if (jump) jump.current = (id) => jumpTo(stage, id);
+        pictureJump.current = (id) => jumpTo(stage, id);
         const goBack = () => stage.go("back");
 
         const readout = (
