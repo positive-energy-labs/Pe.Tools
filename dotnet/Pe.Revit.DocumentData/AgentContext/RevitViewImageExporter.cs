@@ -10,13 +10,13 @@ namespace Pe.Revit.DocumentData.AgentContext;
 ///     Captures views exactly as configured — templates, VG overrides, and temporary
 ///     hide/isolate all apply. Never creates or permanently mutates views.
 ///     A cropped view exports unmodified and is cut to exactly its crop arithmetically; focus capture
-///     sets a temporary crop box (clearing any scope box) then restores it (editable doc only).
+///     sets a temporary crop box (clearing any scope box, annotation crop on) then restores it (editable doc only).
 ///     Sheet-filtered schedules get their filter temporarily lifted the same way (editable doc only).
 /// </summary>
 public static class RevitViewImageExporter {
     public static RevitViewImageData Export(Document document, View view, int pixelSize) {
-        var producedPath = ExportCropped(document, view, pixelSize, out var clamped, out var refusal);
-        return BuildResult(document, view, producedPath, clamped, TryModelRect(view), null,
+        var producedPath = ExportCropped(document, view, pixelSize, out var refusal);
+        return BuildResult(document, view, producedPath, pixelSize, TryModelRect(view), null,
             refusal is { } refused ? (null, refused) : TryRegistration(view, producedPath));
     }
 
@@ -27,17 +27,16 @@ public static class RevitViewImageExporter {
     ///     So the export is sized for the crop (<see cref="RevitViewImageRegistration.ExportWidth" />) and cut to the crop's pixel rectangle
     ///     inside the outline (<see cref="RevitViewImageRegistration.CropPixels" />); <paramref name="refusal" /> says why it could not be.
     /// </summary>
-    private static string ExportCropped(Document document, View view, int pixelSize, out int clampedPixelSize,
-        out RevitViewImageRegistrationRefusal? refusal) {
+    private static string ExportCropped(Document document, View view, int pixelSize, out RevitViewImageRegistrationRefusal? refusal) {
         refusal = null;
         if (view is ViewSheet || !view.CropBoxActive)
-            return ExportToTemp(document, view, pixelSize, out clampedPixelSize);
+            return ExportToTemp(document, view, pixelSize);
         var crop = view.CropBox;
         var outline = view.Outline;
         (double X, double Y) outlineMin = (outline.Min.U, outline.Min.V), outlineMax = (outline.Max.U, outline.Max.V);
         (double X, double Y) cropMin = (crop.Min.X, crop.Min.Y), cropMax = (crop.Max.X, crop.Max.Y);
         var path = ExportToTemp(document, view,
-            RevitViewImageRegistration.ExportWidth(pixelSize, outlineMin, outlineMax, view.Scale, cropMin, cropMax), out clampedPixelSize);
+            RevitViewImageRegistration.ExportWidth(pixelSize, outlineMin, outlineMax, view.Scale, cropMin, cropMax));
         BitmapFrame frame;
         using (var stream = File.OpenRead(path))
             frame = BitmapDecoder.Create(stream, BitmapCreateOptions.None, BitmapCacheOption.OnLoad).Frames[0];
@@ -85,6 +84,12 @@ public static class RevitViewImageExporter {
         // write is silently ignored (verified: crop snaps back). So clear the scope box for the
         // duration, then restore it; a scope box drives graphics-free geometry, so clearing it
         // does not change what the export shows other than the crop we are deliberately setting.
+        // Annotation crop ON for the duration makes View.Outline (the extent ExportImage fits) exactly the crop: with it off,
+        // far annotations keep the extent wide, the export hits the 8000 px cap and a 10 ft focus in an 800 ft plan came out
+        // ~92 px (PROVEN[fresh, ViewImageRegistrationProofTests.Focus_capture_delivers_the_requested_pixels_in_a_wide_plan]: outline
+        // 804 ft -> 10 ft). It only hides annotations past the crop, which the cut discards anyway.
+        var annotationCropParam = view.get_Parameter(BuiltInParameter.VIEWER_ANNOTATION_CROP_ACTIVE);
+        var originalAnnotationCrop = annotationCropParam is { IsReadOnly: false } ? annotationCropParam.AsInteger() : (int?)null;
         var scopeParam = view.get_Parameter(BuiltInParameter.VIEWER_VOLUME_OF_INTEREST_CROP);
         var originalScopeId = scopeParam is { IsReadOnly: false } ? scopeParam.AsElementId() : ElementId.InvalidElementId;
         var originalCrop = view.CropBox;
@@ -93,17 +98,19 @@ public static class RevitViewImageExporter {
         RunCropTransaction(document, "PE temporary crop", () => {
             if (originalScopeId != ElementId.InvalidElementId) scopeParam!.Set(ElementId.InvalidElementId);
             ApplyCrop(view, modelBox, marginPercent);
+            if (originalAnnotationCrop is not null) annotationCropParam!.Set(1);
         });
         try {
-            var producedPath = ExportCropped(document, view, pixelSize, out var clamped, out var refusal);
+            var producedPath = ExportCropped(document, view, pixelSize, out var refusal);
             // Read while the temporary crop is still set: it is the crop the image was exported with.
-            return BuildResult(document, view, producedPath, clamped, TryModelRect(view), null,
+            return BuildResult(document, view, producedPath, pixelSize, TryModelRect(view), null,
                 refusal is { } refused ? (null, refused) : TryRegistration(view, producedPath));
         } finally {
             RunCropTransaction(document, "PE restore crop", () => {
                 view.CropBox = originalCrop;
                 view.CropBoxActive = originalActive;
                 view.CropBoxVisible = originalVisible;
+                if (originalAnnotationCrop is { } annotationCrop) annotationCropParam!.Set(annotationCrop);
                 // Re-assigning the scope box re-locks the crop to its extent (the original state).
                 if (originalScopeId != ElementId.InvalidElementId) scopeParam!.Set(originalScopeId);
             });
@@ -178,7 +185,7 @@ public static class RevitViewImageExporter {
 
         // Export the sheet large enough that the cropped schedule still has ~pixelSize resolution.
         var sheetPixel = (int)Math.Min(8000, Math.Ceiling(pixelSize / Math.Max(0.01, Math.Max(fracW, fracH))));
-        var sheetPath = ExportToTemp(document, sheet, sheetPixel, out _);
+        var sheetPath = ExportToTemp(document, sheet, sheetPixel);
 
         var croppedPath = CropSheetPng(sheetPath, outline, box, marginPercent);
         var schedule = (ViewSchedule)document.GetElement(instance.ScheduleId);
@@ -284,18 +291,17 @@ public static class RevitViewImageExporter {
         return croppedPath;
     }
 
-    private static string ExportToTemp(Document document, View view, int pixelSize, out int clampedPixelSize) {
-        clampedPixelSize = Math.Min(Math.Max(pixelSize, 100), 8000);
+    private static string ExportToTemp(Document document, View view, int pixelSize) {
         var outputDirectory = Path.Combine(ProductRuntimeLayout.ForCurrentUser().ScratchPath, "pe-view-captures");
         var baseName = $"view-{view.Id.Value()}-{Guid.NewGuid():N}";
-        return ExportPng(document, view.Id, outputDirectory, baseName, clampedPixelSize);
+        return ExportPng(document, view.Id, outputDirectory, baseName, Math.Min(Math.Max(pixelSize, 100), 8000));
     }
 
     private static RevitViewImageData BuildResult(
         Document document,
         View view,
         string producedPath,
-        int pixelSize,
+        int requestedPixelSize,
         RevitViewImageModelRect? modelRect,
         string? sheetNumber,
         (RevitViewImageRegistration? Registration, RevitViewImageRegistrationRefusal? Refusal) registration
@@ -319,11 +325,17 @@ public static class RevitViewImageExporter {
             // some view kinds throw on Scale; leave null
         }
 
+        BitmapFrame frame;
+        using (var stream = File.OpenRead(producedPath))
+            frame = BitmapDecoder.Create(stream, BitmapCreateOptions.None, BitmapCacheOption.OnLoad).Frames[0];
+
         return new RevitViewImageData(
             handle,
             producedPath,
-            new FileInfo(producedPath) is { Exists: true } file ? file.Length : 0,
-            pixelSize,
+            new FileInfo(producedPath).Length,
+            frame.PixelWidth,
+            frame.PixelHeight,
+            RevitViewImageData.SmallImageWarning(frame.PixelWidth, frame.PixelHeight, requestedPixelSize),
             scale,
             modelRect,
             sheetNumber,

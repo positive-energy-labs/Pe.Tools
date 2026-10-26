@@ -287,7 +287,7 @@ test.each(["http", "stdio"])(
           reads.push({ key, ref });
           return key === "revit.context.view-image"
             ? Response.json(
-                { view: { label: "User view" }, byteSize: image.length, pixelSize: 1500 },
+                { view: { label: "User view" }, byteSize: image.length, width: 1500, height: 1500 },
                 { headers: { "x-pe-capture-id": "f-a", "x-pe-capture-url": capturePath } },
               )
             : Response.json({ families: 3 });

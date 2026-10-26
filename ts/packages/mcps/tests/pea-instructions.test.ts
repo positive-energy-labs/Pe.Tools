@@ -115,7 +115,7 @@ test("capture_view refuses null and named targets before host work and preserves
       "revit.context.view-image",
     );
     return Response.json(
-      { view: { label: "Selected view" }, byteSize: reportedSize, pixelSize: 1500 },
+      { view: { label: "Selected view" }, byteSize: reportedSize, width: 1500, height: 1500 },
       {
         headers: { "x-pe-capture-id": "capture-1", "x-pe-capture-url": returnedCapturePath },
       },

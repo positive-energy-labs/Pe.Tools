@@ -1,4 +1,4 @@
-using Pe.Shared.RevitData;
+﻿using Pe.Shared.RevitData;
 
 namespace Pe.Revit.Tests;
 
@@ -90,6 +90,27 @@ public sealed class ViewImageOutlineTests {
             Assert.That(RevitViewImageRegistration.ExportWidth(1500, GuestHouse.OutlineMin, GuestHouse.OutlineMax, GuestHouse.Scale, GuestHouse.CropMin, GuestHouse.CropMax), Is.EqualTo(1500));
             Assert.That(RevitViewImageRegistration.ExportWidth(1500, Gatehouse.OutlineMin, Gatehouse.OutlineMax, Gatehouse.Scale, Gatehouse.CropMin, Gatehouse.CropMax), Is.EqualTo(8000));
             Assert.That(RevitViewImageRegistration.ExportWidth(600, LowerLevel.OutlineMin, LowerLevel.OutlineMax, LowerLevel.Scale, LowerLevel.CropMin, LowerLevel.CropMax), Is.EqualTo(600));
+        });
+    }
+
+    // The fresh-rung focus case (804 ft outline at 1:96, 10 ft crop): with annotation crop off the cap binds and the cut is a thumbnail that
+    // must be named; with it on (focus capture) the outline is the crop and the cut is the requested size.
+    [Test]
+    public void A_crop_far_smaller_than_its_outline_is_a_named_thumbnail_and_annotation_crop_restores_the_requested_size() {
+        (double X, double Y) cropMin = (-5, -5), cropMax = (5, 5);
+        int Delivered((double X, double Y) outlineMin, (double X, double Y) outlineMax) {
+            var width = RevitViewImageRegistration.ExportWidth(1500, outlineMin, outlineMax, 96, cropMin, cropMax);
+            var height = (int)Math.Round(width * (outlineMax.Y - outlineMin.Y) / (outlineMax.X - outlineMin.X));
+            return RevitViewImageRegistration.CropPixels(width, height, outlineMin, outlineMax, 96, cropMin, cropMax).Rect!.Width;
+        }
+        var wide = Delivered((-402.0 / 96, -401.0 / 96), (402.0 / 96, 401.0 / 96));
+        var cropped = Delivered((-5.0 / 96, -5.0 / 96), (5.0 / 96, 5.0 / 96));
+        Assert.Multiple(() => {
+            Assert.That(wide, Is.EqualTo(100).Within(2), "annotation crop off: capped at 8000 across 804 ft");
+            Assert.That(RevitViewImageData.SmallImageWarning(wide, wide, 1500), Does.StartWith($"only {wide}x{wide} px delivered of 1500 asked"));
+            Assert.That(cropped, Is.EqualTo(1500), "annotation crop on: outline == crop");
+            Assert.That(RevitViewImageData.SmallImageWarning(cropped, cropped, 1500), Is.Null);
+            Assert.That(RevitViewImageData.SmallImageWarning(200, 150, 200), Is.Null, "a small image that was asked for is not a warning");
         });
     }
 }

@@ -57,14 +57,16 @@ const captureViewInputSchema = z.object({
     .max(8000)
     .default(1500)
     .describe(
-      "Largest image dimension in pixels. 1500 is plenty for orientation; go higher only to read fine annotation.",
+      "Asked long side of the image (of the crop, when focused or cropped), in pixels. 1500 is plenty for orientation; go higher only to read fine annotation. Revit exports a cropped view's whole extent, capped at 8000 px, so a crop that is a small part of an unfocused view can come back smaller; the answer reports the delivered size and warns when it is a thumbnail.",
     ),
 });
 
 type RevitViewImageData = {
   view: { label?: string; elementId?: number };
   byteSize: number;
-  pixelSize: number;
+  width: number;
+  height: number;
+  warning?: string | null;
   viewScale?: number | null;
   modelRect?: { minX: number; minY: number; maxX: number; maxY: number } | null;
   sheetNumber?: string | null;
@@ -100,7 +102,12 @@ export function createCaptureViewTool(createHostRpcCaller: () => Promise<HostRpc
           ? `model rect (${data.modelRect.minX.toFixed(1)},${data.modelRect.minY.toFixed(1)})→(${data.modelRect.maxX.toFixed(1)},${data.modelRect.maxY.toFixed(1)}) ft`
           : null,
       ].filter(Boolean);
-      const text = `${data.view?.label ?? "view"}: ${caller.hostBaseUrl.replace(/\/$/, "")}${result.capture.url} (capture ${result.capture.id}, ${data.byteSize} bytes, ${data.pixelSize}px${extras.length ? `; ${extras.join("; ")}` : ""})`;
+      const text = `${data.view?.label ?? "view"}: ${caller.hostBaseUrl.replace(/\/$/, "")}${result.capture.url} (capture ${result.capture.id}, ${data.byteSize} bytes, ${data.width}x${data.height}px delivered${extras.length ? `; ${extras.join("; ")}` : ""})${
+        data.warning
+          ? `
+Warning: ${data.warning}`
+          : ""
+      }`;
       try {
         const sha = /^\/captures\/([0-9a-f]{64})\.png$/.exec(result.capture.url)?.[1];
         if (!sha) throw new Error("The host returned an invalid capture URL");
