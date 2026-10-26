@@ -46,18 +46,24 @@ describe("scene ownership accounting", () => {
     const memory = new SceneMemory({ maxAdmissionBytes: 100 });
     const old = memory.acquire("uploaded", { buffers: [new ArrayBuffer(80)] });
     const evict = vi.fn();
-    memory.retain("prepared", { buffers: [new ArrayBuffer(10)] }, { optional: true, evict });
+    const retained = memory.retain(
+      "prepared",
+      { buffers: [new ArrayBuffer(10)] },
+      { optional: true, evict },
+    );
     const reservation = memory.reserve("staging", { jsBufferBytes: 60, gpuEstimateBytes: 20 });
-    expect(evict).toHaveBeenCalledOnce();
+    expect(evict).not.toHaveBeenCalled();
     expect(memory.snapshot().reserved).toEqual({
       jsBufferBytes: 60,
       gpuEstimateBytes: 20,
       jsHeapEstimateBytes: 0,
     });
-    expect(memory.snapshot().overageBytes).toBe(60);
+    expect(memory.snapshot().overageBytes).toBe(70);
     reservation.release();
     reservation.release();
     expect(() => reservation.commit({})).toThrow("settled");
+    expect(memory.snapshot().owned.jsBufferBytes).toBe(90);
+    retained.release();
     expect(memory.snapshot().owned.jsBufferBytes).toBe(80);
     expect(memory.snapshot().overageBytes).toBe(0);
     const next = memory.reserve("staging", { jsBufferBytes: 40 });
@@ -99,7 +105,7 @@ describe("scene ownership accounting", () => {
     expect(memory.snapshot().ownedAndReservedBytes).toBe(0);
   });
 
-  it("evicts optional retention before focus, then LRU, and never caps active geometry", () => {
+  it("bounds retention by its allowance, with optional then LRU eviction independent of workspace", () => {
     const memory = new SceneMemory({ maxAdmissionBytes: 100, maxPreparedBytes: 100 });
     const removed: string[] = [];
     const retain = (key: string, optional: boolean) =>
@@ -110,30 +116,43 @@ describe("scene ownership accounting", () => {
       );
     const a = retain("focus-a", false);
     retain("context", true).touch();
-    retain("focus-b", false);
+    const b = retain("focus-b", false);
     a.touch();
-    retain("focus-c", false);
+    const c = retain("focus-c", false);
     expect(removed).toEqual(["context"]);
     const reservation = memory.reserve("prepared", { jsBufferBytes: 30 });
-    expect(removed).toEqual(["context", "focus-b"]);
+    expect(removed).toEqual(["context"]);
     reservation.release();
     const active = memory.acquire("decoded", { buffers: [new ArrayBuffer(200)] });
-    expect(memory.snapshot().owned.jsBufferBytes).toBe(200);
-    expect(memory.snapshot().overageBytes).toBe(100);
-    expect(removed).toEqual(["context", "focus-b", "focus-a", "focus-c"]);
+    expect(memory.snapshot().owned.jsBufferBytes).toBe(290);
+    expect(memory.snapshot().overageBytes).toBe(190);
+    expect(removed).toEqual(["context"]);
+    const d = retain("focus-d", false);
+    expect(removed).toEqual(["context", "focus-b"]);
+    expect(memory.snapshot().retention.preparedBytes).toBe(90);
     active.release();
+    a.release();
+    b.release();
+    c.release();
+    d.release();
+    expect(memory.snapshot().ownedAndReservedBytes).toBe(0);
   });
 
-  it("reclaims all retained aliases under pressure and re-evaluates when an active sharer releases", () => {
+  it("does not claim geometry is reclaimed by dropping an alias while another owner still holds it", () => {
     const memory = new SceneMemory({ maxAdmissionBytes: 100, maxPreparedBytes: 100 });
     const footprint = { buffers: [new ArrayBuffer(80)] },
       evict = vi.fn();
     const active = memory.acquire("prepared", footprint);
-    memory.retain("prepared", footprint, { optional: false, evict });
-    memory.retain("prepared", footprint, { optional: true, evict });
+    const first = memory.retain("prepared", footprint, { optional: false, evict });
+    const second = memory.retain("prepared", footprint, { optional: true, evict });
     const work = memory.reserve("staging", { jsBufferBytes: 50 });
     expect(evict).not.toHaveBeenCalled();
     active.release();
+    expect(evict).not.toHaveBeenCalled();
+    first.release();
+    expect(memory.snapshot().owned.jsBufferBytes).toBe(80);
+    expect(memory.snapshot().overageBytes).toBe(30);
+    second.release();
     expect(evict).toHaveBeenCalledTimes(2);
     expect(memory.snapshot().owned.jsBufferBytes).toBe(0);
     expect(memory.snapshot().overageBytes).toBe(0);

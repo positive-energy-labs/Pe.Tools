@@ -61,8 +61,9 @@ function validate(footprint: SceneFootprint) {
 
 /** Independent SceneCaches can share this owner; cache and active references use the same census.
  * The unchanged 512MiB proxy admits decoded artifacts. Derived retention borrows at most32MiB
- * of its spare capacity. Owned work/reservations evict retention under pressure, but cannot
- * refuse an already-admitted focus or its replacement. Remaining pressure is explicit overage.
+ * of its spare capacity. Active resources and transient reservations are accounted separately;
+ * their total is not a second retention ceiling. Replacement workspace can exceed the admission
+ * proxy while the previous display remains usable; snapshot.overageBytes reports that honestly.
  * This accounts owned backing stores, not GC timing, Three internals, or unobservable driver VRAM.
  */
 export class SceneMemory {
@@ -88,14 +89,12 @@ export class SceneMemory {
     validate(footprint);
     const owned: Ownership = { phase, footprint };
     this.#owned.add(owned);
-    this.#trim();
     return this.#lease(owned);
   }
 
   reserve(phase: ScenePhase, value: SceneEstimate): SceneMemoryReservation {
     const key = {};
     this.#reserved.set(key, { phase, estimate: estimate(value) });
-    this.#trim();
     return {
       commit: (footprint) => {
         if (!this.#reserved.has(key)) throw Error("Scene memory reservation already settled");
@@ -105,7 +104,6 @@ export class SceneMemory {
       },
       release: () => {
         this.#reserved.delete(key);
-        this.#trim();
       },
     };
   }
@@ -141,7 +139,6 @@ export class SceneMemory {
       },
       release: () => {
         this.#drop(owned);
-        this.#trim();
       },
     };
   }
@@ -194,7 +191,6 @@ export class SceneMemory {
     return {
       release: () => {
         this.#drop(owned);
-        this.#trim();
       },
       move: (phase) => {
         if (!this.#owned.has(owned)) throw Error("Scene memory lease released");
@@ -204,7 +200,6 @@ export class SceneMemory {
         if (!this.#owned.has(owned)) throw Error("Scene memory lease released");
         validate(footprint);
         owned.footprint = footprint;
-        this.#trim();
       },
     };
   }
@@ -261,14 +256,9 @@ export class SceneMemory {
       if (decoded.length > this.maxDecodedScenes || admissionBytes > this.maxAdmissionBytes)
         candidates = decoded;
       else if (total(this.#measure(prepared)) > preparedLimit) candidates = prepared;
-      else {
-        const before = total(this.#measure(this.#owned));
-        if (before + total(this.#reservationTotals()) <= this.maxAdmissionBytes) return;
-        // Retained aliases can be removed together; active shared storage cannot be reclaimed.
-        const active = [...this.#owned].filter((o) => !o.retention);
-        const activeBytes = total(this.#measure(active));
-        candidates = retained.filter((o) => total(this.#measure([...active, o])) > activeBytes);
-      }
+      // The admission proxy bounds retained work. Observed allocations/reservations have
+      // different scope; using their sum as a cap destroys warm identities during replacement.
+      else return;
       if (!candidates.length) return;
       // Stable sort preserves LRU within each tier. Optional context goes before exact focus.
       candidates.sort(

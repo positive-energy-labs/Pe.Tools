@@ -24,6 +24,71 @@ const decoded = (): SceneData => ({
 });
 
 describe("prepared retention under the scene policy", () => {
+  it("preserves warm decoded/prepared identity through transient replacement workspace", () => {
+    const memory = new SceneMemory({ maxAdmissionBytes: 10000 });
+    const scenes = new SceneCache<SceneData & { meshes: SceneMeshes }>(memory);
+    const derived = new PreparedCache(memory);
+    const data = decoded();
+    const meshes = new SceneMeshes(
+      data.positions,
+      {
+        minX: 0,
+        minY: 0,
+        minZ: 0,
+        maxX: 1,
+        maxY: 1,
+        maxZ: 1,
+      },
+      [],
+    );
+    const resident = scenes.put("focus", { ...data, meshes });
+    const ready = prepared(),
+      key = derived.key(meshes, "subject/30");
+    derived.put(key, ready);
+    const source = resident.acquire();
+    const preparation = memory.acquire("prepared", preparedFootprint(ready));
+    const displayBacking = new ArrayBuffer(7000),
+      displayGpu = {};
+    const display = memory.acquire("uploaded", {
+      buffers: [data.positions.buffer, ready.positions.buffer, displayBacking],
+      gpu: [{ key: displayGpu, bytes: 2000 }],
+    });
+    expect(memory.snapshot().ownedAndReservedBytes).toBeLessThan(memory.maxAdmissionBytes);
+    const workspace = memory.reserve("prepared", { jsBufferBytes: 2000 });
+    expect(memory.snapshot().overageBytes).toBeGreaterThan(0);
+    expect(memory.snapshot().owners.retained).toBe(2);
+    workspace.release();
+    // A conservative worker reservation must not erase hot identities then leave an empty cache
+    // below the ceiling. These cache aliases share their geometry with active owners.
+    expect(memory.snapshot().owners.retained).toBe(2);
+    expect(scenes.get("focus")).toBe(resident);
+    expect(derived.get(derived.key(scenes.get("focus")!.data.meshes, "subject/30"))).toBe(ready);
+    expect(memory.snapshot().overageBytes).toBe(0);
+    const stageGpu = {};
+    const stage = memory.acquire("staging", { buffers: [displayBacking] });
+    stage.update({
+      buffers: [displayBacking],
+      gpu: [
+        { key: displayGpu, bytes: 2000 },
+        { key: stageGpu, bytes: 2500 },
+      ],
+    });
+    expect(memory.snapshot().owned.gpuEstimateBytes).toBe(4500);
+    expect(memory.snapshot().overageBytes).toBeGreaterThan(0);
+    expect(scenes.get("focus")).toBe(resident);
+    expect(derived.get(key)).toBe(ready);
+    stage.move("uploaded");
+    stage.release();
+    expect(memory.snapshot().owned.gpuEstimateBytes).toBe(2000);
+    expect(memory.snapshot().owners.retained).toBe(2);
+    display.release();
+    preparation.release();
+    source.release();
+    scenes.clear();
+    derived.clear();
+    expect(memory.snapshot().ownedAndReservedBytes).toBe(0);
+  });
+
   it("keys exact immutable mesh identity and structural semantics", () => {
     const cache = new PreparedCache(new SceneMemory());
     const mesh = new SceneMeshes(
