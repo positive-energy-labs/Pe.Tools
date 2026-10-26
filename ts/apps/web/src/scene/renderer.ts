@@ -108,7 +108,7 @@ export type ClipVolume = {
   preview?: boolean;
 };
 export type ContextMode = "halo" | "all";
-/** Context alone in the first pass; the normal camera layers draw ducts and annotations after it. */
+/** Optional translucent faces share a pass after the subject has established occlusion depth. */
 const CONTEXT_LAYER = 5;
 const SHELL_LAYER = 6;
 /** Points per axis polygon the shader reads; `space/state.ts` packs its cuts against it. */
@@ -364,7 +364,7 @@ export function createRenderer(
     0,
     material,
   );
-  // Two passes reuse the same batch and its back-to-front instance sort. Context never owns depth.
+  // Both passes reuse the batch and its back-to-front instance sort. Context never owns depth.
   batch.position.copy(origin);
   batch.layers.enable(OCCLUDER_LAYER);
   batch.layers.enable(CONTEXT_LAYER);
@@ -538,39 +538,33 @@ export function createRenderer(
   let thumbsStale = true;
   let hasContext = false;
   let hasShell = false;
-  // TODO: Restore truthful translucent front/behind depth. Subject-over-context compositing
-  // is superseded by the 2026-10-26 ruling; proximity capture does not require this order.
+  // The 2026-10-26 ruling supersedes subject-over-context compositing: front context tints
+  // the subject, while rear context fails its depth test. Translucent duct fill still occludes
+  // equipment edges; opacity is not permission to draw those edges through a duct.
   const drawScene = (shown: THREE.Camera) => {
     const mask = shown.layers.mask;
     const autoClear = renderer.autoClear;
-    // Empty passes still submitted and sorted the entire batch before fragment rejection.
-    // Preserve compositing order, but only draw a pass when it has visible members.
     renderer.clear();
     renderer.autoClear = false;
+    veil.scenePass.value = 1;
+    material.depthWrite = true;
+    caps.forEach((cap) => {
+      cap.material.depthWrite = true;
+    });
+    renderer.render(scene, shown);
     if (hasContext || hasShell) {
       material.depthWrite = false;
       caps.forEach((cap) => {
         cap.material.depthWrite = false;
       });
-      if (hasContext) {
-        shown.layers.set(CONTEXT_LAYER);
-        veil.scenePass.value = 0;
-        renderer.render(scene, shown);
-      }
-      if (hasShell) {
-        shown.layers.set(SHELL_LAYER);
-        veil.scenePass.value = 2;
-        renderer.render(scene, shown);
-      }
+      shown.layers.set(CONTEXT_LAYER);
+      shown.layers.enable(SHELL_LAYER);
+      veil.scenePass.value = 3;
+      renderer.render(scene, shown);
     }
     shown.layers.mask = mask;
     veil.scenePass.value = 1;
-    material.depthWrite = !look.depth.everythingTranslucent;
-    caps.forEach((cap, id) => {
-      cap.material.depthWrite = paints[id]!.tier !== "context" && !look.depth.everythingTranslucent;
-    });
-    renderer.autoClear = false;
-    renderer.render(scene, shown);
+    material.depthWrite = true;
     renderer.autoClear = autoClear;
   };
   const drawThumbs = () => {
@@ -1117,7 +1111,7 @@ export function createRenderer(
     render();
   };
 
-  // Match compositing: visible ducts win over translucent context, then nearest within the tier.
+  // Inspection prefers the subject through its translucent surroundings, then nearest in that tier.
   const pick = createMeshPicker(batch, byId, (i) =>
     paintOf(i, paintBy).tier === "context" ? 0 : 1,
   );

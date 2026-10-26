@@ -106,7 +106,7 @@ export function routeLines(positions: number[], color: THREE.Color, look: Look, 
 
 /** One outline draw, irrespective of the number of equipment instances. */
 export function shellLines(positions: number[], color: THREE.Color, look: Look) {
-  return new LineSegments2(
+  const line = new LineSegments2(
     new LineSegmentsGeometry().setPositions(positions),
     new LineMaterial({
       color,
@@ -117,4 +117,7 @@ export function shellLines(positions: number[], color: THREE.Color, look: Look) 
       fog: true,
     }),
   );
+  // Duct faces must write depth before an equipment edge is tested against them.
+  line.renderOrder = 2;
+  return line;
 }
