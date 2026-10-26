@@ -517,11 +517,34 @@ export function createRenderer(mount: HTMLElement, initialMeshes: SceneMeshes, w
     });
     renderer.render(scene, shown);
     overlay?.();
-    if (hasContext || hasShell) {
-      material.depthWrite = false;
+    const glass = (depthWrite: boolean, colorWrite = true) => {
+      material.depthWrite = depthWrite;
+      material.colorWrite = colorWrite;
       caps.forEach((cap) => {
-        cap.material.depthWrite = false;
+        cap.material.depthWrite = depthWrite;
+        cap.material.colorWrite = colorWrite;
       });
+    };
+    if (look.veil.singleLayer && hasContext) {
+      // A/B (veil.singleLayer): each pixel shows only the nearest context surface. Envelopes keep
+      // their own sorted pass first; context then writes depth alone (after every highlight test,
+      // so marks never see it) and draws LessEqual, so it tints the subject once and rear context
+      // fails. EXCEPTION to the one-sorted-translucent-pass rule: context behind an equipment
+      // envelope draws over it here; equipment owns no depth and that ordering is unruled.
+      glass(false);
+      if (hasShell) {
+        shown.layers.set(SHELL_LAYER);
+        veil.scenePass.value = 4;
+        renderer.render(scene, shown);
+      }
+      shown.layers.set(CONTEXT_LAYER);
+      veil.scenePass.value = 5;
+      glass(true, false);
+      renderer.render(scene, shown);
+      glass(false);
+      renderer.render(scene, shown);
+    } else if (hasContext || hasShell) {
+      glass(false);
       shown.layers.set(CONTEXT_LAYER);
       shown.layers.enable(SHELL_LAYER);
       veil.scenePass.value = 3;
@@ -529,7 +552,7 @@ export function createRenderer(mount: HTMLElement, initialMeshes: SceneMeshes, w
     }
     shown.layers.mask = mask;
     veil.scenePass.value = 1;
-    material.depthWrite = true;
+    glass(true);
     renderer.autoClear = autoClear;
   };
   const drawThumbs = () => {
@@ -1285,9 +1308,11 @@ export function createRenderer(mount: HTMLElement, initialMeshes: SceneMeshes, w
           meshes = next;
           origin.fromArray(center(next.bounds));
           outlined.position.copy(origin);
-          for (const part of batch.parts)
-            for (const layer of [OCCLUDER_LAYER, CONTEXT_LAYER, SHELL_LAYER])
-              part.mesh.layers.enable(layer);
+          // Each part enters only the passes that keep its fragments: every pass submits and
+          // sorts a whole batch, and the discarded half used to cost as much as the drawn one.
+          batch.depth?.mesh.layers.enable(OCCLUDER_LAYER);
+          batch.translucent?.mesh.layers.set(CONTEXT_LAYER);
+          batch.translucent?.mesh.layers.enable(SHELL_LAYER);
           batch.addTo(scene);
           for (const part of batch.parts) gpuMemory.uploaded(part.mesh);
           byId.splice(0, byId.length, ...next.instances);

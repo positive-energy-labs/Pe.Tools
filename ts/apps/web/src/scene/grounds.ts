@@ -110,6 +110,8 @@ export const LOOK = defineKnobs("scene", "ts/apps/web/src/scene/grounds.ts", {
     desaturate: num("Desaturate far", 0, [0, 1, 0.01]),
     fog: num("Fog to ground far", 0, [0, 1, 0.01]),
     brightness: num("Brightness near ducts", 0, [0, 1, 0.01]),
+    // A/B for kaitpw (2026-10-26): only the nearest context surface per pixel, no stacking.
+    singleLayer: bool("Single-layer context", false),
   },
   fog: {
     depth: bool("Camera-depth fog", false),

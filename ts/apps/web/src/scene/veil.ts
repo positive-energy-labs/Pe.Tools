@@ -106,7 +106,8 @@ void veil(inout vec4 c) {
 #ifdef VEIL_TIER
   bool context = c.a == 0.0;
   bool shell = c.a > 1.0;
-  if ((context || shell) ? scenePass != 3 : scenePass != 1) discard;
+  // 1 subject; 3 context and envelopes in one sorted pass; 4 envelopes alone; 5 context alone.
+  if (context ? (scenePass != 3 && scenePass != 5) : shell ? (scenePass != 3 && scenePass != 4) : scenePass != 1) discard;
   float facing = abs(dot(normalize(sceneNormal), normalize(sceneView)));
   if (shell) c.a -= 1.0;
   if (context) {
