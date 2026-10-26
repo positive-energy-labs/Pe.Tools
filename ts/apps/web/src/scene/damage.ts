@@ -158,7 +158,10 @@ export function damageLayer(
       const still = at.reducedMotion;
       const strike = still ? 0 : flash(at.seconds - (born.get(key) ?? -Infinity));
       const swell = still ? 0 : landing(at.landed);
-      const beat = still ? STEADY : heartbeat(at.seconds);
+      // Damage remains visible at rest; perpetual heartbeat must not keep the entire scene awake.
+      const age = at.seconds - (born.get(key) ?? -Infinity);
+      const animating = !still && (age < 0.9 || at.landed < 0.65);
+      const beat = animating ? heartbeat(at.seconds) : STEADY;
       const energy = FLOOR[at.state] + BEAT[at.state] * beat + 1.6 * strike + 0.8 * swell;
       const heat =
         at.state === "hover" || at.state === "focus" ? 0.45 : at.state === "reach" ? 0.2 : 0;
@@ -170,7 +173,7 @@ export function damageLayer(
       u.alpha.value = damageAlpha(at.look) * (at.selected ? 0.4 : 1);
       u.rim.value.copy(RIM).lerp(HOT, Math.min(1, heat + strike * 0.7));
       halo.material.color.copy(RIM).multiplyScalar(0.5 + 0.9 * energy);
-      return !still;
+      return animating;
     },
   };
 }

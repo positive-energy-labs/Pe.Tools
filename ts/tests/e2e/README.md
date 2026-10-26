@@ -1,5 +1,20 @@
 # e2e lane: one test per acceptance journey (E2E-J1..J6)
 
+## Required product-browser case
+
+From `ts`, run `pnpm test:browser:product`. `pnpm verify` runs the same command without a task
+cache. It typechecks the CDP calls and browser callbacks, then starts an isolated source host with
+`--no-revit --no-tray` and an owned headless `@pe/browser` session. The navigation fixture supplies
+fixed local data. The case opens SA Lab and SA Office through real controls and checks exact URL
+membership, open-system chips and picture scope through reload, Back and Forward. Reload must
+complete before the retained state can pass. Uncaught browser exceptions fail the case.
+
+The shared launcher writes `custody.json` and `journey-result.json` under the dated route-launch
+run. Failures also save rendered state and a screenshot. Cleanup retires only the owned browser
+and host. This case does not read the shared dev tray, attach to a user's browser, start Revit or
+send a Pea prompt. Keep browser callbacks self-contained and pass their inputs as arguments.
+The visible chaos journey below remains a separate opt-in check.
+
 ## Conversation and saved Work (Vitest + chrome-agent)
 
 From `ts`, run `vp run --no-cache journey:conversation-work`. It starts its own source host with

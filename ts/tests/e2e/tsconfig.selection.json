@@ -1,0 +1,5 @@
+{
+  "extends": "../../packages/browser/tsconfig.json",
+  "compilerOptions": { "declaration": false },
+  "include": ["typed-page.ts", "product-selection*.ts", "route-chaos-launch.ts"]
+}
