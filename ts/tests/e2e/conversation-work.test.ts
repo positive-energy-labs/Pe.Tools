@@ -261,7 +261,11 @@ test("real conversation Work cutover retains authored cells, draft, Places and o
       ).toEqual([]);
       await p.open(url(`/takeoffs?target=${encodeURIComponent(seed.address)}`));
       await p.until(
-        async () => p.read<boolean>("Boolean(history.state.__peRouteTab?.id)"),
+        async () =>
+          p.read<boolean>(`(() => {
+          const id = history.state.__peRouteTab?.id;
+          return Boolean(id && [...document.querySelectorAll('[data-route-tab]')].some(e => e.getClientRects().length && e.getAttribute('data-route-tab') === id));
+        })()`),
         "second browser Place",
       );
       expect(new URL(await p.url()).searchParams.has("thread")).toBe(false);
