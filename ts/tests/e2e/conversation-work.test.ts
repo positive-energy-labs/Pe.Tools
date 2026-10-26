@@ -497,6 +497,68 @@ test("real conversation Work cutover retains authored cells, draft, Places and o
       expect(await draft()).toBe(message);
       expect(await composerIdentity()).toBe(officeComposer);
     });
+    await step(
+      "the tool directory changes the tool without selecting another conversation",
+      async () => {
+        const before = await p.url();
+        const requests = network.length;
+        await p.click("Home / tool directory");
+        await p.waitText("Find a tool");
+        await p.click("Show All exposure");
+        await p.clickAt('input[aria-label="Search tools and saved Works"]');
+        await p.type("Ducts");
+        await p.clickAt(
+          '[data-list-view][aria-label="tools and saved Works"] [data-key="/ducts"] .dl-row-label',
+        );
+        await p.until(
+          async () => new URL(await p.url()).pathname === "/ducts",
+          "directory opens Ducts",
+        );
+        expect(new URL(await p.url()).searchParams.get("thread")).toBe(CONVERSATION_THREADS.office);
+        expect(
+          new URL(await p.url()).searchParams.get("target"),
+          "the directory never inherits another tool's subject",
+        ).toBeNull();
+        if (await p.has("Expand chat")) await p.click("Expand chat");
+        expect(await draft()).toBe(message);
+        expect(await composerIdentity()).toBe(officeComposer);
+        expect(
+          network
+            .slice(requests)
+            .filter(
+              (event) =>
+                event.method === "POST" &&
+                event.url &&
+                /\/pe\/threads$|\/scope\/|\/place$/.test(new URL(event.url).pathname),
+            ),
+          "ordinary tool navigation creates no chat, document admission or Work association",
+        ).toEqual([]);
+        // These two named moves return through the directory to the original retained Place.
+        for (let move = 0; move < 2; move++) {
+          const history = await p.send("Page.getNavigationHistory");
+          const back = history.entries[history.currentIndex - 1];
+          if (!back || new URL(back.url).origin !== base.origin)
+            throw Error("PRECONDITION: missing directory history entry");
+          await p.send("Page.navigateToHistoryEntry", { entryId: back.id });
+          await p.until(
+            async () => (await p.url()) === back.url,
+            "one directory history move settled",
+          );
+        }
+        await p.until(
+          async () => (await p.url()) === before,
+          "Back restores the exact prior tool Place",
+        );
+        expect(await draft()).toBe(message);
+        expect(await composerIdentity()).toBe(officeComposer);
+        expect(await workEvidence(seed.productHome)).toEqual(initial);
+        receipt.coverage.directory = {
+          thread: CONVERSATION_THREADS.office,
+          nativeTargets: [],
+          hostWrites: [],
+        };
+      },
+    );
     await step("another conversation starts with collapsed tools", async () => {
       await pickThread(CONVERSATION_THREADS.empty);
       await p.until(
