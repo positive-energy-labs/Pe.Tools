@@ -116,6 +116,7 @@ test("opening a second duct system retains the first through reload and browser 
   expect(["127.0.0.1", "localhost"]).toContain(url.hostname);
   const page = await connectTypedPage();
   const checkpoints: { label: string; state: Awaited<ReturnType<typeof state>> }[] = [];
+  let sourceStartupMs: number | undefined;
   let failure: unknown;
   await mkdir(dirname(resultPath), { recursive: true });
   const assertScope = async (label: string, systems: string[]) => {
@@ -154,8 +155,23 @@ test("opening a second duct system retains the first through reload and browser 
     checkpoints.push({ label, state: await state(page) });
   };
   try {
+    const startup = Date.now();
     const navigation = await page.send("Page.navigate", { url: url.href });
     expect(navigation.errorText).toBeUndefined();
+    // Cold Vite loads the client graph and pricing worker after the launcher's HTML readiness.
+    // Give source boot its own budget; selection and history transitions retain their 20s limit.
+    await expect
+      .poll(
+        async () => {
+          const current = await state(page);
+          expect(current.alerts).toEqual([]);
+          return current.ready;
+        },
+        { timeout: 60_000, message: "cold source workspace ready" },
+      )
+      .toBe(true);
+    sourceStartupMs = Date.now() - startup;
+    console.log(`SELECTION_SOURCE_STARTUP_MS=${sourceStartupMs}`);
     await assertScope("initial whole document", []);
     await openSystem(page, "SA Lab");
     await assertScope("open SA Lab", ["SA Lab"]);
@@ -211,6 +227,7 @@ test("opening a second duct system retains the first through reload and browser 
           {
             result: failure ? "failed" : "passed",
             checkpoints,
+            sourceStartupMs,
             error: failure instanceof Error ? failure.stack : failure,
             errors: page.errors,
           },
