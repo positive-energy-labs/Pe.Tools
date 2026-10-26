@@ -143,49 +143,78 @@ async function stageWork(page: Page, selector: string, value: string) {
 }
 
 async function state(page: Page) {
-  return page.read<{
-    url: string;
-    pictureTitle: string;
-    visibility: string;
-    title: string;
-    crumb: string;
-    selected: string | null;
-    focus: {
-      tag: string;
-      label: string | null;
-      id: string;
-      value: string | null;
-      scroll: number[];
-    };
-    panes: { id: string; top: number; left: number }[];
-    armed: string[];
-    alerts: string[];
-    loading: boolean;
-    refreshing: boolean;
-  }>(`(() => {
-    const shown = ${visible};
-    const active = document.activeElement;
-    const scroll = [];
-    for (let e = active; e; e = e.parentElement) {
-      if (e.scrollHeight > e.clientHeight || e.scrollWidth > e.clientWidth) scroll.push(e.scrollTop, e.scrollLeft);
-    }
-    return {
-      url: location.href, title: document.title,
-      visibility: document.visibilityState,
-      pictureTitle: [...document.querySelectorAll('[data-pane-id="e-picture"] [data-slot="pane-title"]')].find(shown)?.innerText ?? '',
-      crumb: [...document.querySelectorAll('[data-e-crumb], [data-picture-readout]')].filter(shown).map(e => e.innerText).join(' | '),
-      selected: [...document.querySelectorAll('[data-crumb-segment="selection"]')].find(shown)?.innerText.trim() || null,
-      focus: { tag: active?.tagName, label: active?.getAttribute('aria-label'), id: active?.id ?? '', value: active?.value ?? null, scroll },
-      panes: [...document.querySelectorAll('[data-pane-id]')].filter(shown).map(e => {
-        const body = e.querySelector('[data-slot="pane-body"]');
-        return { id: e.getAttribute('data-pane-id'), top: body?.scrollTop ?? 0, left: body?.scrollLeft ?? 0 };
-      }),
-      armed: [...document.querySelectorAll('button')].filter(shown).filter(e => !e.disabled && e.getAttribute('aria-disabled') !== 'true' && /^(apply|write|heal|make fan)\\b/i.test(e.getAttribute('aria-label') || e.innerText.trim())).map(e => e.getAttribute('aria-label') || e.innerText.trim()),
-      alerts: [...document.querySelectorAll('[role="alert"]')].filter(shown).map(e => e.innerText),
-      loading: ![...document.querySelectorAll(${literal(PICTURE)})].some(shown),
-      refreshing: [...document.querySelectorAll(${literal(PENDING_PICTURE)})].some(shown)
-    };
-  })()`);
+  return page.evaluate(
+    ({ picture, pending }) => {
+      const shown = (element: Element) =>
+        element.getClientRects().length > 0 && getComputedStyle(element).visibility !== "hidden";
+      const active = document.activeElement;
+      const scroll: number[] = [];
+      for (let element = active; element; element = element.parentElement) {
+        if (
+          element.scrollHeight > element.clientHeight ||
+          element.scrollWidth > element.clientWidth
+        )
+          scroll.push(element.scrollTop, element.scrollLeft);
+      }
+      return {
+        url: location.href,
+        title: document.title,
+        visibility: document.visibilityState,
+        pictureTitle:
+          [
+            ...document.querySelectorAll<HTMLElement>(
+              '[data-pane-id="e-picture"] [data-slot="pane-title"]',
+            ),
+          ].find(shown)?.innerText ?? "",
+        crumb: [...document.querySelectorAll<HTMLElement>("[data-e-crumb], [data-picture-readout]")]
+          .filter(shown)
+          .map((element) => element.innerText)
+          .join(" | "),
+        selected:
+          [...document.querySelectorAll<HTMLElement>('[data-crumb-segment="selection"]')]
+            .find(shown)
+            ?.innerText.trim() || null,
+        focus: {
+          tag: active?.tagName ?? "",
+          label: active?.getAttribute("aria-label") ?? null,
+          id: active?.id ?? "",
+          value:
+            active instanceof HTMLInputElement ||
+            active instanceof HTMLTextAreaElement ||
+            active instanceof HTMLButtonElement ||
+            active instanceof HTMLSelectElement
+              ? active.value
+              : null,
+          scroll,
+        },
+        panes: [...document.querySelectorAll("[data-pane-id]")].filter(shown).map((element) => {
+          const body = element.querySelector('[data-slot="pane-body"]');
+          return {
+            id: element.getAttribute("data-pane-id") ?? "",
+            top: body?.scrollTop ?? 0,
+            left: body?.scrollLeft ?? 0,
+          };
+        }),
+        armed: [...document.querySelectorAll("button")]
+          .filter(shown)
+          .filter(
+            (element) =>
+              !element.disabled &&
+              element.getAttribute("aria-disabled") !== "true" &&
+              /^(apply|write|heal|make fan)\b/i.test(
+                element.getAttribute("aria-label") || element.innerText.trim(),
+              ),
+          )
+          .map((element) => element.getAttribute("aria-label") || element.innerText.trim()),
+        alerts: [...document.querySelectorAll<HTMLElement>('[role="alert"]')]
+          .filter(shown)
+          .map((element) => element.innerText),
+        loading: ![...document.querySelectorAll(picture)].some(shown),
+        refreshing: [...document.querySelectorAll(pending)].some(shown),
+      };
+    },
+    { picture: PICTURE, pending: PENDING_PICTURE },
+  );
 }
 
 async function settled(page: Page, allowHeld = false) {

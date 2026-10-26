@@ -204,8 +204,17 @@ test("real conversation Work cutover retains authored cells, draft, Places and o
       await p.click(label, '[aria-label="Places"]');
     };
     const draft = () =>
-      p.read<string>(
-        `[...document.querySelectorAll('textarea[aria-label="Message"],input[aria-label="Message"]')].find(${visible})?.value ?? ''`,
+      p.evaluate(
+        () =>
+          [
+            ...document.querySelectorAll<HTMLInputElement | HTMLTextAreaElement>(
+              'textarea[aria-label="Message"],input[aria-label="Message"]',
+            ),
+          ].find(
+            (element) =>
+              element.getClientRects().length > 0 &&
+              getComputedStyle(element).visibility !== "hidden",
+          )?.value ?? "",
       );
     const composerIdentity = async () => {
       const located = await p.send("Runtime.evaluate", {

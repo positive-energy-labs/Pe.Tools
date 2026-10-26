@@ -75,6 +75,7 @@ export async function connect(
     },
     send,
     read,
+    evaluate: transport.evaluate.bind(transport),
     close: async () => {
       unsubscribe();
       await transport.close();
