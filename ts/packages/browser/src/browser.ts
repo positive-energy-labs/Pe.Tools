@@ -9,6 +9,7 @@ import { SessionClient } from "./client.ts";
 import { activeEndpoint, browserHome, defaultChromeProfile } from "./platform.ts";
 import { readSessionReceipt } from "./receipts.ts";
 import { BrowserError } from "./errors.ts";
+import type { Evaluation } from "./evaluate.ts";
 
 export interface OpenBrowserOptions {
   mode?: "headless" | "visible";
@@ -43,7 +44,7 @@ export interface SessionInfo {
   receiptId: string;
   createdAt: string;
 }
-export interface BrowserPage {
+export interface BrowserPage extends Evaluation {
   targetId: string;
   send<M extends keyof ProtocolMapping.Commands>(
     method: M,

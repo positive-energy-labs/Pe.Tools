@@ -1,6 +1,7 @@
 import { appendFile, mkdir } from "node:fs/promises";
 import { dirname } from "node:path";
 import type { BrowserPage, CdpClient, CdpEvent } from "../../src/index.ts";
+import { evaluator } from "../../src/evaluate.ts";
 
 /** A durable test witness around the public API; no CDP messages are synthesized here. */
 export async function actionTrace(path: string) {
@@ -22,8 +23,9 @@ export async function actionTrace(path: string) {
         void record({ kind: "event", targetId, event });
       }),
     );
-    return new Proxy(original, {
+    const wrapped = new Proxy(original, {
       get(target, property) {
+        if (property === "evaluate") return evaluator(wrapped.sendRaw.bind(wrapped));
         if (property !== "send" && property !== "sendRaw") return Reflect.get(target, property);
         return async (method: string, ...args: unknown[]) => {
           const id = ++sequence;
@@ -73,6 +75,7 @@ export async function actionTrace(path: string) {
         };
       },
     });
+    return wrapped;
   };
   return {
     path,

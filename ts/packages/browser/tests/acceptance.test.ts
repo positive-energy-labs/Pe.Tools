@@ -15,6 +15,7 @@ import {
   connectCdpEffect,
   getBrowserEndpoint,
   getProtocol,
+  getTargets,
   listBrowsers,
   type BrowserSession,
   type BrowserPage,
@@ -25,6 +26,7 @@ import { fixtureServer } from "./fixtures/server.ts";
 import { actionTrace } from "./fixtures/action-trace.ts";
 import { readSessionReceipt } from "../src/receipts.ts";
 import { assertProfileAvailable } from "../src/platform.ts";
+import { guardianClient } from "../src/attached-guardian.ts";
 import {
   processIdentities,
   sameProcess,
@@ -1173,4 +1175,259 @@ test("A8 route adapter uses the frozen API; live route replay remains an indepen
       "UNPROVEN: parent runs journey:routes during quiet source window; original route-chaos assertions retained",
   };
   expect((await getProtocol(port).catch(() => ({ closed: true }))).closed).toBe(true);
+});
+
+test("A9 public callback evaluation preserves JSON, failures and transport ownership", async () => {
+  const browser = await launch();
+  const page = await browser.page({ url: server.url });
+  await until(
+    () =>
+      page.evaluate(
+        (url) =>
+          location.href === new URL(url).href &&
+          document.readyState === "complete" &&
+          !!document.body,
+        server.url,
+      ),
+    "callback fixture document ready",
+  );
+  const target = (await getTargets(browser.info.endpoint)).find(
+    (item) => item.id === page.targetId,
+  );
+  expect(target?.webSocketDebuggerUrl).toBeTruthy();
+  const direct = await connectCdp(target!.webSocketDebuggerUrl!);
+  const title = await page.evaluate(() => document.title);
+  // Exercise the guardian adapter against the real target; its control pipe cannot evaluate.
+  const forwardedDirect = guardianClient({
+    ...direct,
+    evaluate: () => Promise.reject(new Error("Evaluation reached the guardian control pipe")),
+    sendRaw: (method, params, options) => {
+      expect(method).toBe("PeBrowser.forward");
+      return direct.sendRaw(
+        String(params?.method),
+        params?.params as Record<string, unknown>,
+        options,
+      );
+    },
+  });
+  try {
+    for (const client of [page, direct, forwardedDirect]) {
+      expect(await client.evaluate(() => "[native code]")).toBe("[native code]");
+      const prototypeKey = JSON.parse('{"__proto__":{"marker":1}}') as {
+        __proto__: { marker: number };
+      };
+      expect(
+        await client.evaluate(
+          (data) => ({
+            own: Object.hasOwn(data, "__proto__"),
+            marker: data.__proto__.marker,
+          }),
+          prototypeKey,
+        ),
+      ).toEqual({ own: true, marker: 1 });
+      const shared = { value: 4 };
+      expect(await client.evaluate((data) => data, { first: shared, second: shared })).toEqual({
+        first: { value: 4 },
+        second: { value: 4 },
+      });
+      expect(
+        await client.evaluate(
+          async (values: readonly [string, number]) => ({
+            title: document.title,
+            values,
+            answer: await Promise.resolve(values[1] * 2),
+          }),
+          ["argument", 21] as const,
+        ),
+      ).toEqual({
+        title: await page.evaluate(() => document.title),
+        values: ["argument", 21],
+        answer: 42,
+      });
+      await client.evaluate(() => {
+        document.body.dataset.evaluationCount = "0";
+        return null;
+      });
+      await expect(
+        client.evaluate(() => {
+          document.body.dataset.evaluationCount = String(
+            Number(document.body.dataset.evaluationCount) + 1,
+          );
+          throw new Error("callback failure witness");
+        }),
+      ).rejects.toMatchObject({
+        code: "EvaluationError",
+        outcome: "unknown",
+        message: expect.stringContaining("Error: callback failure witness"),
+        data: {
+          phase: "callback",
+          exceptionDetails: {
+            exception: { description: expect.stringContaining("callback failure witness") },
+          },
+        },
+      });
+      expect(await client.evaluate(() => document.body.dataset.evaluationCount ?? "")).toBe("1");
+      await expect(
+        client.evaluate(async () => {
+          throw new Error("async rejection witness");
+        }),
+      ).rejects.toMatchObject({
+        code: "EvaluationError",
+        message: expect.stringContaining("async rejection witness"),
+        outcome: "unknown",
+      });
+      await expect(
+        client.evaluate(() => {
+          throw "primitive throw witness";
+        }),
+      ).rejects.toMatchObject({
+        code: "EvaluationError",
+        message: expect.stringContaining("primitive throw witness"),
+        outcome: "unknown",
+      });
+      const nodeCapture = "Node only";
+      await expect(client.evaluate(() => nodeCapture)).rejects.toMatchObject({
+        code: "EvaluationError",
+        outcome: "unknown",
+        message: expect.stringContaining("ReferenceError: nodeCapture is not defined"),
+      });
+      expect(await client.evaluate((capture) => capture, nodeCapture)).toBe(nodeCapture);
+      // JavaScript callers can evade the static boundary; runtime checks still apply.
+      const unsafe = client.evaluate.bind(client) as (
+        callback: (...args: never[]) => unknown,
+        ...args: unknown[]
+      ) => Promise<unknown>;
+      const cycle: Record<string, unknown> = {};
+      cycle.self = cycle;
+      const sparse = [1];
+      sparse.length = 2;
+      let hooks = 0;
+      const getter = Object.defineProperty({}, "value", {
+        enumerable: true,
+        get() {
+          hooks++;
+          return 1;
+        },
+      });
+      const toJSON = {
+        toJSON() {
+          hooks++;
+          return {};
+        },
+      };
+      for (const input of [
+        undefined,
+        () => 1,
+        Symbol("input"),
+        1n,
+        NaN,
+        Infinity,
+        new Date(),
+        cycle,
+        sparse,
+        { nested: undefined },
+        getter,
+        toJSON,
+      ]) {
+        await expect(
+          unsafe(() => {
+            document.body.dataset.evaluationCount = "invalid input dispatched";
+            return null;
+          }, input),
+        ).rejects.toMatchObject({
+          code: "SerializationError",
+          outcome: "not-sent",
+          data: { phase: "arguments", path: expect.any(String) },
+        });
+      }
+      expect(hooks).toBe(0);
+      expect(await client.evaluate(() => document.body.dataset.evaluationCount ?? "")).toBe("1");
+      await expect(unsafe(Math.max)).rejects.toMatchObject({
+        code: "SerializationError",
+        outcome: "not-sent",
+        data: { phase: "callback" },
+      });
+      await expect(unsafe((() => 1).bind(null))).rejects.toMatchObject({
+        code: "SerializationError",
+        outcome: "not-sent",
+      });
+      for (const callback of [
+        () => undefined,
+        () => ({ value: undefined }),
+        () => ({ value: () => 1 }),
+        () => new Date(),
+        () => {
+          const sparse = [1];
+          sparse.length = 2;
+          return sparse;
+        },
+        () => NaN,
+        () => 1n,
+        () => ({ [Symbol("result")]: 1 }),
+        () => {
+          const value: Record<string, unknown> = {};
+          value.self = value;
+          return value;
+        },
+        () => ({
+          get value() {
+            document.body.dataset.evaluationCount = "getter invoked";
+            return 1;
+          },
+        }),
+        () => ({
+          toJSON() {
+            document.body.dataset.evaluationCount = "toJSON invoked";
+            return {};
+          },
+        }),
+      ]) {
+        await expect(unsafe(callback)).rejects.toMatchObject({
+          code: "SerializationError",
+          outcome: "unknown",
+          data: { phase: "result", path: expect.any(String) },
+        });
+      }
+      expect(await client.evaluate(() => document.body.dataset.evaluationCount ?? "")).toBe("1");
+    }
+    await direct.close();
+    await expect(direct.evaluate(() => null)).rejects.toMatchObject({
+      code: "Closed",
+      outcome: "not-sent",
+    });
+    const targetId = page.targetId;
+    await page.release();
+    await expect(page.evaluate(() => null)).rejects.toMatchObject({
+      code: "LeaseReleased",
+      outcome: "not-sent",
+    });
+    const attached = await attachBrowser({ endpoint: browser.info.endpoint, home });
+    sessions.add(attached);
+    await remember(attached.info);
+    try {
+      const forwarded = await attached.page({ targetId });
+      expect(
+        await forwarded.evaluate((value) => ({ value, title: document.title }), "guardian"),
+      ).toEqual({ value: "guardian", title });
+      await forwarded.release();
+    } finally {
+      await attached.close();
+    }
+    const disconnected = await browser.page();
+    await browser.disconnect();
+    await expect(disconnected.evaluate(() => null)).rejects.toMatchObject({
+      code: "Disconnected",
+      outcome: "not-sent",
+    });
+    receipts.A9 = {
+      info: browser.info,
+      targetId,
+      transports: ["page", "direct", "guardian"],
+      callbackFailures: "returned errors and independent no-replay readback",
+      localHooks: "not invoked",
+    };
+  } finally {
+    await direct.close();
+    await browser.close();
+  }
 });

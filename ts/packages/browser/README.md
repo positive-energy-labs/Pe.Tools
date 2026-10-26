@@ -8,15 +8,22 @@ import { openBrowser } from "@pe/browser";
 const browser = await openBrowser({ mode: "headless" });
 try {
   const page = await browser.page({ url: "https://example.com" });
-  const result = await page.send("Runtime.evaluate", {
-    expression: "document.title",
-    returnByValue: true,
-  });
-  console.log(result.result.value);
+  const result = await page.evaluate(
+    (selector) => ({
+      title: document.title,
+      count: document.querySelectorAll(selector).length,
+    }),
+    "a",
+  );
+  console.log(result.title, result.count);
 } finally {
   await browser.close();
 }
 ```
+
+`CdpClient` and `BrowserPage` expose the same `evaluate(fn, ...args)` method. Arguments and the awaited result use plain JSON data, including readonly arrays and named DTO interfaces. Callbacks run in Chrome and must be self-contained. Pass Node values explicitly as arguments; captured variables fail in Chrome with their original error details. Native and bound callbacks cannot be serialized. There is no static closure detector.
+
+Evaluation rejects undefined, functions, symbols, bigint, non-finite numbers, cycles, sparse arrays, accessors, non-enumerable properties, and class instances. It validates arguments before dispatch without invoking getters or `toJSON`, and validates results in Chrome before CDP can drop unsupported properties. A local serialization error has `outcome: "not-sent"`; a callback or result failure has `outcome: "unknown"` because the callback may have acted. Errors include `data.phase` and `data.path`; transport failures keep their existing metadata. Evaluation never retries.
 
 From `ts`, `node packages/browser/src/cli.ts --help` prints the CLI surface. `launch` defaults to headless; `--visible` creates a window, `--profile DIR` retains an explicitly selected automation profile. CLI launches persist across invocations. Use `--home DIR` to isolate session receipts and `stop SESSION` to retire them. `help SESSION Page.navigate` uses the connected browser's live HTTP schema when available. If approval-mode Chrome returns HTTP 404, the session may provide the pinned bundled reference with explicit `bundled-reference` provenance and `unverified` compatibility. This reference cannot certify the connected browser's complete command set. `--schema` exposes the same provenance. Raw calls require `--target TARGET` or explicit privileged `--browser`; pass structured parameters through `--params-file FILE` or `--params-stdin`.
 
@@ -31,7 +38,7 @@ pnpm exec pe-browser stop SESSION
 
 `navigate.json` contains `{"url":"https://example.com"}`. Use the returned session and target ids. `status` reads effective closure from terminal and guardian publications; an immutable `session.json` readiness record alone is not a liveness check. Session directories also contain the command journal for correlating reported request ids and unknown outcomes.
 
-`attachBrowser` accepts an explicit CDP endpoint or human-enabled modern Chrome discovery. A page lease is exclusive across clients of one session; another target can proceed independently. `release` ends the lease. `close` can retire only library-created tabs; a borrowed tab must be released. Session cleanup closes created tabs and disconnects from an attached browser. Browser-level raw CDP is privileged and can change foreign state; custody is a lifecycle boundary, not a protocol security sandbox.
+`attachBrowser` accepts an explicit CDP endpoint or human-enabled modern Chrome discovery. A page lease is exclusive across clients of one session; another target can proceed independently. `release` ends the lease. Release pages before `session.disconnect()` when retaining the session for another client. `close` can retire only library-created tabs; a borrowed tab must be released. Session cleanup closes created tabs and disconnects from an attached browser. Browser-level raw CDP is privileged and can change foreign state; custody is a lifecycle boundary, not a protocol security sandbox.
 
 Default session storage is `productRoot()/state/browser`, including the canonical product-home override. Attachment exclusion uses the canonical OS-user product state namespace instead, so different explicit browser homes or product-home overrides cannot create competing keepers for the same browser. Chrome's own profile discovery remains separate from product storage.
 

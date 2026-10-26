@@ -5,6 +5,7 @@ import { dirname, join } from "node:path";
 import { Effect, Semaphore } from "effect";
 import { connectCdp, type CdpClient, type CommandOptions } from "./cdp.ts";
 import { BrowserError } from "./errors.ts";
+import { evaluator } from "./evaluate.ts";
 import { releaseAttachment, type AttachmentLock } from "./attachment-lock.ts";
 import { publishJson } from "./receipts.ts";
 
@@ -76,6 +77,7 @@ export function guardianClient(pipe: CdpClient): CdpClient {
   return {
     ...pipe,
     sendRaw,
+    evaluate: evaluator(sendRaw),
     send: ((method: string, ...params: Record<string, unknown>[]) =>
       sendRaw(method, params[0])) as CdpClient["send"],
   };

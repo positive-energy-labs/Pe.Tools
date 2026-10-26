@@ -3,6 +3,7 @@ import type { Scope } from "effect";
 import type { ProtocolMapping } from "devtools-protocol/types/protocol-mapping.js";
 import WebSocket from "ws";
 import { BrowserError } from "./errors.ts";
+import { evaluator, type Evaluation } from "./evaluate.ts";
 
 export interface CdpEvent {
   method: string;
@@ -36,7 +37,7 @@ export interface ConnectOptions {
   signal?: AbortSignal;
 }
 
-export interface CdpClient {
+export interface CdpClient extends Evaluation {
   send<M extends keyof ProtocolMapping.Commands>(
     method: M,
     ...params: ProtocolMapping.Commands[M]["paramsType"]
@@ -350,6 +351,7 @@ async function acquireClient(
       )) as ProtocolMapping.Commands[M]["returnType"];
     },
     sendRaw,
+    evaluate: evaluator(sendRaw),
     subscribe: (listener) => {
       if (closed)
         throw new BrowserError("Closed", "Cannot subscribe to a closed CDP client", {

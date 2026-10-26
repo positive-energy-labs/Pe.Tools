@@ -10,7 +10,7 @@ async function click(page: TypedPage, selector: string) {
   await expect
     .poll(
       async () => {
-        point = await page.read((selector) => {
+        point = await page.evaluate((selector) => {
           const element = [...document.querySelectorAll<HTMLElement>(selector)].find(
             (element) =>
               element.getClientRects().length > 0 &&
@@ -60,7 +60,7 @@ async function click(page: TypedPage, selector: string) {
 
 async function openSystem(page: TypedPage, name: string) {
   const selector = `${SYSTEMS}[data-key=${JSON.stringify(name)}]`;
-  const shown = await page.read(
+  const shown = await page.evaluate(
     (selector) =>
       [...document.querySelectorAll<HTMLElement>(selector)].some(
         (row) => row.getClientRects().length > 0,
@@ -72,7 +72,7 @@ async function openSystem(page: TypedPage, name: string) {
 }
 
 function state(page: TypedPage) {
-  return page.read(() => {
+  return page.evaluate(() => {
     const url = new URL(location.href);
     const encoded = url.searchParams.get("system");
     const system = encoded ? encoded.split(",").filter(Boolean) : [];
@@ -188,7 +188,7 @@ test("opening a second duct system retains the first through reload and browser 
         {
           state: await state(page).catch(String),
           errors: page.errors,
-          body: await page.read(() => document.body.innerText).catch(String),
+          body: await page.evaluate(() => document.body.innerText).catch(String),
         },
         null,
         2,

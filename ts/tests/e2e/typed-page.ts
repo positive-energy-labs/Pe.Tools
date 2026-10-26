@@ -1,7 +1,5 @@
 import { connectCdp, getTargets, type CdpClient } from "@pe/browser";
 
-type Json = null | boolean | number | string | Json[] | { [key: string]: Json };
-
 /** Callbacks must be self-contained; arguments and results cross CDP as JSON. */
 export async function connectTypedPage() {
   const port = Number(process.env.CDP_PORT);
@@ -19,22 +17,6 @@ export async function connectTypedPage() {
     if (event.method === "Page.loadEventFired") loadCount++;
     if (event.method === "Runtime.exceptionThrown") errors.push(JSON.stringify(event.params));
   });
-  const read = async <Args extends Json[], Result extends Json>(
-    callback: (...args: Args) => Result | Promise<Result>,
-    ...args: Args
-  ): Promise<Awaited<Result>> => {
-    const response = await client.send("Runtime.evaluate", {
-      expression: `(${callback.toString()})(...${JSON.stringify(args)})`,
-      returnByValue: true,
-      awaitPromise: true,
-    });
-    if (response.exceptionDetails)
-      throw new Error(
-        response.exceptionDetails.exception?.description ?? response.exceptionDetails.text,
-      );
-    // The single wire boundary: consumers infer their result from the callback, never assert it.
-    return response.result.value as Awaited<Result>;
-  };
   try {
     await client.send("Runtime.enable");
     await client.send("Page.enable");
@@ -53,7 +35,7 @@ export async function connectTypedPage() {
   }
   return {
     send,
-    read,
+    evaluate: client.evaluate.bind(client),
     errors,
     loadCount: () => loadCount,
     async close() {
