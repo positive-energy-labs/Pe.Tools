@@ -119,7 +119,10 @@ export function useTeaching() {
       const instance = inventory.find((fact) => fact.instanceVisible)?.instance;
       if (!instance) return reference;
       const own = facts.filter((fact) => fact.instance === instance);
-      const regions = own.filter((fact) => fact.kind === "region" && fact.node != null);
+      const regions = own.filter(
+        (fact): fact is Extract<Teaching, { kind: "region" }> =>
+          fact.kind === "region" && fact.node != null,
+      );
       const projected = regions.flatMap((region) => {
         const controls = own.filter((fact) => fact.region === region.id && fact.kind !== "region");
         const measured =
