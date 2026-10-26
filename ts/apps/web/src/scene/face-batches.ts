@@ -1,12 +1,28 @@
 import * as THREE from "three";
 import type { PreparedGeometry } from "./prepare-geometry";
 import type { Paint, SceneInstance, SceneMeshes } from "./types";
+import type { SceneGpuMemory } from "./scene-gpu";
 import { center } from "./orbit";
 
 type Part = {
   mesh: THREE.BatchedMesh;
   instances: readonly SceneInstance[];
+  release(this: void): void;
 };
+/** The release closure must not capture the asynchronous preparation frame and its face arrays. */
+function facePart(mesh: THREE.BatchedMesh, instances: readonly SceneInstance[]): Part {
+  let owned = true;
+  return {
+    mesh,
+    instances,
+    release() {
+      if (!owned) return;
+      owned = false;
+      mesh.removeFromParent();
+      mesh.dispose();
+    },
+  };
+}
 type Address = { part: Part; local: number };
 const pause = () => new Promise<void>((resolve) => setTimeout(resolve, 0));
 
@@ -20,16 +36,6 @@ export class FaceBatches {
   ) {}
   get parts() {
     return [this.depth, this.translucent].filter((p): p is Part => !!p);
-  }
-  matchesPartition(paints: readonly Paint[]) {
-    return (
-      paints.length === this.addresses.length &&
-      paints.every(
-        (paint, id) =>
-          (paint.tier === "context" || paint.surface === "shell") ===
-          (this.addresses[id]!.part.mesh === this.translucent?.mesh),
-      )
-    );
   }
   getVisibleAt(id: number) {
     const at = this.addresses[id]!;
@@ -49,8 +55,7 @@ export class FaceBatches {
   disposeExcept(keep?: FaceBatches) {
     for (const part of this.parts) {
       if (keep?.parts.some((p) => p.mesh === part.mesh)) continue;
-      part.mesh.removeFromParent();
-      part.mesh.dispose();
+      part.release();
     }
   }
 }
@@ -100,6 +105,7 @@ export async function prepareFaceBatches(
   material: THREE.Material,
   prior: FaceBatches | undefined,
   check: () => void,
+  memory?: SceneGpuMemory,
 ) {
   const depth: number[] = [],
     translucent: number[] = [];
@@ -112,7 +118,11 @@ export async function prepareFaceBatches(
     if (!indices.length) return undefined;
     if (retained && (await matches(retained, indices, next, ready, check))) {
       // Refresh metadata without changing the old owner's picker before atomic publication.
-      const part = { mesh: retained.mesh, instances: indices.map((i) => next.instances[i]!) };
+      const part = {
+        mesh: retained.mesh,
+        instances: indices.map((i) => next.instances[i]!),
+        release: retained.release,
+      };
       indices.forEach((global, local) => {
         addresses[global] = { part, local };
       });
@@ -124,8 +134,12 @@ export async function prepareFaceBatches(
       0,
       material,
     );
+    const allocation = memory?.own(mesh, "staging");
     mesh.position.fromArray(center(next.bounds));
-    const part = { mesh, instances: indices.map((i) => next.instances[i]!) };
+    const part = facePart(
+      mesh,
+      indices.map((i) => next.instances[i]!),
+    );
     owned.push(part);
     let started = performance.now();
     for (const [local, index] of indices.entries()) {
@@ -155,6 +169,7 @@ export async function prepareFaceBatches(
       geometry.boundingSphere = new THREE.Sphere(new THREE.Vector3().fromArray(sphere), sphere[3]);
       mesh.addInstance(mesh.addGeometry(geometry));
       geometry.dispose();
+      if (local === 0) allocation?.refresh();
       addresses[index] = { part, local };
       if (performance.now() - started > 8) {
         await pause();
@@ -162,6 +177,7 @@ export async function prepareFaceBatches(
         started = performance.now();
       }
     }
+    allocation?.refresh();
     return part;
   };
   try {
@@ -170,7 +186,7 @@ export async function prepareFaceBatches(
     check();
     return new FaceBatches(kept, glass, addresses);
   } catch (error) {
-    for (const part of owned) part.mesh.dispose();
+    for (const part of owned) part.release();
     throw error;
   }
 }

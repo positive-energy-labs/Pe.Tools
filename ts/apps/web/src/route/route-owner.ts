@@ -385,12 +385,9 @@ export function useRouteOwner<T extends { dispose(): void; registry: AtomRegistr
       else retired.dispose();
     }
     return () => {
-      // Activity disconnects Effects while preserving this owner. The enclosing pane disposes it.
-      if (!activity || activity.current())
-        disposeTimer.current = setTimeout(() => {
-          if (activity) activity.retire(store);
-          else store.dispose();
-        }, 0);
+      // Effect disconnection is not final release: an outer Activity can hide a still-current
+      // route. Its retained pane alone disposes registered owners; standalone owners retire here.
+      if (!activity) disposeTimer.current = setTimeout(() => store.dispose(), 0);
     };
   }, [store, activity]);
   return store;

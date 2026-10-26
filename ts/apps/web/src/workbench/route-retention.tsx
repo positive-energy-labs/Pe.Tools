@@ -2,7 +2,7 @@ import {
   Activity,
   Suspense,
   memo,
-  useEffect,
+  useInsertionEffect,
   useRef,
   type ComponentType,
   type ReactNode,
@@ -25,7 +25,7 @@ interface RetainedRoute {
   dispose(): void;
 }
 
-/** This component is outside Activity: hiding disconnects route effects, closing disposes owners. */
+/** A Place owns final disposal, including when an enclosing tools Activity folds. */
 const RetainedPane = memo(function RetainedPane({
   entry,
   id,
@@ -39,7 +39,10 @@ const RetainedPane = memo(function RetainedPane({
   renderRoute: (body: ReactNode) => ReactNode;
 }) {
   const disposal = useRef<ReturnType<typeof setTimeout> | null>(null);
-  useEffect(() => {
+  // FOOTGUN: Activity disconnects layout/passive effects, including this pane when tools fold.
+  // Insertion lifetime follows actual removal. Defer disposal past the commit, never update
+  // owner subscribers inside insertion cleanup. Guard: "folding the outer tools Activity".
+  useInsertionEffect(() => {
     if (disposal.current) clearTimeout(disposal.current);
     return () => {
       disposal.current = setTimeout(() => entry.dispose(), 0);

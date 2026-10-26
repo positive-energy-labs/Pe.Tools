@@ -17,7 +17,7 @@ import type { ElementTarget } from "#/revit/element-target";
 import { SelectionBoxButton } from "#/revit/element-menu";
 import { observedElements, useNativeObservation } from "#/revit/observation";
 import type { Psc1Metadata } from "#/scene/psc1";
-import { sceneTarget } from "#/scene/scene3d";
+import { sceneTarget } from "#/scene/scene-target";
 import type { SceneInstance } from "#/scene/types";
 
 import { ENCODINGS, ENCODING_SAYS, rowAt, type Legend, type SpaceLayer } from "./layers";

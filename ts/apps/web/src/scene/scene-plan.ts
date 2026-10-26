@@ -1,0 +1,49 @@
+import { paintOf, type Look } from "./grounds";
+import type { Paint, PaintOf, SceneMeshes } from "./types";
+
+/** Only these values can change prepared geometry or its render-pass partition. */
+export type SceneStructure = Pick<Paint, "tier" | "surface">;
+export type SceneAppearance = Omit<Paint, keyof SceneStructure>;
+export type ScenePlan = {
+  meshes: SceneMeshes;
+  roles: readonly SceneStructure[];
+  angles: (number | null)[];
+  semantics: string;
+  shellAngle: number;
+  routeAngle: number;
+};
+export function scenePlan(meshes: SceneMeshes, of: PaintOf | undefined, look: Look): ScenePlan {
+  const roles = meshes.instances.map((i) => {
+    const { tier, surface } = paintOf(i, of);
+    return { tier, surface };
+  });
+  const angles = roles.map((p) =>
+    p.tier === "context"
+      ? null
+      : p.surface === "shell"
+        ? look.shell.edgeAngle
+        : p.tier === "subject"
+          ? look.routes.edgeAngle
+          : null,
+  );
+  return {
+    meshes,
+    roles,
+    angles,
+    semantics: JSON.stringify([roles, angles, look.shell.edgeAngle, look.routes.edgeAngle]),
+    shellAngle: look.shell.edgeAngle,
+    routeAngle: look.routes.edgeAngle,
+  };
+}
+export function samePlan(a: ScenePlan | undefined, b: ScenePlan): boolean {
+  return a?.meshes === b.meshes && a.semantics === b.semantics;
+}
+/** The accepted structural plan wins over a presentation callback from a newer request. */
+export function planPaint(plan: ScenePlan, appearance: PaintOf | undefined): PaintOf {
+  const index = new Map(plan.meshes.instances.map((instance, i) => [instance.key, i]));
+  return (instance) => {
+    const i = index.get(instance.key);
+    if (i === undefined) return undefined;
+    return { ...appearance?.(instance), ...plan.roles[i]! };
+  };
+}

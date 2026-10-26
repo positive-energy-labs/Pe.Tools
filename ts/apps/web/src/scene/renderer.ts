@@ -5,7 +5,10 @@
  * world-foot sections; drawing and picking consume the same clip volume. */
 import * as THREE from "three";
 import type { PreparedGeometry } from "./prepare-geometry";
-import { scenePreparation } from "./preparation";
+import { sceneDiagnostics } from "./scene-diagnostics";
+import { SceneGpuMemory } from "./scene-gpu";
+import { sceneMemory } from "./scene-memory";
+import { planPaint, type ScenePlan } from "./scene-plan";
 import { SceneMeshes } from "./types";
 import { LineMaterial } from "three/addons/lines/LineMaterial.js";
 import { LineSegments2 } from "three/addons/lines/LineSegments2.js";
@@ -175,8 +178,9 @@ function preparedEdges(
   edges: PreparedGeometry["edges"],
   angles: PreparedGeometry["angles"],
   ids: ReadonlyMap<string, number>,
+  allocated: (buffers: ArrayBufferLike[]) => void,
 ) {
-  const fallback = surfaceEdges(meshes);
+  const fallback = surfaceEdges(meshes, allocated);
   return (instance: SceneInstance, angle: number) => {
     const id = ids.get(instance.key)!;
     return angles[id] === angle && edges[id] ? edges[id]! : fallback(instance, angle);
@@ -434,13 +438,11 @@ export function createRenderer(mount: HTMLElement, initialMeshes: SceneMeshes, w
       cap.material.opacity = alpha;
     }
   };
+  let geometryAccountPending = true;
   let field: VeilField;
   // Viewport construction has no membership work. Replacements are prepared off-thread below.
   field = { data: new Uint8Array([255]), dims: [1, 1, 1], min: [0, 0, 0], cellFt: 1 };
   setVeilField(veil, field);
-  const preparation = scenePreparation();
-  let replacement = 0;
-  let disposed = false;
 
   let frame = 0;
   let sizePending = false;
@@ -619,6 +621,7 @@ export function createRenderer(mount: HTMLElement, initialMeshes: SceneMeshes, w
       if (appearanceChanged && markBatch?.sync()) fitLines(markBatch.group);
       // Update transforms once, including any frame callback's changes, before all passes.
       scene.updateMatrixWorld();
+      accountGeometry();
       if (thumbsStale) drawThumbs();
       drawScene(active());
       if (glowing) glow.render(scene, active());
@@ -800,6 +803,7 @@ export function createRenderer(mount: HTMLElement, initialMeshes: SceneMeshes, w
   motion.addEventListener("change", motionChanged);
   /** The one re-apply path: a theme change or a look change re-reads grounds and re-tints. */
   const applyLook = () => {
+    geometryAccountPending = true;
     layerRevision++;
     routeGeometryDirty = true;
     const next = sceneGrounds(mount, look);
@@ -891,7 +895,12 @@ export function createRenderer(mount: HTMLElement, initialMeshes: SceneMeshes, w
   scene.add(outlined);
   const envelopes = new THREE.Group();
   scene.add(envelopes);
-  let edgesOf = surfaceEdges(meshes);
+  let fallbackEdgeStorage: ArrayBufferLike[] = [];
+  const ownFallbackEdges = (buffers: ArrayBufferLike[]) => {
+    fallbackEdgeStorage = buffers;
+    geometryAccountPending = true;
+  };
+  let edgesOf = surfaceEdges(meshes, ownFallbackEdges);
   const routes = new THREE.Group();
   scene.add(routes);
   let routeStamp = "";
@@ -978,6 +987,7 @@ export function createRenderer(mount: HTMLElement, initialMeshes: SceneMeshes, w
   let painted: Paint = [undefined, undefined, undefined, undefined];
   let routeGeometryDirty = true;
   const paintNow = (...[selected, hidden, isolated, lit]: Paint) => {
+    geometryAccountPending = true;
     layerRevision++;
     hasContext = false;
     hasShell = false;
@@ -1064,6 +1074,7 @@ export function createRenderer(mount: HTMLElement, initialMeshes: SceneMeshes, w
   const pickPriority = (i: SceneInstance) => (paintOf(i, paintBy).tier === "context" ? 0 : 1);
   let pick = createFacePicker(batch, pickPriority);
   const rebuildCaps = () => {
+    geometryAccountPending = true;
     const stamp = JSON.stringify([clipVolume?.section, look.section.cap]);
     if (clipVolume?.preview) {
       caps.forEach((cap) => {
@@ -1119,8 +1130,51 @@ export function createRenderer(mount: HTMLElement, initialMeshes: SceneMeshes, w
   };
   const capRay = new THREE.Raycaster();
   capRay.layers.enableAll();
+  const gpuMemory = new SceneGpuMemory();
+  const geometryMemory = sceneMemory.acquire("uploaded", {});
+  let edgeStorage: ArrayBufferLike[] = [];
+  const accountGeometry = () => {
+    if (!geometryAccountPending) return;
+    geometryAccountPending = false;
+    const footprint = gpuMemory.footprint(scene, [veil.veilField.value]);
+    geometryMemory.update({
+      ...footprint,
+      buffers: [...(footprint.buffers ?? []), ...edgeStorage, ...fallbackEdgeStorage],
+    });
+  };
   const api = {
     meshes: () => meshes,
+    diagnostics: sceneDiagnostics,
+    clear() {
+      api.setLayers([]);
+      batch.disposeExcept();
+      batch = new FaceBatches(undefined, undefined, []);
+      for (const group of [outlined, routes, envelopes]) {
+        for (const child of group.children.slice()) {
+          group.remove(child);
+          disposeTree(child);
+        }
+      }
+      caps.forEach((cap) => {
+        scene.remove(cap);
+        disposeTree(cap);
+      });
+      caps.clear();
+      capStamp = "";
+      byId.length = 0;
+      paints.length = 0;
+      batchIdByKey.clear();
+      meshes = new SceneMeshes(new Float32Array(), bounds, []);
+      paintBy = undefined;
+      geometryAccountPending = true;
+      edgeStorage = [];
+      fallbackEdgeStorage = [];
+      edgesOf = () => new Float32Array();
+      pick = createFacePicker(batch, pickPriority);
+      field = { data: new Uint8Array([255]), dims: [1, 1, 1], min: [0, 0, 0], cellFt: 1 };
+      setVeilField(veil, field);
+      accountGeometry();
+    },
     frameBounds: () => bounds,
     /** Camera zoom belongs to the caller's picture, independently of staged geometry bounds. */
     setFrameBounds(next: typeof bounds) {
@@ -1129,25 +1183,16 @@ export function createRenderer(mount: HTMLElement, initialMeshes: SceneMeshes, w
       applyStage();
       render();
     },
-    async replaceMeshes(
-      next: SceneMeshes,
-      nextPaint: PaintOf | undefined,
+    async stage(
+      plan: ScenePlan,
+      ready: PreparedGeometry,
       signal: AbortSignal,
       preserveLayers = false,
-    ): Promise<void> {
-      const version = ++replacement;
-      const check = () => {
-        signal.throwIfAborted();
-        if (disposed || version !== replacement)
-          throw new DOMException("Scene superseded", "AbortError");
-      };
+    ) {
+      const next = plan.meshes;
+      const check = () => signal.throwIfAborted();
       check();
-      if (next === meshes && nextPaint === paintBy) return;
-      mark("prepare-start", { instances: next.instances.length });
-      const ready = await preparation.prepare(next, nextPaint, look, signal);
-      check();
-      mark("prepare-ready", { instances: next.instances.length });
-      const nextPaints = next.instances.map((i) => paintOf(i, nextPaint));
+      const nextPaints = plan.roles;
       const incoming = await prepareFaceBatches(
         next,
         ready,
@@ -1155,6 +1200,7 @@ export function createRenderer(mount: HTMLElement, initialMeshes: SceneMeshes, w
         material,
         preserveLayers ? batch : undefined,
         check,
+        gpuMemory,
       );
       try {
         await uploadFaceBatches(renderer, incoming, batch, active(), check);
@@ -1180,75 +1226,115 @@ export function createRenderer(mount: HTMLElement, initialMeshes: SceneMeshes, w
           );
         });
       mark("uploaded", { instances: next.instances.length, reusedDepth, sameEdges });
-      // Atomic ownership transfer: no frame or picker sees half-installed membership.
-      // Optional context keeps the same focus and already-current world-space diagnostics.
-      // Clearing them here repeats their geometry build and stalls the held pointer.
-      if (!preserveLayers) api.setLayers([]);
-      caps.forEach((cap) => {
-        scene.remove(cap);
-        disposeTree(cap);
-      });
-      caps.clear();
-      capStamp = "";
-      for (const group of sameEdges ? [outlined] : [outlined, routes, envelopes]) {
-        for (const child of group.children.slice()) {
-          group.remove(child);
-          disposeTree(child);
-        }
-      }
-      batch.disposeExcept(incoming);
-      batch = incoming;
-      meshes = next;
-      origin.fromArray(center(next.bounds));
-      outlined.position.copy(origin);
-      for (const part of batch.parts)
-        for (const layer of [OCCLUDER_LAYER, CONTEXT_LAYER, SHELL_LAYER])
-          part.mesh.layers.enable(layer);
-      batch.addTo(scene);
-      byId.splice(0, byId.length, ...next.instances);
-      paintBy = nextPaint;
-      paints.splice(0, paints.length, ...nextPaints);
-      batchIdByKey.clear();
-      byId.forEach((i, id) => batchIdByKey.set(i.key, id));
-      LOOK.offer(
-        "layers",
-        "hiddenCategories",
-        [
-          ...new Set(
-            byId
-              .filter((_, id) => paints[id]!.tier === "context")
-              .flatMap((i) => (i.categoryId === null ? [] : [String(i.categoryId)])),
-          ),
-        ].sort(),
-        Object.fromEntries(
-          byId.filter((i) => i.categoryId !== null).map((i) => [String(i.categoryId), i.category]),
-        ),
-      );
-      field = ready.field;
-      setVeilField(veil, field);
-      edgesOf = preparedEdges(meshes, ready.edges, ready.angles, batchIdByKey);
-      pick = createFacePicker(batch, pickPriority);
-      marked.clear();
-      if (!sameEdges) {
-        routeStamp = "";
-        envelopeStamp = "";
-      }
-      routeGeometryDirty = true;
-      byId.forEach((_, id) => tint(id));
-      subjectBounds =
-        boundsOfInstances(meshes, (i) => paintOf(i, paintBy).tier !== "context") ??
-        (preserveLayers ? subjectBounds : null);
-      limits = subjectBounds
-        ? cameraBounds(subjectBounds, look.camera.zoomOutFactor, look.camera.panMargin)
-        : null;
-      returning = null;
-      applyStage();
-      paintNow(...painted);
-      rebuildCaps();
-      thumbsStale = true;
-      moves.dispatchEvent({ type: "change" });
-      mark("membership", { instances: byId.length, focus: byId.filter((i) => i.focus).length });
-      render();
+      let owned = true;
+      return {
+        release() {
+          if (!owned) return;
+          owned = false;
+          incoming.disposeExcept(batch);
+        },
+        commit(appearance: PaintOf | undefined) {
+          check();
+          if (!owned) throw Error("Scene stage already released");
+          owned = false;
+          const nextPaint = planPaint(plan, appearance);
+          const nextPaints = next.instances.map((i) => paintOf(i, nextPaint));
+          // Atomic ownership transfer: no frame or picker sees half-installed membership.
+          // Optional context keeps the same focus and already-current world-space diagnostics.
+          // Clearing them here repeats their geometry build and stalls the held pointer.
+          if (!preserveLayers) api.setLayers([]);
+          caps.forEach((cap) => {
+            scene.remove(cap);
+            disposeTree(cap);
+          });
+          caps.clear();
+          capStamp = "";
+          for (const group of sameEdges ? [outlined] : [outlined, routes, envelopes]) {
+            for (const child of group.children.slice()) {
+              group.remove(child);
+              disposeTree(child);
+            }
+          }
+          batch.disposeExcept(incoming);
+          batch = incoming;
+          meshes = next;
+          origin.fromArray(center(next.bounds));
+          outlined.position.copy(origin);
+          for (const part of batch.parts)
+            for (const layer of [OCCLUDER_LAYER, CONTEXT_LAYER, SHELL_LAYER])
+              part.mesh.layers.enable(layer);
+          batch.addTo(scene);
+          for (const part of batch.parts) gpuMemory.uploaded(part.mesh);
+          byId.splice(0, byId.length, ...next.instances);
+          paintBy = nextPaint;
+          paints.splice(0, paints.length, ...nextPaints);
+          batchIdByKey.clear();
+          byId.forEach((i, id) => batchIdByKey.set(i.key, id));
+          LOOK.offer(
+            "layers",
+            "hiddenCategories",
+            [
+              ...new Set(
+                byId
+                  .filter((_, id) => paints[id]!.tier === "context")
+                  .flatMap((i) => (i.categoryId === null ? [] : [String(i.categoryId)])),
+              ),
+            ].sort(),
+            Object.fromEntries(
+              byId
+                .filter((i) => i.categoryId !== null)
+                .map((i) => [String(i.categoryId), i.category]),
+            ),
+          );
+          field = ready.field;
+          setVeilField(veil, field);
+          edgeStorage = ready.edges.flatMap((edge) => (edge ? [edge.buffer] : []));
+          fallbackEdgeStorage = [];
+          edgesOf = preparedEdges(
+            meshes,
+            ready.edges,
+            ready.angles,
+            batchIdByKey,
+            ownFallbackEdges,
+          );
+          // Edge angles are structural: publish them with their prepared edge storage. Theme,
+          // colour and opacity still apply immediately to the accepted geometry.
+          if (
+            look.shell.edgeAngle !== plan.shellAngle ||
+            look.routes.edgeAngle !== plan.routeAngle
+          ) {
+            look = {
+              ...look,
+              shell: { ...look.shell, edgeAngle: plan.shellAngle },
+              routes: { ...look.routes, edgeAngle: plan.routeAngle },
+            };
+          }
+
+          pick = createFacePicker(batch, pickPriority);
+          marked.clear();
+          if (!sameEdges) {
+            routeStamp = "";
+            envelopeStamp = "";
+          }
+          routeGeometryDirty = true;
+          byId.forEach((_, id) => tint(id));
+          subjectBounds =
+            boundsOfInstances(meshes, (i) => paintOf(i, paintBy).tier !== "context") ??
+            (preserveLayers ? subjectBounds : null);
+          limits = subjectBounds
+            ? cameraBounds(subjectBounds, look.camera.zoomOutFactor, look.camera.panMargin)
+            : null;
+          returning = null;
+          applyStage();
+          paintNow(...painted);
+          rebuildCaps();
+          thumbsStale = true;
+          moves.dispatchEvent({ type: "change" });
+          mark("membership", { instances: byId.length, focus: byId.filter((i) => i.focus).length });
+          accountGeometry();
+          render();
+        },
+      };
     },
     canvas,
     gestureSize: () => [size.height, viewHeight(camera, controls.target)] as const,
@@ -1417,7 +1503,15 @@ export function createRenderer(mount: HTMLElement, initialMeshes: SceneMeshes, w
       const changedBounds =
         next.camera.zoomOutFactor !== look.camera.zoomOutFactor ||
         next.camera.panMargin !== look.camera.panMargin;
-      look = next;
+      look =
+        next.shell.edgeAngle === look.shell.edgeAngle &&
+        next.routes.edgeAngle === look.routes.edgeAngle
+          ? next
+          : {
+              ...next,
+              shell: { ...next.shell, edgeAngle: look.shell.edgeAngle },
+              routes: { ...next.routes, edgeAngle: look.routes.edgeAngle },
+            };
       applyLook();
       rebuildCaps();
       if (changedBounds) returnInside();
@@ -1433,18 +1527,9 @@ export function createRenderer(mount: HTMLElement, initialMeshes: SceneMeshes, w
       thumbsStale = true;
       render();
     },
-    /** Who is subject, stub or context, and each subject's colour key; re-bakes the veil. */
-    setPaint(next: PaintOf | undefined, signal: AbortSignal): Promise<void> | undefined {
-      if (next === paintBy) return;
-      const nextPaints = byId.map((instance) => paintOf(instance, next));
-      // A tier/surface change changes the render pass and/or veil. Keep the old valid picture
-      // until its replacement is prepared; colour-only changes still apply immediately.
-      if (
-        !batch.matchesPartition(nextPaints) ||
-        nextPaints.some((p, id) => p.tier !== paints[id]!.tier)
-      )
-        return api.replaceMeshes(meshes, next, signal, true);
-      paintBy = next;
+    /** Presentation cannot change the accepted structural plan or start a worker. */
+    setAppearance(plan: ScenePlan, next: PaintOf | undefined) {
+      paintBy = planPaint(plan, next);
       routeGeometryDirty = true;
       byId.forEach((instance, id) => {
         const paint = paintOf(instance, paintBy);
@@ -1489,6 +1574,7 @@ export function createRenderer(mount: HTMLElement, initialMeshes: SceneMeshes, w
     },
     /** One group per key, rebuilt when its layer object is replaced, disposed when its key leaves. */
     setLayers(next: readonly Layer3D[] = []) {
+      geometryAccountPending = true;
       // An equal layer list must not schedule three thumbnail renders and GPU readbacks.
       if (
         layers.size === next.length &&
@@ -1555,9 +1641,8 @@ export function createRenderer(mount: HTMLElement, initialMeshes: SceneMeshes, w
     },
     dispose() {
       mark("dispose");
-      disposed = true;
-      replacement++;
-      preparation.stop();
+      api.clear();
+      geometryMemory.release();
       onFrame = null;
       cancelAnimationFrame(frame);
       motion.removeEventListener("change", motionChanged);
@@ -1583,6 +1668,7 @@ export function createRenderer(mount: HTMLElement, initialMeshes: SceneMeshes, w
       material.dispose();
       veil.veilField.value.dispose();
       disposeTree(scene);
+      scene.clear();
       glow.dispose();
       outline.dispose();
       renderer.dispose();

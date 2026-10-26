@@ -570,12 +570,12 @@ export function useSearchKey(owner: SearchKeyOwner) {
     { kind: "search", label: "Search", fields: [], syntax: SEARCH_FOCUS_SYNTAX },
     owner.available?.() !== false,
   );
-  const latest = useRef(owner);
-  latest.current = owner;
+  const latest = useRef<SearchKeyOwner | null>(null);
+  latest.current = live ? owner : null;
   const [self] = useState<SearchKeyOwner>(() => ({
-    region: () => latest.current.region(),
-    focus: () => latest.current.focus(),
-    available: () => latest.current.available?.() !== false,
+    region: () => latest.current?.region() ?? null,
+    focus: () => latest.current?.focus(),
+    available: () => !!latest.current && latest.current.available?.() !== false,
   }));
   useEffect(() => {
     if (!live) return;
@@ -584,6 +584,11 @@ export function useSearchKey(owner: SearchKeyOwner) {
     return () => {
       targets.delete(self);
       listeners.forEach((notify) => notify());
+      // Hidden subscribers can retain the former leader, including its caller's geometry.
+      // Revoke its callbacks after same-turn StrictMode reconnects have had a chance to register.
+      queueMicrotask(() => {
+        if (!targets.has(self)) latest.current = null;
+      });
     };
   }, [self, live]);
   const bindingOwner = useSyncExternalStore(subscribe, leader, noLeader);

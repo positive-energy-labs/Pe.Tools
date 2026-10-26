@@ -2,7 +2,7 @@
 import { act, cleanup, renderHook, waitFor } from "@testing-library/react";
 import { afterEach, expect, it, vi } from "vite-plus/test";
 import { sceneRequest } from "./host";
-import { useDuctScene } from "./use-scene";
+import { useDuctScene } from "#/ducts/scene-read";
 
 const native = vi.hoisted(() => ({
   calls: [] as {

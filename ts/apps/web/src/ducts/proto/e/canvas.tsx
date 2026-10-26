@@ -16,7 +16,6 @@ import { DUCTS_LAYERS, emptyListSearch, toggleLayer } from "@pe/agent-contracts"
 import { snapshotById } from "@pe/ducts-domain/readiness";
 import { noRunBranches } from "@pe/ducts-domain/no-runs";
 import { scopeOf, systemScope } from "@pe/ducts-domain/system-scope";
-import { clipMeshes } from "#/scene/clip";
 import { worstRun } from "@pe/ducts-domain/losses";
 import type { Neighbour } from "@pe/ducts-domain/neighbours";
 import { TooltipHint } from "@pe/kit/lang/tooltip";
@@ -24,7 +23,7 @@ import { SelectionBoxButton } from "#/revit/element-menu";
 import { observedElements } from "#/revit/observation";
 import { PaneWork } from "@pe/kit/lang/pane";
 import { useNativeObservation } from "#/revit/observation";
-import { useDuctScene, usePictureRead } from "#/scene/use-scene";
+import { useDuctScene, usePictureRead } from "#/ducts/scene-read";
 import { useLiveOrbit } from "@pe/kit/lang/live-orbit";
 import type { Bounds } from "#/scene/types";
 import { Button } from "@pe/kit/lang/button";
@@ -194,7 +193,6 @@ function Canvas({
     () => stubLabels(snapshot, neighbours, opened),
     [snapshot, neighbours, opened],
   );
-  const captured = useDuctScene(request, native, captureSource?.version ?? "");
   const meshCuts = useMemo(() => {
     const cuts = new Map<number, (typeof neighbours)[number]["cuts"]>();
     for (const id of stubs) {
@@ -207,19 +205,16 @@ function Canvas({
     }
     return cuts;
   }, [neighbours, stubs]);
-  const capturedMeshes = useMemo(
-    () => (captured.meshes ? clipMeshes(captured.meshes, meshCuts) : null),
-    [captured.meshes, meshCuts],
-  );
-  const focusMeshes = useMemo(
-    () => (captured.focusMeshes ? clipMeshes(captured.focusMeshes, meshCuts) : null),
-    [captured.focusMeshes, meshCuts],
-  );
+  const captured = useDuctScene(request, native, captureSource?.version ?? "", meshCuts);
   const capture =
     import.meta.env.DEV && frozenDemo() === "colours"
       ? { ...captured, meshes: COLOURS_FIXTURE.meshes, focusMeshes: COLOURS_FIXTURE.meshes }
-      : { ...captured, meshes: capturedMeshes, focusMeshes };
-  const pictureKey = doc && request ? `${doc.session}/${doc.openId}` : null;
+      : captured;
+  // Capture provenance owns visual retention; the bound document remains its fallback
+  // while pricing withdraws capture readiness. Neither grants native action authority.
+  const pictureDocument = native ?? doc;
+  const pictureKey =
+    pictureDocument && request ? `${pictureDocument.session}/${pictureDocument.openId}` : null;
   const { read, holding } = usePictureRead(
     capture,
     pictureKey,
@@ -249,6 +244,16 @@ function Canvas({
     [page.viewport, bounds, pictureSize],
   );
   const landing = useRef<(() => void) | null>(null);
+  const pictureJump = useRef<((id: number) => void) | null>(null);
+  useEffect(() => {
+    if (!jump) return;
+    const callback = pictureJump.current;
+    jump.current = callback;
+    // The retained route owns selection state, not the disposed picture's geometry closure.
+    return () => {
+      if (jump.current === callback) jump.current = null;
+    };
+  });
   const orbit = useLiveOrbit(
     pose,
     stageViewport(setPage),
@@ -527,7 +532,7 @@ function Canvas({
       }}
     >
       {(stage) => {
-        if (jump) jump.current = (id) => jumpTo(stage, id);
+        pictureJump.current = (id) => jumpTo(stage, id);
         const goBack = () => stage.go("back");
 
         const readout = (

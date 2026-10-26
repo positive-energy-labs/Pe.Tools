@@ -1,3 +1,5 @@
+import { SceneGpuMemory } from "./scene-gpu";
+import { sceneMemory } from "./scene-memory";
 import * as THREE from "three";
 import { expect, test, vi } from "vite-plus/test";
 import { FaceBatches, prepareFaceBatches } from "./face-batches";
@@ -103,12 +105,65 @@ test("superseded preparation cannot dispose the still-published depth owner", as
 test("tier changes require a new pass owner, while colours keep the partition", async () => {
   const f = fixture(true),
     first = await build(f);
-  expect(first.matchesPartition(f.paints.map((p) => ({ ...p, ink: "#0000ff" })))).toBe(true);
   f.paints[0] = { tier: "subject", surface: "shell" };
-  expect(first.matchesPartition(f.paints)).toBe(false);
   const next = await build(f, first);
   expect(next.depth).toBeUndefined();
   expect(next.translucent!.instances.map((i) => i.key)).toEqual(["0", "1", "2"]);
   first.disposeExcept(next);
   next.disposeExcept();
+});
+
+test("viewport allocations release independently; reused focus is counted once and incoming rollback preserves it", async () => {
+  const baseline = sceneMemory.snapshot().owners.active;
+  const firstMemory = new SceneGpuMemory(),
+    insetMemory = new SceneGpuMemory();
+  const f = fixture();
+  const first = await prepareFaceBatches(
+    f.meshes,
+    f.ready,
+    f.paints,
+    material,
+    undefined,
+    () => {},
+    firstMemory,
+  );
+  const firstBytes = sceneMemory.snapshot().owned.gpuEstimateBytes;
+  const inset = await prepareFaceBatches(
+    f.meshes,
+    f.ready,
+    f.paints,
+    material,
+    undefined,
+    () => {},
+    insetMemory,
+  );
+  expect(sceneMemory.snapshot().owned.gpuEstimateBytes).toBe(firstBytes * 2);
+  const c = fixture(true);
+  const incoming = await prepareFaceBatches(
+    c.meshes,
+    c.ready,
+    c.paints,
+    material,
+    first,
+    () => {},
+    firstMemory,
+  );
+  expect(incoming.depth!.mesh).toBe(first.depth!.mesh);
+  incoming.disposeExcept(first);
+  expect(sceneMemory.snapshot().owned.gpuEstimateBytes).toBe(firstBytes * 2);
+  first.disposeExcept();
+  expect(sceneMemory.snapshot().owned.gpuEstimateBytes).toBe(firstBytes);
+  expect(inset.getVisibleAt(0)).toBe(true);
+  inset.disposeExcept();
+  expect(sceneMemory.snapshot().owners.active).toBe(baseline);
+  expect(sceneMemory.snapshot().owners.reservations).toBe(0);
+});
+
+test("closing the viewport during a staged shared-focus replacement releases each allocation once", async () => {
+  const old = await build(fixture()),
+    incoming = await build(fixture(true), old);
+  const released = vi.spyOn(old.depth!.mesh, "dispose");
+  old.disposeExcept();
+  expect(() => incoming.disposeExcept()).not.toThrow();
+  expect(released).toHaveBeenCalledTimes(1);
 });
