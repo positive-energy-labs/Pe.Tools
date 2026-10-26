@@ -247,6 +247,16 @@ test("real conversation Work cutover retains authored cells, draft, Places and o
               getComputedStyle(element).visibility !== "hidden",
           )?.value ?? "",
       );
+    const currentPlaceId = () =>
+      p.until(
+        () =>
+          p.evaluate(() =>
+            typeof history.state?.__peRouteTab?.id === "string"
+              ? (history.state.__peRouteTab.id as string)
+              : null,
+          ),
+        "the current Place is enrolled in browser history",
+      );
     const composerIdentity = async () => {
       const located = await p.send("Runtime.evaluate", {
         expression: `[...document.querySelectorAll('textarea[aria-label="Message"],input[aria-label="Message"]')].find(${visible})`,
@@ -870,7 +880,7 @@ test("real conversation Work cutover retains authored cells, draft, Places and o
       const pageHistory = await p.send("Page.getNavigationHistory");
       const returnEntry = pageHistory.entries[pageHistory.currentIndex];
       const origin = await p.evaluate(() => performance.timeOrigin);
-      const ductsPlace = await p.evaluate(() => history.state.__peRouteTab.id as string);
+      const ductsPlace = await currentPlaceId();
       const pages = ["chadds-duct-readiness", "chadds-duct-detail", "chadds-duct-readiness"];
       const pageIds: string[] = [];
       for (const slug of pages) {
@@ -895,7 +905,7 @@ test("real conversation Work cutover retains authored cells, draft, Places and o
         expect(await p.evaluate(() => performance.timeOrigin)).toBe(origin);
         expect(await composerIdentity()).toBe(pageComposer);
         expect(await draft()).toBe(pageDraft);
-        pageIds.push(await p.evaluate(() => history.state.__peRouteTab.id as string));
+        pageIds.push(await currentPlaceId());
       }
       expect(pageIds[0]).not.toBe(pageIds[1]);
       expect(pageIds[2]).toBe(pageIds[0]);
@@ -911,7 +921,7 @@ test("real conversation Work cutover retains authored cells, draft, Places and o
         async () => (await p.url()) === beforePages,
         "Back returns to the original Ducts Page",
       );
-      expect(await p.evaluate(() => history.state.__peRouteTab.id as string)).toBe(ductsPlace);
+      expect(await currentPlaceId()).toBe(ductsPlace);
       expect(await draft()).toBe(pageDraft);
       expect(await workEvidence(seed.productHome)).toEqual(initial);
       receipt.coverage.pageLinks = {

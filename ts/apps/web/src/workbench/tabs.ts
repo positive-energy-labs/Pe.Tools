@@ -230,7 +230,7 @@ export function useRouteTabs() {
     } catch (error) {
       fail(error);
     }
-  }, [active?.id, active?.link, active?.route]);
+  }, [active?.id, active?.link, active?.route, tagged?.id, tagged?.route]);
 
   // The command id names the last explicit open this Place rendered for its conversation; it
   // survives same-Place Page moves but not a change of the thread association.
@@ -406,6 +406,7 @@ export function useRouteTabs() {
           await router.navigate({
             to: router.state.location.pathname,
             search: (previous: Record<string, unknown>) => ({ ...previous, thread: owner }),
+            state: (previous: Record<string, unknown>) => ({ ...previous }),
             replace: true,
           } as never);
         },

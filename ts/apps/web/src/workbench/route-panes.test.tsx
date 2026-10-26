@@ -107,7 +107,7 @@ const familiesManifest = defineRoute({
 function FamiliesProbe() {
   const handle = useRoute(familiesManifest, { thread: useRouteThread() });
   useRouteLease("families", handle.page, { thread: handle.thread ?? undefined });
-  return <output data-families-probe="">{String(handle.page[0].sort ?? "")}</output>;
+  return <output data-families-probe="">{JSON.stringify(handle.page[0].sort ?? "")}</output>;
 }
 
 let mounts = 0;
@@ -226,7 +226,7 @@ const resume = (
 const shown = (router: Awaited<ReturnType<typeof mount>>) => ({
   path: router.state.location.pathname,
   system: (router.state.location.search as { system?: string }).system,
-  selected: String((router.state.location.search as { selected?: unknown }).selected ?? ""),
+  selected: (router.state.location.search as { selected?: string }).selected ?? "",
   target: (router.state.location.search as { target?: string }).target,
   tab: (router.state.location.state as { __peRouteTab?: { id: string } }).__peRouteTab?.id ?? null,
 });
@@ -396,6 +396,7 @@ test("(d) first Send from a tool promotes in place: tool stays, one thread.place
   const router = await mount("/ducts?target=C%3A%2FModels%2FOffice.rvt");
   await settle();
   const mounted = mounts;
+  const placeId = shown(router).tab;
   threads.push({ id: "NEW" });
   try {
     await act(() => store.actions.promoteThread("NEW"));
@@ -403,6 +404,7 @@ test("(d) first Send from a tool promotes in place: tool stays, one thread.place
     expect(router.state.location.pathname).toBe("/ducts");
     expect(search(router)).toMatchObject({ thread: "NEW", target: "C:/Models/Office.rvt" });
     expect(mounts).toBe(mounted);
+    expect(shown(router).tab).toBe(placeId);
     store.actions.sent("NEW");
     expect(hostCalls("thread.place")).toEqual([
       [
