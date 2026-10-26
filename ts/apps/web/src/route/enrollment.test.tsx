@@ -84,7 +84,10 @@ async function mount(current = false) {
 test("a stable scope starts publishing owner changes after delayed enrollment", async () => {
   const probe = await mount();
   try {
-    expect(probe.mode()).toBe("unenrolled");
+    // Unenrolled, it still reads one real snapshot (never a null Page), then freezes until enrolled.
+    expect(probe.mode()).toBe("3d");
+    act(() => probe.owner.setPage({ mode: "side" }));
+    expect(probe.mode()).toBe("3d");
     probe.enroll();
     act(() => probe.owner.setPage({ mode: "top" }));
     await waitFor(() => expect(probe.mode()).toBe("top"));

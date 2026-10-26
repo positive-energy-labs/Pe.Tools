@@ -36,6 +36,9 @@ export function useOwned<A>(
 ): A | null {
   const activity = useRouteActivity();
   const last = useRef<A | null>(null);
+  // Null is a legal atom value, so "never read" is its own flag: a body that first mounts hidden
+  // (a retained route re-rendering behind its rail) still reads one real snapshot.
+  const seen = useRef(false);
   const subscribe = useMemo(
     () => (notify: () => void) =>
       // Enrollment changes custody without replacing the scope or re-running subscription setup.
@@ -47,7 +50,8 @@ export function useOwned<A>(
     [registry, atom, activity],
   );
   return useSyncExternalStore(subscribe, () => {
-    if (activity && !activity.current()) return last.current;
+    if (activity && !activity.current() && seen.current) return last.current;
+    seen.current = true;
     return (last.current = atom ? registry.get(atom) : null);
   });
 }
@@ -394,8 +398,8 @@ export function useRouteOwner<T extends { dispose(): void; registry: AtomRegistr
 
 /**
  * Route search preserves the target string; parseTarget validates its exact request or shorthand.
- * `thread` names the thread whose head is the route's target store; the root retains it on every
- * link, so the URL carries the thread.
+ * `thread` is an optional conversation association (ADR 0022), not a target store; tool routes
+ * never mint or retain it.
  */
 export function routeSearch(search: Record<string, unknown>): {
   target?: string;

@@ -15,6 +15,7 @@ import { RegistryContext } from "@effect/atom-react";
 import { appAtomRegistry } from "#/route/route-owner";
 import { createChatPageStore } from "./store";
 import { RouteDock } from "./route-panes";
+import { useRouteCurrent } from "#/route/activity";
 
 const store = createChatPageStore({
   registry: appAtomRegistry,
@@ -79,8 +80,10 @@ const call = vi.hoisted(() => vi.fn(async (..._: unknown[]) => ({})));
 vi.mock("#/host/pe-client", () => ({ peClient: { call } }));
 
 let mounts = 0;
+let bodyCurrent: (() => boolean) | null = null;
 function DuctsProbe() {
   useState(() => ++mounts);
+  bodyCurrent = useRouteCurrent();
   const system = useRouterState({
     select: (state) => (state.location.search as { system?: string }).system,
   });
@@ -558,4 +561,16 @@ test("enrolling a pasted URL relabels the same visible body with the Place's his
   await settle();
   expect(body()).toBe(before);
   expect(body().dataset.routeTab).toBe(shown(router).tab);
+});
+
+test("after a cross-row Work press the retained body is current again under the {id, route} tag", async () => {
+  const router = await mount(tabB.link);
+  await waitFor(() => expect(shown(router).tab).toBe(tabB.id));
+  await act(() => router.navigate({ to: "/pea", search: { thread: "U" } } as never));
+  await settle();
+  expect(bodyCurrent!()).toBe(false);
+  await press(resume({ binding: "address", route: "ducts", target: DOC_B }, "/ducts?system=base"));
+  await waitFor(() => expect(shown(router)).toMatchObject({ tab: tabB.id, system: "SB" }));
+  expect(mounts).toBe(1);
+  expect(bodyCurrent!()).toBe(true);
 });
