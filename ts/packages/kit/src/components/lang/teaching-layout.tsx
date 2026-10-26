@@ -2,7 +2,7 @@ import { useContext, useEffect, useId, useRef, type ComponentProps, type ReactNo
 import { Pane } from "./pane";
 import { PaneSplit, type PaneSide } from "./pane-resize";
 import { declaredTeaching, registerTeaching, type Teaching, type TeachingLayout } from "./teach";
-import { registerTeachingMeasure, teachingBox } from "./teach-measure";
+import { registerTeachingMeasure, teachingBox, teachingTitle } from "./teach-measure";
 import { TeachInstance, TeachLive, TeachPage, TeachPane } from "./use-teach";
 
 type LeafIds<L> = L extends { id: infer I extends string }
@@ -122,10 +122,7 @@ export function TeachingLayoutView<const L extends TeachingLayout>({
           id,
           region,
           node: node.id,
-          label:
-            pane?.querySelector('[data-slot="pane-title"]')?.textContent?.trim() ||
-            pane?.querySelector("[data-list-view][aria-label]")?.getAttribute("aria-label") ||
-            fact.label,
+          label: (pane && teachingTitle(pane)) || fact.label,
           instance,
           instanceVisible,
           page,

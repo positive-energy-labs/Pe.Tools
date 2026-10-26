@@ -5,6 +5,7 @@ import { afterEach, expect, test, vi } from "vite-plus/test";
 import { TeachingLayoutView, type TeachingPaneRender } from "@pe/kit/lang/teaching-layout";
 import { declaredTeaching, readTeaching, type TeachingLayout } from "@pe/kit/lang/teach";
 import { TeachPage, TeachReference, useTeaching } from "@pe/kit/lang/use-teach";
+import { PaneCrumb } from "@pe/kit/lang/pane-crumb";
 
 afterEach(() => {
   cleanup();
@@ -115,7 +116,10 @@ test("live pane titles and list fallback change labels without changing semantic
           <TeachingLayoutView<typeof current>
             layout={current}
             content={{
-              stable: (pane) => pane(<div data-list-view="" aria-label="System runs" />, { title }),
+              stable: (pane) =>
+                pane(<div data-list-view="" aria-label="System runs" />, {
+                  title: <PaneCrumb segments={[{ label: "Systems" }, { label: title }]} />,
+                }),
             }}
           />
           <Probe />
@@ -124,12 +128,12 @@ test("live pane titles and list fallback change labels without changing semantic
     );
   }
   const view = render(<Consumer />);
-  expect(facts(view.container)[0]).toMatchObject({ id: "stable", label: "First system" });
+  expect(facts(view.container)[0]).toMatchObject({ id: "stable", label: "Systems › First system" });
   fireEvent.click(screen.getByText("Rename"));
   await waitFor(() =>
     expect(facts(view.container)[0]).toMatchObject({
       id: "stable",
-      label: "Second system",
+      label: "Systems › Second system",
       visibility: "visible",
     }),
   );

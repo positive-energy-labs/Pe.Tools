@@ -8,6 +8,21 @@ let consumers = 0;
 let frame = 0;
 let mutation: MutationObserver | undefined;
 let resize: ResizeObserver | undefined;
+/** Read picture breadcrumbs as distinct words, as their visible chevrons separate them. */
+export function teachingTitle(pane: HTMLElement) {
+  const title = pane.querySelector('[data-slot="pane-title"]');
+  const segments = [...(title?.querySelectorAll("[data-crumb-segment]") ?? [])];
+  return (
+    (segments.length
+      ? segments
+          .map((segment) => segment.textContent?.trim())
+          .filter(Boolean)
+          .join(" › ")
+      : title?.textContent?.trim()) ||
+    pane.querySelector("[data-list-view][aria-label]")?.getAttribute("aria-label") ||
+    undefined
+  );
+}
 /** Every affected region/anchor is read once in the shared frame, even with many facts. */
 export const teachingBox = (node: HTMLElement) => {
   if (!boxes.has(node)) boxes.set(node, node.getBoundingClientRect());

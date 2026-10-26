@@ -17,7 +17,12 @@ import {
   type TeachDescriptor,
   type Teaching,
 } from "./teach";
-import { registerTeachingMeasure, subscribeMeasuredTeaching, teachingBox } from "./teach-measure";
+import {
+  registerTeachingMeasure,
+  subscribeMeasuredTeaching,
+  teachingBox,
+  teachingTitle,
+} from "./teach-measure";
 
 export const TeachRegion = createContext<string | undefined>(undefined);
 export const TeachInstance = createContext<string | undefined>(undefined);
@@ -79,10 +84,7 @@ export function useTeach(
     const measure = () => {
       const next = { ...fact, id, region: owner, page, instance };
       if (next.kind === "region" && pane) {
-        next.label =
-          pane.querySelector('[data-slot="pane-title"]')?.textContent?.trim() ||
-          pane.querySelector("[data-list-view][aria-label]")?.getAttribute("aria-label") ||
-          next.label;
+        next.label = teachingTitle(pane) || next.label;
         const { left, top, width, height } = teachingBox(pane);
         next.rect = { left, top, width, height };
       }
