@@ -8,7 +8,8 @@ public sealed record SceneRequest(
     double ContextPaddingFt = 15,
     int MaxTriangles = 1500000,
     Aabb? Bounds = null,
-    bool FocusOnly = false
+    bool FocusOnly = false,
+    bool Proximity = false
 );
 
 public sealed record SceneElement(Handle Handle, int FirstVertex, int VertexCount, Aabb Bounds, bool Focus, long? CategoryId);
@@ -16,12 +17,15 @@ public sealed record SceneSource(string DocumentKey, long? LinkInstanceId, IRead
 public sealed record SceneUnavailableElement(long ElementId, string? UniqueId, string? Category, string Reason);
 public sealed record SceneMetadata(string Format, Stamp Stamp, Aabb Bounds, int Triangles,
     IReadOnlyList<SceneElement> Elements, IReadOnlyList<long> RequestedElementIds, int OmittedElements,
-    IReadOnlyList<SceneSource> Sources, string Phase, IReadOnlyList<SceneUnavailableElement> UnavailableElements);
+    IReadOnlyList<SceneSource> Sources, string Phase, IReadOnlyList<SceneUnavailableElement> UnavailableElements,
+    SceneWork Work);
+public sealed record SceneWork(int BroadCandidates, int ExtractedElements, int ExtractedTriangles, double NativeMilliseconds);
 public sealed record SceneArtifact(SceneMetadata Scene, string Id, string Url, long Bytes);
 
 /// <summary>Bounded real triangles. Coordinates remain host internal feet.</summary>
 public static class Scene {
     public static SceneMetadata Write(Document document, SceneRequest request, Stream vertices) {
+        var clock = System.Diagnostics.Stopwatch.StartNew();
         if (request.MaxTriangles is < 1 or > 3000000)
             throw new ArgumentException("maxTriangles must be between 1 and 3000000.");
         if (double.IsNaN(request.ContextPaddingFt) || double.IsInfinity(request.ContextPaddingFt)
@@ -32,10 +36,12 @@ public static class Scene {
             throw new ArgumentException("bounds must be finite ordered host-internal-ft bounds.");
 
         var ids = new HashSet<long>(request.ElementIds ?? []);
+        if (request.Proximity && (ids.Count == 0 || request.Bounds is not null))
+            throw new ArgumentException("proximity requires elementIds and cannot specify bounds.");
         if (request.FocusOnly && (ids.Count == 0 || request.Bounds is not null))
             throw new ArgumentException("focusOnly requires elementIds and cannot specify bounds.");
         var crop = request.Bounds;
-        var world = SpaceWorld.PrepareScene(document, ids, ref crop, request.ContextPaddingFt, request.FocusOnly);
+        var world = SpaceWorld.PrepareScene(document, ids, ref crop, request.ContextPaddingFt, request.FocusOnly, request.Proximity);
         var rows = world.Partitions.SelectMany(p => p.Prims.Select((row, i) => (Partition: p, Row: row, Index: i)))
             .Where(x => x.Row.Kind is PrimKind.Solid or PrimKind.Mesh).ToList();
         var available = new HashSet<long>(world.SceneFocusMeshIds
@@ -47,6 +53,11 @@ public static class Scene {
         }).ToList();
         var focusBounds = rows.Where(x => x.Partition.Kind == SourceKind.Host && ids.Contains(x.Row.ElementId))
             .Select(x => x.Row.Box).DefaultIfEmpty(crop ?? Aabb.Empty).Aggregate(Union);
+        var proximity = request.Proximity && !request.FocusOnly
+            ? Bvh.Build(rows.Where(x => x.Partition.Kind == SourceKind.Host && ids.Contains(x.Row.ElementId))
+                .SelectMany(x => x.Partition.Tris.Skip(x.Partition.Starts[x.Index]).Take(x.Partition.Starts[x.Index + 1] - x.Partition.Starts[x.Index])).ToArray())
+            : null;
+        var focusBoxes = rows.Where(x => x.Partition.Kind == SourceKind.Host && ids.Contains(x.Row.ElementId)).Select(x => x.Row.Box).ToArray();
         var candidates = rows.Where(x => crop is null || x.Row.Box.Overlaps(crop.Value))
             .OrderByDescending(x => x.Partition.Kind == SourceKind.Host && ids.Contains(x.Row.ElementId))
             .ThenBy(x => focusBounds.DistanceSquared(x.Row.Box)).ToList();
@@ -57,12 +68,21 @@ public static class Scene {
         using var writer = new BinaryWriter(vertices, System.Text.Encoding.UTF8, true);
         foreach (var x in candidates) {
             var isFocus = x.Partition.Kind == SourceKind.Host && ids.Contains(x.Row.ElementId);
+            // A containing solid obstructs the route even when all its boundary faces are far away.
+            // Bounds containment is deliberately conservative for hollow/concave solids: retain
+            // the whole row rather than claim that an untested volume is empty.
+            var containsFocus = proximity is not null && x.Row.Kind == PrimKind.Solid && focusBoxes.Any(b =>
+                x.Row.Box.MinX <= b.MinX && x.Row.Box.MinY <= b.MinY && x.Row.Box.MinZ <= b.MinZ &&
+                x.Row.Box.MaxX >= b.MaxX && x.Row.Box.MaxY >= b.MaxY && x.Row.Box.MaxZ >= b.MaxZ);
             var kept = new List<Tri>();
             var elementBounds = Aabb.Empty;
             var overBudget = false;
             for (var i = x.Partition.Starts[x.Index]; i < x.Partition.Starts[x.Index + 1] && !overBudget; i++) {
                 var t = x.Partition.Tris[i];
-                foreach (var clipped in crop is { } box ? Clip(t, box) : new[] { t }) {
+                // Keep whole crossing triangles. Their vertices may all lie outside the radius.
+                // Requested focus is exact and never cropped by its optional context coverage.
+                if (!isFocus && !containsFocus && proximity is not null && !proximity.Within(t, request.ContextPaddingFt)) continue;
+                foreach (var clipped in proximity is null && crop is { } box ? Clip(t, box) : new[] { t }) {
                     if (triangles + kept.Count >= request.MaxTriangles) { overBudget = true; break; }
                     kept.Add(clipped);
                     elementBounds = Union(elementBounds, Box(clipped));
@@ -95,7 +115,9 @@ public static class Scene {
                     t.BasisZ.X, t.BasisZ.Y, t.BasisZ.Z, 0,
                     t.Origin.X, t.Origin.Y, t.Origin.Z, 1
                 });
-            }).ToList(), request.FocusOnly ? "focus" : "context", unavailable);
+            }).ToList(), request.FocusOnly ? "focus" : "context", unavailable,
+            new SceneWork(world.Partitions.Sum(p => p.SceneCandidates), rows.Select(x => (x.Partition.Source, x.Row.ElementId)).Distinct().Count(),
+                world.Partitions.Sum(p => p.Tris.Length), clock.Elapsed.TotalMilliseconds));
     }
 
     private static Aabb Box(Tri t) => new(

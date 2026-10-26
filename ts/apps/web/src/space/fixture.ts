@@ -173,6 +173,12 @@ const handleOf = (b: Box) => ({
 function psc1(): ArrayBuffer {
   const positions = BOXES.flatMap((b) => boxTriangles(b.box));
   const metadata: Psc1Metadata = {
+    work: {
+      broadCandidates: BOXES.length,
+      extractedElements: BOXES.length,
+      extractedTriangles: positions.length / 9,
+      nativeMilliseconds: 0,
+    },
     format: "space-scene-v1",
     stamp,
     bounds,

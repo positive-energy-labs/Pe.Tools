@@ -296,6 +296,31 @@ internal sealed class Bvh {
 
     public Tri Triangle(int i) => this._tris[i];
 
+    /// <summary>Conservative triangle-to-surface gate. The centroid ball encloses the whole
+    /// candidate triangle, so a crossing interior cannot be lost. Retained geometry can extend
+    /// at most radius + twice that triangle's centroid radius from the exact focus surface.</summary>
+    internal bool Within(Tri triangle, double radius) {
+        var centre = (triangle.A + triangle.B + triangle.C) / 3f;
+        var reach = Math.Max(Vector3.Distance(centre, triangle.A), Math.Max(Vector3.Distance(centre, triangle.B), Vector3.Distance(centre, triangle.C)));
+        // Float input rounding can only broaden this gate, never reject boundary contact.
+        var cap = radius + reach + Math.Max(1, Math.Max(Math.Abs(centre.X), Math.Max(Math.Abs(centre.Y), Math.Abs(centre.Z)))) * Math.Pow(2, -21);
+        var box = Aabb.Empty.Include(centre);
+        var stack = new Stack<int>();
+        if (this._used > 0) stack.Push(0);
+        while (stack.Count > 0) {
+            var i = stack.Pop();
+            var node = this._nodes[i];
+            if (box.DistanceSquared(new Aabb(node.MinX, node.MinY, node.MinZ, node.MaxX, node.MaxY, node.MaxZ)) > cap * cap) continue;
+            if (node.Count <= 0) { stack.Push(i + 1); stack.Push(-node.Count); continue; }
+            for (var k = node.Start; k < node.Start + node.Count; k++) {
+                var other = this._tris[this._order[k]];
+                if (Geom.PointTriangle(centre, other) <= cap) return true;
+            }
+        }
+        return false;
+    }
+
+
     /// <summary>Nodes through maxDepth inclusive, post-order with the root last.</summary>
     public List<BvhNode> Walk(int maxDepth) {
         if (maxDepth < 0) throw new ArgumentOutOfRangeException(nameof(maxDepth));
@@ -391,6 +416,8 @@ internal readonly struct Obb {
 ///     the third by the segment-segment test.
 /// </summary>
 internal static class Geom {
+    internal static double PointTriangle(Vector3 p, Tri t) => PointTriangle(p.X, p.Y, p.Z,
+        t.A.X, t.A.Y, t.A.Z, t.B.X, t.B.Y, t.B.Z, t.C.X, t.C.Y, t.C.Z, out _);
     public static double SegmentTriangle(XYZ p0, XYZ p1, Tri t, out XYZ closest) {
         double ax = t.A.X, ay = t.A.Y, az = t.A.Z;
         double bx = t.B.X, by = t.B.Y, bz = t.B.Z;

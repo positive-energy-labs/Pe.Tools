@@ -46,7 +46,7 @@ public static class SpaceWorld {
     }
 
     // A scene snapshot does not populate the query world or need its triangle BVH.
-    internal static World PrepareScene(Document document, IReadOnlyCollection<long> ids, ref Aabb? crop, double padding, bool focusOnly) {
+    internal static World PrepareScene(Document document, IReadOnlyCollection<long> ids, ref Aabb? crop, double padding, bool focusOnly, bool proximity = false) {
         if (crop is null && ids.Count == 0) return Prepare(document);
         var resident = Resident(document);
         if (!focusOnly && resident.Prepared) {
@@ -54,7 +54,7 @@ public static class SpaceWorld {
             return resident;
         }
         var world = new World(document.GetDocumentKey());
-        world.BuildScope(document, ids, ref crop, padding, resident.CurrentEpoch, focusOnly);
+        world.BuildScope(document, ids, ref crop, padding, resident.CurrentEpoch, focusOnly, proximity);
         return world;
     }
 
@@ -143,7 +143,7 @@ public sealed class World {
         }
     }
 
-    internal void BuildScope(Document host, IReadOnlyCollection<long> ids, ref Aabb? crop, double padding, long epoch, bool focusOnly) {
+    internal void BuildScope(Document host, IReadOnlyCollection<long> ids, ref Aabb? crop, double padding, long epoch, bool focusOnly, bool proximity = false) {
         this.CurrentEpoch = epoch;
         this._partitions.Add(new Partition(0, host, SourceKind.Host, null, Transform.Identity));
         if (focusOnly) {
@@ -165,7 +165,8 @@ public sealed class World {
             this.ResolveSceneCrop(ids, ref crop, padding);
         }
         if (crop is not { } region) throw new ArgumentException("A contextual scene requires mesh-bearing ids or bounds.");
-        foreach (var partition in this._partitions) partition.BuildRegion(region, epoch);
+        var local = proximity ? this._partitions[0].Prims.Select(p => p.Box.Expand(padding)).ToArray() : null;
+        foreach (var partition in this._partitions) partition.BuildRegion(region, epoch, local);
         this.BuiltUtc = DateTime.UtcNow;
     }
 

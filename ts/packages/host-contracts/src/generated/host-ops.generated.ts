@@ -5841,6 +5841,7 @@ export namespace RevitDetailSpaceScene {
       maxTriangles?: number;
       bounds?: null | Aabb;
       focusOnly?: boolean;
+      proximity?: boolean;
     }
     /**
      * Axis-aligned bounds in host internal feet.
@@ -5890,6 +5891,7 @@ export namespace RevitDetailSpaceScene {
       sources: SceneSource[];
       phase: string;
       unavailableElements: SceneUnavailableElement[];
+      work: SceneWork;
     }
     /**
      * Provenance and freshness. Every answer embeds one; it is not optional.
@@ -5984,6 +5986,12 @@ export namespace RevitDetailSpaceScene {
       uniqueId?: null | string;
       category?: null | string;
       reason: string;
+    }
+    export interface SceneWork {
+      broadCandidates: number;
+      extractedElements: number;
+      extractedTriangles: number;
+      nativeMilliseconds: number;
     }
   }
 }

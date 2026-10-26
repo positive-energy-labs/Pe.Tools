@@ -5,6 +5,42 @@ namespace Pe.Revit.Tests;
 
 public sealed class SpaceSceneScopeProofTests {
     [Test]
+    public void ProximityKeepsCrossingFacesAndFocusButRejectsTheEnclosingBoxGap(UIApplication uiApplication) {
+        var doc = RevitFamilyFixtureHarness.CreateProjectDocument(uiApplication.Application);
+        try {
+            DirectShape first, last, gap, wall, contains;
+            using (var transaction = new Transaction(doc, "Create proximity proof geometry")) {
+                transaction.Start();
+                first = Cube(doc, 0);
+                last = Cube(doc, 100);
+                gap = Cube(doc, 50);
+                wall = Block(doc, -100, 2, 0, 200, 0.1, 1);
+                contains = Block(doc, -20, -20, -20, 40, 40, 40);
+                transaction.Commit();
+            }
+            using var bytes = new MemoryStream();
+            var scene = Scene.Write(doc, new SceneRequest([first.Id.Value(), last.Id.Value()], 3, Proximity: true), bytes);
+            Assert.That(scene.Elements.Where(e => e.Focus).Select(e => e.Handle.ElementId), Is.EquivalentTo(new[] { first.Id.Value(), last.Id.Value() }));
+            Assert.That(scene.Elements.Any(e => e.Handle.ElementId == gap.Id.Value()), Is.False);
+            Assert.That(scene.Elements.Any(e => e.Handle.ElementId == wall.Id.Value()), Is.True, "A long triangle's interior crosses the radius although its vertices do not.");
+            Assert.That(scene.Elements.Any(e => e.Handle.ElementId == contains.Id.Value()), Is.True, "Containing solids cannot be called empty because their surfaces are far away.");
+            Assert.That(scene.Elements.Where(e => e.Focus).Sum(e => e.VertexCount), Is.EqualTo(72));
+            using var oldBytes = new MemoryStream();
+            var old = Scene.Write(doc, new SceneRequest([first.Id.Value(), last.Id.Value()], 3), oldBytes);
+            Assert.That(old.Elements.Any(e => e.Handle.ElementId == gap.Id.Value()), Is.True);
+        } finally { doc.Close(false); }
+    }
+
+    private static DirectShape Block(Document doc, double x, double y, double z, double length, double width, double height) {
+        var points = new[] { new XYZ(x, y, z), new XYZ(x + length, y, z), new XYZ(x + length, y + width, z), new XYZ(x, y + width, z) };
+        var loop = new CurveLoop();
+        for (var i = 0; i < points.Length; i++) loop.Append(Line.CreateBound(points[i], points[(i + 1) % points.Length]));
+        var shape = DirectShape.CreateElement(doc, new ElementId(BuiltInCategory.OST_GenericModel));
+        shape.SetShape([GeometryCreationUtilities.CreateExtrusionGeometry([loop], XYZ.BasisZ, height)]);
+        return shape;
+    }
+
+    [Test]
     public void BoundedScenePreservesMeshesWithoutPreparingQueryWorld(UIApplication uiApplication) {
         var doc = RevitFamilyFixtureHarness.CreateProjectDocument(uiApplication.Application);
         try {

@@ -46,6 +46,7 @@ internal sealed class Partition {
     public long BuiltAtEpoch { get; private set; }
     public bool Dirty { get; set; } = true;
     public int Skipped { get; private set; }
+    internal int SceneCandidates { get; private set; }
 
     public SourceRow Row => new(
         this.Source, this.DocumentKey, this.LinkInstanceId, this.Kind,
@@ -77,7 +78,7 @@ internal sealed class Partition {
         this.Dirty = false;
     }
 
-    internal void BuildRegion(Aabb hostBounds, long epoch) {
+    internal void BuildRegion(Aabb hostBounds, long epoch, IReadOnlyList<Aabb>? local = null) {
         var inverse = this.Transform.Inverse;
         var min = new XYZ(double.MaxValue, double.MaxValue, double.MaxValue);
         var max = new XYZ(double.MinValue, double.MinValue, double.MinValue);
@@ -94,7 +95,24 @@ internal sealed class Partition {
         var magnitude = new[] { min.X, min.Y, min.Z, max.X, max.Y, max.Z }.Max(Math.Abs);
         using var filter = new BoundingBoxIntersectsFilter(outline, Math.Max(1, magnitude) * Math.Pow(2, -23));
         using var collector = new FilteredElementCollector(this.Doc);
-        this.BuildElements(collector.WhereElementIsNotElementType().WherePasses(filter), epoch, hostBounds);
+        var candidates = collector.WhereElementIsNotElementType().WherePasses(filter).ToElements();
+        this.SceneCandidates = candidates.Count;
+        var elements = candidates.AsEnumerable();
+        if (local is not null) elements = elements.Where(e => {
+            try {
+                if (e.get_BoundingBox(null) is not { } b) return true;
+                var transform = this.Transform.Multiply(b.Transform);
+                var box = Aabb.Empty;
+                foreach (var x in new[] { b.Min.X, b.Max.X })
+                foreach (var y in new[] { b.Min.Y, b.Max.Y })
+                foreach (var z in new[] { b.Min.Z, b.Max.Z }) {
+                    var p = transform.OfPoint(new XYZ(x, y, z));
+                    box = box.Include(new Vector3((float)p.X, (float)p.Y, (float)p.Z));
+                }
+                return local.Any(scope => scope.Overlaps(box));
+            } catch { return true; }
+        });
+        this.BuildElements(elements, epoch, hostBounds);
     }
 
     /// <summary>
