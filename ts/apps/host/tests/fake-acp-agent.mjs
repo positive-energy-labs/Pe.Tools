@@ -216,12 +216,14 @@ new AgentSideConnection(
           await new Promise((done) => setTimeout(done, 100));
         }
         if (!mounted) throw Error("explicit open did not acquire its own rendered lease");
+        await say(`route-cutover-acquired ${JSON.stringify(mounted)}`);
         const applied = await request("/pe/route-view/families/set", {
           thread: scope.value.thread,
           instance: mounted.instance,
           revision: mounted.revision,
           patch: { query: "" },
         });
+        await say(`route-cutover-ack ${JSON.stringify(applied)}`);
         if (applied.status !== 200 || applied.value.outcome !== "rendered")
           throw Error(`render ack refused: ${JSON.stringify(applied.value)}`);
         await say(`route-cutover-rendered ${opened.value.commandId}`);

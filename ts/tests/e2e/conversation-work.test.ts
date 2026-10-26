@@ -155,7 +155,7 @@ test("real conversation Work cutover retains authored cells, draft, Places and o
           data:
             ["/pe/turn-element-names", "/pe/threads"].includes(
               new URL(params.request.url).pathname,
-            ) || /\/prompt$|\/place$/.test(new URL(params.request.url).pathname)
+            ) || /\/prompt$|\/place$|\/pe\/route-view\//.test(new URL(params.request.url).pathname)
               ? params.request.postData
               : undefined,
           build: builds[0],
