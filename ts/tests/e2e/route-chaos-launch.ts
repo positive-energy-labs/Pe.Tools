@@ -15,10 +15,15 @@ const { values } = parseArgs({
     url: { type: "string" },
     port: { type: "string" },
     target: { type: "string" },
+    suite: { type: "string", default: "chaos" },
     seed: { type: "string", default: "20261023" },
     require: { type: "string", default: "refresh,reconnect,worker" },
   },
 });
+if (values.suite !== "chaos" && values.suite !== "selection")
+  throw new Error("--suite must be chaos or selection");
+if (values.suite === "selection" && (values.attached || values.url || values.port || values.target))
+  throw new Error("The required selection suite owns its isolated runtime and browser");
 const testTs = resolve(import.meta.dirname, "../..");
 const source = resolve(values.source ?? join(testTs, ".."));
 const dir = join(
@@ -31,6 +36,7 @@ const dir = join(
 );
 await mkdir(dir, { recursive: true });
 const receipt = {
+  suite: values.suite,
   mode: values.attached ? "attached" : "demo",
   source,
   seed: values.seed,
@@ -126,17 +132,19 @@ try {
         "Attached mode requires --url, --port, --target and --source for served-build provenance; it borrows them without lifecycle changes",
       );
   } else {
-    receipt.tray = { before: await trayHash(), after: null, changed: false, sampleMs: 1000 };
-    trayMonitor = setInterval(() => {
-      void trayHash()
-        .then((hash) => {
-          if (hash !== receipt.tray!.before) receipt.tray!.changed = true;
-        })
-        .catch((error) => {
-          receipt.tray!.changed = true;
-          receipt.cleanup.push(`Tray observation: ${String(error)}`);
-        });
-    }, 1000);
+    if (values.suite === "chaos") {
+      receipt.tray = { before: await trayHash(), after: null, changed: false, sampleMs: 1000 };
+      trayMonitor = setInterval(() => {
+        void trayHash()
+          .then((hash) => {
+            if (hash !== receipt.tray!.before) receipt.tray!.changed = true;
+          })
+          .catch((error) => {
+            receipt.tray!.changed = true;
+            receipt.cleanup.push(`Tray observation: ${String(error)}`);
+          });
+      }, 1000);
+    }
     const home = join(dir, "home");
     env.PE_TOOLS_PRODUCT_HOME = home;
     env.LOCALAPPDATA = join(dir, "localappdata");
@@ -228,7 +236,7 @@ try {
     )
       throw new Error(`Source document readiness failed: HTTP ${document.status}`);
     browser = await openBrowser({
-      mode: "visible",
+      mode: values.suite === "selection" ? "headless" : "visible",
       home: env.PE_BROWSER_HOME,
       args: [
         "--disable-background-timer-throttling",
@@ -258,8 +266,10 @@ try {
     CHAOS_REQUIRE: values.require,
     CHAOS_PRODUCT_ROOT: source,
     CHAOS_RESULT_PATH: journeyResultPath,
+    E2E_RESULT_PATH: journeyResultPath,
   };
-  testProcess = spawn("vp", ["test", "run", "--config", "tests/e2e/route-chaos.config.ts"], {
+  const config = values.suite === "selection" ? "product-selection" : "route-chaos";
+  testProcess = spawn("vp", ["test", "run", "--config", `tests/e2e/${config}.config.ts`], {
     cwd: testTs,
     env: testEnv,
     stdio: "inherit",

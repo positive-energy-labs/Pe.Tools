@@ -17,6 +17,7 @@
   "type": "module",
   "scripts": {
     "test:browser": "vp run --filter @pe/browser test",
+    "test:browser:product": "tsc --project tests/e2e/tsconfig.selection.json && node tests/e2e/route-chaos-launch.ts --suite selection",
     "test:route-chaos": "vp test run --config tests/e2e/route-chaos.config.ts",
     "journey:routes": "node tests/e2e/route-chaos-launch.ts",
     "journey:conversation-work": "node --import jiti/register tests/e2e/conversation-work.launch.ts",
@@ -28,8 +29,10 @@
   },
   "devDependencies": {
     "@pe/browser": "workspace:*",
+    "@types/node": "catalog:",
     "jiti": "^2.7.0",
     "knip": "catalog:",
+    "typescript": "catalog:",
     "vite-plus": "catalog:"
   },
   "overrides": {
