@@ -1,4 +1,5 @@
 import {
+  Activity,
   isValidElement,
   useCallback,
   useEffect,
@@ -467,7 +468,9 @@ export function PaneSplit({ id, axis, start, end, resize, grow }: PaneSplitProps
           onFocusCapture={() => state.focus(side)}
           onPointerDownCapture={() => state.focus(side)}
         >
-          {child}
+          {/* Folded panes retain local state, but their effects and background updates must not
+              block the visible pane. Activity admits current props before revealing them. */}
+          <Activity mode={rail ? "hidden" : "visible"}>{child}</Activity>
         </div>
       </>
     );

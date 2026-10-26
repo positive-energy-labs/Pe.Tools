@@ -706,6 +706,8 @@ test("a staged subject and plural claim select the whole row without framing; a 
   await mount();
   // The staged labelParameter rides the snapshot request.
   await waitFor(() => expect(requests.at(-1)?.request).toEqual({ labelParameter: "Unit Tag" }));
+  // A person reveals the folded pane before acting on its evidence.
+  fireEvent.click(await screen.findByRole("button", { name: /^Expand Rulings/ }));
   const inbox = await screen.findByText("Check");
   expect(inbox).toBeTruthy();
   const prefix = await waitFor(() => {

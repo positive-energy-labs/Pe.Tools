@@ -215,7 +215,8 @@ test("a shared split change reaches the rendered layout and reference rectangles
           tree: { available: true },
           tight: { available: false },
         },
-        choices: { scope: { value: "start", onChange: () => {} } },
+        // Render the tree side: folded Activity content is intentionally absent from SSR.
+        choices: { scope: { value: "end", onChange: () => {} } },
         folds: {
           sidebar: { collapsed: null, onChange: () => {} },
           drawing: { collapsed: null, onChange: () => {} },

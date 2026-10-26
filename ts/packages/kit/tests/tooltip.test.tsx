@@ -2,11 +2,31 @@
 import { act, cleanup, fireEvent, render, screen } from "@testing-library/react";
 import { afterEach, expect, test, vi } from "vite-plus/test";
 import { SvgTip, TooltipHint, TooltipProvider } from "../src/components/lang/tooltip";
+import { SubjectBox } from "../src/components/lang/popover-internal";
 
 afterEach(() => {
   cleanup();
   vi.restoreAllMocks();
   vi.useRealTimers();
+});
+
+test("closed hints do not measure the picture; opening reads the current subject box", async () => {
+  vi.useFakeTimers();
+  const box = vi.fn(() => new DOMRect(10, 20, 100, 100));
+  render(
+    <SubjectBox box={box}>
+      <TooltipProvider delay={0}>
+        <TooltipHint content="Current evidence">
+          <button>Hint</button>
+        </TooltipHint>
+      </TooltipProvider>
+    </SubjectBox>,
+  );
+  expect(box).not.toHaveBeenCalled();
+  fireEvent.focus(screen.getByRole("button", { name: "Hint" }));
+  await act(() => vi.advanceTimersByTime(10));
+  expect(box).toHaveBeenCalled();
+  expect(screen.getByRole("tooltip").textContent).toBe("Current evidence");
 });
 
 function evidence(svg = false) {

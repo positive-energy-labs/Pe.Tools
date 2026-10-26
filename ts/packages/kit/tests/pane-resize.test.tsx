@@ -1,5 +1,5 @@
 // @vitest-environment jsdom
-import { Profiler, useState } from "react";
+import { Profiler, useEffect, useState } from "react";
 import { act, cleanup, fireEvent, render, screen } from "@testing-library/react";
 import { afterEach, expect, test, vi } from "vite-plus/test";
 
@@ -25,6 +25,54 @@ function measure(width: number, height = 600) {
     },
   );
 }
+
+test("a folded pane releases effects, retains edits, and reveals only current action inputs", () => {
+  measure(1200);
+  const acquire = vi.fn(),
+    release = vi.fn(),
+    actOn = vi.fn();
+  function Editor({ scope }: { scope: string }) {
+    const [draft, setDraft] = useState("");
+    useEffect(() => {
+      acquire(scope);
+      return () => release(scope);
+    }, [scope]);
+    return (
+      <>
+        <input aria-label="draft" value={draft} onChange={(e) => setDraft(e.target.value)} />
+        <button onClick={() => actOn(scope, draft)}>Act on {scope}</button>
+      </>
+    );
+  }
+  const dock = (folded: boolean, scope: string) => (
+    <PaneSplit
+      axis="horizontal"
+      start="picture"
+      end={<Editor scope={scope} />}
+      resize={{
+        target: "end",
+        defaultSize: 400,
+        minSize: 200,
+        collapse: {
+          collapsed: folded ? "end" : null,
+          onCollapsedChange: () => {},
+          end: { title: "Editor" },
+        },
+      }}
+    />
+  );
+  const view = render(dock(false, "A"));
+  fireEvent.change(screen.getByRole("textbox", { name: "draft" }), { target: { value: "kept" } });
+  view.rerender(dock(true, "B"));
+  expect(release).toHaveBeenCalledWith("A");
+  expect(acquire).not.toHaveBeenCalledWith("B");
+  expect(screen.queryByRole("textbox")).toBeNull();
+  view.rerender(dock(false, "C"));
+  expect((screen.getByRole("textbox") as HTMLInputElement).value).toBe("kept");
+  fireEvent.click(screen.getByRole("button", { name: "Act on C" }));
+  expect(actOn).toHaveBeenCalledWith("C", "kept");
+  expect(acquire).toHaveBeenLastCalledWith("C");
+});
 
 test.each(["horizontal", "vertical"] as const)(
   "fitting %s reserves the subject minimum and centres the seam grip through pre-observer layout changes",
@@ -147,7 +195,7 @@ test("20 drag steps preview geometry without React commits, then commit once wit
 
 test.each([true, false])(
   "a narrow split yields with rail=%s, then restores its mounted contents",
-  (rail) => {
+  async (rail) => {
     measure(600);
     let resized: (entries: { contentRect: DOMRect }[]) => void;
     vi.stubGlobal(
@@ -179,7 +227,9 @@ test.each([true, false])(
       );
     }
     const { container } = render(<Dock />);
-    const input = screen.getByRole("textbox", { name: "draft", hidden: true });
+    await act(async () => {}); // Activity prepares initially folded content at background priority.
+    const input = container.querySelector<HTMLInputElement>('input[aria-label="draft"]')!;
+    expect(input).not.toBeNull();
     const split = container.firstElementChild as HTMLElement;
     if (rail) {
       expect(input.closest(".hidden")).toBeTruthy();

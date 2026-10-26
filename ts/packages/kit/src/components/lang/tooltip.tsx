@@ -161,7 +161,19 @@ export function TooltipProvider({ delay = 350, ...props }: Primitive.Provider.Pr
   return <Primitive.Provider delay={delay} {...props} />;
 }
 
-export function TooltipContent({
+type TooltipContentProps = Omit<Primitive.Popup.Props, "className"> &
+  FloatingPosition & { className?: string; anchor?: Element | null };
+
+export function TooltipContent(props: TooltipContentProps) {
+  // The portal owns visibility: closed hints must not subscribe to the picture or measure it.
+  return (
+    <Primitive.Portal>
+      <TooltipBody {...props} />
+    </Primitive.Portal>
+  );
+}
+
+function TooltipBody({
   side = "top",
   align = "center",
   sideOffset = 6,
@@ -170,40 +182,37 @@ export function TooltipContent({
   anchor,
   ref,
   ...props
-}: Omit<Primitive.Popup.Props, "className"> &
-  FloatingPosition & { className?: string; anchor?: Element | null }) {
+}: TooltipContentProps) {
   const description = useContext(Description);
   const target = anchor ?? description?.anchor ?? null;
   const parent = target?.closest('[data-slot="tooltip-content"]');
   const away = useSubjectPosition(parent ? null : target);
   const surface = useHoverSurface(target, ref, description?.contact, description?.close);
   return (
-    <Primitive.Portal>
-      <Primitive.Positioner
-        anchor={parent ?? anchor}
-        side={away?.side ?? side}
-        collisionAvoidance={{ side: "flip", align: "shift", fallbackAxisSide: "start" }}
-        align={align}
-        sideOffset={
-          typeof sideOffset === "function"
-            ? (data) => sideOffset(data) + (away?.offset ?? 0)
-            : sideOffset + (away?.offset ?? 0)
-        }
-        alignOffset={alignOffset}
-        collisionPadding={8}
-        className="isolate z-popup"
-      >
-        <Primitive.Popup
-          id={description?.id}
-          role="tooltip"
-          data-surface="artifact"
-          data-slot="tooltip-content"
-          className={cn(floatingSurface, className)}
-          {...props}
-          ref={surface}
-        />
-      </Primitive.Positioner>
-    </Primitive.Portal>
+    <Primitive.Positioner
+      anchor={parent ?? anchor}
+      side={away?.side ?? side}
+      collisionAvoidance={{ side: "flip", align: "shift", fallbackAxisSide: "start" }}
+      align={align}
+      sideOffset={
+        typeof sideOffset === "function"
+          ? (data) => sideOffset(data) + (away?.offset ?? 0)
+          : sideOffset + (away?.offset ?? 0)
+      }
+      alignOffset={alignOffset}
+      collisionPadding={8}
+      className="isolate z-popup"
+    >
+      <Primitive.Popup
+        id={description?.id}
+        role="tooltip"
+        data-surface="artifact"
+        data-slot="tooltip-content"
+        className={cn(floatingSurface, className)}
+        {...props}
+        ref={surface}
+      />
+    </Primitive.Positioner>
   );
 }
 
