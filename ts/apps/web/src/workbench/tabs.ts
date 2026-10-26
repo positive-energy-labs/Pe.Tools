@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import { z } from "zod";
 import { useRouter, useRouterState } from "@tanstack/react-router";
 import {
@@ -218,6 +218,22 @@ export function useRouteTabs() {
       fail(error);
     }
   }, [active?.id, active?.link, active?.route]);
+
+  // The command id names the last explicit open this Place rendered for its conversation; it
+  // survives same-Place Page moves but not a change of the thread association.
+  const lastThread = useRef(thread);
+  useEffect(() => {
+    if (lastThread.current === thread) return;
+    lastThread.current = thread;
+    if (!historyOf(router.state.location.state).__peViewOpenCommandId) return;
+    void router.navigate({
+      to: router.state.location.pathname,
+      search: router.state.location.search,
+      state: { ...router.state.location.state, __peViewOpenCommandId: undefined },
+      replace: true,
+      ignoreBlocker: true,
+    } as never);
+  }, [thread]);
 
   /** Every move keeps the selected `?thread`; an ordinary move clears an explicit open's id. */
   const navigate = async (

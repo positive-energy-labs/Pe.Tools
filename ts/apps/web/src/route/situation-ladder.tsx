@@ -136,7 +136,7 @@ export function useDocumentLadder(
     lost: lost != null,
     refusal: null,
     hosted,
-    /** No pin: the read-only fallback to the machine's sole user document; said quietly in the sentence. */
+    /** No pin: the fallback to the machine's sole user document; said quietly in the sentence. */
     autoBound: handle.targetProvenance?.source === "sole-document" && bound != null,
     levels: hosted
       ? []

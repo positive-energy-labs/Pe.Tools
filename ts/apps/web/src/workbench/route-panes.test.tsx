@@ -487,3 +487,32 @@ test("the closed-Work band follows the Place a press opened, with no chat select
   await waitFor(() => expect(shown(router).tab).toBe(tabB.id));
   expect(document.querySelector("[data-closed-work]")).toBeNull();
 });
+
+test("an explicit open's command id clears when the thread association changes", async () => {
+  sessionStorage.setItem("pe.places", JSON.stringify([]));
+  const router = await mount("/pea?thread=T");
+  await settle();
+  const commandId = "33333333-3333-4333-8333-333333333333";
+  act(() =>
+    hostEvents.listener!({
+      type: "route-view-open",
+      route: "ducts",
+      thread: "T",
+      link: "/ducts",
+      commandId,
+    }),
+  );
+  const command = () =>
+    (router.state.location.state as { __peViewOpenCommandId?: string }).__peViewOpenCommandId;
+  await waitFor(() => expect(command()).toBe(commandId));
+  await act(() =>
+    router.navigate({
+      to: "/ducts",
+      search: { ...search(router), thread: "U" },
+      state: router.state.location.state,
+      replace: true,
+    } as never),
+  );
+  await waitFor(() => expect(command()).toBeUndefined());
+  expect(router.state.location.pathname).toBe("/ducts");
+});

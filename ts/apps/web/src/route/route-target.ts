@@ -1,4 +1,4 @@
-/** Where a route acts: its `?target` pin, else read-only the machine's sole user document. */
+/** Where a route acts: its `?target` pin, else the machine's sole user document as a fallback. */
 import type { BridgeSessionListEntry } from "@pe/host-contracts/operation-types";
 import { useMemo, useRef } from "react";
 import {
@@ -77,9 +77,10 @@ export type TargetProvenance =
   | { source: "seed" | "none" };
 
 /**
- * The route's Target: a `?target` pin resolved against the live inventory; with no pin, a read-only
- * fallback to the machine's sole user document (it writes no URL and moves no thread); else the
- * route refuses until a document is chosen. The selected conversation never defaults it.
+ * The route's Target: a `?target` pin resolved against the live inventory; with no pin, a fallback to
+ * the machine's sole user document; else the route refuses until a document is chosen. Resolving
+ * the fallback never writes target, head, or authority; explicit human actions remain subject to
+ * existing freshness/admission. The selected conversation never defaults it.
  */
 export function useRouteTarget(
   manifest: Pick<RouteManifest<any, any, any, any>, "needs">,
