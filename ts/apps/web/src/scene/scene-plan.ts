@@ -9,6 +9,8 @@ export type ScenePlan = {
   roles: readonly SceneStructure[];
   angles: (number | null)[];
   semantics: string;
+  shellAngle: number;
+  routeAngle: number;
 };
 export function scenePlan(meshes: SceneMeshes, of: PaintOf | undefined, look: Look): ScenePlan {
   const roles = meshes.instances.map((i) => {
@@ -24,7 +26,14 @@ export function scenePlan(meshes: SceneMeshes, of: PaintOf | undefined, look: Lo
           ? look.routes.edgeAngle
           : null,
   );
-  return { meshes, roles, angles, semantics: JSON.stringify([roles, angles]) };
+  return {
+    meshes,
+    roles,
+    angles,
+    semantics: JSON.stringify([roles, angles, look.shell.edgeAngle, look.routes.edgeAngle]),
+    shellAngle: look.shell.edgeAngle,
+    routeAngle: look.routes.edgeAngle,
+  };
 }
 export function samePlan(a: ScenePlan | undefined, b: ScenePlan): boolean {
   return a?.meshes === b.meshes && a.semantics === b.semantics;

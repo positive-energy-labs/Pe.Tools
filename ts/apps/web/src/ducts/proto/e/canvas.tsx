@@ -16,7 +16,6 @@ import { DUCTS_LAYERS, emptyListSearch, toggleLayer } from "@pe/agent-contracts"
 import { snapshotById } from "@pe/ducts-domain/readiness";
 import { noRunBranches } from "@pe/ducts-domain/no-runs";
 import { scopeOf, systemScope } from "@pe/ducts-domain/system-scope";
-import { clipMeshes } from "#/scene/clip";
 import { worstRun } from "@pe/ducts-domain/losses";
 import type { Neighbour } from "@pe/ducts-domain/neighbours";
 import { TooltipHint } from "@pe/kit/lang/tooltip";
@@ -194,7 +193,6 @@ function Canvas({
     () => stubLabels(snapshot, neighbours, opened),
     [snapshot, neighbours, opened],
   );
-  const captured = useDuctScene(request, native, captureSource?.version ?? "");
   const meshCuts = useMemo(() => {
     const cuts = new Map<number, (typeof neighbours)[number]["cuts"]>();
     for (const id of stubs) {
@@ -207,18 +205,11 @@ function Canvas({
     }
     return cuts;
   }, [neighbours, stubs]);
-  const capturedMeshes = useMemo(
-    () => (captured.meshes ? clipMeshes(captured.meshes, meshCuts) : null),
-    [captured.meshes, meshCuts],
-  );
-  const focusMeshes = useMemo(
-    () => (captured.focusMeshes ? clipMeshes(captured.focusMeshes, meshCuts) : null),
-    [captured.focusMeshes, meshCuts],
-  );
+  const captured = useDuctScene(request, native, captureSource?.version ?? "", meshCuts);
   const capture =
     import.meta.env.DEV && frozenDemo() === "colours"
       ? { ...captured, meshes: COLOURS_FIXTURE.meshes, focusMeshes: COLOURS_FIXTURE.meshes }
-      : { ...captured, meshes: capturedMeshes, focusMeshes };
+      : captured;
   const pictureKey = doc && request ? `${doc.session}/${doc.openId}` : null;
   const { read, holding } = usePictureRead(
     capture,

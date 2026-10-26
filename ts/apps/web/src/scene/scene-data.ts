@@ -153,3 +153,11 @@ export function sceneData(source: SceneSource) {
   if (!data) sources.set(key, (data = new SceneData(source, key)));
   return data;
 }
+
+/** A domain can keep a clipped/read-only picture while it withdraws action authority or hides
+ * its viewport. That CPU lifetime is a data lease, independent of renderer admission/disposal. */
+export function retainSceneMeshes(meshes: readonly (SceneMeshes | null | undefined)[]) {
+  return sceneMemory.acquire("decoded", {
+    buffers: meshes.flatMap((mesh) => (mesh ? [mesh.positions.buffer] : [])),
+  });
+}

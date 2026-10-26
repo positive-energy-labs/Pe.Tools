@@ -9,11 +9,20 @@ import type { PreparedGeometry } from "./prepare-geometry";
 const work = vi.hoisted(() => ({ prepare: vi.fn() }));
 vi.mock("./preparation", () => ({ prepareScene: work.prepare }));
 const mesh = () =>
-  new SceneMeshes(
-    new Float32Array(9),
-    { minX: 0, minY: 0, minZ: 0, maxX: 1, maxY: 1, maxZ: 1 },
-    [],
-  );
+  new SceneMeshes(new Float32Array(9), { minX: 0, minY: 0, minZ: 0, maxX: 1, maxY: 1, maxZ: 1 }, [
+    {
+      key: "a",
+      revitId: 1,
+      uniqueId: "a",
+      documentKey: "doc",
+      linkInstanceId: null,
+      categoryId: null,
+      category: "Ducts",
+      focus: true,
+      firstVertex: 0,
+      vertexCount: 3,
+    },
+  ]);
 const request = (
   meshes = mesh(),
   context = meshes,

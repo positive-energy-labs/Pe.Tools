@@ -1,3 +1,4 @@
+import { viewportCodec } from "@pe/agent-contracts";
 import { useWork } from "@pe/kit/lang/pane";
 import { RevitTarget } from "@pe/kit/lang/revit-target";
 /**
@@ -122,6 +123,7 @@ export function Scene3D(props: Scene3DProps): ReactNode {
   const latest = useRef({ ...props, observation, onHover });
   latest.current = { ...props, observation, onHover };
   const core = useRef<SceneRenderer | null>(null);
+  const viewBeforeRequest = useRef<OrbitViewport | null>(null);
   const [controller] = useState(
     () =>
       new SceneController((focusChanged) => {
@@ -129,7 +131,12 @@ export function Scene3D(props: Scene3DProps): ReactNode {
         if (!r) return;
         if (focusChanged && !gesturing.current) {
           const pose = latest.current.orbit.read();
-          if (pose) r.setViewport(pose);
+          if (
+            pose &&
+            viewportCodec.encode(pose) !==
+              (viewBeforeRequest.current ? viewportCodec.encode(viewBeforeRequest.current) : null)
+          )
+            r.setViewport(pose);
           else latest.current.orbit.restore(r.viewport());
         }
         r.setClip(latest.current.clipVolume, latest.current.meshes?.bounds);
@@ -197,10 +204,10 @@ export function Scene3D(props: Scene3DProps): ReactNode {
         : null,
     [meshes, currentFocus, props.paintOf, shownLook],
   );
-  useEffect(
-    () => controller.request(request),
-    [controller, request, hasBounds, props.orbit, props.wheelHost],
-  );
+  useEffect(() => {
+    viewBeforeRequest.current = core.current?.viewport() ?? null;
+    controller.request(request);
+  }, [controller, request, hasBounds, props.orbit, props.wheelHost]);
 
   useEffect(() => {
     (focusCurrent ? core.current : null)?.setOrbitPivot(props.orbitPivot ?? null);

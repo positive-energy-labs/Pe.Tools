@@ -1283,6 +1283,19 @@ export function createRenderer(mount: HTMLElement, initialMeshes: SceneMeshes, w
           setVeilField(veil, field);
           edgeStorage = ready.edges.flatMap((edge) => (edge ? [edge.buffer] : []));
           edgesOf = preparedEdges(meshes, ready.edges, ready.angles, batchIdByKey);
+          // Edge angles are structural: publish them with their prepared edge storage. Theme,
+          // colour and opacity still apply immediately to the accepted geometry.
+          if (
+            look.shell.edgeAngle !== plan.shellAngle ||
+            look.routes.edgeAngle !== plan.routeAngle
+          ) {
+            look = {
+              ...look,
+              shell: { ...look.shell, edgeAngle: plan.shellAngle },
+              routes: { ...look.routes, edgeAngle: plan.routeAngle },
+            };
+          }
+
           pick = createFacePicker(batch, pickPriority);
           marked.clear();
           if (!sameEdges) {
@@ -1476,7 +1489,15 @@ export function createRenderer(mount: HTMLElement, initialMeshes: SceneMeshes, w
       const changedBounds =
         next.camera.zoomOutFactor !== look.camera.zoomOutFactor ||
         next.camera.panMargin !== look.camera.panMargin;
-      look = next;
+      look =
+        next.shell.edgeAngle === look.shell.edgeAngle &&
+        next.routes.edgeAngle === look.routes.edgeAngle
+          ? next
+          : {
+              ...next,
+              shell: { ...next.shell, edgeAngle: look.shell.edgeAngle },
+              routes: { ...next.routes, edgeAngle: look.routes.edgeAngle },
+            };
       applyLook();
       rebuildCaps();
       if (changedBounds) returnInside();
