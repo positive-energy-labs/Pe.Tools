@@ -178,8 +178,9 @@ function preparedEdges(
   edges: PreparedGeometry["edges"],
   angles: PreparedGeometry["angles"],
   ids: ReadonlyMap<string, number>,
+  allocated: (buffers: ArrayBufferLike[]) => void,
 ) {
-  const fallback = surfaceEdges(meshes);
+  const fallback = surfaceEdges(meshes, allocated);
   return (instance: SceneInstance, angle: number) => {
     const id = ids.get(instance.key)!;
     return angles[id] === angle && edges[id] ? edges[id]! : fallback(instance, angle);
@@ -894,7 +895,12 @@ export function createRenderer(mount: HTMLElement, initialMeshes: SceneMeshes, w
   scene.add(outlined);
   const envelopes = new THREE.Group();
   scene.add(envelopes);
-  let edgesOf = surfaceEdges(meshes);
+  let fallbackEdgeStorage: ArrayBufferLike[] = [];
+  const ownFallbackEdges = (buffers: ArrayBufferLike[]) => {
+    fallbackEdgeStorage = buffers;
+    geometryAccountPending = true;
+  };
+  let edgesOf = surfaceEdges(meshes, ownFallbackEdges);
   const routes = new THREE.Group();
   scene.add(routes);
   let routeStamp = "";
@@ -1133,7 +1139,7 @@ export function createRenderer(mount: HTMLElement, initialMeshes: SceneMeshes, w
     const footprint = gpuMemory.footprint(scene, [veil.veilField.value]);
     geometryMemory.update({
       ...footprint,
-      buffers: [...(footprint.buffers ?? []), ...edgeStorage],
+      buffers: [...(footprint.buffers ?? []), ...edgeStorage, ...fallbackEdgeStorage],
     });
   };
   const api = {
@@ -1162,6 +1168,7 @@ export function createRenderer(mount: HTMLElement, initialMeshes: SceneMeshes, w
       paintBy = undefined;
       geometryAccountPending = true;
       edgeStorage = [];
+      fallbackEdgeStorage = [];
       edgesOf = () => new Float32Array();
       pick = createFacePicker(batch, pickPriority);
       field = { data: new Uint8Array([255]), dims: [1, 1, 1], min: [0, 0, 0], cellFt: 1 };
@@ -1282,7 +1289,14 @@ export function createRenderer(mount: HTMLElement, initialMeshes: SceneMeshes, w
           field = ready.field;
           setVeilField(veil, field);
           edgeStorage = ready.edges.flatMap((edge) => (edge ? [edge.buffer] : []));
-          edgesOf = preparedEdges(meshes, ready.edges, ready.angles, batchIdByKey);
+          fallbackEdgeStorage = [];
+          edgesOf = preparedEdges(
+            meshes,
+            ready.edges,
+            ready.angles,
+            batchIdByKey,
+            ownFallbackEdges,
+          );
           // Edge angles are structural: publish them with their prepared edge storage. Theme,
           // colour and opacity still apply immediately to the accepted geometry.
           if (

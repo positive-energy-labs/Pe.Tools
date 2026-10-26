@@ -58,7 +58,10 @@ export function surfaceAlpha(paint: Paint, look: Look) {
 }
 
 /** Cache only admitted envelopes/routes, never crease-expand the surrounding building. */
-export function surfaceEdges(meshes: SceneMeshes) {
+export function surfaceEdges(
+  meshes: SceneMeshes,
+  allocated: (buffers: ArrayBufferLike[]) => void = () => {},
+) {
   const cache = new Map<SceneInstance, { angle: number; positions: Float32Array }>();
   return (instance: SceneInstance, angle: number) => {
     const hit = cache.get(instance);
@@ -78,6 +81,7 @@ export function surfaceEdges(meshes: SceneMeshes) {
     edges.dispose();
     geometry.dispose();
     cache.set(instance, { angle, positions });
+    allocated([...cache.values()].map((entry) => entry.positions.buffer));
     return positions;
   };
 }
