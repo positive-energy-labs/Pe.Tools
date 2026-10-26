@@ -62,6 +62,7 @@ public record LoadedFamiliesMatrixRequest(
 public enum LoadedFamiliesReadPhase { Matrix, Prepare, Extract }
 
 /// <summary>A copy is eligible only when the file is exactly this document's saved revision.</summary>
+/// <summary>Worker input inventory. Version fingerprints selected saved family and type revisions, excluding project-only state.</summary>
 public record LoadedFamiliesReadSource(
     List<LoadedFamilyCatalogEntry> Families,
     string RevitVersion,

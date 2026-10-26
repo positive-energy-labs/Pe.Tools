@@ -36,7 +36,12 @@ public sealed class LoadedFamiliesReadTests {
             using (var group = new TransactionGroup(project, "read evaluation")) {
                 group.Start();
                 using (var transaction = new Transaction(project, "temporary project value")) {
-                    transaction.Start(); project.ProjectInformation.Name = "temporary"; transaction.Commit();
+                    transaction.Start();
+                    project.ProjectInformation.Name = "temporary";
+                    var temporarySymbol = (FamilySymbol)project.GetElement(family.GetFamilySymbolIds().First());
+                    if (!temporarySymbol.IsActive) temporarySymbol.Activate();
+                    project.Regenerate();
+                    transaction.Commit();
                 }
                 group.RollBack();
             }
@@ -49,6 +54,18 @@ public sealed class LoadedFamiliesReadTests {
             }
             Assert.That(project.PrepareFamilyRead(filter).Source!.CopyPath, Is.Null);
             Assert.That(project.PrepareFamilyRead(filter).Source!.CopyRefusal, Does.Contain("unsaved"));
+            project.Save();
+            Assert.That(project.PrepareFamilyRead(filter).Source!.Version, Is.EqualTo(prepared.Source.Version),
+                "Unrelated project metadata is not worker input.");
+            using (var transaction = new Transaction(project, "change family type")) {
+                transaction.Start();
+                var symbol = (FamilySymbol)project.GetElement(family.GetFamilySymbolIds().First());
+                symbol.Name += " - changed";
+                transaction.Commit();
+            }
+            project.Save();
+            Assert.That(project.PrepareFamilyRead(filter).Source!.Version, Is.Not.EqualTo(prepared.Source.Version),
+                "A saved type edit must change the worker input identity.");
         } finally { RevitFamilyFixtureHarness.CloseDocument(project); }
     }
 

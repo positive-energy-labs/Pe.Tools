@@ -3,12 +3,14 @@ import { NodeServices } from "@effect/platform-node";
 import { randomUUID } from "node:crypto";
 import { copyFile, mkdir, mkdtemp, readFile, rename, rm, writeFile } from "node:fs/promises";
 import { dirname, join } from "node:path";
-import { freemem, tmpdir } from "node:os";
+import { freemem } from "node:os";
+import { productScratchPath } from "@pe/host-contracts/service-identity";
 import {
   canonicalRouteInput,
   type AppliedFilter,
   type DocumentRef,
   type WorkKey,
+  workKey,
 } from "@pe/agent-contracts";
 import type { RevitMatrixLoadedFamilies } from "@pe/host-contracts/generated";
 import {
@@ -86,7 +88,7 @@ export async function readFamiliesProgressively(options: {
     runs.has(readId) ||
     [...runs.values()].some(
       (r) =>
-        canonicalRouteInput(r.work) === canonicalRouteInput(work) ||
+        workKey(r.work) === workKey(work) ||
         canonicalRouteInput(r.document) === canonicalRouteInput(document),
     )
   )
@@ -216,6 +218,7 @@ export async function readFamiliesProgressively(options: {
         (samples.length >= Math.min(3, pending.length) ||
           pending.every((f) => costs.families[costKey(f)])),
       warning: (error) => {
+        if (run.cancelled) return;
         message = `Worker unavailable; continuing here. ${detail(error)}`;
       },
       completed: async (item, data) => {
@@ -251,7 +254,9 @@ export async function readFamiliesProgressively(options: {
         try {
           if (source.copyPath) {
             freezing ??= (async () => {
-              folder = await mkdtemp(join(tmpdir(), "Pe.Tools.families-"));
+              const scratch = productScratchPath();
+              await mkdir(scratch, { recursive: true });
+              folder = await mkdtemp(join(scratch, "families-"));
               const candidate = join(folder, "source.rvt");
               // One immutable input for this run, copied before any worker opens it.
               await copyFile(source.copyPath!, candidate);
@@ -287,7 +292,7 @@ export async function readFamiliesProgressively(options: {
             docOpenArgv({
               id,
               source: source.cloudSource ?? file!,
-              detach: !source.cloudSource,
+              detach: true,
               // Keep reads the saved local cloud revision; never discard unsynced work or sync.
               unsynced: source.cloudSource ? "keep" : undefined,
               window: "headless",
@@ -342,6 +347,7 @@ export async function readFamiliesProgressively(options: {
       },
     });
     if (run.cancelled) {
+      message = undefined;
       await publish("cancelled", "Cancelled");
       return latest!;
     }
@@ -353,6 +359,7 @@ export async function readFamiliesProgressively(options: {
       includeTempPlacement: true,
     });
     if (run.cancelled) {
+      message = undefined;
       await publish("cancelled", "Cancelled");
       return latest!;
     }

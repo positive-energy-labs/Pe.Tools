@@ -1,17 +1,13 @@
-/** Predict the tail of a pull queue. A worker is admitted only if it gets useful work and saves real time. */
+/** Predict a pull queue's tail, including work each existing executor still holds. */
 export function workerBenefit(
   costs: readonly number[],
-  ready: number,
-  starting: number,
+  availableIn: readonly number[],
   startupMs: number,
   minimumSavingMs = 30_000,
 ): boolean {
-  if (costs.length < 4 || ready + starting >= 3) return false;
+  if (!costs.length || !availableIn.length || availableIn.length >= 3) return false;
   const schedule = (extra: boolean) => {
-    const slots = [
-      ...Array<number>(ready).fill(0),
-      ...Array<number>(starting + Number(extra)).fill(startupMs),
-    ];
+    const slots = [...availableIn, ...(extra ? [startupMs] : [])];
     let assigned = 0;
     for (const cost of [...costs].sort((a, b) => b - a)) {
       const worker = slots.indexOf(Math.min(...slots));
@@ -23,7 +19,7 @@ export function workerBenefit(
   const before = schedule(false),
     after = schedule(true);
   return (
-    after.assigned >= 2 && before.finish - after.finish > Math.max(minimumSavingMs, startupMs * 0.2)
+    after.assigned > 0 && before.finish - after.finish > Math.max(minimumSavingMs, startupMs * 0.2)
   );
 }
 
@@ -32,7 +28,7 @@ export interface WorkExecutor<T, R> {
   dispose(): Promise<void>;
 }
 
-/** One item per idle executor, no upfront partition. Acquisition and disposal belong to the caller's runtime. */
+/** One indivisible item per idle executor; acquisition and disposal belong to the caller's runtime. */
 export async function adaptiveWork<T, R>(options: {
   items: readonly T[];
   primary: WorkExecutor<T, R>;
@@ -45,79 +41,86 @@ export async function adaptiveWork<T, R>(options: {
   warning: (error: unknown) => void;
 }) {
   const queue = [...options.items];
-  let ready = 1,
-    starting = 0,
-    opened = 0;
+  const available = new Map<WorkExecutor<T, R>, number>([[options.primary, 0]]);
+  let starting = false,
+    opened = 0,
+    admitting = true;
+  let failure: unknown, cleanupFailure: unknown;
   const extras: Promise<void>[] = [];
-  let cleanupFailure: unknown;
-  let failure: unknown;
-  let admitting = true;
   const useful = () => !failure && !options.cancelled() && queue.length > 0;
   const run = async (executor: WorkExecutor<T, R>, auxiliary: boolean) => {
-    try {
-      while (useful()) {
-        const item = queue.shift()!;
-        let value: R;
+    while (useful()) {
+      const item = queue.shift()!;
+      available.set(executor, Date.now() + options.cost(item));
+      let value: R;
+      try {
+        value = await executor.run(item);
+      } catch (error) {
+        if (!auxiliary) throw error;
+        queue.unshift(item);
+        if (!options.cancelled()) options.warning(error);
+        return;
+      }
+      if (!options.cancelled()) {
         try {
-          value = await executor.run(item);
+          await options.completed(item, value);
         } catch (error) {
-          if (!auxiliary) throw error;
-          queue.unshift(item);
-          options.warning(error);
-          return;
-        }
-        if (!options.cancelled()) {
-          try {
-            await options.completed(item, value);
-          } catch (error) {
-            failure ??= error;
-            throw error;
-          }
-        }
-        if (
-          admitting &&
-          options.canExpand() &&
-          starting === 0 &&
-          opened < 2 &&
-          workerBenefit(queue.map(options.cost), ready, starting, options.startupMs())
-        ) {
-          opened++;
-          starting++;
-          extras.push(
-            (async () => {
-              let worker: WorkExecutor<T, R> | null = null;
-              try {
-                worker = await options.acquire(useful);
-                starting--;
-                if (worker) {
-                  ready++;
-                  await run(worker, true);
-                }
-              } catch (error) {
-                if (!worker) starting--;
-                options.warning(error);
-              } finally {
-                if (worker) {
-                  ready--;
-                  await worker.dispose();
-                }
-              }
-            })().catch((error: unknown) => {
-              cleanupFailure ??= error;
-            }),
-          );
+          failure ??= error;
+          throw error;
         }
       }
-    } finally {
-      /* The primary's caller owns its lifetime. */
+      available.set(executor, Date.now());
+      admit();
     }
   };
+  function admit() {
+    if (!useful() || !admitting || starting || opened >= 2 || !options.canExpand()) return;
+    const now = Date.now();
+    if (
+      !workerBenefit(
+        queue.map(options.cost),
+        [...available.values()].map((at) => Math.max(0, at - now)),
+        options.startupMs(),
+      )
+    )
+      return;
+    opened++;
+    starting = true;
+    extras.push(
+      (async () => {
+        let worker: WorkExecutor<T, R> | null = null;
+        try {
+          try {
+            worker = await options.acquire(useful);
+          } finally {
+            starting = false;
+          }
+          if (worker) {
+            available.set(worker, Date.now());
+            // Readiness is an admission point too: the primary can still hold a long family.
+            admit();
+            await run(worker, true);
+          }
+        } catch (error) {
+          if (!options.cancelled()) options.warning(error);
+        } finally {
+          if (worker) {
+            available.delete(worker);
+            await worker.dispose();
+          }
+        }
+      })().catch((error: unknown) => {
+        cleanupFailure ??= error;
+      }),
+    );
+  }
+  // Retained timings can justify an immediate start; cold estimates wait for the caller's samples.
+  admit();
   try {
     await run(options.primary, false);
   } catch (error) {
     failure = error;
   }
-  // New executors can be admitted by an executor already draining the queue.
   for (let i = 0; i < extras.length; i++) await extras[i];
   admitting = false;
   if (cleanupFailure) throw cleanupFailure;

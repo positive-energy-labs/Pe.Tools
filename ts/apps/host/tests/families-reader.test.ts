@@ -73,6 +73,8 @@ async function fixture(blockSecond: boolean) {
     readId,
     release,
     dir,
+    bridge,
+    filter,
     start: () => readFamiliesProgressively({ bridge, captures, document, work, readId, filter }),
   };
 }
@@ -102,6 +104,31 @@ test("a row is available before the next family finishes; exact cancellation ret
     expect(result.result.families.map((family) => family.familyId)).toEqual([1]);
     expect(await f.captures.latestFamilies(f.work)).toBeNull();
     expect(f.calls.filter((c) => c.key !== CANCEL_OPERATION_KEY && !c.input.phase)).toHaveLength(0);
+  } finally {
+    f.release();
+    await running;
+    await rm(f.dir, { recursive: true, force: true });
+  }
+});
+
+test("one persistent Work cannot run competing reads through different document bindings", async () => {
+  const f = await fixture(true);
+  const running = f.start();
+  try {
+    await vi.waitFor(() =>
+      expect(f.calls.filter((c) => c.input.phase === "Extract")).toHaveLength(2),
+    );
+    const document = { session: randomUUID(), openId: randomUUID() };
+    await expect(
+      readFamiliesProgressively({
+        bridge: f.bridge,
+        captures: f.captures,
+        document,
+        filter: f.filter,
+        readId: randomUUID(),
+        work: bindWork("families", address(join(f.dir, "source.rvt")), undefined, document),
+      }),
+    ).rejects.toThrow("already running");
   } finally {
     f.release();
     await running;

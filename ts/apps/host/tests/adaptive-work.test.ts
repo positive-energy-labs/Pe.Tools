@@ -3,13 +3,59 @@ import { adaptiveWork, workerBenefit } from "../src/adaptive-work.ts";
 
 afterEach(() => vi.useRealTimers());
 
+test("three known long families use three executors despite their small count", async () => {
+  vi.useFakeTimers();
+  const completed: number[] = [],
+    used = new Set<number>(),
+    disposed: number[] = [];
+  let next = 0;
+  const executor = (id: number) => ({
+    run: async (item: number) => {
+      used.add(id);
+      await new Promise((r) => setTimeout(r, 600_000));
+      return item;
+    },
+    dispose: async () => {
+      disposed.push(id);
+    },
+  });
+  const began = Date.now();
+  const running = adaptiveWork({
+    items: [1, 2, 3],
+    primary: executor(0),
+    acquire: async () => {
+      const id = ++next;
+      await new Promise((r) => setTimeout(r, 15_000));
+      return executor(id);
+    },
+    cost: () => 600_000,
+    startupMs: () => 15_000,
+    canExpand: () => true,
+    cancelled: () => false,
+    completed: async (_, value) => {
+      completed.push(value);
+    },
+    warning: (error) => {
+      throw error;
+    },
+  });
+  await vi.runAllTimersAsync();
+  await running;
+  expect(used.size).toBe(3);
+  expect(Date.now() - began).toBe(630_000);
+  expect(completed.sort((a, b) => a - b)).toEqual([1, 2, 3]);
+  expect(disposed.sort((a, b) => a - b)).toEqual([1, 2]);
+});
+
 test("admission rejects short, drained, cached and already-full queues", () => {
-  expect(workerBenefit([60_000, 60_000, 60_000], 1, 0, 180_000)).toBe(false);
-  expect(workerBenefit(Array(28).fill(2_000), 1, 0, 180_000)).toBe(false);
-  expect(workerBenefit(Array(100).fill(0), 1, 0, 180_000)).toBe(false);
-  expect(workerBenefit(Array(100).fill(60_000), 1, 2, 180_000)).toBe(false);
-  expect(workerBenefit(Array(20).fill(60_000), 1, 0, 180_000)).toBe(true);
-  expect(workerBenefit(Array(20).fill(60_000), 1, 1, 180_000)).toBe(true);
+  expect(workerBenefit([60_000, 60_000, 60_000], [0], 180_000)).toBe(false);
+  expect(workerBenefit(Array(28).fill(2_000), [0], 180_000)).toBe(false);
+  expect(workerBenefit(Array(100).fill(0), [0], 180_000)).toBe(false);
+  expect(workerBenefit(Array(100).fill(60_000), [0, 0, 0], 180_000)).toBe(false);
+  expect(workerBenefit(Array(20).fill(60_000), [0], 180_000)).toBe(true);
+  expect(workerBenefit(Array(20).fill(60_000), [0, 180_000], 180_000)).toBe(true);
+  expect(workerBenefit([600_000, 600_000], [0], 15_000)).toBe(true);
+  expect(workerBenefit([600_000], [580_000, 590_000], 15_000)).toBe(true);
 });
 
 test("idle workers pull the tail, every result lands once, and owned executors close", async () => {
@@ -51,7 +97,7 @@ test("idle workers pull the tail, every result lands once, and owned executors c
   await running;
   expect(completed.sort((a, b) => a - b)).toEqual(Array.from({ length: 24 }, (_, i) => i));
   expect(used.size).toBe(3);
-  expect(disposed.sort()).toEqual([1, 2]);
+  expect(disposed.sort((a, b) => a - b)).toEqual([1, 2]);
 });
 
 test("a failed worker returns its unfinished item to the queue without duplicating completed rows", async () => {

@@ -21,19 +21,11 @@ public static class DocumentCacheMaintenance {
                 || e.GetModifiedElementIds().Count > 0
                 || e.GetDeletedElementIds().Count > 0);
 
-        documents.Opened += tracked => {
-            var document = tracked.Resolve();
-            DocShadow.CaptureSavedCloudVersion(document);
-            FamilySnapshotStore.WarmStart(document);
-        };
+        documents.Opened += tracked => FamilySnapshotStore.WarmStart(tracked.Resolve());
 
         // Save boundaries are the only points where Element.VersionGuid is a valid identity, so
         // persistence lives exclusively on the Saved event (all three kinds).
-        documents.Saved += (tracked, _) => {
-            var document = tracked.Resolve();
-            DocShadow.CaptureSavedCloudVersion(document);
-            FamilySnapshotStore.Persist(document);
-        };
+        documents.Saved += (tracked, _) => FamilySnapshotStore.Persist(tracked.Resolve());
 
         documents.Closed += key => DocShadow.Evict(key.Value);
 
