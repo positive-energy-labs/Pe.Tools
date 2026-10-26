@@ -399,7 +399,8 @@ export function useRouteOwner<T extends { dispose(): void; registry: AtomRegistr
 /**
  * Route search preserves the target string; parseTarget validates its exact request or shorthand.
  * `thread` is an optional conversation association (ADR 0022), not a target store; tool routes
- * never mint or retain it.
+ * never mint or require a thread; the selected conversation may accompany a Place as an optional
+ * association.
  */
 export function routeSearch(search: Record<string, unknown>): {
   target?: string;

@@ -1,5 +1,5 @@
 import { createContext, use, useCallback, useEffect, useState, type ReactNode } from "react";
-import { useNavigate, useRouterState } from "@tanstack/react-router";
+import { useNavigate, useRouter, useRouterState } from "@tanstack/react-router";
 import { navigationClient, type NavigationSnapshot } from "./navigation-client";
 import { admittedDestination } from "./model";
 import { resolveWorkbenchConfig } from "#/workbench/config";
@@ -52,6 +52,7 @@ export function useNavigation() {
 }
 export function useDestination() {
   const navigate = useNavigate();
+  const router = useRouter();
   const host = useSurfaceHost();
   return useCallback(
     (destination: string) => {
@@ -63,7 +64,9 @@ export function useDestination() {
         to: url.pathname,
         search: {
           ...search,
-          thread: search.thread ?? undefined,
+          // Tool entry neither creates nor switches a conversation: it carries the selected
+          // `?thread` unchanged; only an explicit conversation link names its own.
+          thread: search.thread ?? router.state.location.search.thread ?? undefined,
           target: search.target ?? undefined,
           shell: host.surface === "tray" ? "tray" : undefined,
         },
@@ -71,6 +74,6 @@ export function useDestination() {
       });
       return true;
     },
-    [navigate, host],
+    [navigate, router, host],
   );
 }
