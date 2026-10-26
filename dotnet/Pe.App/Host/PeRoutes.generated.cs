@@ -169,6 +169,8 @@ internal static class PeRoutes {
             public const string ThreadSort = "threadSort";
             public const string Page = "page";
             public const string View = "view";
+            public const string Query = "query";
+            public const string Fragment = "fragment";
         }
     }
 

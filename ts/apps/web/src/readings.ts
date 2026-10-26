@@ -90,9 +90,10 @@ export class PeReadings {
     }
   >();
   private source?: Source;
-  /** The stream being replaced by a topology swap; closed once the replacement opens. */
-  private retiring?: Source;
+  /** A replacement cannot retire the active stream until it has opened. */
+  private opening?: Source;
   private generation = 0;
+  private observationEpoch = 0;
   private scheduled = false;
   private pendingFenced = false;
   private retry?: ReturnType<typeof setTimeout>;
@@ -141,8 +142,8 @@ export class PeReadings {
     clearTimeout(this.watchdog);
     this.source?.close();
     this.source = undefined;
-    this.retiring?.close();
-    this.retiring = undefined;
+    this.opening?.close();
+    this.opening = undefined;
     this.entries.clear();
     this.resyncs.clear();
     this.unwatchWake?.();
@@ -184,7 +185,7 @@ export class PeReadings {
     if (this.opened) reportFault({ code: "stream.failed", streamKind: "readings" });
     this.opened = false;
     this.faulted = true;
-    this.lose(true);
+    this.lose();
   }
 
   private watchWake() {
@@ -240,7 +241,26 @@ export class PeReadings {
     if (this.entries.has(readingKey(request))) this.schedule();
   }
 
-  private lose(retry: boolean) {
+  /** Invalidation revokes evidence, not the live command channel. Only the replacement may
+   * acquire evidence again; queued and later snapshots from the old stream cannot do so. */
+  private fence() {
+    this.observationEpoch++;
+    for (const [key, frames] of this.pending) {
+      const events = frames.filter((frame) => frame.kind === "event" || frame.kind === "gap");
+      if (events.length) this.pending.set(key, events);
+      else this.pending.delete(key);
+    }
+    if (this.pending.size === 0) {
+      this.cancelDelivery?.();
+      this.cancelDelivery = undefined;
+    }
+    for (const [key, entry] of this.entries) {
+      entry.stale = true;
+      for (const accept of entry.listeners) accept({ kind: "stale", key });
+    }
+  }
+
+  private lose() {
     this.cancelDelivery?.();
     this.cancelDelivery = undefined;
     this.pending.clear();
@@ -248,20 +268,16 @@ export class PeReadings {
     clearTimeout(this.watchdog);
     this.source?.close();
     this.source = undefined;
-    this.retiring?.close();
-    this.retiring = undefined;
-    for (const [key, entry] of this.entries) {
-      entry.stale = true;
-      for (const accept of entry.listeners) accept({ kind: "stale", key });
-    }
-    if (retry)
-      this.retry = setTimeout(
-        () => {
-          this.retry = undefined;
-          this.open();
-        },
-        Math.min(RETRY_CEILING_MS, 1000 * 2 ** this.attempts++),
-      );
+    this.opening?.close();
+    this.opening = undefined;
+    this.fence();
+    this.retry = setTimeout(
+      () => {
+        this.retry = undefined;
+        this.open();
+      },
+      Math.min(RETRY_CEILING_MS, 1000 * 2 ** this.attempts++),
+    );
   }
 
   /**
@@ -276,7 +292,7 @@ export class PeReadings {
     // `subscribe` can be reached while React evaluates a new aggregate atom. Defer the reconnect
     // so it cannot update another render synchronously.
     if (fenceNow && !this.pendingFenced) {
-      this.lose(false);
+      this.fence();
       this.pendingFenced = true;
     }
     if (this.scheduled) return;
@@ -296,8 +312,8 @@ export class PeReadings {
     if (this.entries.size === 0) {
       this.source?.close();
       this.source = undefined;
-      this.retiring?.close();
-      this.retiring = undefined;
+      this.opening?.close();
+      this.opening = undefined;
       clearTimeout(this.watchdog);
       this.unwatchWake?.();
       this.unwatchWake = undefined;
@@ -305,26 +321,29 @@ export class PeReadings {
     }
     this.watchWake();
     const generation = this.generation;
+    const observationEpoch = this.observationEpoch;
     const url = new URL(this.url());
     url.searchParams.set(
       "keys",
       JSON.stringify([...this.entries.values()].map(({ request }) => request)),
     );
-    // The old stream stays open until the replacement opens; its frames are ignored once replaced.
-    this.retiring?.close();
-    this.retiring = this.source;
+    // Topology changes can overtake a still-opening replacement. Retire that candidate, not the
+    // active stream: commands remain live while the newest connection acquires its keys.
+    this.opening?.close();
     const source = this.connect(url.toString());
-    this.source = source;
-    const current = () => this.generation === generation && this.source === source;
+    this.opening = source;
+    const current = () =>
+      this.generation === generation && (this.source === source || this.opening === source);
     clearTimeout(this.watchdog);
     this.watchdog = setTimeout(() => {
       if (current() && [...this.entries.values()].some((entry) => entry.stale)) this.fault();
     }, READING_DEADLINE_MS);
     source.onopen = () => {
-      if (!current()) return;
+      if (!current() || this.opening !== source) return;
+      this.source?.close();
+      this.source = source;
+      this.opening = undefined;
       this.opened = true;
-      this.retiring?.close();
-      this.retiring = undefined;
       this.recovered();
     };
     const lost = () => {
@@ -334,11 +353,16 @@ export class PeReadings {
     source.onerror = lost;
     // Socket open proves no reading fresh. Each key must receive its owner acquisition.
     source.onmessage = (event) => {
-      if (!current()) return;
+      if (!current() || (this.source !== undefined && this.source !== source)) return;
       try {
         if (new TextEncoder().encode(event.data as string).byteLength > READING_MAX_FRAME_BYTES)
           throw Error("Reading frame exceeds limit");
         const frame = readingFrameSchema.parse(JSON.parse(event.data as string));
+        if (
+          (frame.kind === "snapshot" || frame.kind === "failure") &&
+          observationEpoch !== this.observationEpoch
+        )
+          return;
         const entry = this.entries.get(frame.key);
         if (!entry) return;
         const frames = this.pending.get(frame.key) ?? [];
@@ -836,9 +860,24 @@ function subscribeHostEvents<T>(listener: (event: T) => void): () => void {
 }
 
 export function useHostEvents<T>(enabled: boolean, onEvent: (event: T) => void) {
+  // Overlapping streams can carry the same live command. Consumption is once per follower,
+  // across callback re-subscriptions; this bounded memory never replays an old command.
+  const seen = useRef(new Set<string>());
   useEffect(() => {
     if (!enabled) return;
-    return subscribeHostEvents(onEvent);
+    return subscribeHostEvents<T>((event) => {
+      const command = event as { type?: unknown; commandId?: unknown } | null;
+      if (
+        command &&
+        (command.type === "route-view-open" || command.type === "route-view-intent") &&
+        typeof command.commandId === "string"
+      ) {
+        if (seen.current.has(command.commandId)) return;
+        seen.current.add(command.commandId);
+        if (seen.current.size > 64) seen.current.delete(seen.current.values().next().value!);
+      }
+      onEvent(event);
+    });
   }, [enabled, onEvent]);
 }
 

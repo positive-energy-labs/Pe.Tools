@@ -11,7 +11,14 @@ import { harnessThreadBodySchema, readingFrameSchema, readingKey } from "@pe/age
 import { emptyChatState } from "@pe/agent-contracts/chat-state";
 import { RegistryContext } from "@effect/atom-react";
 
-import { PeReadings, peReadings, readingAtom, previousOf, useReadingSlice } from "./readings";
+import {
+  PeReadings,
+  peReadings,
+  readingAtom,
+  previousOf,
+  useReadingSlice,
+  useHostEvents,
+} from "./readings";
 import { useProviders } from "./workbench/provider/providers";
 import { machineFixture } from "../../../packages/agent-contracts/tests/machine-fixture";
 import { useThreadStream } from "./workbench/provider/thread-stream";
@@ -57,6 +64,116 @@ function owner(
   );
   return { readings, sources };
 }
+
+test("a topology handover keeps its active event source until the latest replacement opens", async () => {
+  const { readings, sources } = owner();
+  const received: unknown[] = [];
+  const world = { kind: "world" } as const;
+  const release = readings.subscribe(world, (frame) => {
+    if (frame.kind === "event") received.push(frame.value);
+  });
+  await Promise.resolve();
+  const active = sources[0]!;
+  active.onopen!();
+  const releaseHead = readings.subscribe(head, () => {});
+  await Promise.resolve();
+  const pending = sources[1]!;
+  const send = (source: Fake, commandId: string) =>
+    source.onmessage!({
+      data: JSON.stringify({
+        kind: "event",
+        key: readingKey(world),
+        value: { type: "route-view-open", commandId },
+      }),
+    });
+  send(active, "before-open");
+  expect(received).toEqual([{ type: "route-view-open", commandId: "before-open" }]);
+  const releaseMachine = readings.subscribe({ kind: "machine" }, () => {});
+  await Promise.resolve();
+  expect(active.closed).toBe(false);
+  expect(pending.closed).toBe(true);
+  send(active, "during-second-swap");
+  sources[2]!.onopen!();
+  expect(active.closed).toBe(true);
+  send(active, "late");
+  send(sources[2]!, "after-open");
+  expect(received).toEqual(
+    ["before-open", "during-second-swap", "after-open"].map((commandId) => ({
+      type: "route-view-open",
+      commandId,
+    })),
+  );
+  releaseMachine();
+  releaseHead();
+  release();
+  readings.close();
+});
+
+test("an overlapping handover delivers a route command once to each mounted follower", async () => {
+  const listeners = new Set<Parameters<PeReadings["subscribe"]>[1]>();
+  const subscription = vi.spyOn(peReadings, "subscribe").mockImplementation((_request, accept) => {
+    listeners.add(accept);
+    return () => void listeners.delete(accept);
+  });
+  const received: unknown[] = [];
+  function Probe() {
+    useHostEvents(true, (event) => received.push(event));
+    return null;
+  }
+  const view = render(<Probe />);
+  const frame = {
+    kind: "event",
+    key: readingKey({ kind: "world" }),
+    value: { type: "route-view-open", commandId: "same-command" },
+  } as const;
+  act(() => {
+    for (const accept of listeners) {
+      accept(frame);
+      accept(frame);
+    }
+  });
+  expect(received).toEqual([frame.value]);
+  view.unmount();
+  subscription.mockRestore();
+});
+
+test("invalidation fences old evidence while the active connection still delivers commands", async () => {
+  const { readings, sources } = owner();
+  const world = { kind: "world" } as const;
+  const frames: unknown[] = [];
+  const states: unknown[] = [];
+  const releaseWorld = readings.subscribe(world, (frame) => {
+    if (frame.kind === "event") frames.push(frame.value);
+  });
+  const releaseHead = readings.subscribe(head, (frame) => states.push(frame));
+  await Promise.resolve();
+  const active = sources[0]!;
+  active.onopen!();
+  active.onmessage!(snapshot({ revision: 1 }));
+  readings.dirty(head);
+  expect(active.closed).toBe(false);
+  active.onmessage!(snapshot({ revision: 999 }));
+  active.onmessage!({
+    data: JSON.stringify({
+      kind: "event",
+      key: readingKey(world),
+      value: { type: "route-view-open", commandId: "during-write" },
+    }),
+  });
+  expect(states.at(-1)).toEqual({ kind: "stale", key: readingKey(head) });
+  expect(frames).toEqual([{ type: "route-view-open", commandId: "during-write" }]);
+  await Promise.resolve();
+  sources[1]!.onopen!();
+  sources[1]!.onmessage!(snapshot({ revision: 2 }));
+  expect(states.at(-1)).toEqual({
+    kind: "snapshot",
+    key: readingKey(head),
+    value: { revision: 2 },
+  });
+  releaseWorld();
+  releaseHead();
+  readings.close();
+});
 
 /** Thread body reads (`thread.get`) and thread tails, as the host answers them. */
 const bodyReads: string[] = [];
@@ -349,8 +466,9 @@ test("a tab shown after sleeping resyncs once, and the thread re-reads its body 
   });
   vi.useRealTimers();
   await vi.waitFor(() => expect(sources).toHaveLength(2));
-  expect(sources[0]!.closed).toBe(true);
+  expect(sources[0]!.closed).toBe(false);
   act(() => sources[1]!.onopen!());
+  expect(sources[0]!.closed).toBe(true);
 
   // The view is marked stale until the re-read body lands, then the tail reopens from its cursor.
   expect(seen.some((s) => s.stale && s.error?.includes("not current"))).toBe(true);
