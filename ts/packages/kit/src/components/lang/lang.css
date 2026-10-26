@@ -1346,6 +1346,27 @@ tr.dl-row[data-active] {
   column-gap: var(--item-pad-x);
   color: var(--pe-ink-2);
 }
+.dl-page-map {
+  position: relative;
+  width: 100%;
+  min-width: 0;
+}
+.dl-page-map > [data-slot="button-host"] > [data-map-region] {
+  position: absolute;
+  min-height: 0;
+  padding: 4px;
+  justify-content: start;
+  border-radius: 0;
+  overflow: hidden;
+  white-space: normal;
+  text-align: left;
+}
+.dl-page-map > [data-slot="button-host"] > [data-map-region] > span {
+  display: block;
+  overflow: hidden;
+  white-space: nowrap;
+  text-overflow: ellipsis;
+}
 .dl-leader-track {
   display: flex;
   min-height: var(--item-pad-x);

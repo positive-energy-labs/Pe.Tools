@@ -24,9 +24,10 @@ test("the static shell renders caller-owned public guidance without a host or pr
       <p>Protected document facts</p>
     </RemoteDeviceGate>,
   );
-  expect(generic).toContain("data-leader-map");
+  expect(generic).toContain("data-page-map");
   expect(generic).toContain("Workspace");
-  expect(generic).toMatch(/data-leader-reference-line="[^"]+"[^>]*d="M/);
+  expect(generic).toContain('data-map-region="navigation"');
+  expect(generic).toContain("aspect-ratio:1440 / 800");
   expect(generic).not.toContain("How Ducts works");
   expect(generic).not.toContain("Protected document facts");
   const ducts = renderToStaticMarkup(
@@ -34,9 +35,9 @@ test("the static shell renders caller-owned public guidance without a host or pr
       <p>Protected document facts</p>
     </RemoteDeviceGate>,
   );
-  expect(ducts).toContain("data-leader-map");
+  expect(ducts).toContain("data-page-map");
   expect(ducts).toContain("All-systems rules");
-  expect(ducts).toContain("Frame the selection");
+  expect(ducts).toContain("move the cursor down");
   expect(ducts).not.toContain(" · active");
   expect(ducts).not.toContain(" · shown");
   expect(ducts).not.toContain(" · available");
