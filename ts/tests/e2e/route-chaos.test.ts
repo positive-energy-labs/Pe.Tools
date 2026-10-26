@@ -805,7 +805,10 @@ test("seeded real-user route journey", async () => {
       await pickSystem(a);
       if (lane === "demo") {
         // The navigation fixture has real schematic data, but no native Revit meshes.
-        await button(p, "schematic", '[data-pane-id="e-picture"]');
+        await click(
+          p,
+          '[data-pane-id="e-picture"] [aria-label="picture"] button[aria-description^="schematic:"]',
+        );
         await p.until(() => box(p, DRAWING), "the fixture's actual schematic drawing");
         receipt.coverage.drawing = "schematic; native mesh and 3D camera behavior remain unproven";
       }
