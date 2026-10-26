@@ -48,6 +48,10 @@ export const LOOK = defineKnobs("scene", "ts/apps/web/src/scene/grounds.ts", {
     everythingTranslucent: bool("Everything translucent", false),
     translucentOpacity: num("Translucent duct opacity", 0.45, [0.05, 0.99, 0.01]),
     rim: num("Duct rim contrast", 0.18, [0, 0.8, 0.01]),
+    // One rule for selected, lit, hover and damage: behind real subject geometry, a highlight
+    // keeps its hue at this alpha and width, constant however many layers are in front.
+    occludedAlpha: num("Occluded highlight alpha", 0.35, [0, 1, 0.01]),
+    occludedWidth: num("Occluded highlight width ×", 0.6, [0.2, 1, 0.05]),
   },
   shell: {
     colour: colour("Envelope ink", "ink-2"),

@@ -379,7 +379,9 @@ export function createRenderer(mount: HTMLElement, initialMeshes: SceneMeshes, w
     light.layers.enable(CONTEXT_LAYER);
     light.layers.enable(SHELL_LAYER);
   }
-  const glow = createGlow(renderer, material);
+  const glow = createGlow(renderer);
+  /** The occluded-mark alpha every highlight shares (`LOOK.depth.occludedAlpha`). */
+  const occluded = { value: look.depth.occludedAlpha };
   /** What a look change re-applies besides instance tints: ground, lights, fog, veil, passes. */
   const applyStage = () => {
     setDamageHue(grounds.damage);
@@ -402,6 +404,8 @@ export function createRenderer(mount: HTMLElement, initialMeshes: SceneMeshes, w
     veil.stubFadeFt.value = look.subject.stubFadeFt;
     veil.stubEndAlpha.value = look.subject.stubEndAlpha;
     outline.setWidths(look.outline);
+    outline.setOccluded(look.depth.occludedAlpha, look.depth.occludedWidth);
+    occluded.value = look.depth.occludedAlpha;
     glow.setLook(look.glow);
   };
   applyStage();
@@ -487,7 +491,21 @@ export function createRenderer(mount: HTMLElement, initialMeshes: SceneMeshes, w
   // The 2026-10-26 ruling supersedes subject-over-context compositing: front context tints
   // the subject, while rear context fails its depth test. Translucent duct fill still occludes
   // equipment edges; opacity is not permission to draw those edges through a duct.
-  const drawScene = (shown: THREE.Camera) => {
+  /** Depth of real subject geometry, no colour, into the bound target: the one occluder set every
+   * highlight tests against. The batch material keeps section cuts and per-element visibility;
+   * context and envelopes discard in this pass, so translucent context never occludes a mark. */
+  const seedOccluders = (shown: THREE.Camera) => {
+    const layers = shown.layers.mask;
+    shown.layers.set(OCCLUDER_LAYER);
+    veil.scenePass.value = 1;
+    material.colorWrite = false;
+    renderer.render(scene, shown);
+    material.colorWrite = true;
+    shown.layers.mask = layers;
+  };
+  // `overlay` (highlight and damage composites) lands after the subject and before the
+  // translucent passes, so front context tints a highlight exactly as it tints the subject.
+  const drawScene = (shown: THREE.Camera, overlay?: () => void) => {
     const mask = shown.layers.mask;
     const autoClear = renderer.autoClear;
     renderer.clear();
@@ -498,6 +516,7 @@ export function createRenderer(mount: HTMLElement, initialMeshes: SceneMeshes, w
       cap.material.depthWrite = true;
     });
     renderer.render(scene, shown);
+    overlay?.();
     if (hasContext || hasShell) {
       material.depthWrite = false;
       caps.forEach((cap) => {
@@ -623,9 +642,12 @@ export function createRenderer(mount: HTMLElement, initialMeshes: SceneMeshes, w
       scene.updateMatrixWorld();
       accountGeometry();
       if (thumbsStale) drawThumbs();
-      drawScene(active());
-      if (glowing) glow.render(scene, active());
-      if (outlined.children.length) outline.render(scene, active());
+      const shown = active();
+      drawScene(shown, () => {
+        if (glowing) glow.render(scene, shown, () => seedOccluders(shown));
+        if (outlined.children.length)
+          outline.render(scene, shown, outlined, () => seedOccluders(shown));
+      });
       if (measuring) fence(started);
       tell();
       if (animate || returning) render();
@@ -849,7 +871,7 @@ export function createRenderer(mount: HTMLElement, initialMeshes: SceneMeshes, w
     const box = new THREE.Box3();
     group.traverse((object) => {
       if (object instanceof LineSegments2) {
-        if (object.userData.casing) return;
+        if (object.userData.casing || object.userData.behind) return;
         const start = object.geometry.getAttribute("instanceStart");
         const end = object.geometry.getAttribute("instanceEnd");
         for (let i = 0; i < start.count; i++)
@@ -1052,12 +1074,15 @@ export function createRenderer(mount: HTMLElement, initialMeshes: SceneMeshes, w
           "position",
           new THREE.BufferAttribute(positions, 3),
         ),
+        // Blending and depth test are set per mask pass (`outline.ts`); the offset lets the
+        // element pass against its own seeded depth.
         new THREE.MeshBasicMaterial({
           color: OUTLINE_CHANNEL[mark],
-          blending: THREE.AdditiveBlending,
-          depthTest: false,
           depthWrite: false,
           side: THREE.DoubleSide,
+          polygonOffset: true,
+          polygonOffsetFactor: -1,
+          polygonOffsetUnits: -4,
         }),
       );
       applyClip(mesh.material);
@@ -1612,7 +1637,7 @@ export function createRenderer(mount: HTMLElement, initialMeshes: SceneMeshes, w
         layers.set(layer.key, { layer, group });
         if (layer.targets?.length) reachOf.set(layer.key, segmentsOf(group));
       }
-      damageBatch = next.some((layer) => layer.damage) ? createDamageBatch(next) : null;
+      damageBatch = next.some((layer) => layer.damage) ? createDamageBatch(next, occluded) : null;
       if (damageBatch) {
         damageBatch.group.traverse((object) => {
           if (object instanceof THREE.Mesh) {

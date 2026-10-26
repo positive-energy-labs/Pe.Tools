@@ -61,9 +61,17 @@ it("damage batches keep identity, share packed geometry, and yield only the sele
   expect(ray.intersectObject(group, true)).toHaveLength(1);
 
   setDamageHue(new THREE.Color(0.3, 0.1, 0.05));
-  const batch = createDamageBatch([firstLayer, secondLayer]);
+  const batch = createDamageBatch([firstLayer, secondLayer], { value: 0.35 });
   const draws = batch.group.children as THREE.BatchedMesh[];
   expect(draws).toHaveLength(4);
+  // Front skin and glow test depth normally; the occluded pair draws only behind subject depth.
+  expect(draws.map((draw) => (draw.material as THREE.Material).depthFunc)).toEqual([
+    THREE.LessEqualDepth,
+    THREE.LessEqualDepth,
+    THREE.GreaterDepth,
+    THREE.GreaterDepth,
+  ]);
+  expect(draws.every((draw) => (draw.material as THREE.Material).depthTest)).toBe(true);
   for (const draw of draws)
     expect(draw.material).toMatchObject({
       polygonOffset: true,
@@ -81,7 +89,7 @@ it("damage batches keep identity, share packed geometry, and yield only the sele
   expect(batch.update(firstLayer, at())).toBe(false);
   expect(batch.update(secondLayer, at({ selected: true }))).toBe(false);
   expect(draws.map((draw) => draw.getVisibleAt(0))).toEqual([true, true, false, false]);
-  expect(draws.map((draw) => draw.getVisibleAt(1))).toEqual([false, false, true, true]);
+  expect(draws.map((draw) => draw.getVisibleAt(1))).toEqual([true, true, true, true]);
   const normal = draws[0]!.getColorAt(0, new THREE.Vector4());
   const selected = draws[2]!.getColorAt(1, new THREE.Vector4());
   expect(selected.y).toBeCloseTo(normal.y * 0.4);
@@ -113,7 +121,11 @@ it("line marks retain dashed geometry and selection depth behavior", () => {
     alarm,
     { dash: { size: 2, gap: 3 } },
   );
-  expect(lines.children.map((c) => (c as LineSegments2).material.dashed)).toEqual([false, true]);
+  expect(lines.children.map((c) => (c as LineSegments2).material.dashed)).toEqual([
+    false,
+    true,
+    true,
+  ]);
   for (const extra of [
     {},
     { state: "reach" },
@@ -130,10 +142,13 @@ it("line marks retain dashed geometry and selection depth behavior", () => {
       landed: Infinity,
       ...extra,
     });
+    const lit = !!extra.selected || !!extra.lit || extra.state === "hover" || extra.state === "focus";
     for (const child of lines.children as THREE.Mesh[])
-      expect((child.material as THREE.Material).depthTest).toBe(
-        !extra.selected && !extra.lit && extra.state !== "hover" && extra.state !== "focus",
-      );
+      expect((child.material as THREE.Material).depthTest).toBe(true);
+    // The occluded twin shows only while lit, at the shared occluded alpha.
+    const behind = lines.children[2] as LineSegments2;
+    expect(behind.material.depthFunc).toBe(THREE.GreaterDepth);
+    expect(behind.material.opacity).toBe(lit ? 0.35 : 0);
   }
 });
 
