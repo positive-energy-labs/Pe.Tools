@@ -828,7 +828,7 @@ test("real conversation Work cutover retains authored cells, draft, Places and o
         () =>
           p.evaluate(() => {
             const send = document.querySelector<HTMLButtonElement>('button[aria-label="send"]');
-            return send !== null && !send.getAttribute("aria-description") && !send.disabled;
+            return send !== null && send.getAttribute("aria-disabled") !== "true" && !send.disabled;
           }),
         "the real Send control reports ready",
       );
