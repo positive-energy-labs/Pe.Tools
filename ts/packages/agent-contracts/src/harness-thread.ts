@@ -515,6 +515,12 @@ export const threadTabRequestSchema = z.discriminatedUnion("op", [
 ]);
 export type ThreadTabRequest = z.infer<typeof threadTabRequestSchema>;
 
+/** Explicit conversation-to-Work context, independent of browser tab ownership or native consent. */
+export const threadPlaceRequestSchema = z.strictObject({
+  route: threadTabSchema.shape.route,
+  link: threadTabSchema.shape.link,
+});
+
 export const harnessThreadSummarySchema = z.object({
   origin: z
     .strictObject({ kind: z.literal("scheduled"), taskId: z.string().min(1), runId: z.uuid() })

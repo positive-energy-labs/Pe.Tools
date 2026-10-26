@@ -1,5 +1,6 @@
 import { z } from "zod";
 import { workKeySchema } from "./route-state.ts";
+import { documentRefSchema } from "./target.ts";
 
 /** A remembered document connection is display context, never native execution authority. */
 export const threadWorkSchema = z.strictObject({
@@ -39,7 +40,8 @@ export const workResumeSchema = z.strictObject({
   key: workKeySchema,
   url: z.string().startsWith("/").nullable(),
   reason: z.string().nullable(),
-  /** Matching canonical Places in thread tab order; browser-local activity is not persisted. */
-  matches: z.array(z.strictObject({ threadId: z.string().min(1), tabId: z.string().min(1) })),
+  /** Exact lifetimes known to name this Address, without conflicting current metadata.
+   * The browser matches its own Places; this evidence grants no native authority. */
+  knownOpenRefs: z.array(documentRefSchema),
 });
 export type WorkResume = z.infer<typeof workResumeSchema>;

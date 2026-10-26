@@ -129,11 +129,7 @@ export async function scopeOf(): Promise<Scope | null> {
   return { thread: body.thread, ...threadHeadSchema.parse(body) };
 }
 
-/**
- * Open a tool as a tab in this thread when none of its views is mounted: put an empty Place, then
- * wait for the browser to publish the view (it focuses a new tab while the person is on this chat).
- * An existing tab of the tool is reused, never duplicated.
- */
+/** Explicitly ask the browser showing this conversation to open a tool, then acquire that render. */
 async function openToolTab(
   client: ReturnType<typeof createPeClient>,
   thread: string,
@@ -142,46 +138,42 @@ async function openToolTab(
   target: Target,
 ): Promise<
   | { mounted: true; instance: string; revision: number }
-  | { mounted: false; outcome: "opened" | "unmounted"; applied: false; note: string }
+  | { mounted: false; outcome: "unmounted"; applied: false; note: string }
 > {
-  const mounted = async () => {
-    const view = (await (await read(undefined)).json()) as {
-      instance?: unknown;
-      revision?: unknown;
-    };
-    return typeof view.instance === "string" && typeof view.revision === "number"
-      ? { mounted: true as const, instance: view.instance, revision: view.revision }
-      : null;
-  };
   const title = routeAddress(route).title;
-  const summary = (await (
-    await client.response("thread.get", { params: { id: thread } })
-  ).json()) as { tabs?: { route: string }[] };
-  const held = (summary.tabs ?? []).some((tab) => tab.route === route);
-  if (!held) {
-    const link = routeAddress(route).link(
-      {},
-      { target: target ? JSON.stringify(target) : undefined },
-    );
-    const put = await client.response("thread.tabs", {
-      params: { id: thread },
-      body: { op: "put", id: crypto.randomUUID(), route, link },
-    });
-    if (!put.ok) throw Error(`Could not open ${title}: ${await put.text()}`);
-  }
-  // ponytail: polls the lease for 6 s; a lease subscription replaces this if the wait matters.
+  const link = routeAddress(route).link(
+    {},
+    { target: target ? JSON.stringify(target) : undefined },
+  );
+  const opened = await client.response("view.open", {
+    params: { route },
+    body: { thread, link },
+  });
+  if (!opened.ok) throw Error(`Could not open ${title}: ${await opened.text()}`);
+  const { commandId } = (await opened.json()) as { commandId: string };
+  // Bound the acquisition wait. A background/unrelated browser never counts as a rendered open.
   for (let i = 0; i < 12; i++) {
-    const view = await mounted();
-    if (view) return view;
+    const response = await read(undefined);
+    if (response.ok) {
+      const view = (await response.json()) as {
+        instance?: unknown;
+        revision?: unknown;
+        openCommandId?: unknown;
+      };
+      if (
+        view.openCommandId === commandId &&
+        typeof view.instance === "string" &&
+        typeof view.revision === "number"
+      )
+        return { mounted: true, instance: view.instance, revision: view.revision };
+    }
     await new Promise((resolve) => setTimeout(resolve, 500));
   }
   return {
     mounted: false,
-    outcome: held ? "unmounted" : "opened",
+    outcome: "unmounted",
     applied: false,
-    note: held
-      ? `A ${title} tab is open in this thread but shows no view yet: it is off the person's screen, or it has no document to read. Nothing moved. Ask them to select the ${title} tab (and the document in the composer if none is selected), then set-view again.`
-      : `Opened ${title} as a tab in this thread, but it shows no view yet: it is off the person's screen, or it has no document to read. Nothing moved. When it shows the document, set-view again.`,
+    note: `The browser showing this conversation did not render ${title}. Nothing was applied. Select this conversation in Pea, choose the tool's document, then set-view again.`,
   };
 }
 
@@ -910,8 +902,8 @@ async function dispatch(
               "Pass both instance and revision for a mounted view, or omit both to open the tool.",
             );
           if (instance === undefined) {
-            // set-view is also the open: with no mounted view, Pea puts the tool's tab in this thread
-            // and waits for the browser to mount it, then moves it like any other view.
+            // An explicit open is delivered only to a browser showing this conversation.
+            // Acquisition names that command, so an older mounted document cannot satisfy it.
             const opened = await openToolTab(client, viewThread, route, read, defaultTarget);
             if (!opened.mounted)
               return { ok: true, target: { session: null, document: null }, result: opened };

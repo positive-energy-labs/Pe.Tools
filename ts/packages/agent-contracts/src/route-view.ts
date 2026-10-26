@@ -6,6 +6,8 @@ export const routeViewSchema = z.strictObject({
   route: z.enum(routeViewRoutes),
   thread: z.string().min(1),
   instance: z.uuid(),
+  /** The explicit open command this browser rendered; absent for ordinary human navigation. */
+  openCommandId: z.uuid().optional(),
   surface: z.enum(["chat", "route"]),
   page: z.record(z.string(), z.string()),
   /** Identity of what is shown (reading, document, Work). A command's ack fails if it moves. */
@@ -14,6 +16,18 @@ export const routeViewSchema = z.strictObject({
   facts: z.record(z.string(), z.unknown()),
 });
 export type RouteView = z.infer<typeof routeViewSchema>;
+
+/** An explicit request to the browser currently showing this conversation. Never persisted/replayed. */
+export const routeViewOpenSchema = z.strictObject({
+  thread: z.string().min(1).max(256),
+  link: z.string().startsWith("/").max(8192),
+});
+export type RouteViewOpen = z.infer<typeof routeViewOpenSchema>;
+export type RouteViewOpenIntent = RouteViewOpen & {
+  type: "route-view-open";
+  route: RouteView["route"];
+  commandId: string;
+};
 
 export const routeViewSetSchema = z.strictObject({
   thread: z.string().min(1),

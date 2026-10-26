@@ -51,6 +51,7 @@ import {
   routeOf,
   THREAD_TABS_MAX,
   threadTabRequestSchema,
+  threadPlaceRequestSchema,
   threadLifecycleSchema,
   updateThreadRequestSchema,
   forkThreadRequestSchema,
@@ -1799,6 +1800,23 @@ export function createHarnessThreads(options: HarnessThreadsOptions) {
         writeMeta(t);
         if (title !== undefined) append(t, { kind: "title_changed", title: t.meta.title });
         notifySummaries();
+        return json(summary(t));
+      }
+      case "thread.place": {
+        if (caller.kind === "pea" && caller.thread !== t.meta.id)
+          return json({ error: "A Pea context may only link Work to its own conversation" }, 403);
+        const change = await input(threadPlaceRequestSchema);
+        const canonical = routeAddress(change.route).tab(change.link);
+        if (!canonical.ok) return json({ error: canonical.error }, 400);
+        const context = readWorkContext(t.meta.workContext);
+        if (!context)
+          return json({ error: "Remembered Work context is unreadable; nothing was changed" }, 409);
+        const next = rememberPlace(context, change.route, canonical.link, options.observeDocument);
+        if (JSON.stringify(context) !== JSON.stringify(next)) {
+          t.meta.workContext = next;
+          writeMeta(t);
+          notifySummaries();
+        }
         return json(summary(t));
       }
       case "thread.tabs": {

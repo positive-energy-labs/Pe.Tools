@@ -28,6 +28,7 @@ import {
   documentRefSchema,
   documentRows,
   routeViewAckSchema,
+  routeViewOpenSchema,
   routeViewSetSchema,
   routeViewSchema,
   routeViewRoutes,
@@ -589,6 +590,18 @@ export function createPeRoutes(options: PeRoutesOptions) {
     ) {
       const route = parts[1];
       const instance = parts[2];
+      if (method === "POST" && instance === "open") {
+        const parsed = routeViewOpenSchema.safeParse(await body());
+        if (!parsed.success)
+          return json({ ok: false, error: `invalid ${route} open command` }, 400);
+        if (caller.kind === "pea" && caller.thread !== parsed.data.thread)
+          return json(
+            { ok: false, error: "A Pea context may only open a tool for its own conversation" },
+            403,
+          );
+        const result = views.open(route as Parameters<typeof views.open>[0], parsed.data);
+        return json(result, result.ok ? 200 : 400);
+      }
       if (method === "PUT" && !instance) {
         const parsed = routeViewSchema.safeParse(await body());
         return parsed.success && parsed.data.route === route

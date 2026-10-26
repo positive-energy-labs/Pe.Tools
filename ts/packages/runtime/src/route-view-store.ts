@@ -1,4 +1,10 @@
-import { routeAddress, type RouteView, type RouteViewAck } from "@pe/agent-contracts";
+import {
+  routeAddress,
+  type RouteView,
+  type RouteViewAck,
+  type RouteViewOpen,
+  type RouteViewOpenIntent,
+} from "@pe/agent-contracts";
 
 type Lease = { view: RouteView; revision: number; seen: number };
 type Intent = {
@@ -19,7 +25,7 @@ const same = (a: unknown, b: unknown) => JSON.stringify(a) === JSON.stringify(b)
  */
 export class RouteViewStore {
   private leases = new Map<string, Lease>();
-  private listeners = new Set<(intent: Intent) => void>();
+  private listeners = new Set<(intent: Intent | RouteViewOpenIntent) => void>();
   private pending = new Map<
     string,
     {
@@ -69,7 +75,23 @@ export class RouteViewStore {
         };
   }
 
-  subscribe(listener: (intent: Intent) => void) {
+  /** Commands are live delivery only. A later subscriber cannot open an old tool accidentally. */
+  open(route: RouteView["route"], input: RouteViewOpen) {
+    const canonical = routeAddress(route).tab(input.link);
+    if (!canonical.ok) return { ok: false as const, error: canonical.error };
+    const commandId = crypto.randomUUID();
+    for (const listener of this.listeners)
+      listener({
+        type: "route-view-open",
+        route,
+        thread: input.thread,
+        link: canonical.link,
+        commandId,
+      });
+    return { ok: true as const, commandId };
+  }
+
+  subscribe(listener: (intent: Intent | RouteViewOpenIntent) => void) {
     this.listeners.add(listener);
     return () => this.listeners.delete(listener);
   }

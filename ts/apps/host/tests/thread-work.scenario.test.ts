@@ -122,10 +122,13 @@ test("HTTP and one Reading retain named unfinished Work after target removal, cl
   const tab = async (body: object) =>
     withInvocationContext({ caller: human }, () =>
       threads.fetch(
-        new Request(`http://host/pe/threads/${id}/tabs`, {
-          method: peRoutes["thread.tabs"].method,
+        new Request(`http://host/pe/threads/${id}/place`, {
+          method: peRoutes["thread.place"].method,
           headers: { "content-type": "application/json" },
-          body: JSON.stringify(body),
+          body: JSON.stringify({
+            route: (body as { route: string }).route,
+            link: (body as { link: string }).link,
+          }),
         }),
       ),
     );
@@ -267,10 +270,10 @@ test("HTTP and one Reading retain named unfinished Work after target removal, cl
     ).toBe(true);
     expect(workKey(resume.key)).toBe(workKey(scope));
     expect(resume.key).not.toHaveProperty("from");
-    expect(resume.matches).toEqual([
-      { threadId: id, tabId: addressTab },
-      { threadId: id, tabId: openTab },
-    ]);
+    expect(resume.knownOpenRefs).toEqual([ref]);
+    expect(
+      (await (await threads.fetch(new Request(`http://host/pe/threads/${id}`))).json()).tabs,
+    ).toEqual([]);
     const retained = await (
       await app.fetch(
         new Request(`http://host/pe/route-state/ducts?target=${encodeURIComponent(at)}`),
@@ -324,8 +327,7 @@ test("HTTP and one Reading retain named unfinished Work after target removal, cl
         )
       ).json(),
     );
-    expect(scheduledPlace.matches).toEqual([{ threadId: id, tabId }]);
-    expect((await tab({ op: "close", id: tabId })).status).toBe(200);
+    expect(scheduledPlace.knownOpenRefs).toEqual([]);
     documents = [];
     await threads.close();
     threads = createHarnessThreads(options);
@@ -373,7 +375,7 @@ test("HTTP and one Reading retain named unfinished Work after target removal, cl
         )
       ).json(),
     );
-    expect(afterSaveAs.matches).toEqual([{ threadId: id, tabId: addressTab }]);
+    expect(afterSaveAs.knownOpenRefs).toEqual([]);
     const beforeAmbiguous = await fileBytes();
     expect(
       (
@@ -397,7 +399,7 @@ test("HTTP and one Reading retain named unfinished Work after target removal, cl
     );
     expect(ambiguousSchedule.url).toBeNull();
     expect(ambiguousSchedule.reason).toContain("no unique remembered document binding");
-    expect(ambiguousSchedule.matches).toEqual([]);
+    expect(ambiguousSchedule.knownOpenRefs).toEqual([]);
     const preservedSchedule = await (
       await app.fetch(new Request("http://host/pe/route-state/schedules?work=office-schedule"))
     ).json();

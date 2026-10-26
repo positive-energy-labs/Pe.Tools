@@ -135,6 +135,7 @@ export type PeApiSchemas = Record<
   | "createThreadRequestSchema"
   | "updateThreadRequestSchema"
   | "threadTabRequestSchema"
+  | "threadPlaceRequestSchema"
   | "harnessThreadSummarySchema"
   | "harnessThreadBodySchema"
   | "harnessEventSchema"
@@ -161,6 +162,7 @@ export type PeApiSchemas = Record<
   | "ductsAnalysisRequestSchema"
   | "ductsAnalysisResponseSchema"
   | "routeViewSchema"
+  | "routeViewOpenSchema"
   | "routeViewSetSchema"
   | "routeViewAckSchema"
   | "pageChoiceSchema"
@@ -510,6 +512,15 @@ export function peRouteTable<S extends PeApiSchemas>(schemas: S) {
       "threads",
       "caller",
     ),
+    "thread.place": route(
+      "POST",
+      "/pe/threads/:id/place",
+      schemas.threadPlaceRequestSchema as S["threadPlaceRequestSchema"],
+      harnessThreadSummarySchema,
+      "caller",
+      "threads",
+      "caller",
+    ),
     "thread.remove": route("DELETE", "/pe/threads/:id", none, none, "caller", "threads", "caller"),
     "thread.prompt": route(
       "POST",
@@ -782,6 +793,15 @@ export function peRouteTable<S extends PeApiSchemas>(schemas: S) {
       "asset",
     ),
     "view.get": route("GET", "/pe/route-view/:route", none, object, "read", "pe", "read"),
+    "view.open": route(
+      "POST",
+      "/pe/route-view/:route/open",
+      schemas.routeViewOpenSchema as S["routeViewOpenSchema"],
+      object,
+      "caller",
+      "pe",
+      "caller",
+    ),
     "view.publish": route(
       "PUT",
       "/pe/route-view/:route",

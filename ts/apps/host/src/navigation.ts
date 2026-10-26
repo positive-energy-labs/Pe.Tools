@@ -4,7 +4,6 @@ import {
   APP_ROUTES,
   addressSchema,
   documentRefSchema,
-  documentRequestSchema,
   harnessThreadSummarySchema,
   routeAt,
   sameAddress,
@@ -16,8 +15,6 @@ import {
   type NavigationSnapshot,
   type NavigationWork,
   type WorkKey,
-  type ThreadTab,
-  type Address,
 } from "@pe/agent-contracts";
 import type { RouteWorkspace } from "@pe/runtime";
 import { sameDocumentRef, type ThreadWorkContext } from "./thread-work-context.ts";
@@ -140,7 +137,7 @@ async function resumeDestination(
   workspace: RouteWorkspace,
   id: string,
   sources?: NavigationSources,
-): Promise<Omit<WorkResume, "matches"> | null> {
+): Promise<Omit<WorkResume, "knownOpenRefs"> | null> {
   const census = await workspace.instances();
   if (!census.available) throw new Error("Persisted Work discovery is unavailable");
   const work = census.works.find((item) => item.id === id);
@@ -220,65 +217,37 @@ async function resumeDestination(
   };
 }
 
-/** Match canonical Places using owner evidence, never a title or a guessed replacement lifetime. */
-async function matchingPlaces(
+/** Unique remembered Address evidence, never a browser tab registry or native admission. */
+async function knownOpenRefs(
   scope: WorkKey,
   sources?: NavigationSources,
-): Promise<WorkResume["matches"]> {
-  if (!sources) return [];
-  const [threadResult, documentResult] = await Promise.allSettled([
-    sources.threads().then((value) => z.array(harnessThreadSummarySchema).parse(value)),
-    sources.documents().then((value) => z.array(documentSchema).parse(value)),
-  ]);
-  if (threadResult.status !== "fulfilled") return [];
+): Promise<WorkResume["knownOpenRefs"]> {
+  if (scope.binding !== "address" || !sources) return [];
   const contexts = sources.contexts?.() ?? [];
-  const current = documentResult.status === "fulfilled" ? documentResult.value : [];
-  const openAddress = (ref: z.infer<typeof documentRefSchema>): Address | null => {
-    const known = contexts.flatMap(({ context }) =>
-      (context?.documents ?? []).flatMap((doc) =>
+  // A failed availability read is unknown, not evidence that a remembered lifetime is unchanged.
+  let current: NavigationDocument[];
+  try {
+    current = z.array(documentSchema).parse(await sources.documents());
+  } catch {
+    return [];
+  }
+  const remembered = contexts.flatMap(({ context }) => context?.documents ?? []);
+  const refs = [...remembered.flatMap((doc) => doc.refs), ...current];
+  return refs
+    .filter((ref, index) => {
+      if (refs.findIndex((other) => sameDocumentRef(other, ref)) !== index) return false;
+      const known = remembered.flatMap((doc) =>
         doc.address && doc.refs.some((held) => sameDocumentRef(held, ref)) ? [doc.address] : [],
-      ),
-    );
-    const live = current.filter((doc) => sameDocumentRef(doc, ref));
-    known.push(...live.flatMap((doc) => (doc.address ? [doc.address] : [])));
-    const at = known[0];
-    return at &&
-      known.every((other) => sameAddress(at, other)) &&
-      live.every((doc) => doc.address !== null && sameAddress(at, doc.address))
-      ? at
-      : null;
-  };
-  const holds = (tab: ThreadTab): boolean => {
-    if (tab.route !== scope.route) return false;
-    const { page, carry } = routeAddress(tab.route).read(
-      Object.fromEntries(new URL(tab.link, "http://place.invalid").searchParams),
-    );
-    const workspace =
-      carry.work ||
-      ("workspaceId" in page && typeof page.workspaceId === "string"
-        ? page.workspaceId
-        : undefined);
-    if (scope.binding === "workspace") return workspace === scope.work;
-    if (workspace) return false;
-    if (scope.binding === "host") return !carry.target;
-    let at = addressSchema.safeParse(carry.target).data ?? null;
-    let ref: z.infer<typeof documentRefSchema> | null = null;
-    if (!at && carry.target) {
-      try {
-        const request = documentRequestSchema.safeParse(JSON.parse(carry.target)).data;
-        if (request?.kind === "named") at = request.address;
-        else if (request?.kind === "open") ref = request.ref;
-      } catch {
-        return false;
-      }
-    }
-    if (scope.binding === "open") return sameDocumentRef(ref, scope.open);
-    at ??= ref ? openAddress(ref) : null;
-    return at !== null && sameAddress(at, scope.target);
-  };
-  return threadResult.value.flatMap((thread) =>
-    thread.tabs.filter(holds).map((tab) => ({ threadId: thread.id, tabId: tab.id })),
-  );
+      );
+      const live = current.filter((doc) => sameDocumentRef(doc, ref));
+      known.push(...live.flatMap((doc) => (doc.address ? [doc.address] : [])));
+      return (
+        known.length > 0 &&
+        known.every((at) => sameAddress(at, scope.target)) &&
+        live.every((doc) => doc.address !== null && sameAddress(doc.address, scope.target))
+      );
+    })
+    .map(({ session, openId }) => ({ session, openId }));
 }
 
 /** Saved Work and a matching Place remain readable without current native authority. */
@@ -291,7 +260,7 @@ export async function resumeWork(
   return (
     destination && {
       ...destination,
-      matches: destination.url ? await matchingPlaces(destination.key, sources) : [],
+      knownOpenRefs: destination.url ? await knownOpenRefs(destination.key, sources) : [],
     }
   );
 }
