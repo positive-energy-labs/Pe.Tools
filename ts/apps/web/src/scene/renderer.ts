@@ -854,6 +854,7 @@ export function createRenderer(
   /** The one re-apply path: a theme change or a look change re-reads grounds and re-tints. */
   const applyLook = () => {
     layerRevision++;
+    routeGeometryDirty = true;
     const next = sceneGrounds(mount, look);
     ground.copy(next.ground);
     ink.copy(next.ink);
@@ -1028,6 +1029,7 @@ export function createRenderer(
     lit: ReadonlySet<string> | undefined,
   ];
   let painted: Paint = [undefined, undefined, undefined, undefined];
+  let routeGeometryDirty = true;
   const paintNow = (...[selected, hidden, isolated, lit]: Paint) => {
     layerRevision++;
     hasContext = false;
@@ -1038,7 +1040,10 @@ export function createRenderer(
         !hidden?.has(key) &&
         (!isolated || isolated.has(key)) &&
         contextVisible(categoryId, paints[id]!.tier, look.layers);
-      batch.setVisibleAt(id, shown);
+      if (batch.getVisibleAt(id) !== shown) {
+        batch.setVisibleAt(id, shown);
+        routeGeometryDirty = true;
+      }
       hasContext ||= shown && paints[id]!.tier === "context";
       hasShell ||= shown && paints[id]!.tier !== "context" && paints[id]!.surface === "shell";
       const cap = caps.get(id);
@@ -1056,8 +1061,13 @@ export function createRenderer(
       if (mark !== (marked.get(id) ?? null)) tint(id, mark);
     });
     marked.clear();
-    rebuildEnvelopes();
-    rebuildRoutes();
+    // Selection and hover change ink, not route geometry. Do not serialize the whole building
+    // merely to discover that its route stamp is unchanged on every pointer crossing.
+    if (routeGeometryDirty) {
+      rebuildEnvelopes();
+      rebuildRoutes();
+      routeGeometryDirty = false;
+    }
     selectedIds.clear();
     litIds.clear();
     for (const [id, mark] of next) {
@@ -1344,6 +1354,7 @@ export function createRenderer(
     setPaint(next: PaintOf | undefined) {
       if (next === paintBy) return;
       paintBy = next;
+      routeGeometryDirty = true;
       let changedSubject = false;
       byId.forEach((instance, id) => {
         const paint = paintOf(instance, paintBy);
