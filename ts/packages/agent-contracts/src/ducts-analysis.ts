@@ -58,6 +58,17 @@ export const ductsAnalysisRequestSchema = z
   });
 export type DuctsAnalysisRequest = z.infer<typeof ductsAnalysisRequestSchema>;
 
+/**
+ * The first call, as the guidance shows it. `source` and `selector` are objects, never strings:
+ * Claude-backed sessions (Oct 21-25) kept passing `source:"fresh"` and got `expected object`.
+ * Parsed by the schema in tests, so the guidance cannot drift from it.
+ */
+export const DUCTS_ANALYSIS_FIRST_CALL = JSON.stringify({
+  source: { kind: "fresh", target: { session: "<session>", openId: "<openId>" } },
+  selector: { kind: "document" },
+  projection: "summary",
+});
+
 const reason = z.strictObject({ code: z.string(), count: z.number().int(), message: z.string() });
 /**
  * How far an inferred join stands from the evidence (pressure-drop ledger, 2026-10-19: inference

@@ -40,6 +40,19 @@ test("the bundled ducts skill is projected from DUCTS_GUIDE and keeps the operat
     expect(description).toContain(word);
 });
 
+test("the documented first analysis call parses through the real schema", async () => {
+  const { DUCTS_ANALYSIS_FIRST_CALL, ductsAnalysisRequestSchema } =
+    await import("@pe/agent-contracts");
+  expect(ductsAnalysisRequestSchema.safeParse(JSON.parse(DUCTS_ANALYSIS_FIRST_CALL)).success).toBe(
+    true,
+  );
+  // The trap the example exists to prevent.
+  expect(
+    ductsAnalysisRequestSchema.safeParse({ source: "fresh", selector: "document" }).success,
+  ).toBe(false);
+  expect(renderDuctsSkill()).toContain(DUCTS_ANALYSIS_FIRST_CALL);
+});
+
 test("the guide read cuts cases to their identity unless cases are asked for", () => {
   const brief = ductsGuideReading().cases as Record<string, unknown>[];
   expect(brief).toHaveLength(DUCTS_GUIDE.cases.length);
