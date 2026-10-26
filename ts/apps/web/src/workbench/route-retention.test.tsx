@@ -1,5 +1,5 @@
 // @vitest-environment jsdom
-import { StrictMode, useEffect, useRef, useState } from "react";
+import { Activity, StrictMode, useEffect, useRef, useState } from "react";
 import { act, cleanup, fireEvent, render, waitFor } from "@testing-library/react";
 import { afterEach, beforeEach, expect, test, vi } from "vite-plus/test";
 import {
@@ -132,6 +132,7 @@ async function mount({
     ? [tab("A"), ...Array.from({ length: 11 }, (_, index) => tab(`T${index}`))]
     : [tab("A"), tab("B"), tab("C", "families")];
   let ready = enrolled;
+  let folded = false;
   let force: () => void = () => {};
   function Root() {
     const location = useRouterState({ select: (state) => state.location });
@@ -139,19 +140,21 @@ async function mount({
     force = () => bump((value) => value + 1);
     const tag = location.state as { __peRouteTab?: { id: string } };
     return (
-      <RouteRetention
-        route={
-          location.pathname === "/ducts"
-            ? "ducts"
-            : location.pathname === "/families"
-              ? "families"
-              : null
-        }
-        active={ready && tag.__peRouteTab ? tag.__peRouteTab : null}
-        tabs={tabs}
-        ready={ready}
-        renderRoute={(body) => body}
-      />
+      <Activity mode={folded ? "hidden" : "visible"}>
+        <RouteRetention
+          route={
+            location.pathname === "/ducts"
+              ? "ducts"
+              : location.pathname === "/families"
+                ? "families"
+                : null
+          }
+          active={ready && tag.__peRouteTab ? tag.__peRouteTab : null}
+          tabs={tabs}
+          ready={ready}
+          renderRoute={(body) => body}
+        />
+      </Activity>
     );
   }
   const root = createRootRoute({ component: Root });
@@ -211,6 +214,10 @@ async function mount({
     router,
     history,
     go,
+    fold: async (value: boolean) => {
+      folded = value;
+      await act(async () => force());
+    },
     enroll: async () => {
       ready = true;
       await act(() =>
@@ -257,6 +264,25 @@ beforeEach(() => {
     wire.push({ operation, input });
     return operation === "view.publish" ? { revision: ++revision } : {};
   }) as typeof peClient.call);
+});
+
+test("folding the outer tools Activity preserves the Page writer until its Place closes", async () => {
+  const { fold, close, go } = await mount({ strict: true });
+  const a = probes.get("A")!;
+  act(() => a.handle.page[1]({ selected: "before-fold", viewport: poseA }));
+  await fold(true);
+  await act(() => new Promise((resolve) => setTimeout(resolve, 5)));
+  expect(a.disposed).not.toHaveBeenCalled();
+  await fold(false);
+  expect(probes.get("A")!.instance).toBe(a.instance);
+  act(() => probes.get("A")!.handle.page[1]({ selected: "after-fold", viewport: poseB }));
+  expect(probes.get("A")!.handle.page[0]).toMatchObject({
+    selected: "after-fold",
+    viewport: poseB,
+  });
+  await go("B");
+  await close("A");
+  await waitFor(() => expect(a.disposed).toHaveBeenCalledTimes(1));
 });
 
 test("an action admitted while visible finishes native receipt and Work bookkeeping after hiding; new hidden writes refuse", async () => {
