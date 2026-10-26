@@ -248,9 +248,12 @@ export function ModelPicture({
       overlay &&
       annotationProject && {
         ...overlay.size,
-        obstacles: meshes ? captionObstacles(meshes, annotationProject, paintOf) : [],
+        obstacles:
+          meshes && labels.some((label) => layers.has(label.stub ? "stub-labels" : "labels"))
+            ? captionObstacles(meshes, annotationProject, paintOf)
+            : [],
       },
-    [overlay, shownView.section, meshes, paintOf],
+    [overlay, shownView.section, meshes, paintOf, labels, layers],
   ); // eslint-disable-line react-hooks/exhaustive-deps
   const captionLabels = useMemo(
     () =>
