@@ -3,6 +3,7 @@ import { Button } from "@pe/kit/lang/button";
 import { useState } from "react";
 import { useList, emptyListState } from "@pe/kit/lang/collection";
 import { ListView, type ListRowParts } from "@pe/kit/lang/list-view";
+import { Scroll } from "@pe/kit/lang/scroll";
 import { TOOLS } from "./catalogue";
 import { TooltipHint } from "@pe/kit/lang/tooltip";
 import type { PodRouteDescriptor } from "@pe/agent-contracts";
@@ -253,38 +254,40 @@ export function Directory({ page: address }: { page: AddressPage<"home"> }) {
     };
   };
   return (
-    <main className="mx-auto w-full max-w-6xl p-5">
-      <PrimaryRouteControls route="index">
-        <RouteHelpButton
-          name="Tool directory"
-          docs="Find a tool by task or description. Main, Preview and Archive are provisional exposure choices, not quality certification. Saved Works stay under the tool that owns them; unavailable destinations explain why they cannot resume. Ctrl Shift K searches tools, saved Works and Pea threads. Search and Home open explicit destinations; route-owned guards retain control of staged changes."
+    <Scroll className="size-full">
+      <main className="mx-auto w-full max-w-6xl p-5">
+        <PrimaryRouteControls route="index">
+          <RouteHelpButton
+            name="Tool directory"
+            docs="Find a tool by task or description. Main, Preview and Archive are provisional exposure choices, not quality certification. Saved Works stay under the tool that owns them; unavailable destinations explain why they cannot resume. Ctrl Shift K searches tools, saved Works and Pea threads. Search and Home open explicit destinations; route-owned guards retain control of staged changes."
+          />
+        </PrimaryRouteControls>
+        {/* L1/I6: the why (exposure, saved Works) is the route help above, one press away. */}
+        <h1 className="t-title mb-3">Find a tool</h1>
+        <div className="mb-4 flex flex-wrap items-center gap-2">
+          <span className="text-ink-2">Exposure proposal:</span>
+          {(["All", "Main", "Preview", "Archive"] as const).map((value) => (
+            <Button
+              key={value}
+              label={`Show ${value} exposure`}
+              pressed={exposure === value}
+              onClick={() => setPage({ exposure: value })}
+            >
+              {value}
+            </Button>
+          ))}
+        </div>
+        <NavigationStatus />
+        <ListView
+          list={list}
+          row={row}
+          aria-label="tools and saved Works"
+          empty={{
+            message: "No tools in this exposure",
+            exit: "Choose All exposure to see the catalogue",
+          }}
         />
-      </PrimaryRouteControls>
-      {/* L1/I6: the why (exposure, saved Works) is the route help above, one press away. */}
-      <h1 className="t-title mb-3">Find a tool</h1>
-      <div className="mb-4 flex flex-wrap items-center gap-2">
-        <span className="text-ink-2">Exposure proposal:</span>
-        {(["All", "Main", "Preview", "Archive"] as const).map((value) => (
-          <Button
-            key={value}
-            label={`Show ${value} exposure`}
-            pressed={exposure === value}
-            onClick={() => setPage({ exposure: value })}
-          >
-            {value}
-          </Button>
-        ))}
-      </div>
-      <NavigationStatus />
-      <ListView
-        list={list}
-        row={row}
-        aria-label="tools and saved Works"
-        empty={{
-          message: "No tools in this exposure",
-          exit: "Choose All exposure to see the catalogue",
-        }}
-      />
-    </main>
+      </main>
+    </Scroll>
   );
 }
