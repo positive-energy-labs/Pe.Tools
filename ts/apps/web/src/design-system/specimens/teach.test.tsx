@@ -13,6 +13,7 @@ import { QueryBox } from "@pe/kit/table/query";
 import { HelpWorld, RouteHelpButton } from "#/route/help";
 import { ductsDocs } from "#/ducts/docs";
 import { DUCTS_COMPARE } from "@pe/agent-contracts/ducts-guide";
+import { LeaderDiagram } from "@pe/kit/lang/leader-diagram";
 const diagram = vi.hoisted(() => vi.fn(() => null));
 vi.mock("#/product-map/diagram", async (original) => ({
   ...(await original<typeof import("#/product-map/diagram")>()),
@@ -51,6 +52,24 @@ afterEach(() => {
   expect(readTeaching()).toEqual([]);
 });
 const noop = () => {};
+test("quantity leaders still connect their track to composed rows in either direction", () => {
+  vi.spyOn(HTMLElement.prototype, "getBoundingClientRect").mockImplementation(
+    function (this: HTMLElement) {
+      if (this.classList.contains("dl-leader-track")) return new DOMRect(100, 20, 200, 50);
+      if (this.hasAttribute("data-key")) return new DOMRect(400, 100, 100, 40);
+      return new DOMRect(0, 0, 600, 300);
+    },
+  );
+  const items = [{ key: "part", at: [0.25], label: "Friction" }];
+  const view = render(<LeaderDiagram label="Losses" items={items} />);
+  expect(view.container.querySelector("[data-leader-line=part]")?.getAttribute("d")).toBe(
+    "M150 70 V120 H300",
+  );
+  view.rerender(<LeaderDiagram label="Losses" items={items} bottom right />);
+  expect(view.container.querySelector("[data-leader-line=part]")?.getAttribute("d")).toBe(
+    "M150 20 V120 H100",
+  );
+});
 test("Help paints its generated screen before mounting prose, cases or invoking diagrams", () => {
   vi.useFakeTimers({ toFake: ["requestAnimationFrame", "cancelAnimationFrame"] });
   render(<RouteHelpButton name="Ducts" docs={ductsDocs} />);
@@ -131,19 +150,17 @@ test("ListView publishes real fields; the open tutorial follows modes and fields
     </StrictMode>
   );
   const view = render(page("parallel", false));
-  await screen.findByRole("heading", { name: "2 Untaught" });
-  const tutorial = screen
-    .getAllByRole("region", { name: "Systems" })
-    .find((node) => !node.hasAttribute("data-slot"))!;
+  await screen.findByRole("button", { name: "Read Untaught controls" });
+  const tutorial = screen.getByRole("region", { name: "Systems controls" });
   expect(tutorial.querySelector("[data-teach-search]")?.textContent).toContain("Name");
   expect(within(tutorial).getByText("parallel · active")).toBeTruthy();
   expect(within(tutorial).getByLabelText("schematic").textContent).toContain("available");
-  expect(screen.getByRole("heading", { name: "2 Untaught" })).toBeTruthy();
+  expect(screen.getByRole("button", { name: "Read Untaught controls" })).toBeTruthy();
   view.rerender(page("perspective", true));
   expect(within(tutorial).getByText("perspective · active")).toBeTruthy();
   expect(tutorial.querySelector("[data-teach-search]")?.textContent).toContain("Size");
 });
-test("the tutorial preserves three pane rectangles, one leader per pane, and scoped single-item key rows", () => {
+test("the foldout preserves pane proportions, selects regions through map and index, and keeps global keys", () => {
   const rects = [
     [20, 50, 200, 600],
     [220, 50, 800, 450],
@@ -167,38 +184,25 @@ test("the tutorial preserves three pane rectangles, one leader per pane, and sco
     ...["0", "1", "2", "3"].map((id) => keys(id, id)),
     ...["navigation", "Situation", "feedback"].map((scope) => keys(scope)),
   );
-  vi.spyOn(SVGElement.prototype, "getBoundingClientRect").mockImplementation(
-    function (this: SVGElement) {
-      const n = (key: string) => Number(this.parentElement!.getAttribute(key)) / 2;
-      return new DOMRect(200 + n("x"), n("y"), n("width"), n("height"));
-    },
-  );
-  vi.spyOn(HTMLElement.prototype, "getBoundingClientRect").mockImplementation(
-    function (this: HTMLElement) {
-      return this.hasAttribute("data-key")
-        ? new DOMRect(0, 0, 100, 100)
-        : new DOMRect(0, 0, 900, 400);
-    },
-  );
   const { container } = render(<HelpWorld facts={facts} />);
-  const panes = [...container.querySelectorAll("[data-leader-source]")].map(
-    (node) => node.parentElement!,
-  );
+  const panes = [...container.querySelectorAll<HTMLElement>("[data-map-region]")];
   expect(panes).toHaveLength(3);
-  panes.forEach((pane, i) => {
-    const [left, top, width, height] = rects[i];
-    expect(Math.abs(Number(pane.getAttribute("x")) / 2 - (left - 20) / 2)).toBeLessThan(1);
-    expect(Math.abs(Number(pane.getAttribute("y")) / 2 - (top - 50) / 2)).toBeLessThan(1);
-    expect(Number(pane.getAttribute("width")) / 2).toBe(width / 2);
-    expect(Number(pane.getAttribute("height")) / 2).toBe(height / 2);
-  });
   expect(
-    [...container.querySelectorAll("[data-leader-line]")].map((path) => path.getAttribute("d")),
+    panes.map((pane) => [pane.style.left, pane.style.top, pane.style.width, pane.style.height]),
   ).toEqual([
-    "M222.2222222222222 375 L111.1111111111111 40",
-    "M333.3333333333333 281.25 L111.1111111111111 40",
-    "M333.3333333333333 656.25 L111.1111111111111 40",
+    ["0%", "0%", "20%", "100%"],
+    ["20%", "0%", "80%", "75%"],
+    ["20%", "75%", "80%", "25%"],
   ]);
+  expect(panes.every((pane) => pane.tagName === "BUTTON")).toBe(true);
+  fireEvent.click(screen.getByRole("button", { name: "Show Pane 1 controls" }));
+  expect(container.querySelector("[data-teach-detail]")?.getAttribute("data-teach-detail")).toBe(
+    "1",
+  );
+  expect(screen.getByText("1-0")).toBeTruthy();
+  expect(screen.queryByText("0-0")).toBeNull();
+  fireEvent.click(screen.getByRole("button", { name: "Read Pane 2 controls" }));
+  expect(screen.getByText("2-0")).toBeTruthy();
   expect(screen.queryByText("3-0")).toBeNull();
   const legend = container.querySelector("[data-teach-legend]")!;
   expect(legend.querySelectorAll("section")).toHaveLength(3);
@@ -230,7 +234,7 @@ test("zero-box panes withdraw facts without rehoming them; untitled panes use th
       <Tutorial />
     </>,
   );
-  expect(await screen.findByRole("heading", { name: "1 System tree" })).toBeTruthy();
+  expect(await screen.findByRole("button", { name: "Read System tree controls" })).toBeTruthy();
 });
 
 test("hidden scopes withdraw keys, modes and regions; key refusal changes remain live", async () => {

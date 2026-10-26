@@ -273,7 +273,7 @@ export function PaneStripSpecimen() {
       <SpecimenFrame name="Mounted tutorial" importPath="@pe/kit/lang/teach">
         <MountedTutorial />
       </SpecimenFrame>
-      <SpecimenFrame name="Declared tutorial · Ducts" importPath="@pe/kit/lang/teach">
+      <SpecimenFrame name="Tutorial foldout · declared Ducts" importPath="@pe/kit/lang/page-map">
         <HelpWorld facts={DUCTS_TEACHING} />
       </SpecimenFrame>
     </>

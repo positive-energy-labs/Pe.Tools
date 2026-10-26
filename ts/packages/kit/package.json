@@ -26,6 +26,7 @@
     "./lang/key-hint": "./src/components/lang/key-hint.tsx",
     "./lang/lang.css": "./src/components/lang/lang.css",
     "./lang/leader-diagram": "./src/components/lang/leader-diagram.tsx",
+    "./lang/page-map": "./src/components/lang/page-map.tsx",
     "./lang/legend": "./src/components/lang/legend.tsx",
     "./lang/list-popup": "./src/components/lang/list-popup.tsx",
     "./lang/minimap": "./src/components/lang/minimap.tsx",

@@ -2,7 +2,7 @@ import { useEffect, useRef, useState, type ReactNode } from "react";
 import { Dialog as DialogPrimitive } from "@base-ui/react/dialog";
 import { KeyHint } from "@pe/kit/lang/key-hint";
 import { Button } from "@pe/kit/lang/button";
-import { LeaderDiagram } from "@pe/kit/lang/leader-diagram";
+import { PageMap } from "@pe/kit/lang/page-map";
 import { Deferred } from "@pe/kit/lang/section";
 import { TeachLive, useTeaching } from "@pe/kit/lang/use-teach";
 import { measureRegions, type Teaching, type TeachKey } from "@pe/kit/lang/teach";
@@ -13,6 +13,8 @@ import { startFeedback } from "#/components/feedback-picker";
 import { SettingsHelpTrigger } from "#/machine/navigation";
 type HelpProps = { docs?: ReactNode; name: string; utilities?: boolean };
 const HELP_CHORD = { hotkey: "Alt+/", label: "How this tool works" } as const;
+const keyIdentity = (item: TeachKey, source?: "reference") =>
+  JSON.stringify([item.keys, item.pointer, item.label, item.says, item.refusal ?? null, source]);
 function Details({ facts }: { facts: readonly Teaching[] }) {
   const rows = new Map<string, { term: ReactNode; text: ReactNode; refusal?: string | null }>();
   const keys = new Map<string, TeachKey>();
@@ -20,7 +22,7 @@ function Details({ facts }: { facts: readonly Teaching[] }) {
     if (f.kind === "keys")
       for (const item of f.items) {
         if (item.label === HELP_CHORD.label) continue;
-        const id = `${f.scope}:${item.keys?.join("+").replaceAll("Escape", "Esc") ?? ""}:${item.pointer ?? ""}`;
+        const id = `${f.scope}:${keyIdentity(item, f.source)}`;
         if (!keys.has(id) || !f.gestures) keys.set(id, item);
       }
     if (
@@ -43,7 +45,9 @@ function Details({ facts }: { facts: readonly Teaching[] }) {
             : f.kind === "views"
               ? o.active
                 ? "shown"
-                : "available"
+                : o.active === false && !o.disabled
+                  ? "available"
+                  : ""
               : o.active
                 ? "active"
                 : "";
@@ -51,8 +55,8 @@ function Details({ facts }: { facts: readonly Teaching[] }) {
           term: (
             <span
               aria-label={o.label}
-              aria-current={o.active ? "true" : undefined}
-              aria-disabled={o.disabled || undefined}
+              aria-current={f.source !== "reference" && o.active ? "true" : undefined}
+              aria-disabled={(f.source !== "reference" && o.disabled) || undefined}
               data-teach-place={o.place}
             >
               {o.label}
@@ -70,6 +74,8 @@ function Details({ facts }: { facts: readonly Teaching[] }) {
       refusal: item.refusal,
     }),
   );
+  if (!rows.size)
+    return <p className="t-small text-ink-2">No additional controls are described here.</p>;
   return (
     <dl
       data-teach-keys=""
@@ -90,11 +96,61 @@ function Details({ facts }: { facts: readonly Teaching[] }) {
 }
 export function HelpWorld({ facts }: { facts: readonly Teaching[] }) {
   const picture = measureRegions(facts);
+  const [picked, setPicked] = useState<string>();
+  const selected = picture.regions.find((region) => region.key === picked) ?? picture.regions[0];
   const global = facts.filter((f) => f.kind === "keys" && !f.region);
   const scopes = [...new Set(global.flatMap((f) => (f.kind === "keys" ? [f.scope] : [])))];
+  const keys = new Map<
+    string,
+    { item: TeachKey; source?: "reference"; regions: Set<string>; uses: Set<string> }
+  >();
+  for (const fact of facts) {
+    const region = picture.regions.find((region) => region.key === fact.region);
+    if (fact.kind !== "keys" || !region) continue;
+    for (const item of fact.items) {
+      const id = keyIdentity(item, fact.source);
+      const entry = keys.get(id) ?? {
+        item,
+        source: fact.source,
+        regions: new Set<string>(),
+        uses: new Set<string>(),
+      };
+      entry.regions.add(region.key);
+      entry.uses.add(
+        `${region.label}${fact.scope.toLowerCase() === region.label.toLowerCase() ? "" : ` / ${fact.scope}`}`,
+      );
+      keys.set(id, entry);
+    }
+  }
+  const shared = new Map<string, Extract<Teaching, { kind: "keys" }>>();
+  const sharedKeys = new Set<string>();
+  for (const [id, entry] of keys) {
+    if (entry.regions.size < 2) continue;
+    sharedKeys.add(id);
+    const scope = [...entry.uses].sort().join(" · ");
+    const groupId = `${entry.source ?? "measured"}:${scope}`;
+    const group = shared.get(groupId) ?? {
+      kind: "keys",
+      id: groupId,
+      scope,
+      source: entry.source,
+      items: [],
+    };
+    shared.set(groupId, { ...group, items: [...group.items, entry.item] });
+  }
+  const local = facts
+    .filter((fact) => fact.region === selected?.key)
+    .map((fact) =>
+      fact.kind === "keys"
+        ? {
+            ...fact,
+            items: fact.items.filter((item) => !sharedKeys.has(keyIdentity(item, fact.source))),
+          }
+        : fact,
+    );
   return (
     <div
-      className="px-4 sm:px-8"
+      className="@container px-4 sm:px-8"
       data-teach-source={facts.some((f) => f.source === "reference") ? "reference" : "measured"}
     >
       {facts.some((f) => f.source === "reference") ? (
@@ -114,28 +170,55 @@ export function HelpWorld({ facts }: { facts: readonly Teaching[] }) {
           </section>
         ))}
       </div>
-      {picture.regions.length ? (
-        <LeaderDiagram label="Page regions" picture={picture} items={picture.regions}>
-          {picture.regions.map((r, i) => (
-            <section
-              key={r.key}
-              data-key={r.key}
-              aria-label={r.label}
-              className="flex w-full min-w-0 flex-col gap-2 t-small wrap-anywhere"
-              style={{ gridColumn: i % 2 ? 3 : 1, gridRow: Math.floor(i / 2) + 1 }}
-            >
-              <h2 className="t-small t-upper">
-                {i + 1} {r.label}
-              </h2>
-              {facts.map((f) =>
-                f.kind === "region" && f.id === r.key && f.purpose ? (
-                  <p key={f.id}>{f.purpose}</p>
-                ) : null,
+      {selected ? (
+        <div className="flex flex-col gap-6" data-teach-foldout="">
+          <div className="grid grid-cols-1 items-start gap-6 @min-[40rem]:grid-cols-2">
+            <PageMap picture={picture} value={selected.key} onValueChange={setPicked} />
+            <div className="flex flex-col gap-3" aria-label="Region index">
+              {picture.regions.map((r, i) => (
+                <section
+                  key={r.key}
+                  aria-label={r.label}
+                  className="flex min-w-0 flex-col gap-1 t-small wrap-anywhere"
+                >
+                  <h2 className="t-small t-upper">
+                    <Button
+                      label={`Read ${r.label} controls`}
+                      pressed={selected.key === r.key}
+                      onClick={() => setPicked(r.key)}
+                    >
+                      {i + 1} {r.label}
+                    </Button>
+                  </h2>
+                  {facts.map((f) =>
+                    f.kind === "region" && f.id === r.key && f.purpose ? (
+                      <p key={f.id}>{f.purpose}</p>
+                    ) : null,
+                  )}
+                </section>
+              ))}
+            </div>
+          </div>
+          <div className="hairline-t grid grid-cols-1 items-start gap-6 pt-4 @min-[40rem]:grid-cols-2">
+            <section aria-label="Shared controls" data-teach-shared="">
+              <h2 className="mb-2 t-small t-upper">Shared controls</h2>
+              {shared.size ? (
+                [...shared].map(([id, group]) => (
+                  <div key={id} className="mb-4 flex flex-col gap-2">
+                    <p className="t-small text-ink-2">{group.scope}</p>
+                    <Details facts={[group]} />
+                  </div>
+                ))
+              ) : (
+                <p className="t-small text-ink-2">Controls are listed with their region.</p>
               )}
-              <Details facts={facts.filter((f) => f.region === r.key)} />
             </section>
-          ))}
-        </LeaderDiagram>
+            <section aria-label={`${selected.label} controls`} data-teach-detail={selected.key}>
+              <h2 className="mb-2 t-small t-upper">{selected.label}</h2>
+              <Details facts={local} />
+            </section>
+          </div>
+        </div>
       ) : null}
     </div>
   );
