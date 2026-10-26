@@ -236,10 +236,18 @@ test("real conversation Work cutover retains authored cells, draft, Places and o
         90_000,
       );
       await p.until(
-        async () => p.read<boolean>("Boolean(history.state.__peRouteTab?.id)"),
+        async () =>
+          p.read<boolean>(`(() => {
+          const id = history.state.__peRouteTab?.id;
+          return Boolean(id && [...document.querySelectorAll('[data-route-tab]')].some(e => e.getClientRects().length && e.getAttribute('data-route-tab') === id));
+        })()`),
         "standalone browser Place identity",
       );
       browserPlaceId = await p.read<string>("history.state.__peRouteTab.id");
+      expect(
+        await p.count('[aria-label="Places"] button[aria-pressed][aria-label^="Ducts"]'),
+        "one pasted URL enrolls exactly one Place",
+      ).toBe(1);
       expect(new URL(await p.url()).searchParams.has("thread")).toBe(false);
       expect(
         network
@@ -257,6 +265,10 @@ test("real conversation Work cutover retains authored cells, draft, Places and o
         "second browser Place",
       );
       expect(new URL(await p.url()).searchParams.has("thread")).toBe(false);
+      expect(
+        await p.count('[aria-label="Places"] button[aria-pressed][aria-label^="Takeoffs"]'),
+        "one second tool URL enrolls exactly one Place",
+      ).toBe(1);
       receipt.coverage.standalone = { thread: null, browserPlaceId, hostWrites: [] };
     });
     await step("real startup and canonical sidebar", async () => {
