@@ -208,7 +208,7 @@ function useRouteViewBridge<R extends RouteViewRoute>({
     }, 5_000);
     return () => clearInterval(timer);
   }, [view, publish]);
-  const onEvent = useCallback(
+  const applyIntent = useCallback(
     (event: Intent) => {
       const value = current.current;
       if (
@@ -263,6 +263,15 @@ function useRouteViewBridge<R extends RouteViewRoute>({
       setIntent({ event, receipt: result.receipt, context: JSON.stringify(value.context) });
     },
     [routeCurrent],
+  );
+  const onEvent = useCallback(
+    (event: Intent) => {
+      if (event.type !== "route-view-intent") return;
+      // The host can deliver an intent before the publication's HTTP response reaches this
+      // browser. Join that receipt first, then apply the unchanged instance/revision/context fences.
+      void publishing.current.catch(() => {}).then(() => applyIntent(event));
+    },
+    [applyIntent],
   );
   useHostEvents(Boolean(view), onEvent);
   useEffect(() => {

@@ -123,7 +123,8 @@ function DuctsProbe() {
 
 beforeEach(() => {
   mounts = 0;
-  call.mockClear();
+  call.mockReset();
+  call.mockImplementation(async (door) => (door === "view.publish" ? { revision: 1 } : {}));
   sessionStorage.clear();
   sessionStorage.setItem("pe.places", JSON.stringify(seeded));
   vi.stubGlobal("matchMedia", () => ({
@@ -610,6 +611,14 @@ test("after a cross-row Work press the retained body is current again under the 
 });
 
 test("a Pea open of a new tool keeps its first lease instance, and a set against it is acknowledged", async () => {
+  let finishPublish: ((value: { revision: number }) => void) | undefined;
+  call.mockImplementation(async (door) => {
+    if (door === "view.publish" && !finishPublish)
+      return await new Promise<{ revision: number }>((resolve) => {
+        finishPublish = resolve;
+      });
+    return door === "view.publish" ? { revision: 1 } : {};
+  });
   const router = await mount("/pea?thread=T", true);
   await settle();
   act(() =>
@@ -642,6 +651,8 @@ test("a Pea open of a new tool keeps its first lease instance, and a set against
       patch: { sort: "Name" },
     }),
   );
+  expect(hostCalls("view.ack")).toEqual([]);
+  await act(async () => finishPublish!({ revision: 1 }));
   await waitFor(() => expect(hostCalls("view.ack").length).toBe(1));
   await settle();
   expect((hostCalls("view.ack")[0]![1] as { body: { outcome: string } }).body.outcome).not.toBe(

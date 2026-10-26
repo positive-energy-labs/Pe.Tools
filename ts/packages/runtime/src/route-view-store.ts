@@ -49,7 +49,7 @@ export class RouteViewStore {
     this.leases.delete(instance);
     for (const [id, pending] of this.pending) {
       if (pending.lease.view.instance === instance)
-        this.finish(id, { ok: false, error: "view unmounted" });
+        this.finish(id, { ok: false, error: "view lease was released" });
     }
   }
 

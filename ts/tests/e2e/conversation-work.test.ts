@@ -148,7 +148,7 @@ test("real conversation Work cutover retains authored cells, draft, Places and o
     receipt.coverage.visibilityTransitions = visibilityTransitions;
     await p.send("Runtime.addBinding", { name: "__peJourneyVisibility" });
     await p.send("Page.addScriptToEvaluateOnNewDocument", {
-      source: `document.addEventListener('visibilitychange',()=>globalThis.__peJourneyVisibility(JSON.stringify({at:Date.now(),state:document.visibilityState})));`,
+      source: `if(window===window.top) document.addEventListener('visibilitychange',()=>globalThis.__peJourneyVisibility(JSON.stringify({at:Date.now(),state:document.visibilityState})));`,
     });
     p.onEvent(({ method, params }) => {
       if (method === "Runtime.bindingCalled" && params.name === "__peJourneyVisibility")

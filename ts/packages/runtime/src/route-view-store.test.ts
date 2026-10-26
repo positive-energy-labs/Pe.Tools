@@ -143,7 +143,7 @@ describe("mounted route view custody", () => {
         }).ok,
       ).toBe(false);
       store.remove(id1);
-      await expect(result).resolves.toMatchObject({ ok: false, error: "view unmounted" });
+      await expect(result).resolves.toMatchObject({ ok: false, error: "view lease was released" });
       expect(store.select("new-thread", "families", id1)).toBeNull();
     } finally {
       vi.useRealTimers();
