@@ -13,7 +13,8 @@
     },
     "./cli": "./src/cli-runner.ts",
     "./guide": "./src/guide.ts",
-    "./worker": "./src/worker.ts"
+    "./worker": "./src/worker.ts",
+    "./build": "./scripts/build-guardian.ts"
   },
   "scripts": {
     "check": "vp check",

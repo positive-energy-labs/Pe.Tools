@@ -1,4 +1,6 @@
 import { defineConfig } from "vite-plus";
+import { browserGuardianPlugin } from "@pe/browser/build";
+import { join } from "node:path";
 import { receiptBuildDefines } from "../host/src/build-stamp.ts";
 
 export default defineConfig({
@@ -7,6 +9,7 @@ export default defineConfig({
     outDir: "dist-installed/bundle",
     clean: ["dist-installed"],
     shims: true,
+    plugins: [browserGuardianPlugin(join(import.meta.dirname, "dist-installed"))],
     define: {
       __PE_SOURCE_COMMIT__: receiptBuildDefines("release").__PE_SOURCE_COMMIT__,
     },

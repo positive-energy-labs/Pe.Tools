@@ -6,6 +6,8 @@ Direct CDP for library callers and shell agents. Commands and sessions use the s
 
 The Windows Pea executable embeds the browser CLI and its keeper/attachment workers. [Pea main](../../apps/pea/src/main.ts) dispatches `@pe/browser/worker` before the ordinary CLI; another SEA embedder must provide that dispatch too. Ordinary Node uses the emitted sibling `worker-entry` file. Packaged workers refuse non-Windows SEA execution; that lifecycle is not certified. See the [port assessment](../../../docs/features/browser/PORT-REVIEW.md) for upstream tradeoffs and proof limits.
 
+Windows host and Pea builds also ship `Pe.Browser.Guardian.exe` and its `.exe.config` beside each app executable. The build compiles the single [native guardian source](native/Guardian.cs) through the shared `@pe/browser/build` pack hook. Packaged launches use only these app-local assets, including native profile checks; missing assets require payload repair and never trigger a compiler fallback. The helper uses .NET Framework 4.8 and Windows Management Instrumentation. End users need an installed supported browser, but no Node, PowerShell, or C# compiler for this packaged browser path. Source checkout execution compiles its development helper on demand.
+
 ```ts
 import { openBrowser } from "@pe/browser";
 

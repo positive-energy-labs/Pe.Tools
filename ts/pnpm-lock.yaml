@@ -127,6 +127,9 @@ importers:
       '@pe/agent-contracts':
         specifier: workspace:*
         version: link:../../packages/agent-contracts
+      '@pe/browser':
+        specifier: workspace:*
+        version: link:../../packages/browser
       '@pe/ducts-domain':
         specifier: workspace:*
         version: link:../../packages/ducts-domain
@@ -151,9 +154,6 @@ importers:
       parse5:
         specifier: ^8.0.1
         version: 8.0.1
-      playwright-core:
-        specifier: 1.60.0
-        version: 1.60.0
       posthog-node:
         specifier: 5.55.2
         version: 5.55.2
@@ -164,6 +164,9 @@ importers:
       '@types/node':
         specifier: ^25.6.2
         version: 25.9.2
+      playwright-core:
+        specifier: 1.60.0
+        version: 1.60.0
       typescript:
         specifier: ^6.0.3
         version: 6.0.3

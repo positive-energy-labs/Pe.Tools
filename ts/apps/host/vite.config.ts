@@ -1,4 +1,6 @@
 import { defineConfig } from "vite-plus";
+import { browserGuardianPlugin } from "@pe/browser/build";
+import { join } from "node:path";
 import { receiptBuildDefines } from "./src/build-stamp.ts";
 
 export default defineConfig({
@@ -9,6 +11,7 @@ export default defineConfig({
     shims: true,
     define: receiptBuildDefines("release"),
     plugins: [
+      browserGuardianPlugin(join(import.meta.dirname, "dist-installed")),
       {
         name: "preserve-node-socket-context",
         transform: {

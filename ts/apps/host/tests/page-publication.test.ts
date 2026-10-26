@@ -115,7 +115,7 @@ it("captures through real Edge, publishes only on success, and preserves authore
     "89504e470d0a1a0a",
   );
   const evidence = fileURLToPath(
-    new URL("../../../../.artifacts/reorient-20261013/p/r5-implementation/", import.meta.url),
+    new URL("../../../../.artifacts/runs/page-capture-cdp-20261026/", import.meta.url),
   );
   await mkdir(evidence, { recursive: true });
   await writeFile(join(evidence, "native-capture.png"), Buffer.from(result.capture.data, "base64"));
