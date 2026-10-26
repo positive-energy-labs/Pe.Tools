@@ -1,6 +1,6 @@
 # 0012 — One verification entrypoint
 
-Date: 2026-09-23. Status: accepted.
+Date: 2026-09-23. Status: cadence and exclusive-proof requirement superseded by [ADR 0023](0023-verification-at-substantial-checkpoints.md); remaining decisions retained.
 
 ## Context
 

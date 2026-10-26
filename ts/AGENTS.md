@@ -9,7 +9,7 @@ Docs are local at `node_modules/vite-plus/docs` or online at https://viteplus.de
 ## Review Checklist
 
 - [ ] Run `vp install` after pulling remote changes and before getting started.
-- [ ] Run `pnpm verify` before claiming a change is done. It is the only proof entrypoint; CI runs the same command.
+- [ ] Use `pnpm verify` at substantial checkpoints: before a worktree merge or release, after accumulated messy changes, or after a few major waves. Iteration and checkpoint commits use claim-specific checks under `execute` and `prove`; CI still runs the comprehensive command.
 - [ ] If setup, runtime, or package-manager behavior looks wrong, run `vp env doctor` and include its output when asking for help.
 
 <!--VITE PLUS END-->

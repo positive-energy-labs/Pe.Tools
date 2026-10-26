@@ -12,7 +12,7 @@ surface is for. `/design-system` is the executable law; a position that can rend
 `tests/repo-guards/src/design-guard.test.ts` is the lint: hard zeros only (one owner per instrument
 path, one CSS owner per class, no unregistered classes); the ratchet baselines were retired in the
 2026-10 test purge. Run
-`pnpm verify` from `ts` before you claim a change is done. A guard
+`pnpm verify` from `ts` at substantial checkpoints: before a worktree merge or release, after accumulated messy changes, or after a few major waves. During iteration, exercise the affected interaction manually or through a bounded browser scenario and run focused checks where needed; follow `execute` and `prove` for cadence. A guard
 change lands as ruling plus code plus guard in one commit; rulings go to
 `docs/features/design-system/LEDGER.md`.
 

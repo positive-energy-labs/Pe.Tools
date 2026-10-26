@@ -4,7 +4,6 @@ description: Who does what, at what cost. Trigger on "delegate", "fan out", "sub
 argument-hint: "How big is the session, what needs your eyes, what can leave your context?"
 figure: Abbot, Falconer, and Breeder — who does what, at what cost, down which line
 prevents: "context rot: one session carrying everything, counsel building"
-disable-model-invocation: true
 ---
 # Delegate
 
@@ -18,7 +17,7 @@ Mode: no fan-out without a posture table first. Task, who (model and thinking), 
 
 ## Laws
 
-- Delegate when any of these holds: the task needs 20+ tool calls, the goal is unambiguous, you want a fresh perspective, the work is parallel and non-overlapping, or it would break your train of thought. The bigger the session or the lower your limits, the more work leaves your context.
+- Delegate sustained independent implementation, research, and proof by default. The main agent remains responsible for triage, final judgment, discussion, and joint inspection. A small standalone task or a short check can stay in the main session. Respect explicit user constraints and existing ownership. Send new feedback to the existing owner and replace superseded instructions.
 - Every mission is bounded and specified. Give the agent an edge (stop condition, time box, report file) and make the important choices before you send it. Send unbounded work to the model with taste. An agent that lacks a choice returns a question, not a guess.
 - Send one ask per turn. Four questions in one prompt return one averaged answer, and no part of it belongs to its question. Send the follow-up down the same line.
 - Make the shared base once (research, fixture, scaffold) and hand it to every agent.

@@ -4,6 +4,10 @@ The one ledger outside `docs/features/`; the skill set is not a feature. Same th
 
 ## Decided
 
+- 2026-10-26, user: "totally unwind this posturing." Broad verification and durable test consolidation move to substantial merge, release, accumulated-change, and major-wave checkpoints; iteration uses claim-specific evidence. [ADR 0023](../../docs/adr/0023-verification-at-substantial-checkpoints.md) and [44 fresh-agent decisions, with limits](../../docs/research/2026-10-26-verification-cadence.md).
+
+- 2026-10-26, delegate most substantive independent work by default; keep the main agent available for discussion and joint inspection. User: "most tasks should be delegated" and "ok please make the changes you see fit." Small standalone tasks, short checks, explicit constraints, and existing ownership remain exceptions. Evidence and cold-agent limits: [conversational delegation study](../../docs/research/2026-10-26-conversational-delegation.md).
+
 - 2026-10-21, grounding folds into `prove` (kaitpw: "prove is stronger and grounding should be positioned as a synonym for proof"). `prove` gains the triggers ("ground this", "census the model", "spike it on a copy", "case list", "let me verify"), a second figure (test pits before footings: the terrain is bored and logged before the footing is sized) and a "Ground: proof before the shape" section with ten laws from the 2026-10-20/21 ducts close (`docs/features/ducts/LEDGER.md`, Proof bar): name the ground (one real model copy, two scenarios with the hurting one first, a saved snapshot twin); census before design; spike on a copy with a works / accepted-but-wrong / refused table; falsify your own guess on the twin when doubted; decode the ground truth file, not its printout; ground in the business; drive by hand after every wave; hand the user a numbered case list with links, drawings and codes; fix only what blocks verification; capture rulings the same turn. Cold-reader test not run.
 
 - 2026-10-16, `goal` becomes `control` (kaitpw): one loop for attended and unattended pushes, `MODE manual|auto` replacing the split, written in swell's control-theory nouns (plant, sensor, signature, observer, actuator, move, operator) so the form ports to `swell.config.ts` without translation. The form gains a frozen SIGNATURES list, per-actuator timeouts and file ownership, and two attempts then give up; done is the next sensor reading, never a predicate. Evidence: thread 36f4d81e's Codex run, one 11-hour turn on "until every terminal is covered" with 402 unfillable terminals and 8 reinstalls; the meta-muse retro (`.artifacts/runs/retro-metamuse-20261014/`). Figure Crusade becomes Governor.
@@ -100,6 +104,10 @@ The one ledger outside `docs/features/`; the skill set is not a feature. Same th
 
 ## Tried & rejected
 
+- 2026-10-26, retired "Run every proof a report states before you accept its verdict", "Every bug the drive finds gets its deterministic test after the fix", and progress requiring "one test that fails when the rule is broken": they turn small discoveries into repeated certification and implementation-preserving tests. Retired the sole `pnpm verify` completion rule in `execute` and TypeScript/web guidance; ADR 0023 supersedes ADR 0012 on cadence. Retired "a wrong number you can see never needs a unit to guard it": visibility does not reliably expose rare critical failures. Exact original and tested replacement text: [candidate evidence](../../.artifacts/runs/deterministic-20261026-verification/candidate-final.json).
+
+- 2026-10-26, removed delegate’s user-only metadata, index gate, and threshold law ("20+ tool calls", "the goal is unambiguous", "fresh perspective", "parallel and non-overlapping", "break your train of thought"). They made delegation either unavailable without a command or overbroad for tiny tasks. The original text and exact tested replacement remain in [the research evidence](../../.artifacts/runs/deterministic-20261026-posture/trials/proposed-guidance.patch).
+
 - `lens.ground` as its own lens (drafted 2026-10-21, killed the same day). kaitpw: fold into `prove`; the contents stay, the stance does not. A second standalone `ground` after the 2026-08-25 deletion would have split proof into two words.
 - 2026-10-16, vaulted from `goal`: the figure "Crusade, an unattended push at a number"; MISSION and NUMBER as form lines (a number is a predicate with no frozen edge; the Codex run had one); keeping goal and campaign as two loops.
 - 2026-08-31, encyclopedic `slot.execute`: 265 lines mixed stable proof choices with a beta-specific CLI manual, incident fixes, prototype mechanics, browser fallbacks, and the full Herdr protocol. A cold reader could not find the next command. The rewrite keeps lane choice, custody, safety boundaries, and authoritative entrypoints inline; git holds the killed laws, and caveats return only when they change a repeated decision.
@@ -114,6 +122,8 @@ The one ledger outside `docs/features/`; the skill set is not a feature. Same th
 - 2026-08-31, worktree dependency wiring (`wire-worktree.ps1`): it redirected `@pe/*` into the candidate but shared third-party dependencies with the donor. Falsifier: 22 of 37 wired worktrees had lockfiles that differed from the donor, and one candidate resolved `class-variance-authority` it neither declared nor locked. Killed for `vp i --frozen-lockfile --prefer-offline` from `ts`, the only taught install surface.
 
 ## Owed
+
+- Resolve the skill checker’s global-home failure against the installed `C:/Users/kaitp/.claude/skills/synced` directory; the 2026-10-26 guidance edits leave it intact. [Verification record](../../docs/research/2026-10-26-verification-cadence.md).
 
 - 2026-10-12, repo skill hygiene owes the three pre-existing `python .agents/skills/check.py` failures: `show-me` directory name is not `<kind>.<name>`; `lens.house` retains `## Parlance`; user-global `C:/Users/kaitp/.claude/skills/synced` violates the single skills home. The worktree junction restores `.claude/skills` to `.agents/skills`; this cut changes no skill or user-global content.
 
