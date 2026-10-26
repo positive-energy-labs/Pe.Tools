@@ -6,7 +6,8 @@
  */
 import { useEffect, useRef, useState } from "react";
 
-import { useHostOp } from "#/readings";
+import { useHostCall } from "#/readings";
+import { callHostRpc } from "#/host/client";
 import { NATIVE_READ_WAIT_S } from "#/route/waits";
 import { fetchSceneArtifact } from "./artifact";
 import { sceneRequest } from "./host";
@@ -59,12 +60,24 @@ function acquireScene(id: string) {
 }
 /** What the disabled call carries: never sent. */
 const IDLE = sceneRequest([], false);
+type CaptureRequest = ReturnType<typeof sceneRequest>;
+// Receipts are reusable only under an explicit native observation revision, never elapsed time.
+const captures = new Map<string, Promise<{ id: string }>>();
+const coverages = new Map<string, CaptureRequest>();
+function retain<T>(entries: Map<string, T>, key: string, value: T): T {
+  entries.delete(key);
+  entries.set(key, value);
+  if (entries.size > 32) entries.delete(entries.keys().next().value!);
+  return value;
+}
 
 export type SceneRead = {
   meshes: SceneMeshes | null;
   /** Why there are no meshes: the capture or the artifact failed; null otherwise. */
   error: string | null;
   pending: boolean;
+  /** Current-scope exact focus is usable while its optional context is pending. */
+  focusReady?: boolean;
   omittedElements: number;
   unavailableElements: number;
 };
@@ -87,25 +100,81 @@ export function usePictureRead(
       ...(holding?.read ?? capture),
       error: capture.error,
       pending,
+      // A current focus may be inspected while pricing refreshes. Native action authority
+      // still belongs to NativeObservationScope, which independently withdraws it.
+      focusReady: !!capture.meshes && capture.focusReady,
     },
+  };
+}
+
+/** Focus owns the first frame. Coverage grows only within one document/revision/membership. */
+export function useDuctScene(
+  request: ReturnType<typeof sceneRequest> | null,
+  doc: { session: string; openId: string } | null,
+  epoch: number | string,
+): SceneRead {
+  const identity = JSON.stringify([
+    doc?.session,
+    doc?.openId,
+    epoch,
+    request?.elementIds,
+    request?.maxTriangles,
+  ]);
+  let coverage = coverages.get(identity) ?? null;
+  if (request && !request.focusOnly) {
+    coverage = retain(coverages, identity, {
+      ...request,
+      proximity: request.proximity && (coverage?.proximity ?? true),
+      contextPaddingFt: Math.max(request.contextPaddingFt, coverage?.contextPaddingFt ?? 0),
+    });
+  }
+  const focus = useScene(
+    request ? { ...request, focusOnly: true, proximity: false, contextPaddingFt: 0 } : null,
+    doc,
+    epoch,
+    true,
+  );
+  // Do not queue optional geometry before exact focus has reached the browser.
+  const context = useScene(focus.meshes ? coverage : null, doc, epoch, true);
+  if (!request || request.focusOnly) return focus;
+  const shown = context.meshes ? context : focus;
+  return {
+    ...shown,
+    error: focus.error ?? context.error,
+    pending: focus.pending || context.pending,
+    focusReady: !!focus.meshes && !focus.pending,
   };
 }
 
 export function useScene(
   request: ReturnType<typeof sceneRequest> | null,
   doc: { session: string; openId: string } | null,
-  epoch: number,
+  epoch: number | string,
+  reuse = false,
 ): SceneRead {
-  const call = useHostOp("revit.detail.space-scene", request ?? IDLE, {
-    bridgeSessionId: doc?.session,
-    openDocumentId: doc?.openId,
-    enabled: request !== null && doc !== null,
-    waitSeconds: NATIVE_READ_WAIT_S,
-  });
-  const { refresh } = call;
-  useEffect(() => {
-    if (epoch > 0) refresh();
-  }, [epoch, refresh]);
+  const key = JSON.stringify([doc?.session, doc?.openId, epoch, request]);
+  const call = useHostCall(
+    async (signal) => {
+      const resident = reuse ? captures.get(key) : undefined;
+      if (resident) return retain(captures, key, resident);
+      const capture = callHostRpc("revit.detail.space-scene", request ?? IDLE, {
+        bridgeSessionId: doc?.session,
+        openDocumentId: doc?.openId,
+        signal,
+      }).then(({ id }) => ({ id }));
+      if (reuse) {
+        retain(captures, key, capture);
+        void capture.catch(() => {
+          if (captures.get(key) === capture) captures.delete(key);
+        });
+      }
+      return capture;
+    },
+    ["space-scene", key],
+    request !== null && doc !== null,
+    NATIVE_READ_WAIT_S,
+    true,
+  );
   const id = request && doc ? (call.data?.id ?? null) : null;
   const artifact = useSceneArtifact(id);
   return {

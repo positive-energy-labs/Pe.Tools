@@ -100,6 +100,7 @@ export function ModelPicture({
   lit,
   paintOf: routePaint,
   contextMode,
+  contextRadiusFt,
   sceneView,
   hovered,
   labels,
@@ -127,6 +128,7 @@ export function ModelPicture({
   lit: ReadonlySet<number>;
   paintOf?: PaintOf;
   contextMode?: "halo" | "all";
+  contextRadiusFt?: number;
   sceneView: SceneView;
   hovered: number | null;
   labels: readonly Label[];
@@ -313,7 +315,7 @@ export function ModelPicture({
           readout={readout}
           className="size-full"
           meshes={meshes}
-          pickingEnabled={!read.pending}
+          pickingEnabled={!read.pending || read.focusReady === true}
           orbit={orbit}
           orbitPivot={stage.orbitPivot}
           wheelHost={wheelHost ?? host}
@@ -321,6 +323,7 @@ export function ModelPicture({
           lit={litKeys}
           paintOf={paintOf}
           contextMode={preset === "nearby-structure" ? "halo" : contextMode}
+          contextRadiusFt={contextRadiusFt}
           preset={preset}
           clipVolume={clipVolume}
           isolated={layers.has("meshes") ? null : NONE}
@@ -351,6 +354,15 @@ export function ModelPicture({
             view={shownView}
             subject={sectionSubject}
             padding={look.section.paddingFt}
+            proximity={
+              contextRadiusFt === undefined
+                ? undefined
+                : {
+                    radiusFt: contextRadiusFt,
+                    onChange: (radius) =>
+                      setPage({ contextRadiusFt: radius }, { history: "replace" }),
+                  }
+            }
             onChange={(next) => {
               setSectionDraft(undefined);
               setPage({ sceneView: next }, { history: "push" });

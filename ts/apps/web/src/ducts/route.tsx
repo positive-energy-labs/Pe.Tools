@@ -555,6 +555,10 @@ export function DuctsRoute({ url = true }: { url?: boolean } = {}) {
     work,
     empty,
     doc,
+    captureSource:
+      snapshotCurrent && read.nativeObservation?.document && read.version
+        ? { document: read.nativeObservation.document, version: read.version }
+        : null,
     reading: {
       pending,
       error: error ?? pricingState.error ?? null,

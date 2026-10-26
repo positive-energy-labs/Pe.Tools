@@ -356,6 +356,7 @@ export function createRenderer(
   };
   applyClip(material);
   const veil = veilUniforms();
+  let contextRadiusFt: number | undefined;
   veilMaterial(material, veil, true);
   const batch = new THREE.BatchedMesh(
     meshes.instances.length,
@@ -388,6 +389,10 @@ export function createRenderer(
       ? new THREE.FogExp2(ground, fogDensity(bounds, look.fog.density))
       : null;
     setVeilLook(veil, look.veil, ground);
+    if (contextRadiusFt !== undefined) {
+      veil.veilFar.value = contextRadiusFt;
+      veil.veilNear.value = Math.min(veil.veilNear.value, contextRadiusFt);
+    }
     veil.subjectRim.value = look.depth.rim;
     veil.stubFadeFt.value = look.subject.stubFadeFt;
     veil.stubEndAlpha.value = look.subject.stubEndAlpha;
@@ -533,7 +538,8 @@ export function createRenderer(
   let thumbsStale = true;
   let hasContext = false;
   let hasShell = false;
-  /** Context cannot attenuate a duct, even through arbitrarily many overlapping slabs. */
+  // TODO: Restore truthful translucent front/behind depth. Subject-over-context compositing
+  // is superseded by the 2026-10-26 ruling; proximity capture does not require this order.
   const drawScene = (shown: THREE.Camera) => {
     const mask = shown.layers.mask;
     const autoClear = renderer.autoClear;
@@ -1345,8 +1351,13 @@ export function createRenderer(
       if (changedBounds) returnInside();
     },
     /** Purely visual: no capture or distance-field bake when a context layer changes. */
-    setContextMode(mode: ContextMode = "all") {
+    setContextMode(mode: ContextMode = "all", radiusFt?: number) {
+      contextRadiusFt = radiusFt;
       veil.veilHalo.value = mode === "halo";
+      if (radiusFt !== undefined) {
+        veil.veilFar.value = radiusFt;
+        veil.veilNear.value = Math.min(veil.veilNear.value, radiusFt);
+      }
       thumbsStale = true;
       render();
     },

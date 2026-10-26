@@ -15,11 +15,13 @@ export function SectionControls({
   subject,
   padding,
   onChange,
+  proximity,
 }: {
   view: SceneView;
   subject: Bounds;
   padding: number;
   onChange: (view: SceneView) => void;
+  proximity?: { radiusFt: number; onChange: (radius: number) => void };
 }) {
   const section = view.section;
   const current = PRESETS.find((p) => p.value === view.preset)!;
@@ -76,6 +78,32 @@ export function SectionControls({
           )}
         </ButtonGroup>
       </div>
+      {proximity && (
+        <label className="flex items-center gap-1">
+          Nearby
+          <span className="w-24">
+            <Input
+              key={proximity.radiusFt}
+              type="number"
+              face="mono"
+              aria-label="Nearby radius in feet"
+              defaultValue={proximity.radiusFt}
+              min={0}
+              max={64}
+              step={1}
+              onBlur={(e) => {
+                const radius = e.currentTarget.valueAsNumber;
+                if (Number.isFinite(radius) && radius >= 0 && radius <= 64)
+                  proximity.onChange(radius);
+              }}
+              onKeyDown={(e) => {
+                if (e.key === "Enter") e.currentTarget.blur();
+              }}
+            />
+          </span>
+          ft
+        </label>
+      )}
       {section?.kind === "plane" && (
         <div className="flex items-center gap-1">
           <Switcher

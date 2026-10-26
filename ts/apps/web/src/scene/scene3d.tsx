@@ -77,6 +77,7 @@ export type Scene3DProps = {
   onIssuePick?: (target: IssueTarget, event: MouseEvent) => void;
   /** A retained picture can still move while a replacement read withholds element actions. */
   pickingEnabled?: boolean;
+  contextRadiusFt?: number;
   /** A click (a press that stayed within 5 px); null when it met nothing. */
   onPick?: (pick: Pick | null, event: MouseEvent) => void;
   /** A double-click: the element under it, or null on empty space. The caller frames it. */
@@ -435,8 +436,9 @@ export function Scene3D(props: Scene3DProps): ReactNode {
     core.current?.setPaint(props.paintOf);
   }, [props.paintOf, meshes]);
   useEffect(() => {
-    core.current?.setContextMode(props.contextMode);
-  }, [props.contextMode, meshes]);
+    if (props.contextRadiusFt === undefined) core.current?.setContextMode(props.contextMode);
+    else core.current?.setContextMode(props.contextMode, props.contextRadiusFt);
+  }, [props.contextMode, props.contextRadiusFt, meshes]);
   // Dev knobs re-apply live; in production `LOOK.read()` is the code defaults and never changes.
   const look = useSyncExternalStore(knobsChanged, LOOK.read, LOOK.read);
   const shownLook = useMemo(() => presetLook(look, props.preset ?? "all"), [look, props.preset]);

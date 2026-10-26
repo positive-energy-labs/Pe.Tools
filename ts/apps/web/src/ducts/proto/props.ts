@@ -13,6 +13,8 @@ import type { Claim, Run } from "../legs";
 import type { PricingResult } from "../pricing-job";
 
 export interface ProtoProps {
+  /** Geometry follows the native snapshot revision, independently of pending pricing. */
+  captureSource?: { document: { session: string; openId: string }; version: string } | null;
   attentionDoc: string;
   selection: Atom.Atom<ReadonlySet<SubjectKey>>;
   /** Null only while reading or with no document. */

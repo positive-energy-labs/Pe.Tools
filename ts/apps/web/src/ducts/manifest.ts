@@ -266,7 +266,7 @@ const pendingOf = (ctx: DuctsCtx) =>
 /** Capture scoped raw and priced members plus connector-derived stubs; context is a separate layer. */
 export const sceneRequestOf = (
   snapshot: DuctSnapshot | null,
-  page: Pick<DuctsPage, "system" | "layers">,
+  page: Pick<DuctsPage, "system" | "layers"> & Partial<Pick<DuctsPage, "contextRadiusFt">>,
   drawn: Iterable<number> = [],
   stubs: Iterable<number> = [],
 ) => {
@@ -280,10 +280,16 @@ export const sceneRequestOf = (
     ]),
   ].filter((id) => id > 0);
   if (!ids.length) return null;
-  return sceneRequest(
-    ids.sort((a, b) => a - b),
-    !page.layers.includes("halo") && !page.layers.includes("context"),
-  );
+  return {
+    ...sceneRequest(
+      ids.sort((a, b) => a - b),
+      !page.layers.includes("halo") && !page.layers.includes("context"),
+      page.contextRadiusFt ?? 10,
+      !page.layers.includes("context"),
+    ),
+    // Whole-document exact focus exceeds 1.5M triangles on Project A. Never drop focus to fit.
+    maxTriangles: 3_000_000,
+  };
 };
 
 /**

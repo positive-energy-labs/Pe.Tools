@@ -6,13 +6,9 @@ import { sceneRequest } from "./host";
 import { useScene, useSceneArtifact } from "./use-scene";
 import { RouteVisibility, VisibleRouteResource } from "#/route/activity";
 
-const call = vi.hoisted(() => ({
-  data: { id: "partial-context" },
-  pending: false,
-  error: null,
-  refresh: vi.fn(),
+vi.mock("#/host/client", () => ({
+  callHostRpc: async () => ({ id: "partial-context" }),
 }));
-vi.mock("#/readings", () => ({ useHostOp: () => call }));
 const io = vi.hoisted(() => ({
   fetch: vi.fn<(id: string, signal?: AbortSignal) => Promise<ArrayBuffer>>(),
   decode: vi.fn(),

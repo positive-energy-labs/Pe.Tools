@@ -29,6 +29,7 @@ export const DUCTS_LAYERS = [
 ] as const;
 
 const ductsFields = {
+  contextRadiusFt: field(z.number().min(0).max(64).default(10), { url: "replace", agent: "set" }),
   sceneView: field(
     sceneViewSchema.default({ preset: "all", section: null }),
     { url: "replace", agent: "set" },

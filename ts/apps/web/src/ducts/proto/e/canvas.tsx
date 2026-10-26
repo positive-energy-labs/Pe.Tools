@@ -24,7 +24,7 @@ import { SelectionBoxButton } from "#/revit/element-menu";
 import { observedElements } from "#/revit/observation";
 import { PaneWork } from "@pe/kit/lang/pane";
 import { useNativeObservation } from "#/revit/observation";
-import { useScene, usePictureRead } from "#/scene/use-scene";
+import { useDuctScene, usePictureRead } from "#/scene/use-scene";
 import { useLiveOrbit } from "@pe/kit/lang/live-orbit";
 import type { Bounds } from "#/scene/types";
 import { Button } from "@pe/kit/lang/button";
@@ -132,6 +132,7 @@ export function ECanvas(props: ProtoProps & ECanvasExtra) {
 function Canvas({
   renderPane,
   snapshot,
+  captureSource,
   doc,
   priced,
   page,
@@ -172,7 +173,8 @@ function Canvas({
         : sceneOf(index, groups, () => true, members),
     [index, snapshot, subject, labelOf, groups, members],
   );
-  const native = observation.scope?.source === "native" ? observation.scope.document : null;
+  // Pricing withdraws action authority, but does not invalidate current native geometry.
+  const native = captureSource?.document ?? null;
   const opened = useMemo(
     () => members ?? new Set([...snapshot.nodes, ...snapshot.segments].map((e) => e.id)),
     [snapshot, members],
@@ -180,7 +182,7 @@ function Canvas({
   const stubs = useMemo(() => stubIdsOf(neighbours, opened), [neighbours, opened]);
   const request = useMemo(
     () => sceneRequestOf(snapshot, page, members, stubs),
-    [snapshot, page.system, page.layers, members, stubs],
+    [snapshot, page.system, page.layers, page.contextRadiusFt, members, stubs],
   ); // eslint-disable-line react-hooks/exhaustive-deps
   const systemColours = page.layers.includes("system-colours");
   const colours = coloursOf(work.doc);
@@ -192,7 +194,7 @@ function Canvas({
     () => stubLabels(snapshot, neighbours, opened),
     [snapshot, neighbours, opened],
   );
-  const captured = useScene(request, native, page.epoch);
+  const captured = useDuctScene(request, native, captureSource?.version ?? "");
   const capturedMeshes = useMemo(() => {
     if (!captured.meshes) return null;
     const cuts = new Map<number, (typeof neighbours)[number]["cuts"]>();
@@ -679,6 +681,7 @@ function Canvas({
             sceneView={page.sceneView}
             paintOf={paintOf}
             contextMode={layers.has("context") ? "all" : "halo"}
+            contextRadiusFt={page.contextRadiusFt}
             readout={readout}
             read={read}
             bounds={bounds}
