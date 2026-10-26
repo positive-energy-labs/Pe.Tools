@@ -76,6 +76,12 @@ test("real conversation Work cutover retains authored cells, draft, Places and o
     steps.push(entry);
     try {
       await run();
+      expect(
+        await page?.read<string[]>(
+          `[...document.querySelectorAll('[role="alert"]')].filter(${visible}).map(e => e.innerText)`,
+        ),
+        "a completed interaction leaves no rendered crash or refusal alert",
+      ).toEqual([]);
       entry.result = "passed";
       await page?.dump(dir, `${steps.length}-${name.replace(/[^a-z0-9]+/gi, "-")}`);
     } catch (error) {
