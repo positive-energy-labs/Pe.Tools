@@ -1414,6 +1414,13 @@ test("seeded real-user route journey", async () => {
           await pickSystem(b, true);
         } finally {
           await p.send("Debugger.resume", {}, workerSession);
+          await p.send("Debugger.disable", {}, workerSession);
+          receipt.workerProtocol.push({
+            at: Date.now(),
+            command: "Debugger.disable returned",
+            session: workerSession,
+          });
+          workerSession = undefined;
           await p.send("Runtime.releaseObject", { objectId: oldDrawing });
         }
         await p.until(
@@ -1694,25 +1701,57 @@ test("seeded real-user route journey", async () => {
       });
     throw error;
   } finally {
+    const flowFailed = receipt.result === "failed";
+    const cleanupErrors: unknown[] = [];
     if (page) {
-      await page
-        .send("Network.emulateNetworkConditions", {
-          offline: false,
-          latency: 0,
-          downloadThroughput: -1,
-          uploadThroughput: -1,
-        })
-        .catch(() => undefined);
+      const cleanup = async (method: string, params: object = {}, sessionId?: string) => {
+        try {
+          await page!.send(method, params, sessionId);
+          receipt.workerProtocol.push({ at: Date.now(), cleanup: method, sessionId, ok: true });
+        } catch (error) {
+          cleanupErrors.push(error);
+          receipt.workerProtocol.push({
+            at: Date.now(),
+            cleanup: method,
+            sessionId,
+            ok: false,
+            error: String(error),
+          });
+        }
+      };
+      await cleanup("Network.emulateNetworkConditions", {
+        offline: false,
+        latency: 0,
+        downloadThroughput: -1,
+        uploadThroughput: -1,
+      });
       if (workerSession) {
-        await page.send("Debugger.resume", {}, workerSession).catch(() => undefined);
-        await page
-          .send("Target.detachFromTarget", { sessionId: workerSession })
-          .catch(() => undefined);
+        if (workers.has(workerSession)) {
+          if (paused.has(workerSession)) await cleanup("Debugger.resume", {}, workerSession);
+          await cleanup("Debugger.disable", {}, workerSession);
+        } else {
+          receipt.workerProtocol.push({
+            at: Date.now(),
+            cleanup: "worker session already retired",
+            sessionId: workerSession,
+            ok: true,
+          });
+        }
       }
+      // Undo only this page's related-worker attachment before retiring its transport. A successful
+      // flow may not hide protocol-cleanup failures or treat a forced browser stop as graceful.
+      await cleanup("Target.setAutoAttach", {
+        autoAttach: false,
+        waitForDebuggerOnStart: false,
+        flatten: true,
+      });
       receipt.coverage.exceptions = JSON.stringify(page.errors);
-      await page.close();
+      await page.close().catch((error) => cleanupErrors.push(error));
     }
+    if (cleanupErrors.length) receipt.result = "failed";
     save();
     console.log(`route-chaos ${receipt.result}: ${dir}`);
+    if (cleanupErrors.length && !flowFailed)
+      throw new AggregateError(cleanupErrors, "route-chaos protocol cleanup failed");
   }
 });
