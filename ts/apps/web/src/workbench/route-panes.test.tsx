@@ -16,6 +16,10 @@ import { appAtomRegistry } from "#/route/route-owner";
 import { createChatPageStore } from "./store";
 import { RouteDock } from "./route-panes";
 import { useRouteCurrent } from "#/route/activity";
+import { useRouteLease } from "#/route/view-bridge";
+import { defineRoute } from "#/route/manifest";
+import { useRoute } from "#/route/use-route";
+import { useRouteThread } from "#/route/shell";
 
 const store = createChatPageStore({
   registry: appAtomRegistry,
@@ -65,19 +69,46 @@ const places = () => JSON.parse(sessionStorage.getItem("pe.places") ?? "[]") as 
 // Only T and U are real host chats; Places are this window's sessionStorage, seeded per test.
 const threads = [{ id: "T" }, { id: "U" }];
 vi.mock("./provider", () => ({ useWorkbench: () => ({ store, threads }) }));
-const hostEvents = vi.hoisted(() => ({ listener: null as null | ((event: unknown) => void) }));
+const hostEvents = vi.hoisted(() => {
+  const listeners = new Set<(event: unknown) => void>();
+  return { listeners, emit: (event: unknown) => [...listeners].forEach((each) => each(event)) };
+});
 vi.mock("#/chat/chat-shell", () => ({ ChatShell: () => <div data-chat-probe="" /> }));
 vi.mock("#/route/situation-ladder", () => ({ ChatPlanIntent: createContext(null) }));
-vi.mock("#/readings", () => ({
-  useReading: () => ({ state: "pending" }),
-  previousOf: () => undefined,
-  useHostEvents: (enabled: boolean, onEvent: (event: unknown) => void) => {
-    hostEvents.listener = enabled ? onEvent : null;
-  },
-}));
+vi.mock("#/readings", async (actual) => {
+  const { useEffect } = await import("react");
+  const real = await actual<typeof import("#/readings")>();
+  // Readings are quiet here: no stream subscription leaves the test.
+  real.peReadings.subscribe = () => () => {};
+  return {
+    ...real,
+    useReading: () => ({ state: "pending" }),
+    previousOf: () => undefined,
+    useHostEvents: (enabled: boolean, onEvent: (event: unknown) => void) =>
+      useEffect(() => {
+        if (!enabled) return;
+        hostEvents.listeners.add(onEvent);
+        return () => void hostEvents.listeners.delete(onEvent);
+      }, [enabled, onEvent]),
+  };
+});
 vi.mock("#/navigation/surface-host", () => ({ useSurfaceHost: () => ({ surface: "web" }) }));
-const call = vi.hoisted(() => vi.fn(async (..._: unknown[]) => ({})));
+const call = vi.hoisted(() =>
+  vi.fn(async (door: unknown, ..._: unknown[]) => (door === "view.publish" ? { revision: 1 } : {})),
+);
 vi.mock("#/host/pe-client", () => ({ peClient: { call } }));
+
+const familiesManifest = defineRoute({
+  key: "families",
+  name: "Families",
+  address: "families",
+  page: routeAddress("families").schema,
+});
+function FamiliesProbe() {
+  const handle = useRoute(familiesManifest, { thread: useRouteThread() });
+  useRouteLease("families", handle.page, { thread: handle.thread ?? undefined });
+  return <output data-families-probe="">{String(handle.page[0].sort ?? "")}</output>;
+}
 
 let mounts = 0;
 let bodyCurrent: (() => boolean) | null = null;
@@ -113,6 +144,7 @@ async function mount(entry = "/pea?thread=T", strict = false) {
   const routes = [
     createRoute({ getParentRoute: () => root, path: "/pea" }),
     createRoute({ getParentRoute: () => root, path: "/ducts", component: DuctsProbe }),
+    createRoute({ getParentRoute: () => root, path: "/families", component: FamiliesProbe }),
   ];
   const router = createRouter({
     routeTree: root.addChildren(routes),
@@ -343,7 +375,7 @@ test("(a) a standalone tool URL with no ?thread mints none and calls no host doo
   expect(places()).toEqual([expect.objectContaining({ route: "ducts" })]);
   expect(places()[0]!.link).toContain("target=");
   // No selected real chat: no route-view-open subscription.
-  expect(hostEvents.listener).toBeNull();
+  expect(hostEvents.listeners.size).toBe(0);
 });
 
 test("(b)(c) switching conversation lands on /pea collapsed, opens no tool, and leaves Places and their ?target unchanged", async () => {
@@ -418,7 +450,7 @@ test("route-view-open: same binding keeps the Page and tags the command; another
     ).carry.target,
   });
   act(() =>
-    hostEvents.listener!({
+    hostEvents.emit({
       type: "route-view-open",
       route: "ducts",
       thread: "U",
@@ -429,7 +461,7 @@ test("route-view-open: same binding keeps the Page and tags the command; another
   await settle();
   expect(router.state.location.pathname).toBe("/pea");
   act(() =>
-    hostEvents.listener!({
+    hostEvents.emit({
       type: "route-view-open",
       route: "ducts",
       thread: "T",
@@ -461,7 +493,7 @@ test("route-view-open with a new binding opens a default Page and borrows no vis
   const router = await mount(`${tabA.link}&thread=T`);
   await settle();
   act(() =>
-    hostEvents.listener!({
+    hostEvents.emit({
       type: "route-view-open",
       route: "ducts",
       thread: "T",
@@ -498,7 +530,7 @@ test("an explicit open's command id clears when the thread association changes",
   await settle();
   const commandId = "33333333-3333-4333-8333-333333333333";
   act(() =>
-    hostEvents.listener!({
+    hostEvents.emit({
       type: "route-view-open",
       route: "ducts",
       thread: "T",
@@ -573,4 +605,78 @@ test("after a cross-row Work press the retained body is current again under the 
   await waitFor(() => expect(shown(router)).toMatchObject({ tab: tabB.id, system: "SB" }));
   expect(mounts).toBe(1);
   expect(bodyCurrent!()).toBe(true);
+});
+
+test("a Pea open of a new tool keeps its first lease instance, and a set against it is acknowledged", async () => {
+  const router = await mount("/pea?thread=T");
+  await settle();
+  act(() =>
+    hostEvents.emit({
+      type: "route-view-open",
+      route: "families",
+      thread: "T",
+      link: "/families",
+      commandId: "44444444-4444-4444-8444-444444444444",
+    }),
+  );
+  await waitFor(() => expect(router.state.location.pathname).toBe("/families"));
+  await waitFor(() => expect(hostCalls("view.publish").length).toBeGreaterThan(0));
+  await settle();
+  const leases = () =>
+    new Set(
+      hostCalls("view.publish").map(
+        ([, input]) => (input as { body: { instance: string } }).body.instance,
+      ),
+    );
+  const [instance] = [...leases()];
+  act(() =>
+    hostEvents.emit({
+      type: "route-view-intent",
+      route: "families",
+      thread: "T",
+      instance,
+      commandId: "55555555-5555-4555-8555-555555555555",
+      revision: 1,
+      patch: { sort: "Name" },
+    }),
+  );
+  await waitFor(() => expect(hostCalls("view.ack").length).toBe(1));
+  await settle();
+  expect((hostCalls("view.ack")[0]![1] as { body: { outcome: string } }).body.outcome).not.toBe(
+    "refused",
+  );
+  expect(hostCalls("view.remove")).toEqual([]);
+  expect(leases()).toEqual(new Set([instance]));
+  expect(places().some((tab) => tab.route === "families")).toBe(true);
+});
+
+test("after first-Send promotion and a chat pick, a Pea open keeps one lease and one Place", async () => {
+  sessionStorage.clear();
+  const router = await mount("/ducts?target=C%3A%2FModels%2FOffice.rvt");
+  await settle();
+  threads.push({ id: "NEW" });
+  try {
+    await act(() => store.actions.promoteThread("NEW"));
+    await settle();
+    await act(() => router.navigate({ to: "/pea", search: { thread: "NEW" } } as never));
+    await settle();
+    act(() =>
+      hostEvents.emit({
+        type: "route-view-open",
+        route: "families",
+        thread: "NEW",
+        link: "/families",
+        commandId: "66666666-6666-4666-8666-666666666666",
+      }),
+    );
+    await waitFor(() => expect(router.state.location.pathname).toBe("/families"));
+    await waitFor(() => expect(hostCalls("view.publish").length).toBeGreaterThan(0));
+    await settle();
+    await settle();
+    expect(hostCalls("view.remove")).toEqual([]);
+    expect(places().filter((tab) => tab.route === "families")).toHaveLength(1);
+    expect(screen.getAllByRole("button", { name: "Families" }).length).toBeGreaterThan(0);
+  } finally {
+    threads.pop();
+  }
 });
