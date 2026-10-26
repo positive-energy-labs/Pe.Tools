@@ -951,28 +951,29 @@ test("route:ducts.guide with a document adds the cases its fresh analysis shows,
   });
 });
 
-test("route:ducts.set-view with no mounted view opens Ducts as a thread tab, then moves it once mounted", async () => {
+test("route:ducts.set-view with no mounted view opens only through an explicit command and ignores an older lease", async () => {
   fakeRuntimeHost("http://127.0.0.1:9");
-  const tabs: unknown[] = [];
+  const opens: unknown[] = [];
   const sets: unknown[] = [];
   let mounted = false;
-  let held = false;
+  let visible = true;
+  let reads = 0;
+  const commandId = "6f1c2a9e-4b7d-4c3e-9a1f-2d8e5b7c0a22";
   vi.stubGlobal("fetch", async (input: string | URL | Request, init?: RequestInit) => {
     const url = new URL(input instanceof Request ? input.url : String(input));
     const method = init?.method ?? "GET";
     if (url.pathname === "/pe/capabilities") return Response.json(catalog());
-    if (url.pathname === "/pe/threads/t1" && method === "GET")
-      return Response.json({ tabs: held ? [{ route: "ducts" }] : [] });
-    if (url.pathname === "/pe/threads/t1/tabs") {
-      tabs.push(JSON.parse(init!.body as string));
-      mounted = true; // the browser on this chat focuses the new tab and publishes its view
-      return Response.json({ tabs: [] });
+    if (url.pathname === "/pe/route-view/ducts/open") {
+      opens.push(JSON.parse(init!.body as string));
+      mounted = visible;
+      return Response.json({ ok: true, commandId });
     }
     if (url.pathname === "/pe/route-view/ducts" && method === "GET")
       return mounted
         ? Response.json({
             instance: "6f1c2a9e-4b7d-4c3e-9a1f-2d8e5b7c0a11",
             revision: 3,
+            openCommandId: reads++ ? commandId : "an-older-command",
             route: "ducts",
             thread: "t1",
             page: { system: "" },
@@ -993,9 +994,8 @@ test("route:ducts.set-view with no mounted view opens Ducts as a thread tab, the
     input: { system: "sa 19" },
     timeoutSeconds: 30,
   });
-  expect(tabs).toEqual([
-    { op: "put", id: expect.any(String), route: "ducts", link: expect.stringMatching(/^\/ducts/) },
-  ]);
+  expect(opens).toEqual([{ thread: "t1", link: expect.stringMatching(/^\/ducts/) }]);
+  expect(reads).toBeGreaterThanOrEqual(2);
   // The open is the set: the mounted view's own names resolve "sa 19", and its lease revision is used.
   expect(sets).toMatchObject([
     {
@@ -1026,11 +1026,11 @@ test("route:ducts.set-view with no mounted view opens Ducts as a thread tab, the
   ).toMatchObject({ ok: false, content: expect.stringContaining("both instance and revision") });
   expect(sets).toEqual([]);
 
-  // A Ducts tab already in the thread but off screen is reused, never duplicated.
-  tabs.length = 0;
+  // No browser acquired this explicit command: an old or absent lease cannot claim success.
+  opens.length = 0;
   sets.length = 0;
   mounted = false;
-  held = true;
+  visible = false;
   vi.useFakeTimers({ toFake: ["setTimeout"] });
   try {
     const pending = run(peDo, {
@@ -1045,6 +1045,6 @@ test("route:ducts.set-view with no mounted view opens Ducts as a thread tab, the
   } finally {
     vi.useRealTimers();
   }
-  expect(tabs).toEqual([]);
+  expect(opens).toHaveLength(1);
   expect(sets).toEqual([]);
 });
