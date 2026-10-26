@@ -142,7 +142,38 @@ test("real conversation Work cutover retains authored cells, draft, Places and o
     expect(seed.unfinished).toBe(3);
     page = await connect();
     const p = page;
+    const viewTransitions: unknown[] = [];
+    receipt.coverage.viewTransitions = viewTransitions;
     p.onEvent(({ method, params }) => {
+      if (
+        method === "Network.requestWillBeSent" &&
+        new URL(params.request.url).pathname.startsWith("/pe/route-view/families") &&
+        viewTransitions.length < 100
+      ) {
+        const at = Date.now();
+        void p
+          .evaluate(() => ({
+            url: location.href,
+            tag: {
+              id: history.state?.__peRouteTab?.id ?? null,
+              route: history.state?.__peRouteTab?.route ?? null,
+            },
+            places: JSON.parse(sessionStorage.getItem("pe.places") ?? "[]"),
+            bodies: [...document.querySelectorAll("[data-route-tab]")].map((element) => ({
+              id: element.getAttribute("data-route-tab"),
+              visible: element.getClientRects().length > 0,
+            })),
+          }))
+          .then((snapshot) =>
+            viewTransitions.push({
+              at,
+              readAt: Date.now(),
+              method: params.request.method,
+              snapshot,
+            }),
+          )
+          .catch((error) => viewTransitions.push({ at, error: String(error) }));
+      }
       if (method === "Network.requestWillBeSent") {
         const builds = Object.entries(params.request.headers ?? {})
           .filter(([key]) => key.toLowerCase() === "x-pe-web-build")
