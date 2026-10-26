@@ -261,13 +261,23 @@ function BindingPickerRoute({ slug }: { slug: string }) {
 }
 
 /** The existing SPA shell supplies chrome; Page bytes stay in their own document. */
-export function BindRoute({ slug, view = false }: { slug: string; view?: boolean }) {
+export function BindRoute({
+  slug,
+  view = false,
+  query = "",
+  fragment = "",
+}: {
+  slug: string;
+  view?: boolean;
+  query?: string;
+  fragment?: string;
+}) {
   return view ? (
     <Surface>
       <iframe
         className="size-full flex-1"
         title={`Page ${slug}`}
-        src={`/pages/${encodeURIComponent(slug)}/`}
+        src={`/pages/${encodeURIComponent(slug)}/${query ? `?${new URLSearchParams(query)}` : ""}${fragment ? `#${fragment}` : ""}`}
       />
     </Surface>
   ) : (

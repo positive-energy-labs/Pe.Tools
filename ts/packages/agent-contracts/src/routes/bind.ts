@@ -11,5 +11,7 @@ export const bindAddress = {
   fields: {
     page: field(text(), { url: "push" }),
     view: field(z.boolean().default(false), { url: "push" }),
+    query: field(text(), { url: "push" }),
+    fragment: field(text(), { url: "push" }),
   },
 } satisfies RouteDeclaration;

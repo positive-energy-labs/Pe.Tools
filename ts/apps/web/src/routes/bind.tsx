@@ -10,6 +10,6 @@ import { BindRoute } from "#/pages-bind/picker";
 export const Route = createFileRoute("/bind")({ ...routeFile("bind"), component: Bind });
 
 function Bind() {
-  const [{ page, view }] = useAddressPage("bind");
-  return <BindRoute slug={page} view={view} />;
+  const [{ page, view, query, fragment }] = useAddressPage("bind");
+  return <BindRoute slug={page} view={view} query={query} fragment={fragment} />;
 }

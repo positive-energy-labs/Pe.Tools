@@ -111,7 +111,7 @@ function ProseLink({ node: _node, href, ...props }: React.ComponentProps<"a"> & 
         )
           return;
         event.preventDefault();
-        void workbench.store.actions.openTab("bind", { page: page.slug, view: true }, {});
+        void workbench.store.actions.openTab("bind", page.page, {});
       }}
     />
   );

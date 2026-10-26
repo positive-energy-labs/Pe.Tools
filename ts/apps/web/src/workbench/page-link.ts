@@ -2,7 +2,7 @@ import { pageKeyOf, routeAddress } from "@pe/agent-contracts";
 
 /** A Page on this runtime opens in the existing viewer. Foreign hosts and Page assets remain
  * ordinary links. This changes navigation only, never the Page's own binding or authority. */
-export function pageLink(href: string, frontend: string): { slug: string; href: string } | null {
+export function pageLink(href: string, frontend: string) {
   try {
     const url = new URL(href, frontend);
     const own = new URL(frontend).origin;
@@ -18,10 +18,13 @@ export function pageLink(href: string, frontend: string): { slug: string; href: 
     if (!match) return null;
     const slug = decodeURIComponent(match[1]!);
     if (!pageKeyOf(slug)) return null;
-    // Page-local query and fragment belong inside the iframe, not to the app's route state.
-    // Links with either keep their normal destination until the viewer declares those fields.
-    if (url.search || url.hash) return null;
-    return { slug, href: routeAddress("bind").link({ page: slug, view: true }) };
+    const page = {
+      page: slug,
+      view: true,
+      query: url.search.slice(1),
+      fragment: url.hash.slice(1),
+    };
+    return { slug, page, href: routeAddress("bind").link(page) };
   } catch {
     return null;
   }

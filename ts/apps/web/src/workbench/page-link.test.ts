@@ -15,6 +15,12 @@ test("Page links use the existing viewer only for this frontend or its exact run
         ).toMatchObject({ page: { page: slug, view: true }, carry: {} });
       }
     }
+    expect(pageLink("/pages/report/?scope=all#airflow", front)?.page).toEqual({
+      page: "report",
+      view: true,
+      query: "scope=all",
+      fragment: "airflow",
+    });
     for (const path of [
       "http://127.0.0.1:60915/pages/report/",
       "https://example.com/pages/report/",

@@ -182,7 +182,7 @@ new AgentSideConnection(
         const base = toolEnv.PE_TOOLS_HOST_BASE_URL;
         if (!base) throw Error("Page link proof needs the actual host origin");
         await say(
-          `\n[See the readiness breakdown](${new URL("/pages/chadds-duct-readiness/", base)})\n\n[See the detail](${new URL("/pages/chadds-duct-detail/", base)})\n\n[External reference](https://example.invalid/reference)`,
+          `\n[See the readiness breakdown](${new URL("/pages/chadds-duct-readiness/", base)})\n\n[See the detail](${new URL("/pages/chadds-duct-detail/?scope=all#airflow", base)})\n\n[External reference](https://example.invalid/reference)`,
         );
         return { stopReason: "end_turn" };
       }

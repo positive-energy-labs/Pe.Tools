@@ -260,6 +260,9 @@ export function useRouteTabs() {
     await router.navigate({
       to: url.pathname,
       search: {
+        // Root carry retention serves ordinary same-scope links. A Place is its own scope.
+        target: undefined,
+        work: undefined,
         ...Object.fromEntries(url.searchParams),
         thread: router.state.location.search.thread,
         shell: surface === "tray" ? "tray" : undefined,

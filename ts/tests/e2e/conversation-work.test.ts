@@ -902,6 +902,21 @@ test("real conversation Work cutover retains authored cells, draft, Places and o
         expect(new URL(await p.url()).pathname).toBe("/bind");
         expect(new URL(await p.url()).searchParams.get("thread")).toBe(thread);
         expect(new URL(await p.url()).searchParams.has("target")).toBe(false);
+        expect(
+          await p.evaluate((pageSlug) => {
+            const frame = document.querySelector<HTMLIFrameElement>(
+              `iframe[title="Page ${pageSlug}"]`,
+            );
+            return {
+              search: frame?.contentWindow?.location.search ?? null,
+              hash: frame?.contentWindow?.location.hash ?? null,
+            };
+          }, slug),
+        ).toEqual(
+          slug === "chadds-duct-detail"
+            ? { search: "?scope=all", hash: "#airflow" }
+            : { search: "", hash: "" },
+        );
         expect(await p.evaluate(() => performance.timeOrigin)).toBe(origin);
         expect(await composerIdentity()).toBe(pageComposer);
         expect(await draft()).toBe(pageDraft);
