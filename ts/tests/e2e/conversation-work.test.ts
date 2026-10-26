@@ -408,6 +408,8 @@ test("real conversation Work cutover retains authored cells, draft, Places and o
         "closed-document reconnect state",
       );
       await headTargets();
+      // Opening Work can fit Threads by folding the chat to its rail; reveal it before reading it.
+      if (await p.has("Expand chat")) await p.click("Expand chat");
       expect(await draft()).toBe(message);
       expect(await composerIdentity()).toBe(officeComposer);
       await choosePlace("Takeoffs");
