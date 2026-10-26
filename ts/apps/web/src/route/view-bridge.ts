@@ -97,6 +97,7 @@ function useRouteViewBridge<R extends RouteViewRoute>({
   const published = useRef<RouteView | null>(null);
   const publishing = useRef<Promise<void>>(Promise.resolve());
   const leased = useRef(false);
+  const lifetime = useRef<object | null>(null);
   const [intent, setIntent] = useState<{
     event: Intent;
     receipt: Extract<PageIntent, { ok: true }>["receipt"];
@@ -145,16 +146,18 @@ function useRouteViewBridge<R extends RouteViewRoute>({
   currentPage.current = page;
   const publish = useCallback(
     (value: RouteView) => {
+      const owner = lifetime.current;
+      if (!owner) return Promise.resolve();
       const next = publishing.current
         .catch(() => {})
         .then(async () => {
-          if (!routeCurrent() || current.current !== value) return;
+          if (lifetime.current !== owner || !routeCurrent() || current.current !== value) return;
           const accepted = (await peClient.call("view.publish", {
             params: { route: value.route },
             body: value,
           })) as { revision: number };
           leased.current = true;
-          if (routeCurrent() && current.current === value) {
+          if (lifetime.current === owner && routeCurrent() && current.current === value) {
             revision.current = accepted.revision;
             published.current = value;
           }
@@ -168,23 +171,23 @@ function useRouteViewBridge<R extends RouteViewRoute>({
     },
     [routeCurrent, route],
   );
+  const hasView = Boolean(view);
+  // Establish the live setup before publication. StrictMode and Activity can replace it
+  // without replacing the component: queued work from the retired setup owns no live lease.
   useEffect(() => {
-    if (!view) return;
-    void publish(view).catch(() => {});
-    const timer = setInterval(() => {
-      if (current.current) void publish(current.current).catch(() => {});
-    }, 5_000);
-    return () => clearInterval(timer);
-  }, [view, publish]);
-  useEffect(
-    () => () => {
+    if (!hasView) return;
+    const owner = {};
+    lifetime.current = owner;
+    return () => {
+      if (lifetime.current !== owner) return;
+      lifetime.current = null;
       revision.current = null;
       published.current = null;
       // Release only a lease the host really took; a view that never published has nothing to remove.
       publishing.current = publishing.current
         .catch(() => {})
         .then(async () => {
-          if (!leased.current) return;
+          if (lifetime.current || !leased.current) return;
           leased.current = false;
           await peClient.call(
             "view.remove",
@@ -195,9 +198,16 @@ function useRouteViewBridge<R extends RouteViewRoute>({
         .catch((cause) =>
           reportFault({ code: "host.failed", routeCode: route, streamKind: "view.remove" }, cause),
         );
-    },
-    [Boolean(view)],
-  );
+    };
+  }, [hasView]);
+  useEffect(() => {
+    if (!view) return;
+    void publish(view).catch(() => {});
+    const timer = setInterval(() => {
+      if (current.current) void publish(current.current).catch(() => {});
+    }, 5_000);
+    return () => clearInterval(timer);
+  }, [view, publish]);
   const onEvent = useCallback(
     (event: Intent) => {
       const value = current.current;

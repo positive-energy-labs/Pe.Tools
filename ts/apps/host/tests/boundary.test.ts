@@ -48,9 +48,9 @@ test("host boundary: service file, status, static SPA, /pe routes, graceful shut
   const appBase = productRoot();
 
   const latch = Effect.runSync(Deferred.make<void>());
+  const handle = Effect.runSync(Deferred.make<ServiceHostHandle>());
   const program = Effect.scoped(
     Effect.gen(function* () {
-      const handle = yield* Deferred.make<ServiceHostHandle>();
       const HttpLive = makeHttpLive({
         capabilities: { revit: true },
         port: 0,
@@ -64,6 +64,9 @@ test("host boundary: service file, status, static SPA, /pe routes, graceful shut
   const done = Effect.runPromise(program);
 
   try {
+    // The claim file precedes terminal-context publication. The lifecycle's handle is the
+    // existing readiness signal; observing a listening port alone cannot prove startup finished.
+    await Effect.runPromise(Deferred.await(handle).pipe(Effect.timeout("10 seconds")));
     // (1) service file exists with the ACTUAL bound port + token.
     const file = await waitFor(() => readServiceFile(appBase, hostOwnership.serviceName));
     expect(file.port).toBeGreaterThan(0);

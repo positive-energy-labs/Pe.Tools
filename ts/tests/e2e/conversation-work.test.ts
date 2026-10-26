@@ -144,7 +144,15 @@ test("real conversation Work cutover retains authored cells, draft, Places and o
     const p = page;
     const viewTransitions: unknown[] = [];
     receipt.coverage.viewTransitions = viewTransitions;
+    const visibilityTransitions: { at: number; state: string }[] = [];
+    receipt.coverage.visibilityTransitions = visibilityTransitions;
+    await p.send("Runtime.addBinding", { name: "__peJourneyVisibility" });
+    await p.send("Page.addScriptToEvaluateOnNewDocument", {
+      source: `document.addEventListener('visibilitychange',()=>globalThis.__peJourneyVisibility(JSON.stringify({at:Date.now(),state:document.visibilityState})));`,
+    });
     p.onEvent(({ method, params }) => {
+      if (method === "Runtime.bindingCalled" && params.name === "__peJourneyVisibility")
+        visibilityTransitions.push(JSON.parse(params.payload));
       if (
         method === "Network.requestWillBeSent" &&
         new URL(params.request.url).pathname.startsWith("/pe/route-view/families") &&
@@ -154,6 +162,7 @@ test("real conversation Work cutover retains authored cells, draft, Places and o
         void p
           .evaluate(() => ({
             url: location.href,
+            visibility: document.visibilityState,
             tag: {
               id: history.state?.__peRouteTab?.id ?? null,
               route: history.state?.__peRouteTab?.route ?? null,
@@ -965,13 +974,30 @@ test("real conversation Work cutover retains authored cells, draft, Places and o
         windowsVirtualKeyCode: 65,
       });
       await p.type("route-cutover-open");
+      await p.send("Page.bringToFront");
+      await p.until(
+        () => p.evaluate(() => document.visibilityState === "visible"),
+        "the Pea command addresses a visible Chrome window",
+      );
+      const commandAt = Date.now();
       await p.click(/^send$/i);
       await p.until(
         async () => new URL(await p.url()).pathname === "/families",
         "explicit Pea context opens its tool",
       );
       expect(new URL(await p.url()).searchParams.get("thread")).toBe(thread);
-      await p.waitText("route-cutover-rendered");
+      try {
+        await p.waitText("route-cutover-rendered");
+      } catch (cause) {
+        if (
+          visibilityTransitions.some((event) => event.at >= commandAt && event.state === "hidden")
+        )
+          throw new Error(
+            "PRECONDITION: Chrome became hidden while its view was leased; the visibility fence revoked the command",
+            { cause },
+          );
+        throw cause;
+      }
       await headTargets(thread);
       expect(await workEvidence(seed.productHome)).toEqual(initial);
       receipt.coverage.explicitPeaOpen = {
@@ -980,6 +1006,57 @@ test("real conversation Work cutover retains authored cells, draft, Places and o
         acquisition: "command-id-fenced lease and rendered ack",
         inference: "substituted-acp-adapter",
         nativeTargets: [],
+      };
+      const beforeHide = Date.now();
+      const leased = network
+        .filter((event) => event.method === "PUT" && event.url?.endsWith("/pe/route-view/families"))
+        .at(-1);
+      const instance = (JSON.parse(leased?.data ?? "null") as { instance: string }).instance;
+      const window = await p.send("Browser.getWindowForTarget", {
+        targetId: process.env.CDP_TARGET,
+      });
+      let shownAt = 0;
+      try {
+        await p.send("Browser.setWindowBounds", {
+          windowId: window.windowId,
+          bounds: { windowState: "minimized" },
+        });
+        await p.until(
+          async () =>
+            visibilityTransitions.some(
+              (event) => event.at >= beforeHide && event.state === "hidden",
+            ) &&
+            network.some(
+              (event) =>
+                event.at >= beforeHide &&
+                event.method === "DELETE" &&
+                event.url?.endsWith(`/pe/route-view/families/${instance}`),
+            ),
+          "a hidden window revokes its exact lease",
+        );
+      } finally {
+        shownAt = Date.now();
+        await p.send("Browser.setWindowBounds", {
+          windowId: window.windowId,
+          bounds: { windowState: "normal" },
+        });
+        await p.send("Page.bringToFront");
+      }
+      await p.until(
+        async () =>
+          network.some(
+            (event) =>
+              event.at >= shownAt &&
+              event.method === "PUT" &&
+              event.url?.endsWith("/pe/route-view/families") &&
+              JSON.parse(event.data ?? "null")?.instance === instance,
+          ),
+        "showing the retained view renews the same instance",
+      );
+      receipt.coverage.visibilityFence = {
+        instance,
+        withdrawsWhenHidden: true,
+        retainsInstance: true,
       };
     });
     expect(

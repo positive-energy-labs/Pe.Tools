@@ -610,7 +610,7 @@ test("after a cross-row Work press the retained body is current again under the 
 });
 
 test("a Pea open of a new tool keeps its first lease instance, and a set against it is acknowledged", async () => {
-  const router = await mount("/pea?thread=T");
+  const router = await mount("/pea?thread=T", true);
   await settle();
   act(() =>
     hostEvents.emit({
