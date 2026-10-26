@@ -111,6 +111,8 @@ One metric substrate under every Pe.* helper that reads or writes Revit geometry
 
 ## Owed
 
+- Cleanup residue only: Git retired `perf/ducts-foundation-20261025` and all owned browser/server processes stopped, but Windows left files under `C:/Users/kaitp/.t3/worktrees/Pe.Tools/perf-ducts-foundation-20261025/ts` after worktree removal reported “Directory not empty.” Source is committed and proof artifacts are copied to main; remove this inactive residue when its dependency locks clear.
+
 - Whole-Chadds follow-up: measure the 189 ms gesture-release outlier and retained UI costs under stable runtime; prove browser heap reclamation across hidden routes and extend the resource boundary to Space. Decide an explicit fit policy for distant real elements (6080672), preserving inspectability. Shared native queue contention and host reconnects still prevent a dependable cold/multi-system latency claim; see the [evidence](../ducts/interaction-performance.md#whole-chadds-foundation-2026-10-25).
 
 - 2026-10-22, investigate TypeGPU-assisted automatic duct routing/pathfinding as a separate compute capability, without requiring a renderer cutover. Start with batched swept-volume clearance and route-candidate scoring against real captured geometry; compare a CPU spatial-index implementation with GPU execution including upload/readback, fitting constraints, clearances and numerical agreement. Simple box overlap is only a broad-phase filter, not proof that a duct route fits. Reuse the [TypeGPU experiment](typegpu-evaluation.md); this is an idea to test, not an adopted solver architecture.
