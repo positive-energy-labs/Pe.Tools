@@ -548,3 +548,14 @@ test("a pasted legacy open-ref URL enrolls one Place under StrictMode; its id su
   expect(search(router).thread).toBe("U");
   expect(places()).toHaveLength(1);
 });
+
+test("enrolling a pasted URL relabels the same visible body with the Place's history id", async () => {
+  sessionStorage.clear();
+  const router = await mount(tabB.link);
+  const body = () => document.querySelector<HTMLElement>("[data-route-tab]")!;
+  const before = body();
+  await waitFor(() => expect(shown(router).tab).not.toBeNull());
+  await settle();
+  expect(body()).toBe(before);
+  expect(body().dataset.routeTab).toBe(shown(router).tab);
+});

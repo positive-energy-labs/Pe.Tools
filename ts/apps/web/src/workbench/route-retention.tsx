@@ -28,10 +28,13 @@ interface RetainedRoute {
 /** This component is outside Activity: hiding disconnects route effects, closing disposes owners. */
 const RetainedPane = memo(function RetainedPane({
   entry,
+  id,
   visible,
   renderRoute,
 }: {
   entry: RetainedRoute;
+  /** The entry's Place id, passed by value: the entry is mutated in place, so memo cannot see it. */
+  id: string | null;
   visible: boolean;
   renderRoute: (body: ReactNode) => ReactNode;
 }) {
@@ -46,10 +49,7 @@ const RetainedPane = memo(function RetainedPane({
   return (
     <RouteActivity.Provider value={entry.scope}>
       <Activity mode={visible ? "visible" : "hidden"}>
-        <div
-          className="size-full min-h-0 min-w-0 overflow-auto"
-          data-route-tab={entry.id ?? "enrolling"}
-        >
+        <div className="size-full min-h-0 min-w-0 overflow-auto" data-route-tab={id ?? "enrolling"}>
           <PaneErrorBoundary>
             <Suspense fallback={null}>{renderRoute(<Component />)}</Suspense>
           </PaneErrorBoundary>
@@ -155,6 +155,12 @@ export function RouteRetention({
     entry.scope.search = location.search;
   }
   return retained.current.map((entry) => (
-    <RetainedPane key={entry.key} entry={entry} visible={entry.visible} renderRoute={renderRoute} />
+    <RetainedPane
+      key={entry.key}
+      entry={entry}
+      id={entry.id}
+      visible={entry.visible}
+      renderRoute={renderRoute}
+    />
   ));
 }
