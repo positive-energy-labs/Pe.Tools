@@ -158,3 +158,12 @@ test("viewport allocations release independently; reused focus is counted once a
   expect(sceneMemory.snapshot().owners.active).toBe(baseline);
   expect(sceneMemory.snapshot().owners.reservations).toBe(0);
 });
+
+test("closing the viewport during a staged shared-focus replacement releases each allocation once", async () => {
+  const old = await build(fixture()),
+    incoming = await build(fixture(true), old);
+  const released = vi.spyOn(old.depth!.mesh, "dispose");
+  old.disposeExcept();
+  expect(() => incoming.disposeExcept()).not.toThrow();
+  expect(released).toHaveBeenCalledTimes(1);
+});

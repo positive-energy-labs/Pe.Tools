@@ -1641,6 +1641,7 @@ export function createRenderer(mount: HTMLElement, initialMeshes: SceneMeshes, w
     },
     dispose() {
       mark("dispose");
+      api.clear();
       geometryMemory.release();
       onFrame = null;
       cancelAnimationFrame(frame);
@@ -1667,6 +1668,7 @@ export function createRenderer(mount: HTMLElement, initialMeshes: SceneMeshes, w
       material.dispose();
       veil.veilField.value.dispose();
       disposeTree(scene);
+      scene.clear();
       glow.dispose();
       outline.dispose();
       renderer.dispose();
