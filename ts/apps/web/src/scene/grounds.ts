@@ -81,6 +81,9 @@ export const LOOK = defineKnobs("scene", "ts/apps/web/src/scene/grounds.ts", {
     zoomOutFactor: num("Zoom-out × subject diagonal", 2, [1, 5, 0.1]),
     panMargin: num("Pan margin × subject diagonal", 0.25, [0, 1, 0.05]),
     returnMs: num("Camera return", 380, [100, 1000, 10], "live", "ms"),
+    wiggleDeg: num("Wiggle cone radius", 6, [1, 15, 0.5], "live", "deg"),
+    wiggleMs: num("Wiggle loop", 1200, [500, 3000, 50], "live", "ms"),
+    wiggleLoops: num("Wiggle loops", 2, [1, 4, 1]),
   },
   palette: Object.fromEntries(
     SYSTEM_PALETTE.map((role, i) => [`s${i + 1}`, colour(`System ink ${i + 1}`, role)]),

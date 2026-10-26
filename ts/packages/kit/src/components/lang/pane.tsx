@@ -57,7 +57,6 @@ export function PaneWork({ pending = true, label }: { pending?: boolean; label?:
 export const PictureContext = createContext<{
   selected: boolean;
   box: () => DOMRect | null;
-  projection?: ReactNode;
 } | null>(null);
 type ReadoutIdentity = { subject?: ReactNode; title?: ReactNode; onClear?: () => void };
 export const PictureReadoutContext = createContext<
@@ -307,14 +306,8 @@ export function Pane({
   const strip =
     (modes?.options.length ?? 0) > 0 ||
     (floaters?.length ?? 0) > 0 ||
-    (layers?.options.length ?? 0) > 0 ||
-    (picture && stage?.projection) ? (
-      <PaneStrip
-        modes={modes}
-        floaters={floaters}
-        layers={layers}
-        projection={picture && stage?.projection}
-      />
+    (layers?.options.length ?? 0) > 0 ? (
+      <PaneStrip modes={modes} floaters={floaters} layers={layers} />
     ) : null;
   const heading = (
     <>

@@ -77,8 +77,7 @@ export function PaneStrip({
   modes,
   floaters,
   layers,
-  projection,
-}: PaneStripProps & { projection?: ReactNode }) {
+}: PaneStripProps) {
   const live = useScopeLive();
   useTeach({
     kind: "views",
@@ -181,20 +180,13 @@ export function PaneStrip({
           </div>
         </div>
       )}
-      {(layers || projection) && (
+      {layers && (
         <div data-strip-group="layers">
           <div data-strip-full="">
-            <ButtonGroup label="layers">
-              {projection}
-              {layerButtons}
-            </ButtonGroup>
+            <ButtonGroup label="layers">{layerButtons}</ButtonGroup>
           </div>
           <div data-strip-folded="">
-            <Folded
-              label="layers"
-              count={layers ? `${layers.value.length}/${layers.options.length}` : ""}
-            >
-              {projection}
+            <Folded label="layers" count={`${layers.value.length}/${layers.options.length}`}>
               {layerButtons}
             </Folded>
           </div>
