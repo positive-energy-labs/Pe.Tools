@@ -104,3 +104,26 @@ export function clipContains(
   }
   return true;
 }
+
+/** Polygon coordinates are capture-local; staged focus and full context can have different origins. */
+export function rebaseClip(
+  volume: ClipVolume | null | undefined,
+  from: readonly number[],
+  to: readonly number[],
+) {
+  if (!volume?.data.length || from.every((n, i) => n === to[i])) return volume;
+  const [x, y, z] = from.map((n, i) => n - to[i]!);
+  const shifts = [
+    [x!, y!],
+    [-x!, z!],
+    [y!, z!],
+  ];
+  const data = volume.data.slice(),
+    stride = data.length / 3;
+  for (let axis = 0; axis < 3; axis++)
+    for (let n = 0; n < (volume.counts[axis] ?? 0); n++) {
+      data[axis * stride + n * 2]! += shifts[axis]![0]!;
+      data[axis * stride + n * 2 + 1]! += shifts[axis]![1]!;
+    }
+  return { ...volume, data };
+}

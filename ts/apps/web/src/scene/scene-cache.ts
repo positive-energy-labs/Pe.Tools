@@ -32,6 +32,7 @@ export class SceneCache<T extends SceneData = SceneData> {
   constructor(
     readonly maxBytes = 512 * 1024 * 1024,
     readonly maxScenes = 32,
+    private readonly onHeadroom: (bytes: number) => void = () => {},
   ) {}
 
   get bytes() {
@@ -89,6 +90,7 @@ export class SceneCache<T extends SceneData = SceneData> {
           this.entries.keys().next().value!,
       );
     this.entries.set(id, entry);
+    this.onHeadroom(this.maxBytes - this.bytes);
     return entry;
   }
 }

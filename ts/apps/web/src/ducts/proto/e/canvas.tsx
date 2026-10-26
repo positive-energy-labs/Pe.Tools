@@ -195,8 +195,7 @@ function Canvas({
     [snapshot, neighbours, opened],
   );
   const captured = useDuctScene(request, native, captureSource?.version ?? "");
-  const capturedMeshes = useMemo(() => {
-    if (!captured.meshes) return null;
+  const meshCuts = useMemo(() => {
     const cuts = new Map<number, (typeof neighbours)[number]["cuts"]>();
     for (const id of stubs) {
       const branches = neighbours.filter((n) => n.stub.includes(id));
@@ -206,12 +205,20 @@ function Canvas({
           branches.flatMap((n) => n.cuts.filter((cut) => cut.id === id)),
         );
     }
-    return clipMeshes(captured.meshes, cuts);
-  }, [captured.meshes, neighbours, stubs]);
+    return cuts;
+  }, [neighbours, stubs]);
+  const capturedMeshes = useMemo(
+    () => (captured.meshes ? clipMeshes(captured.meshes, meshCuts) : null),
+    [captured.meshes, meshCuts],
+  );
+  const focusMeshes = useMemo(
+    () => (captured.focusMeshes ? clipMeshes(captured.focusMeshes, meshCuts) : null),
+    [captured.focusMeshes, meshCuts],
+  );
   const capture =
     import.meta.env.DEV && frozenDemo() === "colours"
-      ? { ...captured, meshes: COLOURS_FIXTURE.meshes }
-      : { ...captured, meshes: capturedMeshes };
+      ? { ...captured, meshes: COLOURS_FIXTURE.meshes, focusMeshes: COLOURS_FIXTURE.meshes }
+      : { ...captured, meshes: capturedMeshes, focusMeshes };
   const pictureKey = doc && request ? `${doc.session}/${doc.openId}` : null;
   const { read, holding } = usePictureRead(
     capture,

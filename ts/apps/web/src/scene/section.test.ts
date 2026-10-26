@@ -1,6 +1,13 @@
 import { expect, test } from "vite-plus/test";
 import { routeAddress, sceneViewSchema } from "@pe/agent-contracts";
-import { clipContains, fitSection, rebaseCaps, sectionContains, sectionVolume } from "./section";
+import {
+  clipContains,
+  fitSection,
+  rebaseCaps,
+  rebaseClip,
+  sectionContains,
+  sectionVolume,
+} from "./section";
 import { moveSectionFace } from "./section-controls";
 import { presetLook } from "./presets";
 import { LOOK } from "./grounds";
@@ -107,4 +114,24 @@ test("compound presets filter context only and never remove an opened system or 
       presetLook(LOOK.defaults, "nearby-structure").layers,
     ),
   ).toBe(false);
+});
+
+test("staged focus preserves every polygon plane and world section across different capture origins", () => {
+  const data = new Float32Array(384);
+  for (let axis = 0; axis < 3; axis++) data.set([-2, -2, 2, -2, 2, 2, -2, 2], axis * 128);
+  const volume = {
+    data,
+    counts: [4, 4, 4],
+    keepInside: [true, true, true],
+    section: { kind: "plane", axis: "z", keep: "above", offset: 29 } as const,
+  };
+  const from = [10, 20, 30],
+    to = [7, 25, 12];
+  const rebased = rebaseClip(volume, from, to);
+  for (let x = 7; x <= 13; x++)
+    for (let y = 17; y <= 23; y++)
+      for (let z = 27; z <= 33; z++)
+        expect(clipContains(rebased, [x, y, z], to)).toBe(clipContains(volume, [x, y, z], from));
+  expect(volume.data).toBe(data);
+  expect(rebased!.section).toBe(volume.section);
 });

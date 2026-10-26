@@ -342,7 +342,7 @@ export function boundsOfInstances(
     maxY: -Infinity,
     maxZ: -Infinity,
   };
-  for (const [instance, box] of instanceBounds(meshes)) {
+  for (const [instance, box] of instanceBounds(meshes, keep)) {
     if (!keep(instance)) continue;
     b.minX = Math.min(b.minX, box.minX);
     b.minY = Math.min(b.minY, box.minY);

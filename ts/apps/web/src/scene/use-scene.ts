@@ -13,10 +13,11 @@ import { fetchSceneArtifact } from "./artifact";
 import { sceneRequest } from "./host";
 import { decodeScene, type Psc1Metadata } from "./psc1";
 import { SceneCache } from "./scene-cache";
+import { preparedHeadroom } from "./prepared-cache";
 import type { SceneMeshes } from "./types";
 
 type Decoded = { metadata: Psc1Metadata; positions: Float32Array; meshes: SceneMeshes };
-const cache = new SceneCache<Decoded>();
+const cache = new SceneCache<Decoded>(undefined, undefined, preparedHeadroom);
 type SceneLoad = { users: number; abort: AbortController; data: Promise<Decoded> };
 const loads = new Map<string, SceneLoad>();
 
@@ -79,6 +80,8 @@ export type SceneRead = {
   pending: boolean;
   /** Current-scope exact focus is usable while its optional context is pending. */
   focusReady?: boolean;
+  /** Exact focus owner, stable while its optional context changes. Also the first staged picture. */
+  focusMeshes?: SceneMeshes | null;
   omittedElements: number;
   unavailableElements: number;
 };
@@ -144,6 +147,7 @@ export function useDuctScene(
     error: focus.error ?? context.error,
     pending: focus.pending || context.pending,
     focusReady: !!focus.meshes && !focus.pending,
+    focusMeshes: focus.meshes,
   };
 }
 

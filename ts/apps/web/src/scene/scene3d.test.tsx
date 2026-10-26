@@ -4,7 +4,7 @@ import { TestAttention } from "#/test-attention";
 import { act, fireEvent, render } from "@testing-library/react";
 import { expect, it, vi } from "vite-plus/test";
 import { SceneMeshes } from "./types";
-import { fitDistance, type OrbitViewport } from "./orbit";
+import { type OrbitViewport } from "./orbit";
 import { createLiveOrbit } from "@pe/kit/lang/live-orbit";
 import { OrbitMinimap } from "@pe/kit/lang/minimap";
 import { Scene3D } from "./scene3d";
@@ -20,14 +20,24 @@ vi.mock("./picking", async (original) => ({
 
 const renderer = vi.hoisted(() => ({ current: null as any }));
 vi.mock("./renderer", () => ({
-  createRenderer: (host: HTMLElement) => {
+  createRenderer: (host: HTMLElement, initial: SceneMeshes) => {
+    let held = initial;
+    renderer.current.meshes = () => held;
+    let frame = initial.bounds;
+    renderer.current.frameBounds = () => frame;
+    renderer.current.setFrameBounds = vi.fn((next) => {
+      frame = next;
+    });
+    renderer.current.replaceMeshes = vi.fn(async (next: SceneMeshes) => {
+      held = next;
+    });
     host.prepend(renderer.current.canvas);
     return renderer.current;
   },
 }));
 vi.mock("#/revit/observation", () => ({ useNativeObservation: () => ({ scope: null }) }));
 
-it("keeps camera gestures local and meshes mounted across native re-reads", () => {
+it("keeps camera gestures local and the viewport mounted across membership and native re-reads", async () => {
   const frames: FrameRequestCallback[] = [];
   vi.stubGlobal("requestAnimationFrame", (frame: FrameRequestCallback) => frames.push(frame));
   const moves = new EventTarget();
@@ -96,6 +106,7 @@ it("keeps camera gestures local and meshes mounted across native re-reads", () =
   );
   const registry = makeAtomRegistry();
   const view = render(<TestAttention registry={registry}>{draw()}</TestAttention>);
+  await act(async () => {});
   expect(renderer.current.setContextMode).toHaveBeenLastCalledWith(undefined);
   expect(view.getByText("picture state")).toBeTruthy();
   const row = view.getByText("linked row").closest(".dl-row")!;
@@ -211,7 +222,6 @@ it("keeps camera gestures local and meshes mounted across native re-reads", () =
   expect(onViewport).toHaveBeenCalledExactlyOnceWith(pose, "gesture");
   // A withheld pick never withholds camera gestures on the retained picture.
   view.rerender(<TestAttention registry={registry}>{draw()}</TestAttention>);
-  const beforeCapture = orbit.read()!;
   const biggerCapture = new SceneMeshes(
     meshes.positions,
     { minX: -100, minY: -100, minZ: -100, maxX: 100, maxY: 100, maxZ: 100 },
@@ -220,13 +230,14 @@ it("keeps camera gestures local and meshes mounted across native re-reads", () =
   view.rerender(
     <TestAttention registry={registry}>{draw(undefined, "all", biggerCapture)}</TestAttention>,
   );
-  expect(renderer.current.recoverViewport).toHaveBeenLastCalledWith(
-    {
-      ...beforeCapture,
-      zoom: (beforeCapture.zoom * fitDistance(biggerCapture.bounds)) / fitDistance(meshes.bounds),
-    },
-    null,
+  await act(async () => {});
+  expect(renderer.current.replaceMeshes).toHaveBeenLastCalledWith(
+    biggerCapture,
+    undefined,
+    expect.any(AbortSignal),
   );
+  expect(renderer.current.canvas).toBe(canvas);
+  expect(renderer.current.dispose).not.toHaveBeenCalled();
   view.unmount();
   type PictureProps = { capture: SceneRead; document?: string };
   function Picture({ capture, document = "native/doc" }: PictureProps) {
@@ -245,6 +256,7 @@ it("keeps camera gestures local and meshes mounted across native re-reads", () =
     unavailableElements: 1,
   };
   const picture = render(<Picture capture={capture} />);
+  await act(async () => {});
   const drawn = picture.container.querySelector("canvas");
   renderer.current.dispose.mockClear();
   for (const pending of [false, true]) {
@@ -261,11 +273,14 @@ it("keeps camera gestures local and meshes mounted across native re-reads", () =
   picture.rerender(<Picture capture={{ ...capture, meshes: replacement }} />);
   expect(picture.container.querySelectorAll("canvas")).toHaveLength(1);
   expect(picture.container.firstElementChild?.hasAttribute("data-reading")).toBe(false);
-  expect(renderer.current.dispose).toHaveBeenCalledTimes(1);
+  await act(async () => {});
+  expect(renderer.current.dispose).not.toHaveBeenCalled();
   picture.rerender(
     <Picture capture={{ ...capture, meshes: null, pending: true }} document="native/other" />,
   );
-  expect(picture.container.querySelector("canvas")).toBeNull();
+  expect(picture.container.querySelector("canvas")?.hidden).toBe(true);
+  await act(async () => {});
+  expect(renderer.current.meshes().instances).toHaveLength(0);
   picture.unmount();
   vi.useRealTimers();
   vi.unstubAllGlobals();

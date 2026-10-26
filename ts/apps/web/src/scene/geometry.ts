@@ -3,13 +3,15 @@ import type { Bounds, SceneInstance, SceneMeshes } from "./types";
 const prepared = new WeakMap<SceneMeshes, ReadonlyMap<SceneInstance, Bounds>>();
 
 /** SceneMeshes is immutable: retain one spatial summary, never another position buffer. */
-export function instanceBounds(meshes: SceneMeshes): ReadonlyMap<SceneInstance, Bounds> {
-  const held = prepared.get(meshes);
-  if (held) return held;
-  const result = new Map<SceneInstance, Bounds>();
+export function instanceBounds(
+  meshes: SceneMeshes,
+  keep: (instance: SceneInstance) => boolean = () => true,
+): ReadonlyMap<SceneInstance, Bounds> {
+  let result = prepared.get(meshes) as Map<SceneInstance, Bounds> | undefined;
+  if (!result) prepared.set(meshes, (result = new Map()));
   const p = meshes.positions;
   for (const instance of meshes.instances) {
-    if (!instance.vertexCount) continue;
+    if (!instance.vertexCount || !keep(instance) || result.has(instance)) continue;
     const b: Bounds = {
       minX: Infinity,
       minY: Infinity,

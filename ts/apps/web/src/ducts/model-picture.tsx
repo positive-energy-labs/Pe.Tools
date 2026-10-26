@@ -310,44 +310,41 @@ export function ModelPicture({
       {!read.pending && status && (
         <OutcomeLine kind={read.error ? "error" : "advisory"} label={status} />
       )}
-      {meshes && pose ? (
-        <Scene3D
-          readout={readout}
-          className="size-full"
-          meshes={meshes}
-          pickingEnabled={!read.pending || read.focusReady === true}
-          orbit={orbit}
-          orbitPivot={stage.orbitPivot}
-          wheelHost={wheelHost ?? host}
-          selected={selectedKeys}
-          lit={litKeys}
-          paintOf={paintOf}
-          contextMode={preset === "nearby-structure" ? "halo" : contextMode}
-          contextRadiusFt={contextRadiusFt}
-          preset={preset}
-          clipVolume={clipVolume}
-          isolated={layers.has("meshes") ? null : NONE}
-          layers={pictureLayers}
-          hoveredIssue={hoveredIssue}
-          focusedIssue={issue}
-          onIssueHover={hoverIssue}
-          onIssuePick={pickIssue}
-          onProject={(project, at, _ray, moving) => {
-            lastFrame.current = { project, size: at };
-            if (!moving && !orbit.moving()) setFramed(lastFrame.current);
-          }}
-          onDoubleClick={(pick) => frameAt(pick?.instance.key ?? null)}
-          onPick={(pick, event) => {
-            if (event.detail > 1) return;
-            if (!pick) return;
-            if (pick.instance.revitId === null) return setSaid("linked element, not selectable");
-            setSaid(null);
-            onPick(pick.instance.revitId, { x: event.clientX, y: event.clientY });
-          }}
-        />
-      ) : (
-        readout
-      )}
+      <Scene3D
+        readout={readout}
+        className="size-full"
+        meshes={meshes}
+        focusMeshes={read.focusMeshes}
+        pickingEnabled={!read.pending || read.focusReady === true}
+        orbit={orbit}
+        orbitPivot={stage.orbitPivot}
+        wheelHost={wheelHost ?? host}
+        selected={selectedKeys}
+        lit={litKeys}
+        paintOf={paintOf}
+        contextMode={preset === "nearby-structure" ? "halo" : contextMode}
+        contextRadiusFt={contextRadiusFt}
+        preset={preset}
+        clipVolume={clipVolume}
+        isolated={layers.has("meshes") ? null : NONE}
+        layers={pictureLayers}
+        hoveredIssue={hoveredIssue}
+        focusedIssue={issue}
+        onIssueHover={hoverIssue}
+        onIssuePick={pickIssue}
+        onProject={(project, at, _ray, moving) => {
+          lastFrame.current = { project, size: at };
+          if (!moving && !orbit.moving()) setFramed(lastFrame.current);
+        }}
+        onDoubleClick={(pick) => frameAt(pick?.instance.key ?? null)}
+        onPick={(pick, event) => {
+          if (event.detail > 1) return;
+          if (!pick) return;
+          if (pick.instance.revitId === null) return setSaid("linked element, not selectable");
+          setSaid(null);
+          onPick(pick.instance.revitId, { x: event.clientX, y: event.clientY });
+        }}
+      />
       {meshes && sectionSubject && (
         <PaneOverlay label="section and context" place="tr">
           <SectionControls

@@ -4,6 +4,9 @@
  * and zooms. Thumbnails reuse this context only when stale. Callers author polygon cuts or typed
  * world-foot sections; drawing and picking consume the same clip volume. */
 import * as THREE from "three";
+import type { PreparedGeometry } from "./prepare-geometry";
+import { scenePreparation } from "./preparation";
+import { SceneMeshes } from "./types";
 import { LineMaterial } from "three/addons/lines/LineMaterial.js";
 import { LineSegments2 } from "three/addons/lines/LineSegments2.js";
 import { createGlow, GLOW_LAYER, OCCLUDER_LAYER } from "./glow";
@@ -39,7 +42,7 @@ import {
 } from "./gestures";
 import { createMeshPicker } from "./picking";
 import { contextVisible } from "./context";
-import { clipContains, rebaseCaps, sectionPlanes, type Section } from "./section";
+import { clipContains, rebaseCaps, rebaseClip, sectionPlanes, type Section } from "./section";
 import { sectionCaps } from "./section-caps";
 import { createOrbitControls } from "./orbit-controls";
 import {
@@ -88,7 +91,6 @@ import type {
   PaintOf,
   Pick,
   SceneInstance,
-  SceneMeshes,
 } from "./types";
 
 /** Opt-in timing marks (`?scenePerf`), including GPU completion rather than a bare RAF tick. */
@@ -167,12 +169,22 @@ const BOX_EDGES = [
 /** Selection, hover and lighting lift the base system ink toward page ink. */
 type Mark = "hover" | "lit" | "selected";
 
-export function createRenderer(
-  mount: HTMLElement,
+/** Keep only edge storage after upload; the completed async preparation must not own face arrays. */
+function preparedEdges(
   meshes: SceneMeshes,
-  wheelHost = mount,
-  initialPaint?: PaintOf,
+  edges: PreparedGeometry["edges"],
+  angles: PreparedGeometry["angles"],
+  ids: ReadonlyMap<string, number>,
 ) {
+  const fallback = surfaceEdges(meshes);
+  return (instance: SceneInstance, angle: number) => {
+    const id = ids.get(instance.key)!;
+    return angles[id] === angle && edges[id] ? edges[id]! : fallback(instance, angle);
+  };
+}
+
+export function createRenderer(mount: HTMLElement, initialMeshes: SceneMeshes, wheelHost = mount) {
+  let meshes = new SceneMeshes(new Float32Array(), initialMeshes.bounds, []);
   const measuring = timing();
   mark("build-start", { instances: meshes.instances.length });
   const renderer = new THREE.WebGLRenderer({ antialias: true });
@@ -192,7 +204,7 @@ export function createRenderer(
   mount.prepend(canvas);
   const outline = createOutline(renderer, ink, ground);
 
-  const bounds = meshes.bounds;
+  let bounds = meshes.bounds;
   const origin = new THREE.Vector3(...center(bounds));
   const scene = new THREE.Scene();
   const hemisphere = new THREE.HemisphereLight();
@@ -250,7 +262,7 @@ export function createRenderer(
   const ortho = new THREE.OrthographicCamera(-1, 1, 1, -1, 0.01, 1);
   let plane: { axis: PlaneAxis; viewport: PlaneViewport } | null = null;
   const active = (): THREE.Camera => (plane ? ortho : camera);
-  let subjectBounds = boundsOfInstances(meshes, (i) => paintOf(i, initialPaint).tier !== "context");
+  let subjectBounds: ReturnType<typeof boundsOfInstances> = null;
   let limits = subjectBounds
     ? cameraBounds(subjectBounds, look.camera.zoomOutFactor, look.camera.panMargin)
     : null;
@@ -358,9 +370,9 @@ export function createRenderer(
   const veil = veilUniforms();
   let contextRadiusFt: number | undefined;
   veilMaterial(material, veil, true);
-  const batch = new THREE.BatchedMesh(
-    meshes.instances.length,
-    meshes.positions.length / 3,
+  let batch = new THREE.BatchedMesh(
+    Math.max(1, meshes.instances.length),
+    Math.max(1, meshes.positions.length / 3),
     0,
     material,
   );
@@ -373,6 +385,7 @@ export function createRenderer(
     light.layers.enable(CONTEXT_LAYER);
     light.layers.enable(SHELL_LAYER);
   }
+  batch.visible = false;
   scene.add(batch);
   const glow = createGlow(renderer, material);
   /** What a look change re-applies besides instance tints: ground, lights, fog, veil, passes. */
@@ -401,7 +414,7 @@ export function createRenderer(
   };
   applyStage();
   const byId: SceneInstance[] = [];
-  let paintBy = initialPaint;
+  let paintBy: PaintOf | undefined;
   const paints: InstancePaint[] = [];
   const tint = (id: number, mark: Mark | null = null) => {
     const paint = paints[id]!;
@@ -440,63 +453,12 @@ export function createRenderer(
     field = bakeVeil(meshes, (i) => paints[idOf[i]!]!.tier === "subject");
     setVeilField(veil, field);
   };
-  mark("geometry-start");
-  for (const instance of meshes.instances) {
-    const vertices = meshes.positions.slice(
-      instance.firstVertex * 3,
-      (instance.firstVertex + instance.vertexCount) * 3,
-    );
-    for (let i = 0; i < vertices.length; i += 3) {
-      vertices[i]! -= origin.x;
-      vertices[i + 1]! -= origin.y;
-      vertices[i + 2]! -= origin.z;
-    }
-    const geometry = new THREE.BufferGeometry();
-    geometry.setAttribute("position", new THREE.BufferAttribute(vertices, 3));
-    const cuts = instance.revitId === null ? [] : (meshes.cuts.get(instance.revitId) ?? []);
-    const continuation = new Float32Array(vertices.length / 3).fill(1e6);
-    for (const cut of cuts) {
-      const normal = new THREE.Vector3()
-        .fromArray(cut.at)
-        .sub(new THREE.Vector3().fromArray(cut.from))
-        .normalize();
-      const end = new THREE.Vector3().fromArray(cut.at);
-      const point = new THREE.Vector3();
-      for (let n = 0; n < continuation.length; n++) {
-        point.fromArray(meshes.positions, (instance.firstVertex + n) * 3);
-        continuation[n] = Math.min(continuation[n]!, Math.abs(point.sub(end).dot(normal)));
-      }
-    }
-    geometry.setAttribute("continuationDistance", new THREE.BufferAttribute(continuation, 1));
-    geometry.computeVertexNormals();
-    geometry.computeBoundingSphere();
-    geometry.computeBoundingBox();
-    const id = batch.addInstance(batch.addGeometry(geometry));
-    byId[id] = instance;
-    idOf.push(id);
-    paints[id] = paintOf(instance, paintBy);
-    tint(id);
-    geometry.dispose();
-  }
-  mark("geometry", { meshes: byId.length, multiDraw: renderer.extensions.has("WEBGL_multi_draw") });
-  bake();
-  mark("veil");
-  LOOK.offer(
-    "layers",
-    "hiddenCategories",
-    [
-      ...new Set(
-        meshes.instances
-          .filter((_, n) => paints[idOf[n]!]!.tier === "context")
-          .flatMap((i) => (i.categoryId === null ? [] : [String(i.categoryId)])),
-      ),
-    ].sort(),
-    Object.fromEntries(
-      meshes.instances
-        .filter((i) => i.categoryId !== null)
-        .map((i) => [String(i.categoryId), i.category]),
-    ),
-  );
+  // Viewport construction has no membership work. Replacements are prepared off-thread below.
+  field = { data: new Uint8Array([255]), dims: [1, 1, 1], min: [0, 0, 0], cellFt: 1 };
+  setVeilField(veil, field);
+  const preparation = scenePreparation();
+  let replacement = 0;
+  let disposed = false;
 
   let frame = 0;
   let sizePending = false;
@@ -688,12 +650,15 @@ export function createRenderer(
     const info = renderer.info;
     const gl = renderer.getContext() as WebGL2RenderingContext;
     mark("submitted", {
+      instances: byId.length,
+      focus: byId.filter((i) => i.focus).length,
       cpuMs: performance.now() - started,
       calls: info.render.calls,
       triangles: info.render.triangles,
       geometries: info.memory.geometries,
       textures: info.memory.textures,
     });
+    const membership = { instances: byId.length, focus: byId.filter((i) => i.focus).length };
     const sync = gl.fenceSync(gl.SYNC_GPU_COMMANDS_COMPLETE, 0);
     gl.flush();
     const complete = () => {
@@ -701,7 +666,7 @@ export function createRenderer(
       const status = gl.clientWaitSync(sync, 0, 0);
       if (status === gl.TIMEOUT_EXPIRED) return void requestAnimationFrame(complete);
       gl.deleteSync(sync);
-      mark(status === gl.WAIT_FAILED ? "gpu-failed" : "gpu-complete", { status });
+      mark(status === gl.WAIT_FAILED ? "gpu-failed" : "gpu-complete", { status, ...membership });
     };
     requestAnimationFrame(complete);
   };
@@ -944,7 +909,7 @@ export function createRenderer(
   scene.add(outlined);
   const envelopes = new THREE.Group();
   scene.add(envelopes);
-  const edgesOf = surfaceEdges(meshes);
+  let edgesOf = surfaceEdges(meshes);
   const routes = new THREE.Group();
   scene.add(routes);
   let routeStamp = "";
@@ -1112,9 +1077,7 @@ export function createRenderer(
   };
 
   // Inspection prefers the subject through its translucent surroundings, then nearest in that tier.
-  const pick = createMeshPicker(batch, byId, (i) =>
-    paintOf(i, paintBy).tier === "context" ? 0 : 1,
-  );
+  let pick = createMeshPicker(batch, byId, (i) => (paintOf(i, paintBy).tier === "context" ? 0 : 1));
   const rebuildCaps = () => {
     const stamp = JSON.stringify([clipVolume?.section, look.section.cap]);
     if (clipVolume?.preview) {
@@ -1171,7 +1134,149 @@ export function createRenderer(
   };
   const capRay = new THREE.Raycaster();
   capRay.layers.enableAll();
-  return {
+  const api = {
+    meshes: () => meshes,
+    frameBounds: () => bounds,
+    /** Camera zoom belongs to the caller's picture, independently of staged geometry bounds. */
+    setFrameBounds(next: typeof bounds) {
+      if (bounds === next) return;
+      bounds = next;
+      applyStage();
+      render();
+    },
+    async replaceMeshes(
+      next: SceneMeshes,
+      nextPaint: PaintOf | undefined,
+      signal: AbortSignal,
+      preserveLayers = false,
+    ): Promise<void> {
+      const version = ++replacement;
+      const check = () => {
+        signal.throwIfAborted();
+        if (disposed || version !== replacement)
+          throw new DOMException("Scene superseded", "AbortError");
+      };
+      check();
+      if (next === meshes) return;
+      mark("prepare-start", { instances: next.instances.length });
+      const ready = await preparation.prepare(next, nextPaint, look, signal);
+      check();
+      mark("prepare-ready", { instances: next.instances.length });
+      const incoming = new THREE.BatchedMesh(
+        Math.max(1, next.instances.length),
+        Math.max(1, next.positions.length / 3),
+        0,
+        material,
+      );
+      incoming.visible = next.instances.length > 0;
+      try {
+        let sliceStart = performance.now();
+        for (const [index, instance] of next.instances.entries()) {
+          check();
+          const start = instance.firstVertex,
+            end = start + instance.vertexCount;
+          const geometry = new THREE.BufferGeometry()
+            .setAttribute(
+              "position",
+              new THREE.BufferAttribute(ready.positions.subarray(start * 3, end * 3), 3),
+            )
+            .setAttribute(
+              "normal",
+              new THREE.BufferAttribute(ready.normals.subarray(start * 3, end * 3), 3),
+            )
+            .setAttribute(
+              "continuationDistance",
+              new THREE.BufferAttribute(ready.continuation.subarray(start, end), 1),
+            );
+          const box = ready.boxes[index]!,
+            sphere = ready.spheres[index]!;
+          geometry.boundingBox = new THREE.Box3(
+            new THREE.Vector3().fromArray(box),
+            new THREE.Vector3().fromArray(box, 3),
+          );
+          geometry.boundingSphere = new THREE.Sphere(
+            new THREE.Vector3().fromArray(sphere),
+            sphere[3],
+          );
+          incoming.addInstance(incoming.addGeometry(geometry));
+          geometry.dispose();
+          if (performance.now() - sliceStart > 8) {
+            await new Promise<void>((resolve) => setTimeout(resolve, 0));
+            sliceStart = performance.now();
+          }
+        }
+        check();
+      } catch (error) {
+        incoming.dispose();
+        throw error;
+      }
+      // Atomic ownership transfer: no frame or picker sees half-installed membership.
+      // Optional context keeps the same focus and already-current world-space diagnostics.
+      // Clearing them here repeats their geometry build and stalls the held pointer.
+      if (!preserveLayers) api.setLayers([]);
+      caps.forEach((cap) => {
+        scene.remove(cap);
+        disposeTree(cap);
+      });
+      caps.clear();
+      capStamp = "";
+      for (const group of [outlined, routes, envelopes]) {
+        for (const child of group.children.slice()) {
+          group.remove(child);
+          disposeTree(child);
+        }
+      }
+      scene.remove(batch);
+      batch.dispose();
+      batch = incoming;
+      meshes = next;
+      origin.fromArray(center(next.bounds));
+      batch.position.copy(origin);
+      outlined.position.copy(origin);
+      for (const layer of [OCCLUDER_LAYER, CONTEXT_LAYER, SHELL_LAYER]) batch.layers.enable(layer);
+      scene.add(batch);
+      byId.splice(0, byId.length, ...next.instances);
+      idOf.splice(0, idOf.length, ...byId.map((_, i) => i));
+      paintBy = nextPaint;
+      paints.splice(0, paints.length, ...byId.map((i) => paintOf(i, paintBy)));
+      batchIdByKey.clear();
+      byId.forEach((i, id) => batchIdByKey.set(i.key, id));
+      LOOK.offer(
+        "layers",
+        "hiddenCategories",
+        [
+          ...new Set(
+            byId
+              .filter((_, id) => paints[id]!.tier === "context")
+              .flatMap((i) => (i.categoryId === null ? [] : [String(i.categoryId)])),
+          ),
+        ].sort(),
+        Object.fromEntries(
+          byId.filter((i) => i.categoryId !== null).map((i) => [String(i.categoryId), i.category]),
+        ),
+      );
+      field = ready.field;
+      setVeilField(veil, field);
+      edgesOf = preparedEdges(meshes, ready.edges, ready.angles, batchIdByKey);
+      pick = createMeshPicker(batch, byId, (i) => (paintOf(i, paintBy).tier === "context" ? 0 : 1));
+      marked.clear();
+      routeStamp = "";
+      envelopeStamp = "";
+      routeGeometryDirty = true;
+      byId.forEach((_, id) => tint(id));
+      subjectBounds = boundsOfInstances(meshes, (i) => paintOf(i, paintBy).tier !== "context");
+      limits = subjectBounds
+        ? cameraBounds(subjectBounds, look.camera.zoomOutFactor, look.camera.panMargin)
+        : null;
+      returning = null;
+      applyStage();
+      paintNow(...painted);
+      rebuildCaps();
+      thumbsStale = true;
+      moves.dispatchEvent({ type: "change" });
+      mark("membership", { instances: byId.length, focus: byId.filter((i) => i.focus).length });
+      render();
+    },
     canvas,
     gestureSize: () => [size.height, viewHeight(camera, controls.target)] as const,
     controls,
@@ -1387,7 +1492,8 @@ export function createRenderer(
       thumbsStale = true;
       render();
     },
-    setClip(volume: ClipVolume | null | undefined) {
+    setClip(volume: ClipVolume | null | undefined, sourceBounds = meshes.bounds) {
+      volume = rebaseClip(volume, center(sourceBounds), origin.toArray());
       layerRevision++;
       clipVolume = volume;
       uniforms.clipPolygon.value = volume?.data.length
@@ -1477,6 +1583,9 @@ export function createRenderer(
     },
     dispose() {
       mark("dispose");
+      disposed = true;
+      replacement++;
+      preparation.stop();
       onFrame = null;
       cancelAnimationFrame(frame);
       motion.removeEventListener("change", motionChanged);
@@ -1510,6 +1619,7 @@ export function createRenderer(
       canvas.remove();
     },
   };
+  return api;
 }
 
 export type SceneRenderer = ReturnType<typeof createRenderer>;
