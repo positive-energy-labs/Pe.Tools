@@ -91,6 +91,7 @@ const session = (sessionId) => ({
   },
 });
 let cancelled = () => {};
+let toolEnv = {};
 async function gate(step) {
   if (!process.env.FAKE_ACP_GATE) return;
   const path = join(process.env.FAKE_ACP_GATE, step);
@@ -114,7 +115,13 @@ new AgentSideConnection(
       };
     },
     authenticate: () => {},
-    async newSession() {
+    async newSession({ mcpServers }) {
+      toolEnv = Object.fromEntries(
+        (mcpServers.find((server) => server.name === "pea")?.env ?? []).map(({ name, value }) => [
+          name,
+          value,
+        ]),
+      );
       const auth = process.env.FAKE_ACP_AUTH ?? "account";
       if (auth === "required") throw RequestError.authRequired();
       const report = () =>
@@ -171,6 +178,55 @@ new AgentSideConnection(
           update: { sessionUpdate: "agent_message_chunk", content: { type: "text", text: chunk } },
         });
       await say(`echo: ${text}`);
+      if (text === "route-cutover-open") {
+        // Browser acceptance substitutes inference, not identity, route delivery, lease or render ack.
+        const base = toolEnv.PE_TOOLS_HOST_BASE_URL;
+        if (!base || !process.env.PE_CONTEXT)
+          throw Error("route cutover needs a real host-minted Pea context");
+        const headers = {
+          "content-type": "application/json",
+          "x-pe-context": process.env.PE_CONTEXT,
+        };
+        const request = async (path, body) => {
+          const response = await fetch(new URL(path, base), {
+            method: body ? "POST" : "GET",
+            headers,
+            ...(body ? { body: JSON.stringify(body) } : {}),
+            signal: AbortSignal.timeout(15000),
+          });
+          return { status: response.status, value: await response.json() };
+        };
+        const scope = await request("/pe/scope/self");
+        if (scope.status !== 200 || !scope.value.thread) throw Error("missing own conversation");
+        const opened = await request("/pe/route-view/families/open", {
+          thread: scope.value.thread,
+          link: "/families",
+        });
+        if (opened.status !== 200) throw Error(`open refused: ${JSON.stringify(opened.value)}`);
+        const end = Date.now() + 12000;
+        let mounted;
+        while (Date.now() < end) {
+          const read = await request(
+            `/pe/route-view/families?thread=${encodeURIComponent(scope.value.thread)}`,
+          );
+          if (read.status === 200 && read.value.openCommandId === opened.value.commandId) {
+            mounted = read.value;
+            break;
+          }
+          await new Promise((done) => setTimeout(done, 100));
+        }
+        if (!mounted) throw Error("explicit open did not acquire its own rendered lease");
+        const applied = await request("/pe/route-view/families/set", {
+          thread: scope.value.thread,
+          instance: mounted.instance,
+          revision: mounted.revision,
+          patch: { query: "" },
+        });
+        if (applied.status !== 200 || applied.value.outcome !== "rendered")
+          throw Error(`render ack refused: ${JSON.stringify(applied.value)}`);
+        await say(`route-cutover-rendered ${opened.value.commandId}`);
+        return { stopReason: "end_turn" };
+      }
       const blocks = prompt.flatMap((b) =>
         b.type === "image"
           ? [{ type: b.type, mimeType: b.mimeType, data: b.data }]

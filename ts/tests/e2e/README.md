@@ -4,10 +4,15 @@
 
 From `ts`, run `vp run --no-cache journey:conversation-work`. It starts its own source host with
 `--no-revit --no-tray`, seeds canonical thread/Work files in an isolated product home, and drives
-Chrome through conversation entry, explicit Work resume, draft/history retention, reconnect and
+Chrome through standalone tool entry, conversation entry, explicit Work resume, draft/history retention, reconnect and
 a 36-second quiet dwell. It also checks legacy Place rebasing, closed unsaved Work, and the real
 batched names read for unresolved prose ids. It checks source custody, served web build and unchanged
-Work bytes. Each run creates a dated artifact directory and stops its host and Chrome. Override
+Work bytes. Browser Places are created through pasted tool URLs, never injected into browser storage.
+A Work press from another thread's row must preserve the selected conversation. First Send creates
+one conversation while retaining the tool; the existing ACP test adapter substitutes inference only.
+That adapter also sends a real Pea-context open request and requires its command-specific lease and
+render acknowledgement. No native Revit operation or external model inference runs.
+Each run creates a dated artifact directory and stops its host and Chrome. Override
 `CONVERSATION_WORK_ARTIFACT_DIR` or `CONVERSATION_WORK_CHROME_PORT` when needed. This proves saved
 Work and browser behavior; it does not prove a native Revit read or write.
 
@@ -21,7 +26,9 @@ vp run --no-cache journey:routes
 
 The launcher starts `src/dev.ts --no-revit --no-tray` through the checkout's installed Node/jiti runtime,
 an isolated product home and local SDK/app-data roots, the canonical source Vite child, and a
-private visible `@pe/browser` session on a dynamically selected port. It reads the host service
+private visible `@pe/browser` session on a dynamically selected port. The demo explicitly selects
+`thread=demo-review` for the lease witness; standalone no-conversation behavior belongs to the
+conversation/Work journey above. It reads the host service
 receipt and returned browser identity, then runs Vitest with `refresh,reconnect,worker` required. It never
 starts Revit or sends a Pea prompt. The integrated navigation fixture must expose its real demo
 Refresh action. `--seed`, `--require` and `--source` override the default seed, requested coverage

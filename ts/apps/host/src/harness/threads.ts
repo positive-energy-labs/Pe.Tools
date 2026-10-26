@@ -48,9 +48,6 @@ import {
   emptyThreadLifecycle,
   harnessThreadSummarySchema,
   routeAddress,
-  routeOf,
-  THREAD_TABS_MAX,
-  threadTabRequestSchema,
   threadPlaceRequestSchema,
   threadLifecycleSchema,
   updateThreadRequestSchema,
@@ -1817,53 +1814,6 @@ export function createHarnessThreads(options: HarnessThreadsOptions) {
           writeMeta(t);
           notifySummaries();
         }
-        return json(summary(t));
-      }
-      case "thread.tabs": {
-        const change = await input(threadTabRequestSchema);
-        // No await below: the tab list is read, changed and written in one tick, so no lifecycle
-        // or tab write interleaves (one in-memory meta, written whole by `writeMeta`).
-        const tabs = t.meta.tabs;
-        const index = tabs.findIndex((tab) => tab.id === change.id);
-        if (change.op === "close") {
-          if (index < 0) return json(summary(t));
-          tabs.splice(index, 1);
-        } else {
-          const route = routeOf(change.route);
-          if (!route) return json({ error: `no route '${change.route}'` }, 400);
-          const canonical = routeAddress(route).tab(change.link);
-          if (!canonical.ok) return json({ error: canonical.error }, 400);
-          const held = index < 0 ? null : tabs[index]!;
-          if (held && held.route !== route)
-            return json({ error: `Tab ${change.id} is a ${held.route} tab, not ${route}` }, 409);
-          if (held?.link === canonical.link) return json(summary(t));
-          if (!held && tabs.length >= THREAD_TABS_MAX)
-            return json(
-              {
-                error: `A thread keeps ${THREAD_TABS_MAX} tabs; close one first`,
-                thread: summary(t),
-              },
-              409,
-            );
-          const tab = {
-            id: change.id,
-            route,
-            link: canonical.link,
-            at: new Date().toISOString(),
-          };
-          if (held) tabs[index] = tab;
-          else tabs.push(tab);
-          const context = readWorkContext(t.meta.workContext);
-          if (context)
-            t.meta.workContext = rememberPlace(
-              context,
-              route,
-              canonical.link,
-              options.observeDocument,
-            );
-        }
-        writeMeta(t);
-        notifySummaries();
         return json(summary(t));
       }
       case "thread.remove":

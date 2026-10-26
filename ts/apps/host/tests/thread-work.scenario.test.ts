@@ -22,6 +22,78 @@ import { createPeRoutes } from "../src/pe-routes.ts";
 import { HostLog } from "../src/host-log.ts";
 import { fileRouteDocumentStore } from "../src/route-document-store.ts";
 import { human } from "./callers.ts";
+import { hostResourceObserver } from "../src/resource-adapters.ts";
+
+test("explicit Pea opens travel live through world and cannot address another conversation", async () => {
+  const root = await mkdtemp(join(tmpdir(), "pe-view-open-"));
+  const app = createPeRoutes({
+    registrations: createRouteRegistrations(),
+    store: fileRouteDocumentStore(root),
+    heads: { observe: () => () => {} },
+    observeHostResource: hostResourceObserver(),
+  });
+  const abort = new AbortController();
+  const stream = await app.fetch(
+    new Request(
+      `http://host/pe/resources?keys=${encodeURIComponent(JSON.stringify([{ kind: "world" }]))}`,
+      { signal: abort.signal },
+    ),
+  );
+  const reader = stream.body!.getReader();
+  let buffer = "";
+  const next = async () => {
+    for (;;) {
+      const end = buffer.indexOf("\n\n");
+      if (end >= 0) {
+        const block = buffer.slice(0, end);
+        buffer = buffer.slice(end + 2);
+        const data = /^data: (.*)$/m.exec(block)?.[1];
+        if (data) return JSON.parse(data);
+      } else {
+        const chunk = await reader.read();
+        if (chunk.done) throw Error("world ended");
+        buffer += new TextDecoder().decode(chunk.value);
+      }
+    }
+  };
+  const open = (thread: string, link = "/families") =>
+    withInvocationContext(
+      { caller: { kind: "pea", context: "test-context", thread: "selected-chat" } },
+      () =>
+        app.fetch(
+          new Request("http://host/pe/route-view/families/open", {
+            method: "POST",
+            headers: { "content-type": "application/json" },
+            body: JSON.stringify({ thread, link }),
+          }),
+        ),
+    );
+  try {
+    expect((await next()).kind).toBe("gap");
+    expect((await next()).kind).toBe("snapshot");
+    expect((await open("other-chat")).status).toBe(403);
+    expect((await open("selected-chat", "/ducts")).status).toBe(400);
+    const response = await open("selected-chat");
+    expect(response.status).toBe(200);
+    const receipt = await response.json();
+    expect((await next()).value).toEqual({
+      type: "route-view-open",
+      route: "families",
+      thread: "selected-chat",
+      link: "/families",
+      commandId: receipt.commandId,
+    });
+    const missing = await app.fetch(
+      new Request("http://host/pe/route-view/families?thread=selected-chat"),
+    );
+    expect(missing.status).toBe(409);
+    expect(await missing.json()).toMatchObject({ ok: false, instances: [] });
+    expect(await app.workspace.instances()).toMatchObject({ works: [] });
+  } finally {
+    abort.abort();
+    await rm(root, { recursive: true, force: true });
+  }
+});
 
 test("HTTP and one Reading retain named unfinished Work after target removal, closure and host restart", async () => {
   const root = await mkdtemp(join(tmpdir(), "pe-thread-work-"));

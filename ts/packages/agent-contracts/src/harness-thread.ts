@@ -503,18 +503,6 @@ export const threadTabSchema = z.strictObject({
   at: z.iso.datetime(),
 });
 export type ThreadTab = z.infer<typeof threadTabSchema>;
-/** Open or move one tab (`put`, which also re-opens a tab another window closed), or close it. */
-export const threadTabRequestSchema = z.discriminatedUnion("op", [
-  z.strictObject({
-    op: z.literal("put"),
-    id: z.uuid(),
-    route: threadTabSchema.shape.route,
-    link: threadTabSchema.shape.link,
-  }),
-  z.strictObject({ op: z.literal("close"), id: z.uuid() }),
-]);
-export type ThreadTabRequest = z.infer<typeof threadTabRequestSchema>;
-
 /** Explicit conversation-to-Work context, independent of browser tab ownership or native consent. */
 export const threadPlaceRequestSchema = z.strictObject({
   route: threadTabSchema.shape.route,

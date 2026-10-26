@@ -120,7 +120,7 @@ type Page = any;
 
 const SCRATCH = process.env.PE_DEMO_LANE_SHOTS;
 
-test("issued Pea draft survives Home and Back in its mounted composer bank", async () => {
+test("unissued Pea draft survives Home and Back without creating a conversation", async () => {
   const page = await browser!.newPage();
   const draft = "Unsent Home Back draft: preserve the original composer.";
   const evidence: Record<string, unknown> = {};
@@ -131,11 +131,9 @@ test("issued Pea draft survives Home and Back in its mounted composer bank", asy
         timeout: 30_000,
       })
       .toBeGreaterThan(0);
-    await expect
-      .poll(() => new URL(page.url()).searchParams.get("thread"), { timeout: 30_000 })
-      .toMatch(/^[0-9a-f-]{36}$/);
+    expect(new URL(page.url()).searchParams.has("thread")).toBe(false);
     const issuedThread = new URL(page.url()).searchParams.get("thread");
-    // Closing the last Place opens its own Pea thread; global Open Pea starts another address.
+    // Closing the last Place reveals the unissued composer without choosing a conversation.
     await page.getByRole("button", { name: "Close Ducts", exact: true }).click();
     await expect.poll(() => new URL(page.url()).pathname).toBe("/pea");
     expect(new URL(page.url()).searchParams.get("thread")).toBe(issuedThread);
@@ -199,9 +197,7 @@ test("unsent draft remains current across real offline/online stream recovery", 
     await page.goto(`${baseUrl}/ducts?demo=navigation`, { waitUntil: "domcontentloaded" });
     const composer = page.getByRole("textbox", { name: "Message", exact: true });
     await expect.poll(() => composer.isVisible(), { timeout: 30_000 }).toBe(true);
-    await expect
-      .poll(() => new URL(page.url()).searchParams.get("thread"), { timeout: 30_000 })
-      .toMatch(/^[0-9a-f-]{36}$/);
+    expect(new URL(page.url()).searchParams.has("thread")).toBe(false);
     await expect
       .poll(() => page.getByRole("button", { name: "All systems", exact: true }).count(), {
         timeout: 30_000,
@@ -210,9 +206,7 @@ test("unsent draft remains current across real offline/online stream recovery", 
     await expect.poll(streams, { timeout: 30_000 }).toBeGreaterThan(0);
     await composer.fill(draft);
     const thread = new URL(page.url()).searchParams.get("thread");
-    expect(
-      await page.evaluate((id: string) => sessionStorage.getItem(`pe.routeThread.${id}`), thread),
-    ).toBe("minted");
+    expect(thread).toBeNull();
     const before = streams();
     evidence.before = { thread, streams: before, draft: await composer.inputValue() };
     await page.context().setOffline(true);

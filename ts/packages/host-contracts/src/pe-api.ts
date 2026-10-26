@@ -134,7 +134,6 @@ export type PeApiSchemas = Record<
   | "providerSchema"
   | "createThreadRequestSchema"
   | "updateThreadRequestSchema"
-  | "threadTabRequestSchema"
   | "threadPlaceRequestSchema"
   | "harnessThreadSummarySchema"
   | "harnessThreadBodySchema"
@@ -184,7 +183,6 @@ export function peRouteTable<S extends PeApiSchemas>(schemas: S) {
     schemas.createThreadRequestSchema as S["createThreadRequestSchema"];
   const updateThreadRequestSchema =
     schemas.updateThreadRequestSchema as S["updateThreadRequestSchema"];
-  const threadTabRequestSchema = schemas.threadTabRequestSchema as S["threadTabRequestSchema"];
   const harnessThreadSummarySchema =
     schemas.harnessThreadSummarySchema as S["harnessThreadSummarySchema"];
   const harnessThreadBodySchema = schemas.harnessThreadBodySchema as S["harnessThreadBodySchema"];
@@ -498,15 +496,6 @@ export function peRouteTable<S extends PeApiSchemas>(schemas: S) {
       "PUT",
       "/pe/threads/:id",
       updateThreadRequestSchema,
-      harnessThreadSummarySchema,
-      "caller",
-      "threads",
-      "caller",
-    ),
-    "thread.tabs": route(
-      "POST",
-      "/pe/threads/:id/tabs",
-      threadTabRequestSchema,
       harnessThreadSummarySchema,
       "caller",
       "threads",

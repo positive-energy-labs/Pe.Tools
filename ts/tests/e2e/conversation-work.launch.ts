@@ -36,6 +36,9 @@ const env: NodeJS.ProcessEnv = {
   LOCALAPPDATA: join(dir, "localappdata"),
   APPDATA: join(dir, "appdata"),
   CONVERSATION_WORK_ARTIFACT_DIR: resolve(dir),
+  // Substitute inference only. The browser, ACP transport, thread store and tool protocol stay real.
+  PE_HARNESS_ADAPTER_CODEX: join(ts, "apps/host/tests/fake-acp-agent.mjs"),
+  FAKE_ACP_SHAPE: "config",
 };
 for (const key of [
   "PE_TOOLS_HOST_SERVICE_NAME",
@@ -49,6 +52,7 @@ const receipt = {
   source,
   startedAt: new Date().toISOString(),
   mode: "owned-source-no-revit-no-tray",
+  inference: "substituted-acp-adapter",
   hostSource: {
     commit: "",
     productDirty: "",

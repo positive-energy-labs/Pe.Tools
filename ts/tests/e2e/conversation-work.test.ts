@@ -144,7 +144,9 @@ test("real conversation Work cutover retains authored cells, draft, Places and o
           url: params.request.url,
           method: params.request.method,
           data:
-            new URL(params.request.url).pathname === "/pe/turn-element-names"
+            ["/pe/turn-element-names", "/pe/threads"].includes(
+              new URL(params.request.url).pathname,
+            ) || /\/prompt$|\/place$/.test(new URL(params.request.url).pathname)
               ? params.request.postData
               : undefined,
           build: builds[0],
@@ -170,18 +172,10 @@ test("real conversation Work cutover retains authored cells, draft, Places and o
         });
     });
     const url = (path: string) => new URL(path, base).href;
-    const pickThread = async (title: string) => {
+    const pickThread = async (thread: string) => {
       if (await p.has("Expand threads")) await p.click("Expand threads");
-      const point = await p.until(
-        () =>
-          p.read<{ x: number; y: number } | null>(`(() => {
-        const label = [...document.querySelectorAll('[data-thread-sidebar] *')].find(e => !e.children.length && e.textContent.trim() === ${JSON.stringify(title)} && e.getClientRects().length);
-        if(!label)return null; const r=label.getBoundingClientRect(); return {x:r.left+Math.min(r.width/2,60),y:r.top+r.height/2};
-      })()`),
-        `${title} thread label`,
-      );
-      for (const type of ["mouseMoved", "mousePressed", "mouseReleased"])
-        await p.send("Input.dispatchMouseEvent", { type, ...point, button: "left", clickCount: 1 });
+      // The row's label may change after an explicit Work reference. Identity does not.
+      await p.clickAt(`[data-thread-sidebar] [data-key="${thread}"] .dl-row-label`);
     };
     const openWork = async (thread: string) => {
       if (await p.has("Expand threads")) await p.click("Expand threads");
@@ -216,6 +210,7 @@ test("real conversation Work cutover retains authored cells, draft, Places and o
       }
     };
     let officeComposer: number;
+    let browserPlaceId: string;
     const headTargets = async (thread = CONVERSATION_THREADS.office) => {
       const meta = JSON.parse(
         await readFile(
@@ -225,6 +220,39 @@ test("real conversation Work cutover retains authored cells, draft, Places and o
       );
       expect(meta.head.targets, "reading saved Work must not arm a native target").toEqual([]);
     };
+    await step("standalone tool creates no conversation and remembers its own Place", async () => {
+      const before = network.length;
+      await p.open(url(seed.placeUrl));
+      await p.send("Page.bringToFront");
+      await p.until(
+        async () => network.some((event) => event.build === head.slice(0, 12)),
+        "standalone source hydration",
+        90_000,
+      );
+      await p.until(
+        async () => p.read<boolean>("Boolean(history.state.__peRouteTab?.id)"),
+        "standalone browser Place identity",
+      );
+      browserPlaceId = await p.read<string>("history.state.__peRouteTab.id");
+      expect(new URL(await p.url()).searchParams.has("thread")).toBe(false);
+      expect(
+        network
+          .slice(before)
+          .filter(
+            (event) =>
+              event.method === "POST" &&
+              event.url &&
+              /\/pe\/threads$|\/scope\/|\/place$/.test(new URL(event.url).pathname),
+          ),
+      ).toEqual([]);
+      await p.open(url(`/takeoffs?target=${encodeURIComponent(seed.address)}`));
+      await p.until(
+        async () => p.read<boolean>("Boolean(history.state.__peRouteTab?.id)"),
+        "second browser Place",
+      );
+      expect(new URL(await p.url()).searchParams.has("thread")).toBe(false);
+      receipt.coverage.standalone = { thread: null, browserPlaceId, hostWrites: [] };
+    });
     await step("real startup and canonical sidebar", async () => {
       const started = Date.now();
       await p.open(url(`/pea?thread=${CONVERSATION_THREADS.empty}`));
@@ -262,9 +290,22 @@ test("real conversation Work cutover retains authored cells, draft, Places and o
       );
       receipt.coverage.source = { builds, browser: await p.send("Browser.getVersion") };
     });
+    await step("Work from another row preserves the selected conversation", async () => {
+      await openWork(CONVERSATION_THREADS.office);
+      await p.until(
+        async () => new URL(await p.url()).pathname === "/ducts",
+        "Work tool opens in current conversation",
+      );
+      expect(new URL(await p.url()).searchParams.get("thread")).toBe(CONVERSATION_THREADS.empty);
+      expect(new URL(await p.url()).searchParams.get("system")).toBe(seed.retainedPage);
+      expect(await p.read("history.state.__peRouteTab.id")).toBe(browserPlaceId);
+      await headTargets(CONVERSATION_THREADS.empty);
+      await pickThread(CONVERSATION_THREADS.empty);
+      await p.until(toolsCollapsed, "conversation entry collapses tools without replacing Places");
+    });
     await step("thread press stays chat with tools collapsed", async () => {
       // List rows have a separate Open Ducts button; pressing their label is a thread pick.
-      await pickThread("Office model");
+      await pickThread(CONVERSATION_THREADS.office);
       await p.until(
         async () =>
           new URL(await p.url()).searchParams.get("thread") === CONVERSATION_THREADS.office,
@@ -316,7 +357,7 @@ test("real conversation Work cutover retains authored cells, draft, Places and o
       const historyState = await p.read<{ __peRouteTab?: { id?: string } }>("history.state");
       receipt.coverage.workResume = {
         expectedUrl: seed.placeUrl,
-        expectedTabId: seed.placeId,
+        expectedTabId: browserPlaceId,
         actualUrl: await p.url(),
         historyState,
       };
@@ -325,7 +366,7 @@ test("real conversation Work cutover retains authored cells, draft, Places and o
         "Work press restores the saved Place's nondefault Page",
       ).toBe(seed.retainedPage);
       expect(historyState.__peRouteTab?.id, "Work press preserves the exact saved Place id").toBe(
-        seed.placeId,
+        browserPlaceId,
       );
       expect(
         sameAddress(
@@ -352,7 +393,7 @@ test("real conversation Work cutover retains authored cells, draft, Places and o
         async () => new URL(await p.url()).pathname === "/ducts",
         "Ducts Place restored",
       );
-      await pickThread("Office model");
+      await pickThread(CONVERSATION_THREADS.office);
       await p.until(toolsCollapsed, "tools collapsed explicitly");
       expect(await draft()).toBe(message);
       await p.click(/^Ducts/, '[aria-label="Thread Places"]');
@@ -416,7 +457,7 @@ test("real conversation Work cutover retains authored cells, draft, Places and o
       expect(await composerIdentity()).toBe(officeComposer);
     });
     await step("another conversation starts with collapsed tools", async () => {
-      await pickThread("Conversation without Work");
+      await pickThread(CONVERSATION_THREADS.empty);
       await p.until(
         async () =>
           new URL(await p.url()).searchParams.get("thread") === CONVERSATION_THREADS.empty &&
@@ -431,7 +472,8 @@ test("real conversation Work cutover retains authored cells, draft, Places and o
     });
     await step("pasted closed Work URL reads retained Work without native target", async () => {
       const opened = Date.now();
-      await p.open(url(`${seed.workUrl}&thread=${CONVERSATION_THREADS.office}`));
+      await p.open(url(seed.workUrl));
+      expect(new URL(await p.url()).searchParams.has("thread")).toBe(false);
       const snapshot = await p.until(async () => {
         const streams = new Set(
           network
@@ -574,7 +616,7 @@ test("real conversation Work cutover retains authored cells, draft, Places and o
     await step(
       "closed unsaved Work stays visible and bound only to its original lifetime",
       async () => {
-        await pickThread("Unsaved design");
+        await pickThread(CONVERSATION_THREADS.unsaved);
         await p.until(
           async () =>
             new URL(await p.url()).pathname === "/pea" &&
@@ -629,14 +671,68 @@ test("real conversation Work cutover retains authored cells, draft, Places and o
         };
       },
     );
+    await step("first Send creates one chat without replacing the current tool", async () => {
+      await p.open(url(seed.workUrl));
+      await p.until(async () => p.has("Send"), "standalone composer send control");
+      expect(new URL(await p.url()).searchParams.has("thread")).toBe(false);
+      const before = network.length;
+      await p.clickAt('textarea[aria-label="Message"],input[aria-label="Message"]');
+      await p.type("pid");
+      await p.click("Send");
+      const thread = await p.until(
+        async () => new URL(await p.url()).searchParams.get("thread"),
+        "first Send publishes a real conversation",
+      );
+      expect(new URL(await p.url()).pathname).toBe("/ducts");
+      await p.waitText("PID=");
+      expect(
+        network
+          .slice(before)
+          .filter(
+            (event) =>
+              event.event === "Network.requestWillBeSent" &&
+              event.method === "POST" &&
+              event.url &&
+              new URL(event.url).pathname === "/pe/threads",
+          ),
+      ).toHaveLength(1);
+      await headTargets(thread);
+      expect(await workEvidence(seed.productHome)).toEqual(initial);
+      receipt.coverage.firstSend = {
+        thread,
+        created: 1,
+        retainedPath: "/ducts",
+        inference: "substituted-acp-adapter",
+      };
+      await pickThread(thread);
+      await p.until(toolsCollapsed, "explicit collapse keeps the newly issued conversation");
+      await p.clickAt('textarea[aria-label="Message"],input[aria-label="Message"]');
+      await p.type("route-cutover-open");
+      await p.click("Send");
+      await p.until(
+        async () => new URL(await p.url()).pathname === "/families",
+        "explicit Pea context opens its tool",
+      );
+      expect(new URL(await p.url()).searchParams.get("thread")).toBe(thread);
+      await p.waitText("route-cutover-rendered");
+      await headTargets(thread);
+      expect(await workEvidence(seed.productHome)).toEqual(initial);
+      receipt.coverage.explicitPeaOpen = {
+        thread,
+        route: "families",
+        acquisition: "command-id-fenced lease and rendered ack",
+        inference: "substituted-acp-adapter",
+        nativeTargets: [],
+      };
+    });
     expect(
       network.filter(
         (event) =>
           event.method === "POST" &&
           event.url &&
-          /\/prompt$|\/actions$|\/call$/.test(new URL(event.url).pathname),
+          /\/actions$|\/call$/.test(new URL(event.url).pathname),
       ),
-      "journey must not infer or invoke native operations",
+      "journey must not invoke native operations",
     ).toEqual([]);
     expect(network.some((event) => event.stream && event.url?.includes("/pe/resources"))).toBe(
       true,

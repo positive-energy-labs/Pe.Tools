@@ -202,7 +202,7 @@ try {
       "source web origin",
       90_000,
     );
-    web = new URL("/ducts?demo=navigation", web).href;
+    web = new URL("/ducts?demo=navigation&thread=demo-review", web).href;
     receipt.web = web;
     await save();
     // A bound Vite port precedes its first SSR import. Keep cold compilation outside
