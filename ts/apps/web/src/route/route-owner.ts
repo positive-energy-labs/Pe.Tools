@@ -134,7 +134,7 @@ export function createRouteOwner(route: string, registry: AtomRegistry.AtomRegis
    */
   const runAction = async (
     key: string,
-    work: () => Promise<Refusal | null>,
+    work: (cancelWith: (cancel: () => Promise<void>) => void) => Promise<Refusal | null>,
     keys?: readonly string[],
     onStopped?: () => void,
     /** The word on the button. The log says what the user pressed, never the action key. */
@@ -179,8 +179,16 @@ export function createRouteOwner(route: string, registry: AtomRegistry.AtomRegis
     // so Revit stops at the operation's next checkpoint and the row settles `cancelled`. The wait
     // is released only once the host said yes; a refusal leaves the op running and says why.
     // A late result still lands as its own row.
+    let cancelRead: (() => Promise<void>) | undefined;
     const stopped = new Promise<"stopped">((resolve) => {
       stopper = () => {
+        if (cancelRead) {
+          void cancelRead().then(
+            () => resolve("stopped"),
+            (cause: unknown) => verb(`stop refused · ${refusalOf(cause).message}`, true),
+          );
+          return;
+        }
         void cancelRunningAdmissions().then((settled) => {
           const refused = settled.flatMap((one) =>
             one.status === "rejected"
@@ -202,7 +210,9 @@ export function createRouteOwner(route: string, registry: AtomRegistry.AtomRegis
         bound = setTimeout(() => resolve("timeout"), waitSeconds * 1000);
     });
     try {
-      const running = work();
+      const running = work((cancel) => {
+        cancelRead = cancel;
+      });
       const result = await Promise.race([running, stopped, timedOut]);
       if (result === "timeout") {
         const refusal = refuse("unknown", `stopped: no answer after ${waitSeconds}s`);

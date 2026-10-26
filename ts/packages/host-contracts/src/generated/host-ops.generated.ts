@@ -6737,11 +6737,26 @@ export namespace RevitGlanceModel {
 export namespace RevitMatrixLoadedFamilies {
   export namespace Req {
     export type LoadedFamilyPlacementScope = "AllLoaded" | "PlacedOnly" | "UnplacedOnly";
+    export type LoadedFamiliesReadPhase = "Matrix" | "Prepare" | "Extract";
+    export type ParameterIdentityKind = "SharedGuid" | "BuiltInParameter" | "ParameterElement" | "NameFallback";
+    export type LoadedFamilyParameterKind =
+      | "Unknown"
+      | "FamilyParameter"
+      | "SharedParameter"
+      | "ProjectParameter"
+      | "ProjectSharedParameter";
+    export type LoadedFamilyParameterPresence = "Unresolved" | "Family" | "FamilyAndProjectBinding" | "ProjectBindingOnly";
+    export type FormulaState = "None" | "Present" | "NotApplicable" | "Unknown";
+    export type ExcludedParameterReason = "UnresolvedClassification" | "ProjectObservedBuiltIn";
+    export type RevitDataIssueSeverity = "Info" | "Warning" | "Error";
 
     export interface Request {
       filter?: null | LoadedFamiliesFilter;
       budget?: null | RevitDataOutputBudget;
       includeTempPlacement?: boolean;
+      phase?: LoadedFamiliesReadPhase;
+      familyId?: number | null;
+      snapshots?: FamilySnapshotRecord[] | null;
     }
     export interface LoadedFamiliesFilter {
       /**
@@ -6771,6 +6786,83 @@ export namespace RevitMatrixLoadedFamilies {
       maxSamplesPerEntry?: number | null;
       includeDiagnostics?: boolean;
     }
+    export interface FamilySnapshotRecord {
+      familyId: number;
+      familyUniqueId: string;
+      familyName: string;
+      categoryName?: null | string;
+      versionGuid?: null | string;
+      typeNames: string[];
+      parameters: FamilyParameterSnapshot[];
+      issues: RevitDataIssue[];
+      isPartial: boolean;
+      placedInstanceCount?: number;
+      scheduleNames?: string[] | null;
+    }
+    /**
+     * Canonical family/parameter record language shared by DocumentData collection, FamilyFoundry
+     * capture, and the matrix wire. Serialization-clean: built on
+     * ParameterDefinitionDescriptor and plain values.
+     * ValuesPerType preserves null (no value) vs "" (empty string value) — renderers coerce, the wire
+     * does not.
+     *
+     */
+    export interface FamilyParameterSnapshot {
+      definition: ParameterDefinitionDescriptor;
+      kind: LoadedFamilyParameterKind;
+      scope: LoadedFamilyParameterPresence;
+      storageType: string;
+      formulaState: FormulaState;
+      formula?: null | string;
+      valuesPerType: {
+        [k: string]: null | string;
+      };
+      excludedReason?: null | ExcludedParameterReason;
+      displayUnit?: null | MeasuredDisplayUnit;
+    }
+    export interface ParameterDefinitionDescriptor {
+      identity: ParameterIdentity;
+      isInstance?: boolean | null;
+      dataTypeId?: null | string;
+      dataTypeLabel?: null | string;
+      groupTypeId?: null | string;
+      groupTypeLabel?: null | string;
+      visible?: boolean | null;
+      userModifiable?: boolean | null;
+      description?: null | string;
+    }
+    export interface ParameterIdentity {
+      key: string;
+      kind: ParameterIdentityKind;
+      name: string;
+      builtInParameterId?: number | null;
+      sharedGuid?: null | string;
+      parameterElementId?: number | null;
+    }
+    /**
+     * That a surface measures this value, and the unit it renders it in, read from the Reading's own
+     * document (a schedule field's effective format options, else that document's units for the
+     * spec). Every spelling is one the parameter unit door accepts, so a human surface can stage a
+     * bare number with it. Null where nothing is measurable at all; TypeId null where it measures
+     * but this document shows no unit — the surface asks for one instead of letting a push refuse a
+     * bare number later. Refusal where Revit failed to answer, never read as not-measured. Evidence only: no write path fills a unit from it.
+     *
+     */
+    export interface MeasuredDisplayUnit {
+      specTypeId: string;
+      typeId?: null | string;
+      label?: null | string;
+      symbol?: null | string;
+      refusal?: null | string;
+    }
+    export interface RevitDataIssue {
+      code: string;
+      severity: RevitDataIssueSeverity;
+      message: string;
+      familyName?: null | string;
+      typeName?: null | string;
+      parameterName?: null | string;
+    }
   }
   export namespace Res {
     export type ParameterIdentityKind = "SharedGuid" | "BuiltInParameter" | "ParameterElement" | "NameFallback";
@@ -6789,6 +6881,9 @@ export namespace RevitMatrixLoadedFamilies {
       families: FamilySnapshotRecord[];
       issues: RevitDataIssue[];
       page?: null | RevitDataResultPage;
+      source?: null | LoadedFamiliesReadSource;
+      elapsedMs?: null | number;
+      cacheHit?: boolean | null;
     }
     export interface FamilySnapshotRecord {
       familyId: number;
@@ -6871,6 +6966,29 @@ export namespace RevitMatrixLoadedFamilies {
       totalCount: number;
       returnedCount: number;
       isTruncated: boolean;
+    }
+    /**
+     * A copy is eligible only when the file is exactly this document's saved revision.
+     */
+    export interface LoadedFamiliesReadSource {
+      families: LoadedFamilyCatalogEntry[];
+      revitVersion: string;
+      version: string;
+      copyPath?: null | string;
+      copyRefusal?: null | string;
+      cloudSource?: null | string;
+    }
+    export interface LoadedFamilyCatalogEntry {
+      familyId: number;
+      familyUniqueId: string;
+      familyName: string;
+      categoryName?: null | string;
+      typeCount: number;
+      placedInstanceCount: number;
+      types: LoadedFamilyTypeEntry[];
+    }
+    export interface LoadedFamilyTypeEntry {
+      typeName: string;
     }
   }
 }

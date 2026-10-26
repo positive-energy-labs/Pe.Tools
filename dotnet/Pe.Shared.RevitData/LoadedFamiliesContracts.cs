@@ -52,7 +52,23 @@ public record LoadedFamiliesMatrixRequest(
     RevitDataOutputBudget? Budget = null,
     // Temp placement supplies live instance values, regen-dependent values, and schedule membership for
     // unplaced types, at the cost of a rollback transaction on the document. Disable for a read-only pass.
-    bool IncludeTempPlacement = true
+    bool IncludeTempPlacement = true,
+    LoadedFamiliesReadPhase Phase = LoadedFamiliesReadPhase.Matrix,
+    long? FamilyId = null,
+    IReadOnlyList<Families.FamilySnapshotRecord>? Snapshots = null
+);
+
+[JsonConverter(typeof(StringEnumConverter))]
+public enum LoadedFamiliesReadPhase { Matrix, Prepare, Extract }
+
+/// <summary>A copy is eligible only when the file is exactly this document's saved revision.</summary>
+public record LoadedFamiliesReadSource(
+    List<LoadedFamilyCatalogEntry> Families,
+    string RevitVersion,
+    string Version,
+    string? CopyPath,
+    string? CopyRefusal,
+    string? CloudSource = null
 );
 
 public record LoadedFamiliesFilter {
@@ -112,5 +128,8 @@ public record LoadedFamiliesCatalogData(
 public record LoadedFamiliesMatrixData(
     List<Families.FamilySnapshotRecord> Families,
     List<RevitDataIssue> Issues,
-    RevitDataResultPage? Page = null
+    RevitDataResultPage? Page = null,
+    LoadedFamiliesReadSource? Source = null,
+    double? ElapsedMs = null,
+    bool? CacheHit = null
 );
