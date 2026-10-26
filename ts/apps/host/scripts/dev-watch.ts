@@ -1,8 +1,9 @@
 import { spawn, type ChildProcess } from "node:child_process";
-import { existsSync, readdirSync, statSync, watch } from "node:fs";
+import { statSync, watch } from "node:fs";
 import { fileURLToPath } from "node:url";
 import { checkoutRootFrom } from "@pe/host-contracts/service-identity";
 import { createDevTraySupervisor } from "./dev-tray-supervisor.ts";
+import { devWatchRoots } from "./dev-watch-roots.ts";
 
 const sourceRoot = checkoutRootFrom(import.meta.dirname);
 if (!sourceRoot) throw new Error("Dev watcher must start from a Pe.Tools checkout");
@@ -43,14 +44,7 @@ const changed = (root: URL) => (event: string, file: string | null) => {
     disconnect();
   }, 150);
 };
-const packages = new URL("../../../packages/", import.meta.url);
-const watchRoots = [
-  new URL("../src/", import.meta.url),
-  ...readdirSync(packages, { withFileTypes: true })
-    .filter((entry) => entry.isDirectory())
-    .map((entry) => new URL(`${entry.name}/src/`, packages))
-    .filter((root) => existsSync(root)),
-];
+const watchRoots = devWatchRoots(new URL("../", import.meta.url));
 const watchers = watchRoots.map((root) => watch(root, { recursive: true }, changed(root)));
 const stop = () => {
   stopped = true;
