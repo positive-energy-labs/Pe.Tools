@@ -1,9 +1,17 @@
 import * as THREE from "three";
 import type { LineSegments2 } from "three/addons/lines/LineSegments2.js";
 import { expect, it } from "vite-plus/test";
-import { damageLayers, damageMark, damageLayer, heartbeat, setDamageHue } from "./damage";
+import {
+  damageLayers,
+  damageMark,
+  damageLayer,
+  heartbeat,
+  setDamageHue,
+  damageAppearance,
+} from "./damage";
+import { createDamageBatch } from "./damage-batch";
 import { landing, markFrame, markLines } from "./marks";
-import { BLACK, WHITE, fogDensity, paintOf, GROUND_MATERIAL, keySlot, LOOK } from "./grounds";
+import { BLACK, WHITE, fogDensity, paintOf, GROUND_MATERIAL, keySlot } from "./grounds";
 import { SceneMeshes, type LayerFrame, type SceneInstance } from "./types";
 
 const instance: SceneInstance = {
@@ -37,48 +45,75 @@ it("beats lub-dub then rests, and lands with an eased swell", () => {
   expect(landing(Infinity)).toBe(0);
 });
 
-it("damage keeps mesh and row identity, beats, flashes once, and holds still for reduced motion", () => {
+it("damage batches keep identity, share packed geometry, and yield only the selected element", () => {
   const targets = [{ key: "equipmentFlows:7", elementId: 7 }];
-  const alarm = new THREE.Color(0.3, 0.1, 0.05);
-  setDamageHue(alarm);
-  const layer = damageLayer(meshes, instance, targets, ["no-flow:7"]);
+  const second = { ...instance, key: "second", revitId: 8 };
+  const firstLayer = damageLayer(meshes, instance, targets, ["no-flow:7"]);
+  const secondLayer = damageLayer(meshes, second, [{ key: "flow:8", elementId: 8 }], []);
   const group = new THREE.Group();
-  layer.build(group);
-  for (const child of group.children as THREE.Mesh[])
-    expect(child.material).toMatchObject({
+  firstLayer.build(group);
+  const proxy = group.children[0] as THREE.Mesh;
+  expect(proxy.visible).toBe(false);
+  expect(proxy.geometry.getAttribute("position").array.buffer).toBe(meshes.positions.buffer);
+  expect(firstLayer.targets).toEqual(targets);
+  group.updateMatrixWorld(true);
+  const ray = new THREE.Raycaster(new THREE.Vector3(100.5, 100.5, 2), new THREE.Vector3(0, 0, -1));
+  expect(ray.intersectObject(group, true)).toHaveLength(1);
+
+  setDamageHue(new THREE.Color(0.3, 0.1, 0.05));
+  const batch = createDamageBatch([firstLayer, secondLayer]);
+  const draws = batch.group.children as THREE.BatchedMesh[];
+  expect(draws).toHaveLength(4);
+  for (const draw of draws)
+    expect(draw.material).toMatchObject({
       polygonOffset: true,
       polygonOffsetFactor: -1,
       polygonOffsetUnits: -4,
     });
-  const p = [0, 0, 0],
-    q = [1, 1, 1];
-  const lines = markLines([[p, q]], alarm, { dash: { size: 2, gap: 3 } });
-  expect(lines.children.map((c) => (c as LineSegments2).material.dashed)).toEqual([false, true]);
-  const born = performance.now() / 1000;
-  expect(layer.targets).toEqual(targets);
-  expect(group.position.toArray()).toEqual([101, 101, 0]);
-  const skin = group.children[0] as THREE.Mesh<THREE.BufferGeometry, THREE.ShaderMaterial>;
-  expect(skin.material.uniforms.core!.value).toEqual(alarm);
-  const energy = () => skin.material.uniforms.energy!.value as number;
-  const at = (seconds: number, extra: Partial<LayerFrame> = {}): LayerFrame => ({
-    seconds,
+  expect(new Set(draws.map((draw) => draw.geometry)).size).toBe(1);
+  const at = (extra: Partial<LayerFrame> = {}): LayerFrame => ({
+    seconds: firstLayer.damage!.born + 3,
     reducedMotion: false,
     state: "rest",
     landed: Infinity,
     ...extra,
   });
-  // The hit flash at birth outshines any later beat.
-  expect(layer.frame!(group, at(born))).toBe(true);
-  const flash = energy();
-  layer.frame!(group, at(born + 3.1));
-  expect(energy()).toBeLessThan(flash);
-  // Reduced motion: no frames requested, the same energy at any time, hover still reads.
-  expect(layer.frame!(group, at(born + 5, { reducedMotion: true }))).toBe(false);
-  const steady = energy();
-  layer.frame!(group, at(born + 5.4, { reducedMotion: true }));
-  expect(energy()).toBe(steady);
-  layer.frame!(group, at(born + 5.4, { reducedMotion: true, state: "hover" }));
-  expect(energy()).toBeGreaterThan(steady);
+  expect(batch.update(firstLayer, at())).toBe(false);
+  expect(batch.update(secondLayer, at({ selected: true }))).toBe(false);
+  expect(draws.map((draw) => draw.getVisibleAt(0))).toEqual([true, true, false, false]);
+  expect(draws.map((draw) => draw.getVisibleAt(1))).toEqual([false, false, true, true]);
+  const normal = draws[0]!.getColorAt(0, new THREE.Vector4());
+  const selected = draws[2]!.getColorAt(1, new THREE.Vector4());
+  expect(selected.y).toBeCloseTo(normal.y * 0.4);
+  batch.update(secondLayer, at({ shown: () => false }));
+  expect(draws.every((draw) => !draw.getVisibleAt(1))).toBe(true);
+  const born = firstLayer.damage!.born;
+  expect(batch.update(firstLayer, at({ seconds: born }))).toBe(true);
+  expect(batch.update(firstLayer, at({ state: "focus", landed: 0 }))).toBe(true);
+  expect(batch.update(firstLayer, at({ state: "focus", landed: 0, reducedMotion: true }))).toBe(
+    false,
+  );
+  expect(damageAppearance(at({ reducedMotion: true }), born).energy).toBe(
+    damageAppearance(at({ reducedMotion: true, seconds: born + 100 }), born).energy,
+  );
+  expect(damageLayer(meshes, instance, targets, []).damage!.born).toBe(born);
+  batch.dispose();
+  expect(batch.group.children).toHaveLength(0);
+});
+
+it("line marks retain dashed geometry and selection depth behavior", () => {
+  const alarm = new THREE.Color(0.3, 0.1, 0.05);
+  const lines = markLines(
+    [
+      [
+        [0, 0, 0],
+        [1, 1, 1],
+      ],
+    ],
+    alarm,
+    { dash: { size: 2, gap: 3 } },
+  );
+  expect(lines.children.map((c) => (c as LineSegments2).material.dashed)).toEqual([false, true]);
   for (const extra of [
     {},
     { state: "reach" },
@@ -88,22 +123,18 @@ it("damage keeps mesh and row identity, beats, flashes once, and holds still for
     { lit: true },
     {},
   ] as Partial<LayerFrame>[]) {
-    layer.frame!(group, at(born + 6, extra));
-    markFrame(lines, at(born + 6, extra));
-    for (const child of [...group.children, ...lines.children] as THREE.Mesh[])
+    markFrame(lines, {
+      seconds: 3,
+      reducedMotion: true,
+      state: "rest",
+      landed: Infinity,
+      ...extra,
+    });
+    for (const child of lines.children as THREE.Mesh[])
       expect((child.material as THREE.Material).depthTest).toBe(
         !extra.selected && !extra.lit && extra.state !== "hover" && extra.state !== "focus",
       );
   }
-  const look = {
-    ...LOOK.defaults,
-    damage: { ...LOOK.defaults.damage, alpha: 0.2 },
-    marks: { ...LOOK.defaults.marks, restCasing: 0.12 },
-  };
-  layer.frame!(group, at(born + 6, { reducedMotion: true, look }));
-  markFrame(lines, at(born + 6, { reducedMotion: true, look }));
-  expect(skin.material.uniforms.alpha!.value).toBe(0.2);
-  expect((lines.children[0] as LineSegments2).material.opacity).toBe(0.12);
 });
 
 it.each([WHITE, BLACK])("shared ground colours cannot be corrupted by a material", (color) => {

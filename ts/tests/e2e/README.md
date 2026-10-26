@@ -15,6 +15,12 @@ and host. This case does not read the shared dev tray, attach to a user's browse
 send a Pea prompt. Keep browser callbacks self-contained and pass their inputs as arguments.
 The visible chaos journey below remains a separate opt-in check.
 
+For a concrete product bug, add a bounded regression to this required gate using fixed local
+inputs, the actual rendered control, trusted input, and an independent state read-back. Keep
+browser callbacks typed and self-contained. Calibrate the meaningful invariant against the
+broken behavior, restore the fix, and run it again. A fixture-only browser receipt cannot prove
+Revit mutation or installed behavior; keep the longer journeys separate.
+
 ## Conversation and saved Work (Vitest + @pe/browser)
 
 From `ts`, run `vp run --no-cache journey:conversation-work`. It starts its own source host with

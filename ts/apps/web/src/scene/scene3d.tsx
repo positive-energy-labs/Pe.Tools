@@ -75,6 +75,8 @@ export type Scene3DProps = {
   focusedIssue?: string | null;
   onIssueHover?: (target: IssueTarget | null) => void;
   onIssuePick?: (target: IssueTarget, event: MouseEvent) => void;
+  /** A retained picture can still move while a replacement read withholds element actions. */
+  pickingEnabled?: boolean;
   /** A click (a press that stayed within 5 px); null when it met nothing. */
   onPick?: (pick: Pick | null, event: MouseEvent) => void;
   /** A double-click: the element under it, or null on empty space. The caller frames it. */
@@ -289,6 +291,7 @@ export function Scene3D(props: Scene3DProps): ReactNode {
 
     // The element under the pointer, declared where the element menu looks (absent when none).
     const aim = (at: PointerEvent | MouseEvent) => {
+      if (latest.current.pickingEnabled === false) return pointerLeave();
       const issue = r.pickIssue(at);
       latest.current.onIssueHover?.(issue);
       if (issue) canvas.dataset.issue = issue.key;
@@ -342,6 +345,7 @@ export function Scene3D(props: Scene3DProps): ReactNode {
     // Open facts on click, after the document's outside-press capture. Opening on pointerup lets
     // the trailing click immediately dismiss the new popover as an outside press.
     const click = (event: MouseEvent) => {
+      if (latest.current.pickingEnabled === false) return;
       if (event.button !== 0 || down?.button !== 0 || !isClick(down, event)) return;
       const issue = r.pickIssue(event);
       if (issue && latest.current.onIssuePick) return latest.current.onIssuePick(issue, event);
@@ -440,8 +444,18 @@ export function Scene3D(props: Scene3DProps): ReactNode {
     core.current?.setLook(shownLook);
   }, [shownLook, meshes]);
 
+  useEffect(() => {
+    if (props.pickingEnabled !== false) return;
+    const canvas = core.current?.canvas;
+    if (canvas) for (const name of ATTRS) canvas.removeAttribute(name);
+    core.current?.reach(null);
+    core.current?.hoverElement(null);
+    onHover(null);
+    props.onIssueHover?.(null);
+  }, [props.pickingEnabled, meshes]); // eslint-disable-line react-hooks/exhaustive-deps
+
   return (
-    <RevitTarget scope={observation.scope}>
+    <RevitTarget scope={props.pickingEnabled === false ? null : observation.scope}>
       <div ref={host} className={`relative min-h-0 overflow-hidden ${props.className ?? ""}`}>
         {failure ? <p className="t-small text-ink-2 p-2">{failure}</p> : null}
         {props.children}

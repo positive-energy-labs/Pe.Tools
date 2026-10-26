@@ -9,7 +9,7 @@ import {
 } from "react";
 import { useRouter, useRouterState } from "@tanstack/react-router";
 import { THREAD_TABS_MAX, routeAddress, type RouteKey, type ThreadTab } from "@pe/agent-contracts";
-import { RouteActivity, type RouteActivityScope } from "#/route/activity";
+import { RouteActivity, RouteVisibility, type RouteActivityScope } from "#/route/activity";
 import { currentLocation } from "#/route/url";
 import { PaneErrorBoundary } from "@pe/kit/lang/pane";
 
@@ -48,13 +48,18 @@ const RetainedPane = memo(function RetainedPane({
   const Component = entry.Component;
   return (
     <RouteActivity.Provider value={entry.scope}>
-      <Activity mode={visible ? "visible" : "hidden"}>
-        <div className="size-full min-h-0 min-w-0 overflow-auto" data-route-tab={id ?? "enrolling"}>
-          <PaneErrorBoundary>
-            <Suspense fallback={null}>{renderRoute(<Component />)}</Suspense>
-          </PaneErrorBoundary>
-        </div>
-      </Activity>
+      <RouteVisibility.Provider value={visible}>
+        <Activity mode={visible ? "visible" : "hidden"}>
+          <div
+            className="size-full min-h-0 min-w-0 overflow-auto"
+            data-route-tab={id ?? "enrolling"}
+          >
+            <PaneErrorBoundary>
+              <Suspense fallback={null}>{renderRoute(<Component />)}</Suspense>
+            </PaneErrorBoundary>
+          </div>
+        </Activity>
+      </RouteVisibility.Provider>
     </RouteActivity.Provider>
   );
 });

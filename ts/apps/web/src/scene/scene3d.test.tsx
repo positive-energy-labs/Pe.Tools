@@ -74,13 +74,19 @@ it("keeps camera gestures local and meshes mounted across native re-reads", () =
   const onViewport = vi.fn();
   const onPick = vi.fn();
   const orbit = createLiveOrbit(initial, onViewport);
-  const draw = (pivot?: readonly number[], contextMode?: "halo" | "all", shown = meshes) => (
+  const draw = (
+    pivot?: readonly number[],
+    contextMode?: "halo" | "all",
+    shown = meshes,
+    pickingEnabled = true,
+  ) => (
     <>
       <Scene3D
         readout={<span>picture state</span>}
         meshes={shown}
         orbit={orbit}
         onPick={onPick}
+        pickingEnabled={pickingEnabled}
         orbitPivot={pivot}
         contextMode={contextMode}
       />
@@ -182,6 +188,11 @@ it("keeps camera gestures local and meshes mounted across native re-reads", () =
   expect(onPick).not.toHaveBeenCalled();
   fireEvent.click(canvas, { button: 0, clientX: 10, clientY: 10 });
   expect(onPick).toHaveBeenCalledExactlyOnceWith(null, expect.any(MouseEvent));
+  view.rerender(
+    <TestAttention registry={registry}>{draw(undefined, "all", meshes, false)}</TestAttention>,
+  );
+  fireEvent.click(canvas, { button: 0, clientX: 10, clientY: 10 });
+  expect(onPick).toHaveBeenCalledTimes(1);
   const touch = (type: string, pointerId: number, clientX: number) =>
     fireEvent(
       canvas,
@@ -198,6 +209,8 @@ it("keeps camera gestures local and meshes mounted across native re-reads", () =
     moves.dispatchEvent(new Event("end"));
   });
   expect(onViewport).toHaveBeenCalledExactlyOnceWith(pose, "gesture");
+  // A withheld pick never withholds camera gestures on the retained picture.
+  view.rerender(<TestAttention registry={registry}>{draw()}</TestAttention>);
   const beforeCapture = orbit.read()!;
   const biggerCapture = new SceneMeshes(
     meshes.positions,

@@ -34,6 +34,8 @@ export function markLines(
     }),
   );
   const casing = new LineSegments2(geometry, ink.material.clone());
+  // Semantic lines remain individually pickable; the renderer batches their visible strokes.
+  ink.userData.markStroke = casing.userData.markStroke = true;
   casing.material.color.copy(BLACK);
   casing.userData.casing = true;
   casing.renderOrder = 9;

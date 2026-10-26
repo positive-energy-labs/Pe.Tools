@@ -109,6 +109,8 @@ export type LayerFrame = {
 };
 export type Layer3D = {
   key: string;
+  /** Semantic mesh skin; the renderer batches surfaces independently of issue identity. */
+  damage?: { meshes: SceneMeshes; instance: SceneInstance; born: number };
   build(group: THREE.Group): void;
   targets?: readonly IssueTarget[];
   findings?: readonly string[];

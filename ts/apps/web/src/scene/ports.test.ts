@@ -1,9 +1,10 @@
 import { expect, it } from "vite-plus/test";
 import * as THREE from "three";
+import type { LineSegments2 } from "three/addons/lines/LineSegments2.js";
 import { equipmentPaint, equipmentPorts } from "../ducts/paint";
 import type { Scene } from "../ducts/scene";
 import { LOOK } from "./grounds";
-import { portLayer, portSegments } from "./ports";
+import { portLayer, portSegments, type SurfacePort } from "./ports";
 import { sectionContains } from "./section";
 import { SceneMeshes, type LayerFrame, type PaintOf, type SceneInstance } from "./types";
 import { surfaceEdges, surfaceAlpha } from "./surfaces";
@@ -157,6 +158,43 @@ it("keeps the connector ring in its frame and encodes envelopes independently of
   expect(surfaceAlpha({ tier: "context", surface: "shell" }, LOOK.defaults)).toBe(0);
   const edges = surfaceEdges(meshes);
   expect(edges(meshes.instances[0]!, 35)).toBe(edges(meshes.instances[0]!, 35));
+});
+
+it("draws hundreds of individually gated ports in two stable material batches", () => {
+  const source = equipmentPorts(graphOf(scene), meshes, base)[0]!;
+  const ports: SurfacePort[] = Array.from({ length: 339 }, (_, i) => ({
+    ...source,
+    key: `port-${i}`,
+    owner: `owner-${i}`,
+    route: `route-${i}`,
+    at: [i * 2, 0, 0],
+    paint: { tier: i % 3 ? "subject" : "stub", ink: i % 2 ? "#ff0000" : "#0000ff" },
+  }));
+  const layer = portLayer(ports, LOOK.defaults);
+  const group = new THREE.Group();
+  layer.build(group);
+  const lines = group.children as LineSegments2[];
+  expect(lines).toHaveLength(2);
+  const count = () => lines.reduce((n, line) => n + line.geometry.instanceCount, 0);
+  expect(count()).toBe(339 * 5);
+  const at: LayerFrame = { seconds: 0, reducedMotion: true, state: "rest", landed: Infinity };
+  const firstGeometry = lines.map((line) => line.geometry);
+  const materials = lines.map((line) => line.material);
+  layer.frame!(group, at);
+  expect(lines.map((line) => line.geometry)).toEqual(firstGeometry);
+  layer.frame!(group, { ...at, shown: (key) => key !== "route-1" && key !== "owner-0" });
+  expect(count()).toBe(337 * 5);
+  expect(lines.map((line) => line.material)).toEqual(materials);
+  const colours = lines[0]!.geometry.getAttribute("instanceColorStart");
+  expect(colours.getZ(0)).toBe(1);
+  expect(colours.getX(5)).toBe(0);
+  expect(colours.getX(10)).toBe(1);
+  layer.frame!(group, { ...at, contains: (p) => p[0]! < 4 });
+  expect(count()).toBe(2 * 5);
+  for (const line of lines) {
+    line.geometry.dispose();
+    line.material.dispose();
+  }
 });
 
 it("unions route-only references without duplicates and leaves absent equipment ports unknown", () => {

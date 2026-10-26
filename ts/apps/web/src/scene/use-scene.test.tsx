@@ -1,9 +1,10 @@
 // @vitest-environment jsdom
-import { act, cleanup, renderHook, waitFor } from "@testing-library/react";
-import { StrictMode, type ReactNode } from "react";
+import { act, cleanup, fireEvent, render, renderHook, waitFor } from "@testing-library/react";
+import { Activity, StrictMode, useRef, useState, type ReactNode } from "react";
 import { afterEach, expect, it, vi } from "vite-plus/test";
 import { sceneRequest } from "./host";
 import { useScene, useSceneArtifact } from "./use-scene";
+import { RouteVisibility, VisibleRouteResource } from "#/route/activity";
 
 const call = vi.hoisted(() => ({
   data: { id: "partial-context" },
@@ -132,4 +133,53 @@ it("StrictMode reconnects share the pending request instead of aborting and down
   expect(io.fetch.mock.calls.length).toBe(requests + 1);
   await act(async () => pending.resolve(new ArrayBuffer(0)));
   expect(view.result.current.pending).toBe(false);
+});
+
+it("hidden Activity drops the picture owner, retains UI state, and returns from the shared cache", async () => {
+  const mounts: object[] = [];
+  const geometries: unknown[] = [];
+  function Picture() {
+    const owner = useRef<object | null>(null);
+    if (!owner.current) mounts.push((owner.current = {}));
+    const read = useSceneArtifact("activity-owned");
+    if (read.meshes && geometries.at(-1) !== read.meshes) geometries.push(read.meshes);
+    return <span data-testid="picture">{read.pending ? "loading" : "ready"}</span>;
+  }
+  function Route() {
+    const [draft, setDraft] = useState("");
+    return (
+      <>
+        <input
+          aria-label="retained draft"
+          value={draft}
+          onChange={(e) => setDraft(e.target.value)}
+        />
+        <VisibleRouteResource>
+          <Picture />
+        </VisibleRouteResource>
+      </>
+    );
+  }
+  function App({ visible }: { visible: boolean }) {
+    return (
+      <RouteVisibility.Provider value={visible}>
+        <Activity mode={visible ? "visible" : "hidden"}>
+          <Route />
+        </Activity>
+      </RouteVisibility.Provider>
+    );
+  }
+  const requests = io.fetch.mock.calls.length;
+  const view = render(<App visible />);
+  await waitFor(() => expect(view.getByTestId("picture").textContent).toBe("ready"));
+  fireEvent.change(view.getByLabelText("retained draft"), { target: { value: "kept" } });
+  expect(mounts).toHaveLength(1);
+  view.rerender(<App visible={false} />);
+  await waitFor(() => expect(view.queryByTestId("picture")).toBeNull());
+  view.rerender(<App visible />);
+  await waitFor(() => expect(view.getByTestId("picture").textContent).toBe("ready"));
+  expect((view.getByLabelText("retained draft") as HTMLInputElement).value).toBe("kept");
+  expect(mounts).toHaveLength(2);
+  expect(geometries).toHaveLength(1);
+  expect(io.fetch.mock.calls.length).toBe(requests + 1);
 });

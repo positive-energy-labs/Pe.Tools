@@ -3,14 +3,14 @@ import { createServer, type Socket, type Server } from "node:net";
 import { appendFile, mkdir, open, readFile, rm, writeFile } from "node:fs/promises";
 import { join, resolve } from "node:path";
 import { spawn } from "node:child_process";
-import { fileURLToPath } from "node:url";
 import { Effect, Semaphore } from "effect";
 import type { KeeperConfig, SessionInfo, SessionReceipt } from "./browser.ts";
 import { connectCdp, type CdpClient } from "./cdp.ts";
 import { getBrowserEndpoint, getProtocol } from "./protocol.ts";
 import { CLOSE_BUDGET_MS, publishJson, publishSessionReceipt } from "./receipts.ts";
 import { acquireAttachment, releaseAttachment, type AttachmentLock } from "./attachment-lock.ts";
-import { guardianClient, runAttachedGuardian } from "./attached-guardian.ts";
+import { guardianClient } from "./attached-guardian.ts";
+import { browserWorkerCommand } from "./worker.ts";
 import { BrowserError } from "./errors.ts";
 import {
   activeEndpoint,
@@ -41,7 +41,7 @@ const ignore = (body: () => Promise<unknown>) =>
     } catch {}
   });
 
-async function run(configFile: string): Promise<void> {
+export async function runBrowserKeeper(configFile: string): Promise<void> {
   const config: KeeperConfig = JSON.parse(await readFile(configFile, "utf8"));
   const directory = join(config.home, config.id);
   const receiptFile = join(directory, "session.json");
@@ -296,11 +296,12 @@ async function run(configFile: string): Promise<void> {
             }),
             { mode: 0o600 },
           );
-          attachedGuardian = spawn(
-            process.execPath,
-            [fileURLToPath(import.meta.url), "--attached-guardian", guardianFile],
-            { detached: true, windowsHide: true, stdio: ["pipe", "pipe", "pipe"] },
-          );
+          const worker = browserWorkerCommand("attached-guardian", guardianFile);
+          attachedGuardian = spawn(worker.command, worker.args, {
+            detached: true,
+            windowsHide: true,
+            stdio: ["pipe", "pipe", "pipe"],
+          });
           attachedGuardian.on("error", () => {});
           attachedGuardian.stderr?.on("data", () => {});
           info = { ...info, guardianPid: attachedGuardian.pid };
@@ -585,13 +586,3 @@ async function run(configFile: string): Promise<void> {
     await trace("terminal.published", { errorCode });
   }
 }
-
-if (process.argv[2] === "--attached-guardian")
-  runAttachedGuardian(process.argv[3]!).catch(() => {
-    process.exitCode = 1;
-  });
-else if (process.argv[2])
-  run(process.argv[2]).catch((error) => {
-    process.stderr.write(String(error) + "\n");
-    process.exitCode = 1;
-  });

@@ -2,6 +2,10 @@
 
 Direct CDP for library callers and shell agents. Commands and sessions use the same public implementation. Known commands use type-only upstream `devtools-protocol` mappings; `sendRaw` forwards methods absent from those types. No Playwright or Python runtime is used.
 
+`pea browser guide` (or standalone `pe-browser guide`) prints the bundled agent guide without a browser or host. Pea publishes that same guide as `use-browser` into both harness skill roots; discover it with `pe_find` query `browser`, then read `skill:@product/skills/use-browser` with `pe_read`. [guide.ts](src/guide.ts) owns the shared prose; connected `help SESSION Domain.method` owns protocol detail. The workflow adapts [chrome-agent's agent guide](https://github.com/captivus/chrome-agent/blob/ab3f3be6ef4c3be85546bf84aa8282b98456b97b/AGENTS.md), with Pea-specific leases, custody, JSON evaluation, and cleanup.
+
+The Windows Pea executable embeds the browser CLI and its keeper/attachment workers. [Pea main](../../apps/pea/src/main.ts) dispatches `@pe/browser/worker` before the ordinary CLI; another SEA embedder must provide that dispatch too. Ordinary Node uses the emitted sibling `worker-entry` file. Packaged workers refuse non-Windows SEA execution; that lifecycle is not certified. See the [port assessment](../../../docs/features/browser/PORT-REVIEW.md) for upstream tradeoffs and proof limits.
+
 ```ts
 import { openBrowser } from "@pe/browser";
 

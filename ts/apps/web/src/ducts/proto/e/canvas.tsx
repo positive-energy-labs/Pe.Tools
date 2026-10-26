@@ -68,6 +68,7 @@ import { stubLabels } from "../../stub-labels";
 import { coloursOf } from "../../colours";
 import { COLOURS_FIXTURE } from "../../colours.fixture";
 import { frozenDemo } from "#/host/demo-client";
+import { VisibleRouteResource } from "#/route/activity";
 
 const fmt = (n: number | null | undefined, d = 3) => (n == null ? "—" : n.toFixed(d));
 
@@ -120,7 +121,12 @@ export function ECanvas(props: ProtoProps & ECanvasExtra) {
         {props.empty?.says ?? (props.reading.pending ? "reading ducts…" : "no snapshot")}
       </p>
     );
-  return <Canvas {...props} snapshot={snapshot} />;
+  // Route UI stays retained; capture buffers, clipped meshes and layer descriptors do not.
+  return (
+    <VisibleRouteResource>
+      <Canvas {...props} snapshot={snapshot} />
+    </VisibleRouteResource>
+  );
 }
 
 function Canvas({
@@ -713,11 +719,8 @@ function Canvas({
                   setLanded(null);
               }}
               onWheelCapture={(e) => {
-                if (read.pending) {
-                  e.nativeEvent.preventDefault();
-                  e.stopPropagation();
-                  return;
-                }
+                // A pending native read withholds element actions, not local camera movement.
+                // The retained picture stays labelled; Scene3D separately gates picking.
                 if (landed && !(e.target as Element).closest("[data-picture-readout]"))
                   setLanded(null);
               }}

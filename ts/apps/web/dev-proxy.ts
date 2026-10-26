@@ -170,7 +170,9 @@ async function checkoutMiddleware(
         let bytes = 0;
         for await (const chunk of req) {
           bytes += Buffer.byteLength(chunk);
-          if (bytes > 65_536) throw Error("Read request exceeds 64 KiB.");
+          // Whole-building reads enumerate element ids (Chadds exceeds 64 KiB); admission still
+          // checks generated read-only operation metadata before anything reaches the host.
+          if (bytes > 1_048_576) throw Error("Read request exceeds 1 MiB.");
           chunks.push(Buffer.from(chunk));
         }
         body = Buffer.concat(chunks).toString("utf8");
