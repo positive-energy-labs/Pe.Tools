@@ -35,7 +35,15 @@ import { isClick, pickAt } from "./picking";
 import { samePlane, type PlaneAxis, type PlaneViewport } from "./plane";
 import type { Project, Ray, Size } from "./projection";
 import { createRenderer, type ClipVolume, type ContextMode, type SceneRenderer } from "./renderer";
-import type { IssueTarget, Layer3D, PaintOf, Pick, SceneInstance, SceneMeshes } from "./types";
+import type {
+  Bounds,
+  IssueTarget,
+  Layer3D,
+  PaintOf,
+  Pick,
+  SceneInstance,
+  SceneMeshes,
+} from "./types";
 
 export type Scene3DProps = {
   /** Fixed picture state; null explicitly shares a parent readout in an inset. */
@@ -149,7 +157,7 @@ export function Scene3D(props: Scene3DProps): ReactNode {
   const core = useRef<SceneRenderer | null>(null);
   const previousView = useRef<{
     orbit: LiveOrbit;
-    meshes: SceneMeshes;
+    bounds: Bounds;
     viewport: OrbitViewport;
     plane: PlaneViewport | null;
   } | null>(null);
@@ -186,7 +194,7 @@ export function Scene3D(props: Scene3DProps): ReactNode {
       // Zoom is relative to capture bounds. Preserve world framing when context or subject meshes change.
       const kept = {
         ...incoming,
-        zoom: (incoming.zoom * fitDistance(meshes.bounds)) / fitDistance(previous.meshes.bounds),
+        zoom: (incoming.zoom * fitDistance(meshes.bounds)) / fitDistance(previous.bounds),
       };
       r.recoverViewport(
         kept,
@@ -372,7 +380,13 @@ export function Scene3D(props: Scene3DProps): ReactNode {
       moves.removeEventListener("bounds", boundsChanged);
       if (over) latest.current.onHover(null);
       orbit.cancel(token);
-      previousView.current = { orbit, meshes, viewport: r.viewport(), plane: r.plane() };
+      // Recovery needs six bounds numbers, not a retained copy of a disposed scene's geometry.
+      previousView.current = {
+        orbit,
+        bounds: meshes.bounds,
+        viewport: r.viewport(),
+        plane: r.plane(),
+      };
       unconstrain();
       moves.removeEventListener("start", start);
       moves.removeEventListener("change", change);
