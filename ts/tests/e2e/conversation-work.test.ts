@@ -108,6 +108,9 @@ test("real conversation Work cutover retains authored cells, draft, Places and o
       throw Error(
         "PRECONDITION: fresh owned host source provenance is required, not only a client build header",
       );
+    expect(custody.inference, "Send coverage must never call an external model").toBe(
+      "substituted-acp-adapter",
+    );
     expect(custody.hostSource).toEqual({
       commit: head,
       productDirty: "",
