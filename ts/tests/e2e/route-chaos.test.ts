@@ -803,6 +803,12 @@ test("seeded real-user route journey", async () => {
     });
     await step("select a real tree row and retain copied URL through reload", async () => {
       await pickSystem(a);
+      if (lane === "demo") {
+        // The navigation fixture has real schematic data, but no native Revit meshes.
+        await button(p, "schematic", '[data-pane-id="e-picture"]');
+        await p.until(() => box(p, DRAWING), "the fixture's actual schematic drawing");
+        receipt.coverage.drawing = "schematic; native mesh and 3D camera behavior remain unproven";
+      }
       if (!(await box(p, '[data-pane-id="e-sidebar"] [role=treeitem]')))
         await button(p, `Expand ${a}`);
       await click(p, '[data-pane-id="e-sidebar"] [role=treeitem][aria-level="2"][data-key]');
