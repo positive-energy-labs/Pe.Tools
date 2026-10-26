@@ -18,6 +18,8 @@ import { Code } from "@pe/kit/lang/code";
 import { proseIds } from "@pe/kit/lang/subject-text";
 import { cn } from "@pe/kit/lib/utils";
 import { subjectParts, TurnSubjectText, type TurnSubjects } from "./turn-names";
+import { WorkbenchContext } from "./provider/thread-summary";
+import { pageLink } from "./page-link";
 
 const PROSE_CLASS = [
   "prose min-w-0 max-w-none text-ink [overflow-wrap:anywhere]",
@@ -74,6 +76,7 @@ function FencedBlock({ node, children }: { children?: ReactNode } & ExtraProps) 
 }
 
 const MARKDOWN_COMPONENTS: Components = {
+  a: ProseLink,
   pre: FencedBlock,
   // A table is the one block that can be wider than the lane. It gets its own scroll box so it
   // scrolls inside the message instead of widening the chat column.
@@ -84,6 +87,35 @@ const MARKDOWN_COMPONENTS: Components = {
     </div>
   ),
 };
+
+function ProseLink({ node: _node, href, ...props }: React.ComponentProps<"a"> & ExtraProps) {
+  const workbench = useContext(WorkbenchContext);
+  const page = href && typeof window !== "undefined" ? pageLink(href, window.location.href) : null;
+  return (
+    <a
+      {...props}
+      href={page?.href ?? href}
+      onClick={(event) => {
+        props.onClick?.(event);
+        if (
+          !page ||
+          !workbench ||
+          event.defaultPrevented ||
+          event.button !== 0 ||
+          event.metaKey ||
+          event.ctrlKey ||
+          event.shiftKey ||
+          event.altKey ||
+          props.download !== undefined ||
+          (props.target && props.target !== "_self")
+        )
+          return;
+        event.preventDefault();
+        void workbench.store.actions.openTab("bind", { page: page.slug, view: true }, {});
+      }}
+    />
+  );
+}
 
 // GFM, or pea's tables arrive as a paragraph of pipes. It also buys strikethrough, task lists,
 // and bare autolinks.

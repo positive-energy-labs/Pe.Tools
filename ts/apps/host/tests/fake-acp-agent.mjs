@@ -178,6 +178,14 @@ new AgentSideConnection(
           update: { sessionUpdate: "agent_message_chunk", content: { type: "text", text: chunk } },
         });
       await say(`echo: ${text}`);
+      if (text === "route-cutover-pages") {
+        const base = toolEnv.PE_TOOLS_HOST_BASE_URL;
+        if (!base) throw Error("Page link proof needs the actual host origin");
+        await say(
+          `\n[See the readiness breakdown](${new URL("/pages/chadds-duct-readiness/", base)})\n\n[See the detail](${new URL("/pages/chadds-duct-detail/", base)})\n\n[External reference](https://example.invalid/reference)`,
+        );
+        return { stopReason: "end_turn" };
+      }
       if (text === "route-cutover-open") {
         // Browser acceptance substitutes inference, not identity, route delivery, lease or render ack.
         const base = toolEnv.PE_TOOLS_HOST_BASE_URL;

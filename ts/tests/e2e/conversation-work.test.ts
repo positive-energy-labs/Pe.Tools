@@ -824,6 +824,14 @@ test("real conversation Work cutover retains authored cells, draft, Places and o
       const before = network.length;
       await p.clickAt('textarea[aria-label="Message"],input[aria-label="Message"]');
       await p.type("pid");
+      await p.until(
+        () =>
+          p.evaluate(() => {
+            const send = document.querySelector<HTMLButtonElement>('button[aria-label="send"]');
+            return send !== null && !send.getAttribute("aria-description") && !send.disabled;
+          }),
+        "the real Send control reports ready",
+      );
       await p.click(/^send$/i);
       const thread = await p.until(
         async () => new URL(await p.url()).searchParams.get("thread"),
@@ -850,9 +858,87 @@ test("real conversation Work cutover retains authored cells, draft, Places and o
         retainedPath: "/ducts",
         inference: "substituted-acp-adapter",
       };
+      await p.clickAt('textarea[aria-label="Message"],input[aria-label="Message"]');
+      await p.type("route-cutover-pages");
+      await p.click(/^send$/i);
+      await p.waitText("See the readiness breakdown");
+      await p.clickAt('textarea[aria-label="Message"],input[aria-label="Message"]');
+      await p.type("Keep this draft while I read the report");
+      const pageDraft = await draft();
+      const pageComposer = await composerIdentity();
+      const beforePages = await p.url();
+      const pageHistory = await p.send("Page.getNavigationHistory");
+      const returnEntry = pageHistory.entries[pageHistory.currentIndex];
+      const origin = await p.evaluate(() => performance.timeOrigin);
+      const ductsPlace = await p.evaluate(() => history.state.__peRouteTab.id as string);
+      const pages = ["chadds-duct-readiness", "chadds-duct-detail", "chadds-duct-readiness"];
+      const pageIds: string[] = [];
+      for (const slug of pages) {
+        await p.clickAt(`a[href*="page=${slug}"]`);
+        await p.until(
+          () =>
+            p.evaluate((pageSlug) => {
+              const frame = document.querySelector<HTMLIFrameElement>(
+                `iframe[title="Page ${pageSlug}"]`,
+              );
+              return Boolean(
+                frame?.getClientRects().length &&
+                frame.contentDocument?.body.textContent?.includes("Retained Page proof"),
+              );
+            }, slug),
+          "the actual hosted Page is visible inside the tool viewer",
+        );
+        expect(new URL(await p.url()).origin).toBe(base.origin);
+        expect(new URL(await p.url()).pathname).toBe("/bind");
+        expect(new URL(await p.url()).searchParams.get("thread")).toBe(thread);
+        expect(new URL(await p.url()).searchParams.has("target")).toBe(false);
+        expect(await p.evaluate(() => performance.timeOrigin)).toBe(origin);
+        expect(await composerIdentity()).toBe(pageComposer);
+        expect(await draft()).toBe(pageDraft);
+        pageIds.push(await p.evaluate(() => history.state.__peRouteTab.id as string));
+      }
+      expect(pageIds[0]).not.toBe(pageIds[1]);
+      expect(pageIds[2]).toBe(pageIds[0]);
+      expect(
+        await p.evaluate(
+          () =>
+            document.querySelector<HTMLAnchorElement>('a[href="https://example.invalid/reference"]')
+              ?.href ?? null,
+        ),
+      ).toBe("https://example.invalid/reference");
+      await p.send("Page.navigateToHistoryEntry", { entryId: returnEntry.id });
+      await p.until(
+        async () => (await p.url()) === beforePages,
+        "Back returns to the original Ducts Page",
+      );
+      expect(await p.evaluate(() => history.state.__peRouteTab.id as string)).toBe(ductsPlace);
+      expect(await draft()).toBe(pageDraft);
+      expect(await workEvidence(seed.productHome)).toEqual(initial);
+      receipt.coverage.pageLinks = {
+        hostOrigin: `http://127.0.0.1:${hostService.port}`,
+        pages,
+        pageIds,
+        thread,
+        sameDocument: true,
+        draftRetained: true,
+      };
       await pickThread(thread);
       await p.until(toolsCollapsed, "explicit collapse keeps the newly issued conversation");
       await p.clickAt('textarea[aria-label="Message"],input[aria-label="Message"]');
+      await p.send("Input.dispatchKeyEvent", {
+        type: "keyDown",
+        key: "a",
+        code: "KeyA",
+        modifiers: 2,
+        windowsVirtualKeyCode: 65,
+      });
+      await p.send("Input.dispatchKeyEvent", {
+        type: "keyUp",
+        key: "a",
+        code: "KeyA",
+        modifiers: 2,
+        windowsVirtualKeyCode: 65,
+      });
       await p.type("route-cutover-open");
       await p.click(/^send$/i);
       await p.until(

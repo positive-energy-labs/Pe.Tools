@@ -22,6 +22,9 @@ test("borrowed production bundles retain the explicit host owner for preview", a
     expect(built.define["import.meta.env.PE_RUNTIME_SERVICE"]).toBe(
       JSON.stringify(checkoutServiceName()),
     );
+    expect(built.define["import.meta.env.PE_RUNTIME_ORIGIN"]).toBe(
+      JSON.stringify("http://127.0.0.1:12345"),
+    );
     expect(
       built.plugins.find((plugin: { name?: string }) => plugin?.name === "pe:checkout-ingress")
         .configurePreviewServer,

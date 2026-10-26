@@ -3,6 +3,7 @@
 An agent or a person drops a folder of HTML under the product home and the host serves it at an open URL with doors into Revit: typed ops, show, captures, the thread target, and shared state. Captures are the one picture currency that every surface links. Source: muse rounds 1 and 2 of 2026-10-04 over the pressure-drop walkthrough (`.artifacts/pdrop/walkthru/`, gitignored) and the synthesized-views session of 2026-09-28.
 
 ## Decided
+- 2026-10-25, Kaitpw: a Page link in Pea opens a browser Place in the existing embedded viewer and preserves the selected conversation, draft and other Places. Opening a Page does not bind it or grant native authority. Only this frontend and its exact runtime host are rebased; other hosts retain normal link behavior.
 - 2026-10-13, owner round 4: Pod route promotion is explicit in `pod.json.routes`; the shell loads a captured React module only after a human administrator trusts its exact SHA-256. Route code has browser authority, not a hostile-code sandbox. `podRouteWorkSpec` persists JSON through the canonical Work runtime; Pages retain their binding and offline export. Snowdon Circuits shares calculation, reducer and instruments between both forms.
 - 2026-10-14, owner approved an exception to unchanged Snowdon consumer bytes: circuits identifies an exported Page with `Boolean(pe.exported)`, including its embedded source. The exporter may expose snapshot-only `pe.target()` for provenance without making the Page hosted; document selectors remain refused.
 

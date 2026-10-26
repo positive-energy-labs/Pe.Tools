@@ -90,8 +90,16 @@ function rebased(tab: ThreadTab, url: string | null): string {
 
 /** A Place's binding: its canonical `?target` and `?work`; a Place is reused only on an exact one. */
 const bindingOf = (route: RouteKey, link: string) => {
-  const { target, work } = routeAddress(route).read(params(link)).carry;
-  return JSON.stringify([target ?? null, work ?? null]);
+  const {
+    page,
+    carry: { target, work },
+  } = routeAddress(route).read(params(link));
+  // A published Page is a distinct subject, although it carries no Revit target or Work key.
+  return JSON.stringify([
+    target ?? null,
+    work ?? null,
+    route === "bind" && "page" in page ? page.page : null,
+  ]);
 };
 
 const sameRef = (a: DocumentRef, b: DocumentRef) =>
@@ -289,7 +297,7 @@ export function useRouteTabs() {
     try {
       const wanted = bindingOf(
         targetRoute,
-        routeAddress(targetRoute).link(undefined, {
+        routeAddress(targetRoute).link(page, {
           target: explicit !== undefined ? explicit.target : carry.target,
           work: explicit !== undefined ? explicit.work : carry.work,
         }),

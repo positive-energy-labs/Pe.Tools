@@ -73,6 +73,13 @@ export function parseContributionKey(key: string): ContributionReference | null 
   return result.success ? result.data : null;
 }
 
+/** The Page behind one served URL segment: scratch folder or `<pod>--<page>`. */
+export function pageKeyOf(slug: string): string | null {
+  const [id, page, ...more] = slug.split("--");
+  const key = page === undefined ? `page:@pages/${slug}` : `page:@${id}/pages/${page}`;
+  return !more.length && parseContributionKey(key) ? key : null;
+}
+
 export function contributionKey(reference: ContributionReference): string {
   const { kind, packageId, path } = contributionReferenceSchema.parse(reference);
   return `${kind}:@${packageId}/${path}`;

@@ -48,6 +48,11 @@ const config = defineConfig(({ mode, command }) => {
           ? hostProcessIdentity.serviceName
           : checkoutServiceName(),
       ),
+      // Published Page links name the backend in dev. Only this exact owner may be rebased
+      // into the frontend's existing Page viewer; another loopback host is another namespace.
+      "import.meta.env.PE_RUNTIME_ORIGIN": JSON.stringify(
+        command === "serve" || readHostCheckout() ? (process.env.PE_TOOLS_HOST_BASE_URL ?? "") : "",
+      ),
     },
     plugins: [
       devIcons(),

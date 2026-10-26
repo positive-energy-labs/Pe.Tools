@@ -18,7 +18,9 @@ function tabTitle(tab: ThreadTab) {
           ? page.schedule
           : "query" in page
             ? page.query
-            : "";
+            : "page" in page
+              ? page.page
+              : "";
   return `${at.title}${typeof subject === "string" && subject ? ` · ${subject}` : ""}`;
 }
 

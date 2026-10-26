@@ -46,6 +46,14 @@ export async function seedConversationWork(homeInput: string, artifactInput: str
   const { createRouteRegistrations } = await import("../../packages/mcps/src/pea/routes.ts");
   const { fileRouteDocumentStore } = await import("../../apps/host/src/route-document-store.ts");
   const paths = await import("../../apps/host/src/product-paths.ts");
+  for (const slug of ["chadds-duct-readiness", "chadds-duct-detail"]) {
+    const page = join(paths.productPagesRootPath(), slug);
+    await mkdir(page, { recursive: true });
+    await writeFile(
+      join(page, "index.html"),
+      `<!doctype html><html><title>${slug}</title><body><h1>${slug}</h1><p>Retained Page proof</p></body></html>`,
+    );
+  }
   await mkdir(artifactDir, { recursive: true });
   const scope = bindWork("ducts", address(OFFICE_ADDRESS));
   const unsavedScope = bindWork("ducts", null, undefined, UNSAVED_REF);

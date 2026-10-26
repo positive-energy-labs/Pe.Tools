@@ -9,7 +9,7 @@ import {
 } from "@pe/host-contracts/contracts";
 import { invocationContext, type RequestPrincipal } from "@pe/runtime/context";
 import { hostOwnership } from "./host-ownership.ts";
-import { parseContributionKey } from "@pe/agent-contracts";
+import { pageKeyOf, parseContributionKey } from "@pe/agent-contracts";
 import type {
   Basis,
   Caller,
@@ -108,15 +108,6 @@ export function writeTerminalContext(serviceName: string) {
   };
 }
 
-/**
- * The D12 page key of a `/pages/<slug>/…` path: `<id>--<page>` is the page an admitted package
- * (by manifest id) contributes; null when the codec admits no key for it.
- */
-export const pageKeyOf = (slug: string): string | null => {
-  const [id, page, ...more] = slug.split("--");
-  const key = page === undefined ? `page:@pages/${slug}` : `page:@${id}/pages/${page}`;
-  return !more.length && parseContributionKey(key) ? key : null;
-};
 /** The write door of a page key: the inverse of `pageKeyOf`. */
 export const pageActDoor = (page: string) => {
   const ref = parseContributionKey(page);
