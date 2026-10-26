@@ -27,7 +27,7 @@ vp run --no-cache journey:routes
 The launcher starts `src/dev.ts --no-revit --no-tray` through the checkout's installed Node/jiti runtime,
 an isolated product home and local SDK/app-data roots, the canonical source Vite child, and a
 private visible `@pe/browser` session on a dynamically selected port. The demo explicitly selects
-`thread=demo-review` for the lease witness; standalone no-conversation behavior belongs to the
+an isolated, persisted conversation with no targets for the lease witness; standalone no-conversation behavior belongs to the
 conversation/Work journey above. It reads the host service
 receipt and returned browser identity, then runs Vitest with `refresh,reconnect,worker` required. It never
 starts Revit or sends a Pea prompt. The integrated navigation fixture must expose its real demo

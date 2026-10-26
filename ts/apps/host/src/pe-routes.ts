@@ -621,6 +621,11 @@ export function createPeRoutes(options: PeRoutesOptions) {
         if (!parsed.success)
           return json({ ok: false, error: `invalid ${route} view command` }, 400);
         const { thread, instance: target, revision, patch } = parsed.data;
+        if (caller.kind === "pea" && caller.thread !== thread)
+          return json(
+            { ok: false, error: "A Pea context may only move a view for its own conversation" },
+            403,
+          );
         const result = await views.set(thread, route, target, revision, patch);
         return json(result, (result as { ok: boolean }).ok ? 200 : 409);
       }

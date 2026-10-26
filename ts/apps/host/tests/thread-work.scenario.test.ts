@@ -72,6 +72,23 @@ test("explicit Pea opens travel live through world and cannot address another co
     expect((await next()).kind).toBe("gap");
     expect((await next()).kind).toBe("snapshot");
     expect((await open("other-chat")).status).toBe(403);
+    const foreignSet = await withInvocationContext(
+      { caller: { kind: "pea", context: "test-context", thread: "selected-chat" } },
+      () =>
+        app.fetch(
+          new Request("http://host/pe/route-view/families/set", {
+            method: "POST",
+            headers: { "content-type": "application/json" },
+            body: JSON.stringify({
+              thread: "other-chat",
+              instance: randomUUID(),
+              revision: 1,
+              patch: { query: "" },
+            }),
+          }),
+        ),
+    );
+    expect(foreignSet.status).toBe(403);
     expect((await open("selected-chat", "/ducts")).status).toBe(400);
     const response = await open("selected-chat");
     expect(response.status).toBe(200);
