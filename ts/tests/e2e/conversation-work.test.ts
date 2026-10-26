@@ -575,6 +575,8 @@ test("real conversation Work cutover retains authored cells, draft, Places and o
           new URL(await p.url()).pathname === "/pea",
         "other conversation selected",
       );
+      await p.until(toolsCollapsed, "the other conversation opens with tools folded to their rail");
+      await p.click("Expand tools");
       expect(await p.count('[aria-label="Places"] button[aria-pressed]')).toBeGreaterThan(0);
       expect(await p.count('[aria-label="Places"] button[aria-pressed="true"]')).toBe(0);
     });
