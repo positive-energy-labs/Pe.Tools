@@ -4,15 +4,50 @@ import { renderToString, renderToStaticMarkup } from "react-dom/server";
 import { hydrateRoot } from "react-dom/client";
 import { afterEach, expect, test, vi } from "vite-plus/test";
 import { actionScopeKeys, actionTeaching, chordLabel } from "@pe/kit/keys";
-import { declaredTeaching, registerTeaching, type Teaching } from "@pe/kit/lang/teach";
+import {
+  declaredTeaching,
+  measureRegions,
+  registerTeaching,
+  type Teaching,
+} from "@pe/kit/lang/teach";
 import { TeachingLayoutView } from "@pe/kit/lang/teaching-layout";
 import { TeachPage, TeachReference, TeachTarget, useTeaching } from "@pe/kit/lang/use-teach";
-import { DUCTS_LAYOUT, DUCTS_TEACHING } from "#/ducts/proto/e/teaching";
+import { ductsPaneState, DUCTS_LAYOUT, DUCTS_TEACHING } from "#/ducts/proto/e/teaching";
 import { STAGE_ACTIONS } from "#/scene/stage-teaching";
 import { HelpWorld } from "./help";
 import { STARTUP_TEACHING } from "./teaching";
 
 afterEach(cleanup);
+
+test("Ducts support folds retain the current width and last-focused priority policy", () => {
+  const state = {
+    inboxOpen: null,
+    treeCollapsed: null,
+    priority: "sidebar" as const,
+    toRule: 1,
+    staged: 0,
+  };
+  expect(ductsPaneState({ ...state, width: 1400 })).toEqual({
+    sidebarCollapsed: false,
+    inboxShown: true,
+  });
+  expect(ductsPaneState({ ...state, width: 900 })).toEqual({
+    sidebarCollapsed: false,
+    inboxShown: false,
+  });
+  expect(ductsPaneState({ ...state, width: 600 })).toEqual({
+    sidebarCollapsed: true,
+    inboxShown: false,
+  });
+  expect(ductsPaneState({ ...state, width: 900, inboxOpen: true, priority: "inbox" })).toEqual({
+    sidebarCollapsed: true,
+    inboxShown: true,
+  });
+  expect(ductsPaneState({ ...state, width: 900, inboxOpen: true })).toEqual({
+    sidebarCollapsed: false,
+    inboxShown: false,
+  });
+});
 
 const twoRegions: Teaching[] = [
   { kind: "region", id: "a", label: "Systems", rect: { left: 0, top: 0, width: 200, height: 400 } },
@@ -159,14 +194,34 @@ test("a shared split change reaches the rendered layout and reference rectangles
     start: { ...DUCTS_LAYOUT.start, axis: "horizontal" as const },
   };
   const reference = declaredTeaching(layout);
-  expect(reference.find((f) => f.kind === "region" && f.id === "rules")).toMatchObject({
-    rect: { left: 336, top: 0, width: 176 },
+  expect(reference.find((f) => f.kind === "region" && f.id === "e-rules-all")).toMatchObject({
+    rect: { left: 336, top: 0, width: 88 },
   });
   const html = renderToStaticMarkup(
-    <TeachingLayoutView
+    <TeachingLayoutView<typeof layout>
       layout={layout}
-      panes={{ systems: "systems", rules: "rules", picture: "picture", rulings: "rulings" }}
-      resize={{ sidebar: { minSize: 0 }, stack: { minSize: 0 }, drawing: { minSize: 0 } }}
+      content={{
+        "e-systems": (pane) => pane("systems"),
+        "e-sidebar": (pane) => pane("tree"),
+        "e-inputs": (pane) => pane("inputs"),
+        "e-rules-all": (pane) => pane("rules"),
+        "e-rules": (pane) => pane("selected rules"),
+        "e-picture": (pane) => pane("picture"),
+        "e-inbox": (pane) => pane("rulings"),
+      }}
+      state={{
+        conditions: {
+          system: { available: true },
+          tree: { available: true },
+          tight: { available: false },
+        },
+        choices: { scope: { value: "start", onChange: () => {} } },
+        folds: {
+          sidebar: { collapsed: null, onChange: () => {} },
+          drawing: { collapsed: null, onChange: () => {} },
+          inputs: { collapsed: "end", onChange: () => {} },
+        },
+      }}
     />,
   );
   expect(html).toContain("512px");
@@ -176,7 +231,7 @@ test("a shared split change reaches the rendered layout and reference rectangles
     [...container.querySelectorAll("[data-slot=pane-split]")].map((node) =>
       node.getAttribute("data-axis"),
     ),
-  ).toEqual(["horizontal", "horizontal", "horizontal"]);
+  ).toEqual(["horizontal", "horizontal", "horizontal", "vertical", "horizontal", "horizontal"]);
 });
 
 test("reference projection removes runtime claims even from an accidentally stateful declaration", () => {
@@ -340,4 +395,118 @@ test("SSR never reads the process-global mounted registry and hydrates the same 
   act(() => root.unmount());
   container.remove();
   errors.mockRestore();
+});
+
+test("current pane and covering rail geometry share one workspace origin", () => {
+  const facts: Teaching[] = [
+    {
+      kind: "region",
+      id: "picture",
+      label: "Picture",
+      rect: { left: 132, top: 80, width: 600, height: 400 },
+    },
+    ...["tree", "inputs"].map(
+      (id): Teaching => ({
+        kind: "region",
+        id,
+        label: id,
+        visibility: "folded",
+        foldedBy: ["sidebar"],
+        rail: {
+          id: "sidebar:start",
+          orientation: "vertical",
+          label: "Systems",
+          rect: { left: 100, top: 80, width: 32, height: 400 },
+        },
+      }),
+    ),
+  ];
+  const picture = measureRegions(facts);
+  expect(picture.regions[0]).toMatchObject({ left: 32, top: 0 });
+  expect(picture.rails).toHaveLength(1);
+  expect(picture.rails[0]).toMatchObject({ left: 0, top: 0, width: 32, height: 400 });
+  expect(picture).toMatchObject({ width: 632, height: 400 });
+});
+test("described hidden controls do not downgrade observed workspace geometry", () => {
+  const view = render(
+    <HelpWorld
+      facts={[
+        ...twoRegions,
+        {
+          kind: "region",
+          id: "hidden",
+          label: "Inputs",
+          visibility: "folded",
+          available: false,
+          refusal: "Choose a system",
+          foldedBy: ["sidebar"],
+        },
+        {
+          kind: "keys",
+          id: "described",
+          region: "hidden",
+          scope: "Inputs",
+          source: "reference",
+          items: [{ keys: ["F"], label: "frame" }],
+        },
+      ]}
+    />,
+  );
+  expect(
+    view.container.querySelector("[data-teach-source]")?.getAttribute("data-teach-source"),
+  ).toBe("measured");
+  expect(screen.getByRole("button", { name: "Read Inputs controls" })).toBeTruthy();
+  fireEvent.click(screen.getByRole("button", { name: "Read Inputs controls" }));
+  expect(screen.getByRole("region", { name: "Inputs controls" }).textContent).toContain(
+    "Declared controls",
+  );
+  expect(view.container.textContent).toContain("Folded in workspace");
+  expect(view.container.textContent).toContain("Choose a system");
+});
+
+test("a folded composition pane keeps described controls even while retained bindings exist", () => {
+  const withdraw = registerTeaching([
+    {
+      kind: "region",
+      id: "instance:hidden",
+      region: "instance:hidden",
+      node: "hidden",
+      instance: "instance",
+      instanceVisible: true,
+      page: "/folded",
+      label: "Hidden",
+      visibility: "folded",
+    },
+    {
+      kind: "keys",
+      id: "described",
+      region: "instance:hidden",
+      instance: "instance",
+      page: "/folded",
+      source: "reference",
+      scope: "Hidden",
+      items: [{ keys: ["F"], label: "Described frame" }],
+    },
+    {
+      kind: "keys",
+      id: "retained",
+      region: "instance:hidden",
+      instance: "instance",
+      page: "/folded",
+      scope: "Hidden",
+      items: [{ keys: ["F"], label: "Retained binding" }],
+    },
+  ]);
+  try {
+    const view = render(
+      <TeachPage value="/folded">
+        <Tutorial />
+      </TeachPage>,
+    );
+    expect(view.container.textContent).toContain("Described frame");
+    expect(view.container.textContent).not.toContain("Retained binding");
+    expect(view.container.querySelector('[data-teach-node="hidden"]')).not.toBeNull();
+  } finally {
+    act(withdraw);
+  }
 });

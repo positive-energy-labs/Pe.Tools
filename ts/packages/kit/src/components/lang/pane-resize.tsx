@@ -18,6 +18,26 @@ import { tv } from "../../lib/tv";
 import { TooltipHint } from "./tooltip";
 
 export type PaneSide = "start" | "end";
+/** The same title treatment labels a physical rail and its measured page-map projection. */
+export function PaneRailTitle({
+  title,
+  orientation,
+  refused,
+}: {
+  title: string;
+  orientation: "horizontal" | "vertical";
+  refused?: boolean;
+}) {
+  return (
+    <span
+      data-slot="pane-rail-title"
+      className={`${orientation === "vertical" ? "[writing-mode:vertical-rl]" : "min-w-0 truncate"} data-[disabled]:text-ink-mute`}
+      data-disabled={refused || undefined}
+    >
+      {title}
+    </span>
+  );
+}
 
 /** What a folded side becomes: its rail, the title under an expand press. Nothing else. */
 export interface PaneRail {
@@ -316,6 +336,7 @@ function PaneResizeHandle({ axis, split, state, spec, containerSize }: PaneResiz
 }
 
 interface PaneSplitProps {
+  id?: string;
   axis: "horizontal" | "vertical";
   start: ReactNode;
   end: ReactNode;
@@ -334,7 +355,7 @@ export const paneSplitRecipe = tv({
 });
 
 /** Binary compositional escape hatch. Null sides retain their wrappers but consume no track. */
-export function PaneSplit({ axis, start, end, resize, grow }: PaneSplitProps) {
+export function PaneSplit({ id, axis, start, end, resize, grow }: PaneSplitProps) {
   const rootRef = useRef<HTMLDivElement>(null);
   const state = usePaneSize(resize ?? NO_RESIZE);
   const [stacked, setStacked] = useState(false);
@@ -400,6 +421,7 @@ export function PaneSplit({ axis, start, end, resize, grow }: PaneSplitProps) {
         {rail && spec && (
           <div
             data-slot="pane-rail"
+            data-pane-rail-side={side}
             className={
               horizontal
                 ? "flex min-h-0 flex-col items-center gap-2 py-2"
@@ -421,16 +443,15 @@ export function PaneSplit({ axis, start, end, resize, grow }: PaneSplitProps) {
               refusal={spec.refusal}
               onClick={() => state.expand(side)}
             />
-            <span
-              data-slot="pane-rail-title"
-              className={`${horizontal ? "[writing-mode:vertical-rl]" : "min-w-0 truncate"} data-[disabled]:text-ink-mute`}
-              data-disabled={spec.refusal != null || undefined}
-            >
-              {spec.title}
-            </span>
+            <PaneRailTitle
+              title={spec.title}
+              orientation={horizontal ? "vertical" : "horizontal"}
+              refused={spec.refusal != null}
+            />
           </div>
         )}
         <div
+          data-pane-side={side}
           data-surface={
             bothSides &&
             (resize
@@ -456,6 +477,9 @@ export function PaneSplit({ axis, start, end, resize, grow }: PaneSplitProps) {
     <div
       ref={rootRef}
       data-slot="pane-split"
+      data-layout-split={id}
+      data-pane-folded={folded ?? undefined}
+      data-pane-stacked={stacked || undefined}
       data-axis={horizontal ? "horizontal" : "vertical"}
       data-surface="page"
       className={paneSplitRecipe({ grow })}

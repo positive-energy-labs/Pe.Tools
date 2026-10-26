@@ -96,8 +96,24 @@ function Details({ facts }: { facts: readonly Teaching[] }) {
 }
 export function HelpWorld({ facts }: { facts: readonly Teaching[] }) {
   const picture = measureRegions(facts);
+  const regions = facts.flatMap((fact) =>
+    fact.kind === "region" ? [{ ...fact, key: fact.id }] : [],
+  );
   const [picked, setPicked] = useState<string>();
-  const selected = picture.regions.find((region) => region.key === picked) ?? picture.regions[0];
+  const selected =
+    regions.find((region) => region.key === picked) ??
+    regions.find((region) => region.visibility === "visible") ??
+    regions[0];
+  const map = {
+    ...picture,
+    regions: [
+      ...picture.regions.map((region) => ({
+        ...region,
+        ordinal: String(regions.findIndex((entry) => entry.key === region.key) + 1),
+      })),
+      ...picture.rails.map((rail) => ({ ...rail, ordinal: "" })),
+    ],
+  };
   const global = facts.filter((f) => f.kind === "keys" && !f.region);
   const scopes = [...new Set(global.flatMap((f) => (f.kind === "keys" ? [f.scope] : [])))];
   const keys = new Map<
@@ -105,7 +121,7 @@ export function HelpWorld({ facts }: { facts: readonly Teaching[] }) {
     { item: TeachKey; source?: "reference"; regions: Set<string>; uses: Set<string> }
   >();
   for (const fact of facts) {
-    const region = picture.regions.find((region) => region.key === fact.region);
+    const region = regions.find((region) => region.key === fact.region);
     if (fact.kind !== "keys" || !region) continue;
     for (const item of fact.items) {
       const id = keyIdentity(item, fact.source);
@@ -151,9 +167,9 @@ export function HelpWorld({ facts }: { facts: readonly Teaching[] }) {
   return (
     <div
       className="@container px-4 sm:px-8"
-      data-teach-source={facts.some((f) => f.source === "reference") ? "reference" : "measured"}
+      data-teach-source={regions.some((f) => f.source === "reference") ? "reference" : "measured"}
     >
-      {facts.some((f) => f.source === "reference") ? (
+      {regions.some((f) => f.source === "reference") ? (
         <p className="mb-4 t-small text-ink-2">
           Reference layout · controls described here take effect once loaded. Current visibility and
           availability are not yet measured.
@@ -173,11 +189,21 @@ export function HelpWorld({ facts }: { facts: readonly Teaching[] }) {
       {selected ? (
         <div className="flex flex-col gap-6" data-teach-foldout="">
           <div className="grid grid-cols-1 items-start gap-6 @min-[40rem]:grid-cols-2">
-            <PageMap picture={picture} value={selected.key} onValueChange={setPicked} />
+            <PageMap
+              picture={map}
+              value={selected.rail?.id ?? selected.key}
+              onValueChange={(key) => {
+                const region =
+                  regions.find((region) => region.key === key) ??
+                  regions.find((region) => region.rail?.id === key);
+                if (region) setPicked(region.key);
+              }}
+            />
             <div className="flex flex-col gap-3" aria-label="Region index">
-              {picture.regions.map((r, i) => (
+              {regions.map((r, i) => (
                 <section
                   key={r.key}
+                  data-teach-node={r.key}
                   aria-label={r.label}
                   className="flex min-w-0 flex-col gap-1 t-small wrap-anywhere"
                 >
@@ -190,6 +216,16 @@ export function HelpWorld({ facts }: { facts: readonly Teaching[] }) {
                       {i + 1} {r.label}
                     </Button>
                   </h2>
+                  {r.visibility === "folded" || r.available === false ? (
+                    <p className="t-small text-ink-2">
+                      {[
+                        r.visibility === "folded" ? "Folded in workspace" : "",
+                        r.available === false ? (r.refusal ?? "Unavailable in this scope") : "",
+                      ]
+                        .filter(Boolean)
+                        .join(" · ")}
+                    </p>
+                  ) : null}
                   {facts.map((f) =>
                     f.kind === "region" && f.id === r.key && f.purpose ? (
                       <p key={f.id}>{f.purpose}</p>
@@ -205,7 +241,10 @@ export function HelpWorld({ facts }: { facts: readonly Teaching[] }) {
               {shared.size ? (
                 [...shared].map(([id, group]) => (
                   <div key={id} className="mb-4 flex flex-col gap-2">
-                    <p className="t-small text-ink-2">{group.scope}</p>
+                    <p className="t-small text-ink-2">
+                      {group.scope}
+                      {group.source === "reference" ? " · declared" : ""}
+                    </p>
                     <Details facts={[group]} />
                   </div>
                 ))
@@ -215,6 +254,11 @@ export function HelpWorld({ facts }: { facts: readonly Teaching[] }) {
             </section>
             <section aria-label={`${selected.label} controls`} data-teach-detail={selected.key}>
               <h2 className="mb-2 t-small t-upper">{selected.label}</h2>
+              {local.some((fact) => fact.source === "reference") ? (
+                <p className="mb-2 t-small text-ink-2">
+                  Declared controls; current bindings are not asserted.
+                </p>
+              ) : null}
               <Details facts={local} />
             </section>
           </div>

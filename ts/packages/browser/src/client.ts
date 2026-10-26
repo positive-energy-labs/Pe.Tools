@@ -2,6 +2,7 @@ import { createConnection, type Socket } from "node:net";
 import { randomUUID } from "node:crypto";
 import { CLOSE_BUDGET_MS, readClosingState, readSessionReceipt } from "./receipts.ts";
 import { BrowserError } from "./errors.ts";
+import { evaluator } from "./evaluate.ts";
 import type { ProtocolMapping } from "devtools-protocol/types/protocol-mapping.js";
 import type { BrowserPage, BrowserSession, SessionInfo, SessionReceipt } from "./browser.ts";
 import type { CdpEvent, CdpTarget, CommandOptions } from "./cdp.ts";
@@ -219,6 +220,7 @@ export class SessionClient implements BrowserSession {
         ...params: ProtocolMapping.Commands[M]["paramsType"]
       ) => Promise<ProtocolMapping.Commands[M]["returnType"]>,
       sendRaw,
+      evaluate: evaluator(sendRaw),
       subscribe: (listener) => {
         listeners.add(listener);
         return () => {
@@ -243,24 +245,32 @@ export class SessionClient implements BrowserSession {
     return (this.closePromise ??= this.finishClose());
   }
   private async finishClose(): Promise<void> {
-    if (this.closed) {
-      const receipt = (await readSessionReceipt(this.info.receipt))!;
-      if (receipt.status === "closed") {
-        if (receipt.error)
-          throw new BrowserError(receipt.errorCode ?? "CleanupFailed", receipt.error);
-        return;
+    try {
+      if (this.closed) {
+        const receipt = (await readSessionReceipt(this.info.receipt))!;
+        if (receipt.status === "closed") {
+          if (receipt.error)
+            throw new BrowserError(receipt.errorCode ?? "CleanupFailed", receipt.error);
+          return;
+        }
+        if (!(await readClosingState(this.info.receipt))) {
+          const replacement = await SessionClient.connect(receipt, this.clientId);
+          await replacement.close();
+          return;
+        }
+      } else {
+        try {
+          await this.call("close");
+        } finally {
+          await this.disconnect();
+        }
       }
-      if (!(await readClosingState(this.info.receipt))) {
-        const replacement = await SessionClient.connect(receipt, this.clientId);
-        await replacement.close();
-        return;
-      }
-    } else {
-      try {
-        await this.call("close");
-      } finally {
-        await this.disconnect();
-      }
+    } catch (error) {
+      // Caller EOF can start cleanup before its closing receipt is published or reconnect answers.
+      // A lost control socket is not a cleanup verdict; wait for the existing terminal receipt.
+      const code = (error as { code?: string } | undefined)?.code;
+      if (!["SessionClosed", "Disconnected", "ECONNREFUSED", "ECONNRESET"].includes(code ?? ""))
+        throw error;
     }
     let deadline = Date.now() + CLOSE_BUDGET_MS;
     while (Date.now() < deadline) {

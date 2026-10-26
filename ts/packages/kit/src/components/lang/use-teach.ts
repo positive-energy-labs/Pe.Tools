@@ -17,9 +17,17 @@ import {
   type TeachDescriptor,
   type Teaching,
 } from "./teach";
-import { registerTeachingMeasure, subscribeMeasuredTeaching, teachingBox } from "./teach-measure";
+import {
+  registerTeachingMeasure,
+  subscribeMeasuredTeaching,
+  teachingBox,
+  teachingTitle,
+} from "./teach-measure";
 
 export const TeachRegion = createContext<string | undefined>(undefined);
+export const TeachInstance = createContext<string | undefined>(undefined);
+/** Composition owns the region record; Pane still owns its controls and physical element. */
+export const TeachPane = createContext<string | undefined>(undefined);
 export const TeachPage = createContext<string | undefined>(undefined);
 /** The current reader can sit in shell chrome outside the retained route's source boundary. */
 export const TeachTarget = createContext<string | undefined>(undefined);
@@ -48,7 +56,10 @@ export function useTeach(
   enabled = true,
   host?: HTMLElement | null | RefObject<HTMLElement | null>,
 ) {
-  const id = useId();
+  const generated = useId();
+  const owned = useContext(TeachPane);
+  const instance = useContext(TeachInstance);
+  const id = descriptor?.kind === "region" && owned ? owned : generated;
   const parent = useContext(TeachRegion);
   const page = useContext(TeachPage);
   host = useContext(TeachOwner) ?? host;
@@ -57,20 +68,23 @@ export function useTeach(
   const value = JSON.stringify(descriptor);
   useEffect(() => {
     const fact = JSON.parse(value) as TeachDescriptor | null;
-    if (!live || !fact) return;
+    if (!live || !fact || (fact.kind === "region" && owned)) return;
     const anchor = host && ("current" in host ? host.current : host);
     const owner = region ?? anchor?.closest<HTMLElement>("[data-teach-id]")?.dataset.teachId;
     const pane = document.querySelector<HTMLElement>(`[data-teach-id="${owner}"]`);
     const nodes = [...new Set([anchor, pane])].filter((node) => node != null);
     let previous: string | undefined;
-    let withdraw: (() => void) | undefined = registerTeaching({ ...fact, id, region: owner, page });
+    let withdraw: (() => void) | undefined = registerTeaching({
+      ...fact,
+      id,
+      region: owner,
+      page,
+      instance,
+    });
     const measure = () => {
-      const next = { ...fact, id, region: owner, page };
+      const next = { ...fact, id, region: owner, page, instance };
       if (next.kind === "region" && pane) {
-        next.label =
-          pane.querySelector('[data-slot="pane-title"]')?.textContent?.trim() ||
-          pane.querySelector("[data-list-view][aria-label]")?.getAttribute("aria-label") ||
-          next.label;
+        next.label = teachingTitle(pane) || next.label;
         const { left, top, width, height } = teachingBox(pane);
         next.rect = { left, top, width, height };
       }
@@ -89,7 +103,7 @@ export function useTeach(
       unmeasure();
       withdraw?.();
     };
-  }, [id, region, live, value, host, page]);
+  }, [id, region, live, value, host, page, instance, owned]);
   return id;
 }
 export function useTeaching() {
@@ -100,6 +114,36 @@ export function useTeaching() {
   const all = useSyncExternalStore(subscribeMeasuredTeaching, readTeaching, serverTeaching);
   return useMemo(() => {
     const facts = page == null ? all : all.filter((fact) => fact.page === page);
+    const inventory = facts.filter((fact) => fact.kind === "region" && fact.node != null);
+    if (inventory.length) {
+      const instance = inventory.find((fact) => fact.instanceVisible)?.instance;
+      if (!instance) return reference;
+      const own = facts.filter((fact) => fact.instance === instance);
+      const regions = own.filter(
+        (fact): fact is Extract<Teaching, { kind: "region" }> =>
+          fact.kind === "region" && fact.node != null,
+      );
+      const projected = regions.flatMap((region) => {
+        const controls = own.filter((fact) => fact.region === region.id && fact.kind !== "region");
+        const measured =
+          region.visibility === "visible"
+            ? controls.filter((fact) => fact.source !== "reference")
+            : [];
+        const described = controls.filter((fact) => fact.source === "reference");
+        return [
+          { ...region, id: region.node!, region: region.node },
+          ...(measured.length ? measured : described).map((fact) => ({
+            ...fact,
+            region: region.node,
+          })),
+        ];
+      });
+      return [
+        ...all.filter((fact) => fact.page == null && fact.kind === "keys"),
+        ...facts.filter((fact) => fact.instance == null && fact.kind === "keys" && !fact.region),
+        ...projected,
+      ];
+    }
     return reference.length &&
       !facts.some(
         (fact) =>

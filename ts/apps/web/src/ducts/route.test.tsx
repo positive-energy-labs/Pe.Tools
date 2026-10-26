@@ -35,6 +35,10 @@ import { peReadings } from "#/readings";
 import { pricingJob, type PricingRequest, type PricingResponse } from "./pricing-job";
 import type { ModelPicture } from "./model-picture";
 import type { SceneInstance } from "#/scene/types";
+import { scopeOf } from "@pe/ducts-domain/system-scope";
+import { declaredTeaching } from "@pe/kit/lang/teach";
+import { useTeaching } from "@pe/kit/lang/use-teach";
+import { DUCTS_LAYOUT } from "./proto/e/teaching";
 
 const picture = vi.hoisted(() => ({ current: null as Parameters<typeof ModelPicture>[0] | null }));
 vi.mock("./model-picture", async (original) => {
@@ -49,6 +53,19 @@ vi.mock("./model-picture", async (original) => {
 });
 
 const drawing = vi.hoisted(() => ({ lightweight: false, latest: null as ProtoProps | null }));
+const inboxProbe = vi.hoisted(() => ({
+  focus: null as Parameters<typeof import("./proto/e/inbox").Inbox>[0]["onFocusCell"] | null,
+}));
+vi.mock("./proto/e/inbox", async (original) => {
+  const module = await original<typeof import("./proto/e/inbox")>();
+  return {
+    ...module,
+    Inbox: (props: Parameters<typeof module.Inbox>[0]) => {
+      inboxProbe.focus = props.onFocusCell;
+      return <module.Inbox {...props} />;
+    },
+  };
+});
 vi.mock("./proto/e/screen", async (original) => {
   const { EScreen } = await original<typeof import("./proto/e/screen")>();
   return {
@@ -220,6 +237,7 @@ const inventory = {
 beforeEach(() => {
   drawing.lightweight = false;
   drawing.latest = null;
+  inboxProbe.focus = null;
   picture.current = null;
   work = ductsRouteState.schema.parse({ assumptions: {} });
   revision = 0;
@@ -368,9 +386,9 @@ beforeEach(() => {
     "ResizeObserver",
     class {
       constructor(private readonly callback: ResizeObserverCallback) {}
-      observe() {
+      observe(target: Element) {
         this.callback(
-          [{ contentRect: { width: 800, height: 600 } } as ResizeObserverEntry],
+          [{ target, contentRect: { width: 800, height: 600 } } as ResizeObserverEntry],
           this as unknown as ResizeObserver,
         );
       }
@@ -468,6 +486,87 @@ test("navigation demo prices the production route and moves all to Office to Lab
   } finally {
     cleanup();
     window.history.replaceState({}, "", "/");
+  }
+}, 30_000);
+
+test("the real workspace composition keeps paired scopes, Inputs folds and programmatic landings", async () => {
+  const rect = vi
+    .spyOn(HTMLElement.prototype, "getBoundingClientRect")
+    .mockReturnValue(new DOMRect(100, 80, 1200, 800));
+  window.history.replaceState({}, "", "/ducts?demo=navigation");
+  vi.stubGlobal(
+    "Worker",
+    class {
+      onmessage: ((event: MessageEvent<PricingResponse>) => void) | null = null;
+      onerror = null;
+      solve = pricingJob();
+      postMessage(request: PricingRequest) {
+        const data = this.solve(request);
+        queueMicrotask(() => this.onmessage?.({ data } as MessageEvent<PricingResponse>));
+      }
+      terminate() {}
+    },
+  );
+  function Inventory() {
+    return (
+      <output data-workspace-inventory="">
+        {JSON.stringify(useTeaching().filter((fact) => fact.kind === "region"))}
+      </output>
+    );
+  }
+  try {
+    const mounted = await mount("&demo=navigation", false, "slice", "fixture", false);
+    await waitFor(() => expect(drawing.latest?.priced).not.toBeNull());
+    render(<Inventory />);
+    const inventory = () =>
+      JSON.parse(document.querySelector("[data-workspace-inventory]")!.textContent!);
+    const ids = declaredTeaching(DUCTS_LAYOUT)
+      .filter((fact) => fact.kind === "region")
+      .map((fact) => fact.id)
+      .sort();
+    expect(ids).toHaveLength(7);
+    await waitFor(() =>
+      expect(
+        inventory()
+          .map((fact: { id: string }) => fact.id)
+          .sort(),
+      ).toEqual(ids),
+    );
+    expect(inventory().find((fact: { id: string }) => fact.id === "e-inputs")).toMatchObject({
+      available: false,
+      visibility: "folded",
+    });
+    const unit = drawing.latest!.snapshot!.nodes.find((node) => node.kind === "equipment")!;
+    await waitFor(() => expect(inboxProbe.focus).not.toBeNull());
+    act(() => inboxProbe.focus!({ segment: "equipmentFlows", id: unit.id }));
+    const split = (id: string) => mounted.container.querySelector(`[data-layout-split="${id}"]`)!;
+    await waitFor(() => expect(split("inputs").hasAttribute("data-pane-folded")).toBe(false));
+    expect(split("scope-upper").getAttribute("data-pane-folded")).toBe("start");
+    expect(split("scope-lower").getAttribute("data-pane-folded")).toBe("start");
+    const actual = [...mounted.container.querySelectorAll("[data-pane-id]")]
+      .map((node) => node.getAttribute("data-pane-id"))
+      .sort();
+    expect(actual).toEqual(ids);
+    expect(mounted.container.querySelectorAll('[data-pane-id="e-picture"]')).toHaveLength(1);
+    const own = scopeOf(drawing.latest!.snapshot!, drawing.latest!.page.system)!;
+    const component = drawing.latest!.snapshot!.nodes.find(
+      (node) => node.groupId && own.groups.includes(node.groupId),
+    )!;
+    fireEvent.click(
+      within(split("scope-upper") as HTMLElement).getByRole("button", {
+        name: "Expand Systems",
+        hidden: true,
+      }),
+    );
+    expect(split("scope-upper").getAttribute("data-pane-folded")).toBe("end");
+    expect(split("scope-lower").getAttribute("data-pane-folded")).toBe("end");
+    act(() => inboxProbe.focus!({ segment: "componentDrops", id: component.id }));
+    expect(split("scope-upper").getAttribute("data-pane-folded")).toBe("start");
+    expect(split("scope-lower").getAttribute("data-pane-folded")).toBe("start");
+    expect(requests).toEqual([]);
+  } finally {
+    rect.mockRestore();
+    cleanup();
   }
 }, 30_000);
 

@@ -15,7 +15,6 @@ import {
   useState,
   useSyncExternalStore,
   type ComponentProps,
-  type ReactNode,
 } from "react";
 import type { DuctsApply } from "@pe/host-contracts/generated";
 import { survey, unitFlowsIn } from "@pe/ducts-domain/survey";
@@ -26,9 +25,7 @@ import { Button } from "@pe/kit/lang/button";
 import { systemSearch } from "@pe/ducts-domain/system-search";
 import { useList, emptyListState, type ListOptions } from "@pe/kit/lang/collection";
 import { ListView } from "@pe/kit/lang/list-view";
-import { Pane } from "@pe/kit/lang/pane";
 import { Scroll } from "@pe/kit/lang/scroll";
-import { PaneSplit } from "@pe/kit/lang/pane-resize";
 
 import { airflowOptions } from "../../airflow";
 import { noRunParts, subjectNamer } from "../../subject-text";
@@ -75,7 +72,7 @@ import { InputsPane } from "./inputs-pane";
 import { RulesTree, ruleOfIds } from "./rules-pane";
 import { SystemTree } from "./tree-sidebar";
 import { useGroupEncoding } from "../encoding/use-encoding";
-import { DUCTS_LAYOUT, DUCTS_REGIONS, DUCTS_TEACHING } from "./teaching";
+import { DUCTS_LAYOUT, DUCTS_TEACHING, ductsPaneState, TIGHT_PX } from "./teaching";
 import { TeachingLayoutView } from "@pe/kit/lang/teaching-layout";
 import { HelpWorld } from "#/route/help";
 import { LoadingContext } from "#/route/loading-context";
@@ -94,10 +91,6 @@ const plural = (n: number, word: string) => `${n} ${word}${n === 1 ? "" : "s"}`;
 
 type Side = "left" | "right";
 
-/** Below this the screen is narrow: the inbox is a rail until asked for. Below TIGHT the sidebar is too. */
-const NARROW_PX = 1100;
-const TIGHT_PX = 700;
-
 /** The element's width, measured; 0 until it is (jsdom never measures). */
 function useWidth() {
   const ref = useRef<HTMLDivElement>(null);
@@ -112,51 +105,6 @@ function useWidth() {
   return [ref, width] as const;
 }
 
-/**
- * One pane of the sidebar, split into its all-systems half (left) and its this-system half
- * (right). One half is open; the other is the shared PaneSplit rail, so a half is never squeezed.
- * A half with a `refusal` stays a drawn, inert rail: nothing to open until a system is chosen.
- */
-function Halves({
-  side,
-  onSide,
-  left,
-  right,
-}: {
-  side: Side;
-  onSide: (side: Side) => void;
-  left: { title: string; pane: ReactNode; refusal?: string };
-  right: { title: string; pane: ReactNode; refusal?: string };
-}) {
-  const closed = side === "left" ? right : left;
-  return (
-    <PaneSplit
-      axis="horizontal"
-      start={left.pane}
-      end={right.pane}
-      resize={{
-        target: "end",
-        defaultSize: 32,
-        minSize: 32,
-        collapse: {
-          collapsed: side === "left" ? "end" : "start",
-          start: { title: left.title, refusal: left.refusal },
-          end: { title: right.title, refusal: right.refusal },
-          // Expanding the rail opens that half and folds the other: one half is always open.
-          onCollapsedChange: (folded) => {
-            if (folded == null && closed.refusal == null)
-              onSide(side === "left" ? "right" : "left");
-          },
-        },
-      }}
-    />
-  );
-}
-
-/**
- * The read snapshot is priced once the tables are in (2-3 s on a large model): until then the
- * screen says so instead of holding the first paint.
- */
 export function EScreen({ props }: { props: ProtoProps }) {
   if (!props.snapshot || props.pricing)
     return (
@@ -616,14 +564,14 @@ function LoadedScreenBody({
         ),
       )
     : null;
-  // A narrow screen keeps the inbox a rail until it is asked for.
-  const open =
-    inboxOpen ?? ((width === 0 || width >= NARROW_PX) && (toRule > 0 || props.staged > 0));
-  // Admit the last requested support pane when both would consume the picture's navigation field.
-  const sidebarWanted = !(treeCollapsed ?? (width > 0 && width < TIGHT_PX));
-  const cramped = width > 0 && width < 280 + 260 + 360 + 16;
-  const sidebarCollapsed = !sidebarWanted || (cramped && open && panePriority === "inbox");
-  const inboxShown = open && !(cramped && sidebarWanted && panePriority === "sidebar");
+  const { sidebarCollapsed, inboxShown } = ductsPaneState({
+    width,
+    inboxOpen,
+    treeCollapsed,
+    priority: panePriority,
+    toRule,
+    staged: props.staged,
+  });
   // A cell outside the system (a Set row on the whole document) moves the page to its system.
   const focusCell = useCallback(
     (cell: CellRef) => {
@@ -694,7 +642,7 @@ function LoadedScreenBody({
   const treePane = useMemo(
     () =>
       tree ? (
-        <Pane id="e-sidebar" scroll="clip" flush>
+        <>
           <OpenSystems system={page.system} onChange={(system) => setPage({ system })} />
           <Scroll className="min-h-0 flex-1">
             <div className="min-w-0 shrink-0">
@@ -737,7 +685,7 @@ function LoadedScreenBody({
               ) : null}
             </div>
           </Scroll>
-        </Pane>
+        </>
       ) : null,
     [
       tree,
@@ -762,14 +710,7 @@ function LoadedScreenBody({
   );
   const systemsPane = useMemo(
     () => (
-      <Pane
-        id="e-systems"
-        title={DUCTS_REGIONS.systems.label}
-        help={DUCTS_REGIONS.systems.purpose}
-        meta={`${census.systems} · ${census.priced} priced · ${census.fix} need a fix`}
-        scroll="clip"
-        flush
-      >
+      <>
         <OpenSystems system={page.system} onChange={(system) => setPage({ system })} />
         <Scroll className="min-h-0 flex-1">
           <SystemsList
@@ -782,7 +723,7 @@ function LoadedScreenBody({
             setPage={setPage}
           />
         </Scroll>
-      </Pane>
+      </>
     ),
     [
       census.systems,
@@ -801,14 +742,7 @@ function LoadedScreenBody({
   const rulesPanes = useMemo(
     () =>
       [false, true].map((wide) => (
-        <Pane
-          id={wide ? "e-rules-all" : "e-rules"}
-          title={wide ? DUCTS_REGIONS.rules.label : "This system's rules"}
-          meta={wide ? "every system" : (scope?.name ?? "")}
-          help={DUCTS_REGIONS.rules.purpose}
-          scroll="auto"
-          flush
-        >
+        <>
           {priced ? (
             <RulesTree
               snapshot={drawn ?? snapshot}
@@ -823,7 +757,7 @@ function LoadedScreenBody({
           ) : (
             <p className="text-ink-2 p-2">Loading rules</p>
           )}
-        </Pane>
+        </>
       )),
     [scope?.name, priced, drawn, snapshot, groups, work, ruleFocus, nameOf],
   );
@@ -833,14 +767,7 @@ function LoadedScreenBody({
   const inputsPane = useMemo(
     () =>
       tree && scope ? (
-        <Pane
-          id="e-inputs"
-          title="Inputs"
-          meta={inputsCount}
-          help="Each unit and grille of this system, named, with the cells you can type into. A typed value stages as an override and reprices."
-          scroll="auto"
-          flush
-        >
+        <>
           <p className="t-small text-ink-2 px-(--item-mark-pad-x) py-1">flow · ESP · role · drop</p>
           <InputsPane
             address={{
@@ -859,7 +786,7 @@ function LoadedScreenBody({
             selected={selected}
             select={select}
           />
-        </Pane>
+        </>
       ) : null,
     [
       tree,
@@ -880,52 +807,6 @@ function LoadedScreenBody({
       select,
     ],
   );
-  const systemPane = (
-    <PaneSplit
-      axis="vertical"
-      start={treePane}
-      end={inputsPane}
-      resize={{
-        target: "end",
-        defaultSize: 220,
-        minSize: 100,
-        minOtherSize: 100,
-        persist: "proto-e-system-inputs",
-        // A rail until asked for, so the tree keeps the sidebar's height; a Set row's cell opens it.
-        collapse: {
-          collapsed: inputsOpen ? null : "end",
-          onCollapsedChange: (folded) => setInputsOpen(folded !== "end"),
-          end: { title: `Inputs · ${inputsCount}`, collapseBelow: 80 },
-        },
-      }}
-    />
-  );
-  const noSystem = chosen ? undefined : "choose a system first";
-  const left = (
-    <TeachingLayoutView
-      layout={DUCTS_LAYOUT.start}
-      panes={{
-        systems: (
-          <Halves
-            side={side}
-            onSide={pick}
-            left={{ title: "Systems", pane: systemsPane }}
-            right={{ title: scope?.name ?? "System", pane: systemPane, refusal: noSystem }}
-          />
-        ),
-        rules: (
-          <Halves
-            side={side}
-            onSide={pick}
-            left={{ title: "All-systems rules", pane: rulesPanes[1] }}
-            right={{ title: "This system's rules", pane: rulesPanes[0], refusal: noSystem }}
-          />
-        ),
-      }}
-      resize={{ stack: { minSize: 64, minOtherSize: 200, persist: "proto-e-stack" } }}
-    />
-  );
-
   // The inbox header says what holds the system's ESP back, not only how many rows wait.
   const held = inbox ? holding(inbox.fix) + inbox.set.length : 0;
   const rulingsWord = !chosen
@@ -974,13 +855,7 @@ function LoadedScreenBody({
   );
   const inboxPane = useMemo(
     () => (
-      <Pane
-        id="e-inbox"
-        title={DUCTS_REGIONS.rulings.label}
-        help={DUCTS_REGIONS.rulings.purpose}
-        meta={rulingsWord}
-        flush
-      >
+      <>
         {inbox ? (
           <ReachInbox
             groups={inbox}
@@ -1004,7 +879,7 @@ function LoadedScreenBody({
             }}
           />
         ) : null}
-      </Pane>
+      </>
     ),
     [
       rulingsWord,
@@ -1045,13 +920,21 @@ function LoadedScreenBody({
         <div ref={rootRef} data-proto="E2" className="flex size-full min-h-0">
           <BarRules snapshot={drawn!} work={work} priced={priced}>
             <DuctSettings work={work} rate={designRate} snapshot={snapshot} scope={scope} />
-            <TeachingLayoutView
+            <TeachingLayoutView<typeof DUCTS_LAYOUT>
               layout={DUCTS_LAYOUT}
-              panes={{
-                stack: left,
-                picture: (
+              content={{
+                "e-systems": (pane) =>
+                  pane(systemsPane, {
+                    meta: `${census.systems} · ${census.priced} priced · ${census.fix} need a fix`,
+                  }),
+                "e-sidebar": (pane) => pane(treePane),
+                "e-inputs": (pane) => pane(inputsPane, { meta: inputsCount }),
+                "e-rules-all": (pane) => pane(rulesPanes[1], { meta: "every system" }),
+                "e-rules": (pane) => pane(rulesPanes[0], { meta: scope?.name ?? "" }),
+                "e-picture": (pane) => (
                   <div className="relative size-full min-w-0">
                     <ECanvas
+                      renderPane={pane}
                       {...props}
                       onIssueHover={setHoveredIssue}
                       issueScope={issueScope}
@@ -1092,36 +975,42 @@ function LoadedScreenBody({
                     />
                   </div>
                 ),
-                rulings: inboxPane,
+                "e-inbox": (pane) => pane(inboxPane, { meta: rulingsWord }),
               }}
-              resize={{
-                sidebar: {
-                  minSize: 280,
-                  maxSize: 760,
-                  // The picture keeps 360 beside the inbox rail; a tight screen starts with the sidebar a rail.
-                  minOtherSize: 392,
-                  persist: "proto-e-sidebar",
-                  collapse: {
+              state={{
+                conditions: {
+                  tree: { available: tree != null, reason: "choose a system first" },
+                  system: { available: chosen, reason: "choose a system first" },
+                  tight: { available: width > 0 && width < TIGHT_PX },
+                },
+                choices: {
+                  scope: {
+                    value: side === "left" ? "start" : "end",
+                    onChange: (next) => pick(next === "start" ? "left" : "right"),
+                  },
+                },
+                folds: {
+                  "scope-upper": { endTitle: scope?.name ?? "System" },
+                  inputs: {
+                    collapsed: inputsOpen ? null : "end",
+                    onChange: (folded) => setInputsOpen(folded !== "end"),
+                    endTitle: `Inputs · ${inputsCount}`,
+                  },
+                  sidebar: {
                     collapsed: sidebarCollapsed ? "start" : null,
-                    onCollapsedChange: (folded) => {
+                    startTitle: scope?.name ?? "systems",
+                    onChange: (folded) => {
                       if (folded !== "start") setPanePriority("sidebar");
                       setTreeCollapsed(folded === "start");
                     },
-                    start: { title: scope?.name ?? "systems", collapseBelow: 200 },
                   },
-                },
-                drawing: {
-                  minSize: 260,
-                  maxSize: 520,
-                  minOtherSize: width > 0 && width < TIGHT_PX ? 240 : 360,
-                  persist: "proto-e-inbox",
-                  collapse: {
+                  drawing: {
                     collapsed: inboxShown ? null : "end",
-                    onCollapsedChange: (folded) => {
+                    endTitle: `Rulings · ${toRule}`,
+                    onChange: (folded) => {
                       if (folded !== "end") setPanePriority("inbox");
                       setInboxOpen(folded !== "end");
                     },
-                    end: { title: `Rulings · ${toRule}`, collapseBelow: 200 },
                   },
                 },
               }}
