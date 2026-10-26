@@ -164,33 +164,35 @@ try {
     await mkdir(home, { recursive: true });
     await mkdir(env.LOCALAPPDATA!, { recursive: true });
     await mkdir(env.APPDATA!, { recursive: true });
-    // The lease witness explicitly selects an existing conversation. Tool entry itself creates none.
-    const threadDir = join(home, ".local-state", "state", "harness-threads", leaseThread);
-    await mkdir(threadDir, { recursive: true });
-    const at = new Date().toISOString();
-    await writeFile(
-      join(threadDir, "meta.json"),
-      JSON.stringify({
-        id: leaseThread,
-        harness: "codex",
-        providerId: "codex",
-        providerName: "Codex",
-        title: "Route continuity proof",
-        createdAt: at,
-        updatedAt: at,
-        modelId: null,
-        acpSessionId: null,
-        models: [],
-        traits: [],
-        traitValues: {},
-        head: { targets: [], revision: 0 },
-        forkOf: null,
-        promptCapabilities: null,
-        lifecycle: emptyThreadLifecycle(),
-        tabs: [],
-      }),
-    );
-    await writeFile(join(threadDir, "events.jsonl"), "");
+    if (values.suite === "chaos") {
+      // The lease witness explicitly selects an existing conversation. Tool entry itself creates none.
+      const threadDir = join(home, ".local-state", "state", "harness-threads", leaseThread);
+      await mkdir(threadDir, { recursive: true });
+      const at = new Date().toISOString();
+      await writeFile(
+        join(threadDir, "meta.json"),
+        JSON.stringify({
+          id: leaseThread,
+          harness: "codex",
+          providerId: "codex",
+          providerName: "Codex",
+          title: "Route continuity proof",
+          createdAt: at,
+          updatedAt: at,
+          modelId: null,
+          acpSessionId: null,
+          models: [],
+          traits: [],
+          traitValues: {},
+          head: { targets: [], revision: 0 },
+          forkOf: null,
+          promptCapabilities: null,
+          lifecycle: emptyThreadLifecycle(),
+          tabs: [],
+        }),
+      );
+      await writeFile(join(threadDir, "events.jsonl"), "");
+    }
     host = spawn(
       process.execPath,
       ["--import", "jiti/register", "src/dev.ts", "--no-revit", "--no-tray"],
@@ -239,7 +241,10 @@ try {
       "source web origin",
       90_000,
     );
-    web = new URL(`/ducts?demo=navigation&thread=${leaseThread}`, web).href;
+    web = new URL(
+      `/ducts?demo=navigation${values.suite === "chaos" ? `&thread=${leaseThread}` : ""}`,
+      web,
+    ).href;
     receipt.web = web;
     await save();
     // A bound Vite port precedes its first SSR import. Keep cold compilation outside
