@@ -82,6 +82,49 @@ public sealed class ViewImageRegistrationProofTests {
         } finally { doc.Close(false); }
     }
 
+    /// <summary>
+    ///     A ~10 ft focus in a plan whose far notes keep its extent ~800 ft wide. Before annotation crop went on for the duration, the
+    ///     export hit the 8000 px cap and the cut came out 92x92 px while reporting "8000" (fresh rung, 2fa00104). It must now deliver
+    ///     the requested long side, register, carry no warning, and leave the view's crop and annotation crop as they were.
+    /// </summary>
+    [Test]
+    public void Focus_capture_delivers_the_requested_pixels_in_a_wide_plan() {
+        var doc = RevitFamilyFixtureHarness.CreateProjectDocument(this._ui.Application);
+        try {
+            var center = new XYZ(1000, 1000, 0);
+            ViewPlan view;
+            using (var tx = new Transaction(doc, "Seed wide plan")) {
+                _ = tx.Start();
+                var level = Level.Create(doc, 0);
+                var planType = new FilteredElementCollector(doc).OfClass(typeof(ViewFamilyType)).Cast<ViewFamilyType>().First(t => t.ViewFamily == ViewFamily.FloorPlan);
+                view = ViewPlan.Create(doc, planType.Id, level.Id);
+                view.ViewTemplateId = ElementId.InvalidElementId;
+                view.Scale = Scale;
+                foreach (var arm in new[] { new XYZ(3, 0, 0), new XYZ(0, 3, 0) })
+                    _ = doc.Create.NewDetailCurve(view, Line.CreateBound(center - arm, center + arm));
+                var text = doc.GetDefaultElementTypeId(ElementTypeGroup.TextNoteType);
+                _ = TextNote.Create(doc, view.Id, center + new XYZ(-400, -400, 0), "FAR SW", text);
+                _ = TextNote.Create(doc, view.Id, center + new XYZ(400, 400, 0), "FAR NE", text);
+                Assert.That(tx.Commit(), Is.EqualTo(TransactionStatus.Committed));
+            }
+            var annotationCrop = view.get_Parameter(BuiltInParameter.VIEWER_ANNOTATION_CROP_ACTIVE);
+            var cropBefore = view.CropBox;
+            var (activeBefore, annotationBefore) = (view.CropBoxActive, annotationCrop.AsInteger());
+            var box = new BoundingBoxXYZ { Min = center - new XYZ(4, 4, 0), Max = center + new XYZ(4, 4, 1) };
+
+            var image = RevitViewImageExporter.ExportFocused(doc, view, box, 8, 1500);
+            Console.WriteLine($"[PE_VIEW_IMAGE_FOCUS] delivered={image.Width}x{image.Height} warning={image.Warning} refusal={image.RegistrationRefusal} file={image.FilePath}");
+            Assert.Multiple(() => {
+                Assert.That(Math.Max(image.Width, image.Height), Is.EqualTo(1500).Within(15), "the crop gets the requested long side");
+                Assert.That(image.Warning, Is.Null);
+                Assert.That(image.RegistrationRefusal, Is.Null);
+                Assert.That(view.CropBoxActive, Is.EqualTo(activeBefore), "crop active restored");
+                Assert.That(view.CropBox.Min.DistanceTo(cropBefore.Min) + view.CropBox.Max.DistanceTo(cropBefore.Max), Is.LessThan(1e-6), "crop box restored");
+                Assert.That(annotationCrop.AsInteger(), Is.EqualTo(annotationBefore), "annotation crop restored");
+            });
+        } finally { doc.Close(false); }
+    }
+
     /// <summary>A plan at 1/8" with two detail-line crosses near (1000, 1000), cropped (rotated by <paramref name="degrees" />).</summary>
     private static (ViewPlan View, XYZ[] Marks) Seed(Document doc, double degrees, bool annotationCrop, bool farAnnotations, bool crossing) {
         // Far from the template's origin annotations (elevation markers), so the crop holds only the two crosses.

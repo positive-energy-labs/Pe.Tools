@@ -4123,7 +4123,7 @@ export namespace RevitContextSummary {
   }
 }
 
-/** Export a view exactly as the user sees it (templates, VG overrides, temporary hide/isolate all apply) to a PNG and return its path. Target the active view (omit target), a view/sheet/viewport by id or name, or a schedule placed on a sheet. Optional focus crops to element ids, the current selection, or a scope box. The view exports unmodified, with all the user's settings; focus capture sets a temporary crop box (clearing any scope box) and restores it afterward (editable document only). A cropped view's image is exactly its model crop, cut from the export (which covers the view's whole outline) at the requested width, and returns registration: the model XY of the image's top-left, top-right and bottom-left corners plus the image sha256, which places pixels under model geometry even on a rotated crop. */
+/** Export a view exactly as the user sees it (templates, VG overrides, temporary hide/isolate all apply) to a PNG and return its path. Target the active view (omit target), a view/sheet/viewport by id or name, or a schedule placed on a sheet. Optional focus crops to element ids, the current selection, or a scope box. The view exports unmodified, with all the user's settings; focus capture sets a temporary crop box (clearing any scope box, annotation crop on so the export spans only the crop) and restores it afterward (editable document only). A cropped view's image is exactly its model crop, cut from the export (which covers the view's whole outline) at the requested width (the response gives the delivered width and height, and a warning when a crop that is a small part of the view comes back a thumbnail), and returns registration: the model XY of the image's top-left, top-right and bottom-left corners plus the image sha256, which places pixels under model geometry even on a rotated crop. */
 export namespace RevitContextViewImage {
   export namespace Req {
     export interface Request {
@@ -4181,7 +4181,15 @@ export namespace RevitContextViewImage {
       view: RevitAgentContextHandle;
       filePath: string;
       byteSize: number;
-      pixelSize: number;
+      /**
+       * Delivered PNG width in pixels, read from the final file (not the export width it was cut from).
+       */
+      width: number;
+      height: number;
+      /**
+       * Why the image is far smaller than asked, in words; null when it is not.
+       */
+      warning?: null | string;
       viewScale?: number | null;
       modelRect?: null | RevitViewImageModelRect;
       sheetNumber?: null | string;

@@ -69,7 +69,8 @@ async function host(
             view: { kind: "View", elementId: 7, label: `Floor Plan: ${name}` },
             filePath,
             byteSize: exports[name]!.length,
-            pixelSize: 1500,
+            width: 1500,
+            height: 1500,
             ...(registered
               ? {
                   registration: {

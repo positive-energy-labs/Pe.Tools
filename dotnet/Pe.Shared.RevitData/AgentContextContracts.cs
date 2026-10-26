@@ -358,11 +358,15 @@ public record RevitViewImageModelRect(
     double MaxY
 );
 
+/// <param name="Width">Delivered PNG width in pixels, read from the final file (not the export width it was cut from).</param>
+/// <param name="Warning">Why the image is far smaller than asked, in words; null when it is not.</param>
 public record RevitViewImageData(
     RevitAgentContextHandle View,
     string FilePath,
     long ByteSize,
-    int PixelSize,
+    int Width,
+    int Height,
+    string? Warning = null,
     int? ViewScale = null,
     RevitViewImageModelRect? ModelRect = null,
     string? SheetNumber = null,
@@ -375,6 +379,22 @@ public record RevitViewImageData(
     ///     null exactly when <see cref="Registration" /> is. <see cref="FilePath" /> stays the host-side record.
     /// </summary>
     public string? ImageUrl => this.Registration is null ? null : $"/captures/{this.Registration.ImageSha256}.png";
+
+    /// <summary>Below this long side a capture is a thumbnail: say so rather than hand it over as a success.</summary>
+    public const int SmallLongSide = 400;
+
+    /// <summary>
+    ///     A warning when the delivered long side is under <see cref="SmallLongSide" /> and short of <paramref name="requested" />:
+    ///     ExportImage fits the view's whole extent (View.Outline x Scale) into at most 8000 px, so a crop that is a small part of
+    ///     that extent comes out small.
+    /// </summary>
+    public static string? SmallImageWarning(int width, int height, int requested) {
+        var longSide = Math.Max(width, height);
+        return longSide >= SmallLongSide || longSide >= requested * 0.9
+            ? null
+            : $"only {width}x{height} px delivered of {requested} asked: Revit exports the view's whole extent (capped at 8000 px) and this crop is a small part of it. " +
+              "Capture a larger focus, or a view whose annotation crop keeps its extent near its crop.";
+    }
 }
 
 /// <summary>Where a set of model points sits against a view's model crop. Outside means it can never draw under that view's image.</summary>
@@ -461,7 +481,10 @@ public record RevitViewImageRegistration(
         return r - l < 1 || b - t < 1 ? (null, RevitViewImageRegistrationRefusal.DegenerateCrop) : (new RevitViewImagePixelRect(l, t, r - l, b - t), null);
     }
 
-    /// <summary>The export width that gives the crop <paramref name="requested" /> pixels across, up to ExportImage's 8000 px cap.</summary>
+    /// <summary>
+    ///     The export width that gives the crop <paramref name="requested" /> pixels across, up to ExportImage's 8000 px cap. The cap binds when the
+    ///     crop is under 1/(8000/requested) of the extent; focus capture avoids that by turning annotation crop on, which makes the extent the crop.
+    /// </summary>
     public static int ExportWidth(int requested, (double X, double Y) outlineMin, (double X, double Y) outlineMax, double scale,
         (double X, double Y) cropMin, (double X, double Y) cropMax) =>
         (int)Math.Min(8000, Math.Round(requested * Math.Max(1, (outlineMax.X - outlineMin.X) * scale / (cropMax.X - cropMin.X))));
