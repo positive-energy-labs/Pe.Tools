@@ -11,7 +11,7 @@ import {
 } from "./damage";
 import { createDamageBatch } from "./damage-batch";
 import { landing, markFrame, markLines } from "./marks";
-import { BLACK, WHITE, fogDensity, paintOf, GROUND_MATERIAL, keySlot } from "./grounds";
+import { BLACK, WHITE, paintOf, GROUND_MATERIAL, keySlot } from "./grounds";
 import { SceneMeshes, type LayerFrame, type SceneInstance } from "./types";
 
 const instance: SceneInstance = {
@@ -174,10 +174,6 @@ it("grounds retain captured tiers and translucent defaults, with scale-invariant
   expect(keySlot("SA 7", 6)).toBeGreaterThanOrEqual(0);
   expect(keySlot("SA 7", 6)).toBeLessThan(6);
   expect(GROUND_MATERIAL).toMatchObject({ depthTest: true, depthWrite: false });
-  const b = { minX: 0, minY: 0, minZ: 0, maxX: 3, maxY: 4, maxZ: 0 };
-  const larger = { ...b, maxX: 30, maxY: 40 };
-  expect(fogDensity(b)).toBeCloseTo(fogDensity(larger) * 10);
-  expect(Number.isFinite(fogDensity({ ...b, maxX: 0, maxY: 0 }))).toBe(true);
 });
 
 it("row damage feeds both plan marks and native mesh skins, then clears with the row", () => {

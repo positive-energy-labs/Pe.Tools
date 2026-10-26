@@ -17,7 +17,6 @@ import { createDamageBatch } from "./damage-batch";
 import { createMarkBatch } from "./mark-batch";
 import { createOutline, OUTLINE_LAYER } from "./outline";
 import {
-  fogDensity,
   GROUND_MATERIAL,
   keySlot,
   LOOK,
@@ -391,17 +390,10 @@ export function createRenderer(mount: HTMLElement, initialMeshes: SceneMeshes, w
     hemisphere.intensity = look.lights.hemisphere;
     sun.color.copy(grounds.lights.sun);
     sun.intensity = look.lights.sunIntensity;
-    // Camera-depth fog is optional and off by default; the veil is the element-anchored fog.
-    scene.fog = look.fog.depth
-      ? new THREE.FogExp2(ground, fogDensity(bounds, look.fog.density))
-      : null;
-    setVeilLook(veil, look.veil, ground);
-    if (contextRadiusFt !== undefined) {
-      veil.veilFar.value = contextRadiusFt;
-      veil.veilNear.value = Math.min(veil.veilNear.value, contextRadiusFt);
-    }
+    // The veil is the only fade (element-anchored); there is no camera-depth fog. One reach:
+    // the page's Nearby radius is the veil far edge and the stub fade.
+    setVeilLook(veil, look.veil, ground, contextRadiusFt);
     veil.subjectRim.value = look.depth.rim;
-    veil.stubFadeFt.value = look.subject.stubFadeFt;
     veil.stubEndAlpha.value = look.subject.stubEndAlpha;
     outline.setWidths(look.outline);
     outline.setOccluded(look.depth.occludedAlpha, look.depth.occludedWidth);
@@ -1398,9 +1390,9 @@ export function createRenderer(mount: HTMLElement, initialMeshes: SceneMeshes, w
         if (veil.veilHalo.value && paintOf(hit.instance, paintBy).tier === "context") {
           const distance = veilDistance(field, hit.point);
           if (distance >= veil.veilFar.value) return false;
+          const t = falloff(distance, veil.veilNear.value, veil.veilFar.value, veil.veilCurve.value);
           const opacity =
-            veil.veilMaxOpacity.value *
-            falloff(distance, veil.veilNear.value, veil.veilFar.value, veil.veilCurve.value);
+            veil.veilMinOpacity.value + (veil.veilMaxOpacity.value - veil.veilMinOpacity.value) * t;
           if (opacity < 0.004) return false;
         }
         return clip?.(hit) ?? true;
@@ -1570,10 +1562,7 @@ export function createRenderer(mount: HTMLElement, initialMeshes: SceneMeshes, w
     setContextMode(mode: ContextMode = "all", radiusFt?: number) {
       contextRadiusFt = radiusFt;
       veil.veilHalo.value = mode === "halo";
-      if (radiusFt !== undefined) {
-        veil.veilFar.value = radiusFt;
-        veil.veilNear.value = Math.min(veil.veilNear.value, radiusFt);
-      }
+      setVeilLook(veil, look.veil, ground, contextRadiusFt);
       thumbsStale = true;
       render();
     },
