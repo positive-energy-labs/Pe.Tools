@@ -33,6 +33,17 @@ public sealed class LoadedFamiliesReadTests {
             Assert.That(JsonConvert.SerializeObject(bounded), Is.EqualTo(JsonConvert.SerializeObject(serial)));
             Assert.That(() => project.WithFamilySnapshots([extracted.Families.Single() with { FamilyUniqueId = "foreign" }], new EmptyCache()),
                 Throws.InvalidOperationException);
+            using (var group = new TransactionGroup(project, "read evaluation")) {
+                group.Start();
+                using (var transaction = new Transaction(project, "temporary project value")) {
+                    transaction.Start(); project.ProjectInformation.Name = "temporary"; transaction.Commit();
+                }
+                group.RollBack();
+            }
+            Assert.That(project.IsModified, Is.False);
+            var afterRollback = project.PrepareFamilyRead(filter).Source!;
+            Assert.That(afterRollback.CopyPath, Is.EqualTo(path));
+            Assert.That(afterRollback.Version, Is.EqualTo(prepared.Source.Version));
             using (var transaction = new Transaction(project, "unsaved change")) {
                 transaction.Start(); project.ProjectInformation.Name = "unsaved"; transaction.Commit();
             }

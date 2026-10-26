@@ -40,6 +40,13 @@ internal sealed class DocShadow : IProjectBrowserIndexProvider, IFamilySnapshotC
     private readonly Dictionary<long, FamilySnapshotRecord> _familySnapshots = new();
     private readonly Dictionary<ProjectBrowserShadowKey, ProjectBrowserShadowEntry> _projectBrowserIndexes = new();
     private ParameterEvidencePrimitiveSet? _parameterEvidencePrimitives;
+    internal Guid? SavedCloudVersion { get; private set; }
+
+    /// <summary>Only the SDK's open/save boundaries identify the saved cloud input; rollback changes the live GUID.</summary>
+    internal static void CaptureSavedCloudVersion(RevitDocument document) {
+        if (document.IsModelInCloud)
+            For(document).SavedCloudVersion = RevitDocument.GetDocumentVersion(document).VersionGUID;
+    }
 
     public static DocShadow For(RevitDocument document) =>
         Shadows.GetOrAdd(document.GetDocumentKey(), _ => new DocShadow());

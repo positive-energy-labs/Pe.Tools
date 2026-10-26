@@ -466,7 +466,7 @@ internal sealed class RevitDataRequestService {
         try {
             var cache = DocShadow.For(document);
             if (request.Phase == LoadedFamiliesReadPhase.Prepare)
-                return document.PrepareFamilyRead(filter, cache);
+                return document.PrepareFamilyRead(filter, cache, cache.SavedCloudVersion);
             if (request.Phase == LoadedFamiliesReadPhase.Extract) {
                 if (request.FamilyId is not { } familyId)
                     throw new ArgumentException("An Extract read requires familyId.");

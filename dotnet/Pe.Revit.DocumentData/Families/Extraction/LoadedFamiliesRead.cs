@@ -8,24 +8,25 @@ namespace Pe.Revit.DocumentData.Families.Extraction;
 /// <summary>Bounded family extraction and its saved-file boundary, shared by serial and worker reads.</summary>
 public static class LoadedFamiliesRead {
     public static LoadedFamiliesMatrixData PrepareFamilyRead(this Document document, LoadedFamiliesFilter? filter,
-        IFamilySnapshotCache? cache = null) {
+        IFamilySnapshotCache? cache = null, Guid? savedCloudVersion = null) {
         var catalog = LoadedFamiliesCatalogCollector.CollectCanonical(document, filter);
         var cached = new List<FamilySnapshotRecord>();
         foreach (var family in catalog)
             if (cache?.TryGet(family.FamilyId, out var record) == true)
                 cached.Add(record);
         var version = Document.GetDocumentVersion(document);
-        var (path, refusal) = CopySource(document, version);
+        var (path, refusal, inputVersion) = CopySource(document, version);
         string? cloudSource = null;
-        if (document.IsModelInCloud && !document.IsModified) {
+        if (document.IsModelInCloud && !document.IsModified && savedCloudVersion is { } savedVersion) {
             var cloud = document.GetCloudModelPath();
             cloudSource = $"cld://{cloud.Region}/{cloud.GetProjectGUID():D}/{cloud.GetModelGUID():D}";
             refusal = null;
+            inputVersion = savedVersion;
         }
         return new LoadedFamiliesMatrixData(cached, [], Source: new LoadedFamiliesReadSource(
             catalog.Select(f => new LoadedFamilyCatalogEntry(f.FamilyId, f.FamilyUniqueId, f.FamilyName,
                 f.CategoryName, f.Types.Count, f.PlacedInstanceCount, [])).ToList(),
-            document.Application.VersionNumber, version.VersionGUID.ToString("D"), path, refusal, cloudSource));
+            document.Application.VersionNumber, inputVersion.ToString("D"), path, refusal, cloudSource));
     }
 
     public static LoadedFamiliesMatrixData ReadLoadedFamilySnapshot(this Document document, long familyId,
@@ -40,20 +41,28 @@ public static class LoadedFamiliesRead {
         return new LoadedFamiliesMatrixData([record], record.Issues.ToList(), ElapsedMs: timer.Elapsed.TotalMilliseconds);
     }
 
-    private static (string? Path, string? Refusal) CopySource(Document document, DocumentVersion version) {
+    private static (string? Path, string? Refusal, Guid Version) CopySource(Document document, DocumentVersion version) {
         // Opening a clone does not copy unsaved memory. SaveAs changes the user's document identity.
-        if (document.IsModified) return (null, "Reading unsaved changes in this instance.");
-        if (document.IsModelInCloud) return (null, "Reading the open cloud revision in this instance.");
+        if (document.IsModified) return (null, "Reading unsaved changes in this instance.", version.VersionGUID);
+        if (document.IsModelInCloud) return (null, "Reading the open cloud revision in this instance.", version.VersionGUID);
         if (string.IsNullOrEmpty(document.PathName) || !File.Exists(document.PathName))
-            return (null, "The document has no saved file to copy.");
+            return (null, "The document has no saved file to copy.", version.VersionGUID);
         try {
             using var info = BasicFileInfo.Extract(document.PathName);
             var saved = info.GetDocumentVersion();
-            return saved.VersionGUID == version.VersionGUID && saved.NumberOfSaves == version.NumberOfSaves
-                ? (document.PathName, null)
-                : (null, "The file differs from this open revision.");
+            if (saved.NumberOfSaves != version.NumberOfSaves)
+                return (null, "The file differs from this open revision.", version.VersionGUID);
+            if (saved.VersionGUID != version.VersionGUID) {
+                // Revit advances the in-memory GUID even after a complete placement rollback (IsModified=false).
+                // Accept that lineage only when Revit proves the file's revision has no remaining element changes.
+                using var difference = document.GetChangedElements(saved.VersionGUID);
+                if (difference.GetCreatedElementIds().Count > 0 || difference.GetModifiedElementIds().Count > 0 ||
+                    difference.GetDeletedElementIds().Count > 0)
+                    return (null, "The file differs from this open revision.", version.VersionGUID);
+            }
+            return (document.PathName, null, saved.VersionGUID);
         } catch (Exception exception) {
-            return (null, $"The saved revision could not be verified: {exception.Message}");
+            return (null, $"The saved revision could not be verified: {exception.Message}", version.VersionGUID);
         }
     }
 

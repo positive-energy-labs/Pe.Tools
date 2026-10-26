@@ -77,6 +77,7 @@ export async function adaptiveWork<T, R>(options: {
         if (
           admitting &&
           options.canExpand() &&
+          starting === 0 &&
           opened < 2 &&
           workerBenefit(queue.map(options.cost), ready, starting, options.startupMs())
         ) {

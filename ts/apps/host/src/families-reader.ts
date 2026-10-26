@@ -1,9 +1,9 @@
 import { Effect } from "effect";
 import { NodeServices } from "@effect/platform-node";
 import { randomUUID } from "node:crypto";
-import { copyFile, mkdir, readFile, rename, rm, writeFile } from "node:fs/promises";
-import { join } from "node:path";
-import { freemem } from "node:os";
+import { copyFile, mkdir, mkdtemp, readFile, rename, rm, writeFile } from "node:fs/promises";
+import { dirname, join } from "node:path";
+import { freemem, tmpdir } from "node:os";
 import {
   canonicalRouteInput,
   type AppliedFilter,
@@ -19,7 +19,7 @@ import {
   type DocOpResult,
 } from "@pe/host-contracts/pe-revit-contract";
 import { adaptiveWork, type WorkExecutor } from "./adaptive-work.ts";
-import { CANCEL_OPERATION_KEY, type RevitBridge } from "./bridge.ts";
+import { BridgeError, CANCEL_OPERATION_KEY, type RevitBridge } from "./bridge.ts";
 import { assertFresh, documentMarks } from "./document-marks.ts";
 import { hostOwnership, productRoot } from "./host-ownership.ts";
 import { parsePeRevitEnvelope, peRevitLauncher } from "./pe-revit-launch.ts";
@@ -42,6 +42,18 @@ const runs = new Map<string, Run>();
 const OP = "revit.matrix.loaded-families";
 const costsPath = () => join(productRoot(), "state", "families", "read-costs.json");
 const delay = (ms: number) => new Promise<void>((resolve) => setTimeout(resolve, ms));
+const detail = (error: unknown) =>
+  error instanceof Error || error instanceof BridgeError ? error.message : String(error);
+let lifecycleTail = Promise.resolve();
+/** The SDK serializes checkout lifecycle mutations; keep our own starts/stops in that order too. */
+function lifecycle<T>(operation: () => Promise<T>): Promise<T> {
+  const next = lifecycleTail.then(operation);
+  lifecycleTail = next.then(
+    () => undefined,
+    () => undefined,
+  );
+  return next;
+}
 
 async function sdk<T>(args: string[]): Promise<T> {
   const raw = await Effect.runPromise(runPeRevitCli(args).pipe(Effect.provide(NodeServices.layer)));
@@ -161,7 +173,7 @@ export async function readFamiliesProgressively(options: {
   let startingWorkers = 0;
   let frozenPath: string | undefined;
   let freezing: Promise<string> | undefined;
-  const folder = join(productRoot(), "state", "families", "workers", readId);
+  let folder: string | undefined;
   const costKey = (item: Item) => `${item.familyUniqueId}:${item.typeCount}`;
   const estimate = (item: Item) => {
     const known = costs.families[costKey(item)];
@@ -204,7 +216,7 @@ export async function readFamiliesProgressively(options: {
         (samples.length >= Math.min(3, pending.length) ||
           pending.every((f) => costs.families[costKey(f)])),
       warning: (error) => {
-        message = `Worker unavailable; continuing here. ${error instanceof Error ? error.message : String(error)}`;
+        message = `Worker unavailable; continuing here. ${detail(error)}`;
       },
       completed: async (item, data) => {
         const record = data.families[0];
@@ -228,8 +240,10 @@ export async function readFamiliesProgressively(options: {
         let acquired = false;
         const stop = async () => {
           if (acquired) {
-            await sdk(
-              sessionStopArgv({ id, unsaved: "discard", force: true, requestId: randomUUID() }),
+            await lifecycle(() =>
+              sdk(
+                sessionStopArgv({ id, unsaved: "discard", force: true, requestId: randomUUID() }),
+              ),
             );
             acquired = false;
           }
@@ -237,7 +251,7 @@ export async function readFamiliesProgressively(options: {
         try {
           if (source.copyPath) {
             freezing ??= (async () => {
-              await mkdir(folder, { recursive: true });
+              folder = await mkdtemp(join(tmpdir(), "Pe.Tools.families-"));
               const candidate = join(folder, "source.rvt");
               // One immutable input for this run, copied before any worker opens it.
               await copyFile(source.copyPath!, candidate);
@@ -249,15 +263,17 @@ export async function readFamiliesProgressively(options: {
             id,
             year: source.revitVersion,
             background: true,
-            quarantine: Number(source.revitVersion) >= 2025,
+            // Quarantine owns one native settings lease; a pool uses the SDK's normal background launches.
             snapshot: hostOwnership.lane === "dev",
             project: resolveStartProject(hostOwnership.lane, hostOwnership.sourceRoot),
           };
-          await sdk(sessionStartArgv({ ...start, plan: true }));
-          acquired = true; // Retain custody even when a launch answers late or fails.
-          const launched = await sdk<SessionStartResult>(
-            sessionStartArgv({ ...start, requestId: randomUUID() }),
-          );
+          const launched = await lifecycle(async () => {
+            if (!useful()) return null;
+            await sdk(sessionStartArgv({ ...start, plan: true }));
+            acquired = true; // Retain custody even when a launch answers late or fails.
+            return sdk<SessionStartResult>(sessionStartArgv({ ...start, requestId: randomUUID() }));
+          });
+          if (!launched) return null;
           if (launched.phase !== "ready") throw Error("Worker Revit did not become ready.");
           // Even an unused boot teaches us its lower bound; do not repeat the same cheap-start mistake.
           costs.startupMs = Math.max(costs.startupMs, Date.now() - startedAt);
@@ -265,12 +281,12 @@ export async function readFamiliesProgressively(options: {
             await stop();
             return null;
           }
-          const file = join(folder, `${id}.rvt`);
-          if (frozenPath) await copyFile(frozenPath, file);
+          const file = frozenPath ? join(dirname(frozenPath), `${id}.rvt`) : undefined;
+          if (frozenPath) await copyFile(frozenPath, file!);
           const opened = await sdk<DocOpResult>(
             docOpenArgv({
               id,
-              source: source.cloudSource ?? file,
+              source: source.cloudSource ?? file!,
               detach: !source.cloudSource,
               // Keep reads the saved local cloud revision; never discard unsynced work or sync.
               unsynced: source.cloudSource ? "keep" : undefined,
@@ -355,7 +371,7 @@ export async function readFamiliesProgressively(options: {
     await captures.clearFamiliesProgress(document, filter);
     return saved;
   } catch (error) {
-    message = error instanceof Error ? error.message : String(error);
+    message = run.cancelled ? undefined : detail(error);
     await publish(
       run.cancelled ? "cancelled" : "failed",
       run.cancelled ? "Cancelled" : "Read failed",
@@ -363,7 +379,7 @@ export async function readFamiliesProgressively(options: {
     return latest!;
   } finally {
     runs.delete(readId);
-    if (frozenPath) await rm(folder, { recursive: true, force: true }).catch(() => {});
+    if (folder) await rm(folder, { recursive: true, force: true }).catch(() => {});
     const temp = `${costsPath()}.${randomUUID()}.tmp`;
     try {
       await mkdir(join(productRoot(), "state", "families"), { recursive: true });
