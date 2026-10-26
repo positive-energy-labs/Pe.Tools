@@ -50,14 +50,15 @@ export function RouteDock({
   useEffect(() => setFold(tabs.route ? null : "end"), [tabs.route, tabs.active?.id]);
   const failure = tabs.failure ?? planRefusal?.message ?? null;
   // A Work pressed on a closed document: its tool says what was kept and how to reconnect, while
-  // the thread's live Work still finds that document closed.
+  // the source row's remembered Work still finds that document closed. It follows the Place the
+  // press opened, whatever conversation is selected.
   const navigate = useNavigate();
   const closed = useAtomValue(store.atoms.closedWork);
   const works = useThreadWorks();
   const reconnect =
     closed &&
-    closed.thread === tabs.thread &&
-    closed.route === tabs.route &&
+    closed.place !== undefined &&
+    closed.place === tabs.active?.id &&
     works.of.get(closed.thread)?.documents.find((doc) => doc.id === closed.documentId)
       ?.availability !== "open"
       ? closed

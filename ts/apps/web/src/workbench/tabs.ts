@@ -260,7 +260,6 @@ export function useRouteTabs() {
     explicit?: Pick<Carry, "target" | "work">,
     duplicate = false,
     keep = false,
-    command?: string,
   ) => {
     if (targetRoute === "pea") {
       setFailure(`This route has no saved Place contract: ${targetRoute}`);
@@ -270,8 +269,8 @@ export function useRouteTabs() {
       const wanted = bindingOf(
         targetRoute,
         routeAddress(targetRoute).link(undefined, {
-          target: explicit?.target ?? carry.target,
-          work: explicit?.work ?? carry.work,
+          target: explicit !== undefined ? explicit.target : carry.target,
+          work: explicit !== undefined ? explicit.work : carry.work,
         }),
       );
       // Reuse only the Place with this exact binding (the `?demo=` fixture keeps one per route).
@@ -292,13 +291,16 @@ export function useRouteTabs() {
                     ...page,
                   } as LinkPage<R>)
                 : page,
-              { target: explicit?.target ?? carry.target, work: explicit?.work ?? carry.work },
+              {
+                target: explicit !== undefined ? explicit.target : carry.target,
+                work: explicit !== undefined ? explicit.work : carry.work,
+              },
             );
       const canonical = routeAddress(targetRoute).tab(nextLink);
       if (!canonical.ok) throw Error(canonical.error);
       const id = existing ? existing.id : crypto.randomUUID();
       put(id, targetRoute, canonical.link);
-      await navigate(canonical.link, id, false, command);
+      await navigate(canonical.link, id);
       return router.state.location.pathname === routeAddress(targetRoute).path;
     } catch (error) {
       fail(error);
@@ -320,17 +322,21 @@ export function useRouteTabs() {
       const at = routeAddress(event.route as RouteKey);
       const canonical = at.tab(event.link);
       if (!canonical.ok) return;
-      const { page, carry: explicit } = at.read(params(canonical.link));
-      void open(
-        event.route as RouteKey,
-        page as never,
-        explicit,
-        false,
-        false,
-        event.commandId,
-      ).then(
-        (opened) => opened && recordPlace(event.thread, event.route as RouteKey, canonical.link),
+      const wanted = bindingOf(event.route as RouteKey, canonical.link);
+      // The exact binding's Place is focused with its saved Page unchanged (Pea patches only the
+      // fields it names next); a new binding opens at the base link's default Page.
+      const existing = read().find(
+        (tab) => tab.route === event.route && bindingOf(tab.route, tab.link) === wanted,
       );
+      void (async () => {
+        if (existing) await navigate(existing.link, existing.id, false, event.commandId);
+        else {
+          const id = crypto.randomUUID();
+          put(id, event.route as RouteKey, canonical.link);
+          await navigate(canonical.link, id, false, event.commandId);
+        }
+        recordPlace(event.thread, event.route as RouteKey, canonical.link);
+      })().catch(fail);
     },
     [router, thread, threads],
   );
@@ -352,6 +358,7 @@ export function useRouteTabs() {
               : (resumed?.url ?? routeAddress(workRoute as RouteKey).link());
             const id = saved?.id ?? crypto.randomUUID();
             put(id, workRoute as RouteKey, destination);
+            store.actions.placeClosedWork(id);
             await navigate(destination, id);
             // The row may belong to another thread: the selected chat stays selected and is the one
             // that learns this Place.

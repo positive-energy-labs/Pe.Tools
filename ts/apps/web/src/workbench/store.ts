@@ -51,7 +51,9 @@ export function createChatPageStore(deps: {
   /** The last Work pressed on a closed document, for the tool it opened (page state, not URL). */
   const closedWork = core.owned(
     "widget/closed-work",
-    Atom.make<(ClosedWork & { thread: string; route: string; reason: string | null }) | null>(null),
+    Atom.make<
+      (ClosedWork & { thread: string; route: string; reason: string | null; place?: string }) | null
+    >(null),
   );
 
   const set = <A>(verb: string, atom: Atom.Writable<A>, next: Setter<A>) =>
@@ -71,6 +73,9 @@ export function createChatPageStore(deps: {
       closedWork,
     },
     actions: {
+      /** The Place a Work press opened: its recovery band follows that Place, not a conversation. */
+      placeClosedWork: (place: string) =>
+        set("open-work", closedWork, (closed) => (closed ? { ...closed, place } : closed)),
       /** First Send promoted the browser draft to this host thread; the visible tool stays. */
       promoteThread: (owner: string) => {
         if (!tabs)

@@ -51,10 +51,9 @@ export const ChatPlanIntent = createContext<{
 
 /**
  * session › document, read from Machine: titles and pe-revit ids, not GUIDs.
- * A route pick adds the document to the thread's targets (the one target store, ADR 0021) and
- * pins `?target` to it when the thread then targets several, so the route shows one document. A
- * route with no thread still binds through `?target`. Chat's composer hands in its own `binding`:
- * a multi-select where a pick toggles the document in the thread's targets.
+ * A route pick writes only that tool's `?target`; it never moves a conversation's targets. A lost
+ * pin stays its old Work and offers an explicit choice; nothing rebinds it automatically. Chat's
+ * composer hands in its own `binding`: a multi-select that toggles the thread's targets.
  */
 export function useDocumentLadder(
   handle: RouteHandle<any, any, any, any>,
@@ -138,7 +137,7 @@ export function useDocumentLadder(
     refusal: null,
     hosted,
     /** No pin: the read-only fallback to the machine's sole user document; said quietly in the sentence. */
-    autoBound: handle.targetProvenance.source === "sole-document" && bound != null,
+    autoBound: handle.targetProvenance?.source === "sole-document" && bound != null,
     levels: hosted
       ? []
       : [

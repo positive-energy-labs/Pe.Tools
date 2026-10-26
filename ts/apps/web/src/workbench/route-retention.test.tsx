@@ -137,7 +137,7 @@ async function mount({
     const location = useRouterState({ select: (state) => state.location });
     const [, bump] = useState(0);
     force = () => bump((value) => value + 1);
-    const tag = location.state as { __peRouteTab?: { id: string }; __pePromotedThread?: string };
+    const tag = location.state as { __peRouteTab?: { id: string } };
     return (
       <RouteRetention
         route={
@@ -147,11 +147,9 @@ async function mount({
               ? "families"
               : null
         }
-        thread={location.search.thread ?? ""}
         active={ready && tag.__peRouteTab ? tag.__peRouteTab : null}
         tabs={tabs}
         ready={ready}
-        promotedFrom={tag.__pePromotedThread}
         renderRoute={(body) => body}
       />
     );
@@ -183,7 +181,7 @@ async function mount({
     await router.navigate({
       to: "/ducts",
       search: router.state.location.search,
-      state: { __peRouteTab: { id: "A", thread: "t", route: "ducts" } },
+      state: { __peRouteTab: { id: "A", route: "ducts" } },
       replace: true,
     } as never);
   render(
@@ -205,7 +203,7 @@ async function mount({
       router.navigate({
         to: `/${route}`,
         search: { thread: "t", target: id, ...extra },
-        state: { __peRouteTab: { id, thread: "t", route } },
+        state: { __peRouteTab: { id, route } },
       } as never),
     );
   };
@@ -219,7 +217,7 @@ async function mount({
         router.navigate({
           to: "/ducts",
           search: router.state.location.search,
-          state: { __peRouteTab: { id: "A", thread: "t", route: "ducts" } },
+          state: { __peRouteTab: { id: "A", route: "ducts" } },
           replace: true,
         } as never),
       );
@@ -356,7 +354,7 @@ test("two actual Page owners retain independent selection, viewport, draft and D
   expect(probes.get("A")!.handle.page[0].selected).toBe("202");
 });
 
-test("a hidden leaf never becomes another route; chat retains it, close and thread switch dispose it", async () => {
+test("a hidden leaf never becomes another route; chat retains it, close disposes it, and a chat switch keeps it", async () => {
   const { router, go, close } = await mount();
   const a = probes.get("A")!;
   await go("C", "families");
@@ -376,11 +374,14 @@ test("a hidden leaf never becomes another route; chat retains it, close and thre
   await act(() =>
     router.navigate({
       to: "/ducts",
-      search: { thread: "another", target: "D" },
-      state: { __peRouteTab: { id: "D", thread: "another", route: "ducts" } },
+      search: { ...router.state.location.search, thread: "another" },
+      state: router.state.location.state,
     } as never),
   );
-  await waitFor(() => expect(b.disposed).toHaveBeenCalledTimes(1));
+  // Retention keys by Place id: the selected conversation changes without remounting the body.
+  await waitFor(() => expect(probes.get("B")!.search.thread).toBe("another"));
+  expect(probes.get("B")!.instance).toBe(b.instance);
+  expect(b.disposed).not.toHaveBeenCalled();
 });
 
 test("enrollment and lazy promotion preserve the initial Page, draft, and identity under StrictMode; a source change intentionally replaces it", async () => {
@@ -397,8 +398,7 @@ test("enrollment and lazy promotion preserve the initial Page, draft, and identi
       to: "/ducts",
       search: { ...router.state.location.search, thread: "promoted" },
       state: {
-        __pePromotedThread: "t",
-        __peRouteTab: { id: "A", thread: "promoted", route: "ducts" },
+        __peRouteTab: { id: "A", route: "ducts" },
       },
       replace: true,
     } as never),

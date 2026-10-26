@@ -41,7 +41,7 @@ export function RouteTabs({
   return (
     <span
       role="group"
-      aria-label="Thread Places"
+      aria-label="Places"
       data-slot="route-tabs"
       className="flex min-w-0 shrink items-center"
     >

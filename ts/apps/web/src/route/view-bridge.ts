@@ -6,7 +6,7 @@
  * authored Work.
  */
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import { useRouterState } from "@tanstack/react-router";
+import { useRouter } from "@tanstack/react-router";
 import {
   routeAddress,
   type RoutePage,
@@ -115,11 +115,12 @@ function useRouteViewBridge<R extends RouteViewRoute>({
   const lease = routeAddress<RouteViewRoute>(route).agent;
   // The explicit Pea open this rendered Place answers (page-local history, set by the Places'
   // route-view-open listener); MCP waits for its own id, so an older lease never satisfies it.
-  const openCommandId = useRouterState({
-    select: (state) =>
-      (state.location.state as { __peViewOpenCommandId?: string } | undefined)
-        ?.__peViewOpenCommandId,
-  });
+  // Read at render: the navigation that sets it re-renders this route; a chat pane has no router.
+  const openCommandId = (
+    useRouter({ warn: false })?.state.location.state as
+      | { __peViewOpenCommandId?: string }
+      | undefined
+  )?.__peViewOpenCommandId;
   const addressed = lease.write(page);
   const raw: RouteView | null =
     thread && visible && pageVisible && routeCurrent()
