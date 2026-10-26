@@ -10,7 +10,10 @@
     ".": {
       "types": "./src/index.ts",
       "import": "./src/index.ts"
-    }
+    },
+    "./cli": "./src/cli-runner.ts",
+    "./guide": "./src/guide.ts",
+    "./worker": "./src/worker.ts"
   },
   "scripts": {
     "check": "vp check",

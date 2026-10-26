@@ -11,6 +11,10 @@ import {
 import type { PeaPromptRequest } from "./prompt.ts";
 
 export async function runPeaMain(args = process.argv.slice(2)): Promise<void> {
+  if (args[0] === "browser") {
+    await (await import("@pe/browser/cli")).runBrowserCli(args.slice(1), "pea browser");
+    return;
+  }
   // `pea mcp` serves an MCP client, never the owner: it keeps only a context it was spawned with.
   if (args[0] !== "mcp") adoptTerminalContext();
   if (isRootPromptInvocation(args)) {
@@ -41,6 +45,7 @@ export function createPeaCliCommand() {
       "pea",
       'pea --prompt "Summarize the open Revit documents." --json',
       "pea host status",
+      "pea browser guide",
       "pea mcp --host dev",
       "pea script bootstrap",
       "pea script execute --source-path src\\SampleScript.cs",
@@ -56,6 +61,10 @@ export function createPeaCliCommand() {
 
 export function createPeaCliSubCommands() {
   return {
+    browser: define({
+      name: "browser",
+      description: "Operate a browser through CDP. Run pea browser guide for the workflow.",
+    }),
     ...new PeaCliCommands().commands(),
     mcp: define({
       name: "mcp",

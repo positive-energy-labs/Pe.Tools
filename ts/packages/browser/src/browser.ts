@@ -2,7 +2,6 @@ import { spawn } from "node:child_process";
 import { randomUUID } from "node:crypto";
 import { mkdir, readdir, writeFile } from "node:fs/promises";
 import { join } from "node:path";
-import { fileURLToPath } from "node:url";
 import type { ProtocolMapping } from "devtools-protocol/types/protocol-mapping.js";
 import type { CdpEvent, CdpTarget, CommandOptions } from "./cdp.ts";
 import { SessionClient } from "./client.ts";
@@ -10,6 +9,7 @@ import { activeEndpoint, browserHome, defaultChromeProfile } from "./platform.ts
 import { readSessionReceipt } from "./receipts.ts";
 import { BrowserError } from "./errors.ts";
 import type { Evaluation } from "./evaluate.ts";
+import { browserWorkerCommand } from "./worker.ts";
 
 export interface OpenBrowserOptions {
   mode?: "headless" | "visible";
@@ -98,17 +98,12 @@ async function start(
   const id = randomUUID();
   const token = randomUUID();
   const directory = join(home, id);
-  await mkdir(directory, { recursive: true, mode: 0o700 });
   const full: KeeperConfig = { ...config, id, token, home };
   const configFile = join(directory, "config.json");
+  const worker = browserWorkerCommand("keeper", configFile);
+  await mkdir(directory, { recursive: true, mode: 0o700 });
   await writeFile(configFile, JSON.stringify(full), { mode: 0o600 });
-  const extension = import.meta.url.endsWith(".ts")
-    ? ".ts"
-    : import.meta.url.endsWith(".mjs")
-      ? ".mjs"
-      : ".js";
-  const keeper = fileURLToPath(new URL(`./keeper${extension}`, import.meta.url));
-  const child = spawn(process.execPath, [keeper, configFile], {
+  const child = spawn(worker.command, worker.args, {
     detached: true,
     windowsHide: true,
     stdio: [config.lifetime === "caller" ? "pipe" : "ignore", "ignore", "pipe"],

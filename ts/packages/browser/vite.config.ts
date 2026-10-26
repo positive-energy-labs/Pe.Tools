@@ -3,7 +3,7 @@ import { defineConfig } from "vite-plus";
 export default defineConfig({
   pack: {
     tsconfig: "tsconfig.build.json",
-    entry: ["src/index.ts", "src/cli.ts", "src/keeper.ts"],
+    entry: ["src/index.ts", "src/cli.ts", "src/worker-entry.ts", "src/guide.ts"],
     dts: { tsgo: true },
   },
   lint: { options: { typeAware: true, typeCheck: true } },

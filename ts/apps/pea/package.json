@@ -35,6 +35,7 @@
   },
   "dependencies": {
     "@pe/agent-contracts": "workspace:*",
+    "@pe/browser": "workspace:*",
     "@pe/host-contracts": "workspace:*",
     "@pe/mcps": "workspace:*",
     "@pe/runtime": "workspace:*",

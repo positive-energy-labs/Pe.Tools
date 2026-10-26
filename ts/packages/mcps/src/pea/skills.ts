@@ -1,4 +1,5 @@
 import path from "node:path";
+import { browserSkillName, renderBrowserGuide } from "@pe/browser/guide";
 import { productHomePath } from "@pe/host-contracts/product-paths";
 import { renderDuctsSkill } from "./ducts-skill.ts";
 
@@ -8,6 +9,10 @@ export interface BundledPeaSkill {
 }
 
 export const bundledPeaSkills: readonly BundledPeaSkill[] = [
+  {
+    name: browserSkillName,
+    content: renderBrowserGuide("pea browser"),
+  },
   {
     name: "make-page",
     content: String.raw`---
