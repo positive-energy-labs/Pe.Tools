@@ -495,8 +495,10 @@ export function createRenderer(mount: HTMLElement, initialMeshes: SceneMeshes, w
     material.colorWrite = true;
     shown.layers.mask = layers;
   };
-  // `overlay` (highlight and damage composites) lands after the subject and before the
-  // translucent passes, so front context tints a highlight exactly as it tints the subject.
+  // `overlay` (highlight and damage composites) lands last. EXCEPTION to "front context tints a
+  // highlight once like any subject": composited before the context pass, stacked context
+  // (5+ faces) muted the selection ring to invisible (proto-3d-20261026 after-sa19-*-selected).
+  // Kept: the highlight still obeys subject depth (`seedOccluders`); context never occludes it.
   const drawScene = (shown: THREE.Camera, overlay?: () => void) => {
     const mask = shown.layers.mask;
     const autoClear = renderer.autoClear;
@@ -508,8 +510,7 @@ export function createRenderer(mount: HTMLElement, initialMeshes: SceneMeshes, w
       cap.material.depthWrite = true;
     });
     renderer.render(scene, shown);
-    overlay?.();
-    const glass = (depthWrite: boolean, colorWrite = true) => {
+    const glass =(depthWrite: boolean, colorWrite = true) => {
       material.depthWrite = depthWrite;
       material.colorWrite = colorWrite;
       caps.forEach((cap) => {
@@ -549,6 +550,7 @@ export function createRenderer(mount: HTMLElement, initialMeshes: SceneMeshes, w
     shown.layers.mask = mask;
     veil.scenePass.value = 1;
     glass(true);
+    overlay?.();
     renderer.autoClear = autoClear;
   };
   const drawThumbs = () => {

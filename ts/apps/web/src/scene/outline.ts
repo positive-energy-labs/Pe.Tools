@@ -1,8 +1,8 @@
 /** Lit elements get silhouettes: selection, row lighting and pointer hover. One depth rule
  * (`LOOK.depth.occluded*`): the part in front of real subject geometry draws bold, the part behind
  * it draws thin and faint in the same hue, constant however deep, so it reads as behind yet stays
- * findable. Translucent context owns no depth here: behind context counts as visible, and the
- * renderer composites this before the context pass so front context tints it once.
+ * findable. Translucent context owns no depth here: behind context counts as visible (the
+ * renderer composites this after the context pass; see its `drawScene` exception note).
  * The ink and dark casing keep the outline visible on light meshes and ground alike. */
 import * as THREE from "three";
 import { FullScreenQuad } from "three/addons/postprocessing/Pass.js";
