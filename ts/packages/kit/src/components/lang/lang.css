@@ -1347,9 +1347,14 @@ tr.dl-row[data-active] {
   color: var(--pe-ink-2);
 }
 .dl-page-map {
+  --rail-h: var(--item-h);
   position: relative;
   width: 100%;
   min-width: 0;
+}
+.dl-page-map :is([data-slot="pane-title"], [data-slot="pane-rail-title"]) {
+  font-size: var(--type-small-size);
+  line-height: var(--type-small-line-height);
 }
 .dl-page-map > [data-slot="button-host"] > [data-map-region] {
   position: absolute;

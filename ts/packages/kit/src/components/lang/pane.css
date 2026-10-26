@@ -54,6 +54,10 @@
   white-space: nowrap;
   color: var(--pe-ink);
 }
+/* Pane furniture needs one control and its gutter; route rails retain their own height. */
+[data-slot="pane-header"] {
+  --rail-h: calc(var(--control-h) + var(--gutter));
+}
 /* Side-by-side pane heads share one baseline whatever the title's size or face: each lead sets its
    trimmed baseline a fixed distance above the rail's foot (centring each measured 1.6px apart). */
 [data-slot="pane-header"] [data-slot="rail-lead"] {
