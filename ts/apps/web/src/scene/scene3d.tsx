@@ -466,6 +466,7 @@ export function Scene3D(props: Scene3DProps): ReactNode {
   const publishedPlane = useRef<PlaneViewport | null>(null);
   const gesturing = useRef(false);
   const [failed, setFailed] = useState<{ meshes: SceneMeshes; message: string } | null>(null);
+  const [paintPending, setPaintPending] = useState(false);
   const meshes = props.meshes;
   const initialBounds = useRef<Bounds | null>(null);
   initialBounds.current ??= meshes?.bounds ?? null;
@@ -474,7 +475,7 @@ export function Scene3D(props: Scene3DProps): ReactNode {
   const focusCurrent = focusOwner.current === currentFocus;
   const failure = failed?.meshes === meshes ? failed.message : null;
   useWork(
-    membership.current !== meshes && !failure,
+    (membership.current !== meshes || paintPending) && !failure,
     focusCurrent ? "Preparing nearby context..." : "Preparing model...",
   );
 
@@ -547,7 +548,7 @@ export function Scene3D(props: Scene3DProps): ReactNode {
           });
       });
     return () => abort.abort();
-  }, [currentFocus, hasBounds, props.orbit, props.wheelHost]);
+  }, [currentFocus, hasBounds, props.orbit, props.wheelHost, props.paintOf]);
 
   useEffect(() => {
     const r = core.current;
@@ -569,7 +570,7 @@ export function Scene3D(props: Scene3DProps): ReactNode {
         setFailed({ meshes, message: `Scene preparation failed: ${String(error)}` });
     });
     return () => abort.abort();
-  }, [meshes, currentFocus, commitVersion, props.orbit, props.wheelHost]);
+  }, [meshes, currentFocus, commitVersion, props.orbit, props.wheelHost, props.paintOf]);
 
   useEffect(() => {
     (focusOwner.current === currentFocus ? core.current : null)?.setOrbitPivot(
@@ -614,7 +615,29 @@ export function Scene3D(props: Scene3DProps): ReactNode {
     );
   }, [props.clipVolume, meshes, commitVersion]);
   useEffect(() => {
-    (focusOwner.current === currentFocus ? core.current : null)?.setPaint(props.paintOf);
+    const r = focusOwner.current === currentFocus ? core.current : null;
+    if (!r || !meshes || membership.current !== meshes) return;
+    const abort = new AbortController();
+    const pending = r.setPaint(props.paintOf, abort.signal);
+    if (!pending) return;
+    setPaintPending(true);
+    void pending
+      .then(() => {
+        if (abort.signal.aborted) return;
+        r.setClip(latest.current.clipVolume, latest.current.meshes?.bounds);
+        setPaintPending(false);
+        setCommitted(meshes);
+      })
+      .catch((error: unknown) => {
+        if (!abort.signal.aborted) {
+          setPaintPending(false);
+          setFailed({ meshes, message: `Scene preparation failed: ${String(error)}` });
+        }
+      });
+    return () => {
+      abort.abort();
+      setPaintPending(false);
+    };
   }, [props.paintOf, meshes, commitVersion]);
   useEffect(() => {
     if (props.contextRadiusFt === undefined)
@@ -648,8 +671,8 @@ export function Scene3D(props: Scene3DProps): ReactNode {
     <RevitTarget scope={props.pickingEnabled === false || !focusCurrent ? null : observation.scope}>
       <div
         ref={host}
-        aria-busy={membership.current !== meshes || undefined}
-        data-scene-pending={membership.current !== meshes ? "" : undefined}
+        aria-busy={membership.current !== meshes || paintPending || undefined}
+        data-scene-pending={membership.current !== meshes || paintPending ? "" : undefined}
         className={`relative min-h-0 overflow-hidden ${props.className ?? ""}`}
       >
         {failure ? <p className="t-small text-ink-2 p-2">{failure}</p> : null}

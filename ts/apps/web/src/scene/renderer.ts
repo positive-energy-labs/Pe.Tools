@@ -24,7 +24,6 @@ import {
   type Look,
 } from "./grounds";
 import {
-  bakeVeil,
   falloff,
   setVeilField,
   setVeilLook,
@@ -40,7 +39,8 @@ import {
   wheelPixels,
   wheelPlane,
 } from "./gestures";
-import { createMeshPicker } from "./picking";
+import { createFacePicker } from "./picking";
+import { FaceBatches, prepareFaceBatches, uploadFaceBatches } from "./face-batches";
 import { contextVisible } from "./context";
 import { clipContains, rebaseCaps, rebaseClip, sectionPlanes, type Section } from "./section";
 import { sectionCaps } from "./section-caps";
@@ -370,23 +370,11 @@ export function createRenderer(mount: HTMLElement, initialMeshes: SceneMeshes, w
   const veil = veilUniforms();
   let contextRadiusFt: number | undefined;
   veilMaterial(material, veil, true);
-  let batch = new THREE.BatchedMesh(
-    Math.max(1, meshes.instances.length),
-    Math.max(1, meshes.positions.length / 3),
-    0,
-    material,
-  );
-  // Both passes reuse the batch and its back-to-front instance sort. Context never owns depth.
-  batch.position.copy(origin);
-  batch.layers.enable(OCCLUDER_LAYER);
-  batch.layers.enable(CONTEXT_LAYER);
-  batch.layers.enable(SHELL_LAYER);
+  let batch = new FaceBatches(undefined, undefined, []);
   for (const light of [hemisphere, sun]) {
     light.layers.enable(CONTEXT_LAYER);
     light.layers.enable(SHELL_LAYER);
   }
-  batch.visible = false;
-  scene.add(batch);
   const glow = createGlow(renderer, material);
   /** What a look change re-applies besides instance tints: ground, lights, fog, veil, passes. */
   const applyStage = () => {
@@ -446,13 +434,7 @@ export function createRenderer(mount: HTMLElement, initialMeshes: SceneMeshes, w
       cap.material.opacity = alpha;
     }
   };
-  /** Instance index to batch id, for the veil's subject test. */
-  const idOf: number[] = [];
   let field: VeilField;
-  const bake = () => {
-    field = bakeVeil(meshes, (i) => paints[idOf[i]!]!.tier === "subject");
-    setVeilField(veil, field);
-  };
   // Viewport construction has no membership work. Replacements are prepared off-thread below.
   field = { data: new Uint8Array([255]), dims: [1, 1, 1], min: [0, 0, 0], cellFt: 1 };
   setVeilField(veil, field);
@@ -1077,7 +1059,10 @@ export function createRenderer(mount: HTMLElement, initialMeshes: SceneMeshes, w
   };
 
   // Inspection prefers the subject through its translucent surroundings, then nearest in that tier.
-  let pick = createMeshPicker(batch, byId, (i) => (paintOf(i, paintBy).tier === "context" ? 0 : 1));
+  // This callback outlives replacement. Do not create it in the async preparation scope: that
+  // scope also contains comparison closures over ~140 MB of temporary worker arrays.
+  const pickPriority = (i: SceneInstance) => (paintOf(i, paintBy).tier === "context" ? 0 : 1);
+  let pick = createFacePicker(batch, pickPriority);
   const rebuildCaps = () => {
     const stamp = JSON.stringify([clipVolume?.section, look.section.cap]);
     if (clipVolume?.preview) {
@@ -1157,59 +1142,44 @@ export function createRenderer(mount: HTMLElement, initialMeshes: SceneMeshes, w
           throw new DOMException("Scene superseded", "AbortError");
       };
       check();
-      if (next === meshes) return;
+      if (next === meshes && nextPaint === paintBy) return;
       mark("prepare-start", { instances: next.instances.length });
       const ready = await preparation.prepare(next, nextPaint, look, signal);
       check();
       mark("prepare-ready", { instances: next.instances.length });
-      const incoming = new THREE.BatchedMesh(
-        Math.max(1, next.instances.length),
-        Math.max(1, next.positions.length / 3),
-        0,
+      const nextPaints = next.instances.map((i) => paintOf(i, nextPaint));
+      const incoming = await prepareFaceBatches(
+        next,
+        ready,
+        nextPaints,
         material,
+        preserveLayers ? batch : undefined,
+        check,
       );
-      incoming.visible = next.instances.length > 0;
       try {
-        let sliceStart = performance.now();
-        for (const [index, instance] of next.instances.entries()) {
-          check();
-          const start = instance.firstVertex,
-            end = start + instance.vertexCount;
-          const geometry = new THREE.BufferGeometry()
-            .setAttribute(
-              "position",
-              new THREE.BufferAttribute(ready.positions.subarray(start * 3, end * 3), 3),
-            )
-            .setAttribute(
-              "normal",
-              new THREE.BufferAttribute(ready.normals.subarray(start * 3, end * 3), 3),
-            )
-            .setAttribute(
-              "continuationDistance",
-              new THREE.BufferAttribute(ready.continuation.subarray(start, end), 1),
-            );
-          const box = ready.boxes[index]!,
-            sphere = ready.spheres[index]!;
-          geometry.boundingBox = new THREE.Box3(
-            new THREE.Vector3().fromArray(box),
-            new THREE.Vector3().fromArray(box, 3),
-          );
-          geometry.boundingSphere = new THREE.Sphere(
-            new THREE.Vector3().fromArray(sphere),
-            sphere[3],
-          );
-          incoming.addInstance(incoming.addGeometry(geometry));
-          geometry.dispose();
-          if (performance.now() - sliceStart > 8) {
-            await new Promise<void>((resolve) => setTimeout(resolve, 0));
-            sliceStart = performance.now();
-          }
-        }
+        await uploadFaceBatches(renderer, incoming, batch, active(), check);
         check();
       } catch (error) {
-        incoming.dispose();
+        incoming.disposeExcept(batch);
         throw error;
       }
+      const reusedDepth = !!incoming.depth && incoming.depth.mesh === batch.depth?.mesh;
+      // Keep immutable world-space edges and their programs only when their exact arrays match.
+      // Matching keys alone would reuse stale lines after geometry or edge-angle changes.
+      const sameEdges =
+        preserveLayers &&
+        next.instances.every((instance, index) => {
+          const angle = ready.angles[index];
+          if (angle == null) return true;
+          const id = batchIdByKey.get(instance.key);
+          if (id === undefined) return false;
+          const previous = edgesOf(byId[id]!, angle),
+            edge = ready.edges[index];
+          return (
+            !!edge && previous.length === edge.length && edge.every((n, i) => n === previous[i])
+          );
+        });
+      mark("uploaded", { instances: next.instances.length, reusedDepth, sameEdges });
       // Atomic ownership transfer: no frame or picker sees half-installed membership.
       // Optional context keeps the same focus and already-current world-space diagnostics.
       // Clearing them here repeats their geometry build and stalls the held pointer.
@@ -1220,25 +1190,24 @@ export function createRenderer(mount: HTMLElement, initialMeshes: SceneMeshes, w
       });
       caps.clear();
       capStamp = "";
-      for (const group of [outlined, routes, envelopes]) {
+      for (const group of sameEdges ? [outlined] : [outlined, routes, envelopes]) {
         for (const child of group.children.slice()) {
           group.remove(child);
           disposeTree(child);
         }
       }
-      scene.remove(batch);
-      batch.dispose();
+      batch.disposeExcept(incoming);
       batch = incoming;
       meshes = next;
       origin.fromArray(center(next.bounds));
-      batch.position.copy(origin);
       outlined.position.copy(origin);
-      for (const layer of [OCCLUDER_LAYER, CONTEXT_LAYER, SHELL_LAYER]) batch.layers.enable(layer);
-      scene.add(batch);
+      for (const part of batch.parts)
+        for (const layer of [OCCLUDER_LAYER, CONTEXT_LAYER, SHELL_LAYER])
+          part.mesh.layers.enable(layer);
+      batch.addTo(scene);
       byId.splice(0, byId.length, ...next.instances);
-      idOf.splice(0, idOf.length, ...byId.map((_, i) => i));
       paintBy = nextPaint;
-      paints.splice(0, paints.length, ...byId.map((i) => paintOf(i, paintBy)));
+      paints.splice(0, paints.length, ...nextPaints);
       batchIdByKey.clear();
       byId.forEach((i, id) => batchIdByKey.set(i.key, id));
       LOOK.offer(
@@ -1258,13 +1227,17 @@ export function createRenderer(mount: HTMLElement, initialMeshes: SceneMeshes, w
       field = ready.field;
       setVeilField(veil, field);
       edgesOf = preparedEdges(meshes, ready.edges, ready.angles, batchIdByKey);
-      pick = createMeshPicker(batch, byId, (i) => (paintOf(i, paintBy).tier === "context" ? 0 : 1));
+      pick = createFacePicker(batch, pickPriority);
       marked.clear();
-      routeStamp = "";
-      envelopeStamp = "";
+      if (!sameEdges) {
+        routeStamp = "";
+        envelopeStamp = "";
+      }
       routeGeometryDirty = true;
       byId.forEach((_, id) => tint(id));
-      subjectBounds = boundsOfInstances(meshes, (i) => paintOf(i, paintBy).tier !== "context");
+      subjectBounds =
+        boundsOfInstances(meshes, (i) => paintOf(i, paintBy).tier !== "context") ??
+        (preserveLayers ? subjectBounds : null);
       limits = subjectBounds
         ? cameraBounds(subjectBounds, look.camera.zoomOutFactor, look.camera.panMargin)
         : null;
@@ -1461,23 +1434,22 @@ export function createRenderer(mount: HTMLElement, initialMeshes: SceneMeshes, w
       render();
     },
     /** Who is subject, stub or context, and each subject's colour key; re-bakes the veil. */
-    setPaint(next: PaintOf | undefined) {
+    setPaint(next: PaintOf | undefined, signal: AbortSignal): Promise<void> | undefined {
       if (next === paintBy) return;
+      const nextPaints = byId.map((instance) => paintOf(instance, next));
+      // A tier/surface change changes the render pass and/or veil. Keep the old valid picture
+      // until its replacement is prepared; colour-only changes still apply immediately.
+      if (
+        !batch.matchesPartition(nextPaints) ||
+        nextPaints.some((p, id) => p.tier !== paints[id]!.tier)
+      )
+        return api.replaceMeshes(meshes, next, signal, true);
       paintBy = next;
       routeGeometryDirty = true;
-      let changedSubject = false;
       byId.forEach((instance, id) => {
         const paint = paintOf(instance, paintBy);
-        changedSubject ||= paint.tier !== paints[id]!.tier;
         paints[id] = paint;
       });
-      if (changedSubject) {
-        bake();
-        // An empty subject retains the last meaningful bound; context never supplies one.
-        subjectBounds =
-          boundsOfInstances(meshes, (i) => paintOf(i, paintBy).tier !== "context") ?? subjectBounds;
-        returnInside();
-      }
       byId.forEach((_, id) => tint(id, marked.get(id) ?? null));
       caps.forEach((cap, id) =>
         cap.layers.set(
@@ -1607,8 +1579,7 @@ export function createRenderer(mount: HTMLElement, initialMeshes: SceneMeshes, w
         scene.remove(damageBatch.group);
         damageBatch.dispose();
       }
-      batch.dispose();
-      scene.remove(batch);
+      batch.disposeExcept();
       material.dispose();
       veil.veilField.value.dispose();
       disposeTree(scene);

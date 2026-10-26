@@ -2,6 +2,7 @@
 import * as THREE from "three";
 import type { SceneRenderer } from "./renderer";
 import type { Pick, SceneInstance } from "./types";
+import type { FaceBatches } from "./face-batches";
 
 const CLICK_PX = 5;
 export const isClick = (down: { x: number; y: number }, up: { clientX: number; clientY: number }) =>
@@ -62,6 +63,34 @@ export function createMeshPicker(
         rank = nextRank;
         nearest = distance;
         result = pick;
+      }
+    }
+    return result;
+  };
+}
+
+/** Pass ownership must not change inspection's subject-first, nearest-within-tier rule. */
+export function createFacePicker(
+  batches: FaceBatches,
+  priority: (instance: SceneInstance) => number,
+) {
+  const pickers = batches.parts.map((part) =>
+    createMeshPicker(part.mesh, part.instances, priority),
+  );
+  const point = new THREE.Vector3();
+  return (ray: THREE.Ray, clip?: (hit: Pick) => boolean): Pick | null => {
+    let result: Pick | null = null,
+      rank = -Infinity,
+      distance = Infinity;
+    for (const picker of pickers) {
+      const hit = picker(ray, clip);
+      if (!hit) continue;
+      const nextRank = priority(hit.instance),
+        nextDistance = point.fromArray(hit.point).distanceToSquared(ray.origin);
+      if (nextRank > rank || (nextRank === rank && nextDistance < distance)) {
+        result = hit;
+        rank = nextRank;
+        distance = nextDistance;
       }
     }
     return result;

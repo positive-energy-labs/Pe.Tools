@@ -10,7 +10,7 @@ import { OrbitMinimap } from "@pe/kit/lang/minimap";
 import { Scene3D } from "./scene3d";
 import { usePictureRead, type SceneRead } from "./use-scene";
 import { Row } from "@pe/kit/lang/row";
-import type { Pick } from "./types";
+import type { Pick, PaintOf } from "./types";
 
 const picking = vi.hoisted(() => ({ current: null as Pick | null }));
 vi.mock("./picking", async (original) => ({
@@ -89,6 +89,7 @@ it("keeps camera gestures local and the viewport mounted across membership and n
     contextMode?: "halo" | "all",
     shown = meshes,
     pickingEnabled = true,
+    paintOf?: PaintOf,
   ) => (
     <>
       <Scene3D
@@ -97,6 +98,7 @@ it("keeps camera gestures local and the viewport mounted across membership and n
         orbit={orbit}
         onPick={onPick}
         pickingEnabled={pickingEnabled}
+        paintOf={paintOf}
         orbitPivot={pivot}
         contextMode={contextMode}
       />
@@ -238,6 +240,30 @@ it("keeps camera gestures local and the viewport mounted across membership and n
   );
   expect(renderer.current.canvas).toBe(canvas);
   expect(renderer.current.dispose).not.toHaveBeenCalled();
+  // A structural paint change keeps the old frame explicitly pending. Navigation aborts it;
+  // a late completion must never republish the old membership or leave the new picture pending.
+  let finishPaint!: () => void;
+  renderer.current.setPaint.mockImplementationOnce(
+    () =>
+      new Promise<void>((resolve) => {
+        finishPaint = resolve;
+      }),
+  );
+  const recolour: PaintOf = () => ({ tier: "context" });
+  view.rerender(
+    <TestAttention registry={registry}>
+      {draw(undefined, "all", biggerCapture, true, recolour)}
+    </TestAttention>,
+  );
+  const paintSignal = renderer.current.setPaint.mock.lastCall[1] as AbortSignal;
+  expect(view.container.querySelector("[data-scene-pending]")).toBeTruthy();
+  view.rerender(<TestAttention registry={registry}>{draw()}</TestAttention>);
+  expect(paintSignal.aborted).toBe(true);
+  await act(async () => {
+    finishPaint();
+  });
+  expect(renderer.current.meshes()).toBe(meshes);
+  expect(view.container.querySelector("[data-scene-pending]")).toBeNull();
   view.unmount();
   type PictureProps = { capture: SceneRead; document?: string };
   function Picture({ capture, document = "native/doc" }: PictureProps) {
