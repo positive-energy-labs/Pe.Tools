@@ -6,6 +6,7 @@
 import type { Bounds, SceneInstance, SceneMeshes } from "./types";
 import { Quaternion, Vector3, type Camera } from "three";
 import { LOOK } from "./grounds";
+import { instanceBounds } from "./geometry";
 
 import { orbitLooks, type OrbitLook, type OrbitViewport } from "@pe/agent-contracts";
 export type { OrbitLook, OrbitViewport };
@@ -328,7 +329,7 @@ export function boundsOfPoints(points: Iterable<readonly number[]>): Bounds | nu
   return Number.isFinite(b.minX) ? b : null;
 }
 
-/** The box around the instances `keep` admits, from their vertices; null for none. */
+/** The exact box around admitted instances, reusing their immutable vertex bounds; null for none. */
 export function boundsOfInstances(
   meshes: SceneMeshes,
   keep: (instance: SceneInstance) => boolean,
@@ -341,18 +342,14 @@ export function boundsOfInstances(
     maxY: -Infinity,
     maxZ: -Infinity,
   };
-  const p = meshes.positions;
-  for (const instance of meshes.instances) {
+  for (const [instance, box] of instanceBounds(meshes)) {
     if (!keep(instance)) continue;
-    const end = (instance.firstVertex + instance.vertexCount) * 3;
-    for (let i = instance.firstVertex * 3; i < end; i += 3) {
-      b.minX = Math.min(b.minX, p[i]!);
-      b.minY = Math.min(b.minY, p[i + 1]!);
-      b.minZ = Math.min(b.minZ, p[i + 2]!);
-      b.maxX = Math.max(b.maxX, p[i]!);
-      b.maxY = Math.max(b.maxY, p[i + 1]!);
-      b.maxZ = Math.max(b.maxZ, p[i + 2]!);
-    }
+    b.minX = Math.min(b.minX, box.minX);
+    b.minY = Math.min(b.minY, box.minY);
+    b.minZ = Math.min(b.minZ, box.minZ);
+    b.maxX = Math.max(b.maxX, box.maxX);
+    b.maxY = Math.max(b.maxY, box.maxY);
+    b.maxZ = Math.max(b.maxZ, box.maxZ);
   }
   return Number.isFinite(b.minX) ? b : null;
 }

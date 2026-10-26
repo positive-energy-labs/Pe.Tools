@@ -16,6 +16,47 @@ import type { SceneMeshes } from "./types";
 
 type Decoded = { metadata: Psc1Metadata; positions: Float32Array; meshes: SceneMeshes };
 const cache = new SceneCache<Decoded>();
+type SceneLoad = { users: number; abort: AbortController; data: Promise<Decoded> };
+const loads = new Map<string, SceneLoad>();
+
+/** Active consumers share identity even if the LRU evicts their scene. The last release owns abort. */
+function acquireScene(id: string) {
+  let load = loads.get(id);
+  if (!load) {
+    const abort = new AbortController();
+    const resident = cache.get(id);
+    const next: SceneLoad = {
+      users: 0,
+      abort,
+      data: resident
+        ? Promise.resolve(resident.data)
+        : fetchSceneArtifact(id, abort.signal).then((buffer) => {
+            // Fetch adapters may finish after cancellation; never decode or cache an abandoned read.
+            if (abort.signal.aborted || next.users === 0)
+              throw new DOMException("Scene read released", "AbortError");
+            const { metadata, meshes } = decodeScene(buffer);
+            const data = { metadata, positions: meshes.positions, meshes };
+            cache.put(id, data);
+            return data;
+          }),
+    };
+    loads.set(id, (load = next));
+  }
+  const held = load;
+  held.users++;
+  return {
+    data: held.data,
+    release() {
+      held.users--;
+      // StrictMode reconnects effects synchronously; it must not restart a shared download.
+      queueMicrotask(() => {
+        if (held.users || loads.get(id) !== held) return;
+        loads.delete(id);
+        held.abort.abort();
+      });
+    },
+  };
+}
 /** What the disabled call carries: never sent. */
 const IDLE = sceneRequest([], false);
 
@@ -87,19 +128,18 @@ export type ArtifactRead = {
 export function useSceneArtifact(id: string | null): ArtifactRead {
   const [loaded, setLoaded] = useState<{ id: string; data?: Decoded; error?: string } | null>(null);
   useEffect(() => {
+    // An idle or changed address must release its previous hook-owned buffer, not just hide it.
+    setLoaded(null);
     if (!id) return;
-    const resident = cache.get(id);
-    if (resident) return setLoaded({ id, data: resident.data });
-    const abort = new AbortController();
-    fetchSceneArtifact(id, abort.signal)
-      .then((buffer) => {
-        const { metadata, meshes } = decodeScene(buffer);
-        const data = { metadata, positions: meshes.positions, meshes };
-        cache.put(id, data);
-        setLoaded({ id, data });
-      })
-      .catch((e: unknown) => abort.signal.aborted || setLoaded({ id, error: String(e) }));
-    return () => abort.abort();
+    const scene = acquireScene(id);
+    let active = true;
+    scene.data
+      .then((data) => active && setLoaded({ id, data }))
+      .catch((e: unknown) => active && setLoaded({ id, error: String(e) }));
+    return () => {
+      active = false;
+      scene.release();
+    };
   }, [id]);
   const here = id && loaded?.id === id ? loaded : null;
   return {

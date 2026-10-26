@@ -250,7 +250,7 @@ export function ModelPicture({
         ...overlay.size,
         obstacles:
           meshes && labels.some((label) => layers.has(label.stub ? "stub-labels" : "labels"))
-            ? captionObstacles(meshes, annotationProject, paintOf)
+            ? captionObstacles(meshes, overlay.project, paintOf, overlay.size)
             : [],
       },
     [overlay, shownView.section, meshes, paintOf, labels, layers],
