@@ -202,7 +202,12 @@ export function useRouteTabs() {
   useEffect(() => {
     if (!active) return;
     try {
-      const id = active.id ?? crypto.randomUUID();
+      // Enrollment is idempotent: a repeat run (StrictMode, or a re-render before the history tag
+      // lands) reuses the record the first run stored for this exact link instead of minting another.
+      const id =
+        active.id ??
+        read().find((tab) => tab.route === active.route && tab.link === active.link)?.id ??
+        crypto.randomUUID();
       focus(id);
       if (!tabs.some((tab) => tab.id === id && tab.link === active.link))
         put(id, active.route, active.link);

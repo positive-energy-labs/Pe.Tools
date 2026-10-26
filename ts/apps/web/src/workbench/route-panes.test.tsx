@@ -1,5 +1,5 @@
 // @vitest-environment jsdom
-import { createContext, useState } from "react";
+import { createContext, StrictMode, useState } from "react";
 import { act, cleanup, fireEvent, render, screen, waitFor } from "@testing-library/react";
 import { afterEach, beforeEach, expect, test, vi } from "vite-plus/test";
 import {
@@ -103,7 +103,7 @@ afterEach(() => {
   vi.unstubAllGlobals();
 });
 
-async function mount(entry = "/pea?thread=T") {
+async function mount(entry = "/pea?thread=T", strict = false) {
   const root = createRootRoute({
     component: () => <RouteDock renderRoute={(body) => body}>{null}</RouteDock>,
   });
@@ -116,11 +116,12 @@ async function mount(entry = "/pea?thread=T") {
     history: createMemoryHistory({ initialEntries: [entry] }),
   });
   await router.load();
-  render(
+  const tree = (
     <RegistryContext.Provider value={appAtomRegistry}>
       <RouterProvider router={router} />
-    </RegistryContext.Provider>,
+    </RegistryContext.Provider>
   );
+  render(strict ? <StrictMode>{tree}</StrictMode> : tree);
   await waitFor(() => expect(document.querySelector('[data-pane-id="tools"]')).toBeTruthy());
   return router;
 }
@@ -515,4 +516,35 @@ test("an explicit open's command id clears when the thread association changes",
   );
   await waitFor(() => expect(command()).toBeUndefined());
   expect(router.state.location.pathname).toBe("/ducts");
+});
+
+test("a pasted legacy open-ref URL enrolls one Place under StrictMode; its id survives /pea and a cross-row Work press", async () => {
+  sessionStorage.clear();
+  const legacy = `/ducts?target=${encodeURIComponent(
+    JSON.stringify({ kind: "open", ref: { session: "closed-session", openId: "closed-open" } }),
+  )}&system=${encodeURIComponent("Office retained page")}`;
+  const router = await mount(legacy, true);
+  await waitFor(() => expect(shown(router).tab).not.toBeNull());
+  await settle();
+  const id = shown(router).tab;
+  expect(places()).toHaveLength(1);
+  expect(places()[0]!.id).toBe(id);
+  await act(() => router.navigate({ to: "/pea", search: { thread: "U" } } as never));
+  await settle();
+  await act(() =>
+    store.actions.openWork(
+      "OTHER",
+      "ducts",
+      resume(
+        { binding: "address", route: "ducts", target: address("C:/Models/Office.rvt") },
+        `/ducts?target=${encodeURIComponent("C:/Models/Office.rvt")}`,
+        [{ session: "closed-session", openId: "closed-open" }],
+      ),
+    ),
+  );
+  await waitFor(() => expect(shown(router).path).toBe("/ducts"));
+  await settle();
+  expect(shown(router)).toMatchObject({ tab: id, system: "Office retained page" });
+  expect(search(router).thread).toBe("U");
+  expect(places()).toHaveLength(1);
 });
