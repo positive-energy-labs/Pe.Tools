@@ -1515,8 +1515,7 @@ test("seeded real-user route journey", async () => {
       const restored = await state(p);
       const restoredReadout = await visibleText(p, "[data-picture-readout]");
       const mainRetained = await retained(p, main);
-      // RouteRetention disposes leaves on a thread change. Global Pea can change that address;
-      // only a same-thread visit promises the old DOM object, while both paths restore the URL's reading.
+      // Browser Place identity retains the body across conversation changes as well as route visits.
       const sameThread =
         routeThread === enteredPeaThread && routeThread === peaThread && !canSwitch;
       receipt.routeReturn = {
@@ -1530,8 +1529,10 @@ test("seeded real-user route journey", async () => {
         restored: { ...restored, readout: restoredReadout },
       };
       save();
-      if (sameThread)
-        expect(mainRetained, "same-thread Activity retained the Ducts main DOM").toBe(true);
+      expect(
+        mainRetained,
+        "browser Place Activity retained the Ducts main DOM across conversations",
+      ).toBe(true);
       expect(restored.pictureTitle, "returned picture title").toBe(baseline.pictureTitle);
       expect(restored.crumb, "returned picture identity").toBe(baseline.crumb);
       expect(restoredReadout, "returned picture readout").toBe(baselineReadout);

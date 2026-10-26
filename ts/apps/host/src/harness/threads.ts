@@ -1960,7 +1960,7 @@ export function createHarnessThreads(options: HarnessThreadsOptions) {
             traitValues: same ? { ...t.meta.traitValues } : {},
             forkOf: { threadId: t.meta.id, acpSessionId: same ? t.meta.acpSessionId : null },
             lifecycle: emptyThreadLifecycle(),
-            // A fork starts where its parent stood: the same tabs and Places.
+            // Preserve historical Place evidence for the fork, never browser navigation state.
             tabs: t.meta.tabs.map((tab) => ({ ...tab })),
           },
           [...t.events],

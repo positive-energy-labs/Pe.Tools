@@ -70,7 +70,7 @@ export class RouteViewStore {
           ok: false,
           error: views.length
             ? `ambiguous mounted ${route} views`
-            : `no mounted ${route} view; route:${route}.set-view opens it in this thread`,
+            : `no mounted ${route} view; route:${route}.set-view asks the browser showing this conversation to open it`,
           instances: views.map((view) => view.instance),
         };
   }

@@ -38,6 +38,7 @@ const env: NodeJS.ProcessEnv = {
   CONVERSATION_WORK_ARTIFACT_DIR: resolve(dir),
   // Substitute inference only. The browser, ACP transport, thread store and tool protocol stay real.
   PE_HARNESS_ADAPTER_CODEX: join(ts, "apps/host/tests/fake-acp-agent.mjs"),
+  PE_HARNESS_ADAPTER_CLAUDE: join(ts, "apps/host/tests/fake-acp-agent.mjs"),
   FAKE_ACP_SHAPE: "config",
 };
 for (const key of [

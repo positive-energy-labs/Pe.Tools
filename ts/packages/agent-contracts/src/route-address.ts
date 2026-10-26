@@ -123,8 +123,8 @@ export interface RouteAddress<R extends RouteKey> {
    */
   link(page?: LinkPage<R>, carry?: Carry): string;
   /**
-   * A thread tab's link, canonical: `link(page, { target, work })`. The path must be the route's; a
-   * draft or the browser `shell` drops; `thread` (the tab's own thread), an unknown key, or a value
+   * A browser Place's link, canonical: `link(page, { target, work })`. The path must be the route's; a
+   * draft or the browser `shell` drops; a conversation's `thread`, an unknown key, or a value
    * its field cannot read is refused, never defaulted. Target and work are kept: dropping them
    * would retarget the tab.
    */

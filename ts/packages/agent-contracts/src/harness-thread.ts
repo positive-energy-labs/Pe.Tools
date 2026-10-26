@@ -491,9 +491,8 @@ export const updateThreadRequestSchema = z
 export type UpdateThreadRequest = z.infer<typeof updateThreadRequestSchema>;
 
 /**
- * The route tabs a thread remembers, in open order: each a Place (`routeAddress(route).tab`, a canonical
- * `link` with its target and work, never its thread). Which tab is active belongs to each browser
- * workspace and is never stored here. Writes are per tab, last writer wins; the host stamps `at`.
+ * A canonical Place record. Browser windows own current tabs. Legacy thread `tabs` retain this
+ * shape only as evidence for remembered Work context; no endpoint writes that historical list.
  */
 export const THREAD_TABS_MAX = 12;
 export const threadTabSchema = z.strictObject({

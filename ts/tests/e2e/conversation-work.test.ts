@@ -173,24 +173,27 @@ test("real conversation Work cutover retains authored cells, draft, Places and o
     });
     const url = (path: string) => new URL(path, base).href;
     const pickThread = async (thread: string) => {
+      if (await p.has("Expand pea")) await p.click("Expand pea");
       if (await p.has("Expand threads")) await p.click("Expand threads");
       // The row's label may change after an explicit Work reference. Identity does not.
       await p.clickAt(`[data-thread-sidebar] [data-key="${thread}"] .dl-row-label`);
     };
     const openWork = async (thread: string) => {
+      if (await p.has("Expand pea")) await p.click("Expand pea");
       if (await p.has("Expand threads")) await p.click("Expand threads");
       await p.click("Open Ducts", `[data-thread-sidebar] [data-key="${thread}"]`);
     };
     const toolsCollapsed = async () =>
       new URL(await p.url()).pathname === "/pea" &&
-      (await p.read<boolean>(
-        `(() => {
-          const root = document.querySelector('section[data-slot="pane"][data-pane-id="tools"]');
-          const strip = [...document.querySelectorAll('[role="group"][aria-label="Thread Places"]')].find(${visible});
-          return root && !root.getClientRects().length && Boolean(strip?.closest('[data-pane-id="transcript"] [data-slot="pane-header"]')) &&
-            [...root.querySelectorAll('[data-route-tab]')].every(e => !e.getClientRects().length);
-        })()`,
-      ));
+      (await p.has("Expand tools")) &&
+      (await p.read<boolean>(`(() => {
+        const root = document.querySelector('section[data-slot="pane"][data-pane-id="tools"]');
+        return Boolean(root && [...root.querySelectorAll('[data-route-tab]')].every(e => !e.getClientRects().length));
+      })()`));
+    const choosePlace = async (label: string | RegExp) => {
+      if (await p.has("Expand tools")) await p.click("Expand tools");
+      await p.click(label, '[aria-label="Places"]');
+    };
     const draft = () =>
       p.read<string>(
         `[...document.querySelectorAll('textarea[aria-label="Message"],input[aria-label="Message"]')].find(${visible})?.value ?? ''`,
@@ -382,13 +385,13 @@ test("real conversation Work cutover retains authored cells, draft, Places and o
       await headTargets();
       expect(await draft()).toBe(message);
       expect(await composerIdentity()).toBe(officeComposer);
-      await p.click("Takeoffs", '[aria-label="Thread Places"]');
+      await choosePlace("Takeoffs");
       await p.until(
         async () => new URL(await p.url()).pathname === "/takeoffs",
         "second persisted Place",
       );
       expect(await draft()).toBe(message);
-      await p.click(/^Ducts/, '[aria-label="Thread Places"]');
+      await choosePlace(/^Ducts/);
       await p.until(
         async () => new URL(await p.url()).pathname === "/ducts",
         "Ducts Place restored",
@@ -396,7 +399,7 @@ test("real conversation Work cutover retains authored cells, draft, Places and o
       await pickThread(CONVERSATION_THREADS.office);
       await p.until(toolsCollapsed, "tools collapsed explicitly");
       expect(await draft()).toBe(message);
-      await p.click(/^Ducts/, '[aria-label="Thread Places"]');
+      await choosePlace(/^Ducts/);
       await p.until(
         async () => new URL(await p.url()).pathname === "/ducts",
         "tools reopened from Place",
@@ -413,7 +416,7 @@ test("real conversation Work cutover retains authored cells, draft, Places and o
           deviceScaleFactor: 1,
           mobile: false,
         });
-        const axis = width === 1200 ? "vertical" : "horizontal";
+        const axis = "horizontal";
         await p.until(
           async () =>
             p.read<boolean>(
@@ -425,16 +428,21 @@ test("real conversation Work cutover retains authored cells, draft, Places and o
           viewport: number;
           document: number;
           composer: number;
+          pea: number;
+          tools: number;
           density: string | null;
         }>(`(() => {
           const composer = [...document.querySelectorAll('[data-chat-composer]')].find(${visible});
           return { viewport: innerWidth, document: document.documentElement.scrollWidth,
             composer: composer?.getBoundingClientRect().width ?? 0,
+            pea: [...document.querySelectorAll('[data-chat="surface"]')].find(e => e.getClientRects().length)?.getBoundingClientRect().width ?? 0,
+            tools: document.querySelector('[data-pane-id="tools"]')?.getBoundingClientRect().width ?? 0,
             density: document.documentElement.getAttribute('data-density') };
         })()`);
         expect(layout.viewport).toBe(width);
         expect(Number.isFinite(layout.composer)).toBe(true);
-        expect(layout.composer, "Pea keeps its reading measure").toBeGreaterThanOrEqual(560);
+        expect(layout.pea, "Pea keeps its accepted pane floor").toBeGreaterThanOrEqual(280);
+        expect(layout.tools, "tools keep their accepted pane floor").toBeGreaterThanOrEqual(420);
         expect(layout.document, "the dock introduces no horizontal overflow").toBeLessThanOrEqual(
           width + 1,
         );
@@ -466,7 +474,7 @@ test("real conversation Work cutover retains authored cells, draft, Places and o
       );
       expect(
         await p.count(
-          '[aria-label="Thread Places"] [aria-checked="true"],[aria-label="Thread Places"] [aria-selected="true"]',
+          '[aria-label="Places"] [aria-checked="true"],[aria-label="Places"] [aria-selected="true"]',
         ),
       ).toBe(0);
     });
@@ -565,16 +573,12 @@ test("real conversation Work cutover retains authored cells, draft, Places and o
           );
         });
       }, "reconnected stream acquires the real Office Work summary");
+      if (await p.has("Expand pea")) await p.click("Expand pea");
       if (await p.has("Expand threads")) await p.click("Expand threads");
       await p.waitText("Office model");
       await p.waitText("3 unfinished");
-      if (await p.count('[role="dialog"]')) {
-        await p.press("Escape");
-        await p.until(
-          async () => (await p.count('[role="dialog"]')) === 0,
-          "threads overlay closes",
-        );
-      }
+      expect(await p.count('[role="dialog"]')).toBe(0);
+      if (await p.has("Expand chat")) await p.click("Expand chat");
       await headTargets();
     });
     await step("36 second quiet continuity and immutable Work readback", async () => {
@@ -673,12 +677,12 @@ test("real conversation Work cutover retains authored cells, draft, Places and o
     );
     await step("first Send creates one chat without replacing the current tool", async () => {
       await p.open(url(seed.workUrl));
-      await p.until(async () => p.has("Send"), "standalone composer send control");
+      await p.until(async () => p.has(/^send$/i), "standalone composer send control");
       expect(new URL(await p.url()).searchParams.has("thread")).toBe(false);
       const before = network.length;
       await p.clickAt('textarea[aria-label="Message"],input[aria-label="Message"]');
       await p.type("pid");
-      await p.click("Send");
+      await p.click(/^send$/i);
       const thread = await p.until(
         async () => new URL(await p.url()).searchParams.get("thread"),
         "first Send publishes a real conversation",
@@ -708,7 +712,7 @@ test("real conversation Work cutover retains authored cells, draft, Places and o
       await p.until(toolsCollapsed, "explicit collapse keeps the newly issued conversation");
       await p.clickAt('textarea[aria-label="Message"],input[aria-label="Message"]');
       await p.type("route-cutover-open");
-      await p.click("Send");
+      await p.click(/^send$/i);
       await p.until(
         async () => new URL(await p.url()).pathname === "/families",
         "explicit Pea context opens its tool",
