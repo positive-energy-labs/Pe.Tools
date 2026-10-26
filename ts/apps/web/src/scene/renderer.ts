@@ -532,7 +532,11 @@ export function createRenderer(mount: HTMLElement, initialMeshes: SceneMeshes, w
       shown.layers.set(CONTEXT_LAYER);
       veil.scenePass.value = 5;
       glass(true, false);
+      // Depth alone needs no back-to-front order; skip the per-instance sort.
+      const glassBatch = batch.translucent?.mesh;
+      if (glassBatch) glassBatch.sortObjects = false;
       renderer.render(scene, shown);
+      if (glassBatch) glassBatch.sortObjects = true;
       glass(false);
       renderer.render(scene, shown);
     } else if (hasContext || hasShell) {
