@@ -231,7 +231,8 @@ export function frame(
   from: Pick<OrbitViewport, "yaw" | "elev" | "projection"> = {
     yaw: LOOK.read().camera.yaw,
     elev: LOOK.read().camera.elev,
-    projection: "parallel",
+    // kaitpw 2026-10-26: perspective is the default projection wherever a picture starts.
+    projection: "perspective",
   },
   aspect = 1,
   points?: Iterable<readonly number[]>,
