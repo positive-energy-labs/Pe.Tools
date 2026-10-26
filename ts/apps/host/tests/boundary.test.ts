@@ -64,9 +64,14 @@ test("host boundary: service file, status, static SPA, /pe routes, graceful shut
   const done = Effect.runPromise(program);
 
   try {
-    // The claim file precedes terminal-context publication. The lifecycle's handle is the
-    // existing readiness signal; observing a listening port alone cannot prove startup finished.
-    await Effect.runPromise(Deferred.await(handle).pipe(Effect.timeout("10 seconds")));
+    // A published service file precedes terminal context creation. The host's handle signals
+    // completed acquisition; retain the independent file read below as the boundary assertion.
+    await Promise.race([
+      Effect.runPromise(Deferred.await(handle)),
+      done.then(() => {
+        throw new Error("Host exited before readiness");
+      }),
+    ]);
     // (1) service file exists with the ACTUAL bound port + token.
     const file = await waitFor(() => readServiceFile(appBase, hostOwnership.serviceName));
     expect(file.port).toBeGreaterThan(0);
