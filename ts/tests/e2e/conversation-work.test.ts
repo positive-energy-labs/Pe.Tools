@@ -507,6 +507,14 @@ test("real conversation Work cutover retains authored cells, draft, Places and o
         await p.click("Show All exposure");
         await p.clickAt('input[aria-label="Search tools and saved Works"]');
         await p.type("Ducts");
+        await p.until(
+          () =>
+            p.read<boolean>(`(() => {
+            const rows = [...document.querySelectorAll('[data-list-view][aria-label="tools and saved Works"] [role="treeitem"][data-key]')].filter(${visible});
+            return rows.length > 0 && rows.every(row => row.getAttribute('data-key') === '/ducts' || row.getAttribute('data-key').startsWith('work:ducts/'));
+          })()`),
+          "the directory filter has rendered only Ducts and its saved Works",
+        );
         await p.clickAt(
           '[data-list-view][aria-label="tools and saved Works"] [data-key="/ducts"] .dl-row-label',
         );

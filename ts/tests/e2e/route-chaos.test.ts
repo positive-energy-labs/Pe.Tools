@@ -1301,7 +1301,14 @@ test("seeded real-user route journey", async () => {
       "worker paused in flight; old completion cannot replace current system",
       async () => {
         if (!requested("worker")) return;
+        // The preceding refresh deliberately closes its status and drawer while focusing Message.
+        if (!(await box(p, "button", "refresh")) && (await box(p, "button", "Show Situation")))
+          await button(p, "Show Situation");
         const worker = [...workers].find(([, url]) => /pricing\.worker/.test(url));
+        receipt.coverage.workerPrecondition = JSON.stringify({
+          workers: [...workers],
+          refreshVisible: !!(await box(p, "button", "refresh")),
+        });
         if (
           !available(
             "worker",
