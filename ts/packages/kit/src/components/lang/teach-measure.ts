@@ -64,7 +64,7 @@ export function subscribeMeasuredTeaching(notify: () => void) {
       childList: true,
       characterData: true,
       attributes: true,
-      attributeFilter: ["style", "hidden", "class"],
+      attributeFilter: ["style", "hidden", "class", "data-pane-folded", "data-pane-stacked"],
     });
     resize =
       typeof ResizeObserver === "undefined"

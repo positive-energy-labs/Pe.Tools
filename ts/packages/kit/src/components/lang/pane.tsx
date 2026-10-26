@@ -35,7 +35,7 @@ import { PaneCrumb } from "./pane-crumb";
 import { SubjectBox } from "./popover";
 import "./lang.css";
 import "./pane.css";
-import { TeachRegion, teachText, useTeach } from "./use-teach";
+import { TeachPane, TeachRegion, teachText, useTeach } from "./use-teach";
 
 const WorkContext = createContext<((key: object, label: string) => () => void) | null>(null);
 /** Context preserves pane ownership across arbitrary portals, which DOM ancestry cannot do. */
@@ -357,81 +357,83 @@ export function Pane({
       </div>
     );
   return (
-    <TeachRegion value={teachId}>
-      <WorkContext value={registerWork}>
-        <PictureReadoutContext value={picture ? register : null}>
-          <SubjectBox box={picture ? pictureBox : null}>
-            <KeyScope id={id ?? "pane"} element={rootRef}>
-              <section
-                ref={rootRef}
-                data-slot="pane"
-                data-teach-id={teachId}
-                data-picture={picture || undefined}
-                data-pane-id={id}
-                data-surface={ground}
-                aria-label={typeof title === "string" ? title : undefined}
-                tabIndex={-1}
-                // A click on inert content focuses the pane, so its scope's keys bind.
-                onPointerDownCapture={(event) => {
-                  const focusable = (event.target as HTMLElement).closest<HTMLElement>(
-                    "a,button,input,select,textarea,[contenteditable='true'],[tabindex]",
-                  );
-                  if (!focusable || focusable === event.currentTarget)
-                    event.currentTarget.focus({ preventScroll: true });
-                }}
-                className={root()}
-              >
-                {[title, meta, actions, leadingActions, tabs, help, strip].some(hasContent) && (
-                  <div data-slot="pane-header" data-title-align={titleAlign} className="shrink-0">
-                    <Rail
-                      lead={
-                        <>
-                          {leadingActions}
-                          {titleAlign === "start" ? heading : null}
-                        </>
-                      }
-                      center={titleAlign === "center" ? heading : undefined}
-                      trail={
-                        hasContent(actions) || strip != null ? (
-                          <div data-slot="pane-actions" className="flex min-w-0 items-center">
-                            {hasContent(actions) && <ButtonGroup>{actions}</ButtonGroup>}
-                            {strip}
-                          </div>
-                        ) : undefined
-                      }
-                    />
-                  </div>
-                )}
-                <PaneOverlayContext value={field}>
-                  <div
-                    ref={setField}
-                    data-slot="pane-field"
-                    data-working={work.length > 0 || undefined}
-                    className="relative flex min-h-0 min-w-0 flex-1 flex-col"
-                  >
-                    {paneBody}
-                    {hasContent(overlay) ? (
-                      <PaneOverlay label="pane overlay" place="tr">
-                        {overlay}
-                      </PaneOverlay>
-                    ) : null}
-                    {floaters?.map((spec) =>
-                      spec.open ? <Floater key={spec.key} spec={spec} /> : null,
-                    )}
-                    <PaneGestureLegend host={rootRef}>{legend}</PaneGestureLegend>
-                    {work.length > 0 && (
-                      <div data-slot="pane-work" role="status" className="t-small">
-                        {[...new Set(work)].join(" · ")}
-                      </div>
-                    )}
-                  </div>
-                </PaneOverlayContext>
-              </section>
-            </KeyScope>
-          </SubjectBox>
-        </PictureReadoutContext>
-      </WorkContext>
-    </TeachRegion>
+    <TeachPane value={undefined}>
+      <TeachRegion value={teachId}>
+        <WorkContext value={registerWork}>
+          <PictureReadoutContext value={picture ? register : null}>
+            <SubjectBox box={picture ? pictureBox : null}>
+              <KeyScope id={id ?? "pane"} element={rootRef}>
+                <section
+                  ref={rootRef}
+                  data-slot="pane"
+                  data-teach-id={teachId}
+                  data-picture={picture || undefined}
+                  data-pane-id={id}
+                  data-surface={ground}
+                  aria-label={typeof title === "string" ? title : undefined}
+                  tabIndex={-1}
+                  // A click on inert content focuses the pane, so its scope's keys bind.
+                  onPointerDownCapture={(event) => {
+                    const focusable = (event.target as HTMLElement).closest<HTMLElement>(
+                      "a,button,input,select,textarea,[contenteditable='true'],[tabindex]",
+                    );
+                    if (!focusable || focusable === event.currentTarget)
+                      event.currentTarget.focus({ preventScroll: true });
+                  }}
+                  className={root()}
+                >
+                  {[title, meta, actions, leadingActions, tabs, help, strip].some(hasContent) && (
+                    <div data-slot="pane-header" data-title-align={titleAlign} className="shrink-0">
+                      <Rail
+                        lead={
+                          <>
+                            {leadingActions}
+                            {titleAlign === "start" ? heading : null}
+                          </>
+                        }
+                        center={titleAlign === "center" ? heading : undefined}
+                        trail={
+                          hasContent(actions) || strip != null ? (
+                            <div data-slot="pane-actions" className="flex min-w-0 items-center">
+                              {hasContent(actions) && <ButtonGroup>{actions}</ButtonGroup>}
+                              {strip}
+                            </div>
+                          ) : undefined
+                        }
+                      />
+                    </div>
+                  )}
+                  <PaneOverlayContext value={field}>
+                    <div
+                      ref={setField}
+                      data-slot="pane-field"
+                      data-working={work.length > 0 || undefined}
+                      className="relative flex min-h-0 min-w-0 flex-1 flex-col"
+                    >
+                      {paneBody}
+                      {hasContent(overlay) ? (
+                        <PaneOverlay label="pane overlay" place="tr">
+                          {overlay}
+                        </PaneOverlay>
+                      ) : null}
+                      {floaters?.map((spec) =>
+                        spec.open ? <Floater key={spec.key} spec={spec} /> : null,
+                      )}
+                      <PaneGestureLegend host={rootRef}>{legend}</PaneGestureLegend>
+                      {work.length > 0 && (
+                        <div data-slot="pane-work" role="status" className="t-small">
+                          {[...new Set(work)].join(" · ")}
+                        </div>
+                      )}
+                    </div>
+                  </PaneOverlayContext>
+                </section>
+              </KeyScope>
+            </SubjectBox>
+          </PictureReadoutContext>
+        </WorkContext>
+      </TeachRegion>
+    </TeachPane>
   );
 }
 

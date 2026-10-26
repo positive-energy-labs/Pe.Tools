@@ -12,8 +12,21 @@ export type TeachKey = ScopeGesture & {
   refusal?: string | null;
 };
 export type TeachRect = { left: number; top: number; width: number; height: number };
+type TeachingPath = readonly { split: string; side: "start" | "end"; choice?: string }[];
 export type TeachDescriptor =
-  | { kind: "region"; label: string; purpose?: string; rect?: TeachRect }
+  | {
+      kind: "region";
+      label: string;
+      purpose?: string;
+      rect?: TeachRect;
+      referenceRect?: TeachRect;
+      path?: TeachingPath;
+      available?: boolean;
+      refusal?: string;
+      foldedBy?: readonly string[];
+      visibility?: "visible" | "folded" | "unmounted";
+      rail?: { id: string; label: string; rect: TeachRect; orientation: "horizontal" | "vertical" };
+    }
   | {
       kind: "keys";
       label?: never;
@@ -38,16 +51,39 @@ export type Teaching = TeachDescriptor & {
   region?: string;
   page?: string;
   source?: "reference";
+  instance?: string;
+  instanceVisible?: boolean;
+  node?: string;
 };
 
 /** A binary layout is projected before mounting and rendered by the same split topology. */
 export type TeachingLayout =
-  | { id: string; label: string; purpose?: string; controls?: readonly TeachDescriptor[] }
+  | {
+      id: string;
+      label: string;
+      purpose?: string;
+      controls?: readonly TeachDescriptor[];
+      available?: string;
+      mount?: string;
+      pane?: {
+        scroll?: "auto" | "clip" | "visible";
+        flush?: boolean;
+        header?: false;
+        picture?: boolean;
+      };
+    }
   | {
       id: string;
       axis: "horizontal" | "vertical";
       target: "start" | "end";
       size: number;
+      minSize?: number;
+      minOtherSize?: number | { when: string; yes: number; no: number };
+      maxSize?: number;
+      persist?: string;
+      available?: string;
+      choice?: string;
+      rails?: Partial<Record<"start" | "end", { title: string; collapseBelow?: number }>>;
       start: TeachingLayout;
       end: TeachingLayout;
     };
@@ -58,7 +94,7 @@ export function declaredTeaching(
   height = 800,
 ): readonly Teaching[] {
   const facts: Teaching[] = [];
-  const visit = (node: TeachingLayout, rect: TeachRect) => {
+  const visit = (node: TeachingLayout, rect: TeachRect, path: TeachingPath = []) => {
     if (!("axis" in node)) {
       facts.push({
         kind: "region",
@@ -66,6 +102,8 @@ export function declaredTeaching(
         label: node.label,
         purpose: node.purpose,
         rect,
+        referenceRect: rect,
+        path,
         source: "reference",
       });
       node.controls?.forEach((control, i) => {
@@ -87,18 +125,32 @@ export function declaredTeaching(
     }
     const horizontal = node.axis === "horizontal";
     const extent = horizontal ? rect.width : rect.height;
-    const start = Math.max(0, node.target === "start" ? node.size : extent - node.size);
-    visit(node.start, {
-      ...rect,
-      width: horizontal ? start : rect.width,
-      height: horizontal ? rect.height : start,
-    });
-    visit(node.end, {
-      left: rect.left + (horizontal ? start : 0),
-      top: rect.top + (horizontal ? 0 : start),
-      width: horizontal ? extent - start : rect.width,
-      height: horizontal ? rect.height : extent - start,
-    });
+    const start = Math.min(
+      extent,
+      Math.max(
+        0,
+        node.choice ? extent / 2 : node.target === "start" ? node.size : extent - node.size,
+      ),
+    );
+    visit(
+      node.start,
+      {
+        ...rect,
+        width: horizontal ? start : rect.width,
+        height: horizontal ? rect.height : start,
+      },
+      [...path, { split: node.id, side: "start", choice: node.choice }],
+    );
+    visit(
+      node.end,
+      {
+        left: rect.left + (horizontal ? start : 0),
+        top: rect.top + (horizontal ? 0 : start),
+        width: horizontal ? extent - start : rect.width,
+        height: horizontal ? rect.height : extent - start,
+      },
+      [...path, { split: node.id, side: "end", choice: node.choice }],
+    );
   };
   visit(layout, { left: 0, top: 0, width, height });
   return facts;
@@ -112,13 +164,36 @@ export function measureRegions(facts: readonly Teaching[]) {
         : [],
     )
     .sort((a, b) => a.left - b.left || a.top - b.top);
-  const left = Math.min(...visible.map((r) => r.left));
-  const top = Math.min(...visible.map((r) => r.top));
-  const regions = visible.map((r) => ({ ...r, left: r.left - left, top: r.top - top }));
+  const railMap = new Map(
+    facts.flatMap((fact) =>
+      fact.kind === "region" && fact.rail && fact.rail.rect.width > 0 && fact.rail.rect.height > 0
+        ? [
+            [
+              fact.rail.id,
+              {
+                key: fact.rail.id,
+                label: fact.rail.label,
+                orientation: fact.rail.orientation,
+                ...fact.rail.rect,
+              },
+            ] as const,
+          ]
+        : [],
+    ),
+  );
+  const covering = [...visible, ...railMap.values()];
+  const left = covering.length ? Math.min(...covering.map((r) => r.left)) : 0;
+  const top = covering.length ? Math.min(...covering.map((r) => r.top)) : 0;
+  const normalize = <T extends TeachRect>(r: T) => ({
+    ...r,
+    left: r.left - left,
+    top: r.top - top,
+  });
   return {
-    regions,
-    width: Math.max(1, ...regions.map((r) => r.left + r.width)),
-    height: Math.max(1, ...regions.map((r) => r.top + r.height)),
+    regions: visible.map(normalize),
+    rails: [...railMap.values()].map(normalize),
+    width: Math.max(1, ...covering.map((r) => r.left - left + r.width)),
+    height: Math.max(1, ...covering.map((r) => r.top - top + r.height)),
   };
 }
 const mounted = new Map<string, Teaching>();
@@ -135,12 +210,14 @@ export const subscribeTeaching = (notify: () => void) => {
     listeners.delete(notify);
   };
 };
-export function registerTeaching(entry: Teaching) {
-  mounted.set(entry.id, entry);
+export function registerTeaching(entry: Teaching | readonly Teaching[]) {
+  const entries: readonly Teaching[] = Array.isArray(entry) ? entry : [entry as Teaching];
+  entries.forEach((fact) => mounted.set(fact.id, fact));
   changed();
   return () => {
-    if (mounted.get(entry.id) !== entry) return;
-    mounted.delete(entry.id);
+    entries.forEach((fact) => {
+      if (mounted.get(fact.id) === fact) mounted.delete(fact.id);
+    });
     changed();
   };
 }

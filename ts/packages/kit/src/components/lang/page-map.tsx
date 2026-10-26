@@ -1,5 +1,7 @@
 import "./lang.css";
 import { Button } from "./button";
+import { Rail } from "./rail";
+import { PaneRailTitle } from "./pane-resize";
 import type { TeachRect } from "./teach";
 
 /** A page's measured or declared regions; selection operates this map, never the source page. */
@@ -11,7 +13,12 @@ export function PageMap({
   picture: {
     width: number;
     height: number;
-    regions: readonly (TeachRect & { key: string; label: string })[];
+    regions: readonly (TeachRect & {
+      key: string;
+      label: string;
+      ordinal?: string;
+      orientation?: "horizontal" | "vertical";
+    })[];
   };
   value: string;
   onValueChange: (key: string) => void;
@@ -31,6 +38,7 @@ export function PageMap({
           label={`Show ${region.label} controls`}
           pressed={value === region.key}
           data-map-region={region.key}
+          data-map-rail={region.orientation}
           onClick={() => onValueChange(region.key)}
           style={{
             left: `${(region.left / picture.width) * 100}%`,
@@ -39,9 +47,17 @@ export function PageMap({
             height: `${(region.height / picture.height) * 100}%`,
           }}
         >
-          <span>
-            {index + 1} {region.label}
-          </span>
+          {region.orientation ? (
+            <PaneRailTitle title={region.label} orientation={region.orientation} />
+          ) : (
+            <Rail
+              lead={
+                <h2 data-slot="pane-title">
+                  {region.ordinal ?? index + 1} {region.label}
+                </h2>
+              }
+            />
+          )}
         </Button>
       ))}
     </div>
