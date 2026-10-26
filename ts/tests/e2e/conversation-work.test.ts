@@ -184,7 +184,7 @@ test("real conversation Work cutover retains authored cells, draft, Places and o
           url: params.request.url,
           method: params.request.method,
           data:
-            ["/pe/turn-element-names", "/pe/threads"].includes(
+            ["/pe/turn-element-names", "/pe/threads", "/call"].includes(
               new URL(params.request.url).pathname,
             ) || /\/prompt$|\/place$|\/pe\/route-view\//.test(new URL(params.request.url).pathname)
               ? params.request.postData
@@ -985,12 +985,23 @@ test("real conversation Work cutover retains authored cells, draft, Places and o
     expect(
       network.filter(
         (event) =>
+          event.method === "POST" && event.url && new URL(event.url).pathname.endsWith("/actions"),
+      ),
+      "journey must not admit an effect",
+    ).toEqual([]);
+    const hostReads = network
+      .filter(
+        (event) =>
+          event.event === "Network.requestWillBeSent" &&
           event.method === "POST" &&
           event.url &&
-          /\/actions$|\/call$/.test(new URL(event.url).pathname),
-      ),
-      "journey must not invoke native operations",
-    ).toEqual([]);
+          new URL(event.url).pathname === "/call",
+      )
+      .map((event) => JSON.parse(event.data ?? "null") as unknown);
+    // Families reads its local Pod chooser. Every other /call remains forbidden, including Revit reads.
+    for (const call of hostReads)
+      expect(call, "only the host-local Pod inventory may be read").toEqual({ key: "pod.list" });
+    receipt.coverage.hostReads = hostReads;
     expect(network.some((event) => event.stream && event.url?.includes("/pe/resources"))).toBe(
       true,
     );
