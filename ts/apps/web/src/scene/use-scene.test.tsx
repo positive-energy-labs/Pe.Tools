@@ -79,7 +79,7 @@ it("shares a download and decoded identity, and one consumer cannot abort anothe
   await act(async () => pending.resolve(new ArrayBuffer(0)));
   expect(second.result.current.pending).toBe(false);
   // Evict the settled scene from the bounded LRU while its second consumer still owns it.
-  for (const id of ["evict-1", "evict-2", "evict-3"]) {
+  for (const id of Array.from({ length: 32 }, (_, n) => `evict-${n}`)) {
     const filler = renderHook(() => useSceneArtifact(id));
     await waitFor(() => expect(filler.result.current.pending).toBe(false));
     filler.unmount();

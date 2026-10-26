@@ -62,7 +62,8 @@ function acquireScene(id: string) {
 const IDLE = sceneRequest([], false);
 type CaptureRequest = ReturnType<typeof sceneRequest>;
 // Receipts are reusable only under an explicit native observation revision, never elapsed time.
-const captures = new Map<string, Promise<{ id: string }>>();
+type Capture = { flight: Promise<{ id: string }>; id?: string };
+const captures = new Map<string, Capture>();
 const coverages = new Map<string, CaptureRequest>();
 function retain<T>(entries: Map<string, T>, key: string, value: T): T {
   entries.delete(key);
@@ -156,16 +157,20 @@ export function useScene(
   const call = useHostCall(
     async (signal) => {
       const resident = reuse ? captures.get(key) : undefined;
-      if (resident) return retain(captures, key, resident);
+      if (resident) return retain(captures, key, resident).flight;
       const capture = callHostRpc("revit.detail.space-scene", request ?? IDLE, {
         bridgeSessionId: doc?.session,
         openDocumentId: doc?.openId,
         signal,
       }).then(({ id }) => ({ id }));
       if (reuse) {
-        retain(captures, key, capture);
+        const receipt: Capture = retain(captures, key, { flight: capture });
+        void capture.then(
+          ({ id }) => (receipt.id = id),
+          () => {},
+        );
         void capture.catch(() => {
-          if (captures.get(key) === capture) captures.delete(key);
+          if (captures.get(key) === receipt) captures.delete(key);
         });
       }
       return capture;
@@ -175,12 +180,14 @@ export function useScene(
     NATIVE_READ_WAIT_S,
     true,
   );
-  const id = request && doc ? (call.data?.id ?? null) : null;
+  // An exact completed receipt needs no async mount round trip. The key still fences document,
+  // native revision and every request input; this does not establish new host action authority.
+  const id = request && doc ? (reuse && captures.get(key)?.id) || call.data?.id || null : null;
   const artifact = useSceneArtifact(id);
   return {
     meshes: artifact.meshes,
     error: request ? (call.error?.message ?? artifact.error) : null,
-    pending: !!request && !!doc && (call.pending || artifact.pending),
+    pending: !!request && !!doc && ((!id && call.pending) || artifact.pending),
     omittedElements: artifact.metadata?.omittedElements ?? 0,
     unavailableElements: artifact.metadata?.unavailableElements.length ?? 0,
   };
@@ -196,6 +203,7 @@ export type ArtifactRead = {
 /** One saved scene by its artifact id, fetched and decoded once into the shared cache. */
 export function useSceneArtifact(id: string | null): ArtifactRead {
   const [loaded, setLoaded] = useState<{ id: string; data?: Decoded; error?: string } | null>(null);
+  const resident = id ? cache.get(id) : undefined;
   useEffect(() => {
     // An idle or changed address must release its previous hook-owned buffer, not just hide it.
     setLoaded(null);
@@ -210,7 +218,11 @@ export function useSceneArtifact(id: string | null): ArtifactRead {
       scene.release();
     };
   }, [id]);
-  const here = id && loaded?.id === id ? loaded : null;
+  const here = resident
+    ? { data: resident.data, error: undefined }
+    : id && loaded?.id === id
+      ? loaded
+      : null;
   return {
     meshes: here?.data?.meshes ?? null,
     metadata: here?.data?.metadata ?? null,

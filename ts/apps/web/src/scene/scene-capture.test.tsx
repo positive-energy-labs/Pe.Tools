@@ -122,11 +122,11 @@ it("reuses A/B/A and remounts at the same native revision, but expansion and rev
   await finish(3, "reuse-context-b");
   await waitFor(() => expect(view.result.current.pending).toBe(false));
   view.rerender({ id: 7130, radius: 5, revision: "reuse-a" });
-  await waitFor(() => expect(view.result.current.meshes).toMatchObject({ id: "reuse-context-a" }));
+  expect(view.result.current).toMatchObject({ meshes: { id: "reuse-context-a" }, pending: false });
   expect(native.calls).toHaveLength(4);
   view.unmount();
   const remount = renderHook(hook, { initialProps: { id: 7130, radius: 10, revision: "reuse-a" } });
-  await waitFor(() => expect(remount.result.current.pending).toBe(false));
+  expect(remount.result.current.pending).toBe(false);
   expect(native.calls).toHaveLength(4);
   remount.rerender({ id: 7130, radius: 20, revision: "reuse-a" });
   expect(native.calls).toHaveLength(5);

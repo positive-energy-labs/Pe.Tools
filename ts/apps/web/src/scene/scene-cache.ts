@@ -31,7 +31,7 @@ export class SceneCache<T extends SceneData = SceneData> {
   readonly entries = new Map<string, ResidentScene<T>>();
   constructor(
     readonly maxBytes = 512 * 1024 * 1024,
-    readonly maxScenes = 3,
+    readonly maxScenes = 32,
   ) {}
 
   get bytes() {
@@ -48,8 +48,8 @@ export class SceneCache<T extends SceneData = SceneData> {
   }
 
   put(id: string, data: T) {
-    // PSC1 buffer + merged CPU positions/normals + GPU positions/normals. Render surfaces are
-    // bounded separately by the three-context limit. This is an allocation proxy, not driver VRAM.
+    // PSC1 buffer + merged CPU positions/normals + GPU positions/normals. This is a per-snapshot
+    // allocation proxy, not renderer admission or driver VRAM. Entry count is independent of bytes.
     const bytes =
       data.positions.buffer.byteLength +
       data.positions.byteLength * 4 +
@@ -82,7 +82,12 @@ export class SceneCache<T extends SceneData = SceneData> {
       this.entries.size &&
       (this.bytes + bytes > this.maxBytes || this.entries.size >= this.maxScenes)
     )
-      this.entries.delete(this.entries.keys().next().value!);
+      // Prefer retaining the small exact focuses that make navigation usable over optional context.
+      // Within each tier retain LRU order; both tiers share the same byte and entry limits.
+      this.entries.delete(
+        [...this.entries].find(([, entry]) => entry.metadata.elements.some((e) => !e.focus))?.[0] ??
+          this.entries.keys().next().value!,
+      );
     this.entries.set(id, entry);
     return entry;
   }

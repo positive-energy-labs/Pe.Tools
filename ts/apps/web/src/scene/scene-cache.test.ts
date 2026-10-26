@@ -36,6 +36,20 @@ describe("resident Space scopes", () => {
     expect(bounded.bytes).toBeLessThanOrEqual(bounded.maxBytes);
     expect(() => new SceneCache(1).put("large", scene())).toThrow("budget");
   });
+  it("retains exact focuses ahead of optional context within the same byte limit", () => {
+    const focus = scene();
+    const context = scene();
+    context.metadata.elements = [{ focus: false }] as SceneData["metadata"]["elements"];
+    const cache = new SceneCache(10000, 3);
+    const a = cache.put("focus-a", focus);
+    cache.put("context-a", context);
+    cache.put("focus-b", focus);
+    cache.get("context-a");
+    cache.put("context-b", context);
+    expect(cache.get("focus-a")).toBe(a);
+    expect(cache.get("context-a")).toBeUndefined();
+    expect(cache.bytes).toBeLessThanOrEqual(cache.maxBytes);
+  });
   it("invalidates scopes on document epoch or partition rebuild, preserving other documents", () => {
     const cache = new SceneCache();
     cache.put("a", scene());
