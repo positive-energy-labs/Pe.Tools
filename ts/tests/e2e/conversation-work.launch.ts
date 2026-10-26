@@ -3,6 +3,7 @@ import { spawn, execFile, type ChildProcess } from "node:child_process";
 import { promisify } from "node:util";
 import { mkdir, readFile, readdir, writeFile } from "node:fs/promises";
 import { join, resolve } from "node:path";
+import { openBrowser, type BrowserSession, type SessionInfo } from "@pe/browser";
 import { seedConversationWork } from "./conversation-work.fixture.ts";
 
 const exec = promisify(execFile);
@@ -20,15 +21,6 @@ const dir = resolve(
 );
 await mkdir(dir, { recursive: true });
 const home = join(resolve(dir), "home");
-const port = Number(process.env.CONVERSATION_WORK_CHROME_PORT ?? "9304");
-if ([9292, 9222, 9223, 9231].includes(port) || !Number.isInteger(port) || port < 1024)
-  throw Error("Protected or invalid Chrome port");
-try {
-  await fetch(`http://127.0.0.1:${port}/json`, { signal: AbortSignal.timeout(1000) });
-  throw Error(`Port ${port} is already answering; never borrow it in owned mode`);
-} catch (error) {
-  if (String(error).includes("already answering")) throw error;
-}
 const env: NodeJS.ProcessEnv = {
   ...process.env,
   PE_LANE: "dev",
@@ -63,8 +55,8 @@ const receipt = {
   hostPid: 0,
   service: "",
   web: "",
-  chrome: "",
-  port,
+  browser: null as SessionInfo | null,
+  port: 0,
   target: "",
   result: "UNPROVEN_STARTUP",
   cleanup: [] as string[],
@@ -76,23 +68,7 @@ let token = "";
 let hostPort = 0;
 let output = "";
 let cancelled = false;
-let chromeAttempted = false;
-let existingChrome = new Set<string>();
-const chromeRows = async (): Promise<{ name: string; port: number }[]> => {
-  const { stdout } = await exec("chrome-agent", ["status"], {
-    env,
-    timeout: 10_000,
-    windowsHide: true,
-  });
-  if (stdout.trim() === "No instances registered. Launch one with: chrome-agent launch") return [];
-  const rows: unknown = JSON.parse(stdout);
-  if (
-    !Array.isArray(rows) ||
-    rows.some((row) => typeof row?.name !== "string" || typeof row?.port !== "number")
-  )
-    throw Error("Unexpected Chrome registry response; no cleanup identity can be inferred");
-  return rows;
-};
+let browser: BrowserSession | undefined;
 const stopOwned = async (child: ChildProcess) => {
   if (child.exitCode !== null || child.signalCode !== null || !child.pid) return;
   if (process.platform === "win32")
@@ -211,31 +187,20 @@ try {
   await writeFile(join(dir, "startup-response.html"), html);
   if (!ready.ok || !html.includes("<html"))
     throw Error("UNPROVEN_STARTUP: frontend did not serve HTML");
-  existingChrome = new Set((await chromeRows()).map((row) => row.name));
-  chromeAttempted = true;
-  const launch = await exec(
-    "chrome-agent",
-    [
-      "launch",
-      "--port",
-      String(port),
-      "--",
+  browser = await openBrowser({
+    mode: "visible",
+    home: join(dir, "browser-home"),
+    args: [
       "--disable-background-timer-throttling",
       "--disable-renderer-backgrounding",
       "--disable-backgrounding-occluded-windows",
     ],
-    { env, timeout: 45_000, windowsHide: true },
-  );
-  const chrome = JSON.parse(launch.stdout);
-  if (!chrome.name || chrome.port !== port)
-    throw Error("Owned Chrome returned an unexpected identity");
-  receipt.chrome = chrome.name;
-  const targets = (await fetch(`http://127.0.0.1:${port}/json`).then((response) =>
-    response.json(),
-  )) as { type: string; id: string }[];
-  const pages = targets.filter((target) => target.type === "page");
-  if (pages.length !== 1) throw Error("Owned Chrome must have exactly one empty page");
-  receipt.target = pages[0]!.id;
+  });
+  receipt.browser = browser.info;
+  receipt.port = Number(new URL(browser.info.endpoint).port);
+  const ownedPage = await browser.page();
+  receipt.target = ownedPage.targetId;
+  await ownedPage.release();
   await save();
   runner = spawn(
     process.execPath,
@@ -251,7 +216,7 @@ try {
       env: {
         ...env,
         WEB_BASE_URL: receipt.web,
-        CDP_PORT: String(port),
+        CDP_PORT: String(receipt.port),
         CDP_TARGET: receipt.target,
       },
       stdio: "inherit",
@@ -284,29 +249,12 @@ try {
     await stopOwned(runner).catch((error) => receipt.cleanup.push(String(error)));
     await exited(runner, 5000).catch((error) => receipt.cleanup.push(String(error)));
   }
-  if (!receipt.chrome && chromeAttempted) {
-    try {
-      const created = (await chromeRows()).filter(
-        (row) => row.port === port && !existingChrome.has(row.name),
-      );
-      if (created.length > 1) {
-        receipt.cleanup.push("Multiple new Chrome identities; cleanup cannot guess ownership");
-        process.exitCode = 1;
-      } else receipt.chrome = created[0]?.name ?? "";
-    } catch (error) {
-      receipt.cleanup.push(`Partial Chrome custody read failed: ${String(error)}`);
-      process.exitCode = 1;
-    }
-  }
-  if (receipt.chrome)
-    await exec("chrome-agent", ["stop", receipt.chrome], {
-      env,
-      timeout: 20_000,
-      windowsHide: true,
-    }).then(
-      () => receipt.cleanup.push(`stopped ${receipt.chrome}`),
+  if (browser)
+    await browser.close().then(
+      () => receipt.cleanup.push(`stopped owned browser ${browser!.info.id}`),
       (error) => {
         receipt.cleanup.push(String(error));
+        receipt.result = "UNPROVEN_CLEANUP";
         process.exitCode = 1;
       },
     );

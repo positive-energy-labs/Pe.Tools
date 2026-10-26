@@ -15,7 +15,7 @@ and host. This case does not read the shared dev tray, attach to a user's browse
 send a Pea prompt. Keep browser callbacks self-contained and pass their inputs as arguments.
 The visible chaos journey below remains a separate opt-in check.
 
-## Conversation and saved Work (Vitest + chrome-agent)
+## Conversation and saved Work (Vitest + @pe/browser)
 
 From `ts`, run `vp run --no-cache journey:conversation-work`. It starts its own source host with
 `--no-revit --no-tray`, seeds canonical thread/Work files in an isolated product home, and drives
@@ -28,7 +28,7 @@ one conversation while retaining the tool; the existing ACP test adapter substit
 That adapter also sends a real Pea-context open request and requires its command-specific lease and
 render acknowledgement. No native Revit operation or external model inference runs.
 Each run creates a dated artifact directory and stops its host and Chrome. Override
-`CONVERSATION_WORK_ARTIFACT_DIR` or `CONVERSATION_WORK_CHROME_PORT` when needed. This proves saved
+`CONVERSATION_WORK_ARTIFACT_DIR` when needed; the owned browser uses a dynamic port. This proves saved
 Work and browser behavior; it does not prove a native Revit read or write.
 
 ## Seeded route journey (Vitest + @pe/browser)
