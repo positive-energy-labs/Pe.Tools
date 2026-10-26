@@ -5,6 +5,48 @@ namespace Pe.Revit.Tests;
 
 public sealed class SpaceSceneScopeProofTests {
     [Test]
+    public void ProximityTransformsLinkedBoundsAndKeepsSourceIdentity(UIApplication uiApplication) {
+        var path = Path.Combine(Path.GetTempPath(), $"proximity-link-{Guid.NewGuid():N}.rvt");
+        var source = RevitFamilyFixtureHarness.CreateProjectDocument(uiApplication.Application);
+        long nearId, farId;
+        try {
+            using (var transaction = new Transaction(source, "Create linked proximity geometry")) {
+                transaction.Start();
+                nearId = Cube(source, 100).Id.Value();
+                farId = Cube(source, 50).Id.Value();
+                transaction.Commit();
+            }
+            source.SaveAs(path);
+        } finally { source.Close(false); }
+        var doc = RevitFamilyFixtureHarness.CreateProjectDocument(uiApplication.Application);
+        try {
+            DirectShape focus;
+            RevitLinkInstance link;
+            using (var transaction = new Transaction(doc, "Place rotated translated link")) {
+                transaction.Start();
+                focus = Cube(doc, 0);
+                using var options = new RevitLinkOptions(false);
+                var loaded = RevitLinkType.Create(doc, ModelPathUtils.ConvertUserVisiblePathToModelPath(path), options);
+                link = RevitLinkInstance.Create(doc, loaded.ElementId);
+                ElementTransformUtils.RotateElement(doc, link.Id, Line.CreateBound(XYZ.Zero, XYZ.BasisZ), Math.PI / 2);
+                ElementTransformUtils.MoveElement(doc, link.Id, new XYZ(0, -98, 0));
+                transaction.Commit();
+            }
+            using var bytes = new MemoryStream();
+            var scene = Scene.Write(doc, new SceneRequest([focus.Id.Value()], 3, Proximity: true), bytes);
+            var linked = scene.Elements.Where(e => e.Handle.LinkInstanceId == link.Id.Value()).ToList();
+            Assert.That(linked.Any(e => e.Handle.ElementId == nearId), Is.True);
+            Assert.That(linked.Any(e => e.Handle.ElementId == farId), Is.False);
+            Assert.That(linked.All(e => !e.Focus), Is.True);
+            Assert.That(scene.Elements.Single(e => e.Focus).Handle.ElementId, Is.EqualTo(focus.Id.Value()));
+            Assert.That(scene.Sources.Single(s => s.LinkInstanceId == link.Id.Value()).SourceToHost[13], Is.EqualTo(-98).Within(1e-8));
+        } finally {
+            doc.Close(false);
+            if (File.Exists(path)) File.Delete(path);
+        }
+    }
+
+    [Test]
     public void ProximityKeepsCrossingFacesAndFocusButRejectsTheEnclosingBoxGap(UIApplication uiApplication) {
         var doc = RevitFamilyFixtureHarness.CreateProjectDocument(uiApplication.Application);
         try {
