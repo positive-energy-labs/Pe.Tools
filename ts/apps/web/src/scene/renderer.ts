@@ -7,6 +7,8 @@ import * as THREE from "three";
 import { LineMaterial } from "three/addons/lines/LineMaterial.js";
 import { LineSegments2 } from "three/addons/lines/LineSegments2.js";
 import { createGlow, GLOW_LAYER, OCCLUDER_LAYER } from "./glow";
+import { createDamageBatch } from "./damage-batch";
+import { createMarkBatch } from "./mark-batch";
 import { createOutline, OUTLINE_LAYER } from "./outline";
 import {
   fogDensity,
@@ -81,6 +83,7 @@ import type {
   IssueState,
   IssueTarget,
   Layer3D,
+  LayerFrame,
   Paint as InstancePaint,
   PaintOf,
   Pick,
@@ -528,21 +531,32 @@ export function createRenderer(
   /** Thumbnails: an axis drawn at its fit; the axis shown large draws the 3D pose instead. */
   let thumbs: Partial<Record<PlaneAxis, HTMLCanvasElement | null>> = {};
   let thumbsStale = true;
+  let hasContext = false;
+  let hasShell = false;
   /** Context cannot attenuate a duct, even through arbitrarily many overlapping slabs. */
   const drawScene = (shown: THREE.Camera) => {
     const mask = shown.layers.mask;
     const autoClear = renderer.autoClear;
-    shown.layers.set(CONTEXT_LAYER);
-    veil.scenePass.value = 0;
-    material.depthWrite = false;
-    caps.forEach((cap) => {
-      cap.material.depthWrite = false;
-    });
-    renderer.render(scene, shown);
-    shown.layers.set(SHELL_LAYER);
-    veil.scenePass.value = 2;
+    // Empty passes still submitted and sorted the entire batch before fragment rejection.
+    // Preserve compositing order, but only draw a pass when it has visible members.
+    renderer.clear();
     renderer.autoClear = false;
-    renderer.render(scene, shown);
+    if (hasContext || hasShell) {
+      material.depthWrite = false;
+      caps.forEach((cap) => {
+        cap.material.depthWrite = false;
+      });
+      if (hasContext) {
+        shown.layers.set(CONTEXT_LAYER);
+        veil.scenePass.value = 0;
+        renderer.render(scene, shown);
+      }
+      if (hasShell) {
+        shown.layers.set(SHELL_LAYER);
+        veil.scenePass.value = 2;
+        renderer.render(scene, shown);
+      }
+    }
     shown.layers.mask = mask;
     veil.scenePass.value = 1;
     material.depthWrite = !look.depth.everythingTranslucent;
@@ -615,28 +629,50 @@ export function createRenderer(
         renderer.info.reset();
       }
       let animate = false;
+      let appearanceChanged = false;
       const seconds = started / 1000;
-      for (const { layer, group } of layers.values()) {
-        if (!layer.frame) continue;
+      for (const held of layers.values()) {
+        const { layer, group } = held;
+        if (!layer.frame && !layer.damage) continue;
         const state = stateOf(layer);
-        animate =
-          layer.frame(group, {
-            look,
-            contains: (point) => clipContains(clipVolume, point, origin.toArray()),
-            shown: (key) => {
-              const id = batchIdByKey.get(key);
-              return id !== undefined && batch.getVisibleAt(id);
-            },
-            ink,
-            seconds,
-            reducedMotion: motion.matches,
-            state,
-            landed: state === "focus" ? seconds - focusedAt : Infinity,
-            selected: !!layer.targets?.some((t) => selectedIds.has(t.elementId)),
-            lit: !!layer.targets?.some((t) => litIds.has(t.elementId)),
-          }) || animate;
+        const selected = !!layer.targets?.some((t) => selectedIds.has(t.elementId));
+        const lit = !!layer.targets?.some((t) => litIds.has(t.elementId));
+        const before = held.appearance;
+        // Camera motion changes projection, not issue appearance. Only changed states and finite
+        // transitions run layer updates; semantic layer count must not multiply orbit work.
+        if (
+          before &&
+          !before.animated &&
+          before.revision === layerRevision &&
+          before.state === state &&
+          before.selected === selected &&
+          before.lit === lit
+        )
+          continue;
+        const at: LayerFrame = {
+          look,
+          contains: (point) => clipContains(clipVolume, point, origin.toArray()),
+          shown: (key) => {
+            const id = batchIdByKey.get(key);
+            return id !== undefined && batch.getVisibleAt(id);
+          },
+          ink,
+          seconds,
+          reducedMotion: motion.matches,
+          state,
+          landed: state === "focus" ? seconds - focusedAt : Infinity,
+          selected,
+          lit,
+        };
+        const animated = layer.damage
+          ? (damageBatch?.update(layer, at) ?? false)
+          : layer.frame!(group, at);
+        held.appearance = { revision: layerRevision, state, selected, lit, animated };
+        appearanceChanged = true;
+        animate ||= animated;
       }
       // Geometry is unchanged between the main, thumbnail, glow and outline passes.
+      if (appearanceChanged && markBatch?.sync()) fitLines(markBatch.group);
       // Update transforms once, including any frame callback's changes, before all passes.
       scene.updateMatrixWorld();
       if (thumbsStale) drawThumbs();
@@ -775,7 +811,23 @@ export function createRenderer(
   observer.observe(mount);
   resize();
 
-  const layers = new Map<string, { layer: Layer3D; group: THREE.Group }>();
+  let layerRevision = 0;
+  let damageBatch: ReturnType<typeof createDamageBatch> | null = null;
+  let markBatch: ReturnType<typeof createMarkBatch> | null = null;
+  const layers = new Map<
+    string,
+    {
+      layer: Layer3D;
+      group: THREE.Group;
+      appearance?: {
+        revision: number;
+        state: IssueState;
+        selected: boolean;
+        lit: boolean;
+        animated: boolean;
+      };
+    }
+  >();
   scene.matrixWorldAutoUpdate = false;
   let litIssue: string | null = null;
   let focusedIssue: string | null = null;
@@ -794,9 +846,14 @@ export function createRenderer(
   };
   let glowing = false;
   const motion = window.matchMedia("(prefers-reduced-motion: reduce)");
-  motion.addEventListener("change", render);
+  const motionChanged = () => {
+    layerRevision++;
+    render();
+  };
+  motion.addEventListener("change", motionChanged);
   /** The one re-apply path: a theme change or a look change re-reads grounds and re-tints. */
   const applyLook = () => {
+    layerRevision++;
     const next = sceneGrounds(mount, look);
     ground.copy(next.ground);
     ink.copy(next.ink);
@@ -972,6 +1029,9 @@ export function createRenderer(
   ];
   let painted: Paint = [undefined, undefined, undefined, undefined];
   const paintNow = (...[selected, hidden, isolated, lit]: Paint) => {
+    layerRevision++;
+    hasContext = false;
+    hasShell = false;
     const next = new Map<number, Mark>();
     byId.forEach(({ key, categoryId }, id) => {
       const shown =
@@ -979,6 +1039,8 @@ export function createRenderer(
         (!isolated || isolated.has(key)) &&
         contextVisible(categoryId, paints[id]!.tier, look.layers);
       batch.setVisibleAt(id, shown);
+      hasContext ||= shown && paints[id]!.tier === "context";
+      hasShell ||= shown && paints[id]!.tier !== "context" && paints[id]!.surface === "shell";
       const cap = caps.get(id);
       if (cap) cap.visible = shown && !clipVolume?.preview;
       const mark: Mark | null = !shown
@@ -1310,6 +1372,7 @@ export function createRenderer(
       render();
     },
     setClip(volume: ClipVolume | null | undefined) {
+      layerRevision++;
       clipVolume = volume;
       uniforms.clipPolygon.value = volume?.data.length
         ? volume.data
@@ -1338,6 +1401,14 @@ export function createRenderer(
         next.every((layer) => layers.get(layer.key)?.layer === layer)
       )
         return;
+      if (damageBatch) {
+        scene.remove(damageBatch.group);
+        damageBatch.dispose();
+      }
+      if (markBatch) {
+        scene.remove(markBatch.group);
+        markBatch.dispose();
+      }
       for (const [key, held] of layers) {
         if (next.includes(held.layer)) continue;
         scene.remove(held.group);
@@ -1361,7 +1432,27 @@ export function createRenderer(
         layers.set(layer.key, { layer, group });
         if (layer.targets?.length) reachOf.set(layer.key, segmentsOf(group));
       }
-      glowing = false;
+      damageBatch = next.some((layer) => layer.damage) ? createDamageBatch(next) : null;
+      if (damageBatch) {
+        damageBatch.group.traverse((object) => {
+          if (object instanceof THREE.Mesh) {
+            applyClip(object.material);
+            veilMaterial(object.material, veil);
+          }
+        });
+        scene.add(damageBatch.group);
+      }
+      layerRevision++;
+      markBatch = createMarkBatch(
+        [...layers.values()].map(({ group }) => group),
+        (material) => {
+          applyClip(material);
+          veilMaterial(material, veil);
+        },
+      );
+      markBatch.sync();
+      scene.add(markBatch.group);
+      glowing = !!damageBatch;
       for (const { group } of layers.values())
         group.traverse((object) => void (glowing ||= object.layers.isEnabled(GLOW_LAYER)));
       fitLines(scene);
@@ -1372,7 +1463,7 @@ export function createRenderer(
       mark("dispose");
       onFrame = null;
       cancelAnimationFrame(frame);
-      motion.removeEventListener("change", render);
+      motion.removeEventListener("change", motionChanged);
       theme.disconnect();
       observer.disconnect();
       controls.removeEventListener("change", render);
@@ -1383,6 +1474,14 @@ export function createRenderer(
       window.removeEventListener("pointerup", planeUp);
       canvas.removeEventListener("pointerdown", turnStart, true);
       releaseGestures();
+      if (markBatch) {
+        scene.remove(markBatch.group);
+        markBatch.dispose();
+      }
+      if (damageBatch) {
+        scene.remove(damageBatch.group);
+        damageBatch.dispose();
+      }
       batch.dispose();
       scene.remove(batch);
       material.dispose();
