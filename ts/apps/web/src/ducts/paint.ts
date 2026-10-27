@@ -20,10 +20,12 @@ export function equipmentPaint(graph: DuctGraph, base?: PaintOf): PaintOf {
     // only; port identity still requires the supplied domain graph. Other labels stay unknown.
     const savedEquipment =
       instance.categoryId === null && instance.category === "Mechanical Equipment";
+    // Stub is the body tier for non-focus MEP (selection.ts MEP_CATEGORIES): equipment keeps it,
+    // so its hue shows; only the subject takes the shell.
     return (instance.revitId !== null && ids.has(instance.revitId)) ||
       instance.categoryId === EQUIPMENT_CATEGORY_ID ||
       savedEquipment
-      ? { ...paint, tier: paint.tier === "context" ? "context" : "envelope" }
+      ? { ...paint, tier: paint.tier === "subject" ? "envelope" : paint.tier }
       : paint;
   };
 }

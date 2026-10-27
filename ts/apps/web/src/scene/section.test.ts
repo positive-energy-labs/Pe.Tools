@@ -87,7 +87,7 @@ test("section and preset survive the shared address contract; invalid boxes cann
   ).toBe(false);
 });
 
-test("compound presets filter context only and never remove an opened system or stub", () => {
+test("compound presets filter context and stub alike, and never remove an opened system", () => {
   for (const preset of [
     "walls",
     "structural",
@@ -97,7 +97,9 @@ test("compound presets filter context only and never remove an opened system or 
   ] as const) {
     const look = presetLook(LOOK.defaults, preset);
     expect(contextVisible(CATEGORY_IDS.lightingFixtures, "subject", look.layers)).toBe(true);
-    expect(contextVisible(CATEGORY_IDS.lightingFixtures, "stub", look.layers)).toBe(true);
+    expect(contextVisible(CATEGORY_IDS.lightingFixtures, "stub", look.layers)).toBe(
+      contextVisible(CATEGORY_IDS.lightingFixtures, "context", look.layers),
+    );
     expect(contextVisible(CATEGORY_IDS.lightingFixtures, "context", look.layers)).toBe(false);
   }
   expect(

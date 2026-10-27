@@ -134,7 +134,7 @@ export const LOOK = defineKnobs("scene", "ts/apps/web/src/scene/grounds.ts", {
     preset: choice("Picture preset preview", "page", ["page", ...SCENE_PRESETS]),
     context: choice("Context preset", "all", ["all", "walls", "structural", "none"]),
     lighting: bool("Lighting fixtures", true),
-    // TODO: Filter capture by stable category IDs; these controls only filter drawn context.
+    // TODO: Filter capture by stable category IDs; these controls filter drawn context and stubs (never subjects).
     hiddenCategories: set("Hidden context categories"),
   },
   section: {

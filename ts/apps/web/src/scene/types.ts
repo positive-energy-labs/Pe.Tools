@@ -44,6 +44,9 @@ export type Paint = {
   readonly kind?: string;
   readonly tier: Tier;
   readonly key?: string;
+  /** A stub that is a one-hop neighbour of an opened system. The mesh-only view keeps it through
+   * every context preset; proximity stubs (non-focus MEP) follow the presets like context. */
+  readonly neighbour?: boolean;
   /** Scene-stamped by `systemPaint` (rung index among same-kind keys); routes never set it. */
   readonly variant?: number;
 };
