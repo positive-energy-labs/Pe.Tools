@@ -75,7 +75,11 @@ import {
   transitionPatches,
 } from "@pe/agent-contracts";
 import { parseLoadPreview } from "@pe/ducts-domain/load-preview";
-import { HostRpcCaller, type ResolvedTarget } from "../shared/host-rpc-caller.ts";
+import {
+  HostRpcCaller,
+  type HostOperationCallResult,
+  type ResolvedTarget,
+} from "../shared/host-rpc-caller.ts";
 import type { RevitCatalogLoadedFamilies } from "@pe/host-contracts/generated";
 import { coerceJsonObject } from "../shared/coerce.ts";
 import { resolveHostBaseUrl } from "../shared/host-config.ts";
@@ -491,7 +495,13 @@ async function executeTool(
         timeoutMs: input.timeoutSeconds * 1000,
       });
       const result = await caller.callOperation(key, payload);
-      return { ok: result.ok, key: input.key, target: defaultTarget, revision, result };
+      return {
+        ok: result.ok,
+        key: input.key,
+        target: defaultTarget,
+        revision,
+        result: key === "scripting.execute" ? scriptResultForModel(result) : result,
+      };
     }
   }
   const catalog = await readCatalog(
@@ -719,7 +729,14 @@ async function dispatch(
                 session: target.bridgeSessionId ?? null,
                 document: null,
               },
-        result: result.action ? result : result.ok ? result.response : result,
+        result:
+          key === "scripting.execute"
+            ? scriptResultForModel(result)
+            : result.action
+              ? result
+              : result.ok
+                ? result.response
+                : result,
         elapsedMs: result.elapsedMs,
       };
     }
@@ -811,7 +828,7 @@ async function dispatch(
       return {
         ok: result.ok,
         target: { session: target.bridgeSessionId ?? null, document: null },
-        result,
+        result: scriptResultForModel(result),
       };
     }
     case "route-doc":
@@ -1142,6 +1159,40 @@ function transportScope(target: RunInput["target"], fallback: Target = null): Ho
     : document
       ? { bridgeSessionId: document.session }
       : {};
+}
+
+/**
+ * A succeeded script returns its output once: the durable action repeats it with the captured source
+ * bundle, so the model gets a pointer to the complete receipt instead. Failures pass through whole.
+ */
+function scriptResultForModel(result: HostOperationCallResult): unknown {
+  if (!result.ok || result.action?.state !== "succeeded") return result;
+  const { action, ...call } = result;
+  const response = call.response as
+    | { status?: string; diagnostics?: { stage?: string; severity?: string }[] }
+    | undefined;
+  const diagnostics = response?.diagnostics;
+  return {
+    ...call,
+    ...(response?.status === "Succeeded" && diagnostics
+      ? {
+          response: {
+            ...response,
+            // Successful reference resolution is noise; the receipt keeps every diagnostic.
+            diagnostics: diagnostics.filter(
+              (d) => !(d.stage === "resolve" && d.severity === "Info"),
+            ),
+            diagnosticCounts: diagnostics.reduce<Record<string, number>>((counts, d) => {
+              const stage = d.stage ?? "unknown";
+              counts[stage] = (counts[stage] ?? 0) + 1;
+              return counts;
+            }, {}),
+          },
+        }
+      : {}),
+    action: { id: action.id, state: action.state },
+    fullReceipt: { key: "op:action.read", input: { id: action.id } },
+  };
 }
 
 async function operationTarget(
