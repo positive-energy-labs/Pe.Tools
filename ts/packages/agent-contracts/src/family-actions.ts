@@ -37,7 +37,7 @@ export const familyActions = {
   "settings.write": {
     says: "Save reviewed member Work, or create exact raw bytes, through the host pod member writer.",
     needs: "nothing",
-    actor: "human",
+    effect: "command",
     dirties: ["pods"],
     input: z.object({
       member: podMemberSchema,
@@ -50,7 +50,7 @@ export const familyActions = {
   "family.capture": {
     says: "Read the open family's spec. With a pod, file it as a new member there (the draft's `spec` text when given, else what Revit said) and write the run; without one, return the spec and write nothing.",
     needs: "family-document",
-    actor: "any",
+    effect: "command",
     dirties: ["pods"],
     input: z
       .object({ ...captureInto, pod: captureInto.pod.optional(), spec: z.string().optional() })
@@ -59,14 +59,14 @@ export const familyActions = {
   "family.plan": {
     says: "Plan a saved family spec, or a supplied draft's exact bytes (filed nowhere), against the open family and return the plan; changes nothing.",
     needs: "family-document",
-    actor: "any",
+    effect: "query",
     dirties: [],
     input: z.object({ source: planSourceSchema }),
   },
   "family.apply": {
     says: "Apply the exact family plan a succeeded family.plan action returned (named by that action id, one included hash), from the spec bytes that plan sealed, and write a run receipt. Staged cells the plan consumed retire only if unchanged after native success.",
     needs: "family-document",
-    actor: "human",
+    effect: "command",
     dirties: ["family", "pods"],
     input: z.object({
       /** The succeeded `family.plan` action this applies; its sealed preparation is the input. */
@@ -80,14 +80,14 @@ export const familyActions = {
   "families.capture": {
     says: "Capture loaded families as new spec members in the route's pod, one member per family; returns the members and what the capture saw per family.",
     needs: "project-document",
-    actor: "human",
+    effect: "command",
     dirties: ["pods"],
     input: z.object({ pod: z.string().min(1), familyIds: z.array(z.number().int()).min(1) }),
   },
   "families.plan": {
     says: "Plan a saved spec, or a supplied draft's exact bytes (filed nowhere), over the loaded families in the reviewed Families Work scope; returns the plan and the hashes apply would send, and changes nothing.",
     needs: "project-document",
-    actor: "human",
+    effect: "query",
     dirties: [],
     input: z
       .object({
@@ -105,7 +105,7 @@ export const familyActions = {
   "families.apply": {
     says: "Apply the exact family plans a succeeded families.plan action returned (named by that action id), from the spec bytes that plan sealed; each family's plan hash gates drift. Staged cells a successful family consumed retire only if unchanged.",
     needs: "project-document",
-    actor: "human",
+    effect: "command",
     dirties: ["families", "pods"],
     input: z.object({
       /** The succeeded `families.plan` action this applies; its sealed preparation is the input. */
@@ -116,14 +116,14 @@ export const familyActions = {
   "parameter-links.apply": {
     says: "Store the reviewed parameter-link draft and reconcile exactly the evaluated writes the human approved.",
     needs: "project-document",
-    actor: "human",
+    effect: "command",
     dirties: ["parameter-links"],
     input: z.object({ readingId: z.string().regex(/^[a-f0-9]{64}$/) }),
   },
   "family.build": {
     says: "Build a saved composed family spec to an admitted output path. The target is execution context, not the new family.",
     needs: "document",
-    actor: "human",
+    effect: "command",
     dirties: ["family"],
     input: z.object({
       source: podMemberSourceSchema,
@@ -137,14 +137,14 @@ export const familyReads = {
     says: "Read an immutable saved Family reading, including historical citation IDs, without Revit.",
     dirties: [],
     needs: "nothing",
-    actor: "any",
+    effect: "query",
     input: z.object({ id: z.string().regex(/^[a-f0-9]{64}$/) }),
   },
   "parameter-links.read": {
     says: "Read the stored parameter-link profile and runtime status, and optionally evaluate the authored draft, into a durable reading; writes nothing.",
     dirties: [],
     needs: "project-document",
-    actor: "any",
+    effect: "query",
     input: z.object({
       evaluate: z.boolean().default(false),
       /** A proposal evaluation is a labelled preview; only the staged profile can arm apply. */

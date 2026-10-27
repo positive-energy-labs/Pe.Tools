@@ -27,7 +27,7 @@ export interface ActionDefinition {
   /** The Reading keys this action invalidates on success. */
   dirties: readonly ActionReadingKey[];
   needs: ActionNeed;
-  actor: "any" | "human";
+  effect: "query" | "command";
   input: z.ZodType;
 }
 
@@ -39,14 +39,14 @@ const definitions = {
   "takeoffs.initialize": {
     says: "Write the shared parameters this document is missing before any takeoff runs.",
     needs: "project-document",
-    actor: "human",
+    effect: "command",
     input: z.object({ stage: z.string().min(1) }),
     dirties: ["snapshot"],
   },
   "takeoffs.adopt": {
     says: "Adopt selected regions using the submitted names and system tags.",
     needs: "project-document",
-    actor: "any",
+    effect: "command",
     input: z.object({
       views: z.array(z.object({ view: z.string(), items: z.array(item).min(1) })).min(1),
     }),
@@ -55,7 +55,7 @@ const definitions = {
   "takeoffs.partition": {
     says: "Prepare carriers and partition the selected adopted zone.",
     needs: "project-document",
-    actor: "any",
+    effect: "command",
     input: z.object({
       zoneRegion: z.number().int(),
       view: z.string(),
@@ -68,14 +68,14 @@ const definitions = {
   "takeoffs.sync": {
     says: "Insert eligible rooms, preserve system/link behavior, and update linked staged rooms in RHVAC.",
     needs: "project-document",
-    actor: "any",
+    effect: "command",
     input: z.object({ path: z.string().min(1), zones: z.array(z.string()).default([]) }),
     dirties: ["snapshot", "rhvac-open"],
   },
   "rooms.partition": {
     says: "Partition every zone drawn on one plan view into rooms, keeping locked and matched rooms.",
     needs: "project-document",
-    actor: "any",
+    effect: "command",
     // rejected: standing "not a room" rings (model feet, outer only); a face at IoU >= 0.6 is held `rejected`.
     input: z.object({ view: z.string().min(1), rejected: z.array(loop).optional() }),
     dirties: ["snapshot"],
@@ -83,7 +83,7 @@ const definitions = {
   "rooms.draw": {
     says: "Draw one room (locked) or zone region from loops on a plan view.",
     needs: "project-document",
-    actor: "any",
+    effect: "command",
     input: z.object({
       view: z.string().min(1),
       loops: z.array(loop).min(1),
@@ -95,7 +95,7 @@ const definitions = {
   "rooms.write": {
     says: "Write the given room fields, and a person's room or zone designation, onto regions by guid.",
     needs: "project-document",
-    actor: "any",
+    effect: "command",
     input: z.object({
       regions: z
         .array(
@@ -119,7 +119,7 @@ const definitions = {
   "rooms.merge": {
     says: "Combine two or more touching rooms of one zone on one plan view into one locked room.",
     needs: "project-document",
-    actor: "any",
+    effect: "command",
     input: z.object({
       view: z.string().min(1),
       guids: z.array(z.string().min(1)).min(2),
@@ -138,42 +138,42 @@ export const ductsActions = {
   "ducts.preview-losses": {
     says: "Plan the staged duct loss writes (fitting coefficients, terminal and component drops, fan static) and report each write's outcome without changing Revit.",
     needs: "project-document",
-    actor: "any",
+    effect: "query",
     input: ductsApplyInputSchema,
     dirties: [],
   },
   "ducts.apply-losses": {
     says: "Write the staged duct loss values to Revit (fitting coefficients, terminal and component drops, fan static) and record their provenance in Project Information.",
     needs: "project-document",
-    actor: "any",
+    effect: "command",
     input: ductsApplyInputSchema,
     dirties: ["snapshot"],
   },
   "ducts.preview-heal": {
     says: "Preview healing duct groups in Revit: cap dangling open ends, connect coincident same-size ends, close same-size gaps of at most 3 in; runs every repair and Pe's post-check, then rolls all of it back. Name a group without items to preview everything the Ducts route would heal there; show the person the per-item outcome before any apply.",
     needs: "project-document",
-    actor: "any",
+    effect: "query",
     input: ductsHealInputSchema,
     dirties: [],
   },
   "ducts.apply-heal": {
     says: "Heal duct groups in Revit, one transaction per group, with exactly the items a preview showed and a person approved; an item failing Pe's post-check is refused and rolled back. Revit gives rebuilt elements new ids: read the duct snapshot again after.",
     needs: "project-document",
-    actor: "any",
+    effect: "command",
     input: ductsHealInputSchema,
     dirties: ["snapshot"],
   },
   "ducts.preview-assign-fan": {
     says: "Preview making a unit the fan of a duct system in Revit (Duct Systems > Select Equipment: the system's base equipment): runs Pe's guards, the write and its read back, then rolls it back. Refuses a system that already has base equipment, and a unit with no port of the system's air classification in that system or on its ducts. Show the person the outcome before any apply.",
     needs: "project-document",
-    actor: "any",
+    effect: "query",
     input: ductsAssignFanInputSchema,
     dirties: [],
   },
   "ducts.apply-assign-fan": {
     says: "Make a unit the base equipment (the fan) of a duct system in Revit, as a preview showed and a person approved; the system keeps its id, name and type. Read the duct snapshot again after: the unit's role reads base equipment of that system.",
     needs: "project-document",
-    actor: "any",
+    effect: "command",
     input: ductsAssignFanInputSchema,
     dirties: ["snapshot"],
   },
@@ -217,35 +217,31 @@ export const actionControls = {
     says: "Read the original action and its individual file/native/publication outcomes without Revit.",
     dirties: ["receipts"],
     needs: "nothing",
-    actor: "any",
+    effect: "query",
     input: z.object({ id: z.string().min(1) }),
-    mutates: false,
   },
   "action.recover": {
     says: "Read durable native evidence for the original action; uncertain outcomes remain blocked.",
     dirties: ["receipts"],
     needs: "nothing",
-    actor: "any",
+    effect: "query",
     input: z.object({ id: z.string().min(1) }),
-    mutates: false,
   },
   "action.resume": {
     says: "Explicitly authorize remaining effects of a recovered original action. Completed effects never repeat.",
     dirties: ["receipts"],
     needs: "nothing",
-    actor: "any",
+    effect: "command",
     input: z.object({ id: z.string().min(1) }),
-    mutates: true,
   },
   "action.cancel": {
     says: "Stop the running action at the operation's next checkpoint. Work already written to Revit stands.",
     dirties: ["receipts"],
     needs: "nothing",
-    actor: "any",
+    effect: "query",
     input: z.object({ id: z.string().min(1) }),
-    mutates: true,
   },
-} as const satisfies Record<string, ActionDefinition & { mutates: boolean }>;
+} as const satisfies Record<string, ActionDefinition>;
 export type ActionControlKey = keyof typeof actionControls;
 
 /**

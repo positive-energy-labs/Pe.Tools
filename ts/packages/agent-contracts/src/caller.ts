@@ -22,7 +22,11 @@ export const callerSchema = z.discriminatedUnion("kind", [
     device: z.string().optional(),
   }),
   // A harness child and its shell, bound to one thread at spawn.
-  z.strictObject({ kind: z.literal("pea"), context: z.string(), thread: z.string() }),
+  z.strictObject({
+    kind: z.literal("pea"), context: z.string(), thread: z.string(),
+    run: z.strictObject({ thread: z.string(), turn: z.string() }).optional(),
+    root: z.strictObject({ thread: z.string(), turn: z.string() }).optional(),
+  }),
   z.strictObject({
     kind: z.literal("external-mcp"),
     context: z.string(),
@@ -68,6 +72,9 @@ export const basisSchema = z.discriminatedUnion("kind", [
 export type Basis = z.infer<typeof basisSchema>;
 
 export const refusalCodes = [
+  "run.none",
+  "run.closed",
+  "consent.stopped",
   "context.missing",
   "device.unpaired",
   "device.revoked",

@@ -19,6 +19,8 @@ import type {
   Refusal,
   RefusalCode,
   ThreadHead,
+  Origin,
+  RunRef,
 } from "@pe/agent-contracts";
 
 /**
@@ -45,7 +47,7 @@ const refuse = (
 /* ── Contexts ─────────────────────────────────────────────────────────────────────────── */
 
 type MintSpec =
-  | { kind: "pea"; thread: string }
+  | { kind: "pea"; thread: string; run?: RunRef; root?: RunRef }
   | { kind: "external-mcp"; label: string; device?: string }
   | { kind: "human"; via: "cli" };
 const contexts = new Map<string, Caller>();
@@ -85,6 +87,13 @@ export function mintContext(spec: MintSpec): string {
   return token;
 }
 export const retireContext = (token: string) => void contexts.delete(token);
+
+/** Origin comes only from authenticated transport, never a caller-supplied body. */
+export const originOf = (caller: Caller): Origin => ({
+  caller,
+  run: caller.kind === "pea" ? caller.run ?? null : null,
+  root: caller.kind === "pea" ? caller.root ?? caller.run ?? null : null,
+});
 
 /**
  * BUILD-RULES ruling 1: the owner's own terminal is a human. The host writes one `human/cli`

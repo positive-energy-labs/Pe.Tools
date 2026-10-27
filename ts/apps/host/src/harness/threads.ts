@@ -79,6 +79,7 @@ import {
   type ReadingFrame,
   type ReadingRequest,
   type Caller,
+  type RunRef,
   emptyThreadHead,
 } from "@pe/agent-contracts";
 import { HOST_CONTEXT_VARIABLE } from "@pe/host-contracts/contracts";
@@ -114,6 +115,8 @@ import {
 type Meta = Omit<HarnessThreadSummary, "lastSeq" | "cursor" | "activity" | "head"> & {
   /** Display/Work relationships survive removal of native target authority. */
   workContext?: ThreadWorkContext;
+  /** Host-issued causal delegation; absent for independent and scheduled threads. */
+  consentRoot?: RunRef;
   acpSessionId: string | null;
   models: HarnessThreadBody["models"];
   traits: HarnessThreadBody["traits"];
@@ -1039,8 +1042,10 @@ export function createHarnessThreads(options: HarnessThreadsOptions) {
       );
     const env = await childEnv(record, options, t.meta.modelId);
     if (t.stopped) throw new Error("The thread was stopped before its harness connected");
-    // One pea context per spawn: the child, its shell and its MCP server cross as this thread.
-    const context = mintContext({ kind: "pea", thread: t.meta.id });
+    // A process receives one immutable run. Resume the saved ACP conversation in a new
+    // process each turn; delayed MCP and shell invocations can never acquire a later turn.
+    const run = t.running ? { thread: t.meta.id, turn: t.running } : undefined;
+    const context = mintContext({ kind: "pea", thread: t.meta.id, ...(run ? { run, root: t.meta.consentRoot ?? run } : {}) });
     env[HOST_CONTEXT_VARIABLE] = context;
     let live: Live | undefined;
     const { child, conn, stderr } = openAdapter(harness, options.worldRoot, env, () => ({
@@ -1098,7 +1103,8 @@ export function createHarnessThreads(options: HarnessThreadsOptions) {
         }),
     }));
     t.child = child;
-    child.once("exit", () => retireContext(context));
+    // Closed run identities remain inspectable for command-id recovery until host restart.
+    if (!run) child.once("exit", () => retireContext(context));
     child.on("exit", (code, signal) => {
       if (t.child !== child || t.session === "closed") return;
       clearIdle(t);
@@ -1426,6 +1432,9 @@ export function createHarnessThreads(options: HarnessThreadsOptions) {
     mentions?: Mention[],
   ) {
     clearIdle(t);
+    // Configuration may have warmed an unscoped child. No process is reused across turns.
+    await t.retiring;
+    if (t.child) await retire(t);
     t.running = turnId;
     // The head as of delivery is the document this turn runs against; the record names it itself.
     const head = readHead(t.meta.id);
@@ -1517,7 +1526,7 @@ export function createHarnessThreads(options: HarnessThreadsOptions) {
     disarm(t);
     await options.pluginHook?.("turn.after", { threadId: t.meta.id, turnId, outcome });
     t.running = null;
-    scheduleIdle(t);
+    await retire(t);
     drain(t);
   }
 
