@@ -40,6 +40,8 @@ export type ScheduleGridCell = z.infer<typeof scheduleGridCellSchema>;
 
 export const scheduleCatalogEntrySchema = z.object({
   scheduleId: z.number().int(),
+  /** The schedule's Work id (document address + UniqueId); null when the document has no path. */
+  workspaceId: z.string().nullish(),
   name: z.string(),
   categoryName: z.string().nullish(),
   rowCount: z.number().int().default(0),

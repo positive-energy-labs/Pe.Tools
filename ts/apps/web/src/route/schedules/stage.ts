@@ -7,7 +7,6 @@ import type { Rung } from "#/route/ladder";
 import type { EntityAction, EntityReading, EntityStage } from "#/route/entity-route";
 import type { PaneDecl, StageDecl } from "#/route/stage";
 import type { ScheduleGridAction, ScheduleGridReading } from "./manifest";
-import type { ScheduleGridState } from "./workspace";
 
 type R = ScheduleGridReading | EntityReading;
 type A = ScheduleGridAction | EntityAction;
@@ -35,14 +34,15 @@ export const SCHEDULE_STAGES: Readonly<Record<EntityStage, StageDecl<R, A, Pane>
 };
 
 /**
- * The sentence ladder's last rung: every schedule in the document, by category. A pick runs the
- * hidden `read`: a schedule's workspace id is minted by its first read, and the Readings follow it.
+ * The sentence ladder's last rung: every schedule in the document, by category. A pick selects the
+ * schedule's Work by the catalog's id (address + UniqueId); the owner reads Revit only when the host
+ * holds no reading of that Work.
  */
 export const scheduleRung = (
   catalog: ScheduleCatalog | null,
   open: { scheduleId: number; scheduleName: string } | null,
   failure: string | undefined,
-  execute: ScheduleGridState["execute"],
+  select: (entry: ScheduleCatalog["schedules"][number]) => void,
 ): Rung => ({
   key: "schedule",
   label: open?.scheduleName ?? null,
@@ -65,6 +65,6 @@ export const scheduleRung = (
   picked: (id) => id === String(open?.scheduleId),
   pick: (id) => {
     const entry = catalog?.schedules.find((row) => String(row.scheduleId) === id);
-    if (entry) void execute("read", { scheduleId: entry.scheduleId });
+    if (entry) select(entry);
   },
 });

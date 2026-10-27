@@ -33,7 +33,8 @@ import {
 
 const valueOf = <T,>(reading: Reading<unknown>, schema: { parse(value: unknown): T }) => {
   const value = previousOf(reading);
-  return value === undefined ? undefined : schema.parse(value);
+  // The host answers null for a Work it holds no reading of (a catalog pick not yet read).
+  return value == null ? undefined : schema.parse(value);
 };
 
 const readingError = (reading: Reading<unknown>) =>
@@ -224,6 +225,16 @@ export function LiveScheduleGridWorkspace({
     : gridChanged
       ? "changed"
       : "current";
+  // A picked Work the host holds no reading of is read once from Revit; one it holds opens as is.
+  const firstRead = useRef<string | null>(null);
+  const noRetained =
+    handle.readings.work.state === "ready" && previousOf(handle.readings.work) === null;
+  useEffect(() => {
+    const entry = catalog?.schedules.find((row) => row.workspaceId === page.workspaceId);
+    if (!noRetained || !entry || handle.busy || firstRead.current === page.workspaceId) return;
+    firstRead.current = page.workspaceId;
+    void execute("read", { scheduleId: entry.scheduleId });
+  }, [noRetained, page.workspaceId, catalog, handle.busy]); // eslint-disable-line react-hooks/exhaustive-deps
   const readingFailure =
     readingError(handle.readings.catalog) ??
     readingError(handle.readings.work) ??
@@ -343,7 +354,10 @@ export function LiveScheduleGridWorkspace({
             catalog ?? null,
             shown?.snapshot ?? null,
             readingError(handle.readings.catalog),
-            execute,
+            (entry) =>
+              entry.workspaceId
+                ? setPage({ workspaceId: entry.workspaceId, captureId: "" })
+                : void execute("read", { scheduleId: entry.scheduleId }),
           ),
         ]}
       >

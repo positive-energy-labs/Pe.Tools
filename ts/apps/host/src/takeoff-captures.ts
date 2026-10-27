@@ -356,7 +356,8 @@ export class TakeoffCaptures {
     return parsed.data;
   }
   /** The latest reading of one Work subject; other subjects' readings are never parsed as readings. */
-  async scheduleWork(workspaceId: string): Promise<ScheduleReading> {
+  /** The Work's latest retained reading; null when the host holds none (a catalog pick, unread). */
+  async scheduleWork(workspaceId: string): Promise<ScheduleReading | null> {
     const names = await readdir(join(this.directory, "schedules"));
     const stamps = await Promise.all(
       names
@@ -370,8 +371,7 @@ export class TakeoffCaptures {
     const latest = stamps
       .filter((stamp) => stamp?.workspaceId === workspaceId)
       .sort((a, b) => b!.capturedAt.localeCompare(a!.capturedAt))[0];
-    if (!latest) throw Error("No retained reading for this Schedule Work");
-    return this.schedule(latest.id);
+    return latest ? this.schedule(latest.id) : null;
   }
   private async storedSchedule(id: string): Promise<unknown> {
     return JSON.parse(await readFile(join(this.directory, "schedules", `${id}.json`), "utf8"));

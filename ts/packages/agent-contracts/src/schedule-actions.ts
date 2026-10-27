@@ -115,7 +115,7 @@ export const scheduleReads = {
     }),
   },
   "schedule.grid.work": {
-    says: "Read the latest retained schedule reading for a subject Work address. This is dated evidence, not a fresh native read.",
+    says: "Read the latest retained schedule reading for a subject Work address, or null when none is retained. This is dated evidence, not a fresh native read.",
     dirties: [],
     needs: "nothing",
     actor: "any",
