@@ -624,14 +624,16 @@ test("a changed document fences a pending read after changing targets and return
 test("picture layers choose the Context and Colour dials", async () => {
   const instance = { revitId: 1 } as SceneInstance;
   await mount();
-  await waitFor(() => expect(picture.current?.contextMode).toBe("lines"));
+  await waitFor(() => expect(picture.current?.contextMode).toBe("glass"));
   expect(picture.current!.paintOf!(instance)).toEqual({ tier: "subject", kind: "supply" });
   expect(picture.current?.colour).toBe("firm");
   expect(picture.current?.kinds.supply).toBe("#0569a5");
   act(() => drawing.latest!.setPage({ layers: ["meshes", "halo", "context"] }));
   await waitFor(() => expect(picture.current?.contextMode).toBe("glass"));
   expect(picture.current?.colour).toBe("mono");
-  act(() => drawing.latest!.setPage({ layers: ["meshes", "halo", "system-colours"] }));
+  act(() => drawing.latest!.setPage({ layers: ["meshes", "system-colours"] }));
+  await waitFor(() => expect(picture.current?.contextMode).toBe("off"));
+  act(() => drawing.latest!.setPage({ layers: ["meshes", "halo", "system-colours"], contextStyle: "lines" }));
   await waitFor(() => expect(picture.current?.contextMode).toBe("lines"));
   expect(picture.current?.colour).toBe("firm");
   // Scope mutation cannot depend on rendering an animation frame.

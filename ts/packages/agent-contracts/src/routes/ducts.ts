@@ -94,6 +94,11 @@ const ductsFields = {
       agent: "set",
     },
   ),
+  /**
+   * How the model picture draws context when the halo or context layer is on: `glass` surfaces or
+   * `lines`. With neither layer on, context is off (nothing captured or drawn).
+   */
+  contextStyle: field(modeKey(["lines", "glass"], "glass"), { url: "replace", agent: "set" }),
   /** What the picture pane draws: the `model` in space, or the `schematic` one-line. */
   picture: field(modeKey(["model", "schematic"], "model"), { url: "push", agent: "set" }),
   /** Where the model picture looks from; null = fit the subject. A drag replaces, a preset pushes. */

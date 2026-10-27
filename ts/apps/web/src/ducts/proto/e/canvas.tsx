@@ -689,7 +689,10 @@ function Canvas({
           <ModelPicture
             sceneView={page.sceneView}
             paintOf={paintOf}
-            contextMode={layers.has("context") ? "glass" : "lines"}
+            contextMode={
+              // Main's rule: neither context layer on = no context at all (the manifest captures none).
+              layers.has("context") || layers.has("halo") ? page.contextStyle : "off"
+            }
             kinds={colours}
             colour={systemColours ? "firm" : "mono"}
             contextRadiusFt={page.contextRadiusFt}
