@@ -63,6 +63,39 @@ public sealed class PodTests {
     }
 
     [Test]
+    public void Preparation_reads_a_utf8_bom_manifest_like_the_plain_one_and_keeps_its_exact_bytes() {
+        var json = Encoding.UTF8.GetBytes("""{"schemaVersion":2,"id":"bom","name":"Bom","version":"1","entrypoints":[{"sourcePath":"src/Run.cs"}]}""");
+        var bom = new byte[] { 0xEF, 0xBB, 0xBF };
+        byte[] Join(params byte[][] parts) => parts.SelectMany(part => part).ToArray();
+        PodPreparation PrepareRaw(string name, byte[] manifest) {
+            var folder = Path.Combine(this._pods, name);
+            Directory.CreateDirectory(Path.Combine(folder, "src"));
+            File.WriteAllBytes(Path.Combine(folder, "pod.json"), manifest);
+            File.WriteAllText(Path.Combine(folder, "src", "Run.cs"), "public sealed class Run : PeScriptContainer { public override void Execute() {} }");
+            return ScriptPodPreparationService.Prepare(folder, Bundle(folder));
+        }
+
+        var plain = PrepareRaw("plain", json);
+        var withBom = PrepareRaw("with-bom", Join(bom, json));
+
+        Assert.Multiple(() => {
+            Assert.That(withBom, Is.TypeOf<PreparedPod>(), string.Join("; ", withBom.Diagnostics.Select(d => d.Message)));
+            Assert.That(((PreparedPod)withBom).Manifest.Id, Is.EqualTo(((PreparedPod)plain).Manifest.Id));
+            Assert.That(((PreparedPod)withBom).Manifest.Entrypoints, Is.EqualTo(((PreparedPod)plain).Manifest.Entrypoints));
+            Assert.That(withBom.Diagnostics.Select(d => d.Message), Is.EqualTo(plain.Diagnostics.Select(d => d.Message)));
+            // The member identity is the exact on-disk bytes, BOM included; nothing is rewritten.
+            Assert.That(withBom.Members.Single(member => member.Path == "pod.json").Sha256,
+                Is.EqualTo(ScriptPodPreparationService.Sha256(Join(bom, json))));
+            // Only one standard UTF-8 BOM is framing; everything else stays a JSON or encoding error.
+            Assert.That(PrepareRaw("bom-malformed", Join(bom, "{ not json"u8.ToArray())), Is.TypeOf<RefusedPod>());
+            Assert.That(PrepareRaw("double-bom", Join(bom, bom, json)), Is.TypeOf<RefusedPod>());
+            var invalid = PrepareRaw("bad-utf8", Join("{\"schemaVersion\":2,\"id\":\"x\",\"name\":\""u8.ToArray(), [0xFF], "\",\"version\":\"1\"}"u8.ToArray()));
+            Assert.That(invalid, Is.TypeOf<RefusedPod>());
+            Assert.That(invalid.Diagnostics.Select(d => d.Message), Has.Some.Contains("not valid UTF-8"));
+        });
+    }
+
+    [Test]
     public void Preparation_gates_entrypoint_source() {
         var folder = this.WritePod("scripts", "scripts",
             new() { ["src/Two.cs"] = "public sealed class A : PeScriptContainer {} public sealed class B : PeScriptContainer {}" },

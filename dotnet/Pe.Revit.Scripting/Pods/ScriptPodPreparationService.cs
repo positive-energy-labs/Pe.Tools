@@ -133,7 +133,7 @@ public sealed class ScriptPodPreparationService(string? podsRoot = null, Func<st
             diagnostics.Add(ScriptDiagnosticFactory.Error(Stage, "Pod has no pod.json.", "pod.json"));
             return new RefusedPod(folder, members, diagnostics);
         }
-        var manifest = PodManifestValidator.ValidateJson(Encoding.UTF8.GetString(manifestBytes));
+        var manifest = PodManifestValidator.ValidateUtf8(manifestBytes);
         diagnostics.AddRange(manifest.Diagnostics);
         if (manifest.Manifest is null)
             return new RefusedPod(folder, members, diagnostics);

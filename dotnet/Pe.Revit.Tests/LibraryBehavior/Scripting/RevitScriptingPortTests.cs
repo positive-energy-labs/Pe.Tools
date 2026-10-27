@@ -759,6 +759,35 @@ public sealed class RevitScriptingPortTests {
             && diagnostic.Message.Contains("Execute() returns void", StringComparison.Ordinal)), Is.True);
     }
 
+    // A commit Error must roll back, never be resolved by changing content (here: the offered DeleteElements resolution,
+    // which the general non-modal policy would apply and commit); in a fresh run a modal would hang the test.
+    [Test]
+    public void WriteTransaction_commit_error_rolls_back_without_changing_the_model(UIApplication uiApplication) {
+        var document = EnsureActiveProjectDocument(uiApplication);
+        int WallCount() => new FilteredElementCollector(document).OfClass(typeof(Wall)).GetElementCount();
+        var before = WallCount();
+
+        var result = CreateExecutionService(uiApplication).Execute(document, new ExecuteRevitScriptRequest(
+            """
+            var level = new FilteredElementCollector(doc!).OfClass(typeof(Level)).FirstElementId();
+            var wall = Wall.Create(doc!, Line.CreateBound(XYZ.Zero, new XYZ(10, 0, 0)), level, false);
+            var error = Autodesk.Revit.ApplicationServices.Application.GetFailureDefinitionRegistry().ListAllFailureDefinitions()
+                .First(definition => definition.GetSeverity() == FailureSeverity.Error
+                    && definition.IsResolutionApplicable(FailureResolutionType.DeleteElements));
+            var message = new FailureMessage(error.GetId());
+            message.SetFailingElement(wall.Id);
+            message.AddResolution(FailureResolutionType.DeleteElements, DeleteElements.Create(doc!, wall.Id));
+            _ = doc!.PostFailure(message);
+            """,
+            PermissionMode: ScriptPermissionMode.WriteTransaction
+        ), "test-write-transaction-commit-error");
+
+        var detail = string.Join("; ", result.Diagnostics.Select(d => d.Message));
+        Assert.That(result.Status, Is.EqualTo(ScriptExecutionStatus.RuntimeFailed), detail);
+        Assert.That(result.Diagnostics.Any(d => d.Stage == "transaction" && d.Message.StartsWith("Rejected error:", StringComparison.Ordinal)), Is.True, detail);
+        Assert.That(WallCount(), Is.EqualTo(before));
+    }
+
     [Test]
     public void WriteTransaction_policy_still_rejects_script_owned_transaction(UIApplication uiApplication) {
         var service = CreateExecutionService(uiApplication);
