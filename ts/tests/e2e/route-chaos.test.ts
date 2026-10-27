@@ -1350,7 +1350,8 @@ test("seeded real-user route journey", async () => {
         const oldDrawing = await hold(p, DRAWING);
         const oldIdentity = (await state(p)).pictureTitle;
         expect(oldIdentity, "old picture names its subject before pausing").not.toBe("");
-        // The route's public busy ancestor owns snapshot freshness and held pricing (route.tsx).
+        // The route's work owner (the surface, or a pane) states snapshot freshness and pricing;
+        // an idle owner carries no aria-busy at all, so settled reads null.
         const routeBusy = () =>
           p.read<{ value: string | null; owner: string | null }>(`(() => {
             const pane = document.querySelector('[data-pane-id="e-picture"]');
@@ -1364,7 +1365,7 @@ test("seeded real-user route journey", async () => {
           save();
           return sample.value;
         };
-        expect(await sampleBusy("before worker pause"), "settled route is not busy").toBe("false");
+        expect(await sampleBusy("before worker pause"), "settled route is not busy").toBeNull();
         await p.send("Debugger.enable", {}, workerSession);
         await p.send("Debugger.pause", {}, workerSession);
         receipt.workerProtocol.push({
@@ -1424,10 +1425,10 @@ test("seeded real-user route journey", async () => {
           await p.send("Runtime.releaseObject", { objectId: oldDrawing });
         }
         await p.until(
-          async () => (await routeBusy()).value === "false",
+          async () => (await routeBusy()).value === null,
           "public route busy clears after worker resume",
         );
-        expect(await sampleBusy("after worker resume")).toBe("false");
+        expect(await sampleBusy("after worker resume")).toBeNull();
         await settled(p);
         await subject(p, b);
         const freshReadout = await showReadout(p);

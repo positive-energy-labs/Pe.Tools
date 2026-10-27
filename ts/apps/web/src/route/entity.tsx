@@ -46,6 +46,8 @@ export function EntityRouteView({
   facts,
   subject,
   work,
+  commitIn,
+  log,
   wire,
   startFreshAside,
   onStartedFresh,
@@ -70,6 +72,8 @@ export function EntityRouteView({
   subject?: ReactNode;
   /** The Situation's Work slot and aggregate wire (`SituationProps`). */
   work?: SituationProps["work"];
+  commitIn?: SituationProps["commitIn"];
+  log?: SituationProps["log"];
   wire?: SituationProps["wire"];
   startFreshAside?: ReactNode;
   onStartedFresh?: () => void;
@@ -211,6 +215,8 @@ export function EntityRouteView({
           chords={stage.keys}
           meter={stage.meter}
           work={work}
+          commitIn={commitIn}
+          log={log}
           wire={wire}
           startFreshAside={startFreshAside}
           onStartedFresh={onStartedFresh}

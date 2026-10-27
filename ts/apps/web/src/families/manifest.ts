@@ -8,6 +8,7 @@ import { z } from "zod";
 import {
   routeAddress,
   familiesRouteState,
+  familiesReadProgressSchema,
   ffPlanEntrySchema,
   workKey,
   type ActionReceipt,
@@ -27,6 +28,7 @@ import {
   documentOf,
   entityRoute,
   workflow,
+  refuse,
   type EntityPage,
   type HeldRow,
   type EntityRouteDef,
@@ -38,6 +40,7 @@ import { applyOutcome, applyTally, type PlanRun } from "./apply-outcome";
 import { plural } from "#/components/work/band";
 import {
   archivedFamiliesObservation,
+  cancelFamiliesObservation,
   readFamiliesObservation,
   type FamiliesDraft,
   type FamiliesObservation,
@@ -81,6 +84,7 @@ const familiesPageSchema = routeAddress("families").schema.extend({
       work: z.custom<FamiliesObservation["work"]>(),
       capturedAt: z.string(),
       completedAt: z.string(),
+      progress: familiesReadProgressSchema.optional(),
       readback: z
         .object({
           sourceId: z.string(),
@@ -210,6 +214,8 @@ export const familiesSpec: EntityRouteDef<FamiliesRouteDocument, FamiliesReading
       return ids.length ? { familyIds: ids } : "read families first";
     },
     targetReady: (ctx) => {
+      if (ctx.page.reading?.progress && ctx.page.reading.progress.state !== "complete")
+        return "Complete this Families read before planning edits";
       if (ctx.work.doc?.patch.staged && stagedDrafts(ctx.work.doc.cells).length)
         return "Stage either a native Family Foundry patch or per-type cells, not both";
       if (ctx.work.doc?.patch.staged && !ctx.work.doc.scope.staged)
@@ -388,7 +394,7 @@ export const manifest = entityRoute<
       input: z.void() as never,
       dirties: ["matrix"],
       rereads: "matrix",
-      waitSeconds: 240,
+      waitSeconds: 1800,
       stage: "audit",
       count: (ctx) => ctx.page.draft.families?.length || null,
       ready: (ctx) =>
@@ -407,7 +413,70 @@ export const manifest = entityRoute<
           familyNames: families ? [...families] : [],
           placementScope: placement,
         };
-        const reading = await readFamiliesObservation(ctx.work.key, target, filter);
+        const readId = crypto.randomUUID();
+        const now = new Date().toISOString();
+        const starting: FamiliesObservation = {
+          id: `pending-${readId}`,
+          work: ctx.work.key,
+          document: target,
+          filter,
+          capturedAt: now,
+          completedAt: now,
+          progress: {
+            runId: readId,
+            state: "reading",
+            phase: "preparing",
+            completed: 0,
+            total: 0,
+            workers: 1,
+          },
+          result: {
+            families: [],
+            issues: [],
+            page: { totalCount: 0, returnedCount: 0, isTruncated: false },
+          },
+        };
+        const stage = (ctx.page as FamiliesPage & EntityPage).stage;
+        const ownsRun = () => {
+          if (!ctx.currentPage) return true;
+          const current = ctx.currentPage() as (FamiliesPage & EntityPage) | null;
+          return current?.reading?.progress?.runId === readId && current.stage === stage;
+        };
+        ctx.setPage({ reading: starting });
+        ctx.cancelWith?.(() => cancelFamiliesObservation(target, readId));
+        let reading: FamiliesObservation;
+        try {
+          reading = await readFamiliesObservation(ctx.work.key, target, filter, readId);
+        } catch (cause) {
+          if (ownsRun()) {
+            const current = ctx.currentPage?.()?.reading ?? starting;
+            ctx.setPage({
+              reading: {
+                ...current,
+                progress: {
+                  ...(current.progress ?? starting.progress!),
+                  state: "failed",
+                  message: cause instanceof Error ? cause.message : String(cause),
+                },
+              },
+            });
+          }
+          throw cause;
+        }
+        if (!ownsRun()) return;
+        // Resource progress intentionally moves reading; the run id and stage guard its final result.
+        (
+          ctx.setPage as (
+            next: Partial<FamiliesPage>,
+            guard: readonly (keyof (FamiliesPage & EntityPage))[],
+          ) => void
+        )({ reading }, ["stage"]);
+        if (reading.progress && reading.progress.state !== "complete")
+          return refuse(
+            "partial",
+            reading.progress.message ??
+              `${reading.progress.state} after ${reading.progress.completed} of ${reading.progress.total} families`,
+          );
         // A plan confirmed over another scope no longer describes what apply would touch.
         (ctx.setPage as (next: Partial<EntityPage>) => void)({ confirming: false, sheet: null });
         await ctx.write([
@@ -420,13 +489,6 @@ export const manifest = entityRoute<
           },
           { path: ["takenAt"], value: reading.capturedAt },
         ]);
-        // entityRoute adds stage to the page even though this action is declared on FamiliesPage.
-        (
-          ctx.setPage as (
-            next: Partial<FamiliesPage>,
-            guard: readonly (keyof (FamiliesPage & EntityPage))[],
-          ) => void
-        )({ reading }, ["reading", "stage"]);
         const page = reading.result.page;
         if (page?.isTruncated)
           ctx.note(

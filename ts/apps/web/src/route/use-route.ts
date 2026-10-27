@@ -19,11 +19,13 @@ import {
 import {
   changedInRevit,
   dirty,
+  inFlight,
   readingAtom,
   peReadings,
   previousOf,
   targetInventory,
 } from "#/readings";
+import { useWork } from "@pe/kit/lang/work";
 import { situationCells } from "./cells";
 import { DEFAULT_WAIT_S, type PageMove, type RouteManifest } from "./manifest";
 import { urlPage, useInitialUrlPage, useUrlPage } from "./url";
@@ -245,6 +247,13 @@ export function useRoute<W, R extends string, P, A extends string>(
       (seededReadings ?? { ...liveReadings, ...providedReadings }) as Record<R, Reading<unknown>>,
     [seededReadings, liveReadings, providedReadings],
   );
+  // The route's readings and its running verb are its work, owned by the nearest work owner.
+  const reading = Object.entries<Reading<unknown>>(readings)
+    .filter(([, value]) => inFlight(value))
+    .map(([name]) => name);
+  useWork(reading.length > 0, `reading ${reading.join(", ")}…`);
+  const running = busy ? manifest.actions?.[busy.key] : undefined;
+  useWork(busy !== null, `${running?.label ?? "working"}…`);
 
   const writer = useMemo(
     () =>
@@ -374,6 +383,8 @@ export function useRoute<W, R extends string, P, A extends string>(
       },
       readings,
       page,
+      currentPage: () =>
+        currentActionScope.current === actionScope ? owner.view.read().page : null,
       note: owner.verbNote,
       call: <K extends OpKey>(operation: K, ...[input]: OpCallArgs<K, never>) =>
         callHostRpc(
@@ -422,7 +433,7 @@ export function useRoute<W, R extends string, P, A extends string>(
             let stopped = false;
             const refusal = await owner.runAction(
               name,
-              async () => {
+              async (cancelWith) => {
                 const unavailable = requirementRefusal(action);
                 if (unavailable) return refuse("not-ready", unavailable);
                 // The verb row runs a verb bare. An empty-object input is supplied; a verb that
@@ -443,7 +454,8 @@ export function useRoute<W, R extends string, P, A extends string>(
                   );
                 const reason = action.ready(ctx as never, parsed.data as never);
                 if (reason) return refuse("not-ready", reason);
-                const refusal = (await action.run(ctx as never, parsed.data as never)) ?? null;
+                const refusal =
+                  (await action.run({ ...ctx, cancelWith } as never, parsed.data as never)) ?? null;
                 // A partial outcome landed something: stale either way; a planning press, nothing.
                 if (!action.plans?.(ctx as never) && (!refusal || refusal.code === "partial"))
                   for (const reading of action.dirties) {

@@ -80,17 +80,18 @@ public sealed record OriginalCurvesAnswer(
 );
 
 /// <summary>
-///     The two questions the soup answers this round. Neither builds anything: a verb applies the
-///     queued tracker delta to the host partition and then reads. An unbuilt world answers empty
-///     with a stamp that says so.
+///     Queries over operation-owned geometry. Pass one World to share capture across related reads.
 /// </summary>
 public static class Verbs {
     /// <summary>
     ///     Rereads selected host or linked CAD imports. XY rejects curves outside the box; z0..z1
     ///     selects curves through the same per-curve storey-band assumption used by ribbons.
     /// </summary>
+    public static OriginalCurvesAnswer OriginalCurves(Document document, double z0, double z1, Aabb xyClip, Filter filter) =>
+        OriginalCurves(SpaceWorld.Prepare(document), z0, z1, xyClip, filter);
+
     public static OriginalCurvesAnswer OriginalCurves(
-        Document document,
+        World world,
         double z0,
         double z1,
         Aabb xyClip,
@@ -98,8 +99,7 @@ public static class Verbs {
     ) {
         if (z1 < z0) (z0, z1) = (z1, z0);
         var sw = System.Diagnostics.Stopwatch.StartNew();
-        var world = SpaceWorld.Resident(document);
-        world.ApplyQueued();
+
         var touched = world.Partitions.Where(p => filter.Wants(p.Kind)).ToList();
         var result = new List<OriginalCurve>();
         var failures = new List<CurveCaptureFailure>();
@@ -205,11 +205,13 @@ public static class Verbs {
     }
 
     /// <summary>What is in this box, by source, category, and kind, plus the ten fattest elements.</summary>
-    public static CensusAnswer Census(Document document, Aabb box, Filter? filter = null) {
+    public static CensusAnswer Census(Document document, Aabb box, Filter? filter = null) =>
+        Census(SpaceWorld.Prepare(document), box, filter);
+
+    public static CensusAnswer Census(World world, Aabb box, Filter? filter = null) {
         filter ??= Filter.Default;
         var sw = System.Diagnostics.Stopwatch.StartNew();
-        var world = SpaceWorld.Resident(document);
-        world.ApplyQueued();
+
 
         var touched = world.Partitions.Where(p => filter.Wants(p.Kind)).ToList();
         var buckets = new Dictionary<(SourceKind, string, PrimKind, string?), (int Elements, int Triangles)>();
@@ -261,8 +263,11 @@ public static class Verbs {
     ///         no longer wrong about how much room is left.
     ///     </para>
     /// </summary>
+    public static SweepAnswer Sweep(Document document, IReadOnlyList<XYZ> polyline, double widthFt, double heightFt, double clearanceFt, Filter? filter = null) =>
+        Sweep(SpaceWorld.Prepare(document), polyline, widthFt, heightFt, clearanceFt, filter);
+
     public static SweepAnswer Sweep(
-        Document document,
+        World world,
         IReadOnlyList<XYZ> polyline,
         double widthFt,
         double heightFt,
@@ -271,8 +276,7 @@ public static class Verbs {
     ) {
         filter ??= Filter.Default;
         var sw = System.Diagnostics.Stopwatch.StartNew();
-        var world = SpaceWorld.Resident(document);
-        world.ApplyQueued();
+
 
         var touched = world.Partitions.Where(p => filter.Wants(p.Kind)).ToList();
         var cats = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
@@ -335,8 +339,11 @@ public static class Verbs {
     ///         clippings, and every consumer of this shape assumes they are.
     ///     </para>
     /// </summary>
+    public static SliceAnswer Slice(Document document, double z0, double z1, Filter? filter = null, Aabb? xyClip = null) =>
+        Slice(SpaceWorld.Prepare(document), z0, z1, filter, xyClip);
+
     public static SliceAnswer Slice(
-        Document document,
+        World world,
         double z0,
         double z1,
         Filter? filter = null,
@@ -345,8 +352,7 @@ public static class Verbs {
         filter ??= Filter.Default;
         if (z1 < z0) (z0, z1) = (z1, z0);
         var sw = System.Diagnostics.Stopwatch.StartNew();
-        var world = SpaceWorld.Resident(document);
-        world.ApplyQueued();
+
 
         var touched = world.Partitions.Where(p => filter.Wants(p.Kind)).ToList();
         var cats = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
@@ -460,8 +466,11 @@ public static class Verbs {
     ///     over it. This is what a headroom gate reads — floor to ceiling at a spot — and it answers
     ///     null rather than guessing when the ray leaves the model without hitting anything.
     /// </summary>
+    public static ProbeAnswer Probe(Document document, XYZ at, Filter? filter = null, double maxDistanceFt = 200.0, ProbePurpose purpose = ProbePurpose.Obstructions) =>
+        Probe(SpaceWorld.Prepare(document), at, filter, maxDistanceFt, purpose);
+
     public static ProbeAnswer Probe(
-        Document document,
+        World world,
         XYZ at,
         Filter? filter = null,
         double maxDistanceFt = 200.0,
@@ -469,14 +478,13 @@ public static class Verbs {
     ) {
         filter ??= Filter.Default;
         var sw = System.Diagnostics.Stopwatch.StartNew();
-        var world = SpaceWorld.Resident(document);
-        world.ApplyQueued();
+
 
         var touched = world.Partitions.Where(p => filter.Wants(p.Kind)).ToList();
         var cats = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
         var candidates = 0;
         ProbeHit? down = null, up = null;
-        var levelZs = new FilteredElementCollector(document).OfClass(typeof(Level)).Cast<Level>()
+        var levelZs = new FilteredElementCollector(world.HostDocument).OfClass(typeof(Level)).Cast<Level>()
             .Select(l => l.ProjectElevation).ToList();
 
         foreach (var p in touched) {

@@ -18,6 +18,7 @@ import type { DuctSnapshot } from "@pe/ducts-domain/types";
 import { EMPTY_CATALOGS } from "@pe/ducts-domain/catalog";
 
 import { Surface } from "@pe/kit/lang/surface";
+import { useWork } from "@pe/kit/lang/work";
 import { frozenDemo } from "#/host/demo-client";
 import { SAVED, useDuctSnapshot, useDuctTables, useDuctCatalogs } from "./host";
 import { SCENE_CLAIMS, SCENE_FIXTURE } from "./scene.fixture";
@@ -242,6 +243,8 @@ export function DuctsRoute({ url = true }: { url?: boolean } = {}) {
     ],
   );
   const pricingState = usePricing(pricingInput);
+  // Pricing runs in a worker, not a reading hook, so the route registers it once for every pane.
+  useWork(pricingState.running, "pricing…");
   const priced = pricingState.observation?.result.priced ?? null;
   useEffect(() => {
     setProvided({
@@ -562,7 +565,8 @@ export function DuctsRoute({ url = true }: { url?: boolean } = {}) {
     reading: {
       pending,
       error: error ?? pricingState.error ?? null,
-      refreshing: !!held || (!snapshotCurrent && !!snapshot),
+      // A failed refresh is said, not still refreshing.
+      refreshing: !error && !pricingState.error && (!!held || (!snapshotCurrent && !!snapshot)),
     },
     actions,
     staged: pendingCount(handle.work.doc, snapshot?.store),
@@ -626,9 +630,7 @@ export function DuctsRoute({ url = true }: { url?: boolean } = {}) {
         <NativeObservationScope
           value={snapshotCurrent && !held ? nativeObservation : NO_NATIVE_OBSERVATION}
         >
-          <div className="contents" aria-busy={!!snapshot && (!snapshotCurrent || !!held)}>
-            <EScreen props={shell} />
-          </div>
+          <EScreen props={shell} />
         </NativeObservationScope>
       </Surface>
     </RegistryContext>

@@ -32,14 +32,42 @@ public sealed class SpaceSceneScopeProofTests {
                 ElementTransformUtils.MoveElement(doc, link.Id, new XYZ(0, -98, 0));
                 transaction.Commit();
             }
+            var links = new[] { link };
+            var generation = SpaceWorld.LinkGeneration(doc, links);
+            var captures = 0;
+            LinkedGeometryStore.Geometry Capture() { captures++; return new([], []); }
+            var store = LinkedGeometryStore.For(link.GetLinkDocument()!, link.Id.Value(), link.GetTotalTransform(), generation);
+            Assert.That(store, Is.Not.Null, "A clean saved loaded linked snapshot is cacheable.");
+            store!.Read("identity-proof", Capture);
             using var bytes = new MemoryStream();
             var scene = Scene.Write(doc, new SceneRequest([focus.Id.Value()], 3, Proximity: true), bytes);
+            using var repeated = new MemoryStream();
+            Scene.Write(doc, new SceneRequest([focus.Id.Value()], 4, Proximity: true), repeated);
+            Assert.That(repeated.ToArray(), Is.EqualTo(bytes.ToArray()), "Overlapping scopes reuse uncropped geometry without erasing crossing faces.");
+            using (var transaction = new Transaction(doc, "Edit host without changing link")) {
+                transaction.Start();
+                Cube(doc, 200);
+                transaction.Commit();
+            }
+            var sameGeneration = SpaceWorld.LinkGeneration(doc, links);
+            Assert.That(sameGeneration, Is.EqualTo(generation));
+            LinkedGeometryStore.For(link.GetLinkDocument()!, link.Id.Value(), link.GetTotalTransform(), sameGeneration)!
+                .Read("identity-proof", Capture);
+            Assert.That(captures, Is.EqualTo(1), "Ordinary host edits preserve linked geometry reuse.");
             var linked = scene.Elements.Where(e => e.Handle.LinkInstanceId == link.Id.Value()).ToList();
             Assert.That(linked.Any(e => e.Handle.ElementId == nearId), Is.True);
             Assert.That(linked.Any(e => e.Handle.ElementId == farId), Is.False);
             Assert.That(linked.All(e => !e.Focus), Is.True);
             Assert.That(scene.Elements.Single(e => e.Focus).Handle.ElementId, Is.EqualTo(focus.Id.Value()));
             Assert.That(scene.Sources.Single(s => s.LinkInstanceId == link.Id.Value()).SourceToHost[13], Is.EqualTo(-98).Within(1e-8));
+            using (var transaction = new Transaction(doc, "Move linked snapshot")) {
+                transaction.Start();
+                ElementTransformUtils.MoveElement(doc, link.Id, new XYZ(1, 0, 0));
+                transaction.Commit();
+            }
+            LinkedGeometryStore.For(link.GetLinkDocument()!, link.Id.Value(), link.GetTotalTransform(),
+                SpaceWorld.LinkGeneration(doc, links))!.Read("identity-proof", Capture);
+            Assert.That(captures, Is.EqualTo(2), "A link placement change cannot read old host-coordinate triangles.");
         } finally {
             doc.Close(false);
             if (File.Exists(path)) File.Delete(path);
@@ -98,8 +126,9 @@ public sealed class SpaceSceneScopeProofTests {
             var request = new SceneRequest([focus.Id.Value()], 4);
             using var scopedBytes = new MemoryStream();
             var scoped = Scene.Write(doc, request, scopedBytes);
-            Assert.That(SpaceWorld.Resident(doc).BuiltUtc, Is.EqualTo(default(DateTime)),
-                "First bounded capture must not ingest the query world.");
+            var firstWorld = SpaceWorld.Prepare(doc);
+            var secondWorld = SpaceWorld.Prepare(doc);
+            Assert.That(secondWorld, Is.Not.SameAs(firstWorld), "Geometry belongs to each operation.");
             Assert.That(scoped.Elements.Select(e => e.Handle.ElementId),
                 Is.EquivalentTo(new[] { focus.Id.Value(), context.Id.Value() }));
             Assert.That(scoped.Stamp.Fresh, Is.True);
@@ -112,7 +141,6 @@ public sealed class SpaceSceneScopeProofTests {
             Assert.That(focusScene.Triangles, Is.EqualTo(12));
             Assert.That(focusScene.RequestedElementIds, Does.Contain(long.MaxValue));
             Assert.That(focusScene.UnavailableElements.Single().ElementId, Is.EqualTo(long.MaxValue));
-            Assert.That(SpaceWorld.Resident(doc).BuiltUtc, Is.EqualTo(default(DateTime)));
 
             SpaceWorld.Prepare(doc);
             using var worldBytes = new MemoryStream();

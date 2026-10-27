@@ -49,6 +49,7 @@ export const rawByDesign = [
   "ducts.assign-fan",
   "ducts.family-patch",
   "ducts.heal",
+  "ducts.ports",
   "ducts.snapshot",
   "ducts.tables",
   "families.apply",

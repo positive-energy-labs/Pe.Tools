@@ -380,6 +380,7 @@ test("action controls and the Families reading judge their real caller", async (
         {
           work: { binding: "workspace", route: "families", target: null, work: "production" },
           filter: { categoryNames: ["Ducts"], familyNames: [], placementScope: "AllLoaded" },
+          readId: "00000000-0000-4000-8000-000000000000",
         },
       );
     expect((await families({})).text).toMatch(/anonymous callers are read-only/);

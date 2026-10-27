@@ -6,7 +6,7 @@
 import { useRouterState } from "@tanstack/react-router";
 import { InstallScrim } from "#/machine/install-scrim";
 import { FeedbackPicker } from "#/components/feedback-picker";
-import { HelpChord } from "#/route/help";
+import { HelpOwner } from "#/route/help";
 import { MachineAttention } from "#/machine/attention";
 import { OsNotices } from "#/machine/os-notices";
 import { TanStackRouterDevtoolsPanel } from "@tanstack/react-router-devtools";
@@ -19,7 +19,7 @@ function AppChrome() {
       <MachineAttention />
       <OsNotices />
       <FeedbackPicker hideTrigger />
-      <HelpChord />
+      <HelpOwner />
     </>
   );
 }

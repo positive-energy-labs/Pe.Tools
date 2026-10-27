@@ -51,6 +51,7 @@ import "#/workbench/lens.css";
 import "./chat-shell.css";
 import { CurrentThreadViewOwner } from "#/workbench/thread-view";
 import { Pane, PaneSplit, type PaneSide } from "@pe/kit/lang/pane";
+import { Work } from "@pe/kit/lang/work";
 import { Surface as PageSurface } from "@pe/kit/lang/surface";
 import { ThreadBody } from "#/workbench/lens/thread-body";
 import { ComposerBank } from "#/chat/composer-bank";
@@ -331,6 +332,7 @@ function ChatSurface({ target, docked = false }: ChatShellProps) {
           boundaryKey={shown.thread}
           onRetry={retryBody}
         >
+          <Work pending={switching} label="opening thread…" />
           {missingThread ? (
             <div className="grid min-h-[60vh] place-content-center justify-items-center gap-3 px-6 text-center">
               <EmptyState story="scope" exit="start a new thread, or pick one on the left">

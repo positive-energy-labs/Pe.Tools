@@ -27,7 +27,7 @@ import {
   runSemanticAction,
 } from "../../../../../packages/mcps/src/shared/takeoff-action-client";
 
-export type ScheduleGridReading = "catalog" | "work" | "saved" | "receipts";
+export type ScheduleGridReading = "catalog" | "work" | "history" | "saved" | "receipts";
 export type ScheduleGridAction = "read";
 
 /**
@@ -167,7 +167,8 @@ export const scheduleSpec: EntityRouteDef<
   },
   captureInput: (ctx) => {
     const reading = previousOf(ctx.readings.work);
-    return reading === undefined
+    // Null: the host holds no reading of this Work yet (a catalog pick before its first read).
+    return reading == null
       ? "open a schedule in the grid first"
       : { scheduleId: scheduleReadingSchema.parse(reading).snapshot.scheduleId };
   },
@@ -198,6 +199,11 @@ export const schedulesManifest = () =>
         work: (page: ScheduleGridPage) =>
           page.workspaceId
             ? { kind: "schedule-reading", subject: "work", id: page.workspaceId }
+            : null,
+        // History: every retained read of this Work, newest first (ruling 57).
+        history: (page: ScheduleGridPage) =>
+          page.workspaceId
+            ? { kind: "schedule-reading", subject: "history", id: page.workspaceId }
             : null,
         saved: (page: ScheduleGridPage) =>
           page.captureId

@@ -103,35 +103,15 @@ internal static class Ingest {
             return;
         }
 
-        if (ge is not null) Walk(ge, xf, prim, sink, ref sawSolid, 0, region);
+        using (ge) if (ge is not null) Walk(ge, xf, prim, sink, ref sawSolid, region, false);
     }
 
-    /// <summary>
-    ///     Walks a whole document into one triangle sink and one row list, in step. Row i owns the
-    ///     triangles appended while it was being read, which is what makes the range map possible.
-    ///     Returns the count of elements that produced nothing.
-    /// </summary>
-    public static int Document(Document doc, int source, Transform xf, List<Tri> sink, List<PrimRow> rows) {
-        var skipped = 0;
-        foreach (var e in new FilteredElementCollector(doc).WhereElementIsNotElementType()) {
-            if (!Allowed(e)) {
-                skipped++;
-                continue;
-            }
-
-            if (Element(e, source, rows.Count, sink, xf, rows) == 0) skipped++;
-        }
-
-        return skipped;
-    }
-
-    // Solid faces triangulate to Solid; loose Mesh objects stay Mesh. GetInstanceGeometry already
-    // composes the instance transform onto the geometry, so the link transform passes down unchanged
-    // — multiplying again is the double-transform bug probe 1 hit.
+    // Borrow symbol geometry and apply its instance transform once, without a native deep copy.
+    // Joined instance-specific bodies arrive as direct Solids and keep the same path.
     // ponytail: loose curves outside a DWG import, and points, are still dropped. Only an
     // ImportInstance raises its curves into ribbons, because only there does a layer name exist.
-    private static void Walk(GeometryElement ge, Transform xf, int prim, List<Tri> outp, ref bool sawSolid, int depth, Aabb? region) {
-        if (depth > 4) return;
+    private static void Walk(GeometryElement ge, Transform xf, int prim, List<Tri> outp, ref bool sawSolid, Aabb? region, bool reverseWinding) {
+        // Native symbol hierarchies are acyclic; unlike copied geometry, nested symbols are not flattened.
         foreach (var go in ge) {
             switch (go) {
                 case Solid s when s.Faces.Size > 0:
@@ -145,22 +125,28 @@ internal static class Ingest {
                             continue;
                         }
 
-                        if (m is not null) Emit(m, xf, prim, outp);
+                        using (m) if (m is not null) Emit(m, xf, prim, outp, reverseWinding);
                     }
 
                     break;
                 case Mesh mm:
-                    Emit(mm, xf, prim, outp);
+                    Emit(mm, xf, prim, outp, reverseWinding);
                     break;
                 case GeometryInstance gi: {
                     GeometryElement? inner;
                     try {
-                        inner = gi.GetInstanceGeometry();
+                        inner = gi.GetSymbolGeometry();
                     } catch {
                         continue;
                     }
 
-                    if (inner is not null) Walk(inner, xf, prim, outp, ref sawSolid, depth + 1, region);
+                    using (inner) if (inner is not null) {
+                        using var local = gi.Transform;
+                        using var toHost = xf.Multiply(local);
+                        // Native instance copies correct winding for mirrored symbols; preserve that parity,
+                        // independently of the caller's link transform, which the copied path never corrected.
+                        Walk(inner, toHost, prim, outp, ref sawSolid, region, reverseWinding ^ local.HasReflection);
+                    }
                     break;
                 }
             }
@@ -198,15 +184,15 @@ internal static class Ingest {
         }
     }
 
-    private static void Emit(Mesh m, Transform xf, int prim, List<Tri> outp) {
+    private static void Emit(Mesh m, Transform xf, int prim, List<Tri> outp, bool reverseWinding) {
         // Revit vertices are shared by triangles. Cross the native XYZ boundary once per vertex.
         var vertices = m.Vertices.Select(vertex => P(xf, vertex)).ToArray();
         for (var i = 0; i < m.NumTriangles; i++) {
             var t = m.get_Triangle(i);
             var tri = new Tri {
                 A = vertices[t.get_Index(0)],
-                B = vertices[t.get_Index(1)],
-                C = vertices[t.get_Index(2)],
+                B = vertices[t.get_Index(reverseWinding ? 2 : 1)],
+                C = vertices[t.get_Index(reverseWinding ? 1 : 2)],
                 Prim = prim,
             };
             if (!tri.IsDegenerate) outp.Add(tri);

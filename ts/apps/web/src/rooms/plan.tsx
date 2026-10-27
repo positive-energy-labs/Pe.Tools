@@ -56,7 +56,10 @@ export type RegionState = "zone" | "locked" | "stale" | "held" | "machine" | "un
 /** The legend order. Unassigned is not an ink: it counts rooms outside every zone. */
 const REGION_STATES = ["zone", "locked", "stale", "held", "machine", "unassigned"] as const;
 
-/** The ink order: the first that holds wins. A person's region outranks a stale one. */
+/**
+ * The outline's ink order: the first that holds wins, so a person's region outranks a stale one.
+ * Stale evidence under a locked region still shows, in its fill, count and readout (`lockedStale`).
+ */
 export const regionState = (
   region: Pick<RoomsRegion, "locked" | "stale" | "role">,
 ): Exclude<RegionState, "unassigned"> =>
@@ -69,6 +72,10 @@ export const regionState = (
         : region.role === "held"
           ? "held"
           : "machine";
+
+/** A locked region whose walls moved since: both facts hold and both are shown. */
+export const lockedStale = (region: Pick<RoomsRegion, "locked" | "stale" | "role">) =>
+  regionState(region) === "locked" && region.stale;
 
 /** A room no zone on its view contains: partition never touches it. */
 export const unassigned = (region: Pick<RoomsRegion, "role" | "zone">) =>
@@ -212,6 +219,7 @@ export function RoomsPlan({
     };
     for (const row of rows) {
       n[regionState(row.region)] += 1;
+      if (lockedStale(row.region)) n.stale += 1;
       if (unassigned(row.region)) n.unassigned += 1;
     }
     return n;
@@ -558,6 +566,8 @@ export function RoomsPlan({
                 {plan ? <PlanImageLayer plan={plan} frame={world.frame} /> : null}
                 {world.shapes.map(({ region, state, d }) => {
                   const ink = token(REGION_INK[state].ink!);
+                  const stale = lockedStale(region);
+                  const fillInk = stale ? token(REGION_INK.stale.ink!) : ink;
                   const on = selected.has(region.guid);
                   const hot =
                     attention.hovered.has(elementKey(region.elementId)) ||
@@ -569,12 +579,13 @@ export function RoomsPlan({
                       {...revitTarget([region.elementId])}
                       data-state={state}
                       data-unassigned={unassigned(region) || undefined}
+                      data-stale={stale || undefined}
                       d={d}
                       fillRule="evenodd"
                       fill={
                         state === "zone"
                           ? "none"
-                          : `color-mix(in srgb, ${ink} ${on || hot ? FILL_HOT_PCT : FILL_PCT}%, transparent)`
+                          : `color-mix(in srgb, ${fillInk} ${on || hot ? FILL_HOT_PCT : FILL_PCT}%, transparent)`
                       }
                       stroke={ink}
                       className={REGION_INK[state].dash ?? undefined}
@@ -588,7 +599,7 @@ export function RoomsPlan({
                         if (dragDist.current < CLICK_PX) onSelect(region.guid, event.shiftKey);
                       }}
                     >
-                      <SvgTip content={state} />
+                      <SvgTip content={stale ? "locked · stale" : state} />
                     </path>
                   );
                 })}

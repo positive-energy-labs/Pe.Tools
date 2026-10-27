@@ -103,7 +103,7 @@ test("host boundary: service file, status, static SPA, /pe routes, graceful shut
     expect(conflictingOps.status).toBe(400);
 
     // (2b) /call envelope rejects unknown top-level body keys. A `bridgeSessionId` in the body
-    // once silently mis-routed to the user's live Revit â€” it must 400 and point at the header.
+    // once silently mis-routed to the user's live Revit — it must 400 and point at the header.
     const misTargeted = await fetch(`${base}/call`, {
       method: "POST",
       headers: { "content-type": "application/json", "x-pe-context": terminal },

@@ -1,5 +1,6 @@
 // @vitest-environment jsdom
 /** Deterministic route proof: fixture transport, real route/page owner, head and the one shell. No ASHRAE tables are served, so nothing is priced. */
+import { WorkOwner } from "@pe/kit/lang/work";
 import { ChatHosted } from "#/route/situation-ladder";
 import { Route } from "#/routes/ducts";
 import {
@@ -432,7 +433,10 @@ async function mount(
   peReadings.resync();
   const rendered = render(
     <ChatHosted.Provider value={hosted}>
-      <RouterProvider router={router} />
+      {/* The app's surface owner, which the route's reading registers its refresh with. */}
+      <WorkOwner owner="surface">
+        <RouterProvider router={router} />
+      </WorkOwner>
     </ChatHosted.Provider>,
   );
   if (nativeRead) await waitFor(() => expect(requests.length).toBeGreaterThan(0));

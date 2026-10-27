@@ -75,6 +75,7 @@
     "./lang/coverage-bar": "./src/components/lang/coverage-bar.tsx",
     "./lang/arming-strip": "./src/components/lang/arming-strip.tsx",
     "./lang/pane": "./src/components/lang/pane.tsx",
+    "./lang/work": "./src/components/lang/work.tsx",
     "./lang/pane-resize": "./src/components/lang/pane-resize.tsx",
     "./lang/floater": "./src/components/lang/floater.tsx",
     "./lang/button-group": "./src/components/lang/button-group.tsx",

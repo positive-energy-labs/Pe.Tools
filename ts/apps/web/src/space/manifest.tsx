@@ -235,7 +235,7 @@ export const manifest = defineRoute<
     },
     context: {
       label: "load context",
-      says: "Capture the named elements and what is around them (no ids: the whole resident world, within budget)",
+      says: "Capture the named elements and what is around them (no ids: the whole model, within budget)",
       needs: "document",
       actor: "any",
       input: none,
@@ -247,7 +247,7 @@ export const manifest = defineRoute<
     status: read(
       "revit.detail.space-status",
       "status",
-      "Read the resident Space's stamp, sources, levels and world bounds",
+      "Read the document epoch and levels without retaining or extracting geometry",
       z.object({}),
     ),
     rows: read(

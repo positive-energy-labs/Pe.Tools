@@ -1,10 +1,16 @@
-import { useEffect, useRef, useState, type ReactNode } from "react";
+import { useContext, useEffect, useRef, useState, useSyncExternalStore, type ReactNode } from "react";
 import { Dialog as DialogPrimitive } from "@base-ui/react/dialog";
 import { KeyHint } from "@pe/kit/lang/key-hint";
 import { Button } from "@pe/kit/lang/button";
 import { PageMap } from "@pe/kit/lang/page-map";
 import { Deferred } from "@pe/kit/lang/section";
-import { TeachLive, useTeaching } from "@pe/kit/lang/use-teach";
+import {
+  TeachLive,
+  TeachPage,
+  TeachReference,
+  TeachTarget,
+  useTeaching,
+} from "@pe/kit/lang/use-teach";
 import { measureRegions, type Teaching, type TeachKey } from "@pe/kit/lang/teach";
 import { useScopeKeys } from "@pe/kit/keys";
 import { GestureKey } from "@pe/kit/lang/gesture-glyph";
@@ -267,13 +273,19 @@ export function HelpWorld({ facts }: { facts: readonly Teaching[] }) {
     </div>
   );
 }
-function HelpBody({ docs, name, utilities, close }: HelpProps & { close: () => void }) {
+function HelpBody({
+  docs,
+  name,
+  utilities,
+  chord,
+  close,
+}: HelpProps & { chord: boolean; close: () => void }) {
   const facts = useTeaching();
   return (
     <div className="absolute inset-0 flex flex-col gap-3 overflow-y-auto">
       <div className="flex items-baseline gap-3 px-8 pt-6">
         <span className="t-title text-ink">{name}</span>
-        <KeyHint>Alt+/</KeyHint>
+        {chord ? <KeyHint>{HELP_CHORD.hotkey}</KeyHint> : null}
       </div>
       <HelpWorld facts={facts} />
       {docs ? (
@@ -303,57 +315,126 @@ function HelpBody({ docs, name, utilities, close }: HelpProps & { close: () => v
     </div>
   );
 }
-/** Navigation can mount several openers; the newest owns Help. */
-const openers: (() => void)[] = [];
-export function HelpChord() {
+/** One owner renders the one dialog. Pages register their help under the page they teach (TeachPage,
+ *  else TeachTarget; "" is the app level); triggers and the chord only ask to open a page. Module
+ *  state because the owner (app chrome) is a sibling of the routes, not their provider. */
+const appPage = "";
+type HelpEntry = HelpProps & { reference: readonly Teaching[] };
+/** A stack per page: several triggers can declare one page; an unmount restores the one beneath. */
+const helps = new Map<string, HelpEntry[]>();
+let shown: string | undefined;
+const listeners = new Set<() => void>();
+const publish = () => listeners.forEach((l) => l());
+const subscribe = (l: () => void) => (listeners.add(l), () => void listeners.delete(l));
+const current = () => (shown === undefined ? undefined : helps.get(shown)?.at(-1));
+const showHelp = (page: string) => {
+  if (!helps.get(page)?.length) return false;
+  shown = page;
+  publish();
+  return true;
+};
+/** Mount once: owns the chord and the single Tutorial dialog. */
+export function HelpOwner() {
+  const help = useSyncExternalStore(subscribe, current);
+  const page = shown;
+  useEffect(() => () => void (shown = undefined), []);
+  const close = () => {
+    shown = undefined;
+    publish();
+  };
   useScopeKeys(
     [
       {
         hotkey: HELP_CHORD.hotkey,
         label: HELP_CHORD.label,
-        callback: () => openers.at(-1)?.(),
+        callback: () => {
+          // A toggle. The chord teaches the URL's page, then the app; never the focused one: the
+          // composer autofocuses on every route, so focus named Pea where the person meant the tool
+          // (2026-10-26, browser). Another page's trigger (Pea docked) opens its own help by click.
+          if (shown !== undefined) return close();
+          if (!showHelp(window.location.pathname)) showHelp(appPage);
+        },
         options: { ignoreInputs: false },
       },
     ],
     document.documentElement,
   );
-  return null;
-}
-export function RouteHelpButton({ docs, name, utilities = false }: HelpProps) {
-  const [open, setOpen] = useState(false);
   // Focus the page itself, not its first tabbable (a footer button) that would scroll it to the end.
   const popup = useRef<HTMLDivElement>(null);
-  useEffect(() => {
-    const opener = () => setOpen(true);
-    openers.push(opener);
-    return () => void openers.splice(openers.indexOf(opener), 1);
-  }, []);
   return (
-    <DialogPrimitive.Root open={open} onOpenChange={setOpen}>
-      <DialogPrimitive.Trigger
-        render={
-          <HotkeyCommand
-            bind={false}
-            label={HELP_CHORD.label}
-            word="Tutorial"
-            hotkey={HELP_CHORD.hotkey}
-            reason="how this tool works — its regions and every key bound right now (Alt+/)"
-            invoke={() => setOpen(true)}
-          />
-        }
-      />
+    <DialogPrimitive.Root open={!!help} onOpenChange={(next) => next || close()}>
       <DialogPrimitive.Portal>
         <DialogPrimitive.Popup
           ref={popup}
           initialFocus={popup}
           className="fixed inset-0 z-modal outline-none"
         >
-          <div data-surface="page" className="absolute inset-0" onClick={() => setOpen(false)} />
-          <TeachLive value={false}>
-            <HelpBody docs={docs} name={name} utilities={utilities} close={() => setOpen(false)} />
-          </TeachLive>
+          <div data-surface="page" className="absolute inset-0" onClick={close} />
+          {help ? (
+            <TeachPage value={page || undefined}>
+              <TeachReference value={help.reference}>
+                <TeachLive value={false}>
+                  <HelpBody
+                    docs={help.docs}
+                    name={help.name}
+                    utilities={help.utilities}
+                    chord={page === window.location.pathname || page === appPage}
+                    close={close}
+                  />
+                </TeachLive>
+              </TeachReference>
+            </TeachPage>
+          ) : null}
         </DialogPrimitive.Popup>
       </DialogPrimitive.Portal>
     </DialogPrimitive.Root>
+  );
+}
+/** Registers this page's help with the owner and renders the trigger. The page comes from context, so
+ *  a portaled trigger still opens the page that declared it. */
+export function RouteHelpButton({ docs, name, utilities = false }: HelpProps) {
+  const owner = useContext(TeachPage);
+  const target = useContext(TeachTarget);
+  const page = owner ?? target ?? appPage;
+  // The trigger's own reference teaches its page while nothing is measured (Pea docked on /ducts).
+  const reference = useContext(TeachReference);
+  useEffect(() => {
+    const help = { docs, name, utilities, reference };
+    const stack = [...(helps.get(page) ?? []), help];
+    helps.set(page, stack);
+    publish();
+    return () => {
+      const rest = (helps.get(page) ?? []).filter((entry) => entry !== help);
+      if (rest.length) helps.set(page, rest);
+      else {
+        helps.delete(page);
+        // A page that leaves (Back, a hidden Activity) closes its open Tutorial for good.
+        if (shown === page) shown = undefined;
+      }
+      publish();
+    };
+  }, [page, docs, name, utilities, reference]);
+  // Only the URL's page (or the app fallback, keyed by it) owns the chord, so only it shows the chord.
+  if (page === target || page === appPage)
+    return (
+      <HotkeyCommand
+        bind={false}
+        label={HELP_CHORD.label}
+        word="Tutorial"
+        hotkey={HELP_CHORD.hotkey}
+        reason="how this tool works — its regions and every key bound right now (Alt+/)"
+        invoke={() => void showHelp(page)}
+      />
+    );
+  return (
+    <span className="dl-hotkey-command" data-command-face="responsive">
+      <Button
+        label={HELP_CHORD.label}
+        reason="how this tool works — its regions and every key bound right now"
+        onClick={() => void showHelp(page)}
+      >
+        <span data-command-word>Tutorial</span>
+      </Button>
+    </span>
   );
 }

@@ -21,7 +21,6 @@ import type { Neighbour } from "@pe/ducts-domain/neighbours";
 import { TooltipHint } from "@pe/kit/lang/tooltip";
 import { SelectionBoxButton } from "#/revit/element-menu";
 import { observedElements } from "#/revit/observation";
-import { PaneWork } from "@pe/kit/lang/pane";
 import { useNativeObservation } from "#/revit/observation";
 import { useDuctScene, usePictureRead } from "#/ducts/scene-read";
 import { useLiveOrbit } from "@pe/kit/lang/live-orbit";
@@ -722,7 +721,6 @@ function Canvas({
         );
         return renderPane(
           <>
-            <PaneWork pending={identity.refreshing} />
             <div
               ref={setPictureHost}
               data-proto="E"

@@ -44,8 +44,10 @@ def render(fixture_dir, truth_root):
             if len(piece) >= 6 and visible(piece):
                 d.polygon([px(p) for p in pts(piece)], fill=(grey, grey, grey, 255))
     faces = Image.new("RGBA", size, (0, 0, 0, 0))
-    fd = ImageDraw.Draw(faces)
     for i, r in enumerate(answer["Rooms"]):
+        # Each face draws on its own layer: a hole cleared on the shared layer would erase a room drawn inside it.
+        face = Image.new("RGBA", size, (0, 0, 0, 0))
+        fd = ImageDraw.Draw(face)
         ring = [px(p) for p in pts(r["Loop"])]
         if is_sliver(r):
             fd.polygon(ring, fill=(220, 30, 30, 200), outline=(160, 0, 0, 255))
@@ -57,6 +59,8 @@ def render(fixture_dir, truth_root):
             dashed(fd, ring, (120, 60, 160, 255), 3)
         for hole in r.get("Holes") or []:
             fd.polygon([px(p) for p in pts(hole)], fill=(255, 255, 255, 0))
+        faces = Image.alpha_composite(faces, face)
+    fd = ImageDraw.Draw(faces)
     for z in answer["Zones"]:
         for loop in z:
             fd.line([px(p) for p in pts(loop)] + [px(pts(loop)[0])], fill=(0, 0, 0, 255), width=3)

@@ -41,6 +41,7 @@ Authority runs user, then skill, then this file. A stance is a posture, not a pr
 | slot | `execute` | the proving ground and chain of custody — touch the right reality, then name exactly what answered | the wrong reality: a claim proved on a lane that cannot falsify it | - | - | - |
 | slot | `mine` | how retained Claude and Codex sessions become evidence, this repo | rumor: a finding without lineage | - | - | - |
 | slot | `page` | the orrery, not the painting — a page that holds state and turns | the painting: a page with no state behind it | - | - | - |
+| slot | `recon` | the surveyor who walks the boundary before mapping the interior | rumor about a rival: a claim about their product nobody traced to their bytes | - | - | - |
 | slot | `show-me` | the sketch on the back of the envelope | the wall of text: a topic explained in prose that a diagram would settle | - | - | - |
 
 Real work starts with two accounts (`AGENTS.md`, Always): the ask restated, then what the terrain shows. `protoui`, `muse`, `purge`, `diagnose`, and `control` often form a session's main loop. A pasted failure is `diagnose`. `control` and `relay` are user-only; name them then stop. Suggest "/realy" when you and the user seem to be consistently misaligned.

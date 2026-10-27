@@ -15,6 +15,7 @@ import {
   nativeProcessSchema,
   splitScheduleCellKey,
   rebindScheduleWork,
+  type Address,
   type DocumentRef,
   type ScheduleReading,
   type ScheduleReadKey,
@@ -46,6 +47,11 @@ import {
   type FamilyActionDependencies,
 } from "./family-actions.ts";
 
+/** A schedule's Work key: its document's address and its Revit UniqueId, never a capture. */
+export const scheduleWorkId = (document: Address, scheduleUniqueId: string) =>
+  `schedule:${createHash("sha256")
+    .update(canonicalRouteInput([document, scheduleUniqueId]))
+    .digest("hex")}`;
 const refused = (message: string) => new BridgeError(message, 409, { notDispatched: true });
 const same = (a: unknown, b: unknown) => canonicalRouteInput(a) === canonicalRouteInput(b);
 async function current(
@@ -91,6 +97,8 @@ export async function readSchedule(
   const key = raw.key as ScheduleReadKey;
   if (key === "schedule.grid.saved")
     return captures.schedule(scheduleReads[key].input.parse(raw.input).id);
+  if (key === "schedule.grid.history")
+    return captures.scheduleHistory(scheduleReads[key].input.parse(raw.input).workspaceId);
   if (key === "schedule.grid.work")
     return captures.scheduleWork(scheduleReads[key].input.parse(raw.input).workspaceId);
   const target = documentRefSchema.parse(raw.target);
@@ -115,12 +123,16 @@ export async function readSchedule(
       budget: { maxEntries: 500 },
     })) as RevitCatalogSchedules.Res.Response;
     await current(bridge, target, process);
+    // An unsaved document has no address, so its schedules have no Work yet (a read refuses too).
+    const address = doc.address ? addressSchema.parse(doc.address) : null;
     return scheduleCatalogSchema.parse({
       takenAt: new Date().toISOString(),
       schedules: catalog.entries
         .filter((e) => !e.isTemplate)
         .map((e) => ({
           scheduleId: e.scheduleId,
+          workspaceId:
+            address && e.scheduleUniqueId ? scheduleWorkId(address, e.scheduleUniqueId) : null,
           name: e.name,
           categoryName: e.categoryName,
           rowCount: e.visibleBodyRowCount,
@@ -163,9 +175,7 @@ export async function readSchedule(
     truncated: response.page?.isTruncated ?? entry.rows.length >= input.maxRows,
   });
   if (!snapshot.scheduleUniqueId) throw refused("Schedule unique identity is missing");
-  const workspaceId = `schedule:${createHash("sha256")
-    .update(canonicalRouteInput([document, snapshot.scheduleUniqueId]))
-    .digest("hex")}`;
+  const workspaceId = scheduleWorkId(document, snapshot.scheduleUniqueId);
   await current(bridge, target, process);
   const reading = await captures.saveSchedule({
     target,

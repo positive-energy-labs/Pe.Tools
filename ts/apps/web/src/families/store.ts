@@ -36,6 +36,7 @@ import type { PageMove } from "#/route/manifest";
 import { usePodList } from "#/route/pods";
 import {
   archivedFamiliesObservation,
+  progressiveFamiliesObservation,
   archivedFamiliesObservations,
   createLiveFamiliesHost,
   latestFamiliesObservation,
@@ -225,8 +226,7 @@ export function useFamiliesStore(
     setPage,
     handle.busy,
   ]);
-  // The matrix Reading is an envelope (MAP ruling 3): when its body id moves past the reading on
-  // screen (another reader, a readback), fetch that body once over RPC. The body never streams.
+  // Progress moves the compact envelope; immutable family bodies stay on the host.
   const bodyVersion =
     (previousOf(handle.readings.matrix as Reading<unknown>) as FamiliesMatrixEnvelope | undefined)
       ?.bodyVersion ?? null;
@@ -234,14 +234,38 @@ export function useFamiliesStore(
     if (!bodyVersion || bodyVersion === page.reading?.id || page.stage === "history") return;
     let live = true;
     // A failed fetch leaves the matrix on its last body; the envelope still says it moved.
-    void archivedFamiliesObservation(bodyVersion).then(
-      (reading) => live && setPage({ reading }),
+    const current = page.reading;
+    // The parts door answers completed readings whole and progress revisions by new records only.
+    void progressiveFamiliesObservation(bodyVersion).then(
+      (reading) => {
+        if (
+          !live ||
+          reading.document.session !== documentTarget?.session ||
+          reading.document.openId !== documentTarget.openId ||
+          (current?.progress?.state === "reading" &&
+            reading.progress?.runId !== current.progress.runId) ||
+          (current?.progress &&
+            reading.progress?.runId === current.progress.runId &&
+            (reading.progress.completed < current.progress.completed ||
+              (current.progress.state !== "reading" && reading.progress.state === "reading"))) ||
+          (current && !current.id.startsWith("pending-") && reading.capturedAt < current.capturedAt)
+        )
+          return;
+        setPage({ reading });
+      },
       () => undefined,
     );
     return () => {
       live = false;
     };
-  }, [bodyVersion, page.reading?.id, page.stage, setPage]);
+  }, [
+    bodyVersion,
+    page.reading?.id,
+    page.stage,
+    documentTarget?.session,
+    documentTarget?.openId,
+    setPage,
+  ]);
   // One shared empty list while Work is null: `actions` memoizes on it, and a fresh `[]` per
   // render would rebuild the controller on every pass.
   const excluded = doc?.excluded ?? NO_EXCLUDED;

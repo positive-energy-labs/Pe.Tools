@@ -305,13 +305,16 @@ internal sealed class Bvh {
         // Float input rounding can only broaden this gate, never reject boundary contact.
         var cap = radius + reach + Math.Max(1, Math.Max(Math.Abs(centre.X), Math.Max(Math.Abs(centre.Y), Math.Abs(centre.Z)))) * Math.Pow(2, -21);
         var box = Aabb.Empty.Include(centre);
-        var stack = new Stack<int>();
-        if (this._used > 0) stack.Push(0);
-        while (stack.Count > 0) {
-            var i = stack.Pop();
+        // Median splits halve an int-sized triangle count. At most 32 nodes can be pending
+        // on this depth-first path, including the root; LeafMax=8 tightens that bound to 29.
+        Span<int> stack = stackalloc int[32];
+        var pending = 0;
+        if (this._used > 0) stack[pending++] = 0;
+        while (pending > 0) {
+            var i = stack[--pending];
             var node = this._nodes[i];
             if (box.DistanceSquared(new Aabb(node.MinX, node.MinY, node.MinZ, node.MaxX, node.MaxY, node.MaxZ)) > cap * cap) continue;
-            if (node.Count <= 0) { stack.Push(i + 1); stack.Push(-node.Count); continue; }
+            if (node.Count <= 0) { stack[pending++] = i + 1; stack[pending++] = -node.Count; continue; }
             for (var k = node.Start; k < node.Start + node.Count; k++) {
                 var other = this._tris[this._order[k]];
                 if (Geom.PointTriangle(centre, other) <= cap) return true;
@@ -416,7 +419,7 @@ internal readonly struct Obb {
 ///     the third by the segment-segment test.
 /// </summary>
 internal static class Geom {
-    internal static double PointTriangle(Vector3 p, Tri t) => PointTriangle(p.X, p.Y, p.Z,
+    internal static double PointTriangle(Vector3 p, Tri t) => PointTriangleCoordinates(p.X, p.Y, p.Z,
         t.A.X, t.A.Y, t.A.Z, t.B.X, t.B.Y, t.B.Z, t.C.X, t.C.Y, t.C.Z, out _);
     public static double SegmentTriangle(XYZ p0, XYZ p1, Tri t, out XYZ closest) {
         double ax = t.A.X, ay = t.A.Y, az = t.A.Z;
@@ -486,13 +489,26 @@ internal static class Geom {
         return true;
     }
 
-    // Ericson, Real-Time Collision Detection, closest point on a triangle to a point.
+    // Revit witnesses belong at the API boundary; proximity queries need only the numeric distance.
     private static double PointTriangle(
         double px, double py, double pz,
         double ax, double ay, double az,
         double bx, double by, double bz,
         double cx, double cy, double cz,
         out XYZ closest
+    ) {
+        var distance = PointTriangleCoordinates(px, py, pz, ax, ay, az, bx, by, bz, cx, cy, cz, out var point);
+        closest = new XYZ(point.X, point.Y, point.Z);
+        return distance;
+    }
+
+    // Ericson, Real-Time Collision Detection, closest point on a triangle to a point.
+    private static double PointTriangleCoordinates(
+        double px, double py, double pz,
+        double ax, double ay, double az,
+        double bx, double by, double bz,
+        double cx, double cy, double cz,
+        out (double X, double Y, double Z) closest
     ) {
         double abx = bx - ax, aby = by - ay, abz = bz - az;
         double acx = cx - ax, acy = cy - ay, acz = cz - az;
@@ -537,8 +553,8 @@ internal static class Geom {
             out closest);
     }
 
-    private static double Done(double px, double py, double pz, double qx, double qy, double qz, out XYZ closest) {
-        closest = new XYZ(qx, qy, qz);
+    private static double Done(double px, double py, double pz, double qx, double qy, double qz, out (double X, double Y, double Z) closest) {
+        closest = (qx, qy, qz);
         double dx = px - qx, dy = py - qy, dz = pz - qz;
         return Math.Sqrt((dx * dx) + (dy * dy) + (dz * dz));
     }

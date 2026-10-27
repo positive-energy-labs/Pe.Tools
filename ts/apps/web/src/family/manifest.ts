@@ -27,6 +27,7 @@ import {
   type RoutePage,
   settingsCandidate,
   settingsFieldPointer,
+  settingsFieldSegments,
 } from "@pe/agent-contracts";
 import type { BridgeSessionListEntry } from "@pe/host-contracts/operation-types";
 
@@ -258,6 +259,13 @@ const profileInputOf = (ctx: Ctx) => {
 const sameSource = (left: PodMemberSource, right: PodMemberSource) =>
   left.pod === right.pod && left.path === right.path && left.sha256 === right.sha256;
 
+/** The parameter a draft cell edits, when its pointer is under `/parameters`. */
+const familyCellParameter = (key: string) => {
+  if (!key.startsWith("/")) return null;
+  const [root, name] = settingsFieldSegments(key);
+  return root === "parameters" && name ? name : null;
+};
+
 /** Family spec readings (parsed documents) belong to the member's Work, not the open Revit file. */
 const familyCaptureWork = (work: WorkKey): WorkKey | null =>
   work.work
@@ -403,6 +411,19 @@ export const familyManifest = (authoring = absentAuthoringFacts) =>
       inventory: { kind: "inventory" },
     } as never,
     work: familyDraftRouteState,
+    // Draft cells are JSON pointers (`/parameters/<name>/value`): grouped by parameter, so the
+    // Chat head reads pending Family edits like any other route's, and a review opens its param.
+    cells: [
+      {
+        segment: "cells",
+        groupOf: (key) => [familyCellParameter(key) ?? key],
+        nouns: ["parameter"],
+        focus: (key): Record<string, string> => {
+          const name = familyCellParameter(key);
+          return name ? { inspector: `param:${name}` } : {};
+        },
+      },
+    ],
     // A saved Family Reading, as the host serves it: raw JSON, read-only.
     inspectables: {
       reading: {

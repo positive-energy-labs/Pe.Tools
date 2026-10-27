@@ -6,7 +6,7 @@ using ProjectDocument = Pe.Revit.Operations.ProjectDocument;
 
 namespace Pe.Revit.Global.Services.Host;
 
-/// <summary>Document-owned reads over the resident spatial world. Only Build performs a full ingest.</summary>
+/// <summary>Document-owned reads over the operation-owned spatial world. Each operation captures its own geometry.</summary>
 internal static class SpaceOps {
     /// <summary>Read rows passing Filter; omitted axes use the resolved defaults in the answer stamp.</summary>
     public sealed record RowsRequest(FilterRequest? Filter = null);
@@ -19,7 +19,7 @@ internal static class SpaceOps {
 
     /// <summary>
     /// Slice z0..z1 in host internal feet. XyClip is six ordered bounds; only x/y reject whole rows.
-    /// MaxPieces defaults to 50000 and retains whole elements in resident order; zero emits none.
+    /// MaxPieces defaults to 50000 and retains whole elements in source order; zero emits none.
     /// </summary>
     public sealed record SliceRequest(double Z0, double Z1, FilterRequest? Filter = null, double[]? XyClip = null, int? MaxPieces = null);
 
@@ -32,28 +32,28 @@ internal static class SpaceOps {
     /// <summary>Sweep a positive width/height profile in feet along at least two host-coordinate triples, with nonnegative clearance.</summary>
     public sealed record SweepRequest(double[][] Polyline, double WidthFt, double HeightFt, double ClearanceFt, FilterRequest? Filter = null);
 
-    [Op("revit.detail.space-status", Does = "Read whether the resident spatial world is built for the target project, its stamp (epoch, freshness, sources), the categories each source holds, level elevations, and world bounds.", Title = "Get Space World Status", Finds = ["space", "world", "status", "stamp", "sources", "levels"], Cost = OpCost.Cheap)]
+    [Op("revit.detail.space-status", Does = "Read the current change epoch and level elevations without capturing geometry. Geometry is operation-owned; status reports no retained world.", Title = "Get Space World Status", Finds = ["space", "world", "status", "stamp", "sources", "levels"], Cost = OpCost.Cheap)]
     private static StatusAnswer Status(NoRequest _, ProjectDocument document) => SpaceView.Status(document.Value);
 
-    [Op("revit.detail.space-build", Does = "Build the resident spatial world for the target project: tessellate host and every loaded link into one triangle soup with a BVH per source. Minutes on a large model; holds Revit for the whole ingest.", Title = "Build Space World", Finds = ["space", "world", "build", "ingest", "tessellate"], Cost = OpCost.Expensive)]
+    [Op("revit.detail.space-build", Does = "Capture host and loaded link geometry for this operation, returning its summary and releasing its triangle soup and BVH afterward. Saved linked geometry may be reused from disk. Minutes on a large model; holds Revit for the capture.", Title = "Build Space World", Finds = ["space", "world", "build", "ingest", "tessellate"], Cost = OpCost.Expensive)]
     private static StatusAnswer Build(NoRequest _, ProjectDocument document) {
-        SpaceWorld.Build(document.Value);
-        return SpaceView.Status(document.Value);
+        var world = SpaceWorld.Build(document.Value);
+        return SpaceView.Status(document.Value, world);
     }
 
-    [Op("revit.detail.space-rows", Does = "Read every element row of the resident world that passes a filter, as parallel arrays with legend lists for category, kind, layer and height role, plus each row's box and triangle count.", Title = "Get Space Rows", Finds = ["space", "rows", "elements", "boxes", "categories"], Cost = OpCost.Bounded)]
+    [Op("revit.detail.space-rows", Does = "Read every element row of the operation-owned world that passes a filter, as parallel arrays with legend lists for category, kind, layer and height role, plus each row's box and triangle count.", Title = "Get Space Rows", Finds = ["space", "rows", "elements", "boxes", "categories"], Cost = OpCost.Expensive)]
     private static RowsAnswer Rows(RowsRequest request, ProjectDocument document) =>
         SpaceView.Rows(document.Value, (request.Filter ?? new FilterRequest()).ToFilter());
 
-    [Op("revit.detail.space-tree", Does = "Read one source's BVH down to a depth: each node's box, depth, leaf flag and triangle count, so a viewer can draw how a sweep prunes.", Title = "Get Space BVH", Finds = ["space", "bvh", "tree", "nodes"], Cost = OpCost.Bounded)]
+    [Op("revit.detail.space-tree", Does = "Read one source's BVH down to a depth: each node's box, depth, leaf flag and triangle count, so a viewer can draw how a sweep prunes.", Title = "Get Space BVH", Finds = ["space", "bvh", "tree", "nodes"], Cost = OpCost.Expensive)]
     private static TreeAnswer Tree(TreeRequest request, ProjectDocument document) =>
         SpaceView.Tree(document.Value, request.Source ?? 0, request.MaxDepth ?? 8);
 
-    [Op("revit.detail.space-census", Does = "Count what the resident world holds inside a box, by source, category, kind and DWG layer, plus the ten fattest elements by triangle count.", Title = "Census Space World", Finds = ["space", "census", "count", "categories", "box"], Cost = OpCost.Bounded)]
+    [Op("revit.detail.space-census", Does = "Count what the operation-owned world holds inside a box, by source, category, kind and DWG layer, plus the ten fattest elements by triangle count.", Title = "Census Space World", Finds = ["space", "census", "count", "categories", "box"], Cost = OpCost.Expensive)]
     private static CensusAnswer Census(CensusRequest request, ProjectDocument document) =>
         Verbs.Census(document.Value, Box(request.Box, nameof(request.Box)), (request.Filter ?? new FilterRequest()).ToFilter());
 
-    [Op("revit.detail.space-slice", Does = "Slice the resident world with a horizontal band z0..z1: every triangle clipped to the band and flattened to convex xy pieces per element, the exact footprint the partition solver reads; capped at maxPieces with whole elements, and the answer says when it truncated and the total it found. xyClip rejects elements whose box misses the rectangle.", Title = "Slice Space World", Finds = ["space", "slice", "band", "footprint", "plan"], Cost = OpCost.Bounded)]
+    [Op("revit.detail.space-slice", Does = "Slice the operation-owned world with a horizontal band z0..z1: every triangle clipped to the band and flattened to convex xy pieces per element, the exact footprint the partition solver reads; capped at maxPieces with whole elements, and the answer says when it truncated and the total it found. xyClip rejects elements whose box misses the rectangle.", Title = "Slice Space World", Finds = ["space", "slice", "band", "footprint", "plan"], Cost = OpCost.Expensive)]
     private static SliceCapped Slice(SliceRequest request, ProjectDocument document) {
         Finite(request.Z0, nameof(request.Z0));
         Finite(request.Z1, nameof(request.Z1));
@@ -61,7 +61,7 @@ internal static class SpaceOps {
             request.XyClip is null ? null : Box(request.XyClip, nameof(request.XyClip)), request.MaxPieces ?? 50_000);
     }
 
-    [Op("revit.detail.space-probe", Does = "Probe straight down and straight up from one point: the first thing under it and over it, with the Handle and distance of each; null when nothing is hit within maxDistanceFt.", Title = "Probe Space World", Finds = ["space", "probe", "floor", "ceiling", "ray"], Cost = OpCost.Cheap)]
+    [Op("revit.detail.space-probe", Does = "Probe straight down and straight up from one point: the first thing under it and over it, with the Handle and distance of each; null when nothing is hit within maxDistanceFt.", Title = "Probe Space World", Finds = ["space", "probe", "floor", "ceiling", "ray"], Cost = OpCost.Expensive)]
     private static ProbeAnswer Probe(ProbeRequest request, ProjectDocument document) {
         var distance = request.MaxDistanceFt ?? 200;
         Positive(distance, nameof(request.MaxDistanceFt));
@@ -71,7 +71,7 @@ internal static class SpaceOps {
             (request.Filter ?? new FilterRequest()).ToFilter(), distance, purpose);
     }
 
-    [Op("revit.detail.space-sweep", Does = "Sweep a rectangular profile (widthFt across, heightFt up) along a polyline and answer HIT, NEAR or CLEAR per segment with the exact gap and the nearest element's Handle.", Title = "Sweep Space World", Finds = ["space", "sweep", "clearance", "duct", "collision"], Cost = OpCost.Cheap)]
+    [Op("revit.detail.space-sweep", Does = "Sweep a rectangular profile (widthFt across, heightFt up) along a polyline and answer HIT, NEAR or CLEAR per segment with the exact gap and the nearest element's Handle.", Title = "Sweep Space World", Finds = ["space", "sweep", "clearance", "duct", "collision"], Cost = OpCost.Expensive)]
     private static SweepAnswer Sweep(SweepRequest request, ProjectDocument document) {
         if (request.Polyline is not { Length: >= 2 }) throw new ArgumentException("polyline needs at least two coordinate triples.");
         Positive(request.WidthFt, nameof(request.WidthFt));

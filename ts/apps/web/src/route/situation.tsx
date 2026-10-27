@@ -3,6 +3,7 @@
  * Sentence, staged Work, commit, verbs and log still project the existing owner exactly once. */
 import { useMemo, type ReactNode } from "react";
 import type { TrichotomyCellLike } from "@pe/agent-contracts";
+import { cn } from "@pe/kit/lib/utils";
 import { PrimaryRouteControls } from "#/navigation/route-controls";
 import {
   WorkSentence,
@@ -38,6 +39,13 @@ export interface SituationProps {
   chooseStage?: (stage: string) => void;
   /** The verb that commits Work; drawn bold. */
   commit?: string;
+  /**
+   * Where the commit draws while cells are staged: in the Work sentence (default), or kept in the
+   * verb row, where every verb lives (ruling 39: apply is a verb, not a Work-slot button).
+   */
+  commitIn?: "work" | "verbs";
+  /** The log column's width: a full column (default), or narrow so grouped Work lines get the room. */
+  log?: "column" | "narrow";
   /** The stage verbs the row draws, as the route's stage declares them; absent = every verb of the stage. */
   verbs?: readonly string[];
   /** The chords the stage node binds, by verb (`StageDecl.keys`); the row draws them beside the verb. */
@@ -82,6 +90,8 @@ export function Situation({
   inspection = false,
   chooseStage,
   commit,
+  commitIn = "work",
+  log = "column",
   verbs: declaredVerbs,
   chords,
   meter,
@@ -121,13 +131,16 @@ export function Situation({
       ),
     [cells, counted, spec, lockOf],
   );
+  const staged = summary.staged > 0;
   const verbs = Object.entries(handle.actions).filter(
     ([name, action]) =>
-      (declaredVerbs ? declaredVerbs.includes(name) : !action.stage || action.stage === stage) &&
+      ((declaredVerbs ? declaredVerbs.includes(name) : !action.stage || action.stage === stage) ||
+        // Staged Work puts the commit in the row even where the stage does not declare it.
+        (commitIn === "verbs" && name === commit && staged)) &&
       (handle.manifest.actions as Record<string, { visible?: false }> | undefined)?.[name]
         ?.visible !== false &&
       // The commit verb is drawn once: in the Work sentence while something is staged, else here.
-      !(name === commit && summary.staged > 0),
+      !(commitIn === "work" && name === commit && staged),
   ) as [string, ActionHandle][];
   const commitAction = !inspection && commit ? handle.actions[commit] : undefined;
   const workLine = (
@@ -136,7 +149,7 @@ export function Situation({
       cells={cells}
       wire={wire}
       commit={
-        commit && commitAction ? (
+        commitIn === "work" && commit && commitAction ? (
           <SituationAction
             handle={handle}
             name={commit}
@@ -229,7 +242,10 @@ export function Situation({
             {!inspection ? (
               <div
                 data-slot="situation-band"
-                className="h-(--head-h) min-w-0 basis-[20rem] flex-[2] overflow-y-auto"
+                className={cn(
+                  "h-(--head-h) min-w-0 overflow-y-auto",
+                  log === "narrow" ? "basis-[40rem] flex-[4]" : "basis-[20rem] flex-[2]",
+                )}
               >
                 {work ? work(summary, workLine) : workLine}
                 <WorkStanding
@@ -250,7 +266,12 @@ export function Situation({
             ) : null}
             {/* the log: folded to its newest row on the head's rung, opened over the grid (ruling 21) */}
             {!inspection ? (
-              <div className="h-(--head-h) min-w-0 basis-[18rem] flex-[2]">
+              <div
+                className={cn(
+                  "h-(--head-h) min-w-0",
+                  log === "narrow" ? "flex-none basis-[10rem]" : "basis-[18rem] flex-[2]",
+                )}
+              >
                 <PageLog entries={handle.log} manifest={handle.manifest} collapsible />
               </div>
             ) : null}

@@ -55,7 +55,7 @@ test("connection failure retains guidance; retry must still pass admission", asy
   );
   expect((await screen.findByRole("alert")).textContent).toBe("Host offline");
   expect(screen.getByText("Public guide")).toBeTruthy();
-  expect(screen.getByRole("region").getAttribute("aria-busy")).toBe("false");
+  expect(screen.getByRole("region").hasAttribute("aria-busy")).toBe(false);
   host.call.mockResolvedValueOnce({ environmentId: "test", local: false, paired: false });
   fireEvent.click(screen.getByRole("button", { name: "Retry host connection" }));
   await waitFor(() => expect(host.call).toHaveBeenCalledTimes(2));
@@ -100,8 +100,8 @@ test("the actual Ducts loading branch keeps one guide through reading, pricing a
     />,
   );
   expect(screen.getByRole("alert").textContent).toBe("Snapshot refused");
-  expect(screen.getByRole("region", { name: "Ducts loading" }).getAttribute("aria-busy")).toBe(
-    "false",
+  expect(screen.getByRole("region", { name: "Ducts loading" }).hasAttribute("aria-busy")).toBe(
+    false,
   );
   expect(screen.getByRole("group", { name: "Page regions" })).toBeTruthy();
 });

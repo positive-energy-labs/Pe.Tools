@@ -1,0 +1,182 @@
+  'E 24-Oct-2026 02:59:42.530;   0:< 
+  Jrn.Browser "SelChange"  _
+           , ">>Views (Discipline/View Use)>>Mechanical>>PRINTED VIEWS>>Floor Plans>>00 Mechanical Plan - Basement/Crawlspace>>" 
+  ' 0:< ::1368:: Delta VM: Avail -36 -> 133877640 MB, Used 2821 MB; RAM: Avail +309 -> 6339 MB, Used +0 -> 2275 MB 
+  ' 0:< GUI Resource Usage GDI: Avail 8515, Used 1485, User: Used 643 
+  'E 24-Oct-2026 02:59:42.744;   0:< 
+  Jrn.Browser "LButtonDblClk"  _
+           , ">>Views (Discipline/View Use)>>Mechanical>>PRINTED VIEWS>>Floor Plans>>00 Mechanical Plan - Basement/Crawlspace>>" 
+    ' 0:< ::1369:: Delta VM: Avail -2 -> 133877639 MB, Used +0 -> 2822 MB; RAM: Avail -110 -> 6230 MB, Used 2275 MB 
+    ' 0:< GUI Resource Usage GDI: Avail 8450, Used 1550, User: Used 674 
+    'E 24-Oct-2026 02:59:43.014;   0:< 
+    ' [Jrn.TabbedViewAnalytics] ViewCount: 2
+  'H 24-Oct-2026 02:59:43.015;   0:< 
+  Jrn.Directive  _
+          "GlobalToProj"  , "[GUI-TEST-AHKOFF-LEVEL00-Chadds_detached.rvt]" , "Floor Plan: 00 Mechanical Plan - Basement/Crawlspace"  _
+          , 0.02083333333333 _
+          , 0.70710678118655, -0.70710678118655, 0.00000000000000 _
+          , 0.70710678118655, 0.70710678118655, -0.00000000000000 _
+          , 0.00000000000000, 0.00000000000000, 1.00000000000000 _
+          , 0.00000000000000, 0.00000000000000, -87.99999999999999
+  'H 24-Oct-2026 02:59:43.016;   0:< 
+  Jrn.Directive  _
+          "ProjToPage"  , "[GUI-TEST-AHKOFF-LEVEL00-Chadds_detached.rvt]" , "Floor Plan: 00 Mechanical Plan - Basement/Crawlspace"  _
+          , 1.00000000000000 _
+          , 1.00000000000000, 0.00000000000000, 0.00000000000000 _
+          , 0.00000000000000, 1.00000000000000, 0.00000000000000 _
+          , 0.00000000000000, 0.00000000000000, 1.00000000000000 _
+          , 0.00000000000000, 0.00000000000000, 0.00000000000000
+  'H 24-Oct-2026 02:59:43.016;   0:< 
+  Jrn.Directive  _
+          "WindowSize"  , "[GUI-TEST-AHKOFF-LEVEL00-Chadds_detached.rvt]" , "Floor Plan: 00 Mechanical Plan - Basement/Crawlspace"  _
+          , 0, 0
+    ' [Jrn.Activate] Rvt.Attr.DocumentExpression: "[GUI-TEST-AHKOFF-LEVEL00-Chadds_detached.rvt]" Rvt.Attr.ViewTitleExpression: Floor Plan: 00 Mechanical Plan - Basement/Crawlspace 
+    ' 3:< ::1370:: Delta VM: Avail -48 -> 133877592 MB, Used +48 -> 2870 MB; RAM: Avail +1118 -> 7349 MB, Used +98 -> 2374 MB 
+    ' 3:< GUI Resource Usage GDI: Avail 8447, Used 1553, User: Used 676 
+    '  0.104397      4:<<<sortByAppearanceSteps 10956 elements 
+    ' 4:< ::1370:: Delta VM: Avail -6 -> 133877586 MB, Used +0 -> 2871 MB; RAM: Avail -647 -> 6702 MB, Used +18 -> 2393 MB 
+    ' 4:< GUI Resource Usage GDI: Avail 8442, Used 1558, User: Used 684 
+    ' 4:< ANTECEDENT:
+    'cleaning DBView of type DBViewPlan
+    'generateViewSpecificGRep for FamilyInstance 
+    'C 24-Oct-2026 02:59:47.489;  DBG_INFO: DBViewPlan::generateViewSpecificGRep() is invoked and returns VC_Invisible - quick rejection failed.: line 5586 of F:\Ship25.4.6\2025_px64\Source\Essentials\EssentialsDB\Elem\DBViewPlan.cpp. 
+    '  5.310175      4:<<<updateGReps 4973 elements 
+    '  5.423613     3:<<00 Mechanical Plan - Basement/Crawlspace: ;PERF;MISC;generating greps 
+  ' 0:< ::1370:: Delta VM: Avail -3 -> 133877584 MB, Used 2871 MB; RAM: Avail +1395 -> 8098 MB, Used +6 -> 2399 MB 
+  ' 0:< GUI Resource Usage GDI: Avail 8443, Used 1557, User: Used 685 
+  ' 0:< View Open: Element expansion used 1.198117 seconds averaging 0.000062 seconds/hit for 19461 hits. 
+    'E 24-Oct-2026 02:59:50.342;   0:< 
+    ' [Jrn.ViewOpen] Rvt.Attr.ActiveViewType: VT_Plan Rvt.Attr.Discipline: Mechanical Rvt.Attr.DetailLevel: Fine Rvt.Attr.HiddenLines: 1 , Rvt.Attr.TimeSpent_visitAllViews: 0.000000 , Rvt.Attr.TimeSpent_createNewCView: 7.594000 , Rvt.Attr.NumCalled_updateAllGReps: 1 , Rvt.Attr.TimeSpent_updateAllGReps: 6.994425
+  ' 0:< ::1371:: Delta VM: Avail +1 -> 133877585 MB, Used 2871 MB; RAM: Avail -58 -> 8040 MB, Used 2399 MB 
+  ' 0:< GUI Resource Usage GDI: Avail 8444, Used 1556, User: Used 678 
+  'E 24-Oct-2026 02:59:50.455;   0:< 
+  Jrn.Size        0 ,   2570 ,   1812
+  'H 24-Oct-2026 02:59:50.456;   0:< 
+  Jrn.Directive  _
+          "WindowSize"  , "[GUI-TEST-AHKOFF-LEVEL00-Chadds_detached.rvt]" , "Floor Plan: 00 Mechanical Plan - Basement/Crawlspace"  _
+          , 2570, 1812
+' 0:< ::1372:: Delta VM: Avail -26 -> 133877560 MB, Used +16 -> 2887 MB; RAM: Avail -24 -> 8017 MB, Used +23 -> 2423 MB 
+' 0:< GUI Resource Usage GDI: Avail 8443, Used 1557, User: Used 676 
+' 0:< Exception caught from managed method RevitDBAPI::Void _CxxThrowException(Void*, _s__ThrowInfo*) <System.Runtime.InteropServices.SEHException> <External component has thrown an exception.> 
+'C 24-Oct-2026 02:59:50.852;  DBG_WARN: An external DirectContext3D server threw an exception! Exception handled.: line 237 of F:\Ship25.4.6\2025_px64\Source\Revit\RevitDB\DirectContext3DService\DirectContext3DService.cpp. 
+' 0:< An external DirectContext3D server threw an exception from getBoundingBox()! 
+' 0:< ::1372:: Delta VM: Avail 133877560 MB, Used 2887 MB; RAM: Avail -23 -> 7994 MB, Used 2423 MB 
+' 0:< GUI Resource Usage GDI: Avail 8443, Used 1557, User: Used 676 
+'H 24-Oct-2026 02:59:50.875;   0:< 
+Jrn.Directive  _
+        "ProjToPage"  , "[GUI-TEST-AHKOFF-LEVEL00-Chadds_detached.rvt]" , "Floor Plan: 00 Mechanical Plan - Basement/Crawlspace"  _
+        , 232.35701177668278 _
+        , 232.35701177668278, 0.00000000000000, 0.00000000000000 _
+        , 0.00000000000000, 232.35701177668278, 0.00000000000000 _
+        , 0.00000000000000, 0.00000000000000, 232.35701177668278 _
+        , 0.00000000000000, 0.00000000000000, 0.00000000000000
+'H 24-Oct-2026 02:59:50.876;   0:< 
+Jrn.Directive  _
+        "ProjToPage"  , "[GUI-TEST-AHKOFF-LEVEL00-Chadds_detached.rvt]" , "Floor Plan: 00 Mechanical Plan - Basement/Crawlspace"  _
+        , 232.35701177668278 _
+        , 232.35701177668278, 0.00000000000000, 0.00000000000000 _
+        , 0.00000000000000, 232.35701177668278, 0.00000000000000 _
+        , 0.00000000000000, 0.00000000000000, 232.35701177668278 _
+        , -2518.17827229896011, -2213.26558107727169, 0.00000000000000
+' 0:< ::1372:: Delta VM: Avail 133877560 MB, Used 2887 MB; RAM: Avail -97 -> 7897 MB, Used -1 -> 2422 MB 
+' 0:< GUI Resource Usage GDI: Avail 8440, Used 1560, User: Used 676 
+'H 24-Oct-2026 02:59:51.123;   0:< 
+Jrn.Directive  _
+        "ProjToPage"  , "[GUI-TEST-AHKOFF-LEVEL00-Chadds_detached.rvt]" , "Floor Plan: 00 Mechanical Plan - Basement/Crawlspace"  _
+        , 232.35701177668290 _
+        , 232.35701177668290, 0.00000000000000, 0.00000000000000 _
+        , 0.00000000000000, 232.35701177668290, 0.00000000000000 _
+        , 0.00000000000000, 0.00000000000000, 232.35701177668290 _
+        , -2518.17827229896011, -2213.26558107727169, 0.00000000000000
+'H 24-Oct-2026 02:59:51.124;   0:< 
+Jrn.Directive  _
+        "ProjToPage"  , "[GUI-TEST-AHKOFF-LEVEL00-Chadds_detached.rvt]" , "Floor Plan: 00 Mechanical Plan - Basement/Crawlspace"  _
+        , 232.35701177668290 _
+        , 232.35701177668290, 0.00000000000000, 0.00000000000000 _
+        , 0.00000000000000, 232.35701177668290, 0.00000000000000 _
+        , 0.00000000000000, 0.00000000000000, 232.35701177668290 _
+        , -2518.17827229896011, -2213.26558107727124, 0.00000000000000
+' 5:< ::1372:: Delta VM: Avail -56 -> 133877504 MB, Used +55 -> 2943 MB; RAM: Avail +56 -> 7954 MB, Used +6 -> 2429 MB 
+' 5:< GUI Resource Usage GDI: Avail 8434, Used 1566, User: Used 678 
+' 5:< ANTECEDENT:
+'generateViewSpecificGRep for RbsDuctCurve 
+'C 24-Oct-2026 02:59:51.331;  DBG_INFO: visibilityForcedByHeightHelperOrGroups: line 5574 of F:\Ship25.4.6\2025_px64\Source\Essentials\EssentialsDB\Elem\DBViewPlan.cpp. 
+' 5:< ANTECEDENT:
+'generateViewSpecificGRep for RbsDuctCurve 
+'C 24-Oct-2026 02:59:51.332;  DBG_INFO: visibilityForcedByHeightHelperOrGroups but generateGrep confirms element invisible: line 5610 of F:\Ship25.4.6\2025_px64\Source\Essentials\EssentialsDB\Elem\DBViewPlan.cpp. 
+' 5:< ::1372:: Delta VM: Avail 133877504 MB, Used 2943 MB; RAM: Avail -215 -> 7739 MB, Used -6 -> 2423 MB 
+' 5:< GUI Resource Usage GDI: Avail 8434, Used 1566, User: Used 677 
+' 5:< ANTECEDENT:
+'generateViewSpecificGRep for RbsDuctCurve 
+'C 24-Oct-2026 02:59:51.897;  DBG_INFO: Odd number of edges at a vertex.: line 5793 of F:\Ship25.4.6\2025_px64\Source\Foundation\GeomUtil\BooleanOps.cpp. 
+' 5:< ::1372:: Delta VM: Avail -1 -> 133877503 MB, Used 2943 MB; RAM: Avail -235 -> 7505 MB, Used +1 -> 2424 MB 
+' 5:< GUI Resource Usage GDI: Avail 8433, Used 1567, User: Used 685 
+' 5:< ANTECEDENT:
+'generateViewSpecificGRep for RbsDuctCurve 
+'C 24-Oct-2026 02:59:54.206;  DBG_INFO: Invalid input for BooleanController::addEdgeForNonManifoldCondition; input faceXSecs have different geomIdx.: line 4367 of F:\Ship25.4.6\2025_px64\Source\Foundation\GeomUtil\BooleanOps.cpp. 
+' 5:< ANTECEDENT:
+'generateViewSpecificGRep for RbsDuctCurve 
+'C 24-Oct-2026 02:59:54.207;  DBG_INFO: Containment check performed on a boundary edge.: line 5648 of F:\Ship25.4.6\2025_px64\Source\Foundation\GeomUtil\BooleanOps.cpp. 
+' 5:< ::1372:: Delta VM: Avail 133877503 MB, Used 2943 MB; RAM: Avail -168 -> 7337 MB, Used +4 -> 2429 MB 
+' 5:< GUI Resource Usage GDI: Avail 8433, Used 1567, User: Used 685 
+' 5:< ANTECEDENT:
+'generateViewSpecificGRep for RbsFlexDuctCurve 
+'C 24-Oct-2026 02:59:54.818;  DBG_INFO: TODO: Check to see how often this case will happen. calling SPline->projectPoint() could be very expensive.: line 2073 of F:\Ship25.4.6\2025_px64\Source\BuildingSystems\BuildingSystemsDB\Base Classes\RbsFlexCurve.cpp. 
+' 4:< ::1372:: Delta VM: Avail -15 -> 133877488 MB, Used +15 -> 2959 MB; RAM: Avail +36 -> 7373 MB, Used +15 -> 2445 MB 
+' 4:< GUI Resource Usage GDI: Avail 8433, Used 1567, User: Used 685 
+'  4.711618       5:<<<updateGReps 6250 elements 
+'  4.799053      4:<<00 Mechanical Plan - Basement/Crawlspace: ;PERF;MISC;generating greps 
+' 0:< GIncrementalDrawTask: Drawing thread could not acquire lock after 5 seconds while there was data to draw and a timer is running 
+' 0:< ;PERF;MISC;ElementsGraphicCacheUpdater::updateAll() DBViewPlan id=1444670: 3940(49%) elements need cache update 
+' 0:< SANITY CHECK: Skip testing a traversed GRep 
+'C 24-Oct-2026 02:59:57.631;  [Draw Thread]DBG_INFO: Silhouette moved outside face envelope.: line 2340 of F:\Ship25.4.6\2025_px64\Source\Foundation\GeomUtil\Silhouettes.cpp. 
+'C 24-Oct-2026 02:59:58.018;  [Draw Thread]DBG_INFO: RuledSurfaceSilhouetteGen::traceSilhouettes: Odd number of end points.: line 3238 of F:\Ship25.4.6\2025_px64\Source\Foundation\GeomUtil\Silhouettes.cpp. 
+'C 24-Oct-2026 02:59:58.356;  [Draw Thread]DBG_INFO: Cannot compute silhouette edges: line 1928 of F:\Ship25.4.6\2025_px64\Source\Foundation\GeomUtil\FaceSilhouette.cpp. 
+'C 24-Oct-2026 02:59:58.600;  [Draw Thread]DBG_INFO: Zero normal vector for ruled surface.: line 1786 of F:\Ship25.4.6\2025_px64\Source\Foundation\GeomUtil\RuledSurf.cpp. 
+'Add-in component: Rvt.CoordinationModel.CoordModelTypeDrawingCreated
+'Rvt.Attr.AddInName: Coordination Model
+'Rvt.Attr.CommandVendorId: ADSK
+'Rvt.Attr.CoordinationModelType.DataSource: [remote-url-redacted]
+'Rvt.Attr.CoordinationModelType.ElapsedTime_createNWCDrawing: 3 seconds.
+'Rvt.Attr.CoordinationModelType.Guid: 188d1e71-dd72-4a99-8217-f61701037ca6
+'Rvt.Attr.CoordinationModelType.Status: Success 
+' 0:< CoordinationModelDB: BIM360ExternalDataTypeServer: Time to add [remote-url-redacted] : 3 seconds. 
+'C 24-Oct-2026 03:00:02.678;  [Draw Thread]DBG_INFO: GContextStdGdi::drawRegion() failed.: line 1297 of F:\Ship25.4.6\2025_px64\Source\Foundation\Graphics\GraphUtil\GContextStdGdi.cpp. 
+' 0:< ::1372:: Delta VM: Avail -320 -> 133877169 MB, Used +245 -> 3204 MB; RAM: Avail -1821 -> 5552 MB, Used +143 -> 2589 MB 
+' 0:< GUI Resource Usage GDI: Avail 8422, Used 1578, User: Used 704 
+'  7.668022!!! 2:!!!BIG_GAP ;PERF;MISC;drawing 
+' 12.604445   1:<<;PERF;MISC;drawing/ALL_GAPS   7.805391/TurnOff_GAPs 2% 
+  ' 0:< ::1372:: Delta VM: Avail 133877169 MB, Used 3204 MB; RAM: Avail -13 -> 5540 MB, Used +29 -> 2619 MB 
+  ' 0:< GUI Resource Usage GDI: Avail 8426, Used 1574, User: Used 704 
+  'E 24-Oct-2026 03:00:03.735;   0:< 
+' 0:< ::1373:: Delta VM: Avail +1 -> 133877170 MB, Used 3204 MB; RAM: Avail -33 -> 5507 MB, Used 2619 MB 
+' 0:< GUI Resource Usage GDI: Avail 8428, Used 1572, User: Used 693 
+'C 24-Oct-2026 03:00:03.809;   0:< idle0_doc 
+  ' 0:< ::1373:: Delta VM: Avail 133877170 MB, Used 3204 MB; RAM: Avail +39 -> 5547 MB, Used 2619 MB 
+  ' 0:< GUI Resource Usage GDI: Avail 8421, Used 1579, User: Used 704 
+  ' 0:< <<Begin build CT>>
+  '
+  'Edit mode: IDR_COMMON
+  'Command: ID_BUTTON_SELECT
+  'Category: 0
+  'Bar list: 
+  '	Dialog_Revit_DynamicLabelDBar
+  '	Dialog_Essentials_FilterSelectionMm
+  '	Dialog_Essentials_FilterSelectionNew
+  'Provider list: 
+  '	PP_ArrowEditor_EditableOnly
+  'Product: Revit
+  '
+  '
+  '***********************************************************
+  '***********************************************************
+  '<<End build CT>> 
+  ' 0:< ::1373:: Delta VM: Avail +4 -> 133877174 MB, Used -1 -> 3203 MB; RAM: Avail -2362 -> 3185 MB, Used 2619 MB 
+  ' 0:< GUI Resource Usage GDI: Avail 8423, Used 1577, User: Used 701 
+  'E 24-Oct-2026 03:00:09.509;   0:< 
+  ' [Jrn.ExternalEventExecution] Rvt.Attr.AddInId: c490d6f9-46ad-966f-543f-27557cf6d7f6 Rvt.Attr.AddInName: Pe.Revit.Bridge Rvt.Attr.AddInVersion: 0.1.0.214 Rvt.Attr.ExternalEventName: Pe.Revit.Tasks.RevitTaskQueue Rvt.Attr.VendorDescription: Pe.Revit.Sdk session bridge Rvt.Attr.VendorId: PE 
+  ' 0:< ::1374:: Delta VM: Avail +36 -> 133877210 MB, Used +0 -> 3204 MB; RAM: Avail -1787 -> 1398 MB, Used +0 -> 2620 MB 
+  ' 0:< GUI Resource Usage GDI: Avail 8423, Used 1577, User: Used 701 
+  'E 24-Oct-2026 03:00:18.423;   0:< 
+  Jrn.RibbonEvent "TabActivated:View" 
+  ' 0:< ::1375:: Delta VM: Avail 133877210 MB, Used +23 -> 3227 MB; RAM: Avail +1096 -> 2494 MB, Used +24 -> 2644 MB 

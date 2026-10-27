@@ -271,6 +271,8 @@ public sealed record DuctRef(long ElementId, int Connector);
 ///     Facing is Connector.CoordinateSystem.BasisZ, the unit axis the connector faces out of its owner, and WidthAxis its
 ///     BasisX on a rectangular or oval connector (the side WidthIn runs along), both model coordinates; null when Revit
 ///     gives no frame and in snapshots taken before they were read.
+///     IsPrimary and IsSecondary are a duct fitting's MEPConnectorInfo flags (by family convention a tee's run legs);
+///     null on any other element and in snapshots taken before they were read.
 /// </summary>
 public sealed record DuctConnector(
     int Index,
@@ -287,7 +289,9 @@ public sealed record DuctConnector(
     DuctRef? ConnectedTo,
     double? AreaFt2 = null,
     double[]? Facing = null,
-    double[]? WidthAxis = null);
+    double[]? WidthAxis = null,
+    bool? IsPrimary = null,
+    bool? IsSecondary = null);
 
 /// <summary>One stated or reported value with its unit and provenance.</summary>
 public sealed record DuctFact(string Key, double? Value, string? Text, string Unit, DuctProvenance Provenance);

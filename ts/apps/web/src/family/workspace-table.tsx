@@ -294,7 +294,7 @@ export function FamilyWorkspaceTable() {
   ) : null;
 
   const tablePane = (
-    <Pane flush scroll="clip">
+    <Pane id="parameters" flush scroll="clip">
       {drillIn ?? crossType}
     </Pane>
   );

@@ -1,0 +1,35 @@
+# Browser ledger
+
+## Decided
+
+- 2026-10-25: The user endorsed one small required typed product-browser case with fixed local data, real controls, multiple-system selection and reload/Back persistence. Make the normal gate reject a deliberate behavior regression before expanding browser coverage; keep the longer visible chaos journey separate.
+- 2026-10-24: Use `@pe/browser` direct CDP as the common library and `pe-browser` CLI foundation; retain dynamic raw commands and derive help from the connected Chrome schema.
+- 2026-10-24: Owned headless and visible sessions, retained profiles, and consented attachment are required. Google sign-in and daily Chrome connection consent remain human actions; fixture attachment cannot prove either checkpoint.
+- 2026-10-24: [Native browser acceptance](../../../ts/packages/browser/tests/acceptance.test.ts) owns A1–A7 and the migrated route adapter check. The [route replay](../../../ts/tests/e2e/route-chaos-launch.ts) retains its original journey assertions as a separate A8 gate; measure only in a quiet source window.
+- 2026-10-24: Raw browser CDP is privileged. Attached custody controls cleanup rights; it does not sandbox arbitrary protocol mutations. Borrowed tabs must survive session cleanup.
+- 2026-10-24: Notify the user with a question before a Chrome consent step; commentary alone does not trigger the user's GUI notification.
+- 2026-10-24: Progressive help uses live HTTP schema when available. Approval-mode Chrome HTTP 404 may use the pinned bundled protocol reference on explicit opt-in, with browser identity from the existing approved connection and compatibility marked unverified; a reference never certifies browser completeness.
+- 2026-10-24: Parent proved the normal human-approved daily Chrome `autoConnect` path, trusted input in a created tab, preservation of all pre-existing target ids, and session cleanup; [source hashes and receipt](../../../.artifacts/runs/browser-20261024-port/personal-attach-proof.json), [Chrome PID 70468 surviving](../../../.artifacts/runs/browser-20261024-port/personal-chrome-after.json). Google account persistence is a separate checkpoint.
+- 2026-10-24: Windows owned cleanup joins native process exits before releasing a profile lock or acknowledging close. JavaScript finalizers and next-run sweeps cannot certify hard-kill cleanup; [native shutdown proof](../../../.artifacts/runs/browser-20261024-port/lifecycle-r4-native-final.json).
+- 2026-10-24: Session storage uses canonical `productRoot()/state/browser`; attachment exclusion uses the canonical OS-user namespace across browser-home and product-home overrides. [Storage and nine-case native proof](../../../.artifacts/runs/browser-20261024-port/storage-authority-fix.md).
+- 2026-10-24: Read effective status through the public API/CLI. `session.json` is immutable readiness, not liveness; terminal and guardian publications determine closure. [Status audit](../../../.artifacts/runs/browser-20261024-port/receipt-status-audit.json).
+- 2026-10-24: The real route requires refresh, reconnect and worker recovery. Public busy state and a nonempty held identity are the worker oracle. Optional thread/arming coverage remains omitted; a partial global receipt must not conceal the required outcomes.
+- 2026-10-24: Architectural convergence stopped after two dry rounds. Error shape and CLI recovery context were unified; rewriting control-wire correlation was deferred because its string errors differ from CDP numeric errors. [Convergence stop](../../../.artifacts/runs/browser-20261024-port/convergence-4.md).
+- 2026-10-24: Native test census compares process creation identity, executable and command; rescue pins the process handle before identity checks. Windows reused an owned PID for another process, including the same executable and command. [Custody proof](../../../.artifacts/runs/browser-20261024-port/lifecycle-r5.md).
+- 2026-10-24: Keep the protocol JSON reference as a declared pinned runtime dependency for this private workspace package; [packed-module import resolution](../../../.artifacts/runs/browser-20261024-port/integration-r2-assets.json) proves the three JSON imports and package version without a self-contained bundle claim.
+- 2026-10-24: Independent final proof on `af21713c` passed native A0–A8, required route refresh/reconnect/worker, and serial `pnpm verify` through R24 compile. [Audited receipts](../../../.artifacts/runs/browser-20261024-port/completion-audit.json) pin unchanged sources and ROOT executable parity; optional thread/arming remain omitted.
+
+## Tried & rejected
+
+- 2026-10-24: Playwright runtime/MCP and Python launchers are excluded from this port; the user requires direct CDP and real browser/process acceptance.
+- 2026-10-24: Closing the Windows Job Object without joining process exits let immediate retained-profile reopen race surviving Chrome children. The joined shutdown barrier replaced that behavior.
+- 2026-10-24: A remembered numeric PID cannot authorize a leak claim or termination. The original rescued PID 69796's identity remains unknown; reproduced PID reuse falsified that census without establishing a production keeper leak.
+- 2026-10-24: PowerShell JSON alone did not preserve Unicode profile command lines. Explicit UTF-8 at the process-census boundary restored direct `ProfileBusy` refusal; [native red and green](../../../.artifacts/runs/browser-20261024-port/lifecycle-profile-encoding.md).
+
+## Owed
+
+- Retire inactive owned proof directory `C:/Users/kaitp/AppData/Local/Temp/pea-browser-artifact-EvrHyb`; automatic approval review rejected recursive removal with "blocked by policy" after all eight sessions and both fixtures were closed. [Cleanup audit](../../../.artifacts/runs/browser-discovery-20261025/cleanup-audit.json).
+- Human Google checkpoint: launch an explicitly retained automation profile visibly, sign in through Google's native UI, close/reopen that profile, and confirm the rendered account state. Automation must not receive credentials or read credential stores.
+- Helium and non-Windows lifecycle behavior remain unverified; exercise them before claiming support.
+- Retire inert owned test directory `C:/Users/kaitp/AppData/Local/Temp/pe-browser-acceptance-1CcrPn`; process census was empty, but automated approval rejected its recursive cleanup with “blocked by policy”.
+- Remove inactive remainder at `C:/Users/kaitp/.t3/worktrees/Pe.Tools/t3-b4f4a2e5`; Git registration is retired and the proof child is archived, but Windows refuses deletion and rename because a file is in use. Do not stop an unidentified process; [cleanup receipt](../../../.artifacts/runs/browser-20261024-port/cleanup-final.json).

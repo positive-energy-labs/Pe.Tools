@@ -18,7 +18,7 @@ import { ArrowLeft, ArrowRight, ExternalLink, type LucideIcon } from "lucide-rea
 import { Tooltip, TooltipTrigger, TooltipContent } from "./tooltip";
 import { Popover, PopoverContent } from "./popover-internal";
 import { OutcomeLine, type OutcomeLineProps } from "./outcome";
-import { useWork } from "./pane";
+import { useWork } from "./work";
 
 import "./button.css";
 

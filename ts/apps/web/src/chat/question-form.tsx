@@ -1,4 +1,4 @@
-import { useWork } from "@pe/kit/lang/pane";
+import { useWork } from "@pe/kit/lang/work";
 /**
  * The question card: one ACP elicitation form (`question_request`) in the composer head, beside
  * the approval cards. Each property of the requested schema is one field: a `oneOf` is a pick, an

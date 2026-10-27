@@ -126,15 +126,16 @@ public static class TakeoffAtlas
         if (TakeoffCarriers.ReadIdentity(zone) != (TakeoffCarriers.RoleZoningRegion, request.ZoneGuid)
             || zone.OwnerViewId != FindView(doc, request.View).Id)
             throw new InvalidOperationException("Partition target does not match the adopted zone identity and view");
-        Pe.Revit.Space.SpaceWorld.Prepare(doc);
+        var world = Pe.Revit.Space.SpaceWorld.Prepare(doc);
         return MaterializePartition(doc, request, Pe.Revit.Partition.Verbs.Partition(
-            doc, new Pe.Revit.Partition.PartitionRequest(request.ZoneRegion)));
+            doc, new Pe.Revit.Partition.PartitionRequest(request.ZoneRegion), world), world);
     }
 
     public static TakeoffPartitionResult MaterializePartition(
         Document doc,
         TakeoffPartitionRequest request,
-        Pe.Revit.Partition.PartitionAnswer answer)
+        Pe.Revit.Partition.PartitionAnswer answer,
+        Pe.Revit.Space.World? world = null)
     {
         TakeoffCarriers.Require(doc, TakeoffCarrierStage.Materialization);
         Action<string> log = static _ => { };
@@ -175,7 +176,7 @@ public static class TakeoffAtlas
         var materialized = ZoneMaterializer.Materialize(
             doc, view, elevation, request.ZoneGuid, request.RunId, rooms, residues, log);
         doc.Regenerate();
-        RegionMeasurements.Measure(doc, view, request.ZoneGuid, request.RunId);
+        RegionMeasurements.Measure(doc, view, request.ZoneGuid, request.RunId, world);
 
         var acc = answer.Accounting;
         return new TakeoffPartitionResult(

@@ -1,5 +1,5 @@
 import { reachProps } from "./reach";
-import { useWork } from "./pane";
+import { useWork } from "./work";
 /**
  * The cell: one grammar for a value at any scale (table td, card line, key specimen).
  * Body fill is only a pea proposal or locked; bold is only unsaved; one squiggle wins; icons

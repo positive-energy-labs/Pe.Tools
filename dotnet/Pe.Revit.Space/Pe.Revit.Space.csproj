@@ -32,4 +32,7 @@
         <ProjectReference Include="..\Pe.Revit\Pe.Revit.csproj"/>
     </ItemGroup>
 
+    <ItemGroup>
+        <InternalsVisibleTo Include="Pe.Revit.Tests"/>
+    </ItemGroup>
 </Project>

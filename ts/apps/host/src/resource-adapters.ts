@@ -37,7 +37,11 @@ const ONE_SHOT: Record<string, (r: never) => readonly [string, RequestInit?]> = 
       body: JSON.stringify({
         key: `schedule.grid.${r.subject}`,
         input:
-          r.subject === "work" ? { workspaceId: r.id } : r.subject === "saved" ? { id: r.id } : {},
+          r.subject === "work" || r.subject === "history"
+            ? { workspaceId: r.id }
+            : r.subject === "saved"
+              ? { id: r.id }
+              : {},
         target: r.target,
       }),
     },

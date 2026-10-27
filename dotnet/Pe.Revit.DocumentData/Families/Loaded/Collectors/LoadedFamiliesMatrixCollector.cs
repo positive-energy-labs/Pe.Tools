@@ -14,7 +14,8 @@ public static class LoadedFamiliesMatrixCollector {
         Action<string>? onProgress = null,
         RevitDataOutputBudget? budget = null,
         bool includeTempPlacement = true,
-        IFamilySnapshotCache? snapshotCache = null
+        IFamilySnapshotCache? snapshotCache = null,
+        CancellationToken cancellationToken = default
     ) {
         var effectiveBudget = RevitDataOutputBudgets.WithDefaults(budget, maxEntries: 10, maxSamplesPerEntry: 25);
         // The matrix reads the PROJECT: its values are rendered in the project's units, so that is the
@@ -41,6 +42,7 @@ public static class LoadedFamiliesMatrixCollector {
         var snapshotRecords = new Dictionary<long, FamilySnapshotRecord>();
         var snapshotCacheHits = 0;
         foreach (var familyId in selectedFamilyIds) {
+            cancellationToken.ThrowIfCancellationRequested();
             if (snapshotCache != null && snapshotCache.TryGet(familyId, out var cachedRecord)) {
                 snapshotRecords[familyId] = cachedRecord;
                 snapshotCacheHits++;
@@ -78,6 +80,7 @@ public static class LoadedFamiliesMatrixCollector {
         TimeSpan projectValueElapsed;
         TimeSpan scheduleMatchElapsed;
         using (var evaluationContext = LoadedFamiliesTempPlacementEngine.CreateEvaluationContext(doc, selectedFamilyIds)) {
+            cancellationToken.ThrowIfCancellationRequested();
             onProgress?.Invoke($"Family matrix collecting project values for {catalogFamilies.Count} families.");
             if (includeTempPlacement)
                 evaluationContext.BeginTransaction("Loaded Families Matrix Evaluation");
@@ -115,6 +118,7 @@ public static class LoadedFamiliesMatrixCollector {
                         projectValueFamilies,
                         evaluationContext,
                         (schedule, serializeElapsed, evaluateElapsed, matchCount) => {
+                            cancellationToken.ThrowIfCancellationRequested();
                             candidateSchedules++;
                             scheduleSerializeElapsed += serializeElapsed;
                             scheduleEvalElapsed += evaluateElapsed;
@@ -137,6 +141,7 @@ public static class LoadedFamiliesMatrixCollector {
 
         // Phase 3: pure-compute authority classification + formula supplement from the extracted records.
         var formulaStopwatch = Stopwatch.StartNew();
+        cancellationToken.ThrowIfCancellationRequested();
         onProgress?.Invoke($"Family matrix classifying parameters for {scheduleFamilies.Count} families.");
         var supplementedFamilies = LoadedFamiliesFormulaCollector.Supplement(
             doc,
@@ -248,7 +253,7 @@ public static class LoadedFamiliesMatrixCollector {
                 .Select(parameter => ToParameterSnapshot(parameter, maxSamplesPerEntry, projectUnits))
                 .ToList(),
             family.Issues.Select(LoadedFamiliesCollectorSupport.ToContractIssue).ToList(),
-            IsPartial: false,
+            IsPartial: family.Issues.Any(issue => issue.Severity == CollectedIssueSeverity.Error),
             family.PlacedInstanceCount,
             scheduleNames.ToList()
         );
