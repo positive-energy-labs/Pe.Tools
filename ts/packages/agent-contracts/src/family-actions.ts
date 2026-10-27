@@ -2,6 +2,7 @@ import type { Command } from "./command.ts";
 import { z } from "zod";
 import { specDocSchema } from "./family.ts";
 import { documentRefSchema } from "./target.ts";
+import { nativeProcessSchema } from "./native-process.ts";
 import { workKeySchema } from "./route-state.ts";
 import { podDraftSourceSchema, podMemberSchema, podMemberSourceSchema } from "./settings.ts";
 import { familyExecutionOptionsSchema } from "./families.ts";
@@ -12,7 +13,12 @@ export const familyCaptureSchema = z.object({
   key: workKeySchema,
   capturedAt: z.string(),
   provenance: z.discriminatedUnion("kind", [
-    z.object({ kind: z.literal("live"), target: documentRefSchema }),
+    // Historical readings remain inspectable; mutation requires a captured native process.
+    z.object({
+      kind: z.literal("live"),
+      target: documentRefSchema,
+      process: nativeProcessSchema.optional(),
+    }),
     z.object({ kind: z.literal("file") }),
   ]),
   reading: z.discriminatedUnion("kind", [
@@ -199,13 +205,12 @@ export const familyActions = {
     }),
   },
   "family.build": {
-    says: "Build a saved composed family spec to an admitted output path. The target is execution context, not the new family.",
+    says: "Build a saved composed family spec into its source Pod's run folder. The target is execution context for the new family.",
     needs: "document",
     effect: "command",
     dirties: ["family"],
     input: z.object({
       source: podMemberSourceSchema,
-      outputPath: z.string().optional(),
       modelDirectory: z.string().optional(),
     }),
   },

@@ -45,6 +45,7 @@ const cleanup: (() => Promise<void>)[] = [];
 afterEach(async () => {
   for (const f of cleanup.splice(0).reverse()) await f();
   vi.unstubAllEnvs();
+  vi.unstubAllGlobals();
 });
 const at = address("C:/Tower.rvt");
 const target = { session: "A", openId: "open-A" };
@@ -1105,6 +1106,53 @@ test("a stored-profile read can never arm an apply of a draft it did not evaluat
   ).toMatch(/stored-profile read/);
   expect(sent.filter((s) => s.key === "revit.apply.parameter-links")).toHaveLength(0);
 });
+test.each(["suggestion", "edit", "native"] as const)(
+  "held Parameter Links Apply consumes its edited profile and exact native reading: %s",
+  async (change) => {
+    const env = await setup();
+    const revision = await authorDraft(env.work, link);
+    const capture = (await env.read("parameter-links.read", { evaluate: true })) as { id: string };
+    env.approval.hold();
+    const completion = env.admit(
+      "parameter-links.apply",
+      { readingId: capture.id },
+      revision,
+      "held-profile",
+      "agent",
+    );
+    await vi.waitFor(async () =>
+      expect((await env.owner.list(undefined, "held-profile"))[0]?.state).toBe("waiting"),
+    );
+    if (change === "native") await env.changed();
+    else
+      expect(
+        await env.work.apply(
+          parameterScope,
+          "parameter-links",
+          change === "edit" ? "human" : "pea",
+          [
+            {
+              path: ["profile", change],
+              value: {
+                value: { ...link, definitions: [{ ...link.definitions[0], reducer: "max" }] },
+              },
+            },
+          ],
+          revision,
+        ),
+      ).toMatchObject({ ok: true });
+    env.approval.allow();
+    const completed = await completion;
+    expect(completed).toMatchObject(
+      change === "suggestion" ? { state: "succeeded" } : { state: "failed", notDispatched: true },
+    );
+    expect(
+      env.sent.filter(
+        (row) => row.key === "revit.apply.parameter-links" && row.input.previewOnly === false,
+      ),
+    ).toHaveLength(change === "suggestion" ? 1 : 0);
+  },
+);
 test("a plan whose apply outcome is unknown refuses another apply until it is recovered", async () => {
   const { work, admit, sent, unknown } = await setup();
   const revision = await authorFamilies(work);
@@ -1540,6 +1588,46 @@ test("a submitted source freezes before countdown; changed source never becomes 
     ),
   );
   expect(env.approval.asks).toHaveLength(1);
+});
+test("a URL specification retains the exact acquired PDF before consent, and cancellation writes no assets", async () => {
+  const env = await setup();
+  const pdf = Buffer.from("%PDF-1.7\nexact acquired source");
+  const url = "https://spec.example/source.pdf";
+  const download = vi.fn(async () => new Response(pdf));
+  vi.stubGlobal("fetch", download);
+  await mkdir(join(env.podsRoot, "Global", "settings", "family"), { recursive: true });
+  await writeFile(
+    join(env.podsRoot, "Global", "settings", "family", "captured.json"),
+    JSON.stringify({ family: { name: "Box" } }),
+  );
+  env.approval.hold();
+  const completion = env.admit(
+    "family.attach-spec",
+    { member: { pod: "global", path: "settings/family/captured.json" }, source: { url } },
+    0,
+    "attach-url",
+    "agent",
+    { ...scope, route: "family" },
+  );
+  await vi.waitFor(async () =>
+    expect((await env.owner.list(undefined, "attach-url"))[0]?.state).toBe("waiting"),
+  );
+  await env.owner.cancel("attach-url");
+  expect(await completion).toMatchObject({ state: "cancelled" });
+  const recovered = (
+    await new ActionJournal(join(env.podsRoot, "..", "actions.json")).list(undefined, "attach-url")
+  )[0]!;
+  expect(recovered.consumes).toContainEqual({
+    kind: "capture",
+    origin: { kind: "url", url },
+    bytesBase64: pdf.toString("base64"),
+    sha256: createHash("sha256").update(pdf).digest("hex"),
+    capturedAt: expect.any(String),
+  });
+  expect(download).toHaveBeenCalledTimes(1);
+  expect(await readdir(join(env.podsRoot, "Global", "settings", "family"))).toEqual([
+    "captured.json",
+  ]);
 });
 test("edits remain writable during countdown and invalidate the submitted Work revision", async () => {
   const env = await setup();

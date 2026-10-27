@@ -129,7 +129,7 @@ export function ductsExecutors(
             _ctx: CommandContext,
             execution: import("./action-journal.ts").ActionExecution,
           ) => {
-            const prepared = preparedDuctsSchema.parse(execution.prepared);
+            const prepared = execution.prepared as z.infer<typeof preparedDuctsSchema>;
             const value = await execution.step(
               "native",
               prepared.op,

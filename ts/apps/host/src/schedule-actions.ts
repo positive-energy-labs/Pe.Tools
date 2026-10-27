@@ -7,7 +7,6 @@ import {
   scheduleCellBindingSchema,
   type WorkHandle,
   canonicalRouteInput,
-  sameValue,
   refusalText,
   documentRefSchema,
   addressSchema,
@@ -33,7 +32,6 @@ import {
   type ScheduleCellsApply,
 } from "@pe/host-contracts/generated";
 import { BridgeError, type RevitBridge } from "./bridge.ts";
-import { assertFresh, documentMarks } from "./document-marks.ts";
 import { ActionIncomplete, type ActionExecution } from "./action-journal.ts";
 import { z } from "zod";
 import type { CommandContext, CommandFactory } from "./command-executor.ts";
@@ -49,6 +47,7 @@ import {
   runPods,
   writeCaptureRun,
   writeMemberOnce,
+  sourceRunOutput,
   type FamilyActionDependencies,
 } from "./family-actions.ts";
 
@@ -398,7 +397,12 @@ export function scheduleExecutors(
               ),
             ];
             return {
-              effects: [{ kind: "document" as const, ref: target }],
+              effects: [
+                { kind: "document" as const, ref: target },
+                ...(pod
+                  ? [{ kind: "directory" as const, path: await sourceRunOutput(pod, deps) }]
+                  : []),
+              ],
               consumes: [
                 { kind: "work" as const, handle: base, paths, snapshot: frozenDocument },
                 {
@@ -695,6 +699,10 @@ async function scheduleSpecExecutor(
         ],
         effects: [
           { kind: "document" as const, ref: target },
+          {
+            kind: "directory" as const,
+            path: await sourceRunOutput(capture?.pod ?? frozenSpec!.source.id, deps),
+          },
           ...(capture ? [{ kind: "member" as const, pod: capture.pod, path: path! }] : []),
         ],
       };

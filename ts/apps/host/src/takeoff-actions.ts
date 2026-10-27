@@ -22,7 +22,6 @@ import {
   takeoffDecisionKey,
   takeoffEditKey,
   takeoffsRouteState,
-  transitionPatches,
   type StagedRoomEdit,
   type ModelRoom,
 } from "@pe/agent-contracts";
@@ -181,7 +180,7 @@ export function takeoffExecutors(
             ...(capture ? { capture } : {}),
           }),
           run: async (_ctx: CommandContext, execution: ActionExecution) => {
-            const frozen = preparedSyncSchema.parse(execution.prepared);
+            const frozen = execution.prepared as z.infer<typeof preparedSyncSchema>;
             const submitted = { edits: frozen.edits, decisions: frozen.decisions };
             const capture = frozen.capture;
             const native = <A = unknown>(key: string, input: unknown) =>

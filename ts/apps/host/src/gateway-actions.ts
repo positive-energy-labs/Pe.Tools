@@ -477,7 +477,7 @@ export function gatewayExecutor(
         };
       },
       run: async (_ctx: CommandContext, execution: ActionExecution) => {
-        const prepared = preparedGatewaySchema.parse(execution.prepared);
+        const prepared = execution.prepared as z.infer<typeof preparedGatewaySchema>;
         const capturedScript = prepared.kind === "native-leaf" ? prepared.script : undefined;
         if (
           key === "scripting.execute" &&
@@ -537,7 +537,7 @@ export function gatewayExecutor(
         );
       },
       recover: async (step: import("@pe/agent-contracts").ActionStep, raw: unknown) => {
-        const prepared = preparedGatewaySchema.parse(raw);
+        const prepared = raw as z.infer<typeof preparedGatewaySchema>;
         if (prepared.kind !== "native-leaf")
           throw Error("This command has no native receipt recovery");
         const read = await readNativeReceipt(

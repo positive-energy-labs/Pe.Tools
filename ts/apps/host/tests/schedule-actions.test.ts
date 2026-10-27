@@ -311,6 +311,41 @@ test("missing acknowledgments recover the same native receipt before original re
   expect((await f.view()).doc.cells["1::2"].edit).toBeNull();
   expect(f.sent.filter((s) => s.key === "schedule.cells.apply")).toHaveLength(1);
 });
+test("a recovered partial acknowledgment retires newly proven cells without rewriting prior retirement or dispatching again", async () => {
+  const f = await setup();
+  const detail = detailResponse();
+  detail.entries[0].rows.push({
+    ...detail.entries[0].rows[0],
+    rowNumber: 2,
+    bindings: [
+      { ...detail.entries[0].rows[0].bindings[0], targetElementIds: [9], targets: [target(9)] },
+    ],
+  });
+  f.setDetail(detail);
+  await f.bind(await f.read());
+  await f.patch([{ path: ["cells", "2::2"], value: { edit: { value: "200 VA" } } }]);
+  f.setResponse(cellsApplied([[1, 2, true]]));
+  const original = await f.admission();
+  expect(await f.submit(original)).toMatchObject({ state: "incomplete", result: { applied: 1 } });
+  const first = (await f.owner().list(undefined, original.id))[0]!.steps.find(
+    (step) => step.key === "work.retire",
+  )!;
+  expect((await f.view()).doc.cells["1::2"].edit).toBeNull();
+  expect((await f.view()).doc.cells["2::2"].edit).toMatchObject({ value: "200 VA" });
+  f.setResponse(
+    cellsApplied([
+      [1, 2, true],
+      [2, 2, true],
+    ]),
+  );
+  await controlAction("action.recover", { id: original.id }, "");
+  await controlAction("action.resume", { id: original.id }, "");
+  const completed = await f.owner().wait(original.id);
+  expect(completed).toMatchObject({ state: "succeeded" });
+  expect(completed.steps.find((step) => step.id === first.id)).toEqual(first);
+  expect((await f.view()).doc.cells["2::2"].edit).toBeNull();
+  expect(f.sent.filter((step) => step.key === "schedule.cells.apply")).toHaveLength(1);
+});
 
 /** Rewrite a stored reading the way a capture from before per-target evidence looks: no `targets`. */
 async function strip(dir: string, id: string, workspaceId?: string) {

@@ -7,6 +7,7 @@ import {
   familyActions,
   commands,
   familyReads,
+  familyCaptureSchema,
   familiesCaptureEvidenceSchema,
   familiesRouteState,
   familiesExcluded,
@@ -17,9 +18,7 @@ import {
   familyDraftRouteState,
   familyStagedPatch,
   memberWork,
-  sameValue,
   editedEntries,
-  transitionPatches,
   draftCellSchema,
   parameterLinksRouteState,
   parameterLinksBasis,
@@ -101,9 +100,18 @@ const familyInput = <K extends FamilyActionKey>(
 const refused = (message: string) => new BridgeError(message, 409, { notDispatched: true });
 const digest = (value: string) => createHash("sha256").update(value).digest("hex");
 // PodRuns.StartComposedRun writes to this source Pod's output, or operations for a supplied draft.
-const familyOutput = async (pod: string | null | undefined, deps: PodDependencies) =>
-  pod ? join(await runPods(deps, podFolder(pod, {podsRoot:deps.podsRoot})),productPathNames.outputDirectoryName)
-    : join(deps.podsRoot ?? productPodsRootPath(),scriptingWorkspaceIdentity.defaultWorkspaceKey,productPathNames.outputDirectoryName,"operations");
+export const sourceRunOutput = async (pod: string | null | undefined, deps: PodDependencies) =>
+  pod
+    ? join(
+        await runPods(deps, podFolder(pod, { podsRoot: deps.podsRoot })),
+        productPathNames.outputDirectoryName,
+      )
+    : join(
+        deps.podsRoot ?? productPodsRootPath(),
+        scriptingWorkspaceIdentity.defaultWorkspaceKey,
+        productPathNames.outputDirectoryName,
+        "operations",
+      );
 
 /** Pod I/O runs against the product Pods root unless an owner (the demo lane) supplies its own. */
 export type PodDependencies = {
@@ -574,12 +582,12 @@ export function familyExecutors(
           return structuredClone(frozen);
         };
         let observedMember: PodMemberRead | null = null;
+        let evaluatedCapture: FamilyCapture | null = null;
         const captureInput = admission.input as {
           pod?: string;
           path?: string;
           familyIds?: number[];
           member?: PodMember;
-          outputPath?: string;
         };
         const capturePaths = Object.fromEntries(
           (captureInput.familyIds ?? [0]).map((id) => [
@@ -606,9 +614,6 @@ export function familyExecutors(
                       pod: captureInput.pod!,
                       path,
                     }))
-                  : []),
-                ...(captureInput.outputPath
-                  ? [{ kind: "file" as const, path: captureInput.outputPath }]
                   : []),
               ];
         const consumes: Dependency[] = [];
@@ -649,7 +654,7 @@ export function familyExecutors(
                       .map(([cell]) => ["fields", cell, "edit"]),
                   ]
                 : submittedRoute === "parameter-links"
-                  ? [["profile"], ["reading"], ["basis"]]
+                  ? [["profile", "edit"]]
                   : [
                       ["reading"],
                       ["takenAt"],
@@ -688,6 +693,30 @@ export function familyExecutors(
             : undefined;
           if (target && process)
             consumes.push({ kind: "incarnation", target: admission.target, process });
+          if (key === "parameter-links.apply" && typeof admission.input.readingId === "string") {
+            const artifact = await captures.savedFamilyText(admission.input.readingId);
+            evaluatedCapture = familyCaptureSchema.parse(JSON.parse(artifact.text));
+            if (evaluatedCapture.provenance.kind !== "live" || !evaluatedCapture.provenance.process)
+              throw refused("This historical reading has no exact native process; evaluate again");
+            consumes.push(
+              {
+                kind: "file",
+                path: artifact.path,
+                sha256: digest(artifact.text),
+                bytesBase64: Buffer.from(artifact.text).toString("base64"),
+              },
+              {
+                kind: "incarnation",
+                target: admission.target,
+                process: evaluatedCapture.provenance.process,
+              },
+              {
+                kind: "document-mark",
+                ref: evaluatedCapture.provenance.target,
+                takenAt: evaluatedCapture.capturedAt,
+              },
+            );
+          }
           const takenAt = (frozenWork?.doc as { takenAt?: string | null } | undefined)?.takenAt;
           if (
             target &&
@@ -716,16 +745,23 @@ export function familyExecutors(
                 );
           }
           if (["family.apply", "families.apply", "family.build"].includes(key)) {
-            const roots = new Set([...sources.values()].map(source=>source.source.root.id));
+            const roots = new Set([...sources.values()].map((source) => source.source.root.id));
             const plans = planId ? ctx.read.receipts(planId) : [];
-            const collectRoots = (prepared: Prepared):void => {
+            const collectRoots = (prepared: Prepared): void => {
               if (prepared.kind === "batch") prepared.items.forEach(collectRoots);
-              else if (prepared.kind === "native" && prepared.sealed) roots.add(prepared.sealed.source.root.id);
+              else if (prepared.kind === "native" && prepared.sealed)
+                roots.add(prepared.sealed.source.root.id);
             };
-            for (const plan of plans) if (plan.prepared.state === "ready") collectRoots(preparedFamilySchema.parse(plan.prepared.value));
-            for (const pod of roots) footprint.push({kind:"directory",path:await familyOutput(pod,deps)});
+            for (const plan of plans)
+              if (plan.prepared.state === "ready")
+                collectRoots(preparedFamilySchema.parse(plan.prepared.value));
+            for (const pod of roots)
+              footprint.push({ kind: "directory", path: await sourceRunOutput(pod, deps) });
           } else if ((key === "family.capture" || key === "families.capture") && captureInput.pod)
-            footprint.push({kind:"directory",path:await familyOutput(captureInput.pod,deps)});
+            footprint.push({
+              kind: "directory",
+              path: await sourceRunOutput(captureInput.pod, deps),
+            });
           return {
             consumes,
             effects: footprint,
@@ -1270,7 +1306,7 @@ export function familyExecutors(
                 input: { profile: staged, previewOnly: false, reconcile: true },
               };
             }
-            const capture = await captures.family(input.readingId);
+            const capture = evaluatedCapture!;
             if (
               capture.reading.kind !== "parameter-links" ||
               capture.provenance.kind !== "live" ||
@@ -1619,7 +1655,7 @@ export function familyExecutors(
           bind,
           prepare: () => prepare(),
           run: (_ctx: CommandContext, execution: import("./action-journal.ts").ActionExecution) =>
-            executePrepared(execution, preparedFamilySchema.parse(execution.prepared)),
+            executePrepared(execution, execution.prepared as Prepared),
           recover: (step: import("@pe/agent-contracts").ActionStep, prepared: unknown) =>
             recoverFamilyStep(step, prepared, admission.target, deps),
         };
@@ -1634,7 +1670,7 @@ async function recoverFamilyStep(
   target: import("@pe/agent-contracts").ExecutionTarget,
   deps: FamilyActionDependencies,
 ) {
-  const whole = preparedFamilySchema.parse(raw);
+  const whole = raw as Prepared;
   const prepared =
     whole.kind === "batch"
       ? whole.items.find(
@@ -1645,7 +1681,7 @@ async function recoverFamilyStep(
       : whole;
   if (!prepared || !("process" in prepared))
     throw refused("No prepared native source matches this step");
-  const process = nativeProcessSchema.parse((prepared as { process: unknown }).process);
+  const process = prepared.process;
   if (step.key !== "families.apply") return readNativeReceipt(step, process, deps.sdk);
   if (step.state === "succeeded" && isFamiliesApplyResponse(step.result))
     return { step, evidence: { recordedNativeOutcome: true } };
@@ -1668,7 +1704,7 @@ async function recoverFamilyStep(
     return { step: unknown, evidence: { sdk: sdk.evidence, conflict: sdk.step } };
   try {
     const input = (prepared as { input?: { source?: { root?: { id?: string | null } } } }).input;
-    const root = await familyOutput(input?.source?.root?.id, deps);
+    const root = await sourceRunOutput(input?.source?.root?.id, deps);
     const selected = target;
     const run =
       selected.kind === "document"
@@ -1705,7 +1741,9 @@ export async function readFamily(
   const scope = workKeySchema.parse(raw.scope);
   const target = documentRefSchema.parse(raw.target);
   // Parameter Links reads a project document, not a family document.
-  const original = await current(bridge, target, "project");
+  const { session: original, process } = await lifetime(bridge, target, "project", deps);
+  const marks = documentMarks(bridge);
+  const capturedAt = new Date().toISOString();
   const fence = async () => {
     const next = await current(bridge, target, "project");
     if (
@@ -1713,6 +1751,7 @@ export async function readFamily(
       next.processStartUtcUnixMs !== original.processStartUtcUnixMs
     )
       throw refused("Reading process changed");
+    assertFresh(marks, target, capturedAt);
   };
   const native = async (key: string, input: unknown) => {
     await fence();
@@ -1759,9 +1798,6 @@ export async function readFamily(
     }),
   };
   await fence();
-  const provenance: FamilyCapture["provenance"] = { kind: "live", target };
-  return captures.saveFamily(
-    { key: scope, capturedAt: new Date().toISOString(), provenance, reading },
-    fence,
-  );
+  const provenance: FamilyCapture["provenance"] = { kind: "live", target, process };
+  return captures.saveFamily({ key: scope, capturedAt, provenance, reading }, fence);
 }

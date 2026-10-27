@@ -207,7 +207,9 @@ export async function familySpecExecutor(
       return { member, doc, specPath, assets };
     },
     run: async (_ctx: CommandContext, execution: ActionExecution) => {
-      const { member, doc, specPath, assets } = preparedSpecSchema.parse(execution.prepared);
+      const { member, doc, specPath, assets } = execution.prepared as z.infer<
+        typeof preparedSpecSchema
+      >;
       for (const asset of assets)
         await execution.step("file", "family.spec.asset", asset, async () => {
           await mkdir(dirname(asset.path), { recursive: true });

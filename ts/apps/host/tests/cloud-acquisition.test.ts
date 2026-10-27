@@ -13,7 +13,10 @@ import { replay } from "./e2-sdk-recordings.ts";
 import { createMachine, useHostMachine, unavailableShare } from "../src/machine.ts";
 import { unreadLeg } from "../src/update-reader.ts";
 const folders: string[] = [];
+const machines: ReturnType<typeof createMachine>[] = [];
 afterEach(async () => {
+  useHostMachine(undefined);
+  for (const machine of machines.splice(0)) machine.close();
   for (const folder of folders.splice(0)) await rm(folder, { recursive: true, force: true });
 });
 async function folder() {
@@ -175,6 +178,7 @@ test("recorded SDK envelopes: only the downloaded local work file crosses the ac
     },
   });
   useHostMachine(machine);
+  machines.push(machine);
   const peaWork = join(dir, "pea-work");
   const started = await fixtureAction(
     owner,
@@ -248,8 +252,6 @@ test("recorded SDK envelopes: only the downloaded local work file crosses the ac
   );
   const receipt = await owner.wait(admitted.id);
   expect(receipt, JSON.stringify(receipt)).toMatchObject({ state: "succeeded" });
-  useHostMachine(undefined);
-  machine.close();
   expect(receipt.steps.map((step) => step.key)).toEqual([
     "acquisition.baseline",
     "acquisition.work",

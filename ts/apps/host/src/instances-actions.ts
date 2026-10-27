@@ -14,7 +14,6 @@ import {
   canonicalRouteInput,
   type InstancesActionKey,
   type Basis,
-  type ActionAdmission,
   type RefusalCode,
 } from "@pe/agent-contracts";
 import type { ActionStep } from "@pe/agent-contracts";
@@ -69,7 +68,7 @@ import {
 } from "./acquisition.ts";
 import { productPeaWorkPath } from "./product-paths.ts";
 import { resolveStartProject, runPeRevitCli } from "./session-route.ts";
-import { admitCrossing, live, Refused, requireHuman } from "./control.ts";
+import { admitCrossing, Refused, requireHuman } from "./control.ts";
 import { readMachineSession } from "./machine.ts";
 import { downloadCloudVersion } from "./cloud-version.ts";
 import { markDispatched, validateDispatch } from "./action-dispatch.ts";
@@ -397,7 +396,7 @@ export function instancesExecutors(deps: InstancesActionDependencies = {}) {
     Object.keys(instancesActions).map((name) => [
       name,
       (ctx: CommandContext) => {
-        const { admission, owner } = ctx;
+        const { admission } = ctx;
         const key = name as InstancesActionKey;
         if (key === "instances.handover" || key === "instances.cleanup")
           return acquisitionReleaseExecutor(ctx, key, deps);
@@ -1036,7 +1035,7 @@ async function acquisitionReleaseExecutor(
   key: "instances.handover" | "instances.cleanup",
   deps: InstancesActionDependencies,
 ) {
-  const { admission, owner } = ctx;
+  const { admission } = ctx;
   const crossing = { caller: ctx.caller, basis: ctx.basis };
   const read = deps.sdk ?? mutate;
   let acquired: Acquisition | undefined;
@@ -1110,6 +1109,7 @@ async function acquisitionReleaseExecutor(
       }
 
       return {
+        claims: key === "instances.cleanup" ? [{ kind: "reconciliation" as const, id }] : [],
         effects: [
           ...(document
             ? [
@@ -1190,7 +1190,9 @@ async function acquisitionReleaseExecutor(
       };
     },
     run: async (_ctx: CommandContext, execution: ActionExecution) => {
-      const { target, open, acquired, removals } = releasePreparedSchema.parse(execution.prepared);
+      const { target, open, acquired, removals } = execution.prepared as z.infer<
+        typeof releasePreparedSchema
+      >;
       const document = acquired.document;
       const expectSession = target?.expectSession ?? "";
       const sdkOpenId = document?.sdkOpenId ?? "";
