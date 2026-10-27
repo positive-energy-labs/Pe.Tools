@@ -182,10 +182,7 @@ export function ModelPicture({
   const pictureLayers = useMemo(
     () =>
       meshes
-        ? [
-            ...findings3d,
-            portLayer(equipmentPorts(graph, meshes, paintOf), colour === "firm" ? kinds : {}, look),
-          ]
+        ? [...findings3d, portLayer(equipmentPorts(graph, meshes, paintOf), colour === "firm" ? kinds : {}, look)]
         : findings3d,
     [graph, meshes, paintOf, findings3d, look, kinds, colour],
   );

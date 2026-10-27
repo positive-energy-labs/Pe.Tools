@@ -11,7 +11,7 @@ export type SceneRead = {
   pending: boolean;
   /** Current-scope exact focus is usable while its optional context is pending. */
   focusReady?: boolean;
-  /** Exact focus owner, stable while its optional context changes. Also the first edit picture. */
+  /** Exact focus owner, stable while its optional context changes. Also the first staged picture. */
   focusMeshes?: SceneMeshes | null;
   omittedElements: number;
   unavailableElements: number;
