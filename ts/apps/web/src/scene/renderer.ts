@@ -514,9 +514,7 @@ export function createRenderer(mount: HTMLElement, initialMeshes: SceneMeshes, w
     const layers = shown.layers.mask;
     material.colorWrite = false;
     material.depthWrite = true;
-    shown.layers.set(STUB_LAYER);
-    veil.scenePass.value = 6;
-    renderer.render(scene, shown);
+    // Translucent stubs never occlude a mark, like context: a wrapped subject's hover must show.
     shown.layers.set(OCCLUDER_LAYER);
     veil.scenePass.value = 1;
     renderer.render(scene, shown);
@@ -567,15 +565,17 @@ export function createRenderer(mount: HTMLElement, initialMeshes: SceneMeshes, w
     caps.forEach((cap) => {
       cap.material.depthWrite = true;
     });
-    // Stub depth pre-pass: each pixel records its nearest stub surface, colour withheld.
+    // Subjects first, then the stub depth pre-pass: each pixel records its nearest stub surface in
+    // front of the subject, colour withheld. Pre-pass first erased any subject behind a stub, and
+    // insulation wrapping the subject greyed the whole system (EX 7, 2026-10-27).
+    veil.scenePass.value = 1;
+    renderer.render(scene, shown);
     shown.layers.set(STUB_LAYER);
     veil.scenePass.value = 6;
     material.colorWrite = false;
     renderer.render(scene, shown);
     material.colorWrite = true;
     shown.layers.mask = mask;
-    veil.scenePass.value = 1;
-    renderer.render(scene, shown);
     // Stub fill: only the pixel's nearest stub passes EQUAL, so overlapping translucent pieces
     // blend once. Stub seams follow on their own layer, above the fill.
     shown.layers.set(STUB_LAYER);
