@@ -1,4 +1,4 @@
-/** Browser proof against the real host: capture → plan → apply with filed receipts read back on `/pods`. */
+/** Browser proof against the isolated host: capture and one Apply with filed receipts on `/pods`. */
 import { existsSync, mkdtempSync, writeFileSync } from "node:fs";
 import { createServer as createNodeServer } from "node:http";
 import { tmpdir } from "node:os";
@@ -413,15 +413,6 @@ async function run(page: Page, label: string) {
   await button.click();
 }
 
-/** The plan sheet gates apply: its `apply N rows` is the only apply button (w8-revit trip 5). */
-async function applySheet(page: Page) {
-  const button = page
-    .getByRole("region", { name: "Confirmation sheet" })
-    .getByRole("button", { name: /^apply \d+ rows?/ });
-  await expect.poll(() => button.isEnabled(), { timeout: 30_000 }).toBe(true);
-  await button.click();
-}
-
 async function landed(page: Page, pattern: RegExp) {
   await expect
     .poll(() => decodeURIComponent(new URL(page.url()).searchParams.get("path") ?? ""), {
@@ -512,8 +503,8 @@ test("live /schedules: capture then apply files a run receipt", async () => {
       .first()
       .click();
     await run(page, "capture schedule");
-    const path = await landed(page, /^settings\/schedules\/schedule-481223-.*\.json$/);
-    // Apply is an Applying verb; with no cell staged it names the opened spec (ruling 41).
+    const path = await landed(page, /^captures\/schedule-481223-[a-f0-9]+\.json$/);
+    // Apply names the opened spec when no cell is edited.
     await go(page, `${page.url()}&stage=apply`);
     await run(page, "apply spec");
     await logged(page, "apply", "ran");
@@ -522,7 +513,10 @@ test("live /schedules: capture then apply files a run receipt", async () => {
   expect(shown).toContain("Succeeded");
   // Every capture writes a run: the capture's own run sits on this member beside the apply's.
   expect(shown).toContain("schedule.capture");
-  expect(workflows).toEqual(["schedule.capture", "schedule.apply"]);
+  expect(workflows.filter((key) => !key.endsWith(".observe"))).toEqual([
+    "schedule.capture",
+    "schedule.apply",
+  ]);
 }, 180_000);
 
 test("live /family: capture, then one apply press (plan and send) files a run receipt", async () => {
@@ -530,7 +524,7 @@ test("live /family: capture, then one apply press (plan and send) files a run re
     const pod = await openLive(page, "/family", "demo=capture&live=1");
     await go(page, `${page.url()}&pod=${pod}`);
     await run(page, "capture family");
-    const path = await landed(page, /^settings\/family\/Simulated-demo-family-.*\.json$/);
+    const path = await landed(page, /^captures\/[a-f0-9]+-0\.json$/);
     // The capture's receipt is a log row whose label opens the member it filed.
     await logged(page, "captured 1 family", path);
     if (SCRATCH) await page.screenshot({ path: join(SCRATCH, "family-captured.png") });
@@ -546,8 +540,10 @@ test("live /family: capture, then one apply press (plan and send) files a run re
   expect(shown).toContain("Succeeded");
   // The capture filed a run of its own on this member: that run holds the unmodeled facts.
   expect(shown).toContain("family.capture");
-  // The seeded draft already holds a reading, so arrival reads nothing; the one capture saves it.
-  expect(workflows).toEqual(["family.capture", "family.plan", "family.apply"]);
+  // Arrival may read the native baseline; saving and applying each use their own semantic command.
+  expect(workflows.filter((key) => key === "family.apply")).toEqual(["family.apply"]);
+  expect(workflows).not.toContain("family.plan");
+  expect(workflows).toContain("family.capture");
 }, 180_000);
 
 async function readMechanicalFamilies(page: Page, expectedValue = "Fan Coil Unit - Ducted model") {
@@ -706,13 +702,11 @@ test("/families History inspects a saved reading without a target or Revit conne
 
 /**
  * THE EDITABLE TABLE, on keyed cells. Two cells are typed across two families: a typed value
- * stages directly, and it survives a reload. Typing one back to Revit's value clears its stage.
- * PLAN takes the staged cell only, generates one patch draft for that family, files nothing, and
- * plans exactly that family's id from the draft's bytes. Apply names that plan; after the native
- * apply succeeds the host retires the unchanged staged cell, and `/pods` shows the run under the
- * draft's name as a supplied draft, not a saved member.
+ * edits shared Work directly and survives reload. Returning to the native value clears the edit.
+ * One Apply submits all source bytes, plans internally, checks native hashes and retires only
+ * unchanged edits after success. `/pods` shows each source's run without creating a saved member.
  */
-test("live /families: retained readback supports repeat and consecutive family plans", async () => {
+test("live /families: retained readback supports repeated shared Apply commands", async () => {
   const { shown, workflows } = await liveLoop("families-table", async (page) => {
     let fullReads = 0;
     page.on("request", (request: { method(): string; url(): string }) => {
@@ -731,17 +725,18 @@ test("live /families: retained readback supports repeat and consecutive family p
       await page
         .locator('section[aria-label="Situation"][data-surface="page"]')
         .screenshot({ path: join(SCRATCH, "families-read.png") });
-    // The Situation's Work sentence ("2 cells staged by you, 1 proposed by Pea · …"); none when
-    // nothing is pending.
-    const band = (open: number, staged: number) => {
+    // The Work sentence counts edits and suggestions without guessing their authors.
+    const band = (open: number, edited: number) => {
       const says = [
-        staged ? `${staged} cell${staged === 1 ? "" : "s"} staged by you` : "",
-        open ? `${open} proposed by Pea` : "",
+        edited ? `${edited} edited cell${edited === 1 ? "" : "s"}` : "",
+        open ? `${open} suggestion${open === 1 ? "" : "s"}` : "",
       ].filter(Boolean);
       return expect
         .poll(() => page.locator('[data-slot="situation-band"]').innerText(), { timeout: 30_000 })
         .toMatch(
-          says.length ? new RegExp(`^${says.join(", ")}( ·|$)`) : /^(?![\s\S]*by (you|Pea))/,
+          says.length
+            ? new RegExp(`^${says.join(", ")}( ·|$)`)
+            : /^(?![\s\S]*(?:edited cells?|suggestions?))/,
         );
     };
     const type = async (family: string, current: string, next: string) => {
@@ -770,15 +765,12 @@ test("live /families: retained readback supports repeat and consecutive family p
     await go(page, auditUrl.href);
     // The host's retained matrix restores without another expensive Read.
     await expectModelValue(page, "Fan Coil Unit - Ducted", "FXMQ20");
-    // Typing a cell back to Revit's value clears its stage: it shows Revit's value again.
+    // Returning a cell to Revit's value clears its edit.
     await type("Heat Pump - Split", "RXL30", "Heat Pump - Split model");
     await band(0, 1);
     await expectModelValue(page, "Heat Pump - Split", "Heat Pump - Split model");
     if (SCRATCH)
-      await page.screenshot({ path: join(SCRATCH, "families-table-staged.png"), fullPage: true });
-    await run(page, "apply");
-    if (SCRATCH)
-      await page.screenshot({ path: join(SCRATCH, "families-table-plan.png"), fullPage: true });
+      await page.screenshot({ path: join(SCRATCH, "families-table-edited.png"), fullPage: true });
     let releaseReadback!: () => void;
     const heldReadback = new Promise<void>((resolve) => {
       releaseReadback = resolve;
@@ -793,15 +785,15 @@ test("live /families: retained readback supports repeat and consecutive family p
         await route.continue();
       },
     );
-    await applySheet(page);
+    await run(page, "apply");
     await expect.poll(() => readbackRequested, { timeout: 30_000 }).toBe(true);
     await page.getByRole("combobox", { name: "table query" }).fill("parameter~model ");
     releaseReadback();
     // The owner changes simulated native state; the Host's targeted matrix readback, not the
-    // staged input, supplies the value that the table draws after apply.
+    // submitted input, supplies the value that the table draws after Apply.
     await expectModelValue(page, "Fan Coil Unit - Ducted", "FXMQ20");
     // The apply is one log row; the simulated engine writes no bundle, so it links nothing.
-    await logged(page, "apply 1 family · 1 converged", "no artifacts on disk");
+    await logged(page, "apply", "ran");
     if (SCRATCH) await page.screenshot({ path: join(SCRATCH, "families-applied.png") });
     await page.getByRole("combobox", { name: "table query" }).focus();
     await expect
@@ -809,13 +801,11 @@ test("live /families: retained readback supports repeat and consecutive family p
         page.getByRole("button", { name: "parameter contains model", exact: true }).count(),
       )
       .toBe(1);
-    // The retained post-apply observation keeps the original Work baseline. Plan two separate
-    // families from it; applying the first must not make the second plan unusable.
+    // The retained observation supplies the baseline for the next Apply across two families.
     await type("Fan Coil Unit - Ducted", "FXMQ20", "FXMQ21");
     await type("Heat Pump - Split", "Heat Pump - Split model", "RXL31");
     await band(0, 2);
     await run(page, "apply");
-    await applySheet(page);
     await expectModelValue(page, "Fan Coil Unit - Ducted", "FXMQ21");
     await expectModelValue(page, "Heat Pump - Split", "RXL31");
     await band(0, 0);
@@ -823,15 +813,15 @@ test("live /families: retained readback supports repeat and consecutive family p
     // Plan filed no spec nobody authored: the page names no member.
     expect(new URL(page.url()).searchParams.get("path") ?? "").toBe("");
     await logged(page, "apply", "ran");
-    // The applied, unchanged staged cell retired: the sentence is gone; the receipt is the record.
+    // The applied unchanged edits retire; the receipt remains the record.
     await band(0, 0);
     // The run is filed under the draft's name; `/pods` browses members, and none was filed.
     // A string, so vitest leaves the page's own dynamic import alone.
     const runs = (await page.evaluate(
-      `import("/src/host/pods.ts").then((m) => m.listRuns(${JSON.stringify(pod)}, "staged/Fan-Coil-Unit---Ducted.json"))`,
+      `import("/src/host/pods.ts").then((m) => m.listRuns(${JSON.stringify(pod)}, "edit/Fan-Coil-Unit---Ducted.json"))`,
     )) as { receipt: unknown }[];
     const members = await receiptOnPods(page, pod, "", "Members");
-    expect(members).not.toContain("staged");
+    expect(members).not.toContain("edit/Fan-Coil-Unit---Ducted.json");
     return JSON.stringify(runs.map((r) => r.receipt));
   });
   expect(JSON.parse(shown)).toEqual([
@@ -852,13 +842,6 @@ test("live /families: retained readback supports repeat and consecutive family p
       memberSha256: null,
     }),
   ]);
-  // The second review planned and applied both families from the retained readback.
-  expect(workflows).toEqual([
-    "families.plan",
-    "families.apply",
-    "families.plan",
-    "families.plan",
-    "families.apply",
-    "families.apply",
-  ]);
+  // Two human presses each submit one semantic Apply, even when the second covers two sources.
+  expect(workflows).toEqual(["families.apply", "families.apply"]);
 }, 180_000);
