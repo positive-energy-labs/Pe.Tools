@@ -92,12 +92,14 @@ void veil(inout vec4 c) {
     c.a = veilFill * t;
     if (c.a < 0.004) discard;
     // Glass: only the nearest context surface at this pixel draws, so sheets never stack. The
-    // pre-pass ran this same vertex path, so equal surfaces match to depth-buffer precision;
-    // the slack is a few 24-bit ulps plus the pixel's depth slope (MSAA centre vs sample). A
-    // fixed epsilon would be metres of view depth far out at near 0.05, so none is used.
+    // pre-pass ran this same vertex path, so equal surfaces match to depth-buffer precision; the
+    // slack is a few 24-bit ulps. No fwidth term: its slope widens the tolerance at grazing
+    // angles, so parallel roof layers (deck, insulation, ceiling) all pass and stack
+    // (2026-10-27 Chadds). MSAA is harmless here: the fill's fragments run once per pixel centre,
+    // and the pre-pass samples that same centre from a single-sample target.
     if (contextDepthSize.x > 0.0) {
       float nearest = texture(contextDepth, gl_FragCoord.xy / contextDepthSize).r;
-      if (gl_FragCoord.z > nearest + 4.0 / 16777216.0 + 2.0 * fwidth(gl_FragCoord.z)) discard;
+      if (gl_FragCoord.z > nearest + 8.0 / 16777216.0) discard;
     }
   } else {
     // Negative batch alpha carries the stub tier without spending another vertex attribute.
