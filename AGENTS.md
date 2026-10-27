@@ -135,6 +135,7 @@ After any large changes, ALWAYS clarify user intent and capture the durable know
   rg exit 1 means "no matches", not an error. Never blind-retry a quoting variant, and never put
   JSON on a command line (`pea ... --request '{...}'` dies in re-quoting): one failed quote → write
   the payload/pattern to a file (harness Read/Grep tools where available) — see the `execute` skill.
+- `pe-revit dev link` run through the shim fails with "file in use", because the shim locks its own `pe-revit.exe` and `Pe.Revit.Cli.dll`. Run `dotnet tool run pe-revit -- dev link` from the checkout instead (proven 2026-10-27: the shim form failed 3 times, and the pinned-tool form linked `pe-revit` and `pea` to the root checkout).
 - Background + poll anything minutes-scale, and read `status` before any retry. (Client-kill orphans
   were field-disproven at beta.118 — the SDK reaps its own children.)
 - A `preview_evaluate` that runs past its 15 s limit kills whatever JavaScript the page is running then; inside a React render that leaves the page wedged with no error (2026-10-21, /ducts read as "stuck on pricing…"). Poll with short evaluates; never wait inside one.
