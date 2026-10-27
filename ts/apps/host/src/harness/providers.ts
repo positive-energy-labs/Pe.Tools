@@ -54,7 +54,7 @@ const log = {
 const flatten = (option: SessionConfigOption & { type: "select" }) =>
   option.options.flatMap((o) => ("options" in o ? o.options : [o]));
 
-/** Mode and collaboration mode are not traits: access sets the mode, plan mode is not offered. */
+/** Mode follows the journal-safe harness policy; collaboration/plan mode is not a user trait. */
 const notTraits = new Set(["model", "mode", "collaboration_mode"]);
 
 function traitsOf(configOptions: readonly SessionConfigOption[]): TraitOption[] {

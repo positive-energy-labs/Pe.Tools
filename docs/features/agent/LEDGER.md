@@ -240,7 +240,7 @@ restated here.
 - `PUT /pe/scope/<any id>` creates an unbounded `.heads/<sha256>.json` file per id; cap or sweep.
 - `family.temporary.acquire` lost its turn-scoped release with turn admission, and the harness lane refuses it (`TODO:` in `ts/packages/mcps/src/pea/capability-tools.ts`). A harness `turn_end` hook is the natural owner.
 - `ts/packages/mcps/src/pea/skills.ts` still names `ask_user`. Rewrite it to the question card (Claude's AskUserQuestion, an MCP elicitation form).
-- Route Work cutover deliberately imported no old proposals. Any desired recovery of pre-cutover dev Work needs a separate decision; no migration or recovery proof is claimed (`state/route-work/`, `harness/threads.ts`).
+- Recover unindexed or pre-cell Work only through an explicit identity-preserving import. Shared Work's indexed cutover preserves original bytes, revisions and known authorship; records without trustworthy identity remain backed up and refused.
 - Revit tool results must come back small: the harness compacts nothing for us. Census the largest `pe_read` payloads on a real document and cap or page them at the tool.
 - OpenCode as a third harness, later, when asked. Verify `opencode acp` exists first.
 - Head binding, second-document half: an ACP child with `PE_THREAD` set runs `target_set` to document A, `pe_read` with a per-call override to document B, then `target_set` to B; needs two open documents in one host inventory. Single-document half PROVEN 2026-09-26 (`.artifacts/runs/spike-acp-child-20260926/REPORT2.md`).
