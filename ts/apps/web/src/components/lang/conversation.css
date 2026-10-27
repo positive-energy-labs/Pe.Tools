@@ -230,3 +230,26 @@
   font-size: var(--type-prose-size);
   line-height: var(--type-prose-line-height);
 }
+/* A copy press on a picture: its top right, shown while the picture is hovered or holds focus. */
+.dl-corner-copy {
+  position: absolute;
+  top: 4px;
+  right: 4px;
+  background: var(--pe-artifact);
+  opacity: 0;
+  transition: opacity var(--motion-control);
+}
+:hover > .dl-corner-copy,
+:focus-within > .dl-corner-copy {
+  opacity: 1;
+}
+@media (hover: none) {
+  .dl-corner-copy {
+    opacity: 1;
+  }
+}
+@media (prefers-reduced-motion: reduce) {
+  .dl-corner-copy {
+    transition: none;
+  }
+}
