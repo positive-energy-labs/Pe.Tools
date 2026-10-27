@@ -303,6 +303,11 @@ export function entityRoute<W, const R extends string, P extends object, const A
   const apply: RouteAction<unknown, string, EntityPage, never> = {
     waitSeconds: NATIVE_APPLY_WAIT_S,
     label: "apply",
+    labelNow: (ctx) => {
+      const n = stagedCount(ctx);
+      if (n) return `apply ${n} cell${n === 1 ? "" : "s"}`;
+      return ctx.page.path ? `apply spec ${ctx.page.path.split("/").at(-1)}` : "apply";
+    },
     does: def.apply,
     saysNow: (ctx) =>
       objectOf(ctx) === "cells"

@@ -770,6 +770,7 @@ export function instancesExecutors(deps: InstancesActionDependencies = {}) {
                 async (id) => {
                   return dispatch(adoptionInput, id, read, true);
                 },
+                target!.process,
               );
               // A live adoption keeps its whole envelope; a recovered one keeps the response's two fields.
               const envelope = adoption as {

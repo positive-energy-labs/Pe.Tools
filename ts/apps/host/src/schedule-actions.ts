@@ -503,26 +503,25 @@ export function scheduleExecutors(
             // rebind, nor does an unresolved push (its resume publishes against the original basis); a
             // person's re-read that moved the basis meanwhile is the newer rebind and stands. A
             // post-publication convenience: nothing it throws changes the push's outcome (`rebindError`).
-            let rebind: "rebound" | "contended" | `skipped:${string}` = !readback
+            let rebind: "rebound" | `skipped:${string}` = !readback
                 ? "skipped:no-readback"
                 : outcome.unresolved
                   ? "skipped:unresolved"
-                  : "contended",
+                  : "skipped:unchanged",
               rebindError: string | undefined;
             try {
-              for (let attempt = 0; rebind === "contended" && attempt < 4; attempt++) {
+              if (readback && !outcome.unresolved) {
                 const view = await work.read(base.key, scheduleGridRouteState.route);
                 const latest = view && scheduleGridDocumentSchema.parse(view.doc);
-                if (!latest || latest.basis?.captureId !== document.basis!.captureId) {
+                if (!latest || latest.basis?.captureId !== document.basis!.captureId)
                   rebind = "skipped:basis-moved";
-                  break;
+                else {
+                  const patches = rebindScheduleWork(latest, reading, readback);
+                  if (patches.length) {
+                    await execution.publishWork(base.key, scheduleGridRouteState.route, patches);
+                    rebind = "rebound";
+                  }
                 }
-                const patches = rebindScheduleWork(latest, reading, readback!);
-                if (!patches.length) rebind = "skipped:unchanged";
-                else if (
-                  (await execution.publishWork(base.key, scheduleGridRouteState.route, patches)).ok
-                )
-                  rebind = "rebound";
               }
             } catch (error) {
               rebind = "skipped:error";

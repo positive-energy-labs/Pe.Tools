@@ -543,7 +543,11 @@ test.each(["open", "stop", "restart", "close"])(
           };
     const receipt = await f.admit(`instances.${verb}`, input);
     expect(receipt.state).toBe("succeeded");
-    expect(receipt.steps[0]).toMatchObject({ key: `instances.${verb}.adopt`, state: "succeeded" });
+    expect(receipt.steps[0]).toMatchObject({
+      key: `instances.${verb}.adopt`,
+      state: "succeeded",
+      process: observed.process,
+    });
     expect(
       f.calls.filter((args) => args[1] !== "list").map((args) => args.slice(0, 2).join(" ")),
     ).toEqual([

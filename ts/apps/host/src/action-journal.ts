@@ -29,7 +29,6 @@ import {
   type WorkKey,
   type RouteStatePatch,
   type RouteStateWriteResult,
-  nativeProcessSchema,
   commands,
   workKey,
   transitionPatches,
@@ -278,7 +277,7 @@ export type ActionExecution = {
     key: WorkKey,
     route: string,
     patches: readonly RouteStatePatch[],
-  ): Promise<RouteStateWriteResult>;
+  ): Promise<Extract<RouteStateWriteResult, { ok: true }>>;
   retireWork(
     key: WorkKey,
     route: string,
@@ -1484,22 +1483,13 @@ export class ActionJournal implements ReceiptReader {
             if (previous.state === "succeeded") return structuredClone(previous.result) as never;
             throw Error("An uncertain effect cannot be replayed");
           }
-          const defaultProcess =
-            row.prepared.state === "ready" &&
-            row.prepared.value &&
-            typeof row.prepared.value === "object"
-              ? nativeProcessSchema.safeParse((row.prepared.value as { process?: unknown }).process)
-                  .data
-              : undefined;
           const incarnation = row.consumes.find(
             (dependency) =>
               dependency.kind === "incarnation" &&
               canonicalRouteInput(dependency.target) === canonicalRouteInput(row.target),
           );
           const exactProcess =
-            process ??
-            defaultProcess ??
-            (incarnation?.kind === "incarnation" ? incarnation.process : undefined);
+            process ?? (incarnation?.kind === "incarnation" ? incarnation.process : undefined);
           const step: ActionStep = {
             id: randomUUID(),
             kind,
