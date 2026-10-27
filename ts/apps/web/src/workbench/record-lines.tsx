@@ -20,14 +20,14 @@ import { NativeReadingReferences } from "#/revit/reading-references";
 
 const line = "flex min-w-0 items-baseline gap-2 t-small text-ink-2";
 
-/** `Pea proposed {n} changes in {Route} · {Subject}`: counts are the call's own, never live Work. */
+/** `Pea changed {n} cells in {Route} · {Subject}`: counts are the call's own, never live Work. */
 export function ProposedLine({ record }: { record: ProposedRecord }) {
   const { store } = useWorkbench();
   const place = record.place;
   return (
     <div className={line} data-proposed={record.route}>
       <span className="truncate">
-        Pea proposed {record.changes} change{record.changes === 1 ? "" : "s"} in{" "}
+        Pea changed {record.changes} cell{record.changes === 1 ? "" : "s"} in{" "}
         {chatPluginTitle(record.route)}
         {record.subject ? ` · ${record.subject}` : ""}
       </span>

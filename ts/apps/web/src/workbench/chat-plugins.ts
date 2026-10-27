@@ -11,6 +11,7 @@ import {
   documentRefSchema,
   documentRequestSchema,
   workKeySchema,
+  podMemberSchema,
   routeOf,
   type Carry,
   type LinkPage,
@@ -45,8 +46,8 @@ const parsed = (value: unknown): unknown => {
 
 export interface ProposedRecord {
   route: ChatPluginRoute;
-  /** Distinct cells (or fields) the call proposed on, not patches: several rungs of one cell's
-   * suggestion are one change. */
+  /** Distinct cells (or fields) the call changed, not patches: an edit and a suggestion on one
+   * cell are one change. */
   changes: number;
   /** The document (or named workspace) the call recorded; null when it recorded none. */
   subject: string | null;
@@ -74,7 +75,14 @@ export function capturedPlace(
   if (!key) return { ok: false, refusal: `This route has no saved Place contract: ${route}` };
   if (!scope)
     return { ok: false, refusal: "This reading did not record its Work or document target." };
-  const input = isRecord(source) ? source : {};
+  const member =
+    key === "pods" && scope.binding === "workspace" ? parseContributionKey(scope.work) : null;
+  const input: Record<string, unknown> = {
+    ...(isRecord(source) ? source : {}),
+    ...(member?.kind === "member" ? { pod: member.packageId, path: member.path } : {}),
+  };
+  if (key === "pods" && !podMemberSchema.safeParse({ pod: input.pod, path: input.path }).success)
+    return { ok: false, refusal: "This reading did not record an exact pod member." };
   if (subject && key === "ducts" && (typeof input.system !== "string" || !input.system.trim()))
     return {
       ok: false,
@@ -88,7 +96,7 @@ export function capturedPlace(
         ? { kind: "open", ref: scope.from }
         : (named ?? null);
   const needs = (publicRoutes.get(route)?.manifest as { needs?: unknown } | undefined)?.needs;
-  if (!target && (scope.binding !== "host" || needs))
+  if (!target && needs && needs !== "nothing")
     return {
       ok: false,
       refusal:
@@ -113,7 +121,11 @@ export function actionPlace(route: string, receipt: ActionReceipt | undefined): 
   const scope = workKeySchema.safeParse(work?.key);
   const target = receipt?.destination;
   const result = receipt && "result" in receipt && isRecord(receipt.result) ? receipt.result : null;
-  const member = isRecord(result?.member) ? result.member : null;
+  const member = isRecord(result?.member)
+    ? result.member
+    : isRecord(receipt?.request.member)
+      ? receipt.request.member
+      : null;
   const source = isRecord(receipt?.request.source) ? receipt.request.source : null;
   const workspace =
     typeof receipt?.request.workspaceId === "string" ? receipt.request.workspaceId : null;
@@ -134,9 +146,9 @@ export function actionPlace(route: string, receipt: ActionReceipt | undefined): 
 }
 
 /**
- * `Pea proposed {n} changes in {Route} · {Subject}`: read from the call's own args and recorded
+ * `Pea changed {n} cells in {Route} · {Subject}`: read from the call's own args and recorded
  * result, never from live Work, because a record that moves is not a record. Null for any call
- * that did not land a `route:<route>.propose` write.
+ * that did not land a `route:<route>.edit` write.
  */
 export function proposedRecord(
   toolName: string,
@@ -145,20 +157,24 @@ export function proposedRecord(
 ): ProposedRecord | null {
   const call = routeCallOf(toolName, args);
   const route = chatPluginRoutes().find((name) => name === call?.route);
-  if (!route || call?.member !== "propose") return null;
+  if (!route || call?.member !== "edit") return null;
   const outer = payload(result);
   if (!isRecord(outer) || outer.ok !== true) return null;
-  const request = isRecord(args) ? args : {};
+  const decoded = parsed(args);
+  const request = isRecord(decoded) ? decoded : {};
   const input = parsed(request.input);
   const patches = isRecord(input) && Array.isArray(input.patches) ? input.patches : [];
-  // Pea's mask admits `cells/<key>/suggestion…`, `fields/<pointer>/suggestion…` and a root cell's
-  // `<cell>/suggestion…` (families' `scope`, F-H6-5).
+  // Both authors may edit or suggest. Count a cell once even when this command changes both rungs.
   const cells = new Set(
     patches.flatMap((patch) => {
       const path = isRecord(patch) && Array.isArray(patch.path) ? patch.path : [];
-      if ((path[0] === "cells" || path[0] === "fields") && path[1] !== undefined)
-        return [`${path[0]}/${String(path[1])}`];
-      return path[1] === "suggestion" ? [String(path[0])] : [];
+      const rung =
+        path[2] === "edit" || path[2] === "suggestion"
+          ? 2
+          : path[1] === "edit" || path[1] === "suggestion"
+            ? 1
+            : -1;
+      return rung > 0 ? [JSON.stringify(path.slice(0, rung))] : [];
     }),
   );
   const target = isRecord(outer.target) ? outer.target : {};

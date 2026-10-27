@@ -513,7 +513,7 @@ export const familyManifest = (authoring = absentAuthoringFacts) =>
         },
       },
     } as never,
-    runs: ["family.plan"],
+    runs: ["family.plan", "family.observe"],
     seeds: {
       read: familySeed("box", "audit", false),
       build: familySeed("refline", "apply"),

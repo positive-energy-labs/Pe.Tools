@@ -254,7 +254,7 @@ export const schedulesManifest = () =>
           },
         },
       },
-      runs: ["schedule.grid.push"],
+      runs: ["schedule.grid.push", "schedule.grid.bind"],
       seeds: SCHEDULE_SEEDS as never,
     },
   );

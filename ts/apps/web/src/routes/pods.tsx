@@ -53,12 +53,12 @@ import { SpecEditor, type DemoSpec } from "#/route/spec-editor";
 import { useRouteLease } from "#/route/view-bridge";
 import { TooltipHint } from "@pe/kit/lang/tooltip";
 
-/** `/pods` writes no document; its target is the thread's document, which field options read. */
+/** Member Work needs no document. Native field-option reads require their own document target. */
 export const manifest = defineRoute({
   key: "pods",
   name: "Pods",
-  needs: "document",
-  runs: ["settings.write"],
+  needs: "nothing",
+  runs: ["settings.write", "settings.observe"],
   address: "pods",
   page: routeAddress("pods").schema,
   seeds: PODS_SEEDS,
