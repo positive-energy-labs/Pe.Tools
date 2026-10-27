@@ -1,4 +1,4 @@
-import { paintOf, type Look } from "./grounds";
+import { CONTEXT_CREASE_DEG, paintOf, type Look } from "./grounds";
 import type { Paint, PaintOf, SceneMeshes } from "./types";
 
 /** Only these values can change prepared geometry or its render-pass partition. */
@@ -19,7 +19,7 @@ export function scenePlan(meshes: SceneMeshes, of: PaintOf | undefined, look: Lo
   });
   const angles = roles.map((p) =>
     p.tier === "context"
-      ? null
+      ? CONTEXT_CREASE_DEG
       : p.surface === "shell"
         ? look.shell.edgeAngle
         : p.tier === "subject"

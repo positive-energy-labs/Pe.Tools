@@ -8,6 +8,8 @@ export const WHITE = Object.freeze(new THREE.Color(1, 1, 1));
 export const BLACK = Object.freeze(new THREE.Color(0, 0, 0));
 /** Keep the context ceiling representably translucent after upload to a float32 uniform. */
 export const CONTEXT_OPACITY_LIMIT = 0.95;
+/** Crease angle of context lines: one weight, one angle, not a dial. */
+export const CONTEXT_CREASE_DEG = 35;
 /** Mask colours encode channels, not visible hues. */
 export const OUTLINE_CHANNEL = {
   selected: new THREE.Color(1, 0, 0),
@@ -97,19 +99,13 @@ export const LOOK = defineKnobs("scene", "ts/apps/web/src/scene/grounds.ts", {
   },
   veil: {
     colour: colour("Context ink", "theme"),
-    themeGroundMix: num("Context mix toward ground", 0, [0, 1, 0.01]),
     nearFt: num("Full within", 0, [0, 20, 0.25], "live", "ft"),
-    curve: num("Curve exponent", 4, [0.25, 8, 0.05]),
-    maxOpacity: num("Opacity at subject", 0.23, [0.01, CONTEXT_OPACITY_LIMIT, 0.01]),
-    interior: num("Context face fill", 0.67, [0, 1, 0.01]),
-    silhouettePower: num("Context silhouette exponent", 3, [0.5, 12, 0.5]),
+    // 2026-10-26 ruling: context alpha is the linear falloff squared, lines and glass alike.
+    curve: num("Curve exponent", 2, [0.25, 8, 0.05]),
     // The reach (veil far = stub fade) is the page's Nearby radius, else VEIL_DEFAULT_REACH_FT.
-    minOpacity: num("Opacity at reach edge", 0.004, [0, CONTEXT_OPACITY_LIMIT, 0.001]),
-    desaturate: num("Desaturate far", 0, [0, 1, 0.01]),
-    fog: num("Fog to ground far", 0, [0, 1, 0.01]),
-    brightness: num("Brightness near ducts", 0, [0, 1, 0.01]),
-    // A/B for kaitpw (2026-10-26): only the nearest context surface per pixel, no stacking.
-    singleLayer: bool("Single-layer context", false),
+    fill: num("Context glass fill", 0.25, [0.01, CONTEXT_OPACITY_LIMIT, 0.01]),
+    lineAlpha: num("Context line alpha at subject", 0.75, [0.05, 1, 0.01]),
+    glass: bool("Context glass", true),
   },
   lights: {
     sky: colour("Hemisphere sky", "#fff8ee"),
@@ -207,9 +203,7 @@ export function sceneGrounds(mount: Element, look: Look) {
     ink,
     subject,
     shell: inkOr(look.shell.colour, mount, () => inkOf("ink-2", mount)),
-    context: inkOr(look.veil.colour, mount, () =>
-      inkOf("ink-mute", mount).lerp(ground, look.veil.themeGroundMix).offsetHSL(0, -1, 0),
-    ),
+    context: inkOr(look.veil.colour, mount, () => inkOf("ink-mute", mount).offsetHSL(0, -1, 0)),
     palette: Object.values(look.palette).map((value) => inkOr(value, mount, () => subject.clone())),
     damage: inkOr(look.damage.colour, mount, () => inkOf("alarm", mount)),
     lights: {

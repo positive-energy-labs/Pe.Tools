@@ -17,6 +17,7 @@ import { createDamageBatch } from "./damage-batch";
 import { createMarkBatch } from "./mark-batch";
 import { createOutline, OUTLINE_LAYER } from "./outline";
 import {
+  CONTEXT_CREASE_DEG,
   GROUND_MATERIAL,
   keySlot,
   LOOK,
@@ -372,7 +373,16 @@ export function createRenderer(mount: HTMLElement, initialMeshes: SceneMeshes, w
   applyClip(material);
   const veil = veilUniforms();
   let contextRadiusFt: number | undefined;
-  veilMaterial(material, veil, true);
+  veilMaterial(material, veil, "tier");
+  // Context is a line drawing: creases at one weight, faded per fragment by the veil field.
+  const contextMaterial = new THREE.LineBasicMaterial({
+    color: grounds.ink,
+    transparent: true,
+    opacity: look.veil.lineAlpha,
+    depthWrite: false,
+  });
+  applyClip(contextMaterial);
+  veilMaterial(contextMaterial, veil, "line");
   let batch = new FaceBatches(undefined, undefined, []);
   for (const light of [hemisphere, sun]) {
     light.layers.enable(CONTEXT_LAYER);
@@ -392,9 +402,11 @@ export function createRenderer(mount: HTMLElement, initialMeshes: SceneMeshes, w
     sun.intensity = look.lights.sunIntensity;
     // The veil is the only fade (element-anchored); there is no camera-depth fog. One reach:
     // the page's Nearby radius is the veil far edge and the stub fade.
-    setVeilLook(veil, look.veil, ground, contextRadiusFt);
+    setVeilLook(veil, look.veil, contextRadiusFt);
     veil.subjectRim.value = look.depth.rim;
     veil.stubEndAlpha.value = look.subject.stubEndAlpha;
+    contextMaterial.color.copy(ink);
+    contextMaterial.opacity = look.veil.lineAlpha;
     outline.setWidths(look.outline);
     outline.setOccluded(look.depth.occludedAlpha, look.depth.occludedWidth);
     occluded.value = look.depth.occludedAlpha;
@@ -510,42 +522,34 @@ export function createRenderer(mount: HTMLElement, initialMeshes: SceneMeshes, w
       cap.material.depthWrite = true;
     });
     renderer.render(scene, shown);
-    const glass =(depthWrite: boolean, colorWrite = true) => {
+    const glass = (depthWrite: boolean) => {
       material.depthWrite = depthWrite;
-      material.colorWrite = colorWrite;
       caps.forEach((cap) => {
         cap.material.depthWrite = depthWrite;
-        cap.material.colorWrite = colorWrite;
       });
     };
-    if (look.veil.singleLayer && hasContext) {
-      // A/B (veil.singleLayer): each pixel shows only the nearest context surface. Envelopes keep
-      // their own sorted pass first; context then writes depth alone (after every highlight test,
-      // so marks never see it) and draws LessEqual, so it tints the subject once and rear context
-      // fails. EXCEPTION to the one-sorted-translucent-pass rule: context behind an equipment
-      // envelope draws over it here; equipment owns no depth and that ordering is unruled.
-      glass(false);
-      if (hasShell) {
-        shown.layers.set(SHELL_LAYER);
-        veil.scenePass.value = 4;
-        renderer.render(scene, shown);
-      }
+    // 2026-10-26 glass, sort path: envelopes first, then context as the nearest-surface pane,
+    // drawn after every subject, stub, line and hull. Depth write is on and instances draw front
+    // to back, so a second sheet behind a nearer one fails its depth test and never stacks; the
+    // subject's own depth already hides context behind it, so context tints only from in front.
+    // Sort is per instance (bounding-sphere centre), so crossing walls can still double up.
+    // EXCEPTION to the one-sorted-translucent-pass rule: context behind an equipment envelope
+    // draws over it; equipment owns no depth and that ordering is unruled.
+    glass(false);
+    if (hasShell) {
+      shown.layers.set(SHELL_LAYER);
+      veil.scenePass.value = 4;
+      renderer.render(scene, shown);
+    }
+    const glassBatch = batch.translucent?.mesh;
+    if (hasContext && look.veil.glass && glassBatch) {
       shown.layers.set(CONTEXT_LAYER);
       veil.scenePass.value = 5;
-      glass(true, false);
-      // Depth alone needs no back-to-front order; skip the per-instance sort.
-      const glassBatch = batch.translucent?.mesh;
-      if (glassBatch) glassBatch.sortObjects = false;
+      glass(true);
+      glassBatch.customSort = (list) => list.sort((a, b) => a.z - b.z);
       renderer.render(scene, shown);
-      if (glassBatch) glassBatch.sortObjects = true;
+      glassBatch.customSort = null;
       glass(false);
-      renderer.render(scene, shown);
-    } else if (hasContext || hasShell) {
-      glass(false);
-      shown.layers.set(CONTEXT_LAYER);
-      shown.layers.enable(SHELL_LAYER);
-      veil.scenePass.value = 3;
-      renderer.render(scene, shown);
     }
     shown.layers.mask = mask;
     veil.scenePass.value = 1;
@@ -991,6 +995,39 @@ export function createRenderer(mount: HTMLElement, initialMeshes: SceneMeshes, w
         routes.add(lines);
       }
   };
+  const contextLines = new THREE.LineSegments(new THREE.BufferGeometry(), contextMaterial);
+  contextLines.frustumCulled = false;
+  contextLines.renderOrder = 2;
+  scene.add(contextLines);
+  let fieldRevision = 0;
+  let contextStamp = "";
+  /** Creases of visible context whose reach can show: a segment is kept if any of its two ends or
+   * its middle lies inside the veil's far edge. The fragment fade does the rest. */
+  const rebuildContextLines = () => {
+    const ids = byId.flatMap((_, id) =>
+      paints[id]!.tier === "context" && batch.getVisibleAt(id) ? [id] : [],
+    );
+    const stamp = JSON.stringify([ids, fieldRevision, veil.veilFar.value]);
+    if (stamp === contextStamp) return;
+    contextStamp = stamp;
+    const positions: number[] = [];
+    const reach = veil.veilFar.value;
+    for (const id of ids) {
+      const edges = edgesOf(byId[id]!, CONTEXT_CREASE_DEG);
+      for (let n = 0; n + 5 < edges.length; n += 6) {
+        const a = [edges[n]!, edges[n + 1]!, edges[n + 2]!];
+        const b = [edges[n + 3]!, edges[n + 4]!, edges[n + 5]!];
+        const m = a.map((v, i) => (v + b[i]!) / 2);
+        if ([a, m, b].some((point) => veilDistance(field, point) < reach))
+          positions.push(...a, ...b);
+      }
+    }
+    contextLines.geometry.dispose();
+    contextLines.geometry = new THREE.BufferGeometry().setAttribute(
+      "position",
+      new THREE.Float32BufferAttribute(positions, 3),
+    );
+  };
   const batchIdByKey = new Map(byId.map((instance, id) => [instance.key, id]));
   let envelopeStamp = "";
   const rebuildEnvelopes = () => {
@@ -1066,6 +1103,7 @@ export function createRenderer(mount: HTMLElement, initialMeshes: SceneMeshes, w
     if (routeGeometryDirty) {
       rebuildEnvelopes();
       rebuildRoutes();
+      rebuildContextLines();
       routeGeometryDirty = false;
     }
     selectedIds.clear();
@@ -1163,7 +1201,7 @@ export function createRenderer(mount: HTMLElement, initialMeshes: SceneMeshes, w
         polygonOffsetUnits: -1,
       });
       applyClip(capMaterial);
-      veilMaterial(capMaterial, veil, true);
+      veilMaterial(capMaterial, veil, "tier");
       const cap = new THREE.Mesh(geometry, capMaterial);
       cap.position.copy(origin);
       cap.visible = batch.getVisibleAt(id);
@@ -1218,6 +1256,7 @@ export function createRenderer(mount: HTMLElement, initialMeshes: SceneMeshes, w
       edgesOf = () => new Float32Array();
       pick = createFacePicker(batch, pickPriority);
       field = { data: new Uint8Array([255]), dims: [1, 1, 1], min: [0, 0, 0], cellFt: 1 };
+      fieldRevision++;
       setVeilField(veil, field);
       accountGeometry();
     },
@@ -1335,6 +1374,7 @@ export function createRenderer(mount: HTMLElement, initialMeshes: SceneMeshes, w
             ),
           );
           field = ready.field;
+          fieldRevision++;
           setVeilField(veil, field);
           edgeStorage = ready.edges.flatMap((edge) => (edge ? [edge.buffer] : []));
           fallbackEdgeStorage = [];
@@ -1363,6 +1403,7 @@ export function createRenderer(mount: HTMLElement, initialMeshes: SceneMeshes, w
           if (!sameEdges) {
             routeStamp = "";
             envelopeStamp = "";
+            contextStamp = "";
           }
           routeGeometryDirty = true;
           byId.forEach((_, id) => tint(id));
@@ -1396,9 +1437,9 @@ export function createRenderer(mount: HTMLElement, initialMeshes: SceneMeshes, w
         if (veil.veilHalo.value && paintOf(hit.instance, paintBy).tier === "context") {
           const distance = veilDistance(field, hit.point);
           if (distance >= veil.veilFar.value) return false;
-          const t = falloff(distance, veil.veilNear.value, veil.veilFar.value, veil.veilCurve.value);
           const opacity =
-            veil.veilMinOpacity.value + (veil.veilMaxOpacity.value - veil.veilMinOpacity.value) * t;
+            veil.veilFill.value *
+            falloff(distance, veil.veilNear.value, veil.veilFar.value, veil.veilCurve.value);
           if (opacity < 0.004) return false;
         }
         return clip?.(hit) ?? true;
@@ -1568,7 +1609,8 @@ export function createRenderer(mount: HTMLElement, initialMeshes: SceneMeshes, w
     setContextMode(mode: ContextMode = "all", radiusFt?: number) {
       contextRadiusFt = radiusFt;
       veil.veilHalo.value = mode === "halo";
-      setVeilLook(veil, look.veil, ground, contextRadiusFt);
+      setVeilLook(veil, look.veil, contextRadiusFt);
+      rebuildContextLines();
       thumbsStale = true;
       render();
     },
