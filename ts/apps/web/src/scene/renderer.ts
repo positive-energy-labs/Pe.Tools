@@ -17,7 +17,6 @@ import { createDamageBatch } from "./damage-batch";
 import { createMarkBatch } from "./mark-batch";
 import { createOutline, OUTLINE_LAYER } from "./outline";
 import {
-  fogDensity,
   GROUND_MATERIAL,
   keySlot,
   LOOK,
@@ -379,7 +378,9 @@ export function createRenderer(mount: HTMLElement, initialMeshes: SceneMeshes, w
     light.layers.enable(CONTEXT_LAYER);
     light.layers.enable(SHELL_LAYER);
   }
-  const glow = createGlow(renderer, material);
+  const glow = createGlow(renderer);
+  /** The occluded-mark alpha every highlight shares (`LOOK.depth.occludedAlpha`). */
+  const occluded = { value: look.depth.occludedAlpha };
   /** What a look change re-applies besides instance tints: ground, lights, fog, veil, passes. */
   const applyStage = () => {
     setDamageHue(grounds.damage);
@@ -389,19 +390,14 @@ export function createRenderer(mount: HTMLElement, initialMeshes: SceneMeshes, w
     hemisphere.intensity = look.lights.hemisphere;
     sun.color.copy(grounds.lights.sun);
     sun.intensity = look.lights.sunIntensity;
-    // Camera-depth fog is optional and off by default; the veil is the element-anchored fog.
-    scene.fog = look.fog.depth
-      ? new THREE.FogExp2(ground, fogDensity(bounds, look.fog.density))
-      : null;
-    setVeilLook(veil, look.veil, ground);
-    if (contextRadiusFt !== undefined) {
-      veil.veilFar.value = contextRadiusFt;
-      veil.veilNear.value = Math.min(veil.veilNear.value, contextRadiusFt);
-    }
+    // The veil is the only fade (element-anchored); there is no camera-depth fog. One reach:
+    // the page's Nearby radius is the veil far edge and the stub fade.
+    setVeilLook(veil, look.veil, ground, contextRadiusFt);
     veil.subjectRim.value = look.depth.rim;
-    veil.stubFadeFt.value = look.subject.stubFadeFt;
     veil.stubEndAlpha.value = look.subject.stubEndAlpha;
     outline.setWidths(look.outline);
+    outline.setOccluded(look.depth.occludedAlpha, look.depth.occludedWidth);
+    occluded.value = look.depth.occludedAlpha;
     glow.setLook(look.glow);
   };
   applyStage();
@@ -487,7 +483,23 @@ export function createRenderer(mount: HTMLElement, initialMeshes: SceneMeshes, w
   // The 2026-10-26 ruling supersedes subject-over-context compositing: front context tints
   // the subject, while rear context fails its depth test. Translucent duct fill still occludes
   // equipment edges; opacity is not permission to draw those edges through a duct.
-  const drawScene = (shown: THREE.Camera) => {
+  /** Depth of real subject geometry, no colour, into the bound target: the one occluder set every
+   * highlight tests against. The batch material keeps section cuts and per-element visibility;
+   * context and envelopes discard in this pass, so translucent context never occludes a mark. */
+  const seedOccluders = (shown: THREE.Camera) => {
+    const layers = shown.layers.mask;
+    shown.layers.set(OCCLUDER_LAYER);
+    veil.scenePass.value = 1;
+    material.colorWrite = false;
+    renderer.render(scene, shown);
+    material.colorWrite = true;
+    shown.layers.mask = layers;
+  };
+  // `overlay` (highlight and damage composites) lands last. EXCEPTION to "front context tints a
+  // highlight once like any subject": composited before the context pass, stacked context
+  // (5+ faces) muted the selection ring to invisible (proto-3d-20261026 after-sa19-*-selected).
+  // Kept: the highlight still obeys subject depth (`seedOccluders`); context never occludes it.
+  const drawScene = (shown: THREE.Camera, overlay?: () => void) => {
     const mask = shown.layers.mask;
     const autoClear = renderer.autoClear;
     renderer.clear();
@@ -498,11 +510,38 @@ export function createRenderer(mount: HTMLElement, initialMeshes: SceneMeshes, w
       cap.material.depthWrite = true;
     });
     renderer.render(scene, shown);
-    if (hasContext || hasShell) {
-      material.depthWrite = false;
+    const glass =(depthWrite: boolean, colorWrite = true) => {
+      material.depthWrite = depthWrite;
+      material.colorWrite = colorWrite;
       caps.forEach((cap) => {
-        cap.material.depthWrite = false;
+        cap.material.depthWrite = depthWrite;
+        cap.material.colorWrite = colorWrite;
       });
+    };
+    if (look.veil.singleLayer && hasContext) {
+      // A/B (veil.singleLayer): each pixel shows only the nearest context surface. Envelopes keep
+      // their own sorted pass first; context then writes depth alone (after every highlight test,
+      // so marks never see it) and draws LessEqual, so it tints the subject once and rear context
+      // fails. EXCEPTION to the one-sorted-translucent-pass rule: context behind an equipment
+      // envelope draws over it here; equipment owns no depth and that ordering is unruled.
+      glass(false);
+      if (hasShell) {
+        shown.layers.set(SHELL_LAYER);
+        veil.scenePass.value = 4;
+        renderer.render(scene, shown);
+      }
+      shown.layers.set(CONTEXT_LAYER);
+      veil.scenePass.value = 5;
+      glass(true, false);
+      // Depth alone needs no back-to-front order; skip the per-instance sort.
+      const glassBatch = batch.translucent?.mesh;
+      if (glassBatch) glassBatch.sortObjects = false;
+      renderer.render(scene, shown);
+      if (glassBatch) glassBatch.sortObjects = true;
+      glass(false);
+      renderer.render(scene, shown);
+    } else if (hasContext || hasShell) {
+      glass(false);
       shown.layers.set(CONTEXT_LAYER);
       shown.layers.enable(SHELL_LAYER);
       veil.scenePass.value = 3;
@@ -510,7 +549,8 @@ export function createRenderer(mount: HTMLElement, initialMeshes: SceneMeshes, w
     }
     shown.layers.mask = mask;
     veil.scenePass.value = 1;
-    material.depthWrite = true;
+    glass(true);
+    overlay?.();
     renderer.autoClear = autoClear;
   };
   const drawThumbs = () => {
@@ -623,9 +663,12 @@ export function createRenderer(mount: HTMLElement, initialMeshes: SceneMeshes, w
       scene.updateMatrixWorld();
       accountGeometry();
       if (thumbsStale) drawThumbs();
-      drawScene(active());
-      if (glowing) glow.render(scene, active());
-      if (outlined.children.length) outline.render(scene, active());
+      const shown = active();
+      drawScene(shown, () => {
+        if (glowing) glow.render(scene, shown, () => seedOccluders(shown));
+        if (outlined.children.length)
+          outline.render(scene, shown, outlined, () => seedOccluders(shown));
+      });
       if (measuring) fence(started);
       tell();
       if (animate || returning) render();
@@ -849,7 +892,7 @@ export function createRenderer(mount: HTMLElement, initialMeshes: SceneMeshes, w
     const box = new THREE.Box3();
     group.traverse((object) => {
       if (object instanceof LineSegments2) {
-        if (object.userData.casing) return;
+        if (object.userData.casing || object.userData.behind) return;
         const start = object.geometry.getAttribute("instanceStart");
         const end = object.geometry.getAttribute("instanceEnd");
         for (let i = 0; i < start.count; i++)
@@ -1052,12 +1095,15 @@ export function createRenderer(mount: HTMLElement, initialMeshes: SceneMeshes, w
           "position",
           new THREE.BufferAttribute(positions, 3),
         ),
+        // Blending and depth test are set per mask pass (`outline.ts`); the offset lets the
+        // element pass against its own seeded depth.
         new THREE.MeshBasicMaterial({
           color: OUTLINE_CHANNEL[mark],
-          blending: THREE.AdditiveBlending,
-          depthTest: false,
           depthWrite: false,
           side: THREE.DoubleSide,
+          polygonOffset: true,
+          polygonOffsetFactor: -1,
+          polygonOffsetUnits: -4,
         }),
       );
       applyClip(mesh.material);
@@ -1260,9 +1306,11 @@ export function createRenderer(mount: HTMLElement, initialMeshes: SceneMeshes, w
           meshes = next;
           origin.fromArray(center(next.bounds));
           outlined.position.copy(origin);
-          for (const part of batch.parts)
-            for (const layer of [OCCLUDER_LAYER, CONTEXT_LAYER, SHELL_LAYER])
-              part.mesh.layers.enable(layer);
+          // Each part enters only the passes that keep its fragments: every pass submits and
+          // sorts a whole batch, and the discarded half used to cost as much as the drawn one.
+          batch.depth?.mesh.layers.enable(OCCLUDER_LAYER);
+          batch.translucent?.mesh.layers.set(CONTEXT_LAYER);
+          batch.translucent?.mesh.layers.enable(SHELL_LAYER);
           batch.addTo(scene);
           for (const part of batch.parts) gpuMemory.uploaded(part.mesh);
           byId.splice(0, byId.length, ...next.instances);
@@ -1348,9 +1396,9 @@ export function createRenderer(mount: HTMLElement, initialMeshes: SceneMeshes, w
         if (veil.veilHalo.value && paintOf(hit.instance, paintBy).tier === "context") {
           const distance = veilDistance(field, hit.point);
           if (distance >= veil.veilFar.value) return false;
+          const t = falloff(distance, veil.veilNear.value, veil.veilFar.value, veil.veilCurve.value);
           const opacity =
-            veil.veilMaxOpacity.value *
-            falloff(distance, veil.veilNear.value, veil.veilFar.value, veil.veilCurve.value);
+            veil.veilMinOpacity.value + (veil.veilMaxOpacity.value - veil.veilMinOpacity.value) * t;
           if (opacity < 0.004) return false;
         }
         return clip?.(hit) ?? true;
@@ -1520,10 +1568,7 @@ export function createRenderer(mount: HTMLElement, initialMeshes: SceneMeshes, w
     setContextMode(mode: ContextMode = "all", radiusFt?: number) {
       contextRadiusFt = radiusFt;
       veil.veilHalo.value = mode === "halo";
-      if (radiusFt !== undefined) {
-        veil.veilFar.value = radiusFt;
-        veil.veilNear.value = Math.min(veil.veilNear.value, radiusFt);
-      }
+      setVeilLook(veil, look.veil, ground, contextRadiusFt);
       thumbsStale = true;
       render();
     },
@@ -1612,7 +1657,7 @@ export function createRenderer(mount: HTMLElement, initialMeshes: SceneMeshes, w
         layers.set(layer.key, { layer, group });
         if (layer.targets?.length) reachOf.set(layer.key, segmentsOf(group));
       }
-      damageBatch = next.some((layer) => layer.damage) ? createDamageBatch(next) : null;
+      damageBatch = next.some((layer) => layer.damage) ? createDamageBatch(next, occluded) : null;
       if (damageBatch) {
         damageBatch.group.traverse((object) => {
           if (object instanceof THREE.Mesh) {

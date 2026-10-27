@@ -64,6 +64,8 @@ it("sibling send preserves picture and focus; projection controls and history re
       <Profiler id="picture" onRender={commits}>
         <Pane picture legend={null}>
           {stage.goTo}
+          {/* The globe hosts the projection control (stage-globe.tsx); the pane strip does not. */}
+          {stage.projection}
         </Pane>
       </Profiler>
     );

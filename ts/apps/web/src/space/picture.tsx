@@ -7,7 +7,7 @@ import { SubjectTextContext } from "@pe/kit/lang/reach";
 import { type Chord } from "@pe/kit/keys";
 import { Button } from "@pe/kit/lang/button";
 import type { FloaterSpec } from "@pe/kit/lang/floater";
-import { OrbitMinimap } from "@pe/kit/lang/minimap";
+import { StageGlobe } from "#/scene/stage-globe";
 import { Pane } from "@pe/kit/lang/pane";
 import type { PageMove } from "#/route/manifest";
 import { PictureStage, stageViewport } from "#/scene/stage-controller";
@@ -252,7 +252,7 @@ export function SpacePicture({
   const globe = useMemo(
     () =>
       hasPose ? (
-        <OrbitMinimap orbit={orbit} lines={box} />
+        <StageGlobe orbit={orbit} lines={box} />
       ) : (
         <p className="t-small text-ink-2 m-0 p-2">no scene yet</p>
       ),

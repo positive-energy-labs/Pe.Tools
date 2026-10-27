@@ -49,12 +49,9 @@ export function routeColour(colour: THREE.Color, paint: Paint, look: Look) {
 export function surfaceAlpha(paint: Paint, look: Look) {
   if (paint.tier === "context") return 0;
   if (paint.surface === "shell") return 1 + look.shell.opacity;
-  const ceiling = look.depth.everythingTranslucent ? look.depth.translucentOpacity : 1;
   return paint.tier === "stub"
-    ? -Math.min(look.subject.stubOpacity, ceiling)
-    : look.depth.everythingTranslucent
-      ? ceiling
-      : look.subject.opacity;
+    ? -Math.min(look.subject.stubOpacity, look.subject.opacity)
+    : look.subject.opacity;
 }
 
 /** Cache only admitted envelopes/routes, never crease-expand the surrounding building. */

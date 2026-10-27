@@ -59,7 +59,8 @@ export function createMarkBatch(
     sync() {
       const next = new Map<string, Stroke[]>();
       for (const stroke of strokes) {
-        if (!stroke.visible) continue;
+        // A fully transparent stroke (a lit mark's occluded twin at rest) costs no draw.
+        if (!stroke.visible || stroke.line.material.opacity === 0) continue;
         const { line } = stroke;
         const m = line.material;
         const key = [
@@ -69,6 +70,7 @@ export function createMarkBatch(
           m.linewidth,
           m.opacity,
           m.depthTest,
+          m.depthFunc,
           m.dashed,
           m.dashSize,
           m.gapSize,

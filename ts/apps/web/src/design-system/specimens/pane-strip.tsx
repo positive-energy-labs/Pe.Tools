@@ -1,4 +1,4 @@
-import { useLiveOrbit } from "@pe/kit/lang/live-orbit";
+import { useLiveOrbit, wiggle } from "@pe/kit/lang/live-orbit";
 /**
  * The pane strip specimen (ledger 2026-10-21): one pane with two modes, two floaters (a plane
  * minimap over a stand-in 4000x3000 field, an orbit globe with a few painted segments) and three
@@ -91,7 +91,6 @@ const LAYERS = [
 /** The parts alone, as the pane draws them: the strip in a header's trail, a floater in a body corner. */
 function PaneStripAnatomy() {
   const [mode, setMode] = useState("plane");
-  const [projection, setProjection] = useState("perspective");
   const [open, setOpen] = useState(true);
   const corner = {
     key: "anatomy",
@@ -110,17 +109,6 @@ function PaneStripAnatomy() {
           modes={{ value: mode, label: "viewport", options: unbound(MODES), onChange: setMode }}
           floaters={[corner]}
           layers={{ value: ["grid"], options: unbound(LAYERS), onToggle: () => {} }}
-          projection={
-            <Switcher
-              ariaLabel="projection"
-              value={projection}
-              onChange={setProjection}
-              options={[
-                { value: "perspective", label: "perspective", title: "Perspective depth" },
-                { value: "parallel", label: "parallel", title: "Parallel projection" },
-              ]}
-            />
-          }
         />
         <div className="relative h-24 w-64" data-surface="support" data-slot="pane-field">
           {open ? <Floater spec={corner} /> : null}
@@ -246,7 +234,28 @@ export function PaneStripSpecimen() {
                 place: "tr",
                 open: globeOpen,
                 onOpenChange: setGlobeOpen,
-                render: () => <OrbitMinimap orbit={camera} lines={SEGMENTS} />,
+                render: () => (
+                  <OrbitMinimap orbit={camera} lines={SEGMENTS}>
+                    <Switcher
+                      ariaLabel="projection"
+                      value={orbit.projection ?? "perspective"}
+                      onChange={(projection) => camera.move({ ...orbit, projection })}
+                      options={(["perspective", "parallel"] as const).map((value) => ({
+                        value,
+                        label: value,
+                        title: `${value} projection`,
+                      }))}
+                    />
+                    <span data-wiggle="">
+                      <Button
+                        label="wiggle"
+                        onClick={() => wiggle(camera, { deg: 6, loopMs: 1200, loops: 2 })}
+                      >
+                        wiggle
+                      </Button>
+                    </span>
+                  </OrbitMinimap>
+                ),
               },
             ]}
           >

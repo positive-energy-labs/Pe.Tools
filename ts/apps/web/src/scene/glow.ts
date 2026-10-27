@@ -35,7 +35,7 @@ void main() {
   gl_FragColor = vec4(c / max(a, 1e-3), a);
 }`;
 
-export function createGlow(renderer: THREE.WebGLRenderer, occluder: THREE.Material) {
+export function createGlow(renderer: THREE.WebGLRenderer) {
   const mask = new THREE.WebGLRenderTarget(1, 1, { type: THREE.HalfFloatType, samples: 4 });
   const a = new THREE.WebGLRenderTarget(1, 1, { type: THREE.HalfFloatType, depthBuffer: false });
   const b = new THREE.WebGLRenderTarget(1, 1, { type: THREE.HalfFloatType, depthBuffer: false });
@@ -89,21 +89,17 @@ export function createGlow(renderer: THREE.WebGLRenderer, occluder: THREE.Materi
       for (const t of [a, b])
         t.setSize(Math.max(1, Math.round(w / 2)), Math.max(1, Math.round(h / 2)));
     },
-    render(scene: THREE.Scene, camera: THREE.Camera) {
+    /** `seed` draws the occluders' depth (no colour) into the bound target: one shared rule. */
+    render(scene: THREE.Scene, camera: THREE.Camera, seed: () => void) {
       renderer.getClearColor(clear);
       const alpha = renderer.getClearAlpha();
       const layers = camera.layers.mask;
       const autoClear = renderer.autoClear;
       renderer.setClearColor(BLACK, 0);
       renderer.setRenderTarget(mask);
-      camera.layers.set(OCCLUDER_LAYER);
-      // The actual batch material preserves section cuts and per-element visibility in depth.
-      const colorWrite = occluder.colorWrite;
-      occluder.colorWrite = false;
-      renderer.autoClear = true;
-      renderer.render(scene, camera);
-      occluder.colorWrite = colorWrite;
+      renderer.clear();
       renderer.autoClear = false;
+      seed();
       camera.layers.set(GLOW_LAYER);
       renderer.render(scene, camera);
       renderer.autoClear = true;

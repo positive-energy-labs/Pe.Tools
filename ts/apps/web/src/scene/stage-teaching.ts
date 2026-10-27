@@ -26,6 +26,13 @@ export const STAGE_ACTIONS = {
     description: "Look north, keeping elevation, pivot and zoom",
     bindings: ["N"],
   },
+  wiggle: {
+    id: "stage.wiggle",
+    label: "wiggle",
+    description:
+      "Circle the camera briefly about the target for depth, then return to the same view; any input stops it",
+    bindings: ["W"],
+  },
 } as const satisfies Record<string, Omit<ActionDefinition, "invoke">>;
 export const stageTeaching = (): readonly TeachDescriptor[] => [
   {
