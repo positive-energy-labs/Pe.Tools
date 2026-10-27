@@ -9,7 +9,7 @@ import type { RevitDetailSpaceScene } from "@pe/host-contracts/generated";
 import type { Bounds, ScenePrimitive } from "./types";
 
 /** The artifact's metadata, as the op declares it. */
-export type Psc1Metadata = RevitDetailSpaceScene.Res.SceneMetadata;
+export type Psc1Metadata = RevitDetailSpaceScene.Artifact.SceneMetadata;
 export const SCENE_FORMAT = "space-scene-v3";
 
 const MAGIC = 0x31435350; // "PSC1" little-endian

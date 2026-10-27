@@ -9,7 +9,7 @@ import type { Look } from "./grounds";
 
 export type ScenePrimitive =
   | { kind: "box"; bounds: Bounds }
-  | { kind: "run"; bounds: Bounds; run: RevitDetailSpaceScene.Res.SceneRun };
+  | { kind: "run"; bounds: Bounds; run: RevitDetailSpaceScene.Artifact.SceneRun };
 
 /** Axis-aligned bounds in host internal feet. */
 export type Bounds = {
