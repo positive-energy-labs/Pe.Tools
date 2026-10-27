@@ -225,7 +225,14 @@ export class RouteWorkspace {
         this.#publish({ type: "route_workspace", scope, route, actor, ...event });
       const envelope = await this.#load(scope, registration.spec).catch(unreadable);
       if ("ok" in envelope) return envelope;
-      const applied = applyPatches(registration.spec, envelope, actor, patches, expectedRevision, trusted);
+      const applied = applyPatches(
+        registration.spec,
+        envelope,
+        actor,
+        patches,
+        expectedRevision,
+        trusted,
+      );
       const landed =
         (applied.ok &&
           (await registration.admit?.(applied.envelope.doc, patches, {
@@ -316,7 +323,11 @@ export class RouteWorkspace {
           work: scope.work,
           getDoc: () => structuredClone(committed?.doc ?? envelope.doc),
           setDoc: async (candidate) => {
-            const landed = commitDoc(spec, envelope, stampChanges(candidate, envelope.doc, actor, expectedRevision));
+            const landed = commitDoc(
+              spec,
+              envelope,
+              stampChanges(candidate, envelope.doc, actor, expectedRevision),
+            );
             if (!landed.ok) throw Error(`${landed.error}: ${landed.hint}`);
             committed = landed.envelope;
           },
@@ -347,7 +358,7 @@ export class RouteWorkspace {
   }
 
   /**
-   * Human-only: moves unreadable Work aside, byte-for-byte and never parsed, to the first free
+   * Either author moves unreadable Work aside, byte-for-byte and never parsed, to the first free
    * `<route>:aside:<n>`, and starts an empty Work at the same address. Readable Work is refused.
    */
   async startFresh(
@@ -357,8 +368,6 @@ export class RouteWorkspace {
   ): Promise<RouteStateWriteResult> {
     const registration = this.#registry.get(route);
     if (!registration) return unknownRoute(route);
-    if (actor !== "human")
-      return refuse("refused", "start fresh is human-only", "Ask the user to start fresh.");
     const { spec } = registration;
     const targetKey = workKey(scope);
     return this.#serialized(async () => {
@@ -385,18 +394,16 @@ export class RouteWorkspace {
   }
 
   /**
-   * Human-only, read-only: what the route's `salvage` carries over from Work it can no longer
+   * Read-only: what the route's `salvage` carries over from Work it can no longer
    * read, the unreadable document before start fresh, else the newest aside. Null when the route
    * declares no salvage or there is nothing to salvage.
    */
   async salvage(
     scope: WorkKey,
     route: string,
-    actor: RouteActor,
+    _actor: RouteActor,
   ): Promise<{ from: string; value: unknown } | RouteRefusal | null> {
     const spec = this.#registry.get(route)?.spec;
-    if (actor !== "human")
-      return refuse("refused", "salvage is human-only", "Ask the user to carry old Work over.");
     if (!spec?.salvage) return null;
     const targetKey = workKey(scope);
     const docOf = (raw: unknown) => (raw as { doc?: unknown } | null)?.doc;

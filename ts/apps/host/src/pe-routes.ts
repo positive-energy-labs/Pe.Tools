@@ -295,7 +295,7 @@ export function createPeRoutes(options: PeRoutesOptions) {
         return work.command(scope, route, actor, command, input, expectedRevision);
       },
     },
-    // The agent door is refused by startFresh itself.
+    // Authenticated authors share recovery; the workspace preserves unreadable source bytes.
     [START_FRESH]: {
       schema: z.object({}),
       hint: "expected {}",
