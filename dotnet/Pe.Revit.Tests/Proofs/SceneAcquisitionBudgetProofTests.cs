@@ -10,13 +10,14 @@ public sealed class SceneAcquisitionBudgetProofTests {
         try {
             DirectShape focus;
             using (var tx = new Transaction(doc, "Create streaming scope")) {
-                tx.Start(); focus = Cube(doc, 0);
-                for (var i = 1; i <= 40; i++) Cube(doc, i * 2);
+                // Default templates can contain eligible model elements; isolate this exact acquisition count.
+                tx.Start(); focus = Cube(doc, 10000);
+                for (var i = 1; i <= 40; i++) Cube(doc, 10000 + i * 2);
                 tx.Commit();
             }
             using var output = new MemoryStream();
-            var scene = Scene.Write(doc, new SceneRequest([focus.Id.Value()], 100, MaxTriangles: 24, Proximity: true), output);
-            Assert.That(scene.Format, Is.EqualTo("space-scene-v2"));
+            var scene = Scene.Write(doc, new SceneRequest([focus.Id.Value()], 100, MaxTriangles: 24, Proximity: true, ContextRepresentation: SceneContextRepresentation.Meshes), output);
+            Assert.That(scene.Format, Is.EqualTo("space-scene-v3"));
             Assert.That(scene.Elements.Single(row => row.Focus).Handle.ElementId, Is.EqualTo(focus.Id.Value()));
             Assert.That(scene.Triangles, Is.EqualTo(24));
             Assert.That(scene.Work.ExtractedElements, Is.EqualTo(2), "The other39 context elements must never acquire geometry.");
@@ -26,7 +27,7 @@ public sealed class SceneAcquisitionBudgetProofTests {
             Assert.That(scene.Work.PeakRetainedTriangles, Is.LessThanOrEqualTo(60));
             using var repeat = new MemoryStream();
             var repeated = Scene.Write(doc, new SceneRequest([focus.Id.Value()], FocusOnly: true), repeat);
-            Assert.That(repeated.Work.Memory!.BaselinePrivateBytes, Is.EqualTo(scene.Work.Memory!.BaselinePrivateBytes), "Pressure protection must not rebase each request.");
+            Assert.That(repeated.Work.ContextGeometryCalls, Is.Zero, "Focus-only capture never acquires context geometry.");
         } finally { doc.Close(false); }
     }
 
@@ -41,6 +42,14 @@ public sealed class SceneAcquisitionBudgetProofTests {
             Assert.That(error!.Message, Does.Contain("Exact focus acquisition stopped"));
             Assert.That(output.Length, Is.Zero);
         } finally { doc.Close(false); }
+    }
+
+    [Test]
+    public void AcquisitionCounterRetainsTheAlreadyTessellatedFaceThatExceedsAdmission() {
+        var budget = new SceneBudget(12);
+        var error = Assert.Throws<SceneLimitException>(() => budget.Mesh(25, 0));
+        Assert.That(error!.Reason, Is.EqualTo("acquisition-budget"));
+        Assert.That(budget.NativeTriangles, Is.EqualTo(25), "Do not clamp a native face count to the admission limit after allocation.");
     }
 
     [Test]

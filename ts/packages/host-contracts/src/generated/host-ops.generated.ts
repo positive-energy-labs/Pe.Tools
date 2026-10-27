@@ -5479,7 +5479,7 @@ export namespace RevitDetailSpaceBuild {
      * ribbon; it is never an obstructor unless a filter names it.
      *
      */
-    export type PrimKind = "Solid" | "Mesh" | "Curve2D";
+    export type PrimKind = "Solid" | "Mesh" | "Curve2D" | "Element";
 
     /**
      * Summary of the operation's capture. Status alone reports Built false because it does not
@@ -5594,7 +5594,7 @@ export namespace RevitDetailSpaceCensus {
      * ribbon; it is never an obstructor unless a filter names it.
      *
      */
-    export type PrimKind = "Solid" | "Mesh" | "Curve2D";
+    export type PrimKind = "Solid" | "Mesh" | "Curve2D" | "Element";
     /**
      * Architectural height authority, independent of collision geometry. None means never a height.
      * ByGeometry is an element with no category role (an IFC proxy slab or roof is a nameless Generic
@@ -5738,7 +5738,7 @@ export namespace RevitDetailSpaceProbe {
      * ribbon; it is never an obstructor unless a filter names it.
      *
      */
-    export type PrimKind = "Solid" | "Mesh" | "Curve2D";
+    export type PrimKind = "Solid" | "Mesh" | "Curve2D" | "Element";
     /**
      * Architectural height authority, independent of collision geometry. None means never a height.
      * ByGeometry is an element with no category role (an IFC proxy slab or roof is a nameless Generic
@@ -5878,7 +5878,7 @@ export namespace RevitDetailSpaceRows {
      * ribbon; it is never an obstructor unless a filter names it.
      *
      */
-    export type PrimKind = "Solid" | "Mesh" | "Curve2D";
+    export type PrimKind = "Solid" | "Mesh" | "Curve2D" | "Element";
 
     /**
      * Every row that passes the filter, as parallel arrays: index i across every array is one
@@ -5957,9 +5957,11 @@ export namespace RevitDetailSpaceRows {
   }
 }
 
-/** Export real triangles in host internal feet. Set focusOnly with host elementIds for the first usable exact-membership mesh without preparing the whole world. Request context separately with focusOnly false; contextPaddingFt derives its crop, or bounds sets it explicitly. Metadata phase distinguishes focus/context, unavailableElements identifies requested ids without meshes, omittedElements counts context excluded by the output budget, and completeness reports deferred context and acquisition resource limits. Successful artifacts preserve exact focus membership; optional context stops between native calls under memory, time, or triangle limits. No document mutation. Browser orbit, visibility and cuts need no further native calls. */
+/** Export native meshes and sized straight physical runs in host internal feet. focusOnly captures host elementIds without context. Context defaults to native boxes and sized runs without tessellating context; contextRepresentation meshes explicitly acquires Coarse context within contextPaddingFt of focus bounds, or explicit bounds. none suppresses context. Primitive rows own zero vertices; representation distinguishes mesh, box and run. Metadata phase distinguishes focus/context, unavailableElements identifies requested ids without meshes, omittedElements counts context excluded by the output budget, and completeness reports deferred context and acquisition resource limits. Successful artifacts preserve focus membership; unsupported parametric focus retains Medium/Fine meshes. Native triangle counts stop further acquisition after each tessellated face, so one already allocated face can exceed the acquisition budget. Completeness discloses omitted or deferred context. No document mutation. Browser orbit, visibility and cuts need no further native calls. */
 export namespace RevitDetailSpaceScene {
   export namespace Req {
+    export type SceneContextRepresentation = "none" | "boxes" | "meshes";
+
     export interface Request {
       elementIds?: number[] | null;
       contextPaddingFt?: number;
@@ -5967,6 +5969,7 @@ export namespace RevitDetailSpaceScene {
       bounds?: null | Aabb;
       focusOnly?: boolean;
       proximity?: boolean;
+      contextRepresentation?: SceneContextRepresentation;
     }
     /**
      * Axis-aligned bounds in host internal feet.
@@ -5990,7 +5993,7 @@ export namespace RevitDetailSpaceScene {
      * ribbon; it is never an obstructor unless a filter names it.
      *
      */
-    export type PrimKind = "Solid" | "Mesh" | "Curve2D";
+    export type PrimKind = "Solid" | "Mesh" | "Curve2D" | "Element";
     /**
      * Architectural height authority, independent of collision geometry. None means never a height.
      * ByGeometry is an element with no category role (an IFC proxy slab or roof is a nameless Generic
@@ -5998,6 +6001,8 @@ export namespace RevitDetailSpaceScene {
      *
      */
     export type HeightRole = "None" | "Floor" | "Overhead" | "ByGeometry";
+    export type SceneRepresentation = "mesh" | "box" | "run";
+    export type SceneRunShape = "round" | "rectangular" | "oval";
 
     export interface Response {
       scene: SceneMetadata;
@@ -6077,6 +6082,8 @@ export namespace RevitDetailSpaceScene {
       bounds: Aabb;
       focus: boolean;
       categoryId?: number | null;
+      representation: SceneRepresentation;
+      run?: null | SceneRun;
     }
     /**
      * The address of one element. Enough for the host to select it.
@@ -6102,6 +6109,18 @@ export namespace RevitDetailSpaceScene {
       maxHeightFt: number;
       reasons: string[];
     }
+    /**
+     * Straight physical run. Points and dimensions use host internal feet; X is the unit width axis.
+     */
+    export interface SceneRun {
+      start: number[];
+      end: number[];
+      shape: SceneRunShape;
+      widthFt?: null | number;
+      heightFt?: null | number;
+      diameterFt?: null | number;
+      crossSectionXAxis: number[];
+    }
     export interface SceneSource {
       documentKey: string;
       linkInstanceId?: number | null;
@@ -6121,14 +6140,13 @@ export namespace RevitDetailSpaceScene {
       peakRetainedTriangles: number;
       nativeGeometryCalls: number;
       memory?: null | SceneMemory;
+      acquiredTriangles: number;
+      contextGeometryCalls: number;
     }
     export interface SceneMemory {
       startPrivateBytes: number;
       endPrivateBytes: number;
       peakPrivateBytes: number;
-      baselinePrivateBytes: number;
-      nativeGrowthAllowanceBytes: number;
-      physicalHeadroomBytes: number;
       managedBytes: number;
     }
     export interface SceneCompleteness {
@@ -6178,7 +6196,7 @@ export namespace RevitDetailSpaceSlice {
      * ribbon; it is never an obstructor unless a filter names it.
      *
      */
-    export type PrimKind = "Solid" | "Mesh" | "Curve2D";
+    export type PrimKind = "Solid" | "Mesh" | "Curve2D" | "Element";
     /**
      * Architectural height authority, independent of collision geometry. None means never a height.
      * ByGeometry is an element with no category role (an IFC proxy slab or roof is a nameless Generic
@@ -6300,7 +6318,7 @@ export namespace RevitDetailSpaceStatus {
      * ribbon; it is never an obstructor unless a filter names it.
      *
      */
-    export type PrimKind = "Solid" | "Mesh" | "Curve2D";
+    export type PrimKind = "Solid" | "Mesh" | "Curve2D" | "Element";
 
     /**
      * Summary of the operation's capture. Status alone reports Built false because it does not
@@ -6418,7 +6436,7 @@ export namespace RevitDetailSpaceSweep {
      * ribbon; it is never an obstructor unless a filter names it.
      *
      */
-    export type PrimKind = "Solid" | "Mesh" | "Curve2D";
+    export type PrimKind = "Solid" | "Mesh" | "Curve2D" | "Element";
     /**
      * Architectural height authority, independent of collision geometry. None means never a height.
      * ByGeometry is an element with no category role (an IFC proxy slab or roof is a nameless Generic
@@ -6544,7 +6562,7 @@ export namespace RevitDetailSpaceTree {
      * ribbon; it is never an obstructor unless a filter names it.
      *
      */
-    export type PrimKind = "Solid" | "Mesh" | "Curve2D";
+    export type PrimKind = "Solid" | "Mesh" | "Curve2D" | "Element";
 
     /**
      * One source BVH, through MaxDepth inclusive, in post-order with the root last.

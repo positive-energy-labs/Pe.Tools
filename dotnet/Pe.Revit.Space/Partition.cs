@@ -118,15 +118,15 @@ internal sealed class Partition {
 
     internal IDisposable? OpenScene() => this._store?.Open();
 
-    internal LinkedGeometryStore.Geometry CaptureScene(Element element, Aabb? region, SceneBudget budget) {
+    internal LinkedGeometryStore.Geometry CaptureScene(Element element, Aabb? region, SceneBudget budget, bool coarse = false) {
         LinkedGeometryStore.Geometry Capture(Aabb? bounds) {
             var triangles = new List<Tri>();
             var rows = new List<PrimRow>();
-            Ingest.Element(element, 0, 0, triangles, this.Transform, rows, false, bounds, budget);
+            Ingest.Element(element, 0, 0, triangles, this.Transform, rows, false, bounds, budget, coarse);
             return new LinkedGeometryStore.Geometry(rows.ToArray(), triangles.ToArray());
         }
-        budget.Headroom();
-        var result = this._store is null || (this.Kind == SourceKind.Host && region is { } box && !this.InsideRegion(element, box))
+        budget.Check();
+        var result = coarse || this._store is null || (this.Kind == SourceKind.Host && region is { } box && !this.InsideRegion(element, box))
             ? Capture(region)
             : this._store.Read(element.UniqueId + "/mesh", () => Capture(null));
         return result;
@@ -164,7 +164,9 @@ internal sealed class Partition {
                 var point = transform.OfPoint(new XYZ(x, y, z));
                 box = box.Include(new Vector3((float)point.X, (float)point.Y, (float)point.Z));
             }
-            return box;
+            return new[] { box.MinX, box.MinY, box.MinZ, box.MaxX, box.MaxY, box.MaxZ }
+                .Any(value => double.IsNaN(value) || double.IsInfinity(value))
+                || box.MinX > box.MaxX || box.MinY > box.MaxY || box.MinZ > box.MaxZ ? null : box;
         } catch { return null; }
     }
 

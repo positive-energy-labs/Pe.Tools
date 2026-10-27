@@ -40,10 +40,10 @@ public sealed class SpaceSceneScopeProofTests {
             Assert.That(store, Is.Not.Null, "A clean saved loaded linked snapshot is cacheable.");
             store!.Read("identity-proof", Capture);
             using var bytes = new MemoryStream();
-            var scene = Scene.Write(doc, new SceneRequest([focus.Id.Value()], 3, Proximity: true), bytes);
+            var scene = Scene.Write(doc, new SceneRequest([focus.Id.Value()], 3, Proximity: true, ContextRepresentation: SceneContextRepresentation.Meshes), bytes);
             using var repeated = new MemoryStream();
-            Scene.Write(doc, new SceneRequest([focus.Id.Value()], 4, Proximity: true), repeated);
-            Assert.That(repeated.ToArray(), Is.EqualTo(bytes.ToArray()), "Overlapping scopes reuse uncropped geometry without erasing crossing faces.");
+            Scene.Write(doc, new SceneRequest([focus.Id.Value()], 4, Proximity: true, ContextRepresentation: SceneContextRepresentation.Meshes), repeated);
+            Assert.That(repeated.ToArray(), Is.EqualTo(bytes.ToArray()), "Coarse context recapture preserves crossing faces across overlapping scopes.");
             using (var transaction = new Transaction(doc, "Edit host without changing link")) {
                 transaction.Start();
                 Cube(doc, 200);
@@ -89,14 +89,14 @@ public sealed class SpaceSceneScopeProofTests {
                 transaction.Commit();
             }
             using var bytes = new MemoryStream();
-            var scene = Scene.Write(doc, new SceneRequest([first.Id.Value(), last.Id.Value()], 3, Proximity: true), bytes);
+            var scene = Scene.Write(doc, new SceneRequest([first.Id.Value(), last.Id.Value()], 3, Proximity: true, ContextRepresentation: SceneContextRepresentation.Meshes), bytes);
             Assert.That(scene.Elements.Where(e => e.Focus).Select(e => e.Handle.ElementId), Is.EquivalentTo(new[] { first.Id.Value(), last.Id.Value() }));
             Assert.That(scene.Elements.Any(e => e.Handle.ElementId == gap.Id.Value()), Is.False);
             Assert.That(scene.Elements.Any(e => e.Handle.ElementId == wall.Id.Value()), Is.True, "A long triangle's interior crosses the radius although its vertices do not.");
             Assert.That(scene.Elements.Any(e => e.Handle.ElementId == contains.Id.Value()), Is.True, "Containing solids cannot be called empty because their surfaces are far away.");
             Assert.That(scene.Elements.Where(e => e.Focus).Sum(e => e.VertexCount), Is.EqualTo(72));
             using var oldBytes = new MemoryStream();
-            var old = Scene.Write(doc, new SceneRequest([first.Id.Value(), last.Id.Value()], 3), oldBytes);
+            var old = Scene.Write(doc, new SceneRequest([first.Id.Value(), last.Id.Value()], 3, ContextRepresentation: SceneContextRepresentation.Boxes), oldBytes);
             Assert.That(old.Elements.Any(e => e.Handle.ElementId == gap.Id.Value()), Is.True);
         } finally { doc.Close(false); }
     }
@@ -123,7 +123,7 @@ public sealed class SpaceSceneScopeProofTests {
                 _ = Cube(doc, 100);
                 transaction.Commit();
             }
-            var request = new SceneRequest([focus.Id.Value()], 4);
+            var request = new SceneRequest([focus.Id.Value()], 4, ContextRepresentation: SceneContextRepresentation.Meshes);
             using var scopedBytes = new MemoryStream();
             var scoped = Scene.Write(doc, request, scopedBytes);
             var firstWorld = SpaceWorld.Prepare(doc);
@@ -165,7 +165,7 @@ public sealed class SpaceSceneScopeProofTests {
             Scene.Write(doc, request, restoredBytes);
             Assert.That(restoredBytes.ToArray(), Is.EqualTo(scopedBytes.ToArray()));
             using var explicitBytes = new MemoryStream();
-            var explicitCrop = Scene.Write(doc, new SceneRequest([focus.Id.Value()], Bounds: new Aabb(1.5, -1, -1, 4, 2, 2)), explicitBytes);
+            var explicitCrop = Scene.Write(doc, new SceneRequest([focus.Id.Value()], Bounds: new Aabb(1.5, -1, -1, 4, 2, 2), ContextRepresentation: SceneContextRepresentation.Meshes), explicitBytes);
             Assert.That(explicitCrop.Elements.Single().Handle.ElementId, Is.EqualTo(context.Id.Value()));
             Assert.That(explicitCrop.Elements.Single().Focus, Is.False);
         } finally {
