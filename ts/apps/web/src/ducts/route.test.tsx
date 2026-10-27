@@ -3,6 +3,7 @@
 import { WorkOwner } from "@pe/kit/lang/work";
 import { ChatHosted } from "#/route/situation-ladder";
 import { Route } from "#/routes/ducts";
+import { DuctsRoute } from "./route";
 import {
   applyPatches,
   ductsRouteState,
@@ -419,7 +420,8 @@ async function mount(
     getParentRoute: () => root,
     path: "/ducts",
     validateSearch: Route.options.validateSearch,
-    component: Route.options.component,
+    // Import the real screen before timed interactions; the browser journey covers lazy routing.
+    component: DuctsRoute,
   });
   const router = createRouter({
     routeTree: root.addChildren([route]),
