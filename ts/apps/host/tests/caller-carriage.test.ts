@@ -121,9 +121,7 @@ test("/actions sees each principal's real carriage through the real HTTP server"
     // Control: nobody stays nobody.
     expect(await post({})).toBe("context.missing");
     expect(await post(token(host.terminal))).not.toBe("context.missing");
-    expect(await post(token(mintContext({ kind: "pea", thread: "t-carriage" })))).toBe(
-      "grant.required",
-    );
+    expect(await post(token(mintContext({ kind: "pea", thread: "t-carriage" })))).toBe("run.none");
     expect(await post(token(mintContext({ kind: "external-mcp", label: "ext" })))).toBe(
       "grant.context-cannot-hold",
     );
@@ -229,7 +227,7 @@ test("the harness, Page and route-state doors carry their caller through the rea
     const write = "/pe/route-state/families/apply";
     const patch = { patches: [], expectedRevision: 0 };
     expect((await at("POST", write, {}, patch)).code).toBe("context.missing");
-    expect((await at("POST", write, page, patch)).code).toBe("page.use-page-door");
+    expect((await at("POST", write, page, patch)).code).toBe("human.only");
     humanReached(await at("POST", write, human, patch));
   } finally {
     await host.close();
@@ -368,7 +366,7 @@ test("action controls and the Families reading judge their real caller", async (
       const control = (headers: Record<string, string>) =>
         send(`${server.base}/actions/${verb}`, "POST", headers, { id: admitted.id });
       expect((await control({})).code, verb).toBe("context.missing");
-      expect((await control(pea)).code, verb).toBe("human.only");
+      expect((await control(pea)).code, verb).toBe("context.foreign-thread");
       const reached = await control(human);
       expect(reached.code, reached.text).toBeUndefined();
     }
@@ -383,7 +381,7 @@ test("action controls and the Families reading judge their real caller", async (
         },
       );
     expect((await families({})).text).toMatch(/anonymous callers are read-only/);
-    expect((await families(pea)).text).toMatch(/pea calls are refused/);
+    expect((await families(pea)).text).toMatch(/Families Work belongs to another document/);
     expect((await families(human)).text).toMatch(/Families Work belongs to another document/);
   } finally {
     await server.close();

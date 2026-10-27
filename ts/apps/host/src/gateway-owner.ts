@@ -1,3 +1,4 @@
+import { dispatchRefusal, validateDispatch, markDispatched } from "./action-dispatch.ts";
 import { join } from "node:path";
 import { ActionJournal } from "./action-journal.ts";
 import { HostLog } from "./host-log.ts";
@@ -35,10 +36,6 @@ export const recordBridgeQueue = (...args: Parameters<ActionJournal["recordQueue
     ? journal.recordQueue(...args)
     : Promise.reject(Error("Receipt owner has not been initialized"));
 
-export const bridgeDispatchRefusal = (requestId: string): string | null =>
-  journal?.dispatchRefusal(requestId) ?? null;
-
-export const bridgeValidateDispatch = (requestId: string) =>
-  journal?.validateDispatch(requestId) ?? Promise.resolve(null);
-export const markBridgeDispatched = (requestId: string) =>
-  journal?.markDispatched(requestId) ?? Promise.resolve();
+export const bridgeDispatchRefusal = dispatchRefusal;
+export const bridgeValidateDispatch = validateDispatch;
+export const markBridgeDispatched = markDispatched;

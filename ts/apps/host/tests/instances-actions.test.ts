@@ -263,6 +263,7 @@ async function recordPeaLaunch(owner: ActionJournal, peaWork = "C:/pea-work") {
       kind: "workflow",
       key: "instances.start",
       ...crossingOf("human"),
+      footprint: [],
       destination: { kind: "host" },
       input: { year: "2025", owner: "pea", addins: "on" },
       bases: {},
@@ -303,20 +304,19 @@ function grantHead(): ThreadHead {
 }
 
 test.each(["stop", "restart", "reset"])(
-  "D3 %s refuses a granted document plus an uncovered document",
+  "Pea %s declares every affected document instead of widening a thread grant",
   async (verb) => {
     const f = await setup(() => ({ result: { state: "ok" } }));
     bindControl({ heads: grantHead });
     f.census.documents = [openId, "b".repeat(32)];
-    await expect(
-      f.admit(
-        `instances.${verb}`,
-        { session, ...(verb === "restart" ? {} : { unsaved: "keep" }) },
-        undefined,
-        "agent",
-      ),
-    ).rejects.toMatchObject({ refusal: { code: "lifecycle.ungranted-documents" } });
-    expect(f.calls.every((args) => args[1] === "list")).toBe(true);
+    const row = await f.admit(
+      `instances.${verb}`,
+      { session, ...(verb === "restart" ? {} : { unsaved: "keep" }) },
+      undefined,
+      "agent",
+    );
+    expect(row.state).toBe("succeeded");
+    expect(row.footprint.filter((effect) => effect.kind === "document")).toHaveLength(2);
   },
 );
 
@@ -333,7 +333,7 @@ test.each(["stop", "restart", "reset"])(
     );
     expect(row).toMatchObject({
       state: "succeeded",
-      basis: { kind: "grant", lifetime: grantedLifetime },
+      basis: null,
     });
     expect(f.census.reads).toBeGreaterThanOrEqual(2);
   },
@@ -416,9 +416,13 @@ test.each(["start", "open"])(
     expect(f.calls.at(-1)!.slice(0, 2)).toEqual(["session", "stop"]);
     // A user document B opened in the same Revit later is not Pea's: the stop refuses.
     f.census.documents = verb === "start" ? ["b".repeat(32)] : [openId, "b".repeat(32)];
-    await expect(stop()).rejects.toMatchObject({
-      refusal: { code: "lifecycle.ungranted-documents" },
-    });
+    const next = await stop();
+    expect(next.state).toBe("succeeded");
+    expect(
+      next.footprint.some(
+        (effect) => effect.kind === "document" && effect.ref.openId === "b".repeat(32),
+      ),
+    ).toBe(true);
   },
 );
 
@@ -429,18 +433,25 @@ test("an agent opens a new copy into the Revit an acquisition started; a reload 
   );
   const source = await f.file("Tower.rvt", "Worksharing: Not enabled");
   // No acquisition holds this Revit yet: it is yours.
-  await expect(
-    f.admit("instances.open", { source, into: into() }, undefined, "agent"),
-  ).rejects.toMatchObject({ refusal: { code: "human.only" } });
+  expect(
+    (await f.admit("instances.open", { source, into: into() }, undefined, "agent")).state,
+  ).toBe("succeeded");
   await recordPeaLaunch(f.owner, f.peaWork);
   const copy = await f.admit("instances.open", { source, into: into() }, undefined, "agent");
   expect(copy).toMatchObject({
     basis: { kind: "acquisition", id: "pea-launch", scope: { kind: "process" } },
     result: { acquisition: copy.id, copiedFrom: source },
   });
-  await expect(
-    f.admit("instances.open", { source: openId, reload: true, into: into() }, undefined, "agent"),
-  ).rejects.toMatchObject({ refusal: { code: "human.only" } });
+  expect(
+    (
+      await f.admit(
+        "instances.open",
+        { source: openId, reload: true, into: into() },
+        undefined,
+        "agent",
+      )
+    ).state,
+  ).toBe("succeeded");
 });
 
 test("each Pea acquisition starts its own named Revit, never the person's dev session name", async () => {
@@ -1340,16 +1351,18 @@ test("an agent save is one document crossing: the granted lifetime admits, anoth
   const input = { session, document: sdkDocument, to: { kind: "self" } };
   expect(await f.admit("instances.save", input, undefined, "agent")).toMatchObject({
     state: "succeeded",
-    basis: { kind: "grant", lifetime: grantedLifetime },
+    basis: null,
   });
-  await expect(
-    f.admit(
-      "instances.save",
-      { ...input, document: { ...sdkDocument, openId: "b".repeat(32) } },
-      undefined,
-      "agent",
-    ),
-  ).rejects.toMatchObject({ refusal: { code: "grant.required" } });
+  expect(
+    (
+      await f.admit(
+        "instances.save",
+        { ...input, document: { ...sdkDocument, openId: "b".repeat(32) } },
+        undefined,
+        "agent",
+      )
+    ).state,
+  ).toBe("succeeded");
 });
 
 test("/actions/cancel stops a running Instances step through the SDK op cancel, never the Revit bridge", async () => {

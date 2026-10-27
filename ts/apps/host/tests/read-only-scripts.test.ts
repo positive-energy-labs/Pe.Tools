@@ -3,11 +3,12 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { randomUUID } from "node:crypto";
 import { Effect, Layer } from "effect";
-import { expect, test } from "vite-plus/test";
+import { expect, test, vi } from "vite-plus/test";
 import { HOST_CONTEXT_HEADER, HOST_RUNTIME_SERVICE_HEADER } from "@pe/host-contracts/contracts";
 import { ActionJournal } from "../src/action-journal.ts";
 import { RevitBridge } from "../src/bridge.ts";
 import { makeCallRoute } from "../src/call-route.ts";
+import { RunConsents, type ConsentEvent } from "../src/run-consent.ts";
 import { bindControl, mintContext } from "../src/control.ts";
 import { hostOwnership } from "../src/host-ownership.ts";
 import { pagesRoute } from "../src/pages-route.ts";
@@ -115,6 +116,7 @@ async function serve(onCatalog?: (documents: (typeof other)[]) => void) {
       error?: { code: string; details?: { refusal?: { code: string } } };
       state?: string;
       id?: string;
+      footprint?: import("@pe/agent-contracts").Footprint;
     };
     return { status: response.status, json, text };
   };
@@ -122,9 +124,14 @@ async function serve(onCatalog?: (documents: (typeof other)[]) => void) {
   const settle = async (id: string) => {
     for (let i = 0; i < 200; i++) {
       const [row] = (await (
-        await fetch(`${server.base}/actions?id=${encodeURIComponent(id)}`)
-      ).json()) as { state: string; result?: unknown }[];
-      if (row && row.state !== "running") return row;
+        await fetch(`${server.base}/actions?id=${encodeURIComponent(id)}`, {
+          headers: {
+            [HOST_CONTEXT_HEADER]: mintContext({ kind: "human", via: "cli" }),
+            [HOST_RUNTIME_SERVICE_HEADER]: hostOwnership.serviceName,
+          },
+        })
+      ).json()) as { state: string; result?: unknown; consent?: unknown }[];
+      if (row && row.state !== "running" && row.state !== "waiting") return row;
       await new Promise((resolve) => setTimeout(resolve, 25));
     }
     throw Error(`action ${id} never settled`);
@@ -236,18 +243,25 @@ test("item 9: Pea reads an ungranted human document by exact target; a write the
       destination: { kind: "document", ref: doc },
       input: script("WriteTransaction"),
     });
-    expect([write.status, write.json.refusal?.code], write.text).toEqual([403, "grant.required"]);
+    expect([write.status, write.json.refusal?.code], write.text).toEqual([403, "run.none"]);
     expect(host.sent).toHaveLength(1);
   } finally {
     await host.close();
   }
 }, 30_000);
 
-test("item 10: Pea runs a ReadOnly script on an ungranted human document; NoTransaction and WriteTransaction stay writes", async () => {
+test("Pea script modes all cross the same root-run consent and raw script dispatch refuses", async () => {
   const host = await serve();
+  const events: ConsentEvent[] = [],
+    run = { thread: "script-turn", turn: randomUUID() },
+    runs = new RunConsents((_, event) => events.push(event));
+  runs.open(run);
+  bindControl({ runs });
+  const headers = as({ kind: "pea", thread: run.thread, run, root: run });
   try {
-    for (const mode of ["ReadOnly", undefined]) {
-      const act = await host.send("/actions", as({ kind: "pea", thread: "t-read" }), {
+    let decision: unknown;
+    for (const mode of ["ReadOnly", undefined, "NoTransaction", "WriteTransaction"]) {
+      const act = await host.send("/actions", headers, {
         id: randomUUID(),
         kind: "operation",
         key: "scripting.execute",
@@ -255,62 +269,71 @@ test("item 10: Pea runs a ReadOnly script on an ungranted human document; NoTran
         input: script(mode),
       });
       expect(act.status, act.text).toBeLessThan(300);
-      expect(await host.settle(act.json.id!)).toMatchObject({ state: "succeeded" });
-      const call = await host.send("/call", peaCall("t-read"), {
-        key: "scripting.execute",
-        request: script(mode),
-      });
-      expect(call.status, call.text).toBe(200);
+      if (!decision) {
+        expect(act.json.state).toBe("waiting");
+        expect(host.sent).toEqual([]);
+        await vi.waitFor(() =>
+          expect(events.some((e) => e.kind === "permission_request")).toBe(true),
+        );
+        const ask = events.find((e) => e.kind === "permission_request")!;
+        if (ask.kind === "permission_request") runs.decide(run.thread, ask.requestId, "allow_now");
+      }
+      const row = await host.settle(act.json.id!);
+      expect(row.state, JSON.stringify(row)).toBe("succeeded");
+      if (!decision) decision = row.consent;
+      else expect(row.consent).toEqual(decision);
+      const raw = await host.send(
+        "/call",
+        { ...headers, "x-pe-bridge-session-id": doc.session, "x-pe-open-document-id": doc.openId },
+        { key: "scripting.execute", request: script(mode) },
+      );
+      expect(raw.status, raw.text).toBe(409);
     }
-    const before = host.sent.length;
-    for (const mode of ["NoTransaction", "WriteTransaction"]) {
-      const admit = await host.send("/actions", as({ kind: "pea", thread: "t-read" }), {
-        id: randomUUID(),
-        kind: "operation",
-        key: "scripting.execute",
-        destination: { kind: "document", ref: doc },
-        input: script(mode),
-      });
-      expect([admit.status, admit.json.refusal?.code], admit.text).toEqual([403, "grant.required"]);
-      const call = await host.send("/call", peaCall("t-read"), {
-        key: "scripting.execute",
-        request: script(mode),
-      });
-      expect(call.status, call.text).toBe(409);
-    }
-    expect(host.sent.length).toBe(before);
+    expect(events.filter((event) => event.kind === "permission_request")).toHaveLength(1);
+    expect(host.sent).toHaveLength(4);
   } finally {
+    runs.closeAll();
     await host.close();
   }
-}, 30_000);
+}, 30000);
 
-test("item 10, K9: Pea's ReadOnly script refuses while an ungranted sibling is open", async () => {
+test("Pea script footprint includes every sibling and Stop prevents dispatch", async () => {
   const host = await serve();
   host.openDocuments.push(other);
+  const run = { thread: "siblings", turn: randomUUID() },
+    runs = new RunConsents(() => {});
+  runs.open(run);
+  bindControl({ runs });
+  const headers = as({ kind: "pea", thread: run.thread, run, root: run });
   try {
-    const call = await host.send("/call", peaCall("t-read"), {
-      key: "scripting.execute",
-      request: script("ReadOnly"),
-    });
-    expect(call.status, call.text).toBe(403);
-    expect(call.text).toContain("script.ungranted-documents");
-    expect(call.text).toContain(other.openId);
-    const act = await host.send("/actions", as({ kind: "pea", thread: "t-read" }), {
+    const raw = await host.send(
+      "/call",
+      { ...headers, "x-pe-bridge-session-id": doc.session, "x-pe-open-document-id": doc.openId },
+      { key: "scripting.execute", request: script("ReadOnly") },
+    );
+    expect(raw.status).toBe(409);
+    const act = await host.send("/actions", headers, {
       id: randomUUID(),
       kind: "operation",
       key: "scripting.execute",
       destination: { kind: "document", ref: doc },
       input: script("ReadOnly"),
     });
-    expect(act.status, act.text).toBeLessThan(300);
-    const row = await host.settle(act.json.id!);
-    expect(row, JSON.stringify(row)).toMatchObject({ state: "failed" });
-    expect(JSON.stringify(row)).toContain("script.ungranted-documents");
+    expect(act.json.state, act.text).toBe("waiting");
+    expect(act.json.footprint).toEqual(
+      expect.arrayContaining([
+        { kind: "document", ref: doc },
+        { kind: "document", ref: { session: doc.session, openId: other.openId } },
+      ]),
+    );
+    runs.close(run, "stopped");
+    expect((await host.settle(act.json.id!)).state).toBe("cancelled");
     expect(host.sent).toEqual([]);
   } finally {
+    runs.closeAll();
     await host.close();
   }
-}, 30_000);
+}, 30000);
 
 test("an external MCP client cannot read a human document with a ReadOnly script", async () => {
   const host = await serve();
@@ -391,11 +414,9 @@ test("a human pin consents only to its document: an ungranted sibling refuses Re
         key: "scripting.execute",
         input: script(mode),
       });
-      expect(act.status, act.text).toBeLessThan(300);
-      const row = await host.settle(act.json.id!);
-      expect(row, JSON.stringify(row)).toMatchObject({ state: "failed" });
-      expect(JSON.stringify(row)).toContain("script.ungranted-documents");
-      expect(JSON.stringify(row)).toContain(other.openId);
+      expect(act.status, act.text).toBe(403);
+      expect(act.text).toContain("grant.required");
+      expect(act.text).toContain(other.openId);
       expect(host.sent).toEqual([]);
     }
   } finally {

@@ -1,7 +1,7 @@
 import { readFile } from "node:fs/promises";
 import { resolve } from "node:path";
 import { createHash } from "node:crypto";
-import { capturePackage, captureDirectory } from "./packages.ts";
+import { capturePackage, captureDirectory, listPackages } from "./packages.ts";
 import { readZip } from "./pod-transfer.ts";
 import { productPagesRootPath } from "./product-paths.ts";
 import { resolveSdkSession, type SdkSession } from "./sdk-session.ts";
@@ -15,8 +15,9 @@ import {
   type ExecutionTarget,
   type Footprint,
   canonicalRouteInput,
+  semanticWorkflowForOperation,
 } from "@pe/agent-contracts";
-import { admitScript, consentedRead, Refused } from "./control.ts";
+import { admitScript, consentedRead, Refused, requireHuman } from "./control.ts";
 import { hostOperationDefinitionSchema } from "@pe/host-contracts/contracts";
 import {
   isTsOnlyOperationKey,
@@ -196,6 +197,11 @@ export async function admitGatewayAction(
       throw refused("Original document lifetime is no longer open");
     return session;
   };
+  const semantic = semanticWorkflowForOperation(admission.key);
+  if (semantic)
+    throw refused(
+      `Use the semantic workflow '${semantic}' so the host seals its full Work, source and file footprint`,
+    );
   const submittedSession = await validate();
   const submittedDefinition = await operationDefinition(admission.key, bridge, submittedSession);
   requireEligibleCaller(submittedDefinition, crossing.caller, "/actions");
@@ -214,10 +220,19 @@ export async function admitGatewayAction(
     if (admission.key === "scripting.execute") {
       if (!docs) throw refused("Script effects require a complete sibling document census");
       footprint.push(
-        ...docs.map((doc) => ({
-          kind: "document" as const,
-          ref: { session: submittedSession.sessionId, openId: doc.openId },
-        })),
+        ...docs
+          .filter(
+            (doc) =>
+              !(
+                crossing.caller.kind === "page" &&
+                readTarget?.session === submittedSession.sessionId &&
+                readTarget.openId === doc.openId
+              ),
+          )
+          .map((doc) => ({
+            kind: "document" as const,
+            ref: { session: submittedSession.sessionId, openId: doc.openId },
+          })),
       );
       const census = docs.map((doc) => doc.openId).sort();
       frozen.census = census;
@@ -242,6 +257,23 @@ export async function admitGatewayAction(
       case "pod.export": {
         footprint.push({ kind: "file", path: resolve(String(input.archivePath)) });
         const capture = await capturePackage(String(input.pod));
+        const dependencies = async () => {
+          const listing = await listPackages();
+          if (listing.unreadable.length)
+            throw refused("Cannot freeze an unreadable Pod dependency catalog");
+          return listing.packages
+            .map((pod) => ({
+              id: pod.id,
+              members: pod.members.map((member) => ({ path: member.path, sha256: member.sha256 })),
+            }))
+            .sort((a, b) => a.id.localeCompare(b.id));
+        };
+        const versions = await dependencies();
+        frozen.dependencies = versions;
+        checks.push(async () => {
+          if (canonicalRouteInput(await dependencies()) !== canonicalRouteInput(versions))
+            throw refused("Pod dependency source changed after submission; submit a new command");
+        });
         frozen.source = capture;
         checks.push(async () => {
           if (
@@ -297,14 +329,22 @@ export async function admitGatewayAction(
         });
         break;
       }
+      case "host.shell.open":
+        if (crossing.caller.kind !== "human" && crossing.caller.kind !== "pea")
+          throw refused("Opening a host viewer requires a human or Pea caller");
+        // Opening the registered viewer changes no user resource bytes.
+        break;
+      case "aps.auth.login":
+      case "aps.auth.logout":
+        // Account administration remains an explicit human transport exception.
+        requireHuman(crossing.caller, "/actions", "APS account administration");
+        break;
+      case "rhvac.launch":
       case "rhvac.sync":
         footprint.push({ kind: "file", path: resolve(String(input.path)) });
         break;
       default:
-        if (crossing.caller.kind !== "human")
-          throw refused(
-            `'${admission.key}' has no declared external effect adapter; use its human control`,
-          );
+        throw refused(`'${admission.key}' has no declared external effect adapter`);
     }
   }
   const revalidate = async () => {

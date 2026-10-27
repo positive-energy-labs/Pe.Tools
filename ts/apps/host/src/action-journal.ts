@@ -1,3 +1,4 @@
+import { bindActionDispatch } from "./action-dispatch.ts";
 import { BridgeError } from "./bridge.ts";
 import { appendFile, mkdir, readdir, readFile, writeFile } from "node:fs/promises";
 import { renameReplacing } from "./rename-retry.ts";
@@ -13,7 +14,6 @@ import {
   type ActionAdmission,
   type ActionStep,
   type Basis,
-  type Origin,
   type Footprint,
   type CommandConsent,
   semanticActions,
@@ -41,6 +41,8 @@ import {
   authorizeCommand,
   commandCheckpoint,
   subscribeRunChanges,
+  validateFootprintCaller,
+  Refused,
 } from "./control.ts";
 
 /** Who crossed and why it was admitted: host-minted, stamped on the receipt beside the admission. */
@@ -283,7 +285,7 @@ const unsettled = (row: ActionReceipt) => {
   return attempt;
 };
 
-/** Settled receipts kept by compaction; open actions are never dropped. */
+/** Telemetry facts kept by compaction; command identities and outcomes never expire. */
 const RETAIN_RECEIPTS = 10_000;
 /** A row that blocks overlapping admissions and must stay visible until recovered. */
 const isOpen = (row: ActionReceipt) =>
@@ -297,8 +299,8 @@ const isOpen = (row: ActionReceipt) =>
  *
  * Storage is append-only lines: a `{"version":5}` header, then one `{receipt}` per committed
  * revision and one `{mapping}` per minted opaque id; the last revision of an id wins. A commit
- * appends only what it changed, and compaction rewrites the newest {@link RETAIN_RECEIPTS} settled
- * receipts plus every open action once the file holds twice what is live.
+ * appends only what it changed, and compaction rewrites the newest {@link RETAIN_RECEIPTS} telemetry
+ * facts plus every command once the file holds twice what is live.
  */
 export class ActionJournal implements ReceiptReader {
   private readonly rows = new Map<string, ActionReceipt>();
@@ -312,6 +314,7 @@ export class ActionJournal implements ReceiptReader {
   private fresh: string[] = [];
   private minted = new Set<string>();
   private lines = 0;
+  private factCount = 0;
   private header = false;
   private torn = false;
   private committed: Receipt[] = [];
@@ -605,7 +608,11 @@ export class ActionJournal implements ReceiptReader {
         commandCheckpoint(row.origin, row.consent);
       const earlier = [...this.rows.values()].slice(0, [...this.rows.keys()].indexOf(id));
       const blocked = earlier.find(
-        (other) => isOpen(other) && effectsOverlap(row.footprint, other.footprint),
+        (other) =>
+          isOpen(other) &&
+          (other.state !== "incomplete" || other.key === "schedule.grid.push") &&
+          (effectsOverlap(row.footprint, other.footprint) ||
+            (!other.origin && overlaps(row.destination, other.destination))),
       );
       if (!blocked) return;
       if (blocked.state === "unknown" || blocked.state === "incomplete")
@@ -622,6 +629,50 @@ export class ActionJournal implements ReceiptReader {
         this.listeners.add(changed);
       });
     }
+  }
+  visibleTo(row: ActionReceipt, caller: Caller): boolean {
+    if (caller.kind === "human")
+      return (
+        caller.via === "local" ||
+        caller.via === "cli" ||
+        row.caller.kind === "pea" ||
+        (row.caller.kind === "human" &&
+          row.caller.device === caller.device &&
+          row.caller.login === caller.login)
+      );
+    if (caller.kind === "pea")
+      return (
+        row.caller.kind === "pea" &&
+        (row.caller.thread === caller.thread ||
+          (caller.root !== undefined &&
+            canonicalRouteInput(row.origin?.root) === canonicalRouteInput(caller.root)))
+      );
+    if (caller.kind === "page")
+      return row.caller.kind === "page" && row.caller.page === caller.page;
+    if (caller.kind === "external-mcp")
+      return (
+        row.caller.kind === "external-mcp" &&
+        (row.caller.context === caller.context ||
+          (caller.device !== undefined && row.caller.device === caller.device))
+      );
+    return false;
+  }
+  async readFor(caller: Caller, target?: DocumentRef, id?: string): Promise<ActionReceipt[]> {
+    if (caller.kind === "anonymous" || caller.kind === "service")
+      throw new Refused({
+        code: "context.missing",
+        door: "/actions",
+        reason: "Authenticate before inspecting command inputs or outcomes",
+      });
+    const rows = await this.list(target, id),
+      visible = rows.filter((row) => this.visibleTo(row, caller));
+    if (id && rows.length && !visible.length)
+      throw new Refused({
+        code: "context.foreign-thread",
+        door: "/actions",
+        reason: "This command belongs to another authenticated caller",
+      });
+    return visible;
   }
   /** Authentication precedes recovery, and recovery never borrows a newer turn. */
   async existing(admission: ActionAdmission, caller: Caller): Promise<ActionReceipt | null> {
@@ -678,6 +729,7 @@ export class ActionJournal implements ReceiptReader {
           throw Error("Recover every uncertain step before resuming the original action");
       }
       const footprint = structuredClone(declared ?? declaredFootprint(admission));
+      validateFootprintCaller(caller, footprint);
       if (footprint.some((e) => e.kind !== "receipt")) assertRunAdmission(origin);
       const opening = admission.key === "instances.start" || admission.key === "instances.open";
       const blocked =
@@ -692,6 +744,7 @@ export class ActionJournal implements ReceiptReader {
                 row.state === "unknown" ||
                 (row.key === "schedule.grid.push" && row.state === "incomplete")) &&
               (effectsOverlap(footprint, row.footprint) ||
+                (!row.origin && overlaps(admission.destination, row.destination)) ||
                 (row.key === "schedule.grid.push" &&
                   admission.key === row.key &&
                   admission.bases.work &&
@@ -739,6 +792,7 @@ export class ActionJournal implements ReceiptReader {
           this.notify();
           row = nextRow;
         });
+      const releaseDispatch: (() => void)[] = [];
       let cursor = 0;
       const execution: ActionExecution = {
         get prepared() {
@@ -815,6 +869,14 @@ export class ActionJournal implements ReceiptReader {
             return { ...row, steps: [...row.steps, step] };
           });
           cursor = row.steps.length;
+          if (kind === "native")
+            releaseDispatch.push(
+              bindActionDispatch(step.id, {
+                refusal: () => this.dispatchRefusal(step.id),
+                validate: () => this.validateDispatch(step.id),
+                dispatched: () => this.markDispatched(step.id),
+              }),
+            );
           let result;
           try {
             await this.export(row.id, `steps/${step.id}.json`, {
@@ -956,6 +1018,7 @@ export class ActionJournal implements ReceiptReader {
             this.pending.delete(row.id);
             this.validators.delete(row.id);
             releaseRun();
+            releaseDispatch.forEach((release) => release());
             return actionReceiptSchema.parse(structuredClone(next));
           }),
         );
@@ -1246,7 +1309,7 @@ export class ActionJournal implements ReceiptReader {
     this.committed.push(...receipts);
     if (
       this.lines > 2 * Math.max(this.receipts.size, 1000) ||
-      this.receipts.size > this.retain + Math.max(this.retain / 10, 1)
+      this.factCount > this.retain + Math.max(this.retain / 10, 1)
     )
       await this.compact();
   }
@@ -1258,22 +1321,17 @@ export class ActionJournal implements ReceiptReader {
     else this.open.delete(row.id);
   }
   private keep(receipt: Receipt) {
+    if (receipt.body.kind !== "action" && !this.receipts.has(receipt.id)) this.factCount++;
     this.receipts.set(receipt.id, receipt);
     if (receipt.body.kind === "action") this.actionReceipt.set(receipt.body.value.id, receipt.id);
   }
 
-  /** Rewrite the newest settled receipts, every open action, and the mappings they still name. */
+  /** Commands keep their immutable identity and outcome forever; only telemetry facts expire. */
   private async compact() {
-    const settled = [...this.receipts.values()].filter(
-      (r) => r.body.kind !== "action" || !this.open.has(r.body.value.id),
-    );
-    for (const r of settled.slice(0, Math.max(0, settled.length - this.retain))) {
-      this.receipts.delete(r.id);
-      if (r.body.kind !== "action") continue;
-      const row = r.body.value;
-      this.rows.delete(row.id);
-      this.actionReceipt.delete(row.id);
-      for (const step of row.steps) this.stepAction.delete(step.id);
+    const facts = [...this.receipts.values()].filter((receipt) => receipt.body.kind !== "action");
+    for (const receipt of facts.slice(0, Math.max(0, facts.length - this.retain))) {
+      this.receipts.delete(receipt.id);
+      this.factCount--;
     }
     const named = new Set(
       [...this.receipts.values()].flatMap((r) => [

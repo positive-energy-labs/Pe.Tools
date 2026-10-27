@@ -174,3 +174,67 @@ test("restart cancels unapproved rows and conflicting consumed edits fail before
     await h.close();
   }
 });
+
+test("receipt recovery authenticates its original principal and Page bindings grant no host-resource writes", async () => {
+  const h = await setup();
+  try {
+    const by: Caller = { kind: "human", via: "local" };
+    await h.journal.admit(
+      { ...admission("private"), caller: by, basis: { kind: "human" }, footprint },
+      async () => null,
+      async () => null,
+    );
+    await h.journal.wait("private");
+    await expect(h.journal.readFor({ kind: "anonymous" }, undefined, "private")).rejects.toThrow(
+      "Authenticate",
+    );
+    await expect(h.journal.readFor(caller, undefined, "private")).rejects.toThrow(
+      "another authenticated",
+    );
+    expect(await h.journal.readFor(by, undefined, "private")).toHaveLength(1);
+    const page: Caller = { kind: "page", page: "page:@pages/report" };
+    await expect(
+      h.journal.admit(
+        {
+          ...admission("page-file"),
+          caller: page,
+          basis: null,
+          footprint: [{ kind: "file", path: "C:/user/file.json" }],
+        },
+        async () => null,
+        async () => null,
+      ),
+    ).rejects.toThrow("no member, file, publication or session effect capability");
+    expect(await h.journal.list(undefined, "page-file")).toEqual([]);
+  } finally {
+    await h.close();
+  }
+});
+
+test("compaction and restart never forget a command id or replay its successful effect", async () => {
+  const h = await setup();
+  try {
+    const journal = new ActionJournal(h.path, () => null, 1);
+    let effects = 0;
+    const submit = (owner: ActionJournal) =>
+      owner.admit(
+        {
+          ...admission("durable"),
+          caller: { kind: "human", via: "local" },
+          basis: { kind: "human" },
+          footprint,
+        },
+        async () => null,
+        async (e) => e.step("file", "write", {}, async () => ++effects),
+      );
+    await submit(journal);
+    await journal.wait("durable");
+    for (let i = 0; i < 8; i++) await journal.recordFact({ kind: "turn", phase: "started" });
+    const recovered = new ActionJournal(h.path, () => null, 1);
+    expect((await submit(recovered)).state).toBe("succeeded");
+    expect(effects).toBe(1);
+    expect(await recovered.list(undefined, "durable")).toHaveLength(1);
+  } finally {
+    await h.close();
+  }
+});

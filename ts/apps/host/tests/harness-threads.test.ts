@@ -20,7 +20,6 @@ import { human } from "./callers.ts";
 import {
   admitCrossing,
   bindControl,
-  live,
   onRevoke,
   Refused,
   callerOf,
@@ -1311,3 +1310,111 @@ for (const harness of ["claude", "codex"] as const) {
     }
   });
 }
+
+test("recorded run permission answers survive reconnect and restart without approving an old run", async () => {
+  const h = host(),
+    call = caller(h),
+    read = reader(h),
+    id = (await call("POST", "/pe/threads", { providerId: "claude" })).json.id as string,
+    turn = randomUUID();
+  await until(read, id, (body) => body.models.length > 0);
+  await call("POST", `/pe/threads/${id}/prompt`, { id: turn, text: "hang" });
+  await until(read, id, (body) => lastEcho(body) === "echo: hang");
+  const run = { thread: id, turn },
+    by: Caller = { kind: "pea", context: "host-fixture", thread: id, run, root: run };
+  const authorized = h.runs.authorize(originOf(by), "command", [
+    { kind: "file", path: "C:/user/result.json" },
+  ]);
+  const body = await until(read, id, (body) => openAsks(body).some((ask) => ask.scope === "run")),
+    ask = openAsks(body).find((ask) => ask.scope === "run")!;
+  const first = await call("POST", `/pe/threads/${id}/permission`, {
+    requestId: ask.requestId,
+    optionId: "allow_now",
+  });
+  expect(first.status).toBe(200);
+  await authorized;
+  const repeated = await call("POST", `/pe/threads/${id}/permission`, {
+    requestId: ask.requestId,
+    optionId: "stop_writes",
+  });
+  expect(repeated.json.decision).toEqual(first.json.decision);
+  await h.close();
+  const restarted = host(),
+    again = caller(restarted);
+  try {
+    const recovered = await again("POST", `/pe/threads/${id}/permission`, {
+      requestId: ask.requestId,
+      optionId: "allow_now",
+    });
+    expect(recovered.json.decision).toEqual(first.json.decision);
+    expect(() => restarted.runs.assertOpen(originOf(by))).toThrow("run.closed");
+  } finally {
+    await restarted.close();
+  }
+});
+
+test("delegated thread processes carry host-bound root consent and Stop", async () => {
+  const tokens: string[] = [];
+  const realOpen = adapter.openAdapter;
+  const launched = vi.spyOn(adapter, "openAdapter").mockImplementation((...args) => {
+    tokens.push(args[2].PE_CONTEXT ?? "");
+    return realOpen(...args);
+  });
+  const h = host(),
+    call = caller(h),
+    read = reader(h);
+  const minted = (turn: string) => {
+    for (const token of tokens) {
+      const identity = callerOf({ kind: "local" }, { "x-pe-context": token });
+      if (
+        "caller" in identity &&
+        identity.caller.kind === "pea" &&
+        identity.caller.run?.turn === turn
+      )
+        return identity.caller;
+    }
+    throw Error("No host-issued run token");
+  };
+  try {
+    const parent = (await call("POST", "/pe/threads", { providerId: "claude" })).json.id as string;
+    const parentTurn = randomUUID(),
+      childTurn = randomUUID();
+    await until(read, parent, (body) => body.models.length > 0);
+    await call("POST", `/pe/threads/${parent}/prompt`, { id: parentTurn, text: "hang" });
+    await until(read, parent, (body) => lastEcho(body) === "echo: hang");
+    const parentCaller = minted(parentTurn);
+    h.as = parentCaller;
+    const child = (await call("POST", "/pe/threads", { providerId: "codex", delegated: true })).json
+      .id as string;
+    expect(
+      (await call("POST", `/pe/threads/${child}/prompt`, { id: childTurn, text: "hang" })).status,
+    ).toBe(200);
+    await until(read, child, (body) => lastEcho(body) === "echo: hang");
+    const childCaller = minted(childTurn);
+    expect(childCaller.root).toEqual(parentCaller.run);
+    const pending = h.runs.authorize(originOf(childCaller), "child-command", [
+      { kind: "file", path: "C:/user/shared.json" },
+    ]);
+    h.as = human;
+    const asking = await until(read, parent, (body) =>
+      openAsks(body).some((ask) => ask.scope === "run"),
+    );
+    const ask = openAsks(asking).find((ask) => ask.scope === "run")!;
+    await call("POST", `/pe/threads/${parent}/permission`, {
+      requestId: ask.requestId,
+      optionId: "allow_now",
+    });
+    const consent = await pending;
+    expect(
+      await h.runs.authorize(originOf(parentCaller), "parent-command", [
+        { kind: "file", path: "C:/user/other.json" },
+      ]),
+    ).toEqual(consent);
+    await call("POST", `/pe/threads/${parent}/cancel`);
+    expect(() => h.runs.checkpoint(originOf(childCaller), consent)).toThrow("consent.stopped");
+    await call("POST", `/pe/threads/${child}/cancel`);
+  } finally {
+    launched.mockRestore();
+    await h.close();
+  }
+}, 15000);

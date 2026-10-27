@@ -23,7 +23,7 @@ import { originalProcess, sdkEnvelope } from "./native-receipt-fixture.ts";
 import { bindRevoke } from "../src/revoke.ts";
 import { admitCrossing, bindControl, emitRevoke } from "../src/control.ts";
 import type { DocumentRef, ThreadHead } from "@pe/agent-contracts";
-import { asCaller, crossingOf, human, pea } from "./callers.ts";
+import { asCaller, crossingOf, human } from "./callers.ts";
 
 const metrics = {
   requestBytes: 0,
@@ -61,7 +61,11 @@ const lane = <A, E, R>(body: (harness: Harness) => Effect.Effect<A, E, R>) =>
       );
     const get = (path: string) =>
       Effect.promise(async () =>
-        (await web.handler(new Request(`http://host${path}`), Context.empty() as never)).json(),
+        (
+          await asCaller(human, () =>
+            web.handler(new Request(`http://host${path}`), Context.empty() as never),
+          )()
+        ).json(),
       );
     const answer = (requestId: string, response: Record<string, unknown>) =>
       Queue.offer(
@@ -189,7 +193,7 @@ test("a cancel reaches the op while it blocks, and the action settles cancelled"
           ...row.steps.map((step) => `steps/${step.id}.json`),
         ].sort(),
       );
-      expect(output.files["admission.json"]).toEqual(intent);
+      expect(output.files["admission.json"]).toMatchObject(intent);
       expect(JSON.stringify(output.files)).not.toContain("cancelled");
     }),
   ));
@@ -469,10 +473,15 @@ test("F-c revoke lets a dispatched step report and refuses the next step without
       const intent = fixture.intent("revoke-begun");
       const target = intent.destination.ref;
       const head = revokeHead(target);
-      bindControl({ heads: () => head });
+      bindControl({ heads: () => head, deviceThread: () => "thread-1" });
       const unbind = bindRevoke(owner, bridge);
       try {
-        const caller = pea();
+        const caller = {
+          kind: "external-mcp" as const,
+          context: "revoke",
+          label: "paired test device",
+          device: "revoke-device",
+        };
         const row = yield* Effect.promise(() =>
           owner.admit(
             { ...intent, caller, basis: admitCrossing(caller, intent.destination, "/actions") },
@@ -528,6 +537,7 @@ test.each([false, true])(
         const other = revokeHead(otherTarget);
         bindControl({
           heads: (thread) => (thread === "thread-1" ? head : other),
+          deviceThread: (device) => device,
         });
         const unbind = bindRevoke(owner, bridge);
         const holding = yield* Effect.forkScoped(
@@ -540,8 +550,22 @@ test.each([false, true])(
             owner.admit(
               {
                 ...fixture.intent("revoke-queued"),
-                caller: pea(),
-                basis: admitCrossing(pea(), { kind: "document", ref: target }, "/actions"),
+                caller: {
+                  kind: "external-mcp" as const,
+                  context: "revoke-thread",
+                  label: "paired",
+                  device: "thread-1",
+                },
+                basis: admitCrossing(
+                  {
+                    kind: "external-mcp" as const,
+                    context: "revoke-thread",
+                    label: "paired",
+                    device: "thread-1",
+                  },
+                  { kind: "document", ref: target },
+                  "/actions",
+                ),
               },
               async () => null,
               (execution) =>
@@ -561,9 +585,19 @@ test.each([false, true])(
                 ...fixture.intent("other-thread"),
                 input: {},
                 destination: { kind: "document", ref: otherTarget },
-                caller: pea("other"),
+                caller: {
+                  kind: "external-mcp" as const,
+                  context: "revoke-other",
+                  label: "paired",
+                  device: "other",
+                },
                 basis: admitCrossing(
-                  pea("other"),
+                  {
+                    kind: "external-mcp" as const,
+                    context: "revoke-other",
+                    label: "paired",
+                    device: "other",
+                  },
                   { kind: "document", ref: otherTarget },
                   "/actions",
                 ),
@@ -620,7 +654,6 @@ test.each([false, true])(
               key: "queued",
               state: "failed",
               notDispatched: true,
-              nativeOutcome: "CancelledBeforeDispatch",
             },
           ]);
           expect(wire).toEqual(["unrelated"]);
@@ -639,10 +672,15 @@ test("F-c revoke stops a begun step that has not reached the bridge queue yet", 
       const intent = fixture.intent("revoke-before-queue");
       const target = intent.destination.ref;
       const head = revokeHead(target);
-      bindControl({ heads: () => head });
+      bindControl({ heads: () => head, deviceThread: () => "thread-1" });
       const unbind = bindRevoke(owner, bridge);
       try {
-        const caller = pea();
+        const caller = {
+          kind: "external-mcp" as const,
+          context: "revoke",
+          label: "paired test device",
+          device: "revoke-device",
+        };
         // The step has begun in the journal, and awaits (as a script step does while it validates
         // its session) before it reaches the bridge; the revoke lands in that gap.
         const inGap = Promise.withResolvers<void>();

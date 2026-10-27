@@ -69,15 +69,15 @@ const action = (id: string, state: "running" | "succeeded") => ({
   ...(state === "succeeded" ? { result: null } : {}),
 });
 
-test("retention keeps the newest settled receipts and every open action, across a reload", async () => {
+test("retention expires telemetry facts while preserving every command identity and outcome", async () => {
   const path = file();
   await writeJournal(path, [action("open", "running"), action("old", "succeeded")]);
   const journal = new ActionJournal(path, () => null, 100);
   for (let i = 0; i < 500; i++) await journal.recordFact({ kind: "turn", phase: "started" });
   const reloaded = new ActionJournal(path, () => null, 100);
   const receipts = await reloaded.read({});
-  expect(receipts.length).toBeLessThanOrEqual(111);
+  expect(receipts.length).toBeLessThanOrEqual(112);
   expect((await reloaded.list(undefined, "open"))[0]!.state).toBe("unknown");
-  expect(await reloaded.list(undefined, "old")).toEqual([]);
+  expect((await reloaded.list(undefined, "old"))[0]!.state).toBe("succeeded");
   expect((await readFile(path, "utf8")).trim().split("\n").length).toBeLessThan(400);
 });

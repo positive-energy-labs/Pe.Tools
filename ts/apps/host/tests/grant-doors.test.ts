@@ -143,18 +143,13 @@ test("door 2: a thread targets documents, never a session", async () => {
       ...admission(),
       destination: { kind: "session", session: "S1" },
     }),
-    "grant.required",
+    "run.none",
   );
 });
 
-test("door 2: under Guarded, another lifetime of the same file is not a target", async () => {
+test("door 2: a thread target cannot substitute for causal run identity", async () => {
   heads.t1 = headWith(docB);
-  const wire = await send(pea("t1"), "/actions", admission(docA));
-  refused(wire, "grant.required");
-  expect(wire.json.refusal.lifetime).toEqual(docA);
-  expect(wire.json.refusal.reason).toBe(
-    "Refused at /actions: this would write your document S1/A, which thread t1 does not target and Pea did not open. Add it to this thread's documents in the composer, switch access to Full, or open a copy.",
-  );
+  refused(await send(pea("t1"), "/actions", admission(docA)), "run.none");
 });
 
 test("door 2: an unpaired external MCP client cannot write your document", async () => {
@@ -190,5 +185,5 @@ test("door 3: resume re-crosses under the current caller and never inherits the 
   expect(wire.json.refusal.door).toBe("/actions");
   // A Pea context whose thread does not target it is refused for the same row, not the human's pass.
   const agent = await send(pea("t1"), "/actions/resume", { id: "door-3-resume" });
-  expect([agent.status, agent.json.refusal?.code]).toEqual([403, "grant.required"]);
+  expect([agent.status, agent.json.refusal?.code]).toEqual([403, "context.foreign-thread"]);
 });

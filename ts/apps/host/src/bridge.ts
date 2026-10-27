@@ -552,7 +552,11 @@ export const RevitBridgeLive = Layer.effect(
         if (reserved) {
           const invalid = yield* Effect.promise(() => bridgeValidateDispatch(requestId));
           if (invalid)
-            return yield* Effect.fail(new BridgeError(invalid, 409, { notDispatched: true }));
+            return yield* Effect.fail(
+              new BridgeError(invalid, /cancel|consent.stopped/i.test(invalid) ? 499 : 409, {
+                notDispatched: true,
+              }),
+            );
         }
         const phase = yield* Ref.modify(
           session.requests,
@@ -574,7 +578,13 @@ export const RevitBridgeLive = Layer.effect(
         );
         if (phase === "dispatched") break;
         if (typeof phase !== "string")
-          return yield* Effect.fail(new BridgeError(phase.refusal, 403, { notDispatched: true }));
+          return yield* Effect.fail(
+            new BridgeError(
+              phase.refusal,
+              /cancel|consent.stopped/i.test(phase.refusal) ? 499 : 403,
+              { notDispatched: true },
+            ),
+          );
         if (phase === "cancelled")
           return yield* Effect.fail(
             new BridgeError(`'${operationKey}' was cancelled before dispatch.`, 499, {

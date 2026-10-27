@@ -956,7 +956,7 @@ export function createHarnessThreads(options: HarnessThreadsOptions) {
         ),
       ),
     /** Any head set. */
-    subscribe(notify: () => void) {
+    subscribe(this: void, notify: () => void) {
       const listener = () => notify();
       headListeners.add(listener);
       return () => void headListeners.delete(listener);
@@ -1521,6 +1521,7 @@ export function createHarnessThreads(options: HarnessThreadsOptions) {
         ),
       });
       const u = result.usage;
+      runs.close(runRef, result.stopReason === "cancelled" ? "stopped" : "completed");
       append(t, {
         kind: "turn_end",
         turnId,
@@ -1540,6 +1541,7 @@ export function createHarnessThreads(options: HarnessThreadsOptions) {
       });
       outcome = result.stopReason;
     } catch (error) {
+      runs.close(runRef, "stopped");
       // A stopped thread's open turn is ended by restart recovery, not by "connection closed".
       if (!t.stopped) {
         const expired = isAuthRefusal(error) ? options.providers.expire(t.meta.providerId) : null;
@@ -1559,7 +1561,9 @@ export function createHarnessThreads(options: HarnessThreadsOptions) {
       }
     }
     disarm(t);
-    await options.pluginHook?.("turn.after", { threadId: t.meta.id, turnId, outcome });
+    await options
+      .pluginHook?.("turn.after", { threadId: t.meta.id, turnId, outcome })
+      .catch((error) => warn(`turn.after failed after the run closed: ${String(error)}`));
     runs.close(runRef, outcome === "cancelled" || outcome === "failed" ? "stopped" : "completed");
     t.running = null;
     await retire(t);
@@ -1989,9 +1993,18 @@ export function createHarnessThreads(options: HarnessThreadsOptions) {
       case "thread.permission": {
         requireHuman(caller, url.pathname, "answering a harness approval");
         const { requestId, optionId } = await input(permissionResponseSchema);
-        return runs.decide(t.meta.id, requestId, optionId) ||
-          resolvePermission(t, requestId, optionId, "user")
-          ? json({ ok: true })
+        const recorded = t.events.findLast(
+          (event) => event.kind === "permission_resolved" && event.requestId === requestId,
+        );
+        if (recorded) return json({ ok: true, decision: recorded });
+        const accepted =
+          runs.decide(t.meta.id, requestId, optionId) ||
+          resolvePermission(t, requestId, optionId, "user");
+        const decision = t.events.findLast(
+          (event) => event.kind === "permission_resolved" && event.requestId === requestId,
+        );
+        return accepted
+          ? json({ ok: true, decision })
           : json({ error: `No pending permission ${requestId}` }, 409);
       }
       case "thread.question": {

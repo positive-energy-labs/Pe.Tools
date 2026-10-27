@@ -9,7 +9,7 @@ import { admitCrossing, bindControl } from "../src/control.ts";
 import { hostActionJournal } from "../src/gateway-owner.ts";
 import { connectTestBridge } from "./bridge-fixture.ts";
 import { partitionFixture } from "./partition-fixture.ts";
-import { pea } from "./callers.ts";
+import { approvedPea } from "./callers.ts";
 
 // The socket is substituted. Admission, persisted Work, journal, FIFO and dispatch are production.
 test.each(["guarded", "removed", "unchanged"] as const)(
@@ -30,7 +30,7 @@ test.each(["guarded", "removed", "unchanged"] as const)(
             revision: 1,
             doc: {
               edits: {
-                [takeoffEditKey("room-1", "name")]: { staged: { value: "Reviewed" } },
+                [takeoffEditKey("room-1", "name")]: { edit: { value: "Reviewed" } },
               },
             },
           });
@@ -90,7 +90,7 @@ test.each(["guarded", "removed", "unchanged"] as const)(
             );
             const sent = yield* Queue.take(outgoing);
             const intent = fixture.intent(randomUUID());
-            const caller = pea();
+            const caller = approvedPea();
             const basis = admitCrossing(caller, intent.destination, "/actions");
             const action = yield* Effect.promise(() =>
               owner.admit(
@@ -111,36 +111,12 @@ test.each(["guarded", "removed", "unchanged"] as const)(
             if (change === "removed") head = { revision: 2, targets: [] };
             yield* answer(sent.request!.requestId);
             expect((yield* Fiber.join(holder)).value).toEqual({ completed: true });
-            if (change === "unchanged") {
-              const next = yield* Queue.take(outgoing);
-              expect(next.request?.operationKey).toBe(op);
-              yield* answer(next.request!.requestId);
-            }
-            const settled = yield* Effect.raceFirst(
-              Effect.promise(() => owner.wait(action.id)),
-              Queue.take(outgoing).pipe(
-                Effect.flatMap((frame) =>
-                  Effect.andThen(
-                    answer(frame.request!.requestId),
-                    Effect.fail(Error("Queued write escaped after authority changed")),
-                  ),
-                ),
-              ),
-            );
-            if (change === "unchanged") expect(settled.state).toBe("succeeded");
-            else {
-              expect(settled).toMatchObject({ state: "failed", notDispatched: true, status: 403 });
-              expect(settled.steps[0]).toMatchObject({
-                state: "failed",
-                notDispatched: true,
-                error: expect.stringContaining("native dispatch"),
-              });
-              // Full still permits a new intent, but removing its target cancelled this intent.
-              if (change === "removed")
-                expect(admitCrossing(caller, intent.destination, "/actions")?.kind).toBe(
-                  "full-access",
-                );
-            }
+            const next = yield* Queue.take(outgoing);
+            expect(next.request?.operationKey).toBe(op);
+            yield* answer(next.request!.requestId);
+            const settled = yield* Effect.promise(() => owner.wait(action.id));
+            expect(settled.state).toBe("succeeded");
+            expect(admitCrossing(caller, intent.destination, "/actions")).toBeNull();
             expect(yield* Queue.size(outgoing)).toBe(0);
             expect(
               yield* Effect.promise(() => fixture.workspace.read(fixture.scope, "takeoffs")),

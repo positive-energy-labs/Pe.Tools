@@ -24,6 +24,8 @@ import {
   requireEligibleCaller,
 } from "./gateway-actions.ts";
 import {
+  originOf,
+  assertRunAdmission,
   admitCrossing,
   admitScript,
   consentedRead,
@@ -181,8 +183,13 @@ export function makeCallRoute(
     resume = false,
   ) => {
     const input = actionAdmissionSchema.parse(raw);
+    const definition = semanticActions[input.key as keyof typeof semanticActions];
+    if (input.kind === "workflow" && definition)
+      input.input = definition.input.parse(input.input) as Record<string, unknown>;
     const prior = !resume && (await owner().existing(input, caller));
     if (prior) return prior;
+    if (semanticActions[input.key as keyof typeof semanticActions]?.effect !== "query")
+      assertRunAdmission(originOf(caller));
     const reads = readsOnly(input.key, input.input);
     const crossing = { caller, basis: admitCrossing(caller, input.destination, "/actions", reads) };
     return input.kind === "workflow" && Object.hasOwn(scheduleActions, input.key)
@@ -641,8 +648,12 @@ export function makeCallRoute(
               [{ path: ["takenAt"], value: saved.capturedAt }],
               body.expectedRevision,
             );
-            if (!published.ok) throw Error(published.error);
-            return Response.jsonUnsafe({ ...saved, envelope: published.envelope });
+            if (!published.ok)
+              throw Error(`Families observation refused: ${JSON.stringify(published)}`);
+            return Response.jsonUnsafe({
+              ...saved,
+              envelope: { version: 1, revision: published.revision, doc: published.doc },
+            });
           }
           return Response.jsonUnsafe(saved);
         },
@@ -724,11 +735,18 @@ export function makeCallRoute(
     ),
   );
   const readDoor = peRoutes["actions.read"];
-  const actionReads = HttpRouter.add(readDoor.method, readDoor.path, (req) =>
-    Effect.tryPromise({
+  const actionReads = HttpRouter.add(readDoor.method, readDoor.path, (req) => {
+    const caller = currentCaller();
+    return Effect.tryPromise({
       try: async () => {
         const query = new URL(req.url, "http://host").searchParams;
         if (query.has("file")) {
+          if (caller.kind !== "human" && caller.kind !== "pea")
+            throw new Refused({
+              code: "context.missing",
+              door: "/actions",
+              reason: "File versions require a human or Pea caller",
+            });
           const path = query.get("file")!;
           return Response.jsonUnsafe({
             path,
@@ -736,12 +754,15 @@ export function makeCallRoute(
           });
         }
         // Exported inputs by original action ID; the receipt, not this, says how the action settled.
-        if (query.has("output"))
+        if (query.has("output")) {
+          const visible = await owner().readFor(caller, undefined, query.get("output")!);
+          if (!visible.length) throw Error("No retained command owns this output");
           return Response.jsonUnsafe(await owner().outputs(query.get("output")!));
+        }
         const session = req.headers[HOST_RPC_BRIDGE_SESSION_HEADER],
           openId = req.headers[HOST_RPC_DOCUMENT_HEADER];
         const target = session && openId ? documentRefSchema.parse({ session, openId }) : undefined;
-        let rows = await owner().list(target, query.get("id") ?? undefined);
+        let rows = await owner().readFor(caller, target, query.get("id") ?? undefined);
         if (query.has("kind")) rows = rows.filter((row) => row.kind === query.get("kind"));
         if (query.has("scope")) {
           if (query.has("id")) throw Error("Choose original ID or subject listing");
@@ -792,10 +813,14 @@ export function makeCallRoute(
       catch: (error) => error,
     }).pipe(
       Effect.catch((error) =>
-        Effect.succeed(Response.jsonUnsafe({ error: String(error) }, { status: 400 })),
+        Effect.succeed(
+          error instanceof Refused
+            ? refusedResponse(error)
+            : Response.jsonUnsafe({ error: String(error) }, { status: 400 }),
+        ),
       ),
-    ),
-  );
+    );
+  });
   // action.read is GET /actions; every other control is POST /actions/<verb>, the path the client builds.
   const controlVerbs = Object.keys(actionControls).filter(
     (key): key is Exclude<keyof typeof actionControls, "action.read"> => key !== "action.read",
@@ -810,25 +835,11 @@ export function makeCallRoute(
             const body = await Effect.runPromise(req.json);
             if (!isRecord(body) || typeof body.id !== "string")
               throw Error("An original action ID is required");
-            const controlled = (await owner().list(undefined, body.id))[0];
+            const controlled = (await owner().readFor(caller, undefined, body.id))[0];
             if (body.kind !== undefined && body.kind !== controlled?.kind)
               throw Error("Original admission kind mismatch");
             if (!controlled) throw Error(`Action '${body.id}' has no admitted receipt`);
-            // Cancel and recover belong to a human or the context that admitted the original.
-            if (
-              choice !== "resume" &&
-              caller.kind !== "human" &&
-              !(
-                "context" in caller &&
-                "context" in controlled.caller &&
-                caller.context === controlled.caller.context
-              )
-            )
-              throw new Refused({
-                code: caller.kind === "anonymous" ? "context.missing" : "human.only",
-                door: `/actions/${choice}`,
-                reason: `Refused at /actions/${choice}: only a human or the caller that admitted '${body.id}' may ${choice} it.`,
-              });
+            // readFor already authenticated the same principal or causal task lineage.
             if (choice === "cancel")
               return Response.jsonUnsafe(
                 // An Instances step is an SDK request: the SDK cancels it, not the Revit bridge.

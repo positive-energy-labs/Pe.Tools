@@ -13,7 +13,7 @@ import {
 } from "./ducts-analysis.ts";
 import { sdkSessionSelectionSchema } from "@pe/agent-contracts";
 import type { MachineShareAdapter } from "./machine.ts";
-import { Deferred, Effect, Layer, Option, Stream } from "effect";
+import { Effect, Option, Stream } from "effect";
 import {
   HttpEffect,
   HttpRouter,
@@ -108,7 +108,7 @@ import { hostActionJournal, hostLog } from "./gateway-owner.ts";
 import type { HostLog } from "./host-log.ts";
 import { UpdateReader } from "./update-reader.ts";
 import { makeInstalledUpdateReader } from "./update-route.ts";
-import { HostLifecycle, resolveHostVersion } from "./host-lifecycle.ts";
+import { resolveHostVersion } from "./host-lifecycle.ts";
 import { bindActionWorkspace } from "./takeoff-actions.ts";
 import { familySpecAsset, familySpecHandlers } from "./family-spec.ts";
 import { fileRouteDocumentStore } from "./route-document-store.ts";
@@ -184,18 +184,15 @@ export function createPeRoutes(options: PeRoutesOptions) {
   const work = new RouteWorkspace({ registrations: options.registrations, store: options.store });
   async function routeWorkKey(url: URL, route: string, shape: "read" | "write", caller: Caller) {
     const scope = workKey(url, route, shape);
-    if (
-      scope instanceof Response ||
-      scope.binding === "workspace" ||
-      scope.binding === "host" ||
-      caller.kind === "human" ||
-      caller.kind === "pea" ||
-      caller.kind === "anonymous"
-    )
+    if (scope instanceof Response || scope.binding === "workspace" || scope.binding === "host")
       return scope;
+    const shared = caller.kind === "human" || caller.kind === "pea" || caller.kind === "anonymous";
+    // Saved Addresses remain usable offline. An explicit open/from claim must match real inventory.
+    if (shared && scope.binding === "address" && !scope.from) return scope;
     const refused = (error: string) => json({ ok: false, error, hint: error }, 403);
     const thread = callerThread(caller);
-    if (!thread) return refused("Document-owned route Work requires this caller's thread targets.");
+    if (!shared && !thread)
+      return refused("Document-owned route Work requires this caller's thread targets.");
     let documents;
     try {
       documents = z
@@ -204,8 +201,9 @@ export function createPeRoutes(options: PeRoutesOptions) {
     } catch {
       return refused("Current document bindings are unavailable; retained Work has not changed.");
     }
-    const head = threadHead(thread);
+    const head = thread ? threadHead(thread) : null;
     const targeted = (doc: (typeof documents)[number]) =>
+      shared ||
       head?.targets.some(({ request }) =>
         request.kind === "open"
           ? request.ref.session === doc.session && request.ref.openId === doc.openId
@@ -222,6 +220,8 @@ export function createPeRoutes(options: PeRoutesOptions) {
           sameAddress(scope.target, doc.address) &&
           targeted(doc),
     );
+    // Retained Work makes no native freshness claim. A closed lifetime keeps its authored key.
+    if (shared && matching.length === 0) return scope;
     if (matching.length !== 1)
       return refused(
         "Route Work target is closed or ambiguous; name an exact current open document.",
@@ -236,7 +236,7 @@ export function createPeRoutes(options: PeRoutesOptions) {
       return refused(
         "Route Work target must be one of this thread's documents, even under Full. Retained Work has not changed.",
       );
-    // Authoring Work is not native execution: masks/revisions govern proposals, not native grants.
+    // Identity and revision checks govern shared Work; thread targets only constrain trust adapters.
     return bindWork(route, doc.address, undefined, { session: doc.session, openId: doc.openId });
   }
   const analysis = options.ductsAnalysis
@@ -646,7 +646,8 @@ export function createPeRoutes(options: PeRoutesOptions) {
     const [head, route, verb, extra] = parts;
     if (head === "route-state" && extra === undefined) {
       // Door 9: the author is the host-minted caller, never the path. Reads are free.
-      const actor = routeActorOf(caller);
+      const actor =
+        caller.kind === "human" || caller.kind === "pea" ? routeActorOf(caller) : "agent";
       if (method === "GET" && !route) return json(work.list());
       if (method === "GET" && route && !verb) {
         const scope = await routeWorkKey(url, route, "read", caller);
@@ -667,7 +668,7 @@ export function createPeRoutes(options: PeRoutesOptions) {
         return "ok" in salvaged ? json(salvaged, 403) : json(salvaged);
       }
       const write = method === "POST" && route && verb ? writes[verb] : undefined;
-      if (write && route && (caller.kind === "anonymous" || caller.kind === "page"))
+      if (write && route && caller.kind !== "human" && caller.kind !== "pea")
         return Response.json(
           {
             ok: false,

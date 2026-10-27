@@ -726,9 +726,9 @@ export function peRouteTable<S extends PeApiSchemas>(schemas: S) {
         expectedRevision: z.number().int().nonnegative(),
       }),
       object,
-      "caller",
+      "human-or-pea",
       "pe",
-      "caller",
+      "human-or-pea",
     ),
     "work.command": route(
       "POST",
@@ -739,9 +739,9 @@ export function peRouteTable<S extends PeApiSchemas>(schemas: S) {
         expectedRevision: z.number().int().nonnegative(),
       }),
       object,
-      "caller",
+      "human-or-pea",
       "pe",
-      "caller",
+      "human-or-pea",
     ),
     "work.fresh": route(
       "POST",
