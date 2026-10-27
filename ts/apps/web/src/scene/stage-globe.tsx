@@ -10,14 +10,16 @@ export function StageGlobe({
   orbit,
   lines,
   litLines,
+  selectedLines,
 }: {
   orbit: LiveOrbit;
   lines?: Lines;
   litLines?: Lines;
+  selectedLines?: Lines;
 }) {
   const stage = useStage();
   return (
-    <OrbitMinimap orbit={orbit} lines={lines} litLines={litLines}>
+    <OrbitMinimap orbit={orbit} lines={lines} litLines={litLines} selectedLines={selectedLines}>
       {stage.projection}
       {stage.wiggle && (
         <span data-wiggle="">

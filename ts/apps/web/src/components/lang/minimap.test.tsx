@@ -227,3 +227,21 @@ test("perspective puts the globe's silhouette on the rim and parallel keeps the 
     ),
   ).toBeCloseTo(92, 6);
 });
+
+test("selected lines draw the select underlay; none draws nothing", () => {
+  const orbit = createLiveOrbit(
+    { kind: "orbit", yaw: 30, elev: 30, zoom: 1, pivot: [0, 0, 0] },
+    vi.fn(),
+  );
+  const line = [
+    [
+      [0, 0, 0],
+      [0.5, 0.5, 0.5],
+    ],
+  ];
+  const view = render(<OrbitMinimap orbit={orbit} lines={line} selectedLines={line} />);
+  const path = () => view.container.querySelector("[data-orbit-mini-selected]")!.getAttribute("d");
+  expect(path()).toContain("L");
+  view.rerender(<OrbitMinimap orbit={orbit} lines={line} />);
+  expect(path()).toBe("");
+});

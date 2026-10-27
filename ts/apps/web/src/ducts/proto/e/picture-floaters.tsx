@@ -39,7 +39,7 @@ export function usePictureFloaters({
   /** The schematic, small. */
   small: () => ReactNode;
 }): FloaterSpec[] {
-  const { hovered } = useElementAttention();
+  const { lit, selected } = useElementAttention();
   const [globe, setGlobe] = useState(true);
   const [corner, setCorner] = useState(true);
   // The globe draws the subject's centrelines in unit-sphere space, scaled from its own radius.
@@ -52,10 +52,11 @@ export function usePictureFloaters({
       f.segment.polyline.map((p) => p.map((v, j) => (v - c[j]!) * k)),
     );
   }, [bounds, scene]);
-  const litLines = useMemo(
-    () => lines?.filter((_, index) => scene.segments[index]?.segment.id === hovered),
-    [lines, scene, hovered],
-  );
+  // The globe marks what the schematic marks: the hover-lit set heavy, the selection underlaid.
+  const linesOf = (ids: ReadonlySet<number>) =>
+    lines?.filter((_, index) => ids.has(scene.segments[index]?.segment.id ?? NaN));
+  const litLines = useMemo(() => linesOf(lit), [lines, scene, lit]);
+  const selectedLines = useMemo(() => linesOf(selected), [lines, scene, selected]);
   return [
     {
       key: "globe",
@@ -68,7 +69,12 @@ export function usePictureFloaters({
       onOpenChange: setGlobe,
       render: () =>
         pose ? (
-          <StageGlobe orbit={orbit} lines={lines} litLines={litLines} />
+          <StageGlobe
+            orbit={orbit}
+            lines={lines}
+            litLines={litLines}
+            selectedLines={selectedLines}
+          />
         ) : (
           <p className="t-small text-ink-2 m-0 p-2">no pose yet</p>
         ),

@@ -243,11 +243,14 @@ export function OrbitMinimap({
   orbit,
   lines,
   litLines,
+  selectedLines,
   children,
 }: {
   orbit: LiveOrbit;
   lines?: readonly (readonly (readonly number[])[])[];
+  /** Hover-lit lines, drawn heavy; selected lines get the `select` underlay, as on the schematic. */
   litLines?: readonly (readonly (readonly number[])[])[];
+  selectedLines?: readonly (readonly (readonly number[])[])[];
   /** The camera's own verbs (projection, wiggle): one row in the globe's free lower corners. */
   children?: ReactNode;
 }) {
@@ -318,6 +321,7 @@ export function OrbitMinimap({
           .join("");
       root.querySelector("[data-orbit-mini-lines]")!.setAttribute("d", path(lines));
       root.querySelector("[data-orbit-mini-reach]")!.setAttribute("d", path(litLines));
+      root.querySelector("[data-orbit-mini-selected]")!.setAttribute("d", path(selectedLines));
     };
     draw();
     const release = orbit.subscribe(() => {
@@ -327,7 +331,7 @@ export function OrbitMinimap({
       cancelAnimationFrame(frame);
       release();
     };
-  }, [orbit, lines, litLines]);
+  }, [orbit, lines, litLines, selectedLines]);
 
   const dots = (front: boolean): ReactNode =>
     body.stops.map((stop, i) => {
@@ -402,6 +406,14 @@ export function OrbitMinimap({
       />
       <g data-orbit-stops="far">{dots(false)}</g>
       <g pointerEvents="none" data-orbit-mini="">
+        <path
+          data-orbit-mini-selected=""
+          fill="none"
+          stroke={tokenRef("select")}
+          strokeWidth={5}
+          strokeLinecap="round"
+          strokeLinejoin="round"
+        />
         <path data-orbit-mini-reach="" fill="none" stroke={tokenRef("ink")} strokeWidth={3.5} />
         <path
           data-orbit-mini-lines=""
