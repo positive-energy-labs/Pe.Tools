@@ -39,7 +39,7 @@ const FILES: Entry[] = [
   ...collect(KIT_ROOT, "", [], /\.(?:tsx?|css)$/),
 ];
 
-describe("design guard â€” current token authority", () => {
+describe("design guard — current token authority", () => {
   it("has one source owner for every shared instrument path", () => {
     const paths = FILES.filter((file) =>
       /^(components\/|lib\/|base\.css$|design-lang\.css$)/.test(file.rel),

@@ -849,6 +849,8 @@ export namespace DuctsSnapshot {
      * Facing is Connector.CoordinateSystem.BasisZ, the unit axis the connector faces out of its owner, and WidthAxis its
      * BasisX on a rectangular or oval connector (the side WidthIn runs along), both model coordinates; null when Revit
      * gives no frame and in snapshots taken before they were read.
+     * IsPrimary and IsSecondary are a duct fitting's MEPConnectorInfo flags (by family convention a tee's run legs);
+     * null on any other element and in snapshots taken before they were read.
      *
      */
     export interface DuctConnector {
@@ -867,6 +869,8 @@ export namespace DuctsSnapshot {
       areaFt2?: null | number;
       facing?: number[] | null;
       widthAxis?: number[] | null;
+      isPrimary?: boolean | null;
+      isSecondary?: boolean | null;
     }
     /**
      * What a connector touches: an element id and that element's connector index.
