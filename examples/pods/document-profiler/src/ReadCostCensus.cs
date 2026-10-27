@@ -21,11 +21,11 @@ public sealed class ReadCostCensus : PeScriptContainer
         if (doc == null) { Result(new { refused = "No active document." }); return; }
         if (doc.IsModifiable) throw new ArgumentException("Runs outside any transaction; request NoTransaction.");
         if (ProfilerSettings.CensusFirstTouchSample < 1 || ProfilerSettings.CensusFirstTouchSample > 20000 ||
-            ProfilerSettings.CensusChunk < 1 || ProfilerSettings.CensusOrientationSample < 1 || ProfilerSettings.CensusOrientationSample > 20000 ||
+            ProfilerSettings.CensusChunk < 1 || ProfilerSettings.CensusCategoryWalk < 1 || ProfilerSettings.CensusCategoryWalk > 20000 || ProfilerSettings.CensusOrientationSample < 1 || ProfilerSettings.CensusOrientationSample > 20000 ||
             ProfilerSettings.CensusObbSample < 0 || ProfilerSettings.CensusObbSample > 1000 ||
             ProfilerSettings.CensusFidelitySample < 1 || ProfilerSettings.CensusFidelitySample > 20000 ||
             ProfilerSettings.CensusBudgetSeconds < 10 || ProfilerSettings.CensusBudgetSeconds > 1800)
-            throw new ArgumentException("Bounds: samples 1..20000 (OBB 0..1000), chunk >= 1, 10..1800 seconds.");
+            throw new ArgumentException("Bounds: samples and category walk 1..20000 (OBB 0..1000), chunk >= 1, 10..1800 seconds.");
         budget = new ProfilerBudget(ct, ProfilerSettings.CensusBudgetSeconds);
         modifiedBefore = doc.IsModified;
         // Baseline after compile: the Pod compile and load happened before Execute, so deltas exclude it.
@@ -46,7 +46,7 @@ public sealed class ReadCostCensus : PeScriptContainer
         catch (System.OperationCanceledException e) { status = "cancelled"; diagnostics.Add(e.Message); }
         var evidence = new {
             schemaVersion = 1, status, stamp, seconds = budget.Elapsed,
-            settings = new { ProfilerSettings.CensusBudgetSeconds, ProfilerSettings.CensusFirstTouchSample, ProfilerSettings.CensusChunk,
+            settings = new { ProfilerSettings.CensusBudgetSeconds, ProfilerSettings.CensusFirstTouchSample, ProfilerSettings.CensusChunk, ProfilerSettings.CensusCategoryWalk,
                 ProfilerSettings.CensusOrientationSample, ProfilerSettings.CensusObbSample, ProfilerSettings.CensusFidelitySample, ProfilerSettings.CensusSeed },
             sections, diagnostics, memoryBefore, memoryAfter = Profiler.Memory(),
             isModifiedBefore = modifiedBefore, isModifiedAfter = doc.IsModified, limits = Limits
@@ -160,10 +160,11 @@ public sealed class ReadCostCensus : PeScriptContainer
         return p.Categories = rows.ToArray();
     }
 
-    // M3: expand a bounded random sample in chunks; slope times count is a projection, never a measurement.
-    // FOOTGUN: expand through a collector, never doc.GetElement. On Chadds' IFC link (2026-10-27, probe-25 PID 55812) 1000 random
-    // GetElement + Category cost ~0.45 KB/element while a full collector walk cost +1,090 MiB for 86,678 (~13 KB/element):
-    // a GetElement slope under-projected the walk ~27x. The control route stays in the output so the gap stays visible.
+    // M3: expand a bounded sample; slope times count is a projection, never a measurement.
+    // FOOTGUN: on Chadds' IFC link (2026-10-27, probe-25) a full non-type collector walk cost ~13 KB/element, linear at ~64 MiB
+    // per 5,000 elements, while 1000 random GetElement or id-set-collector touches read ~0.3 to 0.5 KB/element. Random touches
+    // do not reproduce a walk's cost, mechanism unknown. So the projection takes the larger of the id-set slope and a bounded
+    // walk of the partition's largest model category, and it is labelled a floor.
     private object FirstTouch(CensusPartition p)
     {
         var before = PrivateBytes();
@@ -171,21 +172,32 @@ public sealed class ReadCostCensus : PeScriptContainer
         using (var c = new FilteredElementCollector(p.Doc).WhereElementIsNotElementType()) ids = c.ToElementIds().ToList();
         var idListBytes = PrivateBytes() - before;
         p.NonTypeCount = ids.Count;
-        // One shuffle, two disjoint slices: the first chunk is the GetElement control, the rest is the collector sample.
+        // One shuffle, two disjoint slices: the first chunk is the GetElement control, the rest is the id-set collector sample.
         var drawn = Sample(ids, ProfilerSettings.CensusFirstTouchSample + ProfilerSettings.CensusChunk);
         var control = Touch(p.Doc, drawn.Take(ProfilerSettings.CensusChunk).ToList(), false);
         p.Sample = drawn.Skip(ProfilerSettings.CensusChunk).ToList();
         var sample = Touch(p.Doc, p.Sample, true);
-        var projected = sample.Kb > 0 ? (long?)(sample.Kb * 1024 * ids.Count) : null;
-        headlines.Add(p.Key + ": first touch " + sample.Kb.ToString("0.0") + " KB/element over " + p.Sample.Count + " collector-sampled (GetElement control " + control.Kb.ToString("0.0") +
-            "); full walk of " + ids.Count + " projected " + (projected == null ? "n/a (slope not positive: noise or already warm)" : Mib(projected.Value)));
+        var top = Categories(p).Where(x => x.CategoryType == "Model").OrderByDescending(x => x.Count).FirstOrDefault();
+        var walkClock = Stopwatch.StartNew(); var walkBefore = PrivateBytes(); var walked = 0;
+        if (top != null)
+            using (var c = new FilteredElementCollector(p.Doc).OfCategoryId(new ElementId(top.CategoryId)).WhereElementIsNotElementType())
+            foreach (var e in c) { budget.Check(); _ = e.Category; if (++walked == ProfilerSettings.CensusCategoryWalk) break; }
+        var walkKb = (PrivateBytes() - walkBefore) / 1024.0 / Math.Max(1, walked);
+        var kb = Math.Max(walkKb, sample.Kb);
+        var projected = kb > 0 ? (long?)(kb * 1024 * ids.Count) : null;
+        var disagree = kb > 1 && kb > 3 * Math.Max(0.1, Math.Min(walkKb, sample.Kb));
+        headlines.Add(p.Key + ": first touch " + kb.ToString("0.0") + " KB/element (category walk " + walkKb.ToString("0.0") + " over " + walked + " " + top?.Category +
+            ", id-set " + sample.Kb.ToString("0.0") + " over " + p.Sample.Count + ", GetElement " + control.Kb.ToString("0.0") + "); full walk of " + ids.Count + " projected at least " +
+            (projected == null ? "n/a (slope not positive: noise or already warm)" : Mib(projected.Value)) + (disagree ? "; routes disagree by >3x" : ""));
         return new { partition = p.Key, nonTypeElements = new { basis = "measured", count = ids.Count, idListPrivateBytesDelta = idListBytes },
+            categoryWalk = new { basis = "sampled", route = "OfCategoryId(largest model category) collector walk, stopped at the cap", category = top?.Category, elements = walked,
+                seconds = walkClock.Elapsed.TotalSeconds, kbPerElement = walkKb },
             sample = new { basis = "sampled", route = "FilteredElementCollector(doc, chunk ids) iteration + Category", elements = p.Sample.Count, seed = ProfilerSettings.CensusSeed,
                 seconds = sample.Seconds, privateBytesDelta = sample.Bytes, kbPerElement = sample.Kb, msPerElement = sample.Seconds * 1000 / Math.Max(1, p.Sample.Count), chunks = sample.Chunks },
-            control = new { basis = "sampled", route = "doc.GetElement + Category (does not expand like a walk; do not project from it)", elements = control.Elements,
+            control = new { basis = "sampled", route = "doc.GetElement + Category (did not reproduce a walk on Chadds; never projected from)", elements = control.Elements,
                 privateBytesDelta = control.Bytes, kbPerElement = control.Kb },
-            fullWalk = new { basis = "projected", privateBytes = projected, seconds = sample.Seconds / Math.Max(1, p.Sample.Count) * ids.Count,
-                note = "Collector slope times count; null when the slope is not positive. Elements already touched in this process read as zero; categories differ in cost, so a skewed sample skews this." } };
+            fullWalk = new { basis = "projected-floor", privateBytes = projected, kbPerElement = kb, routesDisagree = disagree, seconds = walkClock.Elapsed.TotalSeconds / Math.Max(1, walked) * ids.Count,
+                note = "Larger slope times count; null when not positive. A floor: on Chadds random touches read ~30x under a full walk. Elements touched earlier in this process read as zero." } };
     }
 
     private (int Elements, long Bytes, double Kb, double Seconds, List<object> Chunks) Touch(Document d, List<ElementId> ids, bool collector)
@@ -195,7 +207,8 @@ public sealed class ReadCostCensus : PeScriptContainer
             budget.Check();
             var chunk = ids.Skip(i).Take(ProfilerSettings.CensusChunk).ToList();
             var b = PrivateBytes(); var touched = 0;
-            if (collector) { using (var c = new FilteredElementCollector(d, chunk)) foreach (var e in c) if (e.Category != null) touched++; }
+            // Revit refuses to iterate an id-set collector with no filter applied.
+            if (collector) { using (var c = new FilteredElementCollector(d, chunk).WhereElementIsNotElementType()) foreach (var e in c) if (e.Category != null) touched++; }
             else foreach (var id in chunk) if (d.GetElement(id)?.Category != null) touched++;
             var delta = PrivateBytes() - b; total += delta;
             chunks.Add(new { elements = chunk.Count, withCategory = touched, privateBytesDelta = delta });
@@ -500,6 +513,7 @@ public sealed class ReadCostCensus : PeScriptContainer
         "Private bytes is whole-process: other documents, the UI, GC timing and allocator granularity land in every delta. Small deltas are noise.",
         "Projected rows are slope times count; sampled rows are a seeded random sample; only measured rows are exact for this process.",
         "First touch reads zero for elements anything in this process touched earlier, including earlier sections of this run.",
+        "First-touch projections are floors: on Chadds (2026-10-27) random element touches read ~30x under a full collector walk of the same link.",
         "Oriented boxes use route (a): exact on rotated family instances proven on Chadds, unproven on nested or multi-instance families.",
         "Checkout status and element VersionGuid are sampled; worksharing borrowed counts are projected, not listed."
     };

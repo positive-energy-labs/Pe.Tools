@@ -25,6 +25,8 @@ public static class ProfilerSettings
     public static int CensusBudgetSeconds = 180;
     public static int CensusFirstTouchSample = 1000;
     public static int CensusChunk = 250;
+    // A bounded walk of the largest model category: ~13 KB/element on Chadds' IFC link, so 5000 is ~65 MiB.
+    public static int CensusCategoryWalk = 5000;
     public static int CensusOrientationSample = 2000;
     public static int CensusObbSample = 200;
     public static int CensusFidelitySample = 500;
