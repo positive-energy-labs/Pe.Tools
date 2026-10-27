@@ -177,7 +177,6 @@ restated here.
 
 ## Owed
 
-- Remove the stopped synthetic journal fixture [pe-directory-effect-6s9cX8](C:/Users/kaitp/AppData/Local/Temp/pe-directory-effect-6s9cX8). Automatic approval review rejected both scoped and verified-literal deletion on 2026-10-26 with "blocked by policy"; it contains this run's fake journal and action outputs, and has no process.
 - Revisit shared approval for non-Revit resource writes against understandable change summaries and the real resource lifecycle. Typical users cannot read JSON; beta editors may never cover every resource type and have incomplete routing and resource management.
 - Design the deferred escape from sharing root approval and Stop with explicitly delegated descendants. The accepted default remains shared consent.
 - Complete the workshop S3 proof: real-provider native file/shell confinement, Pea root consent in Revit, native preview isolation, sibling script effects, stale queue races and actual Stop-after-dispatch outcomes. The isolated native Schedule Apply/readback passed; it does not settle these cases or installed/tray delivery. Deterministic journal and adapter tests do not establish an OS sandbox.
