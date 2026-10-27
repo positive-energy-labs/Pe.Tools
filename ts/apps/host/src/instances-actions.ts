@@ -58,6 +58,7 @@ import { worksharingHint } from "./pea-source.ts";
 import {
   acquisitionSessionId,
   acquisitionIntentSchema,
+  acquisitionSchema,
   acquisitionRoot,
   foldAcquisitions,
   heldProcess,
@@ -139,20 +140,8 @@ type ControlInput = {
     | { kind: "save-as"; out: string; worksets?: "preserve" | "strip" }
     | { kind: "central"; comment?: string };
 };
-/** The SDK row an action acts on, resolved once at preparation and frozen with the attempt. */
-type Target = {
-  selection: SdkSessionSelection;
-  /** The row's receipt path; null for an icon-started Revit, which the SDK adopts first. */
-  expectSession: string | null;
-  process: NativeProcess;
-};
-type Prepared = {
-  target: Target | null;
-  /** Frozen before any allocation: every path this acquisition may create (acquisition.ts). */
-  acquisition: AcquisitionIntent | null;
-  /** A Save As of this held acquisition's document: its new file becomes the acquisition's artifact. */
-  artifactOf?: string;
-};
+type Target = z.infer<typeof lifecycleTargetSchema>;
+type Prepared = z.infer<typeof preparedInstancesSchema>;
 
 async function hashFile(path: string) {
   const hash = createHash("sha256");
@@ -424,7 +413,10 @@ export function instancesExecutors(deps: InstancesActionDependencies = {}) {
             reason: `Refused at ${door}: '${key}' ${reason}`,
           });
         // Resolve before admission: the receipt must carry the basis that admits its effects.
-        const censusBasis = async (target: Target): Promise<Basis | null> => {
+        const censusBasis = (
+          target: Target,
+          row: Awaited<ReturnType<typeof readMachineSession>>,
+        ): Basis | null => {
           const held = heldProcess(foldAcquisitions(ctx.read.receipts()), target.process);
           const processBasis = (session: string): Basis | null =>
             held ? { kind: "acquisition", id: held.id, scope: { kind: "process", session } } : null;
@@ -436,14 +428,6 @@ export function instancesExecutors(deps: InstancesActionDependencies = {}) {
             if (crossing.caller.kind === "pea") return null;
             requireHuman(crossing.caller, door, `${key} into your Revit`);
             return { kind: "human" };
-          }
-          let row;
-          try {
-            row = await readMachineSession(target.process);
-          } catch (error) {
-            throw lifecycleRefusal(
-              `cannot prove which documents it would affect. ${String(error)}`,
-            );
           }
           const documents = row.documents!;
           const attached = row.attachment;
@@ -502,21 +486,27 @@ export function instancesExecutors(deps: InstancesActionDependencies = {}) {
           bind: async () => {
             if (selection) {
               admittedTarget = await readTarget(selection, control?.session.process, read);
+              census = await readMachineSession(admittedTarget.process).catch((error) => {
+                throw lifecycleRefusal(
+                  `cannot prove which documents it would affect. ${String(error)}`,
+                );
+              });
             }
             if (crossing.caller.kind !== "human") {
               // Also validates anonymous and Page callers before the empty-session case.
               admitCrossing(crossing.caller, admission.target, door);
               if (selection) {
-                crossing = { ...crossing, basis: await censusBasis(admittedTarget!) };
+                crossing = { ...crossing, basis: censusBasis(admittedTarget!, census!) };
               }
             }
             const footprint: import("@pe/agent-contracts").Footprint = [];
-            census = admittedTarget ? await readMachineSession(admittedTarget.process) : null;
             if (census) {
-              const session =
-                census.attachment?.session ??
-                `${admittedTarget!.process.pid}:${admittedTarget!.process.processStartUtc}`;
-              footprint.push({ kind: "session", session });
+              const sessions = new Set([
+                census.attachment?.session,
+                `${admittedTarget!.process.pid}:${admittedTarget!.process.processStartUtc}`,
+              ]);
+              for (const session of sessions)
+                if (session) footprint.push({ kind: "session", session });
               const documents = census.attachment?.documents ?? [];
               if (census.attachment && (census.documents?.length ?? 0) !== documents.length)
                 throw lifecycleRefusal("has no complete lifecycle footprint census");
@@ -531,11 +521,6 @@ export function instancesExecutors(deps: InstancesActionDependencies = {}) {
                     ref: { session: doc.session, openId: doc.openId },
                   })),
               );
-            } else if (selection && control) {
-              footprint.push({
-                kind: "session",
-                session: `${control.session.process.pid}:${control.session.process.processStartUtc}`,
-              });
             } else if (start) {
               // Exact reserved command identity names the not-yet-created process, never a guessed pid.
               footprint.push({ kind: "session", session: `new:${admission.id}` });
@@ -567,11 +552,6 @@ export function instancesExecutors(deps: InstancesActionDependencies = {}) {
                 kind: "file",
                 path: launch.source,
                 sha256: (await hashFile(launch.source)).sha256,
-              });
-            if (admittedTarget)
-              footprint.push({
-                kind: "session",
-                session: `${admittedTarget.process.pid}:${admittedTarget.process.processStartUtc}`,
               });
             if (start?.owner === "pea" || launch)
               footprint.push({
@@ -999,34 +979,10 @@ const temporaryFiles = (acquired: Acquisition) => {
     .flatMap((path) => [`${path}.part`, path]);
 };
 
-/** Release touches only receipted resources; unknown outcomes require recovery first. */
-const acquiredProcessSchema = z.object({ pid: z.number().int(), processStartUtc: z.string() });
-const acquiredFileSchema = z.strictObject({
-  path: z.string(),
-  sha256: z.string(),
-  bytes: z.number(),
-});
-const acquiredSchema: z.ZodType<Acquisition> = z.strictObject({
-  id: z.string(),
-  intent: acquisitionIntentSchema,
-  state: z.enum(["planned", "reconciling", "held", "released"]),
-  process: acquiredProcessSchema.nullable(),
-  document: z.strictObject({ process: acquiredProcessSchema, sdkOpenId: z.string() }).nullable(),
-  files: z.array(z.string()),
-  baseline: acquiredFileSchema.nullable(),
-  artifacts: z.array(acquiredFileSchema),
-  handover: z
-    .object({
-      result: acquiredFileSchema,
-      diffPlan: z.string(),
-      work: acquiredFileSchema.nullable(),
-    })
-    .nullable(),
-});
 const releasePreparedSchema = z.strictObject({
   target: lifecycleTargetSchema.nullable(),
   open: z.boolean(),
-  acquired: acquiredSchema,
+  acquired: acquisitionSchema,
   removals: z.array(z.string()),
 });
 
@@ -1216,8 +1172,12 @@ async function acquisitionReleaseExecutor(
             expectDoc: sdkOpenId,
           }),
         };
-        await execution.step("native", "instances.handover.save", save, (requestId) =>
-          dispatch(save, requestId, read),
+        await execution.step(
+          "native",
+          "instances.handover.save",
+          save,
+          (requestId) => dispatch(save, requestId, read),
+          target!.process,
         );
         return execution.step(
           "file",
@@ -1270,8 +1230,12 @@ async function acquisitionReleaseExecutor(
             expectDoc: sdkOpenId,
           }),
         };
-        await execution.step("native", "instances.cleanup.close", close, (requestId) =>
-          dispatch(close, requestId, read),
+        await execution.step(
+          "native",
+          "instances.cleanup.close",
+          close,
+          (requestId) => dispatch(close, requestId, read),
+          target!.process,
         );
         outcome.closed = sdkOpenId;
       }

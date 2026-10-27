@@ -15,13 +15,12 @@ import type {
   ExecutionTarget,
   ActionNeed,
 } from "@pe/agent-contracts";
-import type { ActionExecution, ActionJournal } from "./action-journal.ts";
+import type { ActionExecution } from "./action-journal.ts";
 
 export interface CommandContext {
   admission: ActionAdmission;
   caller: Caller;
   basis: Basis | null;
-  owner: ActionJournal;
   work?: RouteWorkspace;
   consumed: Consumed[];
   read: {
@@ -30,7 +29,7 @@ export interface CommandContext {
   };
 }
 
-export interface CommandBinding {
+interface CommandBinding {
   consumes?: Consumed[];
   claims?: Claim[];
   effects: Footprint;
@@ -64,9 +63,7 @@ export interface CommandReads {
   cancel?(requestId: string): Promise<unknown>;
   target?(target: ExecutionTarget, needs: ActionNeed): Promise<void>;
   effectPath?(effect: Extract<Effect, { kind: "member" }>): Promise<string | undefined>;
-  recover?(
-    step: ActionStep,
-  ): Promise<{
+  recover?(step: ActionStep): Promise<{
     step: ActionStep;
     evidence: unknown;
     observation?: Extract<import("@pe/agent-contracts").ReceiptFact, { kind: "native" }>;
@@ -77,4 +74,3 @@ export type CommandFactory = (
   context: CommandContext,
 ) => CommandExecutor | Promise<CommandExecutor>;
 export type CommandRegistry = (key: string) => CommandFactory;
-export const hasEffects = (effects: readonly Effect[]) => effects.length > 0;

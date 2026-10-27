@@ -2,6 +2,7 @@ import { mkdtemp, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { expect, test } from "vite-plus/test";
+import { validateNativeInput } from "../src/native-input.ts";
 import { ActionJournal } from "../src/action-journal.ts";
 import { fixtureCommand } from "./command-fixture.ts";
 
@@ -34,4 +35,17 @@ test("persisted native input must still satisfy C# metadata before any effect ca
   } finally {
     await rm(directory, { recursive: true, force: true });
   }
+});
+
+test("live native schema changes cannot reuse a validator compiled for the same operation key", () => {
+  const schema = (field: string) =>
+    JSON.stringify({
+      type: "object",
+      required: [field],
+      properties: { [field]: { type: "string" } },
+      additionalProperties: false,
+    });
+  validateNativeInput("test.dynamic", { before: "one" }, schema("before"));
+  expect(() => validateNativeInput("test.dynamic", { before: "one" }, schema("after"))).toThrow();
+  validateNativeInput("test.dynamic", { after: "two" }, schema("after"));
 });

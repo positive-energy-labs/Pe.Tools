@@ -31,7 +31,7 @@ import {
   type RevitCatalogSchedules,
   type ScheduleCellsApply,
 } from "@pe/host-contracts/generated";
-import { BridgeError, type RevitBridge } from "./bridge.ts";
+import { BridgeError, invokeBridge as invoke, type RevitBridge } from "./bridge.ts";
 import { ActionIncomplete, type ActionExecution } from "./action-journal.ts";
 import { z } from "zod";
 import type { CommandContext, CommandFactory } from "./command-executor.ts";
@@ -117,19 +117,6 @@ async function current(
   )
     throw refused("The exact schedule document lifetime/process is unavailable");
   return { session, doc };
-}
-async function invoke(
-  bridge: RevitBridge["Service"],
-  target: DocumentRef,
-  key: string,
-  input: unknown,
-  id?: string,
-) {
-  const result = await Effect.runPromise(
-    Effect.result(bridge.invoke(key, input, target.session, target.openId, id)),
-  );
-  if (result._tag === "Failure") throw result.failure;
-  return result.success.value;
 }
 export async function readSchedule(
   raw: { key: string; input?: unknown; target?: unknown },

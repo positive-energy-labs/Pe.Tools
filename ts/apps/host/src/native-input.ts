@@ -9,15 +9,14 @@ const contracts = new Map<string, string | null | undefined>(
 );
 
 /** C# request metadata validates captured execution again after persistence or recovery. */
-export function validateNativeInput(key: string, input: unknown): void {
-  const json = contracts.get(key);
+export function validateNativeInput(key: string, input: unknown, json = contracts.get(key)): void {
   if (!json) return;
-  let check = compiled.get(key);
+  let check = compiled.get(json);
   if (!check) {
     const schema = JSON.parse(json);
     delete schema.$schema;
     check = validator.compile(schema);
-    compiled.set(key, check);
+    compiled.set(json, check);
   }
   if (!check(input))
     throw new BridgeError(

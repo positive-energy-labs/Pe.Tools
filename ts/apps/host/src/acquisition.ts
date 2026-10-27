@@ -54,27 +54,25 @@ export const acquisitionIntentSchema = z.strictObject({
 export type AcquisitionIntent = z.infer<typeof acquisitionIntentSchema>;
 
 const artifactSchema = z.strictObject({ path: z.string(), sha256: z.string(), bytes: z.number() });
-type Artifact = z.infer<typeof artifactSchema>;
-
-export type Acquisition = {
-  readonly id: string;
-  readonly intent: AcquisitionIntent;
-  /** Reconciling includes unknown handover/cleanup steps; held describes receipts, not liveness. */
-  readonly state: "planned" | "reconciling" | "held" | "released";
-  /** The Revit this acquisition started (a start step that succeeded, even if the open failed). */
-  readonly process: AcquiredProcess | null;
-  /** The SDK lifetime the open step bound, in the process it ran in. */
-  readonly document: {
-    readonly process: AcquiredProcess;
-    readonly sdkOpenId: string;
-  } | null;
-  /** Paths its file steps recorded before any write; cleanup touches only these. */
-  readonly files: readonly string[];
-  readonly baseline: Artifact | null;
-  readonly handover: z.infer<typeof handedSchema> | null;
-  /** Files a Save As moved its document to, each from a receipted `acquisition.artifact` step. */
-  readonly artifacts: readonly Artifact[];
-};
+const handedSchema = z.object({
+  result: artifactSchema,
+  diffPlan: z.string(),
+  work: artifactSchema.nullable(),
+});
+export const acquisitionSchema = z.strictObject({
+  id: z.string(),
+  intent: acquisitionIntentSchema,
+  /** Reconciling includes unknown handover/cleanup steps; held is not a liveness claim. */
+  state: z.enum(["planned", "reconciling", "held", "released"]),
+  process: processSchema.nullable(),
+  document: z.strictObject({ process: processSchema, sdkOpenId: z.string() }).nullable(),
+  /** Cleanup touches only the paths recorded by file steps. */
+  files: z.array(z.string()).readonly(),
+  baseline: artifactSchema.nullable(),
+  handover: handedSchema.nullable(),
+  artifacts: z.array(artifactSchema).readonly(),
+});
+export type Acquisition = Readonly<z.infer<typeof acquisitionSchema>>;
 
 /** Action ids are caller text: never a path segment or an SDK name, only this digest of them. */
 const acquisitionKey = (id: string) => createHash("sha256").update(id).digest("hex").slice(0, 32);
@@ -155,18 +153,13 @@ const preparedSchema = z.object({ acquisition: acquisitionIntentSchema.nullable(
 const startedSchema = z.object({ session: z.object({ process: processSchema }) });
 const openedDoc = z.object({ openId: z.string().min(1), path: z.string().nullable() });
 // A live open records the CLI's DocOpResult; recovery records the op response, whose `result` is
-// the bridge's document itself (`{requestId,key,verdict,result:{openId,path,…}}`, acceptance R4d).
+// the bridge's document itself (`{requestId,key,verdict,result:{openId,path,â€¦}}`, acceptance R4d).
 const openedSchema = z.union([
   z.object({ document: openedDoc }).transform((r) => r.document),
   z.object({ result: openedDoc }).transform((r) => r.result),
 ]);
 const copiedSchema = z.object({ sha256: z.string(), bytes: z.number() });
 const fileStepInput = z.object({ to: z.string() });
-const handedSchema = z.object({
-  result: artifactSchema,
-  diffPlan: z.string(),
-  work: artifactSchema.nullable(),
-});
 const forAcquisition = z.object({ acquisition: z.string() });
 const artifactStep = z.object({ acquisition: z.string(), to: z.string() });
 

@@ -755,6 +755,7 @@ test("handover saves the acquired copy to its create-only result with a diff pla
   });
   const save = f.calls.find((argv) => argv[1] === "save")!;
   expect(flag(save, "--out")).toBe(intent.result);
+  expect(handed.steps.find((step) => step.kind === "native")?.process).toEqual(originalProcess);
   expect(flag(save, "--release")).toBe("none");
   expect(save).not.toContain("--central");
   const plan = JSON.parse(await readFile(intent.diffPlan, "utf8"));
@@ -808,6 +809,8 @@ test("handover saves the acquired copy to its create-only result with a diff pla
     },
   });
   expect(f.calls.at(-1)!.slice(0, 2)).toEqual(["session", "stop"]);
+  for (const step of cleaned.steps.filter((step) => step.kind === "native"))
+    expect(step.process).toEqual(originalProcess);
   expect(existsSync(work)).toBe(false);
   // The handover's result, its diff plan and the baseline it compares against are kept.
   for (const kept of [

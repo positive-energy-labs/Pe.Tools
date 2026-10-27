@@ -66,6 +66,21 @@ export type BridgeRequest = {
 /** The op that must never wait behind the op it names. */
 export const CANCEL_OPERATION_KEY = "op.cancel";
 
+/** Preserve the bridge error itself across the Promise boundary, including dispatch evidence. */
+export async function invokeBridge<A = unknown>(
+  bridge: RevitBridge["Service"],
+  target: { session: string; openId?: string | null },
+  key: string,
+  input: unknown,
+  requestId?: string,
+): Promise<A> {
+  const result = await Effect.runPromise(
+    Effect.result(bridge.invoke(key, input, target.session, target.openId, requestId)),
+  );
+  if (result._tag === "Failure") throw result.failure;
+  return result.success.value as A;
+}
+
 /** A bridge operation failed on the Revit side (statusCode mirrors the C# BridgeOperationException). */
 export class BridgeError {
   readonly _tag = "BridgeError";

@@ -32,7 +32,7 @@ import type {
   RhvacSyncRequest,
   RhvacSyncResult,
 } from "@pe/host-contracts/operation-types";
-import { BridgeError, type RevitBridge } from "./bridge.ts";
+import { BridgeError, invokeBridge, type RevitBridge } from "./bridge.ts";
 import type { ActionExecution } from "./action-journal.ts";
 import { type TakeoffCaptures } from "./takeoff-captures.ts";
 import { rhvacOpen, rhvacSync } from "./rhvac-ops.ts";
@@ -188,15 +188,7 @@ export function takeoffExecutors(
                 "native",
                 key,
                 input,
-                async (requestId) => {
-                  const outcome = await Effect.runPromise(
-                    Effect.result(
-                      bridge.invoke(key, input, target.session, target.openId, requestId),
-                    ),
-                  );
-                  if (outcome._tag === "Failure") throw outcome.failure;
-                  return outcome.success.value as A;
-                },
+                (requestId) => invokeBridge<A>(bridge, target, key, input, requestId),
                 frozen.process,
               );
             const prepare = async (stage: string) => {

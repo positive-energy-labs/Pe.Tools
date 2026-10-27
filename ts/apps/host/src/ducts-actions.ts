@@ -5,7 +5,6 @@
  * staged cells and Pe's own lookup; the host admits it against the exact document lifetime and
  * process incarnation, journals the native step, and never reads or rewrites the Work.
  */
-import { Effect } from "effect";
 import {
   ductsActions,
   commands,
@@ -20,7 +19,7 @@ import {
 import { healPlan, healRequestGroup } from "@pe/ducts-domain/heal";
 import type { DuctSnapshot } from "@pe/ducts-domain/types";
 import { z } from "zod";
-import { BridgeError, type RevitBridge } from "./bridge.ts";
+import { BridgeError, invokeBridge, type RevitBridge } from "./bridge.ts";
 import type { CommandContext, CommandFactory } from "./command-executor.ts";
 import { lifetime } from "./family-actions.ts";
 import { type SdkReceiptReader } from "./native-receipts.ts";
@@ -113,13 +112,7 @@ export function ductsExecutors(
             input: {
               ...(native.op === "ducts.heal"
                 ? await planned(input as DuctsHealInput, async () => {
-                    const read = await Effect.runPromise(
-                      Effect.result(
-                        bridge.invoke("ducts.snapshot", {}, target.session, target.openId),
-                      ),
-                    );
-                    if (read._tag === "Failure") throw read.failure;
-                    return read.success.value as DuctSnapshot;
+                    return invokeBridge<DuctSnapshot>(bridge, target, "ducts.snapshot", {});
                   })
                 : input),
               previewOnly: native.previewOnly,
@@ -134,21 +127,7 @@ export function ductsExecutors(
               "native",
               prepared.op,
               prepared.input,
-              async (requestId) => {
-                const outcome = await Effect.runPromise(
-                  Effect.result(
-                    bridge.invoke(
-                      prepared.op,
-                      prepared.input,
-                      target.session,
-                      target.openId,
-                      requestId,
-                    ),
-                  ),
-                );
-                if (outcome._tag === "Failure") throw outcome.failure;
-                return outcome.success.value;
-              },
+              (requestId) => invokeBridge(bridge, target, prepared.op, prepared.input, requestId),
               prepared.process,
             );
             return { value, target: { session: target.session, document: null } };

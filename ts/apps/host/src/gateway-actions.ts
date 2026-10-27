@@ -15,7 +15,7 @@ import type { CommandContext, CommandFactory } from "./command-executor.ts";
 import { productPagesRootPath } from "./product-paths.ts";
 import { resolveSdkSession, type SdkSession } from "./sdk-session.ts";
 import { freezeScript, requireScriptSuccess } from "./operation-script.ts";
-import { Ajv, type ValidateFunction } from "ajv";
+import { validateNativeInput } from "./native-input.ts";
 import { Effect, Schema } from "effect";
 import {
   commands,
@@ -35,7 +35,7 @@ import {
   tsOnlyOperationSchemas,
 } from "@pe/host-contracts/operation-types";
 import type { ActionExecution } from "./action-journal.ts";
-import { BridgeError, type RevitBridge } from "./bridge.ts";
+import { BridgeError, invokeBridge, type RevitBridge } from "./bridge.ts";
 import {
   readNativeReceipt,
   readOriginalProcess,
@@ -50,11 +50,12 @@ const catalogs = new WeakMap<object, Map<string, CatalogEntry>>();
 /** Registry bindings precede bridge registration. Retain metadata, never a native response/receipt. */
 async function operationRows(bridge: RevitBridge["Service"], target: SdkSession) {
   const read = async () => {
-    const result = await Effect.runPromise(
-      Effect.result(bridge.invoke("host.ops.catalog", {}, target.sessionId, null)),
+    const { operations: rows } = await invokeBridge<{ operations?: unknown[] }>(
+      bridge,
+      { session: target.sessionId },
+      "host.ops.catalog",
+      {},
     );
-    if (result._tag === "Failure") throw result.failure;
-    const rows = (result.success.value as { operations?: unknown[] })?.operations;
     if (!Array.isArray(rows)) throw refused("Operation catalog unavailable");
     return rows;
   };
@@ -213,27 +214,17 @@ export function gatewayExecutor(
     const readTarget = consentedRead(caller, key, admission.input, target) ? target : undefined;
     let session: SdkSession | undefined;
     let metadata: Awaited<ReturnType<typeof operationDefinition>>;
-    let nativeCheck: ValidateFunction | undefined;
-    const nativeInput = z.record(z.string(), z.unknown()).superRefine((input, ctx) => {
-      try {
-        if (isTsOnlyOperationKey(key)) {
-          const contract = tsOnlyOperationSchemas[key];
-          if (!("request" in contract)) throw Error("Operation has no request contract");
-          Schema.decodeUnknownSync(contract.request, { onExcessProperty: "error" })(input);
-        } else {
-          if (!("requestSchemaJson" in metadata) || !metadata.requestSchemaJson)
-            throw Error("Native request schema unavailable");
-          if (!nativeCheck) {
-            const schema = JSON.parse(metadata.requestSchemaJson);
-            delete schema.$schema;
-            nativeCheck = new Ajv({ strict: false, allErrors: true }).compile(schema);
-          }
-          if (!nativeCheck(input)) throw Error(JSON.stringify(nativeCheck.errors));
-        }
-      } catch (error) {
-        ctx.addIssue({ code: "custom", message: String(error) });
+    const validateInput = (input: unknown) => {
+      if (isTsOnlyOperationKey(key)) {
+        const contract = tsOnlyOperationSchemas[key];
+        if (!("request" in contract)) throw refused("Operation has no request contract");
+        Schema.decodeUnknownSync(contract.request, { onExcessProperty: "error" })(input);
+      } else {
+        if (!("requestSchemaJson" in metadata) || !metadata.requestSchemaJson)
+          throw refused("Native request schema unavailable");
+        validateNativeInput(key, input, metadata.requestSchemaJson);
       }
-    });
+    };
     const catalogued =
       tsOnlyOperationCatalog.find((row) => row.key === key) ??
       hostOpCatalog.find((row) => row.key === key);
@@ -281,7 +272,7 @@ export function gatewayExecutor(
         const expected = gatewayTarget(key, metadata.needs, session, target?.openId);
         if (canonicalRouteInput(expected) !== canonicalRouteInput(admission.target))
           throw refused("Target does not match operation needs");
-        nativeInput.parse(admission.input);
+        validateInput(admission.input);
         if (session) {
           process = await readOriginalProcess(
             session.processId,
@@ -467,8 +458,7 @@ export function gatewayExecutor(
       },
       prepare: async () => {
         if (!process) return payload;
-        if (script && !nativeCheck?.({ ...admission.input, sourceBundle: script.sourceBundle }))
-          throw refused("Native contract refuses the captured Pod bundle");
+        if (script) validateInput({ ...admission.input, sourceBundle: script.sourceBundle });
         return {
           kind: "native-leaf",
           process,
@@ -513,19 +503,13 @@ export function gatewayExecutor(
             const target = admission.target;
             if (target.kind !== "document" && target.kind !== "session")
               throw refused("Native target required");
-            const answer = await Effect.runPromise(
-              Effect.result(
-                bridge.invoke(
-                  key,
-                  input,
-                  target.kind === "document" ? target.ref.session : target.session,
-                  target.kind === "document" ? target.ref.openId : null,
-                  requestId,
-                ),
-              ),
+            const value = await invokeBridge(
+              bridge,
+              target.kind === "document" ? target.ref : { session: target.session },
+              key,
+              input,
+              requestId,
             );
-            if (answer._tag === "Failure") throw answer.failure;
-            const value = answer.success.value;
             if (key === "scripting.execute") requireScriptSuccess(value);
             if (isTemporary(key) && !temporarySucceeded(value))
               throw new BridgeError("Temporary lifecycle requires reconciliation", 409, {

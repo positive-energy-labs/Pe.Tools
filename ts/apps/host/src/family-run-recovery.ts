@@ -4,8 +4,7 @@ import { join } from "node:path";
 import { z } from "zod";
 import {
   canonicalRouteInput,
-  diagnosticSchema,
-  ffReceiptSchema,
+  familyNativeApplyResultSchema,
   nativeProcessSchema,
   type ActionStep,
 } from "@pe/agent-contracts";
@@ -41,12 +40,6 @@ const receiptSchema = z.object({
   planHash: z.string(),
   origin: z.string(),
   outputs: z.array(z.string()),
-});
-const responseSchema = z.object({
-  receipts: z.array(ffReceiptSchema.passthrough()),
-  diagnostics: z.array(diagnosticSchema.passthrough()),
-  receiptPath: z.string().nullish(),
-  reason: z.string().nullish(),
 });
 
 const lowerInitial = (value: Record<string, unknown>) =>
@@ -155,7 +148,7 @@ export async function familiesApplyRun(
     !Array.isArray(apply.Diagnostics)
   )
     return null;
-  const normalized = responseSchema.safeParse({
+  const normalized = familyNativeApplyResultSchema.safeParse({
     receipts: apply.Receipts.map((row) => {
       const fields = object(row);
       if (!fields || !Array.isArray(fields.Residue)) return null;
@@ -198,4 +191,4 @@ export async function familiesApplyRun(
 }
 
 export const isFamiliesApplyResponse = (value: unknown): value is FamiliesApply.Res.Response =>
-  responseSchema.safeParse(value).success;
+  familyNativeApplyResultSchema.safeParse(value).success;

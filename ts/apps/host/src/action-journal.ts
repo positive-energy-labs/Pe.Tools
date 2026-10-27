@@ -5,7 +5,6 @@ import type {
   CommandRegistry,
   CommandExecutor,
 } from "./command-executor.ts";
-import { hasEffects } from "./command-executor.ts";
 import { importHistoricalAction } from "./legacy-action-journal.ts";
 import { validateNativeInput } from "./native-input.ts";
 import { bindActionDispatch } from "./action-dispatch.ts";
@@ -722,7 +721,7 @@ export class ActionJournal implements ReceiptReader {
     if (!row) return null;
     if (row.cancellationRequested) return "Action cancelled before dispatch";
     try {
-      if (hasEffects(row.effects)) commandCheckpoint(originOf(row.caller), row.consent);
+      if (row.effects.length) commandCheckpoint(originOf(row.caller), row.consent);
     } catch (error) {
       return String(error);
     }
@@ -931,7 +930,6 @@ export class ActionJournal implements ReceiptReader {
     return {
       admission,
       ...crossing,
-      owner: this,
       work: this.commandReads?.work,
       consumed,
       read: {
@@ -997,7 +995,7 @@ export class ActionJournal implements ReceiptReader {
   ): Promise<void> {
     if (row.cancellationRequested)
       throw new BridgeError("Command cancelled before dispatch", 499, { notDispatched: true });
-    if (hasEffects(row.effects)) {
+    if (row.effects.length) {
       if (moment === "admit" || moment === "authorize") assertRunAdmission(originOf(row.caller));
       else commandCheckpoint(originOf(row.caller), row.consent);
     }
@@ -1292,7 +1290,7 @@ export class ActionJournal implements ReceiptReader {
       }
       row = actionReceiptSchema.parse({
         ...row,
-        state: row.caller.kind === "pea" && hasEffects(row.effects) ? "waiting" : "running",
+        state: row.caller.kind === "pea" && row.effects.length ? "waiting" : "running",
       });
       try {
         await this.commit([row]);
@@ -1394,7 +1392,7 @@ export class ActionJournal implements ReceiptReader {
               { work: key, route, paths: outstanding },
               async () => {
                 if (
-                  !hasEffects(row.effects) ||
+                  !row.effects.length ||
                   !row.steps.some(
                     (step) =>
                       step.state === "succeeded" &&
@@ -1603,7 +1601,7 @@ export class ActionJournal implements ReceiptReader {
       let validated = row.prepared.state === "ready";
       const releaseRun = subscribeRunChanges(() => {
         try {
-          if (hasEffects(row.effects)) commandCheckpoint(originOf(row.caller), row.consent);
+          if (row.effects.length) commandCheckpoint(originOf(row.caller), row.consent);
         } catch {
           this.cancelWaits.get(row.id)?.();
           void save((current) => ({ ...current, cancellationRequested: true })).catch(() => {});

@@ -436,7 +436,7 @@ async function authorFamilies(work: RouteWorkspace, revision = 0, where = scope)
   expect(landed.ok).toBe(true);
   return landed.revision!;
 }
-/* ── the boundary itself ─────────────────────────────────────────────────────────────────── */
+/* â”€â”€ the boundary itself â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€ */
 type Plan = {
   id: string;
   plan: {
@@ -547,7 +547,7 @@ test("families apply sends exactly the reviewed hashes, and the spec, source byt
   // The native run names the plan it applies (execution reads it once C# declares the field).
   expect(native.input.plan).toBe(plan.id);
 });
-/* ── consumed-cell retirement (obligation 8) ─────────────────────────────────────────────── */
+/* â”€â”€ consumed-cell retirement (obligation 8) â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€ */
 const cellOf = (parameter: string) =>
   familyCellKey({ familyName: "Box", typeName: "T", parameter });
 const W = cellOf("Width");
@@ -721,7 +721,13 @@ test("native patch refuses mixed staged cells and keeps its staged rung after pa
   env.applied({
     receipts: [
       env.box,
-      { ...env.box, familyId: 2, familyName: "Pipe", converged: false, residue: ["Width"] },
+      {
+        ...env.box,
+        familyId: 2,
+        familyName: "Pipe",
+        converged: false,
+        residue: entry(2, "Pipe", "partial").changes,
+      },
     ],
   });
   const done = resultOf<{
@@ -967,7 +973,7 @@ test("/family retires the draft's consumed cells after a proven apply, and keeps
   expect(root).toMatchObject({ id: "global", path: draft.path, origin: "SuppliedDraft" });
   expect(Buffer.from(root.bytesBase64, "base64").toString("utf8")).toBe(draft.content);
 });
-/* ── parameter links ─────────────────────────────────────────────────────────────────────── */
+/* â”€â”€ parameter links â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€ */
 /** The person stages a profile on the one cell. */
 async function authorDraft(work: RouteWorkspace, draft: unknown, revision = 0) {
   const landed = await work.apply(
@@ -1331,7 +1337,7 @@ test("an interrupted Families apply resumes from its exact durable FF run withou
   expect(resumed.retired.retired).toEqual([["cells", W]]);
   expect(env.sent.filter((row) => row.key === "families.apply")).toHaveLength(1);
 });
-/* ── O8-b: a stale review refuses ────────────────────────────────────────────────────────── */
+/* â”€â”€ O8-b: a stale review refuses â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€ */
 test("a staged cell changed since the plan refuses apply visibly; a Pea proposal alone does not", async () => {
   const env = await setup();
   const { apply, revision } = await stagedPlan(env, { [W]: staged("10"), [H]: staged("20") });
@@ -1369,7 +1375,7 @@ test("a staged cell changed since the plan refuses apply visibly; a Pea proposal
   ).toMatch(/Consumed input changed/);
   expect(env.sent.filter((s) => s.key === "families.apply")).toHaveLength(0);
 });
-/* ── Doors 2 and 9: the minted caller, never a self-asserted actor (ADR 0017 D2) ─────────── */
+/* â”€â”€ Doors 2 and 9: the minted caller, never a self-asserted actor (ADR 0017 D2) â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€ */
 const doorRegistrations = [
   {
     spec: {

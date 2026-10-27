@@ -19,7 +19,6 @@ import {
   familyStagedPatch,
   memberWork,
   editedEntries,
-  draftCellSchema,
   parameterLinksRouteState,
   parameterLinksBasis,
   stagedParameterProfile,
@@ -39,7 +38,6 @@ import {
   type SettingsRouteDocument,
   type FamilyCapture,
   type AppliedFilter,
-  type Rung,
   type Footprint,
   type WorkKey,
   appliedScopeSchema,
@@ -47,7 +45,6 @@ import {
   familyCatalogProblem,
   familyCatalogRequest,
   stagedFilter,
-  refusalText,
 } from "@pe/agent-contracts";
 import type {
   PodMemberSaveRequest,
@@ -69,7 +66,7 @@ import {
   productPathNames,
   scriptingWorkspaceIdentity,
 } from "@pe/host-contracts/contracts";
-import { BridgeError, type RevitBridge } from "./bridge.ts";
+import { BridgeError, invokeBridge as invoke, type RevitBridge } from "./bridge.ts";
 import { assertFresh, documentMarks } from "./document-marks.ts";
 import { ActionIncomplete, CommandRejected } from "./action-journal.ts";
 import { z } from "zod";
@@ -223,7 +220,7 @@ const documentKind = (key: FamilyActionKey): boolean | "project" =>
       : false;
 
 const diagnosticLine = (d: { code: string; path: string; message: string }) =>
-  `${d.code} · ${d.path} — ${d.message}`;
+  `${d.code} Â· ${d.path} â€” ${d.message}`;
 
 /** Every capture writes a run beside the member it filed: `output/<runId>/receipt.json` plus its outputs. */
 /**
@@ -293,19 +290,6 @@ async function current(
     throw refused("The exact admitted document lifetime/process is no longer available");
   return session;
 }
-async function invoke(
-  bridge: RevitBridge["Service"],
-  target: DocumentRef,
-  key: string,
-  input: unknown,
-  requestId?: string,
-) {
-  const result = await Effect.runPromise(
-    Effect.result(bridge.invoke(key, input, target.session, target.openId, requestId)),
-  );
-  if (result._tag === "Failure") throw result.failure;
-  return result.success.value;
-}
 export async function lifetime(
   bridge: RevitBridge["Service"],
   target: DocumentRef,
@@ -328,14 +312,6 @@ export async function lifetime(
   return { session: await current(bridge, target, family, process), process };
 }
 
-/** The staged cells a plan provably consumed, at the Work revision the plan was bound to. */
-type Retirement = {
-  key: WorkKey;
-  route: "family" | "families";
-  cells: Record<string, Rung>;
-  /** The single native patch rung, separate from canonical per-type cell addresses. */
-  patch?: Rung;
-};
 type Sealed = z.infer<typeof sealedSchema>;
 
 /** A member's JSON as authored, ignoring the `$schema` URL its writer stamps. */
@@ -345,27 +321,13 @@ const unstamped = (json: string) => {
 };
 const rootText = (source: { root: { bytesBase64: string } }) =>
   Buffer.from(source.root.bytesBase64, "base64").toString("utf8");
-const consumedOf = (
-  key: WorkKey,
-  route: Retirement["route"],
-  cells: Record<string, { edit?: Rung | null }>,
-  keys: string[],
-): Retirement => ({
-  key,
-  route,
-  cells: Object.fromEntries(keys.map((cell) => [cell, cells[cell]!.edit!])),
-});
-
-const workRoute = (consumed: Retirement) =>
-  consumed.route === "family" ? familyDraftRouteState.route : familiesRouteState.route;
-
-const rungSchema = draftCellSchema(z.unknown(), { deletable: true }).shape.edit.unwrap().unwrap();
 const retirementSchema = z.strictObject({
   key: workKeySchema,
   route: z.enum(["family", "families"]),
-  cells: z.record(z.string(), rungSchema),
-  patch: rungSchema.optional(),
+  cells: z.array(z.string()),
+  patch: z.literal(true).optional(),
 });
+type Retirement = z.infer<typeof retirementSchema>;
 const sourceMemberSchema = z
   .strictObject({
     id: z.string(),
@@ -807,7 +769,7 @@ export function familyExecutors(
           if (scope) {
             const planned = result as FamiliesPlan.Res.Response;
             if (planned.diagnostics.length)
-              throw refused(planned.diagnostics.map(diagnosticLine).join(" · "));
+              throw refused(planned.diagnostics.map(diagnosticLine).join(" Â· "));
             // A cell whose family or type no longer resolves never re-attaches: plan names it.
             const loaded = new Set(
               catalog!.flatMap((family) =>
@@ -831,8 +793,9 @@ export function familyExecutors(
           const plan = planned.families[0];
           if (planned.diagnostics.length || planned.families.length !== 1 || plan!.refusals.length)
             throw refused(
-              [...planned.diagnostics, ...(plan?.refusals ?? [])].map(diagnosticLine).join(" · ") ||
-                "Expected one family plan",
+              [...planned.diagnostics, ...(plan?.refusals ?? [])]
+                .map(diagnosticLine)
+                .join(" Â· ") || "Expected one family plan",
             );
           return {
             id: admission.id,
@@ -984,7 +947,7 @@ export function familyExecutors(
                 unstamped(settingsCandidate(draft.reading, draft.cells)) ===
                   unstamped(rootText(source))
               )
-                consumed = consumedOf(base.key, "family", draft.cells, staged);
+                consumed = { key: base.key, route: "family", cells: staged };
             }
             return {
               kind: "native",
@@ -1134,12 +1097,12 @@ export function familyExecutors(
             const consumed = sealed.consumed;
             if (consumed?.route === "families") {
               const document = frozenWork?.doc as
-                | { cells?: Record<string, { edit?: Rung | null }>; patch?: { edit?: Rung | null } }
+                | { cells?: Record<string, { edit?: unknown }>; patch?: { edit?: unknown } }
                 | undefined;
               if (
                 (consumed.patch &&
                   Object.values(document?.cells ?? {}).some((cell) => cell.edit != null)) ||
-                (Object.keys(consumed.cells).length && document?.patch?.edit != null)
+                (consumed.cells.length && document?.patch?.edit != null)
               )
                 throw refused(
                   "Stage either a native Family Foundry patch or per-type cells, not both",
@@ -1235,10 +1198,10 @@ export function familyExecutors(
                 : null;
             const consumedCells =
               generated && canonicalRouteInput(generated.spec) === unstamped(rootText(source))
-                ? consumedOf(base!.key, "families", doc.cells, generated.keys)
+                ? { key: base!.key, route: "families" as const, cells: generated.keys }
                 : null;
             const consumed: Retirement | null = doc.patch.edit
-              ? { key: base!.key, route: "families", cells: {}, patch: doc.patch.edit }
+              ? { key: base!.key, route: "families", cells: [], patch: true }
               : consumedCells;
             if (consumed) {
               const observed = await captures.latestFamilies(base!.key);
@@ -1369,20 +1332,18 @@ export function familyExecutors(
           }
           if (prepared.kind === "settings-observation") {
             if (!base || !work) throw refused("Member Work is unavailable");
-            const result = await execution.publishWork(base.key, "pods", [
+            await execution.publishWork(base.key, "pods", [
               { path: ["basis"], value: prepared.basis },
               { path: ["fields"], value: {} },
             ]);
-            if (!result.ok) throw refused(refusalText(result));
             return { envelope: await work.read(base.key, "pods") };
           }
           if (prepared.kind === "observation") {
             if (!base || !work) throw refused("Family Work is unavailable");
-            const result = await execution.publishWork(base.key, "family", [
+            await execution.publishWork(base.key, "family", [
               { path: ["reading"], value: prepared.reading },
               { path: ["takenAt"], value: prepared.takenAt },
             ]);
-            if (!result.ok) throw refused(refusalText(result));
             return { envelope: await work.read(base.key, "family") };
           }
           if (prepared.kind === "batch") {
@@ -1583,21 +1544,15 @@ export function familyExecutors(
               const patchConverged =
                 prepared.retirePatchNames?.every((name) => converged.has(name)) ?? false;
               // A family document applies its one family; Families retires per proven family only.
-              const retiring: Retirement = {
-                ...consumed,
-                cells: Object.fromEntries(
-                  Object.entries(consumed.cells).filter(
-                    ([cell]) =>
-                      consumed.route === "family" ||
-                      succeeded.has(familyCellAddress(cell).familyName),
-                  ),
-                ),
-                ...(consumed.patch && !patchConverged ? { patch: undefined } : {}),
-              };
-              const retired = await execution.retireWork(retiring.key, workRoute(retiring), [
-                ...Object.keys(retiring.cells).map((key) => ["cells", key]),
-                ...(retiring.patch ? [["patch"]] : []),
-              ]);
+              const paths = consumed.cells
+                .filter(
+                  (cell) =>
+                    consumed.route === "family" ||
+                    succeeded.has(familyCellAddress(cell).familyName),
+                )
+                .map((cell) => ["cells", cell]);
+              if (consumed.patch && patchConverged) paths.push(["patch"]);
+              const retired = await execution.retireWork(consumed.key, consumed.route, paths);
               return { executionContext: target, native: result, retired, ...(await readback()) };
             }
             return {
@@ -1642,11 +1597,6 @@ export function familyExecutors(
               },
             ],
           );
-          if (!publication.ok)
-            throw new ActionIncomplete(
-              "Member write succeeded; original Work revision publication refused. Later edits retained.",
-              { file: written, publication },
-            );
           return { file: written, publication, retired };
         };
         return {
