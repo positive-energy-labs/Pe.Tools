@@ -416,7 +416,7 @@ async function executeTool(
   // Receipt recovery precedes every live default, Work, catalog and source lookup. A retry
   // belongs to the original admission, even when its conversation or document has closed.
   if (replayOperations && input.key.startsWith("workflow:")) {
-    const payload: Record<string, unknown> = coerceJsonObject(input.input) ?? {};
+    const payload = z.record(z.string(), z.unknown()).parse(coerceJsonObject(input.input) ?? {});
     const { bases, actionId, ...intent } = payload;
     const id = typeof actionId === "string" ? actionId : requestIdentity(context);
     const original = await readAction(id, base()).catch(() => undefined);

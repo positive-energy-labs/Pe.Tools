@@ -57,7 +57,6 @@ import { TooltipHint } from "@pe/kit/lang/tooltip";
 export const manifest = defineRoute({
   key: "pods",
   name: "Pods",
-  needs: "nothing",
   runs: ["settings.write", "settings.observe"],
   address: "pods",
   page: routeAddress("pods").schema,
