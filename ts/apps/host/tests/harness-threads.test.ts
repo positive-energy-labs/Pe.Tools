@@ -1215,6 +1215,55 @@ test("one huge tool result is kept bounded in the record, the log and every read
 });
 
 for (const harness of ["claude", "codex"] as const) {
+  test.each([undefined, "other", "switch_mode"] as const)(
+    `${harness}: an unclassified native approval (%s) cannot authorize an effect`,
+    async (kind) => {
+      const realOpen = adapter.openAdapter;
+      const launched = vi.spyOn(adapter, "openAdapter").mockImplementation((...args) => {
+        const createClient = args[3];
+        args[3] = (connection) => {
+          const client = createClient(connection);
+          return {
+            ...client,
+            requestPermission: (request) =>
+              client.requestPermission({ ...request, toolCall: { ...request.toolCall, kind } }),
+          };
+        };
+        return realOpen(...args);
+      });
+      const h = host(),
+        call = caller(h),
+        read = reader(h);
+      try {
+        const id = (await call("POST", "/pe/threads", { providerId: harness })).json.id as string;
+        await until(read, id, (body) => body.models.length > 0);
+        await call("POST", `/pe/threads/${id}/prompt`, { text: "permission" });
+        const body = await until(read, id, (body) => !body.running && turnEnds(body).length === 1);
+        expect(openAsks(body)).toHaveLength(0);
+        expect(body.events.some((event) => event.kind === "permission_request")).toBe(false);
+        expect(
+          body.events.some(
+            (event) =>
+              event.kind === "update" &&
+              event.update.sessionUpdate === "tool_call_update" &&
+              event.update.status === "failed" &&
+              String(event.update.title).includes("host semantic or causal CLI commands"),
+          ),
+        ).toBe(true);
+        expect(
+          body.events.some(
+            (event) =>
+              event.kind === "update" &&
+              event.update.sessionUpdate === "agent_message_chunk" &&
+              String((event.update.content as { text?: string })?.text).includes("chose no"),
+          ),
+        ).toBe(true);
+      } finally {
+        launched.mockRestore();
+        await h.close();
+      }
+    },
+  );
   test(`${harness}: delayed invocation and CLI child retain immutable old run across the next turn`, async () => {
     const calls: { token: string; harness: string }[] = [];
     const realOpen = adapter.openAdapter;

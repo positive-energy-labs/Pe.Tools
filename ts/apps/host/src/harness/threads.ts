@@ -1069,11 +1069,11 @@ export function createHarnessThreads(options: HarnessThreadsOptions) {
         new Promise<RequestPermissionResponse>((resolve) => {
           if (t.child !== child || t.stopped) return resolve({ outcome: { outcome: "cancelled" } });
           clearIdle(t);
-          // Native harness writes have no immutable host command or exact effect footprint.
-          // Their approval cannot bypass the journal; the semantic and causal CLI doors remain.
-          if (["edit", "delete", "move", "execute"].includes(request.toolCall.kind ?? "")) {
+          // Only explicitly classified reads use native approval. Missing and unknown effects
+          // have no immutable host command or footprint and cannot bypass the journal.
+          if (!["read", "search", "fetch", "think"].includes(request.toolCall.kind ?? "")) {
             const reason =
-              "Native unjournaled writes are unsupported. Use Pea host semantic or causal CLI commands.";
+              "Native unjournaled writes are unsupported. Only read, search, fetch and think approvals use this door; use Pea host semantic or causal CLI commands.";
             append(t, {
               kind: "update",
               turnId: t.running,
