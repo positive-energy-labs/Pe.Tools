@@ -93,6 +93,14 @@ const session = (sessionId) => ({
 });
 let cancelled = () => {};
 let toolEnv = {};
+const bindToolEnv = (mcpServers) => {
+  toolEnv = Object.fromEntries(
+    (mcpServers.find((server) => server.name === "pea")?.env ?? []).map(({ name, value }) => [
+      name,
+      value,
+    ]),
+  );
+};
 async function gate(step) {
   if (!process.env.FAKE_ACP_GATE) return;
   const path = join(process.env.FAKE_ACP_GATE, step);
@@ -117,12 +125,7 @@ new AgentSideConnection(
     },
     authenticate: () => {},
     async newSession({ mcpServers }) {
-      toolEnv = Object.fromEntries(
-        (mcpServers.find((server) => server.name === "pea")?.env ?? []).map(({ name, value }) => [
-          name,
-          value,
-        ]),
-      );
+      bindToolEnv(mcpServers);
       const auth = process.env.FAKE_ACP_AUTH ?? "account";
       if (auth === "required") throw RequestError.authRequired();
       const report = () =>
@@ -134,8 +137,9 @@ new AgentSideConnection(
       else await report();
       return session("fake-session");
     },
-    resumeSession({ sessionId }) {
+    resumeSession({ sessionId, mcpServers }) {
       if (sessionId === "lost") throw RequestError.invalidParams({ sessionId });
+      bindToolEnv(mcpServers);
       const { sessionId: _, ...rest } = session(sessionId);
       return rest;
     },

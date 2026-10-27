@@ -1,5 +1,5 @@
 // The whole e2e helper: trusted CDP input on a real control, and reads of the rendered DOM.
-// No element.click(), no handlers, no stores, no fetch. Runtime.evaluate only locates and reads.
+// No element.click(), app handlers, stores or fetch. Runtime.evaluate locates/reads and records trusted input targets.
 // Browser: explicitly owned or consented CDP endpoint; pass its port as CDP_PORT.
 // Hold operators own 9222/9223/9231, so there is no default port.
 import { connectCdp, getTargets } from "@pe/browser";
@@ -67,7 +67,54 @@ export async function connect(
     await transport.close();
     throw error;
   }
+  const inputEvents: unknown[] = [];
+  const click = async (element: string, what: string, completed?: () => Promise<boolean>) => {
+    const box = await page
+      .until(async () => {
+        if (await completed?.()) return { completed: true as const };
+        const first = await read<{ x: number; y: number } | null>(center(element));
+        if (!first) return null;
+        await send("Input.dispatchMouseEvent", { type: "mouseMoved", ...first });
+        const stable = await read<{ x: number; y: number } | null>(center(element));
+        return stable && Math.abs(first.x - stable.x) < 0.5 && Math.abs(first.y - stable.y) < 0.5
+          ? stable
+          : null;
+      }, what)
+      .catch(async (error) => {
+        const probe = await read(`(() => {
+        const el = ${element};
+        if (!el) return {missing:true,url:location.href};
+        const r=el.getBoundingClientRect(), style=getComputedStyle(el);
+        const parents=[];
+        for(let node=el.parentElement;node;node=node.parentElement){
+          const s=getComputedStyle(node);parents.push({tag:node.tagName,slot:node.getAttribute("data-slot"),box:node.getBoundingClientRect().toJSON(),display:s.display,overflow:s.overflow,visibility:s.visibility});
+        }
+        return {url:location.href,viewport:[innerWidth,innerHeight],expected:el.outerHTML,box:r.toJSON(),display:style.display,visibility:style.visibility,opacity:style.opacity,hit:document.elementFromPoint(r.x+r.width/2,r.y+r.height/2)?.outerHTML?.slice(0,700),parents};
+      })()`).catch((cause) => ({ error: String(cause) }));
+        inputEvents.push({ failed: what, probe });
+        throw error;
+      });
+    if ("completed" in box) return;
+    await read(`(() => {
+      const expected = ${element};
+      globalThis.__peCdpClick = null;
+      document.addEventListener("click", event => {
+        globalThis.__peCdpClick = { trusted: event.isTrusted, expected: expected?.outerHTML?.slice(0, 500),
+          hit: expected?.contains(event.target), target: event.target?.outerHTML?.slice(0, 500),
+          x: event.clientX, y: event.clientY, url: location.href, at: Date.now() };
+      }, {once: true, capture: true});
+    })()`);
+    for (const type of ["mousePressed", "mouseReleased"])
+      await send("Input.dispatchMouseEvent", { type, ...box, button: "left", clickCount: 1 });
+    const evidence = await read<{ trusted: boolean; hit: boolean } | null>(
+      "globalThis.__peCdpClick",
+    );
+    inputEvents.push(evidence);
+    if (!evidence?.trusted || !evidence.hit)
+      throw new Error(`CDP click missed ${what}: ${JSON.stringify(evidence)}`);
+  };
   const page = {
+    inputEvents,
     /** Uncaught page exceptions, for evidence dumps only (never an assertion). */
     errors,
     onEvent(listener: (event: { method?: string; params?: any; sessionId?: string }) => void) {
@@ -89,7 +136,9 @@ export async function connect(
       ),
     /** Is a visible control with this text or aria-label rendered (optionally inside `within`)? */
     has: async (name: string | RegExp, within?: string) =>
-      (await read(locate(name, within))) !== null,
+      await read<boolean>(
+        `(() => {const el = ${control(name, within)}; return Boolean(el?.checkVisibility({checkOpacity:true,checkVisibilityCSS:true}) && el.getClientRects().length);})()`,
+      ),
     url: () => read<string>("location.href"),
     async open(url: string) {
       const before = loadSerial;
@@ -131,19 +180,8 @@ export async function connect(
     waitText: (s: string, ms?: number) =>
       page.until(async () => (await page.text()).includes(s), `text "${s}"`, ms),
     /** Click the visible control (button, link, role=button/menuitem/tab, summary) whose text or aria-label matches. */
-    async click(name: string | RegExp, within?: string) {
-      const box = await page.until(
-        () => read<{ x: number; y: number } | null>(locate(name, within)),
-        `control ${name}`,
-      );
-      for (const type of ["mouseMoved", "mousePressed", "mouseReleased"])
-        await send("Input.dispatchMouseEvent", {
-          type,
-          x: box.x,
-          y: box.y,
-          button: "left",
-          clickCount: 1,
-        });
+    async click(name: string | RegExp, within?: string, completed?: () => Promise<boolean>) {
+      await click(control(name, within), `control ${name}`, completed);
     },
     /**
      * Click a grid cell's editor: the row whose text has every `row` word, under header `column`.
@@ -164,21 +202,10 @@ export async function connect(
       );
       if (cell === "none")
         throw new Error(`PRECONDITION: ${row.join("/")} has no ${column} (the cell has no editor)`);
-      const box = await page.until(
-        () =>
-          read<{ x: number; y: number } | null>(
-            center(`${cellOf(row, column)}.querySelector(${JSON.stringify(EDITOR)})`),
-          ),
-        `cell ${row.join("/")} × ${column} editor`,
+      await click(
+        `${cellOf(row, column)}.querySelector(${JSON.stringify(EDITOR)})`,
+        `cell ${row.join("/")} ? ${column} editor`,
       );
-      for (const type of ["mouseMoved", "mousePressed", "mouseReleased"])
-        await send("Input.dispatchMouseEvent", {
-          type,
-          x: box.x,
-          y: box.y,
-          button: "left",
-          clickCount: 1,
-        });
     },
     /** Type a value into a grid cell as a person does: click, select all, delete, type, Enter. */
     async setCell(row: string[], column: string, text: string) {
@@ -225,23 +252,10 @@ export async function connect(
       })()`),
     /** Click the element matching a CSS selector (for controls with no text, e.g. a cell). */
     async clickAt(selector: string) {
-      const box = await page.until(
-        () =>
-          read<{ x: number; y: number } | null>(
-            center(
-              `[...document.querySelectorAll(${JSON.stringify(selector)})].find((e) => e.getClientRects().length && e.getBoundingClientRect().width)`,
-            ),
-          ),
+      await click(
+        `[...document.querySelectorAll(${JSON.stringify(selector)})].find((e) => e.getClientRects().length && e.getBoundingClientRect().width)`,
         selector,
       );
-      for (const type of ["mouseMoved", "mousePressed", "mouseReleased"])
-        await send("Input.dispatchMouseEvent", {
-          type,
-          x: box.x,
-          y: box.y,
-          button: "left",
-          clickCount: 1,
-        });
     },
     /** Type into whatever has focus, one trusted key event per character. */
     async type(text: string) {
@@ -327,12 +341,18 @@ const KEYS = {
 } as const;
 export const CTRL = 2;
 
-const center = (el: string) => `(() => {
+const center = (el: string) => `(async () => {
   const el = ${el};
-  if (!el) return null;
-  el.scrollIntoView({ block: "center", inline: "center" });
+  if (!el?.checkVisibility({checkOpacity:true,checkVisibilityCSS:true})) return null;
+  el.scrollIntoView({ block: "nearest", inline: "nearest", behavior: "instant" });
+  const before = el.getBoundingClientRect();
+  await new Promise(requestAnimationFrame);
+  await new Promise(requestAnimationFrame);
+  if (!el.isConnected || !el.checkVisibility({checkOpacity:true,checkVisibilityCSS:true})) return null;
   const r = el.getBoundingClientRect();
-  return r.width && r.height ? { x: r.x + r.width / 2, y: r.y + r.height / 2 } : null;
+  if (!r.width || !r.height || ["x","y","width","height"].some(k => Math.abs(before[k]-r[k])>=0.5)) return null;
+  const x = r.x+r.width/2, y=r.y+r.height/2;
+  return el.contains(document.elementFromPoint(x,y)) ? {x,y} : null;
 })()`;
 
 /**
@@ -349,8 +369,8 @@ const cellOf = (row: string[], column: string) => `(() => {
   return [...tr.children].find((td) => { const r = td.getBoundingClientRect(); return r.left <= x && x <= r.right; }) ?? null;
 })()`;
 
-const locate = (name: string | RegExp, within?: string) =>
-  center(`(() => {
+const control = (name: string | RegExp, within?: string) =>
+  `(() => {
     const want = ${name instanceof RegExp ? name.toString() : JSON.stringify(name)};
     const root = ${within ? `document.querySelector(${JSON.stringify(within)})` : "document"};
     if (!root) return null;
@@ -358,7 +378,7 @@ const locate = (name: string | RegExp, within?: string) =>
     const hit = (e) => labels(e).some((l) => typeof want === "string" ? l === want : want.test(l));
     return [...root.querySelectorAll("button, a, [role=button], [role=menuitem], [role=tab], [role=option], [role=combobox], summary")]
       .find((e) => hit(e) && e.getClientRects().length > 0) ?? null;
-  })()`);
+  })()`;
 
 /**
  * Run one journey: `E2E_LABEL=green|red node tests/e2e/j5.ts`. Writes steps, the failing

@@ -70,6 +70,8 @@ test("real conversation Work cutover retains authored cells, draft, Places and o
   const save = async () => {
     await writeFile(join(dir, "journey-result.json"), JSON.stringify(receipt, null, 2));
     await writeFile(join(dir, "network.json"), JSON.stringify(network, null, 2));
+    if (page)
+      await writeFile(join(dir, "input-events.json"), JSON.stringify(page.inputEvents, null, 2));
   };
   const step = async (name: string, run: () => Promise<void>) => {
     const entry = { name, at: new Date().toISOString(), result: "running" };
@@ -225,7 +227,7 @@ test("real conversation Work cutover retains authored cells, draft, Places and o
       if (await p.has("Expand pea")) await p.click("Expand pea");
       if (await p.has("Expand threads")) await p.click("Expand threads");
       // The row's label may change after an explicit Work reference. Identity does not.
-      await p.clickAt(`[data-thread-sidebar] [data-key="${thread}"] .dl-row-label`);
+      await p.clickAt(`[data-thread-sidebar] [data-key="${thread}"] .dl-row-title`);
     };
     const openWork = async (thread: string) => {
       if (await p.has("Expand pea")) await p.click("Expand pea");
@@ -239,6 +241,20 @@ test("real conversation Work cutover retains authored cells, draft, Places and o
         const root = document.querySelector('section[data-slot="pane"][data-pane-id="tools"]');
         return Boolean(root && [...root.querySelectorAll('[data-route-tab]')].every(e => !e.getClientRects().length));
       })()`));
+    const openPea = async (what: string) => {
+      await p.click("Open Pea");
+      await p.until(toolsCollapsed, what);
+      // Appbar hover opens the floating Situation; dismiss it before pressing its underlay.
+      await p.press("Escape");
+      await p.until(
+        () =>
+          p.read<boolean>(`(() => {
+          const drawer = document.querySelector('#pe-situation-drawer');
+          return Boolean(drawer?.getAttribute('data-state') === 'closed' && drawer.getAttribute('aria-hidden') === 'true' && getComputedStyle(drawer).pointerEvents === 'none');
+        })()`),
+        "Escape closes the floating Situation drawer",
+      );
+    };
     const choosePlace = async (label: string | RegExp) => {
       if (await p.has("Expand tools")) await p.click("Expand tools");
       await p.click(label, '[aria-label="Places"]');
@@ -487,7 +503,11 @@ test("real conversation Work cutover retains authored cells, draft, Places and o
       );
       await headTargets();
       // Opening Work can fit Threads by folding the chat to its rail; reveal it before reading it.
-      if (await p.has("Expand chat")) await p.click("Expand chat");
+      await p.click("Expand chat", undefined, async () =>
+        p.read<boolean>(
+          `[...document.querySelectorAll('textarea[aria-label="Message"],input[aria-label="Message"]')].some(${visible})`,
+        ),
+      );
       expect(await draft()).toBe(message);
       expect(await composerIdentity()).toBe(officeComposer);
       await choosePlace("Takeoffs");
@@ -501,8 +521,7 @@ test("real conversation Work cutover retains authored cells, draft, Places and o
         async () => new URL(await p.url()).pathname === "/ducts",
         "Ducts Place restored",
       );
-      await p.click("Open Pea");
-      await p.until(toolsCollapsed, "Open Pea explicitly collapses tools");
+      await openPea("Open Pea explicitly collapses tools");
       expect(await draft()).toBe(message);
       await choosePlace(/^Ducts/);
       await p.until(
@@ -599,7 +618,11 @@ test("real conversation Work cutover retains authored cells, draft, Places and o
           new URL(await p.url()).searchParams.get("target"),
           "the directory never inherits another tool's subject",
         ).toBeNull();
-        if (await p.has("Expand chat")) await p.click("Expand chat");
+        await p.click("Expand chat", undefined, async () =>
+          p.read<boolean>(
+            `[...document.querySelectorAll('textarea[aria-label="Message"],input[aria-label="Message"]')].some(${visible})`,
+          ),
+        );
         expect(await draft()).toBe(message);
         expect(await composerIdentity()).toBe(officeComposer);
         expect(
@@ -748,7 +771,11 @@ test("real conversation Work cutover retains authored cells, draft, Places and o
       await p.waitText("Office model");
       await p.waitText("3 unfinished");
       expect(await p.count('[role="dialog"]')).toBe(0);
-      if (await p.has("Expand chat")) await p.click("Expand chat");
+      await p.click("Expand chat", undefined, async () =>
+        p.read<boolean>(
+          `[...document.querySelectorAll('textarea[aria-label="Message"],input[aria-label="Message"]')].some(${visible})`,
+        ),
+      );
       await headTargets();
     });
     await step("36 second quiet continuity and immutable Work readback", async () => {
@@ -793,16 +820,25 @@ test("real conversation Work cutover retains authored cells, draft, Places and o
         await pickThreadKeepingTool(CONVERSATION_THREADS.unsaved);
         const opened = Date.now();
         await openWork(CONVERSATION_THREADS.unsaved);
-        await p.until(
-          async () => new URL(await p.url()).pathname === "/ducts",
-          "retained unsaved Work opens",
-        );
-        const target = new URL(await p.url()).searchParams.get("target");
-        // TanStack JSON-quotes a carry string that itself contains a JSON DocumentRequest.
-        const queryValue = JSON.parse(target!);
-        const request = documentRequestSchema.parse(
-          typeof queryValue === "string" ? JSON.parse(queryValue) : queryValue,
-        );
+        const request = await p.until(async () => {
+          if (new URL(await p.url()).pathname !== "/ducts") return null;
+          const target = new URL(await p.url()).searchParams.get("target");
+          try {
+            // TanStack JSON-quotes a carry string that itself contains a JSON DocumentRequest.
+            const queryValue = JSON.parse(target!);
+            const parsed = documentRequestSchema.safeParse(
+              typeof queryValue === "string" ? JSON.parse(queryValue) : queryValue,
+            );
+            const value = parsed.success ? parsed.data : null;
+            return value?.kind === "open" &&
+              value.ref.session === UNSAVED_REF.session &&
+              value.ref.openId === UNSAVED_REF.openId
+              ? value
+              : null;
+          } catch {
+            return null;
+          }
+        }, "retained unsaved Work opens at its exact original lifetime");
         expect(request).toEqual({ kind: "open", ref: UNSAVED_REF });
         const expectedKey = readingKey({
           kind: "work",
@@ -960,8 +996,7 @@ test("real conversation Work cutover retains authored cells, draft, Places and o
         draftRetained: true,
       };
       await pickThreadKeepingTool(thread);
-      await p.click("Open Pea");
-      await p.until(toolsCollapsed, "explicit Open Pea keeps the newly issued conversation");
+      await openPea("explicit Open Pea keeps the newly issued conversation");
       await p.clickAt('textarea[aria-label="Message"],input[aria-label="Message"]');
       await p.send("Input.dispatchKeyEvent", {
         type: "keyDown",
