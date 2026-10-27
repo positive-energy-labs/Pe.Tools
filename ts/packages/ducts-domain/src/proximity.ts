@@ -33,6 +33,7 @@
  */
 import { subjectName } from "./words.ts";
 import type { DuctInferenceGrade, DuctsRouteDocument } from "@pe/agent-contracts";
+import { cells } from "./geometry.ts";
 import type { DuctSnapshot } from "./types.ts";
 
 type Node = DuctSnapshot["nodes"][number];
@@ -635,8 +636,15 @@ function infer(
     closes(id, n.id, host.owner);
   }
   const pairs: { a: (typeof open)[number]; b: (typeof open)[number]; d: number }[] = [];
+  // Each end's box is `tol` either way in a grid of `tol` cells: its own cell's list holds every
+  // end within `tol` (its 27 neighbouring cells), in the order the all-pairs scan met them.
+  const near = cells(
+    open.map((p) => [p.point.map((v) => v - tol), p.point.map((v) => v + tol)] as const),
+    tol || 1,
+  );
   for (let i = 0; i < open.length; i++)
-    for (let j = i + 1; j < open.length; j++) {
+    for (const j of near(open[i]!.point)) {
+      if (j <= i) continue;
       const [a, b] = [open[i]!, open[j]!].sort((x, y) => x.id - y.id || x.index - y.index);
       const d = dist(a!.point, b!.point);
       if (a!.id !== b!.id && d <= tol) pairs.push({ a: a!, b: b!, d });
@@ -675,9 +683,26 @@ function infer(
     open.filter((p) => !inline.some((x) => x.ports.includes(p.k))),
   );
   const faceTol = FACE_TOL_IN / 12;
+  // Each face's box: its centerline piece or origin, out by its section's reach (w + h bounds a
+  // rectangle's half-diagonal) and the tolerance, so a port's own cell lists every face it lands on.
+  // ponytail: 1 ft cells, as 2 in cells over a large duct's box run to tens of thousands; a long
+  // diagonal duct still covers its whole box, an oriented index if that ever measures slow.
+  const faceAt = cells(
+    faces.map((f) => {
+      const ends = f.label === "side" ? [f.a, add(f.a, f.u, f.len)] : [f.origin];
+      const r = ("inner" in f.section ? f.section.outer : f.section.w + f.section.h) + 2 * faceTol;
+      const box = (k: number) => ends.map((e) => e[k]!);
+      return [
+        [0, 1, 2].map((k) => Math.min(...box(k)) - r),
+        [0, 1, 2].map((k) => Math.max(...box(k)) + r),
+      ] as const;
+    }),
+    1,
+  );
   for (const p of open) {
     if (used.has(p.k) || !p.axis) continue;
-    const hits = faces
+    const hits = faceAt(p.point)
+      .map((i) => faces[i]!)
       .flatMap((face) => {
         const hit = face.owner === p.id ? null : land(face, p.point, p.axis!);
         const near = hit && (face.label === "side" ? hit.d <= faceTol : Math.abs(hit.d) <= faceTol);

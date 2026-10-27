@@ -4,7 +4,8 @@ import { createPortal } from "react-dom";
 import { use } from "react";
 import { afterEach, expect, it, vi } from "vite-plus/test";
 import { Button } from "../src/components/lang/button";
-import { Pane, PaneWork, useWork } from "../src/components/lang/pane";
+import { Pane } from "../src/components/lang/pane";
+import { Work, WorkOwner, useWork } from "../src/components/lang/work";
 
 afterEach(cleanup);
 
@@ -34,10 +35,10 @@ it("registers one chip, clears it, and keeps nested panes separate", async () =>
   const view = (pending: boolean) => (
     <Pane title="outer">
       <div aria-busy data-work-label="attributes are accessibility only" />
-      <PaneWork pending={pending} label="capturing meshes… gestures wait" />
-      <PaneWork pending={pending} />
+      <Work pending={pending} label="capturing meshes… gestures wait" />
+      <Work pending={pending} />
       <Pane title="inner">
-        <PaneWork label="inner read" />
+        <Work label="inner read" />
       </Pane>
     </Pane>
   );
@@ -50,13 +51,12 @@ it("registers one chip, clears it, and keeps nested panes separate", async () =>
     ).toBe("capturing meshes… gestures wait · reading…"),
   );
   expect(container.querySelectorAll('[data-slot="pane-work"]')).toHaveLength(2);
-  expect(outer.querySelector('[data-slot="pane-field"]')?.getAttribute("data-working")).toBe(
-    "true",
-  );
+  expect(outer.getAttribute("data-working")).toBe("true");
+  expect(outer.getAttribute("aria-busy")).toBe("true");
   rerender(
     <Pane title="outer">
       <Pane title="inner">
-        <PaneWork label="inner read" />
+        <Work label="inner read" />
       </Pane>
     </Pane>,
   );
@@ -134,3 +134,27 @@ it.each(["refused", "error"] as const)(
     expect(screen.getByRole("button", { name: "send" }).hasAttribute("aria-busy")).toBe(false);
   },
 );
+
+it("sends work outside every pane to the root owner, and marks a header-less pane's own root", async () => {
+  const { container, rerender } = render(
+    <WorkOwner owner="root" className="contents">
+      <Work label="reading…" />
+      <Pane>
+        <Work label="inner read" />
+      </Pane>
+    </WorkOwner>,
+  );
+  const root = container.querySelector('[data-work-owner="root"]')!;
+  const pane = container.querySelector('[data-slot="pane"]')!;
+  await waitFor(() => expect(root.getAttribute("data-working")).toBe("true"));
+  expect(container.querySelector('[data-slot="pane-header"]')).toBeNull();
+  expect(pane.getAttribute("data-working")).toBe("true");
+  expect(pane.getAttribute("data-work-owner")).toBe("pane");
+  rerender(
+    <WorkOwner owner="root" className="contents">
+      <Pane>ready</Pane>
+    </WorkOwner>,
+  );
+  await waitFor(() => expect(root.hasAttribute("data-working")).toBe(false));
+  expect(container.querySelector('[data-slot="pane"]')!.hasAttribute("data-working")).toBe(false);
+});

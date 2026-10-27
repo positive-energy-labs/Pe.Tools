@@ -34,7 +34,7 @@ test("selection knobs change admission and disclose the capture cost", () => {
   expect(DUCTS_MULTI.read().selection.hop).toBe("all");
 });
 
-test("halo and big context share capture; plain subject ink omits system keys", () => {
+test("halo and big context share capture; paint names kind and tier only", () => {
   const { snapshot } = NAVIGATION_FIXTURE;
   for (const layers of [["halo"], ["context"], ["halo", "context"]] satisfies (
     | "halo"
@@ -42,8 +42,8 @@ test("halo and big context share capture; plain subject ink omits system keys", 
   )[][])
     expect(sceneRequestOf(snapshot, { system: ["SA Office"], layers })!.focusOnly).toBe(false);
   const id = snapshot.segments[0]!.id;
-  const paint = paintOfDucts(snapshot, new Set([id]), new Set(), false);
-  expect(paint({ revitId: id } as SceneInstance)).toEqual({ tier: "subject" });
+  const paint = paintOfDucts(snapshot, new Set([id]), new Set());
+  expect(paint({ revitId: id } as SceneInstance)).toEqual({ tier: "subject", kind: "supply" });
 });
 
 test("the production fixture unions sections once and captures every opened member plus stubs", () => {
@@ -74,9 +74,9 @@ test("paint uses each element's own system, subject wins over stub, and context 
   const lab = snapshot.nodes.find((n) => n.systemName === "SA Lab")!;
   const paint = paintOfDucts(snapshot, open, new Set([outside.id, office.id]));
   const instance = (id: number | null) => ({ revitId: id, focus: true }) as SceneInstance;
-  expect(paint(instance(office.id))).toEqual({ tier: "subject", key: "supply", ink: "#0569a5" });
+  expect(paint(instance(office.id))).toEqual({ tier: "subject", kind: "supply" });
   expect(paint(instance(lab.id))).toBeUndefined();
-  expect(paint(instance(outside.id))).toEqual({ tier: "stub", key: "exhaust", ink: "#fea665" });
+  expect(paint(instance(outside.id))).toEqual({ tier: "stub", kind: "exhaust" });
   expect(paint(instance(999999))).toBeUndefined();
   expect(paint(instance(null))).toBeUndefined();
 });

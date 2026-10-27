@@ -1,8 +1,8 @@
 {
     "header":  [
                    "SHIM. Cloneable Manual-J code fields per assembly, used ONLY when the target .r10 does not",
-                   "already contain a row using that assembly name. The real design â€” per-project custom",
-                   "assemblies authored against the project envelope â€” is deferred; see the sync op comment.",
+                   "already contain a row using that assembly name. The real design — per-project custom",
+                   "assemblies authored against the project envelope — is deferred; see the sync op comment.",
                    "Values are RHVAC VB6 variant cells: variantType 8195=int32 (0x2003), 8196=float32 (0x2004),",
                    "8200=string (0x2008), 8203=int16 bool (0x200B). Geometry, U-value, and SHGC are NOT here:",
                    "those come from the takeoff, per room.",

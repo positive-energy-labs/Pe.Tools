@@ -128,6 +128,7 @@ export async function setup() {
   const catalog = [
     {
       scheduleId: 42,
+      scheduleUniqueId: "uid-42",
       name: "Panel",
       isTemplate: false,
       visibleBodyRowCount: 1,
@@ -369,6 +370,7 @@ export async function setup() {
     addSchedule: (scheduleId: number, name: string) =>
       catalog.push({
         scheduleId,
+        scheduleUniqueId: `uid-${scheduleId}`,
         name,
         isTemplate: false,
         visibleBodyRowCount: 0,

@@ -574,6 +574,119 @@ export namespace DuctsHeal {
   }
 }
 
+/** Read every physical HVAC connector of 1 to 32 explicit element IDs in this exact open project document: connector ids, origin and raw connector frame in host-model feet (BasisZ is approach orientation, not airflow), shape and inches, connected state, all physical peers, element level, connector system and system type, direction, Revit-calculated and assigned connector flow, and the family's associated airflow parameter. Each optional fact is value, absent or error, never a silent zero; Revit-calculated flow is withheld under network-based calculations. A detail read for exact connections; reread after regeneration. Use ducts.snapshot for whole networks. Read-only. */
+export namespace DuctsPorts {
+  export namespace Req {
+    /**
+     * Inspect only these known project elements. IDs belong to the current exact open document.
+     */
+    export interface Request {
+      elementIds: number[];
+    }
+  }
+  export namespace Res {
+    /**
+     * How one optional port fact read went. Only `value` carries data; a failed fact never fails its port row.
+     */
+    export type DuctReadState = "value" | "absent" | "error";
+    export type DuctShape = "round" | "rectangular" | "oval" | "other";
+
+    /**
+     * Exact live port geometry in host-model internal feet; read connector IDs again after regeneration.
+     */
+    export interface Response {
+      documentTitle: string;
+      readAtUtc: string;
+      networkBasedCalculations: boolean;
+      elements: DuctPortElement[];
+    }
+    export interface DuctPortElement {
+      elementId: number;
+      level: DuctElementLevel;
+      ports: DuctPhysicalPort[];
+    }
+    /**
+     * Element.LevelId as Revit reports it (a duct's reference level, an instance's level). Absent when Revit reports no level; never inferred from elevation.
+     */
+    export interface DuctElementLevel {
+      state: DuctReadState;
+      id?: number | null;
+      name?: null | string;
+      error?: null | string;
+    }
+    /**
+     * One physical HVAC End/Curve port. Raw connector axes; BasisZ is approach orientation, not airflow direction.
+     */
+    export interface DuctPhysicalPort {
+      connectorId: number;
+      kind: string;
+      originFt: number[];
+      basisX: number[];
+      basisY: number[];
+      basisZ: number[];
+      shape: DuctShape;
+      diameterIn?: null | number;
+      widthIn?: null | number;
+      heightIn?: null | number;
+      isConnected: boolean;
+      physicalPeers: DuctRef[];
+      system: DuctPortSystem;
+      direction: DuctPortDirection;
+      revitFlow: DuctPortFlow;
+      assignedFlow: DuctPortFlow;
+      flowParameter: DuctFlowParameter;
+    }
+    /**
+     * What a connector touches: an element id and that element's connector index.
+     */
+    export interface DuctRef {
+      elementId: number;
+      connector: number;
+    }
+    /**
+     * The connector's MEP system as Revit reports it: the system element, its system type element (GetTypeId), and the MechanicalSystem classification. Membership only, not design intent.
+     */
+    export interface DuctPortSystem {
+      state: DuctReadState;
+      id?: number | null;
+      name?: null | string;
+      typeId?: number | null;
+      classification?: null | string;
+      error?: null | string;
+    }
+    /**
+     * Connector.Direction as Revit reports it (in, out, bidirectional); never derived from BasisZ.
+     */
+    export interface DuctPortDirection {
+      state: DuctReadState;
+      value?: null | string;
+      error?: null | string;
+    }
+    /**
+     * A connector flow in CFM. `revitFlow` is Connector.Flow (Revit-calculated; absent under network-based calculations, where the getter can crash Revit); `assignedFlow` is Connector.AssignedFlow (the connector's preset flow). Neither is the family flow input, and neither is design intent.
+     */
+    export interface DuctPortFlow {
+      state: DuctReadState;
+      cfm?: null | number;
+      error?: null | string;
+    }
+    /**
+     * The element parameter the family associates with this connector's Flow (RBS_DUCT_FLOW_PARAM); `provenance` names how it was matched. Absent means unknown demand provenance, not zero demand.
+     */
+    export interface DuctFlowParameter {
+      state: DuctReadState;
+      id?: number | null;
+      name?: null | string;
+      guid?: null | string;
+      writable?: boolean | null;
+      hasValue?: boolean | null;
+      cfm?: null | number;
+      provenance?: null | string;
+      error?: null | string;
+    }
+  }
+}
+
 /** Read every duct network in the project: ducts, flex, fittings, accessories, terminals and HVAC equipment with their connectors, grouped by topology with equipment cut out, plus pass-1 terminal flow, fitting geometry ratios, fitting and accessory loss methods, terminal drops, Revit's supply/return/exhaust systems with critical path and sections, issues and the query behind each layer. Slots name the fan static, fan flow, component drop and terminal catalog drop parameters; labelParameter names the instance parameter whose value names equipment for people (each node's label). Read-only. */
 export namespace DuctsSnapshot {
   export namespace Req {
@@ -736,6 +849,8 @@ export namespace DuctsSnapshot {
      * Facing is Connector.CoordinateSystem.BasisZ, the unit axis the connector faces out of its owner, and WidthAxis its
      * BasisX on a rectangular or oval connector (the side WidthIn runs along), both model coordinates; null when Revit
      * gives no frame and in snapshots taken before they were read.
+     * IsPrimary and IsSecondary are a duct fitting's MEPConnectorInfo flags (by family convention a tee's run legs);
+     * null on any other element and in snapshots taken before they were read.
      *
      */
     export interface DuctConnector {
@@ -754,6 +869,8 @@ export namespace DuctsSnapshot {
       areaFt2?: null | number;
       facing?: number[] | null;
       widthAxis?: number[] | null;
+      isPrimary?: boolean | null;
+      isSecondary?: boolean | null;
     }
     /**
      * What a connector touches: an element id and that element's connector index.
@@ -6753,11 +6870,26 @@ export namespace RevitGlanceModel {
 export namespace RevitMatrixLoadedFamilies {
   export namespace Req {
     export type LoadedFamilyPlacementScope = "AllLoaded" | "PlacedOnly" | "UnplacedOnly";
+    export type LoadedFamiliesReadPhase = "Matrix" | "Prepare" | "Extract";
+    export type ParameterIdentityKind = "SharedGuid" | "BuiltInParameter" | "ParameterElement" | "NameFallback";
+    export type LoadedFamilyParameterKind =
+      | "Unknown"
+      | "FamilyParameter"
+      | "SharedParameter"
+      | "ProjectParameter"
+      | "ProjectSharedParameter";
+    export type LoadedFamilyParameterPresence = "Unresolved" | "Family" | "FamilyAndProjectBinding" | "ProjectBindingOnly";
+    export type FormulaState = "None" | "Present" | "NotApplicable" | "Unknown";
+    export type ExcludedParameterReason = "UnresolvedClassification" | "ProjectObservedBuiltIn";
+    export type RevitDataIssueSeverity = "Info" | "Warning" | "Error";
 
     export interface Request {
       filter?: null | LoadedFamiliesFilter;
       budget?: null | RevitDataOutputBudget;
       includeTempPlacement?: boolean;
+      phase?: LoadedFamiliesReadPhase;
+      familyId?: number | null;
+      snapshots?: FamilySnapshotRecord[] | null;
     }
     export interface LoadedFamiliesFilter {
       /**
@@ -6787,6 +6919,83 @@ export namespace RevitMatrixLoadedFamilies {
       maxSamplesPerEntry?: number | null;
       includeDiagnostics?: boolean;
     }
+    export interface FamilySnapshotRecord {
+      familyId: number;
+      familyUniqueId: string;
+      familyName: string;
+      categoryName?: null | string;
+      versionGuid?: null | string;
+      typeNames: string[];
+      parameters: FamilyParameterSnapshot[];
+      issues: RevitDataIssue[];
+      isPartial: boolean;
+      placedInstanceCount?: number;
+      scheduleNames?: string[] | null;
+    }
+    /**
+     * Canonical family/parameter record language shared by DocumentData collection, FamilyFoundry
+     * capture, and the matrix wire. Serialization-clean: built on
+     * ParameterDefinitionDescriptor and plain values.
+     * ValuesPerType preserves null (no value) vs "" (empty string value) — renderers coerce, the wire
+     * does not.
+     *
+     */
+    export interface FamilyParameterSnapshot {
+      definition: ParameterDefinitionDescriptor;
+      kind: LoadedFamilyParameterKind;
+      scope: LoadedFamilyParameterPresence;
+      storageType: string;
+      formulaState: FormulaState;
+      formula?: null | string;
+      valuesPerType: {
+        [k: string]: null | string;
+      };
+      excludedReason?: null | ExcludedParameterReason;
+      displayUnit?: null | MeasuredDisplayUnit;
+    }
+    export interface ParameterDefinitionDescriptor {
+      identity: ParameterIdentity;
+      isInstance?: boolean | null;
+      dataTypeId?: null | string;
+      dataTypeLabel?: null | string;
+      groupTypeId?: null | string;
+      groupTypeLabel?: null | string;
+      visible?: boolean | null;
+      userModifiable?: boolean | null;
+      description?: null | string;
+    }
+    export interface ParameterIdentity {
+      key: string;
+      kind: ParameterIdentityKind;
+      name: string;
+      builtInParameterId?: number | null;
+      sharedGuid?: null | string;
+      parameterElementId?: number | null;
+    }
+    /**
+     * That a surface measures this value, and the unit it renders it in, read from the Reading's own
+     * document (a schedule field's effective format options, else that document's units for the
+     * spec). Every spelling is one the parameter unit door accepts, so a human surface can stage a
+     * bare number with it. Null where nothing is measurable at all; TypeId null where it measures
+     * but this document shows no unit — the surface asks for one instead of letting a push refuse a
+     * bare number later. Refusal where Revit failed to answer, never read as not-measured. Evidence only: no write path fills a unit from it.
+     *
+     */
+    export interface MeasuredDisplayUnit {
+      specTypeId: string;
+      typeId?: null | string;
+      label?: null | string;
+      symbol?: null | string;
+      refusal?: null | string;
+    }
+    export interface RevitDataIssue {
+      code: string;
+      severity: RevitDataIssueSeverity;
+      message: string;
+      familyName?: null | string;
+      typeName?: null | string;
+      parameterName?: null | string;
+    }
   }
   export namespace Res {
     export type ParameterIdentityKind = "SharedGuid" | "BuiltInParameter" | "ParameterElement" | "NameFallback";
@@ -6805,6 +7014,9 @@ export namespace RevitMatrixLoadedFamilies {
       families: FamilySnapshotRecord[];
       issues: RevitDataIssue[];
       page?: null | RevitDataResultPage;
+      source?: null | LoadedFamiliesReadSource;
+      elapsedMs?: null | number;
+      cacheHit?: boolean | null;
     }
     export interface FamilySnapshotRecord {
       familyId: number;
@@ -6887,6 +7099,29 @@ export namespace RevitMatrixLoadedFamilies {
       totalCount: number;
       returnedCount: number;
       isTruncated: boolean;
+    }
+    /**
+     * Worker input inventory. Version fingerprints the selected saved family and type revisions, excluding project-only state.
+     *             CopyPath is set only when the saved file is exactly this document; otherwise CopyRefusal says why the read stays in this instance.
+     */
+    export interface LoadedFamiliesReadSource {
+      families: LoadedFamilyCatalogEntry[];
+      revitVersion: string;
+      version: string;
+      copyPath?: null | string;
+      copyRefusal?: null | string;
+    }
+    export interface LoadedFamilyCatalogEntry {
+      familyId: number;
+      familyUniqueId: string;
+      familyName: string;
+      categoryName?: null | string;
+      typeCount: number;
+      placedInstanceCount: number;
+      types: LoadedFamilyTypeEntry[];
+    }
+    export interface LoadedFamilyTypeEntry {
+      typeName: string;
     }
   }
 }
@@ -8439,6 +8674,7 @@ export interface HostOps {
   "ducts.assign-fan": { request: DuctsAssignFan.Req.Request; response: DuctsAssignFan.Res.Response };
   "ducts.family-patch": { request: DuctsFamilyPatch.Req.Request; response: DuctsFamilyPatch.Res.Response };
   "ducts.heal": { request: DuctsHeal.Req.Request; response: DuctsHeal.Res.Response };
+  "ducts.ports": { request: DuctsPorts.Req.Request; response: DuctsPorts.Res.Response };
   "ducts.snapshot": { request: DuctsSnapshot.Req.Request; response: DuctsSnapshot.Res.Response };
   "ducts.tables": { request: DuctsTables.Req.Request; response: DuctsTables.Res.Response };
   "families.apply": { request: FamiliesApply.Req.Request; response: FamiliesApply.Res.Response };
@@ -8533,6 +8769,7 @@ export const hostOpKeys = [
   "ducts.assign-fan",
   "ducts.family-patch",
   "ducts.heal",
+  "ducts.ports",
   "ducts.snapshot",
   "ducts.tables",
   "families.apply",
@@ -8627,6 +8864,7 @@ export const hostOpSafety = {
   "ducts.assign-fan": {"intent":"Mutate","costTier":"Mutation","usesTransactions":true},
   "ducts.family-patch": {"intent":"Read","costTier":"Cheap","usesTransactions":false},
   "ducts.heal": {"intent":"Mutate","costTier":"Mutation","usesTransactions":true},
+  "ducts.ports": {"intent":"Read","costTier":"Bounded","usesTransactions":false},
   "ducts.snapshot": {"intent":"Read","costTier":"Bounded","usesTransactions":false},
   "ducts.tables": {"intent":"Read","costTier":"Cheap","usesTransactions":false},
   "families.apply": {"intent":"Mutate","costTier":"Mutation","usesTransactions":true},

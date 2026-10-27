@@ -2,12 +2,20 @@ import * as THREE from "three";
 import { SCENE_PRESETS } from "@pe/agent-contracts";
 import { bool, choice, colour, defineKnobs, num, set } from "#/knobs/knobs";
 import { inkOf } from "./ink";
-import type { Bounds, IssueState, LayerFrame, Paint, PaintOf, SceneInstance } from "./types";
+import type { IssueState, LayerFrame, Paint, PaintOf, SceneInstance } from "./types";
 
 export const WHITE = Object.freeze(new THREE.Color(1, 1, 1));
 export const BLACK = Object.freeze(new THREE.Color(0, 0, 0));
 /** Keep the context ceiling representably translucent after upload to a float32 uniform. */
 export const CONTEXT_OPACITY_LIMIT = 0.95;
+/** Crease angle of context lines: one weight, one angle, not a dial. */
+export const CONTEXT_CREASE_DEG = 35;
+/** OKLCH lightness of the 1st, 2nd and 3rd system of one kind, most legible first (dark values
+ * provisional, 2026-10-26). Fixed per theme: never a step from the previous system. */
+export const SYSTEM_LIGHTNESS = {
+  light: [0.46, 0.58, 0.7],
+  dark: [0.78, 0.68, 0.58],
+} as const;
 /** Mask colours encode channels, not visible hues. */
 export const OUTLINE_CHANNEL = {
   selected: new THREE.Color(1, 0, 0),
@@ -23,12 +31,6 @@ export const GROUND_MATERIAL = {
 };
 
 /**
- * Categorical system inks, cycled by a stable hash of the paint key. The one table to replace with
- * Revit view-template colours (a `#rrggbb` per slot; a kit token role resolves per theme).
- */
-const SYSTEM_PALETTE = ["viz-1", "viz-2", "viz-3", "viz-4", "viz-5", "viz-6"] as const;
-
-/**
  * The scene's look, one typed spec: every default a judgment call is here, and each is a dev knob
  * (`#/knobs`). A colour of "theme" is derived below from kit tokens; a role name is that token.
  * Starting rationale lives in the design-system ledger; real-model tuning remains re-openable.
@@ -36,18 +38,20 @@ const SYSTEM_PALETTE = ["viz-1", "viz-2", "viz-3", "viz-4", "viz-5", "viz-6"] as
 export const LOOK = defineKnobs("scene", "ts/apps/web/src/scene/grounds.ts", {
   subject: {
     colour: colour("Subject ink", "theme"),
+    // It also caps the stub opacity (was depth.everythingTranslucent).
     opacity: num("Subject opacity", 0.98, [0.05, 1, 0.01]),
-    bySystem: bool("Colour by system", true),
+    // The X-ray dial (held key) lowers subject opacity to this.
+    xrayOpacity: num("X-ray subject opacity", 0.35, [0.05, 1, 0.01]),
     stubOpacity: num("Stub opacity", 0.16, [0.05, 1, 0.01]),
     stubGroundMix: num("Stub mix toward ground", 0.45, [0, 1, 0.01]),
-    stubFadeFt: num("Stub fade reach", 10, [1, 50, 0.5], "live", "ft"),
     stubEndAlpha: num("Stub fade floor × opacity", 0.06, [0, 1, 0.01]),
-    darkLift: num("Dark-stage colour lift", 0.16, [0, 0.3, 0.01]),
   },
   depth: {
-    everythingTranslucent: bool("Everything translucent", false),
-    translucentOpacity: num("Translucent duct opacity", 0.45, [0.05, 0.99, 0.01]),
     rim: num("Duct rim contrast", 0.18, [0, 0.8, 0.01]),
+    // One rule for selected, lit, hover and damage: behind real subject geometry, a highlight
+    // keeps its hue at this alpha and width, constant however many layers are in front.
+    occludedAlpha: num("Occluded highlight alpha", 0.35, [0, 1, 0.01]),
+    occludedWidth: num("Occluded highlight width ×", 0.6, [0.2, 1, 0.05]),
   },
   shell: {
     colour: colour("Envelope ink", "ink-2"),
@@ -65,7 +69,6 @@ export const LOOK = defineKnobs("scene", "ts/apps/web/src/scene/grounds.ts", {
     roundSegments: num("Round port segments", 16, [8, 32, 1]),
   },
   routes: {
-    lightnessStep: num("Same-type lightness separation", 0.55, [0, 0.9, 0.01]),
     edgeWidth: num("Route edge width", 1, [0, 4, 0.25], "live", "px"),
     edgeOpacity: num("Route edge alpha", 0.4, [0, 1, 0.05]),
     hiddenWidth: num("Occluded route width", 1.5, [0, 4, 0.25], "live", "px"),
@@ -81,32 +84,24 @@ export const LOOK = defineKnobs("scene", "ts/apps/web/src/scene/grounds.ts", {
     zoomOutFactor: num("Zoom-out × subject diagonal", 2, [1, 5, 0.1]),
     panMargin: num("Pan margin × subject diagonal", 0.25, [0, 1, 0.05]),
     returnMs: num("Camera return", 380, [100, 1000, 10], "live", "ms"),
+    wiggleDeg: num("Wiggle cone radius", 6, [1, 15, 0.5], "live", "deg"),
+    wiggleMs: num("Wiggle loop", 1200, [500, 3000, 50], "live", "ms"),
+    wiggleLoops: num("Wiggle loops", 2, [1, 4, 1]),
   },
-  palette: Object.fromEntries(
-    SYSTEM_PALETTE.map((role, i) => [`s${i + 1}`, colour(`System ink ${i + 1}`, role)]),
-  ),
-  fill: {
-    hover: num("Hover ink mix", 0.22, [0, 1, 0.01]),
-    lit: num("Lit ink mix", 0.4, [0, 1, 0.01]),
-    selected: num("Selected ink mix", 0.6, [0, 1, 0.01]),
+  // 2026-10-26 rung rule: a mark keeps the hue and lifts OKLCH lightness by this much.
+  lift: {
+    hover: num("Hover lightness lift", 0.04, [0, 0.3, 0.01]),
+    lit: num("Lit lightness lift", 0.06, [0, 0.3, 0.01]),
+    selected: num("Selected lightness lift", 0.1, [0, 0.3, 0.01]),
   },
   veil: {
     colour: colour("Context ink", "theme"),
-    themeGroundMix: num("Context mix toward ground", 0, [0, 1, 0.01]),
     nearFt: num("Full within", 0, [0, 20, 0.25], "live", "ft"),
-    farFt: num("Far distance", 8, [1, 64, 0.5], "live", "ft"),
-    curve: num("Curve exponent", 4, [0.25, 8, 0.05]),
-    maxOpacity: num("Opacity at subject", 0.23, [0.01, CONTEXT_OPACITY_LIMIT, 0.01]),
-    interior: num("Context face fill", 0.67, [0, 1, 0.01]),
-    silhouettePower: num("Context silhouette exponent", 3, [0.5, 12, 0.5]),
-    minOpacity: num("Opacity far", 0.004, [0, CONTEXT_OPACITY_LIMIT, 0.001]),
-    desaturate: num("Desaturate far", 0, [0, 1, 0.01]),
-    fog: num("Fog to ground far", 0, [0, 1, 0.01]),
-    brightness: num("Brightness near ducts", 0, [0, 1, 0.01]),
-  },
-  fog: {
-    depth: bool("Camera-depth fog", false),
-    density: num("Depth fog × diagonal", 0.45, [0, 3, 0.05]),
+    // 2026-10-26 ruling: context alpha is the linear falloff squared, lines and glass alike.
+    curve: num("Curve exponent", 2, [0.25, 8, 0.05]),
+    // The reach (veil far = stub fade) is the page's Nearby radius, else VEIL_DEFAULT_REACH_FT.
+    fill: num("Context glass fill", 0.25, [0.01, CONTEXT_OPACITY_LIMIT, 0.01]),
+    lineAlpha: num("Context line alpha at subject", 0.75, [0.05, 1, 0.01]),
   },
   lights: {
     sky: colour("Hemisphere sky", "#fff8ee"),
@@ -176,13 +171,6 @@ export const paintOf = (instance: SceneInstance, of?: PaintOf): Paint =>
 export const isLit = (at: LayerFrame) =>
   !!at.selected || !!at.lit || at.state === "hover" || at.state === "focus";
 
-/** FNV-1a: the same key draws the same ink in every capture and session. */
-export const keySlot = (key: string, slots: number) => {
-  let h = 0x811c9dc5;
-  for (let i = 0; i < key.length; i++) h = Math.imul(h ^ key.charCodeAt(i), 0x01000193);
-  return (h >>> 0) % slots;
-};
-
 /** `#rrggbb` as is; any other word but "theme" is a kit token role. */
 const inkOr = (value: string, mount: Element, theme: () => THREE.Color) =>
   /^#[\da-f]{6}$/i.test(value)
@@ -204,10 +192,7 @@ export function sceneGrounds(mount: Element, look: Look) {
     ink,
     subject,
     shell: inkOr(look.shell.colour, mount, () => inkOf("ink-2", mount)),
-    context: inkOr(look.veil.colour, mount, () =>
-      inkOf("ink-mute", mount).lerp(ground, look.veil.themeGroundMix).offsetHSL(0, -1, 0),
-    ),
-    palette: Object.values(look.palette).map((value) => inkOr(value, mount, () => subject.clone())),
+    context: inkOr(look.veil.colour, mount, () => inkOf("ink-mute", mount).offsetHSL(0, -1, 0)),
     damage: inkOr(look.damage.colour, mount, () => inkOf("alarm", mount)),
     lights: {
       sky: inkOr(look.lights.sky, mount, () => WHITE.clone()),
@@ -216,7 +201,3 @@ export function sceneGrounds(mount: Element, look: Look) {
     },
   };
 }
-
-/** Exponential squared falloff is invariant under a uniform change of model units/size. */
-export const fogDensity = (b: Bounds, k = LOOK.defaults.fog.density) =>
-  k / Math.max(Math.hypot(b.maxX - b.minX, b.maxY - b.minY, b.maxZ - b.minZ), 1e-6);

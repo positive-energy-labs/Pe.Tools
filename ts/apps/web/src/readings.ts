@@ -52,12 +52,26 @@ import type {
 import { callHostRpc } from "#/host/client.ts";
 import { createPeClient } from "@pe/agent-contracts/pe-api";
 import {
+  HostCallError,
   HOST_RPC_BRIDGE_SESSION_HEADER,
   HOST_RPC_DOCUMENT_HEADER,
   HOST_RPC_ORIGIN_HEADER,
 } from "@pe/host-contracts/operation-types";
+
+/** The sentence a person reads: a host refusal's own title, never `HostCallError: <op key>: â€¦`. */
+const failure = (error: unknown) =>
+  Error(
+    error instanceof HostCallError
+      ? typeof error.problem?.title === "string"
+        ? error.problem.title
+        : error.message
+      : error instanceof Error
+        ? error.message
+        : String(error),
+  );
 import { reportFault } from "#/host/diagnostics";
 import { HOST_READ_WAIT_S } from "#/route/waits";
+import { useWork } from "@pe/kit/lang/work";
 import { resolveWorkbenchConfig } from "#/workbench/config.ts";
 import { deepEqual } from "@tanstack/react-router";
 
@@ -425,6 +439,16 @@ const absentAtom = Atom.make<Reading<never>>(absent);
 export const changedInRevit = (reading: Reading<unknown>): boolean =>
   reading.state === "ready" && reading.changed === true;
 
+/**
+ * In flight: loading (bounded by its deadline), or a re-acquisition a write asked for. A failure is
+ * said, never in flight. `disconnected` is excluded: every fence (any write, any outage) demotes
+ * every open key to it with no deadline, so counting it swept every owner app-wide, and forever
+ * while the host was down; the lamp says stale. The reading hooks register this with the nearest
+ * work owner themselves; a call site never restates it.
+ */
+export const inFlight = (reading: Reading<unknown>): boolean =>
+  reading.state === "loading" || (reading.state === "stale" && reading.reason === "dirtied");
+
 export const previousOf = <T>(reading: Reading<T>): T | undefined =>
   reading.state === "ready"
     ? reading.observation
@@ -540,7 +564,9 @@ export function useReading<T = unknown>(
     () => (request ? readingAtom<T>(request, source) : (absentAtom as Atom.Atom<Reading<T>>)),
     [key, source],
   );
-  return useAtomValue(atom);
+  const reading = useAtomValue(atom);
+  useWork(inFlight(reading), `reading ${request?.kind}â€¦`);
+  return reading;
 }
 
 export type DuctsNativeObservation = {
@@ -761,6 +787,9 @@ export function useDuctsReading<T>(
         : body?.key === key && body.revision === envelope?.revision
           ? body.error
           : undefined;
+  const pending = request !== null && !valid && !error;
+  // A closed document's envelope is not acquiring; it waits for the person, not the host.
+  useWork(pending && envelope?.state !== "closed", "reading ductsâ€¦");
   return {
     data: valid ? body.data : undefined,
     previous: previous.current?.data,
@@ -768,7 +797,7 @@ export function useDuctsReading<T>(
     nativeObservation: valid ? body.nativeObservation : undefined,
     version: valid ? body.nativeObservation?.version : undefined,
     error,
-    pending: request !== null && !valid && !error,
+    pending,
     refresh: useCallback(() => acquire(true), [acquire]),
   };
 }
@@ -802,6 +831,9 @@ export function useReadingSlice<T, S>(
     held.current = { value };
     return value;
   }, [registry, atom]);
+  // The slice may hide the lifecycle; a boolean snapshot of the atom itself notifies only on a flip.
+  const working = useCallback(() => inFlight(registry.get(atom)), [registry, atom]);
+  useWork(useSyncExternalStore(subscribe, working, working), `reading ${request?.kind}â€¦`);
   return useSyncExternalStore(subscribe, snapshot, snapshot);
 }
 
@@ -999,6 +1031,8 @@ export function useHostCall<T>(
   waitSeconds = HOST_READ_WAIT_S,
   /** Deps name the call completely (an op key and its request), so equal deps may share it. */
   shared = false,
+  /** What the owner's busy motif says while this call is unanswered. */
+  label = "readingâ€¦",
 ) {
   const identity = useRef({ deps: [...deps], generation: 0 });
   if (!sameDeps(identity.current.deps, deps)) {
@@ -1023,7 +1057,7 @@ export function useHostCall<T>(
         ? { ...current, pending: true }
         : { pending: true, generation },
     );
-    // A read that never answers ends honestly, never as an endless "reading…" (F-J1-4).
+    // A read that never answers ends honestly, never as an endless "readingâ€¦" (F-J1-4).
     const wait = setTimeout(() => {
       if (controller.signal.aborted) return;
       controller.abort();
@@ -1049,7 +1083,7 @@ export function useHostCall<T>(
         },
         (error: unknown) => {
           if (!controller.signal.aborted)
-            setState({ error: Error(String(error)), pending: false, generation });
+            setState({ error: failure(error), pending: false, generation });
         },
       );
     return () => {
@@ -1063,6 +1097,7 @@ export function useHostCall<T>(
     enabled && state.generation === generation
       ? state
       : { data: undefined, error: undefined, pending: enabled };
+  useWork(visible.pending, label);
   return {
     data: visible.data,
     error: visible.error,
@@ -1098,13 +1133,14 @@ export function useAction<I, T>(
         onSuccess?.(value, input);
         return value;
       } catch (error) {
-        setState({ pending: false, error: Error(String(error)) });
+        setState({ pending: false, error: failure(error) });
         throw error;
       }
     },
     // eslint-disable-next-line react-hooks/exhaustive-deps
     [run, onSuccess],
   );
+  useWork(state.pending, "savingâ€¦");
   return {
     mutate: (input: I) => void mutateAsync(input).catch(() => {}),
     mutateAsync,
@@ -1142,6 +1178,7 @@ export function useHostOp<K extends OpKey>(key: K, ...args: OpCallArgs<K, HostQu
     enabled ?? true,
     waitSeconds,
     true,
+    `reading ${key}â€¦`,
   );
 }
 

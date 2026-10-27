@@ -21,7 +21,6 @@ import type { Neighbour } from "@pe/ducts-domain/neighbours";
 import { TooltipHint } from "@pe/kit/lang/tooltip";
 import { SelectionBoxButton } from "#/revit/element-menu";
 import { observedElements } from "#/revit/observation";
-import { PaneWork } from "@pe/kit/lang/pane";
 import { useNativeObservation } from "#/revit/observation";
 import { useDuctScene, usePictureRead } from "#/ducts/scene-read";
 import { useLiveOrbit } from "@pe/kit/lang/live-orbit";
@@ -185,10 +184,7 @@ function Canvas({
   ); // eslint-disable-line react-hooks/exhaustive-deps
   const systemColours = page.layers.includes("system-colours");
   const colours = coloursOf(work.doc);
-  const paintOf = useMemo(
-    () => paintOfDucts(snapshot, opened, stubs, systemColours, colours),
-    [snapshot, opened, stubs, systemColours, colours],
-  );
+  const paintOf = useMemo(() => paintOfDucts(snapshot, opened, stubs), [snapshot, opened, stubs]);
   const stubNames = useMemo(
     () => stubLabels(snapshot, neighbours, opened),
     [snapshot, neighbours, opened],
@@ -692,7 +688,12 @@ function Canvas({
           <ModelPicture
             sceneView={page.sceneView}
             paintOf={paintOf}
-            contextMode={layers.has("context") ? "all" : "halo"}
+            contextMode={
+              // Main's rule: neither context layer on = no context at all (the manifest captures none).
+              layers.has("context") || layers.has("halo") ? page.contextStyle : "off"
+            }
+            kinds={colours}
+            colour={systemColours ? "firm" : "mono"}
             contextRadiusFt={page.contextRadiusFt}
             readout={readout}
             read={read}
@@ -720,7 +721,6 @@ function Canvas({
         );
         return renderPane(
           <>
-            <PaneWork pending={identity.refreshing} />
             <div
               ref={setPictureHost}
               data-proto="E"

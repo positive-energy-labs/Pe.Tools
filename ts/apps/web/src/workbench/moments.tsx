@@ -403,18 +403,36 @@ function RunStack({ run }: { run: RunPart[] }) {
   );
 }
 
-/** What folding never hides: a call's records. Draws nothing when no call has one. */
+/** What folding never hides: the calls' records, then the group's images. Draws nothing when
+ *  no call has either. */
 function RecordsStack({ parts }: { parts: CallPart[] }) {
   const shown = parts.filter((part) => {
     const { proposed, action, diagram } = callRecords(part.call);
-    return part.approval || proposed || action || diagram || part.call.images.length > 0;
+    return part.approval || proposed || action || diagram;
   });
-  if (shown.length === 0) return null;
+  // The images sit at the group's foot, below every later call's records, visible without opening
+  // a call and while one still runs.
+  const images = parts.flatMap(({ call }) =>
+    call.images.map((src, index) => ({
+      src,
+      name: call.target
+        ? (call.target.split(/[\\/]/).at(-1) ?? call.target)
+        : `${toolTitle(call.title)} image ${index + 1}`,
+    })),
+  );
+  if (shown.length === 0 && images.length === 0) return null;
   return (
     <div className="flex min-w-0 flex-col" data-tool-records="">
       {shown.map((part) => (
         <ToolCallPart key={part.call.id} call={part.call} approval={part.approval} recordsOnly />
       ))}
+      {images.length > 0 ? (
+        <div className="flex flex-wrap gap-1.5" data-tool-images="">
+          {images.map((image, index) => (
+            <Thumbnail key={index} src={image.src} name={image.name} />
+          ))}
+        </div>
+      ) : null}
     </div>
   );
 }
@@ -623,7 +641,6 @@ function ToolCallPart({
   const detail = toolDetail(call);
   const tone = failed ? "failed" : running && !approval ? "active" : "";
   const { result, proposed, action, diagram } = callRecords(call);
-  const images = call.images;
   // What the run actually touched: the Scope revision it was admitted under and the session and
   // document the host resolved to. Read from the result, so it is evidence, not intent.
   const ran = readRecord(result);
@@ -692,22 +709,6 @@ function ToolCallPart({
       {/* A diagram call draws its own args once the host accepted them (agent ledger). */}
       {recordsOnly && diagram ? (
         <Code code={toMermaid(diagram)} lang="mermaid" title={diagram.title ?? "diagram"} />
-      ) : null}
-      {/* What the call captured, visible without opening it and while it still runs. */}
-      {recordsOnly && images.length > 0 ? (
-        <div className="flex flex-wrap gap-1.5">
-          {images.map((src, index) => (
-            <Thumbnail
-              key={index}
-              src={src}
-              name={
-                call.target
-                  ? (call.target.split(/[\\/]/).at(-1) ?? call.target)
-                  : `${toolTitle(call.title)} image ${index + 1}`
-              }
-            />
-          ))}
-        </div>
       ) : null}
       {!recordsOnly && open ? (
         <div {...annotation("tool-body")}>

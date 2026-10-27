@@ -1,20 +1,13 @@
 import { expect, it } from "vite-plus/test";
-import * as THREE from "three";
 import { CONTEXT_OPACITY_LIMIT, LOOK } from "./grounds";
 import { SceneMeshes, type SceneInstance } from "./types";
 import { bakeVeil, falloff, setVeilLook, veilDistance, veilUniforms, VEIL_REACH_FT } from "./veil";
 
-it("context opacity cannot become opaque or increase away from ducts when knobs cross", () => {
+it("context fill cannot become opaque when the fill is set past the limit", () => {
   const u = veilUniforms();
-  setVeilLook(u, { ...LOOK.defaults.veil, minOpacity: 1, maxOpacity: 1 }, new THREE.Color());
-  expect(u.veilMaxOpacity.value).toBe(CONTEXT_OPACITY_LIMIT);
-  expect(Math.fround(u.veilMaxOpacity.value)).toBeLessThan(1);
-  setVeilLook(u, { ...LOOK.defaults.veil, minOpacity: 0.9, maxOpacity: 0.2 }, new THREE.Color());
-  expect(u.veilMinOpacity.value).toBe(0.2);
-  expect(u.veilMaxOpacity.value).toBe(0.2);
-  expect(LOOK.defaults.veil.minOpacity).toBeGreaterThan(0);
-  expect(LOOK.defaults.veil.fog).toBe(0);
-  expect(LOOK.defaults.veil.brightness).toBe(0);
+  setVeilLook(u, { ...LOOK.defaults.veil, fill: 1 });
+  expect(u.veilFill.value).toBe(CONTEXT_OPACITY_LIMIT);
+  expect(Math.fround(u.veilFill.value)).toBeLessThan(1);
   u.veilField.value.dispose();
 });
 

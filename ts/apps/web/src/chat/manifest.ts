@@ -1,6 +1,6 @@
 ﻿/**
  * The chat route, declared once. The thread head is a Reading, so the route's default Target is
- * whatever the head says â€” `useRoute` reads it back out of `readings` and no component keeps a
+ * whatever the head says — `useRoute` reads it back out of `readings` and no component keeps a
  * second copy. Every action runs the provider's verb over the harness-thread wire.
  */
 import { z } from "zod";

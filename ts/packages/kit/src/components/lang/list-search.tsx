@@ -11,7 +11,7 @@ import { X, Filter, ArrowDownWideNarrow } from "lucide-react";
 import { type ListSearch } from "@pe/agent-contracts";
 import { Button } from "./button";
 import { OutcomeLine } from "./outcome";
-import { useWork } from "./pane";
+import { useWork } from "./work";
 import { chipRecipe } from "./chip";
 import { type ListController } from "./collection";
 import { KeyHint } from "./key-hint";

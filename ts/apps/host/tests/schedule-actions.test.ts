@@ -448,3 +448,53 @@ test("ask A: a push refused on moved evidence rebinds on its readback; the refus
   expect(doc.cells["1::2"]?.edit).toBeUndefined();
   expect(doc.basis).toEqual({ captureId: expect.any(String) });
 });
+
+test("the catalog names each schedule's Work before any read; an unread Work answers null", async () => {
+  const f = await setup();
+  f.addSchedule(43, "Unread");
+  const listed = await f.post("/schedules/readings", {
+    key: "schedule.grid.catalog",
+    input: {},
+    target: f.b,
+  });
+  const ids = Object.fromEntries(
+    listed.value.schedules.map((s: { scheduleId: number; workspaceId: string }) => [
+      s.scheduleId,
+      s.workspaceId,
+    ]),
+  );
+  // The catalog's id is the one the read files under: selecting it opens the same Work.
+  expect(ids[42]).toBe(f.reading.workspaceId);
+  expect(ids[43]).toMatch(/^schedule:[a-f0-9]{64}$/);
+  const reads = f.reads();
+  const unread = await f.post("/schedules/readings", {
+    key: "schedule.grid.work",
+    input: { workspaceId: ids[43] },
+  });
+  expect(unread).toEqual({ status: 200, value: null });
+  expect(f.reads()).toBe(reads);
+});
+
+test("History lists every retained read of one Work, newest first, and each opens as saved", async () => {
+  const f = await setup();
+  const second = await f.read();
+  const history = await f.post("/schedules/readings", {
+    key: "schedule.grid.history",
+    input: { workspaceId: f.reading.workspaceId },
+  });
+  expect(history.status).toBe(200);
+  const ids = history.value.map((row: { id: string }) => row.id);
+  expect(ids).toHaveLength(2);
+  expect(new Set(ids)).toEqual(new Set([f.reading.id, second.id]));
+  expect(history.value.map((row: { at: string }) => row.at)).toEqual(
+    history.value
+      .map((row: { at: string }) => row.at)
+      .toSorted()
+      .toReversed(),
+  );
+  const other = await f.post("/schedules/readings", {
+    key: "schedule.grid.history",
+    input: { workspaceId: "schedule:other" },
+  });
+  expect(other.value).toEqual([]);
+});

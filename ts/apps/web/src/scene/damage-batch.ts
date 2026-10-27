@@ -30,30 +30,33 @@ const fragmentShader = /* glsl */ `
 uniform vec3 core;
 uniform vec3 rim;
 uniform vec3 hot;
+uniform float strength;
 varying vec3 vNormal;
 varying vec3 vView;
 varying vec4 vDamage;
 #include <fog_pars_fragment>
 void main() {
   #ifdef DAMAGE_GLOW
-    gl_FragColor = vec4(rim * (0.5 + 0.9 * vDamage.x), 1.0);
+    gl_FragColor = vec4(rim * (0.5 + 0.9 * vDamage.x), 1.0) * strength;
   #else
     float f = pow(1.0 - abs(dot(normalize(vNormal), normalize(vView))), 2.0);
     vec3 edge = mix(rim, hot, vDamage.z);
     vec3 color = mix(core, edge, f) * (0.55 + vDamage.x * 0.75);
-    gl_FragColor = vec4(color, vDamage.y * (0.42 + 0.58 * f));
+    gl_FragColor = vec4(color, vDamage.y * (0.42 + 0.58 * f) * strength);
   #endif
   #include <fog_fragment>
 }`;
 
-/** Semantic issue identities do not require separate draw objects or materials. */
-export function createDamageBatch(layers: readonly Layer3D[]) {
+/** Semantic issue identities do not require separate draw objects or materials. A lit issue
+ * shares the highlight depth rule: its front part draws as usual and the part behind real subject
+ * geometry draws again at `occluded` strength (`behind` batches), never through it at full. */
+export function createDamageBatch(layers: readonly Layer3D[], occluded: { value: number }) {
   const damage = layers.filter((layer) => layer.damage !== undefined);
   const group = new THREE.Group();
   group.name = "damage-batches";
   const ids = new Map(damage.map((layer, id) => [layer, id]));
   const count = damage.reduce((sum, layer) => sum + layer.damage!.instance.vertexCount, 0);
-  const batches = [false, true].flatMap((lifted) =>
+  const batches = [false, true].flatMap((behind) =>
     [false, true].map((glow) => {
       const material = new THREE.ShaderMaterial({
         ...SURFACE_DEPTH,
@@ -61,14 +64,16 @@ export function createDamageBatch(layers: readonly Layer3D[]) {
           core: { value: damageColors.core },
           rim: { value: damageColors.rim },
           hot: { value: damageColors.hot },
+          strength: behind ? occluded : { value: 1 },
           ...THREE.UniformsUtils.clone(THREE.UniformsLib.fog),
         },
         defines: glow ? { DAMAGE_GLOW: 1 } : {},
         vertexShader,
         fragmentShader,
-        transparent: !glow,
-        depthWrite: glow,
-        depthTest: !lifted,
+        transparent: !glow || behind,
+        // A behind fragment must never write its depth over the occluder it is behind.
+        depthWrite: glow && !behind,
+        depthFunc: behind ? THREE.GreaterDepth : THREE.LessEqualDepth,
         fog: true,
         toneMapped: false,
         side: THREE.DoubleSide,
@@ -142,7 +147,8 @@ export function createDamageBatch(layers: readonly Layer3D[]) {
       const shown = at.shown?.(surface.instance.key) ?? true;
       const lifted = isLit(at);
       batches.forEach((batch, index) => {
-        batch.setVisibleAt(id, shown && index >= 2 === lifted);
+        // 0, 1: skin and glow in front; 2, 3: their occluded part, only while lit.
+        batch.setVisibleAt(id, shown && (index < 2 || lifted));
         if (changed) batch.setColorAt(id, packed);
       });
       if (changed) previous[id]!.copy(packed);

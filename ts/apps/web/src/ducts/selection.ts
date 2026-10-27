@@ -6,10 +6,8 @@
  */
 import type { Neighbour, Hop } from "@pe/ducts-domain/neighbours";
 import type { DuctSnapshot } from "@pe/ducts-domain/types";
-import type { Paint, PaintOf, Tier } from "#/scene/types";
-import type { DuctSystemColours } from "@pe/agent-contracts";
+import type { PaintOf, Tier } from "#/scene/types";
 import { airTypesOf } from "@pe/ducts-domain/air-types";
-import { FIRM_COLOURS } from "./colours";
 import { choice, defineKnobs, num } from "#/knobs/knobs";
 
 /**
@@ -54,15 +52,13 @@ export const stubIdsOf = (neighbours: readonly Neighbour[], open: ReadonlySet<nu
   new Set(neighbours.flatMap((n) => n.stub).filter((id) => !open.has(id)));
 
 /**
- * Each element uses its own air type and the person's palette. The URL layer owns whether colour
- * is supplied; a multi-stream equipment box is unknown rather than borrowing one port's colour.
+ * Each element's kind is its air type; the Scene3D `kinds` table (the person's palette) picks the
+ * hue and the Colour dial decides whether it shows. A multi-stream equipment box is unknown.
  */
 export function paintOfDucts(
   snapshot: DuctSnapshot,
   opened: ReadonlySet<number>,
   stubs: ReadonlySet<number>,
-  systemColours = true,
-  colours: Readonly<DuctSystemColours> = FIRM_COLOURS,
 ): PaintOf {
   const types = airTypesOf(snapshot);
   return (instance) => {
@@ -70,8 +66,7 @@ export function paintOfDucts(
     const tier: Tier | null =
       id != null && opened.has(id) ? "subject" : id != null && stubs.has(id) ? "stub" : null;
     if (!tier) return undefined;
-    const key = id == null ? "unknown" : (types.get(id) ?? "unknown");
-    const paint: Paint = systemColours ? { tier, key, ink: colours[key] } : { tier };
-    return paint;
+    const kind = id == null ? "unknown" : (types.get(id) ?? "unknown");
+    return { tier, kind };
   };
 }

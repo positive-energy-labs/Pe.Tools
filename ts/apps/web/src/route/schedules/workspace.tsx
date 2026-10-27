@@ -156,10 +156,13 @@ export function ScheduleGridWorkspace({
     locate,
   },
   onRefused,
+  onHidden,
 }: {
   state: ScheduleGridState;
   /** A refused fill or paste, said once: the route logs it (ruling 9), the grid never draws it. */
   onRefused: (says: string) => void;
+  /** A located cell the view hides (the query, a hidden column), said once per locate. */
+  onHidden?: (says: string) => void;
 }) {
   // Another schedule starts a bare view; a schedule arriving (a reload, a deep link) keeps the link's.
   const priorSchedule = useRef(snapshot?.scheduleId);
@@ -174,7 +177,8 @@ export function ScheduleGridWorkspace({
     }
     if (snapshot?.scheduleId !== undefined) priorSchedule.current = snapshot.scheduleId;
   }, [snapshot?.scheduleId]); // eslint-disable-line react-hooks/exhaustive-deps -- the schedule edge
-  const locatedRow = locatedCell ? String(splitScheduleCellKey(locatedCell).rowNumber) : null;
+  const located = locatedCell ? splitScheduleCellKey(locatedCell) : null;
+  const locatedRow = located ? String(located.rowNumber) : null;
   const document = slice;
   const cells = document?.cells ?? {};
   const stale = document?.basis?.stale ?? [];
@@ -294,7 +298,7 @@ export function ScheduleGridWorkspace({
           if (!event.currentTarget.contains(event.relatedTarget as Node | null)) onFocus.grid();
         }}
       >
-        <Pane flush scroll="clip">
+        <Pane id="schedule" flush scroll="clip">
           <section className="flex min-h-0 min-w-0 flex-1 flex-col">
             <div className="flex min-h-0 flex-1 flex-col">
               {snapshot ? (
@@ -331,6 +335,12 @@ export function ScheduleGridWorkspace({
                     state={tableState}
                     onStateChange={setTableState}
                     activeKey={locatedRow}
+                    activeColumn={located ? `c${located.columnNumber}` : null}
+                    onActiveHidden={(why) =>
+                      onHidden?.(
+                        `row ${located!.rowNumber}, column ${located!.columnNumber} not shown: ${why}`,
+                      )
+                    }
                     revit={(row) => row.subjectIds}
                     cellEdit={cellEdit}
                     gutter={(row) => {

@@ -50,5 +50,7 @@ export function usePricing(input: PricingInput | null) {
   return {
     observation: current ? (state.observation ?? null) : null,
     error: current ? (state.error ?? null) : null,
+    /** The worker holds this input and has not answered it. */
+    running: !!input && !current,
   };
 }

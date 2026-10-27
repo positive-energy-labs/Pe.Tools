@@ -237,10 +237,12 @@ public static class DuctHealer {
                 throw new Refused("the rectangular ends are rolled against each other");
             if (a.Owner is Duct && b.Owner is Duct) {
                 how = "union";
+                Unpinned(how, a.Owner, b.Owner);
                 created.Add(doc.Create.NewUnionFitting(a, b).Id.Value());
             } else if (a.Owner is Duct || b.Owner is Duct) {
                 how = "extend";
                 var (move, onto, key) = a.Owner is Duct ? (a, b, keyA) : (b, a, keyB);
+                Unpinned(how, move.Owner);
                 Extend((Duct)move.Owner, move, onto.Origin);
                 Find(doc, key).ConnectTo(onto);
             } else {
@@ -270,6 +272,13 @@ public static class DuctHealer {
         }
         if (problems.Count > 0) throw new Refused("post-check failed: " + string.Join("; ", problems), how);
         return new Done(how, created, replaced, $"{how} {Size(dims)}, {gap:0.###} in gap closed, {SystemName(pairs[0].X)}");
+    }
+
+    /// <summary>A heal that moves or replaces an element refuses a pinned one; a cap or a coincident connect moves nothing.</summary>
+    private static void Unpinned(string how, params Element[] moved) {
+        // Pin is user intent: Naviate's unpin, heal, repin was rejected (counsel 2026-10-22); the person unpins.
+        foreach (var e in moved)
+            if (e.Pinned) throw new Refused($"{e.Id.Value()} is pinned; unpin it to heal", how);
     }
 
     private static void Extend(Duct duct, Connector end, XYZ onto) {

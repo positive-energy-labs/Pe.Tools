@@ -6,8 +6,59 @@
   width: 100%;
   height: 100%;
 }
-[data-slot="pane-field"][data-working] {
+/* One busy motif, drawn by the work owner (pane, route surface, app root) on its own root: the top
+   edge sweeps. Transform-only; the sweep waits a beat so a fast read never flickers. */
+[data-work-owner="pane"][data-working] > [data-slot="pane-field"] {
   cursor: progress;
+}
+[data-work-owner="surface"],
+[data-work-owner="page"] {
+  position: relative;
+}
+[data-work-owner][data-working]::after {
+  content: "";
+  position: absolute;
+  inset: 0 0 auto;
+  /* Above the owner's own content only; a popover over the edge stays on top. */
+  z-index: 1;
+  height: 2px;
+  background: var(--pe-ink-2);
+  pointer-events: none;
+  transform: scaleX(0);
+  transform-origin: left;
+  animation: pe-busy-sweep 900ms ease-in-out 120ms infinite;
+}
+/* One sweep per region: inside a busy surface or pane, nested owners stay still (two lines 8px apart
+   read as a glitch, and the outer one already says "not ready"). The root bar sits on the window's
+   edge, never beside another, so it never silences anything. */
+[data-work-owner]:not([data-work-owner="root"])[data-working]
+  [data-work-owner][data-working]::after {
+  display: none;
+}
+/* The root owner is `display: contents`; its bar is the page-loading bar at the viewport top. */
+[data-work-owner="root"][data-working]::after {
+  position: fixed;
+  z-index: calc(var(--z-popup) + 1);
+}
+@keyframes pe-busy-sweep {
+  0% {
+    transform: scaleX(0);
+  }
+  60% {
+    transform: scaleX(1);
+    opacity: 1;
+  }
+  100% {
+    transform: scaleX(1);
+    opacity: 0;
+  }
+}
+@media (prefers-reduced-motion: reduce) {
+  [data-work-owner][data-working]::after {
+    animation: none;
+    transform: scaleX(1);
+    opacity: 0.5;
+  }
 }
 [data-slot="pane-work"] {
   position: absolute;
@@ -1349,7 +1400,9 @@ tr.dl-row[data-active] {
 .dl-page-map {
   --rail-h: var(--item-h);
   position: relative;
-  width: 100%;
+  /* A map past 36rem wide or 22rem tall pushes the region index below the fold; it reads fine
+     smaller. Height bounds through the picture's own aspect, so a tall pane (Pea's column) shrinks. */
+  width: min(100%, 36rem, calc(22rem * var(--map-aspect, 1)));
   min-width: 0;
 }
 .dl-page-map :is([data-slot="pane-title"], [data-slot="pane-rail-title"]) {
@@ -1370,6 +1423,14 @@ tr.dl-row[data-active] {
 .dl-page-map > [data-slot="button-host"] > [data-map-rail] {
   align-items: center;
   justify-content: center;
+}
+/* At map scale a folded rail is a few px wide: rotated text clips mid-glyph. The strip stays a
+   target and the index beside the map names it. */
+.dl-page-map
+  > [data-slot="button-host"]
+  > [data-map-rail="vertical"]
+  > span[data-slot="pane-rail-title"] {
+  display: none;
 }
 .dl-page-map > [data-slot="button-host"] > [data-map-region] > span {
   display: block;

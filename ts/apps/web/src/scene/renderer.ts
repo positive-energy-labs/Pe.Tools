@@ -16,10 +16,10 @@ import { createGlow, GLOW_LAYER, OCCLUDER_LAYER } from "./glow";
 import { createDamageBatch } from "./damage-batch";
 import { createMarkBatch } from "./mark-batch";
 import { createOutline, OUTLINE_LAYER } from "./outline";
+import { liftLightness } from "./oklch";
 import {
-  fogDensity,
+  CONTEXT_CREASE_DEG,
   GROUND_MATERIAL,
-  keySlot,
   LOOK,
   OUTLINE_CHANNEL,
   paintOf,
@@ -84,12 +84,14 @@ import {
   type Size,
 } from "./projection";
 import { setDamageHue } from "./damage";
+import { kindHue, kindL } from "./kinds";
 import { routeColour, routeLines, surfaceEdges, shellLines, surfaceAlpha } from "./surfaces";
 import type {
   IssueState,
   IssueTarget,
   Layer3D,
   LayerFrame,
+  Kinds,
   Paint as InstancePaint,
   PaintOf,
   Pick,
@@ -112,7 +114,8 @@ export type ClipVolume = {
   section?: Section;
   preview?: boolean;
 };
-export type ContextMode = "halo" | "all";
+export type ContextMode = "off" | "lines" | "glass";
+export type ColourMode = "firm" | "mono";
 /** Optional translucent faces share a pass after the subject has established occlusion depth. */
 const CONTEXT_LAYER = 5;
 const SHELL_LAYER = 6;
@@ -169,7 +172,7 @@ const BOX_EDGES = [
   [2, 6],
   [3, 7],
 ] as const;
-/** Selection, hover and lighting lift the base system ink toward page ink. */
+/** Selection, hover and lighting lift the base system hue in OKLCH lightness (`LOOK.lift`). */
 type Mark = "hover" | "lit" | "selected";
 
 /** Keep only edge storage after upload; the completed async preparation must not own face arrays. */
@@ -197,6 +200,7 @@ export function createRenderer(mount: HTMLElement, initialMeshes: SceneMeshes, w
   let grounds = sceneGrounds(mount, look);
   // Shared by reference with the outline pass and the fog: re-tinted in place, never replaced.
   const { ground, ink } = grounds;
+  const isDark = () => ground.getHSL({ h: 0, s: 0, l: 0 }).l < 0.5;
   renderer.setClearColor(ground);
   const canvas = renderer.domElement;
   canvas.setAttribute(
@@ -373,13 +377,26 @@ export function createRenderer(mount: HTMLElement, initialMeshes: SceneMeshes, w
   applyClip(material);
   const veil = veilUniforms();
   let contextRadiusFt: number | undefined;
-  veilMaterial(material, veil, true);
+  /** The Context dial: off draws nothing, lines the creases alone, glass creases plus the pane. */
+  let contextMode: ContextMode = "glass";
+  veilMaterial(material, veil, "tier");
+  // Context is a line drawing: creases at one weight, faded per fragment by the veil field.
+  const contextMaterial = new THREE.LineBasicMaterial({
+    color: grounds.ink,
+    transparent: true,
+    opacity: look.veil.lineAlpha,
+    depthWrite: false,
+  });
+  applyClip(contextMaterial);
+  veilMaterial(contextMaterial, veil, "line");
   let batch = new FaceBatches(undefined, undefined, []);
   for (const light of [hemisphere, sun]) {
     light.layers.enable(CONTEXT_LAYER);
     light.layers.enable(SHELL_LAYER);
   }
-  const glow = createGlow(renderer, material);
+  const glow = createGlow(renderer);
+  /** The occluded-mark alpha every highlight shares (`LOOK.depth.occludedAlpha`). */
+  const occluded = { value: look.depth.occludedAlpha };
   /** What a look change re-applies besides instance tints: ground, lights, fog, veil, passes. */
   const applyStage = () => {
     setDamageHue(grounds.damage);
@@ -389,47 +406,46 @@ export function createRenderer(mount: HTMLElement, initialMeshes: SceneMeshes, w
     hemisphere.intensity = look.lights.hemisphere;
     sun.color.copy(grounds.lights.sun);
     sun.intensity = look.lights.sunIntensity;
-    // Camera-depth fog is optional and off by default; the veil is the element-anchored fog.
-    scene.fog = look.fog.depth
-      ? new THREE.FogExp2(ground, fogDensity(bounds, look.fog.density))
-      : null;
-    setVeilLook(veil, look.veil, ground);
-    if (contextRadiusFt !== undefined) {
-      veil.veilFar.value = contextRadiusFt;
-      veil.veilNear.value = Math.min(veil.veilNear.value, contextRadiusFt);
-    }
+    // The veil is the only fade (element-anchored); there is no camera-depth fog. One reach:
+    // the page's Nearby radius is the veil far edge and the stub fade.
+    setVeilLook(veil, look.veil, contextRadiusFt);
     veil.subjectRim.value = look.depth.rim;
-    veil.stubFadeFt.value = look.subject.stubFadeFt;
     veil.stubEndAlpha.value = look.subject.stubEndAlpha;
+    contextMaterial.color.copy(ink);
+    contextMaterial.opacity = look.veil.lineAlpha;
     outline.setWidths(look.outline);
+    outline.setOccluded(look.depth.occludedAlpha, look.depth.occludedWidth);
+    occluded.value = look.depth.occludedAlpha;
     glow.setLook(look.glow);
   };
   applyStage();
   const byId: SceneInstance[] = [];
   let paintBy: PaintOf | undefined;
   const paints: InstancePaint[] = [];
+  /** Kind picks the hue; "mono" or a table without the kind or `unknown` is the subject ink. */
+  let kinds: Kinds = {};
+  let colourMode: ColourMode = "firm";
+  let huesStamp = "";
+  const subjectHue = (p: InstancePaint) =>
+    (colourMode === "firm" ? kindHue(kinds, p.kind) : undefined) ?? grounds.subject;
+  const subjectL = (p: InstancePaint) => (colourMode === "firm" ? kindL(kinds, p.kind) : undefined);
   const tint = (id: number, mark: Mark | null = null) => {
     const paint = paints[id]!;
     // Highlighting changes ink only. Promoting a floor to subject made it fully opaque.
     const { tier } = paint;
     const color = routeColour(
-      paint.surface === "shell"
+      tier === "envelope"
         ? grounds.shell
-        : paint.ink
-          ? new THREE.Color(paint.ink)
-          : tier === "context"
-            ? grounds.context
-            : look.subject.bySystem && paint.key !== undefined
-              ? grounds.palette[keySlot(paint.key, grounds.palette.length)]!
-              : grounds.subject,
+        : tier === "context"
+          ? grounds.context
+          : subjectHue(paint),
       paint,
-      look,
+      isDark(),
+      tier === "subject" || tier === "stub" ? subjectL(paint) : undefined,
     );
-    if (tier !== "context" && ground.getHSL({ h: 0, s: 0, l: 0 }).l < 0.5)
-      color.offsetHSL(0, 0, look.subject.darkLift);
-    if (tier === "stub" && paint.surface !== "shell")
-      color.lerp(ground, look.subject.stubGroundMix);
-    if (mark) color.lerp(ink, look.fill[mark]);
+    if (tier === "stub") color.lerp(ground, look.subject.stubGroundMix);
+    // The rung rule: emphasis keeps the hue and lifts OKLCH lightness; the outline carries the rest.
+    if (mark) color.copy(liftLightness(color, look.lift[mark]));
     const alpha = surfaceAlpha(paint, look);
     batch.setColorAt(id, new THREE.Vector4(color.r, color.g, color.b, alpha));
     const cap = caps.get(id);
@@ -487,7 +503,23 @@ export function createRenderer(mount: HTMLElement, initialMeshes: SceneMeshes, w
   // The 2026-10-26 ruling supersedes subject-over-context compositing: front context tints
   // the subject, while rear context fails its depth test. Translucent duct fill still occludes
   // equipment edges; opacity is not permission to draw those edges through a duct.
-  const drawScene = (shown: THREE.Camera) => {
+  /** Depth of real subject geometry, no colour, into the bound target: the one occluder set every
+   * highlight tests against. The batch material keeps section cuts and per-element visibility;
+   * context and envelopes discard in this pass, so translucent context never occludes a mark. */
+  const seedOccluders = (shown: THREE.Camera) => {
+    const layers = shown.layers.mask;
+    shown.layers.set(OCCLUDER_LAYER);
+    veil.scenePass.value = 1;
+    material.colorWrite = false;
+    renderer.render(scene, shown);
+    material.colorWrite = true;
+    shown.layers.mask = layers;
+  };
+  // `overlay` (highlight and damage composites) lands last. EXCEPTION to "front context tints a
+  // highlight once like any subject": composited before the context pass, stacked context
+  // (5+ faces) muted the selection ring to invisible (proto-3d-20261026 after-sa19-*-selected).
+  // Kept: the highlight still obeys subject depth (`seedOccluders`); context never occludes it.
+  const drawScene = (shown: THREE.Camera, overlay?: () => void) => {
     const mask = shown.layers.mask;
     const autoClear = renderer.autoClear;
     renderer.clear();
@@ -498,19 +530,39 @@ export function createRenderer(mount: HTMLElement, initialMeshes: SceneMeshes, w
       cap.material.depthWrite = true;
     });
     renderer.render(scene, shown);
-    if (hasContext || hasShell) {
-      material.depthWrite = false;
+    const glass = (depthWrite: boolean) => {
+      material.depthWrite = depthWrite;
       caps.forEach((cap) => {
-        cap.material.depthWrite = false;
+        cap.material.depthWrite = depthWrite;
       });
-      shown.layers.set(CONTEXT_LAYER);
-      shown.layers.enable(SHELL_LAYER);
-      veil.scenePass.value = 3;
+    };
+    // 2026-10-26 glass, sort path: envelopes first, then context as the nearest-surface pane,
+    // drawn after every subject, stub, line and hull. Depth write is on and instances draw front
+    // to back, so a second sheet behind a nearer one fails its depth test and never stacks; the
+    // subject's own depth already hides context behind it, so context tints only from in front.
+    // Sort is per instance (bounding-sphere centre), so crossing walls can still double up.
+    // EXCEPTION to the one-sorted-translucent-pass rule: context behind an equipment envelope
+    // draws over it; equipment owns no depth and that ordering is unruled.
+    glass(false);
+    if (hasShell) {
+      shown.layers.set(SHELL_LAYER);
+      veil.scenePass.value = 4;
       renderer.render(scene, shown);
+    }
+    const glassBatch = batch.translucent?.mesh;
+    if (hasContext && contextMode === "glass" && glassBatch) {
+      shown.layers.set(CONTEXT_LAYER);
+      veil.scenePass.value = 5;
+      glass(true);
+      glassBatch.customSort = (list) => list.sort((a, b) => a.z - b.z);
+      renderer.render(scene, shown);
+      glassBatch.customSort = null;
+      glass(false);
     }
     shown.layers.mask = mask;
     veil.scenePass.value = 1;
-    material.depthWrite = true;
+    glass(true);
+    overlay?.();
     renderer.autoClear = autoClear;
   };
   const drawThumbs = () => {
@@ -623,9 +675,12 @@ export function createRenderer(mount: HTMLElement, initialMeshes: SceneMeshes, w
       scene.updateMatrixWorld();
       accountGeometry();
       if (thumbsStale) drawThumbs();
-      drawScene(active());
-      if (glowing) glow.render(scene, active());
-      if (outlined.children.length) outline.render(scene, active());
+      const shown = active();
+      drawScene(shown, () => {
+        if (glowing) glow.render(scene, shown, () => seedOccluders(shown));
+        if (outlined.children.length)
+          outline.render(scene, shown, outlined, () => seedOccluders(shown));
+      });
       if (measuring) fence(started);
       tell();
       if (animate || returning) render();
@@ -849,7 +904,7 @@ export function createRenderer(mount: HTMLElement, initialMeshes: SceneMeshes, w
     const box = new THREE.Box3();
     group.traverse((object) => {
       if (object instanceof LineSegments2) {
-        if (object.userData.casing) return;
+        if (object.userData.casing || object.userData.behind) return;
         const start = object.geometry.getAttribute("instanceStart");
         const end = object.geometry.getAttribute("instanceEnd");
         for (let i = 0; i < start.count; i++)
@@ -906,15 +961,13 @@ export function createRenderer(mount: HTMLElement, initialMeshes: SceneMeshes, w
   let routeStamp = "";
   const rebuildRoutes = () => {
     const ids = byId.flatMap((_, id) =>
-      paints[id]!.tier === "subject" && paints[id]!.surface !== "shell" && batch.getVisibleAt(id)
-        ? [id]
-        : [],
+      paints[id]!.tier === "subject" && batch.getVisibleAt(id) ? [id] : [],
     );
     const stamp = JSON.stringify([
       ids.map((id) => [id, paints[id]]),
       look.routes,
       grounds.subject.getHex(),
-      grounds.palette.map((c) => c.getHex()),
+      huesStamp,
     ]);
     if (stamp === routeStamp) return;
     routeStamp = stamp;
@@ -926,15 +979,7 @@ export function createRenderer(mount: HTMLElement, initialMeshes: SceneMeshes, w
     const groups = new Map<number, number[]>();
     for (const id of ids) {
       const p = paints[id]!;
-      const colour = routeColour(
-        p.ink
-          ? new THREE.Color(p.ink)
-          : look.subject.bySystem && p.key !== undefined
-            ? grounds.palette[keySlot(p.key, grounds.palette.length)]!
-            : grounds.subject,
-        p,
-        look,
-      );
+      const colour = routeColour(subjectHue(p), p, isDark(), subjectL(p));
       const key = colour.getHex();
       const positions = groups.get(key) ?? [];
       for (const n of edgesOf(byId[id]!, look.routes.edgeAngle)) positions.push(n);
@@ -948,13 +993,45 @@ export function createRenderer(mount: HTMLElement, initialMeshes: SceneMeshes, w
         routes.add(lines);
       }
   };
+  const contextLines = new THREE.LineSegments(new THREE.BufferGeometry(), contextMaterial);
+  contextLines.frustumCulled = false;
+  contextLines.renderOrder = 2;
+  scene.add(contextLines);
+  const syncContextLines = () => (contextLines.visible = contextMode !== "off");
+  let fieldRevision = 0;
+  let contextStamp = "";
+  /** Creases of visible context whose reach can show: a segment is kept if any of its two ends or
+   * its middle lies inside the veil's far edge. The fragment fade does the rest. */
+  const rebuildContextLines = () => {
+    const ids = byId.flatMap((_, id) =>
+      paints[id]!.tier === "context" && batch.getVisibleAt(id) ? [id] : [],
+    );
+    const stamp = JSON.stringify([ids, fieldRevision, veil.veilFar.value]);
+    if (stamp === contextStamp) return;
+    contextStamp = stamp;
+    const positions: number[] = [];
+    const reach = veil.veilFar.value;
+    for (const id of ids) {
+      const edges = edgesOf(byId[id]!, CONTEXT_CREASE_DEG);
+      for (let n = 0; n + 5 < edges.length; n += 6) {
+        const a = [edges[n]!, edges[n + 1]!, edges[n + 2]!];
+        const b = [edges[n + 3]!, edges[n + 4]!, edges[n + 5]!];
+        const m = a.map((v, i) => (v + b[i]!) / 2);
+        if ([a, m, b].some((point) => veilDistance(field, point) < reach))
+          positions.push(...a, ...b);
+      }
+    }
+    contextLines.geometry.dispose();
+    contextLines.geometry = new THREE.BufferGeometry().setAttribute(
+      "position",
+      new THREE.Float32BufferAttribute(positions, 3),
+    );
+  };
   const batchIdByKey = new Map(byId.map((instance, id) => [instance.key, id]));
   let envelopeStamp = "";
   const rebuildEnvelopes = () => {
     const ids = byId.flatMap((_, id) =>
-      paints[id]!.surface === "shell" && paints[id]!.tier !== "context" && batch.getVisibleAt(id)
-        ? [id]
-        : [],
+      paints[id]!.tier === "envelope" && batch.getVisibleAt(id) ? [id] : [],
     );
     const stamp = JSON.stringify([ids, look.shell, grounds.shell.getHex()]);
     if (stamp === envelopeStamp) return;
@@ -1002,7 +1079,7 @@ export function createRenderer(mount: HTMLElement, initialMeshes: SceneMeshes, w
         routeGeometryDirty = true;
       }
       hasContext ||= shown && paints[id]!.tier === "context";
-      hasShell ||= shown && paints[id]!.tier !== "context" && paints[id]!.surface === "shell";
+      hasShell ||= shown && paints[id]!.tier === "envelope";
       const cap = caps.get(id);
       if (cap) cap.visible = shown && !clipVolume?.preview;
       const mark: Mark | null = !shown
@@ -1023,6 +1100,7 @@ export function createRenderer(mount: HTMLElement, initialMeshes: SceneMeshes, w
     if (routeGeometryDirty) {
       rebuildEnvelopes();
       rebuildRoutes();
+      rebuildContextLines();
       routeGeometryDirty = false;
     }
     selectedIds.clear();
@@ -1052,12 +1130,15 @@ export function createRenderer(mount: HTMLElement, initialMeshes: SceneMeshes, w
           "position",
           new THREE.BufferAttribute(positions, 3),
         ),
+        // Blending and depth test are set per mask pass (`outline.ts`); the offset lets the
+        // element pass against its own seeded depth.
         new THREE.MeshBasicMaterial({
           color: OUTLINE_CHANNEL[mark],
-          blending: THREE.AdditiveBlending,
-          depthTest: false,
           depthWrite: false,
           side: THREE.DoubleSide,
+          polygonOffset: true,
+          polygonOffsetFactor: -1,
+          polygonOffsetUnits: -4,
         }),
       );
       applyClip(mesh.material);
@@ -1117,12 +1198,12 @@ export function createRenderer(mount: HTMLElement, initialMeshes: SceneMeshes, w
         polygonOffsetUnits: -1,
       });
       applyClip(capMaterial);
-      veilMaterial(capMaterial, veil, true);
+      veilMaterial(capMaterial, veil, "tier");
       const cap = new THREE.Mesh(geometry, capMaterial);
       cap.position.copy(origin);
       cap.visible = batch.getVisibleAt(id);
       if (paints[id]!.tier === "context") cap.layers.set(CONTEXT_LAYER);
-      else if (paints[id]!.surface === "shell") cap.layers.set(SHELL_LAYER);
+      else if (paints[id]!.tier === "envelope") cap.layers.set(SHELL_LAYER);
       scene.add(cap);
       caps.set(id, cap);
       tint(id, marked.get(id) ?? null);
@@ -1172,6 +1253,7 @@ export function createRenderer(mount: HTMLElement, initialMeshes: SceneMeshes, w
       edgesOf = () => new Float32Array();
       pick = createFacePicker(batch, pickPriority);
       field = { data: new Uint8Array([255]), dims: [1, 1, 1], min: [0, 0, 0], cellFt: 1 };
+      fieldRevision++;
       setVeilField(veil, field);
       accountGeometry();
     },
@@ -1260,9 +1342,11 @@ export function createRenderer(mount: HTMLElement, initialMeshes: SceneMeshes, w
           meshes = next;
           origin.fromArray(center(next.bounds));
           outlined.position.copy(origin);
-          for (const part of batch.parts)
-            for (const layer of [OCCLUDER_LAYER, CONTEXT_LAYER, SHELL_LAYER])
-              part.mesh.layers.enable(layer);
+          // Each part enters only the passes that keep its fragments: every pass submits and
+          // sorts a whole batch, and the discarded half used to cost as much as the drawn one.
+          batch.depth?.mesh.layers.enable(OCCLUDER_LAYER);
+          batch.translucent?.mesh.layers.set(CONTEXT_LAYER);
+          batch.translucent?.mesh.layers.enable(SHELL_LAYER);
           batch.addTo(scene);
           for (const part of batch.parts) gpuMemory.uploaded(part.mesh);
           byId.splice(0, byId.length, ...next.instances);
@@ -1287,6 +1371,7 @@ export function createRenderer(mount: HTMLElement, initialMeshes: SceneMeshes, w
             ),
           );
           field = ready.field;
+          fieldRevision++;
           setVeilField(veil, field);
           edgeStorage = ready.edges.flatMap((edge) => (edge ? [edge.buffer] : []));
           fallbackEdgeStorage = [];
@@ -1315,6 +1400,7 @@ export function createRenderer(mount: HTMLElement, initialMeshes: SceneMeshes, w
           if (!sameEdges) {
             routeStamp = "";
             envelopeStamp = "";
+            contextStamp = "";
           }
           routeGeometryDirty = true;
           byId.forEach((_, id) => tint(id));
@@ -1345,11 +1431,13 @@ export function createRenderer(mount: HTMLElement, initialMeshes: SceneMeshes, w
     pick(ray: THREE.Ray, clip?: (hit: Pick) => boolean) {
       const kept = (hit: Pick) => {
         if (!clipContains(clipVolume, hit.point, origin.toArray())) return false;
-        if (veil.veilHalo.value && paintOf(hit.instance, paintBy).tier === "context") {
+        if (paintOf(hit.instance, paintBy).tier === "context") {
+          // Only the glass pane is a surface the pointer can meet; creases are not pickable.
+          if (contextMode !== "glass") return false;
           const distance = veilDistance(field, hit.point);
           if (distance >= veil.veilFar.value) return false;
           const opacity =
-            veil.veilMaxOpacity.value *
+            veil.veilFill.value *
             falloff(distance, veil.veilNear.value, veil.veilFar.value, veil.veilCurve.value);
           if (opacity < 0.004) return false;
         }
@@ -1517,13 +1605,22 @@ export function createRenderer(mount: HTMLElement, initialMeshes: SceneMeshes, w
       if (changedBounds) returnInside();
     },
     /** Purely visual: no capture or distance-field bake when a context layer changes. */
-    setContextMode(mode: ContextMode = "all", radiusFt?: number) {
+    setContextMode(mode: ContextMode = "glass", radiusFt?: number) {
       contextRadiusFt = radiusFt;
-      veil.veilHalo.value = mode === "halo";
-      if (radiusFt !== undefined) {
-        veil.veilFar.value = radiusFt;
-        veil.veilNear.value = Math.min(veil.veilNear.value, radiusFt);
-      }
+      contextMode = mode;
+      setVeilLook(veil, look.veil, contextRadiusFt);
+      syncContextLines();
+      rebuildContextLines();
+      thumbsStale = true;
+      render();
+    },
+    /** Hue table and Colour dial: retint only, no capture or bake. */
+    setHues(next: Kinds, mode: ColourMode) {
+      kinds = next;
+      colourMode = mode;
+      huesStamp = JSON.stringify([next, mode]);
+      routeGeometryDirty = true;
+      byId.forEach((_, id) => tint(id, marked.get(id) ?? null));
       thumbsStale = true;
       render();
     },
@@ -1540,7 +1637,7 @@ export function createRenderer(mount: HTMLElement, initialMeshes: SceneMeshes, w
         cap.layers.set(
           paints[id]!.tier === "context"
             ? CONTEXT_LAYER
-            : paints[id]!.surface === "shell"
+            : paints[id]!.tier === "envelope"
               ? SHELL_LAYER
               : 0,
         ),
@@ -1612,7 +1709,7 @@ export function createRenderer(mount: HTMLElement, initialMeshes: SceneMeshes, w
         layers.set(layer.key, { layer, group });
         if (layer.targets?.length) reachOf.set(layer.key, segmentsOf(group));
       }
-      damageBatch = next.some((layer) => layer.damage) ? createDamageBatch(next) : null;
+      damageBatch = next.some((layer) => layer.damage) ? createDamageBatch(next, occluded) : null;
       if (damageBatch) {
         damageBatch.group.traverse((object) => {
           if (object instanceof THREE.Mesh) {

@@ -1,5 +1,10 @@
 import { hostFetch } from "#/host/runtime";
-import { type AppliedFilter, type DocumentRef, type WorkKey } from "@pe/agent-contracts";
+import {
+  type AppliedFilter,
+  type DocumentRef,
+  type FamiliesReadProgress,
+  type WorkKey,
+} from "@pe/agent-contracts";
 import type { RevitMatrixLoadedFamilies } from "@pe/host-contracts/generated";
 import {
   HOST_RPC_BRIDGE_SESSION_HEADER,
@@ -24,6 +29,7 @@ export interface FamiliesObservation {
   capturedAt: string;
   completedAt: string;
   envelope?: { revision: number };
+  progress?: FamiliesReadProgress;
   readback?: { sourceId: string; verifiedFamilies: { name: string; at: string }[] };
   result: RevitMatrixLoadedFamilies.Res.Response;
 }
@@ -38,6 +44,7 @@ export async function readFamiliesObservation(
   work: WorkKey,
   document: DocumentRef,
   filter: AppliedFilter,
+  readId: string,
   expectedRevision?: number,
 ): Promise<FamiliesObservation> {
   const response = await hostFetch(hostUrl("/families/readings"), {
@@ -47,7 +54,7 @@ export async function readFamiliesObservation(
       [HOST_RPC_BRIDGE_SESSION_HEADER]: document.session,
       [HOST_RPC_DOCUMENT_HEADER]: document.openId,
     },
-    body: JSON.stringify({ work, filter, expectedRevision }),
+    body: JSON.stringify({ work, filter, readId, expectedRevision }),
   });
   const body = await response.json();
   if (!response.ok)
@@ -56,6 +63,25 @@ export async function readFamiliesObservation(
         `Families read failed (${response.status})`,
     );
   return body as FamiliesObservation;
+}
+
+export async function cancelFamiliesObservation(document: DocumentRef, readId: string) {
+  const response = await hostFetch(hostUrl("/families/readings"), {
+    method: "DELETE",
+    headers: {
+      "content-type": "application/json",
+      [HOST_RPC_BRIDGE_SESSION_HEADER]: document.session,
+      [HOST_RPC_DOCUMENT_HEADER]: document.openId,
+    },
+    body: JSON.stringify({ readId }),
+  });
+  if (!response.ok) {
+    const body = await response.json();
+    throw Error(
+      (typeof body.error === "string" ? body.error : body.error?.message) ??
+        `Families cancellation failed (${response.status})`,
+    );
+  }
 }
 
 export async function latestFamiliesObservation(
@@ -81,6 +107,46 @@ export async function archivedFamiliesObservation(id: string): Promise<FamiliesO
   const body = await response.json();
   if (!response.ok) throw Error(body.error ?? `Families observation failed (${response.status})`);
   return body as FamiliesObservation;
+}
+
+let recordsRun: string | undefined;
+let familyRecords = new Map<string, Promise<RevitMatrixLoadedFamilies.Res.FamilySnapshotRecord>>();
+/** Existing families stay in memory while each display revision fetches only its new records. */
+export async function progressiveFamiliesObservation(id: string): Promise<FamiliesObservation> {
+  const response = await hostFetch(
+    hostUrl(`/families/readings?id=${encodeURIComponent(id)}&format=parts`),
+  );
+  if (!response.ok) throw Error(`Families observation failed (${response.status})`);
+  const { reading, records } = (await response.json()) as {
+    reading: FamiliesObservation;
+    records: string[] | null;
+  };
+  if (recordsRun !== reading.progress?.runId || !records) {
+    recordsRun = reading.progress?.runId;
+    familyRecords = new Map();
+  }
+  const cache = familyRecords;
+  if (records)
+    reading.result.families = await Promise.all(
+      records.map((hash) => {
+        let pending = cache.get(hash);
+        if (!pending) {
+          pending = (async () => {
+            const part = await hostFetch(
+              hostUrl(`/families/readings?record=${encodeURIComponent(hash)}`),
+            );
+            if (!part.ok) throw Error(`Family record failed (${part.status})`);
+            return (await part.json()) as RevitMatrixLoadedFamilies.Res.FamilySnapshotRecord;
+          })().catch((error: unknown) => {
+            cache.delete(hash);
+            throw error;
+          });
+          cache.set(hash, pending);
+        }
+        return pending;
+      }),
+    );
+  return reading;
 }
 
 /** One loaded family as the picker lists it; `placedInstanceCount` ranks it (ruling 44). */

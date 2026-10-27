@@ -7,7 +7,7 @@ import { useMemo, useState, type ReactNode } from "react";
 
 import { Button } from "@pe/kit/lang/button";
 import type { FloaterSpec } from "@pe/kit/lang/floater";
-import { OrbitMinimap } from "@pe/kit/lang/minimap";
+import { StageGlobe } from "#/scene/stage-globe";
 import type { OrbitViewport } from "#/scene/orbit";
 import type { LiveOrbit } from "@pe/kit/lang/live-orbit";
 import { Scene3D } from "#/scene/scene3d";
@@ -62,13 +62,13 @@ export function usePictureFloaters({
       kind: "picture" as const,
       label: "globe",
       chord: "G",
-      says: "Show or hide the globe: drag it to turn the camera, click a stop to look from there",
+      says: "Show or hide the globe: drag it to turn the camera, click a stop to look from there; it holds the projection and wiggle",
       place: "tr",
       open: globe && picture === "model",
       onOpenChange: setGlobe,
       render: () =>
         pose ? (
-          <OrbitMinimap orbit={orbit} lines={lines} litLines={litLines} />
+          <StageGlobe orbit={orbit} lines={lines} litLines={litLines} />
         ) : (
           <p className="t-small text-ink-2 m-0 p-2">no pose yet</p>
         ),

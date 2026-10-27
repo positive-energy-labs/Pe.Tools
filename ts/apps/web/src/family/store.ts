@@ -45,6 +45,7 @@ import {
 } from "#/family/manifest";
 import { previousOf, useReading } from "#/readings";
 import { workflow, useRoute, type EntityPage } from "#/route";
+import { useWork } from "@pe/kit/lang/work";
 import type { PageMove } from "#/route/manifest";
 import { openMember } from "#/route/spec-editor";
 import { displaySpec } from "#/family/spec";
@@ -232,6 +233,8 @@ export function useFamilyStore(options: {
     [handle.work, draftDoc],
   );
   const editState = useSyncExternalStore(edits.subscribe, edits.getSnapshot, edits.getSnapshot);
+  // The buffer is this store's own in-flight write; readings and verbs register in their hooks.
+  useWork(editState.draft !== null && editState.failure === null, "saving…");
   useEffect(() => {
     if (draftRevision != null) edits.observe(draftRevision);
   }, [edits, draftRevision]);

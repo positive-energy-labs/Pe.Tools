@@ -3,7 +3,8 @@ import { LineMaterial } from "three/addons/lines/LineMaterial.js";
 import { LineSegments2 } from "three/addons/lines/LineSegments2.js";
 import { LineSegmentsGeometry } from "three/addons/lines/LineSegmentsGeometry.js";
 import { LOOK, type Look } from "./grounds";
-import type { Layer3D, Paint } from "./types";
+import { kindHue, kindL } from "./kinds";
+import type { Kinds, Layer3D, Paint } from "./types";
 import { routeColour } from "./surfaces";
 
 /** Facts only: the renderer neither discovers connections nor joins ports inside a shell. */
@@ -58,7 +59,11 @@ export function portSegments(port: SurfacePort, look: Look) {
   ];
 }
 
-export function portLayer(ports: readonly SurfacePort[], look = LOOK.read()): Layer3D {
+export function portLayer(
+  ports: readonly SurfacePort[],
+  kinds: Kinds,
+  look = LOOK.read(),
+): Layer3D {
   type Batch = {
     line: LineSegments2;
     ports: readonly SurfacePort[];
@@ -70,17 +75,22 @@ export function portLayer(ports: readonly SurfacePort[], look = LOOK.read()): La
   const batches = new WeakMap<THREE.Group, Batch[]>();
   const geometryStamp = (look: Look) =>
     [look.ports.tickFt, look.ports.minRadiusFt, look.ports.roundSegments].join("/");
-  const colourStamp = (look: Look, ink?: THREE.Color) =>
-    [look.routes.lightnessStep, ink?.r ?? 1, ink?.g ?? 1, ink?.b ?? 1].join("/");
-  const geometry = (batch: Omit<Batch, "line">, look: Look, ink?: THREE.Color) => {
+  const colourStamp = (ink?: THREE.Color) => [ink?.r ?? 1, ink?.g ?? 1, ink?.b ?? 1].join("/");
+  const geometry = (batch: Omit<Batch, "line">, ink?: THREE.Color) => {
     const positions: number[] = [];
     const colours: number[] = [];
     batch.ports.forEach((port, i) => {
       if (!batch.shown[i]) return;
       const segments = batch.segments[i]!;
       positions.push(...segments);
-      const colour = port.paint.ink
-        ? routeColour(new THREE.Color(port.paint.ink), port.paint, look)
+      const hue = kindHue(kinds, port.paint.kind);
+      const colour = hue
+        ? routeColour(
+            hue,
+            port.paint,
+            (ink?.getHSL({ h: 0, s: 0, l: 0 }).l ?? 0) > 0.5,
+            kindL(kinds, port.paint.kind),
+          )
         : (ink ?? new THREE.Color());
       for (let n = 0; n < segments.length; n += 3) colours.push(colour.r, colour.g, colour.b);
     });
@@ -100,10 +110,10 @@ export function portLayer(ports: readonly SurfacePort[], look = LOOK.read()): La
           segments: members.map((port) => portSegments(port, look)),
           shown: members.map(() => true),
           geometryStamp: geometryStamp(look),
-          colourStamp: colourStamp(look),
+          colourStamp: colourStamp(),
         };
         const line = new LineSegments2(
-          geometry(batch, look),
+          geometry(batch),
           new LineMaterial({
             vertexColors: true,
             linewidth: look.ports.width,
@@ -122,7 +132,7 @@ export function portLayer(ports: readonly SurfacePort[], look = LOOK.read()): La
       const current = at.look ?? look;
       const next = current.ports;
       const shape = geometryStamp(current);
-      const colour = colourStamp(current, at.ink);
+      const colour = colourStamp(at.ink);
       for (const batch of batches.get(group) ?? []) {
         const { line } = batch;
         let changed = batch.geometryStamp !== shape || batch.colourStamp !== colour;
@@ -138,7 +148,7 @@ export function portLayer(ports: readonly SurfacePort[], look = LOOK.read()): La
         });
         if (changed) {
           line.geometry.dispose();
-          line.geometry = geometry(batch, current, at.ink);
+          line.geometry = geometry(batch, at.ink);
           batch.geometryStamp = shape;
           batch.colourStamp = colour;
         }

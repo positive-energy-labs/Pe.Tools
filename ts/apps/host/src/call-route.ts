@@ -49,7 +49,6 @@ import {
   memberWork,
   scheduleActions,
   workKeySchema,
-  FAMILY_CATALOG_LIMIT,
 } from "@pe/agent-contracts";
 import { z } from "zod";
 import { admitTakeoffAction, recoverTakeoffAction, fileVersion } from "./takeoff-actions.ts";
@@ -63,7 +62,7 @@ import {
   actionStatusSchema,
 } from "@pe/agent-contracts";
 import { hostTakeoffCaptures, type TakeoffCaptures } from "./takeoff-captures.ts";
-import { documentMarks } from "./document-marks.ts";
+import { readFamiliesProgressively, cancelFamiliesRead } from "./families-reader.ts";
 import {
   projectTakeoffSnapshot,
   projectTakeoffViews,
@@ -530,9 +529,16 @@ export function makeCallRoute(
             const id = query.get("id");
             const raw = query.get("work");
             const format = query.get("format");
+            const record = query.get("record");
+            if (record)
+              return Response.uint8Array(await observations().familyRecord(record), {
+                contentType: "application/json",
+              });
             if (id && raw) throw Error("Choose one Families reading lookup");
             if (format) {
               if (!id) throw Error("A Families reading ID is required for an artifact reference");
+              if (format === "parts")
+                return Response.jsonUnsafe(await observations().familiesParts(id));
               if (format === "reference")
                 return Response.jsonUnsafe(await observations().familiesReference(id));
               if (format === "artifact")
@@ -550,13 +556,37 @@ export function makeCallRoute(
             if (!raw) return Response.jsonUnsafe(await observations().familiesReadings());
             const work = workKeySchema.parse(JSON.parse(raw));
             if (work.route !== "families") throw Error("Families Work required");
-            return Response.jsonUnsafe(await observations().latestFamilies(work));
+            return Response.jsonUnsafe(await observations().displayedFamilies(work));
+          }
+          if (req.method === "DELETE") {
+            const { readId } = z
+              .strictObject({ readId: z.uuid() })
+              .parse(await Effect.runPromise(req.json));
+            const target = documentRefSchema.parse({
+              session: req.headers[HOST_RPC_BRIDGE_SESSION_HEADER],
+              openId: req.headers[HOST_RPC_DOCUMENT_HEADER],
+            });
+            const session = await Effect.runPromise(
+              sdkSession(
+                bridge,
+                { bridgeSessionId: target.session, openDocumentId: target.openId },
+                actionDeps.sdk,
+              ),
+            );
+            requireEligibleCaller(
+              await operationDefinition("revit.matrix.loaded-families", bridge, session),
+              caller,
+              "/families/readings",
+            );
+            await cancelFamiliesRead(readId, target);
+            return Response.jsonUnsafe({ cancelled: true });
           }
           if (req.method !== "POST") throw Error("Unsupported Families reading method");
           const body = z
             .strictObject({
               work: workKeySchema,
               expectedRevision: z.number().int().nonnegative().optional(),
+              readId: z.uuid(),
               filter: z.strictObject({
                 categoryNames: z.array(z.string()).min(1),
                 familyNames: z.array(z.string()),
@@ -616,30 +646,16 @@ export function makeCallRoute(
             body.work.open.openId !== target.openId
           )
             throw Error("Families Work belongs to another document");
-          documentMarks(bridge);
-          const capturedAt = new Date().toISOString();
-          const result = await Effect.runPromise(
-            bridge.invoke(
-              "revit.matrix.loaded-families",
-              {
-                filter: body.filter,
-                budget: { maxEntries: FAMILY_CATALOG_LIMIT, maxSamplesPerEntry: 1000 },
-                includeTempPlacement: true,
-              },
-              target.session,
-              target.openId,
-            ),
-          );
-          const saved = await observations().saveFamilies({
+          const saved = await readFamiliesProgressively({
+            bridge,
+            captures: observations(),
+            readId: body.readId,
             work: body.work,
             document: target,
-            ...(document?.title ? { documentTitle: document.title } : {}),
+            documentTitle: document?.title ?? undefined,
             filter: body.filter,
-            capturedAt,
-            result:
-              result.value as import("@pe/host-contracts/generated").RevitMatrixLoadedFamilies.Res.Response,
           });
-          if (body.expectedRevision !== undefined) {
+          if (body.expectedRevision !== undefined && saved.progress?.state === "complete") {
             if (!actionDeps.workspace)
               throw Error("Families observation requires the connected Work owner");
             const published = await actionDeps.workspace.publish(

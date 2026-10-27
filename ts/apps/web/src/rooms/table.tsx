@@ -26,6 +26,7 @@ import { Table } from "@pe/kit/table/table";
 import {
   REGION_INK,
   regionLabel,
+  lockedStale,
   regionState,
   unassigned,
   type RoomRow,
@@ -282,10 +283,16 @@ export function RoomsTable({
       {
         key: "state",
         label: "state",
-        width: "w-20",
+        width: "w-28",
         verdict: (row): Verdict => {
           const state = regionState(row.region);
-          return { word: state, tone: VERDICT_TONE[state], note: REGION_INK[state].says };
+          return lockedStale(row.region)
+            ? {
+                word: "locked · stale",
+                tone: VERDICT_TONE.stale,
+                note: `${REGION_INK.locked.says}; ${REGION_INK.stale.says}`,
+              }
+            : { word: state, tone: VERDICT_TONE[state], note: REGION_INK[state].says };
         },
       },
     ];

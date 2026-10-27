@@ -1,11 +1,12 @@
-import { createHash } from "node:crypto";
+import { createHash, randomUUID } from "node:crypto";
 import { mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { Context, Effect, Layer } from "effect";
 import { HttpRouter } from "effect/unstable/http";
 import { expect, test } from "vite-plus/test";
-import { address, bindWork } from "@pe/agent-contracts";
+import { address, bindWork, familiesRouteState } from "@pe/agent-contracts";
+import { RouteWorkspace } from "@pe/runtime";
 import { makeCallRoute } from "../src/call-route.ts";
 import { TakeoffCaptures } from "../src/takeoff-captures.ts";
 import { RevitBridge } from "../src/bridge.ts";
@@ -52,6 +53,16 @@ test("Families observation survives owner reconstruction; failed and wrong-docum
   let matrixCalls = 0;
   let fail = false;
   let connected = true;
+  let storedWork: unknown;
+  const workspace = new RouteWorkspace({
+    registrations: [{ spec: familiesRouteState, handlers: {} }],
+    store: {
+      getState: async () => structuredClone(storedWork),
+      setState: async ({ value }) => {
+        storedWork = structuredClone(value);
+      },
+    },
+  });
   const bridge = {
     list: Effect.sync(() =>
       connected
@@ -78,7 +89,7 @@ test("Families observation survives owner reconstruction; failed and wrong-docum
           ]
         : [],
     ),
-    invoke: (key: string) =>
+    invoke: (key: string, input: { phase?: string; familyId?: number }) =>
       Effect.promise(async () => {
         if (key === "host.ops.catalog")
           return {
@@ -93,8 +104,24 @@ test("Families observation survives owner reconstruction; failed and wrong-docum
             },
           };
         if (key === "revit.matrix.loaded-families") {
-          matrixCalls++;
-          if (fail) throw Error("native failed");
+          if (input.phase === "Prepare") {
+            matrixCalls++;
+            if (fail) throw Error("native failed");
+            return {
+              value: {
+                families: [],
+                issues: [],
+                source: {
+                  families: result.families.map((f) => ({ ...f, typeCount: 1, types: [] })),
+                  revitVersion: "2025",
+                  version: "v1",
+                  copyRefusal: "Reading unsaved changes in this instance.",
+                },
+              },
+            };
+          }
+          if (input.phase === "Extract")
+            return { value: { families: result.families, issues: [], elapsedMs: 1 } };
           return { value: result };
         }
         throw Error(`Unexpected ${key}`);
@@ -103,7 +130,7 @@ test("Families observation survives owner reconstruction; failed and wrong-docum
   } as unknown as RevitBridge["Service"];
   const handler = (captures: TakeoffCaptures) =>
     HttpRouter.toWebHandler(
-      makeCallRoute(undefined, captures, { sdk: sdkSessions }).pipe(
+      makeCallRoute(undefined, captures, { sdk: sdkSessions, workspace }).pipe(
         Layer.provideMerge(Layer.succeed(RevitBridge, bridge)),
       ),
       { disableLogger: true },
@@ -116,13 +143,13 @@ test("Families observation survives owner reconstruction; failed and wrong-docum
     "x-pe-bridge-session-id": target.session,
     "x-pe-open-document-id": target.openId,
   };
-  const post = (captures: TakeoffCaptures, document = target) =>
+  const post = (captures: TakeoffCaptures, document = target, expectedRevision?: number) =>
     call(
       captures,
       new Request(url, {
         method: "POST",
         headers: { ...headers, "x-pe-open-document-id": document.openId },
-        body: JSON.stringify({ work, filter }),
+        body: JSON.stringify({ work, filter, readId: randomUUID(), expectedRevision }),
       }),
     );
   const get = (captures: TakeoffCaptures) =>
@@ -242,15 +269,53 @@ test("Families observation survives owner reconstruction; failed and wrong-docum
     expect(matrixCalls).toBe(1);
     connected = true;
     fail = true;
-    expect((await post(rebuilt)).status).toBe(409);
-    expect(await (await get(rebuilt)).json()).toEqual(saved);
+    const failed = await post(rebuilt);
+    expect(failed.status).toBe(200);
+    expect((await failed.json()).progress).toMatchObject({
+      state: "failed",
+      message: "native failed",
+    });
+    expect((await rebuilt.latestFamilies(work))?.id).toBe(saved.id);
     expect((await post(rebuilt, { ...target, openId: "other" })).status).toBe(409);
-    expect(await (await get(rebuilt)).json()).toEqual(saved);
+    expect((await rebuilt.latestFamilies(work))?.id).toBe(saved.id);
     expect(matrixCalls).toBe(2);
     await writeFile(join(dir, "families", `${legacy.id}.json`), "not JSON");
     expect(
       (await call(rebuilt, new Request(`${url}?id=${legacy.id}&format=reference`))).status,
     ).toBe(409);
+
+    fail = false;
+    const completed = await post(rebuilt, target, 0);
+    expect(completed.status).toBe(200);
+    const observed = await completed.json();
+    expect(observed).toMatchObject({
+      progress: { state: "complete" },
+      envelope: { revision: 1, doc: { takenAt: observed.capturedAt } },
+    });
+    const before = await workspace.readRaw(work, "families");
+    fail = true;
+    const partial = await (await post(rebuilt, target, 1)).json();
+    expect(partial.progress.state).toBe("failed");
+    expect(partial.envelope).toBeUndefined();
+    expect(await workspace.readRaw(work, "families")).toEqual(before);
+    expect(
+      await workspace.apply(work, "families", "human", [{ path: ["takenAt"], value: "forged" }], 1),
+    ).toMatchObject({ ok: false });
+    expect(
+      await workspace.apply(
+        work,
+        "families",
+        "agent",
+        [{ path: ["scope", "edit"], value: { value: filter } }],
+        1,
+      ),
+    ).toMatchObject({ ok: true, revision: 2 });
+    fail = false;
+    expect((await post(rebuilt, target, 1)).status).toBe(409);
+    expect(await workspace.readRaw(work, "families")).toMatchObject({
+      revision: 2,
+      doc: { takenAt: observed.capturedAt },
+    });
   } finally {
     await rm(dir, { recursive: true, force: true });
   }

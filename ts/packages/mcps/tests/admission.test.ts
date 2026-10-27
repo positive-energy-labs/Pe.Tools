@@ -3,6 +3,7 @@ import { withInvocationContext } from "@pe/runtime/context";
 import { afterEach, expect, test, vi } from "vite-plus/test";
 import { peDo, peRead } from "../src/pea/capability-tools.ts";
 import { buildCapabilities } from "../src/pea/capabilities.ts";
+import { readAction } from "../src/shared/takeoff-action-client.ts";
 import type { HostOperationDefinition } from "@pe/host-contracts/contracts";
 import { bodyText } from "./body-text.ts";
 
@@ -32,17 +33,25 @@ const receipt = (admission: Record<string, unknown>) => {
   };
 };
 
-function host(prior?: Record<string, unknown>) {
+function host(prior?: Record<string, unknown>, scriptResponse?: Record<string, unknown>) {
   const posts: Record<string, unknown>[] = [];
   const reads: string[] = [];
+  let saved: Record<string, unknown> | undefined;
   vi.stubGlobal("fetch", async (input: Request | string | URL, init?: RequestInit) => {
     const url = new URL(input instanceof Request ? input.url : String(input));
     reads.push(url.pathname);
     if (url.pathname === "/actions") {
-      if (init?.method !== "POST") return Response.json(prior ? [prior] : []);
+      if (init?.method !== "POST")
+        return Response.json(prior ? [prior] : scriptResponse && saved ? [saved] : []);
       const body = JSON.parse(await bodyText(init));
       posts.push(body);
-      return Response.json(prior ?? receipt(body));
+      if (prior) return Response.json(prior);
+      saved = receipt(body);
+      if (scriptResponse && body.key === "scripting.execute") {
+        saved.result = scriptResponse;
+        saved.preparation = { state: "ready", value: { sourceBundle: "s".repeat(5000) } };
+      }
+      return Response.json(saved);
     }
     if (prior) throw Error("Replay must not consult a live catalog or target");
     if (url.pathname === "/pe/capabilities")
@@ -85,6 +94,62 @@ const call = (tool: typeof peDo | typeof peRead, input: Record<string, unknown>,
       { agent: { toolCallId: id } } as never,
     ),
   ) as Promise<Record<string, unknown>>;
+
+test("pe_do returns a succeeded script's output once and points to its complete receipt", async () => {
+  const scriptResponse = {
+    status: "Succeeded",
+    output: "x".repeat(8000),
+    data: { answer: 42 },
+    diagnostics: [
+      { stage: "resolve", severity: "Info", message: "reference resolved".repeat(200) },
+      { stage: "compile", severity: "Warning", message: "Exact warning" },
+    ],
+  };
+  host(undefined, scriptResponse);
+  const output = await call(peDo, {
+    key: "op:scripting.execute",
+    target,
+    input: { scriptContent: "x" },
+  });
+  expect(output).toMatchObject({
+    ok: true,
+    result: {
+      ok: true,
+      response: {
+        output: scriptResponse.output,
+        data: scriptResponse.data,
+        diagnostics: scriptResponse.diagnostics.slice(1),
+        diagnosticCounts: { resolve: 1, compile: 1 },
+      },
+      action: { id: "attempt", state: "succeeded" },
+      fullReceipt: { key: "op:action.read", input: { id: "attempt" } },
+    },
+  });
+  expect(JSON.stringify(output).length).toBeLessThan(16_000);
+  expect(JSON.stringify(output)).not.toContain("sourceBundle");
+  expect(JSON.stringify(output)).not.toContain("reference resolved");
+  const original = await readAction("attempt", "http://admission.test");
+  expect(original).toMatchObject({
+    state: "succeeded",
+    result: scriptResponse,
+    preparation: { state: "ready", value: { sourceBundle: "s".repeat(5000) } },
+  });
+});
+
+test("a failed script keeps its whole result, resolve diagnostics included", async () => {
+  const scriptResponse = {
+    status: "CompilationFailed",
+    output: "partial output",
+    diagnostics: [{ stage: "resolve", severity: "Info", message: "Needed reference detail" }],
+  };
+  host(undefined, scriptResponse);
+  const output = await call(peDo, {
+    key: "op:scripting.execute",
+    target,
+    input: { scriptContent: "x" },
+  });
+  expect((output.result as Record<string, unknown>).response).toEqual(scriptResponse);
+});
 
 test("pe_do admits native operations and workflows with exact identity, target and bases, and no actor", async () => {
   const { posts } = host();

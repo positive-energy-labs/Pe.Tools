@@ -126,5 +126,8 @@ test("folding leaves images, diagrams, proposals, receipts and waiting records v
   ]) {
     expect(node.closest("details")).toBeNull();
   }
+  // The image sits at the group's foot, below the later calls' records and the live ask.
+  const records = screen.container.querySelector("[data-tool-records]")!;
+  expect(records.lastElementChild?.contains(screen.getByAltText("capture"))).toBe(true);
   expect(screen.container.querySelector(".dl-message-controls")).toBeNull();
 });

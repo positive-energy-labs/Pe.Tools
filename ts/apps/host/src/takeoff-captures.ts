@@ -21,7 +21,10 @@ import {
   canonicalRouteInput,
   workKey,
   workKeySchema,
+  familiesReadProgressSchema,
+  type FamiliesReadProgress,
   type FamilyCapture,
+  type HistoryRow,
   type WorkKey,
 } from "@pe/agent-contracts";
 import { createHash, randomUUID } from "node:crypto";
@@ -29,7 +32,7 @@ import { z } from "zod";
 import type { RevitMatrixLoadedFamilies } from "@pe/host-contracts/generated";
 import { productPathNames } from "@pe/host-contracts/contracts";
 import { mkdir, readFile, readdir, rename, writeFile, rm, stat } from "node:fs/promises";
-import { join, resolve } from "node:path";
+import { dirname, join, resolve } from "node:path";
 import {
   sameAddress,
   takeoffCaptureSchema,
@@ -61,6 +64,7 @@ const familiesObservationSchema = z.object({
   }),
   capturedAt: z.iso.datetime(),
   completedAt: z.iso.datetime(),
+  progress: familiesReadProgressSchema.optional(),
   readback: z
     .object({
       sourceId: z.string().regex(/^[a-f0-9]{64}$/),
@@ -122,6 +126,7 @@ export type FamiliesObservation = {
   filter: AppliedFilter;
   capturedAt: string;
   completedAt: string;
+  progress?: FamiliesReadProgress;
   /** Targeted loaded-project reads after apply; all other families retain capturedAt evidence. */
   readback?: { sourceId: string; verifiedFamilies: { name: string; at: string }[] };
   result: RevitMatrixLoadedFamilies.Res.Response;
@@ -165,15 +170,33 @@ const artifactOf = (path: string, url: string, bytes: Buffer): JsonArtifactRefer
 const familyObservationId = (id: string) => familiesObservationSchema.shape.id.parse(id);
 
 /** Immutable Takeoffs and Family observations outside authored Work. Immutable files use the host's existing atomic-replace pattern. */
+type ProgressManifest = { observation: Omit<FamiliesObservation, "result">; records: string[] };
+/** A progress revision in the completed-reading envelope; `families` may be empty for a parts reply. */
+const progressReading = (manifest: ProgressManifest, families: unknown[]) => ({
+  ...manifest.observation,
+  result: {
+    families,
+    issues: [],
+    page: {
+      totalCount: manifest.observation.progress?.total ?? manifest.records.length,
+      returnedCount: manifest.records.length,
+      isTruncated: false,
+    },
+  },
+});
+
 export class TakeoffCaptures {
   private readonly states = new Map<string, TakeoffObservation>();
   private readonly generations = new Map<string, number>();
   private readonly pending = new Map<string, Promise<unknown>>();
   private readonly reads = new OwnerReads();
   private readonly familiesSaves = new Map<string, Promise<unknown>>();
+  private readonly familyRecordFiles = new WeakMap<object, Promise<string>>();
+  /** Progressive reads this process is running; a stored "reading" revision outside it was interrupted. */
+  private readonly liveReads = new Set<string>();
   private readonly listeners = new Set<(key: string) => void>();
   constructor(
-    private readonly directory: string,
+    readonly directory: string,
     private readonly apsCachePath = join(
       productRoot(),
       productPathNames.stateDirectoryName,
@@ -239,6 +262,16 @@ export class TakeoffCaptures {
     return this.reads.observe(
       `${key}:${canonicalRouteInput(filter)}`,
       async () => {
+        const progress = await this.familiesProgress(target, filter);
+        if (progress)
+          return {
+            reading: {
+              at: progress.work.binding === "address" ? progress.work.target : null,
+              version: null,
+              observedAt: progress.capturedAt,
+            },
+            bodyVersion: progress.id,
+          };
         const latest = (await this.familiesReadings())
           .filter(
             (read) =>
@@ -356,22 +389,31 @@ export class TakeoffCaptures {
     return parsed.data;
   }
   /** The latest reading of one Work subject; other subjects' readings are never parsed as readings. */
-  async scheduleWork(workspaceId: string): Promise<ScheduleReading> {
-    const names = await readdir(join(this.directory, "schedules"));
+  /** Every retained reading of one Work subject, newest first: its History (ruling 57). */
+  async scheduleHistory(workspaceId: string): Promise<HistoryRow[]> {
+    const names = await readdir(join(this.directory, "schedules")).catch(
+      (error: NodeJS.ErrnoException) => {
+        if (error.code === "ENOENT") return [];
+        throw error;
+      },
+    );
     const stamps = await Promise.all(
       names
         .filter((name) => /^[a-f0-9]{64}\.json$/.test(name))
         .map(async (name) => {
           const id = name.slice(0, -5);
           const stamp = retainedStamp(await this.storedSchedule(id));
-          return stamp ? { id, ...stamp } : null;
+          return stamp?.workspaceId === workspaceId
+            ? [{ id, at: stamp.capturedAt, label: "grid read" }]
+            : [];
         }),
     );
-    const latest = stamps
-      .filter((stamp) => stamp?.workspaceId === workspaceId)
-      .sort((a, b) => b!.capturedAt.localeCompare(a!.capturedAt))[0];
-    if (!latest) throw Error("No retained reading for this Schedule Work");
-    return this.schedule(latest.id);
+    return stamps.flat().sort((a, b) => b.at.localeCompare(a.at));
+  }
+  /** The Work's latest retained reading; null when the host holds none (a catalog pick, unread). */
+  async scheduleWork(workspaceId: string): Promise<ScheduleReading | null> {
+    const latest = (await this.scheduleHistory(workspaceId))[0];
+    return latest ? this.schedule(latest.id) : null;
   }
   private async storedSchedule(id: string): Promise<unknown> {
     return JSON.parse(await readFile(join(this.directory, "schedules", `${id}.json`), "utf8"));
@@ -474,6 +516,7 @@ export class TakeoffCaptures {
     expectedLatestId?: string,
   ): Promise<FamiliesObservation> {
     const work = workKey(value.work);
+    if (value.progress) this.liveReads.delete(value.progress.runId);
     const completedAt = new Date().toISOString();
     const id = createHash("sha256")
       .update(JSON.stringify({ ...value, completedAt }))
@@ -504,6 +547,7 @@ export class TakeoffCaptures {
         await rename(tempSnapshot, snapshot);
         await writeFile(tempPointer, id, "utf8");
         await rename(tempPointer, pointer);
+        await this.displayPointer(value.work, id);
       } finally {
         await rm(tempSnapshot, { force: true });
         await rm(tempPointer, { force: true });
@@ -596,24 +640,182 @@ export class TakeoffCaptures {
       throw Error("Families observation Work does not match its latest pointer");
     return record;
   }
+  /** Display can restore partial work; planning uses the completed latestFamilies baseline. */
+  async displayedFamilies(work: WorkKey): Promise<FamiliesObservation | null> {
+    const key = createHash("sha256").update(workKey(work)).digest("hex");
+    const id = await readFile(join(this.directory, "families", `${key}.display`), "utf8").catch(
+      (error: NodeJS.ErrnoException) => {
+        if (error.code === "ENOENT") return null;
+        throw error;
+      },
+    );
+    if (!id) return this.latestFamilies(work);
+    const record = await this.families(id);
+    if (workKey(record.work) !== workKey(work))
+      throw Error("Families display belongs to another Work");
+    return record;
+  }
+
+  private async displayPointer(work: WorkKey, id: string) {
+    const key = createHash("sha256").update(workKey(work)).digest("hex");
+    const path = join(this.directory, "families", `${key}.display`);
+    const temp = `${path}.${randomUUID()}.tmp`;
+    await writeFile(temp, id);
+    await rename(temp, path);
+  }
+
   async families(id: string): Promise<FamiliesObservation> {
     return (await this.familiesFile(id)).record;
   }
   private async familiesFile(id: string) {
     familyObservationId(id);
-    const path = join(this.directory, "families", `${id}.json`);
-    const bytes = await readFile(path);
+    let path = join(this.directory, "families", `${id}.json`);
+    const bytes = await readFile(path).catch(async (error: NodeJS.ErrnoException) => {
+      const manifest = error.code === "ENOENT" ? await this.progressManifest(id) : null;
+      if (!manifest) throw error;
+      path = join(this.directory, "families", "progress", "artifacts", `${id}.json`);
+      const families = await Promise.all(
+        manifest.records.map(async (hash) =>
+          JSON.parse(
+            await readFile(join(this.directory, "families", "records", `${hash}.json`), "utf8"),
+          ),
+        ),
+      );
+      return Buffer.from(JSON.stringify(progressReading(manifest, families)));
+    });
     const record = familiesObservationSchema.parse(
       JSON.parse(bytes.toString("utf8")),
     ) as FamiliesObservation;
     if (record.id !== id) throw Error("Families observation ID does not match its file");
     return { record, path, bytes };
   }
+
+  /** Null when `id` is not a progress revision. A "reading" revision whose run is not live here (host
+   *  restart, or an older revision of a settled run) can never finish, so it reads as failed. */
+  private async progressManifest(id: string): Promise<ProgressManifest | null> {
+    familyObservationId(id);
+    const raw = await readFile(
+      join(this.directory, "families", "progress", `${id}.json`),
+      "utf8",
+    ).catch((error: NodeJS.ErrnoException) => {
+      if (error.code === "ENOENT") return null;
+      throw error;
+    });
+    if (raw === null) return null;
+    const manifest = JSON.parse(raw) as ProgressManifest;
+    for (const hash of manifest.records) familyObservationId(hash);
+    const progress = manifest.observation.progress;
+    if (progress?.state === "reading" && !this.liveReads.has(progress.runId))
+      manifest.observation.progress = {
+        ...progress,
+        state: "failed",
+        message: "This read is no longer running; read again.",
+      };
+    return manifest;
+  }
+
+  private progressKey(target: DocumentRef, filter: AppliedFilter) {
+    return createHash("sha256")
+      .update(canonicalRouteInput([target, filter]))
+      .digest("hex");
+  }
+
+  /** Per-family blobs are written once. Tiny immutable manifests project each revision for the existing envelope. */
+  async saveFamiliesProgress(
+    value: Omit<FamiliesObservation, "id" | "completedAt"> & { progress: FamiliesReadProgress },
+  ) {
+    if (value.progress.state === "reading") this.liveReads.add(value.progress.runId);
+    else this.liveReads.delete(value.progress.runId);
+    const folder = join(this.directory, "families");
+    await mkdir(join(folder, "records"), { recursive: true });
+    await mkdir(join(folder, "progress"), { recursive: true });
+    const records = await Promise.all(
+      value.result.families.map(async (record) => {
+        const known = this.familyRecordFiles.get(record);
+        if (known) return known;
+        const saving = (async () => {
+          const text = JSON.stringify(record);
+          const hash = createHash("sha256").update(text).digest("hex");
+          // Content-addressed: a rename over an existing blob writes identical bytes.
+          const path = join(folder, "records", `${hash}.json`);
+          const temp = `${path}.${randomUUID()}.tmp`;
+          await writeFile(temp, text);
+          await rename(temp, path);
+          return hash;
+        })();
+        this.familyRecordFiles.set(record, saving);
+        return saving;
+      }),
+    );
+    const { result: _, ...metadata } = value;
+    const completedAt = new Date().toISOString();
+    const id = createHash("sha256")
+      .update(JSON.stringify([metadata, completedAt, records]))
+      .digest("hex");
+    const observation = { ...metadata, id, completedAt };
+    await writeFile(
+      join(folder, "progress", `${id}.json`),
+      JSON.stringify({ observation, records }),
+    );
+    const pointer = join(
+      folder,
+      "progress",
+      `${this.progressKey(value.document, value.filter)}.latest`,
+    );
+    const temp = `${pointer}.${randomUUID()}.tmp`;
+    await writeFile(temp, id);
+    await rename(temp, pointer);
+    await this.displayPointer(value.work, id);
+    this.notify(`families-matrix:${keyOf(value.document)}`);
+    return { ...observation, result: value.result };
+  }
+
+  private async familiesProgress(target: DocumentRef, filter: AppliedFilter) {
+    const pointer = join(
+      this.directory,
+      "families",
+      "progress",
+      `${this.progressKey(target, filter)}.latest`,
+    );
+    const id = await readFile(pointer, "utf8").catch((error: NodeJS.ErrnoException) => {
+      if (error.code === "ENOENT") return null;
+      throw error;
+    });
+    return id ? ((await this.progressManifest(id))?.observation ?? null) : null;
+  }
+
+  async clearFamiliesProgress(target: DocumentRef, filter: AppliedFilter) {
+    await rm(
+      join(this.directory, "families", "progress", `${this.progressKey(target, filter)}.latest`),
+      { force: true },
+    );
+    this.notify(`families-matrix:${keyOf(target)}`);
+  }
   async familiesArtifact(id: string): Promise<Buffer> {
     return (await this.familiesFile(id)).bytes;
   }
+  /** Display revisions transfer only newly completed immutable family records. */
+  async familiesParts(id: string) {
+    const manifest = await this.progressManifest(id);
+    if (!manifest) return { reading: await this.families(id), records: null };
+    return {
+      reading: familiesObservationSchema.parse(progressReading(manifest, [])),
+      records: manifest.records,
+    };
+  }
+  async familyRecord(hash: string) {
+    familyObservationId(hash);
+    return readFile(join(this.directory, "families", "records", `${hash}.json`));
+  }
   async familiesReference(id: string) {
     const { record, path, bytes } = await this.familiesFile(id);
+    if (record.progress && record.progress.state !== "complete") {
+      // Materialize a full artifact only when requested, not on every incremental display revision.
+      await mkdir(dirname(path), { recursive: true });
+      await writeFile(path, bytes, { flag: "wx" }).catch((error: NodeJS.ErrnoException) => {
+        if (error.code !== "EEXIST") throw error;
+      });
+    }
     const { result, ...reading } = record;
     return {
       ...reading,

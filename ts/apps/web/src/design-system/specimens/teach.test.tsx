@@ -7,10 +7,10 @@ import { useList } from "@pe/kit/lang/collection";
 import { ListView } from "@pe/kit/lang/list-view";
 import { Switcher } from "@pe/kit/lang/switcher";
 import { readTeaching, type Teaching } from "@pe/kit/lang/teach";
-import { TeachRegion, useTeaching } from "@pe/kit/lang/use-teach";
+import { TeachPage, TeachRegion, TeachTarget, useTeaching } from "@pe/kit/lang/use-teach";
 import { KeyScope, useScopeKeys } from "@pe/kit/keys";
 import { QueryBox } from "@pe/kit/table/query";
-import { HelpWorld, RouteHelpButton } from "#/route/help";
+import { HelpOwner, HelpWorld, RouteHelpButton } from "#/route/help";
 import { ductsDocs } from "#/ducts/docs";
 import { DUCTS_COMPARE } from "@pe/agent-contracts/ducts-guide";
 import { LeaderDiagram } from "@pe/kit/lang/leader-diagram";
@@ -72,7 +72,12 @@ test("quantity leaders still connect their track to composed rows in either dire
 });
 test("Help paints its generated screen before mounting prose, cases or invoking diagrams", () => {
   vi.useFakeTimers({ toFake: ["requestAnimationFrame", "cancelAnimationFrame"] });
-  render(<RouteHelpButton name="Ducts" docs={ductsDocs} />);
+  render(
+    <>
+      <HelpOwner />
+      <RouteHelpButton name="Ducts" docs={ductsDocs} />
+    </>,
+  );
   fireEvent.click(screen.getByRole("button", { name: "How this tool works" }));
   expect(document.querySelector("[data-teach-legend]")).toBeTruthy();
   expect(document.querySelectorAll("article[id^=case-]")).toHaveLength(0);
@@ -93,7 +98,75 @@ test("Help paints its generated screen before mounting prose, cases or invoking 
       .forEach((cell) => expect(cell.getAttribute("data-column-label")).toBeTruthy());
   });
   act(() => within(tables[0]!).getAllByRole("gridcell")[0]!.focus());
-  expect(readTeaching()).toEqual([]);
+  // Only the owner's own chord is live; the dialog's TeachLive=false keeps its contents out.
+  expect(
+    readTeaching().flatMap((f) => (f.kind === "keys" ? f.items.map((i) => i.label) : [f.kind])),
+  ).toEqual(["How this tool works"]);
+});
+test("Alt+/ teaches the URL's page even from Pea's composer; Pea's own trigger teaches Pea", async () => {
+  window.history.pushState({}, "", "/ducts");
+  render(
+    <>
+      <HelpOwner />
+      <TeachTarget value="/ducts">
+        <RouteHelpButton name="Ducts" />
+        <TeachPage value="/pea">
+          <RouteHelpButton name="Pea" />
+          <Pane title="Composer">
+            <textarea aria-label="draft" />
+          </Pane>
+        </TeachPage>
+      </TeachTarget>
+    </>,
+  );
+  // Only the URL page's trigger claims the chord.
+  const triggers = screen.getAllByRole("button", { name: "How this tool works" });
+  expect(triggers.map((t) => t.hasAttribute("aria-keyshortcuts"))).toEqual([true, false]);
+  act(() => screen.getByLabelText("draft").focus());
+  fireEvent.keyDown(document.activeElement!, { key: "/", code: "Slash", altKey: true });
+  await waitFor(() => expect(screen.getByText("Ducts", { selector: ".t-title" })).toBeTruthy());
+  fireEvent.keyDown(document.activeElement!, { key: "Escape" });
+  await waitFor(() => expect(screen.queryByText("Ducts", { selector: ".t-title" })).toBeNull());
+  fireEvent.click(triggers[1]!);
+  await waitFor(() => expect(screen.getByText("Pea", { selector: ".t-title" })).toBeTruthy());
+  window.history.pushState({}, "", "/");
+});
+test("Alt+/ toggles; a page's later trigger unmounting restores the earlier one", async () => {
+  window.history.pushState({}, "", "/ducts");
+  const view = render(
+    <>
+      <HelpOwner />
+      <TeachTarget value="/ducts">
+        <RouteHelpButton name="Ducts" />
+        <RouteHelpButton name="Ducts later" />
+      </TeachTarget>
+    </>,
+  );
+  const chord = () =>
+    fireEvent.keyDown(document.activeElement ?? document.body, {
+      key: "/",
+      code: "Slash",
+      altKey: true,
+    });
+  chord();
+  await waitFor(() =>
+    expect(screen.getByText("Ducts later", { selector: ".t-title" })).toBeTruthy(),
+  );
+  chord();
+  await waitFor(() =>
+    expect(screen.queryByText("Ducts later", { selector: ".t-title" })).toBeNull(),
+  );
+  view.rerender(
+    <>
+      <HelpOwner />
+      <TeachTarget value="/ducts">
+        <RouteHelpButton name="Ducts" />
+      </TeachTarget>
+    </>,
+  );
+  chord();
+  await waitFor(() => expect(screen.getByText("Ducts", { selector: ".t-title" })).toBeTruthy());
+  window.history.pushState({}, "", "/");
 });
 const options = [
   { value: "parallel", label: "parallel", title: "Measured" },

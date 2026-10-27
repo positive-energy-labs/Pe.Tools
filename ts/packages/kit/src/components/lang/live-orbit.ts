@@ -227,6 +227,78 @@ export function glideLook(orbit: LiveOrbit) {
   if (now) flyTo(orbit, { ...now, yaw: NORTH_YAW });
 }
 
+export type Wiggle = {
+  /** Cone half-angle around the current view direction, degrees. Angular, so zoom-independent. */
+  deg: number;
+  /** One loop of the cone, milliseconds. */
+  loopMs: number;
+  loops: number;
+  /** prefers-reduced-motion: one slow loop instead of the configured ones. */
+  reduced?: boolean;
+};
+const wiggles = new WeakMap<LiveOrbit, () => void>();
+const INTERRUPTS = ["pointerdown", "wheel", "keydown"] as const;
+
+/**
+ * A temporary parallax loop: the eye traces a small cone about the orbit target, eased in and out,
+ * then returns to EXACTLY the start pose. It is a gesture that is always cancelled, so it never
+ * publishes (no history, no address) and never touches selection. Any pointer, wheel or key input
+ * outside `[data-wiggle]` restores the start pose before that input acts. A second call while one
+ * runs stops it, restoring the start pose. Returns whether a wiggle started.
+ */
+export function wiggle(orbit: LiveOrbit, w: Wiggle): boolean {
+  const running = wiggles.get(orbit);
+  if (running) {
+    running();
+    return false;
+  }
+  const token = orbit.begin();
+  if (!token) return false;
+  const from = token.from;
+  const loopMs = w.reduced ? w.loopMs * 1.5 : w.loopMs;
+  const total = loopMs * (w.reduced ? 1 : Math.max(1, Math.round(w.loops)));
+  // The radius eases in over the first and out over the last quarter loop.
+  const ramp = Math.min(loopMs / 4, total / 2);
+  const smooth = (x: number) => x * x * (3 - 2 * x);
+  // Yaw degrees shrink toward the poles; divide so the cone stays round on screen.
+  const yawScale = 1 / Math.max(Math.cos((from.elev * Math.PI) / 180), 0.25);
+  let frame = 0;
+  const release = () => {
+    cancelAnimationFrame(frame);
+    wiggles.delete(orbit);
+    for (const type of INTERRUPTS) window.removeEventListener(type, interrupt, true);
+  };
+  const stop = () => {
+    release();
+    orbit.cancel(token);
+  };
+  const interrupt = (event: Event) => {
+    if ((event.target as Element | null)?.closest?.("[data-wiggle]")) return;
+    // The wiggle's own hotkey toggles it through its binding.
+    if (event instanceof KeyboardEvent && event.key.toLowerCase() === "w" && !event.ctrlKey) return;
+    stop();
+  };
+  for (const type of INTERRUPTS)
+    window.addEventListener(type, interrupt, { capture: true, passive: true });
+  wiggles.set(orbit, stop);
+  const started = performance.now();
+  frame = requestAnimationFrame(function step(at) {
+    // A newer gesture or flight took the orbit: it owns the pose now.
+    if (!orbit.owns(token)) return release();
+    const t = at - started;
+    if (t >= total) return stop();
+    const radius = w.deg * smooth(Math.max(0, Math.min(1, t / ramp, (total - t) / ramp)));
+    const theta = (2 * Math.PI * t) / loopMs;
+    orbit.preview(token, {
+      ...from,
+      yaw: from.yaw + radius * Math.cos(theta) * yawScale,
+      elev: Math.min(89, Math.max(-89, from.elev + radius * Math.sin(theta))),
+    });
+    frame = requestAnimationFrame(step);
+  });
+  return true;
+}
+
 /** Scope and Page identity cancel gestures; acknowledgements never reset newer input. */
 export function useLiveOrbit(
   pose: OrbitViewport | null,

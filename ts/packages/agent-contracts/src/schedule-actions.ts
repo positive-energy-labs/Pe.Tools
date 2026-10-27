@@ -125,7 +125,14 @@ export const scheduleReads = {
     }),
   },
   "schedule.grid.work": {
-    says: "Read the latest retained schedule reading for a subject Work address. This is dated evidence, not a fresh native read.",
+    says: "Read the latest retained schedule reading for a subject Work address, or null when none is retained. This is dated evidence, not a fresh native read.",
+    dirties: [],
+    needs: "nothing",
+    effect: "query",
+    input: z.object({ workspaceId: z.string().min(1) }),
+  },
+  "schedule.grid.history": {
+    says: "List every retained schedule reading of a subject Work address, newest first: its History. Each row's id opens with schedule.grid.saved.",
     dirties: [],
     needs: "nothing",
     effect: "query",

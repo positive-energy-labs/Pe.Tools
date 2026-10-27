@@ -9,7 +9,6 @@ import { Rail } from "../src/components/lang/rail";
 import { Pane, PictureContext } from "@pe/kit/lang/pane";
 import { PictureReadout } from "@pe/kit/lang/readout";
 import { Popover, PopoverTrigger, SubjectPopoverContent } from "@pe/kit/lang/popover";
-import { Switcher } from "@pe/kit/lang/switcher";
 import { readTeaching } from "@pe/kit/lang/teach";
 import { useTeaching } from "@pe/kit/lang/use-teach";
 
@@ -70,66 +69,31 @@ test("folded controls teach their choices through the live trigger and withdraw 
         : new DOMRect(0, 0, 400, 600);
     },
   );
-  const page = (value: string) => (
-    <PictureContext
-      value={{
-        selected: false,
-        box: () => null,
-        projection: (
-          <Switcher
-            ariaLabel="projection"
-            value={value}
-            onChange={vi.fn()}
-            options={[
-              { value: "parallel", label: "parallel", title: "Measured" },
-              { value: "perspective", label: "perspective", title: "Depth" },
-            ]}
-          />
-        ),
-      }}
-    >
+  const page = (on: readonly string[]) => (
+    <PictureContext value={{ selected: false, box: () => null }}>
       <Pane
         picture
         title="Systems"
         legend={null}
-        layers={{ value: ["grid"], options: [{ key: "grid", label: "grid" }], onToggle: vi.fn() }}
+        layers={{ value: on, options: [{ key: "grid", label: "grid" }], onToggle: vi.fn() }}
       >
         body
       </Pane>
     </PictureContext>
   );
-  const view = render(page("parallel"));
+  const view = render(page(["grid"]));
   // jsdom has no container layout. Model the compact branch; the browser proves the CSS switch.
   view.container.querySelector<HTMLElement>(
     '[data-strip-group="layers"] > [data-strip-full]',
   )!.hidden = true;
-  expect(screen.queryByRole("button", { name: "parallel" })).toBeNull();
-  const projection = () =>
-    readTeaching().find((f) => f.kind === "modes" && f.label === "projection");
-  await waitFor(() =>
-    expect(projection()).toMatchObject({
-      options: [
-        { key: "parallel", active: true },
-        { key: "perspective", active: false },
-      ],
-    }),
-  );
-  expect(readTeaching().find((f) => f.kind === "views")).toMatchObject({
-    options: [{ key: "grid", active: true }],
-  });
-  view.rerender(page("perspective"));
-  await waitFor(() =>
-    expect(projection()).toMatchObject({
-      options: [
-        { key: "parallel", active: false },
-        { key: "perspective", active: true },
-      ],
-    }),
-  );
+  const views = () => readTeaching().find((f) => f.kind === "views");
+  await waitFor(() => expect(views()).toMatchObject({ options: [{ key: "grid", active: true }] }));
+  view.rerender(page([]));
+  await waitFor(() => expect(views()).toMatchObject({ options: [{ key: "grid", active: false }] }));
   view.container.hidden = true;
   await waitFor(() => expect(readTeaching()).toEqual([]));
   view.container.hidden = false;
-  await waitFor(() => expect(projection()).toBeTruthy());
+  await waitFor(() => expect(views()).toBeTruthy());
   view.unmount();
   expect(readTeaching()).toEqual([]);
 });

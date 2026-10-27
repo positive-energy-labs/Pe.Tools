@@ -58,6 +58,10 @@ export interface Ctx<W, R extends string, P> {
   };
   readonly readings: Readonly<Record<R, Reading<unknown>>>;
   readonly page: P;
+  /** The current Page, or null after this action's Target or Work changed. */
+  readonly currentPage?: () => P | null;
+  /** A cancellable read can register its exact host-run cancellation instead of action admission. */
+  readonly cancelWith?: (cancel: () => Promise<void>) => void;
   readonly call: HostCaller;
   /** The patch lane on the Work document. Throws the refusal; the runner reports it. */
   readonly write: (patch: RouteStatePatch[], expectedRevision?: number) => Promise<Refusal | null>;

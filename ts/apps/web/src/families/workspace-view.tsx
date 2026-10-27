@@ -285,6 +285,9 @@ function FamiliesActiveView({ url }: { url?: boolean }) {
       fixture={store.demo ? DEMO_FAMILIES_SPEC : undefined}
       url={url}
       stages={FAMILIES_STAGES}
+      // Grouped Work: apply stays a verb in the row and the lines get the log's room (ruling 39).
+      commitIn="verbs"
+      log="narrow"
       targetRungs={store.page.stage === "audit" ? targetRungs : undefined}
       subject={<>loaded families</>}
       health={matrixIssue?.title ?? null}

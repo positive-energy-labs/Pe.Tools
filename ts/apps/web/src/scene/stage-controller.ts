@@ -19,7 +19,8 @@ import type { PlaneViewport } from "@pe/agent-contracts";
 import type { PictureBounds } from "./framing";
 import { viewportProject, type Project } from "./projection";
 import { useStageKeys } from "./stage-keys";
-import { flyTo, glideLook, type LiveOrbit } from "@pe/kit/lang/live-orbit";
+import { flyTo, glideLook, wiggle, type LiveOrbit } from "@pe/kit/lang/live-orbit";
+import { LOOK } from "./grounds";
 import { applyLook, center, frame, shiftOnScreen, type OrbitViewport } from "./orbit";
 import type { Bounds } from "./types";
 import { useViewHistory } from "./view-history";
@@ -96,6 +97,17 @@ function useStageBindings(options: OrbitStage | PlaneStage) {
     const pose = options.orbit.read();
     if (pose && next !== projection) options.orbit.move({ ...pose, projection: next });
   };
+  /** A temporary cone about the target; never history, address or selection (`live-orbit.ts`). */
+  const wiggleCamera = () => {
+    if (options.kind !== "orbit" || options.axis) return;
+    const { camera } = LOOK.read();
+    wiggle(options.orbit, {
+      deg: camera.wiggleDeg,
+      loopMs: camera.wiggleMs,
+      loops: camera.wiggleLoops,
+      reduced: window.matchMedia("(prefers-reduced-motion: reduce)").matches,
+    });
+  };
   const [body, setBody] = useState<HTMLElement | null>(null);
   useEffect(() => setBody(document.body), []);
   const poseOf = (target: Bounds | null) => {
@@ -149,6 +161,11 @@ function useStageBindings(options: OrbitStage | PlaneStage) {
               glideLook(options.orbit);
             },
           },
+          {
+            ...STAGE_ACTIONS.wiggle,
+            available: () => !options.axis,
+            invoke: wiggleCamera,
+          },
         ]
       : []),
   ]);
@@ -182,6 +199,8 @@ function useStageBindings(options: OrbitStage | PlaneStage) {
             })),
           })
         : null,
+    /** Null on an axis picture or a plane stage; the globe hosts it. */
+    wiggle: options.kind === "orbit" && !options.axis ? wiggleCamera : null,
     goTo: createElement(ScopeGestures, { gestures, host: options.host }) as ReactNode,
     frameOn,
     poseOf,
@@ -235,7 +254,7 @@ export const PictureStage = memo(function PictureStage({
   };
   return createElement(
     PictureContext,
-    { value: { selected: picture.selectedBounds != null, box, projection: bindings.projection } },
+    { value: { selected: picture.selectedBounds != null, box } },
     createElement(
       StageContext,
       { value: stage },

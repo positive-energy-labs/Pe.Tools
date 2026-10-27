@@ -1,5 +1,4 @@
 import { land } from "./land";
-import { useWork } from "./pane";
 import { rowRevit } from "./revit-target";
 import type { Ref } from "./attention";
 import { rowDamage } from "../master-table/model";
@@ -270,7 +269,7 @@ export function useCollection<T>(options: CollectionOptions<T>) {
     levels,
     status: remote = "ready",
   } = options;
-  useWork(remote === "pending");
+  // `status` projects a reading whose hook already registered its work; a renderer never re-draws it.
   const listId = useId();
   const [ownQuery, setOwnQuery] = useState(options.initialQuery ?? "");
   const query = options.query ?? ownQuery;

@@ -155,6 +155,7 @@ export function MasterTableBody<Row extends RowData>({
   visibleRows,
   columnByKey,
   activeKey,
+  activeColumn,
   rowClassName,
   revit,
   subject,
@@ -176,6 +177,7 @@ export function MasterTableBody<Row extends RowData>({
   visibleRows: VisibleRow<Row>[];
   columnByKey: ReadonlyMap<string, ResolvedColumn<Row>>;
   activeKey?: string | null;
+  activeColumn?: string | null;
   rowClassName?: (row: Row) => string | undefined;
   subject?: (row: Row) => Ref;
   revit?: (row: Row) => readonly number[];
@@ -316,12 +318,22 @@ export function MasterTableBody<Row extends RowData>({
     if (!activeKey) return;
     const index = indexOf.get(activeKey);
     if (index === undefined) return;
+    const requested = pressedKey.current !== activeKey;
     land(activeRowRef.current, {
-      requested: pressedKey.current !== activeKey,
+      requested,
       scroll: virtualized ? () => virtual.scrollToIndex(index, { align: "auto" }) : undefined,
     });
+    // An exact cell named from elsewhere takes the grid's focus, so its own verbs answer the keys.
+    const cell =
+      requested && activeColumn
+        ? [
+            ...(activeRowRef.current?.querySelectorAll<HTMLElement>("[data-master-cell]") ?? []),
+          ].find((td) => td.dataset.columnKey === activeColumn)
+        : null;
+    cell?.scrollIntoView?.({ block: "nearest", inline: "nearest", behavior: "instant" });
+    cell?.focus({ preventScroll: true });
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [activeKey]);
+  }, [activeKey, activeColumn]);
 
   // Stable handlers for every row: a caller's inline arrow (or a per-row one) broke the row memo,
   // so one click redrew every drawn row, and a virtual body renders on every scroll frame.

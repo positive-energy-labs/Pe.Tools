@@ -1,4 +1,4 @@
-import { useWork } from "@pe/kit/lang/pane";
+import { useWork } from "@pe/kit/lang/work";
 import { useEffect, useId, useState } from "react";
 import { ChevronRight, Hand, Timer } from "lucide-react";
 import { toolTitle } from "@pe/agent-contracts";
