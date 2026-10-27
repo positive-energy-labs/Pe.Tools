@@ -17,6 +17,7 @@ public sealed class ShippedPodCompilationTests {
         new Dictionary<(string Pod, string Entrypoint), ScriptPermissionMode> {
             [("document-profiler", "src/MechanicalPlanCensus.cs")] = ScriptPermissionMode.ReadOnly,
             [("document-profiler", "src/Profile.cs")] = ScriptPermissionMode.ReadOnly,
+            [("document-profiler", "src/ReadCostCensus.cs")] = ScriptPermissionMode.NoTransaction,
             [("document-profiler", "src/DeletionExperiment.cs")] = ScriptPermissionMode.NoTransaction,
             [("document-profiler", "src/SaveVariant.cs")] = ScriptPermissionMode.NoTransaction,
             [("document-profiler", "src/ViewOpenProbe.cs")] = ScriptPermissionMode.NoTransaction,
