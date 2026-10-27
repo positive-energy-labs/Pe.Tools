@@ -85,6 +85,8 @@ export type ToolCall = {
 /** One open ACP permission request, answered by `optionId`. */
 export interface Approval {
   requestId: string;
+  deadline?: string;
+  scope?: "run";
   toolCallId: string;
   toolName: string;
   options: Extract<HarnessEvent, { kind: "permission_request" }>["options"];

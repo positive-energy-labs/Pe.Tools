@@ -37,3 +37,8 @@ export const recordBridgeQueue = (...args: Parameters<ActionJournal["recordQueue
 
 export const bridgeDispatchRefusal = (requestId: string): string | null =>
   journal?.dispatchRefusal(requestId) ?? null;
+
+export const bridgeValidateDispatch = (requestId: string) =>
+  journal?.validateDispatch(requestId) ?? Promise.resolve(null);
+export const markBridgeDispatched = (requestId: string) =>
+  journal?.markDispatched(requestId) ?? Promise.resolve();

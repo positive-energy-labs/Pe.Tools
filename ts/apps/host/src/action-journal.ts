@@ -13,6 +13,10 @@ import {
   type ActionAdmission,
   type ActionStep,
   type Basis,
+  type Origin,
+  type Footprint,
+  type CommandConsent,
+  semanticActions,
   type Caller,
   type DocumentRef,
   type ExecutionTarget,
@@ -30,10 +34,50 @@ import {
   type ReceiptReader,
   type ReceiptStamp,
 } from "@pe/agent-contracts";
-import { live } from "./control.ts";
+import {
+  live,
+  originOf,
+  assertRunAdmission,
+  authorizeCommand,
+  commandCheckpoint,
+  subscribeRunChanges,
+} from "./control.ts";
 
 /** Who crossed and why it was admitted: host-minted, stamped on the receipt beside the admission. */
-export type Crossing = { readonly caller: Caller; readonly basis: Basis | null };
+export type Crossing = {
+  readonly caller: Caller;
+  readonly basis: Basis | null;
+  readonly footprint?: Footprint;
+  readonly frozen?: unknown;
+  readonly validate?: () => Promise<void>;
+};
+const sameCaller = (a: Caller, b: Caller) =>
+  a.kind === b.kind &&
+  (a.kind === "pea" && b.kind === "pea"
+    ? a.thread === b.thread
+    : a.kind === "human" && b.kind === "human"
+      ? a.via === b.via && a.login === b.login && a.device === b.device
+      : canonicalRouteInput(a) === canonicalRouteInput(b));
+const effectsOverlap = (a: Footprint, b: Footprint) =>
+  a.some(
+    (x) =>
+      x.kind !== "receipt" &&
+      b.some((y) => {
+        if (y.kind === "receipt") return false;
+        if (x.kind === "document" && y.kind === "session") return x.ref.session === y.session;
+        if (x.kind === "session" && y.kind === "document") return x.session === y.ref.session;
+        return canonicalRouteInput(x) === canonicalRouteInput(y);
+      }),
+  );
+const declaredFootprint = (admission: ActionAdmission): Footprint => {
+  const definition = semanticActions[admission.key as keyof typeof semanticActions];
+  if (definition?.effect === "query") return [];
+  if (admission.destination.kind === "document")
+    return [{ kind: "document", ref: admission.destination.ref }];
+  if (admission.destination.kind === "session")
+    return [{ kind: "session", session: admission.destination.session }];
+  throw Error(`Action '${admission.key}' must declare its exact effect footprint before consent`);
+};
 
 export type ActionExecution = {
   step<A>(
@@ -86,10 +130,10 @@ const failure = (error: unknown): DispatchFailure => {
       ? { issues: [...error.evidence.issues] }
       : {}),
   };
-  return notDispatched
-    ? { ...detail, state: "failed", notDispatched: true }
-    : detail.status === CANCELLED_STATUS
-      ? { state: "cancelled", error: detail.error, status: detail.status }
+  return detail.status === CANCELLED_STATUS
+    ? { state: "cancelled", error: detail.error, status: detail.status }
+    : notDispatched
+      ? { ...detail, state: "failed", notDispatched: true }
       : dispatched
         ? { ...detail, state: "failed" }
         : { ...detail, state: "unknown" };
@@ -123,7 +167,10 @@ type SettleCause =
   | { kind: "recovered" }
   | { kind: "interrupted" };
 /** A terminal state and its fields; every caller parses the whole receipt against the schema. */
-type Settled = { state: Exclude<ActionReceipt["state"], "running"> } & Record<string, unknown>;
+type Settled = { state: Exclude<ActionReceipt["state"], "running" | "waiting"> } & Record<
+  string,
+  unknown
+>;
 
 /**
  * The one terminal decision for an attempt, from its preparation, its recorded steps, and what ended
@@ -145,6 +192,7 @@ function settle(
     (cause.kind === "interrupted"
       ? { error: "Host restarted before the executor recorded an outcome", status: 503 }
       : undefined);
+  if (thrown?.state === "cancelled") return thrown;
   if (!prepared)
     return {
       state: "failed",
@@ -167,11 +215,7 @@ function settle(
   }
   if (cause.kind === "returned") return { state: "succeeded", result: cause.result ?? null };
   const cancelled =
-    thrown?.state === "cancelled"
-      ? thrown
-      : cause.kind !== "threw"
-        ? steps.find((step) => step.state === "cancelled")
-        : undefined;
+    cause.kind !== "threw" ? steps.find((step) => step.state === "cancelled") : undefined;
   if (cancelled?.state === "cancelled")
     return { state: "cancelled", error: cancelled.error, status: cancelled.status };
   const failedStep = [...steps].reverse().find((step) => step.state === "failed");
@@ -243,7 +287,10 @@ const unsettled = (row: ActionReceipt) => {
 const RETAIN_RECEIPTS = 10_000;
 /** A row that blocks overlapping admissions and must stay visible until recovered. */
 const isOpen = (row: ActionReceipt) =>
-  row.state === "running" || row.state === "unknown" || row.state === "incomplete";
+  row.state === "waiting" ||
+  row.state === "running" ||
+  row.state === "unknown" ||
+  row.state === "incomplete";
 
 /**
  * One host journal. Execution never holds the authored Work lock or the journal write tail.
@@ -272,6 +319,8 @@ export class ActionJournal implements ReceiptReader {
   private loaded?: Promise<void>;
   private tail: Promise<unknown> = Promise.resolve();
   private readonly pending = new Map<string, Promise<ActionReceipt>>();
+  private readonly validators = new Map<string, () => Promise<void>>();
+  private readonly cancelWaits = new Map<string, () => void>();
   private readonly listeners = new Set<() => void>();
   private readonly reads = new OwnerReads();
   constructor(
@@ -414,10 +463,43 @@ export class ActionJournal implements ReceiptReader {
   }
 
   /** The committed step index also fences native work after it has waited in the bridge queue. */
+  async validateDispatch(requestId: string): Promise<string | null> {
+    const action = this.stepAction.get(requestId);
+    try {
+      if (action) await this.validators.get(action)?.();
+    } catch (error) {
+      return String(error);
+    }
+    return this.dispatchRefusal(requestId);
+  }
+  async markDispatched(requestId: string) {
+    await this.serial(async () => {
+      const action = this.stepAction.get(requestId),
+        row = action ? this.rows.get(action) : undefined;
+      if (!row) return;
+      await this.commit([
+        {
+          ...row,
+          steps: row.steps.map((step) =>
+            step.id === requestId ? { ...step, dispatchedAt: new Date().toISOString() } : step,
+          ),
+        },
+      ]);
+      this.notify();
+    });
+  }
   dispatchRefusal(requestId: string): string | null {
     const action = this.stepAction.get(requestId);
     const row = action ? this.rows.get(action) : undefined;
-    return row ? (live(row.basis, "native dispatch")?.message ?? null) : null;
+    if (!row) return null;
+    if (row.cancellationRequested) return "Action cancelled before dispatch";
+    try {
+      if (row.origin && row.footprint.some((e) => e.kind !== "receipt"))
+        commandCheckpoint(row.origin, row.consent);
+    } catch (error) {
+      return String(error);
+    }
+    return live(row.basis, "native dispatch")?.message ?? null;
   }
 
   async list(target?: DocumentRef, id?: string): Promise<ActionReceipt[]> {
@@ -514,13 +596,62 @@ export class ActionJournal implements ReceiptReader {
     await writeFile(`${file}.tmp`, JSON.stringify(value, null, 2), "utf8");
     await renameReplacing(`${file}.tmp`, file);
   }
+  private async waitForTurn(id: string) {
+    for (;;) {
+      const row = this.rows.get(id)!;
+      if (row.cancellationRequested)
+        throw new BridgeError("Command cancelled while queued", 499, { notDispatched: true });
+      if (row.origin && row.footprint.some((e) => e.kind !== "receipt"))
+        commandCheckpoint(row.origin, row.consent);
+      const earlier = [...this.rows.values()].slice(0, [...this.rows.keys()].indexOf(id));
+      const blocked = earlier.find(
+        (other) => isOpen(other) && effectsOverlap(row.footprint, other.footprint),
+      );
+      if (!blocked) return;
+      if (blocked.state === "unknown" || blocked.state === "incomplete")
+        throw new BridgeError(
+          `Action '${blocked.id}' requires recovery before this mutation`,
+          409,
+          { notDispatched: true },
+        );
+      await new Promise<void>((resolve) => {
+        const changed = () => {
+          this.listeners.delete(changed);
+          resolve();
+        };
+        this.listeners.add(changed);
+      });
+    }
+  }
+  /** Authentication precedes recovery, and recovery never borrows a newer turn. */
+  async existing(admission: ActionAdmission, caller: Caller): Promise<ActionReceipt | null> {
+    const row = (await this.list(undefined, admission.id))[0];
+    if (!row) return null;
+    if (!sameCaller(row.caller, caller))
+      throw Error("Command id belongs to another authenticated caller");
+    if (
+      canonicalRouteInput({
+        id: row.id,
+        kind: row.kind,
+        key: row.key,
+        destination: row.destination,
+        input: row.request,
+        bases: row.bases,
+      }) !== canonicalRouteInput(admission)
+    )
+      throw Error(
+        `request id '${admission.id}' conflicts with its admitted intent, target or bases`,
+      );
+    return row;
+  }
   async admit(
     raw: ActionAdmission & Crossing,
     prepare: () => Promise<unknown>,
     execute: (execution: ActionExecution) => Promise<unknown>,
     resume = false,
   ): Promise<ActionReceipt> {
-    const { caller, basis, ...authored } = raw;
+    const { caller, basis, footprint: declared, frozen, validate, ...authored } = raw;
+    const origin = originOf(caller);
     const admission = actionAdmissionSchema.parse(authored);
     return this.serial(async () => {
       const prior = this.rows.get(admission.id);
@@ -533,6 +664,8 @@ export class ActionJournal implements ReceiptReader {
         bases: row.bases,
       });
       if (prior) {
+        if (!sameCaller(prior.caller, caller))
+          throw Error("Command id belongs to another authenticated caller");
         if (canonicalRouteInput(identity(prior)) !== canonicalRouteInput(admission))
           throw Error(
             `request id '${admission.id}' conflicts with its admitted intent, target or bases`,
@@ -544,8 +677,11 @@ export class ActionJournal implements ReceiptReader {
         if (prior.steps.some((step) => step.state === "unknown" || step.state === "running"))
           throw Error("Recover every uncertain step before resuming the original action");
       }
+      const footprint = structuredClone(declared ?? declaredFootprint(admission));
+      if (footprint.some((e) => e.kind !== "receipt")) assertRunAdmission(origin);
       const opening = admission.key === "instances.start" || admission.key === "instances.open";
       const blocked =
+        footprint.some((e) => e.kind !== "receipt") &&
         !opening &&
         [...this.open]
           .map((id) => this.rows.get(id)!)
@@ -555,7 +691,7 @@ export class ActionJournal implements ReceiptReader {
               (row.state === "running" ||
                 row.state === "unknown" ||
                 (row.key === "schedule.grid.push" && row.state === "incomplete")) &&
-              (overlaps(admission.destination, row.destination) ||
+              (effectsOverlap(footprint, row.footprint) ||
                 (row.key === "schedule.grid.push" &&
                   admission.key === row.key &&
                   admission.bases.work &&
@@ -568,7 +704,7 @@ export class ActionJournal implements ReceiptReader {
                 (typeof admission.input.path === "string" &&
                   row.request.path === admission.input.path)),
           );
-      if (blocked)
+      if (blocked && blocked.state !== "running")
         throw Error(
           `action '${blocked.id}' is ${blocked.state}; recover that attempt before submitting another`,
         );
@@ -579,6 +715,10 @@ export class ActionJournal implements ReceiptReader {
         // A resume is admitted afresh under its own caller; it never inherits the original basis.
         caller,
         basis,
+        origin,
+        footprint,
+        consent: null,
+        ...(frozen === undefined ? {} : { frozen: structuredClone(frozen) }),
         destination: admission.destination,
         request: admission.input,
         bases: admission.bases,
@@ -587,12 +727,13 @@ export class ActionJournal implements ReceiptReader {
         recovery: prior?.recovery ?? [],
         publication: prior?.publication ?? { state: "unrequested" },
         startedAt: prior?.startedAt ?? new Date().toISOString(),
-        state: "running",
+        state: caller.kind === "pea" && footprint.length ? "waiting" : "running",
       };
       await this.commit([row]);
       this.notify();
       const save = (update: (current: ActionReceipt) => ActionReceipt) =>
         this.serial(async () => {
+          row = this.rows.get(row.id) ?? row;
           const nextRow = actionReceiptSchema.parse(update(row));
           await this.commit([nextRow]);
           this.notify();
@@ -686,6 +827,22 @@ export class ActionJournal implements ReceiptReader {
                 notDispatched: true,
               });
             });
+            row = this.rows.get(row.id) ?? row;
+            if (row.cancellationRequested)
+              throw new BridgeError("Action cancelled before dispatch", 499, {
+                notDispatched: true,
+              });
+            try {
+              if (row.origin && row.footprint.some((e) => e.kind !== "receipt"))
+                commandCheckpoint(row.origin, row.consent);
+            } catch (error) {
+              throw new BridgeError(String(error), 499, { notDispatched: true });
+            }
+            try {
+              await validate?.();
+            } catch (error) {
+              throw new BridgeError(String(error), 409, { notDispatched: true });
+            }
             const dead = live(row.basis);
             if (dead) throw new BridgeError(dead.message, 403, { notDispatched: true });
             result = await effect(step.id);
@@ -713,10 +870,47 @@ export class ActionJournal implements ReceiptReader {
           save((row) => ({ ...row, publication: { state: "recorded", result } })),
       };
       let validated = row.preparation.state === "ready";
+      const releaseRun = subscribeRunChanges(() => {
+        try {
+          if (row.origin && row.footprint.some((e) => e.kind !== "receipt"))
+            commandCheckpoint(row.origin, row.consent);
+        } catch {
+          this.cancelWaits.get(row.id)?.();
+          void save((current) => ({ ...current, cancellationRequested: true })).catch(() => {});
+        }
+      });
       const completion = Promise.resolve()
         .then(async () => {
           // A resumed attempt exported both when it was first admitted and prepared.
-          if (!prior) await this.export(row.id, "admission.json", admission);
+          if (!prior)
+            await this.export(row.id, "admission.json", {
+              ...admission,
+              origin,
+              footprint,
+              frozen,
+            });
+          const cancelled = new Promise<never>((_, reject) =>
+            this.cancelWaits.set(row.id, () =>
+              reject(
+                new BridgeError("Command cancelled before authorization", 499, {
+                  notDispatched: true,
+                }),
+              ),
+            ),
+          );
+          let consent: CommandConsent | null;
+          try {
+            consent = await Promise.race([authorizeCommand(origin, row.id, footprint), cancelled]);
+          } catch (error) {
+            throw new BridgeError(String(error), 499, { notDispatched: true });
+          } finally {
+            this.cancelWaits.delete(row.id);
+          }
+          if (row.cancellationRequested)
+            throw new BridgeError("Command cancelled", 499, { notDispatched: true });
+          await save((current) => ({ ...current, state: "running", consent }));
+          if (footprint.some((e) => e.kind !== "receipt")) commandCheckpoint(origin, consent);
+          await this.waitForTurn(row.id);
           if (row.preparation.state !== "ready") {
             const value = await prepare();
             await this.export(row.id, "preparation.json", value ?? null);
@@ -727,7 +921,12 @@ export class ActionJournal implements ReceiptReader {
           }
           validated = true;
         })
-        .then(() => execute(execution))
+        .then(() => {
+          if (row.cancellationRequested)
+            throw new BridgeError("Command cancelled", 499, { notDispatched: true });
+          if (footprint.some((e) => e.kind !== "receipt")) commandCheckpoint(origin, row.consent);
+          return execute(execution);
+        })
         .then(
           (result) => settle(true, row.steps, { kind: "returned", result }),
           (error) => settle(validated, row.steps, { kind: "threw", error }),
@@ -755,9 +954,12 @@ export class ActionJournal implements ReceiptReader {
             }
             this.notify();
             this.pending.delete(row.id);
+            this.validators.delete(row.id);
+            releaseRun();
             return actionReceiptSchema.parse(structuredClone(next));
           }),
         );
+      if (validate) this.validators.set(row.id, validate);
       this.pending.set(row.id, completion);
       void completion.catch(() => undefined);
       return structuredClone(row);
@@ -774,13 +976,19 @@ export class ActionJournal implements ReceiptReader {
   ): Promise<ActionReceipt> {
     const row = (await this.list(undefined, id))[0];
     if (!row) throw Error(`Action '${id}' has no admitted receipt`);
-    if (row.state !== "running")
-      throw Error(`Action '${id}' is ${row.state}; only a running action can be cancelled`);
+    if (row.state !== "running" && row.state !== "waiting")
+      throw Error(`Action '${id}' is ${row.state}; only an active action can be cancelled`);
+    await this.serial(async () => {
+      const current = this.rows.get(id)!;
+      await this.commit([{ ...current, cancellationRequested: true }]);
+      this.notify();
+    });
+    this.cancelWaits.get(id)?.();
     const step = row.steps.find((step) => step.state === "running" && step.kind === "native");
-    if (!step) throw Error(`Action '${id}' has dispatched nothing to Revit yet`);
-    await signal(step.id);
+    if (step) await signal(step.id);
     return (await this.list(undefined, id))[0] ?? row;
   }
+
   async recover(
     id: string,
     read: (
@@ -964,7 +1172,14 @@ export class ActionJournal implements ReceiptReader {
     const changed: ActionReceipt[] = [];
     for (const row of current) {
       let next = row;
-      if (row.state === "running") {
+      if (row.state === "waiting") {
+        next = {
+          ...row,
+          state: "cancelled",
+          error: "consent.stopped: host restarted during approval",
+          status: 499,
+        };
+      } else if (row.state === "running") {
         const steps = interruptedSteps(row.steps);
         next = {
           ...unsettled(row),

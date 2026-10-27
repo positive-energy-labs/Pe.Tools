@@ -191,7 +191,12 @@ export function projectReceipt(
   const body = r.body;
   switch (body.kind) {
     case "action": {
-      if (!isAnyOperationKey(body.value.key) || body.value.state === "running") return null;
+      if (
+        !isAnyOperationKey(body.value.key) ||
+        body.value.state === "running" ||
+        body.value.state === "waiting"
+      )
+        return null;
       event = "host_op";
       const caller = body.value.caller.kind;
       const settled = body.value;
@@ -836,9 +841,14 @@ type ThreadSnapshot = { id: string; title: string; events: readonly HarnessEvent
 export function createThreadReceiptAdapter(
   exporter: ReceiptExport,
   snapshot: () => readonly ThreadSnapshot[],
+  workReady?: (threadId: string) => Promise<readonly { title: string; href: string }[]>,
 ) {
   const localIds = new Map<string, string>();
   const localTurns = new Map<string, { threadId: string; turnId: string }>();
+  const completions = new Map<
+    string,
+    { running: number; completed: number; work: readonly { title: string; href: string }[] }
+  >();
   let tail = Promise.resolve();
   const peaStamp = exporter.stamps.host
     ? receiptStampSchema.parse({ ...exporter.stamps.host, component: "pea" })
@@ -853,6 +863,8 @@ export function createThreadReceiptAdapter(
       .find((t) => t.id === ref.threadId)
       ?.events.find((e) => String(e.seq) === ref.eventId);
   const context: NoticeContext = {
+    completed: (receipt) =>
+      receipt.join.turnId ? completions.get(receipt.join.turnId) : undefined,
     thread(opaque) {
       const thread = snapshot().find((t) => t.id === localIds.get(opaque));
       return thread ? { id: thread.id, title: thread.title } : undefined;
@@ -972,6 +984,20 @@ export function createThreadReceiptAdapter(
                 : {}),
               ...span,
             };
+        if (ended?.turnId && turnId) {
+          const actions = (await exporter.journal.list()).filter(
+            (action) =>
+              (action.origin?.root?.thread === id && action.origin.root.turn === ended.turnId) ||
+              (action.origin?.run?.thread === id && action.origin.run.turn === ended.turnId),
+          );
+          completions.set(turnId, {
+            running: actions.filter(
+              (action) => action.state === "waiting" || action.state === "running",
+            ).length,
+            completed: actions.filter((action) => action.state === "succeeded").length,
+            work: (await workReady?.(id)) ?? [],
+          });
+        }
         const sourceId = await exporter.journal.opaqueId("request", `${id}:event:${event.seq}`);
         await exporter.record(
           body,

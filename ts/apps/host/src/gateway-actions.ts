@@ -1,13 +1,20 @@
+import { readFile } from "node:fs/promises";
+import { resolve } from "node:path";
+import { createHash } from "node:crypto";
+import { capturePackage, captureDirectory } from "./packages.ts";
+import { readZip } from "./pod-transfer.ts";
+import { productPagesRootPath } from "./product-paths.ts";
 import { resolveSdkSession, type SdkSession } from "./sdk-session.ts";
 import { freezeScript, requireScriptSuccess } from "./operation-script.ts";
 import { Ajv, type ValidateFunction } from "ajv";
 import { Effect, Schema } from "effect";
 import {
   actionAdmissionSchema,
-  eligibleCaller,
   nativeProcessSchema,
   type Caller,
   type ExecutionTarget,
+  type Footprint,
+  canonicalRouteInput,
 } from "@pe/agent-contracts";
 import { admitScript, consentedRead, Refused } from "./control.ts";
 import { hostOperationDefinitionSchema } from "@pe/host-contracts/contracts";
@@ -82,7 +89,12 @@ export function requireEligibleCaller(
   caller: Caller,
   door: string,
 ) {
-  if (!eligibleCaller(definition.actor, caller))
+  if (
+    caller.kind !== "human" &&
+    caller.kind !== "pea" &&
+    definition.actor &&
+    definition.actor !== "any"
+  )
     throw new Refused({
       code: "human.only",
       door,
@@ -184,14 +196,129 @@ export async function admitGatewayAction(
       throw refused("Original document lifetime is no longer open");
     return session;
   };
+  const submittedSession = await validate();
+  const submittedDefinition = await operationDefinition(admission.key, bridge, submittedSession);
+  requireEligibleCaller(submittedDefinition, crossing.caller, "/actions");
+  if (submittedDefinition.intent !== "Mutate" && admission.key !== "scripting.execute")
+    throw refused("Only catalogued commands enter action admission");
+  const frozenScript =
+    admission.key === "scripting.execute" ? await freezeScript(admission.input) : undefined;
+  const footprint: Footprint = [];
+  const checks: (() => Promise<void>)[] = [];
+  const frozen: Record<string, unknown> = {
+    ...(frozenScript ? { script: frozenScript } : {}),
+    definition: submittedDefinition,
+  };
+  if (submittedSession) {
+    const docs = submittedSession.state?.openDocuments;
+    if (admission.key === "scripting.execute") {
+      if (!docs) throw refused("Script effects require a complete sibling document census");
+      footprint.push(
+        ...docs.map((doc) => ({
+          kind: "document" as const,
+          ref: { session: submittedSession.sessionId, openId: doc.openId },
+        })),
+      );
+      const census = docs.map((doc) => doc.openId).sort();
+      frozen.census = census;
+      checks.push(async () => {
+        const current = await validate();
+        if (
+          canonicalRouteInput(current?.state?.openDocuments.map((doc) => doc.openId).sort()) !==
+          canonicalRouteInput(census)
+        )
+          throw refused("Script sibling census changed after submission; submit a new command");
+      });
+    } else if (admission.destination.kind === "document")
+      footprint.push({ kind: "document", ref: admission.destination.ref });
+    else footprint.push({ kind: "session", session: submittedSession.sessionId });
+  } else {
+    const input = admission.input;
+    switch (admission.key) {
+      case "pod.member.write":
+      case "pod.member.save":
+        footprint.push({ kind: "member", pod: String(input.pod), path: String(input.path) });
+        break;
+      case "pod.export": {
+        footprint.push({ kind: "file", path: resolve(String(input.archivePath)) });
+        const capture = await capturePackage(String(input.pod));
+        frozen.source = capture;
+        checks.push(async () => {
+          if (
+            canonicalRouteInput(await capturePackage(String(input.pod))) !==
+            canonicalRouteInput(capture)
+          )
+            throw refused("Pod source changed after submission; submit a new command");
+        });
+        break;
+      }
+      case "pod.import": {
+        const path = resolve(String(input.archivePath)),
+          bytes = await readFile(path),
+          entries = readZip(bytes);
+        const manifest = JSON.parse(entries.get("pod.json")?.toString("utf8") ?? "null") as {
+          id?: string;
+        } | null;
+        if (!manifest?.id) throw refused("Pod archive has no exact destination identity");
+        footprint.push(
+          ...[...entries.keys()].map((path) => ({
+            kind: "member" as const,
+            pod: manifest.id!,
+            path,
+          })),
+        );
+        const hash = createHash("sha256").update(bytes).digest("hex");
+        frozen.archive = { path, sha256: hash, bytesBase64: bytes.toString("base64") };
+        checks.push(async () => {
+          if (
+            createHash("sha256")
+              .update(await readFile(path))
+              .digest("hex") !== hash
+          )
+            throw refused("Pod archive changed after submission; submit a new command");
+        });
+        break;
+      }
+      case "pod.promote": {
+        const source = resolve(productPagesRootPath(), String(input.page)),
+          capture = await captureDirectory(source);
+        frozen.source = capture;
+        footprint.push(
+          { kind: "member", pod: String(input.id), path: "pod.json" },
+          ...capture.members.map((member) => ({
+            kind: "member" as const,
+            pod: String(input.id),
+            path: `pages/${String(input.page)}/${member.path}`,
+          })),
+        );
+        checks.push(async () => {
+          if (canonicalRouteInput(await captureDirectory(source)) !== canonicalRouteInput(capture))
+            throw refused("Page source changed after submission; submit a new command");
+        });
+        break;
+      }
+      case "rhvac.sync":
+        footprint.push({ kind: "file", path: resolve(String(input.path)) });
+        break;
+      default:
+        if (crossing.caller.kind !== "human")
+          throw refused(
+            `'${admission.key}' has no declared external effect adapter; use its human control`,
+          );
+    }
+  }
+  const revalidate = async () => {
+    await crossing.validate?.();
+    for (const check of checks) await check();
+  };
   return owner.admit(
-    { ...admission, ...crossing },
+    { ...admission, ...crossing, footprint, frozen, validate: revalidate },
     async () => {
       const session = await validate();
       const definition = await operationDefinition(admission.key, bridge, session);
       requireEligibleCaller(definition, crossing.caller, "/actions");
       const actor = "actor" in definition ? definition.actor : undefined;
-      if (definition.intent !== "Mutate")
+      if (definition.intent !== "Mutate" && admission.key !== "scripting.execute")
         throw refused("Only catalogued mutations enter external admission");
       let nativeCheck: ValidateFunction | undefined;
       if (isTsOnlyOperationKey(admission.key)) {
@@ -236,8 +363,7 @@ export async function admitGatewayAction(
         sdk,
       );
       await validate(process);
-      const script =
-        admission.key === "scripting.execute" ? await freezeScript(admission.input) : undefined;
+      const script = frozenScript;
       if (script && !nativeCheck?.({ ...admission.input, sourceBundle: script.sourceBundle }))
         throw refused(
           `Native contract does not accept the captured Pod bundle: ${JSON.stringify(nativeCheck?.errors)}`,

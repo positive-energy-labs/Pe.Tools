@@ -1,7 +1,12 @@
 import { Context, Deferred, Effect, Layer, PubSub, Ref, Schema } from "effect";
 import type { HttpServerRequest, HttpServerResponse } from "effect/unstable/http";
 import { HttpServerResponse as Response } from "effect/unstable/http";
-import { bridgeDispatchRefusal, recordBridgeQueue } from "./gateway-owner.ts";
+import {
+  bridgeDispatchRefusal,
+  bridgeValidateDispatch,
+  markBridgeDispatched,
+  recordBridgeQueue,
+} from "./gateway-owner.ts";
 import { receiptProducerSchema, type DocumentRef, type ReceiptProducer } from "@pe/agent-contracts";
 import { randomUUID } from "node:crypto";
 import { runtimeOwnerRejection } from "@pe/host-contracts/service-identity";
@@ -544,6 +549,11 @@ export const RevitBridgeLive = Layer.effect(
               }),
             );
         }
+        if (reserved) {
+          const invalid = yield* Effect.promise(() => bridgeValidateDispatch(requestId));
+          if (invalid)
+            return yield* Effect.fail(new BridgeError(invalid, 409, { notDispatched: true }));
+        }
         const phase = yield* Ref.modify(
           session.requests,
           (
@@ -584,6 +594,7 @@ export const RevitBridgeLive = Layer.effect(
             openDocumentId,
           },
         });
+        if (reserved) yield* Effect.promise(() => markBridgeDispatched(requestId));
         const res = yield* Deferred.await(reply);
         if (!res.ok) {
           const state = yield* Ref.get(session.state);

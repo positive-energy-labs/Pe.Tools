@@ -1,5 +1,6 @@
 import { z } from "zod";
 import { callerSchema } from "./caller.ts";
+import { runRefSchema, type RunConsent } from "./run-consent.ts";
 import { mentionSchema } from "./mention.ts";
 import { documentRequestSchema, threadHeadSchema } from "./target.ts";
 import { routeKeys } from "./route-address.ts";
@@ -288,11 +289,21 @@ export const harnessEventSchema = z.discriminatedUnion("kind", [
   z.object({
     seq: z.number(),
     at: z.string(),
+    kind: z.literal("run_consent"),
+    run: runRefSchema,
+    consent: z.custom<RunConsent>(),
+  }),
+  z.object({
+    seq: z.number(),
+    at: z.string(),
     kind: z.literal("permission_request"),
     turnId: z.string().nullable(),
     requestId: z.string(),
     toolCall: z.object({ toolCallId: z.string(), title: z.string().optional() }).passthrough(),
     options: z.array(permissionOptionSchema),
+    deadline: z.string().optional(),
+    scope: z.literal("run").optional(),
+    commands: z.array(z.string()).optional(),
   }),
   /** One member per `by`: a user answer carries `optionId`; `cancel` (the turn was cancelled with
    * the ask open) and `expired` (the host restarted with it open) carry none. Nested so the outer
@@ -304,7 +315,7 @@ export const harnessEventSchema = z.discriminatedUnion("kind", [
       kind: z.literal("permission_resolved"),
       turnId: z.string().nullable(),
       requestId: z.string(),
-      by: z.literal("user"),
+      by: z.enum(["user", "deadline"]),
       optionId: z.string(),
     }),
     z.object({
@@ -590,6 +601,7 @@ export const forkThreadRequestSchema = z.object({
   title: z.string().optional(),
 });
 export const createThreadRequestSchema = z.object({
+  delegated: z.boolean().optional(),
   providerId: z.string(),
   title: z.string().optional(),
 });

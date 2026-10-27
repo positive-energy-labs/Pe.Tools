@@ -1,0 +1,176 @@
+import { mkdtemp, rm, readFile } from "node:fs/promises";
+import { tmpdir } from "node:os";
+import { join } from "node:path";
+import { expect, test, vi } from "vite-plus/test";
+import { ActionJournal } from "../src/action-journal.ts";
+import { bindControl } from "../src/control.ts";
+import { RunConsents, type ConsentEvent } from "../src/run-consent.ts";
+import type { ActionAdmission, Caller } from "@pe/agent-contracts";
+
+const run = { thread: "thread", turn: "turn" };
+const caller: Caller = { kind: "pea", context: "host-minted", thread: run.thread, run, root: run };
+const footprint = [{ kind: "file" as const, path: "C:/user/design.json" }];
+const admission = (id: string): ActionAdmission => ({
+  id,
+  kind: "operation",
+  key: "test.write",
+  destination: { kind: "host" },
+  input: { value: 250 },
+  bases: {},
+});
+const setup = async () => {
+  const dir = await mkdtemp(join(tmpdir(), "pe-consent-")),
+    path = join(dir, "journal.jsonl");
+  const events: ConsentEvent[] = [],
+    runs = new RunConsents((_, e) => events.push(e));
+  runs.open(run);
+  bindControl({ runs, acquired: () => null });
+  const journal = new ActionJournal(path);
+  const ready = async () =>
+    vi.waitFor(() => expect(events.some((e) => e.kind === "permission_request")).toBe(true));
+  const approve = () => {
+    const ask = events.find((e) => e.kind === "permission_request");
+    if (!ask || ask.kind !== "permission_request") throw Error("No ask");
+    runs.decide(run.thread, ask.requestId, "allow_now");
+  };
+  return {
+    dir,
+    path,
+    events,
+    runs,
+    journal,
+    approve,
+    ready,
+    close: async () => {
+      runs.closeAll();
+      await Promise.all((await journal.list()).map((r) => journal.wait(r.id).catch(() => null)));
+      await rm(dir, { recursive: true, force: true });
+    },
+  };
+};
+
+test("waiting commands are durable, share approval, freeze submitted bytes and serialize common destinations", async () => {
+  const h = await setup();
+  try {
+    let preparation = 0,
+      effects = 0;
+    const frozen = { revision: 13, value: 250 };
+    const submit = async (id: string) =>
+      h.journal.admit(
+        { ...admission(id), caller, basis: null, footprint, frozen },
+        async () => {
+          preparation++;
+          return { ...frozen };
+        },
+        async (e) =>
+          e.step("file", "write", e.prepared, async () => {
+            effects++;
+            return effects;
+          }),
+      );
+    const a = await submit("a"),
+      b = await submit("b");
+    await h.ready();
+    expect([a.state, b.state, preparation, effects]).toEqual(["waiting", "waiting", 0, 0]);
+    expect(await readFile(h.path, "utf8")).toContain('"state":"waiting"');
+    expect(h.events.filter((e) => e.kind === "permission_request")).toHaveLength(1);
+    h.approve();
+    const settled = await Promise.all([h.journal.wait("a"), h.journal.wait("b")]);
+    expect(settled.map((r) => r.state)).toEqual(["succeeded", "succeeded"]);
+    expect(settled[0]!.consent).toEqual(settled[1]!.consent);
+    expect(effects).toBe(2);
+    h.runs.close(run, "completed");
+    expect((await submit("a")).state).toBe("succeeded");
+    await expect(submit("late")).rejects.toThrow("run.closed");
+    await expect(
+      h.journal.existing({ ...admission("a"), input: { value: 999 } }, caller),
+    ).rejects.toThrow("conflicts");
+    await expect(
+      h.journal.existing(admission("a"), { kind: "pea", context: "other", thread: "other" }),
+    ).rejects.toThrow("another authenticated");
+  } finally {
+    await h.close();
+  }
+});
+
+test("per-command cancellation preserves the shared decision; Stop cancels every unstarted mutation", async () => {
+  const h = await setup();
+  try {
+    let effects = 0;
+    const submit = (id: string) =>
+      h.journal.admit(
+        { ...admission(id), caller, basis: null, footprint },
+        async () => null,
+        async (e) => e.step("file", "write", {}, async () => ++effects),
+      );
+    await submit("a");
+    await submit("b");
+    await h.journal.cancel("a", async () => null);
+    await h.ready();
+    h.approve();
+    expect((await h.journal.wait("a")).state).toBe("cancelled");
+    expect((await h.journal.wait("b")).state).toBe("succeeded");
+    expect(effects).toBe(1);
+    let release!: () => void;
+    const gate = new Promise<void>((resolve) => (release = resolve));
+    await h.journal.admit(
+      { ...admission("blocked"), caller, basis: null, footprint },
+      async () => {
+        await gate;
+        return null;
+      },
+      async (e) => e.step("file", "late", {}, async () => ++effects),
+    );
+    h.runs.close(run, "stopped");
+    release();
+    expect((await h.journal.wait("blocked")).state).toBe("cancelled");
+    expect(effects).toBe(1);
+  } finally {
+    await h.close();
+  }
+});
+
+test("restart cancels unapproved rows and conflicting consumed edits fail before a file effect", async () => {
+  const h = await setup();
+  try {
+    await h.journal.admit(
+      { ...admission("old"), caller, basis: null, footprint },
+      async () => null,
+      async () => null,
+    );
+    await h.ready();
+    const recovered = await new ActionJournal(h.path).list(undefined, "old");
+    expect(recovered[0]?.state).toBe("cancelled");
+    h.runs.close(run, "completed");
+    await h.journal.wait("old");
+    const next = { thread: "thread", turn: "next" };
+    h.runs.open(next);
+    const by: Caller = { ...caller, run: next, root: next } as Caller;
+    let effects = 0,
+      version = 13;
+    await h.journal.admit(
+      {
+        ...admission("fresh"),
+        caller: by,
+        basis: null,
+        footprint,
+        frozen: { revision: 13 },
+        validate: async () => {
+          if (version !== 13) throw Error("consumed Work changed");
+        },
+      },
+      async () => null,
+      async (e) => e.step("file", "write", {}, async () => ++effects),
+    );
+    version = 14;
+    await vi.waitFor(() =>
+      expect(h.events.filter((e) => e.kind === "permission_request")).toHaveLength(2),
+    );
+    const ask = h.events.findLast((e) => e.kind === "permission_request")!;
+    if (ask.kind === "permission_request") h.runs.decide(next.thread, ask.requestId, "allow_now");
+    expect((await h.journal.wait("fresh")).state).toBe("failed");
+    expect(effects).toBe(0);
+  } finally {
+    await h.close();
+  }
+});

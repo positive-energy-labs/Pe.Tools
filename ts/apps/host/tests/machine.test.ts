@@ -195,6 +195,8 @@ function acquiring(
     key: `instances.${verb}`,
     caller: { kind: "human", via: "local" },
     basis: { kind: "human" },
+    footprint: [],
+    consent: { by: "press" },
     state,
     destination: { kind: "host" },
     request: verb === "start" ? start : { source: "C:/Tower.rvt", into: { start } },

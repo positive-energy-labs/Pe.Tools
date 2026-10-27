@@ -84,6 +84,8 @@ import {
 } from "@pe/agent-contracts";
 import { HOST_CONTEXT_VARIABLE } from "@pe/host-contracts/contracts";
 import {
+  bindControl,
+  originOf,
   currentCaller,
   callerThread,
   emitRevoke,
@@ -96,10 +98,11 @@ import {
   sessionAcquisition,
 } from "../control.ts";
 import { Effect } from "effect";
+import { RunConsents } from "../run-consent.ts";
 import { z } from "zod";
 import type { HostLog } from "../host-log.ts";
 import { openAdapter, stopChild } from "./adapter.ts";
-import { accessModes, isAuthRefusal, sessionOffer, type Providers } from "./providers.ts";
+import { isAuthRefusal, sessionOffer, type Providers } from "./providers.ts";
 import type { PluginHookName, PluginHooks } from "@pe/agent-contracts";
 import { exportThread } from "../thread-export.ts";
 import {
@@ -385,6 +388,11 @@ function writeJson(path: string, value: unknown) {
 
 export function createHarnessThreads(options: HarnessThreadsOptions) {
   const threads = new Map<string, Thread>();
+  const runs = new RunConsents((run, event) => {
+    const t = threads.get(run.thread);
+    if (t) append(t, event);
+  });
+  bindControl({ runs });
   /** Synchronization only. Observations and pins are always reconstructed from thread events. */
   const elementNameReads = new Map<string, Promise<void>>();
   const headListeners = new Set<(threadId: string, head: ThreadHead) => void>();
@@ -882,7 +890,7 @@ export function createHarnessThreads(options: HarnessThreadsOptions) {
    * Door 6, the only writer of a thread's targets (ADR 0021). The PUT names the whole set; the host
    * keeps the admission of every target it already holds. A human adds or removes any document,
    * and adding an exact open lifetime Pea did not acquire records its admission. Pea adds and
-   * removes only its own acquired documents; it never adds or removes a user document.
+   * may change its context targets; this never creates the human admission external devices use.
    */
   function setHead(
     threadId: string,
@@ -912,12 +920,6 @@ export function createHarnessThreads(options: HarnessThreadsOptions) {
         request.kind === "open"
           ? documentAcquisition(request.ref)
           : sessionAcquisition(request.session);
-      if (caller.kind === "pea" && acquired === null)
-        throw new Refused({
-          code: "grant.required",
-          door,
-          reason: `Refused at ${door}: Pea may add only documents it acquired; this one in session '${request.kind === "open" ? request.ref.session : request.session}' is yours. Only you add your documents to a thread, from the composer, or open a copy.`,
-        });
       return {
         request,
         ...(label ? { label } : {}),
@@ -934,12 +936,6 @@ export function createHarnessThreads(options: HarnessThreadsOptions) {
       };
     });
     const removed = current.targets.filter((held) => !keys.has(targetKey(held.request)));
-    if (caller.kind === "pea" && removed.some((held) => held.admission !== null))
-      throw new Refused({
-        code: "human.only",
-        door,
-        reason: `Refused at ${door}: only you remove a document you added to this thread.`,
-      });
     const head: ThreadHead = { targets, revision };
     writeHead(threadId, head);
     // Removal ends an admission: work it queued but Revit has not begun stops (ADR 0017 rule 6).
@@ -1045,7 +1041,11 @@ export function createHarnessThreads(options: HarnessThreadsOptions) {
     // A process receives one immutable run. Resume the saved ACP conversation in a new
     // process each turn; delayed MCP and shell invocations can never acquire a later turn.
     const run = t.running ? { thread: t.meta.id, turn: t.running } : undefined;
-    const context = mintContext({ kind: "pea", thread: t.meta.id, ...(run ? { run, root: t.meta.consentRoot ?? run } : {}) });
+    const context = mintContext({
+      kind: "pea",
+      thread: t.meta.id,
+      ...(run ? { run, root: t.meta.consentRoot ?? run } : {}),
+    });
     env[HOST_CONTEXT_VARIABLE] = context;
     let live: Live | undefined;
     const { child, conn, stderr } = openAdapter(harness, options.worldRoot, env, () => ({
@@ -1069,6 +1069,30 @@ export function createHarnessThreads(options: HarnessThreadsOptions) {
         new Promise<RequestPermissionResponse>((resolve) => {
           if (t.child !== child || t.stopped) return resolve({ outcome: { outcome: "cancelled" } });
           clearIdle(t);
+          // Native harness writes have no immutable host command or exact effect footprint.
+          // Their approval cannot bypass the journal; the semantic and causal CLI doors remain.
+          if (["edit", "delete", "move", "execute"].includes(request.toolCall.kind ?? "")) {
+            const reason =
+              "Native unjournaled writes are unsupported. Use Pea host semantic or causal CLI commands.";
+            append(t, {
+              kind: "update",
+              turnId: t.running,
+              update: {
+                sessionUpdate: "tool_call_update",
+                toolCallId: request.toolCall.toolCallId,
+                status: "failed",
+                title: reason,
+              },
+            });
+            const reject =
+              request.options.find((option) => option.kind === "reject_once") ??
+              request.options.find((option) => option.kind.startsWith("reject"));
+            return resolve({
+              outcome: reject
+                ? { outcome: "selected", optionId: reject.optionId }
+                : { outcome: "cancelled" },
+            });
+          }
           const requestId = randomUUID();
           const turnId = t.running;
           append(t, {
@@ -1212,14 +1236,16 @@ export function createHarnessThreads(options: HarnessThreadsOptions) {
     for (const [id, value] of Object.entries(wantTraits))
       if (t.meta.traits.find((trait) => trait.id === id)?.current !== value)
         await setTrait(t, live, id, value).catch(notReapplied(`${id} ${String(value)}`));
-    // The access setting picks the mode every session starts in: no mode picker, no plan mode.
-    const access = options.providers.access();
+    // Product writes cross the journal even when the old access preference says Full.
     const offered = new Set(session.modes?.availableModes.map((m) => m.id));
-    const mode = accessModes[access.guarded ? "guarded" : "unguarded"].find((m) => offered.has(m));
-    if (mode && mode !== session.modes?.currentModeId)
-      await live.conn
-        .setSessionMode({ sessionId: live.sessionId, modeId: mode })
-        .catch(notReapplied(`access mode ${mode}`));
+    const required = harness === "codex" ? ["read-only"] : ["default"];
+    const mode = required.find((candidate) => offered.has(candidate));
+    if (!mode)
+      throw Error(
+        `Harness ${harness} offers no journal-safe ${required.join("/")} mode; unjournaled writes are unsupported`,
+      );
+    if (mode !== session.modes?.currentModeId)
+      await live.conn.setSessionMode({ sessionId: live.sessionId, modeId: mode });
     return live;
   }
 
@@ -1432,10 +1458,14 @@ export function createHarnessThreads(options: HarnessThreadsOptions) {
     mentions?: Mention[],
   ) {
     clearIdle(t);
-    // Configuration may have warmed an unscoped child. No process is reused across turns.
-    await t.retiring;
-    if (t.child) await retire(t);
     t.running = turnId;
+    const runRef = { thread: t.meta.id, turn: turnId };
+    let runError: unknown;
+    try {
+      runs.open(runRef, t.meta.consentRoot ?? runRef);
+    } catch (error) {
+      runError = error;
+    }
     // The head as of delivery is the document this turn runs against; the record names it itself.
     const head = readHead(t.meta.id);
     const pins = pinElementTargets(t, turnId, head.targets);
@@ -1468,6 +1498,11 @@ export function createHarnessThreads(options: HarnessThreadsOptions) {
     arm(t);
     let outcome = "failed";
     try {
+      if (runError) throw runError;
+      // Configuration may have warmed an unscoped child. Admission is logged before waiting.
+      await t.retiring;
+      if (t.live) await t.live.catch(() => null);
+      if (t.child) await retire(t);
       await options.prepare?.();
       await options.pluginHook?.("turn.before", { threadId: t.meta.id, turnId });
       if (!t.live) append(t, { kind: "starting", turnId });
@@ -1525,6 +1560,7 @@ export function createHarnessThreads(options: HarnessThreadsOptions) {
     }
     disarm(t);
     await options.pluginHook?.("turn.after", { threadId: t.meta.id, turnId, outcome });
+    runs.close(runRef, outcome === "cancelled" || outcome === "failed" ? "stopped" : "completed");
     t.running = null;
     await retire(t);
     drain(t);
@@ -1638,6 +1674,7 @@ export function createHarnessThreads(options: HarnessThreadsOptions) {
    */
   async function cancel(t: Thread, by: Caller, door: string) {
     const turnId = t.running;
+    if (turnId) runs.close({ thread: t.meta.id, turn: turnId }, "stopped");
     settleAsks(t, "cancel");
     const live = turnId ? await t.live?.catch(() => null) : null;
     if (turnId && live) append(t, { kind: "cancel_requested", turnId, by, door });
@@ -1713,7 +1750,7 @@ export function createHarnessThreads(options: HarnessThreadsOptions) {
         [...threads.values()].map(summary).sort((a, b) => b.updatedAt.localeCompare(a.updatedAt)),
       );
     if (declared.id === "threads.create") {
-      const { providerId, title } = await input(createThreadRequestSchema);
+      const { providerId, title, delegated } = await input(createThreadRequestSchema);
       if (options.updatePending?.())
         return json(
           { error: "Pe.Tools is updating; create this thread after the update finishes." },
@@ -1721,7 +1758,18 @@ export function createHarnessThreads(options: HarnessThreadsOptions) {
         );
       if (!options.providers.get(providerId))
         return json({ error: `No provider ${providerId}` }, 400);
+      if (delegated && (caller.kind !== "pea" || !caller.run || !caller.root))
+        throw new Refused({
+          code: "run.none",
+          door: url.pathname,
+          reason: "Delegation requires an authenticated causal Pea run",
+        });
+      if (delegated) runs.assertOpen(originOf(caller));
       const t = newThread({ providerId, modelId: null }, title);
+      if (delegated && caller.kind === "pea") {
+        t.meta.consentRoot = caller.root;
+        writeMeta(t);
+      }
       return json(summary(t));
     }
     const t = id ? threads.get(id) : undefined;
@@ -1838,7 +1886,21 @@ export function createHarnessThreads(options: HarnessThreadsOptions) {
         return new Response(null, { status: 204 });
       case "thread.prompt": {
         // Only a human message moves a thread.
-        requireHuman(caller, url.pathname, "a thread message");
+        if (
+          caller.kind === "pea" &&
+          t.meta.consentRoot &&
+          caller.root &&
+          JSON.stringify(caller.root) === JSON.stringify(t.meta.consentRoot)
+        ) {
+          runs.assertOpen(originOf(caller));
+        } else {
+          requireHuman(caller, url.pathname, "a thread message");
+          // A human starts an independent task even when this conversation was once delegated.
+          if (t.meta.consentRoot) {
+            delete t.meta.consentRoot;
+            writeMeta(t);
+          }
+        }
         const {
           id: turnId,
           delivery,
@@ -1927,7 +1989,8 @@ export function createHarnessThreads(options: HarnessThreadsOptions) {
       case "thread.permission": {
         requireHuman(caller, url.pathname, "answering a harness approval");
         const { requestId, optionId } = await input(permissionResponseSchema);
-        return resolvePermission(t, requestId, optionId, "user")
+        return runs.decide(t.meta.id, requestId, optionId) ||
+          resolvePermission(t, requestId, optionId, "user")
           ? json({ ok: true })
           : json({ error: `No pending permission ${requestId}` }, 409);
       }
@@ -2072,6 +2135,22 @@ export function createHarnessThreads(options: HarnessThreadsOptions) {
   // Restart recovery: a turn open in the log ended with the host that ran it. Its open asks expire
   // and the turn ends in an error.
   for (const t of threads.values()) {
+    const consentByRun = new Map<string, Extract<HarnessEvent, { kind: "run_consent" }>>();
+    for (const event of t.events)
+      if (event.kind === "run_consent") consentByRun.set(JSON.stringify(event.run), event);
+    for (const event of consentByRun.values())
+      if (event.consent.state !== "closed") {
+        append(t, {
+          kind: "run_consent",
+          run: event.run,
+          consent: {
+            state: "closed",
+            reason: "restart",
+            decision: event.consent.state === "allowed" ? event.consent.decision : null,
+            at: new Date().toISOString(),
+          },
+        });
+      }
     const resolved = new Set(
       t.events.flatMap((e) =>
         e.kind === "permission_resolved" || e.kind === "question_resolved" ? [e.requestId] : [],
@@ -2150,6 +2229,7 @@ export function createHarnessThreads(options: HarnessThreadsOptions) {
   sweep.unref();
 
   return {
+    runs,
     readTurnElementNames,
     /** Current metadata enriches remembered context without changing targets or admissions. */
     refreshWorkContexts: () => {
@@ -2241,6 +2321,7 @@ export function createHarnessThreads(options: HarnessThreadsOptions) {
     /** Host shutdown: stop every harness child and its tree. */
     close: () => {
       clearInterval(sweep);
+      runs.closeAll();
       return Promise.all([...threads.values()].map(stop));
     },
   };

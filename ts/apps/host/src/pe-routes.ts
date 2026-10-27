@@ -189,6 +189,7 @@ export function createPeRoutes(options: PeRoutesOptions) {
       scope.binding === "workspace" ||
       scope.binding === "host" ||
       caller.kind === "human" ||
+      caller.kind === "pea" ||
       caller.kind === "anonymous"
     )
       return scope;
@@ -723,7 +724,27 @@ export function createPeRoutes(options: PeRoutesOptions) {
     return json({ error: `No route ${method} ${url.pathname}` }, 404);
   }
 
-  return { workspace: work, fetch: handle };
+  return {
+    workspace: work,
+    fetch: handle,
+    completedWork: async (threadId: string) => {
+      const snapshot = await readThreadWork(work, options.navigation);
+      const pending =
+        snapshot.threads
+          .find((thread) => thread.threadId === threadId)
+          ?.works.filter((entry) => entry.unfinished > 0) ?? [];
+      return (
+        await Promise.all(
+          pending.map(async (entry) => {
+            const resumed = await resumeWork(work, entry.id, options.navigation);
+            return resumed?.url
+              ? { title: `${entry.route}: ${entry.intent}`, href: resumed.url }
+              : null;
+          }),
+        )
+      ).filter((entry) => entry !== null);
+    },
+  };
 }
 
 /**
@@ -819,6 +840,7 @@ export function createContributionContent(options: {
           title: p.title,
           description: "Page shared state and binding.",
           needs: "nothing",
+          effect: "query",
           mutates: false,
           principal: ["human", "pea", "page", "external-mcp"],
           input: {},
@@ -1033,7 +1055,11 @@ export function makeHostPeRoutes(
   const providers = createProviders({ shellPath });
   const telemetry = hostReceiptExport();
   const stopOperationHooks = observePluginOperations(telemetry.journal, content.lifecycle.emit);
-  const receiptThreads = createThreadReceiptAdapter(telemetry, () => threads.receiptSnapshot());
+  const receiptThreads = createThreadReceiptAdapter(
+    telemetry,
+    () => threads.receiptSnapshot(),
+    (threadId) => routes.completedWork(threadId),
+  );
   const threads = createHarnessThreads({
     prepare: () => content.read(),
     providers,

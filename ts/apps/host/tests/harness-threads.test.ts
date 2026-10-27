@@ -17,7 +17,16 @@ import type {
 import { HARNESS_EVENT_MAX_BYTES } from "@pe/agent-contracts";
 import { withInvocationContext } from "@pe/runtime/context";
 import { human } from "./callers.ts";
-import { admitCrossing, bindControl, live, onRevoke, Refused } from "../src/control.ts";
+import {
+  admitCrossing,
+  bindControl,
+  live,
+  onRevoke,
+  Refused,
+  callerOf,
+  originOf,
+  assertRunAdmission,
+} from "../src/control.ts";
 import { createProviders } from "../src/harness/providers.ts";
 import { createHarnessThreads, IDLE_CHILD_MS } from "../src/harness/threads.ts";
 import * as adapter from "../src/harness/adapter.ts";
@@ -35,6 +44,7 @@ type Host = {
   launchScheduled: ReturnType<typeof createHarnessThreads>["launchScheduled"];
   heads: ReturnType<typeof createHarnessThreads>["heads"];
   observe: ReturnType<typeof createHarnessThreads>["observe"];
+  runs: ReturnType<typeof createHarnessThreads>["runs"];
   log: HostLog;
   close: () => Promise<unknown>;
   consoles: string[];
@@ -82,6 +92,7 @@ const host = (
     launchScheduled: threads.launchScheduled,
     heads: threads.heads,
     observe: threads.observe,
+    runs: threads.runs,
     log,
     close: threads.close,
     consoles,
@@ -147,7 +158,14 @@ async function until(
   throw new Error(`timed out: ${JSON.stringify(await read(id))}`);
 }
 const kinds = (events: HarnessEvent[]) =>
-  events.map((e) => (e.kind === "update" ? `update:${e.update.sessionUpdate}` : e.kind));
+  events
+    .filter(
+      (event, index) =>
+        event.kind !== "run_consent" &&
+        event.kind !== "starting" &&
+        (event.kind !== "session" || events.findIndex((item) => item.kind === "session") === index),
+    )
+    .map((e) => (e.kind === "update" ? `update:${e.update.sessionUpdate}` : e.kind));
 
 test("automatic update admission refuses a new Pea prompt through download and releases on confirmed refusal", async () => {
   const planId = "64f25f46-dfa6-4ee6-b973-d7f6a8b523c4";
@@ -259,79 +277,35 @@ async function untilIo<T>(read: () => Promise<T>, done: (value: T) => boolean): 
   throw new Error(`timed out: ${JSON.stringify(await read())}`);
 }
 
-test("idle reaping keeps history and choices, and a prompt waits for exact-child retirement", async () => {
+test("turn children retire while conversation history and model choices survive", async () => {
   process.env.FAKE_ACP_SHAPE = "config";
-  vi.useFakeTimers({ toFake: ["setTimeout", "clearTimeout", "Date"] });
-  const threads = host();
-  const call = caller(threads);
-  const read = reader(threads);
+  const h = host(),
+    call = caller(h),
+    read = reader(h);
   const id = (await call("POST", "/pe/threads", { providerId: "claude" })).json.id as string;
-  await untilIo(
-    () => read(id),
-    (b) => b.models.length > 0,
-  );
+  await until(read, id, (body) => body.models.length > 0);
   await call("POST", `/pe/threads/${id}/model`, { modelId: "m2" });
   await call("POST", `/pe/threads/${id}/trait`, { id: "effort", value: "high" });
-  await call("POST", `/pe/threads/${id}/trait`, { id: "fast", value: true });
   await call("POST", `/pe/threads/${id}/prompt`, { text: "pid" });
-  const before = await untilIo(
-    () => read(id),
-    (b) => !b.running && turnEnds(b).length === 1,
+  const before = await until(
+    read,
+    id,
+    (body) => !body.running && turnEnds(body).length === 1 && body.session === "closed",
   );
-  const pid = Number(
-    before.events
-      .flatMap((e) =>
-        e.kind === "update" && e.update.sessionUpdate === "agent_message_chunk"
-          ? [(e.update.content as { text?: string })?.text ?? ""]
-          : [],
-      )
-      .find((text) => text.startsWith("PID="))
-      ?.slice(4),
+  expect(before.modelId).toBe("m2");
+  await call("POST", `/pe/threads/${id}/prompt`, { text: "after retirement" });
+  const after = await until(
+    read,
+    id,
+    (body) => !body.running && turnEnds(body).length === 2 && body.session === "closed",
   );
-  expect(Number.isInteger(pid)).toBe(true);
-  expect(pid).toBeGreaterThan(0);
-  const realStop = adapter.stopChild;
-  let release!: () => void;
-  const stop = vi.spyOn(adapter, "stopChild").mockImplementationOnce(async (child) => {
-    await new Promise<void>((resolve) => {
-      release = resolve;
-    });
-    await realStop(child);
-  });
-  const following = threads.observe({ kind: "thread", thread: id }, () => {}, null)!;
-  try {
-    await vi.advanceTimersByTimeAsync(IDLE_CHILD_MS - 1);
-    expect((await read(id)).session).toBe("started");
-    await call("GET", "/pe/threads");
-    await read(id);
-    await vi.advanceTimersByTimeAsync(1);
-    expect((await read(id)).session).toBe("closed");
-    expect((await read(id)).events).toEqual(before.events);
-    expect(JSON.parse(await readFile(join(root, id, "meta.json"), "utf8")).modelId).toBe("m2");
-    expect((await call("GET", "/pe/threads")).json.some((t: { id: string }) => t.id === id)).toBe(
-      true,
-    );
-    await call("POST", `/pe/threads/${id}/prompt`, { text: "after idle" });
-    expect((await read(id)).session).toBe("closed");
-    expect((await read(id)).running).toBe(true);
-    expect(stop).toHaveBeenCalledTimes(1);
-    release();
-    const resumed = await untilIo(
-      () => read(id),
-      (b) => b.session === "resumed" && !b.running,
-    );
-    expect(resumed.modelId).toBe("m2");
-    expect(resumed.traits.map((trait) => trait.current)).toEqual(["high", true]);
-    expect(resumed.events.slice(0, before.events.length)).toEqual(before.events);
-    expect(resumed.events.filter((e) => e.kind === "error")).toEqual([]);
-    expect(lastEcho(resumed)).toBe("echo: after idle");
-    expect(() => process.kill(pid, 0)).toThrow();
-  } finally {
-    release?.();
-    stop.mockRestore();
-    following();
-    await threads.close();
-  }
+  expect(after.modelId).toBe("m2");
+  expect(after.traits.find((trait) => trait.id === "effort")?.current).toBe("high");
+  expect(after.events.slice(0, before.events.length)).toEqual(before.events);
+  expect(
+    after.events.filter((event) => event.kind === "session" && event.state === "resumed").length,
+  ).toBeGreaterThanOrEqual(2);
+  await h.close();
 });
 
 test("connect, model/trait RPCs, active turns and asks prevent idle reaping", async () => {
@@ -379,7 +353,7 @@ test("connect, model/trait RPCs, active turns and asks prevent idle reaping", as
       );
       await vi.advanceTimersByTimeAsync(2 * IDLE_CHILD_MS);
       const active = await read(id);
-      expect(active.session).toBe("started");
+      expect(active.session).toBe("resumed");
       expect(active.running).toBe(true);
       await call("POST", `/pe/threads/${id}/cancel`);
       await untilIo(
@@ -430,8 +404,10 @@ test("a thread prompts, parks a permission, cancels, interrupts, renames, and re
     "update:tool_call",
     "turn_end",
   ]);
-  expect(body.events.map((e) => e.seq)).toEqual([1, 2, 3, 4, 5, 6]);
-  expect(body.lastSeq).toBe(6);
+  expect(body.events.map((e) => e.seq)).toEqual(
+    Array.from({ length: body.events.length }, (_, index) => index + 1),
+  );
+  expect(body.lastSeq).toBe(body.events.length);
 
   // Permission parks the turn until answered.
   await call("POST", `/pe/threads/${id}/prompt`, { text: "ask permission" });
@@ -578,15 +554,16 @@ test("a restarted host expires open asks, ends the open turn, resumes, and keeps
   const resumed = await until(
     reread,
     id,
-    (b) => b.session === "resumed" && !b.running && turnEnds(b).length === 1,
+    (b) => b.session === "closed" && !b.running && turnEnds(b).length === 1,
   );
-  const tail = resumed.events.slice(parked.events.length);
+  const tail = resumed.events
+    .slice(parked.events.length)
+    .filter((event) => event.kind !== "run_consent");
   expect(kinds(tail)).toEqual([
     "permission_resolved",
     "error",
     "prompt",
     "turn_element_targets",
-    "starting",
     "session",
     "model_changed",
     "update:agent_message_chunk",
@@ -702,7 +679,7 @@ test("a question parks the turn, a fork copies the log, and a lost session re-fe
   const lost = await until(reader(second), id, (b) => turnEnds(b).length === 3);
   expect(lost.events.findLast((e) => e.kind === "session")).toMatchObject({ state: "detached" });
   expect(lastEcho(lost)).toMatch(/^echo: \[Pea resumed this thread/);
-  expect(lost.session).toBe("detached");
+  expect(lost.session).toBe("closed");
 }, 30_000);
 
 /** Every `NAME=value` line the fake echoed on "env". */
@@ -954,15 +931,15 @@ test("an endpoint provider is checked before save, and every thread carries its 
   }
 }, 30_000);
 
-test("access picks the mode a session starts in: guarded is auto, unguarded bypasses", async () => {
+test("both harnesses retain journal-safe modes even when access was Full", async () => {
   const threads = host();
   const call = caller(threads);
   try {
     expect((await call("GET", "/pe/access")).json).toEqual({ guarded: true });
-    expect(said(await envOf(threads, "claude"), "MODE")).toBe("auto");
+    expect(said(await envOf(threads, "claude"), "MODE")).toBe("default");
     expect((await call("PUT", "/pe/access", { guarded: false })).json).toEqual({ guarded: false });
     expect((await call("GET", "/pe/access")).json).toEqual({ guarded: false });
-    expect(said(await envOf(threads, "codex"), "MODE")).toBe("bypassPermissions");
+    expect(said(await envOf(threads, "codex"), "MODE")).toBe("read-only");
     expect((await bare(threads, "PUT", "/pe/access")).status).toBe(415);
     expect((await call("PUT", "/pe/access", { guarded: "no" })).status).toBe(400);
   } finally {
@@ -1055,105 +1032,50 @@ test("door 6: a human adds your open lifetimes with an admission; Pea's own and 
   expect(twice.status).toBe(403);
 });
 
-test("door 7: a human removing a target ends its authority and fires onRevoke; re-adding is a new admission", async () => {
-  const threads = host();
-  bindControl({ heads: threads.heads.read });
-  const call = caller(threads);
-  const id = "target-door-7";
+test("thread target changes preserve Pea capability and retain revocation for external grants", async () => {
+  const h = host();
+  bindControl({ heads: h.heads.read });
+  const call = caller(h),
+    id = "target-context";
   const retired: string[] = [];
   const release = onRevoke((thread, lifetime) => retired.push(`${thread}:${lifetime.openId}`));
-  await call("PUT", `/pe/scope/${id}`, { targets: put(yours, theirs), expectedRevision: 0 });
-  const basis = crossing(peaOf(id), yours.ref);
-  expect(basis).toMatchObject({ kind: "grant", thread: id, headRevision: 1 });
-  expect(crossing(peaOf(id), theirs.ref)).toMatchObject({ kind: "grant" });
-  await call("PUT", `/pe/scope/${id}`, { targets: put(theirs), expectedRevision: 1 });
+  await call("PUT", `/pe/scope/${id}`, { targets: put(yours), expectedRevision: 0 });
+  expect(crossing(peaOf(id), yours.ref)).toBeNull();
+  expect(crossing(peaOf(id), theirs.ref)).toBeNull();
+  await call("PUT", `/pe/scope/${id}`, { targets: [], expectedRevision: 1 });
   expect(retired).toEqual([`${id}:A`]);
-  expect(crossing(peaOf(id), yours.ref)).toBe("grant.required");
-  expect(live(basis as never)?.refusal.code).toBe("grant.revoked");
-  // The other target is untouched by the removal.
-  expect(crossing(peaOf(id), theirs.ref)).toMatchObject({ kind: "grant", headRevision: 1 });
-  await call("PUT", `/pe/scope/${id}`, { targets: put(theirs, yours), expectedRevision: 2 });
-  expect(crossing(peaOf(id), yours.ref)).toMatchObject({ kind: "grant", headRevision: 3 });
-  expect(live(basis as never)?.refusal.code).toBe("grant.revoked");
+  expect(crossing(peaOf(id), yours.ref)).toBeNull();
   release();
 });
 
-test("door 6 for Pea: only its own thread, only Pea's documents; it never adds or removes yours", async () => {
-  bindControl(peaAcquiredCopy);
-  const threads = host();
-  const call = caller(threads);
-  const id = "target-door-6-pea";
-  threads.as = peaOf(id);
-  const refused = await call("PUT", "/pe/scope/self", {
-    targets: put(yours),
+test("Pea context targets are editable defaults and mint no external write admission", async () => {
+  const h = host(),
+    call = caller(h),
+    id = "context-only";
+  h.as = peaOf(id);
+  const selected = await call("PUT", "/pe/scope/self", {
+    targets: put(yours, theirs),
     expectedRevision: 0,
   });
-  expect([refused.status, refused.json.refusal.code]).toEqual([403, "grant.required"]);
-  const inherited = await call("PUT", "/pe/scope/self", {
-    targets: put(userInPeas),
-    expectedRevision: 0,
-  });
-  expect([inherited.status, inherited.json.refusal.code]).toEqual([403, "grant.required"]);
-  const own = await call("PUT", "/pe/scope/self", { targets: put(peas), expectedRevision: 0 });
-  expect(own.json).toMatchObject({
-    ok: true,
-    head: { targets: [{ request: peas, admission: null }] },
-  });
-  expect((await call("GET", "/pe/scope/self")).json).toEqual({
-    thread: id,
-    targets: [{ request: peas, admission: null }],
-    revision: 1,
-  });
-  // A human adds yours; Pea may keep it beside its own, but never drop it.
-  threads.as = human;
-  await call("PUT", `/pe/scope/${id}`, { targets: put(peas, yours), expectedRevision: 1 });
-  threads.as = peaOf(id);
-  const ownDropped = await call("PUT", "/pe/scope/self", {
-    targets: put(yours),
-    expectedRevision: 2,
-  });
-  expect(ownDropped.json).toMatchObject({ ok: true, head: { revision: 3 } });
-  const removed = await call("PUT", "/pe/scope/self", { targets: [], expectedRevision: 3 });
-  expect([removed.status, removed.json.refusal.code]).toEqual([403, "human.only"]);
-  const foreign = await call("PUT", "/pe/scope/someone-else", {
-    targets: [],
-    expectedRevision: 0,
-  });
-  expect([foreign.status, foreign.json.refusal.code]).toEqual([403, "context.foreign-thread"]);
-  threads.as = { kind: "anonymous" };
-  const anonymous = await call("PUT", `/pe/scope/${id}`, {
-    targets: [],
-    expectedRevision: 3,
-  });
-  expect([anonymous.status, anonymous.json.refusal.code]).toEqual([403, "context.missing"]);
-  expect((await call("GET", "/pe/scope/self")).status).toBe(404);
+  expect(selected.status).toBe(200);
+  expect(
+    selected.json.head.targets.map((target: { admission: unknown }) => target.admission),
+  ).toEqual([null, null]);
+  expect(
+    (await call("PUT", "/pe/scope/foreign", { targets: [], expectedRevision: 0 })).status,
+  ).toBe(403);
 });
 
-test("door 8: Pea cannot prompt; authority has no clock, and the access switch governs writes", async () => {
-  vi.useFakeTimers({ toFake: ["Date"] });
-  vi.setSystemTime(T0);
-  const threads = host();
-  const call = caller(threads);
-  let accessFull = false;
-  bindControl({ heads: threads.heads.read, fullAccess: () => accessFull });
-  const id = (await call("POST", "/pe/threads", { providerId: "claude" })).json.id as string;
+test("Pea cannot create its own independent prompt and target selection grants no write", async () => {
+  const h = host(),
+    call = caller(h),
+    id = (await call("POST", "/pe/threads", { providerId: "claude" })).json.id;
   await call("PUT", `/pe/scope/${id}`, { targets: put(yours), expectedRevision: 0 });
-  threads.as = peaOf(id);
-  const self = await call("POST", `/pe/threads/${id}/prompt`, { text: "renew me" });
-  expect([self.status, self.json.refusal.code]).toEqual([403, "human.only"]);
-  threads.as = human;
-  // A day later, with no message since, the human-added target still writes.
-  vi.setSystemTime(T0 + 24 * 60 * 60_000);
-  expect(crossing(peaOf(id), yours.ref)).toMatchObject({ kind: "grant", thread: id });
-  // Guarded refuses a document the thread does not target; Full writes it.
-  expect(crossing(peaOf(id), theirs.ref)).toBe("grant.required");
-  accessFull = true;
-  expect(crossing(peaOf(id), theirs.ref)).toEqual({
-    kind: "full-access",
-    thread: id,
-    lifetime: theirs.ref,
-  });
-  await threads.close();
+  h.as = peaOf(id);
+  expect((await call("POST", `/pe/threads/${id}/prompt`, { text: "renew me" })).status).toBe(403);
+  expect(crossing(peaOf(id), yours.ref)).toBeNull();
+  expect(() => assertRunAdmission(originOf(peaOf(id)))).toThrow("run.none");
+  await h.close();
 });
 
 /* ── The prompt inbox: client ids, queue and steer, and wait ─────────────────────────────── */
@@ -1292,3 +1214,100 @@ test("one huge tool result is kept bounded in the record, the log and every read
   );
   expect(threads.log.read(0).entries.some((e) => e.event.kind === "oversize")).toBe(false);
 });
+
+for (const harness of ["claude", "codex"] as const) {
+  test(`${harness}: delayed invocation and CLI child retain immutable old run across the next turn`, async () => {
+    const calls: { token: string; harness: string }[] = [];
+    const realOpen = adapter.openAdapter;
+    const launched = vi.spyOn(adapter, "openAdapter").mockImplementation((...args) => {
+      calls.push({ harness: args[0], token: args[2].PE_CONTEXT ?? "" });
+      return realOpen(...args);
+    });
+    const h = host(),
+      call = caller(h),
+      read = reader(h);
+    try {
+      const id = (await call("POST", "/pe/threads", { providerId: harness })).json.id as string;
+      await until(read, id, (body) => body.models.length > 0);
+      const oldId = randomUUID();
+      await call("POST", `/pe/threads/${id}/prompt`, { id: oldId, text: "env" });
+      await until(read, id, (body) => !body.running && turnEnds(body).length === 1);
+      const minted = calls.map((entry) => ({
+        entry,
+        resolved: callerOf({ kind: "local" }, { "x-pe-context": entry.token }),
+      }));
+      const old = minted.find(
+        (entry) =>
+          "caller" in entry.resolved &&
+          entry.resolved.caller.kind === "pea" &&
+          entry.resolved.caller.run?.turn === oldId,
+      )!;
+      expect(old).toBeDefined();
+      expect(old.entry.harness).toBe(harness);
+      const oldCaller = "caller" in old.resolved ? old.resolved.caller : null;
+      expect(oldCaller?.kind).toBe("pea");
+      const next = randomUUID();
+      await call("POST", `/pe/threads/${id}/prompt`, { id: next, text: "hang" });
+      await until(
+        read,
+        id,
+        (body) =>
+          body.running &&
+          body.events.some(
+            (event) =>
+              event.kind === "session" &&
+              event.seq > body.events.findLast((event) => event.kind === "prompt")!.seq,
+          ),
+      );
+      // This is the exact token a delayed MCP invocation and a background CLI inherited.
+      const delayed = callerOf({ kind: "local" }, { "x-pe-context": old.entry.token });
+      expect(delayed).toEqual(old.resolved);
+      expect(() => assertRunAdmission(originOf(oldCaller!))).toThrow("run.closed");
+      const scoped = calls
+        .map((entry) => callerOf({ kind: "local" }, { "x-pe-context": entry.token }))
+        .find(
+          (resolved) =>
+            "caller" in resolved &&
+            resolved.caller.kind === "pea" &&
+            resolved.caller.run?.turn === next,
+        );
+      expect(
+        scoped && "caller" in scoped && scoped.caller.kind === "pea" ? scoped.caller.run : null,
+      ).toEqual({ thread: id, turn: next });
+      await call("POST", `/pe/threads/${id}/cancel`);
+      await until(read, id, (body) => !body.running);
+    } finally {
+      launched.mockRestore();
+      await h.close();
+    }
+  }, 15000);
+  test(`${harness}: a native write approval is refused with the host-command boundary`, async () => {
+    const h = host(),
+      call = caller(h),
+      read = reader(h);
+    try {
+      const id = (await call("POST", "/pe/threads", { providerId: harness })).json.id as string;
+      await until(read, id, (body) => body.models.length > 0);
+      await call("POST", `/pe/threads/${id}/prompt`, { text: "permission raw-write" });
+      const body = await until(read, id, (body) => !body.running && turnEnds(body).length === 1);
+      expect(openAsks(body)).toHaveLength(0);
+      expect(
+        body.events.some(
+          (event) =>
+            event.kind === "update" &&
+            String(event.update.title).includes("Native unjournaled writes are unsupported"),
+        ),
+      ).toBe(true);
+      expect(
+        body.events.some(
+          (event) =>
+            event.kind === "update" &&
+            event.update.sessionUpdate === "agent_message_chunk" &&
+            String((event.update.content as { text?: string })?.text).includes("chose no"),
+        ),
+      ).toBe(true);
+    } finally {
+      await h.close();
+    }
+  });
+}

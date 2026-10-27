@@ -1,6 +1,7 @@
 import { documentRefSchema } from "./target.ts";
 import { basisSchema, callerSchema } from "./caller.ts";
 import { z } from "zod";
+import { originSchema, footprintSchema, commandConsentSchema } from "./run-consent.ts";
 import { executionTargetSchema } from "./target.ts";
 
 const stepIntent = z.object({
@@ -8,6 +9,7 @@ const stepIntent = z.object({
   key: z.string(),
   kind: z.enum(["native", "file", "publication"]),
   input: z.unknown(),
+  dispatchedAt: z.string().optional(),
 });
 const executionFailure = {
   evidence: z.object({ result: z.unknown() }).strict().optional(),
@@ -57,6 +59,11 @@ const actionAttempt = z.object({
   key: z.string(),
   /** Host-minted; never read from the admission body. */
   caller: callerSchema,
+  origin: originSchema.optional(),
+  footprint: footprintSchema.default([]),
+  consent: commandConsentSchema.nullable().default(null),
+  frozen: z.unknown().optional(),
+  cancellationRequested: z.boolean().optional(),
   /** Why the crossing was admitted; null for a host leaf that crosses into no Revit document. */
   basis: basisSchema.nullable(),
   destination: executionTargetSchema,
@@ -75,6 +82,7 @@ const actionAttempt = z.object({
   ]),
 });
 export const actionReceiptSchema = z.discriminatedUnion("state", [
+  actionAttempt.extend({ state: z.literal("waiting") }).strict(),
   actionAttempt.extend({ state: z.literal("running") }).strict(),
   actionAttempt
     .extend({ state: z.literal("succeeded"), result: z.unknown().refine((v) => v !== undefined) })
@@ -100,6 +108,9 @@ export const actionReceiptSchema = z.discriminatedUnion("state", [
     .strict(),
 ]);
 export const actionStatusSchema = z.discriminatedUnion("state", [
+  actionAttempt
+    .omit({ steps: true, preparation: true, recovery: true })
+    .extend({ state: z.literal("waiting") }),
   actionAttempt
     .omit({ steps: true, preparation: true, recovery: true })
     .extend({ state: z.literal("running") }),

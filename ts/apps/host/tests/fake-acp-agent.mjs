@@ -76,6 +76,7 @@ const session = (sessionId) => ({
   modes: {
     availableModes: [
       { id: "default", name: "Default" },
+      { id: "read-only", name: "Read-only" },
       { id: "auto", name: "Auto" },
       { id: "bypassPermissions", name: "Bypass permissions" },
     ],
@@ -366,7 +367,7 @@ new AgentSideConnection(
       const toolCall = {
         toolCallId: `t-${text}`,
         title: "fake tool",
-        kind: "edit",
+        kind: text.includes("raw-write") ? "edit" : "read",
         status: "pending",
       };
       await conn.sessionUpdate({ sessionId, update: { sessionUpdate: "tool_call", ...toolCall } });

@@ -8,6 +8,7 @@ import {
   HOST_RUNTIME_SERVICE_HEADER,
 } from "@pe/host-contracts/contracts";
 import { invocationContext, type RequestPrincipal } from "@pe/runtime/context";
+import type { RunConsents } from "./run-consent.ts";
 import { hostOwnership } from "./host-ownership.ts";
 import { pageKeyOf, parseContributionKey } from "@pe/agent-contracts";
 import type {
@@ -20,6 +21,8 @@ import type {
   RefusalCode,
   ThreadHead,
   Origin,
+  Footprint,
+  CommandConsent,
   RunRef,
 } from "@pe/agent-contracts";
 
@@ -91,8 +94,8 @@ export const retireContext = (token: string) => void contexts.delete(token);
 /** Origin comes only from authenticated transport, never a caller-supplied body. */
 export const originOf = (caller: Caller): Origin => ({
   caller,
-  run: caller.kind === "pea" ? caller.run ?? null : null,
-  root: caller.kind === "pea" ? caller.root ?? caller.run ?? null : null,
+  run: caller.kind === "pea" ? (caller.run ?? null) : null,
+  root: caller.kind === "pea" ? (caller.root ?? caller.run ?? null) : null,
 });
 
 /**
@@ -314,6 +317,7 @@ export function requireHuman(caller: Caller, door: string, what: string) {
 /* ── Sources: the head store and what Pea's acquisitions hold ─────────────────────────── */
 
 type Sources = {
+  runs?: RunConsents;
   heads: ((thread: string) => ThreadHead) | null;
   subscribeHeads?: (notify: () => void) => () => void;
   /** The acquisition that holds this exact lifetime; null (fail closed) when none is proven. */
@@ -334,6 +338,33 @@ const sources: Sources = {
 export const bindControl = (bound: Partial<Sources>) => void Object.assign(sources, bound);
 export const documentAcquisition = (lifetime: DocumentRef) => sources.acquired(lifetime);
 export const sessionAcquisition = (session: string) => sources.acquiredSession(session);
+export const subscribeRunChanges = (listener: () => void) =>
+  sources.runs?.subscribe(listener) ?? (() => {});
+export const assertRunAdmission = (origin: Origin) => {
+  if (origin.caller.kind !== "pea") return;
+  if (!sources.runs) throw refuse("run.none", "/actions", "No harness run owns this write.");
+  sources.runs.assertOpen(origin);
+};
+export const authorizeCommand = async (
+  origin: Origin,
+  id: string,
+  footprint: Footprint,
+): Promise<CommandConsent | null> => {
+  if (origin.caller.kind === "human") return { by: "press" };
+  if (origin.caller.kind !== "pea") return null;
+  if (!footprint.some((e) => e.kind !== "receipt")) return null;
+  assertRunAdmission(origin);
+  const consequential = footprint.some(
+    (e) => e.kind !== "receipt" && !(e.kind === "document" && sources.acquired(e.ref)),
+  );
+  return consequential ? sources.runs!.authorize(origin, id, footprint) : null;
+};
+export const commandCheckpoint = (origin: Origin, consent: CommandConsent | null) => {
+  if (origin.caller.kind === "pea") {
+    if (!sources.runs) throw Error("run.closed: no active host run registry");
+    sources.runs.checkpoint(origin, consent);
+  }
+};
 
 function acquisitionBasis(
   destination: Extract<ExecutionTarget, { kind: "session" | "document" }>,
@@ -429,7 +460,7 @@ export const consentedRead = (
   key: string,
   input: unknown,
   target?: DocumentRef,
-): boolean => readsOnly(key, input) && readConsent(caller, target);
+): boolean => caller.kind !== "pea" && readsOnly(key, input) && readConsent(caller, target);
 
 /**
  * Admit one crossing at `door`, or throw `Refused`. Null means the crossing needs no basis: a
@@ -489,20 +520,8 @@ export function admitCrossing(
     return null;
   const acquired = acquisitionBasis(destination);
   if (acquired) return acquired;
-  // ADR 0021: the harness access switch governs Pea's Revit writes too. Full writes any open
-  // document; Guarded writes Pea's own lifetimes and the documents a human added to the thread.
-  if (sources.fullAccess() && destination.kind === "document") {
-    const target = admissionOn(caller.thread, destination.ref);
-    return target
-      ? {
-          kind: "grant",
-          thread: caller.thread,
-          headRevision: target.revision,
-          lifetime: destination.ref,
-        }
-      : { kind: "full-access", thread: caller.thread, lifetime: destination.ref };
-  }
-  return admitTarget(caller.thread, destination, door);
+  // Pea product capability is independent of thread targets. Run consent is journal-owned.
+  return null;
 }
 
 /**

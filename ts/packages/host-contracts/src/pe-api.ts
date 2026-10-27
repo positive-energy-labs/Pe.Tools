@@ -516,9 +516,9 @@ export function peRouteTable<S extends PeApiSchemas>(schemas: S) {
       "/pe/threads/:id/prompt",
       promptRequestSchema,
       turnStateSchema,
-      "human",
+      "human-or-pea",
       "threads",
-      "human",
+      "human-or-pea",
     ),
     "thread.queue": route(
       "POST",

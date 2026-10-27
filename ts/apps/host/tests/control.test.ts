@@ -38,16 +38,9 @@ const headWith = (lifetimes: DocumentRef[], revision = 3): ThreadHead => ({
   revision,
 });
 
-test("access-004 K9: a script on a target refuses another open document Pea may not write", () => {
+test("Pea scripts do not borrow authority from thread targets; their full footprint enters consent", () => {
   bind(acquiredCopy);
   heads.t1 = headWith([docA]);
-  expect(
-    refusal(() => admitScript(pea, [docA, { session: "S1", openId: "other" }], "/actions")),
-  ).toBe("script.ungranted-documents");
-  expect(() => admitScript(pea, [docA], "/actions")).not.toThrow();
-  expect(() => admitScript(pea, [{ session: "P", openId: "copy" }], "/actions")).not.toThrow();
-  // Under Full every open document is one Pea may write, so K9 finds no sibling to refuse.
-  full = true;
   expect(() =>
     admitScript(pea, [docA, { session: "S1", openId: "other" }], "/actions"),
   ).not.toThrow();
@@ -58,41 +51,26 @@ let full = false;
 const acquiredCopy = (ref: DocumentRef) =>
   ref.session === "P" && ref.openId === "copy" ? "acq-copy" : null;
 
-test("ADR 0021: Full writes any open document; Guarded refuses a user document the thread does not target", () => {
+test("Pea capability stays independent of thread targets and the old access preference", () => {
   bind();
   heads.t1 = headWith([docA]);
-  expect(refusal(() => admitCrossing(pea, { kind: "document", ref: docB }, "/actions"))).toBe(
-    "grant.required",
-  );
-  expect(admitCrossing(pea, { kind: "document", ref: docA }, "/actions")).toEqual({
-    kind: "grant",
-    thread: "t1",
-    headRevision: 3,
-    lifetime: docA,
-  });
+  expect(admitCrossing(pea, { kind: "document", ref: docA }, "/actions")).toBeNull();
+  expect(admitCrossing(pea, { kind: "document", ref: docB }, "/actions")).toBeNull();
   full = true;
-  const basis = admitCrossing(pea, { kind: "document", ref: docB }, "/actions");
-  expect(basis).toEqual({ kind: "full-access", thread: "t1", lifetime: docB });
-  // A thread still targets documents, never a session, under either setting.
-  expect(refusal(() => admitCrossing(pea, { kind: "session", session: "S2" }, "/actions"))).toBe(
-    "grant.required",
-  );
-  // Switching back to Guarded stops a Full admission at step begin.
-  expect(live(basis)).toBeNull();
+  expect(admitCrossing(pea, { kind: "session", session: "S2" }, "/actions")).toBeNull();
   full = false;
-  expect(live(basis)?.refusal.code).toBe("grant.revoked");
+  heads.t1 = emptyThreadHead;
+  expect(admitCrossing(pea, { kind: "document", ref: docA }, "/actions")).toBeNull();
 });
 
-test("ADR 0021: a human removing a target ends its authority; there is no clock", () => {
+test("external device target removal revokes its own transport exception", () => {
   bind();
-  heads.t1 = headWith([docA, docB]);
-  const basis = admitCrossing(pea, { kind: "document", ref: docA }, "/actions");
-  expect(live(basis)).toBeNull();
-  heads.t1 = { ...headWith([docB]), revision: 4 };
+  bindControl({ deviceThread: () => "t1" });
+  heads.t1 = headWith([docA]);
+  const external: Caller = { kind: "external-mcp", context: "m", label: "device", device: "d1" };
+  const basis = admitCrossing(external, { kind: "document", ref: docA }, "/actions");
+  heads.t1 = emptyThreadHead;
   expect(live(basis)?.refusal.code).toBe("grant.revoked");
-  expect(refusal(() => admitCrossing(pea, { kind: "document", ref: docA }, "/actions"))).toBe(
-    "grant.required",
-  );
 });
 
 test("an external MCP device writes only its thread's human-added targets, never under Full", () => {
@@ -175,10 +153,12 @@ afterEach(() => {
   });
 });
 
-test("access-052: re-adding the same lifetime cannot revive an older admission", () => {
+test("re-adding a target cannot revive an external device's older admission", () => {
   bind();
+  bindControl({ deviceThread: () => "t1" });
   heads.t1 = headWith([docA]);
-  const basis = admitCrossing(pea, { kind: "document", ref: docA }, "/actions");
+  const external: Caller = { kind: "external-mcp", context: "m", label: "device", device: "d1" };
+  const basis = admitCrossing(external, { kind: "document", ref: docA }, "/actions");
   heads.t1 = headWith([docA], 5);
   expect(live(basis)?.refusal.code).toBe("grant.revoked");
 });

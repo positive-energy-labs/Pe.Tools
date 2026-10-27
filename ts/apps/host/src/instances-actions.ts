@@ -373,7 +373,7 @@ export async function admitInstancesAction(
       reason: `Refused at ${door}: '${key}' ${reason}`,
     });
   // Resolve before admission: the receipt must carry the basis that admits its effects.
-  const censusBasis = async (target: Target): Promise<Basis> => {
+  const censusBasis = async (target: Target): Promise<Basis | null> => {
     const held = heldProcess(foldAcquisitions(await owner.list()), target.process);
     const processBasis = (session: string): Basis | null =>
       held ? { kind: "acquisition", id: held.id, scope: { kind: "process", session } } : null;
@@ -382,6 +382,7 @@ export async function admitInstancesAction(
         ? null
         : processBasis(`${target.process.pid}:${target.process.processStartUtc}`);
       if (basis) return basis;
+      if (crossing.caller.kind === "pea") return null;
       requireHuman(crossing.caller, door, `${key} into your Revit`);
       return { kind: "human" };
     }
@@ -426,7 +427,7 @@ export async function admitInstancesAction(
         uncovered.push(doc.title ?? doc.openId ?? "unknown document");
       }
     }
-    if (uncovered.length || !basis)
+    if (uncovered.length || (!basis && crossing.caller.kind !== "pea"))
       throw lifecycleRefusal(
         `would affect uncovered documents: ${uncovered.join(", ") || "unknown"}.`,
       );
@@ -453,8 +454,56 @@ export async function admitInstancesAction(
       throw new BridgeError(String(error), 403, { notDispatched: true });
     }
   };
+  const footprint: import("@pe/agent-contracts").Footprint = [];
+  const census = admittedTarget ? await readMachineSession(admittedTarget.process) : null;
+  if (census) {
+    const session =
+      census.attachment?.session ??
+      `${admittedTarget!.process.pid}:${admittedTarget!.process.processStartUtc}`;
+    footprint.push({ kind: "session", session });
+    const documents = census.attachment?.documents;
+    if (!documents || (census.documents?.length ?? 0) !== documents.length)
+      throw lifecycleRefusal("has no complete lifecycle footprint census");
+    footprint.push(
+      ...documents
+        .filter(
+          (doc) => definition.needs !== "document" || doc.openId === control?.document?.openId,
+        )
+        .map((doc) => ({
+          kind: "document" as const,
+          ref: { session: doc.session, openId: doc.openId },
+        })),
+    );
+  } else if (selection && control) {
+    footprint.push({
+      kind: "session",
+      session: `${control.session.process.pid}:${control.session.process.processStartUtc}`,
+    });
+  } else if (start) {
+    // Exact reserved command identity names the not-yet-created process, never a guessed pid.
+    footprint.push({ kind: "session", session: `new:${admission.id}` });
+  }
+  if (key === "instances.save" && (input.to as { kind?: string })?.kind === "save-as")
+    footprint.push({ kind: "file", path: String((input.to as { out: string }).out) });
+  const frozenCensus = census?.documents?.map((doc) => doc.openId).sort();
+  const validateFootprint = async () => {
+    if (!admittedTarget || !frozenCensus) return;
+    const current = await readMachineSession(admittedTarget.process);
+    if (
+      canonicalRouteInput(current.documents?.map((doc) => doc.openId).sort()) !==
+      canonicalRouteInput(frozenCensus)
+    )
+      throw lifecycleRefusal("document census changed after submission; submit a new command");
+    await crossing.validate?.();
+  };
   return owner.admit(
-    { ...admission, ...crossing },
+    {
+      ...admission,
+      ...crossing,
+      footprint,
+      frozen: { input, census },
+      validate: validateFootprint,
+    },
     async (): Promise<Prepared> => {
       if (definition.needs === "document") {
         const { session, document } = control!;
@@ -867,7 +916,39 @@ async function admitAcquisitionRelease(
   }
   type Release = { target: Target; open: boolean } | { target: null; open: false };
   return owner.admit(
-    { ...admission, ...crossing, basis },
+    {
+      ...admission,
+      ...crossing,
+      basis,
+      footprint: [
+        ...(document
+          ? [
+              {
+                kind: "session" as const,
+                session: `${document.process.pid}:${document.process.processStartUtc}`,
+              },
+            ]
+          : []),
+        ...(key === "instances.handover" && acquired?.intent.document
+          ? [
+              { kind: "file" as const, path: acquired.intent.document.result },
+              {
+                kind: "receipt" as const,
+                pod: "acquisitions",
+                path: acquired.intent.document.diffPlan,
+              },
+            ]
+          : []),
+        ...(key === "instances.cleanup" && acquired
+          ? temporaryFiles(acquired).map((path) => ({
+              kind: "receipt" as const,
+              pod: "acquisitions",
+              path,
+            }))
+          : []),
+      ],
+      frozen: { acquisition: acquired },
+    },
     async (): Promise<Release> => {
       const process = document?.process ?? acquired!.process;
       const target = process ? await readTarget(null, process, read) : null;

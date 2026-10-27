@@ -181,6 +181,8 @@ export function makeCallRoute(
     resume = false,
   ) => {
     const input = actionAdmissionSchema.parse(raw);
+    const prior = !resume && (await owner().existing(input, caller));
+    if (prior) return prior;
     const reads = readsOnly(input.key, input.input);
     const crossing = { caller, basis: admitCrossing(caller, input.destination, "/actions", reads) };
     return input.kind === "workflow" && Object.hasOwn(scheduleActions, input.key)
@@ -547,6 +549,7 @@ export function makeCallRoute(
           const body = z
             .strictObject({
               work: workKeySchema,
+              expectedRevision: z.number().int().nonnegative().optional(),
               filter: z.strictObject({
                 categoryNames: z.array(z.string()).min(1),
                 familyNames: z.array(z.string()),
@@ -629,6 +632,18 @@ export function makeCallRoute(
             result:
               result.value as import("@pe/host-contracts/generated").RevitMatrixLoadedFamilies.Res.Response,
           });
+          if (body.expectedRevision !== undefined) {
+            if (!actionDeps.workspace)
+              throw Error("Families observation requires the connected Work owner");
+            const published = await actionDeps.workspace.publish(
+              body.work,
+              "families",
+              [{ path: ["takenAt"], value: saved.capturedAt }],
+              body.expectedRevision,
+            );
+            if (!published.ok) throw Error(published.error);
+            return Response.jsonUnsafe({ ...saved, envelope: published.envelope });
+          }
           return Response.jsonUnsafe(saved);
         },
         catch: (error) => error,
@@ -686,7 +701,9 @@ export function makeCallRoute(
         try: () => admit(body, bridge, caller),
         catch: (error) => error,
       });
-      return Response.jsonUnsafe(row, { status: row.state === "running" ? 202 : 200 });
+      return Response.jsonUnsafe(row, {
+        status: row.state === "running" || row.state === "waiting" ? 202 : 200,
+      });
     }).pipe(
       Effect.catch((error) =>
         Effect.succeed(
@@ -855,7 +872,7 @@ export function makeCallRoute(
               requireEligibleCaller(
                 {
                   key: controlled.key,
-                  actor: semanticActions[controlled.key as keyof typeof semanticActions]?.actor,
+                  actor: "any",
                 },
                 caller,
                 "/actions/resume",
@@ -873,7 +890,9 @@ export function makeCallRoute(
               caller,
               true,
             );
-            return Response.jsonUnsafe(row, { status: row.state === "running" ? 202 : 200 });
+            return Response.jsonUnsafe(row, {
+              status: row.state === "running" || row.state === "waiting" ? 202 : 200,
+            });
           },
           catch: (error) => error,
         }).pipe(
