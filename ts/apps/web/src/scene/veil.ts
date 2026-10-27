@@ -5,7 +5,7 @@ export { bakeVeil, falloff, veilDistance, VEIL_REACH_FT, type VeilField } from "
 
 /** The reach when no page supplies a Nearby radius; matches the Ducts contract's default
  * (`routes/ducts.ts` contextRadiusFt). One number: the veil's far edge and the stub fade. */
-export const VEIL_DEFAULT_REACH_FT = 10;
+const VEIL_DEFAULT_REACH_FT = 10;
 
 export type VeilLook = { nearFt: number; curve: number; fill: number };
 

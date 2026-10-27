@@ -2,8 +2,7 @@ import { CONTEXT_CREASE_DEG, paintOf, type Look } from "./grounds";
 import type { Paint, PaintOf, SceneMeshes } from "./types";
 
 /** Only these values can change prepared geometry or its render-pass partition. */
-export type SceneStructure = Pick<Paint, "tier">;
-export type SceneAppearance = Omit<Paint, keyof SceneStructure>;
+type SceneStructure = Pick<Paint, "tier">;
 export type ScenePlan = {
   meshes: SceneMeshes;
   roles: readonly SceneStructure[];
