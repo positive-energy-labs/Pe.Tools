@@ -20,6 +20,8 @@ import {
   abortableFetch,
 } from "../src/receipt-export.ts";
 import { mcpBeforeSend } from "../src/mcp-analytics.ts";
+import { RunConsents } from "../src/run-consent.ts";
+import { harnessEventSchema } from "@pe/agent-contracts";
 
 const stamp = receiptGoldenEnvelope.stamp!;
 const r = (body: Receipt["body"]): Receipt => ({
@@ -265,6 +267,55 @@ test("native receipt source identity is retained, deduped, and never replaced wi
     expect((await f.journal.read({ kinds: ["usage"] }))[1]!.stamp).toBeNull();
     expect(f.sent).toHaveLength(1);
   } finally {
+    await f.close();
+  }
+});
+
+test("the countdown notice names the first frozen footprint, deadline and whole-turn scope without exporting paths", async () => {
+  const f = fixture();
+  const events: HarnessEvent[] = [];
+  const run = { thread: "private-thread", turn: "private-turn" };
+  const adapter = createThreadReceiptAdapter(f.exporter, () => [
+    { id: run.thread, title: "Design", events },
+  ]);
+  const runs = new RunConsents((_, event) => {
+    const durable = harnessEventSchema.parse({
+      ...event,
+      seq: events.length + 1,
+      at: new Date().toISOString(),
+    });
+    events.push(durable);
+    adapter.accept(run.thread, "Design", durable);
+  });
+  runs.open(run);
+  const approval = runs.authorize(
+    {
+      caller: { kind: "pea", context: "minted", thread: run.thread, run, root: run },
+      run,
+      root: run,
+    },
+    "command",
+    [{ kind: "file", path: "C:/private/design.json" }],
+  );
+  try {
+    await expect.poll(async () => (await f.journal.read({ kinds: ["permission"] })).length).toBe(1);
+    const [receipt] = await f.journal.read({ kinds: ["permission"] });
+    const ask = events.find((event) => event.kind === "permission_request")!;
+    const notice = adapter.context.asked(receipt!);
+    expect(notice?.body).toContain("First write: file C:/private/design.json");
+    expect(notice?.body).toContain(ask.deadline);
+    expect(notice?.body).toContain("including delegated work");
+    expect(notice?.act).toMatchObject({
+      kind: "permission",
+      requestId: ask.requestId,
+      options: [{ optionId: "allow_now" }, { optionId: "stop_writes" }],
+    });
+    runs.decide(run.thread, ask.requestId, "allow_now");
+    await approval;
+    expect(JSON.stringify(f.sent)).not.toContain("C:/private");
+  } finally {
+    runs.closeAll();
+    await approval.catch(() => null);
     await f.close();
   }
 });

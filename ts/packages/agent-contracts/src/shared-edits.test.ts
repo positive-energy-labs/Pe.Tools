@@ -96,3 +96,23 @@ test("cell keys that look like slots or evidence do not bypass host attribution"
     });
   }
 });
+
+test("generic patches cannot forge or erase any host observation for either author", () => {
+  const fields = ["basis", "reading", "snapshot", "takenAt", "readback", "consent"];
+  const observedSchema = schema.extend(
+    Object.fromEntries(fields.map((field) => [field, z.unknown().optional()])),
+  );
+  for (const actor of ["agent", "human"] as const)
+    for (const field of fields)
+      for (const patch of [
+        { path: [field], value: { verified: true } },
+        { path: [field, "verified"], value: true },
+        { path: [field] },
+      ])
+        expect(
+          applyPatches({ ...spec, schema: observedSchema }, envelope, actor, [patch], 13),
+        ).toMatchObject({
+          ok: false,
+          error: "Host observations cannot be changed by an edit",
+        });
+});

@@ -876,7 +876,14 @@ export function createThreadReceiptAdapter(
       if (e?.kind === "permission_request")
         return {
           threadId,
-          body: e.toolCall.title ?? "A tool call is waiting.",
+          body: [
+            e.toolCall.title ?? "A tool call is waiting.",
+            e.scope === "run" && e.deadline
+              ? `At ${e.deadline}, Pea may write across tools and documents for the rest of this turn, including delegated work. Allow now or Stop writes for this turn.`
+              : "",
+          ]
+            .filter(Boolean)
+            .join("\n\n"),
           act: { kind: "permission", threadId, requestId: e.requestId, options: e.options },
         };
       if (e?.kind === "question_request")

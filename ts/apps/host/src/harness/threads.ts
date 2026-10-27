@@ -389,10 +389,13 @@ function writeJson(path: string, value: unknown) {
 
 export function createHarnessThreads(options: HarnessThreadsOptions) {
   const threads = new Map<string, Thread>();
-  const runs = new RunConsents((run, event) => {
-    const t = threads.get(run.thread);
-    if (t) append(t, event);
-  });
+  const runs = new RunConsents(
+    (run, event) => {
+      const t = threads.get(run.thread);
+      if (t) append(t, event);
+    },
+    (ref) => options.observeDocument?.({ kind: "open", ref })?.name,
+  );
   bindControl({ runs });
   /** Synchronization only. Observations and pins are always reconstructed from thread events. */
   const elementNameReads = new Map<string, Promise<void>>();

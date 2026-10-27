@@ -4,7 +4,7 @@
 
 Human-only commands, agent-only proposals and thread targets imposed different authority on the same tool. A harness spawn token also lacked causal turn identity. Looking up the current turn at delayed tool entry could authorize an earlier invocation under a later turn.
 
-This decision supersedes the Pea grant and authorship policies in ADRs 0016, 0017 and 0021. It extends the independent tool and conversation model in ADR 0022. The workshop's uncommitted per-write hold draft was not adopted.
+This decision supersedes the Pea grant and authorship policies in ADRs 0016, 0017 and 0021. It extends the independent tool and conversation model in ADR 0022, except that switching conversations preserves the current tool instead of collapsing it. The workshop's uncommitted per-write hold draft was not adopted.
 
 ## Decision
 

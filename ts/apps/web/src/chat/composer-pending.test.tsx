@@ -199,13 +199,22 @@ test("root-turn write consent stays visible, counts down and sends the host opti
       <ComposerPending
         approvals={[hold]}
         questions={[]}
-        calls={[]}
+        calls={[
+          {
+            ...call,
+            id: hold.toolCallId,
+            caption: "First write: file C:/user/design.json. Then all writes for this turn.",
+          },
+        ]}
         resolveApproval={resolveApproval}
         answerQuestion={vi.fn()}
       />,
     );
     expect(screen.queryByRole("button", { name: /request needs you/ })).toBeNull();
     expect(screen.getByRole("timer").textContent).toBe("60s");
+    expect(
+      screen.getByText("First write: file C:/user/design.json. Then all writes for this turn."),
+    ).toBeTruthy();
     await act(async () => {
       vi.advanceTimersByTime(18_000);
     });

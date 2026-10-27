@@ -714,7 +714,9 @@ export class ActionJournal implements ReceiptReader {
     execute: (execution: ActionExecution) => Promise<unknown>,
     resume = false,
   ): Promise<ActionReceipt> {
-    const { caller, basis, footprint: declared, frozen, validate, ...authored } = raw;
+    const { caller, basis, validate, ...submitted } = raw;
+    // Page trust is bound to the caller object; detach authored data without copying that capability.
+    const { footprint: declared, frozen, ...authored } = structuredClone(submitted);
     const origin = originOf(caller);
     const admission = actionAdmissionSchema.parse(authored);
     return this.serial(async () => {

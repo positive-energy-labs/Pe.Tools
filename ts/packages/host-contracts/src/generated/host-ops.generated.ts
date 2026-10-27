@@ -5347,7 +5347,7 @@ export namespace RevitDetailSheets {
   }
 }
 
-/** Build the resident spatial world for the target project: tessellate host and every loaded link into one triangle soup with a BVH per source. Minutes on a large model; holds Revit for the whole ingest. */
+/** Capture host and loaded link geometry for this operation, returning its summary and releasing its triangle soup and BVH afterward. Saved linked geometry may be reused from disk. Minutes on a large model; holds Revit for the capture. */
 export namespace RevitDetailSpaceBuild {
   export namespace Req {
     export interface Request {}
@@ -5365,8 +5365,8 @@ export namespace RevitDetailSpaceBuild {
     export type PrimKind = "Solid" | "Mesh" | "Curve2D";
 
     /**
-     * Is there a world, and what does it hold. Built false means every other
-     * answer is empty and honest about it. Bounds are the union of every row box.
+     * Summary of the operation's capture. Status alone reports Built false because it does not
+     * capture geometry. Other query operations prepare their own World. Bounds union captured row boxes.
      *
      */
     export interface Response {
@@ -5446,7 +5446,7 @@ export namespace RevitDetailSpaceBuild {
   }
 }
 
-/** Count what the resident world holds inside a box, by source, category, kind and DWG layer, plus the ten fattest elements by triangle count. */
+/** Count what the operation-owned world holds inside a box, by source, category, kind and DWG layer, plus the ten fattest elements by triangle count. */
 export namespace RevitDetailSpaceCensus {
   export namespace Req {
     /**
@@ -5731,7 +5731,7 @@ export namespace RevitDetailSpaceProbe {
   }
 }
 
-/** Read every element row of the resident world that passes a filter, as parallel arrays with legend lists for category, kind, layer and height role, plus each row's box and triangle count. */
+/** Read every element row of the operation-owned world that passes a filter, as parallel arrays with legend lists for category, kind, layer and height role, plus each row's box and triangle count. */
 export namespace RevitDetailSpaceRows {
   export namespace Req {
     /**
@@ -6004,12 +6004,12 @@ export namespace RevitDetailSpaceScene {
   }
 }
 
-/** Slice the resident world with a horizontal band z0..z1: every triangle clipped to the band and flattened to convex xy pieces per element, the exact footprint the partition solver reads; capped at maxPieces with whole elements, and the answer says when it truncated and the total it found. xyClip rejects elements whose box misses the rectangle. */
+/** Slice the operation-owned world with a horizontal band z0..z1: every triangle clipped to the band and flattened to convex xy pieces per element, the exact footprint the partition solver reads; capped at maxPieces with whole elements, and the answer says when it truncated and the total it found. xyClip rejects elements whose box misses the rectangle. */
 export namespace RevitDetailSpaceSlice {
   export namespace Req {
     /**
      * Slice z0..z1 in host internal feet. XyClip is six ordered bounds; only x/y reject whole rows.
-     * MaxPieces defaults to 50000 and retains whole elements in resident order; zero emits none.
+     * MaxPieces defaults to 50000 and retains whole elements in source order; zero emits none.
      */
     export interface Request {
       z0: number;
@@ -6146,7 +6146,7 @@ export namespace RevitDetailSpaceSlice {
   }
 }
 
-/** Read whether the resident spatial world is built for the target project, its stamp (epoch, freshness, sources), the categories each source holds, level elevations, and world bounds. */
+/** Read the current change epoch and level elevations without capturing geometry. Geometry is operation-owned; status reports no retained world. */
 export namespace RevitDetailSpaceStatus {
   export namespace Req {
     export interface Request {}
@@ -6164,8 +6164,8 @@ export namespace RevitDetailSpaceStatus {
     export type PrimKind = "Solid" | "Mesh" | "Curve2D";
 
     /**
-     * Is there a world, and what does it hold. Built false means every other
-     * answer is empty and honest about it. Bounds are the union of every row box.
+     * Summary of the operation's capture. Status alone reports Built false because it does not
+     * capture geometry. Other query operations prepare their own World. Bounds union captured row boxes.
      *
      */
     export interface Response {
@@ -8674,14 +8674,14 @@ export const hostOpSafety = {
   "revit.detail.schedules": {"intent":"Read","costTier":"Bounded","usesTransactions":false},
   "revit.detail.sheets": {"intent":"Read","costTier":"Bounded","usesTransactions":false},
   "revit.detail.space-build": {"intent":"Read","costTier":"Expensive","usesTransactions":false},
-  "revit.detail.space-census": {"intent":"Read","costTier":"Bounded","usesTransactions":false},
-  "revit.detail.space-probe": {"intent":"Read","costTier":"Bounded","usesTransactions":false},
-  "revit.detail.space-rows": {"intent":"Read","costTier":"Bounded","usesTransactions":false},
+  "revit.detail.space-census": {"intent":"Read","costTier":"Expensive","usesTransactions":false},
+  "revit.detail.space-probe": {"intent":"Read","costTier":"Expensive","usesTransactions":false},
+  "revit.detail.space-rows": {"intent":"Read","costTier":"Expensive","usesTransactions":false},
   "revit.detail.space-scene": {"intent":"Read","costTier":"Expensive","usesTransactions":false},
-  "revit.detail.space-slice": {"intent":"Read","costTier":"Bounded","usesTransactions":false},
+  "revit.detail.space-slice": {"intent":"Read","costTier":"Expensive","usesTransactions":false},
   "revit.detail.space-status": {"intent":"Read","costTier":"Bounded","usesTransactions":false},
-  "revit.detail.space-sweep": {"intent":"Read","costTier":"Bounded","usesTransactions":false},
-  "revit.detail.space-tree": {"intent":"Read","costTier":"Bounded","usesTransactions":false},
+  "revit.detail.space-sweep": {"intent":"Read","costTier":"Expensive","usesTransactions":false},
+  "revit.detail.space-tree": {"intent":"Read","costTier":"Expensive","usesTransactions":false},
   "revit.glance.attention": {"intent":"Read","costTier":"Bounded","usesTransactions":false},
   "revit.glance.model": {"intent":"Read","costTier":"Bounded","usesTransactions":false},
   "revit.matrix.loaded-families": {"intent":"Read","costTier":"Expensive","usesTransactions":true},

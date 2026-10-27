@@ -11,6 +11,8 @@ restated here.
 
 ## Decided
 
+- 2026-10-27, integrated committed main `8c01f759` into the autonomous-tools candidate and reconciled the 33-file legacy `t3/write-countdown` draft. [ADR 0024](../../adr/0024-root-run-consent-and-shared-work.md) keeps one root-turn decision, durable admission before waiting and shared Work; per-write/per-document holds and acquisition exemptions are superseded. ADR 0022 retains independent identities; ADR 0024 replaces its collapse-on-thread-press behavior. Main landing and legacy retirement remain separate work.
+- 2026-10-27, countdown cards name the first command's exact footprint and notifications state its deadline and turn-wide scope. Integration regressions exposed and fixed nested intent aliasing and an unapproved child write surviving normal child completion; approved bounded commands may still finish. Deterministic coverage does not certify native confinement or installed notification delivery.
 - 2026-10-26, kaitpw authorized the [Astra/Fable foundation](AUTONOMOUS-TOOLS-FABLE.md): human and Pea share Work and semantic commands; thread targets supply context only; one 60-second root-run consent covers consequential writes. [ADR 0024](../../adr/0024-root-run-consent-and-shared-work.md) replaces prior Pea grants, actor-only commands and compulsory proposal staging.
 - 2026-10-26, kaitpw accepted root consent and Stop for descendants explicitly delegated within the same task; independently started or scheduled tasks receive separate approval. The future escape from sharing is deferred.
 - 2026-10-26, kaitpw provisionally accepted the same approval for Pod source, settings, other user files and publication, and requested end-of-turn notices with exact proposed Work links. Countdown provides an intervention opportunity, not proof that content was understood.
@@ -177,6 +179,7 @@ restated here.
 
 ## Owed
 
+- Land the reconciled `t3/pea-write-countdown-foundation` candidate on main after resolving concurrent dirty-file overlaps, then retire legacy `t3/write-countdown` and its preserved worktree. The integration handoff is `.artifacts/handoffs/2026-10-27-autonomous-tools-integration.md`; the implementation port is complete in the candidate, while landing and deletion remain pending.
 - Revisit shared approval for non-Revit resource writes against understandable change summaries and the real resource lifecycle. Typical users cannot read JSON; beta editors may never cover every resource type and have incomplete routing and resource management.
 - Design the deferred escape from sharing root approval and Stop with explicitly delegated descendants. The accepted default remains shared consent.
 - Complete the workshop S3 proof: real-provider native file/shell confinement, Pea root consent in Revit, native preview isolation, sibling script effects, stale queue races and actual Stop-after-dispatch outcomes. The isolated native Schedule Apply/readback passed; it does not settle these cases or installed/tray delivery. Deterministic journal and adapter tests do not establish an OS sandbox.

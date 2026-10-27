@@ -6,6 +6,7 @@ import type {
   Origin,
   RunConsent,
   RunRef,
+  DocumentRef,
 } from "@pe/agent-contracts";
 
 export const WRITE_COUNTDOWN_MS = 60_000;
@@ -14,7 +15,7 @@ type Run = {
   ref: RunRef;
   root: RunRef;
   state: RunConsent;
-  waiters: Map<string, (decision: AllowDecision | null) => void>;
+  waiters: Map<string, { run: RunRef; resolve: (decision: AllowDecision | null) => void }>;
   timer?: ReturnType<typeof setTimeout>;
 };
 export type ConsentEvent =
@@ -47,7 +48,34 @@ export class RunConsents {
     this.listeners.add(listener);
     return () => void this.listeners.delete(listener);
   }
-  constructor(private readonly emit: (run: RunRef, event: ConsentEvent) => void) {}
+  constructor(
+    private readonly emit: (run: RunRef, event: ConsentEvent) => void,
+    private readonly documentName?: (ref: DocumentRef) => string | undefined,
+  ) {}
+  private describe(footprint: Footprint) {
+    return footprint
+      .filter((effect) => effect.kind !== "receipt")
+      .map((effect) => {
+        switch (effect.kind) {
+          case "document": {
+            const identity = `${effect.ref.session}/${effect.ref.openId}`;
+            const name = this.documentName?.(effect.ref);
+            return `document ${name ? `${name} (${identity})` : identity}`;
+          }
+          case "session":
+            return `session ${effect.session}`;
+          case "member":
+            return `member ${effect.pod}/${effect.path}`;
+          case "file":
+            return `file ${effect.path}`;
+          case "directory":
+            return `directory ${effect.path}`;
+          case "publication":
+            return `publication ${effect.page}`;
+        }
+      })
+      .join(", ");
+  }
   open(ref: RunRef, root = ref) {
     if (key(ref) !== key(root)) this.assertOpen({ caller: { kind: "anonymous" }, run: root, root });
     if (this.runs.has(key(ref))) throw Error("run.closed: a run identity cannot be reopened");
@@ -78,14 +106,16 @@ export class RunConsents {
   async authorize(
     origin: Origin,
     id: string,
-    _footprint: Footprint,
+    footprint: Footprint,
   ): Promise<CommandConsent | null> {
     if (origin.caller.kind === "human") return { by: "press" };
     if (origin.caller.kind !== "pea") return null;
     this.assertOpen(origin);
     const run = this.runs.get(key(origin.root!))!;
     if (run.state.state === "allowed") return { run: run.ref, decision: run.state.decision };
-    const answer = new Promise<AllowDecision | null>((resolve) => run.waiters.set(id, resolve));
+    const answer = new Promise<AllowDecision | null>((resolve) =>
+      run.waiters.set(id, { run: origin.run!, resolve }),
+    );
     if (run.state.state === "idle") {
       const requestId = randomUUID(),
         deadline = new Date(Date.now() + WRITE_COUNTDOWN_MS).toISOString();
@@ -98,7 +128,10 @@ export class RunConsents {
         deadline,
         scope: "run",
         commands: [id],
-        toolCall: { toolCallId: `writes:${run.ref.turn}`, title: "Writes for this turn" },
+        toolCall: {
+          toolCallId: `writes:${run.ref.turn}`,
+          title: `First write: ${this.describe(footprint)}. Then all writes for this turn.`,
+        },
         options: [
           { optionId: "allow_now", name: "Allow now", kind: "allow_once" },
           { optionId: "stop_writes", name: "Stop writes for this turn", kind: "reject_once" },
@@ -148,7 +181,7 @@ export class RunConsents {
       by,
       optionId,
     });
-    for (const resolve of run.waiters.values()) resolve(decision);
+    for (const { resolve } of run.waiters.values()) resolve(decision);
     run.waiters.clear();
     return true;
   }
@@ -163,6 +196,11 @@ export class RunConsents {
       throw Error("consent.stopped: root writes stopped");
     if (own.state.state === "closed" && own.state.reason !== "completed")
       throw Error("consent.stopped: turn writes stopped");
+    if (
+      (own.state.state === "closed" && !own.state.decision) ||
+      (root.state.state === "closed" && !root.state.decision)
+    )
+      throw Error("run.closed: turn ended before write approval");
     if (consent && "decision" in consent) {
       const decision =
         root.state.state === "allowed" || root.state.state === "closed"
@@ -178,7 +216,11 @@ export class RunConsents {
     if (run.state.state === "closed") return;
     clearTimeout(run.timer);
     const ask = run.state.state === "waiting" ? run.state.requestId : null;
-    const decision = run.state.state === "allowed" ? run.state.decision : null;
+    const root = this.runs.get(key(run.root));
+    const decision =
+      root?.state.state === "allowed" || root?.state.state === "closed"
+        ? root.state.decision
+        : null;
     run.state = { state: "closed", reason, decision, at: new Date().toISOString() };
     this.record(run);
     if (ask) this.answers.set(ask, run.ref.thread);
@@ -189,8 +231,15 @@ export class RunConsents {
         requestId: ask,
         by: "cancel",
       });
-    for (const resolve of run.waiters.values()) resolve(null);
+    for (const { resolve } of run.waiters.values()) resolve(null);
     run.waiters.clear();
+    // Child completion cancels only its unapproved commands, leaving the root countdown intact.
+    if (root && root !== run)
+      for (const [id, waiter] of root.waiters)
+        if (key(waiter.run) === key(ref)) {
+          waiter.resolve(null);
+          root.waiters.delete(id);
+        }
   }
   closeAll() {
     for (const run of this.runs.values()) this.close(run.ref, "restart");

@@ -128,6 +128,65 @@ test("an acquired document supplies provenance without bypassing the run countdo
   }
 });
 
+test("admission detaches nested intent, frozen Work and footprint from the submitter", async () => {
+  const h = await setup();
+  const input = { nested: { value: 250 } },
+    frozen = { revision: 13 },
+    effects = structuredClone(footprint);
+  try {
+    await h.journal.admit(
+      { ...admission("detached"), input, caller, basis: null, footprint: effects, frozen },
+      async () => null,
+      async () => null,
+    );
+    await h.ready();
+    input.nested.value = 999;
+    frozen.revision = 99;
+    effects[0]!.path = "C:/other.json";
+    const [row] = await h.journal.list(undefined, "detached");
+    expect(row).toMatchObject({
+      request: { nested: { value: 250 } },
+      frozen: { revision: 13 },
+      footprint,
+    });
+    h.approve();
+    expect((await h.journal.wait("detached")).request).toEqual({ nested: { value: 250 } });
+  } finally {
+    await h.close();
+  }
+});
+
+test("normal child completion cancels unapproved admitted effects before root approval", async () => {
+  const h = await setup();
+  const child = { thread: "child-thread", turn: "child-turn" };
+  const childCaller: Caller = {
+    kind: "pea",
+    context: "child",
+    thread: child.thread,
+    run: child,
+    root: run,
+  };
+  h.runs.open(child, run);
+  let writes = 0;
+  try {
+    await h.journal.admit(
+      { ...admission("child-write"), caller: childCaller, basis: null, footprint },
+      async () => null,
+      async (e) => e.step("file", "write", {}, async () => ++writes),
+    );
+    await h.ready();
+    h.runs.close(child, "completed");
+    h.approve();
+    expect((await h.journal.wait("child-write")).state).toBe("cancelled");
+    expect(writes).toBe(0);
+    expect(
+      await h.runs.authorize({ caller, run, root: run }, "root-write", footprint),
+    ).toMatchObject({ run });
+  } finally {
+    await h.close();
+  }
+});
+
 test("per-command cancellation preserves the shared decision; Stop cancels every unstarted mutation", async () => {
   const h = await setup();
   try {
@@ -206,6 +265,56 @@ test("restart cancels unapproved rows and conflicting consumed edits fail before
     expect((await h.journal.wait("fresh")).state).toBe("failed");
     expect(effects).toBe(0);
   } finally {
+    await h.close();
+  }
+});
+
+test("root Stop retains a dispatched child result and fences its next effect", async () => {
+  const h = await setup();
+  const child = { thread: "child-thread", turn: "child-turn" };
+  const childCaller: Caller = {
+    kind: "pea",
+    context: "child",
+    thread: child.thread,
+    run: child,
+    root: run,
+  };
+  h.runs.open(child, run);
+  const dispatched = Promise.withResolvers<void>(),
+    finish = Promise.withResolvers<void>();
+  let nextWrites = 0;
+  try {
+    await h.journal.admit(
+      { ...admission("child-dispatched"), caller: childCaller, basis: null, footprint },
+      async () => null,
+      async (e) => {
+        await e.step("native", "first", {}, async (requestId) => {
+          await h.journal.markDispatched(requestId);
+          dispatched.resolve();
+          await finish.promise;
+          return { applied: true };
+        });
+        return e.step("file", "next", {}, async () => ++nextWrites);
+      },
+    );
+    await h.ready();
+    h.approve();
+    await dispatched.promise;
+    h.runs.close(run, "stopped");
+    finish.resolve();
+    const row = await h.journal.wait("child-dispatched");
+    expect(row.state).toBe("cancelled");
+    expect(row.steps[0]).toMatchObject({
+      state: "succeeded",
+      result: { applied: true },
+      dispatchedAt: expect.any(String),
+    });
+    expect(nextWrites).toBe(0);
+    expect(row.steps).toHaveLength(2);
+    expect(row.steps[1]).toMatchObject({ key: "next", state: "cancelled" });
+    expect(row.steps[1]!.dispatchedAt).toBeUndefined();
+  } finally {
+    finish.resolve();
     await h.close();
   }
 });

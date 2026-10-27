@@ -267,11 +267,11 @@ public static class Rooms
         // ponytail: one capture over the rectangle enclosing every zone and every role-less fill, because a
         // role-less fill needs knee evidence before it is known to be a zone. Ceiling: a far-off role-less room
         // widens the capture.
-        SpaceWorld.Prepare(doc);
+        var world = SpaceWorld.Prepare(doc);
         var rect = Box(mayZone.SelectMany(r => r.Loops), 0);
         var captured = PartitionVerbs.Capture(doc, new Pe.Revit.Partition.PartitionRequest(0,
             Loops: [[rect.MinX, rect.MinY, rect.MaxX, rect.MinY, rect.MaxX, rect.MaxY, rect.MinX, rect.MaxY]],
-            View: view.Id.Value()));
+            View: view.Id.Value()), world);
         var knee = captured.Knee.Elements.SelectMany(e => e.Pieces).ToList();
 
         // Designate and classify in memory; nothing is written until every zone is solved.
@@ -334,7 +334,7 @@ public static class Rooms
                 ],
             };
             Pe.Revit.Partition.PartitionAnswer answer;
-            try { answer = PartitionVerbs.Run(doc, input); }
+            try { answer = PartitionVerbs.Run(doc, input, world); }
             catch (Exception ex) when (ex is not Pe.Revit.Partition.PartitionException)
             {
                 // One zone's topology failure names itself and leaves the other zones solved.
