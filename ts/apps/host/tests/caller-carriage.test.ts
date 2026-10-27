@@ -268,7 +268,10 @@ test("/call attributes a view-image capture to the caller it was carried by", as
   writeFileSync(join(dir, "L1.png"), "png-l1");
   const store = new CaptureStore(join(dir, "store"));
   const server = await serveRoutes(
-    makeCallRoute(undefined, undefined, { captureStore: store, sdk: sdkSessions }),
+    makeCallRoute(new ActionJournal(join(dir, "journal.jsonl")), undefined, {
+      captureStore: store,
+      sdk: sdkSessions,
+    }),
     bridgeA((key) =>
       key === "host.ops.catalog"
         ? {
@@ -320,9 +323,9 @@ test("/call attributes a view-image capture to the caller it was carried by", as
 /** `/actions/<control>` and `/families/readings` judge the caller that sent the body. */
 test("action controls and the Families reading judge their real caller", async () => {
   const dir = mkdtempSync(join(tmpdir(), "pe-host-carriage-controls-"));
-  const owner = new ActionJournal(join(dir, "attempts.json"));
+  const seeded = new ActionJournal(join(dir, "attempts.json"));
   const admitted = await invokeCommand(
-    owner,
+    seeded,
     {
       id: "carriage-original",
       key: "revit.context.view-image",
@@ -333,7 +336,8 @@ test("action controls and the Families reading judge their real caller", async (
     async () => ({}),
     async () => ({}),
   );
-  await owner.wait(admitted.id);
+  await seeded.wait(admitted.id);
+  const owner = new ActionJournal(join(dir, "attempts.json"));
   const server = await serveRoutes(
     makeCallRoute(owner, undefined, { sdk: sdkSessions }),
     bridgeA((key) =>
@@ -377,7 +381,7 @@ test("action controls and the Families reading judge their real caller", async (
         },
       );
     expect((await families({})).text).toMatch(/anonymous callers are read-only/);
-    expect((await families(pea)).text).toMatch(/Families Work belongs to another document/);
+    expect((await families(pea)).text).toMatch(/human.only/);
     expect((await families(human)).text).toMatch(/Families Work belongs to another document/);
   } finally {
     await server.close();

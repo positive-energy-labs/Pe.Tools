@@ -117,6 +117,7 @@ async function serve(onCatalog?: (documents: (typeof other)[]) => void) {
       state?: string;
       id?: string;
       effects?: import("@pe/agent-contracts").Footprint;
+      consumes?: import("@pe/agent-contracts").Consumed[];
     };
     return { status: response.status, json, text };
   };
@@ -323,6 +324,18 @@ test("Pea script footprint includes every sibling and Stop prevents dispatch", a
         { kind: "document", ref: { session: doc.session, openId: other.openId } },
       ]),
     );
+    // These expected IDs came from this bridge attachment, not the SDK's document vocabulary.
+    expect(act.json.consumes?.find((dependency) => dependency.kind === "census")).toEqual({
+      kind: "census",
+      probe: { session: doc.session },
+      expected: [doc.openId, other.openId],
+    });
+    expect(
+      act.json.consumes?.find((dependency) => dependency.kind === "incarnation"),
+    ).toMatchObject({
+      probe: { process: { pid: 42, processStartUtc: "1970-01-01T00:00:01.0000000Z" } },
+      expected: true,
+    });
     runs.close(run, "stopped");
     expect((await host.settle(act.json.id!)).state).toBe("cancelled");
     expect(host.sent).toEqual([]);

@@ -109,7 +109,6 @@ import type { HostLog } from "./host-log.ts";
 import { UpdateReader } from "./update-reader.ts";
 import { makeInstalledUpdateReader } from "./update-route.ts";
 import { resolveHostVersion } from "./host-lifecycle.ts";
-import { bindActionWorkspace } from "./takeoff-actions.ts";
 import { familySpecAsset } from "./family-spec.ts";
 import { fileRouteDocumentStore } from "./route-document-store.ts";
 import {
@@ -151,7 +150,13 @@ import { createNotices } from "./notices.ts";
 import { alignBootstrap } from "./bootstrap.ts";
 export { fileRouteDocumentStore } from "./route-document-store.ts";
 
+export interface HostWork {
+  workspace: RouteWorkspace;
+  registrations: readonly RouteWorkspaceRegistration[];
+}
+
 export interface PeRoutesOptions {
+  workspace?: RouteWorkspace;
   registrations: readonly RouteWorkspaceRegistration[];
   store: RouteDocumentStore;
   heads: ThreadHeadSource;
@@ -180,7 +185,9 @@ const message = (error: unknown) => (error instanceof Error ? error.message : St
 
 /** The route-document, Reading, capability and Families-view surface, host-owned. */
 export function createPeRoutes(options: PeRoutesOptions) {
-  const work = new RouteWorkspace({ registrations: options.registrations, store: options.store });
+  const work =
+    options.workspace ??
+    new RouteWorkspace({ registrations: options.registrations, store: options.store });
   async function routeWorkKey(url: URL, route: string, shape: "read" | "write", caller: Caller) {
     const scope = workKey(url, route, shape);
     if (scope instanceof Response || scope.binding === "workspace" || scope.binding === "host")
@@ -1006,6 +1013,7 @@ export function makeHostPeRoutes(
   registrationsFactory: typeof createRouteRegistrations = createRouteRegistrations,
   update: UpdateReader["Service"] = makeInstalledUpdateReader(),
   share?: MachineShareAdapter,
+  hostWork?: HostWork,
 ) {
   const sourceRoot = hostOwnership.sourceRoot;
   const worldRoot = resolvePeaProductHomePath();
@@ -1133,7 +1141,7 @@ export function makeHostPeRoutes(
     automaticUpdates:
       hostOwnership.lane === "installed" ? { peaActive: threads.active } : undefined,
   });
-  const registrations = registrationsFactory({ hostBaseUrl });
+  const registrations = hostWork?.registrations ?? registrationsFactory({ hostBaseUrl });
   const catalog = createCapabilityCatalogSource({
     hostBaseUrl,
     registrations,
@@ -1151,6 +1159,7 @@ export function makeHostPeRoutes(
     machine,
   );
   const routes = createPeRoutes({
+    workspace: hostWork?.workspace,
     registrations,
     ductsAnalysis: {
       root: productDuctsAnalysesPath(),
@@ -1241,7 +1250,6 @@ export function makeHostPeRoutes(
     telemetry,
     reportContext: threads.reportContext,
   });
-  bindActionWorkspace(routes.workspace);
   const podRoutes = createPodRoutes(content.lifecycle, { workspace: routes.workspace });
   const fetchRoute = routes.fetch;
   routes.fetch = async (request) => {
@@ -1270,6 +1278,7 @@ export function makeHostPeRoutes(
 export const peRoutesLayer = (
   registrationsFactory?: typeof createRouteRegistrations,
   share?: MachineShareAdapter,
+  hostWork?: HostWork,
 ) =>
   HttpRouter.use((router) =>
     Effect.gen(function* () {
@@ -1278,14 +1287,13 @@ export const peRoutesLayer = (
       const bridge = Option.getOrUndefined(yield* Effect.serviceOption(RevitBridge));
       const update = yield* UpdateReader;
       const { providers, threads, routes, catalog, machine, notices, plugins, tasks } =
-        makeHostPeRoutes(hostBaseUrl, bridge, registrationsFactory, update, share);
+        makeHostPeRoutes(hostBaseUrl, bridge, registrationsFactory, update, share, hostWork);
       useHostMachine(machine);
       bindControl({
         heads: threads.heads.read,
         subscribeHeads: threads.heads.subscribe,
         acquired: machineAcquisition,
         acquiredSession: machineSessionAcquisition,
-        fullAccess: () => !providers.access().guarded,
       });
       const unbindRevoke = bridge ? bindRevoke(hostActionJournal(), bridge) : undefined;
       yield* Effect.addFinalizer(() =>
@@ -1296,7 +1304,6 @@ export const peRoutesLayer = (
             subscribeHeads: undefined,
             acquired: () => null,
             acquiredSession: () => null,
-            fullAccess: () => false,
           });
           useHostMachine(undefined);
           machine.close();

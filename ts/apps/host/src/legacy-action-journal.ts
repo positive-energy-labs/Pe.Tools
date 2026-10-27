@@ -1,136 +1,19 @@
-/** Pinned foundation-v5 action reader (fd530c41). It never validates new execution or resumes it. */
+/** One-way readers for historical journal envelopes. Archived bytes remain the authority.
+ * Imported actions retain outcomes and reservations, but never gain new execution authority. */
+import { createHash } from "node:crypto";
 import { z } from "zod";
+import { receiptSchema, type Receipt } from "@pe/agent-contracts";
 
-// Historical envelopes retain their complete original JSON in the immutable archived journal.
-const callerSchema = z.object({ kind: z.string() }).passthrough();
-const basisSchema = z.object({ kind: z.string() }).passthrough();
-const originSchema = z
-  .object({ caller: callerSchema, run: z.unknown(), root: z.unknown() })
-  .passthrough();
-const footprintSchema = z.array(z.object({ kind: z.string() }).passthrough());
-const commandConsentSchema = z.union([
-  z.object({ by: z.literal("press") }).strict(),
-  z.object({ run: z.unknown(), decision: z.unknown() }).strict(),
-]);
-const executionTargetSchema = z.discriminatedUnion("kind", [
-  z.object({ kind: z.literal("host") }).strict(),
-  z
-    .object({ kind: z.literal("sdk-session"), selection: z.record(z.string(), z.unknown()) })
-    .strict(),
-  z.object({ kind: z.literal("session"), session: z.string() }).strict(),
-  z
-    .object({
-      kind: z.literal("document"),
-      ref: z.object({ session: z.string(), openId: z.string() }).strict(),
-    })
-    .strict(),
-]);
-const stepIntent = z.object({
+const historicalAction = z.looseObject({
   id: z.string(),
-  key: z.string(),
-  kind: z.enum(["native", "file", "publication"]),
-  input: z.unknown(),
-  dispatchedAt: z.string().optional(),
-});
-const executionFailure = {
-  evidence: z.object({ result: z.unknown() }).strict().optional(),
-  error: z.string(),
-  status: z.number(),
-  nativeOutcome: z.string().optional(),
-  issues: z
-    .array(
-      z.object({
-        instancePath: z.string(),
-        code: z.string(),
-        message: z.string(),
-        severity: z.string(),
-        schemaPath: z.string().nullable().optional(),
-        suggestion: z.string().nullable().optional(),
-      }),
-    )
-    .optional(),
-};
-const actionStepSchema = z.discriminatedUnion("state", [
-  stepIntent.extend({ state: z.literal("running") }).strict(),
-  stepIntent
-    .extend({
-      state: z.literal("succeeded"),
-      result: z.unknown().refine((value) => value !== undefined),
-    })
-    .strict(),
-  stepIntent
-    .extend({
-      state: z.literal("failed"),
-      ...executionFailure,
-      notDispatched: z.literal(true).optional(),
-    })
-    .strict(),
-  stepIntent.extend({ state: z.literal("unknown"), ...executionFailure }).strict(),
-  // Cancelled is its own settled state: the op reached Revit, stopped at a checkpoint, and needs
-  // no recovery read. Unknown means nobody knows; failed means the operation answered, and
-  // notDispatched proves it never ran when present.
-  stepIntent
-    .extend({ state: z.literal("cancelled"), error: z.string(), status: z.number() })
-    .strict(),
-]);
-const actionAttempt = z.object({
-  kind: z.enum(["operation", "workflow"]),
-  id: z.string().min(1),
-  key: z.string(),
-  /** Host-minted; never read from the admission body. */
-  caller: callerSchema,
-  origin: originSchema.optional(),
-  footprint: footprintSchema.default([]),
-  consent: commandConsentSchema.nullable().default(null),
-  frozen: z.unknown().optional(),
-  cancellationRequested: z.boolean().optional(),
-  /** Why the crossing was admitted; null for a host leaf that crosses into no Revit document. */
-  basis: basisSchema.nullable(),
-  destination: executionTargetSchema,
-  request: z.record(z.string(), z.unknown()),
-  bases: z.record(z.string(), z.unknown()),
-  steps: z.array(actionStepSchema),
-  preparation: z.discriminatedUnion("state", [
-    z.strictObject({ state: z.literal("unprepared") }),
-    z.strictObject({ state: z.literal("ready"), value: z.unknown() }),
-  ]),
-  recovery: z.array(z.strictObject({ stepId: z.string(), at: z.string(), evidence: z.unknown() })),
+  state: z.string(),
   startedAt: z.string(),
-  publication: z.discriminatedUnion("state", [
-    z.strictObject({ state: z.literal("unrequested") }),
-    z.strictObject({ state: z.literal("recorded"), result: z.unknown() }),
-  ]),
+  steps: z.array(z.looseObject({ state: z.string() })),
+  recovery: z.array(z.unknown()),
 });
-const historicalActionSchema = z.discriminatedUnion("state", [
-  actionAttempt.extend({ state: z.literal("waiting") }).strict(),
-  actionAttempt.extend({ state: z.literal("running") }).strict(),
-  actionAttempt
-    .extend({ state: z.literal("succeeded"), result: z.unknown().refine((v) => v !== undefined) })
-    .strict(),
-  actionAttempt
-    .extend({
-      state: z.literal("failed"),
-      ...executionFailure,
-      notDispatched: z.literal(true).optional(),
-    })
-    .strict(),
-  actionAttempt.extend({ state: z.literal("unknown"), ...executionFailure }).strict(),
-  actionAttempt
-    .extend({
-      state: z.literal("incomplete"),
-      error: z.string(),
-      status: z.number(),
-      result: z.unknown(),
-    })
-    .strict(),
-  actionAttempt
-    .extend({ state: z.literal("cancelled"), error: z.string(), status: z.number() })
-    .strict(),
-]);
 
-/** Convert inspection facts, not execution authority. Original bytes and schema remain inspectable. */
-export function importHistoricalAction(raw: unknown, archive: string, sha256: string): unknown {
-  const old = historicalActionSchema.parse(raw);
+function importAction(raw: unknown, version: number, archive: string, sha256: string) {
+  const old = historicalAction.parse(raw);
   const {
     kind: _kind,
     origin: _origin,
@@ -141,50 +24,123 @@ export function importHistoricalAction(raw: unknown, archive: string, sha256: st
     bases: _bases,
     preparation,
     publication: _publication,
+    consumes: _consumes,
+    refusal: _refusal,
     ...facts
   } = old;
   const active = old.state === "waiting" || old.state === "running";
   return {
     ...facts,
+    ...(version < 6
+      ? {
+          target: destination,
+          input: request,
+          prepared: preparation,
+          effects: z
+            .array(z.looseObject({ kind: z.string() }))
+            .parse(footprint)
+            .filter((effect) => effect.kind !== "receipt"),
+          claims: [],
+        }
+      : {}),
     ...(active
       ? {
           state: "unknown",
-          error:
-            "Historical execution requires inspection of its original journal; it cannot resume under the new command schema",
           status: 503,
+          error:
+            "Historical execution has no durable terminal outcome; inspect the archived journal",
         }
       : {}),
-    caller: old.caller,
-    basis: old.basis,
-    target: destination,
-    input: request,
-    effects: footprint.filter((effect) => effect.kind !== "receipt"),
     consumes: [],
-    claims: [],
-    prepared: preparation,
     refusal: {
       kind: "domain",
       code: "historical-schema",
       message:
-        "Original command facts are preserved; this historical schema cannot authorize new execution",
+        "Original facts remain archived; this historical schema cannot authorize new execution",
     },
-    steps: old.steps.map((step) =>
-      step.state === "running"
+    steps: old.steps.map((step) => {
+      const { established: _established, ...fact } = step;
+      return step.state === "running"
         ? {
-            ...step,
+            ...fact,
             state: "unknown",
-            error: "Historical execution has no durable outcome",
             status: 503,
+            error: "Historical execution has no durable outcome",
           }
-        : step,
-    ),
+        : fact;
+    }),
     recovery: [
       ...old.recovery,
       {
-        stepId: "historical-v5",
+        stepId: `historical-v${version}`,
         at: old.startedAt,
-        evidence: { schema: "foundation-v5", archive, sha256, action: old.id },
+        evidence: {
+          schema: version === 5 ? "foundation-v5" : `journal-v${version}`,
+          archive,
+          sha256,
+          action: old.id,
+        },
       },
     ],
   };
+}
+
+/** Current decoding and every historical envelope share torn-tail and corruption rules. */
+export function readJournalSnapshot(bytes: Buffer, archive: string) {
+  const lines = bytes.toString("utf8").split("\n");
+  const head = JSON.parse(lines[0]!);
+  const version = head?.version;
+  if (![4, 5, 6, 7].includes(version)) return null;
+  const sha256 = createHash("sha256").update(bytes).digest("hex");
+  const receipts: Receipt[] = [];
+  const mappings: [string, string][] = [];
+  let torn = version === 4;
+  const parseReceipt = (raw: unknown) => {
+    const envelope = z.looseObject({ body: z.looseObject({ kind: z.string() }) }).parse(raw);
+    return receiptSchema.parse(
+      version < 7 && envelope.body.kind === "action"
+        ? {
+            ...envelope,
+            body: {
+              kind: "action",
+              value: importAction(envelope.body.value, version, archive, sha256),
+            },
+          }
+        : raw,
+    );
+  };
+  if (version === 4) {
+    const envelope = z
+      .strictObject({
+        version: z.literal(4),
+        receipts: z.array(z.unknown()),
+        mappings: z.record(z.string(), z.uuid()),
+      })
+      .parse(head);
+    receipts.push(...envelope.receipts.map(parseReceipt));
+    mappings.push(...Object.entries(envelope.mappings));
+  } else {
+    const entry = z.union([
+      z.strictObject({ receipt: z.unknown() }),
+      z.strictObject({ mapping: z.tuple([z.string(), z.uuid()]) }),
+    ]);
+    lines.slice(1).forEach((text, i) => {
+      if (!text) return;
+      // A complete JSON line with an invalid schema is corruption, even at the tail.
+      let json: unknown;
+      try {
+        json = JSON.parse(text);
+      } catch (error) {
+        if (i === lines.length - 2) {
+          torn = true;
+          return;
+        }
+        throw error;
+      }
+      const row = entry.parse(json);
+      if ("receipt" in row) receipts.push(parseReceipt(row.receipt));
+      else mappings.push(row.mapping);
+    });
+  }
+  return { version, receipts, mappings, torn, lines: lines.length - 1, imported: version < 7 };
 }

@@ -9,7 +9,7 @@ import { HOST_CONTEXT_HEADER, HOST_CONTEXT_VARIABLE } from "@pe/host-contracts/c
 import {
   invokeInstances,
   recoverInstances,
-  fixtureAction,
+  bindInstancesFixture,
   afterDomainBind,
 } from "./domain-fixture.ts";
 import { makeCallRoute } from "../src/call-route.ts";
@@ -25,7 +25,7 @@ import {
 } from "../src/machine.ts";
 import { bindControl, mintContext } from "../src/control.ts";
 import type { ThreadHead } from "@pe/agent-contracts";
-import type { SessionObservation } from "@pe/host-contracts/pe-revit-contract";
+import { docListArgv, type SessionObservation } from "@pe/host-contracts/pe-revit-contract";
 import { unreadLeg } from "../src/update-reader.ts";
 import { crossingOf } from "./callers.ts";
 import { serveRoutes } from "./real-server.ts";
@@ -97,6 +97,7 @@ type Answer =
 async function setup(
   answer: (args: readonly string[]) => Answer | Promise<Answer>,
   sessionRows: readonly unknown[] = [controlledRow()],
+  peaLaunchWitness = false,
 ) {
   const dir = await mkdtemp(join(tmpdir(), "pe-instances-"));
   cleanup.push(() => rm(dir, { recursive: true, force: true }));
@@ -142,6 +143,42 @@ async function setup(
   const owner = new ActionJournal(join(dir, "actions.json"));
   const peaWork = join(dir, "pea-work");
   const deps = { sdk, peaWork };
+  if (peaLaunchWitness)
+    bindInstancesFixture(
+      owner,
+      deps,
+      peaLaunchWitness
+        ? {
+            "instances.start": {
+              bind: async ({ admission }) => {
+                if (admission.id !== "pea-launch")
+                  throw Error("This runtime declares only the pea-launch witness");
+                return {
+                  effects: [],
+                  prepare: async () => ({
+                    target: null,
+                    project: null,
+                    acquisition: planAcquisition(
+                      "pea-launch",
+                      peaWork,
+                      { kind: "create", year: "2025" },
+                      null,
+                      false,
+                    ),
+                  }),
+                };
+              },
+              run: (_ctx, execution) =>
+                execution.step(
+                  "native",
+                  "instances.start",
+                  { argv: [] },
+                  async () => startedAnswer.result,
+                ),
+            },
+          }
+        : {},
+    );
   const census = {
     documents: [openId],
     reads: 0,
@@ -205,7 +242,7 @@ async function setup(
       })) as SessionObservation[];
     },
     holdings: async () => null,
-    documents: async () => ({ state: "ok", documents: [] }),
+    documents: async (process) => JSON.parse(await sdk(docListArgv({ pid: process.pid }))).result,
     attachments: async () => [
       {
         session: "bridge-dev",
@@ -265,35 +302,17 @@ async function setup(
   return { calls, owner, deps, admit, dir, peaWork, file, census, machine };
 }
 /** A held process acquisition, as `instances.start` with owner pea records it. */
-async function recordPeaLaunch(owner: ActionJournal, peaWork = "C:/pea-work") {
-  const launch = await fixtureAction(
-    owner,
+async function recordPeaLaunch(owner: ActionJournal, _peaWork?: string) {
+  const row = await owner.invoke(
     {
       id: "pea-launch",
       key: "instances.start",
-      ...crossingOf("human"),
-      effects: [],
       target: { kind: "host" },
-      input: {
-        year: "2025",
-        owner: "pea",
-        addins: "on",
-      },
+      input: { year: "2025", owner: "pea", addins: "on" },
     },
-    async () => ({
-      target: null,
-      acquisition: planAcquisition(
-        "pea-launch",
-        peaWork,
-        { kind: "create", year: "2025" },
-        null,
-        false,
-      ),
-    }),
-    (execution) =>
-      execution.step("native", "instances.start", { argv: [] }, async () => startedAnswer.result),
+    crossingOf("human"),
   );
-  await owner.wait(launch.id);
+  await owner.wait(row.id);
 }
 const into = (id = "dev") => ({ session: { id } });
 const newRevit = (over: Record<string, unknown> = {}) => ({
@@ -360,7 +379,11 @@ test.each(["stop", "restart"])(
         undefined,
         "agent",
       ),
-    ).rejects.toMatchObject({ refusal: { code: "lifecycle.ungranted-documents" } });
+    ).resolves.toMatchObject({
+      state: "failed",
+      notDispatched: true,
+      refusal: { code: "lifecycle.ungranted-documents" },
+    });
     expect(f.calls.every((args) => args[1] === "list")).toBe(true);
   },
 );
@@ -434,6 +457,7 @@ test("an agent opens a new copy into the Revit an acquisition started; a reload 
   const f = await setup(
     () => ({ result: { state: "ok", document: { openId, path: null } } }),
     [controlledRow({ shape: shape("background") })],
+    true,
   );
   const source = await f.file("Tower.rvt", "Worksharing: Not enabled");
   // No acquisition holds this Revit yet: it is yours.
@@ -464,7 +488,7 @@ test("each Pea acquisition starts its own named Revit, never the person's dev se
   const acquisitions: string[] = [];
   for (let n = 0; n < 2; n++) {
     const receipt = await f.admit("instances.start", { year: "2025", owner: "pea", addins: "off" });
-    expect(receipt.state).toBe("succeeded");
+    expect(receipt.state, JSON.stringify(receipt)).toBe("succeeded");
     acquisitions.push(receipt.id);
     starts.push(f.calls.filter((argv) => argv[1] === "start").at(-1)!);
   }
@@ -482,6 +506,7 @@ test("a Pea launch of a workshared model copies first, then opens the copy detac
   const f = await setup(
     () => ({ result: { state: "ok", document: { openId } } }),
     [controlledRow({ id: "pea-bg", shape: shape("background") })],
+    true,
   );
   await recordPeaLaunch(f.owner);
   const source = await f.file("Central.rvt", "Worksharing: Local");
@@ -508,6 +533,7 @@ test("Pea refuses, undispatched, a file whose worksharing it cannot read or a so
   const f = await setup(
     () => ({ result: { state: "ok", document: { openId } } }),
     [controlledRow({ id: "pea-bg", shape: shape("background") })],
+    true,
   );
   await recordPeaLaunch(f.owner);
   const unread = await f.file("Unknown.rvt", "no marker here");
@@ -542,7 +568,7 @@ test.each(["open", "stop", "restart", "close"])(
               : {}),
           };
     const receipt = await f.admit(`instances.${verb}`, input);
-    expect(receipt.state).toBe("succeeded");
+    expect(receipt.state, JSON.stringify(receipt)).toBe("succeeded");
     expect(receipt.steps[0]).toMatchObject({
       key: `instances.${verb}.adopt`,
       state: "succeeded",
@@ -579,7 +605,7 @@ test.each(["resolved-pid", "resolved-start", "session-start", "receipt"])(
       into: { session: { pid: 4242 } },
     });
     expect(receipt.state).not.toBe("succeeded");
-    expect(f.calls.some((args) => args[0] === "doc")).toBe(false);
+    expect(f.calls.some((args) => args[0] === "doc" && args[1] !== "list")).toBe(false);
   },
 );
 test("F7: an acquisition records its paths before writing; a crash at any boundary reconciles from receipts, never guessed", async () => {
@@ -777,7 +803,11 @@ test("handover saves the acquired copy to its create-only result with a diff pla
   // A result is create-only: a second handover refuses before anything dispatches.
   await expect(
     f.admit("instances.handover", { acquisition: acquired.id }, undefined, "agent"),
-  ).rejects.toMatchObject({ refusal: { code: "acquisition.unproven" } });
+  ).resolves.toMatchObject({
+    state: "failed",
+    notDispatched: true,
+    refusal: { code: "acquisition.unproven" },
+  });
   // Unsaved edits no handover saved: keep refuses, undispatched; discard is the explicit choice.
   f.census.modified = true;
   expect(
@@ -790,7 +820,7 @@ test("handover saves the acquired copy to its create-only result with a diff pla
   ).toMatchObject({
     state: "failed",
     notDispatched: true,
-    issues: [{ code: "acquisition.changed-after-handover" }],
+    refusal: { code: "acquisition.changed-after-handover" },
   });
   const cleaned = await f.admit(
     "instances.cleanup",
@@ -836,7 +866,11 @@ test("handover saves the acquired copy to its create-only result with a diff pla
       undefined,
       "agent",
     ),
-  ).rejects.toMatchObject({ refusal: { code: "acquisition.unproven" } });
+  ).resolves.toMatchObject({
+    state: "failed",
+    notDispatched: true,
+    refusal: { code: "acquisition.unproven" },
+  });
 });
 /**
  * R6 (acceptance 2026-10-13): a Save As moves the open document to its new file; the lifetime
@@ -910,7 +944,7 @@ test.each([false, true])(
     ).toMatchObject({
       state: "failed",
       notDispatched: true,
-      issues: [{ code: "acquisition.changed-after-handover" }],
+      refusal: { code: "acquisition.changed-after-handover" },
     });
     expect(f.calls.slice(before).every((argv) => argv[1] === "list")).toBe(true);
     expect(await readFile(work, "utf8")).toBe("saved edits after handover");
@@ -935,7 +969,11 @@ test("cleanup names only its own acquisition: a foreign id refuses, a user docum
       undefined,
       "agent",
     ),
-  ).rejects.toMatchObject({ refusal: { code: "acquisition.unproven" } });
+  ).resolves.toMatchObject({
+    state: "failed",
+    notDispatched: true,
+    refusal: { code: "acquisition.unproven" },
+  });
   const userB = "b".repeat(32);
   f.census.documents = [openId, userB];
   const kept = await f.admit(
@@ -1373,7 +1411,7 @@ test("a document arriving after admission refuses stop at effect entry", async (
   expect(f.calls.every((args) => args[1] === "list")).toBe(true);
 });
 test("a user document opened in Pea's Revit after admission refuses Pea's stop at effect entry", async () => {
-  const f = await setup(() => ({ result: { state: "ok" } }), [controlledRow()]);
+  const f = await setup(() => ({ result: { state: "ok" } }), [controlledRow()], true);
   await recordPeaLaunch(f.owner);
   f.census.documents = [];
   afterDomainBind(f.owner, () => {
@@ -1417,8 +1455,22 @@ test("/actions/cancel stops a running Instances step through the SDK op cancel, 
     await held;
     return { result: { state: "cancelled" } };
   });
-  const row = await invokeInstances(
-    {
+  const server = await serveRoutes(
+    makeCallRoute(f.owner, undefined, f.deps),
+    {} as RevitBridge["Service"],
+  );
+  cleanup.push(async () => {
+    release();
+    await server.close();
+  });
+  const headers = {
+    "content-type": "application/json",
+    [HOST_CONTEXT_HEADER]: mintContext({ kind: "human", via: "cli" }),
+  };
+  const admitted = await fetch(`${server.base}/actions`, {
+    method: "POST",
+    headers,
+    body: JSON.stringify({
       id: "save-held",
       key: "instances.save",
       target: { kind: "sdk-session", selection: session.selection },
@@ -1427,18 +1479,12 @@ test("/actions/cancel stops a running Instances step through the SDK op cancel, 
         document: sdkDocument,
         to: { kind: "self" },
       },
-    },
-    crossingOf("human"),
-    f.owner,
-    f.deps,
-  );
+    }),
+  });
+  expect(admitted.status).toBe(202);
+  const row = (await admitted.json()) as { id: string };
   while (!f.calls.some((args) => args[1] === "save")) await new Promise((r) => setTimeout(r, 5));
   const step = (await f.owner.list(undefined, row.id))[0]!.steps.at(-1)!;
-  const server = await serveRoutes(
-    makeCallRoute(f.owner, undefined, { sdk: f.deps.sdk }),
-    {} as RevitBridge["Service"],
-  );
-  cleanup.push(() => server.close());
   const response = await fetch(`${server.base}/actions/cancel`, {
     method: "POST",
     headers: {

@@ -1,4 +1,4 @@
-import { invokeCommand } from "./command-fixture.ts";
+import { fixtureCommand, invokeCommand, registerFixtureCommand } from "./command-fixture.ts";
 /**
  * A cancel reaches the op while it runs. The socket here is a fake, everything above it — the
  * input table, the per-session FIFO gate, the journal, `/actions` and `/actions/cancel` — is
@@ -16,7 +16,7 @@ import { join } from "node:path";
 import { Context, Effect, Fiber, Layer, Queue } from "effect";
 import { HttpRouter } from "effect/unstable/http";
 import { expect, test } from "vite-plus/test";
-import { RevitBridge, RevitBridgeLive } from "../src/bridge.ts";
+import { RevitBridge, RevitBridgeLive, invokeBridge } from "../src/bridge.ts";
 import { ActionJournal } from "../src/action-journal.ts";
 import { makeCallRoute } from "../src/call-route.ts";
 import { readNativeReceipt } from "../src/native-receipts.ts";
@@ -106,7 +106,7 @@ test("admission answers before the bridge answers anything", () =>
       // Nothing has been offered on `incoming`, so every bridge call this admission makes is
       // unanswerable for the whole of this assertion.
       const accepted = yield* post("/actions", intent);
-      expect(accepted.status).toBe(202);
+      expect(accepted.status, yield* Effect.promise(() => accepted.clone().text())).toBe(202);
       expect(((yield* Effect.promise(() => accepted.json())) as { state: string }).state).toBe(
         "running",
       );
@@ -294,10 +294,22 @@ test("an exact cancelled SDK receipt settles a lost reply once without replaying
               : step,
             evidence: { diagnostics: resolveFollowup ? [] : ["still ambiguous"] },
           });
-    const unresolved = await recovered.recover(intent.id, recover);
+    registerFixtureCommand(
+      recovered,
+      intent.key,
+      fixtureCommand(
+        [],
+        async () => null,
+        async () => null,
+        [],
+        [],
+        { recover },
+      ),
+    );
+    const unresolved = await recovered.recover(intent.id);
     resolveFollowup = true;
-    const first = await recovered.recover(intent.id, recover);
-    const second = await recovered.recover(intent.id, recover);
+    const first = await recovered.recover(intent.id);
+    const second = await recovered.recover(intent.id);
 
     expect(unresolved.state).toBe("unknown");
     expect(first).toMatchObject({ state: "cancelled", status: 499 });
@@ -482,11 +494,7 @@ const nativeValue = async (
   key: string,
   id: string,
 ) => {
-  const result = await Effect.runPromise(
-    Effect.result(bridge.invoke(key, {}, target.session, target.openId, id)),
-  );
-  if (result._tag === "Failure") throw result.failure;
-  return result.success.value;
+  return invokeBridge(bridge, target, key, {}, id);
 };
 
 test("F-c revoke lets a dispatched step report and refuses the next step without rollback", () =>

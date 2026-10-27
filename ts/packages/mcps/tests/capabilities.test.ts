@@ -1,6 +1,6 @@
 import { normalizePeError } from "@pe/host-contracts/pe-api";
 import { machineFixture } from "../../agent-contracts/tests/machine-fixture.ts";
-import type { PodList } from "@pe/host-contracts/operation-types";
+import { tsOnlyOperationCatalog, type PodList } from "@pe/host-contracts/operation-types";
 import { join } from "node:path";
 import { checkoutRootFrom } from "@pe/host-contracts/service-identity";
 import { DUCTS_GUIDE } from "@pe/agent-contracts";
@@ -62,6 +62,31 @@ const ops = [
     actor: "any" as const,
   })),
 ];
+
+test("native Human eligibility and local account requirements project into actual principals", () => {
+  const rows = buildCapabilities({
+    ops: [
+      { key: "native.human", needs: "document", intent: "Mutate", actor: "human" },
+      { key: "native.any", needs: "nothing", intent: "Read", actor: "any" },
+      { key: "local.human", needs: "nothing", intent: "Mutate", principal: ["human"] },
+      ...tsOnlyOperationCatalog.filter((row) =>
+        ["aps.auth.login", "aps.auth.logout", "host.shell.open"].includes(row.key),
+      ),
+    ],
+    routes: [],
+    packages: [],
+    skills: [],
+  });
+  expect(rows.find((row) => row.key === "op:native.human")?.principal).toEqual(["human"]);
+  expect(rows.find((row) => row.key === "op:local.human")?.principal).toEqual(["human"]);
+  for (const key of ["aps.auth.login", "aps.auth.logout"])
+    expect(rows.find((row) => row.key === `op:${key}`)?.principal).toEqual(["human"]);
+  expect(rows.find((row) => row.key === "op:host.shell.open")?.principal).toEqual(["human", "pea"]);
+  expect(rows.find((row) => row.key === "op:native.any")).toMatchObject({
+    needs: "session",
+    principal: ["human", "pea", "page", "external-mcp"],
+  });
+});
 
 const pods = {
   pods: [

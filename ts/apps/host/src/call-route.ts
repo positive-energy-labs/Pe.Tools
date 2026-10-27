@@ -9,7 +9,6 @@ import { sdkSession, readSessionScope } from "./sdk-session.ts";
 import { readSchedule } from "./schedule-actions.ts";
 import { actionControls, commandTool, receiptsForWork } from "@pe/agent-contracts";
 import { NodeHttpClient, NodeServices } from "@effect/platform-node";
-import { hostActionJournal } from "./gateway-owner.ts";
 import { operationDefinition, gatewayTarget, requireEligibleCaller } from "./gateway-actions.ts";
 import {
   admitCrossing,
@@ -41,9 +40,10 @@ import {
   takeoffProjectIndexRequest,
 } from "../../../packages/mcps/src/shared/takeoff-ops.ts";
 import type { OpResponseOf } from "@pe/host-contracts/operation-types";
+import { CommandRejected, StepFailure } from "./command-executor.ts";
 import { ActionJournal } from "./action-journal.ts";
 import { commandRegistry } from "./command-registry.ts";
-import { commandReads } from "./command-reads.ts";
+import { commandResources } from "./command-reads.ts";
 import { VIEW_IMAGE_KEY } from "@pe/agent-contracts";
 import {
   captureOrigin,
@@ -124,7 +124,7 @@ export type CallRouteDispatch = (
 >;
 
 export function makeCallRoute(
-  operations?: ActionJournal,
+  operations: ActionJournal,
   captures?: TakeoffCaptures,
   actionDeps: FamilyActionDependencies & {
     launchShell?: (path: string) => Promise<void>;
@@ -132,8 +132,9 @@ export function makeCallRoute(
     captureStore?: CaptureStore;
   } = {},
   composition?: {
-    readonly forwardBase: string | null;
-    readonly dispatch: CallRouteDispatch;
+    readonly forwardBase?: string | null;
+    readonly dispatch?: CallRouteDispatch;
+    readonly origin?: () => string;
     readonly captureHostOp?: typeof recordHostOp;
     readonly local?: (key: string, input: unknown) => Promise<unknown>;
   },
@@ -147,26 +148,14 @@ export function makeCallRoute(
   const dispatch: CallRouteDispatch = (...args) =>
     (composition?.dispatch ?? dispatchTsOnlyOperation)(...args);
   const observations = () => (captures ??= hostTakeoffCaptures());
-  const owner = () => (operations ??= hostActionJournal());
-  const registry = (bridge: RevitBridge["Service"]) => {
-    const resolve = commandRegistry(
-      bridge,
-      observations(),
-      actionDeps,
-      composition?.local ??
-        ((key, input) => executeGatewayLocal(key, input, bridge, actionDeps.launchShell)),
-    );
-    owner().configureCommands(commandReads(bridge, actionDeps), resolve);
-    return resolve;
-  };
-  const admit = async (raw: unknown, bridge: RevitBridge["Service"], caller: Caller) => {
+  const owner = () => operations;
+  const admit = async (raw: unknown, _bridge: RevitBridge["Service"], caller: Caller) => {
     const input = actionAdmissionSchema.parse(raw);
-    const resolve = registry(bridge);
     const crossing = {
       caller,
       basis: admitCrossing(caller, input.target, "/actions", readsOnly(input.key, input.input)),
     };
-    return owner().invoke(input, crossing, resolve(input.key));
+    return owner().invoke(input, crossing);
   };
   const callDoor = peRoutes["operation.call"];
   const post = HttpRouter.add(callDoor.method, callDoor.path, (req) => {
@@ -768,7 +757,7 @@ export function makeCallRoute(
     const choice = id.slice("action.".length);
     return HttpRouter.add(peRoutes[id].method, peRoutes[id].path, (req) => {
       const caller = currentCaller();
-      return RevitBridge.use((bridge) =>
+      return RevitBridge.use((_bridge) =>
         Effect.tryPromise({
           try: async () => {
             const body = await Effect.runPromise(req.json);
@@ -776,7 +765,6 @@ export function makeCallRoute(
               throw Error("An original action ID is required");
             const controlled = (await owner().readFor(caller, undefined, body.id))[0];
             if (!controlled) throw Error(`Action '${body.id}' has no admitted receipt`);
-            registry(bridge);
             // The journal resolves control behavior from the same executor as invocation.
             if (choice === "cancel")
               return Response.jsonUnsafe(await owner().cancel(body.id), { status: 202 });
@@ -865,6 +853,27 @@ export function makeCallRoute(
     ),
   );
   return Layer.mergeAll(
+    Layer.effectDiscard(
+      RevitBridge.use((bridge) =>
+        Effect.sync(() => {
+          operations.bindCommands({
+            ...commandResources(
+              bridge,
+              actionDeps,
+              async (id) => (await operations.list(undefined, id))[0],
+            ),
+            resolve: commandRegistry(
+              bridge,
+              observations(),
+              actionDeps,
+              composition?.local ??
+                ((key, input) => executeGatewayLocal(key, input, bridge, actionDeps.launchShell)),
+              composition?.origin,
+            ),
+          });
+        }),
+      ),
+    ),
     post,
     familiesReadings,
     captured,
@@ -875,8 +884,6 @@ export function makeCallRoute(
     ...controls,
   );
 }
-
-export const callRoute = makeCallRoute();
 
 const savedTakeoffs = Effect.fnUntraced(function* (request: unknown, captures: TakeoffCaptures) {
   const input = yield* decodeRequest("takeoffs.saved", request ?? {});
@@ -1150,6 +1157,18 @@ function toProblem(error: unknown): {
   result?: unknown;
   resolvedTarget?: BridgeError["evidence"]["resolvedTarget"];
 } {
+  if (error instanceof CommandRejected)
+    return { kind: "InvalidRequest", message: error.message, status: 409 };
+  if (error instanceof StepFailure)
+    return {
+      kind: "HostFailure",
+      message: error.message,
+      status: error.status,
+      ...(error.outcome === "refused" ? { notDispatched: true } : {}),
+      result: error.result,
+      nativeOutcome: error.details?.nativeOutcome,
+      issues: error.details?.issues,
+    };
   if (error instanceof Refused)
     return { kind: "InvalidRequest", message: error.message, status: 403, notDispatched: true };
   if (error instanceof Error) return { kind: "HostFailure", message: error.message, status: 500 };

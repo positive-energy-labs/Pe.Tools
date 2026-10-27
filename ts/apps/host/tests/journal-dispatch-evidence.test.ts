@@ -4,7 +4,7 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { expect, test } from "vite-plus/test";
 import { ActionJournal } from "../src/action-journal.ts";
-import { BridgeError } from "../src/bridge.ts";
+import { StepFailure } from "../src/command-executor.ts";
 import { originalProcess } from "./native-receipt-fixture.ts";
 
 test("a domain prepared field named process is not native dispatch evidence", async () => {
@@ -46,7 +46,7 @@ test("native dispatch evidence survives both successful and failed outcome persi
         {
           id,
 
-          key: "test.native",
+          key: `test.native.${id}`,
           target: { kind: "host" },
           input: {},
 
@@ -61,8 +61,7 @@ test("native dispatch evidence survives both successful and failed outcome persi
             expect((await journal.list(undefined, id))[0]!.steps[0]!.dispatchedAt).toEqual(
               expect.any(String),
             );
-            if (!succeeds)
-              throw new BridgeError("Native answered failure", 500, { dispatched: true });
+            if (!succeeds) throw new StepFailure("Native answered failure", 500, "failed");
             return { applied: true };
           }),
       );

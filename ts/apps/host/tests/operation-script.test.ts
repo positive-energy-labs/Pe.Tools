@@ -139,6 +139,22 @@ it.each([
         const reloaded = new ActionJournal(join(dir, "actions.json"));
         expect(await reloaded.wait(id)).toMatchObject({ state, evidence: { result } });
       }
+      const read = await fetch(`http://127.0.0.1:${port()}/call`, {
+        method: "POST",
+        headers: {
+          "content-type": "application/json",
+          [HOST_CONTEXT_HEADER]: mintContext({ kind: "human", via: "cli" }),
+          "x-pe-bridge-session-id": "bridge-script",
+          "x-pe-open-document-id": "open-script",
+        },
+        body: JSON.stringify({
+          key: "scripting.execute",
+          request: { scriptContent: "WriteLine(1);" },
+        }),
+      });
+      // The query door relays native data; command settlement interprets its typed outcome.
+      expect(read.status, await read.clone().text()).toBe(200);
+      expect(await read.json()).toEqual(result);
     } finally {
       Effect.runSync(Deferred.succeed(latch, undefined));
       await done;

@@ -21,11 +21,9 @@ test("access-086: paired MCP writes only its bound thread's human-added targets;
     ],
     revision: 4,
   };
-  // Full access is Pea's switch, never an external device's.
   bindControl({
     heads: () => head,
     deviceThread: (id: string) => devices.active(id).thread,
-    fullAccess: () => true,
   });
   const web = HttpRouter.toWebHandler(deviceRoutes(devices), { disableLogger: true });
   const listedRw = async () =>

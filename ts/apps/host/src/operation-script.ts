@@ -13,19 +13,17 @@ import {
   listPackages,
 } from "./packages.ts";
 import { productUserContentRootPath } from "./product-paths.ts";
-import { BridgeError } from "./bridge.ts";
+import { StepFailure } from "./command-executor.ts";
 import { requirePackageEnabled } from "./package-lifecycle.ts";
 
 export function requireScriptSuccess(value: unknown): void {
   const status = value && typeof value === "object" && "status" in value ? value.status : undefined;
   if (status === "Succeeded") return;
-  throw new BridgeError(
+  throw new StepFailure(
     `Script execution ${typeof status === "string" ? status : "returned no valid status"}`,
     status === "Cancelled" ? 499 : 422,
-    {
-      dispatched: true,
-      result: value,
-    },
+    status === "Cancelled" ? "cancelled" : "failed",
+    value,
   );
 }
 

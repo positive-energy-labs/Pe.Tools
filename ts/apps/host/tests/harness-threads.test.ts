@@ -993,7 +993,6 @@ afterEach(() =>
     heads: null,
     acquired: () => null,
     acquiredSession: () => null,
-    fullAccess: () => false,
   }),
 );
 

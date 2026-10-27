@@ -70,8 +70,7 @@ import {
 } from "./page-libraries.ts";
 import { productPagesRootPath, productPodsRootPath } from "./product-paths.ts";
 import { exportPage } from "./page-export.ts";
-import { CaptureStore, hostCaptures } from "./captures-route.ts";
-import { escapeHtml, pagePublicationExecutor, withPageKey } from "./page-publication.ts";
+import { escapeHtml, withPageKey } from "./page-publication.ts";
 import { hostActionJournal } from "./gateway-owner.ts";
 import type { ActionJournal } from "./action-journal.ts";
 import { PAGE_MEDIA, readJson } from "./page-artifacts.ts";
@@ -373,7 +372,6 @@ export function createPagesHandler(
   root: string,
   pods?: string,
   live: PageLive = noLive,
-  captures = new CaptureStore(join(root, ".captures")),
   journal?: ActionJournal,
 ) {
   /**
@@ -788,7 +786,6 @@ export function createPagesHandler(
         await owner.invoke(
           { id, key: "page.publish", target: { kind: "host" }, input: input.data },
           { caller, basis: null },
-          pagePublicationExecutor(root, url.origin, pageLibrary, captures),
         );
         const row = await owner.wait(id);
         if (row.state !== "succeeded")
@@ -946,7 +943,7 @@ export const pagesRoute = (root = productPagesRootPath, pods = productPodsRootPa
             body: JSON.stringify(body),
           }),
       };
-      const pages = createPagesHandler(root(), pods(), live, hostCaptures());
+      const pages = createPagesHandler(root(), pods(), live, hostActionJournal());
       const handler = HttpEffect.fromWebHandler((request) =>
         matchPeRoute(request.method, new URL(request.url).pathname)
           ? servePeRoute(request, pages)

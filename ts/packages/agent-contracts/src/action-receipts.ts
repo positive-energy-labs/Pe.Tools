@@ -12,7 +12,6 @@ const stepIntent = z.object({
   kind: z.enum(["native", "file", "publication"]),
   input: z.unknown(),
   process: nativeProcessSchema.optional(),
-  established: z.array(consumedSchema).optional(),
   releases: z.array(z.strictObject({ action: z.string(), claim: claimSchema })).optional(),
   retired: z.literal(true).optional(),
   dispatchedAt: z.string().optional(),

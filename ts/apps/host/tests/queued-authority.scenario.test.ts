@@ -13,7 +13,7 @@ import { partitionFixture } from "./partition-fixture.ts";
 import { approvedPea } from "./callers.ts";
 
 // The socket is substituted. Admission, persisted Work, journal, FIFO and dispatch are production.
-test.each(["guarded", "removed", "unchanged"] as const)(
+test.each(["removed", "unchanged"] as const)(
   "queued native authority: %s preserves authored Work and the dispatched result",
   async (change) => {
     await Effect.runPromise(
@@ -35,7 +35,6 @@ test.each(["guarded", "removed", "unchanged"] as const)(
               },
             },
           });
-          let full = true;
           let head: ThreadHead = {
             revision: 1,
             targets:
@@ -52,7 +51,6 @@ test.each(["guarded", "removed", "unchanged"] as const)(
             heads: () => head,
             acquired: () => null,
             acquiredSession: () => null,
-            fullAccess: () => full,
           });
           const queued = Promise.withResolvers<void>();
           const op = `queued-${randomUUID()}`;
@@ -96,7 +94,7 @@ test.each(["guarded", "removed", "unchanged"] as const)(
             const action = yield* Effect.promise(() =>
               invokeCommand(
                 owner,
-                { ...intent, key: "test.queued-authority", caller, basis },
+                { ...intent, key: `test.queued-authority.${op}`, caller, basis },
                 async () => null,
                 async (execution) =>
                   execution.step("native", op, {}, async (id) => {
@@ -109,7 +107,6 @@ test.each(["guarded", "removed", "unchanged"] as const)(
               ),
             );
             yield* Effect.promise(() => queued.promise);
-            if (change === "guarded") full = false;
             if (change === "removed") head = { revision: 2, targets: [] };
             yield* answer(sent.request!.requestId);
             expect((yield* Fiber.join(holder)).value).toEqual({ completed: true });
@@ -129,7 +126,6 @@ test.each(["guarded", "removed", "unchanged"] as const)(
               heads: null,
               acquired: () => null,
               acquiredSession: () => null,
-              fullAccess: () => false,
             });
           }
         }),

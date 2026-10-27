@@ -13,7 +13,8 @@ import { takeoffExecutors, fileVersion } from "../../../host/src/takeoff-actions
 import { sdkSessions, readRhvacFixture } from "../../../host/tests/native-receipt-fixture";
 import type { RevitBridge } from "../../../host/src/bridge";
 import { crossingOf } from "../../../host/tests/callers";
-import { commandReads } from "../../../host/src/command-reads";
+import { ActionJournal } from "../../../host/src/action-journal";
+import { commandResources } from "../../../host/src/command-reads";
 
 const crossing = crossingOf("human");
 
@@ -27,6 +28,7 @@ test.skipIf(process.env.PE_DEMO_JET !== "1")(
     const root = await mkdtemp(join(tmpdir(), "pe-native-rhvac-integration-"));
     const path = join(root, "integration.r10");
     let owner: Awaited<ReturnType<typeof createDemoOwner>> | undefined;
+    let journal: ActionJournal | undefined;
     try {
       await copyFile(fixture, path);
       const beforeHash = await fileVersion(path);
@@ -92,9 +94,17 @@ test.skipIf(process.env.PE_DEMO_JET !== "1")(
       });
       const deps = { workspace: owner.work, sdk: sdkSessions };
       const executors = takeoffExecutors(owner.captures, bridge, deps);
-      owner.journal.configureCommands(commandReads(bridge, deps), (key) => executors[key]!);
-      await owner.journal.invoke(admission, crossing, executors[admission.key]!);
-      const receipt = await owner.journal.wait(admission.id);
+      const runtime = (journal = new ActionJournal(join(root, "integration-journal.jsonl")));
+      runtime.bindCommands({
+        ...commandResources(bridge, deps, async (id) => (await runtime.list(undefined, id))[0]),
+        resolve: (key) => {
+          const entry = executors[key as keyof typeof executors];
+          if (!entry) throw Error(`No integration executor for ${key}`);
+          return entry;
+        },
+      });
+      await runtime.invoke(admission, crossing);
+      const receipt = await runtime.wait(admission.id);
       expect(receipt.state).toBe("succeeded");
       expect(await fileVersion(path)).not.toBe(beforeHash);
       expect(nativeLinks).toHaveLength(1);
@@ -107,11 +117,11 @@ test.skipIf(process.env.PE_DEMO_JET !== "1")(
         ),
       ).toEqual({});
       const afterHash = await fileVersion(path);
-      await owner.journal.invoke(admission, crossing, executors[admission.key]!);
+      await runtime.invoke(admission, crossing);
       expect(nativeLinks).toHaveLength(1);
       expect(await fileVersion(path)).toBe(afterHash);
       const staleId = `${owner.id}:stale`;
-      await owner.journal.invoke(
+      await runtime.invoke(
         {
           ...admission,
           id: staleId,
@@ -124,16 +134,15 @@ test.skipIf(process.env.PE_DEMO_JET !== "1")(
           },
         },
         crossing,
-        executors[admission.key]!,
       );
-      expect(await owner.journal.wait(staleId)).toMatchObject({
+      expect(await runtime.wait(staleId)).toMatchObject({
         state: "failed",
         steps: [],
         error: "RHVAC file changed before admission",
       });
-      expect(JSON.stringify(await readFile(join(owner.root, "journal.json"), "utf8"))).toContain(
-        admission.id,
-      );
+      expect(
+        JSON.stringify(await readFile(join(root, "integration-journal.jsonl"), "utf8")),
+      ).toContain(admission.id);
     } finally {
       // Preserve failed/unknown receipts before deleting only this integration test's owned root.
       const evidence = join(
@@ -148,7 +157,7 @@ test.skipIf(process.env.PE_DEMO_JET !== "1")(
           JSON.stringify(
             {
               fixture,
-              receipts: owner ? await owner.journal.list() : [],
+              receipts: journal ? await journal.list() : [],
               proof: "Real Jet integration; simulated native links; no application launch",
             },
             null,

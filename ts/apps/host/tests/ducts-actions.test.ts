@@ -4,8 +4,8 @@
  * web built reaches Revit byte for byte; a document that is not the admitted one never dispatches.
  */
 import { connectTestBridge } from "./bridge-fixture.ts";
-import { sdkSessions } from "./native-receipt-fixture.ts";
-import { asCaller, human } from "./callers.ts";
+import { originalProcess, sdkEnvelope, sdkSessions } from "./native-receipt-fixture.ts";
+import { asCaller, crossingOf, human } from "./callers.ts";
 import { mkdtemp, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
@@ -65,14 +65,14 @@ const input: DuctsApplyInput = {
   },
 };
 
-const lane = <A>(body: (h: Harness) => Effect.Effect<A, unknown, never>) =>
+const lane = <A>(body: (h: Harness) => Effect.Effect<A, unknown, never>, sdk = sdkSessions) =>
   Effect.gen(function* () {
     const dir = yield* Effect.promise(() => mkdtemp(join(tmpdir(), "pe-ducts-")));
     const { bridge, incoming, outgoing, target } = yield* connectTestBridge();
     const owner = new ActionJournal(join(dir, "attempts.json"));
     const web = HttpRouter.toWebHandler(
       makeCallRoute(owner, new TakeoffCaptures(join(dir, "captures")), {
-        sdk: sdkSessions,
+        sdk,
       }).pipe(Layer.provideMerge(Layer.succeed(RevitBridge, bridge))),
       { disableLogger: true },
     );
@@ -87,7 +87,7 @@ const lane = <A>(body: (h: Harness) => Effect.Effect<A, unknown, never>) =>
           Context.empty() as never,
         ),
       );
-    const answer = (requestId: string, value: unknown) =>
+    const answer = (requestId: string, value: unknown, lost = false) =>
       Queue.offer(
         incoming,
         JSON.stringify({
@@ -95,8 +95,21 @@ const lane = <A>(body: (h: Harness) => Effect.Effect<A, unknown, never>) =>
           response: {
             requestId,
             metrics,
-            ok: true,
-            statusCode: 200,
+            ok: !lost,
+            statusCode: lost ? 504 : 200,
+            ...(lost
+              ? {
+                  errorMessage: "native reply lost",
+                  issues: [
+                    {
+                      instancePath: "$",
+                      code: "TimedOut",
+                      message: "reply lost",
+                      severity: "error",
+                    },
+                  ],
+                }
+              : {}),
             payloadJson: JSON.stringify(value),
           },
         }),
@@ -126,7 +139,7 @@ type Harness = {
   owner: ActionJournal;
   outgoing: Queue.Queue<import("@pe/host-contracts/contracts").BridgeFrame>;
   post: (body: unknown) => Effect.Effect<Response>;
-  answer: (requestId: string, value: unknown) => Effect.Effect<boolean>;
+  answer: (requestId: string, value: unknown, lost?: boolean) => Effect.Effect<boolean>;
   intent: (
     id: string,
     key: DuctsActionKey,
@@ -260,3 +273,90 @@ test("assign-fan preview and apply send the pair to ducts.assign-fan, differing 
       expect(bad.status).toBeGreaterThanOrEqual(400);
     }),
   ));
+
+test("a group-only heal seals snapshot items and recovers without replanning or duplicate dispatch", async () => {
+  let witness: unknown;
+  await lane(
+    ({ owner, outgoing, post, answer, intent }) =>
+      Effect.gen(function* () {
+        const id = "heal-recovery";
+        expect(
+          (yield* post(intent(id, "ducts.apply-heal", undefined, { groups: [{ group: "g10" }] })))
+            .status,
+        ).toBe(202);
+        const snapshot = yield* Queue.take(outgoing);
+        expect(snapshot.request?.operationKey).toBe("ducts.snapshot");
+        yield* answer(snapshot.request!.requestId, {
+          nodes: [],
+          groups: [],
+          issues: [],
+          segments: [
+            {
+              id: 10,
+              kind: "duct",
+              groupId: "g10",
+              classification: "SupplyAir",
+              polyline: [
+                [0, 0, 0],
+                [10, 0, 0],
+              ],
+              connectors: [
+                {
+                  index: 0,
+                  kind: "end",
+                  point: [0, 0, 0],
+                  shape: "round",
+                  diameterIn: 6,
+                  connectedTo: null,
+                },
+              ],
+            },
+          ],
+        });
+        const native = yield* Queue.take(outgoing),
+          request = native.request!;
+        expect(request.operationKey).toBe("ducts.heal");
+        const sealed = JSON.parse(request.payloadJson);
+        expect(sealed).toEqual({
+          groups: [{ group: "g10", items: [{ key: "cap:10:0", kind: "cap", end: "10:0" }] }],
+          previewOnly: false,
+        });
+        yield* answer(request.requestId, null, true);
+        const uncertain = yield* Effect.promise(() => owner.wait(id));
+        expect(uncertain?.state).toBe("unknown");
+        expect(uncertain?.prepared).toMatchObject({
+          state: "ready",
+          value: { input: sealed, process: originalProcess },
+        });
+        witness = {
+          state: "ok",
+          requestId: request.requestId,
+          receipt: {
+            requestId: request.requestId,
+            key: "ducts.heal",
+            pid: originalProcess.pid,
+            processStartUtc: originalProcess.processStartUtc,
+            verdict: "ok",
+            responsePath: "exact-native-response",
+            startedUtc: originalProcess.processStartUtc,
+            completedUtc: "1970-01-01T00:00:02.0000000Z",
+          },
+          response: healed("healed"),
+        };
+        const recovered = yield* Effect.promise(() => owner.recover(id));
+        expect(recovered.steps[0]).toMatchObject({
+          state: "succeeded",
+          input: sealed,
+          result: healed("healed"),
+        });
+        yield* Effect.promise(() => owner.resume(id, crossingOf("human")));
+        const completed = yield* Effect.promise(() => owner.wait(id));
+        expect(completed).toMatchObject({
+          state: "succeeded",
+          result: { value: healed("healed") },
+        });
+        expect(yield* Queue.size(outgoing)).toBe(0);
+      }),
+    async (args = []) => (args[0] === "op" ? sdkEnvelope(witness) : sdkSessions(args)),
+  );
+});

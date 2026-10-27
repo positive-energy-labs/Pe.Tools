@@ -11,8 +11,12 @@ import { CaptureStore, capturesRoute } from "../src/captures-route.ts";
 import { ActionJournal } from "../src/action-journal.ts";
 import { RunConsents } from "../src/run-consent.ts";
 import { bindControl } from "../src/control.ts";
-import { commitPagePublication, pageVersion } from "../src/page-publication.ts";
-import { createPagesHandler } from "../src/pages-route.ts";
+import {
+  commitPagePublication,
+  pageVersion,
+  pagePublicationExecutor,
+} from "../src/page-publication.ts";
+import { createPagesHandler, pageLibrary } from "../src/pages-route.ts";
 import { asCaller, human, pea } from "./callers.ts";
 import type { Caller } from "@pe/agent-contracts";
 
@@ -29,10 +33,15 @@ async function fixture(caller: Caller = human) {
   await writeFile(join(root, "flow", ".state", "binding.json"), "binding retained");
   const captures = new CaptureStore(join(home, "captures"));
   const journal = new ActionJournal(join(home, "actions.json"));
-  const handle = asCaller(
-    caller,
-    createPagesHandler(root, join(home, "Pods"), undefined, captures, journal),
-  );
+  const executor = pagePublicationExecutor(root, "http://fixture", pageLibrary, captures);
+  journal.bindCommands({
+    resolve: () => executor,
+    probe: async (dependency) => {
+      if (dependency.kind !== "file") throw Error("Unexpected Page source");
+      return pageVersion(root, "flow");
+    },
+  });
+  const handle = asCaller(caller, createPagesHandler(root, join(home, "Pods"), undefined, journal));
   const publish = (body: unknown, id?: string) =>
     servePeRoute(
       new Request("http://fixture/pe/pages/publish", {

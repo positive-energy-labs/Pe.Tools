@@ -12,6 +12,8 @@ import { TakeoffCaptures } from "../src/takeoff-captures.ts";
 import { RevitBridge } from "../src/bridge.ts";
 import { hostOwnership } from "../src/host-ownership.ts";
 import { sdkSessions } from "./native-receipt-fixture.ts";
+import { ActionJournal } from "../src/action-journal.ts";
+import { asCaller, human } from "./callers.ts";
 
 const target = { session: "session-a", openId: "open-a" };
 const work = bindWork("families", address("C:\\Models\\Air.rvt"), undefined, target);
@@ -128,15 +130,23 @@ test("Families observation survives owner reconstruction; failed and wrong-docum
       }),
     subscribe: () => () => {},
   } as unknown as RevitBridge["Service"];
-  const handler = (captures: TakeoffCaptures) =>
-    HttpRouter.toWebHandler(
-      makeCallRoute(undefined, captures, { sdk: sdkSessions, workspace }).pipe(
-        Layer.provideMerge(Layer.succeed(RevitBridge, bridge)),
-      ),
-      { disableLogger: true },
-    );
+  const handlers = new Map<TakeoffCaptures, ReturnType<typeof HttpRouter.toWebHandler>>();
+  const handler = (captures: TakeoffCaptures) => {
+    let current = handlers.get(captures);
+    if (!current) {
+      current = HttpRouter.toWebHandler(
+        makeCallRoute(new ActionJournal(join(dir, `actions-${handlers.size}.json`)), captures, {
+          sdk: sdkSessions,
+          workspace,
+        }).pipe(Layer.provideMerge(Layer.succeed(RevitBridge, bridge))),
+        { disableLogger: true },
+      );
+      handlers.set(captures, current);
+    }
+    return current;
+  };
   const call = (captures: TakeoffCaptures, request: Request) =>
-    handler(captures).handler(request, Context.empty() as never);
+    asCaller(human, handler(captures).handler)(request, Context.empty() as never);
   const url = "http://host/families/readings";
   const headers = {
     "content-type": "application/json",
@@ -164,7 +174,7 @@ test("Families observation survives owner reconstruction; failed and wrong-docum
       result,
     });
     const first = await post(captures);
-    expect(first.status).toBe(200);
+    expect(first.status, await first.clone().text()).toBe(200);
     const saved = await first.json();
     expect(saved).toMatchObject({ document: target, documentTitle: "Air.rvt", filter, result });
     expect(saved.capturedAt).toEqual(expect.any(String));
@@ -317,6 +327,7 @@ test("Families observation survives owner reconstruction; failed and wrong-docum
       doc: { takenAt: observed.capturedAt },
     });
   } finally {
+    for (const current of handlers.values()) await current.dispose();
     await rm(dir, { recursive: true, force: true });
   }
 });

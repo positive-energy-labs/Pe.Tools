@@ -483,6 +483,7 @@ export function createReceiptExport(options: {
         }
       : undefined;
   const pending = new Set<Promise<unknown>>();
+  let closing: Promise<void> | undefined;
   let remotePending = 0;
   let dropped = 0;
   const seen = new Map<string, number>();
@@ -726,11 +727,12 @@ export function createReceiptExport(options: {
           webStamp(browserBuild),
         );
     },
-    async close() {
-      unsubscribe();
-      await bounded(Promise.allSettled(pending)).catch(local);
-      if (options.client) await bounded(options.client.shutdown()).catch(local);
-    },
+    close: () =>
+      (closing ??= (async () => {
+        unsubscribe();
+        await bounded(Promise.allSettled(pending)).catch(local);
+        if (options.client) await bounded(options.client.shutdown()).catch(local);
+      })()),
   };
 }
 export type ReceiptExport = ReturnType<typeof createReceiptExport>;
@@ -803,6 +805,13 @@ export function hostReceiptExport() {
   if (!stamps.host)
     active.track(active.record({ kind: "diagnostic", code: "identity.unavailable" }));
   return active;
+}
+/** Scope release drops the exporter with its journal; a successor composes fresh adapters. */
+export async function releaseHostReceiptExport(journal: ActionJournal) {
+  if (active?.journal !== journal) return;
+  const closing = active;
+  active = undefined;
+  await closing.close();
 }
 export function recordHostFact(body: ReceiptFact, join?: ReceiptJoin) {
   if (!active) {

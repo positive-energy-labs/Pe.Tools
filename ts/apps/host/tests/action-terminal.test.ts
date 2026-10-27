@@ -11,6 +11,7 @@ import { readNativeReceipt } from "../src/native-receipts.ts";
 import { originalProcess, sdkEnvelope } from "./native-receipt-fixture.ts";
 import { crossingOf } from "./callers.ts";
 import { readJournal, writeJournal } from "./journal-fixture.ts";
+import type { StepRecovery } from "../src/command-executor.ts";
 
 type Outcome = "succeeded" | "failed" | "dispatchedFailure" | "cancelled" | "unknown";
 type Terminal = { state: ActionReceipt["state"]; notDispatched: boolean };
@@ -95,14 +96,25 @@ test.each(restarts)("restart with steps %j, prepared %s", async (steps, prepared
 const onDocument = (id: string, session: string, openId: string) => ({
   ...admission(id),
 
-  key: "scripting.execute",
+  key: `test.terminal.${id}`,
   target: { kind: "document" as const, ref: { session, openId } },
 });
 const nativeLeaf = async () => ({ kind: "native-leaf", process: originalProcess });
-async function crashedOn(journal: ActionJournal, session: string, openId: string) {
+async function crashedOn(
+  journal: ActionJournal,
+  session: string,
+  openId: string,
+  recover?: StepRecovery,
+) {
   const id = randomUUID();
-  await invokeCommand(journal, onDocument(id, session, openId), nativeLeaf, async (execution) =>
-    execution.step("native", "scripting.execute", {}, async () => answer("unknown")),
+  await invokeCommand(
+    journal,
+    onDocument(id, session, openId),
+    nativeLeaf,
+    async (execution) =>
+      execution.step("native", "scripting.execute", {}, async () => answer("unknown")),
+    false,
+    { recover },
   );
   expect((await journal.wait(id)).state).toBe("unknown");
   return id;
@@ -163,8 +175,7 @@ const gone: [string, Parameters<typeof sdkRead>, boolean][] = [
 ];
 test.each(gone)("recovery settles failed when %s", async (_, [state, codes], successor) => {
   const journal = new ActionJournal(await journalPath());
-  const id = await crashedOn(journal, "session-a", "doc-x");
-  const recovered = await journal.recover(id, (step) =>
+  const recover: StepRecovery = (step) =>
     readNativeReceipt(
       step,
       originalProcess,
@@ -172,8 +183,9 @@ test.each(gone)("recovery settles failed when %s", async (_, [state, codes], suc
       successor
         ? { sdkSessionId: "agent-1", pid: originalProcess.pid + 1, processStartUtcUnixMs: 5000 }
         : undefined,
-    ),
-  );
+    );
+  const id = await crashedOn(journal, "session-a", "doc-x", recover);
+  const recovered = await journal.recover(id);
   expect(recovered).toMatchObject({
     state: "failed",
     status: 503,
@@ -188,8 +200,16 @@ test.each(gone)("recovery settles failed when %s", async (_, [state, codes], suc
 
 test("unreadable liveness without a successor process stays unknown", async () => {
   const journal = new ActionJournal(await journalPath());
-  const id = await crashedOn(journal, "session-a", "doc-x");
-  for (const successor of [
+  let successor: Parameters<typeof readNativeReceipt>[3];
+  const recover: StepRecovery = (step) =>
+    readNativeReceipt(
+      step,
+      originalProcess,
+      sdkRead("running", ["op.liveness-unknown"]),
+      successor,
+    );
+  const id = await crashedOn(journal, "session-a", "doc-x", recover);
+  for (successor of [
     undefined,
     // The session re-registered from the SAME process: nothing proves it died.
     {
@@ -198,16 +218,5 @@ test("unreadable liveness without a successor process stays unknown", async () =
       processStartUtcUnixMs: Date.parse(originalProcess.processStartUtc),
     },
   ])
-    expect(
-      (
-        await journal.recover(id, (step) =>
-          readNativeReceipt(
-            step,
-            originalProcess,
-            sdkRead("running", ["op.liveness-unknown"]),
-            successor,
-          ),
-        )
-      ).state,
-    ).toBe("unknown");
+    expect((await journal.recover(id)).state).toBe("unknown");
 });

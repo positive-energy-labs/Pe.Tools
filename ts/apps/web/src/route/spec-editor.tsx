@@ -8,10 +8,9 @@ import { presentation } from "./presentation";
  * fields a person edit, reviewed card by card. Every route that opens a member (`/pods`,
  * `/family`, the product routes' spec pane) shows the same lane.
  *
- * One save per member. While the Work holds proposals or edit fields, the draft is the Work's
- * root raw edit, edit fields apply on top of it, and save is `settings.write`. With a clean Work,
- * save is `pod.member.save` of the exact bytes, and the Work re-opens on them. `save as new`
- * files a sibling member.
+ * One save per member. The draft is the Work's root raw edit, fields apply on top of it, and
+ * every save uses `settings.write`. Save as new names a create-only sibling destination
+ * while retaining this member's reviewed Work identity.
  */
 import { useEffect, useMemo, useState, useTransition } from "react";
 import { z } from "zod";
@@ -19,7 +18,6 @@ import { SchemaDocument } from "@pe/schema-core";
 import {
   memberWork,
   podMemberSchema,
-  settingsCandidate,
   settingsRouteState,
   type PodMember,
   type SettingsFieldState,
@@ -76,7 +74,7 @@ export async function openMember(member: PodMember): Promise<SettingsSnapshot> {
   };
 }
 
-type MemberWorkAction = "open" | "adopt" | "save";
+type MemberWorkAction = "open" | "adopt";
 export type MemberWorkHandle = RouteHandle<
   SettingsRouteDocument,
   never,
@@ -125,27 +123,6 @@ const memberWorkManifest = (seed?: SettingsRouteDocument, demo?: string | null) 
                 member,
                 sha256: input.sha256,
                 replaceEdits: true,
-              }),
-            );
-          },
-        },
-        save: {
-          label: "save",
-          does: "settings.write",
-          input: z.void() as never,
-          dirties: [],
-          requires: { work: true },
-          ready: (ctx) => {
-            const doc = ctx.work.doc;
-            if (!doc?.basis) return "open a pod member first";
-            if (!doc.basis.sha256) return "review an adopted member before saving";
-            return null;
-          },
-          run: async (ctx) => {
-            actionResult(
-              await ctx.commands["settings.write"]({
-                member: ctx.work.doc!.basis!.member,
-                write: { kind: "save", sha256: ctx.work.doc!.basis!.sha256 },
               }),
             );
           },
@@ -339,7 +316,7 @@ export function SpecEditor({
   const viaWork = !fixture && Object.values(fields).some((field) => field.edit || field.suggestion);
   const edit = Object.values(fields).some((field) => field.edit);
   const draft = typed ?? (viaWork ? workBytes : null) ?? basis ?? "";
-  const synced = !viaWork || typed === null || typed === workBytes;
+  const synced = typed === null || typed === workBytes;
 
   useEffect(() => {
     if (fixture || !member) return;
@@ -360,7 +337,7 @@ export function SpecEditor({
   const writeWork = work.work.write;
   const basisBytes = work.work.doc?.basis?.rawContent;
   useEffect(() => {
-    if (synced || typed === null) return;
+    if (basisBytes === undefined || synced || typed === null) return;
     const timer = setTimeout(
       () =>
         void writeWork(
@@ -417,30 +394,13 @@ export function SpecEditor({
 
   const dirty = viaWork ? edit : basis !== null && draft !== basis;
   /**
-   * Save writes the Work (draft plus edit fields) or, with a clean Work, overwrites only the bytes
-   * this editor read. Save as new files the same content as a sibling member.
+   * Both saves consume the rendered Work; a new destination leaves this source Work intact.
    */
   const save = (asNew: boolean) =>
     startSave(async () => {
       const ref = asNew ? { pod: member.pod, path: siblingPath(member.path) } : member;
       try {
-        if (asNew) {
-          const content =
-            viaWork && basisBytes !== undefined
-              ? settingsCandidate(basisBytes, { ...fields, "": { edit: { value: draft } } })
-              : draft;
-          await podHost.write(ref, content);
-        } else if (viaWork) {
-          const refusal = await work.actions.save.run();
-          if (refusal) throw Error(refusal.message);
-        } else {
-          const written = await podHost.save(ref, draft, basisSha!);
-          setBasis(draft);
-          setBasisSha(written.sha256);
-          setDraft(null);
-          // The clean Work follows the bytes it will review next.
-          if (work.work.doc?.basis) await work.actions.open.run({ member });
-        }
+        actionResult(await work.commands["settings.write"](asNew ? { destination: ref } : {}));
         onSaved?.(ref);
       } catch (error) {
         setFailure(message(error));
@@ -451,17 +411,19 @@ export function SpecEditor({
   const hostErrors = issues.filter((issue) => issue.severity === "error");
   const saveReason = fixture
     ? "The demo member is read-only."
-    : parsed.error
-      ? `The draft is not JSON: ${parsed.error}`
-      : !synced
-        ? "The draft is still being edit on the member."
-        : !dirty
-          ? "Nothing to save."
-          : composed?.draft !== draft
-            ? "The host is still checking this draft."
-            : hostErrors.length
-              ? `The host called this draft invalid: ${hostErrors.length === 1 ? "1 error" : `${hostErrors.length} errors`}, first ${hostErrors[0]!.path || "the member"}: ${hostErrors[0]!.message}.`
-              : null;
+    : !work.work.doc?.basis || work.work.doc.basis.sha256 !== basisSha
+      ? "Wait for the host to adopt these saved member bytes."
+      : parsed.error
+        ? `The draft is not JSON: ${parsed.error}`
+        : !synced
+          ? "The draft is still being edit on the member."
+          : !dirty
+            ? "Nothing to save."
+            : composed?.draft !== draft
+              ? "The host is still checking this draft."
+              : hostErrors.length
+                ? `The host called this draft invalid: ${hostErrors.length === 1 ? "1 error" : `${hostErrors.length} errors`}, first ${hostErrors[0]!.path || "the member"}: ${hostErrors[0]!.message}.`
+                : null;
   const saveWhy =
     saveReason ??
     (viaWork
@@ -554,7 +516,7 @@ export function SpecEditor({
           </>
         }
       >
-        {basis === null && !failure ? (
+        {(basis === null || (!fixture && !work.work.doc?.basis)) && !failure ? (
           <OutcomeLine kind="busy" label="reading member" />
         ) : shown === "form" && form && baseline ? (
           <div className="px-3 py-1.5">

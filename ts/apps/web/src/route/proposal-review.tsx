@@ -22,7 +22,7 @@ const display = (rung: { value?: unknown; delete?: true } | null | undefined) =>
 
 /**
  * Pea's proposals and the edit fields on the open member, on the Work band: accept stages, deny
- * clears, unstage clears the edit value, and save writes every edit field. It stays out of the
+ * clears and unstage clears the edit value. The editor's Save writes every edit field. It stays out of the
  * way while the Work is clean.
  */
 export function ProposalReview({
@@ -74,21 +74,6 @@ export function ProposalReview({
           summary={workSummary(fields, { groupOf: (key) => [key] }, ["field"])}
           cells={fields}
           wire={wire}
-          commit={
-            <Button
-              kind="framed"
-              label="save"
-              refusal={
-                work.actions.save.refusal != null || busy
-                  ? (work.actions.save.refusal ?? "Write every edit field to the member")
-                  : null
-              }
-              reason="Write every edit field to the member"
-              onClick={() => void work.actions.save.run().catch(() => undefined)}
-            >
-              save
-            </Button>
-          }
         />
         <WorkStanding
           conflict={work.work.conflict}

@@ -159,7 +159,3 @@ export type PageTargetReading = {
   document: { session: string; openId: string; title: string } | null;
   write: PageWrite | null;
 };
-
-/** The capability eligibility `human` admits only a human caller; a page is not one. */
-export const eligibleCaller = (actor: "any" | "human" | "agent" | undefined, caller: Caller) =>
-  actor === undefined || actor === "any" || (actor === "human") === (caller.kind === "human");

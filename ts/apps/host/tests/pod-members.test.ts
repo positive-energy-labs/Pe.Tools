@@ -188,25 +188,34 @@ test("settings.write saves reviewed member Work and republishes the new basis", 
     observed.revision!,
   );
   const owner = new ActionJournal(join(root, "journal.json"));
-  const admit = (id: string, write: unknown, revision: number) =>
+  const bridge = {} as RevitBridge["Service"];
+  const admit = (id: string, input: Record<string, unknown>, revision: number) =>
     invokeFamily(
       {
         id,
         key: "settings.write",
         target: { kind: "host" },
         input: {
-          member,
-          write,
+          ...input,
           work: { key: scope, revision },
         },
       },
       crossingOf("human"),
       owner,
       new TakeoffCaptures(join(root, "captures")),
-      {} as RevitBridge["Service"],
+      bridge,
       { workspace: work, podsRoot: root },
     ).then((row) => owner.wait(row.id));
-  const saved = await admit("save", { kind: "save", sha256 }, authored.revision!);
+  const destination = { pod: member.pod, path: "settings/copy.json" };
+  const copied = await admit("copy", { destination }, authored.revision!);
+  expect(copied.state, JSON.stringify(copied)).toBe("succeeded");
+  expect(
+    JSON.parse(await readFile(join(root, "Renamed In Explorer", destination.path), "utf8")),
+  ).toEqual({ width: 5 });
+  expect(JSON.parse(await readFile(file(), "utf8"))).toEqual({ width: 1 });
+  expect((await work.read(scope, settingsRouteState.route))?.revision).toBe(authored.revision);
+  expect((await admit("copy-again", { destination }, authored.revision!)).state).toBe("failed");
+  const saved = await admit("save", {}, authored.revision!);
   expect(saved.state, JSON.stringify(saved)).toBe("succeeded");
   expect(JSON.parse(await readFile(file(), "utf8"))).toEqual({ width: 5 });
   const after = settingsRouteState.schema.parse(
@@ -214,13 +223,15 @@ test("settings.write saves reviewed member Work and republishes the new basis", 
   );
   expect(after.basis?.sha256).toBe(digest(await readFile(file())));
   expect(after.fields["/width"]?.edit).toBeNull();
-  // The old basis is gone from disk; a second save against it refuses before writing.
+  // An external writer changed disk without changing the host-observed Work basis.
+  await writeFile(file(), '{"width":9}');
   const stale = await admit(
     "stale",
-    { kind: "save", sha256 },
+    {},
     (await work.read(scope, settingsRouteState.route))!.revision,
   );
   expect(stale.state).toBe("failed");
+  expect(JSON.parse(await readFile(file(), "utf8"))).toEqual({ width: 9 });
 });
 test("partial temp write failure cleans only the acquired temp and preserves destination", async () => {
   await writeFile(file(), "original");

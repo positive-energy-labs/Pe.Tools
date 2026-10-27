@@ -46,19 +46,16 @@ test("Pea scripts do not borrow authority from thread targets; their full footpr
   ).not.toThrow();
 });
 let heads: Record<string, ThreadHead> = {};
-let full = false;
 /** Pea acquired one copy in Revit "P"; a user document opened there later is not acquired. */
 const acquiredCopy = (ref: DocumentRef) =>
   ref.session === "P" && ref.openId === "copy" ? "acq-copy" : null;
 
-test("Pea capability stays independent of thread targets and the old access preference", () => {
+test("Pea capability stays independent of thread targets", () => {
   bind();
   heads.t1 = headWith([docA]);
   expect(admitCrossing(pea, { kind: "document", ref: docA }, "/actions")).toBeNull();
   expect(admitCrossing(pea, { kind: "document", ref: docB }, "/actions")).toBeNull();
-  full = true;
   expect(admitCrossing(pea, { kind: "session", session: "S2" }, "/actions")).toBeNull();
-  full = false;
   heads.t1 = emptyThreadHead;
   expect(admitCrossing(pea, { kind: "document", ref: docA }, "/actions")).toBeNull();
 });
@@ -73,11 +70,10 @@ test("external device target removal revokes its own transport exception", () =>
   expect(live(basis)?.refusal.code).toBe("grant.revoked");
 });
 
-test("an external MCP device writes only its thread's human-added targets, never under Full", () => {
+test("an external MCP device writes only its thread's human-added targets", () => {
   bindControl({
     heads: (thread) => heads[thread] ?? emptyThreadHead,
     deviceThread: (device) => (device === "d1" ? "t1" : null),
-    fullAccess: () => true,
   });
   heads.t1 = headWith([docA]);
   const mcp: Caller = { kind: "external-mcp", context: "m", label: "MCP", device: "d1" };
@@ -129,7 +125,6 @@ const bind = (acquired: (ref: DocumentRef) => string | null = () => null) =>
     heads: (thread) => heads[thread] ?? emptyThreadHead,
     acquired,
     acquiredSession: (session) => (acquired === acquiredCopy && session === "P" ? "acq-P" : null),
-    fullAccess: () => full,
   });
 const refusal = (run: () => unknown) => {
   try {
@@ -143,13 +138,11 @@ const refusal = (run: () => unknown) => {
 
 afterEach(() => {
   heads = {};
-  full = false;
   bindControl({
     heads: null,
     acquired: () => null,
     acquiredSession: () => null,
     deviceThread: undefined,
-    fullAccess: () => false,
   });
 });
 

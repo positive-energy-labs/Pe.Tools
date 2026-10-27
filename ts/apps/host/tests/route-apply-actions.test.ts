@@ -25,7 +25,7 @@ import { RouteWorkspace } from "../../../packages/runtime/src/route-workspace.ts
 import { ActionJournal } from "../src/action-journal.ts";
 import { TakeoffCaptures } from "../src/takeoff-captures.ts";
 import { readFamily } from "../src/family-actions.ts";
-import { invokeFamily, fixtureAction } from "./domain-fixture.ts";
+import { invokeFamily } from "./domain-fixture.ts";
 import { documentMarks } from "../src/document-marks.ts";
 import { sdkEnvelope, sdkSessions } from "./native-receipt-fixture.ts";
 import { hostOwnership } from "../src/host-ownership.ts";
@@ -491,7 +491,7 @@ test("apply refuses a missing or foreign plan, or a selection with no planned fa
       ).error,
     ]),
   ).toEqual([
-    ["failed", expect.stringMatching(/Consumed input changed/)],
+    ["failed", "Apply must name a succeeded families.plan action"],
     ["failed", expect.stringMatching(/Target document lifetime or kind differs/)],
     ["failed", expect.stringMatching(/No included family/)],
   ]);
@@ -705,6 +705,42 @@ test("native patch proposal is staged by a person and its exact supplied bytes r
   const root = env.sent.find((row) => row.key === "families.apply")!.input.source.root;
   expect(Buffer.from(root.bytesBase64, "base64").toString("utf8")).toBe(nativePatch.content);
 });
+test.each(["suggestion", "edit"] as const)(
+  "a held native patch ignores new %s-only cell membership only when it is not edited",
+  async (lane) => {
+    const env = await setup();
+    const { apply, revision } = await nativePatchPlan(env);
+    env.approval.hold();
+    const completion = env.admit("families.apply", apply, revision, `patch-${lane}`, "agent");
+    await vi.waitFor(async () =>
+      expect((await env.owner.list(undefined, `patch-${lane}`))[0]?.state).toBe("waiting"),
+    );
+    expect(
+      await env.work.apply(
+        scope,
+        "families",
+        "pea",
+        [{ path: ["cells", D, lane], value: rung("99") }],
+        revision,
+      ),
+    ).toMatchObject({ ok: true });
+    env.approval.allow();
+    const row = await completion;
+    if (lane === "edit") {
+      expect(row).toMatchObject({
+        state: "failed",
+        notDispatched: true,
+        refusal: { kind: "stale" },
+      });
+      expect(env.sent.filter((item) => item.key === "families.apply")).toHaveLength(0);
+    } else {
+      resultOf(row);
+      expect(env.sent.filter((item) => item.key === "families.apply")).toHaveLength(1);
+      expect((await cellsNow(env.work))[D]?.suggestion).toMatchObject(rung("99"));
+    }
+  },
+);
+
 test("native patch refuses mixed staged cells and keeps its staged rung after partial success", async () => {
   const env = await setup();
   const { apply, revision } = await nativePatchPlan(env);
@@ -1200,19 +1236,8 @@ test("an interrupted Families apply resumes from its exact durable FF run withou
     },
     response: { error: "WebSocket Aborted" },
   };
-  // Older SDK recovery treated verdict=ok plus this transport error as a successful step.
-  const mistaken = await env.owner.recover("interrupted", async (row) => ({
-    step: {
-      id: row.id,
-      key: row.key,
-      kind: row.kind,
-      input: row.input,
-      state: "succeeded",
-      result: { error: "WebSocket Aborted" },
-    },
-    evidence: nativeResult,
-  }));
-  expect(mistaken.steps.find((row) => row.id === step.id)?.state).toBe("succeeded");
+  // A transport error under verdict=ok still cannot prove the native apply. The stable executor
+  // reads this SDK witness; callers no longer replace the recovery protocol with a callback.
   const unsupported = await env.recover("interrupted");
   expect(unsupported.state).toBe("unknown");
   expect(unsupported.steps.find((row) => row.id === step.id)?.state).toBe("unknown");
@@ -1330,7 +1355,7 @@ test("an interrupted Families apply resumes from its exact durable FF run withou
 /* ── O8-b: a stale review refuses ────────────────────────────────────────────────────────── */
 test("a staged cell changed since the plan refuses apply visibly; a Pea proposal alone does not", async () => {
   const env = await setup();
-  const { apply, revision } = await stagedPlan(env, { [W]: staged("10"), [H]: staged("20") });
+  const { apply } = await stagedPlan(env, { [W]: staged("10"), [H]: staged("20") });
   // Pea proposes on a consumed cell: the review still stands.
   const now = (await env.work.read(scope, "families"))!.revision;
   const pea = await env.work.apply(
@@ -1564,7 +1589,12 @@ test("a submitted source freezes before countdown; changed source never becomes 
     input: { source },
     prepared: { state: "unprepared" },
     consumes: expect.arrayContaining([
-      { kind: "member", ...source, bytesBase64: Buffer.from(profileBytes).toString("base64") },
+      {
+        kind: "member",
+        probe: { pod: source.pod, path: source.path },
+        expected: source.sha256,
+        bytesBase64: Buffer.from(profileBytes).toString("base64"),
+      },
     ]),
   });
   await vi.waitFor(() => expect(env.approval.asks).toHaveLength(1));
@@ -1614,10 +1644,12 @@ test("a URL specification retains the exact acquired PDF before consent, and can
   )[0]!;
   expect(recovered.consumes).toContainEqual({
     kind: "capture",
-    origin: { kind: "url", url },
-    bytesBase64: pdf.toString("base64"),
-    sha256: createHash("sha256").update(pdf).digest("hex"),
-    capturedAt: expect.any(String),
+    probe: {
+      origin: { kind: "url", url },
+      bytesBase64: pdf.toString("base64"),
+      capturedAt: expect.any(String),
+    },
+    expected: createHash("sha256").update(pdf).digest("hex"),
   });
   expect(download).toHaveBeenCalledTimes(1);
   expect(await readdir(join(env.podsRoot, "Global", "settings", "family"))).toEqual([
@@ -1748,3 +1780,46 @@ test("Family source observation is trusted host evidence, and a forged capture i
   });
   expect(env.sent).toHaveLength(0);
 });
+
+test("a workless Family observation returns evidence without publishing Work", async () => {
+  const env = await setup();
+  env.familyDocument(true);
+  const where: WorkKey = { ...scope, route: "family" };
+  const before = await env.work.read(where, "family");
+  const observed = await env.admit(
+    "family.observe",
+    { source },
+    0,
+    "observe-workless",
+    "human",
+    null,
+  );
+  expect(resultOf(observed)).toMatchObject({ reading: profileBytes, takenAt: null });
+  expect(observed.consumes.some((item) => item.kind === "work")).toBe(false);
+  expect(await env.work.read(where, "family")).toEqual(before);
+  expect(env.sent).toHaveLength(0);
+});
+
+test.each(["direct", "preview"])(
+  "a workless source-backed Family %s Apply preserves optional association",
+  async (mode) => {
+    const env = await setup();
+    env.familyDocument(true);
+    const where: WorkKey = { ...scope, route: "family" };
+    const before = await env.work.read(where, "family");
+    const input =
+      mode === "preview"
+        ? {
+            plan: resultOf<Plan>(
+              await env.admit("family.plan", { source }, 0, "workless-plan", "human", null),
+            ).id,
+            include: "all",
+          }
+        : { source, include: "all" };
+    const applied = await env.admit("family.apply", input, 0, "workless-apply", "human", null);
+    expect(resultOf(applied)).toMatchObject({ native: { receipts: [{ success: true }] } });
+    expect(applied.consumes.some((item) => item.kind === "work")).toBe(false);
+    expect(env.sent.filter((item) => item.key === "family.apply")).toHaveLength(1);
+    expect(await env.work.read(where, "family")).toEqual(before);
+  },
+);

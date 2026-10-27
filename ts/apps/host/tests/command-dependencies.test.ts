@@ -14,8 +14,12 @@ import {
 import { ActionJournal } from "../src/action-journal.ts";
 import { RunConsents, type ConsentEvent } from "../src/run-consent.ts";
 import { bindControl } from "../src/control.ts";
-import type { CommandFactory } from "../src/command-executor.ts";
-import { fixtureCommand } from "./command-fixture.ts";
+import {
+  StepFailure,
+  type CommandExecutor,
+  type CommandResources,
+} from "../src/command-executor.ts";
+import { bindFixtureCommands, fixtureCommand, invokeFixtureCommand } from "./command-fixture.ts";
 import { BridgeError } from "../src/bridge.ts";
 import { HOST_CONTEXT_HEADER } from "@pe/host-contracts/contracts";
 import { admitCrossing, callerOf, mintPageDoor, live } from "../src/control.ts";
@@ -32,6 +36,13 @@ const schema = z.object({
   profile: z.string().default("a"),
   scope: z.string().default("selected"),
 });
+const workSpec = {
+  route: "probe",
+  title: "Probe",
+  description: "Dependency probe",
+  schema,
+  editable: [["fields", "*"]],
+};
 
 test("Page gates retain the minted capability and recheck every effected document after suspension", async () => {
   for (const revoke of [false, true]) {
@@ -62,7 +73,8 @@ test("Page gates retain the minted capability and recheck every effected documen
       const target = { kind: "document", ref: a } as const;
       const basis = admitCrossing(identity.caller, target, "/pages/probe/act");
       let dispatched = 0;
-      await h.journal.invoke(
+      await invokeFixtureCommand(
+        h.journal,
         { id: "page-capability", key: "probe.page", target, input: {} },
         { caller: identity.caller, basis },
         fixtureCommand(
@@ -95,7 +107,21 @@ test("Page gates retain the minted capability and recheck every effected documen
 test.each([false, true])(
   "Page dispatch rechecks secondary-resource trust after an async dependency read; revoked=%s",
   async (revoke) => {
-    const h = await setup();
+    let holdReader = false,
+      readerWaiting = false,
+      dispatched = 0;
+    let release!: () => void;
+    const held = new Promise<void>((resolve) => {
+      release = resolve;
+    });
+    const catalog = [{ id: "catalog-v1", members: [] }];
+    const h = await setup(async () => {
+      if (holdReader) {
+        readerWaiting = true;
+        await held;
+      }
+      return catalog;
+    });
     const a = { session: "page-session", openId: "a" };
     const b = { session: "page-session", openId: "b" };
     let targets = [a, b];
@@ -109,28 +135,6 @@ test.each([false, true])(
         })),
       }),
     });
-    let holdReader = false,
-      readerWaiting = false,
-      dispatched = 0;
-    let release!: () => void;
-    const held = new Promise<void>((resolve) => {
-      release = resolve;
-    });
-    h.journal.configureCommands(
-      {
-        work: h.work,
-        read: async () => {
-          if (holdReader) {
-            readerWaiting = true;
-            await held;
-          }
-          return { version: 1 };
-        },
-      },
-      () => {
-        throw Error("No resumed probe");
-      },
-    );
     const minted = mintPageDoor(
       "page:@pages/probe",
       { kind: "thread", thread: "page-thread" },
@@ -143,7 +147,8 @@ test.each([false, true])(
       if (!("caller" in identity)) throw Error("Missing minted Page caller");
       const target = { kind: "document", ref: a } as const;
       const basis = admitCrossing(identity.caller, target, "/pages/probe/act");
-      await h.journal.invoke(
+      await invokeFixtureCommand(
+        h.journal,
         { id: "page-dispatch", key: "probe.page", target, input: {} },
         { caller: identity.caller, basis },
         fixtureCommand(
@@ -156,11 +161,11 @@ test.each([false, true])(
             execution.step("native", "probe.native", {}, async (requestId) => {
               holdReader = true;
               const refusal = await h.journal.validateDispatch(requestId);
-              if (refusal) throw new BridgeError(refusal, 409, { notDispatched: true });
+              if (refusal) throw new StepFailure(refusal, 409, "refused");
               await h.journal.markDispatched(requestId);
               return ++dispatched;
             }),
-          [{ kind: "catalog", snapshot: { version: 1 } }],
+          [{ kind: "catalog", probe: {}, expected: catalog }],
         ),
       );
       await vi.waitFor(() => expect(readerWaiting).toBe(true));
@@ -180,13 +185,11 @@ test.each([false, true])(
   },
 );
 
-async function setup() {
+async function setup(probe?: CommandResources["probe"]) {
   const directory = await mkdtemp(join(tmpdir(), "pe-dependencies-"));
   const store = new Map<string, unknown>();
   const work = new RouteWorkspace({
-    registrations: [
-      { spec: { route: "probe", title: "Probe", description: "Dependency probe", schema } },
-    ],
+    registrations: [{ spec: workSpec }],
     store: {
       getState: async ({ targetKey, route }) => store.get(`${route}/${targetKey}`),
       setState: async ({ targetKey, route, value }) => {
@@ -201,17 +204,24 @@ async function setup() {
   runs.open(run);
   bindControl({ runs, acquired: () => null });
   const journal = new ActionJournal(join(directory, "journal.jsonl"));
-  journal.configureCommands(
-    {
-      work,
-      read: async () => {
+  bindFixtureCommands(journal, {
+    work,
+    probe:
+      probe ??
+      (async (dependency) => {
+        if (dependency.kind === "file") {
+          const { createHash } = await import("node:crypto");
+          return createHash("sha256")
+            .update(await readFile(dependency.probe.path))
+            .digest("hex");
+        }
+        if (dependency.kind === "receipt") {
+          const row = (await journal.list(undefined, dependency.probe.id))[0];
+          return row?.key === dependency.probe.key && row.state === "succeeded";
+        }
         throw Error("Unexpected dependency");
-      },
-    },
-    () => {
-      throw Error("No resumed probe");
-    },
-  );
+      }),
+  });
   const ready = () =>
     vi.waitFor(() =>
       expect(events.some((event) => event.kind === "permission_request")).toBe(true),
@@ -239,35 +249,74 @@ test("durable dispatch evidence overrides a domain refusal and retains overlap p
       input: {},
     };
     const effects = [{ kind: "file" as const, path: "C:/probe/dispatched" }];
-    await h.journal.invoke(
-      intent,
-      { caller: human, basis: null },
-      fixtureCommand(
-        effects,
-        async () => null,
-        async (execution) =>
-          execution.step("native", "write", {}, async (id) => {
-            await h.journal.markDispatched(id);
-            throw new BridgeError("Domain claims no dispatch", 409, { notDispatched: true });
-          }),
-      ),
+    let writes = 0;
+    const executor = fixtureCommand(
+      effects,
+      async () => null,
+      async (execution, context) => {
+        if (context.admission.id === "behind-dispatched") return ++writes;
+        return execution.step("native", "write", {}, async (id) => {
+          await h.journal.markDispatched(id);
+          throw new BridgeError("Domain claims no dispatch", 409, { notDispatched: true });
+        });
+      },
     );
+    await invokeFixtureCommand(h.journal, intent, { caller: human, basis: null }, executor);
     const settled = await h.journal.wait(intent.id);
     expect(settled.state).toBe("unknown");
     expect(settled).not.toHaveProperty("notDispatched", true);
     expect(settled.steps[0]).toMatchObject({ state: "unknown", dispatchedAt: expect.any(String) });
     expect(settled.steps[0]).not.toHaveProperty("notDispatched", true);
-    let writes = 0;
-    await h.journal.invoke(
+    await invokeFixtureCommand(
+      h.journal,
       { ...intent, id: "behind-dispatched" },
       { caller: human, basis: null },
-      fixtureCommand(
-        effects,
-        async () => null,
-        async () => ++writes,
-      ),
+      executor,
     );
     expect((await h.journal.wait("behind-dispatched")).state).toBe("failed");
+    expect(writes).toBe(0);
+  } finally {
+    await h.close();
+  }
+});
+
+test("a cancellation-shaped refusal after durable dispatch remains unknown and blocks overlap", async () => {
+  const h = await setup();
+  try {
+    let writes = 0;
+    const executor = fixtureCommand(
+      [{ kind: "file", path: "C:/probe/cancelled-dispatch" }],
+      async () => null,
+      async (execution, context) => {
+        if (context.admission.id === "behind-cancelled") return ++writes;
+        return execution.step("native", "write", {}, async (id) => {
+          await h.journal.markDispatched(id);
+          throw new BridgeError("Domain claims cancellation before dispatch", 499, {
+            notDispatched: true,
+            nativeOutcome: "CancelledBeforeDispatch",
+          });
+        });
+      },
+    );
+    const intent = {
+      id: "contradictory-cancellation",
+      key: "probe.cancelled-dispatch",
+      target: { kind: "host" as const },
+      input: {},
+    };
+    await invokeFixtureCommand(h.journal, intent, { caller: human, basis: null }, executor);
+    const settled = await h.journal.wait(intent.id);
+    expect(settled.state).toBe("unknown");
+    expect(settled).not.toHaveProperty("notDispatched", true);
+    expect(settled.steps[0]).toMatchObject({ state: "unknown", dispatchedAt: expect.any(String) });
+    expect(settled.steps[0]).not.toHaveProperty("notDispatched", true);
+    await invokeFixtureCommand(
+      h.journal,
+      { ...intent, id: "behind-cancelled" },
+      { caller: human, basis: null },
+      executor,
+    );
+    expect((await h.journal.wait("behind-cancelled")).state).toBe("failed");
     expect(writes).toBe(0);
   } finally {
     await h.close();
@@ -281,7 +330,7 @@ test("rendered revision refuses unseen Work; later gates compare declared cells,
       const initial = await h.work.read(h.key, "probe");
       const handle = { key: h.key, revision: initial!.revision };
       let effects = 0;
-      const factory: CommandFactory = (context) => ({
+      const factory: CommandExecutor = {
         definition: {
           says: "Save",
           needs: "nothing",
@@ -289,27 +338,23 @@ test("rendered revision refuses unseen Work; later gates compare declared cells,
           dirties: [],
           input: z.object({ work: workHandleSchema }),
         },
-        bind: async () => {
-          const original = await context.read.work(handle, "probe");
+        bind: async (context) => {
+          await context.selectWork(workSpec, handle, () => ({
+            cells: [],
+            facts: [["fields", "consumed"], ["profile"], ["scope"]],
+          }));
           return {
             effects: [{ kind: "file", path: "C:/probe/output" }],
-            consumes: [
-              {
-                kind: "work",
-                handle,
-                paths: [["fields", "consumed"], ["profile"], ["scope"]],
-                snapshot: original.doc,
-              },
-            ],
+            prepare: async () => null,
           };
         },
         prepared: z.null(),
-        prepare: async () => null,
         run: (_context, execution) => execution.step("file", "save", {}, async () => ++effects),
-      });
+      };
       if (changed === "before-admission")
         await h.work.publish(h.key, "probe", [{ path: ["profile"], value: "b" }], handle.revision);
-      const admitted = await h.journal.invoke(
+      const admitted = await invokeFixtureCommand(
+        h.journal,
         { id: "save", key: "probe.save", target: { kind: "host" }, input: { work: handle } },
         { caller: pea, basis: null },
         factory,
@@ -352,7 +397,8 @@ test("rendered revision refuses unseen Work; later gates compare declared cells,
 test("exclusive plans and launch selectors reserve atomically; capture reads remain reusable", async () => {
   const h = await setup();
   try {
-    await h.journal.invoke(
+    await invokeFixtureCommand(
+      h.journal,
       { id: "capture", key: "probe.capture", target: { kind: "host" }, input: {} },
       { caller: human, basis: null },
       fixtureCommand(
@@ -362,11 +408,14 @@ test("exclusive plans and launch selectors reserve atomically; capture reads rem
       ),
     );
     await h.journal.wait("capture");
-    const consumes: Consumed[] = [{ kind: "receipt", id: "capture", key: "probe.capture" }];
+    const consumes: Consumed[] = [
+      { kind: "receipt", probe: { id: "capture", key: "probe.capture" }, expected: true },
+    ];
     const claim: Claim = { kind: "receipt", id: "single-use-plan" };
     const submit = (id: string, claims: Claim[] = []) =>
-      h.journal.invoke(
-        { id, key: "probe.write", target: { kind: "host" }, input: {} },
+      invokeFixtureCommand(
+        h.journal,
+        { id, key: `probe.write.${id}`, target: { kind: "host" }, input: {} },
         { caller: pea, basis: null },
         fixtureCommand(
           [{ kind: "file", path: `C:/${id}` }],
@@ -403,7 +452,8 @@ test("explicit reconciliation can close known partial effects but never bypass a
   for (const known of [true, false]) {
     const h = await setup();
     try {
-      await h.journal.invoke(
+      await invokeFixtureCommand(
+        h.journal,
         { id: "original", key: "test.partial", target: { kind: "host" }, input: {} },
         { caller: human, basis: null },
         fixtureCommand(
@@ -413,11 +463,9 @@ test("explicit reconciliation can close known partial effects but never bypass a
             await execution.step("file", "copy", {}, async () => "copied");
             return execution.step("native", "start", {}, async (requestId) => {
               await h.journal.markDispatched(requestId);
-              throw new BridgeError(
-                known ? "Process ended" : "Reply lost",
-                503,
-                known ? { dispatched: true } : {},
-              );
+              throw known
+                ? new StepFailure("Process ended", 503, "failed")
+                : new BridgeError("Reply lost", 503);
             });
           },
         ),
@@ -425,7 +473,8 @@ test("explicit reconciliation can close known partial effects but never bypass a
       expect((await h.journal.wait("original")).state).toBe(known ? "incomplete" : "unknown");
       let removals = 0;
       const claim: Claim = { kind: "reconciliation", id: "original" };
-      const cleanup = await h.journal.invoke(
+      const cleanup = await invokeFixtureCommand(
+        h.journal,
         { id: "cleanup", key: "test.cleanup", target: { kind: "host" }, input: {} },
         { caller: human, basis: null },
         fixtureCommand(
@@ -439,7 +488,8 @@ test("explicit reconciliation can close known partial effects but never bypass a
       if (known) {
         expect((await h.journal.wait(cleanup.id)).state).toBe("succeeded");
         await expect(
-          h.journal.invoke(
+          invokeFixtureCommand(
+            h.journal,
             { id: "original", key: "test.partial", target: { kind: "host" }, input: {} },
             { caller: human, basis: null },
             fixtureCommand(
@@ -473,7 +523,8 @@ test("same id retains exact input and effects and refuses changed intent", async
       async () => null,
       async () => null,
     );
-    await h.journal.invoke(
+    await invokeFixtureCommand(
+      h.journal,
       { id: "immutable", key: "probe.write", target: { kind: "host" }, input },
       { caller: pea, basis: null },
       factory,
@@ -486,7 +537,8 @@ test("same id retains exact input and effects and refuses changed intent", async
       effects: [{ path: "C:/first" }],
     });
     await expect(
-      h.journal.invoke(
+      invokeFixtureCommand(
+        h.journal,
         { id: "immutable", key: "probe.write", target: { kind: "host" }, input },
         { caller: pea, basis: null },
         factory,
@@ -505,7 +557,8 @@ test("a logical launch reservation survives physical resolution and releases onl
   const claim: Claim = { kind: "session-slot", selector: { id: "chosen-session" } };
   try {
     const launch = (id: string) =>
-      h.journal.invoke(
+      invokeFixtureCommand(
+        h.journal,
         { id, key: "probe.launch", target: { kind: "host" }, input: {} },
         { caller: human, basis: null },
         fixtureCommand(
@@ -527,7 +580,8 @@ test("a logical launch reservation survives physical resolution and releases onl
       state: "failed",
       refusal: { kind: "claimed", by: "first" },
     });
-    await h.journal.invoke(
+    await invokeFixtureCommand(
+      h.journal,
       { id: "stop", key: "probe.stop", target: { kind: "host" }, input: {} },
       { caller: human, basis: null },
       fixtureCommand(
@@ -542,9 +596,7 @@ test("a logical launch reservation survives physical resolution and releases onl
               await h.journal.markDispatched(requestId);
               return { stopped: true };
             },
-            undefined,
-            undefined,
-            () => [{ action: "first", claim }],
+            { releases: () => [{ action: "first", claim }] },
           ),
       ),
     );
@@ -566,7 +618,7 @@ test("own trusted Work publication advances only its recorded patches", async ()
   try {
     const original = (await h.work.read(h.key, "probe"))!;
     const handle = { key: h.key, revision: original.revision };
-    const factory: CommandFactory = () => ({
+    const factory: CommandExecutor = {
       definition: {
         says: "Apply",
         needs: "nothing",
@@ -574,28 +626,29 @@ test("own trusted Work publication advances only its recorded patches", async ()
         dirties: [],
         input: z.record(z.string(), z.unknown()),
       },
-      bind: async () => ({
-        effects: [{ kind: "file", path: "C:/result" }],
-        consumes: [
-          { kind: "work", handle, paths: [["fields", "consumed"]], snapshot: original.doc },
-        ],
-      }),
+      bind: async (context) => {
+        await context.selectWork(workSpec, handle, () => ({
+          cells: [],
+          facts: [["fields", "consumed"]],
+        }));
+        return { effects: [{ kind: "file", path: "C:/result" }], prepare: async () => null };
+      },
       prepared: z.null(),
-      prepare: async () => null,
       run: async (_context, execution) => {
         await execution.step("file", "apply", {}, async () => ({ applied: true }));
         await execution.publishWork(h.key, "probe", [{ path: ["fields", "consumed"], value: 9 }]);
         return execution.step("file", "after-retirement", {}, async () => "continued");
       },
-    });
-    await h.journal.invoke(
+    };
+    await invokeFixtureCommand(
+      h.journal,
       { id: "publication", key: "probe.apply", target: { kind: "host" }, input: {} },
       { caller: human, basis: null },
       factory,
     );
     const result = await h.journal.wait("publication");
     expect(result).toMatchObject({ state: "succeeded", result: "continued" });
-    expect(result.consumes[0]).toMatchObject({ snapshot: { fields: { consumed: 0 } } });
+    expect(result.consumes[0]).toMatchObject({ expected: { fields: { consumed: 0 } } });
     expect((await h.work.read(h.key, "probe"))!.doc).toMatchObject({ fields: { consumed: 9 } });
   } finally {
     await h.close();
@@ -617,7 +670,7 @@ test("post-dispatch retirement keeps newer edits and permits the remaining bound
     );
     const original = (await h.work.read(h.key, "probe"))!;
     const handle = { key: h.key, revision: original.revision };
-    const factory: CommandFactory = () => ({
+    const factory: CommandExecutor = {
       definition: {
         says: "Apply",
         needs: "nothing",
@@ -625,22 +678,11 @@ test("post-dispatch retirement keeps newer edits and permits the remaining bound
         dirties: [],
         input: z.record(z.string(), z.unknown()),
       },
-      bind: async () => ({
-        effects: [{ kind: "file", path: "C:/applied" }],
-        consumes: [
-          {
-            kind: "work",
-            handle,
-            paths: [
-              ["fields", "a"],
-              ["fields", "b"],
-            ],
-            snapshot: original.doc,
-          },
-        ],
-      }),
+      bind: async (context) => {
+        await context.selectWork(workSpec, handle);
+        return { effects: [{ kind: "file", path: "C:/applied" }], prepare: async () => null };
+      },
       prepared: z.null(),
-      prepare: async () => null,
       run: async (_context, execution) => {
         await execution.step("native", "apply", {}, async (requestId) => {
           await h.journal.markDispatched(requestId);
@@ -660,8 +702,9 @@ test("post-dispatch retirement keeps newer edits and permits the remaining bound
         await execution.step("file", "bounded-continuation", {}, async () => "finished");
         return retired;
       },
-    });
-    await h.journal.invoke(
+    };
+    await invokeFixtureCommand(
+      h.journal,
       { id: "retire", key: "probe.retire", target: { kind: "host" }, input: {} },
       { caller: human, basis: null },
       factory,
@@ -685,7 +728,8 @@ test("a stale file refuses before effects even if preparation was durable", asyn
     await writeFile(file, "before");
     const { createHash } = await import("node:crypto");
     const sha256 = createHash("sha256").update("before").digest("hex");
-    await h.journal.invoke(
+    await invokeFixtureCommand(
+      h.journal,
       { id: "file", key: "probe.file", target: { kind: "host" }, input: {} },
       { caller: pea, basis: null },
       fixtureCommand(
@@ -694,7 +738,7 @@ test("a stale file refuses before effects even if preparation was durable", asyn
         async () => {
           throw Error("Must not execute");
         },
-        [{ kind: "file", path: file, sha256 }],
+        [{ kind: "file", probe: { path: file }, expected: sha256 }],
       ),
     );
     await h.ready();

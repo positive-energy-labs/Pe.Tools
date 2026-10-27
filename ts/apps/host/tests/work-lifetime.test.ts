@@ -29,7 +29,6 @@ afterEach(() =>
     heads: null,
     acquired: () => null,
     acquiredSession: () => null,
-    fullAccess: () => false,
   }),
 );
 
@@ -43,7 +42,6 @@ test("HTTP Work shares edits independently of thread targets and refuses forged 
     address: address("C:/Models/Other.rvt"),
   };
   let documents = [a, b, outside];
-  let full = false;
   let head: ThreadHead = {
     revision: 4,
     targets: [
@@ -58,7 +56,6 @@ test("HTTP Work shares edits independently of thread targets and refuses forged 
     heads: () => head,
     acquired: () => null,
     acquiredSession: () => null,
-    fullAccess: () => full,
   });
   const store = fileRouteDocumentStore(join(directory, "work"));
   const app = createPeRoutes({
@@ -192,9 +189,7 @@ test("HTTP Work shares edits independently of thread targets and refuses forged 
     documents = [a, outside];
     expect(await (await request(query())).json()).toMatchObject({ revision: 3 });
     documents = [a, b, outside];
-    full = true;
     expect(await (await request(query(outside))).json()).toMatchObject({ revision: 0 });
-    full = false;
     head = { revision: 5, targets: head.targets.slice(0, 1) };
     expect(await (await request(query(), proposed, 3)).json()).toMatchObject({
       ok: true,

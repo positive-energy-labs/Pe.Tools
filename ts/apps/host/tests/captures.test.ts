@@ -10,6 +10,7 @@ import { HttpRouter, HttpServerResponse } from "effect/unstable/http";
 import { afterEach, expect, test } from "vite-plus/test";
 import { captureListSchema } from "@pe/agent-contracts";
 import { RevitBridge } from "../src/bridge.ts";
+import { ActionJournal } from "../src/action-journal.ts";
 import { makeCallRoute } from "../src/call-route.ts";
 import { CaptureStore, capturesRoute } from "../src/captures-route.ts";
 import { hostOwnership } from "../src/host-ownership.ts";
@@ -91,7 +92,10 @@ async function host(
   const spa = () => Effect.succeed(HttpServerResponse.text("spa"));
   const web = HttpRouter.toWebHandler(
     Layer.mergeAll(
-      makeCallRoute(undefined, undefined, { captureStore: store, sdk: sdkSessions }),
+      makeCallRoute(new ActionJournal(join(dir, "journal.jsonl")), undefined, {
+        captureStore: store,
+        sdk: sdkSessions,
+      }),
       capturesRoute(spa, () => store),
     ).pipe(Layer.provideMerge(Layer.succeed(RevitBridge, bridge))),
     { disableLogger: true },

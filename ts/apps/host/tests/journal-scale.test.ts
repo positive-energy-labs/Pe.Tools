@@ -49,21 +49,21 @@ test("the journal stays linear at 10k receipts: the last thousand write what the
 
 const action = (id: string, state: "running" | "succeeded") => ({
   id,
-  kind: "operation" as const,
   key: "probe.read",
   caller: human,
   basis: null,
-  destination: { kind: "host" },
-  request: {},
-  bases: {},
+  target: { kind: "host" },
+  input: {},
+  consumes: [],
+  claims: [],
+  effects: [],
   // An in-flight native step: a restart cannot know its outcome, so the attempt stays unknown.
   steps:
     state === "running"
       ? [{ id: `${id}-step`, key: "probe", kind: "native" as const, input: {}, state }]
       : [],
-  preparation: { state: "ready", value: null },
+  prepared: { state: "ready", value: null },
   recovery: [],
-  publication: { state: "unrequested" },
   startedAt: new Date().toISOString(),
   state,
   ...(state === "succeeded" ? { result: null } : {}),

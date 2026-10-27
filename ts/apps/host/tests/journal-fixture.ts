@@ -18,10 +18,10 @@ export async function readJournal(path: string): Promise<Journal> {
   return journal;
 }
 
-/** Write a current (v6, one line per record) journal. */
+/** Write a current (v7, one line per record) journal. */
 export async function writeJournalFile(path: string, journal: Journal) {
   const lines = [
-    { version: 6 },
+    { version: 7 },
     ...Object.entries(journal.mappings).map((mapping) => ({ mapping })),
     ...journal.receipts.map((receipt) => ({ receipt })),
   ];

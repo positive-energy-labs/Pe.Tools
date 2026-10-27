@@ -1,4 +1,5 @@
-import { invokeCommand } from "./command-fixture.ts";
+import { bindFixtureCommands, invokeCommand } from "./command-fixture.ts";
+import type { CommandResources } from "../src/command-executor.ts";
 import { mkdtemp, rm, readFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
@@ -18,7 +19,7 @@ const admission = (id: string): ActionAdmission => ({
   target: { kind: "host" },
   input: { value: 250 },
 });
-const setup = async () => {
+const setup = async (probe?: CommandResources["probe"]) => {
   const dir = await mkdtemp(join(tmpdir(), "pe-consent-")),
     path = join(dir, "journal.jsonl");
   const events: ConsentEvent[] = [],
@@ -26,6 +27,7 @@ const setup = async () => {
   runs.open(run);
   bindControl({ runs, acquired: () => null });
   const journal = new ActionJournal(path);
+  bindFixtureCommands(journal, probe ? { probe } : {});
   const ready = async () =>
     vi.waitFor(() => expect(events.some((e) => e.kind === "permission_request")).toBe(true));
   const approve = () => {
@@ -216,7 +218,7 @@ test("per-command cancellation preserves the shared decision; Stop cancels every
       );
     await submit("a");
     await submit("b");
-    await h.journal.cancel("a", async () => null);
+    await h.journal.cancel("a");
     await h.ready();
     h.approve();
     expect((await h.journal.wait("a")).state).toBe("cancelled");
@@ -226,7 +228,13 @@ test("per-command cancellation preserves the shared decision; Stop cancels every
     const gate = new Promise<void>((resolve) => (release = resolve));
     await invokeCommand(
       h.journal,
-      { ...admission("blocked"), caller, basis: null, effects: declaredEffects },
+      {
+        ...admission("blocked"),
+        key: "test.blocked",
+        caller,
+        basis: null,
+        effects: declaredEffects,
+      },
       async () => {
         await gate;
         return null;
@@ -243,7 +251,9 @@ test("per-command cancellation preserves the shared decision; Stop cancels every
 });
 
 test("restart cancels unapproved rows and conflicting consumed edits fail before a file effect", async () => {
-  const h = await setup();
+  let effects = 0,
+    version = 13;
+  const h = await setup(async () => [{ id: `version-${version}`, members: [] }]);
   try {
     await invokeCommand(
       h.journal,
@@ -259,19 +269,15 @@ test("restart cancels unapproved rows and conflicting consumed edits fail before
     const next = { thread: "thread", turn: "next" };
     h.runs.open(next);
     const by: Caller = { ...caller, run: next, root: next } as Caller;
-    let effects = 0,
-      version = 13;
-    h.journal.configureCommands({ read: async () => version }, () => {
-      throw Error("No resumed command");
-    });
     await invokeCommand(
       h.journal,
       {
         ...admission("fresh"),
+        key: "test.fresh-write",
         caller: by,
         basis: null,
         effects: declaredEffects,
-        consumes: [{ kind: "catalog", snapshot: 13 }],
+        consumes: [{ kind: "catalog", probe: {}, expected: [{ id: "version-13", members: [] }] }],
       },
       async () => null,
       async (e) => e.step("file", "write", {}, async () => ++effects),

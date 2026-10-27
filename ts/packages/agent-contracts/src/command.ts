@@ -3,6 +3,7 @@ import { workKeySchema, workKey, type RouteStateSpec } from "./route-state.ts";
 import type { ActionReadingKey } from "./reading.ts";
 import { documentRefSchema, executionTargetSchema, type ExecutionTarget } from "./target.ts";
 import { nativeProcessSchema } from "./native-process.ts";
+import { packageDiagnosticSchema } from "./contribution.ts";
 
 export const workHandleSchema = z.strictObject({
   key: workKeySchema,
@@ -12,48 +13,64 @@ export type WorkHandle = z.infer<typeof workHandleSchema>;
 export type WorkPath = readonly (string | number)[];
 export const workPathSchema = z.array(z.union([z.string(), z.number()]));
 const pathsSchema = z.array(workPathSchema);
+const observed = <K extends string, P extends z.ZodRawShape, E extends z.ZodType>(
+  kind: K,
+  probe: P,
+  expected: E,
+) => z.strictObject({ kind: z.literal(kind), probe: z.strictObject(probe), expected });
+const sha = z.string();
+const memberHash = z.strictObject({ path: z.string(), sha256: sha });
+export const directorySnapshotSchema = z.strictObject({
+  members: z.array(memberHash),
+  diagnostics: z.array(packageDiagnosticSchema),
+});
+export const sdkInstallationSchema = z.strictObject({
+  year: z.string(),
+  directory: z.string(),
+  image: z.strictObject({ assembly: z.string(), sha256: sha, version: z.string() }),
+});
+/** A typed serializable locator plus the value observed there. No second resource identity. */
 export const consumedSchema = z.discriminatedUnion("kind", [
-  z.strictObject({
-    kind: z.literal("work"),
-    handle: workHandleSchema,
-    paths: pathsSchema,
-    snapshot: z.unknown(),
-  }),
-  z.strictObject({
-    kind: z.literal("member"),
-    pod: z.string(),
-    path: z.string(),
-    sha256: z.string().nullable(),
+  observed(
+    "work",
+    { handle: workHandleSchema, paths: pathsSchema, edits: pathsSchema.optional() },
+    z.json(),
+  ),
+  observed("member", { pod: z.string(), path: z.string() }, sha.nullable()).extend({
     bytesBase64: z.string().optional(),
   }),
-  z.strictObject({
-    kind: z.literal("file"),
-    path: z.string(),
-    sha256: z.string().nullable(),
+  observed("file", { path: z.string() }, sha.nullable()).extend({
     bytesBase64: z.string().optional(),
   }),
-  z.strictObject({ kind: z.literal("document-mark"), ref: documentRefSchema, takenAt: z.string() }),
-  z.strictObject({
-    kind: z.literal("incarnation"),
-    target: executionTargetSchema,
-    process: nativeProcessSchema,
-  }),
-  z.strictObject({ kind: z.literal("receipt"), id: z.string(), key: z.string() }),
-  z.strictObject({
-    kind: z.literal("capture"),
-    sha256: z.string(),
-    bytesBase64: z.string(),
-    origin: z.strictObject({ kind: z.literal("url"), url: z.url() }),
-    capturedAt: z.string(),
-  }),
-  z.strictObject({
-    kind: z.literal("census"),
-    session: z.string(),
-    openIds: z.array(z.string()),
-    process: nativeProcessSchema.optional(),
-  }),
-  z.strictObject({ kind: z.literal("directory"), path: z.string(), snapshot: z.unknown() }),
-  z.strictObject({ kind: z.literal("catalog"), snapshot: z.unknown() }),
+  observed("document-mark", { ref: documentRefSchema, takenAt: z.string() }, z.literal(true)),
+  observed(
+    "incarnation",
+    { target: executionTargetSchema, process: nativeProcessSchema },
+    z.literal(true),
+  ),
+  observed("receipt", { id: z.string(), key: z.string() }, z.literal(true)),
+  observed(
+    "capture",
+    {
+      bytesBase64: z.string(),
+      origin: z.strictObject({ kind: z.literal("url"), url: z.url() }),
+      capturedAt: z.string(),
+    },
+    sha,
+  ),
+  observed(
+    "census",
+    { session: z.string(), process: nativeProcessSchema.optional() },
+    z.array(z.string()),
+  ),
+  observed("directory", { path: z.string() }, directorySnapshotSchema),
+  observed(
+    "catalog",
+    {},
+    z.array(z.strictObject({ id: z.string(), members: z.array(memberHash) })),
+  ),
+  observed("sdk-installation", { year: z.string() }, sdkInstallationSchema),
+  observed("sdk-idle", {}, z.literal(true)),
 ]);
 export type Consumed = z.infer<typeof consumedSchema>;
 export const claimSchema = z.discriminatedUnion("kind", [
@@ -103,43 +120,14 @@ export function commandCounts(
   return counts;
 }
 export type CommandCounts = ReturnType<typeof commandCounts>;
-export type ActionNeed =
-  | "nothing"
-  | "session"
-  | "document"
-  | "project-document"
-  | "family-document";
-
-/** Locations stop at cells; metadata and observations cannot become editable locations. */
-type IsCell<T> = string extends keyof T
-  ? false
-  : "edit" extends keyof T
-    ? "suggestion" extends keyof T
-      ? true
-      : false
-    : false;
-type CellPath<T> = {
-  [K in keyof T & string]: IsCell<NonNullable<T[K]>> extends true
-    ? readonly [K]
-    : NonNullable<T[K]> extends Record<string, infer V>
-      ? IsCell<NonNullable<V>> extends true
-        ? readonly [K, "*"]
-        : never
-      : never;
-}[keyof T & string];
-
-export function workLocations<S extends z.ZodType>(
-  spec: RouteStateSpec<S>,
-  editable: readonly CellPath<z.infer<S>>[],
-) {
-  return { ...spec, editable };
-}
+export type ActionNeed = import("./capability.ts").CapabilityNeeds;
 
 /** A portable operation contract. Execution belongs to the host journal. */
 export interface Command<I = unknown, R = unknown> {
   says: string;
   dirties: readonly ActionReadingKey[];
   needs: ActionNeed;
+  principal?: readonly import("./principal.ts").Principal[];
   effect: "query" | "command";
   input: z.ZodType<I>;
   result?: z.ZodType<R>;
@@ -149,6 +137,7 @@ export interface Command<I = unknown, R = unknown> {
   target?(input: I): ExecutionTarget;
   work?: {
     route: string;
+    optional?: true;
     bind(input: Omit<I, "work">, handle: WorkHandle): I;
   };
 }
@@ -159,7 +148,7 @@ export function receiptsForWork<R extends { consumes: Consumed[]; refusal?: Comm
 ): R[] {
   const id = workKey(key);
   const matches = (items: Consumed[]) =>
-    items.some((item) => item.kind === "work" && workKey(item.handle.key) === id);
+    items.some((item) => item.kind === "work" && workKey(item.probe.handle.key) === id);
   return rows.filter(
     (row) =>
       matches(row.consumes) ||
@@ -212,6 +201,7 @@ export function workCounts(doc: unknown, paths: readonly WorkPath[]) {
 export function workCommand<S extends z.ZodRawShape, const C extends Command>(
   route: string,
   command: C & { input: z.ZodObject<S> },
+  options?: { optional: true },
 ) {
   const work = { work: workHandleSchema.optional() };
   // Leaf contracts reserve `work` for this binder; safeExtend also retains their refinements.
@@ -223,6 +213,7 @@ export function workCommand<S extends z.ZodRawShape, const C extends Command>(
     input,
     work: {
       route,
+      ...(options?.optional ? { optional: true as const } : {}),
       bind: (value: Omit<z.infer<typeof input>, "work">, handle: WorkHandle) => ({
         ...value,
         work: handle,

@@ -20,7 +20,7 @@ test("SDK directory effects queue descendant files and directories without locki
       {
         id,
 
-        key: "test.install",
+        key: `test.install.${id}`,
         target: { kind: "host" },
         input: {},
 

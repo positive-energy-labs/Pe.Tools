@@ -1,14 +1,13 @@
 import type {
   CommandContext,
-  CommandFactory,
-  CommandReads,
-  CommandRegistry,
+  CommandEnvironment,
+  CommandBinding,
   CommandExecutor,
 } from "./command-executor.ts";
-import { importHistoricalAction } from "./legacy-action-journal.ts";
+import { CommandRejected, StepFailure, refused } from "./command-executor.ts";
+import { readJournalSnapshot } from "./legacy-action-journal.ts";
 import { validateNativeInput } from "./native-input.ts";
 import { bindActionDispatch } from "./action-dispatch.ts";
-import { BridgeError } from "./bridge.ts";
 import { appendFile, mkdir, readdir, readFile, writeFile } from "node:fs/promises";
 import { renameReplacing } from "./rename-retry.ts";
 import { dirname, join, win32 } from "node:path";
@@ -23,13 +22,14 @@ import {
   type ActionAdmission,
   type Consumed,
   type Claim,
-  type CommandRefusal,
   type NativeProcess,
   type Effect,
   type WorkKey,
   type RouteStatePatch,
   type RouteStateWriteResult,
   commands,
+  editableCells,
+  type Command,
   workKey,
   transitionPatches,
   type CellLike,
@@ -71,19 +71,6 @@ export type Crossing = {
   readonly basis: Basis | null;
 };
 
-export class CommandRejected extends Error {
-  constructor(readonly refusal: CommandRefusal) {
-    super(
-      "message" in refusal
-        ? refusal.message
-        : refusal.kind === "stale_revision"
-          ? `Work changed to r${refusal.live}`
-          : refusal.kind === "claimed"
-            ? `Resource is reserved by ${refusal.by}`
-            : "Consumed input changed",
-    );
-  }
-}
 const messageOf = (error: unknown) =>
   error && typeof error === "object" && "message" in error ? String(error.message) : String(error);
 const holdsClaims = (row: ActionReceipt) =>
@@ -97,42 +84,6 @@ const holdsClaims = (row: ActionReceipt) =>
         step.notDispatched === true,
     )
   );
-const expected = (dependency: Exclude<Consumed, { kind: "work" | "receipt" }>) => {
-  switch (dependency.kind) {
-    case "member":
-    case "file":
-      return dependency.sha256;
-    case "document-mark":
-      return true;
-    case "incarnation":
-      return dependency.process;
-    case "census":
-      return [...dependency.openIds].sort();
-    case "capture":
-      return dependency.sha256;
-    case "directory":
-    case "catalog":
-      return dependency.snapshot;
-  }
-};
-const dependencyIdentity = (dependency: Consumed): string => {
-  switch (dependency.kind) {
-    case "work":
-      return `work:${workKey(dependency.handle.key)}`;
-    case "document-mark":
-      return `mark:${canonicalRouteInput(dependency.ref)}`;
-    case "incarnation":
-      return `process:${canonicalRouteInput(dependency.target)}`;
-    case "census":
-      return `census:${dependency.session}`;
-    case "member":
-      return `member:${dependency.pod}/${dependency.path}`;
-    case "file":
-      return `file:${win32.resolve(dependency.path).toLowerCase()}`;
-    default:
-      return canonicalRouteInput(dependency);
-  }
-};
 const patchSnapshot = (snapshot: unknown, patch: RouteStatePatch): void => {
   if (!snapshot || typeof snapshot !== "object" || !patch.path.length) return;
   let parent = snapshot as Record<string | number, unknown>;
@@ -170,6 +121,30 @@ const project = (
   };
   return paths.map((path) => at(document, path));
 };
+const selectDocument = (document: unknown, paths: readonly WorkPath[]) => {
+  const wanted = (path: WorkPath) =>
+    paths.filter((pattern) =>
+      path.every((part, i) => i < pattern.length && (pattern[i] === "*" || pattern[i] === part)),
+    );
+  const visit = (value: unknown, path: WorkPath): unknown => {
+    const matching = wanted(path);
+    if (matching.some((pattern) => pattern.length === path.length)) return value;
+    if (!value || typeof value !== "object") return undefined;
+    const result: Record<string, unknown> | unknown[] = Array.isArray(value) ? [] : {};
+    for (const [key, child] of Object.entries(value)) {
+      const at = [...path, Array.isArray(value) ? Number(key) : key];
+      if (wanted(at).length) (result as Record<string, unknown>)[key] = visit(child, at);
+    }
+    return result;
+  };
+  return z.json().parse(JSON.parse(JSON.stringify(visit(document, []) ?? {})));
+};
+const selectedEdits = (document: unknown, paths: readonly WorkPath[]) =>
+  editableCells(document, paths)
+    .filter(({ cell }) => cell.edit != null)
+    .map(({ path, cell }) => ({ path, edit: cell.edit }))
+    .sort((a, b) => canonicalRouteInput(a.path).localeCompare(canonicalRouteInput(b.path)));
+
 const sameCaller = (a: Caller, b: Caller) =>
   a.kind === b.kind &&
   (a.kind === "pea" && b.kind === "pea"
@@ -218,59 +193,21 @@ const effectsOverlap = (a: Footprint, b: Footprint) =>
     }),
   );
 
-const effectEstablishes = (row: ActionReceipt, dependency: Consumed): boolean => {
-  if (
-    dependency.kind === "work" ||
-    dependency.kind === "receipt" ||
-    dependency.kind === "capture" ||
-    dependency.kind === "catalog" ||
-    dependency.kind === "directory"
-  )
-    return false;
-  return row.effects.some((effect) => {
-    if (dependency.kind === "member")
-      return (
-        effect.kind === "member" && effect.pod === dependency.pod && effect.path === dependency.path
-      );
-    if (dependency.kind === "file")
-      return (
-        (effect.kind === "file" && win32.relative(effect.path, dependency.path) === "") ||
-        (effect.kind === "directory" && pathInside(effect.path, dependency.path))
-      );
-    const session =
-      dependency.kind === "document-mark"
-        ? dependency.ref.session
-        : dependency.kind === "census"
-          ? dependency.session
-          : dependency.target.kind === "session"
-            ? dependency.target.session
-            : dependency.target.kind === "document"
-              ? dependency.target.ref.session
-              : null;
-    if (effect.kind === "session")
-      return (
-        effect.session === session || row.claims.some((claim) => claim.kind === "session-slot")
-      );
-    if (effect.kind === "document")
-      return (
-        effect.ref.session === session &&
-        (dependency.kind !== "document-mark" || effect.ref.openId === dependency.ref.openId)
-      );
-    return false;
-  });
+export type StepOptions<A> = {
+  process?: NativeProcess;
+  /** Domain postcondition, evaluated only after the operation returned a concrete outcome. */
+  check?(result: A): void;
+  releases?(
+    result: A,
+  ): { action: string; claim: Claim }[] | Promise<{ action: string; claim: Claim }[]>;
 };
-
 export type ActionExecution = {
   step<A>(
     kind: ActionStep["kind"],
     key: string,
     input: unknown,
     execute: (requestId: string) => Promise<A>,
-    process?: NativeProcess,
-    established?: (result: A) => Consumed[] | Promise<Consumed[]>,
-    releases?: (
-      result: A,
-    ) => { action: string; claim: Claim }[] | Promise<{ action: string; claim: Claim }[]>,
+    options?: StepOptions<A>,
   ): Promise<A>;
   effect(effect: Effect): Promise<void>;
   publishWork(
@@ -283,14 +220,8 @@ export type ActionExecution = {
     route: string,
     paths: readonly WorkPath[],
   ): Promise<{ retired: WorkPath[]; revision: number }>;
-  establish(dependencies: Consumed[]): Promise<void>;
   readonly prepared: unknown;
-  /** The latest recorded step of this kind and key: the one a resume replays or redoes. */
   recorded(kind: ActionStep["kind"], key: string): ActionStep | undefined;
-  /**
-   * A resume retires a succeeded step whose lifetime SDK truth says ended (a dead Revit): it is
-   * kept as failed with what it returned, and the resume redoes it as a new step.
-   */
   retire(id: string, reason: string): Promise<ActionStep>;
 };
 /** The bridge answers a cancelled request 499 (BridgeOperationExceptions.CancelledStatusCode). */
@@ -320,38 +251,29 @@ const failure = (error: unknown): DispatchFailure => {
     };
   if (error instanceof CommandRejected)
     return { state: "failed", error: error.message, status: 409, notDispatched: true };
+  if (error instanceof StepFailure) {
+    const detail = {
+      error: error.message,
+      status: error.status,
+      ...(error.result === undefined ? {} : { evidence: { result: error.result } }),
+      ...(error.details?.nativeOutcome ? { nativeOutcome: error.details.nativeOutcome } : {}),
+      ...(error.details?.issues ? { issues: [...error.details.issues] } : {}),
+    };
+    if (error.outcome === "refused")
+      return error.status === CANCELLED_STATUS
+        ? { state: "cancelled", error: error.message, status: error.status, notDispatched: true }
+        : { ...detail, state: "failed", notDispatched: true };
+    if (error.outcome === "cancelled")
+      return { state: "cancelled", error: error.message, status: error.status };
+    return { ...detail, state: error.outcome === "failed" ? "failed" : "unknown" };
+  }
   const problem = error as { message?: string; statusCode?: number } | null;
-  const nativeOutcome = error instanceof BridgeError ? error.nativeOutcome : undefined;
-  const notDispatched =
-    error instanceof BridgeError &&
-    (error.evidence.notDispatched === true ||
-      nativeOutcome === "CancelledBeforeDispatch" ||
-      nativeOutcome === "RefusedQueueUnresponsive" ||
-      nativeOutcome === "RefusedQueueDisposed");
-  const dispatched = error instanceof BridgeError && error.evidence.dispatched === true;
-  const detail = {
-    ...(error instanceof BridgeError && error.evidence.result !== undefined
-      ? { evidence: { result: error.evidence.result } }
-      : {}),
+  // Exception spelling and legacy flags are not independent evidence of a completed effect.
+  return {
+    state: "unknown",
     error: problem?.message ?? String(error),
     status: problem?.statusCode ?? 503,
-    ...(nativeOutcome ? { nativeOutcome } : {}),
-    ...(error instanceof BridgeError && error.evidence.issues
-      ? { issues: [...error.evidence.issues] }
-      : {}),
   };
-  return detail.status === CANCELLED_STATUS
-    ? {
-        state: "cancelled",
-        error: detail.error,
-        status: detail.status,
-        ...(notDispatched ? { notDispatched: true as const } : {}),
-      }
-    : notDispatched
-      ? { ...detail, state: "failed", notDispatched: true }
-      : dispatched
-        ? { ...detail, state: "failed" }
-        : { ...detail, state: "unknown" };
 };
 
 const interruptedSteps = (steps: readonly ActionStep[]): ActionStep[] =>
@@ -407,6 +329,24 @@ function settle(
     (cause.kind === "interrupted"
       ? { error: "Host restarted before the executor recorded an outcome", status: 503 }
       : undefined);
+  const uncertain = steps.find((step) => step.state === "unknown" || step.state === "running");
+  if (uncertain) {
+    if (cause.kind === "recovered")
+      return {
+        state: "unknown",
+        error:
+          "error" in uncertain ? uncertain.error : `Step '${uncertain.key}' has no proven outcome`,
+        status: "status" in uncertain ? uncertain.status : 503,
+      };
+    const detail =
+      thrown?.state === "unknown"
+        ? thrown
+        : {
+            error: `Step '${uncertain.key}' has no proven outcome${reason ? `; ${reason.error}` : ""}`,
+            status: 503,
+          };
+    return { ...detail, state: "unknown" };
+  }
   if (thrown?.state === "cancelled") {
     const { notDispatched: _notDispatched, ...cancelled } = thrown;
     return {
@@ -430,24 +370,6 @@ function settle(
       notDispatched: true,
       ...(thrown && "issues" in thrown && thrown.issues ? { issues: thrown.issues } : {}),
     };
-  const uncertain = steps.find((step) => step.state === "unknown" || step.state === "running");
-  if (uncertain) {
-    if (cause.kind === "recovered")
-      return {
-        state: "unknown",
-        error:
-          "error" in uncertain ? uncertain.error : `Step '${uncertain.key}' has no proven outcome`,
-        status: "status" in uncertain ? uncertain.status : 503,
-      };
-    const detail =
-      thrown?.state === "unknown"
-        ? thrown
-        : {
-            error: `Step '${uncertain.key}' has no proven outcome${reason ? `; ${reason.error}` : ""}`,
-            status: 503,
-          };
-    return { ...detail, state: "unknown" };
-  }
   if (cause.kind === "returned") return { state: "succeeded", result: cause.result ?? null };
   const cancelled =
     cause.kind !== "threw" ? steps.find((step) => step.state === "cancelled") : undefined;
@@ -472,14 +394,30 @@ function settle(
     state: "failed",
     error: why.error,
     status: why.status,
-    ...(steps.length === 0 || ("notDispatched" in why && why.notDispatched === true)
+    ...(steps.length === 0 ||
+    steps.every(
+      (step) =>
+        !step.dispatchedAt &&
+        (step.state === "failed" || step.state === "cancelled") &&
+        step.notDispatched === true,
+    )
       ? { notDispatched: true }
       : {}),
     ...(thrown && "nativeOutcome" in thrown && thrown.nativeOutcome
       ? { nativeOutcome: thrown.nativeOutcome }
       : {}),
     ...(thrown && "issues" in thrown && thrown.issues ? { issues: thrown.issues } : {}),
-    ...(why && "evidence" in why && why.evidence ? { evidence: why.evidence } : {}),
+    ...((failedStep?.state === "failed" && failedStep.evidence) ||
+    (why && "evidence" in why && why.evidence)
+      ? {
+          evidence:
+            failedStep?.state === "failed"
+              ? failedStep.evidence
+              : thrown && "evidence" in thrown
+                ? thrown.evidence
+                : undefined,
+        }
+      : {}),
   };
 }
 
@@ -511,7 +449,7 @@ const isOpen = (row: ActionReceipt) =>
 /**
  * One host journal. Execution never holds the authored Work lock or the journal write tail.
  *
- * Storage is append-only lines: a `{"version":6}` header, then one `{receipt}` per committed
+ * Storage is append-only lines: a `{"version":7}` header, then one `{receipt}` per committed
  * revision and one `{mapping}` per minted opaque id; the last revision of an id wins. A commit
  * appends only what it changed, and compaction rewrites the newest {@link RETAIN_RECEIPTS} telemetry
  * facts plus every command once the file holds twice what is live.
@@ -538,8 +476,7 @@ export class ActionJournal implements ReceiptReader {
   private readonly pending = new Map<string, Promise<ActionReceipt>>();
   // Page authority is a host-minted object capability, never reconstructed from persisted data.
   private readonly activeCallers = new Map<string, Caller>();
-  private commandReads?: CommandReads;
-  private registry?: CommandRegistry;
+  private environment?: CommandEnvironment;
   private readonly cancelWaits = new Map<string, () => void>();
   private readonly listeners = new Set<() => void>();
   private readonly reads = new OwnerReads();
@@ -548,9 +485,10 @@ export class ActionJournal implements ReceiptReader {
     private readonly stamp: () => ReceiptStamp | null = () => null,
     private readonly retain = RETAIN_RECEIPTS,
   ) {}
-  configureCommands(reads: CommandReads, registry: CommandRegistry): void {
-    this.commandReads = reads;
-    this.registry = registry;
+  /** Bound once when the host/demo/test runtime acquires its exact bridge and Work owner. */
+  bindCommands(environment: CommandEnvironment): void {
+    if (this.environment) throw Error("This journal already has its command environment");
+    this.environment = Object.freeze(environment);
   }
 
   private loadOnce(): Promise<void> {
@@ -835,10 +773,9 @@ export class ActionJournal implements ReceiptReader {
       );
       if (!blocked) return;
       if (blocked.state === "unknown" || blocked.state === "incomplete")
-        throw new BridgeError(
+        throw refused(
           `Action '${blocked.id}' requires recovery before this mutation`,
-          409,
-          { notDispatched: true },
+          "effect.recovery",
         );
       await new Promise<void>((resolve) => {
         const changed = () => {
@@ -925,12 +862,76 @@ export class ActionJournal implements ReceiptReader {
     crossing: Crossing,
     consumed: Consumed[],
   ): CommandContext {
+    const workspace = this.environment?.work;
     const cached = new Map<string, { doc: unknown; revision: number }>();
-    return {
+    const context: CommandContext = {
       admission,
       ...crossing,
-      work: this.commandReads?.work,
+      get work() {
+        if (!workspace) throw refused("Work is unavailable", "work.unavailable");
+        return workspace;
+      },
       consumed,
+      selectWork: async (spec, handle, select) => {
+        if (handle.key.route !== spec.route)
+          throw refused("Work belongs to another tool", "work.route");
+        const identity = workKey(handle.key);
+        let original = context.consumed.find(
+          (value) => value.kind === "work" && workKey(value.probe.handle.key) === identity,
+        );
+        let view = cached.get(identity);
+        if (!view) {
+          if (original?.kind === "work") {
+            if (original.probe.handle.revision !== handle.revision)
+              throw Error("Resume changed its observed Work revision");
+            view = { doc: structuredClone(original.expected), revision: handle.revision };
+          } else {
+            const current = await workspace?.view(handle.key, spec.route);
+            if (!current) throw refused("Work is unavailable", "work.unavailable");
+            if (current.revision !== handle.revision)
+              throw new CommandRejected({ kind: "stale_revision", handle, live: current.revision });
+            view = structuredClone({ doc: current.doc, revision: current.revision });
+          }
+          cached.set(identity, view);
+        }
+        const doc = spec.schema.parse(view.doc);
+        const cells = editableCells(doc, spec.editable);
+        const selection = select?.(doc, cells) ?? {};
+        const selected =
+          selection.cells ?? cells.filter(({ cell }) => cell.edit != null).map(({ path }) => path);
+        const edits = [
+          ...(selection.edits ?? []),
+          ...(original?.kind === "work" ? (original.probe.edits ?? []) : []),
+        ].map((path) => [...path]);
+        for (const path of [...selected, ...edits])
+          if (
+            !spec.editable.some(
+              (pattern) =>
+                pattern.length === path.length &&
+                pattern.every((part, i) => part === "*" || part === path[i]),
+            )
+          )
+            throw Error("A command selected a cell outside its tool contract");
+        const paths = [
+          ...selected.map((path) => [...path, "edit"]),
+          ...selectedEdits(doc, edits).map(({ path }) => [...path, "edit"]),
+          ...(selection.facts ?? []).map((path) => [...path]),
+        ].filter(
+          (path, i, all) =>
+            all.findIndex((other) => canonicalRouteInput(other) === canonicalRouteInput(path)) ===
+            i,
+        );
+        if (original?.kind === "work") paths.push(...original.probe.paths);
+        const expected = selectDocument(doc, paths);
+        const dependency: Consumed = {
+          kind: "work",
+          probe: { handle, paths, ...(edits.length ? { edits } : {}) },
+          expected,
+        };
+        context.consumed = context.consumed.filter((value) => value !== original);
+        context.consumed.push(dependency);
+        return doc;
+      },
       read: {
         receipts: (id) =>
           structuredClone(
@@ -938,44 +939,9 @@ export class ActionJournal implements ReceiptReader {
               ? [this.rows.get(id)].filter((value): value is ActionReceipt => value !== undefined)
               : [...this.rows.values()],
           ),
-        work: async (handle, route) => {
-          if (handle.key.route !== route)
-            throw new CommandRejected({
-              kind: "domain",
-              code: "work.route",
-              message: "Work belongs to another tool",
-            });
-          const identity = workKey(handle.key);
-          const held = cached.get(identity);
-          if (held) return held;
-          const original = consumed.find(
-            (value) => value.kind === "work" && workKey(value.handle.key) === identity,
-          );
-          if (original?.kind === "work") {
-            if (original.handle.revision !== handle.revision)
-              throw Error("Resume changed its observed Work revision");
-            const snapshot = {
-              doc: structuredClone(original.snapshot),
-              revision: original.handle.revision,
-            };
-            cached.set(identity, snapshot);
-            return snapshot;
-          }
-          const value = await this.commandReads?.work?.view(handle.key, route);
-          if (!value)
-            throw new CommandRejected({
-              kind: "domain",
-              code: "work.unavailable",
-              message: "Work is unavailable",
-            });
-          if (value.revision !== handle.revision)
-            throw new CommandRejected({ kind: "stale_revision", handle, live: value.revision });
-          const snapshot = structuredClone({ doc: value.doc, revision: value.revision });
-          cached.set(identity, snapshot);
-          return snapshot;
-        },
       },
     };
+    return context;
   }
 
   /** One predicate at every async boundary; domain executors declare only the facts it reads. */
@@ -985,10 +951,15 @@ export class ActionJournal implements ReceiptReader {
     postcondition = false,
   ): Promise<void> {
     if (row.cancellationRequested)
-      throw new BridgeError("Command cancelled before dispatch", 499, { notDispatched: true });
+      throw new StepFailure("Command cancelled before dispatch", 499, "refused");
     if (row.effects.length) {
       if (moment === "admit" || moment === "authorize") assertRunAdmission(originOf(row.caller));
-      else commandCheckpoint(originOf(row.caller), row.consent);
+      else
+        try {
+          commandCheckpoint(originOf(row.caller), row.consent);
+        } catch (error) {
+          throw new StepFailure(messageOf(error), 499, "refused");
+        }
     }
     const dead = live(row.basis, moment);
     if (dead)
@@ -1003,34 +974,26 @@ export class ActionJournal implements ReceiptReader {
         message: error.message,
       });
     }
-    if (postcondition) return;
-    const established = row.steps.flatMap((step) =>
-      step.state === "succeeded" ? (step.established ?? []) : [],
-    );
-    const dependencies = row.consumes.map(
-      (dependency) =>
-        established.findLast(
-          (value) => dependencyIdentity(value) === dependencyIdentity(dependency),
-        ) ?? dependency,
-    );
-    for (const dependency of dependencies) {
+    for (const dependency of row.consumes) {
       if (dependency.kind === "work") {
-        const current = await this.commandReads?.work?.view(
-          dependency.handle.key,
-          dependency.handle.key.route,
+        // Retirement compares each submitted cell against live Work itself.
+        if (postcondition) continue;
+        const current = await this.environment?.work?.view(
+          dependency.probe.handle.key,
+          dependency.probe.handle.key.route,
         );
         if (!current) throw new CommandRejected({ kind: "stale", consumed: [dependency] });
         if (
           moment === "admit" &&
           row.prepared.state === "unprepared" &&
-          current.revision !== dependency.handle.revision
+          current.revision !== dependency.probe.handle.revision
         )
           throw new CommandRejected({
             kind: "stale_revision",
-            handle: dependency.handle,
+            handle: dependency.probe.handle,
             live: current.revision,
           });
-        const snapshot = structuredClone(dependency.snapshot);
+        const snapshot = structuredClone(dependency.expected);
         const currentDocument = structuredClone(current.doc);
         for (const step of row.steps) {
           if (
@@ -1040,7 +1003,7 @@ export class ActionJournal implements ReceiptReader {
           )
             continue;
           const own = step.input as { work: WorkKey; patches?: RouteStatePatch[] };
-          if (workKey(own.work) !== workKey(dependency.handle.key)) continue;
+          if (workKey(own.work) !== workKey(dependency.probe.handle.key)) continue;
           const retired =
             step.key === "work.retire"
               ? (step.result as { patches: RouteStatePatch[]; fulfilled: WorkPath[] })
@@ -1052,37 +1015,46 @@ export class ActionJournal implements ReceiptReader {
           }
         }
         if (
-          canonicalRouteInput(project(currentDocument, dependency.paths)) !==
-          canonicalRouteInput(project(snapshot, dependency.paths))
+          canonicalRouteInput(project(currentDocument, dependency.probe.paths)) !==
+            canonicalRouteInput(project(snapshot, dependency.probe.paths)) ||
+          canonicalRouteInput(selectedEdits(currentDocument, dependency.probe.edits ?? [])) !==
+            canonicalRouteInput(selectedEdits(snapshot, dependency.probe.edits ?? []))
         )
-          throw new CommandRejected({ kind: "stale", consumed: [dependency] });
-      } else if (dependency.kind === "capture") {
-        if (
-          createHash("sha256")
-            .update(Buffer.from(dependency.bytesBase64, "base64"))
-            .digest("hex") !== dependency.sha256
-        )
-          throw new CommandRejected({ kind: "stale", consumed: [dependency] });
-      } else if (dependency.kind === "receipt") {
-        const current = this.rows.get(dependency.id);
-        if (!current || current.key !== dependency.key || current.state !== "succeeded")
           throw new CommandRejected({ kind: "stale", consumed: [dependency] });
       } else {
-        const current =
-          dependency.kind === "file"
-            ? await readFile(dependency.path).then(
-                (bytes) => createHash("sha256").update(bytes).digest("hex"),
-                (error: NodeJS.ErrnoException) => {
-                  if (error.code === "ENOENT") return null;
-                  throw error;
-                },
-              )
-            : this.commandReads
-              ? await this.commandReads.read(dependency)
-              : (() => {
-                  throw Error("Command dependency readers are unavailable");
-                })();
-        if (canonicalRouteInput(current) !== canonicalRouteInput(expected(dependency)))
+        // A recorded write explains only facts in its declared destination. Source facts
+        // outside that footprint still gate every continuation and conditional retirement.
+        const ownWrite = row.steps.some(
+          (step) =>
+            step.state === "succeeded" &&
+            ((dependency.kind === "document-mark" &&
+              step.kind === "native" &&
+              step.dispatchedAt &&
+              row.target.kind === "document" &&
+              canonicalRouteInput(row.target.ref) === canonicalRouteInput(dependency.probe.ref) &&
+              row.effects.some(
+                (effect) =>
+                  effect.kind === "document" &&
+                  canonicalRouteInput(effect.ref) === canonicalRouteInput(dependency.probe.ref),
+              )) ||
+              (dependency.kind === "file" &&
+                step.kind === "file" &&
+                row.effects.some(
+                  (effect) => effect.kind === "file" && effect.path === dependency.probe.path,
+                )) ||
+              (dependency.kind === "member" &&
+                step.kind === "file" &&
+                row.effects.some(
+                  (effect) =>
+                    effect.kind === "member" &&
+                    effect.pod === dependency.probe.pod &&
+                    effect.path === dependency.probe.path,
+                ))),
+        );
+        if (ownWrite) continue;
+        if (!this.environment) throw Error("Command resource probes are unavailable");
+        const current = await this.environment.probe(dependency);
+        if (canonicalRouteInput(current) !== canonicalRouteInput(dependency.expected))
           throw new CommandRejected({ kind: "stale", consumed: [dependency] });
       }
     }
@@ -1091,21 +1063,15 @@ export class ActionJournal implements ReceiptReader {
   /** Identity, binding, reservations and execution have one owner and one durable row. */
   async resume(id: string, crossing: Crossing): Promise<ActionReceipt> {
     const row = (await this.readFor(crossing.caller, undefined, id))[0];
-    if (!row || !this.registry) throw Error("Original command or its executor is unavailable");
+    if (!row || !this.environment) throw Error("Original command or its executor is unavailable");
     return this.invoke(
       { id: row.id, key: row.key, target: row.target, input: row.input },
       crossing,
-      this.registry(row.key),
       true,
     );
   }
 
-  async invoke(
-    raw: ActionAdmission,
-    crossing: Crossing,
-    factory: CommandFactory,
-    resume = false,
-  ): Promise<ActionReceipt> {
+  async invoke(raw: ActionAdmission, crossing: Crossing, resume = false): Promise<ActionReceipt> {
     const admission = actionAdmissionSchema.parse(structuredClone(raw));
     const portable = commands[admission.key as keyof typeof commands];
     if (portable)
@@ -1148,6 +1114,8 @@ export class ActionJournal implements ReceiptReader {
       }
       const context = this.context(admission, crossing, prior?.consumes ?? []);
       let executor!: CommandExecutor;
+      let definition!: Command;
+      let binding: CommandBinding | undefined;
       let row: ActionReceipt = {
         id: admission.id,
         key: admission.key,
@@ -1166,12 +1134,18 @@ export class ActionJournal implements ReceiptReader {
         state: "running",
       };
       try {
-        executor = await factory(context);
-        admission.input = executor.definition.input.parse(admission.input) as Record<
-          string,
-          unknown
-        >;
-        const definition = executor.definition;
+        if (!this.environment) throw Error("Command environment is unavailable");
+        executor = this.environment.resolve(admission.key);
+        definition =
+          typeof executor.definition === "function"
+            ? await executor.definition(context)
+            : executor.definition;
+        admission.input = definition.input.parse(admission.input) as Record<string, unknown>;
+        if (
+          definition.principal &&
+          !definition.principal.some((principal) => principal === crossing.caller.kind)
+        )
+          throw refused("This caller lacks the command's required capability", "caller.ineligible");
         const expectedTarget = definition.target?.(admission.input);
         if (
           expectedTarget &&
@@ -1195,21 +1169,21 @@ export class ActionJournal implements ReceiptReader {
             code: "target.required",
             message: "Target does not match the command contract",
           });
-        await this.commandReads?.target?.(admission.target, definition.needs);
+        await this.environment?.target?.(admission.target, definition.needs);
         if (prior?.prepared.state === "ready") executor.prepared.parse(prior.prepared.value);
         row = { ...row, input: structuredClone(admission.input) };
         if (!prior) {
-          const binding = await executor.bind(context);
+          binding = await executor.bind(context);
           const effects = await Promise.all(
             binding.effects.map(async (effect) =>
-              effect.kind === "member" && !effect.location && this.commandReads?.effectPath
-                ? { ...effect, location: await this.commandReads.effectPath(effect) }
+              effect.kind === "member" && !effect.location && this.environment?.effectPath
+                ? { ...effect, location: await this.environment.effectPath(effect) }
                 : effect,
             ),
           );
           row = {
             ...row,
-            consumes: structuredClone(binding.consumes ?? []),
+            consumes: structuredClone([...context.consumed, ...(binding.consumes ?? [])]),
             claims: structuredClone(binding.claims ?? []),
             effects: structuredClone(effects),
             ...(binding.basis === undefined ? {} : { basis: binding.basis }),
@@ -1315,27 +1289,9 @@ export class ActionJournal implements ReceiptReader {
               ? current.effects
               : [...current.effects, structuredClone(effect)],
           })),
-        establish: async (dependencies) => {
-          const step = row.steps.findLast(
-            (step) => step.kind === "native" && step.state === "succeeded",
-          );
-          if (!step || dependencies.some((dependency) => !effectEstablishes(row, dependency)))
-            throw Error("Only proven native observations can establish a new lifetime checkpoint");
-          await save((current) => ({
-            ...current,
-            steps: current.steps.map((held) =>
-              held.id === step.id
-                ? {
-                    ...held,
-                    established: [...(held.established ?? []), ...structuredClone(dependencies)],
-                  }
-                : held,
-            ),
-          }));
-        },
         publishWork: (key, route, patches) =>
           execution.step("publication", "work.publish", { work: key, route, patches }, async () => {
-            const work = this.commandReads?.work;
+            const work = this.environment?.work;
             const current = await work?.view(key, route);
             if (!work || !current) throw Error("Work publication is unavailable");
             const result = await work.publish(key, route, [...patches], current.revision);
@@ -1370,7 +1326,7 @@ export class ActionJournal implements ReceiptReader {
               ),
             );
           if (!outstanding.length) {
-            const current = await this.commandReads?.work?.view(key, route);
+            const current = await this.environment?.work?.view(key, route);
             if (!current) throw Error("Work retirement is unavailable");
             return { retired: alreadyRetired, revision: current.revision };
           }
@@ -1390,21 +1346,24 @@ export class ActionJournal implements ReceiptReader {
                       (step.kind === "file" || (step.kind === "native" && step.dispatchedAt)),
                   )
                 )
-                  throw new BridgeError("Retirement requires a proven external outcome", 409, {
-                    notDispatched: true,
-                  });
-                const work = this.commandReads?.work;
+                  throw new StepFailure(
+                    "Retirement requires a proven external outcome",
+                    409,
+                    "refused",
+                  );
+                const work = this.environment?.work;
                 const current = await work?.view(key, route);
                 const original = row.consumes.find(
                   (dependency) =>
-                    dependency.kind === "work" && workKey(dependency.handle.key) === workKey(key),
+                    dependency.kind === "work" &&
+                    workKey(dependency.probe.handle.key) === workKey(key),
                 );
                 if (!work || !current || original?.kind !== "work")
                   throw Error("Consumed Work is unavailable for retirement");
                 const patches: RouteStatePatch[] = [];
                 const retired: WorkPath[] = [];
                 for (const path of outstanding) {
-                  const before = valueAt(original.snapshot, path) as CellLike | undefined;
+                  const before = valueAt(original.expected, path) as CellLike | undefined;
                   const now = valueAt(current.doc, path) as CellLike | undefined;
                   if (!before?.edit || !now) continue;
                   const next = transitionPatches(
@@ -1454,7 +1413,8 @@ export class ActionJournal implements ReceiptReader {
           }));
           return structuredClone(retired);
         },
-        step: async (kind, key, input, effect, process, establish, releaseClaims) => {
+        step: async (kind, key, input, effect, options) => {
+          const process = options?.process;
           if (kind === "native") validateNativeInput(key, input);
           while (cursor < row.steps.length) {
             const previous = row.steps[cursor++]!;
@@ -1480,16 +1440,21 @@ export class ActionJournal implements ReceiptReader {
               throw Error(
                 "Original continuation differs from its recorded effect input or process",
               );
-            if (previous.state === "succeeded") return structuredClone(previous.result) as never;
+            if (previous.state === "succeeded") {
+              const result = structuredClone(previous.result) as never;
+              options?.check?.(result);
+              return result;
+            }
             throw Error("An uncertain effect cannot be replayed");
           }
           const incarnation = row.consumes.find(
             (dependency) =>
               dependency.kind === "incarnation" &&
-              canonicalRouteInput(dependency.target) === canonicalRouteInput(row.target),
+              canonicalRouteInput(dependency.probe.target) === canonicalRouteInput(row.target),
           );
           const exactProcess =
-            process ?? (incarnation?.kind === "incarnation" ? incarnation.process : undefined);
+            process ??
+            (incarnation?.kind === "incarnation" ? incarnation.probe.process : undefined);
           const step: ActionStep = {
             id: randomUUID(),
             kind,
@@ -1510,12 +1475,12 @@ export class ActionJournal implements ReceiptReader {
                 dispatched: () => this.markDispatched(step.id),
               }),
             );
-          let result;
+          let result: Awaited<ReturnType<typeof effect>>;
+          let returned = false;
+          let entered = false;
           try {
             await this.export(row.id, `steps/${step.id}.json`, step).catch((error) => {
-              throw new BridgeError(`Step input export failed: ${String(error)}`, 503, {
-                notDispatched: true,
-              });
+              throw refused(`Step input export failed: ${String(error)}`, "step.export");
             });
             row = this.rows.get(row.id) ?? row;
             const postcondition =
@@ -1527,14 +1492,38 @@ export class ActionJournal implements ReceiptReader {
                   (held.kind === "file" || (held.kind === "native" && held.dispatchedAt)),
               );
             await this.gate(row, "step", postcondition);
+            entered = true;
             result = await effect(step.id);
+            returned = true;
+            options?.check?.(result);
           } catch (error) {
             await save((current) => ({
               ...current,
               ...(error instanceof CommandRejected ? { refusal: error.refusal } : {}),
               steps: current.steps.map((held) => {
                 if (held.id !== step.id) return held;
-                const outcome = failure(error);
+                const outcome: DispatchFailure = !entered
+                  ? {
+                      state:
+                        error instanceof StepFailure && error.status === 499
+                          ? "cancelled"
+                          : "failed",
+                      error: messageOf(error),
+                      status: error instanceof StepFailure ? error.status : 409,
+                      notDispatched: true,
+                    }
+                  : returned
+                    ? error instanceof StepFailure && error.outcome !== "refused"
+                      ? failure(error)
+                      : {
+                          state: "failed",
+                          error: messageOf(error),
+                          status: 409,
+                          evidence: { result: structuredClone(result) },
+                        }
+                    : entered && error instanceof CommandRejected
+                      ? { state: "unknown", error: error.message, status: 503 }
+                      : failure(error);
                 // A domain refusal cannot erase the journal's durable dispatch evidence.
                 if (held.dispatchedAt && "notDispatched" in outcome && outcome.notDispatched) {
                   const { notDispatched: _, ...uncertain } = outcome;
@@ -1546,8 +1535,7 @@ export class ActionJournal implements ReceiptReader {
             throw error;
           }
           // Persistence is outside the effect catch: a missing receipt never proves no dispatch.
-          const observations = (await establish?.(result)) ?? [];
-          const releases = (await releaseClaims?.(result)) ?? [];
+          const releases = (await options?.releases?.(result)) ?? [];
           const dispatched = this.rows
             .get(row.id)
             ?.steps.find((held) => held.id === step.id)?.dispatchedAt;
@@ -1568,8 +1556,6 @@ export class ActionJournal implements ReceiptReader {
             throw Error(
               "A logical session claim releases only with a matching dispatched native outcome",
             );
-          if (observations.some((dependency) => !effectEstablishes(row, dependency)))
-            throw Error("Native observations cannot replace source or Work intent");
           await save((current) => ({
             ...current,
             steps: current.steps.map((held) =>
@@ -1578,7 +1564,6 @@ export class ActionJournal implements ReceiptReader {
                     ...held,
                     state: "succeeded",
                     result: structuredClone(result ?? null),
-                    ...(observations.length ? { established: structuredClone(observations) } : {}),
                     ...(releases.length ? { releases: structuredClone(releases) } : {}),
                   }
                 : held,
@@ -1608,11 +1593,7 @@ export class ActionJournal implements ReceiptReader {
           await this.gate(row, "authorize");
           const cancelled = new Promise<never>((_, reject) =>
             this.cancelWaits.set(row.id, () =>
-              reject(
-                new BridgeError("Command cancelled before authorization", 499, {
-                  notDispatched: true,
-                }),
-              ),
+              reject(new StepFailure("Command cancelled before authorization", 499, "refused")),
             ),
           );
           let consent: CommandConsent | null;
@@ -1622,7 +1603,7 @@ export class ActionJournal implements ReceiptReader {
               cancelled,
             ]);
           } catch (error) {
-            throw new BridgeError(String(error), 499, { notDispatched: true });
+            throw new StepFailure(String(error), 499, "refused");
           } finally {
             this.cancelWaits.delete(row.id);
           }
@@ -1631,7 +1612,7 @@ export class ActionJournal implements ReceiptReader {
           await this.waitForTurn(row.id);
           if (row.prepared.state !== "ready") {
             const value = structuredClone(
-              executor.prepared.parse((await executor.prepare?.(context)) ?? null),
+              executor.prepared.parse((await binding?.prepare?.()) ?? null),
             );
             await this.export(row.id, "preparation.json", value);
             await save((current) => ({ ...current, prepared: { state: "ready", value } }));
@@ -1639,7 +1620,7 @@ export class ActionJournal implements ReceiptReader {
           validated = true;
           await this.gate(row, "prepared");
           const result = await executor.run(context, execution);
-          return executor.definition.result ? executor.definition.result.parse(result) : result;
+          return definition.result ? definition.result.parse(result) : result;
         })
         .then(
           (result) => settle(true, row.steps, { kind: "returned", result }),
@@ -1688,10 +1669,7 @@ export class ActionJournal implements ReceiptReader {
    * the requestId the step was dispatched under, so the host can reach it past the session gate.
    * Returns at once with the still-running row: the op settles `cancelled` at its own checkpoint.
    */
-  async cancel(
-    id: string,
-    signal?: (requestId: string) => Promise<unknown>,
-  ): Promise<ActionReceipt> {
+  async cancel(id: string): Promise<ActionReceipt> {
     const row = (await this.list(undefined, id))[0];
     if (!row) throw Error(`Action '${id}' has no admitted receipt`);
     if (row.state !== "running" && row.state !== "waiting")
@@ -1704,51 +1682,23 @@ export class ActionJournal implements ReceiptReader {
     this.cancelWaits.get(id)?.();
     const step = row.steps.find((step) => step.state === "running" && step.kind === "native");
     if (step) {
-      const executor = this.registry
-        ? await this.registry(row.key)(
-            this.context(
-              { id: row.id, key: row.key, target: row.target, input: row.input },
-              { caller: row.caller, basis: row.basis },
-              row.consumes,
-            ),
-          )
-        : undefined;
-      const cancel = signal ?? executor?.cancel ?? this.commandReads?.cancel;
+      const cancel = this.environment?.resolve(row.key).cancel;
       if (!cancel) throw Error("Native cancellation is unavailable");
       await cancel(step.id);
     }
     return (await this.list(undefined, id))[0] ?? row;
   }
 
-  async recover(
-    id: string,
-    read?: (
-      step: ActionStep,
-      prepared: unknown,
-    ) => Promise<{
-      step: ActionStep;
-      evidence: unknown;
-      observation?: Extract<ReceiptFact, { kind: "native" }>;
-    }>,
-    revisit?: (step: ActionStep) => boolean,
-  ): Promise<ActionReceipt> {
+  async recover(id: string): Promise<ActionReceipt> {
     const original = (await this.list(undefined, id))[0];
     if (!original) throw Error(`Action '${id}' has no admitted receipt`);
     if (original.refusal?.kind === "domain" && original.refusal.code === "historical-schema")
       return original;
-    const executor = this.registry
-      ? await this.registry(original.key)(
-          this.context(
-            { id: original.id, key: original.key, target: original.target, input: original.input },
-            { caller: original.caller, basis: original.basis },
-            original.consumes,
-          ),
-        )
-      : undefined;
-    if (original.prepared.state === "ready" && executor)
-      executor.prepared.parse(original.prepared.value);
-    const recover = read ?? executor?.recover ?? this.commandReads?.recover;
-    if (!recover) throw Error("This command has no recovery adapter");
+    if (original.state !== "unknown" && original.state !== "incomplete") return original;
+    const executor = this.environment?.resolve(original.key);
+    if (!executor?.recover) throw Error("This command has no recovery adapter");
+    if (original.prepared.state === "ready") executor.prepared.parse(original.prepared.value);
+    const recover = executor.recover;
     const incomplete = original.state === "incomplete";
     if (original.prepared.state !== "ready") return original;
     const updates: {
@@ -1757,17 +1707,12 @@ export class ActionJournal implements ReceiptReader {
       observation?: Extract<ReceiptFact, { kind: "native" }>;
     }[] = [];
     for (const step of original.steps)
-      if (
-        (step.kind === "native" || (!read && executor?.recover !== undefined)) &&
-        (step.state === "unknown" ||
-          incomplete ||
-          revisit?.(step) ||
-          (!read && executor !== undefined))
-      ) {
+      if (step.kind === "native" || step.state === "unknown" || incomplete) {
         try {
           const update = await recover(
             structuredClone(step),
             structuredClone(original.prepared.value),
+            structuredClone(original.target),
           );
           if (
             update.step.id !== step.id ||
@@ -1788,7 +1733,6 @@ export class ActionJournal implements ReceiptReader {
             ...variant.strip().parse(update.step),
             ...(step.process ? { process: step.process } : {}),
             ...(step.dispatchedAt ? { dispatchedAt: step.dispatchedAt } : {}),
-            ...(step.established ? { established: step.established } : {}),
             ...(step.releases ? { releases: step.releases } : {}),
           });
           updates.push({
@@ -1869,72 +1813,19 @@ export class ActionJournal implements ReceiptReader {
       throw error;
     });
     if (originalBytes === null) return;
-    const raw = originalBytes.toString("utf8");
-    const lines = raw.split("\n");
-    const head = JSON.parse(lines[0]!);
-    const receipts: Receipt[] = [];
-    const mappings: [string, string][] = [];
-    const archive = `${this.path}.v${String(head?.version)}.${Date.now()}.archived`;
-    const fingerprint = createHash("sha256").update(originalBytes).digest("hex");
-    let imported = false;
-    const parseStored = (raw: unknown): Receipt => {
-      const row = raw as { body?: { kind?: string; value?: { kind?: string } } } | null;
-      if (
-        row?.body?.kind === "action" &&
-        (row.body.value?.kind === "operation" || row.body.value?.kind === "workflow")
-      ) {
-        imported = true;
-        return receiptSchema.parse({
-          ...row,
-          body: {
-            kind: "action",
-            value: importHistoricalAction(row.body.value, archive, fingerprint),
-          },
-        });
-      }
-      return receiptSchema.parse(raw);
-    };
-    if (head?.version === 4) {
-      // ponytail: one-way import of the whole-file journal; delete once no host holds a v4 file.
-      const envelope = z
-        .strictObject({
-          version: z.literal(4),
-          receipts: z.array(z.unknown()),
-          mappings: z.record(z.string(), z.uuid()),
-        })
-        .parse(head);
-      receipts.push(...envelope.receipts.map(parseStored));
-      mappings.push(...Object.entries(envelope.mappings));
-      this.torn = true;
-    } else if (head?.version === 5 || head?.version === 6) {
-      const line = z.union([
-        z.strictObject({ receipt: z.unknown() }),
-        z.strictObject({ mapping: z.tuple([z.string(), z.uuid()]) }),
-      ]);
-      lines.slice(1).forEach((text, i) => {
-        if (!text) return;
-        let entry;
-        try {
-          entry = line.parse(JSON.parse(text));
-          if ("receipt" in entry) receipts.push(parseStored(entry.receipt));
-          else mappings.push(entry.mapping);
-        } catch (error) {
-          // Only the last line can be torn by a crash; anything earlier is a corrupt journal.
-          if (i === lines.length - 2) return void (this.torn = true);
-          throw error;
-        }
-      });
-      this.lines = lines.length - 1;
-    } else {
-      // An older or unknown journal never stops a host: archive it beside itself and start fresh.
-      // Receipts are durable evidence of past actions, so the file is kept, never deleted.
-      const archived = `${this.path}.v${String(head?.version)}.${Date.now()}.archived`;
-      await renameReplacing(this.path, archived);
+    const version = JSON.parse(originalBytes.toString("utf8").split("\n")[0]!)?.version;
+    const archive = `${this.path}.v${String(version)}.${Date.now()}.archived`;
+    const snapshot = readJournalSnapshot(originalBytes, archive);
+    if (!snapshot) {
+      await renameReplacing(this.path, archive);
       console.warn(
-        `${this.path} is journal version ${String(head?.version)}; this host reads version 6. Archived it as ${archived} and started a fresh journal.`,
+        `${this.path} has unsupported journal version ${String(version)}; archived as ${archive}`,
       );
       return;
     }
+    const { receipts, mappings, imported } = snapshot;
+    this.torn = snapshot.torn;
+    this.lines = snapshot.lines;
     this.header = true;
     for (const [key, id] of mappings) this.mappings.set(key, id);
     if (new Set(this.mappings.values()).size !== this.mappings.size)
@@ -1981,7 +1872,7 @@ export class ActionJournal implements ReceiptReader {
       this.index(next);
       if (canonicalRouteInput(next) !== canonicalRouteInput(row)) changed.push(next);
     }
-    if (imported || head.version !== 6) {
+    if (imported) {
       await writeFile(archive, originalBytes, { flag: "wx" });
       this.torn = true;
     }
@@ -2019,7 +1910,7 @@ export class ActionJournal implements ReceiptReader {
     ];
     if (lines.length) {
       if (!this.header) await mkdir(dirname(this.path), { recursive: true });
-      const text = `${this.torn ? "\n" : ""}${this.header ? "" : '{"version":6}\n'}${lines
+      const text = `${this.torn ? "\n" : ""}${this.header ? "" : '{"version":7}\n'}${lines
         .map((line) => `${JSON.stringify(line)}\n`)
         .join("")}`;
       try {
@@ -2077,7 +1968,7 @@ export class ActionJournal implements ReceiptReader {
     await mkdir(dirname(this.path), { recursive: true });
     await writeFile(
       `${this.path}.tmp`,
-      `{"version":6}\n${lines.map((line) => `${JSON.stringify(line)}\n`).join("")}`,
+      `{"version":7}\n${lines.map((line) => `${JSON.stringify(line)}\n`).join("")}`,
       "utf8",
     );
     await renameReplacing(`${this.path}.tmp`, this.path);

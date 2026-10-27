@@ -132,7 +132,7 @@ test("a changed version or model identity refuses before download and allocation
 });
 test("recorded SDK envelopes: only the downloaded local work file crosses the acquisition open boundary", async () => {
   const dir = await folder();
-  const owner = new ActionJournal(join(dir, "actions.json"));
+  let owner = new ActionJournal(join(dir, "actions.json"));
   const base = JSON.parse(replay("session-list"));
   const row = base.result.sessions.find(
     (row: { case: string }) => row.case === "controlled-active",
@@ -211,6 +211,8 @@ test("recorded SDK envelopes: only the downloaded local work file crosses the ac
       ),
   );
   await owner.wait(started.id);
+  // The seed runtime has one witness executor; the product runtime binds its real entries once.
+  owner = new ActionJournal(join(dir, "actions.json"));
   const calls: string[][] = [];
   const sdk = async (args: readonly string[]) => {
     calls.push([...args]);

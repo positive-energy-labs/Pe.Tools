@@ -133,10 +133,14 @@ export const familyActions = {
     needs: "family-document",
     effect: "query",
     dirties: [],
-    input: z.union([
-      z.object({ readingId: z.string().min(1) }),
-      z.object({ source: podMemberSourceSchema }),
-    ]),
+    input: z
+      .object({
+        readingId: z.string().min(1).optional(),
+        source: podMemberSourceSchema.optional(),
+      })
+      .refine((input) => (input.readingId !== undefined) !== (input.source !== undefined), {
+        message: "Provide exactly one capture receipt or saved source",
+      }),
   },
   "settings.observe": {
     says: "Adopt verified saved member bytes as the shared Work baseline; replacing pending edits requires explicit intent.",
@@ -150,17 +154,11 @@ export const familyActions = {
     }),
   },
   "settings.write": {
-    says: "Save reviewed member Work, or create exact raw bytes, through the host pod member writer.",
+    says: "Save the reviewed Work to its source member, or create a new member at an explicit destination.",
     needs: "nothing",
     effect: "command",
     dirties: ["pods"],
-    input: z.object({
-      member: podMemberSchema,
-      write: z.discriminatedUnion("kind", [
-        z.object({ kind: z.literal("save"), sha256: z.string().min(1) }),
-        z.object({ kind: z.literal("create"), rawContent: z.string() }),
-      ]),
-    }),
+    input: z.strictObject({ destination: podMemberSchema.optional() }),
   },
   "family.capture": {
     says: "Read the open family's spec. With a pod, file it as a new member there (the draft's `spec` text when given, else what Revit said) and write the run; without one, return the spec and write nothing.",

@@ -1,3 +1,7 @@
+import { mkdtemp, rm } from "node:fs/promises";
+import { tmpdir } from "node:os";
+import { join } from "node:path";
+import { ActionJournal } from "../src/action-journal.ts";
 import { Context, Effect, Layer } from "effect";
 import { HttpRouter } from "effect/unstable/http";
 import { expect, test } from "vite-plus/test";
@@ -13,6 +17,7 @@ import { asCaller, human, pea } from "./callers.ts";
 import { sdkSessions } from "./native-receipt-fixture.ts";
 
 test("every retained /call hit is admitted, SDK aliases share ownership, and response metadata remains native", async () => {
+  const dir = await mkdtemp(join(tmpdir(), "pe-ducts-reading-"));
   const target = { session: "bridge-a", openId: "open-a" };
   const listeners = new Set<(event: HostBridgeEvent) => void>();
   let reads = 0;
@@ -73,7 +78,7 @@ test("every retained /call hit is admitted, SDK aliases share ownership, and res
   } as unknown as RevitBridge["Service"];
   const web = HttpRouter.toWebHandler(
     makeCallRoute(
-      undefined,
+      new ActionJournal(join(dir, "journal.jsonl")),
       undefined,
       { sdk: sdkSessions },
       {
@@ -140,5 +145,6 @@ test("every retained /call hit is admitted, SDK aliases share ownership, and res
     expect(reads).toBe(4);
   } finally {
     await web.dispose();
+    await rm(dir, { recursive: true, force: true });
   }
 });

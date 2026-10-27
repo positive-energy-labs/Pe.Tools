@@ -20,6 +20,7 @@ import type { ServiceHostHandle } from "@pe/host-contracts/pe-service-host";
 import { readServiceFile } from "@pe/host-contracts/pe-service";
 import { makeHttpLive } from "../src/app.ts";
 import { hostActionJournal } from "../src/gateway-owner.ts";
+import { ActionJournal } from "../src/action-journal.ts";
 import { planAcquisition } from "../src/acquisition.ts";
 import { hostOwnership, productRoot } from "../src/host-ownership.ts";
 import { originalProcess } from "./native-receipt-fixture.ts";
@@ -164,7 +165,13 @@ test("handover certifies Pea's acquisition only from native SDK document facts",
   // Two held acquisitions, as `instances.open` with into.start owner pea records them.
   const work: Record<string, string> = {};
   const planned: Record<string, { result: string; diffPlan: string }> = {};
-  const journal = hostActionJournal();
+  const journalPath = join(
+    productRoot(),
+    "state",
+    "host",
+    hostOwnership.serviceName,
+    "partition-operations.json",
+  );
   for (const [id, openId] of [
     ["acq-controlled", controlledId],
     ["acq-observed", observedId],
@@ -183,8 +190,10 @@ test("handover certifies Pea's acquisition only from native SDK document facts",
     // The copy the acquisition's file steps made; its folder is the only one that exists.
     mkdirSync(dirname(work[openId]), { recursive: true });
     writeFileSync(work[openId], "work copy");
+    // Each independent historical witness runs before the real host binds its registry.
+    const witness = new ActionJournal(journalPath);
     const row = await invokeCommand(
-      journal,
+      witness,
       {
         id,
 
@@ -194,7 +203,7 @@ test("handover certifies Pea's acquisition only from native SDK document facts",
         target: { kind: "host" },
         input: launch,
       },
-      async () => ({ target: null, acquisition: intent }),
+      async () => ({ target: null, project: null, acquisition: intent }),
       async (execution) => {
         await execution.step("native", "instances.open.start", { argv: [] }, async () => ({
           session: { process: originalProcess },
@@ -204,8 +213,9 @@ test("handover certifies Pea's acquisition only from native SDK document facts",
         }));
       },
     );
-    expect((await journal.wait(row.id)).state).toBe("succeeded");
+    expect((await witness.wait(row.id)).state).toBe("succeeded");
   }
+  const journal = hostActionJournal();
   census("controlled", {});
 
   const latch = Effect.runSync(Deferred.make<void>());
@@ -292,19 +302,33 @@ test("handover certifies Pea's acquisition only from native SDK document facts",
       });
       const body = (await response.json()) as {
         id?: string;
-        error?: { details?: { refusal?: { code: string; reason: string } } };
+        state?: string;
+        notDispatched?: boolean;
+        steps?: unknown[];
+        error?: string;
+        refusal?: { kind: string; code: string; message: string };
       };
       return {
         status: response.status,
-        refusal: body.error?.details?.refusal ?? null,
+        refusal: body.refusal ?? null,
+        state: body.state,
+        notDispatched: body.notDispatched,
+        steps: body.steps,
+        error: body.error,
         id: body.id,
       };
     };
     const refused = async (acquisition: string, fact: RegExp) => {
       const answer = await handover(acquisition);
-      expect(answer.status, JSON.stringify(answer)).toBe(403);
+      expect(answer.status, JSON.stringify(answer)).toBeLessThan(300);
+      expect(answer, JSON.stringify(answer)).toMatchObject({
+        state: "failed",
+        notDispatched: true,
+        steps: [],
+        refusal: { kind: "domain" },
+      });
       expect(answer.refusal?.code).toBe("acquisition.unproven");
-      expect(answer.refusal?.reason).toMatch(fact);
+      expect(answer.refusal?.message).toMatch(fact);
     };
 
     for (const [custody, acquisition, certify] of [

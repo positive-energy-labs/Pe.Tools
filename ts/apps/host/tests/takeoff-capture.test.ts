@@ -12,6 +12,7 @@ import {
   takeoffEditPatches,
 } from "@pe/agent-contracts";
 import { RouteWorkspace } from "../../../packages/runtime/src/route-workspace.ts";
+import { ActionJournal } from "../src/action-journal.ts";
 import { makeCallRoute } from "../src/call-route.ts";
 import { TakeoffCaptures } from "../src/takeoff-captures.ts";
 import { RevitBridge } from "../src/bridge.ts";
@@ -80,9 +81,9 @@ test("actual snapshot read leaves real Work revision and a concurrent authored e
       }),
   } as unknown as RevitBridge["Service"];
   const web = HttpRouter.toWebHandler(
-    makeCallRoute(undefined, captures, { sdk: sdkSessions }).pipe(
-      Layer.provideMerge(Layer.succeed(RevitBridge, bridge)),
-    ),
+    makeCallRoute(new ActionJournal(join(dir, "journal.jsonl")), captures, {
+      sdk: sdkSessions,
+    }).pipe(Layer.provideMerge(Layer.succeed(RevitBridge, bridge))),
     { disableLogger: true },
   );
   // As the identity middleware would: a person reads takeoffs; an anonymous /call reads only Pods.
@@ -199,9 +200,9 @@ test("actual /call rejects a closed openId and a late generation; saved HTTP rea
       }),
   } as unknown as RevitBridge["Service"];
   const web = HttpRouter.toWebHandler(
-    makeCallRoute(undefined, captures, { sdk: sdkSessions }).pipe(
-      Layer.provideMerge(Layer.succeed(RevitBridge, bridge)),
-    ),
+    makeCallRoute(new ActionJournal(join(dir, "journal.jsonl")), captures, {
+      sdk: sdkSessions,
+    }).pipe(Layer.provideMerge(Layer.succeed(RevitBridge, bridge))),
     { disableLogger: true },
   );
   const read = asCaller(human, () =>
@@ -231,9 +232,15 @@ test("actual /call rejects a closed openId and a late generation; saved HTTP rea
     expect(await captures.list(at)).toHaveLength(1);
     open = false;
     expect((await read()).status).toBe(409);
-    const restored = HttpRouter.toWebHandler(makeCallRoute(undefined, new TakeoffCaptures(dir)), {
-      disableLogger: true,
-    });
+    const restored = HttpRouter.toWebHandler(
+      makeCallRoute(
+        new ActionJournal(join(dir, "restored-journal.jsonl")),
+        new TakeoffCaptures(dir),
+      ).pipe(Layer.provideMerge(Layer.succeed(RevitBridge, bridge))),
+      {
+        disableLogger: true,
+      },
+    );
     try {
       const saved = await restored.handler(
         new Request(`http://host/takeoffs/observations?capture=${id}`),

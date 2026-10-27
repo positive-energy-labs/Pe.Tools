@@ -36,11 +36,15 @@ test("subscribers read one durable action authority, retain opaque ids across re
   const stop = owner.subscribe({ kinds: ["action"] }, (r) => {
     received.push(r);
   });
-  let dispatches = 0;
+  let dispatches = 0,
+    preparations = 0;
   await invokeCommand(
     owner,
     admission(),
-    async () => ({ original: true }),
+    async () => {
+      preparations++;
+      return { original: true };
+    },
     async (ex) =>
       ex.step("native", "test.native", {}, async () => {
         dispatches++;
@@ -60,6 +64,7 @@ test("subscribers read one durable action authority, retain opaque ids across re
   );
   const [receipt] = await owner.read({ kinds: ["action"] });
   expect(dispatches).toBe(1);
+  expect(preparations).toBe(1);
   expect(receipt!.body).toEqual({ kind: "action", value: settled });
   expect(receipt!.join.actionId).not.toBe(admission().id);
   expect(received.at(-1)).toEqual(receipt);

@@ -6,7 +6,9 @@ import { inflateSync } from "node:zlib";
 import { expect, it } from "vite-plus/test";
 import { publishPage } from "../src/page-publication.ts";
 import { CaptureStore } from "../src/captures-route.ts";
-import { createPagesHandler } from "../src/pages-route.ts";
+import { createPagesHandler, pageLibrary } from "../src/pages-route.ts";
+import { ActionJournal } from "../src/action-journal.ts";
+import { pagePublicationExecutor } from "../src/page-publication.ts";
 import { servePeRoute } from "@pe/agent-contracts/pe-api";
 import { asCaller, human } from "./callers.ts";
 
@@ -54,9 +56,12 @@ it("renders the real public Page kit and settled animation pixels below the view
   try {
     const root = join(home, "Pages");
     const captures = new CaptureStore(join(home, "captures"));
+    const journal = new ActionJournal(join(home, "commands.jsonl"));
+    const executor = pagePublicationExecutor(root, "http://fixture", pageLibrary, captures);
+    journal.bindCommands({ resolve: () => executor, probe: async () => null });
     const handler = asCaller(
       human,
-      createPagesHandler(root, join(home, "Pods"), undefined, captures),
+      createPagesHandler(root, join(home, "Pods"), undefined, journal),
     );
     const html = `<!doctype html><html><head><title>Animation</title>
       <link rel="stylesheet" href="/pages/pe.css"><script src="/pages/pe.js"></script>

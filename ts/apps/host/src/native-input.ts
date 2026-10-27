@@ -1,6 +1,8 @@
 import { Ajv, type ValidateFunction } from "ajv";
 import { hostOpCatalog } from "@pe/host-contracts/catalog";
-import { BridgeError } from "./bridge.ts";
+import { refused } from "./command-executor.ts";
+import { z } from "zod";
+import type { HostOperationKey, OpRequestOf } from "@pe/host-contracts/operation-types";
 
 const validator = new Ajv({ strict: false, allErrors: true });
 const compiled = new Map<string, ValidateFunction>();
@@ -9,8 +11,8 @@ const contracts = new Map<string, string | null | undefined>(
 );
 
 /** C# request metadata validates captured execution again after persistence or recovery. */
-export function validateNativeInput(key: string, input: unknown, json = contracts.get(key)): void {
-  if (!json) return;
+function nativeInputProblem(key: string, input: unknown, json = contracts.get(key)): string | null {
+  if (!json) return null;
   let check = compiled.get(json);
   if (!check) {
     const schema = JSON.parse(json);
@@ -18,10 +20,19 @@ export function validateNativeInput(key: string, input: unknown, json = contract
     check = validator.compile(schema);
     compiled.set(json, check);
   }
-  if (!check(input))
-    throw new BridgeError(
-      `Invalid native input for '${key}': ${validator.errorsText(check.errors)}`,
-      409,
-      { notDispatched: true },
-    );
+  return check(input)
+    ? null
+    : `Invalid native input for '${key}': ${validator.errorsText(check.errors)}`;
 }
+
+export function validateNativeInput(key: string, input: unknown, json = contracts.get(key)): void {
+  const problem = nativeInputProblem(key, input, json);
+  if (problem) throw refused(problem, "native.input");
+}
+
+/** Prepared payloads use the same generated DTO authority as the native dispatch boundary. */
+export const nativeInputSchema = <K extends HostOperationKey>(key: K): z.ZodType<OpRequestOf<K>> =>
+  z.custom<OpRequestOf<K>>().superRefine((input, context) => {
+    const problem = nativeInputProblem(key, input);
+    if (problem) context.addIssue({ code: "custom", message: problem });
+  });

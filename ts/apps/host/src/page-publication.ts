@@ -1,6 +1,5 @@
 import { z } from "zod";
-import type { CommandFactory } from "./command-executor.ts";
-import { BridgeError } from "./bridge.ts";
+import { command, StepFailure } from "./command-executor.ts";
 import { createHash } from "node:crypto";
 import { existsSync } from "node:fs";
 import { lstat, readdir, readFile } from "node:fs/promises";
@@ -363,9 +362,11 @@ export async function commitPagePublication(
 ) {
   const { input, capture, origin } = prepared;
   if ((await pageVersion(root, input.slug)) !== expectedVersion)
-    throw new BridgeError("Page changed after submission; read it and submit a new command", 409, {
-      notDispatched: true,
-    });
+    throw new StepFailure(
+      "Page changed after submission; read it and submit a new command",
+      409,
+      "refused",
+    );
   await writeArtifact(root, join(resolve(root), input.slug, "index.html"), input.html, true);
   return {
     ok: true as const,
@@ -395,54 +396,65 @@ export async function publishPage(
   );
 }
 
-/** The HTTP door and journal recovery resolve the same publication implementation. */
-export const pagePublicationExecutor =
-  (
-    root: string,
-    origin: string,
-    library: (path: string) => string | null,
-    captures: Pick<CaptureStore, "adopt">,
-  ): CommandFactory =>
-  (context) => {
-    const input = pagePublicationSchema.parse(context.admission.input);
-    let version: string | null;
-    const prepared = z.strictObject({
-      version: z.string().nullable(),
-      publication: z.strictObject({
-        input: pagePublicationSchema,
-        origin: z.string(),
-        capture: z.strictObject({
-          mimeType: z.literal("image/png"),
-          data: z.string(),
-          width: z.number(),
-          height: z.number(),
-          sha256: z.string(),
-          url: z.string(),
-        }),
-      }),
-    });
-    return {
-      definition: {
-        says: "Publish a captured Page",
-        needs: "nothing",
-        effect: "command",
-        dirties: [],
-        input: pagePublicationSchema,
-      },
-      bind: async () => {
-        version = await pageVersion(root, input.slug);
+const preparedPublication = z.strictObject({
+  version: z.string().nullable(),
+  publication: z.strictObject({
+    input: pagePublicationSchema,
+    origin: z.string(),
+    capture: z.strictObject({
+      mimeType: z.literal("image/png"),
+      data: z.string(),
+      width: z.number(),
+      height: z.number(),
+      sha256: z.string(),
+      url: z.string(),
+    }),
+  }),
+});
+
+/** The HTTP door and recovery resolve one stable publication implementation. */
+export const pagePublicationExecutor = (
+  root: string,
+  origin: string | (() => string),
+  library: (path: string) => string | null,
+  captures: Pick<CaptureStore, "adopt">,
+) =>
+  command(
+    {
+      says: "Publish a captured Page",
+      needs: "nothing",
+      effect: "command",
+      dirties: [],
+      input: pagePublicationSchema,
+    },
+    preparedPublication,
+    {
+      async bind(context) {
+        const input = context.admission.input;
+        const version = await pageVersion(root, input.slug);
         return {
           effects: [{ kind: "publication", page: `page:@pages/${input.slug}` }],
-          consumes: [{ kind: "file", path: join(root, input.slug, "index.html"), sha256: version }],
+          consumes: [
+            {
+              kind: "file",
+              probe: { path: join(root, input.slug, "index.html") },
+              expected: version,
+            },
+          ],
+          prepare: async () => ({
+            version,
+            publication: await preparePagePublication(
+              root,
+              input,
+              typeof origin === "string" ? origin : origin(),
+              library,
+              captures,
+            ),
+          }),
         };
       },
-      prepared,
-      prepare: async () => ({
-        version,
-        publication: await preparePagePublication(root, input, origin, library, captures),
-      }),
-      run: async (_context, execution) => {
-        const frozen = prepared.parse(execution.prepared);
+      async run(_context, execution) {
+        const frozen = execution.prepared;
         return execution.step(
           "publication",
           "page.publish",
@@ -450,5 +462,5 @@ export const pagePublicationExecutor =
           () => commitPagePublication(root, frozen.publication, frozen.version),
         );
       },
-    };
-  };
+    },
+  );

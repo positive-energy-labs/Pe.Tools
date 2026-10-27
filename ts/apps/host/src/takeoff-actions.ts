@@ -1,27 +1,27 @@
-import type { z } from "zod";
 import { lifetime } from "./family-actions.ts";
-import type { CommandContext, CommandFactory } from "./command-executor.ts";
+import { command, refused, type CommandContext } from "./command-executor.ts";
 import { preparedTakeoffSchema } from "@pe/agent-contracts";
-import { type NativeProcess, type SdkReceiptReader } from "./native-receipts.ts";
+import type { NativeProcess, SdkReceiptReader } from "./native-receipts.ts";
 import { createHash } from "node:crypto";
 import { readFile } from "node:fs/promises";
 import { Effect } from "effect";
 import { NodeServices } from "@effect/platform-node";
 import {
   commands,
-  commandTool,
-  editableCells,
+  tools,
+  roomEditAddress,
+  takeoffEditAddress,
+  takeoffDecisionAddress,
+  type RoomsRouteDocument,
+  type WorkPath,
   takeoffCaptureSchema,
   type Consumed,
   type WorkHandle,
-  takeoffActions,
   sameAddress,
-  type TakeoffActionKey,
   stagedDecisions,
   stagedTakeoffEdits,
   takeoffDecisionKey,
   takeoffEditKey,
-  takeoffsRouteState,
   type StagedRoomEdit,
   type ModelRoom,
 } from "@pe/agent-contracts";
@@ -32,16 +32,11 @@ import type {
   RhvacSyncRequest,
   RhvacSyncResult,
 } from "@pe/host-contracts/operation-types";
-import { BridgeError, invokeBridge, type RevitBridge } from "./bridge.ts";
+import { invokeBridge, type RevitBridge } from "./bridge.ts";
 import type { ActionExecution } from "./action-journal.ts";
 import { type TakeoffCaptures } from "./takeoff-captures.ts";
 import { rhvacOpen, rhvacSync } from "./rhvac-ops.ts";
 
-let workspace: RouteWorkspace | undefined;
-export const actionWorkspace = () => workspace;
-export const bindActionWorkspace = (value: RouteWorkspace) => {
-  workspace = value;
-};
 export const fileVersion = async (path: string) =>
   createHash("sha256")
     .update(await readFile(path))
@@ -54,377 +49,455 @@ export type TakeoffActionDependencies = {
   syncFile?: (input: RhvacSyncRequest, expectedVersion: string) => Promise<RhvacSyncResult>;
 };
 
-const takeoffInput = <K extends TakeoffActionKey>(
-  _key: K,
-  input: unknown,
-): z.infer<(typeof takeoffActions)[K]["input"]> =>
-  input as z.infer<(typeof takeoffActions)[K]["input"]>;
-const refused = (message: string) => new BridgeError(message, 409, { notDispatched: true });
+const preparedSyncSchema = preparedTakeoffSchema.extend({ capture: takeoffCaptureSchema });
+const preparedCarrierSchema = preparedTakeoffSchema.pick({ process: true });
+const modelTarget = (ctx: CommandContext) => {
+  if (ctx.admission.target.kind !== "document") throw refused("Exact document target required");
+  return ctx.admission.target.ref;
+};
+const workHandle = (ctx: CommandContext) => ctx.admission.input.work as WorkHandle | undefined;
 
-const preparedSyncSchema = preparedTakeoffSchema.extend({
-  capture: takeoffCaptureSchema.optional(),
-});
+async function bindModel(
+  ctx: CommandContext,
+  bridge: RevitBridge["Service"],
+  deps: TakeoffActionDependencies,
+) {
+  const target = modelTarget(ctx);
+  const observed = await lifetime(bridge, target, "project", deps);
+  const document = observed.session.state!.openDocuments.find(
+    (doc) => doc.openId === target.openId,
+  )!;
+  const handle = workHandle(ctx);
+  if (
+    handle?.key.target &&
+    (!document.address || !sameAddress(handle.key.target, document.address as never))
+  )
+    throw refused("Work belongs to a different document");
+  return { target, process: observed.process };
+}
+
+async function selectRooms(
+  ctx: CommandContext,
+  select: (doc: RoomsRouteDocument, paths: readonly WorkPath[]) => readonly WorkPath[],
+) {
+  const handle = workHandle(ctx);
+  if (handle)
+    await ctx.selectWork(tools.rooms.work, handle, (doc, cells) => ({
+      cells: select(
+        doc,
+        cells.map(({ path }) => path),
+      ),
+    }));
+}
+
+const nativeFor =
+  (
+    ctx: CommandContext,
+    execution: ActionExecution,
+    bridge: RevitBridge["Service"],
+    process: NativeProcess,
+  ) =>
+  <A = unknown>(key: string, input: unknown) =>
+    execution.step(
+      "native",
+      key,
+      input,
+      (id) => invokeBridge<A>(bridge, modelTarget(ctx), key, input, id),
+      { process },
+    );
+type Native = ReturnType<typeof nativeFor>;
+
+/** The carrier stage is bounded by native remaining work, shared by the seven concrete commands. */
+async function runCarrier(
+  ctx: CommandContext,
+  execution: ActionExecution & { readonly prepared: { process: NativeProcess } },
+  captures: TakeoffCaptures,
+  bridge: RevitBridge["Service"],
+  stage: string,
+  perform: (native: Native) => Promise<unknown>,
+) {
+  const target = modelTarget(ctx);
+  const native = nativeFor(ctx, execution, bridge, execution.prepared.process);
+  captures.invalidate(target);
+  try {
+    let remaining = Infinity;
+    while (remaining > 0) {
+      const result = await native<{ remaining: string[] }>("takeoffs.initialize-carrier", {
+        stage,
+      });
+      if (!Array.isArray(result.remaining) || result.remaining.length >= remaining)
+        throw Error("Carrier preparation made no progress");
+      remaining = result.remaining.length;
+    }
+    return await perform(native);
+  } finally {
+    captures.invalidate(target);
+  }
+}
 
 export function takeoffExecutors(
   captures: TakeoffCaptures,
   bridge: RevitBridge["Service"],
   deps: TakeoffActionDependencies = {},
 ) {
-  return Object.fromEntries(
-    Object.keys(takeoffActions).map((name) => [
-      name,
-      async (ctx: CommandContext) => {
-        const { admission } = ctx;
-        const key = name as TakeoffActionKey;
-        const definition = commands[key];
-        const {
-          work: workInput,
-          captureId: _capture,
-          fileVersion: _version,
-          ...operationInput
-        } = admission.input;
-        if (admission.target.kind !== "document") throw refused("Exact document target required");
-        const target = admission.target.ref;
-        const work = deps.workspace ?? ctx.work ?? workspace;
-        const base = workInput as WorkHandle | undefined;
-        let process: NativeProcess;
-        let capture: import("@pe/agent-contracts").TakeoffCapture | undefined;
-        let submitted:
-          | {
-              edits: Record<string, StagedRoomEdit>;
-              decisions: Record<string, "accept" | "dismiss">;
-            }
-          | undefined;
-        return {
-          definition,
-          prepared: preparedSyncSchema,
-          bind: async () => {
-            const lifetimeRead = await lifetime(bridge, target, "project", deps);
-            process = lifetimeRead.process;
-            const document = lifetimeRead.session.state!.openDocuments.find(
-              (doc) => doc.openId === target.openId,
-            )!;
-            const consumes: Consumed[] = [
-              { kind: "incarnation", target: admission.target, process },
-            ];
-            if (base) {
-              if (
-                base.key.target &&
-                (!document.address || !sameAddress(base.key.target, document.address as never))
-              )
-                throw refused("Work belongs to a different document");
-              const view = await ctx.read.work(base, base.key.route);
-              if (base.key.route === "takeoffs") {
-                const doc = takeoffsRouteState.schema.parse(view.doc);
-                submitted = { edits: stagedTakeoffEdits(doc), decisions: stagedDecisions(doc) };
-                consumes.push({
-                  kind: "work",
-                  handle: base,
-                  paths: [
-                    ...Object.entries(doc.edits).flatMap(([key, cell]) =>
-                      cell.edit ? [["edits", key, "edit"]] : [],
-                    ),
-                    ...Object.entries(doc.decisions).flatMap(([key, cell]) =>
-                      cell.edit ? [["decisions", key, "edit"]] : [],
-                    ),
-                    ...Object.keys(submitted.edits).map((room) => ["bases", room]),
-                  ],
-                  snapshot: doc,
-                });
-              } else
-                consumes.push({
-                  kind: "work",
-                  handle: base,
-                  paths: editableCells(view.doc, commandTool(key)?.work?.editable ?? []).flatMap(
-                    ({ path, cell }) => (cell.edit ? [[...path, "edit"]] : []),
-                  ),
-                  snapshot: view.doc,
-                });
-            }
-            const captureId = admission.input.captureId as string | undefined;
-            capture = captureId ? await captures.saved(captureId) : undefined;
-            if (capture) {
-              if (
-                capture.provenance.kind !== "live" ||
-                capture.provenance.target.session !== target.session ||
-                capture.provenance.target.openId !== target.openId
-              )
-                throw refused("Capture is not evidence for the admitted lifetime");
-              const artifact = await captures.savedText(capture.id);
-              consumes.push({
-                kind: "file",
-                path: artifact.path,
-                sha256: createHash("sha256").update(artifact.text).digest("hex"),
-              });
-            }
-            const effects: import("@pe/agent-contracts").Footprint = [
-              { kind: "document", ref: target },
-            ];
-            if (key === "takeoffs.sync") {
-              if (!capture) throw refused("Sync requires its reviewed captureId");
-              if (typeof admission.input.fileVersion !== "string")
-                throw refused("Sync requires its reviewed fileVersion");
-              consumes.push({
-                kind: "file",
-                path: String(admission.input.path),
-                sha256: admission.input.fileVersion,
-              });
-              effects.push({ kind: "file", path: String(admission.input.path) });
-            }
-            return { consumes, effects };
-          },
-          prepare: async () => ({
-            process,
-            edits: submitted?.edits ?? {},
-            decisions: submitted?.decisions ?? {},
-            ...(capture ? { capture } : {}),
+  const bindCarrier = async (ctx: CommandContext, select?: () => Promise<void>) => {
+    const { target, process } = await bindModel(ctx, bridge, deps);
+    await select?.();
+    return {
+      consumes: [
+        {
+          kind: "incarnation" as const,
+          probe: { target: ctx.admission.target, process },
+          expected: true as const,
+        },
+      ],
+      effects: [{ kind: "document" as const, ref: target }],
+      prepare: async () => ({ process }),
+    };
+  };
+  const value = async (ctx: CommandContext, native: Native, key: string, input: unknown) => ({
+    value: await native(key, input),
+    target: { session: modelTarget(ctx).session, document: null },
+  });
+  return {
+    "takeoffs.initialize": command(commands["takeoffs.initialize"], preparedCarrierSchema, {
+      bind: (ctx) => bindCarrier(ctx),
+      run: (ctx, execution) =>
+        runCarrier(ctx, execution, captures, bridge, ctx.admission.input.stage, async () => ({
+          text: `wrote the shared parameters for ${ctx.admission.input.stage}`,
+        })),
+    }),
+    "takeoffs.adopt": command(commands["takeoffs.adopt"], preparedCarrierSchema, {
+      bind: (ctx) => bindCarrier(ctx),
+      run: (ctx, execution) =>
+        runCarrier(ctx, execution, captures, bridge, "Adoption", async (native) => {
+          let adopted = 0;
+          for (const view of ctx.admission.input.views)
+            adopted += (await native<{ adopted: unknown[] }>("takeoffs.adopt", view)).adopted
+              .length;
+          return { adopted, text: `adopted ${adopted} zoning regions` };
+        }),
+    }),
+    "takeoffs.partition": command(commands["takeoffs.partition"], preparedCarrierSchema, {
+      bind: (ctx) => bindCarrier(ctx),
+      run: (ctx, execution) =>
+        runCarrier(ctx, execution, captures, bridge, "Materialization", (native) =>
+          value(ctx, native, "takeoffs.partition", {
+            ...ctx.admission.input,
+            runId: ctx.admission.id,
           }),
-          run: async (_ctx: CommandContext, execution: ActionExecution) => {
-            const frozen = execution.prepared as z.infer<typeof preparedSyncSchema>;
-            const submitted = { edits: frozen.edits, decisions: frozen.decisions };
-            const capture = frozen.capture;
-            const native = <A = unknown>(key: string, input: unknown) =>
-              execution.step(
-                "native",
-                key,
-                input,
-                (requestId) => invokeBridge<A>(bridge, target, key, input, requestId),
-                frozen.process,
+        ),
+    }),
+    "rooms.partition": command(commands["rooms.partition"], preparedCarrierSchema, {
+      bind: (ctx) =>
+        bindCarrier(ctx, () =>
+          selectRooms(ctx, (doc, paths) =>
+            paths.filter((path) => {
+              const mark =
+                path[0] === "marks" ? doc.marks[String(path[1])]?.edit?.value : undefined;
+              return mark?.kind === "reject" && mark.anchor.view === ctx.admission.input.view;
+            }),
+          ),
+        ),
+      run: (ctx, execution) =>
+        runCarrier(ctx, execution, captures, bridge, "Rooms", (native) => {
+          const { work: _work, ...input } = ctx.admission.input;
+          return value(ctx, native, "rooms.partition", { ...input, runId: ctx.admission.id });
+        }),
+    }),
+    "rooms.draw": command(commands["rooms.draw"], preparedCarrierSchema, {
+      bind: (ctx) => bindCarrier(ctx, () => selectRooms(ctx, () => [])),
+      run: (ctx, execution) =>
+        runCarrier(ctx, execution, captures, bridge, "Rooms", (native) => {
+          const { work: _work, ...input } = ctx.admission.input;
+          return value(ctx, native, "rooms.draw", input);
+        }),
+    }),
+    "rooms.write": command(commands["rooms.write"], preparedCarrierSchema, {
+      bind: (ctx) =>
+        bindCarrier(ctx, () =>
+          selectRooms(ctx, (_doc, paths) =>
+            paths.filter((path) => {
+              if (path[0] !== "edits") return false;
+              const { guid, field } = roomEditAddress(String(path[1]));
+              return ctx.admission.input.regions.some(
+                (region) => region.guid === guid && region[field] !== undefined,
               );
-            const prepare = async (stage: string) => {
-              let remaining = Infinity;
-              while (remaining > 0) {
-                const result = await native<{ remaining: string[] }>(
-                  "takeoffs.initialize-carrier",
-                  {
-                    stage,
-                  },
-                );
-                if (!Array.isArray(result.remaining) || result.remaining.length >= remaining)
-                  throw Error("Carrier preparation made no progress");
-                remaining = result.remaining.length;
-              }
-            };
-            if (definition.dirties.includes("snapshot")) captures.invalidate(target);
-            try {
-              if (key === "takeoffs.initialize") {
-                const input = takeoffInput(key, operationInput);
-                await prepare(input.stage);
-                return { text: `wrote the shared parameters for ${input.stage}` };
-              }
-              if (key === "takeoffs.adopt") {
-                const input = takeoffInput(key, operationInput);
-                await prepare("Adoption");
-                const results = [];
-                for (const view of input.views)
-                  results.push(await native<{ adopted: unknown[] }>(key, view));
-                return {
-                  adopted: results.reduce((sum, result) => sum + result.adopted.length, 0),
-                  text: `adopted ${results.reduce((sum, result) => sum + result.adopted.length, 0)} zoning regions`,
-                };
-              }
-              if (key === "takeoffs.partition") {
-                await prepare("Materialization");
-                const value = await native(key, { ...operationInput, runId: admission.id });
-                return { value, target: { session: target.session, document: null } };
-              }
-              if (key === "rooms.partition") {
-                await prepare("Rooms");
-                const value = await native(key, { ...operationInput, runId: admission.id });
-                return { value, target: { session: target.session, document: null } };
-              }
-              if (key === "rooms.draw" || key === "rooms.write" || key === "rooms.merge") {
-                await prepare("Rooms");
-                const value = await native(key, operationInput);
-                return { value, target: { session: target.session, document: null } };
-              }
-              const input = takeoffInput("takeoffs.sync", operationInput);
-              const selected = new Set(input.zones);
-              const zones = capture!.snapshot.world.zones.filter(
-                (zone) => !selected.size || selected.has(zone.zone.guid),
+            }),
+          ),
+        ),
+      run: (ctx, execution) =>
+        runCarrier(ctx, execution, captures, bridge, "Rooms", (native) =>
+          value(ctx, native, "rooms.write", { regions: ctx.admission.input.regions }),
+        ),
+    }),
+    "rooms.merge": command(commands["rooms.merge"], preparedCarrierSchema, {
+      bind: (ctx) =>
+        bindCarrier(ctx, () =>
+          selectRooms(ctx, (doc, paths) =>
+            paths.filter((path) => {
+              const mark =
+                path[0] === "marks" ? doc.marks[String(path[1])]?.edit?.value : undefined;
+              return (
+                mark?.kind === "merge" &&
+                mark.anchor.view === ctx.admission.input.view &&
+                !!mark.guids?.some((guid) => ctx.admission.input.guids.includes(guid))
               );
-              const edits = new Map(Object.entries(submitted?.edits ?? {}));
-              const blocked = zones.filter(
-                (zone) =>
-                  zone.driftSqft === null ||
-                  zone.driftSqft > 0 ||
-                  zone.rooms.some(
-                    (room) =>
-                      room.analysis?.state !== "current" ||
-                      room.analysis.hold !== null ||
-                      room.flags.some(
-                        (flag) =>
-                          submitted?.decisions[takeoffDecisionKey(room.guid, flag)] === undefined,
-                      ),
-                  ) ||
-                  zone.runs.some((run) => run.orphaned > 0 || run.failures > 0),
-              );
-              if (blocked.length)
-                throw refused(`${blocked.length} selected zones are not ready to sync`);
-              const inserts = zones.flatMap((zone) =>
-                zone.rooms
-                  .filter((room) => room.elementId !== null && !room.r10 && room.data !== null)
-                  .map((room) => ({ zone, room })),
-              );
-              const linked = zones
-                .flatMap((zone) => zone.rooms)
-                .filter((room) => room.r10 && edits.has(room.guid));
-              if (!inserts.length && !linked.length)
-                throw refused("No eligible inserts or linked staged updates");
-              if (inserts.some(({ zone }) => !zone.tags[0]))
-                throw refused("Every inserted room requires a system tag");
-              const recordedFile = execution.recorded("file", "rhvac.sync");
-              const request: RhvacSyncRequest = recordedFile
-                ? (recordedFile.input as { request: RhvacSyncRequest }).request
-                : await (async (): Promise<RhvacSyncRequest> => {
-                    const before = await (
-                      deps.openFile ??
-                      ((path) =>
-                        Effect.runPromise(
-                          rhvacOpen({ path }).pipe(Effect.provide(NodeServices.layer)),
-                        ))
-                    )(input.path);
-                    const firstRoomNumber =
-                      Math.max(0, ...before.rooms.map((room) => room.number)) + 1;
-                    const bySystemName = new Map(
-                      before.systems
-                        .filter((system) => system.name.trim())
-                        .map((system) => [system.name.trim().toLocaleLowerCase(), system.number]),
-                    );
-                    const firstRun =
-                      before.rooms.length === 1 &&
-                      before.rooms[0]!.number === 1 &&
-                      !before.rooms[0]!.name.trim() &&
-                      before.rooms[0]!.areaSquareFeet === 0;
-                    let nextSystem =
-                      Math.max(0, ...before.systems.map((system) => system.number)) + 1;
-                    const systems = new Map<string, number>();
-                    for (const { zone } of inserts) {
-                      const tag = zone.tags[0]!;
-                      if (systems.has(tag)) continue;
-                      const existing = bySystemName.get(tag.trim().toLocaleLowerCase());
-                      if (existing !== undefined) systems.set(tag, existing);
-                      else if (firstRun) systems.set(tag, nextSystem++);
-                      else
-                        throw refused(`system '${tag}' does not exist in this non-first-run .r10`);
-                    }
-                    const fileRooms = new Map(before.rooms.map((room) => [room.identifier, room]));
-                    const updates = linked.map((room) => {
-                      const current = fileRooms.get(room.r10!.identifier);
-                      if (!current)
-                        throw refused(`Linked .r10 room ${room.r10!.identifier} no longer exists`);
-                      return applyStaged(current, edits.get(room.guid)!);
-                    });
-                    return {
-                      targetPath: input.path,
-                      updates,
-                      inserts: inserts.map(({ zone, room }, index) =>
-                        edits.has(room.guid)
-                          ? applyStaged(
-                              buildRhvacInsert(
-                                room,
-                                firstRoomNumber + index,
-                                systems.get(zone.tags[0]!)!,
-                              ),
-                              edits.get(room.guid)!,
-                            )
-                          : buildRhvacInsert(
-                              room,
-                              firstRoomNumber + index,
-                              systems.get(zone.tags[0]!)!,
-                            ),
-                      ),
-                      systems: [
-                        ...before.systems.map((system) => ({
-                          number: system.number,
-                          name: system.name,
-                        })),
-                        ...[...systems]
-                          .filter(
-                            ([, number]) =>
-                              !before.systems.some((system) => system.number === number),
-                          )
-                          .map(([name, number]) => ({ name, number })),
-                      ],
-                      deleteUntouchedSeedRoom: inserts.length > 0,
-                    };
-                  })();
-              const result = await execution.step(
-                "file",
-                "rhvac.sync",
-                { request, expectedVersion: admission.input.fileVersion as string },
-                () =>
-                  (
-                    deps.syncFile ??
-                    ((input, expectedVersion) =>
-                      Effect.runPromise(
-                        rhvacSync(input, expectedVersion).pipe(Effect.provide(NodeServices.layer)),
-                      ))
-                  )(request, admission.input.fileVersion as string),
-                undefined,
-                async () => [
-                  {
-                    kind: "file",
-                    path: input.path,
-                    sha256: await (deps.fileVersion ?? fileVersion)(input.path),
-                  },
-                ],
-              );
-              const byNumber = new Map(
-                result.insertedRooms.map((room) => [room.number, room.identifier]),
-              );
-              const fileIdentity = `${result.fileIdentity.fileName}#${result.fileIdentity.stamp}`;
-              const writes = inserts.map(({ room }, index) => {
-                const identifier = byNumber.get(request.inserts![index]!.number);
-                if (identifier === undefined)
-                  throw Error("RHVAC insertion result omitted a room identity");
-                return {
-                  elementId: room.elementId!,
-                  link: {
-                    identifier,
-                    fileIdentity,
-                    syncedAt: new Date().toISOString(),
-                    lastSyncedSqft: room.sqft,
-                  },
-                };
-              });
-              if (writes.length) {
-                const recordedLinks = execution.recorded("native", "takeoffs.rhvac-links");
-                await native("takeoffs.rhvac-links", recordedLinks?.input ?? { writes });
-              }
-              let retirement: unknown;
-              if (base && submitted && work) {
-                const consumed = new Map(
-                  [...linked, ...inserts.map(({ room }) => room)]
-                    .filter((room) => edits.has(room.guid))
-                    .map((room) => [room.guid, edits.get(room.guid)!]),
-                );
-                retirement = await execution.retireWork(
-                  base.key,
-                  "takeoffs",
-                  [...consumed].flatMap(([roomId, edit]) =>
-                    Object.keys(edit.next).map((field) => [
-                      "edits",
-                      takeoffEditKey(roomId, field as keyof typeof edit.next),
-                    ]),
-                  ),
-                );
-              }
-              return {
-                inserted: result.insertedRooms.length,
-                updated: result.updated,
-                text: `synced ${result.insertedRooms.length} inserted and ${result.updated} updated rooms into ${input.path}`,
-                file: result,
-                retirement,
-              };
-            } finally {
-              if (definition.dirties.includes("snapshot")) captures.invalidate(target);
-            }
+            }),
+          ),
+        ),
+      run: (ctx, execution) =>
+        runCarrier(ctx, execution, captures, bridge, "Rooms", (native) => {
+          const { work: _work, ...input } = ctx.admission.input;
+          return value(ctx, native, "rooms.merge", input);
+        }),
+    }),
+    "takeoffs.sync": command(commands["takeoffs.sync"], preparedSyncSchema, {
+      bind: async (ctx) => {
+        const { target, process } = await bindModel(ctx, bridge, deps);
+        const { input } = ctx.admission;
+        const capture = await captures.saved(input.captureId);
+        if (
+          capture.provenance.kind !== "live" ||
+          capture.provenance.target.session !== target.session ||
+          capture.provenance.target.openId !== target.openId
+        )
+          throw refused("Capture is not evidence for the admitted lifetime");
+        const artifact = await captures.savedText(capture.id);
+        const consumes: Consumed[] = [
+          { kind: "incarnation", probe: { target: ctx.admission.target, process }, expected: true },
+          {
+            kind: "file",
+            probe: { path: artifact.path },
+            expected: createHash("sha256").update(artifact.text).digest("hex"),
           },
+          { kind: "file", probe: { path: input.path }, expected: input.fileVersion },
+        ];
+        let edits: Record<string, StagedRoomEdit> = {},
+          decisions: Record<string, "accept" | "dismiss"> = {};
+        const base = input.work;
+        if (base) {
+          const rooms = new Set(
+            capture.snapshot.world.zones
+              .filter((zone) => !input.zones.length || input.zones.includes(zone.zone.guid))
+              .flatMap((zone) => zone.rooms.map((room) => room.guid)),
+          );
+          const doc = await ctx.selectWork(tools.takeoffs.work, base, (_doc, cells) => {
+            const selected = cells.filter(({ path }) =>
+              path[0] === "edits"
+                ? rooms.has(takeoffEditAddress(String(path[1])).roomId)
+                : path[0] === "decisions" &&
+                  rooms.has(takeoffDecisionAddress(String(path[1])).roomGuid),
+            );
+            const edited = new Set(
+              selected
+                .filter(({ path }) => path[0] === "edits")
+                .map(({ path }) => takeoffEditAddress(String(path[1])).roomId),
+            );
+            return {
+              cells: selected.map(({ path }) => path),
+              facts: [...edited].map((room) => ["bases", room] as const),
+            };
+          });
+          edits = Object.fromEntries(
+            Object.entries(stagedTakeoffEdits(doc)).filter(([room]) => rooms.has(room)),
+          );
+          decisions = Object.fromEntries(
+            Object.entries(stagedDecisions(doc)).filter(([key]) =>
+              rooms.has(takeoffDecisionAddress(key).roomGuid),
+            ),
+          );
+        }
+        return {
+          consumes,
+          effects: [
+            { kind: "document", ref: target },
+            { kind: "file", path: input.path },
+          ],
+          prepare: async () => ({ process, edits, decisions, capture }),
         };
       },
-    ]),
-  ) as Record<string, CommandFactory>;
+      run: async (ctx, execution) => {
+        const { input } = ctx.admission;
+        const admission = ctx.admission;
+        const target = modelTarget(ctx);
+        const base = input.work;
+        const frozen = execution.prepared;
+        const submitted = { edits: frozen.edits, decisions: frozen.decisions };
+        const capture = frozen.capture;
+        const native = nativeFor(ctx, execution, bridge, frozen.process);
+        captures.invalidate(target);
+        try {
+          const selected = new Set(input.zones);
+          const zones = capture!.snapshot.world.zones.filter(
+            (zone) => !selected.size || selected.has(zone.zone.guid),
+          );
+          const edits = new Map(Object.entries(submitted?.edits ?? {}));
+          const blocked = zones.filter(
+            (zone) =>
+              zone.driftSqft === null ||
+              zone.driftSqft > 0 ||
+              zone.rooms.some(
+                (room) =>
+                  room.analysis?.state !== "current" ||
+                  room.analysis.hold !== null ||
+                  room.flags.some(
+                    (flag) =>
+                      submitted?.decisions[takeoffDecisionKey(room.guid, flag)] === undefined,
+                  ),
+              ) ||
+              zone.runs.some((run) => run.orphaned > 0 || run.failures > 0),
+          );
+          if (blocked.length)
+            throw refused(`${blocked.length} selected zones are not ready to sync`);
+          const inserts = zones.flatMap((zone) =>
+            zone.rooms
+              .filter((room) => room.elementId !== null && !room.r10 && room.data !== null)
+              .map((room) => ({ zone, room })),
+          );
+          const linked = zones
+            .flatMap((zone) => zone.rooms)
+            .filter((room) => room.r10 && edits.has(room.guid));
+          if (!inserts.length && !linked.length)
+            throw refused("No eligible inserts or linked staged updates");
+          if (inserts.some(({ zone }) => !zone.tags[0]))
+            throw refused("Every inserted room requires a system tag");
+          const recordedFile = execution.recorded("file", "rhvac.sync");
+          const request: RhvacSyncRequest = recordedFile
+            ? (recordedFile.input as { request: RhvacSyncRequest }).request
+            : await (async (): Promise<RhvacSyncRequest> => {
+                const before = await (
+                  deps.openFile ??
+                  ((path) =>
+                    Effect.runPromise(rhvacOpen({ path }).pipe(Effect.provide(NodeServices.layer))))
+                )(input.path);
+                const firstRoomNumber = Math.max(0, ...before.rooms.map((room) => room.number)) + 1;
+                const bySystemName = new Map(
+                  before.systems
+                    .filter((system) => system.name.trim())
+                    .map((system) => [system.name.trim().toLocaleLowerCase(), system.number]),
+                );
+                const firstRun =
+                  before.rooms.length === 1 &&
+                  before.rooms[0]!.number === 1 &&
+                  !before.rooms[0]!.name.trim() &&
+                  before.rooms[0]!.areaSquareFeet === 0;
+                let nextSystem = Math.max(0, ...before.systems.map((system) => system.number)) + 1;
+                const systems = new Map<string, number>();
+                for (const { zone } of inserts) {
+                  const tag = zone.tags[0]!;
+                  if (systems.has(tag)) continue;
+                  const existing = bySystemName.get(tag.trim().toLocaleLowerCase());
+                  if (existing !== undefined) systems.set(tag, existing);
+                  else if (firstRun) systems.set(tag, nextSystem++);
+                  else throw refused(`system '${tag}' does not exist in this non-first-run .r10`);
+                }
+                const fileRooms = new Map(before.rooms.map((room) => [room.identifier, room]));
+                const updates = linked.map((room) => {
+                  const current = fileRooms.get(room.r10!.identifier);
+                  if (!current)
+                    throw refused(`Linked .r10 room ${room.r10!.identifier} no longer exists`);
+                  return applyStaged(current, edits.get(room.guid)!);
+                });
+                return {
+                  targetPath: input.path,
+                  updates,
+                  inserts: inserts.map(({ zone, room }, index) =>
+                    edits.has(room.guid)
+                      ? applyStaged(
+                          buildRhvacInsert(
+                            room,
+                            firstRoomNumber + index,
+                            systems.get(zone.tags[0]!)!,
+                          ),
+                          edits.get(room.guid)!,
+                        )
+                      : buildRhvacInsert(
+                          room,
+                          firstRoomNumber + index,
+                          systems.get(zone.tags[0]!)!,
+                        ),
+                  ),
+                  systems: [
+                    ...before.systems.map((system) => ({
+                      number: system.number,
+                      name: system.name,
+                    })),
+                    ...[...systems]
+                      .filter(
+                        ([, number]) => !before.systems.some((system) => system.number === number),
+                      )
+                      .map(([name, number]) => ({ name, number })),
+                  ],
+                  deleteUntouchedSeedRoom: inserts.length > 0,
+                };
+              })();
+          const result = await execution.step(
+            "file",
+            "rhvac.sync",
+            { request, expectedVersion: admission.input.fileVersion as string },
+            () =>
+              (
+                deps.syncFile ??
+                ((input, expectedVersion) =>
+                  Effect.runPromise(
+                    rhvacSync(input, expectedVersion).pipe(Effect.provide(NodeServices.layer)),
+                  ))
+              )(request, admission.input.fileVersion as string),
+          );
+          const byNumber = new Map(
+            result.insertedRooms.map((room) => [room.number, room.identifier]),
+          );
+          const fileIdentity = `${result.fileIdentity.fileName}#${result.fileIdentity.stamp}`;
+          const writes = inserts.map(({ room }, index) => {
+            const identifier = byNumber.get(request.inserts![index]!.number);
+            if (identifier === undefined)
+              throw Error("RHVAC insertion result omitted a room identity");
+            return {
+              elementId: room.elementId!,
+              link: {
+                identifier,
+                fileIdentity,
+                syncedAt: new Date().toISOString(),
+                lastSyncedSqft: room.sqft,
+              },
+            };
+          });
+          if (writes.length) {
+            const recordedLinks = execution.recorded("native", "takeoffs.rhvac-links");
+            await native("takeoffs.rhvac-links", recordedLinks?.input ?? { writes });
+          }
+          let retirement: unknown;
+          if (base) {
+            const consumed = new Map(
+              [...linked, ...inserts.map(({ room }) => room)]
+                .filter((room) => edits.has(room.guid))
+                .map((room) => [room.guid, edits.get(room.guid)!]),
+            );
+            retirement = await execution.retireWork(
+              base.key,
+              "takeoffs",
+              [...consumed].flatMap(([roomId, edit]) =>
+                Object.keys(edit.next).map((field) => [
+                  "edits",
+                  takeoffEditKey(roomId, field as keyof typeof edit.next),
+                ]),
+              ),
+            );
+          }
+          return {
+            inserted: result.insertedRooms.length,
+            updated: result.updated,
+            text: `synced ${result.insertedRooms.length} inserted and ${result.updated} updated rooms into ${input.path}`,
+            file: result,
+            retirement,
+          };
+        } finally {
+          captures.invalidate(target);
+        }
+      },
+    }),
+  };
 }
 
 const WALL_ASSEMBLY =

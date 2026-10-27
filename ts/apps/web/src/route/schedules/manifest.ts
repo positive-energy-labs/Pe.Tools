@@ -85,7 +85,7 @@ async function pushStaged(ctx: Ctx) {
   if (row.state === "failed" && row.refusal?.kind === "stale") {
     const cells = row.refusal.consumed.flatMap((entry) =>
       entry.kind === "work"
-        ? entry.paths.flatMap((path) =>
+        ? entry.probe.paths.flatMap((path) =>
             path[0] === "cells" && typeof path[1] === "string" ? [path[1]] : [],
           )
         : [],

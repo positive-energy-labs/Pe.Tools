@@ -1,29 +1,28 @@
 import { Effect } from "effect";
 import { NodeServices } from "@effect/platform-node";
-import type { CommandReads } from "./command-executor.ts";
+import type { CommandResources } from "./command-executor.ts";
 import type { RevitBridge } from "./bridge.ts";
 import type { FamilyActionDependencies } from "./family-actions.ts";
 import { assertFresh, documentMarks } from "./document-marks.ts";
-import { readOriginalProcess, readNativeReceipt } from "./native-receipts.ts";
+import { readOriginalProcess } from "./native-receipts.ts";
 import { readMember } from "./settings.ts";
 import { captureDirectory, listPackages } from "./packages.ts";
 import { readMachineSession } from "./machine.ts";
-import { actionWorkspace } from "./takeoff-actions.ts";
-import { CANCEL_OPERATION_KEY } from "./bridge.ts";
 import { onePackage } from "./packages.ts";
 import { join } from "node:path";
+import { readFile } from "node:fs/promises";
+import { createHash } from "node:crypto";
+import type { ActionReceipt } from "@pe/agent-contracts";
+import { readBootstrapIdle, readBootstrapInstallation } from "./bootstrap.ts";
 
 /** Current resource facts only. ActionJournal owns comparisons and every async fence. */
-export function commandReads(
+export function commandResources(
   bridge: RevitBridge["Service"],
   deps: FamilyActionDependencies,
-): CommandReads {
+  readReceipt: (id: string) => Promise<ActionReceipt | undefined>,
+): CommandResources {
   return {
-    work: deps.workspace ?? actionWorkspace(),
-    recover(step) {
-      if (!step.process) throw Error("No exact native process was captured for this step");
-      return readNativeReceipt(step, step.process, deps.sdk);
-    },
+    work: deps.workspace,
     async effectPath(effect) {
       const listing = await listPackages(deps.podsRoot);
       if (listing.unreadable.length)
@@ -49,21 +48,37 @@ export function commandReads(
       )
         throw Error("Target document lifetime or kind differs from the command contract");
     },
-    async cancel(requestId) {
-      const answer = await Effect.runPromise(bridge.invoke(CANCEL_OPERATION_KEY, { requestId }));
-      const result = answer.value as { cancelled?: boolean; message?: string } | null;
-      if (result?.cancelled === false)
-        throw Error(result.message ?? "Native request is not running");
-      return result;
-    },
-    async read(dependency) {
+    async probe(dependency) {
       switch (dependency.kind) {
+        case "receipt": {
+          const current = await readReceipt(dependency.probe.id);
+          return !!current && current.key === dependency.probe.key && current.state === "succeeded";
+        }
+        case "capture":
+          return createHash("sha256")
+            .update(Buffer.from(dependency.probe.bytesBase64, "base64"))
+            .digest("hex");
+        case "file":
+          return readFile(dependency.probe.path).then(
+            (bytes) => createHash("sha256").update(bytes).digest("hex"),
+            (error: NodeJS.ErrnoException) => {
+              if (error.code === "ENOENT") return null;
+              throw error;
+            },
+          );
+        case "sdk-installation":
+          return readBootstrapInstallation(dependency.probe.year, deps.sdk);
+        case "sdk-idle":
+          return readBootstrapIdle(deps.sdk);
         case "member":
           return (
             deps.runPods ??
             ((effect) => Effect.runPromise(effect.pipe(Effect.provide(NodeServices.layer))))
           )(
-            readMember({ pod: dependency.pod, path: dependency.path }, { podsRoot: deps.podsRoot }),
+            readMember(
+              { pod: dependency.probe.pod, path: dependency.probe.path },
+              { podsRoot: deps.podsRoot },
+            ),
           ).then(
             (value) => value.sha256,
             (error: { statusCode?: number }) => {
@@ -72,15 +87,15 @@ export function commandReads(
             },
           );
         case "document-mark":
-          assertFresh(documentMarks(bridge), dependency.ref, dependency.takenAt);
+          assertFresh(documentMarks(bridge), dependency.probe.ref, dependency.probe.takenAt);
           return true;
         case "incarnation": {
           const actual = await readOriginalProcess(
-            dependency.process.pid,
-            Date.parse(dependency.process.processStartUtc),
+            dependency.probe.process.pid,
+            Date.parse(dependency.probe.process.processStartUtc),
             deps.sdk,
           );
-          const target = dependency.target;
+          const target = dependency.probe.target;
           if (target.kind === "document" || target.kind === "session") {
             const session = (await Effect.runPromise(bridge.list)).find(
               (row) =>
@@ -98,22 +113,22 @@ export function commandReads(
                 "Original process incarnation or document lifetime is no longer available",
               );
           }
-          return actual;
+          return true;
         }
         case "census": {
-          if (dependency.process) {
-            const session = await readMachineSession(dependency.process);
+          if (dependency.probe.process) {
+            const session = await readMachineSession(dependency.probe.process);
             if (!session.documents) throw Error("SDK document census unavailable");
             return session.documents.map((doc) => doc.openId).sort();
           }
           const session = (await Effect.runPromise(bridge.list)).find(
-            (row) => row.sessionId === dependency.session,
+            (row) => row.sessionId === dependency.probe.session,
           );
           if (!session?.state) throw Error("Document census unavailable");
           return session.state.openDocuments.map((doc) => doc.openId).sort();
         }
         case "directory":
-          return captureDirectory(dependency.path);
+          return directorySnapshot(await captureDirectory(dependency.probe.path));
         case "catalog": {
           const listing = await listPackages(deps.podsRoot);
           if (listing.unreadable.length)
@@ -129,3 +144,9 @@ export function commandReads(
     },
   };
 }
+
+/** Directory freshness is membership/content/diagnostics, not duplicated file payload bytes. */
+export const directorySnapshot = (captured: Awaited<ReturnType<typeof captureDirectory>>) => ({
+  members: captured.members.map(({ path, sha256 }) => ({ path, sha256 })),
+  diagnostics: captured.diagnostics,
+});

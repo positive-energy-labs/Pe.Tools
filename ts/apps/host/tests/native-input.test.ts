@@ -4,14 +4,15 @@ import { join } from "node:path";
 import { expect, test } from "vite-plus/test";
 import { validateNativeInput } from "../src/native-input.ts";
 import { ActionJournal } from "../src/action-journal.ts";
-import { fixtureCommand } from "./command-fixture.ts";
+import { fixtureCommand, invokeFixtureCommand } from "./command-fixture.ts";
 
 test("persisted native input must still satisfy C# metadata before any effect callback", async () => {
   const directory = await mkdtemp(join(tmpdir(), "pe-native-input-"));
   try {
     const owner = new ActionJournal(join(directory, "journal.jsonl"));
     let effects = 0;
-    await owner.invoke(
+    await invokeFixtureCommand(
+      owner,
       { id: "schema", key: "test.native-schema", target: { kind: "host" }, input: {} },
       { caller: { kind: "human", via: "local" }, basis: null },
       fixtureCommand(

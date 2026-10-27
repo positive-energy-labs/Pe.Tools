@@ -117,7 +117,7 @@ export function capturedPlace(
 /** Action receipts retain their execution document, even when the chat head has since moved. */
 export function actionPlace(route: string, receipt: ActionReceipt | undefined): CapturedPlace {
   const work = receipt?.consumes.find((entry) => entry.kind === "work");
-  const scope = workKeySchema.safeParse(work?.kind === "work" ? work.handle.key : undefined);
+  const scope = workKeySchema.safeParse(work?.kind === "work" ? work.probe.handle.key : undefined);
   const target = receipt?.target;
   return capturedPlace(
     route,
@@ -233,9 +233,7 @@ export function actionCall(toolName: string, args: unknown, result: unknown): Ac
 }
 
 /**
- * The pane a host action opens in: the plugin route whose manifest declares a verb that `does`
- * it, or `runs` it from its views. A key no manifest declares (or two declare) has no pane; its
- * record keeps the receipt link.
+ * A command opens its portable tool's registered pane. Other operations retain their receipt link.
  */
 export const actionRoute = (key: string): ChatPluginRoute | null => publicRoutes.actionRoute(key);
 

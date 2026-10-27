@@ -178,13 +178,7 @@ export const actionAdmissionSchema = z.strictObject({
 });
 export type ActionAdmission = z.infer<typeof actionAdmissionSchema>;
 
-import {
-  workCommand,
-  workHandleSchema,
-  workLocations,
-  type WorkHandle,
-  type Tool,
-} from "./command.ts";
+import { workCommand, type Tool } from "./command.ts";
 import { settingsRouteState } from "./settings.ts";
 import { familyDraftRouteState } from "./family.ts";
 import { familiesRouteState } from "./families.ts";
@@ -197,7 +191,7 @@ export const tools = {
   pods: {
     name: "pods",
     says: settingsRouteState.description,
-    work: workLocations(settingsRouteState, [["fields", "*"]]),
+    work: { ...settingsRouteState, editable: [["fields", "*"]] },
     commands: {
       "settings.observe": workCommand("pods", familyActions["settings.observe"]),
       "settings.write": workCommand("pods", familyActions["settings.write"]),
@@ -206,17 +200,10 @@ export const tools = {
   family: {
     name: "family",
     says: familyDraftRouteState.description,
-    work: workLocations(familyDraftRouteState, [["cells", "*"]]),
+    work: { ...familyDraftRouteState, editable: [["cells", "*"]] },
     commands: {
       "family.attach-spec": workCommand("family", familyActions["family.attach-spec"]),
-      "family.observe": {
-        ...familyActions["family.observe"],
-        input: z.intersection(
-          familyActions["family.observe"].input,
-          z.object({ work: workHandleSchema.optional() }),
-        ),
-        work: { route: "family", bind: (input: object, work: WorkHandle) => ({ ...input, work }) },
-      },
+      "family.observe": workCommand("family", familyActions["family.observe"], { optional: true }),
       "family.capture": workCommand("family", familyActions["family.capture"]),
       "family.plan": workCommand("family", familyActions["family.plan"]),
       "family.apply": workCommand("family", familyActions["family.apply"]),
@@ -226,7 +213,7 @@ export const tools = {
   families: {
     name: "families",
     says: familiesRouteState.description,
-    work: workLocations(familiesRouteState, [["cells", "*"], ["patch"], ["scope"]]),
+    work: { ...familiesRouteState, editable: [["cells", "*"], ["patch"], ["scope"]] },
     commands: {
       "families.capture": workCommand("families", familyActions["families.capture"]),
       "families.plan": workCommand("families", familyActions["families.plan"]),
@@ -237,7 +224,7 @@ export const tools = {
   "parameter-links": {
     name: "parameter-links",
     says: parameterLinksRouteState.description,
-    work: workLocations(parameterLinksRouteState, [["profile"]]),
+    work: { ...parameterLinksRouteState, editable: [["profile"]] },
     commands: {
       "parameter-links.apply": workCommand(
         "parameter-links",
@@ -248,7 +235,7 @@ export const tools = {
   schedules: {
     name: "schedules",
     says: scheduleGridRouteState.description,
-    work: workLocations(scheduleGridRouteState, [["cells", "*"]]),
+    work: { ...scheduleGridRouteState, editable: [["cells", "*"]] },
     commands: {
       "schedule.grid.push": workCommand("schedules", scheduleActions["schedule.grid.push"]),
       "schedule.capture": workCommand("schedules", scheduleActions["schedule.capture"]),
@@ -258,10 +245,13 @@ export const tools = {
   takeoffs: {
     name: "takeoffs",
     says: takeoffsRouteState.description,
-    work: workLocations(takeoffsRouteState, [
-      ["edits", "*"],
-      ["decisions", "*"],
-    ]),
+    work: {
+      ...takeoffsRouteState,
+      editable: [
+        ["edits", "*"],
+        ["decisions", "*"],
+      ],
+    },
     commands: {
       "takeoffs.initialize": definitions["takeoffs.initialize"],
       "takeoffs.adopt": definitions["takeoffs.adopt"],
@@ -272,10 +262,13 @@ export const tools = {
   rooms: {
     name: "rooms",
     says: roomsRouteState.description,
-    work: workLocations(roomsRouteState, [
-      ["edits", "*"],
-      ["marks", "*"],
-    ]),
+    work: {
+      ...roomsRouteState,
+      editable: [
+        ["edits", "*"],
+        ["marks", "*"],
+      ],
+    },
     commands: {
       "rooms.partition": workCommand("rooms", definitions["rooms.partition"]),
       "rooms.draw": workCommand("rooms", definitions["rooms.draw"]),
@@ -286,27 +279,30 @@ export const tools = {
   ducts: {
     name: "ducts",
     says: ductsRouteState.description,
-    work: workLocations(ductsRouteState, [
-      ["calculation", "*"],
-      ["assumptions", "*"],
-      ["rules", "*"],
-      ["catalogs", "*"],
-      ["ruleAssignments", "*"],
-      ["terminalDrops", "*"],
-      ["componentDrops", "*"],
-      ["esp", "*"],
-      ["equipmentFlows", "*"],
-      ["roles", "*"],
-      ["loads", "*"],
-      ["flows", "*"],
-      ["parameters", "*"],
-      ["subject", "*"],
-      ["claims", "*"],
-      ["labelParameter"],
-      ["workingPhase"],
-      ["designFriction"],
-      ["systemColours"],
-    ]),
+    work: {
+      ...ductsRouteState,
+      editable: [
+        ["calculation", "*"],
+        ["assumptions", "*"],
+        ["rules", "*"],
+        ["catalogs", "*"],
+        ["ruleAssignments", "*"],
+        ["terminalDrops", "*"],
+        ["componentDrops", "*"],
+        ["esp", "*"],
+        ["equipmentFlows", "*"],
+        ["roles", "*"],
+        ["loads", "*"],
+        ["flows", "*"],
+        ["parameters", "*"],
+        ["subject", "*"],
+        ["claims", "*"],
+        ["labelParameter"],
+        ["workingPhase"],
+        ["designFriction"],
+        ["systemColours"],
+      ],
+    },
     commands: {
       "ducts.preview-losses": workCommand("ducts", ductsActions["ducts.preview-losses"]),
       "ducts.apply-losses": workCommand("ducts", ductsActions["ducts.apply-losses"]),

@@ -931,6 +931,7 @@ export function isTsOnlyOperationKey(key: string): key is TsOnlyOperationKey {
 export type HostLocalCatalogEntry = HostOperationDefinition & {
   readonly key: TsOnlyOperationKey;
   readonly origin: "host-local";
+  readonly principal?: readonly ("human" | "pea")[];
 };
 
 /**
@@ -960,6 +961,7 @@ export const tsOnlyOperationCatalog: readonly HostLocalCatalogEntry[] = [
   },
   {
     key: "host.shell.open",
+    principal: ["human", "pea"],
     origin: "host-local",
     displayName: "Open Path",
     description:
@@ -1221,6 +1223,7 @@ export const tsOnlyOperationCatalog: readonly HostLocalCatalogEntry[] = [
   },
   {
     key: "aps.auth.login",
+    principal: ["human"],
     origin: "host-local",
     displayName: "APS Auth Login",
     description: "Begin an Autodesk Platform Services auth flow and persist the resulting token.",
@@ -1234,6 +1237,7 @@ export const tsOnlyOperationCatalog: readonly HostLocalCatalogEntry[] = [
   },
   {
     key: "aps.auth.logout",
+    principal: ["human"],
     origin: "host-local",
     displayName: "APS Auth Logout",
     description: "Clear the persisted Autodesk Platform Services token.",

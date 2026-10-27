@@ -1,7 +1,7 @@
 import { createHash, randomUUID } from "node:crypto";
 import { scheduleWorkId } from "./schedule-actions.ts";
 import { existsSync } from "node:fs";
-import { mkdir, mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
+import { mkdir, mkdtemp, rm, writeFile } from "node:fs/promises";
 import { join, resolve } from "node:path";
 
 import { createDemoRhvac } from "./demo-rhvac.ts";
@@ -16,11 +16,10 @@ import {
   importSeed,
   memberWork,
   settingsRouteState,
-  takeoffsRouteState,
   familiesRouteState,
   familyDraftRouteState,
-  parameterLinksRouteState,
   scheduleGridRouteState,
+  tools,
   type WorkKey,
   bindWork,
   workKey,
@@ -47,6 +46,7 @@ import { readFamily } from "./family-actions.ts";
 import { hostProcessIdentity } from "@pe/host-contracts/contracts";
 import type { ScheduleCellsApply } from "@pe/host-contracts/generated";
 import { validateDispatch, markDispatched } from "./action-dispatch.ts";
+import { fileRouteDocumentStore } from "./route-document-store.ts";
 
 /** The command rule a simulated demo SDK envelope carries instead of a real resolution. */
 const SIMULATED_SDK = "simulated-demo";
@@ -161,15 +161,14 @@ export async function createDemoOwner(parent: string, raw: unknown) {
     const journal = new ActionJournal(join(root, "journal.json"));
     const work = new RouteWorkspace({
       registrations: [
-        settingsRouteState,
-        takeoffsRouteState,
-        familiesRouteState,
-        familyDraftRouteState,
-        parameterLinksRouteState,
-        scheduleGridRouteState,
+        tools.pods.work,
+        tools.takeoffs.work,
+        tools.families.work,
+        tools.family.work,
+        tools["parameter-links"].work,
+        tools.schedules.work,
       ].map((spec) => ({
         spec,
-        handlers: {},
         // The same door the live host runs, over the simulated catalog.
         ...(spec.route === familiesRouteState.route
           ? {
@@ -184,36 +183,7 @@ export async function createDemoOwner(parent: string, raw: unknown) {
             }
           : {}),
       })),
-      store: {
-        async getState({ targetKey, route }) {
-          try {
-            return JSON.parse(
-              await readFile(
-                join(
-                  root,
-                  "work",
-                  `${createHash("sha256").update(`${targetKey}:${route}`).digest("hex")}.json`,
-                ),
-                "utf8",
-              ),
-            ) as unknown;
-          } catch (error) {
-            if ((error as NodeJS.ErrnoException).code === "ENOENT") return undefined;
-            throw error;
-          }
-        },
-        async setState({ targetKey, route, value }) {
-          await mkdir(join(root, "work"), { recursive: true });
-          await writeFile(
-            join(
-              root,
-              "work",
-              `${createHash("sha256").update(`${targetKey}:${route}`).digest("hex")}.json`,
-            ),
-            JSON.stringify(value),
-          );
-        },
-      },
+      store: fileRouteDocumentStore(join(root, "work")),
     });
     // Both route demos are file-free: their inputs are parsed JSON in the seed, never a path.
     const originalFiles =

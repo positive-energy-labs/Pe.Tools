@@ -340,16 +340,13 @@ type Sources = {
   /** The held acquisition that started the Revit behind this bridge session. */
   acquiredSession: (session: string) => string | null;
   deviceThread?: (device: string) => string | null;
-  /** The harness access switch (ADR 0021): true when Full, false when Guarded. */
-  fullAccess: () => boolean;
 };
 const sources: Sources = {
   heads: null,
   acquired: () => null,
   acquiredSession: () => null,
-  fullAccess: () => false,
 };
-/** Bound once at boot (and by tests): the head store, Machine's acquisitions, the access switch. */
+/** Bound at boot: independent device/Page targets, acquisition evidence and run consent. */
 export const bindControl = (bound: Partial<Sources>) => void Object.assign(sources, bound);
 export const documentAcquisition = (lifetime: DocumentRef) => sources.acquired(lifetime);
 export const sessionAcquisition = (session: string) => sources.acquiredSession(session);
@@ -459,7 +456,7 @@ export function admitScript(
     throw refuse(
       "script.ungranted-documents",
       door,
-      `Refused at ${door}: scripts can access every open document, and Pea may not write these. Add them to this thread, close them, or run on a separate copy: ${ungranted.map(refText).join(", ")}.`,
+      `Refused at ${door}: scripts can access every open document; this caller lacks authority for ${ungranted.map(refText).join(", ")}. Bind the Page or device to those documents, close them, or use a separate copy.`,
     );
 }
 
@@ -470,8 +467,9 @@ export function admitScript(
  * the target document, so the target needs no write authority; the guard does not roll back a
  * commit on a sibling document, so `admitScript`'s K9 census still holds for every other open
  * document (ADR 0021 keeps it until a rollback group per open document is proven in Revit). It is
- * a read for a human, for Pea on an exact document, and for a Page pinned by a human to this exact
- * document. External MCP keeps it a write. NoTransaction and WriteTransaction are always writes.
+ * a read for a human and for a Page pinned by a human to this exact document. Pea scripts use
+ * root-run consent because rollback does not prove sibling-document or filesystem purity.
+ * External MCP keeps it a write. NoTransaction and WriteTransaction are always writes.
  */
 export const readsOnly = (key: string, input: unknown): boolean =>
   key === "scripting.execute" &&
@@ -496,8 +494,8 @@ export const consentedRead = (
 /**
  * Admit one crossing at `door`, or throw `Refused`. Null means the crossing needs no basis: a
  * consented read, a host leaf, or a lifecycle selection whose census belongs to the Instances
- * action. `scriptReads` is `readsOnly`: a read for Pea on an exact document and for a human-pinned
- * Page's exact target; the script's K9 sibling census follows in `admitScript`.
+ * action. A human-pinned Page's exact read target still leaves its script's sibling census
+ * subject to `admitScript`.
  */
 export function admitCrossing(
   caller: Caller,
@@ -576,7 +574,7 @@ function admitTarget(
   throw refuse(
     "grant.required",
     door,
-    `Refused at ${door}: this would write your document ${refText(lifetime)}, which thread ${thread} does not target and Pea did not open. Add it to this thread's documents in the composer, switch access to Full, or open a copy.`,
+    `Refused at ${door}: this Page or device would write document ${refText(lifetime)}, which thread ${thread} does not target. Add it to that thread's documents in the composer or bind a copy.`,
     { remedy: "Add the document to this thread in the composer.", lifetime },
   );
 }

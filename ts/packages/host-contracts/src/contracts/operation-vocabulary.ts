@@ -29,6 +29,10 @@ export const hostOperationNeedsSchema = Schema.Literals([
 ]);
 export type HostOperationNeeds = Schema.Schema.Type<typeof hostOperationNeedsSchema>;
 
+/** Source vocabulary of C# OpActor; product eligibility projects to actual principals. */
+export const hostOperationActorSchema = Schema.Literals(["any", "human"]);
+export type HostOperationActor = Schema.Schema.Type<typeof hostOperationActorSchema>;
+
 export const hostErrorKindSchema = Schema.Literals([
   "Disconnected",
   "BridgeBusy",
@@ -56,11 +60,14 @@ export const hostOperationDefinitionSchema = Schema.Struct({
   description: Schema.optional(Schema.String),
   searchTerms: Schema.optional(Schema.Array(Schema.String)),
   intent: Schema.optional(hostOperationIntentSchema),
+  actor: Schema.optional(hostOperationActorSchema),
   usesTransactions: Schema.optional(Schema.Boolean),
   needs: hostOperationNeedsSchema,
   costTier: Schema.optional(hostOperationCostTierSchema),
   visibility: Schema.optional(hostOperationVisibilitySchema),
   requestExamples: Schema.optional(Schema.Array(hostOperationRequestExampleSchema)),
+  requestSchemaJson: Schema.optional(Schema.String),
+  responseSchemaJson: Schema.optional(Schema.String),
   safeDefaultRequestJson: Schema.optional(Schema.NullOr(Schema.String)),
   callGuidance: Schema.optional(Schema.Array(Schema.String)),
 });

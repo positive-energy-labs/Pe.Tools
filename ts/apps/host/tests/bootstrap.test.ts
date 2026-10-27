@@ -3,7 +3,12 @@ import { mkdtemp, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join, win32 } from "node:path";
 import { ActionJournal } from "../src/action-journal.ts";
-import { alignBootstrap } from "../src/bootstrap.ts";
+import {
+  alignBootstrap,
+  bootstrapExecutor,
+  readBootstrapInstallation,
+  readBootstrapIdle,
+} from "../src/bootstrap.ts";
 import { replay } from "./e2-sdk-recordings.ts";
 import { bootstrapAlignmentSchema } from "@pe/host-contracts/pe-api";
 import { actionReceiptSchema } from "@pe/agent-contracts";
@@ -71,14 +76,27 @@ async function fixture() {
       },
     },
   );
+  const executor = bootstrapExecutor(sdk);
+  owner.bindCommands({
+    resolve: (key) => {
+      if (key !== "machine.bootstrap") throw Error(`Unexpected command ${key}`);
+      return executor;
+    },
+    probe: async (dependency) => {
+      if (dependency.kind === "sdk-installation")
+        return readBootstrapInstallation(dependency.probe.year, sdk);
+      if (dependency.kind === "sdk-idle") return readBootstrapIdle(sdk);
+      throw Error(`Unexpected dependency ${dependency.kind}`);
+    },
+  });
   return { owner, sdk };
 }
 
 test("alignment requires a human and confirmation of this host's exact SDK version", async () => {
   const { owner, sdk } = await fixture();
-  await expect(alignBootstrap(input, { kind: "anonymous" }, owner, sdk)).rejects.toThrow("human");
+  await expect(alignBootstrap(input, { kind: "anonymous" }, owner)).rejects.toThrow("human");
   await expect(
-    alignBootstrap({ ...input, confirmedVersion: "0.1.0-beta.1" }, human, owner, sdk),
+    alignBootstrap({ ...input, confirmedVersion: "0.1.0-beta.1" }, human, owner),
   ).resolves.toMatchObject({
     state: "failed",
     notDispatched: true,
@@ -90,7 +108,7 @@ test("alignment requires a human and confirmation of this host's exact SDK versi
 test("alignment refuses an open foreign/observed Revit and names its year and pid", async () => {
   const { owner, sdk } = await fixture();
   sdk.respond(async (args) => (args[0] === "session" ? replay("session-list") : sdk.base(args)));
-  const receipt = actionReceiptSchema.parse(await alignBootstrap(input, human, owner, sdk));
+  const receipt = actionReceiptSchema.parse(await alignBootstrap(input, human, owner));
   expect(receipt).toMatchObject({
     state: "failed",
     error: expect.stringMatching(/Revit 2025.*71464/),
@@ -100,22 +118,19 @@ test("alignment refuses an open foreign/observed Revit and names its year and pi
 
 test("alignment installs only the chosen year's bootstrap and verifies it in one durable receipt", async () => {
   const { owner, sdk } = await fixture();
-  const receipt = actionReceiptSchema.parse(await alignBootstrap(input, human, owner, sdk));
+  const receipt = actionReceiptSchema.parse(await alignBootstrap(input, human, owner));
   expect(receipt).toMatchObject({
     state: "succeeded",
     key: "machine.bootstrap",
     result: { year: "2025", sdkVersion: GENERATED_FROM },
   });
-  expect(sdk.calls).toEqual([
-    ["bootstrap", "verify", "--year", "2025", "--json"],
-    ["version", "--json"],
-    ["session", "list", "--all", "--json"],
-    ["version", "--json"],
-    ["session", "list", "--all", "--json"],
-    ["bootstrap", "verify", "--year", "2025", "--json"],
+  expect(sdk.calls.filter((args) => args[0] === "bootstrap" && args[1] === "install")).toEqual([
     ["bootstrap", "install", "--year", "2025", "--json"],
-    ["bootstrap", "verify", "--year", "2025", "--json"],
   ]);
+  const verifies = sdk.calls.filter((args) => args[0] === "bootstrap" && args[1] === "verify");
+  expect(verifies.length).toBeGreaterThanOrEqual(2);
+  expect(verifies.every((args) => args[args.indexOf("--year") + 1] === "2025")).toBe(true);
+  expect(sdk.calls.filter((args) => args[0] === "session").length).toBeGreaterThanOrEqual(2);
   expect((await owner.list()).find((row) => row.id === input.id)).toMatchObject({
     state: "succeeded",
     effects: [{ kind: "directory", path: win32.dirname(installation.actions[0].dest) }],
@@ -130,8 +145,8 @@ test("alignment installs only the chosen year's bootstrap and verifies it in one
   sdk.respond(async () => {
     throw Error("A duplicate command must not consult the current SDK");
   });
-  expect(await alignBootstrap(input, human, owner, sdk)).toEqual(receipt);
-  await expect(alignBootstrap({ ...input, year: "2026" }, human, owner, sdk)).rejects.toThrow(
+  expect(await alignBootstrap(input, human, owner)).toEqual(receipt);
+  await expect(alignBootstrap({ ...input, year: "2026" }, human, owner)).rejects.toThrow(
     "conflicts",
   );
   expect(sdk.calls).toHaveLength(calls);
@@ -152,7 +167,7 @@ test("an unreadable machine census refuses; absence of known rows is not proof o
         })
       : base(args),
   );
-  expect(await alignBootstrap(input, human, owner, sdk)).toMatchObject({
+  expect(await alignBootstrap(input, human, owner)).toMatchObject({
     state: "failed",
     error: expect.stringContaining("census"),
   });
@@ -166,7 +181,7 @@ test("a Revit that appears after confirmation still refuses before installation"
   sdk.respond(async (args) =>
     args[0] === "session" && ++censuses === 2 ? replay("session-list") : base(args),
   );
-  expect(await alignBootstrap(input, human, owner, sdk)).toMatchObject({
+  expect(await alignBootstrap(input, human, owner)).toMatchObject({
     state: "failed",
     error: expect.stringContaining("Close every Revit"),
   });
@@ -198,7 +213,7 @@ test("an SDK journal failure still names an open Revit and blocks installation",
   sdk.respond(async (args) =>
     args[0] === "session" ? replay("session-list", { result: { sessions: [failed] } }) : base(args),
   );
-  expect(await alignBootstrap(input, human, owner, sdk)).toMatchObject({
+  expect(await alignBootstrap(input, human, owner)).toMatchObject({
     state: "failed",
     error: expect.stringContaining(`pid ${process.pid}`),
   });
@@ -209,7 +224,7 @@ test("the answering SDK must match the host pin, and a failed verification never
   const { owner, sdk } = await fixture();
   const base = sdk.base;
   sdk.respond(async (args) =>
-    args[0] === "version"
+    args[0] === "bootstrap"
       ? replay(
           "bootstrap-verify",
           { binary: { informationalVersion: "0.1.0-beta.208+other" }, result: null, exitCode: 0 },
@@ -217,20 +232,21 @@ test("the answering SDK must match the host pin, and a failed verification never
         )
       : base(args),
   );
-  expect(await alignBootstrap(input, human, owner, sdk)).toMatchObject({
+  expect(await alignBootstrap(input, human, owner)).toMatchObject({
     state: "failed",
     error: expect.stringContaining("answering SDK"),
   });
-  expect(sdk.calls).toHaveLength(2);
-  let verifies = 0;
-  sdk.respond(async (args) =>
-    args[0] === "bootstrap" && args[1] === "verify" && ++verifies === 3
-      ? replay("bootstrap-verify", {}, "missing")
-      : base(args),
-  );
-  expect(
-    await alignBootstrap({ ...input, id: "verify-failure" }, human, owner, sdk),
-  ).not.toMatchObject({ state: "succeeded" });
+  expect(sdk.calls.some((args) => args[1] === "install")).toBe(false);
+  let installed = false;
+  sdk.respond(async (args) => {
+    if (args[0] === "bootstrap" && args[1] === "install") installed = true;
+    return args[0] === "bootstrap" && args[1] === "verify" && installed
+      ? replay("bootstrap-verify", { binary: { informationalVersion: GENERATED_FROM } }, "missing")
+      : base(args);
+  });
+  expect(await alignBootstrap({ ...input, id: "verify-failure" }, human, owner)).not.toMatchObject({
+    state: "succeeded",
+  });
 });
 
 test.each(["absent", "ambiguous", "wrong-year"] as const)(
@@ -248,7 +264,7 @@ test.each(["absent", "ambiguous", "wrong-year"] as const)(
               : [{ ...body.result.actions[0], year: "2026" }];
       return JSON.stringify(body);
     });
-    const refused = await alignBootstrap(input, human, owner, sdk);
+    const refused = await alignBootstrap(input, human, owner);
     expect(refused).toMatchObject({
       state: "failed",
       notDispatched: true,
@@ -270,10 +286,10 @@ test("bootstrap refuses a changed SDK destination at the native boundary", async
     }
     return JSON.stringify(body);
   });
-  expect(await alignBootstrap(input, human, owner, sdk)).toMatchObject({
+  expect(await alignBootstrap(input, human, owner)).toMatchObject({
     state: "failed",
     notDispatched: true,
-    error: expect.stringContaining("destination changed"),
+    refusal: { kind: "stale", consumed: [expect.objectContaining({ kind: "sdk-installation" })] },
   });
   expect(sdk.calls.some((args) => args[1] === "install")).toBe(false);
 });

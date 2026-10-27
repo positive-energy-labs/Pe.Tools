@@ -161,8 +161,9 @@ test("door 2: an unpaired external MCP client cannot write your document", async
 
 /** A receipt a human admitted, settled, ready to be controlled by someone else. */
 async function humanReceipt(id: string) {
+  const seeded = new ActionJournal(join(root, "journal.json"));
   await invokeCommand(
-    journal,
+    seeded,
     {
       ...admission(docA, id),
       caller: human,
@@ -171,7 +172,7 @@ async function humanReceipt(id: string) {
     async () => ({}),
     async () => ({}),
   );
-  await journal.wait(id);
+  await seeded.wait(id);
 }
 
 test("door 3: resume re-crosses under the current caller and never inherits the original basis", async () => {

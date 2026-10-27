@@ -30,6 +30,12 @@ export function hostActionJournal() {
   logReceipts(journal, hostLog());
   return journal;
 }
+/** A released HTTP runtime never lends its bound bridge or Work owner to its successor. */
+export function releaseHostReceipts(owner: ActionJournal) {
+  if (journal !== owner) return;
+  journal = undefined;
+  log = undefined;
+}
 
 export const recordBridgeQueue = (...args: Parameters<ActionJournal["recordQueue"]>) =>
   journal

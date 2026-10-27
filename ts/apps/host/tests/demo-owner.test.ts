@@ -101,6 +101,34 @@ test("seed observations publish once while browser edits cannot forge their basi
   expect(after.doc.fields["/family/name"].edit).toMatchObject({ value: "Local edit", by: "human" });
 });
 
+test("demo Work instances count the portable editable cells through the production store", async () => {
+  const f = await setup();
+  const census = await f.owner.work.instances();
+  expect(census).toMatchObject({ available: true, unreadable: 0, unindexed: 0 });
+  expect(census.works.find((row) => row.route === "pods")).toMatchObject({
+    unfinished: 1,
+    proposals: 0,
+    state: "ready",
+  });
+  const before = await (await f.fetch("/work")).json();
+  expect(
+    await (
+      await f.fetch(
+        "/work",
+        {
+          revision: before.revision,
+          patches: [{ path: ["fields", "/family/name", "edit"], value: null }],
+        },
+        "PATCH",
+      )
+    ).json(),
+  ).toMatchObject({ ok: true });
+  expect((await f.owner.work.instances()).works.find((row) => row.route === "pods")).toMatchObject({
+    unfinished: 0,
+    proposals: 0,
+  });
+});
+
 test("admitted demo launch uses only its labelled leaf and rejects escape or real IO fallback", async () => {
   const f = await setup();
   const submit = async (suffix: string, key: string, path: string) => {
@@ -111,7 +139,7 @@ test("admitted demo launch uses only its labelled leaf and rejects escape or rea
       target: { kind: "host" },
       input: { path },
     });
-    expect(response.ok).toBe(true);
+    expect(response.ok, await response.clone().text()).toBe(true);
     return f.owner.journal.wait(id);
   };
   expect(await submit("launch", "rhvac.launch", f.owner.r10Path)).toMatchObject({
@@ -137,9 +165,9 @@ test("simulated native outcomes carry the exact journal dispatch evidence", asyn
     target: { kind: "document", ref: f.owner.target },
     input: {},
   });
-  expect(response.ok).toBe(true);
+  expect(response.ok, await response.clone().text()).toBe(true);
   const row = await f.owner.journal.wait(id);
-  expect(row.state).toBe("succeeded");
+  expect(row.state, JSON.stringify(row)).toBe("succeeded");
   expect(row.steps).toEqual(
     expect.arrayContaining([
       expect.objectContaining({
@@ -161,9 +189,9 @@ test("a simulated lost native result retains pre-effect dispatch evidence and st
     target: { kind: "document", ref: f.owner.target },
     input: { source: { ...f.owner.member, sha256: member.sha256 } },
   });
-  expect(response.ok).toBe(true);
+  expect(response.ok, await response.clone().text()).toBe(true);
   const row = await f.owner.journal.wait(id);
-  expect(row).toMatchObject({ state: "unknown" });
+  expect(row, JSON.stringify(row)).toMatchObject({ state: "unknown" });
   expect(row.steps).toEqual(
     expect.arrayContaining([
       expect.objectContaining({
@@ -188,7 +216,7 @@ test("separate demo journals retain the same exact request ID without rewriting 
       target: { kind: "host" },
       input: { path: f.owner.r10Path },
     });
-    expect(response.ok).toBe(true);
+    expect(response.ok, await response.clone().text()).toBe(true);
     expect(await response.json()).toMatchObject({ id });
     expect(await f.owner.journal.wait(id)).toMatchObject({ id, state: "succeeded" });
     const rows = await (await f.fetch(`/actions?id=${id}`)).json();

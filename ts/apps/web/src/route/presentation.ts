@@ -46,8 +46,9 @@ export function bindCommands(
         const association = (definition as Command).work;
         const rendered = selection?.work ?? handle;
         const destination = selection?.target ?? target;
-        if (association && !rendered) throw Error("Work has not been read yet");
-        const intent = association ? association.bind(input, rendered!) : input;
+        if (association && !association.optional && !rendered)
+          throw Error("Work has not been read yet");
+        const intent = association && rendered ? association.bind(input, rendered) : input;
         const row = await runSemanticAction(
           key as keyof typeof commands,
           structuredClone(intent) as Record<string, unknown>,

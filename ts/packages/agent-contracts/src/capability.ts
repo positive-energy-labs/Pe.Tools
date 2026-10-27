@@ -16,15 +16,22 @@ import {
 } from "./contribution.ts";
 import type { Machine } from "./machine.ts";
 import { principalSchema, type Principal } from "./principal.ts";
+import type { HostOperationActor } from "@pe/host-contracts/contracts";
+
+/** Project C# source metadata once; Work and semantic commands use actual principals. */
+export const nativePrincipals = (actor: HostOperationActor | undefined): Principal[] | undefined =>
+  actor === "human" ? ["human"] : undefined;
 
 /** Native/Work metadata projects to actual callers; service contexts never operate the product. */
 export function capabilityPrincipals(
   mutates: boolean,
-  actor: "any" | "human" | "agent" = "any",
+  principal?: readonly Principal[],
 ): Principal[] {
-  if (actor === "human") return ["human"];
-  const permitted: Principal[] = actor === "agent" ? ["pea", "page"] : ["human", "pea", "page"];
-  return mutates ? permitted : [...permitted, "external-mcp"];
+  return principal
+    ? [...principal]
+    : mutates
+      ? ["human", "pea", "page"]
+      : ["human", "pea", "page", "external-mcp"];
 }
 
 export const capabilityKindSchema = z.enum([

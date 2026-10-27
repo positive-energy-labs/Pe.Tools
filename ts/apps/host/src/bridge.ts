@@ -1,3 +1,4 @@
+import { StepFailure } from "./command-executor.ts";
 import { Context, Deferred, Effect, Layer, PubSub, Ref, Schema } from "effect";
 import type { HttpServerRequest, HttpServerResponse } from "effect/unstable/http";
 import { HttpServerResponse as Response } from "effect/unstable/http";
@@ -66,7 +67,7 @@ export type BridgeRequest = {
 /** The op that must never wait behind the op it names. */
 export const CANCEL_OPERATION_KEY = "op.cancel";
 
-/** Preserve the bridge error itself across the Promise boundary, including dispatch evidence. */
+/** Normalize independently observed bridge outcomes at the transport boundary. */
 export async function invokeBridge<A = unknown>(
   bridge: RevitBridge["Service"],
   target: { session: string; openId?: string | null },
@@ -77,7 +78,29 @@ export async function invokeBridge<A = unknown>(
   const result = await Effect.runPromise(
     Effect.result(bridge.invoke(key, input, target.session, target.openId ?? null, requestId)),
   );
-  if (result._tag === "Failure") throw result.failure;
+  if (result._tag === "Failure") {
+    const error = result.failure;
+    if (error instanceof BridgeError) {
+      const refused =
+        error.evidence.notDispatched ||
+        ["CancelledBeforeDispatch", "RefusedQueueUnresponsive", "RefusedQueueDisposed"].includes(
+          error.nativeOutcome ?? "",
+        );
+      const outcome = refused
+        ? "refused"
+        : error.evidence.dispatched
+          ? error.statusCode === 499
+            ? "cancelled"
+            : "failed"
+          : "unknown";
+      throw new StepFailure(error.message, error.statusCode, outcome, error.evidence.result, {
+        nativeOutcome: error.nativeOutcome,
+        issues: error.evidence.issues ? [...error.evidence.issues] : undefined,
+      });
+    }
+    if (error instanceof NoRevitSession) throw new StepFailure(error.message, 503, "refused");
+    throw error;
+  }
   return result.success.value as A;
 }
 

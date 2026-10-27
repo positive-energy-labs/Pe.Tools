@@ -3,6 +3,7 @@ import type { HostSessionScope } from "@pe/host-contracts/operation-types";
 import { contextFetch as fetch } from "@pe/runtime/context";
 import {
   capabilityPrincipals,
+  nativePrincipals,
   DUCTS_ANALYSIS_FIRST_CALL,
   DUCTS_FINDS,
   ductsAnalysisRequestSchema,
@@ -43,8 +44,7 @@ import type { SkillSnapshot } from "./skill-publication.ts";
 import type { RouteRegistration } from "./routes.ts";
 
 type OpsCatalogEntry = HostOperationDefinition & {
-  requestSchemaJson?: string;
-  responseSchemaJson?: string;
+  principal?: readonly import("@pe/agent-contracts").Principal[];
 };
 
 export interface CapabilitySources {
@@ -111,7 +111,10 @@ export function buildCapabilities(sources: CapabilitySources): Capability[] {
         title: key,
         description: action.says,
         needs: action.needs,
-        principal: capabilityPrincipals(action.effect === "command"),
+        principal: capabilityPrincipals(
+          action.effect === "command",
+          (action as import("@pe/agent-contracts").Command).principal,
+        ),
         effect: action.effect === "command" ? "command" : "query",
         mutates: action.effect === "command",
         input: z.toJSONSchema(action.input) as Record<string, unknown>,
@@ -143,7 +146,10 @@ export function buildCapabilities(sources: CapabilitySources): Capability[] {
         title: key,
         description: action.says,
         needs: action.needs,
-        principal: capabilityPrincipals(action.effect === "command"),
+        principal: capabilityPrincipals(
+          action.effect === "command",
+          (action as import("@pe/agent-contracts").Command).principal,
+        ),
         effect: action.effect === "command" ? "command" : "query",
         mutates: action.effect === "command",
         input: z.toJSONSchema(action.input) as Record<string, unknown>,
@@ -231,12 +237,10 @@ function opRow(op: OpsCatalogEntry): Capability {
     needs: op.needs === "nothing" && !isTsOnlyOperationKey(op.key) ? "session" : op.needs,
     effect: op.intent !== "Read" ? "command" : "query",
     mutates: op.intent !== "Read",
-    principal: ["aps.auth.login", "aps.auth.logout"].includes(op.key)
-      ? ["human"]
-      : capabilityPrincipals(
-          op.intent !== "Read",
-          (op as { actor?: "any" | "human" | "agent" }).actor,
-        ),
+    principal: capabilityPrincipals(
+      op.intent !== "Read",
+      op.principal ?? nativePrincipals(op.actor),
+    ),
     input: parseSchema(op.requestSchemaJson),
     output: op.responseSchemaJson ? parseSchema(op.responseSchemaJson) : undefined,
     source: "catalog",

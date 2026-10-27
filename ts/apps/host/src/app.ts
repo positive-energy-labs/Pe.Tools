@@ -20,13 +20,19 @@ import { readFileSync } from "node:fs";
 import { createServer, type Server } from "node:http";
 import { join } from "node:path";
 import { BRIDGE_PATH, hostProcessIdentity } from "@pe/host-contracts/contracts";
-import type { PeaRuntimeCapabilities } from "@pe/runtime";
+import { RouteWorkspace, type PeaRuntimeCapabilities } from "@pe/runtime";
+import { createRouteRegistrations } from "@pe/mcps";
+import { hostLoadedFamilies } from "../../../packages/mcps/src/pea/families-admission.ts";
+import { fileRouteDocumentStore } from "./route-document-store.ts";
+import { productRouteWorkPath } from "./product-paths.ts";
+import { hostActionJournal, releaseHostReceipts } from "./gateway-owner.ts";
+import { releaseHostReceiptExport } from "./receipt-export.ts";
 import { RevitBridge, RevitBridgeLive } from "./bridge.ts";
 import { getHostStatus } from "./local-ops.ts";
 import { isSettingsSchemaUrl } from "./settings.ts";
 import { isNavigation, opsCatalogRoute, type SpaFallback } from "./ops-catalog.ts";
 import { demoRoutes } from "./demo-owner.ts";
-import { callRoute } from "./call-route.ts";
+import { makeCallRoute } from "./call-route.ts";
 import { instancesReadingsRoute } from "./session-route.ts";
 import {
   adminShutdownRoute,
@@ -37,7 +43,7 @@ import {
 } from "./host-lifecycle.ts";
 import { hostOwnership, productRoot } from "./host-ownership.ts";
 import { staticSpaLayer } from "./static-spa.ts";
-import { peRoutesLayer, peApiErrorsLayer } from "./pe-routes.ts";
+import { peRoutesLayer, peApiErrorsLayer, type HostWork } from "./pe-routes.ts";
 import { capturesRoute } from "./captures-route.ts";
 import { ductCatalogsRoute } from "./duct-catalogs.ts";
 import { pagesRoute } from "./pages-route.ts";
@@ -121,7 +127,11 @@ const hostInstallRoute = HttpRouter.add("GET", "/host/install", () =>
   }),
 );
 
-function makeRevitComposition(spa: SpaFallback = () => emptyNotFound) {
+function makeRevitComposition(
+  spa: SpaFallback = () => emptyNotFound,
+  work?: HostWork,
+  origin?: () => string,
+) {
   return {
     provider: RevitBridgeLive,
     routes: Layer.mergeAll(
@@ -131,7 +141,7 @@ function makeRevitComposition(spa: SpaFallback = () => emptyNotFound) {
       hostStatusRoute,
       hostInstallRoute,
       instancesReadingsRoute(currentMachine),
-      callRoute,
+      makeCallRoute(hostActionJournal(), undefined, { workspace: work?.workspace }, { origin }),
     ),
   };
 }
@@ -166,6 +176,15 @@ export interface HttpLiveOptions {
  * (via `NodeHttpServer.layer`) and shared by the router and the service-file writer.
  */
 export function makeHttpLive(options: HttpLiveOptions) {
+  const receiptOwner = hostActionJournal();
+  const ReceiptLifetime = Layer.effectDiscard(
+    Effect.addFinalizer(() =>
+      Effect.promise(async () => {
+        await releaseHostReceiptExport(receiptOwner);
+        releaseHostReceipts(receiptOwner);
+      }),
+    ),
+  );
   const UpdateLive = Layer.succeed(
     UpdateReader,
     options.updateReader ?? makeInstalledUpdateReader(options.updateFact),
@@ -209,6 +228,16 @@ export function makeHttpLive(options: HttpLiveOptions) {
   const port = () => {
     const address = nodeServer.address();
     return address && typeof address !== "string" ? address.port : options.port;
+  };
+  const registrations = (options.routeRegistrations ?? createRouteRegistrations)({
+    loadedFamilies: (...args) => hostLoadedFamilies(`http://127.0.0.1:${port()}`)(...args),
+  });
+  const work: HostWork = {
+    registrations,
+    workspace: new RouteWorkspace({
+      registrations,
+      store: fileRouteDocumentStore(productRouteWorkPath()),
+    }),
   };
   const share =
     options.share ??
@@ -255,7 +284,7 @@ export function makeHttpLive(options: HttpLiveOptions) {
     adminShutdownRoute,
     adminWindowRoute,
     updateRoutes,
-    peRoutesLayer(options.routeRegistrations, share),
+    peRoutesLayer(options.routeRegistrations, share, work),
     demoRoutes(),
     webUrl
       ? HttpRouter.add("GET", "/*", (req) => (isNavigation(req) ? spa(req) : emptyNotFound))
@@ -263,7 +292,11 @@ export function makeHttpLive(options: HttpLiveOptions) {
   );
 
   if (options.capabilities.revit) {
-    const revitComposition = (options.revitCompositionFactory ?? makeRevitComposition)(spa);
+    const revitComposition = (options.revitCompositionFactory ?? makeRevitComposition)(
+      spa,
+      work,
+      () => `http://127.0.0.1:${port()}`,
+    );
     // Install the request handler before acquiring/publishing the service claim. A request
     // accepted while claim acquisition awaits SDK work must not be stranded without a handler.
     return ServiceFileLive.pipe(
@@ -277,6 +310,7 @@ export function makeHttpLive(options: HttpLiveOptions) {
       Layer.provide(Layer.succeed(HostLifecycle, options.lifecycle)),
       Layer.provide(UpdateLive),
       Layer.provide(NodeServices.layer),
+      Layer.provide(ReceiptLifetime),
     );
   }
 
@@ -285,7 +319,12 @@ export function makeHttpLive(options: HttpLiveOptions) {
       HttpRouter.serve(
         Layer.mergeAll(
           noRevitBoundary(),
-          callRoute,
+          makeCallRoute(
+            hostActionJournal(),
+            undefined,
+            { workspace: work.workspace },
+            { origin: () => `http://127.0.0.1:${port()}` },
+          ),
           opsCatalogRoute(spa),
           noRevitHostStatusRoute,
           CommonAppLive,
@@ -298,5 +337,6 @@ export function makeHttpLive(options: HttpLiveOptions) {
     Layer.provide(Layer.succeed(HostLifecycle, options.lifecycle)),
     Layer.provide(UpdateLive),
     Layer.provide(NodeServices.layer),
+    Layer.provide(ReceiptLifetime),
   );
 }

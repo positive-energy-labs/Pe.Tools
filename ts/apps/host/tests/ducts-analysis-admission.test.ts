@@ -1,3 +1,7 @@
+import { mkdtemp, rm } from "node:fs/promises";
+import { tmpdir } from "node:os";
+import { join } from "node:path";
+import { ActionJournal } from "../src/action-journal.ts";
 import { Effect } from "effect";
 import { expect, test } from "vite-plus/test";
 import { withInvocationContext } from "@pe/runtime/context";
@@ -11,6 +15,7 @@ import { sdkSessions } from "./native-receipt-fixture.ts";
 import { serveRoutes } from "./real-server.ts";
 
 test("the analysis read adapter preserves Pea admission and never borrows a human principal", async () => {
+  const dir = await mkdtemp(join(tmpdir(), "pe-ducts-analysis-"));
   let nativeReads = 0;
   const bridge = {
     subscribe: () => () => {},
@@ -59,7 +64,7 @@ test("the analysis read adapter preserves Pea admission and never borrows a huma
       }),
   } as unknown as RevitBridge["Service"];
   const server = await serveRoutes(
-    makeCallRoute(undefined, undefined, { sdk: sdkSessions }),
+    makeCallRoute(new ActionJournal(join(dir, "journal.jsonl")), undefined, { sdk: sdkSessions }),
     bridge,
   );
   try {
@@ -74,9 +79,9 @@ test("the analysis read adapter preserves Pea admission and never borrows a huma
       },
       () => call("ducts.snapshot", {}, target),
     );
-    expect(pea.status, await pea.clone().text()).toBe(200);
-    expect(pea.headers.get("x-pe-native-request-id")).toMatch(/^[0-9a-f-]{36}$/);
-    expect(nativeReads).toBe(1);
+    expect(pea.status, await pea.clone().text()).toBe(403);
+    expect(pea.headers.get("x-pe-native-request-id")).toBeNull();
+    expect(nativeReads).toBe(0);
     const human = await withInvocationContext(
       {
         hostBaseUrl: server.base,
@@ -86,12 +91,10 @@ test("the analysis read adapter preserves Pea admission and never borrows a huma
     );
     expect(human.status, await human.clone().text()).toBe(200);
     expect(human.headers.get("x-pe-native-request-id")).toMatch(/^[0-9a-f-]{36}$/);
-    // Each caller is admitted separately; both receive the same fresh native observation.
-    expect(human.headers.get("x-pe-native-request-id")).toBe(
-      pea.headers.get("x-pe-native-request-id"),
-    );
+    // Pea cannot borrow the human-only operation; the human performs the first native read.
     expect(nativeReads).toBe(1);
   } finally {
     await server.close();
+    await rm(dir, { recursive: true, force: true });
   }
 }, 30_000);

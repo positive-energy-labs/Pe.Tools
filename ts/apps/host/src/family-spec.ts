@@ -3,16 +3,10 @@ import { mkdir, readFile, rename, writeFile } from "node:fs/promises";
 import { basename, dirname, extname, isAbsolute, join, relative, resolve } from "node:path";
 import { NodeServices } from "@effect/platform-node";
 import { Effect } from "effect";
-import {
-  commands,
-  parsedDocViewSchema,
-  type WorkHandle,
-  type ActionStep,
-} from "@pe/agent-contracts";
+import { commands, parsedDocViewSchema, tools, type ActionStep } from "@pe/agent-contracts";
 import { z } from "zod";
-import type { CommandContext, CommandExecutor } from "./command-executor.ts";
+import { command, refused, type CommandExecutor } from "./command-executor.ts";
 import { runPods, type PodDependencies } from "./family-actions.ts";
-import type { ActionExecution } from "./action-journal.ts";
 import { podFolder } from "./settings.ts";
 import { hostOwnership, productRoot } from "./host-ownership.ts";
 
@@ -67,33 +61,22 @@ const preparedSpecSchema = z.strictObject({
   assets: z.array(assetSchema),
 });
 
-export async function familySpecExecutor(
-  ctx: CommandContext,
-  deps: PodDependencies = {},
-): Promise<CommandExecutor> {
-  const { admission } = ctx;
-  const { member, source } = admission.input as {
-    member: { pod: string; path: string };
-    source: { path: string } | { url: string } | { fileName: string; base64: string };
-  };
-  const handle = admission.input.work as WorkHandle | undefined;
-  if (!handle) throw Error("Reviewed Family Work is required");
-  let work: { doc: unknown; revision: number };
-  let root: string;
-  let memberBytes: Buffer;
-  let file: File;
-  let bytes: ArrayBuffer;
-  return {
-    definition: commands["family.attach-spec"],
-    prepared: preparedSpecSchema,
-    bind: async () => {
-      work = await ctx.read.work(handle, "family");
-      root = await runPods(deps, podFolder(member.pod, { podsRoot: deps.podsRoot }));
+export function familySpecExecutor(deps: PodDependencies = {}): CommandExecutor {
+  return command(commands["family.attach-spec"], preparedSpecSchema, {
+    bind: async (ctx) => {
+      const { member, source, work: handle } = ctx.admission.input;
+      if (!handle) throw refused("Reviewed Family Work is required");
+      await ctx.selectWork(tools.family.work, handle, () => ({
+        cells: [],
+        facts: [["reading"], ["spec"]],
+      }));
+      const root = await runPods(deps, podFolder(member.pod, { podsRoot: deps.podsRoot }));
       if (!member.path.startsWith("settings/family/") || !member.path.endsWith(".json"))
         throw Error("Attach to a captured member in settings/family/");
-      memberBytes = await readFile(safePath(root, member.path));
+      const memberBytes = await readFile(safePath(root, member.path));
       const family = JSON.parse(memberBytes.toString("utf8"));
       if (!family.family?.name) throw Error("The member is not a family capture");
+      let file: File;
       if ("url" in source) {
         const response = await fetch(source.url);
         if (!response.ok) throw Error(`PDF download failed (${response.status})`);
@@ -111,24 +94,23 @@ export async function familySpecExecutor(
           type: "application/pdf",
         });
       }
-      bytes = await file.arrayBuffer();
+      const bytes = await file.arrayBuffer();
       if (Buffer.from(bytes).subarray(0, 5).toString() !== "%PDF-")
         throw Error("Source is not a PDF");
       return {
         consumes: [
-          { kind: "work", handle, paths: [["reading"], ["spec"]], snapshot: work.doc },
           {
             kind: "member",
-            ...member,
-            sha256: createHash("sha256").update(memberBytes).digest("hex"),
+            probe: member,
+            expected: createHash("sha256").update(memberBytes).digest("hex"),
             bytesBase64: memberBytes.toString("base64"),
           },
           ...("path" in source
             ? [
                 {
                   kind: "file" as const,
-                  path: source.path,
-                  sha256: createHash("sha256").update(Buffer.from(bytes)).digest("hex"),
+                  probe: { path: source.path },
+                  expected: createHash("sha256").update(Buffer.from(bytes)).digest("hex"),
                   bytesBase64: Buffer.from(bytes).toString("base64"),
                 },
               ]
@@ -136,77 +118,81 @@ export async function familySpecExecutor(
               ? [
                   {
                     kind: "capture" as const,
-                    sha256: createHash("sha256").update(Buffer.from(bytes)).digest("hex"),
-                    bytesBase64: Buffer.from(bytes).toString("base64"),
-                    origin: { kind: "url" as const, url: source.url },
-                    capturedAt: new Date().toISOString(),
+                    expected: createHash("sha256").update(Buffer.from(bytes)).digest("hex"),
+                    probe: {
+                      bytesBase64: Buffer.from(bytes).toString("base64"),
+                      origin: { kind: "url" as const, url: source.url },
+                      capturedAt: new Date().toISOString(),
+                    },
                   },
                 ]
               : []),
         ],
         effects: [{ kind: "directory", path: dirname(safePath(root, member.path)) }],
+        prepare: async () => {
+          const form = new FormData();
+          form.append("file", file);
+          // The dev frontend receipt is tied to this checkout's host identity, never a guessed port.
+          const port = Number(
+            await readFile(
+              join(productRoot(), "state", "service", `${hostOwnership.serviceName}-web.port`),
+              "utf8",
+            ),
+          );
+          if (!Number.isInteger(port) || port <= 0) throw Error("The web parser is unavailable");
+          const parsed = await fetch(`http://127.0.0.1:${port}/api/pdf-audit/parse`, {
+            method: "POST",
+            body: form,
+          });
+          const payload = await parsed.json();
+          if (!parsed.ok)
+            throw Error(
+              typeof payload === "object" &&
+                payload !== null &&
+                "error" in payload &&
+                typeof payload.error === "string"
+                ? payload.error
+                : `Parse failed (${parsed.status})`,
+            );
+          const doc = parsedDocViewSchema.parse(payload);
+          const dir = dirname(member.path).replaceAll("\\", "/");
+          const name = basename(file.name, extname(file.name)).replace(/[^a-zA-Z0-9_-]/g, "-");
+          const assetDir = `${name || "document"}-${doc.jobId.replace(/[^a-zA-Z0-9_-]/g, "-")}`;
+          const folder = safePath(root, `${dir}/${assetDir}`);
+          const assets: z.infer<typeof assetSchema>[] = [];
+          const retain = (path: string, bytes: Buffer) =>
+            assets.push({
+              path,
+              bytesBase64: bytes.toString("base64"),
+              sha256: createHash("sha256").update(bytes).digest("hex"),
+            });
+          retain(join(folder, "source.pdf"), Buffer.from(bytes));
+          const download = async (url: string, name: string) => {
+            const response = await fetch(url);
+            if (!response.ok) throw Error(`Spec asset download failed (${response.status})`);
+            const extension = response.headers.get("content-type")?.includes("png")
+              ? ".png"
+              : ".jpg";
+            const path = `${name}${extension}`;
+            retain(join(folder, path), Buffer.from(await response.arrayBuffer()));
+            return `${assetDir}/${path}`;
+          };
+          for (const page of doc.pages) {
+            if (!page.screenshotUrl) throw Error(`Parser returned no render for page ${page.page}`);
+            page.screenshotUrl = await download(page.screenshotUrl, `page-${page.page}`);
+          }
+          for (const [index, image] of doc.images.entries())
+            image.url = await download(image.url, `image-${index}`);
+          // The canonical JSON is named after the PDF; a member sidecar binds a family to that JSON.
+          const specPath = `${dir}/${assetDir}.json`;
+          retain(safePath(root, specPath), Buffer.from(JSON.stringify(doc, null, 2)));
+          const sidecar = safePath(root, `${member.path}.spec.json`);
+          retain(sidecar, Buffer.from(JSON.stringify({ path: specPath })));
+          return { member, doc, specPath, assets };
+        },
       };
     },
-    prepare: async () => {
-      const form = new FormData();
-      form.append("file", file);
-      // The dev frontend receipt is tied to this checkout's host identity, never a guessed port.
-      const port = Number(
-        await readFile(
-          join(productRoot(), "state", "service", `${hostOwnership.serviceName}-web.port`),
-          "utf8",
-        ),
-      );
-      if (!Number.isInteger(port) || port <= 0) throw Error("The web parser is unavailable");
-      const parsed = await fetch(`http://127.0.0.1:${port}/api/pdf-audit/parse`, {
-        method: "POST",
-        body: form,
-      });
-      const payload = await parsed.json();
-      if (!parsed.ok)
-        throw Error(
-          typeof payload === "object" &&
-            payload !== null &&
-            "error" in payload &&
-            typeof payload.error === "string"
-            ? payload.error
-            : `Parse failed (${parsed.status})`,
-        );
-      const doc = parsedDocViewSchema.parse(payload);
-      const dir = dirname(member.path).replaceAll("\\", "/");
-      const name = basename(file.name, extname(file.name)).replace(/[^a-zA-Z0-9_-]/g, "-");
-      const assetDir = `${name || "document"}-${doc.jobId.replace(/[^a-zA-Z0-9_-]/g, "-")}`;
-      const folder = safePath(root, `${dir}/${assetDir}`);
-      const assets: z.infer<typeof assetSchema>[] = [];
-      const retain = (path: string, bytes: Buffer) =>
-        assets.push({
-          path,
-          bytesBase64: bytes.toString("base64"),
-          sha256: createHash("sha256").update(bytes).digest("hex"),
-        });
-      retain(join(folder, "source.pdf"), Buffer.from(bytes));
-      const download = async (url: string, name: string) => {
-        const response = await fetch(url);
-        if (!response.ok) throw Error(`Spec asset download failed (${response.status})`);
-        const extension = response.headers.get("content-type")?.includes("png") ? ".png" : ".jpg";
-        const path = `${name}${extension}`;
-        retain(join(folder, path), Buffer.from(await response.arrayBuffer()));
-        return `${assetDir}/${path}`;
-      };
-      for (const page of doc.pages) {
-        if (!page.screenshotUrl) throw Error(`Parser returned no render for page ${page.page}`);
-        page.screenshotUrl = await download(page.screenshotUrl, `page-${page.page}`);
-      }
-      for (const [index, image] of doc.images.entries())
-        image.url = await download(image.url, `image-${index}`);
-      // The canonical JSON is named after the PDF; a member sidecar binds a family to that JSON.
-      const specPath = `${dir}/${assetDir}.json`;
-      retain(safePath(root, specPath), Buffer.from(JSON.stringify(doc, null, 2)));
-      const sidecar = safePath(root, `${member.path}.spec.json`);
-      retain(sidecar, Buffer.from(JSON.stringify({ path: specPath })));
-      return { member, doc, specPath, assets };
-    },
-    run: async (_ctx: CommandContext, execution: ActionExecution) => {
+    run: async (ctx, execution) => {
       const { member, doc, specPath, assets } = execution.prepared as z.infer<
         typeof preparedSpecSchema
       >;
@@ -218,7 +204,7 @@ export async function familySpecExecutor(
           await rename(temporary, asset.path);
           return { path: asset.path, sha256: asset.sha256 };
         });
-      await execution.publishWork(handle.key, "family", [
+      await execution.publishWork(ctx.admission.input.work!.key, "family", [
         { path: ["spec"], value: { member, doc } },
       ]);
       return {
@@ -242,5 +228,5 @@ export async function familySpecExecutor(
           }
         : { step, evidence: { path: asset.path, sha256: hash } };
     },
-  };
+  });
 }

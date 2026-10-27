@@ -7,11 +7,12 @@ import type {
   RhvacSyncResult,
 } from "@pe/host-contracts/operation-types";
 import { BridgeError } from "./bridge.ts";
+import { StepFailure } from "./command-executor.ts";
 import { assertDemoPath } from "./demo-settings.ts";
 
 const simulation = "Simulated RHVAC file effect; no file read or written, no application started";
 type Sample = NonNullable<Extract<DemoSeed, { route: "takeoffs" }>["readings"]["rhvac"]>;
-const refuse = (message: string) => new BridgeError(message, 409, { notDispatched: true });
+const refuse = (message: string) => new StepFailure(message, 409, "refused");
 
 /** Fixed sample facts checked against the real planner's request, not an alternate writer. */
 export function createDemoRhvac(

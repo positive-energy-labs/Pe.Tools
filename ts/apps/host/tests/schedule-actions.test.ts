@@ -6,7 +6,6 @@ import {
   runSemanticAction,
   controlAction,
 } from "../../../packages/mcps/src/shared/takeoff-action-client.ts";
-import { rebindScheduleWork } from "@pe/agent-contracts";
 import { detailResponse, target } from "./schedule-fixture.ts";
 import { cellsApplied, setup } from "./schedule-test-fixture.ts";
 
@@ -419,7 +418,7 @@ test("F-H5-1: a dead-lifetime push names its exit; a re-read rebinds and marks a
     state: "failed",
     notDispatched: true,
     error: expect.stringMatching(/re-opened in Revit; read it again/),
-    issues: [expect.objectContaining({ code: "binding-lifetime-closed" })],
+    refusal: { code: "binding-lifetime-closed" },
   });
   // Load changed while the document was closed; Mark did not.
   f.setDetail(withMark("120"));

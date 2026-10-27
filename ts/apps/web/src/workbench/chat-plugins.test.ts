@@ -20,9 +20,8 @@ const settingsReceipt = (request: Record<string, unknown>, work = true) =>
       ? [
           {
             kind: "work",
-            handle: { key: workspace, revision: 4 },
-            paths: [["fields"]],
-            snapshot: {},
+            probe: { handle: { key: workspace, revision: 4 }, paths: [["fields"]] },
+            expected: {},
           },
         ]
       : [],
