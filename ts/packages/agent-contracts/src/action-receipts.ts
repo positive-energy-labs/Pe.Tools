@@ -1,14 +1,20 @@
-import { documentRefSchema } from "./target.ts";
 import { basisSchema, callerSchema } from "./caller.ts";
 import { z } from "zod";
-import { originSchema, footprintSchema, commandConsentSchema } from "./run-consent.ts";
+import { footprintSchema, commandConsentSchema } from "./run-consent.ts";
 import { executionTargetSchema } from "./target.ts";
+import { consumedSchema, claimSchema, commandRefusalSchema } from "./command.ts";
+import { nativeProcessSchema } from "./native-process.ts";
+export { nativeProcessSchema, type NativeProcess } from "./native-process.ts";
 
 const stepIntent = z.object({
   id: z.string(),
   key: z.string(),
   kind: z.enum(["native", "file", "publication"]),
   input: z.unknown(),
+  process: nativeProcessSchema.optional(),
+  established: z.array(consumedSchema).optional(),
+  releases: z.array(z.strictObject({ action: z.string(), claim: claimSchema })).optional(),
+  retired: z.literal(true).optional(),
   dispatchedAt: z.string().optional(),
 });
 const executionFailure = {
@@ -49,39 +55,39 @@ export const actionStepSchema = z.discriminatedUnion("state", [
   // no recovery read. Unknown means nobody knows; failed means the operation answered, and
   // notDispatched proves it never ran when present.
   stepIntent
-    .extend({ state: z.literal("cancelled"), error: z.string(), status: z.number() })
+    .extend({
+      state: z.literal("cancelled"),
+      error: z.string(),
+      status: z.number(),
+      notDispatched: z.literal(true).optional(),
+    })
     .strict(),
 ]);
 export type ActionStep = z.infer<typeof actionStepSchema>;
 const actionAttempt = z.object({
-  kind: z.enum(["operation", "workflow"]),
   id: z.string().min(1),
   key: z.string(),
   /** Host-minted; never read from the admission body. */
   caller: callerSchema,
-  origin: originSchema.optional(),
-  footprint: footprintSchema.default([]),
+  effects: footprintSchema.default([]),
+  consumes: z.array(consumedSchema).default([]),
+  claims: z.array(claimSchema).default([]),
+  refusal: commandRefusalSchema.optional(),
   consent: commandConsentSchema.nullable().default(null),
-  frozen: z.unknown().optional(),
   cancellationRequested: z.boolean().optional(),
   /** Why the crossing was admitted; null for a host leaf that crosses into no Revit document. */
   basis: basisSchema.nullable(),
-  destination: executionTargetSchema,
-  request: z.record(z.string(), z.unknown()),
-  bases: z.record(z.string(), z.unknown()),
+  target: executionTargetSchema,
+  input: z.record(z.string(), z.unknown()),
   steps: z.array(actionStepSchema),
-  preparation: z.discriminatedUnion("state", [
+  prepared: z.discriminatedUnion("state", [
     z.strictObject({ state: z.literal("unprepared") }),
     z.strictObject({ state: z.literal("ready"), value: z.unknown() }),
   ]),
   recovery: z.array(z.strictObject({ stepId: z.string(), at: z.string(), evidence: z.unknown() })),
   startedAt: z.string(),
-  publication: z.discriminatedUnion("state", [
-    z.strictObject({ state: z.literal("unrequested") }),
-    z.strictObject({ state: z.literal("recorded"), result: z.unknown() }),
-  ]),
 });
-export const actionReceiptSchema = z.discriminatedUnion("state", [
+const actionReceiptDefinition = z.discriminatedUnion("state", [
   actionAttempt.extend({ state: z.literal("waiting") }).strict(),
   actionAttempt.extend({ state: z.literal("running") }).strict(),
   actionAttempt
@@ -104,43 +110,36 @@ export const actionReceiptSchema = z.discriminatedUnion("state", [
     })
     .strict(),
   actionAttempt
-    .extend({ state: z.literal("cancelled"), error: z.string(), status: z.number() })
+    .extend({
+      state: z.literal("cancelled"),
+      error: z.string(),
+      status: z.number(),
+      notDispatched: z.literal(true).optional(),
+    })
     .strict(),
 ]);
+export type ActionReceipt = z.infer<typeof actionReceiptDefinition>;
+export const actionReceiptSchema: z.ZodType<ActionReceipt> = actionReceiptDefinition;
+const statusAttempt = actionAttempt.omit({ steps: true, prepared: true, recovery: true });
 export const actionStatusSchema = z.discriminatedUnion("state", [
-  actionAttempt
-    .omit({ steps: true, preparation: true, recovery: true })
-    .extend({ state: z.literal("waiting") }),
-  actionAttempt
-    .omit({ steps: true, preparation: true, recovery: true })
-    .extend({ state: z.literal("running") }),
-  actionAttempt
-    .omit({ steps: true, preparation: true, recovery: true })
-    .extend({ state: z.literal("succeeded") }),
-  actionAttempt.omit({ steps: true, preparation: true, recovery: true }).extend({
+  statusAttempt.extend({ state: z.literal("waiting") }),
+  statusAttempt.extend({ state: z.literal("running") }),
+  statusAttempt.extend({ state: z.literal("succeeded") }),
+  statusAttempt.extend({
     state: z.literal("failed"),
     ...executionFailure,
     notDispatched: z.literal(true).optional(),
   }),
-  actionAttempt
-    .omit({ steps: true, preparation: true, recovery: true })
-    .extend({ state: z.literal("unknown"), ...executionFailure }),
-  actionAttempt
-    .omit({ steps: true, preparation: true, recovery: true })
-    .extend({ state: z.literal("incomplete"), error: z.string(), status: z.number() }),
-  actionAttempt
-    .omit({ steps: true, preparation: true, recovery: true })
-    .extend({ state: z.literal("cancelled"), error: z.string(), status: z.number() }),
+  statusAttempt.extend({ state: z.literal("unknown"), ...executionFailure }),
+  statusAttempt.extend({ state: z.literal("incomplete"), error: z.string(), status: z.number() }),
+  statusAttempt.extend({
+    state: z.literal("cancelled"),
+    error: z.string(),
+    status: z.number(),
+    notDispatched: z.literal(true).optional(),
+  }),
 ]);
-export type ActionReceipt = z.infer<typeof actionReceiptSchema>;
 export type ActionStatus = z.infer<typeof actionStatusSchema>;
-
-export const nativeProcessSchema = z.strictObject({
-  pid: z.number().int().positive(),
-  processStartUtc: z.string().min(1),
-  executable: z.string().min(1),
-});
-export type NativeProcess = z.infer<typeof nativeProcessSchema>;
 
 export const nativeReceiptSchema = z.object({
   requestId: z.string(),
@@ -154,17 +153,3 @@ export const nativeReceiptFailureSchema = z.object({
   statusCode: z.number(),
   outcome: z.string().optional(),
 });
-
-/** Receipt discovery is a selected subject, never an inferred active document or all-history view. */
-export const actionListFilterSchema = z.discriminatedUnion("kind", [
-  z.strictObject({ kind: z.literal("instances") }),
-  z.strictObject({ kind: z.literal("schedules"), workspaceId: z.string().min(1) }),
-  z.strictObject({ kind: z.literal("family-file"), workspaceId: z.string().min(1) }),
-  z.strictObject({ kind: z.literal("file"), workspaceId: z.string().min(1) }),
-  z.strictObject({
-    kind: z.literal("family"),
-    workspaceId: z.string().min(1),
-    target: documentRefSchema,
-  }),
-]);
-export type ActionListFilter = z.infer<typeof actionListFilterSchema>;

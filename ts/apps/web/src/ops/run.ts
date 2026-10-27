@@ -10,10 +10,7 @@ import {
   type OpRequestOf,
 } from "@pe/host-contracts/operation-types";
 
-import {
-  readAction,
-  submitAction,
-} from "../../../../packages/mcps/src/shared/takeoff-action-client";
+import { submitAction } from "../../../../packages/mcps/src/shared/takeoff-action-client";
 import type { HostCaller } from "#/route";
 import { isMutation, type HostOperationCatalogEntry } from "#/ops/manifest";
 
@@ -26,8 +23,6 @@ export async function runOp(input: {
   request: unknown;
   target: ExecutionTarget;
   call: HostCaller;
-  /** The page's last journaled action; a second mutation waits until it is settled. */
-  priorActionId: string | null;
   base?: string;
 }): Promise<RunOutcome> {
   const started = performance.now();
@@ -41,18 +36,11 @@ export async function runOp(input: {
       value: await input.call(key, input.request as OpRequestOf<typeof key>),
       elapsedMs: Math.round(performance.now() - started),
     };
-  if (input.priorActionId) {
-    const prior = await readAction(input.priorActionId, input.base);
-    if (!prior || (prior.state !== "succeeded" && prior.state !== "failed"))
-      throw Error("Read or reconcile the original action before starting another operation");
-  }
   const admission = actionAdmissionSchema.parse({
     id: crypto.randomUUID(),
-    kind: "operation",
     key: input.op.key,
-    destination: isTsOnlyOperationKey(input.op.key) ? { kind: "host" } : input.target,
+    target: isTsOnlyOperationKey(input.op.key) ? { kind: "host" } : input.target,
     input: input.request ?? {},
-    bases: {},
   });
   const action = await submitAction(admission, input.base, 30_000);
   return { kind: "action", id: action.id, state: action.state };

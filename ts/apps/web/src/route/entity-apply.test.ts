@@ -1,20 +1,20 @@
 import { describe, expect, test, vi } from "vite-plus/test";
 import { routeAddress } from "@pe/agent-contracts";
 import { entityRoute, type EntityRouteDef, type PlanEntry } from "./entity-route";
+import { admissionPlan } from "./workflow";
 
 const SCHEMA = "/schemas/settings/Demo/demo.json";
 const ROW: PlanEntry = {
   id: "a",
   name: "a",
-  planHash: "h",
   actions: 1,
   detail: "",
   flag: null,
   warnings: [],
+  plan: "sealed-preview",
 };
 
-/** An entity route over a saved spec whose plan lane is `read`/`apply` alone: no host reach. */
-function route(confirm: boolean, entries: readonly PlanEntry[] = [ROW], composed = false) {
+function route(entries: readonly PlanEntry[] = [ROW]) {
   const read = vi.fn(async () => ({ entries }));
   const apply = vi.fn(async () => {});
   const direct = vi.fn(async () => {});
@@ -24,18 +24,12 @@ function route(confirm: boolean, entries: readonly PlanEntry[] = [ROW], composed
     entity: "demo",
     schema: SCHEMA,
     apply: "family.apply",
-    plan: {
-      read,
-      apply,
-      ...(composed ? { direct } : {}),
-      ...(confirm ? { confirm: true as const } : {}),
-    },
+    plan: { read, apply, direct },
   };
   const manifest = entityRoute(def, {
     address: "family",
     page: routeAddress("family").schema as never,
   });
-  const setPage = vi.fn();
   const ctx = {
     page: {
       ...routeAddress("family").defaults,
@@ -43,7 +37,7 @@ function route(confirm: boolean, entries: readonly PlanEntry[] = [ROW], composed
       pod: "p",
       path: "a.json",
       confirming: false,
-      sheet: null,
+      sheet: null as { entries: readonly PlanEntry[] } | null,
     },
     readings: {
       pods: {
@@ -52,67 +46,74 @@ function route(confirm: boolean, entries: readonly PlanEntry[] = [ROW], composed
       },
     },
     work: { key: { route: "family" }, doc: null, revision: null, refusal: null },
-    setPage,
+    setPage: vi.fn((patch) => Object.assign(ctx.page, patch)),
     note: vi.fn(),
   };
-  const action = manifest.actions!.apply;
   return {
-    run: () => action.run(ctx as never, undefined as never),
+    run: () => manifest.actions!.apply.run(ctx as never, undefined as never),
     preview: () => manifest.actions!.preview.run(ctx as never, undefined as never),
+    ready: () => manifest.actions!.apply.ready!(ctx as never, undefined as never),
     read,
     direct,
     apply,
-    setPage,
+    ctx,
   };
 }
 
-describe("entity apply (MAP ruling 52)", () => {
-  test("one press plans and applies when the plan declares no confirmation", async () => {
-    const { run, read, apply, setPage } = route(false);
+describe("host semantic Apply and optional Preview", () => {
+  test("one press invokes the host once without a browser planning round trip", async () => {
+    const { run, read, direct, apply, ctx } = route();
     expect(await run()).toBeNull();
+    expect(direct).toHaveBeenCalledExactlyOnceWith(expect.anything(), {
+      pod: "p",
+      path: "a.json",
+      sha256: "s",
+    });
+    expect(read).not.toHaveBeenCalled();
+    expect(apply).not.toHaveBeenCalled();
+    expect(ctx.setPage).not.toHaveBeenCalled();
+  });
+
+  test("Preview opens sealed rows, and Apply names only that reviewed preview", async () => {
+    const { preview, run, read, direct, apply, ctx } = route();
+    await preview();
     expect(read).toHaveBeenCalledOnce();
-    expect(apply).toHaveBeenCalledWith(expect.anything(), [ROW], expect.anything());
-    expect(setPage).not.toHaveBeenCalledWith(
-      expect.objectContaining({ confirming: true }),
-      expect.anything(),
-    );
-  });
-
-  test("a row the plan refuses stops the one press before anything applies", async () => {
-    const { run, apply } = route(false, [{ ...ROW, flag: "refused by the plan" }]);
-    expect(await run()).toMatchObject({ message: "a: refused by the plan" });
+    expect(direct).not.toHaveBeenCalled();
     expect(apply).not.toHaveBeenCalled();
-  });
-
-  test("a confirmed plan opens the sheet on press 1 and changes nothing", async () => {
-    const { run, apply, setPage } = route(true);
+    expect(ctx.page.sheet).toEqual({ entries: [ROW] });
     expect(await run()).toBeNull();
-    expect(apply).not.toHaveBeenCalled();
-    expect(setPage).toHaveBeenCalledWith(
-      expect.objectContaining({ confirming: true, sheet: { entries: [ROW] } }),
-      ["stage", "pod", "path"],
-    );
+    expect(apply).toHaveBeenCalledExactlyOnceWith(expect.anything(), [ROW], {
+      pod: "p",
+      path: "a.json",
+      sha256: "s",
+    });
+    expect(direct).not.toHaveBeenCalled();
+    expect(ctx.page.sheet).toBeNull();
   });
-});
 
-test("a composed Apply submits once without a browser planning round trip", async () => {
-  const { run, read, direct, apply, setPage } = route(false, [ROW], true);
-  expect(await run()).toBeNull();
-  expect(direct).toHaveBeenCalledOnce();
-  expect(direct).toHaveBeenCalledWith(expect.anything(), { pod: "p", path: "a.json", sha256: "s" });
-  expect(read).not.toHaveBeenCalled();
-  expect(apply).not.toHaveBeenCalled();
-  expect(setPage).not.toHaveBeenCalled();
-});
+  test("a preview with no applicable rows refuses Apply without a command", async () => {
+    const { preview, ready, direct, apply } = route([{ ...ROW, flag: "refused by plan" }]);
+    await preview();
+    expect(ready()).toBe("no included row has changes to apply");
+    expect(direct).not.toHaveBeenCalled();
+    expect(apply).not.toHaveBeenCalled();
+  });
 
-test("explicit Preview opens included rows and never invokes the composed Apply", async () => {
-  const { preview, read, direct, apply, setPage } = route(false, [ROW], true);
-  await preview();
-  expect(read).toHaveBeenCalledOnce();
-  expect(direct).not.toHaveBeenCalled();
-  expect(apply).not.toHaveBeenCalled();
-  expect(setPage).toHaveBeenCalledWith(
-    expect.objectContaining({ confirming: true, sheet: { entries: [ROW] } }),
-    ["stage", "pod", "path"],
-  );
+  test("a preview invocation fits the host's strict command input", async () => {
+    const { commands } = await import("@pe/agent-contracts");
+    const apply = vi.fn(async (input) => {
+      commands["families.apply"].input.parse(input);
+      return { state: "succeeded", result: {} };
+    });
+    const plan = admissionPlan({ plan: "families.plan", apply: "families.apply" }, () => ROW);
+    await plan.apply({ commands: { "families.apply": apply } } as never, [ROW], {
+      pod: "p",
+      path: "a.json",
+      sha256: "s",
+    });
+    expect(apply).toHaveBeenCalledWith({
+      plan: "sealed-preview",
+      include: ["a"],
+    });
+  });
 });

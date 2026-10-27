@@ -10,10 +10,11 @@ import type { ReactNode } from "react";
 import { z } from "zod";
 import type { Chord } from "@pe/kit/keys";
 import {
-  semanticActions,
+  commands,
   type SemanticActionKey,
   type ExecutionTarget,
-  type HostActionKey,
+  type ActionStatus,
+  type WorkHandle,
   type Reading,
   type ReadingRequest,
   type History,
@@ -32,7 +33,7 @@ import { registerGlobalOptions } from "#/settings/option-catalogue";
 export const semanticActionInput = (
   key: SemanticActionKey,
   input: unknown,
-): Record<string, unknown> => semanticActions[key].input.parse(input);
+): Record<string, unknown> => commands[key].input.parse(input) as Record<string, unknown>;
 
 /** What a Reading key names: a fixed subject, or one selected by the route's current Page. */
 export type ReadingSpec<P> = ReadingRequest | ((page: P, work: WorkKey) => ReadingRequest | null);
@@ -53,10 +54,14 @@ export interface Ctx<W, R extends string, P> {
     readonly key: WorkKey;
     readonly doc: W | null;
     readonly revision: number | null;
+    readonly handle: () => WorkHandle | null;
     /** Why the Work cannot be read (unreadable saved Work); null when it can. */
     readonly refusal: string | null;
   };
   readonly readings: Readonly<Record<R, Reading<unknown>>>;
+  readonly commands: import("./presentation").BoundCommands;
+  readonly receipts: readonly ActionStatus[];
+  readonly busy: ActionStatus | null;
   readonly page: P;
   /** The current Page, or null after this action's Target or Work changed. */
   readonly currentPage?: () => P | null;
@@ -65,8 +70,6 @@ export interface Ctx<W, R extends string, P> {
   readonly call: HostCaller;
   /** The patch lane on the Work document. Throws the refusal; the runner reports it. */
   readonly write: (patch: RouteStatePatch[], expectedRevision?: number) => Promise<Refusal | null>;
-  /** The command lane on the Work document, one of the Work spec's own commands. */
-  readonly command: (name: string, input?: unknown) => Promise<Refusal | null>;
   /** Publishes action progress only while its original Target, Work, and user Page remain current. */
   readonly setPage: (next: Partial<P>, options?: PageMove<P> | readonly (keyof P)[]) => void;
   /** One page-log line from inside the verb: what its result says beside its outcome. */
@@ -163,9 +166,6 @@ export interface RouteManifest<W, R extends string, P, A extends string> {
       (K extends "read" | "refresh" ? { rereads: R | "work" } : unknown);
   };
   views?: readonly View<R>[];
-  /** Host actions this route's views run that no declared verb `does`: with the verbs, what a
-   * transcript record of that action opens (`workbench/chat-plugins.ts` `actionRoute`). */
-  runs?: readonly HostActionKey[];
   seeds?: Readonly<Partial<Record<A, Seed<W, R, P>>>>;
   docs?: ReactNode;
   /** Projections bind to this route instance's Page and disappear with its owner. */

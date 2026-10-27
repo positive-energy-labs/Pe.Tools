@@ -19,7 +19,7 @@ import { BAY_THREADS } from "#/open/seeds";
 import { inventoryOf, previousOf, useHostCall, useInventory } from "#/readings";
 import { RouteShell } from "#/route";
 import { useRoute } from "#/route/use-route";
-import { readScopedActionStatuses } from "../../../../packages/mcps/src/shared/takeoff-action-client";
+import { readActionStatuses } from "../../../../packages/mcps/src/shared/takeoff-action-client";
 
 export function OpenPage() {
   const container = useRef<HTMLDivElement>(null);
@@ -100,7 +100,7 @@ function useWorldLog(handle: OpenHandle, fixture: boolean) {
     !fixture,
   );
   const unresolved = useHostCall(
-    (signal) => readScopedActionStatuses({ kind: "instances" }, "", signal),
+    (signal) => readActionStatuses({ tool: "instances" }, "", signal),
     ["actions", "subject", "instances"],
     !fixture,
   );

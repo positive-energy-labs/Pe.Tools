@@ -63,7 +63,7 @@ test("Pea enumerates Pod members and proposes revision-checked Work without rout
       if (url.pathname === "/pe/route-state/pods/apply") {
         const body = JSON.parse(await bodyText(init));
         return Response.json(
-          await runtime.apply(scope, "pods", "agent", body.patches, body.expectedRevision),
+          await runtime.apply(scope, "pods", "pea", body.patches, body.expectedRevision),
         );
       }
       throw Error(`Unexpected ${url.href}`);
@@ -105,6 +105,6 @@ test("Pea enumerates Pod members and proposes revision-checked Work without rout
     expect(await run(peRead, { key: "route:pods", workspaceId: "member-a" })).toMatchObject({
       result: { doc: { basis: { sha256: "v1" }, fields: { "/x": { suggestion: { value: 2 } } } } },
     });
-    expect(registrations.every((row) => Object.keys(row.handlers).length === 0)).toBe(true);
-    expect(settingsRouteState.commands).toEqual({});
+    expect(registrations.every((row) => !("handlers" in row))).toBe(true);
+    expect(settingsRouteState).not.toHaveProperty("commands");
   }));

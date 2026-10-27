@@ -2,7 +2,14 @@ import type * as Atom from "effect/unstable/reactivity/Atom";
 import type * as AtomRegistry from "effect/unstable/reactivity/AtomRegistry";
 import type { PageSnapshot } from "./view-owner";
 /** The handle a route gets back from `useRoute`: its resolution, Work, Readings, Page and one handle per action. */
-import type { Reading, RouteStatePatch, TargetResolution, WorkKey } from "@pe/agent-contracts";
+import type {
+  Reading,
+  RouteStatePatch,
+  TargetResolution,
+  WorkKey,
+  WorkHandle,
+  ActionStatus,
+} from "@pe/agent-contracts";
 
 import type { ActionFacts } from "./facts";
 import type { PageMove, RouteManifest } from "./manifest";
@@ -45,6 +52,8 @@ export interface RouteHandle<W, R extends string, P, A extends string> {
     readonly ephemeral: boolean;
     readonly doc: W | null;
     readonly revision: number | null;
+    readonly handle: () => WorkHandle | null;
+    readonly busy: ActionStatus | null;
     /** Whether the authoritative Work reading is current, including a current absent document. */
     readonly current: boolean;
     /** Revit changed the Work's document after the read its edit rungs rest on (`takenAt`). */
@@ -86,6 +95,7 @@ export interface RouteHandle<W, R extends string, P, A extends string> {
   /** The Page and its setter; `{ history: "replace" }` marks a gesture's move (`PageMove`). */
   readonly page: readonly [P, (next: Partial<P>, move?: PageMove<P>) => void];
   readonly actions: Readonly<Record<A, ActionHandle>>;
+  readonly commands: import("./presentation").BoundCommands;
   readonly busy: { readonly key: A; readonly seconds: number } | null;
   readonly stop: () => void; // stop waiting on the busy action (its flag's stop)
   readonly failure: Refusal | null;

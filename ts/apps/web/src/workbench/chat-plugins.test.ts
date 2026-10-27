@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vite-plus/test";
 
-import { actionReceiptSchema, memberWork, semanticActions } from "@pe/agent-contracts";
+import { actionReceiptSchema, memberWork, commands } from "@pe/agent-contracts";
 
 import { actionPlace, actionRoute, capturedPlace, proposedRecord } from "./chat-plugins";
 
@@ -14,19 +14,26 @@ const workspace = {
 const settingsReceipt = (request: Record<string, unknown>, work = true) =>
   actionReceiptSchema.parse({
     id: "settings-observation",
-    kind: "workflow",
     key: "settings.observe",
-    request,
-    bases: work ? { work: { key: workspace, revision: 4 } } : {},
-    destination: { kind: "host" },
+    input: request,
+    consumes: work
+      ? [
+          {
+            kind: "work",
+            handle: { key: workspace, revision: 4 },
+            paths: [["fields"]],
+            snapshot: {},
+          },
+        ]
+      : [],
+    target: { kind: "host" },
     caller: { kind: "human", via: "local" },
     basis: { kind: "human" },
     state: "succeeded",
     result: { envelope: { revision: 5 } },
     steps: [],
     recovery: [],
-    preparation: { state: "ready", value: {} },
-    publication: { state: "unrequested" },
+    prepared: { state: "ready", value: {} },
     startedAt: "2026-10-26T00:00:00.000Z",
   });
 
@@ -69,10 +76,9 @@ describe("chat plugin records", () => {
     expect(actionRoute("settings.write")).toBe("pods");
     expect(actionRoute("settings.observe")).toBe("pods");
     expect(actionRoute("schedule.grid.push")).toBe("schedules");
-    expect(actionRoute("schedule.grid.bind")).toBe("schedules");
     expect(actionRoute("instances.open")).toBe("instances");
     // Every semantic action is some pane's: none falls back to a bare receipt link.
-    expect(Object.keys(semanticActions).filter((key) => !actionRoute(key))).toEqual([]);
+    expect(Object.keys(commands).filter((key) => !actionRoute(key))).toEqual([]);
     // No pane declares these: the record keeps its receipt link instead of inventing an owner.
     expect(actionRoute("schedule.nonexistent")).toBeNull();
     expect(actionRoute("pod.list")).toBeNull();
@@ -89,11 +95,7 @@ describe("chat plugin records", () => {
     expect(
       capturedPlace("pods", workspace, { pod: "other", path: "settings/other.json" }),
     ).toMatchObject({ ok: true, page: member, carry: { work: workspace.work } });
-    expect(actionPlace("pods", settingsReceipt({ member }, false))).toMatchObject({
-      ok: true,
-      page: member,
-      carry: { target: "", work: "" },
-    });
+    expect(actionPlace("pods", settingsReceipt({ member }, false))).toMatchObject({ ok: false });
     expect(
       capturedPlace("pods", { binding: "host", route: "pods", target: null }, {}),
     ).toMatchObject({

@@ -90,8 +90,8 @@ export function NativeReadingReferences({
   const key = action?.key ?? (typeof outer?.key === "string" ? outer.key.replace(/^op:/, "") : "");
   const data: unknown = action && "result" in action ? action.result : outer?.result;
   let scope: RevitObservationScope | null =
-    action?.state === "succeeded" && action.destination.kind === "document"
-      ? { document: action.destination.ref, source: "native" }
+    action?.state === "succeeded" && action.target.kind === "document"
+      ? { document: action.target.ref, source: "native" }
       : null;
   if (!action && outer?.ok === true && outer?.kind === "op") {
     const target = readRecord(outer.target);
@@ -116,7 +116,7 @@ export function NativeReadingReferences({
     );
   } else {
     if (!action && (outer?.ok !== true || outer?.kind !== "op")) return null;
-    references = referencesOf(key, data, action?.request);
+    references = referencesOf(key, data, action?.input);
   }
   if (!references.length) return null;
   const document = readRecord(readRecord(data)?.document);

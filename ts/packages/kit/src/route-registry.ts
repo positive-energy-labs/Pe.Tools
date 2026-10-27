@@ -1,5 +1,5 @@
 import type { ReactNode } from "react";
-import type { WorkKey } from "@pe/agent-contracts";
+import { commandTool, type WorkKey } from "@pe/agent-contracts";
 
 /** The discoverable projection of a route's full, typed manifest. */
 interface RegisteredManifest {
@@ -9,7 +9,6 @@ interface RegisteredManifest {
   readonly cells?: readonly unknown[];
   readonly workKey?: WorkKey | null;
   readonly actions?: Readonly<Record<string, { readonly does?: unknown }>>;
-  readonly runs?: readonly string[];
 }
 type HostedRouteView = (props: { thread: string; visible: boolean }) => ReactNode;
 export interface RouteRegistration {
@@ -52,10 +51,10 @@ export function createRouteRegistry() {
     entries: () => [...routes.values()],
     get: (key: string) => routes.get(key),
     actionRoute(key: string): string | null {
-      const owners = [...routes.values()].filter(
-        ({ manifest }) =>
-          manifest.runs?.includes(key) ||
-          Object.values(manifest.actions ?? {}).some((action) => action.does === key),
+      const tool = commandTool(key);
+      if (tool && routes.has(tool.name)) return tool.name;
+      const owners = [...routes.values()].filter(({ manifest }) =>
+        Object.values(manifest.actions ?? {}).some((action) => action.does === key),
       );
       return owners.length === 1 ? owners[0]!.manifest.key : null;
     },

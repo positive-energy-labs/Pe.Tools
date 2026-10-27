@@ -153,7 +153,7 @@ const preparedSchema = z.object({ acquisition: acquisitionIntentSchema.nullable(
 const startedSchema = z.object({ session: z.object({ process: processSchema }) });
 const openedDoc = z.object({ openId: z.string().min(1), path: z.string().nullable() });
 // A live open records the CLI's DocOpResult; recovery records the op response, whose `result` is
-// the bridge's document itself (`{requestId,key,verdict,result:{openId,path,â€¦}}`, acceptance R4d).
+// the bridge's document itself (`{requestId,key,verdict,result:{openId,path,…}}`, acceptance R4d).
 const openedSchema = z.union([
   z.object({ document: openedDoc }).transform((r) => r.document),
   z.object({ result: openedDoc }).transform((r) => r.result),

@@ -92,7 +92,7 @@ for (const [spec, saved] of [
     const state = new Map([[`${workKey(scope)}\0${spec.route}`, JSON.parse(bytes) as unknown]]);
     const setState = vi.fn(async () => {});
     const module = new RouteWorkspace({
-      registrations: [{ spec: spec as unknown as RouteStateSpec<z.ZodType>, handlers: {} }],
+      registrations: [{ spec: spec as unknown as RouteStateSpec<z.ZodType> }],
       store: {
         getState: async ({ targetKey, route }) =>
           structuredClone(state.get(`${targetKey}\0${route}`)),
@@ -104,7 +104,7 @@ for (const [spec, saved] of [
     await expect(module.read(scope, spec.route)).rejects.toThrow(UNREADABLE_WORK);
     await expect(module.read(scope, spec.route)).rejects.toThrow(UNREADABLE_WORK);
     // A human write and a Pea write, each at the saved revision.
-    for (const actor of ["human", "agent"] as const)
+    for (const actor of ["human", "pea"] as const)
       expect(
         await module.apply(scope, spec.route, actor, [{ path: ["excludedIds"], value: [] }], 0),
       ).toMatchObject({ ok: false, error: UNREADABLE_WORK });
@@ -135,9 +135,7 @@ test("/family: shared suggestions retain either author; legacy slots require exp
   const state = new Map<string, unknown>();
   const setState = vi.fn(async () => {});
   const module = new RouteWorkspace({
-    registrations: [
-      { spec: familyDraftRouteState as unknown as RouteStateSpec<z.ZodType>, handlers: {} },
-    ],
+    registrations: [{ spec: familyDraftRouteState as unknown as RouteStateSpec<z.ZodType> }],
     store: { getState: async () => structuredClone(state.get("doc")), setState },
   });
 
@@ -169,16 +167,14 @@ test("/family: shared suggestions retain either author; legacy slots require exp
   }
 });
 
-test.each(["human", "agent"] as const)(
+test.each(["human", "pea"] as const)(
   "/families: %s starts fresh without changing old bytes or clobbering an aside",
   async (actor) => {
     const scope: WorkKey = { binding: "address" as const, route: "families", target };
     const key = (route: string) => `${workKey(scope)}\0${route}`;
     const state = new Map<string, unknown>();
     const module = new RouteWorkspace({
-      registrations: [
-        { spec: familiesRouteState as unknown as RouteStateSpec<z.ZodType>, handlers: {} },
-      ],
+      registrations: [{ spec: familiesRouteState as unknown as RouteStateSpec<z.ZodType> }],
       store: {
         getState: async ({ targetKey, route }) =>
           structuredClone(state.get(`${targetKey}\0${route}`)),
@@ -207,16 +203,14 @@ test.each(["human", "agent"] as const)(
   },
 );
 
-test.each(["human", "agent"] as const)(
+test.each(["human", "pea"] as const)(
   "/families: %s salvages the same old data before and after recovery",
   async (actor) => {
     const scope: WorkKey = { binding: "address" as const, route: "families", target };
     const key = (route: string) => `${workKey(scope)}\0${route}`;
     const state = new Map<string, unknown>();
     const module = new RouteWorkspace({
-      registrations: [
-        { spec: familiesRouteState as unknown as RouteStateSpec<z.ZodType>, handlers: {} },
-      ],
+      registrations: [{ spec: familiesRouteState as unknown as RouteStateSpec<z.ZodType> }],
       store: {
         getState: async ({ targetKey, route }) =>
           structuredClone(state.get(`${targetKey}\0${route}`)),
@@ -224,18 +218,18 @@ test.each(["human", "agent"] as const)(
           void state.set(`${targetKey}\0${route}`, structuredClone(value)),
       },
     });
-    expect(await module.salvage(scope, "families", actor)).toBeNull();
+    expect(await module.salvage(scope, "families")).toBeNull();
     const bytes = JSON.stringify({
       ...oldFamilies,
       doc: { ...oldFamilies.doc, excludedIds: [3102, 7] },
     });
     state.set(key("families"), JSON.parse(bytes));
-    expect(await module.salvage(scope, "families", actor)).toEqual({
+    expect(await module.salvage(scope, "families")).toEqual({
       from: "unreadable",
       value: { familyNames: [], familyIds: [3102, 7] },
     });
     expect(await module.startFresh(scope, "families", actor)).toMatchObject({ ok: true });
-    expect(await module.salvage(scope, "families", actor)).toEqual({
+    expect(await module.salvage(scope, "families")).toEqual({
       from: "aside:1",
       value: { familyNames: [], familyIds: [3102, 7] },
     });
@@ -246,7 +240,7 @@ test.each(["human", "agent"] as const)(
       doc: { excluded: { "41": { by: "person" } } },
     });
     expect(await module.startFresh(scope, "families", actor)).toMatchObject({ ok: true });
-    expect(await module.salvage(scope, "families", actor)).toEqual({
+    expect(await module.salvage(scope, "families")).toEqual({
       from: "aside:2",
       value: { familyNames: [], familyIds: [41] },
     });

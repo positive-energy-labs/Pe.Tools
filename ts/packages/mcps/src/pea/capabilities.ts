@@ -9,10 +9,8 @@ import {
   instancesReading,
   scheduleReads,
   actionControls,
-  semanticActions,
-  semanticWorkflowForOperation,
+  commands,
   familyReads,
-  actionBasesSchema,
   settingsRouteState,
   scheduleGridRouteState,
   routeAddress,
@@ -57,19 +55,18 @@ export interface CapabilitySources {
   pages?: readonly Capability[];
 }
 
-/** Admission metadata belongs on each object arm, including composed command unions. */
-function admissionInput(input: z.ZodType): z.ZodType {
-  const fields = { bases: actionBasesSchema.optional(), actionId: z.string().optional() };
-  if (input instanceof z.ZodObject) return input.safeExtend(fields);
-  if (input instanceof z.ZodUnion)
-    return z.union(input.options.map((option) => admissionInput(option as z.ZodType)));
-  throw Error("Semantic command input must be an object or a union of objects");
-}
-
 /** Pure projection, ordered by compiled operations/routes, packaged content and scratch Pages. */
 export function buildCapabilities(sources: CapabilitySources): Capability[] {
   return [
-    ...sources.ops.filter((op) => !semanticWorkflowForOperation(op.key)).map(opRow),
+    ...sources.ops
+      .filter(
+        (op) =>
+          !Object.hasOwn(commands, op.key) &&
+          !Object.values(commands).some((command) =>
+            (command as import("@pe/agent-contracts").Command).native?.includes(op.key),
+          ),
+      )
+      .map(opRow),
     {
       key: "route:threads.history",
       kind: "route-command",
@@ -107,9 +104,9 @@ export function buildCapabilities(sources: CapabilitySources): Capability[] {
       source: "SDK reading",
       rank: 2,
     },
-    ...Object.entries(semanticActions).map(
+    ...Object.entries(commands).map(
       ([key, action]): Capability => ({
-        key: `workflow:${key}`,
+        key: `op:${key}`,
         kind: "op",
         title: key,
         description: action.says,
@@ -117,7 +114,7 @@ export function buildCapabilities(sources: CapabilitySources): Capability[] {
         principal: capabilityPrincipals(action.effect === "command"),
         effect: action.effect === "command" ? "command" : "query",
         mutates: action.effect === "command",
-        input: z.toJSONSchema(admissionInput(action.input)) as Record<string, unknown>,
+        input: z.toJSONSchema(action.input) as Record<string, unknown>,
         source: "semantic action",
         rank: 2,
       }),
@@ -351,22 +348,7 @@ function routeRows(spec: RouteStateSpec<z.ZodType>): Capability[] {
     source: "route registry",
     rank: 0,
   };
-  const commands = Object.entries(spec.commands).map(
-    ([name, command]): Capability => ({
-      key: `route:${spec.route}.${name}`,
-      kind: "route-command",
-      title: `${spec.title}: ${name}`,
-      description: `${command.description} ${scopeHint}`,
-      needs: "nothing",
-      effect: command.effect,
-      mutates: command.effect === "command",
-      principal: capabilityPrincipals(command.effect === "command"),
-      input: z.toJSONSchema(command.input) as Record<string, unknown>,
-      source: "route registry",
-      rank: 0,
-    }),
-  );
-  return [read, edit, ...commands];
+  return [read, edit];
 }
 
 function packageRows(pod: PackageProjection): Capability[] {

@@ -1,7 +1,7 @@
 import { readFile } from "node:fs/promises";
 import { resolve } from "node:path";
 import { createHash } from "node:crypto";
-import { capturePackage, captureDirectory, listPackages } from "./packages.ts";
+import { captureDirectory } from "./packages.ts";
 import {
   readZip,
   writeZip,

@@ -226,7 +226,7 @@ test.each(["http", "stdio"])(
       "base64",
     );
     const capturePath = `/captures/${createHash("sha256").update(image).digest("hex")}.png`;
-    const writes: Array<{ caller: unknown; destination: unknown; basis: unknown }> = [];
+    const writes: Array<{ caller: unknown; target: unknown; basis: unknown }> = [];
     const reads: Array<{ key: string; ref: unknown }> = [];
     const tokens = new Set<string>();
     const rows = new Map<string, unknown>();
@@ -299,19 +299,18 @@ test.each(["http", "stdio"])(
             );
           const { input, ...admission } = JSON.parse(body);
           try {
-            const basis = admitCrossing(identity.caller, admission.destination, "/actions");
-            writes.push({ caller: identity.caller, destination: admission.destination, basis });
+            const basis = admitCrossing(identity.caller, admission.target, "/actions");
+            writes.push({ caller: identity.caller, target: admission.target, basis });
             const row = {
               ...admission,
               caller: identity.caller,
               basis,
-              request: input,
+              input,
               state: "succeeded",
               result: { status: "Succeeded" },
               steps: [],
-              preparation: { state: "unprepared" },
+              prepared: { state: "unprepared" },
               recovery: [],
-              publication: { state: "unrequested" },
               startedAt: new Date().toISOString(),
             };
             rows.set(admission.id, row);
@@ -470,7 +469,7 @@ test.each(["http", "stdio"])(
       expect(head.targets.map((target) => target.request)).toEqual([{ kind: "open", ref: user }]);
       expect(writes[0]).toMatchObject({
         basis: null,
-        destination: { kind: "document", ref: other },
+        target: { kind: "document", ref: other },
       });
     } finally {
       for (const client of clients) await client.close();
@@ -524,12 +523,12 @@ test("human and Pea discover the same plan, capture and apply commands with expl
     "family.apply",
     "settings.write",
   ])
-    expect(rows.find((row) => row.key === `workflow:${key}`)?.principal).toEqual(
+    expect(rows.find((row) => row.key === `op:${key}`)?.principal).toEqual(
       expect.arrayContaining(["human", "pea"]),
     );
-  expect(rows.find((row) => row.key === "workflow:families.plan")?.effect).toBe("query");
-  expect(rows.find((row) => row.key === "workflow:families.capture")?.effect).toBe("command");
-  expect(rows.find((row) => row.key === "workflow:family.apply")?.effect).toBe("command");
+  expect(rows.find((row) => row.key === "op:families.plan")?.effect).toBe("query");
+  expect(rows.find((row) => row.key === "op:families.capture")?.effect).toBe("command");
+  expect(rows.find((row) => row.key === "op:family.apply")?.effect).toBe("command");
   expect(rows.find((row) => row.key === "route:families.edit")?.principal).toEqual(
     expect.arrayContaining(["human", "pea"]),
   );

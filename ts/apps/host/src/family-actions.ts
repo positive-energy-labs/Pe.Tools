@@ -12,8 +12,8 @@ import {
   familiesRouteState,
   familiesExcluded,
   type FfPlanEntry,
+  type ActionReceipt,
   familiesIncluded,
-  type FamilyExclusions,
   familyCellAddress,
   familyDraftRouteState,
   familyStagedPatch,
@@ -35,11 +35,9 @@ import {
   type PodMember,
   type PodDraftSource,
   type PodMemberSource,
-  type SettingsRouteDocument,
   type FamilyCapture,
   type AppliedFilter,
   type Footprint,
-  type WorkKey,
   appliedScopeSchema,
   familyExecutionOptionsSchema,
   familyCatalogProblem,
@@ -220,7 +218,7 @@ const documentKind = (key: FamilyActionKey): boolean | "project" =>
       : false;
 
 const diagnosticLine = (d: { code: string; path: string; message: string }) =>
-  `${d.code} Â· ${d.path} â€” ${d.message}`;
+  `${d.code} · ${d.path} — ${d.message}`;
 
 /** Every capture writes a run beside the member it filed: `output/<runId>/receipt.json` plus its outputs. */
 /**
@@ -312,7 +310,7 @@ export async function lifetime(
   return { session: await current(bridge, target, family, process), process };
 }
 
-type Sealed = z.infer<typeof sealedSchema>;
+type Preview = Pick<ActionReceipt, "key" | "state" | "target" | "prepared"> & { result?: unknown };
 
 /** A member's JSON as authored, ignoring the `$schema` URL its writer stamps. */
 const unstamped = (json: string) => {
@@ -523,9 +521,9 @@ export function familyExecutors(
             "families.plan",
             "families.save-draft",
           ].includes(key) &&
-          !("rows" in admission.input) &&
-          !("source" in admission.input) &&
-          !("plan" in admission.input);
+          !admission.input.source &&
+          !admission.input.sources &&
+          !admission.input.plan;
         let directSources: ReturnType<typeof generatedSources> = [];
         const sourceInputs: (PodMemberSource | PodDraftSource)[] = [];
         const collectSources = (value: unknown): void => {
@@ -580,12 +578,7 @@ export function familyExecutors(
               ];
         const consumes: Dependency[] = [];
         let process: NativeProcess | undefined;
-        const planId =
-          typeof admission.input.plan === "string"
-            ? admission.input.plan
-            : typeof (admission.input.rows as { plan?: unknown } | undefined)?.plan === "string"
-              ? (admission.input.rows as { plan: string }).plan
-              : undefined;
+        const planId = admission.input.plan as string | undefined;
         const bind = async () => {
           frozenWork = base ? await ctx.read.work(base, submittedRoute!) : null;
           directSources = direct ? generatedSources() : [];
@@ -769,7 +762,7 @@ export function familyExecutors(
           if (scope) {
             const planned = result as FamiliesPlan.Res.Response;
             if (planned.diagnostics.length)
-              throw refused(planned.diagnostics.map(diagnosticLine).join(" Â· "));
+              throw refused(planned.diagnostics.map(diagnosticLine).join(" · "));
             // A cell whose family or type no longer resolves never re-attaches: plan names it.
             const loaded = new Set(
               catalog!.flatMap((family) =>
@@ -793,9 +786,8 @@ export function familyExecutors(
           const plan = planned.families[0];
           if (planned.diagnostics.length || planned.families.length !== 1 || plan!.refusals.length)
             throw refused(
-              [...planned.diagnostics, ...(plan?.refusals ?? [])]
-                .map(diagnosticLine)
-                .join(" Â· ") || "Expected one family plan",
+              [...planned.diagnostics, ...(plan?.refusals ?? [])].map(diagnosticLine).join(" · ") ||
+                "Expected one family plan",
             );
           return {
             id: admission.id,
@@ -807,13 +799,7 @@ export function familyExecutors(
         const prepare = async (
           key: FamilyActionKey = admission.key as FamilyActionKey,
           commandInput = admission.input,
-          adoptedPlan?: {
-            key: string;
-            state: string;
-            target: typeof admission.target;
-            prepared: { state: string; value?: unknown };
-            result?: unknown;
-          },
+          adoptedPlan?: Preview,
         ): Promise<Prepared> => {
           if (key === "families.save-draft")
             return {
@@ -960,64 +946,28 @@ export function familyExecutors(
           }
           if (key === "family.apply" || key === "families.apply") {
             const authored = familyInput(key, commandInput);
-            let rows = authored.rows;
-            if (!rows) {
-              if (authored.plan) {
-                const [plan] = ctx.read.receipts(authored.plan);
-                if (plan?.state !== "succeeded")
-                  throw refused("Apply requires its succeeded preview");
-                const result = plan.result as {
-                  included: Record<string, string>;
-                  plan: FfPlanEntry[];
-                };
-                rows = {
-                  plan: authored.plan,
-                  expectedPlanHashes: Object.fromEntries(
-                    Object.entries(result.included).filter(
-                      ([id]) =>
-                        authored.include === "all" ||
-                        authored.include.includes(id) ||
-                        result.plan.some(
-                          (entry) =>
-                            String(entry.familyId) === id &&
-                            authored.include.includes(entry.familyName),
-                        ),
-                    ),
-                  ),
-                };
-              } else rows = { sources: directSources, include: authored.include };
-            }
-            if ("sources" in rows) {
+            const sources: typeof authored.sources =
+              authored.sources ??
+              (!authored.source && !authored.plan && !adoptedPlan ? directSources : undefined);
+            if (sources)
               return {
                 kind: "batch",
                 items: await Promise.all(
-                  rows.sources.map((source) =>
+                  sources.map((source) =>
                     prepare(key, {
-                      rows: { ...source, include: rows.include },
-                      familyNames: authored.familyNames,
-                      executionOptions: authored.executionOptions,
+                      ...source,
+                      include: authored.include,
+                      familyNames: source.familyNames ?? authored.familyNames,
+                      executionOptions: source.executionOptions ?? authored.executionOptions,
                     }),
                   ),
                 ),
               };
-            }
             const planKey = key === "family.apply" ? "family.plan" : "families.plan";
-            let plan:
-              | {
-                  key: string;
-                  state: string;
-                  target: typeof admission.target;
-                  prepared: { state: string; value?: unknown };
-                  result?: unknown;
-                }
-              | undefined;
-            let input: { plan: string; expectedPlanHashes: Record<string, string> };
-            if ("source" in rows) {
-              const preparedPlan = await prepare(planKey, {
-                source: rows.source,
-                familyNames: rows.familyNames ?? authored.familyNames,
-                executionOptions: rows.executionOptions ?? authored.executionOptions,
-              });
+            let plan =
+              adoptedPlan ?? (authored.plan ? ctx.read.receipts(authored.plan)[0] : undefined);
+            if (authored.source) {
+              const preparedPlan = await prepare(planKey, authored);
               if (preparedPlan.kind !== "native" || !preparedPlan.planned)
                 throw refused("Planning did not produce a native plan");
               const result = await runPlan(preparedPlan, async (op, input, process) => {
@@ -1030,23 +980,6 @@ export function familyExecutors(
                   `${admission.id}:prepare:${digest(canonicalRouteInput(input)).slice(0, 16)}`,
                 );
               });
-              const included = result.included;
-              const entries = [result.plan].flat() as FfPlanEntry[];
-              const selected =
-                rows.include === "all"
-                  ? included
-                  : Object.fromEntries(
-                      Object.entries(included).filter(
-                        ([id]) =>
-                          rows.include.includes(id) ||
-                          entries.some(
-                            (entry) =>
-                              String(entry.familyId) === id &&
-                              rows.include.includes(entry.familyName),
-                          ),
-                      ),
-                    );
-              input = { plan: `${admission.id}:prepared`, expectedPlanHashes: selected };
               plan = {
                 key: planKey,
                 state: "succeeded",
@@ -1054,46 +987,57 @@ export function familyExecutors(
                 prepared: { state: "ready", value: preparedPlan },
                 result,
               };
-            } else {
-              input = rows;
-              [plan] = adoptedPlan ? [adoptedPlan] : ctx.read.receipts(input.plan);
             }
-            if (!Object.keys(input.expectedPlanHashes).length)
-              throw refused("No included family has changes to apply");
-            const planPrepared =
-              plan?.prepared.state === "ready"
-                ? preparedFamilySchema.parse(plan.prepared.value)
-                : null;
-            if (planPrepared?.kind === "batch") {
-              const results = (plan!.result as { results: unknown[] }).results;
-              const items = [];
-              for (const [index, item] of planPrepared.items.entries()) {
-                const result = results[index] as { included: Record<string, string> };
-                const subset = Object.fromEntries(
-                  Object.entries(input.expectedPlanHashes).filter(([id]) =>
-                    Object.hasOwn(result.included, id),
-                  ),
-                );
-                if (!Object.keys(subset).length) continue;
-                items.push(
-                  await prepare(
-                    key,
-                    { rows: { plan: input.plan, expectedPlanHashes: subset } },
-                    { ...plan!, prepared: { state: "ready", value: item }, result },
-                  ),
-                );
-              }
-              if (!items.length) throw refused("No included family has changes to apply");
-              return { kind: "batch", items };
-            }
-            const sealed =
-              plan?.prepared.state === "ready"
-                ? (planPrepared as { sealed?: Sealed }).sealed
-                : undefined;
-            if (!plan || plan.key !== planKey || plan.state !== "succeeded" || !sealed)
+            if (
+              !plan ||
+              plan.key !== planKey ||
+              plan.state !== "succeeded" ||
+              plan.prepared.state !== "ready"
+            )
               throw refused(`Apply must name a succeeded ${planKey} action`);
             if (canonicalRouteInput(plan.target) !== canonicalRouteInput(admission.target))
               throw refused("The plan was made for a different document");
+            const result = plan.result as {
+              included: Record<string, string>;
+              plan: FfPlanEntry | FfPlanEntry[];
+            };
+            const entries = [result.plan].flat();
+            const expectedPlanHashes = Object.fromEntries(
+              Object.entries(result.included).filter(
+                ([id]) =>
+                  authored.include === "all" ||
+                  authored.include.includes(id) ||
+                  entries.some(
+                    (entry) =>
+                      String(entry.familyId) === id && authored.include.includes(entry.familyName),
+                  ),
+              ),
+            );
+            if (!Object.keys(expectedPlanHashes).length)
+              throw refused("No included family has changes to apply");
+            const input = { plan: authored.plan ?? `${admission.id}:prepared`, expectedPlanHashes };
+            const planPrepared = preparedFamilySchema.parse(plan.prepared.value);
+            if (planPrepared.kind === "batch") {
+              const results = (plan.result as { results: unknown[] }).results;
+              const items = [];
+              for (const [index, item] of planPrepared.items.entries()) {
+                const result = results[index] as { included: Record<string, string> };
+                const included = Object.keys(expectedPlanHashes).filter((id) =>
+                  Object.hasOwn(result.included, id),
+                );
+                if (included.length)
+                  items.push(
+                    await prepare(
+                      key,
+                      { plan: input.plan, include: included },
+                      { ...plan, prepared: { state: "ready", value: item }, result },
+                    ),
+                  );
+              }
+              return { kind: "batch", items };
+            }
+            const sealed = planPrepared.kind === "native" ? planPrepared.sealed : undefined;
+            if (!sealed) throw refused(`Apply must name a sealed ${planKey} action`);
             const consumed = sealed.consumed;
             if (consumed?.route === "families") {
               const document = frozenWork?.doc as
@@ -1108,12 +1052,6 @@ export function familyExecutors(
                   "Stage either a native Family Foundry patch or per-type cells, not both",
                 );
             }
-            const included = (plan.result as { included: Record<string, string> }).included;
-            const stray = Object.keys(input.expectedPlanHashes).filter(
-              (id) => included[id] !== input.expectedPlanHashes[id],
-            );
-            if (stray.length)
-              throw refused(`Families ${stray.join(", ")} are not in the reviewed plan as sent`);
             const patchEntries =
               key === "families.apply" && sealed.consumed?.patch
                 ? (plan.result as { plan: FfPlanEntry[] }).plan
@@ -1397,7 +1335,6 @@ export function familyExecutors(
           };
           if (prepared.kind === "capture") {
             const captured = await native(prepared.nativeKey, prepared.input, prepared.process);
-            const at = new Date(prepared.at);
             const specs =
               prepared.nativeKey === "families.capture"
                 ? (captured as FamiliesCapture.Res.Response).families.flatMap((f) =>

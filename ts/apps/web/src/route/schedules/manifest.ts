@@ -6,7 +6,6 @@ import {
   scheduleReadingSchema,
   scheduleReads,
   splitScheduleCellKey,
-  type ActionStatus,
   type ScheduleGridDocument,
   type WorkKey,
 } from "@pe/agent-contracts";
@@ -21,10 +20,7 @@ import {
 import { previousOf } from "#/readings";
 import { DEMO_PODS, DEMO_SPEC_PATH } from "#/route/seeds";
 import { readScheduleCapture } from "../../../../../packages/mcps/src/shared/schedule-client";
-import {
-  actionResult,
-  runSemanticAction,
-} from "../../../../../packages/mcps/src/shared/takeoff-action-client";
+import { actionResult } from "../../../../../packages/mcps/src/shared/takeoff-action-client";
 
 export type ScheduleGridReading = "catalog" | "work" | "history" | "saved" | "receipts";
 export type ScheduleGridAction = "read";
@@ -47,14 +43,6 @@ const scheduleGridPage = routeAddress("schedules").schema.extend({
 export type ScheduleGridPage = z.output<typeof scheduleGridPage>;
 
 type Ctx = RouteCtx<ScheduleGridDocument, ScheduleGridReading, ScheduleGridPage>;
-
-const REFUSAL_WORD: Record<string, string> = {
-  "stale-edit-cell": "stale",
-  "target-evidence-stale": "stale",
-};
-/** A refused cell's note: its code's word, or the error's first clause when it carries no code. */
-const refusalNote = (f: { error: string; code?: string }) =>
-  f.code ? (REFUSAL_WORD[f.code] ?? f.code) : f.error.split(": ")[0]!;
 
 /** A cell as the person reads it: its column header and row. */
 const cellLabel = (ctx: Ctx, key: string) => {
@@ -88,23 +76,24 @@ const reopened = (ctx: Ctx) => {
   );
 };
 
-const statuses = (ctx: Ctx): ActionStatus[] =>
-  (previousOf(ctx.readings.receipts) as ActionStatus[] | undefined) ?? [];
-
 /** Apply over edit cells (ruling 41): `schedule.grid.push`, its readback, and the rebind. */
 async function pushStaged(ctx: Ctx) {
   ctx.setPage({ refused: {} });
   // The run lands in the pod the route has bound; with none, in the action receipt.
   const pod = (ctx.page as { pod?: string | null }).pod ?? undefined;
-  const row = await runSemanticAction("schedule.grid.push", pod ? { pod } : {}, targetOf(ctx), {
-    work: { key: ctx.work.key as WorkKey, revision: ctx.work.revision! },
-  });
-  // The host's lifetime refusal, by its code (a race past `ready`).
-  if (
-    row.state === "failed" &&
-    row.issues?.some((issue) => issue.code === "binding-lifetime-closed")
-  )
-    return refuse("not-ready", REOPENED);
+  const row = await ctx.commands["schedule.grid.push"](pod ? { pod } : {});
+  if (row.state === "failed" && row.refusal?.kind === "stale") {
+    const cells = row.refusal.consumed.flatMap((entry) =>
+      entry.kind === "work"
+        ? entry.paths.flatMap((path) =>
+            path[0] === "cells" && typeof path[1] === "string" ? [path[1]] : [],
+          )
+        : [],
+    );
+    ctx.setPage({
+      refused: Object.fromEntries(cells.map((cell) => [cell, "changed since review"])),
+    });
+  }
   const result = actionResult(row) as {
     readback?: unknown;
     applied?: number;
@@ -117,9 +106,7 @@ async function pushStaged(ctx: Ctx) {
   }
   // A stale refusal whose readback failed has no C on screen: the flag reads again first.
   ctx.setPage({
-    unread: result.readbackError
-      ? (result.failures ?? []).filter((f) => REFUSAL_WORD[f.code ?? ""] === "stale").length
-      : 0,
+    unread: result.readbackError ? (result.failures ?? []).length : 0,
   });
   if (result.readbackError) throw Error(result.readbackError);
   // Some cells landed and some were refused: an outcome, not a failure. Returned, so the verb's
@@ -127,7 +114,7 @@ async function pushStaged(ctx: Ctx) {
   // Each refusal draws on its cell; the log says the count and the first cell.
   const failures = result.failures ?? [];
   if (!failures.length) return null;
-  ctx.setPage({ refused: Object.fromEntries(failures.map((f) => [f.key, refusalNote(f)])) });
+  ctx.setPage({ refused: Object.fromEntries(failures.map((f) => [f.key, f.error])) });
   return {
     ...refuse(
       result.applied ? "partial" : "not-ready",
@@ -153,15 +140,13 @@ export const scheduleSpec: EntityRouteDef<
   edit: {
     cells: (ctx) => ctx.work.doc?.cells ?? {},
     ready: (ctx) =>
-      statuses(ctx).some((row) => ["running", "unknown", "incomplete"].includes(row.state))
-        ? "Recover or resume the original receipt before a new apply"
-        : !ctx.page.workspaceId || !ctx.work.doc?.basis || ctx.work.revision === null
-          ? "Review the exact schedule binding first"
-          : (["saved", "receipts"] as const).find((key) => ctx.readings[key].state !== "ready")
-            ? "Wait for the schedule and its receipts to finish reading"
-            : reopened(ctx)
-              ? REOPENED
-              : null,
+      !ctx.page.workspaceId || !ctx.work.doc?.basis
+        ? "Review the exact schedule binding first"
+        : (["saved", "receipts"] as const).find((key) => ctx.readings[key].state !== "ready")
+          ? "Wait for the schedule and its receipts to finish reading"
+          : reopened(ctx)
+            ? REOPENED
+            : null,
     apply: (ctx) => pushStaged(ctx),
   },
   captureInput: (ctx) => {
@@ -178,7 +163,6 @@ export const schedulesManifest = () =>
   entityRoute<ScheduleGridDocument, ScheduleGridReading, ScheduleGridPage, ScheduleGridAction>(
     scheduleSpec,
     {
-      work: scheduleGridRouteState,
       // Grouped by column, so the Work sentence says "across 3 columns" (ruling 14).
       cells: [
         {
@@ -208,13 +192,7 @@ export const schedulesManifest = () =>
           page.captureId
             ? { kind: "schedule-reading", subject: "saved", id: page.captureId }
             : null,
-        receipts: (page: ScheduleGridPage) =>
-          page.workspaceId
-            ? {
-                kind: "receipts",
-                scope: { kind: "schedules", workspaceId: page.workspaceId },
-              }
-            : null,
+        receipts: (_page: ScheduleGridPage, work: WorkKey) => ({ kind: "receipts", work }),
       },
       address: "schedules",
       page: scheduleGridPage,
@@ -260,7 +238,6 @@ export const schedulesManifest = () =>
           },
         },
       },
-      runs: ["schedule.grid.push", "schedule.grid.bind"],
       seeds: SCHEDULE_SEEDS as never,
     },
   );

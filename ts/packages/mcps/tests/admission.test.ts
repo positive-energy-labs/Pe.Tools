@@ -17,18 +17,15 @@ const operations: HostOperationDefinition[] = [
 const target = { kind: "open", ref: { session: "A", openId: "open-A" } } as const;
 const destination = { kind: "document", ref: target.ref };
 const receipt = (admission: Record<string, unknown>) => {
-  const { input, ...rest } = admission;
   return {
-    ...rest,
+    ...admission,
     caller: { kind: "pea", context: "c", thread: "t" },
     basis: null,
-    request: input,
     state: "succeeded",
     result: { done: true },
     steps: [],
-    preparation: { state: "unprepared" },
+    prepared: { state: "unprepared" },
     recovery: [],
-    publication: { state: "unrequested" },
     startedAt: new Date(0).toISOString(),
   };
 };
@@ -49,7 +46,7 @@ function host(prior?: Record<string, unknown>, scriptResponse?: Record<string, u
       saved = receipt(body);
       if (scriptResponse && body.key === "scripting.execute") {
         saved.result = scriptResponse;
-        saved.preparation = { state: "ready", value: { sourceBundle: "s".repeat(5000) } };
+        saved.prepared = { state: "ready", value: { sourceBundle: "s".repeat(5000) } };
       }
       return Response.json(saved);
     }
@@ -132,7 +129,7 @@ test("pe_do returns a succeeded script's output once and points to its complete 
   expect(original).toMatchObject({
     state: "succeeded",
     result: scriptResponse,
-    preparation: { state: "ready", value: { sourceBundle: "s".repeat(5000) } },
+    prepared: { state: "ready", value: { sourceBundle: "s".repeat(5000) } },
   });
 });
 
@@ -151,63 +148,60 @@ test("a failed script keeps its whole result, resolve diagnostics included", asy
   expect((output.result as Record<string, unknown>).response).toEqual(scriptResponse);
 });
 
-test("pe_do admits native operations and workflows with exact identity, target and bases, and no actor", async () => {
+test("pe_do admits native and semantic commands with exact Work intent and no actor", async () => {
   const { posts } = host();
   expect(
     await call(peDo, { key: "op:scripting.execute", target, input: { scriptContent: "x" } }),
   ).toMatchObject({ ok: true });
-  for (const key of ["scripting.workspace.bootstrap", "pod.import", "pod.export"])
-    expect(
-      await call(
-        peDo,
-        {
-          key: `op:${key}`,
-          ...(key === "scripting.workspace.bootstrap" ? { target: { id: "A" } } : {}),
-        },
-        key,
-      ),
-    ).toMatchObject({
-      ok: true,
-    });
-  const bases = { captureId: "c".repeat(64) };
+  for (const key of ["scripting.workspace.bootstrap", "pod.import", "pod.export"]) {
+    const result = await call(
+      peDo,
+      {
+        key: `op:${key}`,
+        ...(key === "scripting.workspace.bootstrap" ? { target: { id: "A" } } : {}),
+      },
+      key,
+    );
+    expect(result, JSON.stringify(result)).toMatchObject({ ok: true });
+  }
+  const work = {
+    key: { binding: "workspace", route: "takeoffs", target: null, work: "reviewed" },
+    revision: 13,
+  };
   expect(
     await call(peDo, {
-      key: "workflow:takeoffs.partition",
+      key: "op:takeoffs.partition",
+      actionId: "partition",
       target,
       input: {
         zoneRegion: 1,
         view: "v",
         zoneName: "z",
         zoneGuid: "g",
-        bases,
-        actionId: "workflow",
+        work,
       },
     }),
   ).toMatchObject({ ok: true });
   expect(posts).toMatchObject([
     {
       id: "attempt",
-      kind: "operation",
       key: "scripting.execute",
-      destination,
+      target: destination,
       input: { scriptContent: "x" },
-      bases: {},
     },
     ...["scripting.workspace.bootstrap", "pod.import", "pod.export"].map((key) => ({
       id: key,
-      kind: "operation",
       key,
-      destination:
+      target:
         key === "scripting.workspace.bootstrap"
           ? { kind: "session", session: "A" }
           : { kind: "host" },
     })),
     {
-      id: "workflow",
-      kind: "workflow",
+      id: "partition",
       key: "takeoffs.partition",
-      destination,
-      bases,
+      target: destination,
+      input: { work },
     },
   ]);
   expect(posts.at(-1)?.input).not.toHaveProperty("bases");
@@ -241,28 +235,26 @@ test("pe_do replays the original receipt without catalog or target discovery and
   const { posts, reads } = host(
     receipt({
       id: "attempt",
-      kind: "operation",
       key: "scripting.execute",
-      destination,
+      target: destination,
       input: { scriptContent: "x" },
-      bases: {},
     }),
   );
   expect(
     await call(peDo, { key: "op:scripting.execute", input: { scriptContent: "x" } }),
   ).toMatchObject({ ok: true });
-  expect(posts).toMatchObject([{ id: "attempt", destination, input: { scriptContent: "x" } }]);
-  await expect(
-    call(peDo, { key: "op:scripting.execute", input: { scriptContent: "changed" } }),
-  ).rejects.toThrow("conflicts");
-  await expect(
-    call(peDo, {
+  expect(posts).toEqual([]);
+  expect(
+    await call(peDo, { key: "op:scripting.execute", input: { scriptContent: "changed" } }),
+  ).toMatchObject({ isError: true, content: expect.stringContaining("conflicts") });
+  expect(
+    await call(peDo, {
       key: "op:scripting.execute",
       input: { scriptContent: "x" },
       target: { kind: "open", ref: { session: "B", openId: "open-B" } },
     }),
-  ).rejects.toThrow("destination");
-  expect(posts).toHaveLength(1);
+  ).toMatchObject({ isError: true, content: expect.stringContaining("target") });
+  expect(posts).toHaveLength(0);
   expect(new Set(reads)).toEqual(new Set(["/actions"]));
 });
 
@@ -274,70 +266,61 @@ test("pe_do admits a lifecycle action at the session its input names, with no he
   };
   expect(
     await call(peDo, {
-      key: "workflow:instances.stop",
-      input: { session, unsaved: "keep", actionId: "stop" },
+      key: "op:instances.stop",
+      input: { session, unsaved: "keep" },
+      actionId: "stop",
     }),
   ).toMatchObject({ ok: true });
   expect(posts).toMatchObject([
     {
       id: "stop",
       key: "instances.stop",
-      destination: { kind: "sdk-session", selection: { id: "dev" } },
+      target: { kind: "sdk-session", selection: { id: "dev" } },
     },
   ]);
 });
 
-test("workflow recovery uses the original normalized intent and bases before reading a later thread or closed document", async () => {
-  const bases = { captureId: "c".repeat(64) };
+test("semantic recovery normalizes declared defaults before reading a later thread or closed document", async () => {
+  const selected = { path: "C:/old.rhvac", captureId: "c".repeat(64), fileVersion: "v13" };
   const original = receipt({
-    id: "old-workflow",
-    kind: "workflow",
+    id: "old-sync",
     key: "takeoffs.sync",
-    destination,
-    input: { path: "C:/old.rhvac", zones: [] },
-    bases,
+    target: destination,
+    input: { ...selected, zones: [] },
   });
   const { posts, reads } = host(original);
   const recover = (input: Record<string, unknown>, override?: unknown) =>
     withInvocationContext(
-      {
-        hostBaseUrl: "http://admission.test",
-        headers: { "x-pe-context": "later-turn" },
-      },
+      { hostBaseUrl: "http://admission.test", headers: { "x-pe-context": "later-turn" } },
       () =>
         peDo.execute!(
           {
-            key: "workflow:takeoffs.sync",
+            key: "op:takeoffs.sync",
+            actionId: "old-sync",
             input,
             target: override,
             timeoutSeconds: 30,
           } as never,
-          { agent: { toolCallId: "new-call" } } as never,
+          { agent: { toolCallId: "new-call" } },
         ),
     );
-  expect(await recover({ actionId: "old-workflow", path: "C:/old.rhvac" })).toMatchObject({
+  expect(await recover(selected)).toMatchObject({
     ok: true,
-    recovered: true,
     target: { session: "A" },
-    result: { id: "old-workflow" },
+    result: { id: "old-sync" },
   });
-  expect(posts).toMatchObject([{ id: "old-workflow", destination, bases }]);
-  await expect(recover({ actionId: "old-workflow", path: "C:/changed.rhvac" })).rejects.toThrow(
-    "conflicts",
-  );
-  await expect(
-    recover({ actionId: "old-workflow", path: "C:/old.rhvac", bases: {} }),
-  ).rejects.toThrow("conflicts");
-  await expect(
-    recover(
-      { actionId: "old-workflow", path: "C:/old.rhvac" },
-      {
-        kind: "open",
-        ref: { session: "B", openId: "open-B" },
-      },
-    ),
-  ).rejects.toThrow("destination");
-  expect(posts).toHaveLength(1);
+  expect(await recover({ ...selected, path: "C:/changed.rhvac" })).toMatchObject({
+    isError: true,
+    content: expect.stringContaining("conflicts"),
+  });
+  expect(await recover({ ...selected, fileVersion: "v14" })).toMatchObject({
+    isError: true,
+    content: expect.stringContaining("conflicts"),
+  });
+  expect(
+    await recover(selected, { kind: "open", ref: { session: "B", openId: "open-B" } }),
+  ).toMatchObject({ isError: true, content: expect.stringContaining("target") });
+  expect(posts).toEqual([]);
   expect(new Set(reads)).toEqual(new Set(["/actions"]));
 });
 
@@ -350,22 +333,35 @@ test("a canonical script replays its captured manifest identity and sourcePath w
   };
   const prior = receipt({
     id: "attempt",
-    kind: "operation",
     key: "scripting.execute",
-    destination,
+    target: destination,
     input: { workspaceKey: "historical-folder", sourcePath: "src/Census.cs", sourceBundle },
-    bases: {},
   });
   const before = JSON.stringify(prior);
   const { posts, reads } = host(prior);
   expect(await call(peDo, { key: "script:@shelf-test/src/Census.cs" })).toMatchObject({ ok: true });
-  expect(posts[0]).toMatchObject({
-    id: "attempt",
-    input: { workspaceKey: "historical-folder", sourcePath: "src/Census.cs", sourceBundle },
-  });
+  expect(posts).toEqual([]);
   await expect(call(peDo, { key: "script:@other/src/Census.cs" })).rejects.toThrow("conflicts");
   await expect(call(peDo, { key: "script:@shelf-test/src/Other.cs" })).rejects.toThrow("conflicts");
-  expect(posts).toHaveLength(1);
+  expect(posts).toHaveLength(0);
   expect(new Set(reads)).toEqual(new Set(["/actions"]));
   expect(JSON.stringify(prior)).toBe(before);
+});
+
+test("a direct RPC caller recovers its original command before consulting a missing catalogue", async () => {
+  const { HostRpcCaller } = await import("../src/shared/host-rpc-caller.ts");
+  const input = { pod: "p", archivePath: "p.zip" };
+  const prior = receipt({ id: "rpc-original", key: "pod.export", target: { kind: "host" }, input });
+  const { posts, reads } = host(prior);
+  const caller = new HostRpcCaller({
+    hostBaseUrl: "http://admission.test",
+    requestId: "rpc-original",
+  });
+  expect(await caller.callOperation("pod.export", input)).toMatchObject({
+    ok: true,
+    response: { done: true },
+    action: { id: "rpc-original" },
+  });
+  expect(posts).toEqual([]);
+  expect(reads).toEqual(["/actions"]);
 });

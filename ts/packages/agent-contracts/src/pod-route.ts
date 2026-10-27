@@ -21,7 +21,5 @@ export function podRouteWorkSpec(
     title,
     description: "Authored Pod route Work",
     schema: podRouteStateSchema,
-
-    commands: {},
   };
 }

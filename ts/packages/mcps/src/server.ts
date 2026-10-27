@@ -50,33 +50,32 @@ export async function createPeaMcpServer(context: InvocationContext): Promise<Mc
     server.registerTool(
       tool.id,
       { description: tool.description, inputSchema: tool.inputSchema as never },
-      (async (input: unknown, extra: unknown) => {
-        try {
-          await bound.beforeTool?.(tool.id);
-          const requestId = (extra as { requestId: string | number }).requestId;
-          let id = calls.get(requestId);
-          if (!id) {
-            id = randomUUID();
-            calls.set(requestId, id);
-          }
-          return toContent(
-            tool,
-            await withInvocationContext(bound, () =>
-              tool.execute(input as never, {
+      ((input: unknown, extra: unknown) =>
+        withInvocationContext(bound, async () => {
+          try {
+            await bound.beforeTool?.(tool.id);
+            const requestId = (extra as { requestId: string | number }).requestId;
+            let id = calls.get(requestId);
+            if (!id) {
+              id = randomUUID();
+              calls.set(requestId, id);
+            }
+            return toContent(
+              tool,
+              await tool.execute(input as never, {
                 agent: { toolCallId: id },
                 mcp: { extra },
               }),
-            ),
-          );
-        } catch (error) {
-          return {
-            isError: true,
-            content: [
-              { type: "text", text: error instanceof Error ? error.message : String(error) },
-            ],
-          };
-        }
-      }) as never,
+            );
+          } catch (error) {
+            return {
+              isError: true,
+              content: [
+                { type: "text", text: error instanceof Error ? error.message : String(error) },
+              ],
+            };
+          }
+        })) as never,
     );
   return server;
 }

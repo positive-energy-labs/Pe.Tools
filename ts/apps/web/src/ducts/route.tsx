@@ -110,7 +110,7 @@ export function DuctsRoute({ url = true }: { url?: boolean } = {}) {
           ...bound.actions!.refresh,
           does: undefined,
           needs: "host" as const,
-          actor: "any" as const,
+
           says: "Recalculate the fixture in the pricing worker; no Revit read or write",
         },
       },

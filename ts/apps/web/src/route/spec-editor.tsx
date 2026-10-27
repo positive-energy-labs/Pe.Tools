@@ -1,3 +1,5 @@
+import { tools } from "@pe/agent-contracts";
+import { presentation } from "./presentation";
 /**
  * THE MEMBER EDITOR — one member, one draft; form and raw JSON are two modes of that draft. A draft
  * the form cannot render stays raw, byte for byte. Offline the host answers schema issues only;
@@ -36,13 +38,8 @@ import { SchemaToFieldRender } from "#/lib/schema-to-field-render";
 import { projectHostValidationState } from "#/lib/schema-to-field-render/field-state";
 import { inventoryOf, previousOf, useHostStatusSlice, useInventory } from "#/readings";
 import { schemaFormModel } from "#/settings/schema-form";
-import {
-  actionResult,
-  runSemanticAction,
-  saveSettingsAction,
-} from "../../../../packages/mcps/src/shared/takeoff-action-client";
+import { actionResult } from "../../../../packages/mcps/src/shared/takeoff-action-client";
 
-import { defineRoute } from "./manifest";
 import { useRouteDemo } from "./activity";
 import type { MemberRef } from "./entity-route";
 import { Ladder } from "./ladder";
@@ -96,83 +93,76 @@ const adoptInput = z.object({ sha256: z.string().min(1) });
  * the editor already re-reads the member and shows live composition diagnostics.
  */
 const memberWorkManifest = (seed?: SettingsRouteDocument, demo?: string | null) => {
-  return defineRoute<SettingsRouteDocument, never, Record<string, never>, MemberWorkAction>({
-    key: settingsRouteState.route,
-    name: "Member",
-    docs: "Review Pea's field proposals on one pod member, stage what you accept, and save the member.",
-    work: settingsRouteState,
-    actions: {
-      open: {
-        label: "open",
-        says: "adopts the member's saved bytes as the Work basis; refuses while edits are pending",
-        needs: "host",
-        input: openInput as never,
-        dirties: [],
-        ready: () => null,
-        run: async (ctx, { member }: z.infer<typeof openInput>) => {
-          actionResult(
-            await runSemanticAction("settings.observe", { member }, undefined, {
-              work: { key: ctx.work.key, revision: ctx.work.revision ?? 0 },
-            }),
-          );
-        },
-      },
-      adopt: {
-        label: "adopt disk bytes",
-        says: "adopts the member as it is on disk now and discards the old proposals and edit fields",
-        needs: "host",
-        input: adoptInput as never,
-        dirties: [],
-        ready: (ctx) => (ctx.work.doc?.basis ? null : "open a pod member first"),
-        run: async (ctx, input: z.infer<typeof adoptInput>) => {
-          const member = ctx.work.doc!.basis!.member;
-          actionResult(
-            await runSemanticAction(
-              "settings.observe",
-              { member, sha256: input.sha256, replaceEdits: true },
-              undefined,
-              { work: { key: ctx.work.key, revision: ctx.work.revision ?? 0 } },
-            ),
-          );
-        },
-      },
-      save: {
-        label: "save",
-        does: "settings.write",
-        input: z.void() as never,
-        dirties: [],
-        requires: { work: true },
-        ready: (ctx) => {
-          const doc = ctx.work.doc;
-          if (!doc?.basis) return "open a pod member first";
-          if (!doc.basis.sha256) return "review an adopted member before saving";
-          return null;
-        },
-        run: async (ctx) => {
-          const doc = ctx.work.doc;
-          const revision = ctx.work.revision;
-          if (!doc || revision === null) throw Error("Member Work unavailable");
-          const result = actionResult(await saveSettingsAction(ctx.work.key, doc, revision)) as
-            | { kind?: string }
-            | undefined;
-          if (result?.kind === "conflict")
-            throw Error(
-              "The member changed on disk. Adopt the disk bytes after reviewing; edit fields were kept until then.",
-            );
-        },
-      },
-    },
-    seeds: (seed && demo
-      ? {
-          [demo]: {
-            title: "a member with Pea's suggestion lane",
-            work: seed,
-            readings: {},
-            page: {},
+  return presentation<SettingsRouteDocument, never, Record<string, never>, MemberWorkAction>(
+    tools.pods,
+    {
+      key: settingsRouteState.route,
+      name: "Member",
+      docs: "Review Pea's field proposals on one pod member, stage what you accept, and save the member.",
+      actions: {
+        open: {
+          label: "open",
+          says: "adopts the member's saved bytes as the Work basis; refuses while edits are pending",
+          needs: "host",
+          input: openInput as never,
+          dirties: [],
+          ready: () => null,
+          run: async (ctx, { member }: z.infer<typeof openInput>) => {
+            actionResult(await ctx.commands["settings.observe"]({ member }));
           },
-        }
-      : undefined) as never,
-  });
+        },
+        adopt: {
+          label: "adopt disk bytes",
+          says: "adopts the member as it is on disk now and discards the old proposals and edit fields",
+          needs: "host",
+          input: adoptInput as never,
+          dirties: [],
+          ready: (ctx) => (ctx.work.doc?.basis ? null : "open a pod member first"),
+          run: async (ctx, input: z.infer<typeof adoptInput>) => {
+            const member = ctx.work.doc!.basis!.member;
+            actionResult(
+              await ctx.commands["settings.observe"]({
+                member,
+                sha256: input.sha256,
+                replaceEdits: true,
+              }),
+            );
+          },
+        },
+        save: {
+          label: "save",
+          does: "settings.write",
+          input: z.void() as never,
+          dirties: [],
+          requires: { work: true },
+          ready: (ctx) => {
+            const doc = ctx.work.doc;
+            if (!doc?.basis) return "open a pod member first";
+            if (!doc.basis.sha256) return "review an adopted member before saving";
+            return null;
+          },
+          run: async (ctx) => {
+            actionResult(
+              await ctx.commands["settings.write"]({
+                member: ctx.work.doc!.basis!.member,
+                write: { kind: "save", sha256: ctx.work.doc!.basis!.sha256 },
+              }),
+            );
+          },
+        },
+      },
+      seeds: (seed && demo
+        ? {
+            [demo]: {
+              title: "a member with Pea's suggestion lane",
+              work: seed,
+              readings: {},
+              page: {},
+            },
+          }
+        : undefined) as never,
+    },
+  );
 };
 
 /**

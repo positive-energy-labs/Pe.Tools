@@ -14,11 +14,10 @@ test("connected workspace shares edits, stamps either writer and preserves a rev
     title: "Shared",
     description: "Shared",
     schema,
-    commands: {},
   };
   const rows = new Map<string, unknown>();
   const workspace = new RouteWorkspace({
-    registrations: [{ spec, handlers: {} }],
+    registrations: [{ spec }],
     store: {
       getState: async ({ targetKey }) => rows.get(targetKey),
       setState: async ({ targetKey, value }) => {
@@ -40,7 +39,7 @@ test("connected workspace shares edits, stamps either writer and preserves a rev
     await workspace.apply(
       key,
       "shared",
-      "agent",
+      "pea",
       [{ path: ["cells", "width", "edit"], value: { value: 250, by: "human", base: 0 } }],
       1,
     ),
@@ -58,13 +57,7 @@ test("connected workspace shares edits, stamps either writer and preserves a rev
     ),
   ).toMatchObject({ ok: false, code: "stale_revision" });
   expect(
-    await workspace.apply(
-      key,
-      "shared",
-      "agent",
-      [{ path: ["basis"], value: { forged: true } }],
-      2,
-    ),
+    await workspace.apply(key, "shared", "pea", [{ path: ["basis"], value: { forged: true } }], 2),
   ).toMatchObject({ ok: false });
   expect(
     await workspace.publish(

@@ -1,4 +1,5 @@
-import { stagedTakeoffEdits, takeoffsRouteState } from "@pe/agent-contracts";
+/// <reference lib="es2024.collection" />
+import { actionAdmissionSchema, stagedTakeoffEdits, takeoffsRouteState } from "@pe/agent-contracts";
 import { test, expect } from "vite-plus/test";
 import { copyFile, mkdir, mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
@@ -8,10 +9,11 @@ import { Effect } from "effect";
 import { checkoutRoot } from "../../checkout-paths.ts";
 import { manifest as takeoffManifest } from "#/takeoff/manifest";
 import { createDemoOwner } from "../../../host/src/demo-owner";
-import { admitTakeoffAction, fileVersion } from "../../../host/src/takeoff-actions";
+import { takeoffExecutors, fileVersion } from "../../../host/src/takeoff-actions";
 import { sdkSessions, readRhvacFixture } from "../../../host/tests/native-receipt-fixture";
 import type { RevitBridge } from "../../../host/src/bridge";
 import { crossingOf } from "../../../host/tests/callers";
+import { commandReads } from "../../../host/src/command-reads";
 
 const crossing = crossingOf("human");
 
@@ -76,53 +78,53 @@ test.skipIf(process.env.PE_DEMO_JET !== "1")(
           }),
       } as unknown as RevitBridge["Service"];
       const work = await owner.work.read(owner.scope, "takeoffs");
-      const admission = {
+      const admission = actionAdmissionSchema.parse({
         id: `${owner.id}:jet`,
         key: "takeoffs.sync",
-        destination: { kind: "document", ref: owner.target },
-        input: { path, zones: seed.page.zones },
-        bases: {
+        target: { kind: "document", ref: owner.target },
+        input: {
+          path,
+          zones: seed.page.zones,
           captureId: capture.capture.id,
           fileVersion: beforeHash,
           work: { key: owner.scope, revision: work!.revision },
         },
-      };
+      });
       const deps = { workspace: owner.work, sdk: sdkSessions };
-      await admitTakeoffAction(admission, crossing, owner.journal, owner.captures, bridge, deps);
+      const executors = takeoffExecutors(owner.captures, bridge, deps);
+      owner.journal.configureCommands(commandReads(bridge, deps), (key) => executors[key]!);
+      await owner.journal.invoke(admission, crossing, executors[admission.key]!);
       const receipt = await owner.journal.wait(admission.id);
       expect(receipt.state).toBe("succeeded");
       expect(await fileVersion(path)).not.toBe(beforeHash);
       expect(nativeLinks).toHaveLength(1);
       const after = await readRhvacFixture(path);
       expect(after.rooms.some((room) => room.name === "Reviewed demo room")).toBe(true);
-      // The consumed edit edit retired; nothing edit remains.
+      // Proven consumed edits retire; the receipt remains the record.
       expect(
         stagedTakeoffEdits(
           takeoffsRouteState.schema.parse((await owner.work.read(owner.scope, "takeoffs"))!.doc),
         ),
       ).toEqual({});
       const afterHash = await fileVersion(path);
-      await admitTakeoffAction(admission, crossing, owner.journal, owner.captures, bridge, deps);
+      await owner.journal.invoke(admission, crossing, executors[admission.key]!);
       expect(nativeLinks).toHaveLength(1);
       expect(await fileVersion(path)).toBe(afterHash);
       const staleId = `${owner.id}:stale`;
-      await admitTakeoffAction(
+      await owner.journal.invoke(
         {
           ...admission,
           id: staleId,
-          bases: {
-            ...admission.bases,
+          input: {
+            ...admission.input,
             work: {
-              scope: owner.scope,
+              key: owner.scope,
               revision: (await owner.work.read(owner.scope, "takeoffs"))!.revision,
             },
           },
         },
         crossing,
-        owner.journal,
-        owner.captures,
-        bridge,
-        deps,
+        executors[admission.key]!,
       );
       expect(await owner.journal.wait(staleId)).toMatchObject({
         state: "failed",

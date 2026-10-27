@@ -32,7 +32,7 @@ import {
 } from "./seeds";
 
 vi.mock("../../../../packages/mcps/src/shared/takeoff-action-client", () => ({
-  readScopedActionStatuses: vi.fn(),
+  readActionStatuses: vi.fn(),
   runSemanticAction: vi.fn(async () => ({ id: "action-1", state: "succeeded" })),
 }));
 HTMLElement.prototype.scrollIntoView = vi.fn();
@@ -303,7 +303,7 @@ test("patching Clinic into your Revit 2025 by click names the upgrade and sends 
       links: "refuse",
     },
     undefined,
-    {},
+    undefined,
   ]);
 });
 

@@ -11,7 +11,7 @@ import { useCallback, useEffect, useMemo, useState, useSyncExternalStore } from 
 import {
   actionReceiptSchema,
   familyCaptureSchema,
-  familyProjectionSchema,
+  familyApplyResultSchema,
   memberWork,
   settingsFieldDirectives,
   settingsFieldSegments,
@@ -44,7 +44,8 @@ import {
   type FamilyPage,
 } from "#/family/manifest";
 import { previousOf, useReading } from "#/readings";
-import { workflow, useRoute, type EntityPage } from "#/route";
+import { useRoute, type EntityPage } from "#/route";
+import { actionResult } from "../../../../packages/mcps/src/shared/takeoff-action-client";
 import { useWork } from "@pe/kit/lang/work";
 import type { PageMove } from "#/route/manifest";
 import { openMember } from "#/route/spec-editor";
@@ -132,11 +133,14 @@ function applyOnto(
     .array()
     .parse(receipts)
     .find((entry) => entry.id === status.id);
-  const step = row?.steps.find(
-    (entry) => entry.key === "family.apply" && entry.state === "succeeded",
-  );
-  if (step?.state === "succeeded")
-    projection.apply = familyProjectionSchema.shape.apply.parse(step.result);
+  if (row?.state === "succeeded") {
+    const result = familyApplyResultSchema.parse(row.result);
+    const outcomes = "results" in result ? result.results : [result];
+    projection.apply = {
+      receipts: outcomes.flatMap((outcome) => outcome.native.receipts),
+      diagnostics: outcomes.flatMap((outcome) => outcome.native.diagnostics),
+    };
+  }
   return projection;
 }
 
@@ -543,12 +547,10 @@ export function useFamilyStore(options: {
       async open(next: PodMember) {
         await flush();
         const source = await openMember(next);
+        if (!source.sha256) throw Error("Saved member has no readable content hash");
         if (handle.resolution.kind !== "resolved") throw Error("pick a document");
-        await workflow(
-          "family.observe",
-          { source: { ...next, sha256: source.sha256 } },
-          { target: handle.resolution.target },
-          { work: { key: handle.work.key, revision: handle.work.revision ?? 0 } },
+        actionResult(
+          await handle.commands["family.observe"]({ source: { ...next, sha256: source.sha256 } }),
         );
         setPage({ pod: next.pod, path: next.path, buildReview: null });
       },

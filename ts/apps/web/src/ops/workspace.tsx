@@ -89,7 +89,6 @@ export function OpsRoute({ page }: { page: AddressPage<"ops"> }) {
             request,
             target: ctx.target,
             call: ctx.call,
-            priorActionId: actionId,
           });
           if (outcome.kind === "value")
             setValue({

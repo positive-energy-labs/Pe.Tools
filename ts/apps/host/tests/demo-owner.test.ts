@@ -6,7 +6,7 @@ import { address, exportSeed, type DemoSeed } from "@pe/agent-contracts";
 import { Context, Layer } from "effect";
 import { HttpEffect, HttpRouter } from "effect/unstable/http";
 import { RouteWorkspace, resourceResponse } from "@pe/runtime";
-import { readingKey, settingsRouteState } from "@pe/agent-contracts";
+import { readingKey, settingsRouteState, familiesRouteState } from "@pe/agent-contracts";
 import { demoRoutes, createDemoOwner } from "../src/demo-owner.ts";
 import { assertDemoPath } from "../src/demo-settings.ts";
 
@@ -127,6 +127,56 @@ test("admitted demo launch uses only its labelled leaf and rejects escape or rea
     error: expect.stringContaining("Unsupported simulated local operation"),
   });
 });
+
+test("simulated native outcomes carry the exact journal dispatch evidence", async () => {
+  const f = await setup();
+  const id = "native-capture";
+  const response = await f.fetch("/actions", {
+    id,
+    key: "family.capture",
+    target: { kind: "document", ref: f.owner.target },
+    input: {},
+  });
+  expect(response.ok).toBe(true);
+  const row = await f.owner.journal.wait(id);
+  expect(row.state).toBe("succeeded");
+  expect(row.steps).toEqual(
+    expect.arrayContaining([
+      expect.objectContaining({
+        kind: "native",
+        key: "family.capture",
+        state: "succeeded",
+        dispatchedAt: expect.any(String),
+      }),
+    ]),
+  );
+});
+test("a simulated lost native result retains pre-effect dispatch evidence and stays unknown", async () => {
+  const f = await setup(family("native-unknown"));
+  const member = await f.owner.settings.readMember(f.owner.member!);
+  const id = "lost-native-build";
+  const response = await f.fetch("/actions", {
+    id,
+    key: "family.build",
+    target: { kind: "document", ref: f.owner.target },
+    input: { source: { ...f.owner.member, sha256: member.sha256 } },
+  });
+  expect(response.ok).toBe(true);
+  const row = await f.owner.journal.wait(id);
+  expect(row).toMatchObject({ state: "unknown" });
+  expect(row.steps).toEqual(
+    expect.arrayContaining([
+      expect.objectContaining({
+        kind: "native",
+        key: "family.build",
+        state: "unknown",
+        dispatchedAt: expect.any(String),
+      }),
+    ]),
+  );
+  expect(row.steps.find((step) => step.key === "family.build")).not.toHaveProperty("notDispatched");
+});
+
 test("separate demo journals retain the same exact request ID without rewriting or sharing receipts", async () => {
   const first = await setup();
   const second = await setup();
@@ -184,6 +234,30 @@ test("resolved links, pod members, request identity and dispose cannot cross roo
   ).toBe(409);
   await f.owner.dispose();
   expect(await readFile(join(production, "keep.json"), "utf8")).toBe("KEEP");
+});
+
+test("completed Families readings use the production parts protocol for retained readback", async () => {
+  const seed = family();
+  const f = await setup({
+    ...seed,
+    route: "families",
+    work: { ...seed.work, candidate: familiesRouteState.schema.parse({}) },
+    readings: {
+      profile: { patch: { families: {} } },
+      member: { pod: "demo", path: "settings/patch.json" },
+      families: ["Box"],
+    },
+    page: { armed: true },
+    scenario: "success",
+  });
+  const response = await f.fetch("/families/readings", {
+    work: f.owner.scope,
+    filter: { categoryNames: ["Ducts"], familyNames: [], placementScope: "AllLoaded" },
+  });
+  const reading = await response.json();
+  expect(response.ok).toBe(true);
+  const parts = await f.fetch(`/families/readings?id=${reading.id}&format=parts`);
+  expect(await parts.json()).toEqual({ reading, records: null });
 });
 
 test("same HTTP router separates production Work and two demo resource owners; reset cannot retire production", async () => {

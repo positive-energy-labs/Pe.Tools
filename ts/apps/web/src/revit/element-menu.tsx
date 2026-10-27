@@ -78,11 +78,9 @@ export async function showInRevit(
     const action = await submitAction(
       {
         id: crypto.randomUUID(),
-        kind: "operation",
         key: "revit.context.show-elements",
-        destination: { kind: "document", ref: prepared.document },
+        target: { kind: "document", ref: prepared.document },
         input: { ...prepared.request },
-        bases: {},
       },
       "",
       30_000,

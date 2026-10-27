@@ -159,7 +159,7 @@ export function reviewTransitions(wire: CellWire, key: string, cell: CellLike): 
     unsuggest: counter ? "Clear the suggestion; the current edit stays" : "Clear this suggestion",
     clear: "Clear the edit value; restore the standing suggestion or baseline",
   };
-  return availableTransitions(cell, "human", { lock: wire.lockOf?.(key) ?? null })
+  return availableTransitions(cell, { lock: wire.lockOf?.(key) ?? null })
     .filter((kind): kind is CellTransitionKind => DRAWN.has(kind))
     .map((kind) => ({
       kind,
@@ -187,7 +187,7 @@ export async function runFanOut(
 ): Promise<FanOutOutcome> {
   const { patches, covered, skipped } = fanOut(cells, keys, kind, {
     cellsPath: cellsPath(wire),
-    actor: "human",
+
     lockOf: wire.lockOf,
   });
   const refusal = covered.length ? await writeKind(wire, kind, patches) : null;
@@ -306,7 +306,7 @@ export function UnstageAll({
     () =>
       fanOut(cells, keys, "clear", {
         cellsPath: cellsPath(wire),
-        actor: "human",
+
         lockOf: wire.lockOf,
       }).covered.length,
     [cells, keys, wire],

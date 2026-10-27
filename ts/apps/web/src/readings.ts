@@ -29,7 +29,9 @@ import {
   ductsReadingEnvelopeSchema,
   type DuctsReadingRequest,
   type DuctsReadingEnvelope,
+  actionReceiptSchema,
 } from "@pe/agent-contracts";
+import { bindActionObserver } from "../../../packages/mcps/src/shared/takeoff-action-client";
 import * as Atom from "effect/unstable/reactivity/Atom";
 import { RegistryContext, useAtomValue } from "@effect/atom-react";
 import {
@@ -423,6 +425,26 @@ export const peReadings = new PeReadings(() =>
 );
 
 export type Readings = Pick<PeReadings, "subscribe" | "dirty">;
+
+/** Accepted commands observe the same receipt owner as the rest of the page. */
+export function bindActionReadings(source: Readings = peReadings): () => void {
+  return bindActionObserver((id, base, accept, fail) => {
+    const owner = new URL(resolveWorkbenchConfig().origin);
+    const requested = new URL(base || "/", owner);
+    if (requested.origin !== owner.origin || requested.pathname !== "/") {
+      fail(Error("This receipt stream belongs to a different host"));
+      return () => {};
+    }
+    return source.subscribe({ kind: "receipts", id }, (frame) => {
+      if (frame.kind === "failure" && !frame.stale) fail(Error(frame.error));
+      if (frame.kind !== "snapshot" || frame.stale) return;
+      const rows = actionReceiptSchema.array().safeParse(frame.value);
+      if (!rows.success) return fail(rows.error);
+      const row = rows.data.find((candidate) => candidate.id === id);
+      if (row) accept(row);
+    });
+  });
+}
 /** What a follower of the owner's liveness holds: `onResync` only. */
 export type Liveness = Pick<PeReadings, "onResync">;
 

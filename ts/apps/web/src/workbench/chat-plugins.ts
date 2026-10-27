@@ -6,7 +6,7 @@ import {
   actionControls,
   parseContributionKey,
   routeCallOf,
-  semanticActions,
+  commands,
   addressSchema,
   documentRefSchema,
   documentRequestSchema,
@@ -116,31 +116,19 @@ export function capturedPlace(
 
 /** Action receipts retain their execution document, even when the chat head has since moved. */
 export function actionPlace(route: string, receipt: ActionReceipt | undefined): CapturedPlace {
-  const work = isRecord(receipt?.bases.work) ? receipt.bases.work : null;
-  // A receipt's Work key is authority when it explicitly records one.
-  const scope = workKeySchema.safeParse(work?.key);
-  const target = receipt?.destination;
-  const result = receipt && "result" in receipt && isRecord(receipt.result) ? receipt.result : null;
-  const member = isRecord(result?.member)
-    ? result.member
-    : isRecord(receipt?.request.member)
-      ? receipt.request.member
-      : null;
-  const source = isRecord(receipt?.request.source) ? receipt.request.source : null;
-  const workspace =
-    typeof receipt?.request.workspaceId === "string" ? receipt.request.workspaceId : null;
+  const work = receipt?.consumes.find((entry) => entry.kind === "work");
+  const scope = workKeySchema.safeParse(work?.kind === "work" ? work.handle.key : undefined);
+  const target = receipt?.target;
   return capturedPlace(
     route,
     scope.success
       ? scope.data
-      : workspace
-        ? { binding: "workspace", route, target: null, work: workspace }
-        : target?.kind === "document"
-          ? { binding: "open", route, target: null, open: target.ref }
-          : target?.kind === "host"
-            ? { binding: "host", route, target: null }
-            : null,
-    { ...receipt?.request, ...source, ...member },
+      : target?.kind === "document"
+        ? { binding: "open", route, target: null, open: target.ref }
+        : target?.kind === "host"
+          ? { binding: "host", route, target: null }
+          : null,
+    receipt?.input,
     target?.kind === "document" ? { kind: "open", ref: target.ref } : undefined,
   );
 }
@@ -223,7 +211,7 @@ export function actionCall(toolName: string, args: unknown, result: unknown): Ac
   if (toolName !== "pe_do" || !isRecord(args) || typeof args.key !== "string") return null;
   const key = args.key.replace(/^(op|workflow):/, "");
   const known =
-    Object.hasOwn(semanticActions, key) ||
+    Object.hasOwn(commands, key) ||
     Object.hasOwn(actionControls, key) ||
     args.key.startsWith("op:") ||
     parseContributionKey(args.key)?.kind === "script";

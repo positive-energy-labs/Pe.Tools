@@ -19,6 +19,7 @@ describe("Pod route byte custody", () => {
     const work = {
       key: bindWork(row.workRoute, null, "calculator"),
       revision: 3,
+      handle: () => ({ key: bindWork(row.workRoute, null, "calculator"), revision: 3 }),
       doc: null,
       refusal: null,
     };
@@ -27,19 +28,16 @@ describe("Pod route byte custody", () => {
       return Response.json(
         actionReceiptSchema.parse({
           id: sent.id,
-          kind: "operation",
           key: sent.key,
-          request: sent.input,
-          bases: sent.bases,
-          destination: { kind: "document", ref: { session: "s", openId: "different" } },
+          input: sent.input,
+          target: { kind: "document", ref: { session: "s", openId: "different" } },
           caller: { kind: "human", via: "local" },
           basis: { kind: "human" },
           state: "succeeded",
           result: {},
           steps: [],
           recovery: [],
-          preparation: { state: "ready", value: {} },
-          publication: { state: "unrequested" },
+          prepared: { state: "ready", value: {} },
           startedAt: "2026-10-14T00:00:00.000Z",
         }),
       );
@@ -51,7 +49,7 @@ describe("Pod route byte custody", () => {
           "revit.context.lens",
           {},
         ),
-      ).rejects.toThrow("conflicts with the requested intent");
+      ).rejects.toThrow("different intent or target");
     } finally {
       vi.unstubAllGlobals();
     }

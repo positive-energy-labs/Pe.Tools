@@ -10,6 +10,8 @@ import { useMemo, useRef, useState } from "react";
 import {
   UNREADABLE_WORK,
   bindWork,
+  actionStatusSchema,
+  busyForWork,
   type Address,
   type Reading,
   type ReadingRequest,
@@ -49,6 +51,7 @@ import {
 import { docAtom, docWriter, notHydrated } from "./route-work";
 import { useRouteTarget } from "./route-target";
 import type { ActionHandle, RouteHandle, RouteOutcome } from "./handle";
+import { bindCommands } from "./presentation";
 
 const CLOSED_WORK = "its document is closed; this Work only reads";
 
@@ -170,6 +173,16 @@ export function useRoute<W, R extends string, P, A extends string>(
     [seed, sliceResult],
   );
   const workCurrent = Boolean(seed || sliceResult?.state === "ready");
+  const receiptsAtom = useMemo(
+    () => (!seed && spec ? readingAtom({ kind: "receipts", work: key }, peReadings) : null),
+    [seed, spec, key],
+  );
+  const commandReading = useOwned(owner.registry, receiptsAtom);
+  const receiptRows = actionStatusSchema
+    .array()
+    .safeParse(commandReading ? previousOf(commandReading) : []);
+  const receipts = receiptRows.success ? receiptRows.data : [];
+  const commandBusy = busyForWork(receipts, key)[0] ?? null;
 
   // Every declared Reading is one subject on the one stream — EXCEPT in the demo lane, where the
   // seed is the whole observation and nothing is asked of the host. Subscribing anyway also
@@ -327,6 +340,18 @@ export function useRoute<W, R extends string, P, A extends string>(
   const actionScope = useMemo(() => ({}), [scopeKey]);
   const currentActionScope = useRef(actionScope);
   currentActionScope.current = actionScope;
+  const boundCommands = useMemo(
+    () =>
+      bindCommands(
+        resolution.kind === "resolved" ? resolution.target : { kind: "host" },
+        workCurrent ? { key, revision: doc?.revision ?? 0 } : null,
+        (row) => {
+          if (row.state === "failed" && row.refusal?.kind === "stale_revision")
+            owner.registry.set(owner.conflict, true);
+        },
+      ),
+    [resolution, workCurrent, key, doc?.revision, owner],
+  );
 
   const stage = (page as { stage?: unknown }).stage;
   usePageLogNotes(owner, {
@@ -370,6 +395,8 @@ export function useRoute<W, R extends string, P, A extends string>(
       if (action.requires?.work && (!doc || doc.doc === null))
         return "route document is not hydrated";
       if (action.requires?.work && !workCurrent) return "route document is not current";
+      if (actionFacts(action, ctx as never).effect === "command" && commandBusy)
+        return `${commandBusy.key} ${commandBusy.state}; inspect its receipt before another command`;
       const missing = action.requires?.readings?.find((name) => readings[name].state !== "ready");
       return missing === undefined ? null : `${missing} is not ready`;
     };
@@ -382,9 +409,13 @@ export function useRoute<W, R extends string, P, A extends string>(
         key,
         doc: doc?.doc ?? null,
         revision: doc?.revision ?? null,
+        handle: () => (actionRevision === null ? null : { key, revision: actionRevision }),
         refusal: sliceResult?.state === "failed" ? sliceResult.message : null,
       },
       readings,
+      receipts,
+      busy: commandBusy,
+      commands: boundCommands,
       page,
       currentPage: () =>
         currentActionScope.current === actionScope ? owner.view.read().page : null,
@@ -401,14 +432,6 @@ export function useRoute<W, R extends string, P, A extends string>(
           actionRevision === null
             ? notHydrated
             : await writeWork(patches, expectedRevision ?? actionRevision, true);
-        if (refusal) throw new ActionRefusal(refusal);
-        return null;
-      },
-      command: async (name: string, input?: unknown) => {
-        const refusal =
-          writer && actionRevision !== null
-            ? await writer.command(name as never, input, actionRevision)
-            : notHydrated;
         if (refusal) throw new ActionRefusal(refusal);
         return null;
       },
@@ -504,6 +527,9 @@ export function useRoute<W, R extends string, P, A extends string>(
     actionScope,
     current,
     closedWork,
+    commandBusy,
+    commandReading,
+    boundCommands,
   ]);
 
   const workHandle = useMemo(
@@ -512,6 +538,8 @@ export function useRoute<W, R extends string, P, A extends string>(
       ephemeral,
       doc: (doc?.doc ?? null) as W | null,
       revision: doc?.revision ?? null,
+      handle: () => (workCurrent ? { key, revision: doc?.revision ?? 0 } : null),
+      busy: commandBusy,
       current: workCurrent,
       changed: sliceResult ? changedInRevit(sliceResult) : false,
       write: writeWork,
@@ -550,6 +578,7 @@ export function useRoute<W, R extends string, P, A extends string>(
       spec,
       seed,
       current,
+      commandBusy,
     ],
   );
 
@@ -567,6 +596,7 @@ export function useRoute<W, R extends string, P, A extends string>(
     pageState: owner.view.state,
     page: [page, setPage] as const,
     actions,
+    commands: boundCommands,
     busy,
     stop: owner.stop,
     failure,

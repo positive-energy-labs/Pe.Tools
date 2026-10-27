@@ -1,37 +1,6 @@
 import { z } from "zod";
 import { canonicalRouteInput } from "./route-doc.ts";
-import { isRecord, type RouteStatePatch } from "./route-state.ts";
-
-const isRung = (value: unknown) =>
-  isRecord(value) && (Object.hasOwn(value, "value") || value.delete === true);
-
-/** Optional review changes, counted without interpreting their user-authored values. */
-export function pendingSuggestions(doc: unknown): number {
-  if (Array.isArray(doc))
-    return doc.reduce<number>((sum, item) => sum + pendingSuggestions(item), 0);
-  if (!isRecord(doc) || isRung(doc)) return 0;
-  return Object.entries(doc).reduce(
-    (sum, [key, value]) =>
-      sum + (key === "suggestion" && isRung(value) ? 1 : pendingSuggestions(value)),
-    0,
-  );
-}
-
-/** One unfinished cell even when both its current edit and suggestion are occupied. */
-export function unfinishedCells(doc: unknown): number {
-  if (Array.isArray(doc)) return doc.reduce<number>((sum, item) => sum + unfinishedCells(item), 0);
-  if (!isRecord(doc) || isRung(doc)) return 0;
-  const own = isRung(doc.suggestion) || isRung(doc.edit) ? 1 : 0;
-  return (
-    own +
-    Object.entries(doc).reduce(
-      (sum, [key, value]) =>
-        sum +
-        ((key === "suggestion" || key === "edit") && isRung(value) ? 0 : unfinishedCells(value)),
-      0,
-    )
-  );
-}
+import { type RouteStatePatch } from "./route-state.ts";
 
 /*
  * What a rung writes. Every route sets values, and an empty value is a value. Deleting the
@@ -112,8 +81,6 @@ export interface CellLike {
   edit?: Change | null | undefined;
 }
 
-export type Actor = "pea" | "human";
-
 /** Every way a cell changes. `retire` is the host's alone, after proven native success. */
 export const cellTransitions = {
   suggest: { binding: "unbound" },
@@ -153,7 +120,6 @@ const standing = (cell: CellLike) =>
 
 export function availableTransitions(
   cell: CellLike,
-  _actor: Actor,
   { lock }: { lock: string | null },
 ): TransitionKind[] {
   const open: Record<TransitionKind, boolean> = {
@@ -215,14 +181,9 @@ export function transitionPatches(
 }
 
 export type FanOutKind = "take" | "unsuggest" | "clear";
-export type SkipReason = "actor" | "locked" | "contested" | "agreed" | "no-suggestion" | "no-edit";
+export type SkipReason = "locked" | "contested" | "agreed" | "no-suggestion" | "no-edit";
 
-function skipReason(
-  cell: CellLike,
-  kind: FanOutKind,
-  _actor: Actor,
-  lock: string | null,
-): SkipReason | null {
+function skipReason(cell: CellLike, kind: FanOutKind, lock: string | null): SkipReason | null {
   if (kind === "clear") return cell.edit == null ? "no-edit" : lock ? "locked" : null;
   if (cell.suggestion == null) return "no-suggestion";
   if (kind === "unsuggest") return null;
@@ -241,7 +202,7 @@ export function fanOut(
   cells: Record<string, CellLike>,
   keys: readonly string[],
   kind: FanOutKind,
-  ctx: { cellsPath: readonly string[]; actor: Actor; lockOf?: (key: string) => string | null },
+  ctx: { cellsPath: readonly string[]; lockOf?: (key: string) => string | null },
 ): {
   patches: RouteStatePatch[];
   covered: string[];
@@ -252,7 +213,7 @@ export function fanOut(
   const skipped: { key: string; reason: SkipReason }[] = [];
   for (const key of keys) {
     const cell = cells[key] ?? {};
-    const reason = skipReason(cell, kind, ctx.actor, ctx.lockOf?.(key) ?? null);
+    const reason = skipReason(cell, kind, ctx.lockOf?.(key) ?? null);
     if (reason) skipped.push({ key, reason });
     else {
       covered.push(key);

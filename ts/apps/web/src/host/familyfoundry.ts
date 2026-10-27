@@ -48,7 +48,6 @@ export const ffPlanRow = (entry: FfPlanEntry): PlanEntry => ({
   id: entry.familyName,
   ...(entry.familyId != null ? { hashKey: String(entry.familyId) } : {}),
   name: entry.familyName,
-  planHash: entry.planHash,
   actions: entry.changes.length + entry.runEffects.length,
   detail: provenanceSummary(entry),
   flag: familyFlag(entry),

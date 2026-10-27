@@ -2,13 +2,7 @@ import { observeResources, resourceResponse } from "../src/resource-stream.ts";
 import { expect, test, vi } from "vite-plus/test";
 import { z } from "zod";
 import { address, routeBindingsSchema } from "@pe/agent-contracts";
-import type {
-  RouteActor,
-  RouteStateCommandHandlers,
-  RouteStatePatch,
-  RouteStateSpec,
-  WorkKey,
-} from "@pe/agent-contracts";
+import type { WorkAuthor, RouteStatePatch, RouteStateSpec, WorkKey } from "@pe/agent-contracts";
 import { RouteWorkspace } from "../src/route-workspace.ts";
 import type {
   RouteDocumentStore,
@@ -25,43 +19,14 @@ const documentSchema = z
   .prefault({});
 type TestDocument = z.infer<typeof documentSchema>;
 
-function registration(
-  overrides: Partial<RouteStateCommandHandlers<TestDocument>> = {},
-): RouteWorkspaceRegistration {
+function registration(): RouteWorkspaceRegistration {
   const spec = {
     route: "test-route",
     title: "Test Route",
     description: "A test collaborative route.",
     schema: documentSchema,
-
-    commands: {
-      increment: {
-        effect: "command",
-        description: "Increment the counter.",
-
-        input: z.object({}),
-      },
-      fail: {
-        effect: "command",
-        description: "Fail for chronology proof.",
-
-        input: z.object({}),
-      },
-    },
   } satisfies RouteStateSpec<typeof documentSchema>;
-  const handlers: RouteStateCommandHandlers<TestDocument> = {
-    increment: async (_input, context) => {
-      const doc = context.getDoc();
-      doc.count++;
-      await context.setDoc(doc);
-      return { count: doc.count };
-    },
-    fail: async () => {
-      throw new Error("deliberate failure");
-    },
-    ...overrides,
-  };
-  return { spec: spec as unknown as RouteStateSpec<z.ZodType>, handlers };
+  return { spec };
 }
 
 function memoryStore() {
@@ -102,10 +67,8 @@ const documentB: WorkKey = {
 function bind(module: RouteWorkspace, scope: WorkKey = documentA) {
   return {
     read: () => module.read(scope, "test-route"),
-    apply: (actor: RouteActor, patches: RouteStatePatch[], revision: number) =>
+    apply: (actor: WorkAuthor, patches: RouteStatePatch[], revision: number) =>
       module.apply(scope, "test-route", actor, patches, revision),
-    cmd: (actor: RouteActor, command: string, input: unknown, revision: number) =>
-      module.command(scope, "test-route", actor, command, input, revision),
   };
 }
 
@@ -113,7 +76,7 @@ test("document-scoped route documents are isolated and survive module recreation
   const { store } = memoryStore();
   const first = workspace(store);
   const firstA = bind(first);
-  expect(await firstA.apply("agent", [{ path: ["values", "a"], value: "A" }], 0)).toMatchObject({
+  expect(await firstA.apply("pea", [{ path: ["values", "a"], value: "A" }], 0)).toMatchObject({
     ok: true,
   });
 
@@ -147,95 +110,81 @@ test("document-scoped route documents are isolated and survive module recreation
   ]);
 });
 
-test("apply and command serialize without losing either update", async () => {
-  const { store } = memoryStore();
-  const started = deferred<void>();
-  const release = deferred<void>();
-  const route = registration({
-    increment: async (_input, context) => {
-      const doc = context.getDoc();
-      started.resolve();
-      await release.promise;
-      doc.count++;
-      await context.setDoc(doc);
-      return { count: doc.count };
+test("concurrent authored edits serialize without losing either observed update", async () => {
+  const memory = memoryStore();
+  const started = deferred<void>(),
+    release = deferred<void>();
+  const store: RouteDocumentStore = {
+    ...memory.store,
+    setState: async (input) => {
+      if ((input.value as { revision: number }).revision === 1) {
+        started.resolve();
+        await release.promise;
+      }
+      await memory.store.setState(input);
     },
-  });
-  const module = workspace(store, { registration: route });
-  const w = bind(module);
-
-  const command = w.cmd("agent", "increment", {}, 0);
+  };
+  const w = bind(workspace(store));
+  const first = w.apply("pea", [{ path: ["count"], value: 1 }], 0);
   await started.promise;
-  const apply = w.apply("agent", [{ path: ["values", "name"], value: "kept" }], 1);
+  const second = w.apply("human", [{ path: ["values", "name"], value: "kept" }], 1);
   release.resolve();
-  expect(await command).toMatchObject({ ok: true });
-  expect(await apply).toMatchObject({ ok: true });
-  expect((await w.read())?.doc).toMatchObject({
-    count: 1,
-    values: { name: "kept" },
-  });
+  expect(await first).toMatchObject({ ok: true, revision: 1 });
+  expect(await second).toMatchObject({ ok: true, revision: 2 });
+  expect((await w.read())?.doc).toMatchObject({ count: 1, values: { name: "kept" } });
 });
 
-test("a handler throw discards its staged document write", async () => {
-  const { store } = memoryStore();
-  const module = workspace(store, {
-    registration: registration({
-      fail: async (_input, context) => {
-        const doc = context.getDoc();
-        doc.count = 1;
-        await context.setDoc(doc);
-        throw new Error("deliberate failure");
-      },
-    }),
-  });
-  const w = bind(module);
-
-  expect(await w.cmd("human", "fail", {}, 0)).toMatchObject({
-    ok: false,
-  });
+test("an authored-admission throw cannot persist the candidate Work", async () => {
+  const route = registration();
+  route.admit = async () => {
+    throw Error("catalogue unavailable");
+  };
+  const w = bind(workspace(memoryStore().store, { registration: route }));
+  await expect(w.apply("human", [{ path: ["count"], value: 1 }], 0)).rejects.toThrow(
+    "catalogue unavailable",
+  );
   expect(await w.read()).toBeNull();
 });
 
-test("both writers use the same schema and semantic commands", async () => {
-  const { store } = memoryStore();
-  const w = bind(workspace(store));
-  expect(await w.apply("agent", [{ path: ["count"], value: 1 }], 0)).toMatchObject({ ok: true });
+test("human and Pea edits use the same schema and revision arbitration", async () => {
+  const w = bind(workspace(memoryStore().store));
+  expect(await w.apply("pea", [{ path: ["count"], value: 1 }], 0)).toMatchObject({
+    ok: true,
+    revision: 1,
+  });
   expect(await w.apply("human", [{ path: ["values", "bad"], value: 42 }], 1)).toMatchObject({
     ok: false,
   });
-  expect(await w.cmd("agent", "increment", {}, 1)).toMatchObject({ ok: true, revision: 2 });
-  expect(await w.cmd("human", "bind", {}, 2)).toMatchObject({
-    ok: false,
-    error: "unknown command 'bind'",
+  expect(await w.apply("human", [{ path: ["count"], value: 2 }], 1)).toMatchObject({
+    ok: true,
+    revision: 2,
   });
+  expect((await w.read())?.doc).toMatchObject({ count: 2, values: {} });
 });
 
-// External replay/collision/reconstruction proof lives in host partition-operation.test.ts through /actions.
-
-test("stale commands never invoke and successful writes return landed revisions", async () => {
-  const { store } = memoryStore();
-  const increment = vi.fn(registration().handlers.increment!);
-  const module = workspace(store, { registration: registration({ increment }) });
-  const w = bind(module);
-
+test("stale Work edits never reach semantic admission; success returns its landed revision", async () => {
+  const route = registration();
+  const admit = vi.fn(async () => null);
+  route.admit = admit;
+  const w = bind(workspace(memoryStore().store, { registration: route }));
   expect(await w.apply("human", [{ path: ["count"], value: 1 }], 0)).toMatchObject({
     ok: true,
     revision: 1,
   });
-  expect(await w.cmd("agent", "increment", {}, 0)).toMatchObject({
+  admit.mockClear();
+  expect(await w.apply("pea", [{ path: ["count"], value: 2 }], 0)).toMatchObject({
     ok: false,
-    kind: "refused",
     code: "stale_revision",
   });
-  expect(increment).not.toHaveBeenCalled();
-  expect(await w.cmd("agent", "increment", {}, 1)).toMatchObject({
+  expect(admit).not.toHaveBeenCalled();
+  expect(await w.apply("pea", [{ path: ["count"], value: 2 }], 1)).toMatchObject({
     ok: true,
     revision: 2,
   });
-  expect(increment).toHaveBeenCalledOnce();
+  expect(admit).toHaveBeenCalledOnce();
 });
 
-// Durable large-result / serialization-loss proof lives in host gateway.test.ts on ActionJournal.
+// Command recovery and durable results belong to ActionJournal, exercised in host command-dependencies.test.ts.
 
 test("resource stream publishes absent Work, an applied revision, and ends on abort", async () => {
   const module = workspace(memoryStore().store);

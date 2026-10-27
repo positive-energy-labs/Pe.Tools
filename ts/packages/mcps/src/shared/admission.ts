@@ -1,264 +1,202 @@
-/**
- * The one admission builder. `/call` refuses every `Mutate` operation, so a Pea command that
- * mutates has exactly one road: build the exact `/actions` admission the host requires and
- * follow it to its receipt.
- *
- * Nothing here guesses. The catalogs say whether a key is an operation or a workflow, whether it
- * mutates, and what lifetime it needs; the destination falls out of `needs`. A key no catalog
- * carries is a refusal, not a POST.
- */
+/** Catalog selection is an adapter; immutable request retention and execution belong to shared owners. */
 import {
-  actionAdmissionSchema,
+  commands,
   scheduleReads,
-  semanticActions,
   actionControls,
-  instancesSessionSelection,
+  commandTarget,
+  familyReads,
+  instancesReading,
+  workKeySchema,
   type ActionControlKey,
-  canonicalRouteInput,
-  type ActionReceipt,
   type ScheduleReadKey,
-  type ActionBases,
+  type FamilyReadKey,
   type ExecutionTarget,
   type SemanticActionKey,
   type SdkSessionSelection,
+  type ActionNeed,
 } from "@pe/agent-contracts";
 import { isTsOnlyOperationKey, tsOnlyOperationCatalog } from "@pe/host-contracts/operation-types";
 import { HostRpcCaller } from "./host-rpc-caller.ts";
+import type { HostSessionScope } from "@pe/host-contracts/operation-types";
+import type { HostOperationDefinition } from "@pe/host-contracts/contracts";
 import { readScheduleCapture } from "./schedule-client.ts";
 import {
   actionResult,
-  readAction,
   submitAction,
-  runSemanticAction,
   controlAction,
+  recoverAction,
+  readFamilyCapture,
 } from "./takeoff-action-client.ts";
+import { contextFetch as fetch } from "@pe/runtime/context";
 
 export interface AdmissionContext {
-  /** Caller identity travels in x-pe-context, never in the admission body. */
   hostBaseUrl: string;
-  /** Explicit session selector; omitted means "the session the catalog answered from". */
   bridgeSessionId?: string;
   session?: SdkSessionSelection;
   openDocumentId?: string;
-  /** Reuse an original action id to replay its receipt instead of starting a new attempt. */
   actionId?: string;
   timeoutMs?: number;
-  bases?: ActionBases;
-  /** Tool surfaces retain the receipt; CLI and scripting callers consume its result. */
   receipt?: boolean;
   beforeAdmission?: (id: string) => Promise<void>;
+  /** Adapter target selection is lazy: an original-id retry never re-resolves current state. */
+  resolveTarget?: (intent: CapabilityIntent) => Promise<HostSessionScope>;
 }
-
-/**
- * The destination the host will independently compute from `needs`. It must match exactly, so
- * a missing session or document is an error here rather than a refusal three hops later.
- */
-function admissionDestination(
-  key: string,
-  needs: string,
-  scope: { bridgeSessionId?: string; openDocumentId?: string },
-): ExecutionTarget {
-  // Mirrors the host's `gatewayTarget`: host-local keys run on the host, and a native op that
-  // needs no lifetime still runs in a session. The capability catalog already says "session"
-  // for the latter; `/ops` says "nothing", so the key decides, not the word.
-  if (isTsOnlyOperationKey(key)) return { kind: "host" };
-  if (!scope.bridgeSessionId)
-    throw new Error(`'${key}' runs in a Revit session; none is connected or named.`);
-  if (needs === "nothing" || needs === "session")
-    return { kind: "session", session: scope.bridgeSessionId };
-  if (!scope.openDocumentId)
-    throw new Error(
-      `'${key}' needs an exact open ${needs}; pass its openId (there is no active-document fallback).`,
-    );
-  return {
-    kind: "document",
-    ref: { session: scope.bridgeSessionId, openId: scope.openDocumentId },
-  };
-}
-
-/**
- * What the contract says about a key, and the session a native key was read against. A replay
- * carries its original receipt's destination instead.
- */
 export type CapabilityIntent = {
-  kind: "operation" | "workflow" | "schedule-read";
+  door: "command" | "call" | "schedule-read" | "family-read" | "instances-read";
   needs: string;
   mutates: boolean;
   session?: string;
-  destination?: ExecutionTarget;
-  prior?: ActionReceipt;
 };
+export const CANCEL_KEY = "op.cancel";
+const caller = (context: AdmissionContext) => new HostRpcCaller(context);
 
-/**
- * What the contract says about a key: its admission kind, the lifetime it needs, and whether it
- * mutates. Catalogs in the order the host itself consults them
- * (`apps/host/src/gateway-actions.ts:25`): the compiled host-local catalog, the compiled semantic
- * action contract (every one of which is a `workflow`), the compiled schedule readings, then the
- * session's generated operation catalog at `GET /ops`. `/ops` lists native keys only for a named
- * session, so the session resolves first. A key none of them carries is a refusal, not a POST.
- *
- * An original `actionId` with no named session is a replay: its receipt is the authority for
- * kind and destination, so no catalog or session is read. The host journal refuses a replay whose
- * key, input, target, or bases differ from the original.
- */
 export async function readCapabilityIntent(
   key: string,
   context: AdmissionContext,
+  definition?: { intent: HostOperationDefinition["intent"]; needs: ActionNeed },
 ): Promise<CapabilityIntent> {
-  // The host answers op.cancel itself, outside every gate (apps/host/src/bridge.ts cancelRequest).
-  // The session catalog is served on the Revit thread the op being cancelled holds (w8-revit 4c).
-  if (key === CANCEL_KEY) return { kind: "operation", needs: "nothing", mutates: false };
-  const prior = context.actionId
-    ? await readAction(context.actionId, context.hostBaseUrl)
-    : undefined;
-  if (prior)
-    return { kind: prior.kind, needs: "", mutates: true, destination: prior.destination, prior };
-  const local = tsOnlyOperationCatalog.find((row) => row.key === key);
-  if (local) return { kind: "operation", needs: local.needs, mutates: local.intent !== "Read" };
-  if (Object.hasOwn(semanticActions, key))
-    return {
-      kind: "workflow",
-      needs: semanticActions[key as SemanticActionKey].needs,
-      mutates: semanticActions[key as SemanticActionKey].effect === "command",
-    };
+  if (Object.hasOwn(commands, key)) {
+    const command = commands[key as SemanticActionKey];
+    return { door: "command", needs: command.needs, mutates: command.effect === "command" };
+  }
+  if (Object.hasOwn(actionControls, key)) {
+    const control = actionControls[key as ActionControlKey];
+    return { door: "command", needs: control.needs, mutates: control.effect === "command" };
+  }
+  if (Object.hasOwn(familyReads, key))
+    return { door: "family-read", needs: familyReads[key as FamilyReadKey].needs, mutates: false };
+  if (key === "instances.read") return { door: "instances-read", needs: "nothing", mutates: false };
   if (Object.hasOwn(scheduleReads, key))
     return {
-      kind: "schedule-read",
+      door: "schedule-read",
       needs: scheduleReads[key as ScheduleReadKey].needs,
       mutates: false,
     };
-  const catalog = await caller(context).catalog();
-  const session = catalog.bridgeSessionId;
-  const definition = catalog.ops.find((row) => row.key === key);
-  if (definition)
+  if (key === CANCEL_KEY) return { door: "call", needs: "nothing", mutates: false };
+  const local = tsOnlyOperationCatalog.find((row) => row.key === key);
+  if (local)
     return {
-      kind: "operation",
-      needs: definition.needs,
-      mutates: definition.intent !== "Read",
-      session,
+      door: local.intent === "Read" ? "call" : "command",
+      needs: local.needs,
+      mutates: local.intent !== "Read",
     };
-  throw new Error(
-    catalog.bridgeCatalogError
-      ? `The operation catalog of session '${session}' is unreachable: ${catalog.bridgeCatalogError}. '${key}' was not checked; retry once the session answers.`
-      : `'${key}' is not in the operation catalog of session '${session}'. Run \`pea find\`.`,
-  );
+  const catalog = definition ? undefined : await caller(context).catalog();
+  const selected = definition ?? catalog?.ops.find((row) => row.key === key);
+  if (!selected?.needs)
+    throw Error(
+      catalog?.bridgeCatalogError ?? `Operation '${key}' is unavailable in the selected catalog`,
+    );
+  return {
+    door: selected.intent === "Read" && key !== "scripting.execute" ? "call" : "command",
+    needs:
+      selected.needs === "nothing" && !isTsOnlyOperationKey(key) ? "session" : selected.needs,
+    mutates: selected.intent !== "Read" || key === "scripting.execute",
+    session: catalog?.bridgeSessionId,
+  };
 }
 
-export const CANCEL_KEY = "op.cancel";
-
-const caller = (context: AdmissionContext) =>
-  new HostRpcCaller({
-    hostBaseUrl: context.hostBaseUrl,
-    bridgeSessionId: context.bridgeSessionId,
-    session: context.session,
-    openDocumentId: context.openDocumentId,
-    timeoutMs: context.timeoutMs,
-  });
-
-/** Only the host's SDK-resolved catalog can supply an implicit attachment. */
-async function requireSession(key: string, context: AdmissionContext): Promise<string> {
-  const catalog = await caller(context).catalog();
-  if (catalog.bridgeSessionId) return catalog.bridgeSessionId;
-  throw Error(catalog.bridgeCatalogError ?? `SDK resolution supplied no attachment for '${key}'`);
+function targetFor(key: string, needs: string, context: AdmissionContext): ExecutionTarget {
+  if (isTsOnlyOperationKey(key)) return { kind: "host" };
+  if (!context.bridgeSessionId) throw Error(`'${key}' requires an exact Revit session`);
+  if (needs === "nothing" || needs === "session")
+    return { kind: "session", session: context.bridgeSessionId };
+  if (!context.openDocumentId)
+    throw Error(`'${key}' requires an exact open document; there is no active-document fallback`);
+  return {
+    kind: "document",
+    ref: { session: context.bridgeSessionId, openId: context.openDocumentId },
+  };
 }
-const exactDocument = (context: AdmissionContext) => {
-  if (!context.bridgeSessionId || !context.openDocumentId)
-    throw Error("An exact product DocumentRef is required; no session or document fallback");
-  return { session: context.bridgeSessionId, openId: context.openDocumentId };
-};
 
-/**
- * Run any catalogued capability by key. Reads go to `/call` (schedule readings to their host
- * route); mutations are admitted at `/actions` and followed to a terminal receipt, whose result
- * is returned unwrapped. The host checks the process context and exact lifetime grant; this
- * builder never supplies an actor or a grant. A caller that already read the intent passes it.
- */
 export async function runCapability(
   key: string,
   input: Record<string, unknown>,
   context: AdmissionContext,
   intent?: CapabilityIntent,
 ): Promise<unknown> {
-  if (Object.hasOwn(actionControls, key)) {
+  if (Object.hasOwn(actionControls, key))
     return controlAction(key as ActionControlKey, input, context.hostBaseUrl);
-  }
-  intent ??= await readCapabilityIntent(key, context);
-  if (intent.kind === "schedule-read")
-    return readScheduleCapture(
-      key as ScheduleReadKey,
-      input,
-      context.openDocumentId ? exactDocument(context) : undefined,
-      context.hostBaseUrl,
-    );
-  if (intent.kind === "workflow" && !intent.prior) {
-    // A lifecycle action names its own session; the head lifetime is not its destination.
-    if (intent.needs !== "nothing" && instancesSessionSelection(input) === null)
-      admissionDestination(key, intent.needs, {
-        bridgeSessionId: context.bridgeSessionId,
-        openDocumentId: context.openDocumentId,
-      });
-    const action = await runSemanticAction(
-      key as SemanticActionKey,
-      input,
-      context.openDocumentId ? exactDocument(context) : undefined,
-      context.bases,
-      context.hostBaseUrl,
+  if (context.actionId && (!intent || intent.door === "command")) {
+    const target =
+      context.bridgeSessionId && context.openDocumentId
+        ? {
+            kind: "document" as const,
+            ref: { session: context.bridgeSessionId, openId: context.openDocumentId },
+          }
+        : undefined;
+    const recovered = await recoverAction(
       context.actionId,
+      key,
+      input,
+      target,
+      context.hostBaseUrl,
       context.timeoutMs ?? 30_000,
     );
-    return context.receipt ? action : actionResult(action);
+    if (recovered) return context.receipt ? recovered : actionResult(recovered);
   }
-  if (!intent.mutates)
-    // A NoRequest op is called with no request; `{}` is a different body.
-    return caller({ ...context, bridgeSessionId: intent.session ?? context.bridgeSessionId }).call(
-      key as never,
-      (Object.keys(input).length ? input : undefined) as never,
+  intent ??= await readCapabilityIntent(key, context);
+  if (context.resolveTarget) context = { ...context, ...(await context.resolveTarget(intent)) };
+  const document =
+    context.bridgeSessionId && context.openDocumentId
+      ? { session: context.bridgeSessionId, openId: context.openDocumentId }
+      : undefined;
+  if (intent.door === "schedule-read")
+    return readScheduleCapture(key as ScheduleReadKey, input, document, context.hostBaseUrl);
+  if (intent.door === "family-read") {
+    const { scope, ...value } = input;
+    return readFamilyCapture(
+      key as FamilyReadKey,
+      value,
+      workKeySchema.parse(scope),
+      document,
+      context.hostBaseUrl,
     );
-  const admission = actionAdmissionSchema.parse({
-    id: context.actionId ?? crypto.randomUUID(),
-    kind: intent.kind,
-    key,
-    destination:
-      intent.destination ??
-      admissionDestination(key, intent.needs, {
-        bridgeSessionId:
-          intent.session ??
-          context.bridgeSessionId ??
-          (isTsOnlyOperationKey(key) ? undefined : await requireSession(key, context)),
-        openDocumentId: context.openDocumentId,
-      }),
-    input,
-    bases: context.bases ?? {},
-  });
-  const prior = intent.prior;
-  if (prior) {
-    const normalized = (value: unknown) => {
-      if (intent.kind !== "workflow" || !Object.hasOwn(semanticActions, key)) return value;
-      return semanticActions[key as SemanticActionKey].input.parse(value);
-    };
-    if (
-      prior.kind !== admission.kind ||
-      prior.key !== key ||
-      canonicalRouteInput(normalized(prior.request)) !== canonicalRouteInput(normalized(input)) ||
-      canonicalRouteInput(prior.bases) !== canonicalRouteInput(admission.bases)
-    )
-      throw Error("Original operation ID conflicts with the requested intent");
-    const session =
-      prior.destination.kind === "document"
-        ? prior.destination.ref.session
-        : prior.destination.kind === "session"
-          ? prior.destination.session
-          : undefined;
-    const openId = prior.destination.kind === "document" ? prior.destination.ref.openId : undefined;
-    if (context.session)
-      throw Error("Recovery accepts the original exact destination, not a new SDK selector");
-    if (
-      (context.bridgeSessionId && context.bridgeSessionId !== session) ||
-      (context.openDocumentId && context.openDocumentId !== openId)
-    )
-      throw Error("Original operation ID conflicts with the requested destination");
   }
-  await context.beforeAdmission?.(admission.id);
-  const action = await submitAction(admission, context.hostBaseUrl, context.timeoutMs ?? 30_000);
+  if (intent.door === "instances-read") {
+    const query = new URLSearchParams(
+      Object.entries(instancesReading.input.parse(input))
+        .filter(([, value]) => value !== undefined)
+        .map(([key, value]) => [
+          key,
+          typeof value === "object" ? JSON.stringify(value) : String(value),
+        ]),
+    );
+    const response = await fetch(`${context.hostBaseUrl}/instances/readings?${query}`, {
+      signal: AbortSignal.timeout(context.timeoutMs ?? 30_000),
+    });
+    if (!response.ok) throw Error(await response.text());
+    return response.json();
+  }
+  if (intent.door === "call") {
+    const host = caller({ ...context, bridgeSessionId: context.bridgeSessionId ?? intent.session });
+    return context.receipt
+      ? host.callOperation(key, input)
+      : host.call(key as never, (Object.keys(input).length ? input : undefined) as never);
+  }
+  const id = context.actionId ?? crypto.randomUUID();
+  await context.beforeAdmission?.(id);
+  let action: Awaited<ReturnType<typeof submitAction>>;
+  if (Object.hasOwn(commands, key)) {
+    action = await submitAction(
+      { id, key, target: commandTarget(key, input, document), input },
+      context.hostBaseUrl,
+      context.timeoutMs ?? 30_000,
+    );
+  } else {
+    const session =
+      intent.session ??
+      context.bridgeSessionId ??
+      (isTsOnlyOperationKey(key) ? undefined : (await caller(context).catalog()).bridgeSessionId);
+    action = await submitAction(
+      {
+        id,
+        key,
+        target: targetFor(key, intent.needs, { ...context, bridgeSessionId: session }),
+        input,
+      },
+      context.hostBaseUrl,
+      context.timeoutMs ?? 30_000,
+    );
+  }
   return context.receipt ? action : actionResult(action);
 }

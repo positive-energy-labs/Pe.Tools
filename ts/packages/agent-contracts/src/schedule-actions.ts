@@ -1,4 +1,4 @@
-import type { ActionDefinition } from "./semantic-actions.ts";
+import type { Command } from "./command.ts";
 import { z } from "zod";
 import { addressSchema, documentRefSchema } from "./target.ts";
 import { nativeProcessSchema } from "./action-receipts.ts";
@@ -70,6 +70,7 @@ export function unstale(
 }
 export const scheduleActions = {
   "schedule.grid.push": {
+    native: ["schedule.cells.apply"],
     says: "Push reviewed staged schedule cells using their frozen bindings. Complete positive native acknowledgments precede conditional Work publication and actual readback. Files a run receipt (values before and after) in the bound pod, or in the action receipt when no pod is bound.",
     needs: "project-document",
     effect: "command",
@@ -145,5 +146,5 @@ export const scheduleReads = {
     effect: "query",
     input: z.object({ id: z.string().regex(/^[a-f0-9]{64}$/) }),
   },
-} as const satisfies Record<string, ActionDefinition>;
+} as const satisfies Record<string, Command>;
 export type ScheduleReadKey = keyof typeof scheduleReads;

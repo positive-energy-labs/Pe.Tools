@@ -1,3 +1,6 @@
+import type { Ctx as RouteCtx } from "#/route";
+import { tools } from "@pe/agent-contracts";
+import { presentation } from "#/route/presentation";
 /**
  * The Parameter Links route, declared once. It has NO seeds by ruling (spec §7): the fixture
  * lane it used to carry is deleted, not ported, so `?demo=` is inert here.
@@ -5,18 +8,15 @@
 import { z } from "zod";
 import {
   routeAddress,
-  parameterLinksRouteState,
-  semanticActions,
+  commands,
   type ParameterLinksDocument,
   type WorkKey,
   stagedParameterProfile,
 } from "@pe/agent-contracts";
 
-import { defineRoute, type Ctx as RouteCtx } from "#/route";
 import {
   actionResult,
   readFamilyCapture,
-  runSemanticAction,
 } from "../../../../packages/mcps/src/shared/takeoff-action-client";
 
 type ParameterLinksPage = z.infer<typeof parameterLinksPageSchema>;
@@ -42,20 +42,19 @@ const read = async (ctx: Ctx, evaluate: boolean, subject: "edit" | "suggestion" 
   );
 };
 
-export const manifest = defineRoute<
+export const manifest = presentation<
   ParameterLinksDocument,
   ParameterLinksReadingKey,
   ParameterLinksPage,
   ParameterLinksAction
->({
+>(tools["parameter-links"], {
   key: "parameter-links",
   name: "Parameter Links",
   docs: "Cross-element parameter links: Pea and you co-edit one draft profile of link definitions and assignments. Refresh re-reads the stored links, preview projects the draft's target writes, and the arming strip arms and commits apply.",
   needs: "project",
-  work: parameterLinksRouteState,
   readings: {
     links: (_page: ParameterLinksPage, work: WorkKey) => ({ kind: "family-readings", work }),
-    receipts: { kind: "receipts" },
+    receipts: (_page: ParameterLinksPage, work: WorkKey) => ({ kind: "receipts", work }),
     inventory: { kind: "inventory" },
   } as never,
   address: "parameter-links",
@@ -96,19 +95,13 @@ export const manifest = defineRoute<
     apply: {
       label: "apply links",
       does: "parameter-links.apply",
-      input: semanticActions["parameter-links.apply"].input as never,
+      input: commands["parameter-links.apply"].input as never,
       dirties: ["links", "receipts"],
       requires: { work: true, readings: ["links"] },
       ready: () => null,
       run: async (ctx: Ctx, input: { readingId: string }) => {
-        const revision = ctx.work.revision;
-        if (revision === null) throw Error("Parameter Links Work unavailable");
         const { readingId } = input;
-        actionResult(
-          await runSemanticAction("parameter-links.apply", { readingId }, targetOf(ctx), {
-            work: { key: ctx.work.key, revision },
-          }),
-        );
+        actionResult(await ctx.commands["parameter-links.apply"]({ readingId }));
       },
     },
   },

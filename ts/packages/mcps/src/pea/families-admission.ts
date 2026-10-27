@@ -56,10 +56,8 @@ const refuse = (
 });
 
 /**
- * The Families door. An exclusion is stamped with its writer: every one a write adds or changes
- * says `by` the writer, and Pea never changes or lifts the person's. F-J1-7: a written cell whose
- * key names no type of a family loaded in the Work's scope is refused, whoever writes it. Clearing
- * a cell never asks Revit, so a bad key can always be withdrawn, denied or unedit.
+ * F-J1-7: a written cell must name a type loaded in the Work's scope, for either author.
+ * Clearing a cell needs no Revit read, so an invalid key can always be withdrawn.
  */
 export function familiesAdmission(loadedFamilies: LoadedFamilies): RouteWriteAdmission {
   return async (doc, patches, { scope: work, prior }) => {

@@ -23,7 +23,7 @@ test("CLI has no actor flag; no-context host and script writes get context.missi
     const identity = callerOf({ kind: "local" }, Object.fromEntries(new Headers(init?.headers)));
     if ("refusal" in identity) throw Error(identity.refusal.detail);
     try {
-      admitCrossing(identity.caller, body.destination, "/actions");
+      admitCrossing(identity.caller, body.target, "/actions");
     } catch (error) {
       if (!(error instanceof Refused)) throw error;
       return normalizePeError(
@@ -166,19 +166,16 @@ test.each([
       const admission = JSON.parse(await new Response(init?.body).text());
       actionId = admission.id;
       return Response.json({
-        kind: admission.kind,
         id: admission.id,
         key: admission.key,
         caller: { kind: "anonymous" },
         basis: null,
-        destination: admission.destination,
-        request: admission.input,
-        bases: admission.bases,
+        target: admission.target,
+        input: admission.input,
         steps: [],
-        preparation: { state: "ready", value: { sourceBundle: "MUST NOT PRINT" } },
+        prepared: { state: "ready", value: { sourceBundle: "MUST NOT PRINT" } },
         recovery: [],
         startedAt: "2026-10-15T00:00:00Z",
-        publication: { state: "unrequested" },
         state: "failed",
         status: 422,
         error: `Script execution ${status}`,

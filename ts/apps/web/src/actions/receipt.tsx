@@ -13,16 +13,16 @@ import { outputRenderers } from "#/ops/renderers";
  * certified mutation; every surface that names an action's state reads it from here.
  */
 export const commandStateWord = (
-  row: Pick<ActionReceipt, "kind" | "state" | "preparation" | "steps">,
+  row: Pick<ActionReceipt, "state" | "prepared" | "steps">,
 ): string => {
   if (row.state === "waiting") return "waiting for turn consent";
   if (row.state === "running") {
-    if (row.preparation.state === "unprepared") return "preparing";
+    if (row.prepared.state === "unprepared") return "preparing";
     return row.steps.some((step) => step.dispatchedAt !== undefined)
       ? "running"
       : "authorized and queued";
   }
-  return row.kind === "operation" && row.state === "succeeded" ? "reply received" : row.state;
+  return row.state;
 };
 const stateWord = commandStateWord;
 
@@ -149,9 +149,9 @@ export function ActionReceiptView({
           <>
             <div className="truncate face-mono text-ink-2">
               {row.key} / {row.startedAt} /{" "}
-              {row.destination.kind === "document"
-                ? `${row.destination.ref.session} / ${row.destination.ref.openId}`
-                : row.destination.kind}
+              {row.target.kind === "document"
+                ? `${row.target.ref.session} / ${row.target.ref.openId}`
+                : row.target.kind}
             </div>
             {row.steps.map((step) => (
               <div key={step.id} className="min-w-0 face-mono text-ink-2">
@@ -168,38 +168,26 @@ export function ActionReceiptView({
                 )}
               </div>
             ))}
-            <div className="truncate text-ink">
-              {row.kind === "operation" ? "Operation reply" : "Work publication"} /{" "}
-              {row.kind === "operation" ? row.state : row.publication.state}
-              {row.publication.state === "recorded"
-                ? ` / ${JSON.stringify(row.publication.result)}`
-                : ""}
-            </div>
             {"error" in row && (
               <details>
                 <summary data-tone="caution">{row.error.split("\n")[0]}</summary>
                 <Code code={row.error} lang="plaintext" tone="alarm" wrap />
               </details>
             )}
-            {row.kind === "operation" && "result" in row && outputRenderers[row.key]
+            {"result" in row && outputRenderers[row.key]
               ? (() => {
                   const Output = outputRenderers[row.key]!;
-                  return <Output data={row.result} opKey={row.key} request={row.request} />;
+                  return <Output data={row.result} opKey={row.key} request={row.input} />;
                 })()
               : null}
-            {row.kind === "operation" &&
-              "result" in row && (
-                // The payload is the biggest thing a receipt holds and the least often wanted:
-                // folded by default; `Code` clamps it, so it scrolls inside its own frame.
-                <details>
-                  <summary className="cursor-pointer text-ink-2">Returned payload</summary>
-                  <Code
-                    code={stringify(row.result)}
-                    lang="json"
-                    title="Returned operation payload"
-                  />
-                </details>
-              )}
+            {"result" in row && (
+              // The payload is the biggest thing a receipt holds and the least often wanted:
+              // folded by default; `Code` clamps it, so it scrolls inside its own frame.
+              <details>
+                <summary className="cursor-pointer text-ink-2">Returned payload</summary>
+                <Code code={stringify(row.result)} lang="json" title="Returned operation payload" />
+              </details>
+            )}
           </>
         )}
         {(receiptError || control.error) && (

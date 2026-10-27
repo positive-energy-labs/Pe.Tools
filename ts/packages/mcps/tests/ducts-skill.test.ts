@@ -17,9 +17,9 @@ test("the bundled ducts skill is projected from DUCTS_GUIDE and keeps the operat
   for (const row of DUCTS_RESIDENCY) expect(skill).toContain(row.value);
   for (const key of [
     "route:ducts.set-view",
-    "workflow:ducts.preview-heal",
-    "workflow:ducts.apply-heal",
-    "workflow:ducts.preview-assign-fan",
+    "op:ducts.preview-heal",
+    "op:ducts.apply-heal",
+    "op:ducts.preview-assign-fan",
     "route:ducts.edit",
     "route:ducts.guide",
   ])

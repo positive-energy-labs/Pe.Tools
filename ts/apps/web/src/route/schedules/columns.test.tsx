@@ -251,7 +251,7 @@ test("a grid cell draws the contract's transitions and accept writes at the rend
 
   // Stage is typing: the cell's input, not a button.
   expect(verbs(cellAt("180 VA"))).toEqual(
-    availableTransitions(cells["1::1"]!, "human", { lock: null }).filter(
+    availableTransitions(cells["1::1"]!, { lock: null }).filter(
       (k) => k !== "set" && k !== "suggest",
     ),
   );

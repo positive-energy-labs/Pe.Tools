@@ -10,9 +10,7 @@ import { useEffect, useMemo, useRef, useState } from "react";
 import {
   actionReceiptSchema,
   actionStatusSchema,
-  diagnosticSchema,
   familyCellKey,
-  ffReceiptSchema,
   type ActionStatus,
   type AppliedFilter,
   type FamilyCellAddress,
@@ -43,6 +41,7 @@ import {
   type FamiliesDraft,
 } from "#/families/host";
 import { manifest, type FamiliesPage } from "#/families/manifest";
+import { applyResults } from "./apply-outcome";
 
 /* ── Page memory ───────────────────────────────────────────────────────────── */
 
@@ -107,16 +106,13 @@ function applyDataOf(statuses: unknown, receipts: unknown) {
     .array()
     .parse(receipts)
     .find((entry) => entry.id === row.id);
-  const step = parsed?.steps.find(
-    (entry) => entry.key === "families.apply" && entry.state === "succeeded",
-  );
-  if (!parsed || !step || step.state !== "succeeded") return null;
-  const native = step.result as { diagnostics?: unknown[]; receipts?: unknown[] };
-  const ffReceipts = ffReceiptSchema.array().parse(native.receipts ?? []);
+  if (parsed?.state !== "succeeded") return null;
+  const results = applyResults(parsed.result);
+  const ffReceipts = results.flatMap((result) => result.native.receipts);
   return {
     actionId: parsed.id,
     appliedAt: parsed.startedAt,
-    diagnostics: diagnosticSchema.array().parse(native.diagnostics ?? []),
+    diagnostics: results.flatMap((result) => result.native.diagnostics),
     receipts: ffReceipts,
     artifacts: [
       ...new Set(

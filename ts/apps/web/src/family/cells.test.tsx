@@ -31,7 +31,7 @@ const fields: Record<string, FieldState> = {
   [FAMILY]: { suggestion: { value: "10in" } },
 };
 const drawn = (key: string, lock: string | null = null) =>
-  availableTransitions(fields[key]!, "human", { lock }).filter(
+  availableTransitions(fields[key]!, { lock }).filter(
     (kind) => kind !== "set" && kind !== "suggest",
   );
 

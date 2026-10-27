@@ -131,7 +131,8 @@ async function offer(
     const imported = await installArchive(bytes, path, undefined, options);
     return { archive, sha256, outcome: "imported", id: imported.id, folder: imported.folder };
   } catch (error) {
-    const reason = error instanceof Error ? error.message : String(error);
+    const reason =
+      error instanceof Error || error instanceof TransferRefused ? error.message : String(error);
     if (
       error instanceof TransferRefused &&
       error.status === 409 &&

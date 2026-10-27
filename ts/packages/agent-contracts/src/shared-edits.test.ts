@@ -13,7 +13,6 @@ const spec: RouteStateSpec<typeof schema> = {
   title: "Shared",
   description: "Shared edits",
   schema,
-  commands: {},
 };
 const envelope: RouteEnvelope<z.infer<typeof schema>> = {
   version: 1,
@@ -22,7 +21,7 @@ const envelope: RouteEnvelope<z.infer<typeof schema>> = {
 };
 
 test("either author knowingly replaces the current edit; provenance cannot be forged", () => {
-  for (const actor of ["agent", "human"] as const) {
+  for (const actor of ["pea", "human"] as const) {
     const result = applyPatches(
       spec,
       envelope,
@@ -41,7 +40,7 @@ test("either author knowingly replaces the current edit; provenance cannot be fo
         revision: 14,
         doc: {
           cells: {
-            width: { edit: { value: 250, by: actor === "agent" ? "pea" : "human", base: 13 } },
+            width: { edit: { value: 250, by: actor, base: 13 } },
           },
         },
       },
@@ -57,7 +56,7 @@ test("either author knowingly replaces the current edit; provenance cannot be fo
       ),
     ).toMatchObject({ ok: false, code: "stale_revision" });
     expect(
-      availableTransitions(envelope.doc.cells.width!, actor === "agent" ? "pea" : "human", {
+      availableTransitions(envelope.doc.cells.width!, {
         lock: null,
       }),
     ).toContain("set");
@@ -65,7 +64,7 @@ test("either author knowingly replaces the current edit; provenance cannot be fo
 });
 
 test("both writers retain schema and host-observation boundaries", () => {
-  for (const actor of ["agent", "human"] as const) {
+  for (const actor of ["pea", "human"] as const) {
     expect(
       applyPatches(
         spec,
@@ -86,7 +85,7 @@ test("cell keys that look like slots or evidence do not bypass host attribution"
     const result = applyPatches(
       spec,
       envelope,
-      "agent",
+      "pea",
       [{ path: ["cells", key], value: { edit: { value: 7, by: "human", base: 0 } } }],
       13,
     );
@@ -102,7 +101,7 @@ test("generic patches cannot forge or erase any host observation for either auth
   const observedSchema = schema.extend(
     Object.fromEntries(fields.map((field) => [field, z.unknown().optional()])),
   );
-  for (const actor of ["agent", "human"] as const)
+  for (const actor of ["pea", "human"] as const)
     for (const field of fields)
       for (const patch of [
         { path: [field], value: { verified: true } },

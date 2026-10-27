@@ -18,7 +18,7 @@ import type { CommandFactory } from "../src/command-executor.ts";
 import { fixtureCommand } from "./command-fixture.ts";
 import { BridgeError } from "../src/bridge.ts";
 import { HOST_CONTEXT_HEADER } from "@pe/host-contracts/contracts";
-import { admitCrossing, callerOf, mintPageDoor } from "../src/control.ts";
+import { admitCrossing, callerOf, mintPageDoor, live } from "../src/control.ts";
 
 const run = { thread: "dependency-thread", turn: "first" };
 const pea: Caller = { kind: "pea", context: "host-issued", thread: run.thread, run, root: run };
@@ -91,6 +91,94 @@ test("Page gates retain the minted capability and recheck every effected documen
     }
   }
 });
+
+test.each([false, true])(
+  "Page dispatch rechecks secondary-resource trust after an async dependency read; revoked=%s",
+  async (revoke) => {
+    const h = await setup();
+    const a = { session: "page-session", openId: "a" };
+    const b = { session: "page-session", openId: "b" };
+    let targets = [a, b];
+    bindControl({
+      acquired: () => null,
+      heads: () => ({
+        revision: 3,
+        targets: targets.map((ref) => ({
+          request: { kind: "open", ref },
+          admission: { revision: 3, at: "2026-10-27T12:00:00.000Z", via: "local" },
+        })),
+      }),
+    });
+    let holdReader = false,
+      readerWaiting = false,
+      dispatched = 0;
+    let release!: () => void;
+    const held = new Promise<void>((resolve) => {
+      release = resolve;
+    });
+    h.journal.configureCommands(
+      {
+        work: h.work,
+        read: async () => {
+          if (holdReader) {
+            readerWaiting = true;
+            await held;
+          }
+          return { version: 1 };
+        },
+      },
+      () => {
+        throw Error("No resumed probe");
+      },
+    );
+    const minted = mintPageDoor(
+      "page:@pages/probe",
+      { kind: "thread", thread: "page-thread" },
+      "/pages/probe/act",
+      false,
+      null,
+    );
+    try {
+      const identity = callerOf({ kind: "local" }, { [HOST_CONTEXT_HEADER]: minted.token });
+      if (!("caller" in identity)) throw Error("Missing minted Page caller");
+      const target = { kind: "document", ref: a } as const;
+      const basis = admitCrossing(identity.caller, target, "/pages/probe/act");
+      await h.journal.invoke(
+        { id: "page-dispatch", key: "probe.page", target, input: {} },
+        { caller: identity.caller, basis },
+        fixtureCommand(
+          [
+            { kind: "document", ref: a },
+            { kind: "document", ref: b },
+          ],
+          async () => null,
+          async (execution) =>
+            execution.step("native", "probe.native", {}, async (requestId) => {
+              holdReader = true;
+              const refusal = await h.journal.validateDispatch(requestId);
+              if (refusal) throw new BridgeError(refusal, 409, { notDispatched: true });
+              await h.journal.markDispatched(requestId);
+              return ++dispatched;
+            }),
+          [{ kind: "catalog", snapshot: { version: 1 } }],
+        ),
+      );
+      await vi.waitFor(() => expect(readerWaiting).toBe(true));
+      if (revoke) targets = [a];
+      expect(live(basis)).toBeNull();
+      release();
+      const row = await h.journal.wait("page-dispatch");
+      expect(dispatched).toBe(revoke ? 0 : 1);
+      expect(row.state).toBe(revoke ? "failed" : "succeeded");
+      if (revoke) expect(row).toMatchObject({ notDispatched: true });
+    } finally {
+      release();
+      minted.retire();
+      bindControl({ heads: null });
+      await h.close();
+    }
+  },
+);
 
 async function setup() {
   const directory = await mkdtemp(join(tmpdir(), "pe-dependencies-"));

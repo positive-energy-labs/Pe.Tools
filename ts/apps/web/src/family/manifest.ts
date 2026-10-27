@@ -1,3 +1,4 @@
+import { confirmedPlan } from "#/route/workflow";
 /**
  * `/family`, declared once: an entity route whose audit is the family anatomy and parameter table.
  * The kernel owns capture and apply (and apply's plan confirmation); this file owns the audit's
@@ -8,7 +9,7 @@ import {
   routeAddress,
   actionStatusSchema,
   familyActions,
-  familyDraftRouteState,
+  commands,
   ffPlanEntrySchema,
   familyEvidenceSchema,
   familyProjectionSchema,
@@ -33,10 +34,7 @@ import type { BridgeSessionListEntry } from "@pe/host-contracts/operation-types"
 
 import {
   admissionPlan,
-  byPlan,
   entityRoute,
-  semanticActionInput,
-  workflow,
   type Ctx as RouteCtx,
   type EntityPage,
   type EntityRouteDef,
@@ -46,19 +44,10 @@ import { previousOf } from "#/readings";
 import { ffPlanRow } from "#/host/familyfoundry";
 import { buildRefusals, type BuildFacts } from "#/family/build";
 import { familyFixtures, type AuthoredFamilyName } from "#/family/authored-families";
-import {
-  actionResult,
-  runSemanticAction,
-} from "../../../../packages/mcps/src/shared/takeoff-action-client";
+import { actionResult } from "../../../../packages/mcps/src/shared/takeoff-action-client";
 
 /** The `$schema` path that says a member is a family model: the spec `/family` captures and applies. */
 export const FAMILY_MODEL_SCHEMA = "/schemas/settings/FamilyFoundry/models.json";
-/** A draft's `$schema`: this library, on the host actually serving the page. */
-const modelSchema = () =>
-  typeof location === "undefined"
-    ? FAMILY_MODEL_SCHEMA
-    : new URL(FAMILY_MODEL_SCHEMA, location.origin).href;
-
 /** The route's Work is the family draft: the live reading and the proposals on it. */
 type FamilyRouteDocument = FamilyDraft;
 
@@ -132,56 +121,16 @@ export const familySpec: EntityRouteDef<FamilyRouteDocument, FamilyReadingKey, F
   edit: {
     cells: (ctx) => ctx.work.doc?.cells ?? {},
     direct: async (ctx) => {
-      const spec = ctx.work.doc ? draftSpec(ctx.work.doc) : null;
-      if (!spec || ctx.work.revision === null) throw Error("read the family first");
-      const { $schema: _, ...model } = JSON.parse(spec) as {
-        $schema?: unknown;
-        family?: { name?: string };
-      };
-      const name = (model.family?.name ?? "family").replace(/[^\w.-]+/g, "-");
-      await workflow(
-        "family.apply",
-        {
-          rows: {
-            source: {
-              path: `edit/${name}.json`,
-              content: `${JSON.stringify({ $schema: modelSchema(), ...model }, null, 2)}\n`,
-            },
-            include: "all",
-          },
-        },
-        ctx,
-        { work: { key: ctx.work.key, revision: ctx.work.revision } },
-      );
+      actionResult(await ctx.commands["family.apply"]({ include: "all" }));
     },
     plan: async (ctx) => {
-      const spec = ctx.work.doc ? draftSpec(ctx.work.doc) : null;
-      if (!spec) throw Error("read the family first");
-      const { $schema: _, ...model } = JSON.parse(spec) as {
-        $schema?: unknown;
-        family?: { name?: string };
-      };
-      const name = (model.family?.name ?? "family").replace(/[^\w.-]+/g, "-");
-      // Bound to the reviewed draft: the host consumes its edit cells only if these bytes are it.
-      const result = await workflow(
-        "family.plan",
-        {
-          source: {
-            path: `edit/${name}.json`,
-            content: `${JSON.stringify({ $schema: modelSchema(), ...model }, null, 2)}\n`,
-          },
-        },
-        ctx,
-        ctx.work.revision === null
-          ? undefined
-          : { work: { key: ctx.work.key, revision: ctx.work.revision } },
-      );
+      const result = actionResult(await ctx.commands["family.plan"]({})) as Record<string, unknown>;
       return {
         entries: [{ ...ffPlanRow(ffPlanEntrySchema.parse(result.plan)), plan: String(result.id) }],
       };
     },
     apply: async (ctx, included) => {
-      for (const input of byPlan(included)) await workflow("family.apply", { rows: input }, ctx);
+      actionResult(await ctx.commands["family.apply"](confirmedPlan(included)));
     },
   },
   docs: "Audit a captured family draft baseline with no pod: propose and stage keyed cells, plan and apply the live draft, save it into a pod as a member, open a saved member into the draft, or build a saved member to an .rfa.",
@@ -191,9 +140,9 @@ const latestOf = (rows: ActionStatus[]) =>
   rows.sort((a, b) => b.startedAt.localeCompare(a.startedAt))[0] ?? null;
 
 const onTarget = (row: ActionStatus, target: { session: string; openId: string }) =>
-  row.destination.kind === "document" &&
-  row.destination.ref.session === target.session &&
-  row.destination.ref.openId === target.openId;
+  row.target.kind === "document" &&
+  row.target.ref.session === target.session &&
+  row.target.ref.openId === target.openId;
 
 const statusesOf = (statuses: unknown) =>
   statuses ? actionStatusSchema.array().parse(statuses) : [];
@@ -227,7 +176,7 @@ export const latestBuildStatus = (
     statusesOf(statuses).filter((row) => {
       if (row.key !== "family.build" || row.state !== "succeeded" || !onTarget(row, target))
         return false;
-      const request = familyActions["family.build"].input.safeParse(row.request);
+      const request = familyActions["family.build"].input.safeParse(row.input);
       return request.success && sameSource(profile.source, request.data.source);
     }),
   );
@@ -430,10 +379,10 @@ export const familyManifest = (authoring = absentAuthoringFacts) =>
       // The owner provides this from pod.member.read + pod.member.compose.
       profile: () => null,
       /** Every action receipt for the bound document: the capture, apply and build folds. */
-      receipts: { kind: "receipts", target: { session: "", openId: "" } },
+      receipts: (_page: FamilyPage, work: WorkKey) => ({ kind: "receipts", work }),
       inventory: { kind: "inventory" },
     } as never,
-    work: familyDraftRouteState,
+
     // Draft cells are JSON pointers (`/parameters/<name>/value`): grouped by parameter, so the
     // Chat head reads pending Family edits like any other route's, and a review opens its param.
     cells: [
@@ -461,7 +410,7 @@ export const familyManifest = (authoring = absentAuthoringFacts) =>
         label: "attach PDF",
         says: "Parse and file a portable cut sheet beside the captured family.",
         needs: "nothing",
-        input: familyDraftRouteState.commands.attach_spec.input,
+        input: commands["family.attach-spec"].input,
         dirties: [],
         rereads: "work",
         stage: "audit",
@@ -469,8 +418,12 @@ export const familyManifest = (authoring = absentAuthoringFacts) =>
           (ctx.page as FamilyPage & EntityPage).pod && (ctx.page as FamilyPage & EntityPage).path
             ? null
             : "Capture the family into a pod first",
-        run: async (ctx: Ctx, input: unknown) => {
-          await ctx.command("attach_spec", input);
+        run: async (ctx: Ctx, input: Record<string, unknown>) => {
+          actionResult(
+            await ctx.commands["family.attach-spec"](
+              commands["family.attach-spec"].input.parse(input),
+            ),
+          );
         },
       },
       read: {
@@ -483,10 +436,11 @@ export const familyManifest = (authoring = absentAuthoringFacts) =>
         stage: "audit",
         ready: () => null,
         run: async (ctx: Ctx) => {
-          const read = await workflow("family.capture", {}, ctx);
-          await workflow("family.observe", { readingId: String(read.id) }, ctx, {
-            work: { key: ctx.work.key, revision: ctx.work.revision ?? 0 },
-          });
+          const read = actionResult(await ctx.commands["family.capture"]({})) as Record<
+            string,
+            unknown
+          >;
+          actionResult(await ctx.commands["family.observe"]({ readingId: String(read.id) }));
         },
       },
       // Ruling 45: press 1 reviews the exact saved profile (build's flag draws it), press 2 builds.
@@ -523,18 +477,11 @@ export const familyManifest = (authoring = absentAuthoringFacts) =>
             });
             return;
           }
-          actionResult(
-            await runSemanticAction(
-              "family.build",
-              semanticActionInput("family.build", profile),
-              ctx.target.ref,
-            ),
-          );
+          actionResult(await ctx.commands["family.build"](profile));
           ctx.setPage({ buildReview: null });
         },
       },
     } as never,
-    runs: ["family.plan", "family.observe"],
     seeds: {
       read: familySeed("box", "audit", false),
       build: familySeed("refline", "apply"),

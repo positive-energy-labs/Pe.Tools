@@ -317,13 +317,7 @@ async function setup(sdk: (args: readonly string[]) => Promise<string> = sdkSess
             ? { kind: "host" }
             : { kind: "document", ref: target },
         input: {
-          ...((key === "family.apply" || key === "families.apply") &&
-          input &&
-          typeof input === "object" &&
-          !("rows" in input) &&
-          ("expectedPlanHashes" in input || "source" in input || "sources" in input)
-            ? { rows: input }
-            : (input as Record<string, unknown>)),
+          ...(input as Record<string, unknown>),
           ...(where
             ? {
                 work: {
@@ -436,7 +430,7 @@ async function authorFamilies(work: RouteWorkspace, revision = 0, where = scope)
   expect(landed.ok).toBe(true);
   return landed.revision!;
 }
-/* â”€â”€ the boundary itself â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€ */
+/* ── the boundary itself ─────────────────────────────────────────────────────────────────── */
 type Plan = {
   id: string;
   plan: {
@@ -462,7 +456,7 @@ test("human and Pea share plan and Apply; Pea receives root-run consent", async 
   resultOf(
     await admit(
       "families.apply",
-      { rows: { plan: plan.id, expectedPlanHashes: { "1": "h1" } } },
+      { plan: plan.id, include: ["1"] },
       revision,
       "agent-apply",
       "agent",
@@ -475,29 +469,17 @@ test("apply sends the bytes its plan sealed, not the member as saved since", asy
   const revision = await authorFamilies(work);
   const plan = resultOf<Plan>(await admit("families.plan", { source }, revision));
   await writeFile(join(podsRoot, "Global", "settings", "p.json"), '{"patch":{"changed":1}}');
-  resultOf(
-    await admit("families.apply", { plan: plan.id, expectedPlanHashes: plan.included }, revision),
-  );
+  resultOf(await admit("families.apply", { plan: plan.id, include: "all" }, revision));
   expect(sent.find((row) => row.key === "families.apply")!.input.specJson).toBe(composed);
 });
-test("apply refuses a plan it cannot name, another document's, or a hash the plan never made", async () => {
+test("apply refuses a missing or foreign plan, or a selection with no planned family", async () => {
   const { work, admit, sent } = await setup();
   const revision = await authorFamilies(work);
   const plan = resultOf<Plan>(await admit("families.plan", { source }, revision));
   const refusals = [
-    await admit(
-      "families.apply",
-      { plan: "nope", expectedPlanHashes: { "1": "h1" } },
-      revision,
-      "a1",
-    ),
-    await admit("family.apply", { plan: plan.id, expectedPlanHashes: { "1": "h1" } }, 0, "a2"),
-    await admit(
-      "families.apply",
-      { plan: plan.id, expectedPlanHashes: { "1": "h9" } },
-      revision,
-      "a3",
-    ),
+    await admit("families.apply", { plan: "nope", include: ["1"] }, revision, "a1"),
+    await admit("family.apply", { plan: plan.id, include: ["1"] }, 0, "a2"),
+    await admit("families.apply", { plan: plan.id, include: ["unplanned"] }, revision, "a3"),
   ];
   expect(
     refusals.map((row) => [
@@ -511,10 +493,30 @@ test("apply refuses a plan it cannot name, another document's, or a hash the pla
   ).toEqual([
     ["failed", expect.stringMatching(/Consumed input changed/)],
     ["failed", expect.stringMatching(/Target document lifetime or kind differs/)],
-    ["failed", expect.stringMatching(/not in the reviewed plan/)],
+    ["failed", expect.stringMatching(/No included family/)],
   ]);
   expect(sent.filter((s) => s.key.endsWith(".apply"))).toHaveLength(0);
 });
+test("Apply accepts only a plan selection and rejects forged caller hashes or competing source paths", async () => {
+  const env = await setup();
+  const revision = await authorFamilies(env.work);
+  const plan = resultOf<Plan>(await env.admit("families.plan", { source }, revision));
+  for (const invalid of [
+    { plan: plan.id, expectedPlanHashes: { "1": "forged" } },
+    { rows: { plan: plan.id } },
+    { source, plan: plan.id },
+  ])
+    await expect(env.admit("families.apply", invalid, revision, "forged")).rejects.toThrow();
+  resultOf(
+    await env.admit("families.apply", { plan: plan.id, include: ["Box"] }, revision, "selected"),
+  );
+  expect(
+    env.sent
+      .filter((row) => row.key === "families.apply")
+      .map((row) => row.input.expectedPlanHashes),
+  ).toEqual([{ "1": "h1" }]);
+});
+
 test("families apply sends exactly the reviewed hashes, and the spec, source bytes and options its plan sealed", async () => {
   const { work, admit, sent } = await setup();
   const revision = await authorFamilies(work);
@@ -522,13 +524,7 @@ test("families apply sends exactly the reviewed hashes, and the spec, source byt
   const plan = resultOf<Plan>(
     await admit("families.plan", { source, executionOptions: options }, revision),
   );
-  resultOf(
-    await admit(
-      "families.apply",
-      { plan: plan.id, expectedPlanHashes: { "1": "h1", "2": "h2" } },
-      revision,
-    ),
-  );
+  resultOf(await admit("families.apply", { plan: plan.id, include: ["1", "2"] }, revision));
   const native = sent.find((s) => s.key === "families.apply")!;
   expect(native.input.expectedPlanHashes).toEqual({ "1": "h1", "2": "h2" });
   expect(native.input.specJson).toBe(composed);
@@ -547,7 +543,7 @@ test("families apply sends exactly the reviewed hashes, and the spec, source byt
   // The native run names the plan it applies (execution reads it once C# declares the field).
   expect(native.input.plan).toBe(plan.id);
 });
-/* â”€â”€ consumed-cell retirement (obligation 8) â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€ */
+/* ── consumed-cell retirement (obligation 8) ─────────────────────────────────────────────── */
 const cellOf = (parameter: string) =>
   familyCellKey({ familyName: "Box", typeName: "T", parameter });
 const W = cellOf("Width");
@@ -591,7 +587,7 @@ async function stagedPlan(
   const plan = resultOf<Plan>(
     await env.admit("families.plan", { source: draft, familyNames: ["Box"] }, revision),
   );
-  return { plan, revision, draft, apply: { plan: plan.id, expectedPlanHashes: plan.included } };
+  return { plan, revision, draft, apply: { plan: plan.id, include: "all" } };
 }
 const nativePatch = {
   path: "proposed/duct-patch.json",
@@ -625,7 +621,7 @@ async function nativePatchPlan(env: Awaited<ReturnType<typeof setup>>) {
     )
   ).revision!;
   const plan = resultOf<Plan>(await env.admit("families.plan", { source: nativePatch }, revision));
-  return { plan, revision, apply: { plan: plan.id, expectedPlanHashes: plan.included } };
+  return { plan, revision, apply: { plan: plan.id, include: "all" } };
 }
 test("native patch proposal is staged by a person and its exact supplied bytes retire after every family succeeds", async () => {
   const env = await setup();
@@ -701,13 +697,7 @@ test("native patch proposal is staged by a person and its exact supplied bytes r
     retired: {
       retired: string[][];
     };
-  }>(
-    await env.admit(
-      "families.apply",
-      { plan: plan.id, expectedPlanHashes: plan.included },
-      counter.revision!,
-    ),
-  );
+  }>(await env.admit("families.apply", { plan: plan.id, include: "all" }, counter.revision!));
   expect(done.retired.retired).toContainEqual(["patch"]);
   const final = familiesRouteState.schema.parse((await env.work.read(scope, "families"))!.doc);
   expect(final.patch.edit).toBeNull();
@@ -956,7 +946,7 @@ test("/family retires the draft's consumed cells after a proven apply, and keeps
   resultOf(
     await env.admit(
       "family.apply",
-      { plan: plan.id, expectedPlanHashes: plan.included },
+      { plan: plan.id, include: "all" },
       revision,
       "fa",
       "human",
@@ -973,7 +963,7 @@ test("/family retires the draft's consumed cells after a proven apply, and keeps
   expect(root).toMatchObject({ id: "global", path: draft.path, origin: "SuppliedDraft" });
   expect(Buffer.from(root.bytesBase64, "base64").toString("utf8")).toBe(draft.content);
 });
-/* â”€â”€ parameter links â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€ */
+/* ── parameter links ─────────────────────────────────────────────────────────────────────── */
 /** The person stages a profile on the one cell. */
 async function authorDraft(work: RouteWorkspace, draft: unknown, revision = 0) {
   const landed = await work.apply(
@@ -1163,7 +1153,7 @@ test("a plan whose apply outcome is unknown refuses another apply until it is re
   const { work, admit, sent, unknown } = await setup();
   const revision = await authorFamilies(work);
   const plan = resultOf<Plan>(await admit("families.plan", { source }, revision));
-  const input = { plan: plan.id, expectedPlanHashes: plan.included };
+  const input = { plan: plan.id, include: "all" };
   unknown(true);
   await admit("families.apply", input, revision, "uncertain");
   unknown(false);
@@ -1337,7 +1327,7 @@ test("an interrupted Families apply resumes from its exact durable FF run withou
   expect(resumed.retired.retired).toEqual([["cells", W]]);
   expect(env.sent.filter((row) => row.key === "families.apply")).toHaveLength(1);
 });
-/* â”€â”€ O8-b: a stale review refuses â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€ */
+/* ── O8-b: a stale review refuses ────────────────────────────────────────────────────────── */
 test("a staged cell changed since the plan refuses apply visibly; a Pea proposal alone does not", async () => {
   const env = await setup();
   const { apply, revision } = await stagedPlan(env, { [W]: staged("10"), [H]: staged("20") });
@@ -1375,7 +1365,7 @@ test("a staged cell changed since the plan refuses apply visibly; a Pea proposal
   ).toMatch(/Consumed input changed/);
   expect(env.sent.filter((s) => s.key === "families.apply")).toHaveLength(0);
 });
-/* â”€â”€ Doors 2 and 9: the minted caller, never a self-asserted actor (ADR 0017 D2) â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€ */
+/* ── Doors 2 and 9: the minted caller, never a self-asserted actor (ADR 0017 D2) ─────────── */
 const doorRegistrations = [
   {
     spec: {
@@ -1473,9 +1463,7 @@ test("door 9: route Work writes take their author from the caller; the /pe/agent
 test("one direct Apply plans, seals hashes, applies and reads back under one journal command", async () => {
   const env = await setup();
   const revision = await authorFamilies(env.work);
-  resultOf(
-    await env.admit("families.apply", { rows: { source, include: ["Box"] } }, revision, "direct"),
-  );
+  resultOf(await env.admit("families.apply", { source, include: ["Box"] }, revision, "direct"));
   const writes = env.sent.filter((row) => row.key === "families.apply");
   expect(writes).toHaveLength(1);
   expect(writes[0]?.input.expectedPlanHashes).toEqual({ "1": "h1" });
@@ -1563,7 +1551,7 @@ test("a submitted source freezes before countdown; changed source never becomes 
   env.approval.hold();
   const completion = env.admit(
     "families.apply",
-    { rows: { source, include: "all" } },
+    { source, include: "all" },
     revision,
     "held-source",
     "agent",
@@ -1573,7 +1561,7 @@ test("a submitted source freezes before countdown; changed source never becomes 
   );
   const held = (await env.owner.list(undefined, "held-source"))[0]!;
   expect(held).toMatchObject({
-    input: { rows: { source } },
+    input: { source },
     prepared: { state: "unprepared" },
     consumes: expect.arrayContaining([
       { kind: "member", ...source, bytesBase64: Buffer.from(profileBytes).toString("base64") },
@@ -1588,7 +1576,7 @@ test("a submitted source freezes before countdown; changed source never becomes 
   resultOf(
     await env.admit(
       "families.apply",
-      { rows: { source: updated, include: "all" } },
+      { source: updated, include: "all" },
       revision,
       "new-source",
       "agent",
@@ -1642,7 +1630,7 @@ test("edits remain writable during countdown and invalidate the submitted Work r
   env.approval.hold();
   const completion = env.admit(
     "families.apply",
-    { rows: { source, include: "all" } },
+    { source, include: "all" },
     revision,
     "held-work",
     "agent",
@@ -1670,13 +1658,11 @@ test("direct per-family sources stay one command with exact native hashes for ea
     await env.admit(
       "families.apply",
       {
-        rows: {
-          sources: [
-            { source, familyNames: ["Box"] },
-            { source, familyNames: ["Pipe"] },
-          ],
-          include: "all",
-        },
+        sources: [
+          { source, familyNames: ["Box"] },
+          { source, familyNames: ["Pipe"] },
+        ],
+        include: "all",
       },
       revision,
       "batch",

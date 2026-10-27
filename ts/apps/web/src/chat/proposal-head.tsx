@@ -259,7 +259,7 @@ function GroupRow({
   const { acceptK, denyK } = useMemo(() => {
     const ctx = {
       cellsPath: segment === null ? [] : [segment],
-      actor: "human" as const,
+
       lockOf,
     };
     return {

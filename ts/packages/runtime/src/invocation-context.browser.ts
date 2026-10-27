@@ -2,6 +2,7 @@
 /// <reference types="vite-plus/client" />
 import { HOST_RUNTIME_SERVICE_HEADER } from "@pe/host-contracts/contracts";
 import type { ActionAdmission, Caller } from "@pe/agent-contracts";
+export type InvocationRecord = { id: string; admission?: ActionAdmission };
 
 export type RequestPrincipal =
   | { readonly kind: "local" }
@@ -21,7 +22,7 @@ export interface InvocationContext {
   readonly caller?: Caller;
   readonly device?: string;
   readonly headers?: Readonly<Record<string, string>>;
-  readonly admissions?: Map<string, ActionAdmission>;
+  readonly admissions?: Map<string, InvocationRecord>;
   readonly running?: Map<string, string>;
 }
 
@@ -31,6 +32,15 @@ const serviceName = import.meta.env.PE_RUNTIME_SERVICE;
 // Browser clients already have a single user and same-origin transport, with no ambient tool scope.
 export const invocationContext = (): InvocationContext | undefined => undefined;
 export const carriesCallerContext = (): boolean => false;
+
+export function readOutbox(slot: string): InvocationRecord | undefined {
+  const raw = localStorage.getItem(slot);
+  return raw ? (JSON.parse(raw) as InvocationRecord) : undefined;
+}
+export function writeOutbox(slot: string, value?: InvocationRecord): void {
+  if (value) localStorage.setItem(slot, JSON.stringify(value));
+  else localStorage.removeItem(slot);
+}
 
 /**
  * The page's own origin only, carrying the runtime owner the host's identity gate requires of

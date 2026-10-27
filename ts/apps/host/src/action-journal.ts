@@ -41,7 +41,6 @@ import {
   type CommandConsent,
   type Caller,
   type DocumentRef,
-  type ExecutionTarget,
   type ActionReceipt,
   receiptSchema,
   receiptBodySchema,
@@ -722,6 +721,7 @@ export class ActionJournal implements ReceiptReader {
     if (row.cancellationRequested) return "Action cancelled before dispatch";
     try {
       if (row.effects.length) commandCheckpoint(originOf(row.caller), row.consent);
+      validateFootprintCaller(this.activeCallers.get(row.id) ?? row.caller, row.effects);
     } catch (error) {
       return String(error);
     }
@@ -982,15 +982,7 @@ export class ActionJournal implements ReceiptReader {
   /** One predicate at every async boundary; domain executors declare only the facts it reads. */
   private async gate(
     row: ActionReceipt,
-    moment:
-      | "admit"
-      | "authorize"
-      | "consented"
-      | "turn"
-      | "prepared"
-      | "step"
-      | "dispatch"
-      | "run-change",
+    moment: "admit" | "authorize" | "consented" | "turn" | "prepared" | "step" | "dispatch",
     postcondition = false,
   ): Promise<void> {
     if (row.cancellationRequested)

@@ -270,9 +270,9 @@ it("both authors share revision-fenced Work edits and refuses lossy scalar unit 
     {},
     { kind: "suggest", rung: { value } },
   );
-  expect(applyPatches(ductsRouteState, env, "agent", propose, 3)).toMatchObject({ ok: true });
+  expect(applyPatches(ductsRouteState, env, "pea", propose, 3)).toMatchObject({ ok: true });
   const stage = transitionPatches(["calculation"], "filter", {}, { kind: "set", rung: { value } });
-  expect(applyPatches(ductsRouteState, env, "agent", stage, 3)).toMatchObject({ ok: true });
+  expect(applyPatches(ductsRouteState, env, "pea", stage, 3)).toMatchObject({ ok: true });
   expect(applyPatches(ductsRouteState, env, "human", stage, 3)).toMatchObject({ ok: true });
   expect(applyPatches(ductsRouteState, env, "human", stage, 2)).toMatchObject({ ok: false });
   const doc = work(evidence(s));

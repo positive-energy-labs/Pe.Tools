@@ -8,7 +8,6 @@ import { sdkSessionSelectionSchema } from "./sdk-session.ts";
  * captures are Reading kinds, not nouns. A Reading never writes into Work.
  */
 import { z } from "zod";
-import { actionListFilterSchema } from "./action-receipts.ts";
 import { appliedScopeSchema } from "./families.ts";
 import { canonicalRouteInput } from "./route-doc.ts";
 import { workKey, workKeySchema } from "./route-state.ts";
@@ -217,7 +216,8 @@ export const readingRequestSchema = z.discriminatedUnion("kind", [
     target: documentRefSchema.optional(),
     id: z.string().min(1).max(200).optional(),
     /** A workspace-scoped receipt list, the same subject `readScopedActionStatuses` reads. */
-    scope: actionListFilterSchema.optional(),
+    work: workKeySchema.optional(),
+    tool: z.string().optional(),
   }),
   /**
    * One value domain's options (an `x-options.key`) read from one document, with the context

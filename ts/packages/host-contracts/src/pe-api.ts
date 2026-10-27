@@ -730,19 +730,6 @@ export function peRouteTable<S extends PeApiSchemas>(schemas: S) {
       "pe",
       "human-or-pea",
     ),
-    "work.command": route(
-      "POST",
-      "/pe/route-state/:route/command",
-      z.object({
-        command: z.string(),
-        input: z.unknown().optional(),
-        expectedRevision: z.number().int().nonnegative(),
-      }),
-      object,
-      "human-or-pea",
-      "pe",
-      "human-or-pea",
-    ),
     "work.fresh": route(
       "POST",
       "/pe/route-state/:route/start-fresh",

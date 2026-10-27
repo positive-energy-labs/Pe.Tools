@@ -9,7 +9,10 @@ import { useRouter } from "@tanstack/react-router";
 import { routeAddress, actionAdmissionSchema } from "@pe/agent-contracts";
 
 import { Button } from "@pe/kit/lang/button";
-import { submitAction } from "../../../../packages/mcps/src/shared/takeoff-action-client";
+import {
+  submitAction,
+  actionResult,
+} from "../../../../packages/mcps/src/shared/takeoff-action-client";
 
 export interface Inspectable {
   label: (id: string) => string;
@@ -84,22 +87,18 @@ export function noteCaptured(
 
 /** Opening a path on the host is a host-local mutation, so it needs a journaled human admission. */
 async function openOnHost(path: string): Promise<void> {
-  const action = await submitAction(
-    actionAdmissionSchema.parse({
-      id: crypto.randomUUID(),
-      kind: "operation",
-      key: "host.shell.open",
-      destination: { kind: "host" },
-      input: { path },
-      bases: {},
-    }),
-    "",
-    30_000,
+  actionResult(
+    await submitAction(
+      actionAdmissionSchema.parse({
+        id: crypto.randomUUID(),
+        key: "host.shell.open",
+        target: { kind: "host" },
+        input: { path },
+      }),
+      "",
+      30_000,
+    ),
   );
-  if (action.state !== "succeeded")
-    throw Error(
-      "error" in action && action.error ? String(action.error) : `host.shell.open ${action.state}`,
-    );
 }
 
 /** One inspectable, opened by its kind's policy; a refused shell open says why on hover. */

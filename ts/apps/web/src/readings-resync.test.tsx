@@ -7,7 +7,13 @@
 import { act, cleanup, render } from "@testing-library/react";
 import * as AtomRegistry from "effect/unstable/reactivity/AtomRegistry";
 import { afterEach, beforeEach, expect, test, vi } from "vite-plus/test";
-import { harnessThreadBodySchema, readingFrameSchema, readingKey } from "@pe/agent-contracts";
+import {
+  actionReceiptSchema,
+  harnessThreadBodySchema,
+  readingFrameSchema,
+  readingKey,
+} from "@pe/agent-contracts";
+import { submitAction } from "../../../packages/mcps/src/shared/takeoff-action-client";
 import { emptyChatState } from "@pe/agent-contracts/chat-state";
 import { RegistryContext } from "@effect/atom-react";
 
@@ -18,6 +24,7 @@ import {
   previousOf,
   useReadingSlice,
   useHostEvents,
+  bindActionReadings,
 } from "./readings";
 import { useProviders } from "./workbench/provider/providers";
 import { machineFixture } from "../../../packages/agent-contracts/tests/machine-fixture";
@@ -64,6 +71,53 @@ function owner(
   );
   return { readings, sources };
 }
+
+test("an acknowledged command completes on the existing receipt stream without an HTTP waiter", async () => {
+  const { readings, sources } = owner();
+  const release = bindActionReadings(readings);
+  const admission = {
+    id: "observed-command",
+    key: "host.shell.open",
+    target: { kind: "host" as const },
+    input: { path: "C:/Review" },
+  };
+  const row = actionReceiptSchema.parse({
+    ...admission,
+    state: "running",
+    caller: { kind: "human", via: "local" },
+    basis: { kind: "human" },
+    prepared: { state: "unprepared" },
+    steps: [],
+    recovery: [],
+    startedAt: "2026-10-27T10:00:00Z",
+  });
+  const calls: string[] = [];
+  vi.stubGlobal("fetch", async (_url: unknown, request: RequestInit) => {
+    calls.push(request.method!);
+    return Response.json(row);
+  });
+  try {
+    const completion = submitAction(admission);
+    await vi.waitFor(() => expect(sources).toHaveLength(1));
+    sources[0]!.onopen!();
+    const subject = { kind: "receipts", id: admission.id } as const;
+    sources[0]!.onmessage!({
+      data: JSON.stringify({ kind: "snapshot", key: readingKey(subject), value: [row] }),
+    });
+    sources[0]!.onmessage!({
+      data: JSON.stringify({
+        kind: "snapshot",
+        key: readingKey(subject),
+        value: [{ ...row, state: "succeeded", result: {} }],
+      }),
+    });
+    await expect(completion).resolves.toMatchObject({ id: admission.id, state: "succeeded" });
+    expect(calls).toEqual(["POST"]);
+  } finally {
+    release();
+    readings.close();
+  }
+});
 
 test("a topology handover keeps its active event source until the latest replacement opens", async () => {
   const { readings, sources } = owner();

@@ -172,5 +172,4 @@ export const parameterLinksRouteState = {
 
   // Reading and applying are host ports, not route commands: an observation of Revit can
   // never be written into authored Work.
-  commands: {},
 } satisfies RouteStateSpec<typeof parameterLinksDocumentSchema>;

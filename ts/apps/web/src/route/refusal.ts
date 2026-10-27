@@ -56,10 +56,6 @@ function doorSentence(refusal: FamiliesRefusal): string {
         .join("; ");
     case "unknown-family":
       return `${names(refusal.families)}: not loaded under this scope's categories and placement`;
-    case "exclusion-held":
-      return `${names(refusal.families)}: you held that back, so only you can change it`;
-    case "exclusion-author":
-      return `${names(refusal.families)}: that hold-back names the wrong writer`;
     case "no-scope":
       return "Stage a scope first; cells belong to a scope";
     case "scope-truncated":

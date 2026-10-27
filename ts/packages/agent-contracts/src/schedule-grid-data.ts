@@ -186,8 +186,6 @@ export const scheduleGridRouteState = {
     const stale = doc.basis.stale.filter((cell) => !edited.has(cell.key));
     return { ...doc, basis: { ...doc.basis, stale: stale.length ? stale : undefined } };
   },
-
-  commands: {},
 } satisfies RouteStateSpec<typeof scheduleGridDocumentSchema>;
 
 export function scheduleCellKey(rowNumber: number, columnNumber: number): string {

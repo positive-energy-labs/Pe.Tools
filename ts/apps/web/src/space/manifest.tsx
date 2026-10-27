@@ -125,7 +125,7 @@ export type SpacePage = z.infer<typeof spacePageSchema>;
 type SpaceCtx = Ctx<never, "scene", SpacePage>;
 
 const none = z.void() as unknown as z.ZodType<never>;
-const local = { needs: "host", actor: "any" } as const;
+const local = { needs: "host" } as const;
 const push = { history: "push" } as const;
 
 /** A capture of `ids` (alone, or with what is around them) lands as the page's new scene. */
@@ -153,7 +153,7 @@ const read = <
   label: key,
   says,
   needs: "document" as const,
-  actor: "any" as const,
+
   visible: false as const,
   input: input as unknown as z.ZodType<never>,
   dirties: [],

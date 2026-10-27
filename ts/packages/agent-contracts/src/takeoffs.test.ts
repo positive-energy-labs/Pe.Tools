@@ -22,11 +22,7 @@ const empty = (): RouteEnvelope<unknown> => ({
   doc: spec.schema.parse({}),
 });
 /** Apply as the actor and return the landed document. */
-function land(
-  doc: unknown,
-  actor: "agent" | "human",
-  patches: ReturnType<typeof transitionPatches>,
-) {
+function land(doc: unknown, actor: "pea" | "human", patches: ReturnType<typeof transitionPatches>) {
   const result = applyPatches(spec, { version: 1, revision: 0, doc }, actor, patches, 0);
   expect(result, JSON.stringify(result)).toMatchObject({ ok: true });
   return (result as { envelope: { doc: TakeoffsRouteDocument } }).envelope.doc;
@@ -36,7 +32,7 @@ describe("takeoffsRouteState", () => {
   it("suggestions stay optional and either author can set an executable edit", () => {
     const room = "room-1";
     const decision = takeoffDecisionKey(room, "seedless");
-    const proposed = land(empty().doc, "agent", [
+    const proposed = land(empty().doc, "pea", [
       ...transitionPatches(
         ["decisions"],
         decision,
@@ -55,7 +51,7 @@ describe("takeoffsRouteState", () => {
       applyPatches(
         spec,
         { ...empty(), doc: proposed },
-        "agent",
+        "pea",
         transitionPatches(["decisions"], decision, {}, { kind: "set", rung: { value: "dismiss" } }),
         0,
       ),
@@ -96,7 +92,7 @@ describe("takeoffsRouteState", () => {
     const edited = land(doc, "human", takeoffEditPatches(doc, "r", { name: "A" }, { name: "B" }));
     const proposed = land(
       edited,
-      "agent",
+      "pea",
       transitionPatches(
         ["edits"],
         takeoffEditKey("r", "people"),

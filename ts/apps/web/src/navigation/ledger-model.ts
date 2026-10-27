@@ -144,7 +144,7 @@ function receiptRow(receipt: ActionReceipt): LedgerRow | null {
     group,
     verb: receipt.state,
     what: receipt.key,
-    where: `${receipt.kind} · ${callerWord(receipt.caller)}`,
+    where: callerWord(receipt.caller),
     says: failure.summary,
     at: receipt.startedAt,
     // The failure's door is the row's address; a receipt itself has no page yet.

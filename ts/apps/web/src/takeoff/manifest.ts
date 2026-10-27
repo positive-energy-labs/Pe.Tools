@@ -1,11 +1,11 @@
+import { tools } from "@pe/agent-contracts";
+import { presentation } from "#/route/presentation";
 import {
   takeoffDecisionAddress,
   takeoffEditAddress,
-  takeoffsRouteState,
   type TakeoffsRouteDocument,
 } from "@pe/agent-contracts";
 
-import { defineRoute } from "#/route/manifest";
 import {
   takeoffActions,
   takeoffPageSchema,
@@ -15,17 +15,16 @@ import {
 } from "#/takeoff/actions";
 
 /** The static Takeoffs contract. Behavior lives in actions; mounted state lives in the controller. */
-export const manifest = defineRoute<
+export const manifest = presentation<
   TakeoffsRouteDocument,
   TakeoffReadingKey,
   TakeoffPage,
   keyof typeof takeoffActions
->({
+>(tools["takeoffs"], {
   key: "takeoffs",
   name: "Takeoffs",
   docs: "Choose a project input, adopt its zones, then audit and synchronize the resulting takeoff readings before using them downstream.",
   needs: "project",
-  work: takeoffsRouteState,
   cells: [
     {
       segment: "edits",
@@ -64,7 +63,10 @@ export const manifest = defineRoute<
     rhvacVersion: (page: TakeoffPage) =>
       page.r10 ? { kind: "rhvac-file-version", path: page.r10 } : null,
     inventory: { kind: "inventory" },
-    receipts: { kind: "receipts", target: { session: "", openId: "" } },
+    receipts: (_page: TakeoffPage, work: import("@pe/agent-contracts").WorkKey) => ({
+      kind: "receipts",
+      work,
+    }),
   } as never,
   page: takeoffPageSchema,
   address: "takeoffs",

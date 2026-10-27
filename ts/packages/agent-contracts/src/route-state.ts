@@ -5,13 +5,6 @@
 import { z } from "zod";
 import { addressSchema, documentRefSchema, type Address } from "./target.ts";
 
-/** A named Work command with explicit effect classification. */
-export interface RouteStateCommandSpec {
-  description: string;
-  effect: "query" | "command";
-  input: z.ZodType;
-}
-
 export interface RouteStateSpec<TSchema extends z.ZodType> {
   /** Route name, e.g. `parameter-links` — the URL segment transport adapters key on. */
   route: string;
@@ -21,7 +14,7 @@ export interface RouteStateSpec<TSchema extends z.ZodType> {
   /** Search words for this route's edit door. */
   finds?: readonly string[];
   schema: TSchema;
-  commands: Record<string, RouteStateCommandSpec>;
+  editable?: readonly import("./command.ts").WorkPath[];
   /** Domain-derived bookkeeping after an authored edit, before validation. */
   reconcileEdit?: (next: unknown, patches: readonly RouteStatePatch[]) => unknown;
   /**
@@ -38,7 +31,7 @@ export interface RouteStateSpec<TSchema extends z.ZodType> {
 export type RouteWriteAdmission = (
   doc: unknown,
   patches: readonly RouteStatePatch[],
-  ctx: { scope: WorkKey; actor: import("./route-doc.ts").RouteActor; prior: unknown },
+  ctx: { scope: WorkKey; by: import("./route-doc.ts").WorkAuthor; prior: unknown },
 ) => Promise<import("./families.ts").FamiliesRefusal | null>;
 
 /** Work has one binding. `from` is the Save As source, never its identity. */
@@ -141,27 +134,6 @@ export function parseRouteDoc<TSchema extends z.ZodType>(
   const result = spec.schema.safeParse(raw);
   return result.success ? result.data : null;
 }
-
-/** What a command handler receives: read the current document, write the next one. */
-export interface RouteStateCommandContext<TDoc = unknown> {
-  /** The Address this route document is keyed under. */
-  target: Address | null;
-  /** The named standalone workspace when this Work is not document-scoped. */
-  work?: string;
-  /** The current document (schema-parsed; a fresh empty document when absent). */
-  getDoc(): TDoc;
-  /** Replace the document (schema-validated before it lands). */
-  setDoc(next: TDoc): Promise<void>;
-}
-
-export type RouteStateCommandHandler<TDoc = unknown> = (
-  input: unknown,
-  ctx: RouteStateCommandContext<TDoc>,
-) => Promise<unknown>;
-export type RouteStateCommandHandlers<TDoc = unknown> = Record<
-  string,
-  RouteStateCommandHandler<TDoc>
->;
 
 export function message(error: unknown): string {
   return error instanceof Error ? error.message : String(error);

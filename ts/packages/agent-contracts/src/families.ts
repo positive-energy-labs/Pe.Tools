@@ -116,8 +116,6 @@ export const familyCatalogRequest = (scope: AppliedFilter) => ({
  * its parts; `agentHint` is prose for Pea and is never parsed.
  */
 export type FamiliesRefusalCode =
-  | "exclusion-held"
-  | "exclusion-author"
   | "unknown-family"
   | "no-scope"
   | "unknown-family-type"
@@ -132,7 +130,7 @@ export type FamiliesRefusal = {
   code: FamiliesRefusalCode;
   /** The cell keys refused, on `unknown-family-type`. */
   cells?: FamilyCellAddress[];
-  /** The family names refused, on scope-name, exclusion and `types-truncated` refusals. */
+  /** The family names refused on scope-name and `types-truncated` refusals. */
   families?: string[];
   agentHint: string;
 };
@@ -386,7 +384,6 @@ export const familiesRouteState = {
 
   // Planning and applying are the `families.plan` and `families.apply` workflows. Neither is
   // a route command, so neither can write into authored Work.
-  commands: {},
   // Old Work held exclusions by element id (`excludedIds`, then id-keyed `excluded`), then by name;
   // the page resolves ids to current names and re-excludes by name. Its scope was a bare filter
   // (or `plan.scope` before that): offered back, either author may restore it as an edit.

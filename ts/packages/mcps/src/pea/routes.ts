@@ -5,16 +5,7 @@
  */
 import type { z } from "zod";
 import type { RouteStateSpec, RouteWriteAdmission } from "@pe/agent-contracts";
-import {
-  ductsRouteState,
-  familiesRouteState,
-  familyDraftRouteState,
-  parameterLinksRouteState,
-  roomsRouteState,
-  scheduleGridRouteState,
-  settingsRouteState,
-  takeoffsRouteState,
-} from "@pe/agent-contracts";
+import { tools } from "@pe/agent-contracts";
 
 import {
   familiesAdmission,
@@ -24,31 +15,22 @@ import {
 
 export interface RouteRegistration {
   spec: RouteStateSpec<z.ZodType>;
-  handlers: Record<string, never>;
   admit?: RouteWriteAdmission;
-}
-
-/** Route Work uses generic writes; operations and workflows own execution. */
-function entry<TSchema extends z.ZodType>(spec: RouteStateSpec<TSchema>): RouteRegistration {
-  return { spec: spec as unknown as RouteStateSpec<z.ZodType>, handlers: {} };
 }
 
 export function createRouteRegistrations(
   options: { hostBaseUrl?: string; loadedFamilies?: LoadedFamilies } = {},
 ): RouteRegistration[] {
-  return [
-    // Families and Parameter Links carry no route commands: their readings are host reads and
-    // their applies are semantic actions, so neither can write into authored Work.
-    {
-      ...entry(familiesRouteState),
-      admit: familiesAdmission(options.loadedFamilies ?? hostLoadedFamilies(options.hostBaseUrl)),
-    },
-    entry(familyDraftRouteState),
-    entry(parameterLinksRouteState),
-    entry(settingsRouteState),
-    entry(scheduleGridRouteState),
-    entry(takeoffsRouteState),
-    entry(roomsRouteState),
-    entry(ductsRouteState),
-  ];
+  return Object.values(tools)
+    .filter((tool) => "work" in tool)
+    .map((tool) => ({
+      spec: (tool as import("@pe/agent-contracts").Tool).work!,
+      ...(tool.name === "families"
+        ? {
+            admit: familiesAdmission(
+              options.loadedFamilies ?? hostLoadedFamilies(options.hostBaseUrl),
+            ),
+          }
+        : {}),
+    }));
 }

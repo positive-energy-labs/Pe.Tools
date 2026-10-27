@@ -64,14 +64,9 @@ export async function executePodAction(
     await submitAction(
       {
         id: crypto.randomUUID(),
-        kind: "operation",
         key,
-        destination: ctx.target,
+        target: ctx.target,
         input,
-        bases:
-          ctx.work.revision === null
-            ? {}
-            : { work: { key: ctx.work.key, revision: ctx.work.revision } },
       },
       "",
       120_000,

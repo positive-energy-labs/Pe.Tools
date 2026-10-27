@@ -135,16 +135,9 @@ function install(owner: Promise<string>) {
     const url = new URL(request.url);
     if (url.origin !== location.origin || !HOST_PATH.test(url.pathname)) return fetchHost(request);
     const base = await owner;
-    const id = base.slice("/demo/instances/".length);
-    const own = (value: string) => (value.startsWith(`${id}:`) ? value : `${id}:${value}`);
     const target = rewrite(url, base);
-    if (url.pathname.startsWith("/actions") && target.searchParams.has("id"))
-      target.searchParams.set("id", own(target.searchParams.get("id")!));
-    let body = request.method === "GET" || request.method === "HEAD" ? null : await request.text();
-    if (body && url.pathname.startsWith("/actions")) {
-      const admission = JSON.parse(body) as { id?: string };
-      if (admission.id) body = JSON.stringify({ ...admission, id: own(admission.id) });
-    }
+    const body =
+      request.method === "GET" || request.method === "HEAD" ? null : await request.text();
     return fetchHost(target, {
       method: request.method,
       headers: request.headers,

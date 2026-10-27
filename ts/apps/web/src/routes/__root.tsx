@@ -36,6 +36,7 @@ import { ElementMenu } from "#/revit/element-menu";
 import { WorkbenchProvider } from "#/workbench/provider";
 import { RouteDock } from "#/workbench/route-panes";
 import { useRouteActivity } from "#/route/activity";
+import { bindActionReadings } from "#/readings";
 
 import appCss from "../styles.css?url";
 
@@ -83,6 +84,7 @@ export const Route = createRootRouteWithContext<MyRouterContext>()({
 });
 
 export function RootComponent() {
+  useEffect(() => bindActionReadings(), []);
   const shell = useRouterState({ select: (state) => state.location.search.shell });
   if (shell === "card") return <NoticeShell />;
   return (

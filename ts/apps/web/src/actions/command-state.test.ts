@@ -3,9 +3,8 @@ import { commandStateWord } from "./receipt";
 
 test("recording a native step is queued evidence until the executor stamps dispatch", () => {
   const progress = {
-    kind: "workflow" as const,
     state: "running" as const,
-    preparation: { state: "ready" as const, value: {} },
+    prepared: { state: "ready" as const, value: {} },
     steps: [
       {
         id: "step",
@@ -24,5 +23,5 @@ test("recording a native step is queued evidence until the executor stamps dispa
     }),
   ).toBe("running");
   expect(commandStateWord({ ...progress, state: "waiting" })).toBe("waiting for turn consent");
-  expect(commandStateWord({ ...progress, preparation: { state: "unprepared" } })).toBe("preparing");
+  expect(commandStateWord({ ...progress, prepared: { state: "unprepared" } })).toBe("preparing");
 });

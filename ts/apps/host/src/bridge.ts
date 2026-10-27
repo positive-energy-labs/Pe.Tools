@@ -75,7 +75,7 @@ export async function invokeBridge<A = unknown>(
   requestId?: string,
 ): Promise<A> {
   const result = await Effect.runPromise(
-    Effect.result(bridge.invoke(key, input, target.session, target.openId, requestId)),
+    Effect.result(bridge.invoke(key, input, target.session, target.openId ?? null, requestId)),
   );
   if (result._tag === "Failure") throw result.failure;
   return result.success.value as A;

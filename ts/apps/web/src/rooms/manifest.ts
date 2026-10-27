@@ -1,3 +1,6 @@
+import { invokeBoundCommand } from "#/route/presentation";
+import { tools } from "@pe/agent-contracts";
+import { presentation } from "#/route/presentation";
 /**
  * The static /rooms contract: split one level's plan view into Room Regions, stage their fields
  * into Work, write the edit cells to Revit. Behavior is here; the page draws it (`route.tsx`).
@@ -7,19 +10,15 @@ import type { RoomsMerge, RoomsPartition } from "@pe/host-contracts/generated";
 import {
   routeAddress,
   roomEditAddress,
-  roomsRouteState,
   stagedRoomWrites,
   transitionPatches,
   type Mark,
   type RoomsRouteDocument,
 } from "@pe/agent-contracts";
 
-import { defineRoute, semanticActionInput, type Ctx } from "#/route/manifest";
+import { type Ctx } from "#/route/manifest";
 import { NATIVE_APPLY_WAIT_S } from "#/route/waits";
-import {
-  actionResult,
-  runSemanticAction,
-} from "../../../../packages/mcps/src/shared/takeoff-action-client";
+import { actionResult } from "../../../../packages/mcps/src/shared/takeoff-action-client";
 
 const ROOMS_STAGES = [
   { key: "partition", word: "Partitioning rooms" },
@@ -45,9 +44,9 @@ const dispatch = async (
 ) => {
   if (ctx.target.kind !== "document") throw Error("An open document is required");
   // The host answers `{ value, target }` for every rooms action (takeoff-actions.ts); the value is the op's response.
-  const answer = actionResult(
-    await runSemanticAction(key, semanticActionInput(key, input), ctx.target.ref),
-  ) as { value?: unknown };
+  const answer = actionResult(await invokeBoundCommand(ctx.commands, key, input)) as {
+    value?: unknown;
+  };
   return answer.value ?? answer;
 };
 
@@ -56,18 +55,16 @@ const stagedKeys = (ctx: RoomsCtx) =>
 const bump = (ctx: RoomsCtx) => ctx.setPage({ epoch: ctx.page.epoch + 1 });
 const none = z.void() as unknown as z.ZodType<never>;
 
-export const manifest = defineRoute<
+export const manifest = presentation<
   RoomsRouteDocument,
   RoomsReading,
   RoomsPage,
   "partition" | "apply" | "merge" | "applyMark" | "refresh"
->({
+>(tools["rooms"], {
   key: "rooms",
   name: "Rooms",
-  runs: ["rooms.draw"],
   docs: "Split the zones drawn on one level's plan view into room regions, stage each room's name, type and Manual J fields, then apply them to the regions in Revit.",
   needs: "project",
-  work: roomsRouteState,
   cells: [
     { segment: "edits", groupOf: (key) => [roomEditAddress(key).guid], nouns: ["room"] },
     {
@@ -78,7 +75,12 @@ export const manifest = defineRoute<
       show: (value) => (value as Mark).kind,
     },
   ],
-  readings: { receipts: { kind: "receipts", target: { session: "", openId: "" } } } as never,
+  readings: {
+    receipts: (_page: RoomsPage, work: import("@pe/agent-contracts").WorkKey) => ({
+      kind: "receipts",
+      work,
+    }),
+  } as never,
   page: roomsPageSchema,
   // The stage, the plan view, its layers and focus are the address, so a link lands on the same plan.
   address: "rooms",

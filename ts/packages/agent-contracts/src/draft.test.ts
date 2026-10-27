@@ -56,8 +56,6 @@ const spec = {
   title: "T",
   description: "t",
   schema: docSchema,
-
-  commands: {},
 } satisfies RouteStateSpec<typeof docSchema>;
 const envelope = (
   cells: Record<string, CellLike>,
@@ -77,7 +75,7 @@ describe("fanOut", () => {
   };
   const ctx = {
     cellsPath: ["cells"],
-    actor: "human" as const,
+
     lockOf: (key: string) => (key === "locked" ? "read-only" : null),
   };
 

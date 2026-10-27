@@ -8,31 +8,18 @@ import {
 } from "@pe/runtime/context";
 import {
   sdkSessionSelectionSchema,
-  instancesReading,
-  scheduleReads,
-  type ScheduleReadKey,
   actionControls,
-  semanticActions,
-  familyReads,
   familiesRouteState,
   routeAddress,
   routeViewRoutes,
   type RouteViewRoute,
   familyCatalogRequest,
-  workKeySchema,
-  type FamilyReadKey,
-  actionBasesSchema,
   refusalSchema,
-  type SemanticActionKey,
   type ActionReceipt,
+  actionReceiptSchema,
 } from "@pe/agent-contracts";
-import {
-  type DetachedAction,
-  readAction,
-  readFamilyCapture,
-} from "../shared/takeoff-action-client.ts";
-import { runCapability } from "../shared/admission.ts";
-import { readScheduleCapture } from "../shared/schedule-client.ts";
+import { type DetachedAction, recoverAction } from "../shared/takeoff-action-client.ts";
+import { runCapability, readCapabilityIntent, type CapabilityIntent } from "../shared/admission.ts";
 /**
  * The three doors plus the one Scope door.
  *
@@ -293,6 +280,13 @@ export const peFind = createTool({
 });
 
 const runInputSchema = z.object({
+  actionId: z
+    .string()
+    .min(1)
+    .optional()
+    .describe(
+      "Retry the original command id after a lost response; omitted ids use this tool call's immutable identity.",
+    ),
   workspaceId: z
     .string()
     .min(1)
@@ -401,7 +395,7 @@ export const peDo = createTool({
         row.kind === "document"
           ? `'${row.key}' is a document, a pointer and not an action; pass its session and openId to an op as target {kind: open, ref: {session, openId}}.`
           : row.kind === "recent"
-            ? `'${row.key}' is a recent document, a pointer and not an action; open it first: pe_read it for openWith, then open it with pe_do workflow:instances.open, input {source: <openWith>, into: {session: {id}} or {start: {year, owner: pea, addins: on}}}.`
+            ? `'${row.key}' is a recent document, a pointer and not an action; open it first: pe_read it for openWith, then open it with pe_do op:instances.open, input {source: <openWith>, into: {session: {id}} or {start: {year, owner: pea, addins: on}}}.`
             : row.kind === "member"
               ? `'${row.key}' is a read/mention-only member and cannot execute.`
               : null,
@@ -417,95 +411,152 @@ async function executeTool(
   replayOperations = false,
 ): Promise<Record<string, unknown>> {
   const contribution = parseContributionKey(input.key);
-  // Receipt recovery precedes every live default, Work, catalog and source lookup. A retry
-  // belongs to the original admission, even when its conversation or document has closed.
-  if (replayOperations && input.key.startsWith("workflow:")) {
-    const payload = z.record(z.string(), z.unknown()).parse(coerceJsonObject(input.input) ?? {});
-    const { bases, actionId, ...intent } = payload;
-    const id = typeof actionId === "string" ? actionId : requestIdentity(context);
-    const original = await readAction(id, base()).catch(() => undefined);
-    if (original) {
-      const result = (await runCapability(
-        input.key.slice(9),
-        intent,
+  const requestId = input.actionId ?? requestIdentity(context);
+  if (input.key.startsWith("op:")) {
+    let revision = 0;
+    let target: ResolvedTarget = { session: null, document: null };
+    let door: CapabilityIntent["door"] | undefined;
+    let scope: Scope | null | undefined;
+    try {
+      const key = input.key.slice(3);
+      if (key === "family.temporary.acquire")
+        throw Error("family.temporary.acquire has no turn-owned release on the harness lane.");
+      let intent: CapabilityIntent | undefined;
+      if (!replayOperations) {
+        scope = await scopeOf();
+        revision = scope?.revision ?? 0;
+        const current = soleTarget(scope ? headRequests(scope) : []);
+        const catalog = await readCatalog(
+          current,
+          undefined,
+          transportScope(input.target, current),
+        );
+        if ("isError" in catalog) return catalog;
+        const row = catalog.capabilities.find((row) => row.key === input.key);
+        if (!row) throw Error(`Unknown capability '${input.key}'. Find keys with pe_find.`);
+        const refused = gate(row);
+        if (refused) throw Error(refused);
+        intent = await readCapabilityIntent(
+          key,
+          { hostBaseUrl: base(), ...transportScope(input.target, current) },
+          { needs: row.needs, intent: row.mutates ? "Mutate" : "Read" },
+        );
+      }
+      const result = await runCapability(
+        key,
+        (coerceJsonObject(input.input) ?? {}) as Record<string, unknown>,
         {
           hostBaseUrl: base(),
-          ...transportScope(input.target),
-          actionId: id,
-          bases: bases === undefined ? original.bases : actionBasesSchema.parse(bases),
+          actionId: requestId,
           receipt: true,
           timeoutMs: input.timeoutSeconds * 1000,
+          ...transportScope(input.target),
+          resolveTarget: async ({ needs, door: selectedDoor }) => {
+            door = selectedDoor;
+            if (scope === undefined) scope = await scopeOf();
+            revision = scope?.revision ?? 0;
+            const selected = await operationTarget(
+              { needs } as Capability,
+              input.target,
+              scope ? headRequests(scope) : [],
+            );
+            target = { session: selected.bridgeSessionId ?? null, document: null };
+            return selected;
+          },
         },
-        {
-          kind: "workflow",
-          needs: "nothing",
-          mutates: true,
-          destination: original.destination,
-          prior: original,
-        },
-      )) as ActionReceipt | DetachedAction;
+        intent,
+      );
+      const action = actionReceiptSchema.safeParse(result).data;
+      const call = door === "call" ? (result as HostOperationCallResult) : undefined;
       return {
+        ok:
+          Object.hasOwn(actionControls, key) ||
+          (action ? action.state === "succeeded" : (call?.ok ?? true)),
         key: input.key,
         kind: "op",
-        recovered: true,
-        ok: result.state === "succeeded" || result.state === "detached",
-        target: receiptTarget(original),
-        result,
+        revision,
+        target: action ? receiptTarget(action) : (call?.resolvedTarget ?? target),
+        result:
+          key === "scripting.execute"
+            ? scriptResultForModel(
+                action?.state === "succeeded"
+                  ? { ok: true, key, elapsedMs: 0, response: action.result, action }
+                  : {
+                      ok: false,
+                      key,
+                      elapsedMs: 0,
+                      message: action ? `${action.id}: ${action.state}` : "Outcome pending",
+                      problem: result,
+                      action: action ?? (result as DetachedAction),
+                      nextSteps: ["Read/recover the original receipt."],
+                    },
+              )
+            : call
+              ? call.ok
+                ? call.response
+                : call
+              : result,
+        ...(call ? { elapsedMs: call.elapsedMs } : {}),
+      };
+    } catch (error) {
+      const refusal = refusalSchema.safeParse((error as { refusal?: unknown })?.refusal).data;
+      return {
+        ...refuse(
+          input.key,
+          null,
+          revision,
+          refusal ? JSON.stringify({ refusal }) : message(error),
+        ),
+        ...(refusal ? { refusal } : {}),
       };
     }
   }
-  // A known operation attempt also replays before catalog or target discovery.
-  if (
-    replayOperations &&
-    (input.key.startsWith("op:") || contribution?.kind === "script") &&
-    !Object.hasOwn(actionControls, input.key.slice(3))
-  ) {
-    const id = requestIdentity(context);
-    const original = await readAction(id, base()).catch(() => undefined);
-    if (original) {
-      let key = input.key.slice(3);
-      let payload = coerceJsonObject(input.input) ?? {};
-      if (contribution?.kind === "script") {
-        const preparation =
-          original.preparation.state === "ready"
-            ? (original.preparation.value as {
-                script?: { sourceBundle?: { files?: { path: string; bytesBase64: string }[] } };
-              })
-            : undefined;
-        const bundle =
-          (original.request.sourceBundle as
-            | { files?: { path: string; bytesBase64: string }[] }
-            | undefined) ?? preparation?.script?.sourceBundle;
-        const encoded = bundle?.files?.find((file) => file.path === "pod.json")?.bytesBase64;
-        if (!encoded || original.kind !== "operation" || original.key !== "scripting.execute")
-          throw Error("Original script admission cannot be identified");
-        const manifest = JSON.parse(decodeCapturedManifest(encoded)) as { id: string };
-        if (
-          manifest.id !== contribution.packageId ||
-          original.request.sourcePath !== contribution.path
-        )
-          throw Error("Original script contribution conflicts");
-        key = "scripting.execute";
-        payload = {
-          ...payload,
-          workspaceKey: original.request.workspaceKey,
-          sourcePath: original.request.sourcePath,
-          ...(original.request.sourceBundle ? { sourceBundle: original.request.sourceBundle } : {}),
-        };
-      }
-      const caller = new HostRpcCaller({
-        hostBaseUrl: base(),
-        requestId: id,
-        ...transportScope(input.target),
-        timeoutMs: input.timeoutSeconds * 1000,
-      });
-      const result = await caller.callOperation(key, payload);
+  if (replayOperations && contribution?.kind === "script") {
+    const payload = coerceJsonObject(input.input) as Record<string, unknown> | undefined;
+    const target =
+      input.target && "kind" in input.target
+        ? { kind: "document" as const, ref: input.target.ref }
+        : undefined;
+    const recovered = await recoverAction(
+      requestId,
+      contribution?.kind === "script" ? input.key : input.key.slice(3),
+      payload ?? {},
+      target,
+      base(),
+      input.timeoutSeconds * 1000,
+    );
+    if (recovered) {
       return {
-        ok: result.ok,
+        ok: recovered.state === "succeeded" || recovered.state === "detached",
         key: input.key,
-        target: receiptTarget(original),
+        kind: "op",
         recovered: true,
-        result: key === "scripting.execute" ? scriptResultForModel(result) : result,
+        target:
+          recovered.state === "detached"
+            ? { session: null, document: null }
+            : receiptTarget(recovered),
+        result:
+          input.key === "op:scripting.execute" || contribution?.kind === "script"
+            ? scriptResultForModel(
+                recovered.state === "succeeded"
+                  ? {
+                      ok: true,
+                      key: "scripting.execute",
+                      elapsedMs: 0,
+                      response: recovered.result,
+                      action: recovered,
+                    }
+                  : {
+                      ok: false,
+                      key: "scripting.execute",
+                      elapsedMs: 0,
+                      message: `${recovered.id}: ${recovered.state}`,
+                      problem: recovered,
+                      action: recovered,
+                      nextSteps: ["Read/recover the original receipt."],
+                    },
+              )
+            : recovered,
       };
     }
   }
@@ -602,14 +653,7 @@ async function executeTool(
       "Target overrides are supported by op: capabilities and document-owned route Work only.",
     );
   try {
-    const outcome = await dispatch(
-      row,
-      input,
-      targets,
-      requestIdentity(context),
-      scope?.thread,
-      catalog,
-    );
+    const outcome = await dispatch(row, input, targets, requestId, scope?.thread, catalog);
     return {
       key: row.key,
       kind: row.kind,
@@ -629,10 +673,10 @@ async function executeTool(
 function receiptTarget(row: ActionReceipt): ResolvedTarget {
   return {
     session:
-      row.destination.kind === "document"
-        ? row.destination.ref.session
-        : row.destination.kind === "session"
-          ? row.destination.session
+      row.target.kind === "document"
+        ? row.target.ref.session
+        : row.target.kind === "session"
+          ? row.target.session
           : null,
     document: null,
   };
@@ -661,120 +705,8 @@ async function dispatch(
     coerced && typeof coerced === "object" ? (coerced as Record<string, unknown>) : {};
   const scopeTarget = namedTarget(defaultTarget);
   switch (row.kind) {
-    case "op": {
-      const target = await operationTarget(row, input.target, targets);
-      const caller = new HostRpcCaller({
-        hostBaseUrl: base(),
-        ...target,
-        requestId: row.effect === "command" ? requestId : undefined,
-        timeoutMs: input.timeoutSeconds * 1000,
-      });
-      const key = row.key.replace(/^(op|workflow):/, "");
-      if (key === "instances.read") {
-        const reading = instancesReading.input.parse(payload);
-        const query = new URLSearchParams(
-          Object.entries(reading)
-            .filter(([, value]) => value !== undefined)
-            .map(([key, value]) => [
-              key,
-              typeof value === "object" ? JSON.stringify(value) : String(value),
-            ]),
-        );
-        const response = await fetch(`${base()}/instances/readings?${query.toString()}`, {
-          signal: AbortSignal.timeout(input.timeoutSeconds * 1000),
-        });
-        if (!response.ok) throw Error(await response.text());
-        return {
-          ok: true,
-          target: { session: null, document: null },
-          result: await response.json(),
-        };
-      }
-      if (Object.hasOwn(actionControls, key)) {
-        const result = await runCapability(key, payload, { hostBaseUrl: base() });
-        return { ok: true, target: { session: null, document: null }, result };
-      }
-      if (row.key.startsWith("workflow:")) {
-        const { bases, actionId, ...intent } = payload;
-        const row = (await runCapability(
-          key,
-          intent,
-          {
-            hostBaseUrl: base(),
-            ...target,
-            bases: actionBasesSchema.parse(bases ?? {}),
-            actionId: typeof actionId === "string" ? actionId : requestId,
-            timeoutMs: input.timeoutSeconds * 1000,
-            receipt: true,
-          },
-          {
-            kind: "workflow",
-            needs: semanticActions[key as SemanticActionKey].needs,
-            mutates: semanticActions[key as SemanticActionKey].effect === "command",
-          },
-        )) as ActionReceipt | DetachedAction;
-        return {
-          ok: row.state === "succeeded" || row.state === "detached",
-          target: { session: target.bridgeSessionId ?? null, document: null },
-          result: row,
-        };
-      }
-      if (Object.hasOwn(scheduleReads, key)) {
-        const { scope: _scope, ...input } = payload;
-        const result = await readScheduleCapture(
-          key as ScheduleReadKey,
-          input,
-          target.bridgeSessionId && target.openDocumentId
-            ? { session: target.bridgeSessionId, openId: target.openDocumentId }
-            : undefined,
-          base(),
-        );
-        return {
-          ok: true,
-          target: { session: target.bridgeSessionId ?? null, document: null },
-          result,
-        };
-      }
-      if (Object.hasOwn(familyReads, key)) {
-        const { scope: readScope, ...input } = payload;
-        const result = await readFamilyCapture(
-          key as FamilyReadKey,
-          input,
-          workKeySchema.parse(readScope),
-          target.bridgeSessionId && target.openDocumentId
-            ? { session: target.bridgeSessionId, openId: target.openDocumentId }
-            : undefined,
-          base(),
-        );
-        return {
-          ok: true,
-          target: { session: target.bridgeSessionId ?? null, document: null },
-          result,
-        };
-      }
-      const call = () => caller.callOperation(key, payload, "compact");
-
-      const result = await call();
-      return {
-        ok: result.ok,
-        target:
-          result.ok && result.resolvedTarget
-            ? result.resolvedTarget
-            : {
-                session: target.bridgeSessionId ?? null,
-                document: null,
-              },
-        result:
-          key === "scripting.execute"
-            ? scriptResultForModel(result)
-            : result.action
-              ? result
-              : result.ok
-                ? result.response
-                : result,
-        elapsedMs: result.elapsedMs,
-      };
-    }
+    case "op":
+      throw Error("Operation capabilities use the shared invocation adapter");
     case "document":
     case "recent": {
       // Reading a document pointer is its mention: the facts a first hop needs, read now.
@@ -1130,7 +1062,6 @@ async function dispatch(
             : [];
         return routeWrite(
           parsed.route,
-          "apply",
           workTarget,
           input.expectedRevision,
           {
@@ -1139,17 +1070,7 @@ async function dispatch(
           workspaceId,
         );
       }
-      return routeWrite(
-        parsed.route,
-        "command",
-        defaultTarget,
-        input.expectedRevision,
-        {
-          command: parsed.member,
-          input: payload,
-        },
-        workspaceId,
-      );
+      throw Error(`Unknown route operation '${row.key}'`);
     }
   }
 }
@@ -1283,12 +1204,11 @@ async function operationTarget(
       : {};
 }
 
-/** A route write under the Target. A command with no expectedRevision runs against the current one. */
+/** An authored patch uses the revision observed by its caller. */
 async function routeWrite(
   route: string,
-  suffix: "apply" | "command",
   defaultTarget: Target,
-  expectedRevision: number | undefined,
+  expectedRevision: number,
   body: Record<string, unknown>,
   workspaceId?: string,
 ): Promise<Outcome> {
@@ -1299,14 +1219,9 @@ async function routeWrite(
       }
     : await routeWorkScope(defaultTarget);
   const { query } = scope;
-  const revision =
-    expectedRevision ??
-    (await routeFetch(route, query).then((view) =>
-      typeof view.revision === "number" ? view.revision : 0,
-    ));
-  const result = await routeFetch(route, query, suffix, {
+  const result = await routeFetch(route, query, {
     ...body,
-    expectedRevision: revision,
+    expectedRevision,
   });
   // A command whose receipt names the target it resolved to (instances, pods) wins over the Target.
   const receipt = (result.result ?? result) as { target?: unknown };
@@ -1330,26 +1245,19 @@ function parseTarget(value: unknown): ResolvedTarget | null {
 async function routeFetch(
   route: string,
   queryString: string,
-  verb?: "apply" | "command",
   body?: unknown,
 ): Promise<Record<string, unknown>> {
   const client = createPeClient(base(), fetch);
   const params = { route };
   const query = Object.fromEntries(new URLSearchParams(queryString));
   const response =
-    verb === "apply"
+    body !== undefined
       ? await client.response("work.apply", {
           params,
           query,
           body: peRoutes["work.apply"].body.parse(body),
         })
-      : verb === "command"
-        ? await client.response("work.command", {
-            params,
-            query,
-            body: peRoutes["work.command"].body.parse(body),
-          })
-        : await client.response("work.get", { params, query });
+      : await client.response("work.get", { params, query });
   const wire = (await response.json()) as Record<string, unknown>;
   const payload = response.ok
     ? wire
@@ -1488,30 +1396,3 @@ export const peFeedback = createTool({
     }
   },
 });
-
-// File.ReadAllText/StreamReader BOM rules also apply when identifying a sealed Pod receipt.
-function decodeCapturedManifest(encoded: string): string {
-  const bytes = Uint8Array.from(atob(encoded), (c) => c.charCodeAt(0));
-  const view = new DataView(bytes.buffer);
-  const bom = bytes.length >= 4 ? view.getUint32(0) : 0;
-  if (bom === 0xfffe0000 || bom === 0x0000feff) {
-    if (bytes.length % 4) throw Error("Invalid captured UTF-32 manifest");
-    const text: string[] = [];
-    for (let i = 4; i < bytes.length; i += 4) {
-      const code = view.getUint32(i, bom === 0xfffe0000);
-      text.push(
-        String.fromCodePoint(
-          code <= 0x10ffff && !(code >= 0xd800 && code <= 0xdfff) ? code : 0xfffd,
-        ),
-      );
-    }
-    return text.join("");
-  }
-  const encoding =
-    bytes[0] === 0xff && bytes[1] === 0xfe
-      ? "utf-16le"
-      : bytes[0] === 0xfe && bytes[1] === 0xff
-        ? "utf-16be"
-        : "utf-8";
-  return new TextDecoder(encoding).decode(bytes);
-}

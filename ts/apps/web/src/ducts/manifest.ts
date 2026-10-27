@@ -1,3 +1,6 @@
+import { invokeBoundCommand } from "#/route/presentation";
+import { tools } from "@pe/agent-contracts";
+import { presentation } from "#/route/presentation";
 /**
  * The static /ducts contract: read every duct network of one document, choose one as the subject,
  * stage the assumptions that make it solvable, then price its losses and write them to Revit.
@@ -15,7 +18,6 @@
 import { z } from "zod";
 import {
   routeAddress,
-  ductsRouteState,
   transitionPatches,
   type DuctAssumption,
   type DuctClaim,
@@ -25,15 +27,11 @@ import {
 } from "@pe/agent-contracts";
 
 import type { Cells } from "#/route/cells";
-import { defineRoute, semanticActionInput, type Ctx } from "#/route/manifest";
+import { type Ctx } from "#/route/manifest";
 import { refuse } from "#/route/refusal";
 import { NATIVE_APPLY_WAIT_S } from "#/route/waits";
 import { ductsDocs } from "#/ducts/docs";
-import {
-  actionResult,
-  readAction,
-  runSemanticAction,
-} from "../../../../packages/mcps/src/shared/takeoff-action-client";
+import { actionResult } from "../../../../packages/mcps/src/shared/takeoff-action-client";
 import type { DuctsApply, DuctsAssignFan, DuctsHeal } from "@pe/host-contracts/generated";
 import { EMPTY_CATALOGS, type Catalogs } from "@pe/ducts-domain/catalog";
 import type { Grids } from "@pe/ducts-domain/loss-grid";
@@ -358,15 +356,7 @@ const dispatch = async <T = DuctsApply.Res.Response>(
     | "ducts.apply-assign-fan",
   input: Record<string, unknown>,
 ): Promise<T> => {
-  if (ctx.target.kind !== "document") throw Error("An open document is required");
-  // An apply on a large model runs about 45 s (the commits recalculate it). A
-  // receipt that comes back detached or running is read again until it settles; the verb's
-  // `waitSeconds` is the one bound, and past it the route ends the verb honestly.
-  let row = await runSemanticAction(key, semanticActionInput(key, input), ctx.target.ref);
-  while (row.state === "detached" || row.state === "running") {
-    await new Promise((resolve) => setTimeout(resolve, 1000));
-    row = (await readAction(row.id)) ?? row;
-  }
+  const row = await invokeBoundCommand(ctx.commands, key, input);
   // The host answers `{ value, target }` (ducts-actions.ts); the value is the native op's answer.
   const answer = actionResult(row) as { value?: unknown };
   return (answer.value ?? answer) as T;
@@ -512,17 +502,16 @@ const ductCells = (families: Cells<DuctsRouteDocument>[]): Cells<DuctsRouteDocum
   });
 const none = z.void() as unknown as z.ZodType<never>;
 
-export const manifest = defineRoute<
+export const manifest = presentation<
   DuctsRouteDocument,
   DuctsReading,
   DuctsPage,
   "refresh" | "preview" | "apply" | "heal-preview" | "heal" | "fan-preview" | "fan"
->({
+>(tools["ducts"], {
   key: "ducts",
   name: "Ducts",
   docs: ductsDocs,
   needs: "project",
-  work: ductsRouteState,
   cells: ductCells([
     {
       segment: "calculation",

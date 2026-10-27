@@ -1,17 +1,14 @@
+import { confirmedPlan } from "#/route/workflow";
 /**
  * `/families`, declared once on the route kernel. The audit is the loaded-families matrix over an
- * authored scope, its cells open to proposals; plan reads the page's member, or sends one draft per family generated from edit cells, and
- * apply sends the sheet's included hashes. Work holds the scope and keyed cells,
- * and the rows a person held back.
+ * authored scope and shared edits. The host owns draft composition, planning, Apply and readback;
+ * an optional Preview opens the host's sealed plan. Work holds the scope and keyed cells.
  */
 import { z } from "zod";
 import {
   routeAddress,
-  familiesRouteState,
   familiesReadProgressSchema,
   ffPlanEntrySchema,
-  workKey,
-  type ActionReceipt,
   type AppliedFilter,
   type FamiliesRouteDocument,
   type PodDraftSource,
@@ -24,10 +21,8 @@ import { FAMILY_MODEL_SCHEMA } from "#/family/manifest";
 import {
   HISTORY,
   admissionPlan,
-  byPlan,
   documentOf,
   entityRoute,
-  workflow,
   refuse,
   type EntityPage,
   type HeldRow,
@@ -35,20 +30,18 @@ import {
   type PlanEntry,
 } from "#/route";
 
-import { runSemanticAction } from "../../../../packages/mcps/src/shared/takeoff-action-client";
-import { applyOutcome, applyTally, type PlanRun } from "./apply-outcome";
+import { actionResult } from "../../../../packages/mcps/src/shared/takeoff-action-client";
+import { applyOutcome, applyTally, applyResults } from "./apply-outcome";
 import { plural } from "#/components/work/band";
 import {
-  archivedFamiliesObservation,
   cancelFamiliesObservation,
   readFamiliesObservation,
   type FamiliesDraft,
   type FamiliesObservation,
 } from "./host";
 import { FAMILIES_SEEDS } from "./seeds";
-import { podHost } from "#/route/pods";
 import type { Inspectable } from "#/route/inspect";
-import { familiesGroupOf, stagedDrafts } from "./staged";
+import { familiesGroupOf, editedFamilies } from "./staged";
 
 /**
  * The contract's fields (`routeAddress("families")`: stage, the opened spec, the pivot's table view
@@ -121,61 +114,16 @@ const heldOf = (result: Record<string, unknown>, entries: readonly PlanEntry[]):
 
 /* ── The definition ────────────────────────────────────────────────────────── */
 
-/** The generated draft's `$schema`: this library, on the host actually serving the page. */
-const stagedSchema = () =>
-  typeof location === "undefined" ? FF_SPEC_SCHEMA : new URL(FF_SPEC_SCHEMA, location.origin).href;
-
 type FamiliesApplyCtx = Parameters<
   NonNullable<
     EntityRouteDef<FamiliesRouteDocument, FamiliesReadingKey, FamiliesPage>["edit"]
   >["apply"]
 >[0];
 
-async function applyFamiliesPlans(
-  ctx: FamiliesApplyCtx,
-  included: readonly PlanEntry[],
-  savedSpec: boolean,
-) {
-  const runs: PlanRun[] = [];
-  let readbackId: string | null = null;
-  let readbackError: string | null = null;
-  for (const input of byPlan(included)) {
-    const action = (await runSemanticAction(
-      "families.apply",
-      { rows: input },
-      documentOf(ctx),
-      savedSpec && ctx.work.revision !== null
-        ? { work: { key: ctx.work.key, revision: ctx.work.revision } }
-        : undefined,
-    )) as ActionReceipt;
-    runs.push({
-      families: included.filter((row) => row.plan === input.plan).map((row) => row.name),
-      action,
-    });
-    const result =
-      action.state === "succeeded"
-        ? (action.result as { readback?: { id?: string }; readbackError?: string })
-        : null;
-    if (result?.readback?.id) readbackId = result.readback.id;
-    if (result?.readbackError) readbackError = result.readbackError;
-  }
-  if (readbackId) {
-    try {
-      const reading = await archivedFamiliesObservation(readbackId);
-      const target = documentOf(ctx);
-      if (
-        reading.document.session !== target.session ||
-        reading.document.openId !== target.openId ||
-        workKey(reading.work) !== workKey(ctx.work.key)
-      )
-        throw Error("Readback belongs to another Families target");
-      ctx.setPage({ reading }, ["reading", "stage"]);
-    } catch (error) {
-      readbackError = `Families applied, but their saved readback could not be loaded: ${error instanceof Error ? error.message : String(error)}`;
-    }
-  }
-  // The receipt is a log row linking the run's artifacts (MAP ruling 9); failed families refuse it.
-  const tally = applyTally(runs);
+async function applyFamiliesPlans(ctx: FamiliesApplyCtx, included: readonly PlanEntry[]) {
+  const action = await ctx.commands["families.apply"](confirmedPlan(included));
+  if (action.state === "succeeded") noteReadback(ctx, action.result);
+  const tally = applyTally(action);
   if (tally.families)
     ctx.note(
       [
@@ -190,9 +138,17 @@ async function applyFamiliesPlans(
       tally.failed > 0,
       tally.artifact ? { kind: "artifact", id: tally.artifact } : undefined,
     );
-  // The receipt stands; the table keeps its earlier values. The log says so (MAP ruling 9).
-  if (readbackError) ctx.note("readback unavailable", readbackError, true);
-  return applyOutcome(runs, included.length);
+  return applyOutcome(
+    action,
+    included.map((row) => row.name),
+  );
+}
+
+function noteReadback(ctx: FamiliesApplyCtx, result: unknown) {
+  for (const error of new Set(
+    applyResults(result).flatMap((output) => (output.readbackError ? [output.readbackError] : [])),
+  ))
+    ctx.note("readback unavailable", error, true);
 }
 
 export const ARTIFACT: Inspectable = {
@@ -218,12 +174,12 @@ export const familiesSpec: EntityRouteDef<FamiliesRouteDocument, FamiliesReading
     targetReady: (ctx) => {
       if (ctx.page.reading?.progress && ctx.page.reading.progress.state !== "complete")
         return "Complete this Families read before planning edits";
-      if (ctx.work.doc?.patch.edit && stagedDrafts(ctx.work.doc.cells).length)
+      if (ctx.work.doc?.patch.edit && editedFamilies(ctx.work.doc.cells).length)
         return "Stage either a native Family Foundry patch or per-type cells, not both";
       if (ctx.work.doc?.patch.edit && !ctx.work.doc.scope.edit)
         return "stage a Families scope before planning the native patch";
       if (ctx.work.doc?.patch.edit) return null;
-      if (!stagedDrafts(ctx.work.doc?.cells ?? {}).length) return null;
+      if (!editedFamilies(ctx.work.doc?.cells ?? {}).length) return null;
       const read = ctx.page.reading;
       const target = documentOf(ctx);
       return read?.document.session === target.session &&
@@ -237,7 +193,6 @@ export const familiesSpec: EntityRouteDef<FamiliesRouteDocument, FamiliesReading
       ...admissionPlan<FamiliesRouteDocument, FamiliesReadingKey, FamiliesPage>(
         { plan: "families.plan", apply: "families.apply" },
         (plan) => ffPlanRow(ffPlanEntrySchema.parse(plan)),
-        (work) => (work.executionOptions ? { executionOptions: work.executionOptions } : {}),
         heldOf,
       ),
       // Held-back families are authored Work, by name; the sheet's rows are this plan's ids.
@@ -246,109 +201,33 @@ export const familiesSpec: EntityRouteDef<FamiliesRouteDocument, FamiliesReading
           Object.hasOwn(view.work.doc?.excluded ?? {}, entry.name) ? [entry.id] : [],
         ),
       apply: async (ctx, included) => {
-        await applyFamiliesPlans(ctx, included, true);
+        await applyFamiliesPlans(ctx, included);
       },
       // The one two-press apply (ruling 52): many families, rows a person may hold back.
     },
-    /**
-     * The editable table's half. Plan takes edit cells only, generates one patch draft per family
-     * from them, and plans each through `families.plan` over exactly that family's name, sending the
-     * draft's bytes. Nothing is filed: the plan seals those bytes, and apply's run in the page's pod
-     * keeps them as a supplied draft. Plan never files: capture saves specs, and `save draft to pod`
-     * saves a copy of the draft, both only when pressed.
-     */
+    /** The host derives every family draft from the rendered Work revision. */
     edit: {
       direct: async (ctx) => {
-        const doc = ctx.work.doc;
-        if (!doc || ctx.work.revision === null) throw Error("author the route's Work first");
-        const options = doc.executionOptions ? { executionOptions: doc.executionOptions } : {};
-        const rows = doc.patch.edit
-          ? { source: doc.patch.edit.value, include: "all", ...options }
-          : {
-              sources: stagedDrafts(doc.cells, stagedSchema()).map((draft) => ({
-                source: { path: draft.path, content: draft.content },
-                familyNames: [draft.familyName],
-                ...options,
-              })),
-              include: "all",
-            };
-        const result = await workflow("families.apply", { rows }, ctx, {
-          work: { key: ctx.work.key, revision: ctx.work.revision },
-        });
-        const outputs = (Array.isArray(result.results) ? result.results : [result]) as {
-          readback?: { id?: string };
-          readbackError?: string;
-        }[];
-        const readback = outputs.findLast((output) => output.readback?.id)?.readback?.id;
-        if (readback) {
-          const reading = await archivedFamiliesObservation(readback);
-          const target = documentOf(ctx);
-          if (
-            reading.document.session !== target.session ||
-            reading.document.openId !== target.openId ||
-            workKey(reading.work) !== workKey(ctx.work.key)
-          )
-            throw Error("Readback belongs to another Families target");
-          ctx.setPage({ reading }, ["reading", "stage"]);
-        }
-        const readbackError = outputs.find((output) => output.readbackError)?.readbackError;
-        if (readbackError) ctx.note("readback unavailable", readbackError, true);
+        const result = actionResult(await ctx.commands["families.apply"]({ include: "all" }));
+        noteReadback(ctx, result);
       },
       cells: (ctx) => ({
         ...ctx.work.doc?.cells,
         ...(ctx.work.doc?.patch.edit ? { patch: ctx.work.doc.patch } : {}),
       }),
       plan: async (ctx) => {
-        const doc = ctx.work.doc;
-        if (!doc || ctx.work.revision === null) throw Error("author the route's Work first");
-        const bases = { work: { key: ctx.work.key, revision: ctx.work.revision } };
-        const entries: PlanEntry[] = [];
-        const held: HeldRow[] = [];
-        if (doc.patch.edit) {
-          if (stagedDrafts(doc.cells).length)
-            throw Error("Stage either a native Family Foundry patch or per-type cells, not both");
-          const result = await workflow(
-            "families.plan",
-            {
-              source: doc.patch.edit.value,
-              ...(doc.executionOptions ? { executionOptions: doc.executionOptions } : {}),
-            },
-            ctx,
-            bases,
-          );
-          const rows = [result.plan].flat().map((plan) => ({
-            ...ffPlanRow(ffPlanEntrySchema.parse(plan)),
-            plan: String(result.id),
-          }));
-          const held = heldOf(result, rows);
-          return held.length ? { entries: rows, held } : { entries: rows };
-        }
-        for (const draft of stagedDrafts(doc.cells, stagedSchema())) {
-          const result = await workflow(
-            "families.plan",
-            {
-              source: { path: draft.path, content: draft.content },
-              // The draft selects one family by name, so the host plans that family alone and
-              // never lays one family's types onto the rest of the scope.
-              familyNames: [draft.familyName],
-              ...(doc.executionOptions ? { executionOptions: doc.executionOptions } : {}),
-            },
-            ctx,
-            bases,
-          );
-          const rows = [result.plan].flat().map((plan) => ({
-            ...ffPlanRow(ffPlanEntrySchema.parse(plan)),
-            plan: String(result.id),
-          }));
-          entries.push(...rows);
-          held.push(...heldOf(result, rows));
-        }
+        const result = actionResult(await ctx.commands["families.plan"]({})) as Record<
+          string,
+          unknown
+        >;
+        const entries = [result.plan].flat().map((plan) => ({
+          ...ffPlanRow(ffPlanEntrySchema.parse(plan)),
+          plan: String(result.id),
+        }));
+        const held = heldOf(result, entries);
         return held.length ? { entries, held } : { entries };
       },
-      // Each draft's plan sealed its bytes and the edit cells it consumed; the host retires
-      // those cells after proven native success, only where they are still unchanged.
-      // One action per plan; the verb's outcome is every family's receipt, summed (F-J3-3/4).
-      apply: (ctx, included) => applyFamiliesPlans(ctx, included, false),
+      apply: (ctx, included) => applyFamiliesPlans(ctx, included),
     },
     docs: "Read loaded families on request, stage reviewed per-type values or a native Family Foundry patch, then plan those exact bytes or a saved Pod member and apply the confirmed families.",
   };
@@ -359,7 +238,6 @@ export const manifest = entityRoute<
   FamiliesPage,
   "read" | "save-draft"
 >(familiesSpec, {
-  work: familiesRouteState,
   cells: [
     // The audited scope is a root cell Pea proposes (F-J1-10): its own group, beside the cells.
     {
@@ -408,7 +286,10 @@ export const manifest = entityRoute<
   // An apply's artifact bundle, on disk: opened in the host's default app, never copied.
   inspectables: { artifact: ARTIFACT },
   readings: {
-    receipts: { kind: "receipts", target: { session: "", openId: "" } },
+    receipts: (_page: FamiliesPage, work: import("@pe/agent-contracts").WorkKey) => ({
+      kind: "receipts",
+      work,
+    }),
     inventory: { kind: "inventory" },
     // The matrix read on screen, as an envelope: its taken-at, change mark and body id (ruling 3).
     matrix: (page: FamiliesPage) =>
@@ -552,11 +433,11 @@ export const manifest = entityRoute<
       // The pod list is the entity's Reading; saved members show there.
       dirties: ["pods"] as never,
       stage: "apply",
-      count: (ctx) => stagedDrafts(ctx.work.doc?.cells ?? {}).length || null,
+      count: (ctx) => editedFamilies(ctx.work.doc?.cells ?? {}).length || null,
       ready: (ctx) =>
         (ctx.page as FamiliesPage & EntityPage).stage === "history"
           ? HISTORY
-          : !stagedDrafts(ctx.work.doc?.cells ?? {}).length
+          : !editedFamilies(ctx.work.doc?.cells ?? {}).length
             ? "nothing is edit to save"
             : (ctx.page as unknown as EntityPage).pod
               ? null
@@ -565,11 +446,9 @@ export const manifest = entityRoute<
       // the pod's words; overwrite (pod.member.save with the read sha) if people ask for re-saves.
       run: async (ctx) => {
         const { pod } = ctx.page as unknown as EntityPage;
-        for (const draft of stagedDrafts(ctx.work.doc?.cells ?? {}, stagedSchema()))
-          await podHost.write({ pod, path: draft.path }, draft.content);
+        actionResult(await ctx.commands["families.save-draft"]({ pod }));
       },
     },
   },
-  runs: ["families.plan"],
   seeds: FAMILIES_SEEDS as never,
 });

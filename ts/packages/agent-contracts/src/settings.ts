@@ -104,8 +104,6 @@ export const settingsRouteState = {
   title: "Pods",
   description: "Review, validate, and save proposed changes to one pod member.",
   schema: settingsRouteDocumentSchema,
-
-  commands: {},
 } satisfies RouteStateSpec<typeof settingsRouteDocumentSchema>;
 
 /** Decode an RFC 6901 JSON Pointer field key into property segments. */

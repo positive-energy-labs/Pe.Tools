@@ -5,7 +5,7 @@ export type RouteWriteResponse = { status: number; result: RouteStateWriteResult
 type WorkInput = { params: { route: string }; query: Record<string, string> };
 
 export async function postRouteWrite(
-  operation: "apply" | "command" | "start-fresh",
+  operation: "apply" | "start-fresh",
   input: WorkInput,
   body: unknown,
 ): Promise<RouteWriteResponse> {
@@ -15,12 +15,7 @@ export async function postRouteWrite(
           ...input,
           body: peRoutes["work.apply"].body.parse(body),
         })
-      : operation === "command"
-        ? await peClient.response("work.command", {
-            ...input,
-            body: peRoutes["work.command"].body.parse(body),
-          })
-        : await peClient.response("work.fresh", { ...input, body: {} });
+      : await peClient.response("work.fresh", { ...input, body: {} });
   const wire = await response.json().catch(() => null);
   return { status: response.status, result: response.ok ? wire : (wire?.error?.details ?? null) };
 }

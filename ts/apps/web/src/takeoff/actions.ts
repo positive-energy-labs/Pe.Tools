@@ -1,3 +1,4 @@
+import { invokeBoundCommand } from "#/route/presentation";
 /**
  * Takeoffs action semantics and deterministic seed moments. The route manifest composes these;
  * this file contains no React state or rendering.
@@ -8,7 +9,6 @@ import {
   routeAddress,
   documentRefSchema,
   workKeySchema,
-  workKey,
   takeoffsRouteState,
   type CandidateRegion,
   type TakeoffModel,
@@ -27,11 +27,8 @@ import {
   takeoffDecisionKey,
 } from "@pe/agent-contracts";
 
-import { semanticActionInput, type Ctx as RouteCtx } from "#/route/manifest";
-import {
-  runSemanticAction,
-  actionResult,
-} from "../../../../packages/mcps/src/shared/takeoff-action-client";
+import { type Ctx as RouteCtx } from "#/route/manifest";
+import { actionResult } from "../../../../packages/mcps/src/shared/takeoff-action-client";
 import { applyEdit, readZoneMeta } from "./world";
 
 type Ctx = RouteCtx<TakeoffsRouteDocument, TakeoffReadingKey, TakeoffPage>;
@@ -231,7 +228,7 @@ const dispatch = async (
   input: Record<string, unknown>,
 ) => {
   if (ctx.target.kind !== "document") throw Error("An open document is required");
-  actionResult(await runSemanticAction(key, semanticActionInput(key, input), ctx.target.ref));
+  actionResult(await invokeBoundCommand(ctx.commands, key, input));
 };
 
 export interface SyncPlan {
@@ -303,9 +300,7 @@ const syncRefusal = (ctx: Ctx): string | null => {
     ctx.target.kind !== "document" ||
     ctx.target.ref.session !== review.target.session ||
     ctx.target.ref.openId !== review.target.openId ||
-    workKey(ctx.work.key) !== workKey(review.work.key) ||
     !ctx.work.doc ||
-    ctx.work.revision !== review.work.revision ||
     observation?.kind !== "ready" ||
     observation.capture.id !== review.captureId ||
     fileVersion?.path !== review.path ||
@@ -434,7 +429,7 @@ export const takeoffActions = {
         throw Error("The RHVAC file selection changed during review");
       const review = {
         target: ctx.target.ref,
-        work: { key: ctx.work.key, revision: ctx.work.revision! },
+        work: ctx.work.handle()!,
         captureId: observation.capture.id,
         fileVersion: version.fileVersion,
         path: version.path,
@@ -455,11 +450,14 @@ export const takeoffActions = {
     run: async (ctx: Ctx) => {
       const review = ctx.page.syncReview!;
       actionResult(
-        await runSemanticAction(
-          "takeoffs.sync",
-          semanticActionInput("takeoffs.sync", { path: review.path, zones: review.zones }),
-          review.target,
-          { captureId: review.captureId, fileVersion: review.fileVersion, work: review.work },
+        await ctx.commands["takeoffs.sync"](
+          {
+            path: review.path,
+            zones: [...review.zones],
+            captureId: review.captureId,
+            fileVersion: review.fileVersion,
+          },
+          { work: review.work, target: { kind: "document", ref: review.target } },
         ),
       );
       ctx.setPage({ panel: null, syncReview: null });

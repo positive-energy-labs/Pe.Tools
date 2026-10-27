@@ -8,7 +8,7 @@
  * `instances` key and capability ids outlive the retired URL.
  */
 import { z } from "zod";
-import { instancesActions, type ReadingRequest } from "@pe/agent-contracts";
+import { type ReadingRequest } from "@pe/agent-contracts";
 
 import { defineRoute } from "#/route/manifest";
 import type { RouteHandle } from "#/route/handle";
@@ -28,7 +28,6 @@ export const openManifest = defineRoute({
   name: "Open",
   docs: "Start a Revit, open a model, and see which Revit holds it. Refresh reacquires the machine reading and the recent documents of every installed year.",
   readings: READINGS,
-  runs: Object.keys(instancesActions) as (keyof typeof instancesActions)[],
   actions: {
     refresh: {
       label: "refresh",

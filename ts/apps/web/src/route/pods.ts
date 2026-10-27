@@ -10,29 +10,27 @@ import type {
 } from "@pe/host-contracts/operation-types";
 
 import { composeMember, listPods, listRuns, readMember } from "#/host/pods";
-import { submitAction } from "../../../../packages/mcps/src/shared/takeoff-action-client";
+import {
+  submitAction,
+  actionResult,
+} from "../../../../packages/mcps/src/shared/takeoff-action-client";
 import type { MemberRef, PodRow } from "./entity-route";
 export type Composed = PodMemberComposeResponse;
 
 /** A host-local mutation: admitted under an id, its receipt is the truth of what happened. */
 async function admitHost(key: "pod.member.write" | "pod.member.save", input: object) {
-  const action = await submitAction(
-    actionAdmissionSchema.parse({
-      id: crypto.randomUUID(),
-      kind: "operation",
-      key,
-      destination: { kind: "host" },
-      input,
-      bases: {},
-    }),
-    "",
-    30_000,
-  );
-  if (action.state !== "succeeded")
-    throw Error(
-      "error" in action && action.error ? String(action.error) : `${key} ${action.state}`,
-    );
-  return (action as unknown as { result: PodMemberWritten }).result;
+  return actionResult(
+    await submitAction(
+      actionAdmissionSchema.parse({
+        id: crypto.randomUUID(),
+        key,
+        target: { kind: "host" },
+        input,
+      }),
+      "",
+      30_000,
+    ),
+  ) as PodMemberWritten;
 }
 
 export const podHost = {

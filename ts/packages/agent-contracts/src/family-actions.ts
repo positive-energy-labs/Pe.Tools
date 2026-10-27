@@ -5,8 +5,55 @@ import { documentRefSchema } from "./target.ts";
 import { nativeProcessSchema } from "./native-process.ts";
 import { workKeySchema } from "./route-state.ts";
 import { podDraftSourceSchema, podMemberSchema, podMemberSourceSchema } from "./settings.ts";
-import { familyExecutionOptionsSchema } from "./families.ts";
+import {
+  diagnosticSchema,
+  familyExecutionOptionsSchema,
+  ffPlanEntrySchema,
+  ffReceiptSchema,
+  type FfPlanEntry,
+} from "./families.ts";
 import { parameterLinksReadingSchema } from "./parameter-links.ts";
+import { workPathSchema } from "./command.ts";
+
+/** Native evidence is preserved; semantic callers consume the command result, never its steps. */
+export const familyNativeApplyResultSchema = z.looseObject({
+  receipts: z.array(ffReceiptSchema.loose()),
+  diagnostics: z.array(diagnosticSchema.loose()),
+  receiptPath: z.string().nullish(),
+  reason: z.string().nullish(),
+});
+const familyApplyOutcomeSchema = z.object({
+  executionContext: documentRefSchema,
+  native: familyNativeApplyResultSchema,
+  retired: z
+    .object({ retired: z.array(workPathSchema), revision: z.number().int().nonnegative() })
+    .optional(),
+  readback: z.object({ id: z.string() }).optional(),
+  readbackError: z.string().optional(),
+});
+type FamilyApplyOutcome = z.infer<typeof familyApplyOutcomeSchema>;
+export type FamilyApplyResult = FamilyApplyOutcome | { results: FamilyApplyOutcome[] };
+export const familyApplyResultSchema: z.ZodType<FamilyApplyResult> = z.union([
+  familyApplyOutcomeSchema,
+  z.object({ results: z.array(familyApplyOutcomeSchema) }),
+]);
+export interface FamilyPlanResult {
+  id: string;
+  executionContext: z.infer<typeof documentRefSchema>;
+  plan: FfPlanEntry | FfPlanEntry[];
+  included: Record<string, string>;
+  excluded?: unknown[];
+  orphaned?: string[];
+  [key: string]: unknown;
+}
+export const familyPlanResultSchema: z.ZodType<FamilyPlanResult> = z.looseObject({
+  id: z.string(),
+  executionContext: documentRefSchema,
+  plan: z.union([ffPlanEntrySchema, z.array(ffPlanEntrySchema)]),
+  included: z.record(z.string(), z.string()),
+  excluded: z.array(z.unknown()).optional(),
+  orphaned: z.array(z.string()).optional(),
+});
 
 export const familyCaptureSchema = z.object({
   id: z.string().regex(/^[a-f0-9]{64}$/),
@@ -39,36 +86,26 @@ const captureInto = { pod: z.string().min(1), path: z.string().min(1).optional()
  * stripping.
  */
 const planSourceSchema = z.union([podMemberSourceSchema.strict(), podDraftSourceSchema.strict()]);
-const sourceRowsSchema = z
-  .object({
-    source: planSourceSchema,
-    include: z.union([z.literal("all"), z.array(z.string()).min(1)]).default("all"),
-    familyNames: z.array(z.string()).optional(),
-    executionOptions: familyExecutionOptionsSchema.optional(),
-  })
-  .strict();
-const previewRowsSchema = z
-  .object({ plan: z.string().min(1), expectedPlanHashes: z.record(z.string(), z.string().min(1)) })
-  .strict();
-const applyRowsSchema = z.union([
-  sourceRowsSchema,
-  previewRowsSchema,
-  z
-    .object({
-      sources: z.array(sourceRowsSchema.omit({ include: true })).min(1),
-      include: z.union([z.literal("all"), z.array(z.string()).min(1)]).default("all"),
-    })
-    .strict(),
-]);
+const applySourceSchema = z.strictObject({
+  source: planSourceSchema,
+  familyNames: z.array(z.string()).optional(),
+  executionOptions: familyExecutionOptionsSchema.optional(),
+});
 const applyInputSchema = z
   .object({
-    rows: applyRowsSchema.optional(),
+    source: planSourceSchema.optional(),
+    sources: z.array(applySourceSchema).min(1).optional(),
     include: z.union([z.literal("all"), z.array(z.string()).min(1)]).default("all"),
     plan: z.string().min(1).optional(),
     familyNames: z.array(z.string()).optional(),
     executionOptions: familyExecutionOptionsSchema.optional(),
   })
-  .strict();
+  .strict()
+  .refine(
+    (input) =>
+      [input.source, input.sources, input.plan].filter((value) => value !== undefined).length <= 1,
+    "Choose one source, source batch, preview, or the reviewed Work",
+  );
 export const familyActions = {
   "family.attach-spec": {
     says: "Attach a PDF specification and its parsed assets to the reviewed family member.",
@@ -135,18 +172,20 @@ export const familyActions = {
       .refine((input) => input.pod || (!input.spec && !input.path), "A draft saves into a pod"),
   },
   "family.plan": {
-    says: "Plan a saved family spec, or a supplied draft's exact bytes (filed nowhere), against the open family and return the plan; changes nothing.",
+    says: "Preview the reviewed Family Work or an exact saved or supplied source against the open family. Seal the source and return the plan; change nothing.",
     needs: "family-document",
     effect: "query",
     dirties: [],
     input: z.object({ source: planSourceSchema.optional() }),
+    result: familyPlanResultSchema,
   },
   "family.apply": {
-    says: "Apply the exact family plan a succeeded family.plan action returned (named by that action id, one included hash), from the spec bytes that plan sealed, and write a run receipt. Staged cells the plan consumed retire only if unchanged after native success.",
+    says: "Plan and apply the reviewed Family Work, or apply an optional preview's sealed intent, and write a run receipt. Retire successful consumed edits only while unchanged.",
     needs: "family-document",
     effect: "command",
     dirties: ["family", "pods"],
     input: applyInputSchema,
+    result: familyApplyResultSchema,
   },
   "families.capture": {
     says: "Capture loaded families as new spec members in the route's pod, one member per family; returns the members and what the capture saw per family.",
@@ -156,7 +195,7 @@ export const familyActions = {
     input: z.object({ pod: z.string().min(1), familyIds: z.array(z.number().int()).min(1) }),
   },
   "families.plan": {
-    says: "Plan a saved spec, or a supplied draft's exact bytes (filed nowhere), over the loaded families in the reviewed Families Work scope; returns the plan and the hashes apply would send, and changes nothing.",
+    says: "Preview all reviewed Families drafts or an exact supplied source within the reviewed scope. Seal the sources and return their plans; change nothing.",
     needs: "project-document",
     effect: "query",
     dirties: [],
@@ -172,13 +211,15 @@ export const familyActions = {
       })
       // Exclusions are read from the reviewed Work, never sent; a stale caller sending them refuses.
       .strict(),
+    result: familyPlanResultSchema,
   },
   "families.apply": {
-    says: "Apply the exact family plans a succeeded families.plan action returned (named by that action id), from the spec bytes that plan sealed; each family's plan hash gates drift. Staged cells a successful family consumed retire only if unchanged.",
+    says: "Plan and apply all reviewed Families drafts in one command, or apply an optional preview's sealed intent. Preserve per-family outcomes and retire only successful unchanged consumed edits.",
     needs: "project-document",
     effect: "command",
     dirties: ["families", "pods"],
     input: applyInputSchema,
+    result: familyApplyResultSchema,
   },
   "families.save-draft": {
     says: "Compose the edited family drafts from reviewed Work and save each as a new Pod member.",

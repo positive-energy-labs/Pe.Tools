@@ -2,7 +2,6 @@ import { z } from "zod";
 import {
   isRecord,
   message,
-  type RouteStateCommandSpec,
   type RouteStatePatch,
   type RouteStateSpec,
   type RouteWriteKind,
@@ -16,7 +15,7 @@ export interface RouteEnvelope<D> {
   doc: D;
 }
 
-export type RouteActor = "agent" | "human";
+export type WorkAuthor = "pea" | "human";
 
 /** Every path's answer when saved Work fails the route's schema: fail-closed, never migrated. */
 export const UNREADABLE_WORK =
@@ -46,7 +45,7 @@ const FORBIDDEN_SEGMENTS = new Set(["__proto__", "constructor", "prototype"]);
 export function applyPatches<S extends z.ZodType>(
   spec: RouteStateSpec<S>,
   envelope: RouteEnvelope<z.infer<S>>,
-  actor: RouteActor,
+  by: WorkAuthor,
   patches: readonly RouteStatePatch[],
   expectedRevision: number,
   trusted = false,
@@ -70,12 +69,7 @@ export function applyPatches<S extends z.ZodType>(
   return commitDoc(
     spec,
     envelope,
-    stampChanges(
-      spec.reconcileEdit?.(draft, patches) ?? draft,
-      envelope.doc,
-      actor,
-      expectedRevision,
-    ),
+    stampChanges(spec.reconcileEdit?.(draft, patches) ?? draft, envelope.doc, by, expectedRevision),
   );
 }
 
@@ -98,26 +92,6 @@ export function canonicalRouteInput(input: unknown): string {
   const serialized = JSON.stringify(sortJson(input ?? {}));
   if (serialized === undefined) throw new TypeError("command input is not JSON");
   return serialized;
-}
-
-export function guardCommand<S extends z.ZodType>(
-  spec: RouteStateSpec<S>,
-  _envelope: RouteEnvelope<z.infer<S>>,
-  actor: RouteActor,
-  name: string,
-  input: unknown,
-): { ok: true; input: unknown; command: RouteStateCommandSpec } | RouteRefusal {
-  const command = spec.commands[name];
-  if (!command)
-    return refuse(
-      "error",
-      `unknown command '${name}'`,
-      `available commands: ${Object.keys(spec.commands).join(", ") || "(none)"}.`,
-    );
-  const parsed = command.input.safeParse(input ?? {});
-  if (!parsed.success)
-    return refuse("error", `invalid input for command '${name}'`, formatZodError(parsed.error));
-  return { ok: true, input: parsed.data, command };
 }
 
 export function commitDoc<S extends z.ZodType>(
@@ -192,21 +166,14 @@ function sortJson(value: unknown): unknown {
 export function stampChanges(
   next: unknown,
   prior: unknown,
-  actor: RouteActor,
+  by: WorkAuthor,
   base: number,
   at = new Date().toISOString(),
   depth = 0,
 ): unknown {
   if (Array.isArray(next))
     return next.map((value, index) =>
-      stampChanges(
-        value,
-        Array.isArray(prior) ? prior[index] : undefined,
-        actor,
-        base,
-        at,
-        depth + 1,
-      ),
+      stampChanges(value, Array.isArray(prior) ? prior[index] : undefined, by, base, at, depth + 1),
     );
   if (!isRecord(next)) return next;
   const old = isRecord(prior) ? prior : {};
@@ -227,7 +194,7 @@ export function stampChanges(
               canonicalRouteInput(exclusion) === canonicalRouteInput(was[name])
                 ? exclusion
                 : isRecord(exclusion)
-                  ? { ...exclusion, by: actor === "agent" ? "pea" : "human" }
+                  ? { ...exclusion, by: by }
                   : exclusion,
             ]),
           ),
@@ -239,9 +206,9 @@ export function stampChanges(
         (Object.hasOwn(value, "value") || value.delete === true)
       ) {
         if (canonicalRouteInput(value) === canonicalRouteInput(old[key])) return [key, value];
-        return [key, { ...value, by: actor === "agent" ? "pea" : "human", at, base }];
+        return [key, { ...value, by: by, at, base }];
       }
-      return [key, stampChanges(value, old[key], actor, base, at, depth + 1)];
+      return [key, stampChanges(value, old[key], by, base, at, depth + 1)];
     }),
   );
 }

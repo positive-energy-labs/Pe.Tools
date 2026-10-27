@@ -7,7 +7,7 @@ import {
 } from "@pe/agent-contracts";
 import { sdkSession, readSessionScope } from "./sdk-session.ts";
 import { readSchedule } from "./schedule-actions.ts";
-import { actionControls, commands, commandTool, receiptsForWork } from "@pe/agent-contracts";
+import { actionControls, commandTool, receiptsForWork } from "@pe/agent-contracts";
 import { NodeHttpClient, NodeServices } from "@effect/platform-node";
 import { hostActionJournal } from "./gateway-owner.ts";
 import { operationDefinition, gatewayTarget, requireEligibleCaller } from "./gateway-actions.ts";

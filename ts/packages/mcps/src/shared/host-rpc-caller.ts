@@ -2,7 +2,7 @@ import { createPeClient } from "@pe/agent-contracts/pe-api";
 import { readPeError } from "@pe/host-contracts/pe-api";
 import { contextFetch as fetch } from "@pe/runtime/context";
 import { documentRefSchema, type ActionReceipt, type DocumentRef } from "@pe/agent-contracts";
-import { readAction, type DetachedAction } from "./takeoff-action-client.ts";
+import { recoverAction, type DetachedAction } from "./takeoff-action-client.ts";
 import { runCapability, CANCEL_KEY } from "./admission.ts";
 import { Effect } from "effect";
 import { resolveHostBaseUrl } from "./host-config.ts";
@@ -204,30 +204,36 @@ export class HostRpcCaller {
     request?: unknown,
     verbosity: HostOperationVerbosity = "compact",
   ): Promise<HostOperationCallResult> {
-    const prior = this.options.requestId
-      ? await readAction(this.options.requestId, this.options.hostBaseUrl).catch(() => undefined)
+    const recovered = this.options.requestId
+      ? await recoverAction(
+          this.options.requestId,
+          key,
+          (request ?? {}) as Record<string, unknown>,
+          this.options.bridgeSessionId && this.options.openDocumentId
+            ? {
+                kind: "document",
+                ref: { session: this.options.bridgeSessionId, openId: this.options.openDocumentId },
+              }
+            : undefined,
+          this.options.hostBaseUrl,
+          this.options.timeoutMs ?? 30_000,
+        )
       : undefined;
-    // Original receipt is the replay authority; no live metadata/target dependency on this branch.
-    // op.cancel never waits on the catalog: see readCapabilityIntent.
-    const operation = prior || key === CANCEL_KEY ? undefined : await this.getOperation(key);
-    if (prior || operation?.intent === "Mutate") {
+    const operation = recovered || key === CANCEL_KEY ? undefined : await this.getOperation(key);
+    if (recovered || operation?.intent === "Mutate" || key === "scripting.execute") {
       const started = Date.now();
-      const action = (await runCapability(
-        key,
-        (request ?? {}) as Record<string, unknown>,
-        {
-          ...this.options,
-          actionId: this.options.requestId,
-          receipt: true,
-        },
-        {
-          kind: "operation",
-          mutates: true,
-          needs: operation?.needs ?? "document",
-          destination: prior?.destination,
-          prior,
-        },
-      )) as ActionReceipt | DetachedAction;
+      const action =
+        recovered ??
+        ((await runCapability(
+          key,
+          (request ?? {}) as Record<string, unknown>,
+          {
+            ...this.options,
+            actionId: this.options.requestId,
+            receipt: true,
+          },
+          { door: "command", mutates: true, needs: operation?.needs ?? "document" },
+        )) as ActionReceipt | DetachedAction);
       return action.state === "succeeded"
         ? { ok: true, key, elapsedMs: Date.now() - started, response: action.result, action }
         : {

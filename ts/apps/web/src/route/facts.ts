@@ -4,7 +4,7 @@
  */
 import {
   hostActions,
-  type ActionDefinition,
+  type Command,
   type ActionNeed,
   type HostActionKey,
 } from "@pe/agent-contracts";
@@ -28,7 +28,7 @@ export interface ActionFacts {
   effect?: "query" | "command";
 }
 /** The slice of a host action record a browser verb projects. */
-export type HostRecord = Pick<ActionDefinition, "says" | "needs" | "effect">;
+export type HostRecord = Pick<Command, "says" | "needs" | "effect">;
 
 /**
  * What a verb is. A host verb names its record by key, or picks it at press time (Ops picks the

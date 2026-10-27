@@ -128,7 +128,7 @@ function ProjectAWork(familyNames: string[], categoryNames = ["Air Terminals"]) 
 test("F-J1-12: the live catalog loopback admits a key for a type past the tenth, as Pea and as the person", async () => {
   const { work, at, author } = ProjectAWork(["Price LBP15A Exhaust"]);
   expect(await author()).toMatchObject({ ok: true, revision: 1 });
-  const landed = await work.apply(at, "families", "agent", [propose("Price LBP15A Exhaust")], 1);
+  const landed = await work.apply(at, "families", "pea", [propose("Price LBP15A Exhaust")], 1);
   expect(landed).toMatchObject({ ok: true, revision: 2 });
   const cleared = await work.apply(
     at,
@@ -174,7 +174,7 @@ test("both authors share editable family scope and optional suggestions", async 
     await work.apply(
       scope,
       "families",
-      "agent",
+      "pea",
       [{ path: ["scope", "suggestion"], value: { value: casework([]), note: "all casework" } }],
       1,
     ),
@@ -183,7 +183,7 @@ test("both authors share editable family scope and optional suggestions", async 
     await work.apply(
       scope,
       "families",
-      "agent",
+      "pea",
       [{ path: ["scope", "edit"], value: { value: casework([]) } }],
       2,
     ),
@@ -229,12 +229,12 @@ test("M13-2 (d): Pea proposes a scope, then cells in it, with nothing edit; the 
   const scoped = await work.apply(
     at,
     "families",
-    "agent",
+    "pea",
     [{ path: ["scope", "suggestion"], value: { value: exhaustScope } }],
     1,
   );
   expect(scoped).toMatchObject({ ok: true, revision: 2 });
-  const cells = await work.apply(at, "families", "agent", [propose("Price LBP15A Exhaust")], 2);
+  const cells = await work.apply(at, "families", "pea", [propose("Price LBP15A Exhaust")], 2);
   expect(cells).toMatchObject({ ok: true, revision: 3 });
   expect(calls.length).toBeGreaterThan(0);
   for (const request of calls) expect(request.filter).toBeDefined();
@@ -245,7 +245,7 @@ test("M13-2 (d): Pea proposes a scope, then cells in it, with nothing edit; the 
     await one.work.apply(
       one.at,
       "families",
-      "agent",
+      "pea",
       [
         { path: ["scope", "suggestion"], value: { value: exhaustScope } },
         propose("Price LBP15A Exhaust"),
@@ -288,12 +288,12 @@ test("item 3: every door refusal names its code and its structured parts, and ke
     ],
     [
       "no-scope",
-      () => seededWork({}).work.apply(seededWork({}).at, "families", "agent", [exhaustCell], 1),
+      () => seededWork({}).work.apply(seededWork({}).at, "families", "pea", [exhaustCell], 1),
       {},
     ],
     [
       "unknown-family-type",
-      () => workspace().work.apply(scope, "families", "agent", [propose("Casework 2")], 0),
+      () => workspace().work.apply(scope, "families", "pea", [propose("Casework 2")], 0),
       { cells: [{ familyName: "Casework 2", typeName: "12 X 4", parameter: "View Description" }] },
     ],
     [
@@ -304,7 +304,7 @@ test("item 3: every door refusal names its code and its structured parts, and ke
             edit: { value: { ...exhaustScope, categoryNames: ["Walls"], familyNames: [] } },
           },
         });
-        return work.apply(at, "families", "agent", [exhaustCell], 1);
+        return work.apply(at, "families", "pea", [exhaustCell], 1);
       },
       {},
     ],
@@ -312,7 +312,7 @@ test("item 3: every door refusal names its code and its structured parts, and ke
       "scope-truncated",
       () => {
         const { work, at } = seededWork(stagedExhaust, catalogOf([], true));
-        return work.apply(at, "families", "agent", [exhaustCell], 1);
+        return work.apply(at, "families", "pea", [exhaustCell], 1);
       },
       {},
     ],
@@ -323,7 +323,7 @@ test("item 3: every door refusal names its code and its structured parts, and ke
           stagedExhaust,
           catalogOf([{ ...exhaust, typeCount: 13, types: exhaust.types }]),
         );
-        return work.apply(at, "families", "agent", [exhaustCell], 1);
+        return work.apply(at, "families", "pea", [exhaustCell], 1);
       },
       { families: ["Price LBP15A Exhaust"] },
     ],
@@ -334,7 +334,7 @@ test("item 3: every door refusal names its code and its structured parts, and ke
           stagedExhaust,
           casing((key) => (key === "bridge.sessions.list" ? { sessions: [] } : undefined)),
         );
-        return work.apply(at, "families", "agent", [exhaustCell], 1);
+        return work.apply(at, "families", "pea", [exhaustCell], 1);
       },
       {},
     ],
@@ -347,7 +347,7 @@ test("item 3: every door refusal names its code and its structured parts, and ke
             if (key === "revit.catalog.loaded-families") throw Error("socket hang up");
           }),
         );
-        return work.apply(at, "families", "agent", [exhaustCell], 1);
+        return work.apply(at, "families", "pea", [exhaustCell], 1);
       },
       {},
     ],

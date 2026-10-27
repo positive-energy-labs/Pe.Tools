@@ -22,7 +22,7 @@ const action = (needs: "host" | "document") => ({
   label: needs,
   says: needs,
   needs,
-  actor: "any" as const,
+
   input: z.void() as unknown as z.ZodType<never>,
   dirties: [],
   requires: { work: true as const },

@@ -94,7 +94,7 @@ export function docWriter<S extends RouteStateSpec<any>>(
   conflict: Atom.Writable<boolean> | undefined,
 ) {
   const send = async (
-    operation: "apply" | "command" | typeof START_FRESH,
+    operation: "apply" | typeof START_FRESH,
     body: Record<string, unknown> & { expectedRevision?: number },
     onAccepted?: (base: number, revision: number) => void,
   ): Promise<Refusal | null> => {
@@ -127,21 +127,6 @@ export function docWriter<S extends RouteStateSpec<any>>(
       const revision = writeRevision(expectedRevision);
       if (revision === null) return Promise.resolve(notHydrated);
       return send("apply", { patches, expectedRevision: revision }, onAccepted);
-    },
-    command: (
-      name: keyof S["commands"] & string,
-      input?: unknown,
-      expectedRevision?: number,
-      onAccepted?: (base: number, revision: number) => void,
-    ) => {
-      const revision = writeRevision(expectedRevision);
-      return revision === null
-        ? Promise.resolve(notHydrated)
-        : send(
-            "command",
-            { command: name, input: input ?? {}, expectedRevision: revision },
-            onAccepted,
-          );
     },
     /** The human door only; the host refuses Pea's door and readable Work. */
     startFresh: () => send(START_FRESH, {}),

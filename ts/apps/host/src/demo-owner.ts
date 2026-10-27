@@ -46,6 +46,7 @@ import { listBridgeSessions } from "./local-ops.ts";
 import { readFamily } from "./family-actions.ts";
 import { hostProcessIdentity } from "@pe/host-contracts/contracts";
 import type { ScheduleCellsApply } from "@pe/host-contracts/generated";
+import { validateDispatch, markDispatched } from "./action-dispatch.ts";
 
 /** The command rule a simulated demo SDK envelope carries instead of a real resolution. */
 const SIMULATED_SDK = "simulated-demo";
@@ -389,10 +390,19 @@ export async function createDemoOwner(parent: string, raw: unknown) {
         listeners.add(listener);
         return () => listeners.delete(listener);
       },
-      invoke: (key: string, input: unknown, session?: string, openId?: string) =>
-        Effect.tryPromise({
+      invoke: (
+        key: string,
+        input: unknown,
+        session?: string,
+        openId?: string,
+        requestId?: string,
+      ) => {
+        let dispatched = false;
+        return Effect.tryPromise({
           try: async () => {
             if (retired || session !== id) throw unsupported("production destination");
+            const invalid = requestId ? await validateDispatch(requestId) : null;
+            if (invalid) throw new BridgeError(invalid, 409, { notDispatched: true });
             // The session catalog `/call` consults before a read: only the reads this owner simulates.
             if (key === "host.ops.catalog" && openId === null)
               return {
@@ -406,6 +416,8 @@ export async function createDemoOwner(parent: string, raw: unknown) {
                 target: { session: id, document: at },
               };
             if (openId !== target.openId) throw unsupported("production destination");
+            if (requestId) await markDispatched(requestId);
+            dispatched = true;
             let value: unknown;
             if (key === "takeoffs.initialize-carrier" && seed.route === "takeoffs")
               value = { remaining: [], simulated: true };
@@ -824,11 +836,17 @@ export async function createDemoOwner(parent: string, raw: unknown) {
             } else throw unsupported(key);
             return { value, target: { session: id, document: at } };
           },
-          catch: (error) =>
-            error instanceof BridgeError
-              ? error
-              : new BridgeError(String(error), 409, { notDispatched: true }),
-        }),
+          catch: (error) => {
+            const problem =
+              error instanceof BridgeError
+                ? error
+                : new BridgeError(String(error), 409, { notDispatched: true });
+            if (!dispatched) return problem;
+            const { notDispatched: _notDispatched, ...evidence } = problem.evidence;
+            return new BridgeError(problem.message, problem.statusCode, evidence);
+          },
+        });
+      },
     } as unknown as RevitBridge["Service"];
     // Preparation may materialize a fresh read, never an imported action or receipt.
     if (seed.route === "parameter-links" && seed.readings.prepareEvaluation)
@@ -1215,7 +1233,12 @@ export async function createDemoOwner(parent: string, raw: unknown) {
       if (url.pathname === "/families/readings" && seed.route === "families") {
         if (request.method === "GET") {
           const id = url.searchParams.get("id");
-          if (id) return json(await captures.families(id));
+          if (id)
+            return json(
+              url.searchParams.get("format") === "parts"
+                ? await captures.familiesParts(id)
+                : await captures.families(id),
+            );
           const raw = url.searchParams.get("work");
           if (!raw) return json(await captures.familiesReadings());
           const work = JSON.parse(raw) as WorkKey;

@@ -3,7 +3,8 @@
  * preview whatever Fix and Set hold; while they stand only the ESP is left out of the request.
  * The host is a fixture: the request each verb sends is captured, parsed by the real contract.
  */
-import { ductsRouteState, type DuctsRouteDocument } from "@pe/agent-contracts";
+import { bindWork, ductsRouteState, type DuctsRouteDocument } from "@pe/agent-contracts";
+import { bindCommands } from "#/route/presentation";
 import { EMPTY_CATALOGS } from "@pe/ducts-domain/catalog";
 import { price } from "@pe/ducts-domain/pricing";
 import { readiness } from "@pe/ducts-domain/readiness";
@@ -17,7 +18,7 @@ const answer = { value: {} as unknown };
 vi.mock("../../../../packages/mcps/src/shared/takeoff-action-client", () => ({
   runSemanticAction: async (key: string, input: Record<string, unknown>) => {
     sent.push({ key, input });
-    return { id: "a1", state: "done" };
+    return { id: "a1", state: "succeeded" };
   },
   readAction: async () => undefined,
   actionResult: () => answer,
@@ -111,6 +112,11 @@ let page: Page;
 const grids: Grids = {};
 const ctxOf = (doc: DuctsRouteDocument) => ({
   target: { kind: "document", ref: { session: "s", openId: "d" } },
+  commands: bindCommands(
+    { kind: "document", ref: { session: "s", openId: "d" } },
+    { key: bindWork("ducts", null), revision: 1 },
+    () => {},
+  ),
   readings: {
     ducts: { state: "ready", observation: snapshot },
     tables: { state: "ready", observation: grids },
@@ -200,7 +206,7 @@ test("run bare, the fan verbs act on the chosen system's offered fan, in the pag
   await verb("fan-preview").run(ctxOf(doc) as never, {});
   expect(sent.at(-1)).toEqual({
     key: "ducts.preview-assign-fan",
-    input: { unitId: 100, systemId: 900 },
+    input: { unitId: 100, systemId: 900, work: { key: bindWork("ducts", null), revision: 1 } },
   });
   expect(verb("fan").ready(ctxOf(doc) as never)).toBeNull();
   page = { ...page, system: [] };

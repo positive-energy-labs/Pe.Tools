@@ -25,7 +25,6 @@ it("the catalog runner refuses unknown runtime keys before invoking the typed ca
     request: {},
     target: { kind: "host" } as const,
     call,
-    priorActionId: null,
   };
   await expect(runOp(request)).rejects.toThrow("absent from this client's contract");
   expect(call).not.toHaveBeenCalled();

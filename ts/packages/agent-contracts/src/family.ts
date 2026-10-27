@@ -34,25 +34,6 @@ export const familyDraftRouteState = {
   description:
     "A captured family draft baseline with cells keyed by JSON pointer. Either author writes cells.*.edit at the expected Work revision; cells.*.suggestion is optional review content.",
   schema: familyDraftSchema,
-
-  commands: {
-    attach_spec: {
-      effect: "command",
-      description:
-        "Parse a PDF path, URL, or uploaded bytes and attach its portable pages and blocks beside a captured family member.",
-
-      input: z
-        .object({
-          member: z.object({ pod: z.string().min(1), path: z.string().min(1) }),
-          source: z.union([
-            z.object({ path: z.string().min(1) }).strict(),
-            z.object({ url: z.url() }).strict(),
-            z.object({ fileName: z.string().min(1), base64: z.string().min(1) }).strict(),
-          ]),
-        })
-        .strict(),
-    },
-  },
 } satisfies RouteStateSpec<typeof familyDraftSchema>;
 
 export const specDocSchema = parsedDocViewSchema;

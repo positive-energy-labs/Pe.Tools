@@ -519,6 +519,4 @@ export const takeoffsRouteState = {
   description:
     "Shared edited room values, adoption choices, flag verdicts and review flags, each one cell. Either author edits or suggests; sync consumes the current edits. Model geometry is read from takeoffs.snapshot; durable saved observations are at /takeoffs/observations.",
   schema: takeoffsDocumentSchema,
-
-  commands: {},
 } satisfies RouteStateSpec<typeof takeoffsDocumentSchema>;

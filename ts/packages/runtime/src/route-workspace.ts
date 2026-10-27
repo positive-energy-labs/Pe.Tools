@@ -1,51 +1,32 @@
-import {
-  bindWork,
-  pendingSuggestions,
-  unfinishedCells,
-  workKey,
-  workKeySchema,
-  type WorkKey,
-} from "@pe/agent-contracts";
+import { bindWork, workCounts, workKey, workKeySchema, type WorkKey } from "@pe/agent-contracts";
 import { z } from "zod";
 import { OwnerReads, type OwnerValue } from "./owner-read.ts";
 import {
   applyPatches,
-  stampChanges,
-  checkRevision,
-  commitDoc,
-  guardCommand,
-  message,
   refuse,
   refusalText,
   START_FRESH_ASIDE,
   UNREADABLE_WORK,
-  type RouteActor,
+  type WorkAuthor,
   type RouteEnvelope,
   type RouteRefusal,
   type RouteStatePatch,
   type RouteStateWriteResult,
 } from "@pe/agent-contracts";
-import type {
-  RouteStateCommandHandlers,
-  RouteStateSpec,
-  RouteWriteAdmission,
-} from "@pe/agent-contracts";
+import type { RouteStateSpec, RouteWriteAdmission } from "@pe/agent-contracts";
 
 export interface RouteWorkspaceRegistration {
   spec: RouteStateSpec<z.ZodType>;
-  // biome-ignore lint/suspicious/noExplicitAny: the schema/handler pairing is checked where registrations are built.
-  handlers: RouteStateCommandHandlers<any>;
   admit?: RouteWriteAdmission;
 }
 
 export interface RouteWorkspaceEvent {
   type: "route_workspace";
   scope: WorkKey;
-  actor: RouteActor;
+  by: WorkAuthor;
   route: string;
-  action: "apply" | "command" | "start-fresh";
+  action: "apply" | "start-fresh";
   revision: number;
-  command?: string;
   patchCount?: number;
   ok: boolean;
   error?: string;
@@ -71,7 +52,6 @@ export interface RouteWorkspaceOptions {
 const ENVELOPE_VERSION = 1;
 // Retired close-sweep metadata contains no authored Work. Keep it out of the census.
 const OPEN_REGISTER = { targetKey: "open-work", route: "register" };
-// ponytail: fixed cap keeps every envelope read small; revisit only when a real command needs larger replay results.
 /** Store, order, crash barrier, and publication shell around the pure route-document machine. */
 export class RouteWorkspace {
   readonly #registry = new Map<string, RouteWorkspaceRegistration>();
@@ -92,7 +72,6 @@ export class RouteWorkspace {
     if (route.includes(":")) throw new Error(`route name '${route}' cannot contain ':'`);
     if (this.#registry.has(route)) throw new Error(`duplicate route '${route}'`);
     toJsonSchema(registration.spec.schema);
-    for (const command of Object.values(registration.spec.commands)) toJsonSchema(command.input);
     this.#registry.set(route, registration);
     return () => {
       if (this.#registry.get(route) === registration) this.#registry.delete(route);
@@ -134,8 +113,7 @@ export class RouteWorkspace {
           try {
             const envelope = parseEnvelope(record.value, spec);
             revision = envelope.revision;
-            proposals = pendingSuggestions(envelope.doc);
-            unfinished = unfinishedCells(envelope.doc);
+            ({ proposals, unfinished } = workCounts(envelope.doc, spec.editable ?? []));
             state = "ready";
           } catch {
             // Keep the address discoverable without exposing the unreadable document.
@@ -205,14 +183,13 @@ export class RouteWorkspace {
       doc: structuredClone(envelope.doc),
       revision: envelope.revision,
       schema: toJsonSchema(spec.schema),
-      commands: describeCommands(spec),
     };
   }
 
   async apply(
     scope: WorkKey,
     route: string,
-    actor: RouteActor,
+    by: WorkAuthor,
     patches: RouteStatePatch[],
     expectedRevision: number,
     trusted = false,
@@ -221,14 +198,14 @@ export class RouteWorkspace {
     if (!registration) return unknownRoute(route);
 
     return this.#serialized(async () => {
-      const emit = (event: Omit<RouteWorkspaceEvent, "type" | "scope" | "route" | "actor">) =>
-        this.#publish({ type: "route_workspace", scope, route, actor, ...event });
+      const emit = (event: Omit<RouteWorkspaceEvent, "type" | "scope" | "route" | "by">) =>
+        this.#publish({ type: "route_workspace", scope, route, by, ...event });
       const envelope = await this.#load(scope, registration.spec).catch(unreadable);
       if ("ok" in envelope) return envelope;
       const applied = applyPatches(
         registration.spec,
         envelope,
-        actor,
+        by,
         patches,
         expectedRevision,
         trusted,
@@ -237,7 +214,7 @@ export class RouteWorkspace {
         (applied.ok &&
           (await registration.admit?.(applied.envelope.doc, patches, {
             scope,
-            actor,
+            by,
             prior: envelope.doc,
           }))) ||
         applied;
@@ -274,98 +251,11 @@ export class RouteWorkspace {
     return this.apply(scope, route, "human", patches, expectedRevision, true);
   }
 
-  async command(
-    scope: WorkKey,
-    route: string,
-    actor: RouteActor,
-    command: string,
-    input: unknown,
-    expectedRevision: number,
-  ): Promise<RouteStateWriteResult> {
-    const registration = this.#registry.get(route);
-    if (!registration) return unknownRoute(route);
-    const { spec, handlers } = registration;
-    return this.#serialized(async () => {
-      const envelope = await this.#load(scope, spec).catch(unreadable);
-      if ("ok" in envelope) return envelope;
-      const reject = async (result: RouteStateWriteResult) => {
-        if (!result.ok)
-          await this.#publish({
-            type: "route_workspace",
-            scope,
-            route,
-            actor,
-            action: "command",
-            command,
-            revision: envelope.revision,
-            ok: false,
-            error: refusalText(result),
-          });
-        return result;
-      };
-      const stale = checkRevision(envelope, expectedRevision);
-      if (stale) return reject(stale);
-      const guarded = guardCommand(spec, envelope, actor, command, input);
-      if (!guarded.ok) return reject(guarded);
-      const handler = handlers[command];
-      if (!handler)
-        return reject(
-          refuse(
-            "error",
-            `command '${command}' has no registered handler`,
-            "Route port unavailable.",
-          ),
-        );
-      let committed: RouteEnvelope<unknown> | null = null;
-      try {
-        const result = await handler(guarded.input, {
-          target: scope.target,
-          work: scope.work,
-          getDoc: () => structuredClone(committed?.doc ?? envelope.doc),
-          setDoc: async (candidate) => {
-            const landed = commitDoc(
-              spec,
-              envelope,
-              stampChanges(candidate, envelope.doc, actor, expectedRevision),
-            );
-            if (!landed.ok) throw Error(`${landed.error}: ${landed.hint}`);
-            committed = landed.envelope;
-          },
-        });
-        const next = committed ?? envelope;
-        if (committed) await this.#persist(scope, route, next);
-        await this.#publish({
-          type: "route_workspace",
-          scope,
-          route,
-          actor,
-          action: "command",
-          command,
-          revision: next.revision,
-          ok: true,
-        });
-        return { ok: true, revision: next.revision, ...(result === undefined ? {} : { result }) };
-      } catch (error) {
-        return reject(
-          refuse(
-            "error",
-            message(error),
-            "The read/local handler failed; prior uncertainty remains unresolved.",
-          ),
-        );
-      }
-    });
-  }
-
   /**
    * Either author moves unreadable Work aside, byte-for-byte and never parsed, to the first free
    * `<route>:aside:<n>`, and starts an empty Work at the same address. Readable Work is refused.
    */
-  async startFresh(
-    scope: WorkKey,
-    route: string,
-    actor: RouteActor,
-  ): Promise<RouteStateWriteResult> {
+  async startFresh(scope: WorkKey, route: string, by: WorkAuthor): Promise<RouteStateWriteResult> {
     const registration = this.#registry.get(route);
     if (!registration) return unknownRoute(route);
     const { spec } = registration;
@@ -384,7 +274,7 @@ export class RouteWorkspace {
         type: "route_workspace",
         scope,
         route,
-        actor,
+        by,
         action: "start-fresh",
         revision: fresh.revision,
         ok: true,
@@ -401,7 +291,6 @@ export class RouteWorkspace {
   async salvage(
     scope: WorkKey,
     route: string,
-    _actor: RouteActor,
   ): Promise<{ from: string; value: unknown } | RouteRefusal | null> {
     const spec = this.#registry.get(route)?.spec;
     if (!spec?.salvage) return null;
@@ -569,15 +458,6 @@ function unreadable(error: unknown): RouteRefusal {
       "Nothing was written; the saved Work is kept as it was.",
     );
   throw error;
-}
-
-function describeCommands(spec: RouteStateSpec<z.ZodType>) {
-  return Object.entries(spec.commands).map(([name, command]) => ({
-    name,
-    description: command.description,
-    effect: command.effect,
-    input: toJsonSchema(command.input),
-  }));
 }
 
 function toJsonSchema(schema: z.ZodType): unknown {

@@ -10,7 +10,7 @@ import { fakeRuntimeHost } from "./runtime-host-fixture.ts";
 
 afterEach(() => vi.unstubAllEnvs());
 
-test("Gunshi Schedule read and human apply use exact HTTP action and frozen Work bases", async () => {
+test("Gunshi Schedule read and human apply use exact HTTP command and reviewed Work revision", async () => {
   const f = await setup();
   const output = vi.spyOn(console, "log").mockImplementation(() => {});
   try {
@@ -37,12 +37,12 @@ test("Gunshi Schedule read and human apply use exact HTTP action and frozen Work
       target: f.b,
       workspaceId: f.scope.work,
     });
-    await writeFile(request, JSON.stringify({ bases: (await f.admission()).bases }), "utf8");
+    await writeFile(request, JSON.stringify((await f.admission()).input), "utf8");
     await cli(
       [
         "call",
         "--key",
-        "workflow:schedule.grid.push",
+        "op:schedule.grid.push",
         "--bridge-session-id",
         "B",
         "--open-document-id",
@@ -58,7 +58,7 @@ test("Gunshi Schedule read and human apply use exact HTTP action and frozen Work
     // The admission builder returns the succeeded receipt's result; a failure names the id.
     expect(JSON.parse(output.mock.calls.at(-1)![0])).toMatchObject({ applied: 1, failures: [] });
     expect(f.sent.filter((s) => s.key === "schedule.cells.apply")).toHaveLength(1);
-    expect((await f.view()).doc.cells["1::2"].edit).toBeUndefined();
+    expect((await f.view()).doc.cells["1::2"].edit).toBeNull();
   } finally {
     output.mockRestore();
   }
@@ -108,8 +108,8 @@ test("Schedule A/B/A reads use thread defaults; apply requires matching Work and
   ]);
   expect(
     await run(peDo, {
-      key: "workflow:schedule.grid.push",
-      input: { bases: (await f.admission()).bases },
+      key: "op:schedule.grid.push",
+      input: (await f.admission()).input,
       timeoutSeconds: 5,
     }),
   ).toMatchObject({ ok: false });

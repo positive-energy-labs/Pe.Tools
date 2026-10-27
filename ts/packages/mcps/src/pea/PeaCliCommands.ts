@@ -1,6 +1,5 @@
 import { contextFetch } from "@pe/runtime/context";
 import { createPeClient, isPeRouteId } from "@pe/agent-contracts/pe-api";
-import { actionBasesSchema } from "@pe/agent-contracts";
 import { readCapabilityIntent, runCapability, type AdmissionContext } from "../shared/admission.ts";
 import { define } from "gunshi";
 import { readFileSync } from "node:fs";
@@ -238,7 +237,7 @@ export class PeaCliCommands {
       },
       toKebab: true,
       run: async (ctx) => {
-        const key = firstNonBlank(ctx.values.key)?.replace(/^(op|workflow):/, "");
+        const key = firstNonBlank(ctx.values.key)?.replace(/^op:/, "");
         if (!key) throw new Error("Provide --key <operation.key>.");
         const request = parseOptionalJson(ctx.values.request, ctx.values.requestFile);
         const context: AdmissionContext = {
@@ -258,8 +257,18 @@ export class PeaCliCommands {
           } else console.log(JSON.stringify(result, null, 2));
           return;
         }
+        if (context.actionId) {
+          console.log(
+            JSON.stringify(
+              await runCapability(key, (request ?? {}) as Record<string, unknown>, context),
+              null,
+              2,
+            ),
+          );
+          return;
+        }
         const intent = await readCapabilityIntent(key, context);
-        if (intent.kind === "operation" && !intent.mutates) {
+        if (intent.door === "call" && !intent.mutates) {
           // Operation reads keep `/call`'s enriched result, so --verbosity still means something.
           const result = await this.createHostRpcCaller({
             ...ctx.values,
@@ -268,14 +277,10 @@ export class PeaCliCommands {
           console.log(JSON.stringify(result, null, 2));
           return;
         }
-        // A workflow's request may carry the bases it was drafted against.
-        const { bases, ...input } = (request ?? {}) as Record<string, unknown>;
         const result = await runCapability(
           key,
-          intent.kind === "workflow" ? input : ((request ?? {}) as Record<string, unknown>),
-          intent.kind === "workflow"
-            ? { ...context, bases: actionBasesSchema.parse(bases ?? {}) }
-            : context,
+          (request ?? {}) as Record<string, unknown>,
+          context,
           intent,
         );
         console.log(JSON.stringify(result, null, 2));

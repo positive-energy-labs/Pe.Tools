@@ -477,6 +477,19 @@ async function liveLoop(name: string, loop: (page: Page) => Promise<string>) {
     if (SCRATCH) {
       await page.screenshot({ path: join(SCRATCH, `${name}-failed.png`), fullPage: true });
       console.log(`${name} failed at ${page.url()}\n${await page.locator("body").innerText()}`);
+      const receipts = await page
+        .evaluate(
+          `import("/src/host/runtime.ts").then(async m => {
+          const rows = await (await m.hostFetch("/actions")).json();
+          return (await Promise.all(rows.map(async row =>
+            (await m.hostFetch("/actions?id=" + encodeURIComponent(row.id))).json()))).flat();
+        })`,
+        )
+        .catch((cause: unknown) => ({ evidenceError: String(cause) }));
+      writeFileSync(
+        join(SCRATCH, `${name}-failed-receipts.json`),
+        JSON.stringify(receipts, null, 2),
+      );
     }
     throw error;
   } finally {
@@ -776,17 +789,35 @@ test("live /families: retained readback supports repeated shared Apply commands"
       releaseReadback = resolve;
     });
     let readbackRequested = false;
+    let readbackUrl = "";
     await page.route(
       "**/families/readings?*",
       async (route: { request(): { url(): string }; continue(): Promise<void> }) => {
         if (!route.request().url().includes("id=")) return route.continue();
         readbackRequested = true;
+        readbackUrl = route.request().url();
         await heldReadback;
         await route.continue();
       },
     );
     await run(page, "apply");
     await expect.poll(() => readbackRequested, { timeout: 30_000 }).toBe(true);
+    // Read the saved body independently of the held browser request before judging its display.
+    const savedReadback = await page.request.get(readbackUrl, {
+      headers: { [HOST_RUNTIME_SERVICE_HEADER]: hostOwnership.serviceName },
+    });
+    expect(savedReadback.status()).toBe(200);
+    const savedParts = await savedReadback.json();
+    expect(
+      savedParts.reading.result.families.find(
+        (family: { familyName: string }) => family.familyName === "Fan Coil Unit - Ducted",
+      ).parameters[0].valuesPerType["Type 1"],
+    ).toBe("FXMQ20");
+    if (SCRATCH)
+      writeFileSync(
+        join(SCRATCH, "families-first-readback.json"),
+        JSON.stringify(savedParts, null, 2),
+      );
     await page.getByRole("combobox", { name: "table query" }).fill("parameter~model ");
     releaseReadback();
     // The owner changes simulated native state; the Host's targeted matrix readback, not the

@@ -118,9 +118,8 @@ const dataTablesManifest = (draft: Draft | null, setDraft: (next: Draft | null) 
           const action = await submitAction(
             actionAdmissionSchema.parse({
               id: crypto.randomUUID(),
-              kind: "operation",
               key: "data-table.apply",
-              destination: ctx.target,
+              target: ctx.target,
               input: {
                 table: {
                   name: draft.name,
@@ -129,7 +128,6 @@ const dataTablesManifest = (draft: Draft | null, setDraft: (next: Draft | null) 
                   pruneMissingRows: true,
                 },
               },
-              bases: {},
             }),
             "",
             NATIVE_APPLY_WAIT_S * 1000,

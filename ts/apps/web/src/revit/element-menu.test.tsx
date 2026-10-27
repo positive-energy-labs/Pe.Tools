@@ -64,9 +64,8 @@ test("paired IDs retain exact destination, expected identity and structured part
     false,
   );
   expect(submit.mock.calls[0]?.[0]).toMatchObject({
-    kind: "operation",
     key: "revit.context.show-elements",
-    destination: { kind: "document", ref: documentRef },
+    target: { kind: "document", ref: documentRef },
     input: {
       elementIds: [43, 42, 44],
       expectedUniqueIds: { 42: "captured-42", 44: "old-44" },
@@ -181,7 +180,7 @@ test("right-click Select uses the same exact observation and never invokes a box
   fireEvent.click(select);
   await waitFor(() => expect(submit).toHaveBeenCalledTimes(1));
   expect(submit.mock.calls[0]?.[0]).toMatchObject({
-    destination: { kind: "document", ref: documentRef },
+    target: { kind: "document", ref: documentRef },
     input: { elementIds: [42], selectOnly: true },
   });
 });
@@ -196,7 +195,7 @@ test("the visible Selection Box door is only the kit BX key and still boxes the 
   fireEvent.click(box);
   await waitFor(() => expect(submit).toHaveBeenCalledTimes(1));
   expect(submit.mock.calls[0]?.[0]).toMatchObject({
-    destination: { kind: "document", ref: documentRef },
+    target: { kind: "document", ref: documentRef },
     input: { elementIds: [42], selectOnly: false },
   });
 });

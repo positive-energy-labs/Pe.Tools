@@ -1,5 +1,4 @@
-import type { ActionReadingKey } from "./reading.ts";
-import { instancesActions, instancesReading } from "./instances.ts";
+import { instancesActions, instancesReading, instancesSessionSelection } from "./instances.ts";
 import { scheduleActions, scheduleReads } from "./schedule-actions.ts";
 import { familyActions, familyReads } from "./family-actions.ts";
 import { stagedRoomEditSchema } from "./takeoffs.ts";
@@ -7,30 +6,9 @@ import { ductsApplyInputSchema, ductsAssignFanInputSchema, ductsHealInputSchema 
 import { nativeProcessSchema } from "./action-receipts.ts";
 import { z } from "zod";
 import { executionTargetSchema } from "./target.ts";
-import { workKeySchema } from "./route-state.ts";
 
-/** The target an action must be admitted against. `nothing` runs on the host alone. */
-export type ActionNeed =
-  | "nothing"
-  | "session"
-  | "document"
-  | "project-document"
-  | "family-document";
-
-/**
- * One record per host action. A browser verb, a help row, a refusal, an agent tool and a receipt
- * are projections of it (a browser verb names it by key: `RouteAction.does`); nothing is declared twice.
- */
-export interface ActionDefinition {
-  /** One sentence for a stranger; the agent tool description and the help row. */
-  says: string;
-  /** The Reading keys this action invalidates on success. */
-  dirties: readonly ActionReadingKey[];
-  needs: ActionNeed;
-  effect: "query" | "command";
-  input: z.ZodType;
-}
-
+import type { Command } from "./command.ts";
+export type { ActionNeed } from "./command.ts";
 const item = z.object({ elementId: z.number().int(), name: z.string(), systemTag: z.string() });
 const point = z.tuple([z.number(), z.number()]);
 const loop = z.array(point).min(3);
@@ -69,7 +47,12 @@ const definitions = {
     says: "Insert eligible rooms, preserve system/link behavior, and update linked staged rooms in RHVAC.",
     needs: "project-document",
     effect: "command",
-    input: z.object({ path: z.string().min(1), zones: z.array(z.string()).default([]) }),
+    input: z.object({
+      path: z.string().min(1),
+      zones: z.array(z.string()).default([]),
+      captureId: z.string().min(1),
+      fileVersion: z.string().min(1),
+    }),
     dirties: ["snapshot", "rhvac-open"],
   },
   "rooms.partition": {
@@ -136,6 +119,7 @@ export const takeoffActions = definitions;
  */
 export const ductsActions = {
   "ducts.preview-losses": {
+    native: ["ducts.apply"],
     says: "Plan the staged duct loss writes (fitting coefficients, terminal and component drops, fan static) and report each write's outcome without changing Revit.",
     needs: "project-document",
     effect: "query",
@@ -143,6 +127,7 @@ export const ductsActions = {
     dirties: [],
   },
   "ducts.apply-losses": {
+    native: ["ducts.apply"],
     says: "Write the staged duct loss values to Revit (fitting coefficients, terminal and component drops, fan static) and record their provenance in Project Information.",
     needs: "project-document",
     effect: "command",
@@ -150,6 +135,7 @@ export const ductsActions = {
     dirties: ["snapshot"],
   },
   "ducts.preview-heal": {
+    native: ["ducts.heal"],
     says: "Preview healing duct groups in Revit: cap dangling open ends, connect coincident same-size ends, close same-size gaps of at most 3 in; runs every repair and Pe's post-check, then rolls all of it back. Name a group without items to preview everything the Ducts route would heal there; show the person the per-item outcome before any apply.",
     needs: "project-document",
     effect: "query",
@@ -157,6 +143,7 @@ export const ductsActions = {
     dirties: [],
   },
   "ducts.apply-heal": {
+    native: ["ducts.heal"],
     says: "Heal duct groups in Revit, one transaction per group, with exactly the items a preview showed and a person approved; an item failing Pe's post-check is refused and rolled back. Revit gives rebuilt elements new ids: read the duct snapshot again after.",
     needs: "project-document",
     effect: "command",
@@ -164,6 +151,7 @@ export const ductsActions = {
     dirties: ["snapshot"],
   },
   "ducts.preview-assign-fan": {
+    native: ["ducts.assign-fan"],
     says: "Preview making a unit the fan of a duct system in Revit (Duct Systems > Select Equipment: the system's base equipment): runs Pe's guards, the write and its read back, then rolls it back. Refuses a system that already has base equipment, and a unit with no port of the system's air classification in that system or on its ducts. Show the person the outcome before any apply.",
     needs: "project-document",
     effect: "query",
@@ -171,58 +159,216 @@ export const ductsActions = {
     dirties: [],
   },
   "ducts.apply-assign-fan": {
+    native: ["ducts.assign-fan"],
     says: "Make a unit the base equipment (the fan) of a duct system in Revit, as a preview showed and a person approved; the system keeps its id, name and type. Read the duct snapshot again after: the unit's role reads base equipment of that system.",
     needs: "project-document",
     effect: "command",
     input: ductsAssignFanInputSchema,
     dirties: ["snapshot"],
   },
-} as const satisfies Record<string, ActionDefinition>;
+} as const satisfies Record<string, Command>;
 export type DuctsActionKey = keyof typeof ductsActions;
 
-export const semanticActions = {
-  ...definitions,
-  ...ductsActions,
-  ...familyActions,
-  ...instancesActions,
-  ...scheduleActions,
-} satisfies Record<string, ActionDefinition>;
-export type SemanticActionKey = keyof typeof semanticActions;
-/** Native implementation details use the same public semantic workflow as browser presses. */
-export function semanticWorkflowForOperation(key: string): SemanticActionKey | undefined {
-  if (Object.hasOwn(semanticActions, key)) return key as SemanticActionKey;
-  const native: Record<string, SemanticActionKey> = {
-    "ducts.apply": "ducts.apply-losses",
-    "ducts.assign-fan": "ducts.apply-assign-fan",
-    "ducts.heal": "ducts.apply-heal",
-    "revit.apply.parameter-links": "parameter-links.apply",
-    "schedule.cells.apply": "schedule.grid.push",
-  };
-  return native[key];
-}
 export type TakeoffActionKey = keyof typeof definitions;
-export const actionBasesSchema = z
-  .object({
-    captureId: z
-      .string()
-      .regex(/^[a-f0-9]{64}$/)
-      .optional(),
-    work: z.object({ key: workKeySchema, revision: z.number().int().nonnegative() }).optional(),
-    fileVersion: z.string().optional(),
-  })
-  .strict();
-export const actionAdmissionSchema = z
-  .object({
-    id: z.string().min(1),
-    kind: z.enum(["operation", "workflow"]),
-    key: z.string().min(1),
-    destination: executionTargetSchema,
-    input: z.record(z.string(), z.unknown()),
-    bases: actionBasesSchema.default({}),
-  })
-  .strict();
+export const actionAdmissionSchema = z.strictObject({
+  id: z.string().min(1),
+  key: z.string().min(1),
+  target: executionTargetSchema,
+  input: z.record(z.string(), z.unknown()),
+});
 export type ActionAdmission = z.infer<typeof actionAdmissionSchema>;
-export type ActionBases = z.infer<typeof actionBasesSchema>;
+
+import {
+  workCommand,
+  workHandleSchema,
+  workLocations,
+  type WorkHandle,
+  type Tool,
+} from "./command.ts";
+import { settingsRouteState } from "./settings.ts";
+import { familyDraftRouteState } from "./family.ts";
+import { familiesRouteState } from "./families.ts";
+import { parameterLinksRouteState } from "./parameter-links.ts";
+import { scheduleGridRouteState } from "./schedule-grid-data.ts";
+import { takeoffsRouteState } from "./takeoffs.ts";
+import { roomsRouteState } from "./rooms.ts";
+import { ductsRouteState } from "./ducts.ts";
+export const tools = {
+  pods: {
+    name: "pods",
+    says: settingsRouteState.description,
+    work: workLocations(settingsRouteState, [["fields", "*"]]),
+    commands: {
+      "settings.observe": workCommand("pods", familyActions["settings.observe"]),
+      "settings.write": workCommand("pods", familyActions["settings.write"]),
+    },
+  },
+  family: {
+    name: "family",
+    says: familyDraftRouteState.description,
+    work: workLocations(familyDraftRouteState, [["cells", "*"]]),
+    commands: {
+      "family.attach-spec": workCommand("family", familyActions["family.attach-spec"]),
+      "family.observe": {
+        ...familyActions["family.observe"],
+        input: z.intersection(
+          familyActions["family.observe"].input,
+          z.object({ work: workHandleSchema.optional() }),
+        ),
+        work: { route: "family", bind: (input: object, work: WorkHandle) => ({ ...input, work }) },
+      },
+      "family.capture": workCommand("family", familyActions["family.capture"]),
+      "family.plan": workCommand("family", familyActions["family.plan"]),
+      "family.apply": workCommand("family", familyActions["family.apply"]),
+      "family.build": workCommand("family", familyActions["family.build"]),
+    },
+  },
+  families: {
+    name: "families",
+    says: familiesRouteState.description,
+    work: workLocations(familiesRouteState, [["cells", "*"], ["patch"], ["scope"]]),
+    commands: {
+      "families.capture": workCommand("families", familyActions["families.capture"]),
+      "families.plan": workCommand("families", familyActions["families.plan"]),
+      "families.apply": workCommand("families", familyActions["families.apply"]),
+      "families.save-draft": workCommand("families", familyActions["families.save-draft"]),
+    },
+  },
+  "parameter-links": {
+    name: "parameter-links",
+    says: parameterLinksRouteState.description,
+    work: workLocations(parameterLinksRouteState, [["profile"]]),
+    commands: {
+      "parameter-links.apply": workCommand(
+        "parameter-links",
+        familyActions["parameter-links.apply"],
+      ),
+    },
+  },
+  schedules: {
+    name: "schedules",
+    says: scheduleGridRouteState.description,
+    work: workLocations(scheduleGridRouteState, [["cells", "*"]]),
+    commands: {
+      "schedule.grid.push": workCommand("schedules", scheduleActions["schedule.grid.push"]),
+      "schedule.capture": workCommand("schedules", scheduleActions["schedule.capture"]),
+      "schedule.apply": workCommand("schedules", scheduleActions["schedule.apply"]),
+    },
+  },
+  takeoffs: {
+    name: "takeoffs",
+    says: takeoffsRouteState.description,
+    work: workLocations(takeoffsRouteState, [
+      ["edits", "*"],
+      ["decisions", "*"],
+    ]),
+    commands: {
+      "takeoffs.initialize": definitions["takeoffs.initialize"],
+      "takeoffs.adopt": definitions["takeoffs.adopt"],
+      "takeoffs.partition": definitions["takeoffs.partition"],
+      "takeoffs.sync": workCommand("takeoffs", definitions["takeoffs.sync"]),
+    },
+  },
+  rooms: {
+    name: "rooms",
+    says: roomsRouteState.description,
+    work: workLocations(roomsRouteState, [
+      ["edits", "*"],
+      ["marks", "*"],
+    ]),
+    commands: {
+      "rooms.partition": workCommand("rooms", definitions["rooms.partition"]),
+      "rooms.draw": workCommand("rooms", definitions["rooms.draw"]),
+      "rooms.write": workCommand("rooms", definitions["rooms.write"]),
+      "rooms.merge": workCommand("rooms", definitions["rooms.merge"]),
+    },
+  },
+  ducts: {
+    name: "ducts",
+    says: ductsRouteState.description,
+    work: workLocations(ductsRouteState, [
+      ["calculation", "*"],
+      ["assumptions", "*"],
+      ["rules", "*"],
+      ["catalogs", "*"],
+      ["ruleAssignments", "*"],
+      ["terminalDrops", "*"],
+      ["componentDrops", "*"],
+      ["esp", "*"],
+      ["equipmentFlows", "*"],
+      ["roles", "*"],
+      ["loads", "*"],
+      ["flows", "*"],
+      ["parameters", "*"],
+      ["subject", "*"],
+      ["claims", "*"],
+      ["labelParameter"],
+      ["workingPhase"],
+      ["designFriction"],
+      ["systemColours"],
+    ]),
+    commands: {
+      "ducts.preview-losses": workCommand("ducts", ductsActions["ducts.preview-losses"]),
+      "ducts.apply-losses": workCommand("ducts", ductsActions["ducts.apply-losses"]),
+      "ducts.preview-heal": workCommand("ducts", ductsActions["ducts.preview-heal"]),
+      "ducts.apply-heal": workCommand("ducts", ductsActions["ducts.apply-heal"]),
+      "ducts.preview-assign-fan": workCommand("ducts", ductsActions["ducts.preview-assign-fan"]),
+      "ducts.apply-assign-fan": workCommand("ducts", ductsActions["ducts.apply-assign-fan"]),
+    },
+  },
+  instances: {
+    name: "instances",
+    says: "Revit sessions and document lifecycle",
+    commands: Object.fromEntries(
+      Object.entries(instancesActions).map(([key, definition]) => [
+        key,
+        {
+          ...definition,
+          announce: true as const,
+          target: (input: unknown) => {
+            const selection = instancesSessionSelection(input);
+            return selection
+              ? { kind: "sdk-session" as const, selection }
+              : { kind: "host" as const };
+          },
+        },
+      ]),
+    ) as {
+      [K in keyof typeof instancesActions]: (typeof instancesActions)[K] & {
+        announce: true;
+        target(input: unknown): import("./target.ts").ExecutionTarget;
+      };
+    },
+  },
+} satisfies Record<string, Tool>;
+export const commands = {
+  ...tools.pods.commands,
+  ...tools.family.commands,
+  ...tools.families.commands,
+  ...tools["parameter-links"].commands,
+  ...tools.schedules.commands,
+  ...tools.takeoffs.commands,
+  ...tools.rooms.commands,
+  ...tools.ducts.commands,
+  ...tools.instances.commands,
+};
+export function commandTool(key: string): Tool | undefined {
+  return Object.values(tools).find((tool) => Object.hasOwn(tool.commands, key));
+}
+export function commandTarget(
+  key: string,
+  input: Record<string, unknown>,
+  document?: import("./target.ts").DocumentRef,
+): import("./target.ts").ExecutionTarget {
+  const command: Command | undefined = commands[key as keyof typeof commands];
+  if (command?.target) return command.target(input);
+  if (command?.needs === "nothing") return { kind: "host" };
+  if (document)
+    return command?.needs === "session"
+      ? { kind: "session", session: document.session }
+      : { kind: "document", ref: document };
+  throw Error(`Command '${key}' requires an exact target`);
+}
 
 export const actionControls = {
   "action.read": {
@@ -253,7 +399,7 @@ export const actionControls = {
     effect: "command",
     input: z.object({ id: z.string().min(1) }),
   },
-} as const satisfies Record<string, ActionDefinition>;
+} as const satisfies Record<string, Command>;
 export type ActionControlKey = keyof typeof actionControls;
 
 /**
@@ -266,12 +412,13 @@ export const preparedTakeoffSchema = z.strictObject({
   decisions: z.record(z.string(), z.enum(["accept", "dismiss"])),
 });
 
-/** Every host action a browser verb may name, and every row Pea may find. One key space. */
+/** Discovery projects the same portable command contracts used by invocation. */
 export const hostActions = {
-  ...semanticActions,
+  ...commands,
   ...actionControls,
   ...familyReads,
   ...scheduleReads,
   "instances.read": instancesReading,
-} satisfies Record<string, ActionDefinition>;
+} satisfies Record<string, Command>;
 export type HostActionKey = keyof typeof hostActions;
+export type SemanticActionKey = keyof typeof commands;
