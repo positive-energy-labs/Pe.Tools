@@ -266,6 +266,26 @@ test("real conversation Work cutover retains authored cells, draft, Places and o
           ),
         "the current Place is enrolled in browser history",
       );
+    const pickThreadKeepingTool = async (thread: string) => {
+      const before = new URL(await p.url());
+      const place = await currentPlaceId();
+      await pickThread(thread);
+      await p.until(
+        async () => new URL(await p.url()).searchParams.get("thread") === thread,
+        "conversation changes while the current tool stays open",
+      );
+      const after = new URL(await p.url());
+      before.searchParams.set("thread", thread);
+      expect(after.pathname, "thread selection preserves the open tool").toBe(before.pathname);
+      expect(
+        Object.fromEntries(after.searchParams),
+        "thread selection preserves target and Page",
+      ).toEqual(Object.fromEntries(before.searchParams));
+      expect(after.hash).toBe(before.hash);
+      expect(await currentPlaceId(), "thread selection preserves the exact Place").toBe(place);
+      expect(await p.has("Expand tools")).toBe(false);
+      expect(await workEvidence(seed.productHome)).toEqual(initial);
+    };
     const composerIdentity = async () => {
       const located = await p.send("Runtime.evaluate", {
         expression: `[...document.querySelectorAll('textarea[aria-label="Message"],input[aria-label="Message"]')].find(${visible})`,
@@ -387,19 +407,12 @@ test("real conversation Work cutover retains authored cells, draft, Places and o
       expect(new URL(await p.url()).searchParams.get("system")).toBe(seed.retainedPage);
       expect(await p.read("history.state.__peRouteTab.id")).toBe(browserPlaceId);
       await headTargets(CONVERSATION_THREADS.empty);
-      await pickThread(CONVERSATION_THREADS.empty);
-      await p.until(toolsCollapsed, "conversation entry collapses tools without replacing Places");
+      await pickThreadKeepingTool(CONVERSATION_THREADS.empty);
     });
-    await step("thread press stays chat with tools collapsed", async () => {
-      // List rows have a separate Open Ducts button; pressing their label is a thread pick.
-      await pickThread(CONVERSATION_THREADS.office);
-      await p.until(
-        async () =>
-          new URL(await p.url()).searchParams.get("thread") === CONVERSATION_THREADS.office,
-        "Office thread selected",
-      );
-      await p.until(toolsCollapsed, "tools remain collapsed after thread selection");
-      expect(new URL(await p.url()).pathname).toBe("/pea");
+    await step("thread press preserves the open tool, target, Page and Work", async () => {
+      // The row label selects a conversation; only its separate Open Ducts button resumes Work.
+      await pickThreadKeepingTool(CONVERSATION_THREADS.office);
+      await headTargets(CONVERSATION_THREADS.office);
     });
     await step("settled prose batches its bare ids through the real names read", async () => {
       const names = () =>
@@ -488,8 +501,8 @@ test("real conversation Work cutover retains authored cells, draft, Places and o
         async () => new URL(await p.url()).pathname === "/ducts",
         "Ducts Place restored",
       );
-      await pickThread(CONVERSATION_THREADS.office);
-      await p.until(toolsCollapsed, "tools collapsed explicitly");
+      await p.click("Open Pea");
+      await p.until(toolsCollapsed, "Open Pea explicitly collapses tools");
       expect(await draft()).toBe(message);
       await choosePlace(/^Ducts/);
       await p.until(
@@ -626,19 +639,15 @@ test("real conversation Work cutover retains authored cells, draft, Places and o
         };
       },
     );
-    await step("another conversation starts with collapsed tools", async () => {
-      await pickThread(CONVERSATION_THREADS.empty);
-      await p.until(
-        async () =>
-          new URL(await p.url()).searchParams.get("thread") === CONVERSATION_THREADS.empty &&
-          new URL(await p.url()).pathname === "/pea",
-        "other conversation selected",
-      );
-      await p.until(toolsCollapsed, "the other conversation opens with tools folded to their rail");
-      await p.click("Expand tools");
-      expect(await p.count('[aria-label="Places"] button[aria-pressed]')).toBeGreaterThan(0);
-      expect(await p.count('[aria-label="Places"] button[aria-pressed="true"]')).toBe(0);
-    });
+    await step(
+      "another conversation preserves the current tool and its selected Place",
+      async () => {
+        await pickThreadKeepingTool(CONVERSATION_THREADS.empty);
+        expect(await p.count('[aria-label="Places"] button[aria-pressed]')).toBeGreaterThan(0);
+        expect(await p.count('[aria-label="Places"] button[aria-pressed="true"]')).toBe(1);
+        await headTargets(CONVERSATION_THREADS.empty);
+      },
+    );
     await step("pasted closed Work URL reads retained Work without native target", async () => {
       const opened = Date.now();
       await p.open(url(seed.workUrl));
@@ -666,7 +675,7 @@ test("real conversation Work cutover retains authored cells, draft, Places and o
           if (
             frame.kind === "snapshot" &&
             frame.value?.revision === 2 &&
-            frame.value.doc?.flows?.["1001"]?.staged?.value?.source === "human effort"
+            frame.value.doc?.flows?.["1001"]?.edit?.value?.source === "human effort"
           )
             return frame;
         }
@@ -769,8 +778,8 @@ test("real conversation Work cutover retains authored cells, draft, Places and o
       const flows = after.find((work) => work.record.targetKey === seed.workId)!.record.value.doc
         .flows;
       expect(Object.keys(flows).sort()).toEqual(["1001", "1002", "1003"]);
-      expect(flows["1002"].staged.value.cfm).toBe(200);
-      expect(flows["1002"].proposal.value.cfm).toBe(220);
+      expect(flows["1002"].edit.value.cfm).toBe(200);
+      expect(flows["1002"].suggestion.value.cfm).toBe(220);
       await writeFile(join(dir, "work-readback.json"), JSON.stringify(after, null, 2));
       receipt.coverage.quiet = {
         milliseconds: Date.now() - start,
@@ -781,13 +790,7 @@ test("real conversation Work cutover retains authored cells, draft, Places and o
     await step(
       "closed unsaved Work stays visible and bound only to its original lifetime",
       async () => {
-        await pickThread(CONVERSATION_THREADS.unsaved);
-        await p.until(
-          async () =>
-            new URL(await p.url()).pathname === "/pea" &&
-            new URL(await p.url()).searchParams.get("thread") === CONVERSATION_THREADS.unsaved,
-          "unsaved-document conversation opens without its tool",
-        );
+        await pickThreadKeepingTool(CONVERSATION_THREADS.unsaved);
         const opened = Date.now();
         await openWork(CONVERSATION_THREADS.unsaved);
         await p.until(
@@ -818,11 +821,11 @@ test("real conversation Work cutover retains authored cells, draft, Places and o
               return (
                 frame.kind === "snapshot" &&
                 frame.key === expectedKey &&
-                frame.value?.doc?.flows?.["1002"]?.staged?.value?.cfm === 200 &&
-                frame.value.doc.flows["1002"].proposal?.value?.cfm === 220
+                frame.value?.doc?.flows?.["1002"]?.edit?.value?.cfm === 200 &&
+                frame.value.doc.flows["1002"].suggestion?.value?.cfm === 220
               );
             }),
-          "unsaved Work reading uses the exact original lifetime and retains staged/proposed values",
+          "unsaved Work reading uses the exact original lifetime and retains edited/suggested values",
         );
         await p.waitText("Work is kept, read-only, while its document is closed.");
         await p.waitText("3 unfinished");
@@ -956,8 +959,9 @@ test("real conversation Work cutover retains authored cells, draft, Places and o
         sameDocument: true,
         draftRetained: true,
       };
-      await pickThread(thread);
-      await p.until(toolsCollapsed, "explicit collapse keeps the newly issued conversation");
+      await pickThreadKeepingTool(thread);
+      await p.click("Open Pea");
+      await p.until(toolsCollapsed, "explicit Open Pea keeps the newly issued conversation");
       await p.clickAt('textarea[aria-label="Message"],input[aria-label="Message"]');
       await p.send("Input.dispatchKeyEvent", {
         type: "keyDown",

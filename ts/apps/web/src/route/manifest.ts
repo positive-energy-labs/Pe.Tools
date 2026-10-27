@@ -10,8 +10,6 @@ import type { ReactNode } from "react";
 import { z } from "zod";
 import type { Chord } from "@pe/kit/keys";
 import {
-  commands,
-  type SemanticActionKey,
   type ExecutionTarget,
   type ActionStatus,
   type WorkHandle,
@@ -29,11 +27,6 @@ import type { Refusal } from "./refusal";
 import type { Cells } from "./cells";
 import type { GlobalOption, PageOption } from "#/settings/option-state";
 import { registerGlobalOptions } from "#/settings/option-catalogue";
-
-export const semanticActionInput = (
-  key: SemanticActionKey,
-  input: unknown,
-): Record<string, unknown> => commands[key].input.parse(input) as Record<string, unknown>;
 
 /** What a Reading key names: a fixed subject, or one selected by the route's current Page. */
 export type ReadingSpec<P> = ReadingRequest | ((page: P, work: WorkKey) => ReadingRequest | null);

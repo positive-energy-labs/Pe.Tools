@@ -67,21 +67,24 @@ export async function seedConversationWork(homeInput: string, artifactInput: str
       0,
       [
         {
-          path: ["flows", "1001", "staged"],
+          path: ["flows", "1001", "edit"],
           value: { value: { cfm: 100, source: "human effort" } },
         },
-        { path: ["flows", "1002", "staged"], value: { value: { cfm: 200, source: "reviewed" } } },
+        { path: ["flows", "1002", "edit"], value: { value: { cfm: 200, source: "reviewed" } } },
       ],
     ],
     [
-      "agent",
+      "pea",
       1,
       [
         {
-          path: ["flows", "1002", "proposal"],
+          path: ["flows", "1002", "suggestion"],
           value: { value: { cfm: 220, source: "alternative" } },
         },
-        { path: ["flows", "1003", "proposal"], value: { value: { cfm: 300, source: "proposal" } } },
+        {
+          path: ["flows", "1003", "suggestion"],
+          value: { value: { cfm: 300, source: "proposal" } },
+        },
       ],
     ],
   ] as const) {
