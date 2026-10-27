@@ -1392,7 +1392,7 @@ export function createRenderer(mount: HTMLElement, initialMeshes: SceneMeshes, w
             [
               ...new Set(
                 byId
-                  .filter((_, id) => paints[id]!.tier === "context")
+                  .filter((_, id) => paints[id]!.tier === "context" || paints[id]!.tier === "stub")
                   .flatMap((i) => (i.categoryId === null ? [] : [String(i.categoryId)])),
               ),
             ].sort(),

@@ -3,7 +3,7 @@ import { CATEGORY_IDS as C } from "./categories";
 import { contextVisible } from "./context";
 import { LOOK } from "./grounds";
 
-it("preserves subjects and stubs despite every context filter", () => {
+it("preserves subjects and envelopes despite every context filter; context and stub obey them alike", () => {
   for (const context of ["all", "walls", "structural", "none"] as const) {
     const layers = {
       ...LOOK.defaults.layers,
@@ -13,11 +13,21 @@ it("preserves subjects and stubs despite every context filter", () => {
     };
     for (const id of [C.walls, C.lightingFixtures, null, 123456]) {
       expect(contextVisible(id, "subject", layers)).toBe(true);
-      expect(contextVisible(id, "stub", layers)).toBe(true);
+      expect(contextVisible(id, "envelope", layers)).toBe(true);
+      expect(contextVisible(id, "stub", layers)).toBe(contextVisible(id, "context", layers));
     }
     expect(contextVisible(C.walls, "context", layers)).toBe(false);
     expect(contextVisible(C.lightingFixtures, "context", layers)).toBe(false);
+    expect(contextVisible(C.walls, "stub", layers)).toBe(false);
+    expect(contextVisible(null, "stub", layers)).toBe(context === "all");
   }
+});
+
+it("hidden Pipes hides a non-focus pipe stub, never a focus (subject) pipe", () => {
+  const layers = { ...LOOK.defaults.layers, hiddenCategories: [String(C.pipes)] };
+  expect(contextVisible(C.pipes, "stub", layers)).toBe(false);
+  expect(contextVisible(C.pipes, "subject", layers)).toBe(true);
+  expect(contextVisible(C.pipes, "stub", LOOK.defaults.layers)).toBe(true);
 });
 
 it("matches positive presets by numeric BuiltInCategory identity only", () => {

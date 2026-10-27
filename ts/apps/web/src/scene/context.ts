@@ -15,13 +15,15 @@ const STRUCTURAL = new Set<number>([
 ]);
 const LIGHTING = new Set<number>([CATEGORY_IDS.lightingFixtures, CATEGORY_IDS.lightingDevices]);
 
-/** Context presets cannot remove an opened system or its one-hop stubs. */
+/** Subjects and the equipment shell are never filtered. Context and stub (non-focus MEP, and the
+ * one-hop neighbours) obey the category filters: a category the user hid stays hidden whatever
+ * its tier (ruling 2026-10-27; this replaces "presets cannot remove one-hop stubs"). */
 export function contextVisible(
   categoryId: number | null,
   tier: Tier,
   layers: Look["layers"],
 ): boolean {
-  if (tier !== "context") return true;
+  if (tier === "subject" || tier === "envelope") return true;
   if (categoryId !== null && layers.hiddenCategories.includes(String(categoryId))) return false;
   if (!layers.lighting && categoryId !== null && LIGHTING.has(categoryId)) return false;
   switch (layers.context) {

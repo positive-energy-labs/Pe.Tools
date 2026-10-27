@@ -9,4 +9,6 @@ export const CATEGORY_IDS = {
   floors: -2000032,
   lightingFixtures: -2001120,
   lightingDevices: -2008087,
+  // Confirmed against the cached scene's PSC1 metadata (Pipes|-2008044), not RevitAPI metadata.
+  pipes: -2008044,
 } as const;
