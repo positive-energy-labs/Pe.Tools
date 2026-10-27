@@ -97,7 +97,7 @@ test("paint uses each element's own system, subject wins over stub, and context 
   const instance = (id: number | null) => ({ revitId: id, focus: true }) as SceneInstance;
   expect(paint(instance(office.id))).toEqual({ tier: "subject", kind: "supply" });
   expect(paint(instance(lab.id))).toBeUndefined();
-  expect(paint(instance(outside.id))).toEqual({ tier: "stub", kind: "exhaust" });
+  expect(paint(instance(outside.id))).toEqual({ tier: "stub", kind: "exhaust", neighbour: true });
   expect(paint(instance(999999))).toBeUndefined();
   expect(paint(instance(null))).toBeUndefined();
 });

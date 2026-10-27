@@ -93,14 +93,12 @@ export function paintOfDucts(
     // Proximity is the whole thing: non-focus MEP is body (stub), not a context ring. Focus
     // instances that are not opened keep the default (subject), so this never reaches them.
     const mep = !instance.focus && MEP_CATEGORIES.has(instance.category);
+    const neighbour = id != null && !opened.has(id) && stubs.has(id);
     const tier: Tier | null =
-      id != null && opened.has(id)
-        ? "subject"
-        : (id != null && stubs.has(id)) || mep
-          ? "stub"
-          : null;
+      id != null && opened.has(id) ? "subject" : neighbour || mep ? "stub" : null;
     if (!tier) return undefined;
     const kind = id == null ? "unknown" : (types.get(id) ?? "unknown");
-    return { tier, kind };
+    // A one-hop neighbour survives every context preset; proximity MEP does not (context.ts).
+    return neighbour ? { tier, kind, neighbour: true } : { tier, kind };
   };
 }

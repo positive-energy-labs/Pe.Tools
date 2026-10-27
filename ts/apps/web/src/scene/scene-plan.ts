@@ -2,7 +2,7 @@ import { CONTEXT_CREASE_DEG, paintOf, type Look } from "./grounds";
 import type { Paint, PaintOf, SceneMeshes } from "./types";
 
 /** Only these values can change prepared geometry or its render-pass partition. */
-export type SceneStructure = Pick<Paint, "tier">;
+export type SceneStructure = Pick<Paint, "tier" | "neighbour">;
 export type SceneAppearance = Omit<Paint, keyof SceneStructure>;
 export type ScenePlan = {
   meshes: SceneMeshes;
@@ -13,8 +13,10 @@ export type ScenePlan = {
   routeAngle: number;
 };
 export function scenePlan(meshes: SceneMeshes, of: PaintOf | undefined, look: Look): ScenePlan {
-  const roles = meshes.instances.map((i) => {
-    return { tier: paintOf(i, of).tier };
+  const roles = meshes.instances.map((i): SceneStructure => {
+    const p = paintOf(i, of);
+    // Only stamp the flag when it is set: planPaint spreads roles over the appearance.
+    return p.neighbour ? { tier: p.tier, neighbour: true } : { tier: p.tier };
   });
   const angles = roles.map((p) =>
     p.tier === "context"

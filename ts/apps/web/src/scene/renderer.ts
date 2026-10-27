@@ -1104,7 +1104,7 @@ export function createRenderer(mount: HTMLElement, initialMeshes: SceneMeshes, w
       const shown =
         !hidden?.has(key) &&
         (!isolated || isolated.has(key)) &&
-        contextVisible(categoryId, paints[id]!.tier, look.layers);
+        contextVisible(categoryId, paints[id]!.tier, look.layers, paints[id]!.neighbour);
       if (batch.getVisibleAt(id) !== shown) {
         batch.setVisibleAt(id, shown);
         routeGeometryDirty = true;
