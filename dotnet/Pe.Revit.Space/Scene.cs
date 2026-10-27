@@ -49,7 +49,17 @@ public sealed record SceneMemory(long StartPrivateBytes, long EndPrivateBytes, l
 public sealed record SceneWork(int BroadCandidates, int ExtractedElements, int ExtractedTriangles, double NativeMilliseconds,
     int PeakRetainedTriangles = 0, int NativeGeometryCalls = 0, SceneMemory? Memory = null,
     int AcquiredTriangles = 0, int ContextGeometryCalls = 0);
-public sealed record SceneArtifact(SceneMetadata Scene, string Id, string Url, long Bytes);
+/// <summary>Bounded RPC receipt. Full membership, source transforms and unavailable identities live in PSC1.</summary>
+public sealed record SceneReceipt(string Format, string Frame, string HostDocumentKey, long Epoch, DateTime BuiltUtc, bool Fresh,
+    Aabb Bounds, int Triangles, int Elements, int FocusElements, int ContextElements, int RequestedElements,
+    int OmittedElements, int UnavailableElements, int Sources, string Phase, SceneWork Work, SceneCompleteness Completeness) {
+    public static SceneReceipt From(SceneMetadata scene) => new(scene.Format, scene.Stamp.Frame,
+        scene.Stamp.HostDocumentKey, scene.Stamp.Epoch, scene.Stamp.BuiltUtc, scene.Stamp.Fresh, scene.Bounds, scene.Triangles,
+        scene.Elements.Count, scene.Elements.Count(element => element.Focus), scene.Elements.Count(element => !element.Focus),
+        scene.RequestedElementIds.Count, scene.OmittedElements, scene.UnavailableElements.Count, scene.Sources.Count,
+        scene.Phase, scene.Work, scene.Completeness);
+}
+public sealed record SceneArtifact(SceneReceipt Scene, string Id, string Url, long Bytes);
 
 /// <summary>Bounded native meshes and explicit scene primitives in host internal feet.</summary>
 public static class Scene {

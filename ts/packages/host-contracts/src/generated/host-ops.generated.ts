@@ -2042,6 +2042,7 @@ export namespace HostOpsCatalog {
       responseSchemaJson: string;
       actor: string;
       usesTransactions: boolean;
+      artifactSchemaJson?: null | string;
     }
     export interface HostOperationRequestExample {
       name: string;
@@ -5957,7 +5958,7 @@ export namespace RevitDetailSpaceRows {
   }
 }
 
-/** Export native meshes and sized straight physical runs in host internal feet. focusOnly captures host elementIds without context. Context defaults to native boxes and sized runs without tessellating context; contextRepresentation meshes explicitly acquires Coarse context within contextPaddingFt of focus bounds, or explicit bounds. none suppresses context. Primitive rows own zero vertices; representation distinguishes mesh, box and run. Metadata phase distinguishes focus/context, unavailableElements identifies requested ids without meshes, omittedElements counts context excluded by the output budget, and completeness reports deferred context and acquisition resource limits. Successful artifacts preserve focus membership; unsupported parametric focus retains Medium/Fine meshes. Native triangle counts stop further acquisition after each tessellated face, so one already allocated face can exceed the acquisition budget. Completeness discloses omitted or deferred context. No document mutation. Browser orbit, visibility and cuts need no further native calls. */
+/** Export native meshes and sized straight physical runs in host internal feet. focusOnly captures host elementIds without context. Context defaults to native boxes and sized runs without tessellating context; contextRepresentation meshes explicitly acquires Coarse context within contextPaddingFt of focus bounds, or explicit bounds. none suppresses context. Primitive rows own zero vertices; representation distinguishes mesh, box and run. Metadata phase distinguishes focus/context, unavailableElements identifies requested ids without meshes, omittedElements counts context excluded by the output budget, and completeness reports deferred context and acquisition resource limits. Successful artifacts preserve focus membership; unsupported parametric focus retains Medium/Fine meshes. Native triangle counts stop further acquisition after each tessellated face, so one already allocated face can exceed the acquisition budget. Completeness discloses omitted or deferred context. RPC returns bounded counts and the artifact id; full typed membership and source transforms remain in PSC1. No document mutation. Browser orbit, visibility and cuts need no further native calls. */
 export namespace RevitDetailSpaceScene {
   export namespace Req {
     export type SceneContextRepresentation = "none" | "boxes" | "meshes";
@@ -5984,6 +5985,74 @@ export namespace RevitDetailSpaceScene {
     }
   }
   export namespace Res {
+    export interface Response {
+      scene: SceneReceipt;
+      id: string;
+      url: string;
+      bytes: number;
+    }
+    /**
+     * Bounded RPC receipt. Full membership, source transforms and unavailable identities live in PSC1.
+     */
+    export interface SceneReceipt {
+      format: string;
+      frame: string;
+      hostDocumentKey: string;
+      epoch: number;
+      builtUtc: string;
+      fresh: boolean;
+      bounds: Aabb;
+      triangles: number;
+      elements: number;
+      focusElements: number;
+      contextElements: number;
+      requestedElements: number;
+      omittedElements: number;
+      unavailableElements: number;
+      sources: number;
+      phase: string;
+      work: SceneWork;
+      completeness: SceneCompleteness;
+    }
+    /**
+     * Axis-aligned bounds in host internal feet.
+     */
+    export interface Aabb {
+      minX: number;
+      minY: number;
+      minZ: number;
+      maxX: number;
+      maxY: number;
+      maxZ: number;
+    }
+    export interface SceneWork {
+      broadCandidates: number;
+      extractedElements: number;
+      extractedTriangles: number;
+      nativeMilliseconds: number;
+      peakRetainedTriangles: number;
+      nativeGeometryCalls: number;
+      memory?: null | SceneMemory;
+      acquiredTriangles: number;
+      contextGeometryCalls: number;
+    }
+    export interface SceneMemory {
+      startPrivateBytes: number;
+      endPrivateBytes: number;
+      peakPrivateBytes: number;
+      managedBytes: number;
+    }
+    export interface SceneCompleteness {
+      complete: boolean;
+      /**
+       * Known unacquired candidates, or null when discovery stopped before the remaining count was known.
+       */
+      deferredCandidates?: number | null;
+      acquisitionLimitedElements: number;
+      limitReason?: null | string;
+    }
+  }
+  export namespace Artifact {
     /**
      * Which document a partition reads. One partition per source.
      */
@@ -6004,12 +6073,6 @@ export namespace RevitDetailSpaceScene {
     export type SceneRepresentation = "mesh" | "box" | "run";
     export type SceneRunShape = "round" | "rectangular" | "oval";
 
-    export interface Response {
-      scene: SceneMetadata;
-      id: string;
-      url: string;
-      bytes: number;
-    }
     export interface SceneMetadata {
       format: string;
       stamp: Stamp;

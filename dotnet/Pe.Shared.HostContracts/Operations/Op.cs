@@ -51,6 +51,8 @@ public sealed class OpAttribute(string key) : Attribute {
     public OpThread Thread { get; init; } = OpThread.Any;
     /// <summary>Includes rolled-back previews and transactions in disposable documents.</summary>
     public bool UsesTransactions { get; init; }
+    /// <summary>The full metadata contract stored in the exported artifact, separate from its bounded RPC receipt.</summary>
+    public Type? ArtifactMetadata { get; init; }
     internal OpActor? DeclaredActor { get; private set; }
     public OpActor Actor { get => this.DeclaredActor ?? OpActor.Any; init => this.DeclaredActor = value; }
 }
@@ -226,6 +228,7 @@ public static class OpRegistry {
             IsPublic = Named(nameof(OpAttribute.IsPublic)) as bool? ?? true,
             Thread = (OpThread)EnumValue(nameof(OpAttribute.Thread), (int)OpThread.Any),
             UsesTransactions = Named(nameof(OpAttribute.UsesTransactions)) as bool? ?? false,
+            ArtifactMetadata = Named(nameof(OpAttribute.ArtifactMetadata)) as Type,
             Actor = (OpActor)EnumValue(nameof(OpAttribute.Actor), (int)OpActor.Any)
         };
     }
@@ -258,12 +261,15 @@ public static class OpRegistry {
             );
 
         resolveRuntimeType ??= type => type;
-        return Define(
+        var definition = Define(
             attribute,
             resolveRuntimeType(parameters[0].ParameterType),
             resolveRuntimeType(responseType),
             needs
         );
+        return definition with {
+            ArtifactMetadataType = attribute.ArtifactMetadata is { } artifact ? resolveRuntimeType(artifact) : null
+        };
     }
 
     private static OpNeeds GetNeeds(Type? documentParameter) => documentParameter?.FullName switch {
@@ -306,7 +312,8 @@ public static class OpRegistry {
             metadata,
             needs,
             attribute.Actor,
-            attribute.UsesTransactions || attribute.Intent == OpIntent.Mutate
+            attribute.UsesTransactions || attribute.Intent == OpIntent.Mutate,
+            attribute.ArtifactMetadata
         );
         Validate(definition);
         return definition;
@@ -391,7 +398,8 @@ public sealed record HostOpsCatalogEntry(
     string RequestSchemaJson,
     string ResponseSchemaJson,
     string Actor,
-    bool UsesTransactions
+    bool UsesTransactions,
+    string? ArtifactSchemaJson = null
 ) {
     public static HostOpsCatalogEntry FromOp(Op op) {
         return FromDefinition(op.Definition);
@@ -419,7 +427,8 @@ public sealed record HostOpsCatalogEntry(
             BridgeOpSchemaGenerator.GetRequestSchemaJson(definition.RequestType),
             BridgeOpSchemaGenerator.GetResponseSchemaJson(definition.ResponseType),
             definition.Actor.ToString().ToLowerInvariant(),
-            definition.UsesTransactions
+            definition.UsesTransactions,
+            definition.ArtifactMetadataType is { } artifact ? BridgeOpSchemaGenerator.GetResponseSchemaJson(artifact) : null
         );
     }
 }

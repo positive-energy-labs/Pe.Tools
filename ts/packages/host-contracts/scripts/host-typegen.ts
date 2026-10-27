@@ -31,6 +31,7 @@ type CatalogEntry = {
   description: string;
   requestSchemaJson: string;
   responseSchemaJson: string;
+  artifactSchemaJson?: string;
   // Host-local (TS-only) ops are listed in /ops for discovery but carry no schema JSON — their
   // types are hand-authored in operation-types.ts. Skip them here; the bridge is the type source.
   origin?: string;
@@ -171,11 +172,19 @@ for (const op of operations) {
     bannerComment: "",
     additionalProperties: false,
   });
+  const artifactSchema = op.artifactSchemaJson ? JSON.parse(op.artifactSchemaJson) : null;
+  const artifactTs = artifactSchema
+    ? await compile(artifactSchema, artifactSchema.title ?? "Metadata", {
+        bannerComment: "",
+        additionalProperties: false,
+      })
+    : null;
   chunks.push(
     `/** ${op.description} */`,
     `export namespace ${ns} {`,
     indent(`export namespace Req {\n${indent(requestTs.trim())}\n}`),
     indent(`export namespace Res {\n${indent(responseTs.trim())}\n}`),
+    ...(artifactTs ? [indent(`export namespace Artifact {\n${indent(artifactTs.trim())}\n}`)] : []),
     "}",
     "",
   );
