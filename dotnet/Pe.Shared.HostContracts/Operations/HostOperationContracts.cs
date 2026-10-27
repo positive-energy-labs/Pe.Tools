@@ -169,6 +169,8 @@ public sealed record HostOperationDefinition(
         if (requestType == typeof(NoRequest))
             return null;
         return key switch {
+            // No document-independent element id exists to inspect.
+            "ducts.ports" => null,
             "revit.catalog.project-index" => """{ "projection": { "view": "Summary" }, "budget": { "maxEntries": 10, "maxSamplesPerEntry": 3 } }""",
             "revit.catalog.project-browser" => """{ "view": "Folders", "budget": { "maxSamplesPerEntry": 5 } }""",
             "revit.catalog.schedules" => """{ "projection": { "view": "Summary" }, "budget": { "maxEntries": 25 } }""",
