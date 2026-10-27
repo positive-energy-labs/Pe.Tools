@@ -262,7 +262,7 @@ Rebuilt 2026-10-22 against `a553a15a`; C# declarations and generated metadata ow
 - (/settings) Four variants were built on a worktree behind `?variant=` (2026-08-17) awaiting kaitpw verdicts — harvest the winner or drop the worktree. No design-doc corroboration in this dir; the record is the session memory only. (verify)
 - (/settings) If settings ever grows past a few dozen fields, migrate it to `MasterTable` with `state:` columns and the /schedule-grid pending-strip reviewer pattern.
 - Firewall: stale per-version block rules survive on machines that once ran a pre-0.6.5 non-loopback bind — cosmetic, but nothing prunes them.
-- SEA bundle gap: rolldown leaves `playwright-core` / `chromium-bidi` cjs subpaths as unresolved runtime externals and they are not staged beside `pea.exe` — fires only if pea or the host gains a browser tool.
+- Prove the packaged host's browser worker (`dispatchBrowserWorker`, `--pe-browser-worker`) end to end; the [browser ledger](../browser/LEDGER.md) owns this gap. `playwright-core` is a host test-only devDependency and never ships.
 - `TsHostLauncher` still re-broadcasts the host port via the `PE_TOOLS_HOST_BASE_URL` env var; it should become a service-file read once the C# callers use `Deployment.ServiceBaseUrl(name)`.
 - Dev-takeover deviation: with the fixed 5180 listen port the SDK claim runs post-bind, so a dev host cannot take over a **still-listening** same-port incumbent. Needs the ephemeral-port + file-discovery migration; treated as a manual gate today.
 - Report the remaining `S-*` / `S-DEF-*` rows upstream to Pe.Revit.Sdk `NEXT.md` (they are SDK-owned, not Pe.Tools work).
