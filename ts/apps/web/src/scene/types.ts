@@ -4,7 +4,12 @@ import type { ReachRung } from "@pe/kit/lang/reach";
  * (`Layer3D`), and what the pointer is over (`Pick`). Coordinates are host internal feet, z up.
  */
 import type * as THREE from "three";
+import type { RevitDetailSpaceScene } from "@pe/host-contracts/generated";
 import type { Look } from "./grounds";
+
+export type ScenePrimitive =
+  | { kind: "box"; bounds: Bounds }
+  | { kind: "run"; bounds: Bounds; run: RevitDetailSpaceScene.Artifact.SceneRun };
 
 /** Axis-aligned bounds in host internal feet. */
 export type Bounds = {
@@ -33,6 +38,8 @@ export type SceneInstance = {
   /** Batch range, in vertices (three per triangle, unindexed). */
   firstVertex: number;
   vertexCount: number;
+  /** Native compact geometry has no range in positions. Its bounds and frame use host feet. */
+  primitive?: ScenePrimitive;
 };
 
 /** How the picture treats one instance. Default (no paintOf): focus → subject, else context.

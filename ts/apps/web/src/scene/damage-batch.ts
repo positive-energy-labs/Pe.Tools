@@ -3,6 +3,7 @@ import { damageAppearance, damageColors } from "./damage";
 import { GLOW_LAYER } from "./glow";
 import { isLit } from "./grounds";
 import type { Layer3D, LayerFrame } from "./types";
+import { instancePositions } from "./primitives";
 
 /** I2: the skin and glow mask share one bias so base-depth competition cannot punch holes. */
 const SURFACE_DEPTH = {
@@ -52,10 +53,13 @@ void main() {
  * geometry draws again at `occluded` strength (`behind` batches), never through it at full. */
 export function createDamageBatch(layers: readonly Layer3D[], occluded: { value: number }) {
   const damage = layers.filter((layer) => layer.damage !== undefined);
+  const positionsOf = new Map(
+    damage.map((layer) => [layer, instancePositions(layer.damage!.meshes, layer.damage!.instance)]),
+  );
   const group = new THREE.Group();
   group.name = "damage-batches";
   const ids = new Map(damage.map((layer, id) => [layer, id]));
-  const count = damage.reduce((sum, layer) => sum + layer.damage!.instance.vertexCount, 0);
+  const count = damage.reduce((sum, layer) => sum + positionsOf.get(layer)!.length / 3, 0);
   const batches = [false, true].flatMap((behind) =>
     [false, true].map((glow) => {
       const material = new THREE.ShaderMaterial({
@@ -95,29 +99,16 @@ export function createDamageBatch(layers: readonly Layer3D[], occluded: { value:
   const bounds = new THREE.Box3();
   const point = new THREE.Vector3();
   for (const layer of damage) {
-    const { meshes, instance } = layer.damage!;
-    const p = meshes.positions;
-    for (
-      let n = instance.firstVertex * 3;
-      n < (instance.firstVertex + instance.vertexCount) * 3;
-      n += 3
-    )
-      bounds.expandByPoint(point.fromArray(p, n));
+    const p = positionsOf.get(layer)!;
+    for (let n = 0; n < p.length; n += 3) bounds.expandByPoint(point.fromArray(p, n));
   }
   const origin = bounds.isEmpty() ? new THREE.Vector3() : bounds.getCenter(new THREE.Vector3());
   group.position.copy(origin);
   const packed = new THREE.Vector4(0, 0, 0, 1);
   for (const layer of damage) {
-    const { meshes, instance } = layer.damage!;
     const geometry = new THREE.BufferGeometry().setAttribute(
       "position",
-      new THREE.BufferAttribute(
-        meshes.positions.slice(
-          instance.firstVertex * 3,
-          (instance.firstVertex + instance.vertexCount) * 3,
-        ),
-        3,
-      ),
+      new THREE.BufferAttribute(positionsOf.get(layer)!.slice(), 3),
     );
     geometry.translate(-origin.x, -origin.y, -origin.z);
     geometry.computeVertexNormals();

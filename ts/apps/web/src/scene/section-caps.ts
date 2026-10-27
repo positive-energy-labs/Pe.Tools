@@ -1,6 +1,7 @@
 import { ShapeUtils, Vector2 } from "three";
 import type { Section } from "./section";
 import type { SceneInstance, SceneMeshes } from "./types";
+import { instancePositions } from "./primitives";
 
 type Face = { axis: number; offset: number; normal: number };
 type Loop = { points: Vector2[]; area: number; parent: number };
@@ -10,6 +11,7 @@ type Node = { point: Vector2; edges: Set<number> };
 export function sectionCaps(
   meshes: SceneMeshes,
   section: Section,
+  keep: (instance: SceneInstance) => boolean = () => true,
 ): { instance: SceneInstance; positions: Float32Array }[] {
   const faces: Face[] =
     section.kind === "plane"
@@ -38,12 +40,14 @@ export function sectionCaps(
     : null;
 
   return meshes.instances.flatMap((instance) => {
-    const start = instance.firstVertex * 3;
-    const end = start + instance.vertexCount * 3;
+    if (!keep(instance)) return [];
+    const sourcePositions = instancePositions(meshes, instance);
+    const start = 0,
+      end = sourcePositions.length;
     const magnitude = [1, 1, 1];
     for (let i = start; i < end; i++) {
       const axis = (i - start) % 3;
-      magnitude[axis] = Math.max(magnitude[axis]!, Math.abs(meshes.positions[i]!));
+      magnitude[axis] = Math.max(magnitude[axis]!, Math.abs(sourcePositions[i]!));
     }
     // Captures duplicate vertices per triangle, so shared endpoints can differ by a float32 ULP.
     const tolerance = magnitude.map((value) => Math.max(1e-6, value * 2 ** -23));
@@ -52,7 +56,7 @@ export function sectionCaps(
       const u = (face.axis + 1) % 3;
       const v = (face.axis + 2) % 3; // u × v points along the positive cut axis.
       const areaTolerance = tolerance[u]! * tolerance[v]!;
-      const { loops, open } = contours(meshes.positions, start, end, face, u, v, tolerance);
+      const { loops, open } = contours(sourcePositions, start, end, face, u, v, tolerance);
       const rings: Loop[] = loops.map((points) => ({
         points,
         area: Math.abs(area(points)),

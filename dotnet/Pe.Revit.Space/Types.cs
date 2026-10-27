@@ -4,7 +4,12 @@ namespace Pe.Revit.Space;
 ///     What a triangle came from. <see cref="Curve2D" /> is a DWG 2D layer raised into a vertical
 ///     ribbon; it is never an obstructor unless a filter names it.
 /// </summary>
-public enum PrimKind { Solid, Mesh, Curve2D }
+public enum PrimKind {
+    Solid, Mesh, Curve2D,
+    // Scene primitive addresses have native element identity without claiming a tessellated body kind.
+    // Query ingestion never emits this kind; SceneElement.Representation owns the scene shape.
+    Element
+}
 
 /// <summary>Which document a partition reads. One partition per source.</summary>
 public enum SourceKind { Host, RevitLink, IfcLink }

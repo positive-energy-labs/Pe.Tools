@@ -24,6 +24,12 @@ internal static class Ingest {
         IncludeNonVisibleObjects = false,
     };
 
+    private static readonly Options CoarseOpts = new() {
+        DetailLevel = ViewDetailLevel.Coarse,
+        ComputeReferences = false,
+        IncludeNonVisibleObjects = false,
+    };
+
     /// <summary>The retry for missing or incomplete bodies. Proven on Chadds 2026-09-26: all
     /// 4,707 pipe fittings, 72 plumbing fixtures and 50 conduit fittings have a Solid only at Fine.</summary>
     private static readonly Options FineOpts = new() {
@@ -48,9 +54,9 @@ internal static class Ingest {
     ///     layer, so a filter can name a layer and a Handle can report one. Returns the row count.
     /// </summary>
     public static int Element(Element e, int source, int firstPrim, List<Tri> sink, Transform xf, List<PrimRow> rows,
-        bool includeCurves = true, Aabb? region = null, SceneBudget? budget = null) {
+        bool includeCurves = true, Aabb? region = null, SceneBudget? budget = null, bool coarse = false) {
         var added = 0;
-        var solid = Faces(e, source, firstPrim, sink, xf, region, budget);
+        var solid = Faces(e, source, firstPrim, sink, xf, region, budget, coarse);
         if (solid is not null) {
             rows.Add(solid);
             added++;
@@ -61,15 +67,15 @@ internal static class Ingest {
     }
 
     /// <summary>The solid and mesh half: one row, or null when the element tessellates to nothing.</summary>
-    private static PrimRow? Faces(Element e, int source, int prim, List<Tri> sink, Transform xf, Aabb? region, SceneBudget? budget) {
+    private static PrimRow? Faces(Element e, int source, int prim, List<Tri> sink, Transform xf, Aabb? region, SceneBudget? budget, bool coarse) {
         var start = sink.Count;
         var sawSolid = false;
-        Read(e, Opts, xf, prim, sink, ref sawSolid, region, budget);
+        Read(e, coarse ? CoarseOpts : Opts, xf, prim, sink, ref sawSolid, region, budget);
         var box = TriangleBounds(sink, start);
         var body = sink.Count > start ? ElementBounds(e, xf) : null;
         // A cuff is a solid too. Retry when it spans less than half the body's longest axis;
         // a region-rejected solid still avoids the second walk. Keep Medium if Fine is worse or absent.
-        if (sink.Count == start ? !sawSolid : body is { } b && b.CoverageBy(box) < 0.5) {
+        if (!coarse && (sink.Count == start ? !sawSolid : body is { } b && b.CoverageBy(box) < 0.5)) {
             var fine = new List<Tri>();
             var fineSolid = false;
             Read(e, FineOpts, xf, prim, fine, ref fineSolid, region, budget);
@@ -97,7 +103,7 @@ internal static class Ingest {
 
     private static void Read(Element e, Options o, Transform xf, int prim, List<Tri> sink, ref bool sawSolid, Aabb? region, SceneBudget? budget) {
         GeometryElement? ge;
-        budget?.Native();
+        budget?.Geometry();
         try {
             ge = e.get_Geometry(o);
         } catch {

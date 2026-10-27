@@ -48,7 +48,7 @@ import { unitFlowsIn } from "@pe/ducts-domain/survey";
 import { scopeOf, systemScope, groupsOfSystem } from "@pe/ducts-domain/system-scope";
 import { healWords, networkWord, outcomeWords } from "@pe/ducts-domain/words";
 import { claimsForGroup } from "@pe/ducts-domain/claims";
-import { sceneRequest } from "#/scene/host";
+import { sceneRequest, type ContextRepresentation } from "#/scene/host";
 import { airflowOptions } from "./airflow";
 import { elementNamer } from "./claims";
 import { espWaits, fanRefusal, fanWords, holding, triage } from "./inbox-rows";
@@ -267,6 +267,7 @@ export const sceneRequestOf = (
   page: Pick<DuctsPage, "system" | "layers"> & Partial<Pick<DuctsPage, "contextRadiusFt">>,
   drawn: Iterable<number> = [],
   stubs: Iterable<number> = [],
+  contextRepresentation: ContextRepresentation = "boxes",
 ) => {
   if (!snapshot) return null;
   const scope = scopeOf(snapshot, page.system);
@@ -284,6 +285,7 @@ export const sceneRequestOf = (
       !page.layers.includes("halo") && !page.layers.includes("context"),
       page.contextRadiusFt ?? 10,
       !page.layers.includes("context"),
+      contextRepresentation,
     ),
     // Whole-document exact focus exceeds 1.5M triangles on Project A. Never drop focus to fit.
     maxTriangles: 3_000_000,

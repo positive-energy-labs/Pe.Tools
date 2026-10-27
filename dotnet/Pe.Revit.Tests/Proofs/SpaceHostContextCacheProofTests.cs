@@ -19,7 +19,7 @@ public sealed class SpaceHostContextCacheProofTests {
                 interior = Shape(document, (3, 0, 0, 1));
                 transaction.Commit();
             }
-            var request = new SceneRequest([focus.Id.Value()], 4, MaxTriangles: 36);
+            var request = new SceneRequest([focus.Id.Value()], 4, MaxTriangles: 36, ContextRepresentation: SceneContextRepresentation.Meshes);
             using var originalBytes = new MemoryStream();
             var original = Scene.Write(document, request, originalBytes);
             Assert.That(document.IsModified, Is.True, "Dirty baseline must use original native scoped capture.");

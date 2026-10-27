@@ -39,6 +39,22 @@ public sealed class OpRegistryTests {
         var read = OpRegistry.Define(new OpAttribute("test.read") { Does = "Read without transactions" }, typeof(NoRequest), typeof(SchemaData));
         Assert.That(HostOpsCatalogEntry.FromDefinition(read).UsesTransactions, Is.False);
     }
+
+    [Test]
+    public void Artifact_metadata_survives_offline_attribute_projection_without_expanding_the_receipt() {
+        var handler = typeof(OpRegistryTests).GetMethod(nameof(Handle), BindingFlags.NonPublic | BindingFlags.Static)!;
+        var attribute = OpRegistry.ReadAttribute(handler.CustomAttributes.Single(data => data.AttributeType == typeof(OpAttribute)));
+        var definition = OpRegistry.Define(attribute, handler);
+        var catalog = HostOpsCatalogEntry.FromDefinition(definition);
+        Assert.That(definition.ArtifactMetadataType, Is.EqualTo(typeof(ProbeArtifact)));
+        var schema = Newtonsoft.Json.Linq.JObject.Parse(catalog.ArtifactSchemaJson!);
+        Assert.That(schema["required"]!.Values<string>(), Does.Contain("elements"));
+        Assert.That(catalog.ResponseSchemaJson, Does.Not.Contain("ProbeArtifact"));
+        var ordinary = OpRegistry.Define(new OpAttribute("test.no-artifact") { Does = "Return a receipt." }, typeof(NoRequest), typeof(SchemaData));
+        Assert.That(HostOpsCatalogEntry.FromDefinition(ordinary).ArtifactSchemaJson, Is.Null);
+    }
+
+    private sealed record ProbeArtifact(IReadOnlyList<string> Elements);
     private sealed class BrokenAssembly : Assembly {
         public override Type[] GetTypes() =>
             throw new ReflectionTypeLoadException(Array.Empty<Type?>(), Array.Empty<Exception?>());
@@ -49,6 +65,7 @@ public sealed class OpRegistryTests {
         Does = "Prove attributed handlers are discovered.",
         Title = "Registry Probe",
         UsesTransactions = true,
+        ArtifactMetadata = typeof(ProbeArtifact),
         IsPublic = false
     )]
     private static SchemaData Handle(NoRequest _) => null!;

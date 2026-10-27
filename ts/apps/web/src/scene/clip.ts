@@ -1,4 +1,5 @@
 import { SceneMeshes } from "./types";
+import { instancePositions } from "./primitives";
 
 /** Keep the union of these half spaces for an instance; absent instances retain their mesh. */
 export type MeshCut = { from: readonly number[]; at: readonly number[] };
@@ -9,15 +10,13 @@ export function clipMeshes(meshes: SceneMeshes, cuts: ReadonlyMap<number, readon
   const instances = meshes.instances.flatMap((instance) => {
     const firstVertex = positions.length / 3;
     const planes = instance.revitId == null ? undefined : cuts.get(instance.revitId);
-    const start = instance.firstVertex * 3;
-    const end = start + instance.vertexCount * 3;
+    if (instance.primitive && !planes) return [{ ...instance, firstVertex, vertexCount: 0 }];
+    const source = instancePositions(meshes, instance);
     if (!planes) {
-      for (let i = start; i < end; i++) positions.push(meshes.positions[i]!);
+      for (const value of source) positions.push(value);
     } else {
-      for (let i = start; i < end; i += 9) {
-        const triangle = [0, 3, 6].map((k) =>
-          Array.from(meshes.positions.subarray(i + k, i + k + 3)),
-        );
+      for (let i = 0; i < source.length; i += 9) {
+        const triangle = [0, 3, 6].map((k) => Array.from(source.subarray(i + k, i + k + 3)));
         for (const { from, at } of planes) {
           const normal = at.map((v, k) => from[k]! - v);
           const side = (p: number[]) => p.reduce((sum, v, k) => sum + (v - at[k]!) * normal[k]!, 0);
@@ -39,7 +38,9 @@ export function clipMeshes(meshes: SceneMeshes, cuts: ReadonlyMap<number, readon
       }
     }
     const vertexCount = positions.length / 3 - firstVertex;
-    return vertexCount ? [{ ...instance, firstVertex, vertexCount }] : [];
+    const clipped = { ...instance, firstVertex, vertexCount };
+    delete clipped.primitive;
+    return vertexCount ? [clipped] : [];
   });
   const bounds = {
     minX: Infinity,
@@ -57,9 +58,19 @@ export function clipMeshes(meshes: SceneMeshes, cuts: ReadonlyMap<number, readon
     bounds.minZ = Math.min(bounds.minZ, positions[i + 2]!);
     bounds.maxZ = Math.max(bounds.maxZ, positions[i + 2]!);
   }
+  for (const instance of instances)
+    if (instance.primitive) {
+      const b = instance.primitive.bounds;
+      bounds.minX = Math.min(bounds.minX, b.minX);
+      bounds.maxX = Math.max(bounds.maxX, b.maxX);
+      bounds.minY = Math.min(bounds.minY, b.minY);
+      bounds.maxY = Math.max(bounds.maxY, b.maxY);
+      bounds.minZ = Math.min(bounds.minZ, b.minZ);
+      bounds.maxZ = Math.max(bounds.maxZ, b.maxZ);
+    }
   return new SceneMeshes(
     new Float32Array(positions),
-    positions.length ? bounds : meshes.bounds,
+    instances.length ? bounds : meshes.bounds,
     instances,
     cuts,
   );

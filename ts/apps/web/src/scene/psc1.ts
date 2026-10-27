@@ -6,13 +6,56 @@
 import { SceneMeshes, type SceneInstance } from "./types";
 
 import type { RevitDetailSpaceScene } from "@pe/host-contracts/generated";
+import type { Bounds, ScenePrimitive } from "./types";
 
 /** The artifact's metadata, as the op declares it. */
-export type Psc1Metadata = RevitDetailSpaceScene.Res.SceneMetadata;
-export const SCENE_FORMAT = "space-scene-v2";
+export type Psc1Metadata = RevitDetailSpaceScene.Artifact.SceneMetadata;
+export const SCENE_FORMAT = "space-scene-v3";
 
 const MAGIC = 0x31435350; // "PSC1" little-endian
 const MAX_TRIANGLES = 3_000_000;
+const validBounds = (b: Bounds) =>
+  b &&
+  [b.minX, b.minY, b.minZ, b.maxX, b.maxY, b.maxZ].every(Number.isFinite) &&
+  b.minX <= b.maxX &&
+  b.minY <= b.maxY &&
+  b.minZ <= b.maxZ;
+const vector = (v: number[]) => Array.isArray(v) && v.length === 3 && v.every(Number.isFinite);
+function primitiveOf(e: Psc1Metadata["elements"][number]): ScenePrimitive | undefined {
+  if (e.representation === "mesh") {
+    if (e.run != null) throw Error("Invalid mesh run metadata");
+    return undefined;
+  }
+  if (e.representation === "box" && e.run == null) return { kind: "box", bounds: e.bounds };
+  const r = e.run;
+  if (
+    e.representation !== "run" ||
+    !r ||
+    !vector(r.start) ||
+    !vector(r.end) ||
+    !vector(r.crossSectionXAxis)
+  )
+    throw Error("Invalid scene primitive");
+  const axis = r.crossSectionXAxis,
+    delta = r.end.map((n, i) => n - r.start[i]!);
+  const length = Math.hypot(...delta),
+    axisLength = Math.hypot(...axis);
+  const positive = (n: unknown): n is number =>
+    typeof n === "number" && Number.isFinite(n) && n > 0;
+  if (
+    length <= 1e-8 ||
+    Math.abs(axisLength - 1) > 1e-4 ||
+    Math.abs(delta.reduce((n, v, i) => n + v * axis[i]!, 0) / length) > 1e-4 ||
+    (r.shape === "round"
+      ? !positive(r.diameterFt) || r.widthFt != null || r.heightFt != null
+      : !["rectangular", "oval"].includes(r.shape) ||
+        !positive(r.widthFt) ||
+        !positive(r.heightFt) ||
+        r.diameterFt != null)
+  )
+    throw Error("Invalid scene run frame or dimensions");
+  return { kind: "run", bounds: e.bounds, run: r };
+}
 
 const elementKey = (h: Psc1Metadata["elements"][number]["handle"]) =>
   JSON.stringify([h.documentKey, h.linkInstanceId ?? null, h.uniqueId]);
@@ -44,18 +87,21 @@ export function decodeScene(buffer: ArrayBuffer): { metadata: Psc1Metadata; mesh
   if (
     metadata.stamp?.frame !== "host-internal-ft" ||
     !Number.isInteger(metadata.triangles) ||
-    metadata.triangles < 1 ||
+    metadata.triangles < 0 ||
+    !validBounds(metadata.bounds) ||
     metadata.triangles > MAX_TRIANGLES ||
     buffer.byteLength - offset !== metadata.triangles * 36
   )
     throw Error("Invalid scene frame or vertex budget");
   let nextVertex = 0;
   const instances = metadata.elements.map((e): SceneInstance => {
+    if (!validBounds(e.bounds)) throw Error("Invalid element bounds");
+    const primitive = primitiveOf(e);
     if (
       !Number.isInteger(e.firstVertex) ||
       !Number.isInteger(e.vertexCount) ||
       e.firstVertex !== nextVertex ||
-      e.vertexCount <= 0 ||
+      (primitive ? e.vertexCount !== 0 : e.vertexCount <= 0) ||
       e.vertexCount % 3 !== 0 ||
       e.firstVertex + e.vertexCount > metadata.triangles * 3
     )
@@ -78,6 +124,7 @@ export function decodeScene(buffer: ArrayBuffer): { metadata: Psc1Metadata; mesh
       focus: e.focus,
       firstVertex: e.firstVertex,
       vertexCount: e.vertexCount,
+      ...(primitive ? { primitive } : {}),
     };
   });
   if (nextVertex !== metadata.triangles * 3) throw Error("Incomplete element vertex ranges");

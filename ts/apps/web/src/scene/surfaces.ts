@@ -5,6 +5,7 @@ import { LineSegmentsGeometry } from "three/addons/lines/LineSegmentsGeometry.js
 import { paintOf, SYSTEM_LIGHTNESS, type Look } from "./grounds";
 import { withLightness } from "./oklch";
 import type { Paint, PaintOf, SceneInstance, SceneMeshes } from "./types";
+import { instancePositions, primitiveEdges } from "./primitives";
 
 /** Stable in natural system order, independent of opening order: the first system takes rung 0,
  * the most legible. Stubs inherit an opened system's rung but never change the opened systems'. */
@@ -68,17 +69,12 @@ export function surfaceEdges(
 ) {
   const cache = new Map<SceneInstance, { angle: number; positions: Float32Array }>();
   return (instance: SceneInstance, angle: number) => {
+    if (instance.primitive) return primitiveEdges(instance.primitive, angle);
     const hit = cache.get(instance);
     if (hit?.angle === angle) return hit.positions;
     const geometry = new THREE.BufferGeometry().setAttribute(
       "position",
-      new THREE.BufferAttribute(
-        meshes.positions.slice(
-          instance.firstVertex * 3,
-          (instance.firstVertex + instance.vertexCount) * 3,
-        ),
-        3,
-      ),
+      new THREE.BufferAttribute(instancePositions(meshes, instance).slice(), 3),
     );
     const edges = new THREE.EdgesGeometry(geometry, angle);
     const positions = new Float32Array(edges.getAttribute("position").array);

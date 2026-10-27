@@ -57,6 +57,7 @@ export function useDuctScene(
     epoch,
     request?.elementIds,
     request?.maxTriangles,
+    request?.contextRepresentation,
   ]);
   let coverage = coverages.get(identity) ?? null;
   if (request && !request.focusOnly) {
@@ -67,7 +68,15 @@ export function useDuctScene(
     };
   }
   const focus = useScene(
-    request ? { ...request, focusOnly: true, proximity: false, contextPaddingFt: 0 } : null,
+    request
+      ? {
+          ...request,
+          focusOnly: true,
+          proximity: false,
+          contextPaddingFt: 0,
+          contextRepresentation: "none",
+        }
+      : null,
     doc,
     epoch,
   );
