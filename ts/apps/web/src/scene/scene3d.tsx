@@ -220,13 +220,10 @@ export function Scene3D(props: Scene3DProps): ReactNode {
 
   // React describes the requested view. The controller alone executes its replacement.
   const look = useSyncExternalStore(knobsChanged, LOOK.read, LOOK.read);
+  // X-ray sees through context, not through ducts: held, the glass pane drops to its lines.
   const xray = useHeldKey("x");
-  const shownLook = useMemo(() => {
-    const preset = presetLook(look, props.preset ?? "all");
-    return xray
-      ? { ...preset, subject: { ...preset.subject, opacity: look.subject.xrayOpacity } }
-      : preset;
-  }, [look, props.preset, xray]);
+  const contextMode = xray && props.contextMode === "glass" ? "lines" : props.contextMode;
+  const shownLook = useMemo(() => presetLook(look, props.preset ?? "all"), [look, props.preset]);
   const request = useMemo(
     () =>
       meshes && currentFocus
@@ -277,13 +274,9 @@ export function Scene3D(props: Scene3DProps): ReactNode {
   }, [props.clipVolume, meshes, commitVersion]);
   useEffect(() => {
     if (props.contextRadiusFt === undefined)
-      (focusCurrent ? core.current : null)?.setContextMode(props.contextMode);
-    else
-      (focusCurrent ? core.current : null)?.setContextMode(
-        props.contextMode,
-        props.contextRadiusFt,
-      );
-  }, [props.contextMode, props.contextRadiusFt, meshes, commitVersion]);
+      (focusCurrent ? core.current : null)?.setContextMode(contextMode);
+    else (focusCurrent ? core.current : null)?.setContextMode(contextMode, props.contextRadiusFt);
+  }, [contextMode, props.contextRadiusFt, meshes, commitVersion]);
   useEffect(() => {
     (focusCurrent ? core.current : null)?.setHues(props.kinds ?? NO_KINDS, props.colour ?? "firm");
   }, [props.kinds, props.colour, meshes, commitVersion]);
