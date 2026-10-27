@@ -44,7 +44,7 @@ function invocation() {
     setPage: vi.fn((patch: object, _guard?: readonly string[]) => {
       page = { ...page, ...patch };
     }),
-    write: vi.fn(async (_patches: unknown[]) => null),
+    write: vi.fn(async (_patches: unknown[], _expectedRevision?: number) => null),
     note: vi.fn(),
   };
   let complete!: (value: FamiliesObservation) => void;
@@ -62,6 +62,7 @@ function invocation() {
     complete({
       ...reading(),
       id: "persisted-result",
+      ...(state === "complete" ? { envelope: { revision: 1 } } : {}),
       progress: { ...reading().progress!, state, completed: 1, total: 2 },
       result: {
         families: [family],
@@ -101,7 +102,7 @@ test("the first read subscribes its fixed scope immediately and registers its ex
     filter: run.reading().filter,
   });
   const readId = run.reading().progress!.runId;
-  expect(calls.read).toHaveBeenCalledWith(work, target, run.reading().filter, readId);
+  expect(calls.read).toHaveBeenCalledWith(work, target, run.reading().filter, readId, 0);
   await run.cancel();
   expect(calls.cancel).toHaveBeenCalledWith(target, readId);
   run.finish("cancelled");
@@ -127,9 +128,9 @@ test("progress revisions may replace Page.reading without dropping the final com
   expect(run.reading().progress?.state).toBe("complete");
   expect(run.ctx.write).toHaveBeenCalledTimes(1);
   expect(run.ctx.write.mock.calls[0]?.[0]).toEqual([
-    { path: ["scope", "staged"], value: { value: partial.filter } },
-    { path: ["takenAt"], value: partial.capturedAt },
+    { path: ["scope", "edit"], value: { value: partial.filter } },
   ]);
+  expect(run.ctx.write.mock.calls[0]?.[1]).toBe(1);
   expect(run.ctx.setPage.mock.calls.some((call) => call[1]?.includes("reading"))).toBe(false);
 });
 
