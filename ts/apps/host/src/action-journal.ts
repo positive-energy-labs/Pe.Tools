@@ -1761,7 +1761,7 @@ export class ActionJournal implements ReceiptReader {
     if (original.prepared.state === "ready" && executor)
       executor.prepared.parse(original.prepared.value);
     const recover = read ?? executor?.recover ?? this.commandReads?.recover;
-    if (!recover) throw Error("This command has no native recovery adapter");
+    if (!recover) throw Error("This command has no recovery adapter");
     const incomplete = original.state === "incomplete";
     if (original.prepared.state !== "ready") return original;
     const updates: {
@@ -1771,7 +1771,7 @@ export class ActionJournal implements ReceiptReader {
     }[] = [];
     for (const step of original.steps)
       if (
-        step.kind === "native" &&
+        (step.kind === "native" || (!read && executor?.recover !== undefined)) &&
         (step.state === "unknown" ||
           incomplete ||
           revisit?.(step) ||
@@ -1792,8 +1792,13 @@ export class ActionJournal implements ReceiptReader {
               canonicalRouteInput(step.process) !== canonicalRouteInput(update.step.process))
           )
             throw Error("Recovery cannot change a step's immutable intent or process");
+          // Recovery supplies a new outcome. Obsolete fields from the previous state are not
+          // part of that outcome; the journal retains immutable intent and dispatch evidence.
+          const variant = actionStepSchema.options.find(
+            (schema) => schema.shape.state.value === update.step.state,
+          )!;
           update.step = actionStepSchema.parse({
-            ...update.step,
+            ...variant.strip().parse(update.step),
             ...(step.process ? { process: step.process } : {}),
             ...(step.dispatchedAt ? { dispatchedAt: step.dispatchedAt } : {}),
             ...(step.established ? { established: step.established } : {}),
@@ -1801,7 +1806,10 @@ export class ActionJournal implements ReceiptReader {
           });
           updates.push({
             ...update,
-            evidence: incomplete ? { previous: step, receipt: update.evidence } : update.evidence,
+            evidence:
+              incomplete || step.state !== update.step.state
+                ? { previous: step, receipt: update.evidence }
+                : update.evidence,
           });
         } catch (error) {
           updates.push({ step, evidence: { error: String(error) } });

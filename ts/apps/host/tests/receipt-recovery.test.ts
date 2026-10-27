@@ -11,8 +11,78 @@ import { readNativeReceipt } from "../src/native-receipts.ts";
 import { originalProcess, sdkEnvelope } from "./native-receipt-fixture.ts";
 import { crossingOf } from "./callers.ts";
 import { writeJournal } from "./journal-fixture.ts";
+import { z } from "zod";
+import type { CommandFactory } from "../src/command-executor.ts";
 
 const dirs: string[] = [];
+
+test("an executor recovers an uncertain file from actual bytes and resumes without repeating it", async () => {
+  const dir = await mkdtemp(join(tmpdir(), "pe-file-recovery-"));
+  dirs.push(dir);
+  const path = join(dir, "journal.jsonl");
+  const output = join(dir, "written.txt");
+  const source = "exact\r\noriginal file bytes\r\n";
+  let writes = 0;
+  const factory: CommandFactory = () => ({
+    definition: {
+      says: "Write",
+      needs: "nothing",
+      effect: "command",
+      dirties: [],
+      input: z.object({}),
+    },
+    bind: async () => ({ effects: [{ kind: "file", path: output }] }),
+    prepared: z.object({ source: z.string() }),
+    prepare: async () => ({ source }),
+    run: async (_context, execution) => {
+      const prepared = execution.prepared as { source: string };
+      return execution.step(
+        "file",
+        "write",
+        { path: output, source: prepared.source },
+        async () => {
+          writes++;
+          await writeFile(output, prepared.source);
+          throw Error("Host lost the writer completion after its rename");
+        },
+      );
+    },
+    recover: async (step) => {
+      if (step.kind !== "file") return { step, evidence: { inspected: false } };
+      const actual = await readFile(output, "utf8");
+      return {
+        step: actual === source ? { ...step, state: "succeeded", result: { path: output } } : step,
+        evidence: { path: output, matched: actual === source },
+      };
+    },
+  });
+  const owner = new ActionJournal(path);
+  const crossing = crossingOf("human");
+  await owner.invoke(
+    { id: "file-write", key: "test.file-write", target: { kind: "host" }, input: {} },
+    crossing,
+    factory,
+  );
+  expect(await owner.wait("file-write")).toMatchObject({ state: "unknown" });
+  const restarted = new ActionJournal(path);
+  restarted.configureCommands(
+    {
+      read: async () => {
+        throw Error("Unexpected dependency");
+      },
+    },
+    () => factory,
+  );
+  const recovered = await restarted.recover("file-write");
+  expect(recovered.steps).toMatchObject([{ kind: "file", state: "succeeded" }]);
+  await restarted.resume("file-write", crossing);
+  expect(await restarted.wait("file-write")).toMatchObject({
+    state: "succeeded",
+    result: { path: output },
+  });
+  expect(await readFile(output, "utf8")).toBe(source);
+  expect(writes).toBe(1);
+});
 afterEach(async () => {
   for (const dir of dirs.splice(0)) await rm(dir, { recursive: true, force: true });
 });
