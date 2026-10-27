@@ -1049,11 +1049,14 @@ public sealed class RevitScriptExecutionService(
             );
         }
 
-        // Suppress modal failure dialogs on commit: warnings and auto-resolvable errors are captured
-        // as diagnostics instead of freezing the external-event queue behind a dialog.
+        // A script write may not resolve Revit errors by changing model content on its own
+        // (no detach/fix/delete): capture failures, reject errors, and clear them on rollback so
+        // no modal dialog blocks the external-event queue.
         var commitFailures = new List<(bool IsError, string Message)>();
         var failureOptions = sandbox.Transaction.GetFailureHandlingOptions();
-        _ = failureOptions.SetFailuresPreprocessor(PeToolsFailureHandling.CreatePreprocessor(commitFailures));
+        _ = failureOptions.SetFailuresPreprocessor(new DelegatingFailuresPreprocessor(accessor =>
+            PeToolsFailureHandling.RejectErrors(accessor, commitFailures)));
+        _ = failureOptions.SetClearAfterRollback(true);
         _ = failureOptions.SetForcedModalHandling(false);
         sandbox.Transaction.SetFailureHandlingOptions(failureOptions);
 
