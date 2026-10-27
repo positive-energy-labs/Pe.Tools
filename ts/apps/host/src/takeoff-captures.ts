@@ -21,6 +21,8 @@ import {
   canonicalRouteInput,
   workKey,
   workKeySchema,
+  familiesReadProgressSchema,
+  type FamiliesReadProgress,
   type FamilyCapture,
   type WorkKey,
 } from "@pe/agent-contracts";
@@ -29,7 +31,7 @@ import { z } from "zod";
 import type { RevitMatrixLoadedFamilies } from "@pe/host-contracts/generated";
 import { productPathNames } from "@pe/host-contracts/contracts";
 import { mkdir, readFile, readdir, rename, writeFile, rm, stat } from "node:fs/promises";
-import { join, resolve } from "node:path";
+import { dirname, join, resolve } from "node:path";
 import {
   sameAddress,
   takeoffCaptureSchema,
@@ -61,6 +63,7 @@ const familiesObservationSchema = z.object({
   }),
   capturedAt: z.iso.datetime(),
   completedAt: z.iso.datetime(),
+  progress: familiesReadProgressSchema.optional(),
   readback: z
     .object({
       sourceId: z.string().regex(/^[a-f0-9]{64}$/),
@@ -122,6 +125,7 @@ export type FamiliesObservation = {
   filter: AppliedFilter;
   capturedAt: string;
   completedAt: string;
+  progress?: FamiliesReadProgress;
   /** Targeted loaded-project reads after apply; all other families retain capturedAt evidence. */
   readback?: { sourceId: string; verifiedFamilies: { name: string; at: string }[] };
   result: RevitMatrixLoadedFamilies.Res.Response;
@@ -171,6 +175,7 @@ export class TakeoffCaptures {
   private readonly pending = new Map<string, Promise<unknown>>();
   private readonly reads = new OwnerReads();
   private readonly familiesSaves = new Map<string, Promise<unknown>>();
+  private readonly familyRecordFiles = new WeakMap<object, Promise<string>>();
   private readonly listeners = new Set<(key: string) => void>();
   constructor(
     private readonly directory: string,
@@ -239,6 +244,16 @@ export class TakeoffCaptures {
     return this.reads.observe(
       `${key}:${canonicalRouteInput(filter)}`,
       async () => {
+        const progress = await this.familiesProgress(target, filter);
+        if (progress)
+          return {
+            reading: {
+              at: progress.work.binding === "address" ? progress.work.target : null,
+              version: null,
+              observedAt: progress.capturedAt,
+            },
+            bodyVersion: progress.id,
+          };
         const latest = (await this.familiesReadings())
           .filter(
             (read) =>
@@ -504,6 +519,7 @@ export class TakeoffCaptures {
         await rename(tempSnapshot, snapshot);
         await writeFile(tempPointer, id, "utf8");
         await rename(tempPointer, pointer);
+        await this.displayPointer(value.work, id);
       } finally {
         await rm(tempSnapshot, { force: true });
         await rm(tempPointer, { force: true });
@@ -596,24 +612,202 @@ export class TakeoffCaptures {
       throw Error("Families observation Work does not match its latest pointer");
     return record;
   }
+  /** Display can restore partial work; planning uses the completed latestFamilies baseline. */
+  async displayedFamilies(work: WorkKey): Promise<FamiliesObservation | null> {
+    const key = createHash("sha256").update(workKey(work)).digest("hex");
+    const id = await readFile(join(this.directory, "families", `${key}.display`), "utf8").catch(
+      (error: NodeJS.ErrnoException) => {
+        if (error.code === "ENOENT") return null;
+        throw error;
+      },
+    );
+    if (!id) return this.latestFamilies(work);
+    const record = await this.families(id);
+    if (workKey(record.work) !== workKey(work))
+      throw Error("Families display belongs to another Work");
+    return record;
+  }
+
+  private async displayPointer(work: WorkKey, id: string) {
+    const key = createHash("sha256").update(workKey(work)).digest("hex");
+    const path = join(this.directory, "families", `${key}.display`);
+    const temp = `${path}.${randomUUID()}.tmp`;
+    await writeFile(temp, id);
+    await rename(temp, path);
+  }
+
   async families(id: string): Promise<FamiliesObservation> {
     return (await this.familiesFile(id)).record;
   }
   private async familiesFile(id: string) {
     familyObservationId(id);
-    const path = join(this.directory, "families", `${id}.json`);
-    const bytes = await readFile(path);
+    let path = join(this.directory, "families", `${id}.json`);
+    const bytes = await readFile(path).catch(async (error: NodeJS.ErrnoException) => {
+      if (error.code !== "ENOENT") throw error;
+      path = join(this.directory, "families", "progress", "artifacts", `${id}.json`);
+      const manifest = JSON.parse(
+        await readFile(join(this.directory, "families", "progress", `${id}.json`), "utf8"),
+      ) as {
+        observation: Omit<FamiliesObservation, "result">;
+        records: string[];
+      };
+      const families = await Promise.all(
+        manifest.records.map(async (hash) => {
+          familyObservationId(hash);
+          return JSON.parse(
+            await readFile(join(this.directory, "families", "records", `${hash}.json`), "utf8"),
+          );
+        }),
+      );
+      return Buffer.from(
+        JSON.stringify({
+          ...manifest.observation,
+          result: {
+            families,
+            issues: [],
+            page: {
+              totalCount: manifest.observation.progress?.total ?? families.length,
+              returnedCount: families.length,
+              isTruncated: false,
+            },
+          },
+        }),
+      );
+    });
     const record = familiesObservationSchema.parse(
       JSON.parse(bytes.toString("utf8")),
     ) as FamiliesObservation;
     if (record.id !== id) throw Error("Families observation ID does not match its file");
     return { record, path, bytes };
   }
+
+  private progressKey(target: DocumentRef, filter: AppliedFilter) {
+    return createHash("sha256")
+      .update(canonicalRouteInput([target, filter]))
+      .digest("hex");
+  }
+
+  /** Per-family blobs are written once. Tiny immutable manifests project each revision for the existing envelope. */
+  async saveFamiliesProgress(
+    value: Omit<FamiliesObservation, "id" | "completedAt"> & { progress: FamiliesReadProgress },
+  ) {
+    const folder = join(this.directory, "families");
+    await mkdir(join(folder, "records"), { recursive: true });
+    await mkdir(join(folder, "progress"), { recursive: true });
+    const records = await Promise.all(
+      value.result.families.map(async (record) => {
+        const known = this.familyRecordFiles.get(record);
+        if (known) return known;
+        const saving = (async () => {
+          const text = JSON.stringify(record);
+          const hash = createHash("sha256").update(text).digest("hex");
+          const path = join(folder, "records", `${hash}.json`);
+          await writeFile(path, text, { flag: "wx" }).catch((error: NodeJS.ErrnoException) => {
+            if (error.code !== "EEXIST") throw error;
+          });
+          return hash;
+        })();
+        this.familyRecordFiles.set(record, saving);
+        return saving;
+      }),
+    );
+    const { result: _, ...metadata } = value;
+    const completedAt = new Date().toISOString();
+    const id = createHash("sha256")
+      .update(JSON.stringify([metadata, completedAt, records]))
+      .digest("hex");
+    const observation = { ...metadata, id, completedAt };
+    await writeFile(
+      join(folder, "progress", `${id}.json`),
+      JSON.stringify({ observation, records }),
+    );
+    const pointer = join(
+      folder,
+      "progress",
+      `${this.progressKey(value.document, value.filter)}.latest`,
+    );
+    const temp = `${pointer}.${randomUUID()}.tmp`;
+    await writeFile(temp, id);
+    await rename(temp, pointer);
+    await this.displayPointer(value.work, id);
+    this.notify(`families-matrix:${keyOf(value.document)}`);
+    return { ...observation, result: value.result };
+  }
+
+  private async familiesProgress(target: DocumentRef, filter: AppliedFilter) {
+    const pointer = join(
+      this.directory,
+      "families",
+      "progress",
+      `${this.progressKey(target, filter)}.latest`,
+    );
+    const id = await readFile(pointer, "utf8").catch((error: NodeJS.ErrnoException) => {
+      if (error.code === "ENOENT") return null;
+      throw error;
+    });
+    if (!id) return null;
+    familyObservationId(id);
+    const stored = JSON.parse(
+      await readFile(join(this.directory, "families", "progress", `${id}.json`), "utf8"),
+    ) as {
+      observation: Omit<FamiliesObservation, "result">;
+    };
+    return stored.observation;
+  }
+
+  async clearFamiliesProgress(target: DocumentRef, filter: AppliedFilter) {
+    await rm(
+      join(this.directory, "families", "progress", `${this.progressKey(target, filter)}.latest`),
+      { force: true },
+    );
+    this.notify(`families-matrix:${keyOf(target)}`);
+  }
   async familiesArtifact(id: string): Promise<Buffer> {
     return (await this.familiesFile(id)).bytes;
   }
+  /** Display revisions transfer only newly completed immutable family records. */
+  async familiesParts(id: string) {
+    familyObservationId(id);
+    const raw = await readFile(
+      join(this.directory, "families", "progress", `${id}.json`),
+      "utf8",
+    ).catch((error: NodeJS.ErrnoException) => {
+      if (error.code === "ENOENT") return null;
+      throw error;
+    });
+    if (!raw) return { reading: await this.families(id), records: null };
+    const manifest = JSON.parse(raw) as {
+      observation: Omit<FamiliesObservation, "result">;
+      records: string[];
+    };
+    for (const hash of manifest.records) familyObservationId(hash);
+    const reading = familiesObservationSchema.parse({
+      ...manifest.observation,
+      result: {
+        families: [],
+        issues: [],
+        page: {
+          totalCount: manifest.observation.progress?.total ?? manifest.records.length,
+          returnedCount: manifest.records.length,
+          isTruncated: false,
+        },
+      },
+    });
+    return { reading, records: manifest.records };
+  }
+  async familyRecord(hash: string) {
+    familyObservationId(hash);
+    return readFile(join(this.directory, "families", "records", `${hash}.json`));
+  }
   async familiesReference(id: string) {
     const { record, path, bytes } = await this.familiesFile(id);
+    if (record.progress && record.progress.state !== "complete") {
+      // Materialize a full artifact only when requested, not on every incremental display revision.
+      await mkdir(dirname(path), { recursive: true });
+      await writeFile(path, bytes, { flag: "wx" }).catch((error: NodeJS.ErrnoException) => {
+        if (error.code !== "EEXIST") throw error;
+      });
+    }
     const { result, ...reading } = record;
     return {
       ...reading,

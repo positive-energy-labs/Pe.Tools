@@ -374,6 +374,8 @@ export function useRoute<W, R extends string, P, A extends string>(
       },
       readings,
       page,
+      currentPage: () =>
+        currentActionScope.current === actionScope ? owner.view.read().page : null,
       note: owner.verbNote,
       call: <K extends OpKey>(operation: K, ...[input]: OpCallArgs<K, never>) =>
         callHostRpc(
@@ -422,7 +424,7 @@ export function useRoute<W, R extends string, P, A extends string>(
             let stopped = false;
             const refusal = await owner.runAction(
               name,
-              async () => {
+              async (cancelWith) => {
                 const unavailable = requirementRefusal(action);
                 if (unavailable) return refuse("not-ready", unavailable);
                 // The verb row runs a verb bare. An empty-object input is supplied; a verb that
@@ -443,7 +445,8 @@ export function useRoute<W, R extends string, P, A extends string>(
                   );
                 const reason = action.ready(ctx as never, parsed.data as never);
                 if (reason) return refuse("not-ready", reason);
-                const refusal = (await action.run(ctx as never, parsed.data as never)) ?? null;
+                const refusal =
+                  (await action.run({ ...ctx, cancelWith } as never, parsed.data as never)) ?? null;
                 // A partial outcome landed something: stale either way; a planning press, nothing.
                 if (!action.plans?.(ctx as never) && (!refusal || refusal.code === "partial"))
                   for (const reading of action.dirties) {
