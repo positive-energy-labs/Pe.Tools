@@ -198,6 +198,7 @@ export function createRenderer(mount: HTMLElement, initialMeshes: SceneMeshes, w
   let grounds = sceneGrounds(mount, look);
   // Shared by reference with the outline pass and the fog: re-tinted in place, never replaced.
   const { ground, ink } = grounds;
+  const isDark = () => ground.getHSL({ h: 0, s: 0, l: 0 }).l < 0.5;
   renderer.setClearColor(ground);
   const canvas = renderer.domElement;
   canvas.setAttribute(
@@ -432,10 +433,8 @@ export function createRenderer(mount: HTMLElement, initialMeshes: SceneMeshes, w
               ? grounds.palette[keySlot(paint.key, grounds.palette.length)]!
               : grounds.subject,
       paint,
-      look,
+      isDark(),
     );
-    if (tier !== "context" && ground.getHSL({ h: 0, s: 0, l: 0 }).l < 0.5)
-      color.offsetHSL(0, 0, look.subject.darkLift);
     if (tier === "stub" && paint.surface !== "shell")
       color.lerp(ground, look.subject.stubGroundMix);
     // The rung rule: emphasis keeps the hue and lifts OKLCH lightness; the outline carries the rest.
@@ -982,7 +981,7 @@ export function createRenderer(mount: HTMLElement, initialMeshes: SceneMeshes, w
             ? grounds.palette[keySlot(p.key, grounds.palette.length)]!
             : grounds.subject,
         p,
-        look,
+        isDark(),
       );
       const key = colour.getHex();
       const positions = groups.get(key) ?? [];

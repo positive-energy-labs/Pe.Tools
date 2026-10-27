@@ -32,9 +32,13 @@ export function withLightness(colour: THREE.Color, L: number) {
   let lo = 0,
     hi = C;
   if (inGamut(linear(L, C, h))) lo = C;
-  else for (let i = 0; i < 20; i++) inGamut(linear(L, (lo + hi) / 2, h)) ? (lo = (lo + hi) / 2) : (hi = (lo + hi) / 2);
+  else
+    for (let i = 0; i < 20; i++)
+      inGamut(linear(L, (lo + hi) / 2, h)) ? (lo = (lo + hi) / 2) : (hi = (lo + hi) / 2);
   const [r, g, b] = linear(L, lo, h);
-  return colour.clone().setRGB(Math.max(0, r), Math.max(0, g), Math.max(0, b), THREE.LinearSRGBColorSpace);
+  return colour
+    .clone()
+    .setRGB(Math.max(0, r), Math.max(0, g), Math.max(0, b), THREE.LinearSRGBColorSpace);
 }
 export const liftLightness = (colour: THREE.Color, dL: number) =>
   withLightness(colour, toOklch(colour).L + dL);

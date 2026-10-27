@@ -10,6 +10,12 @@ export const BLACK = Object.freeze(new THREE.Color(0, 0, 0));
 export const CONTEXT_OPACITY_LIMIT = 0.95;
 /** Crease angle of context lines: one weight, one angle, not a dial. */
 export const CONTEXT_CREASE_DEG = 35;
+/** OKLCH lightness of the 1st, 2nd and 3rd system of one kind, most legible first (dark values
+ * provisional, 2026-10-26). Fixed per theme: never a step from the previous system. */
+export const SYSTEM_LIGHTNESS = {
+  light: [0.46, 0.58, 0.7],
+  dark: [0.78, 0.68, 0.58],
+} as const;
 /** Mask colours encode channels, not visible hues. */
 export const OUTLINE_CHANNEL = {
   selected: new THREE.Color(1, 0, 0),
@@ -44,7 +50,6 @@ export const LOOK = defineKnobs("scene", "ts/apps/web/src/scene/grounds.ts", {
     stubOpacity: num("Stub opacity", 0.16, [0.05, 1, 0.01]),
     stubGroundMix: num("Stub mix toward ground", 0.45, [0, 1, 0.01]),
     stubEndAlpha: num("Stub fade floor × opacity", 0.06, [0, 1, 0.01]),
-    darkLift: num("Dark-stage colour lift", 0.16, [0, 0.3, 0.01]),
   },
   depth: {
     rim: num("Duct rim contrast", 0.18, [0, 0.8, 0.01]),
@@ -69,7 +74,6 @@ export const LOOK = defineKnobs("scene", "ts/apps/web/src/scene/grounds.ts", {
     roundSegments: num("Round port segments", 16, [8, 32, 1]),
   },
   routes: {
-    lightnessStep: num("Same-type lightness separation", 0.55, [0, 0.9, 0.01]),
     edgeWidth: num("Route edge width", 1, [0, 4, 0.25], "live", "px"),
     edgeOpacity: num("Route edge alpha", 0.4, [0, 1, 0.05]),
     hiddenWidth: num("Occluded route width", 1.5, [0, 4, 0.25], "live", "px"),

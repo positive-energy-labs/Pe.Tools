@@ -110,11 +110,7 @@ void veil(inout vec4 c) {
  * `tier` is the batch: a context
  * instance (alpha zero) takes its opacity from d; `line` fades a context crease by the same d. Idempotent.
  */
-export function veilMaterial(
-  material: THREE.Material,
-  u: VeilUniforms,
-  kind?: "tier" | "line",
-) {
+export function veilMaterial(material: THREE.Material, u: VeilUniforms, kind?: "tier" | "line") {
   const tiered = kind === "tier";
   if (!(material as { fog?: boolean }).fog || material.userData.veiled) return;
   material.userData.veiled = true;
@@ -139,9 +135,10 @@ export function veilMaterial(
             "#include <project_vertex>",
             "#include <project_vertex>\nsceneContinuation = continuationDistance;\nsceneView = isOrthographic ? vec3(0.0, 0.0, 1.0) : -mvPosition.xyz;",
           );
-    shader.fragmentShader = `${tiered ? "#define VEIL_TIER\n" : kind === "line" ? "#define VEIL_LINE\n" : ""}${shader.fragmentShader}`
-      .replace("#include <fog_pars_fragment>", `#include <fog_pars_fragment>\n${parsFragment}`)
-      .replace("#include <fog_fragment>", "veil(gl_FragColor);\n#include <fog_fragment>");
+    shader.fragmentShader =
+      `${tiered ? "#define VEIL_TIER\n" : kind === "line" ? "#define VEIL_LINE\n" : ""}${shader.fragmentShader}`
+        .replace("#include <fog_pars_fragment>", `#include <fog_pars_fragment>\n${parsFragment}`)
+        .replace("#include <fog_fragment>", "veil(gl_FragColor);\n#include <fog_fragment>");
   };
   const key = material.customProgramCacheKey.bind(material);
   material.customProgramCacheKey = () => `${key()}|veil${kind ? `-${kind}` : ""}`;

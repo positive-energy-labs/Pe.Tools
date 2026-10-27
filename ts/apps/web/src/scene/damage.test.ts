@@ -142,7 +142,8 @@ it("line marks retain dashed geometry and selection depth behavior", () => {
       landed: Infinity,
       ...extra,
     });
-    const lit = !!extra.selected || !!extra.lit || extra.state === "hover" || extra.state === "focus";
+    const lit =
+      !!extra.selected || !!extra.lit || extra.state === "hover" || extra.state === "focus";
     for (const child of lines.children as THREE.Mesh[])
       expect((child.material as THREE.Material).depthTest).toBe(true);
     // The occluded twin shows only while lit, at the shared occluded alpha.

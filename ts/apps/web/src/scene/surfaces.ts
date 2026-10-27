@@ -2,11 +2,12 @@ import * as THREE from "three";
 import { LineMaterial } from "three/addons/lines/LineMaterial.js";
 import { LineSegments2 } from "three/addons/lines/LineSegments2.js";
 import { LineSegmentsGeometry } from "three/addons/lines/LineSegmentsGeometry.js";
-import { paintOf, type Look } from "./grounds";
+import { paintOf, SYSTEM_LIGHTNESS, type Look } from "./grounds";
+import { withLightness } from "./oklch";
 import type { Paint, PaintOf, SceneInstance, SceneMeshes } from "./types";
 
-/** Stable in natural system order, independent of opening order. Stubs inherit an opened
- * system's variant but never change the opened systems' colour assignments. */
+/** Stable in natural system order, independent of opening order: the first system takes rung 0,
+ * the most legible. Stubs inherit an opened system's rung but never change the opened systems'. */
 export function systemPaint(meshes: SceneMeshes, base: PaintOf): PaintOf {
   const paints = new Map(meshes.instances.map((i) => [i.key, paintOf(i, base)]));
   const classes = new Map<string, Set<string>>();
@@ -25,24 +26,24 @@ export function systemPaint(meshes: SceneMeshes, base: PaintOf): PaintOf {
       new Map(
         [...names]
           .sort((a, b) => a.localeCompare(b, undefined, { numeric: true }))
-          .map((name, n) => [name, n % 2 ? -(n + 1) / 2 : n / 2]),
+          .map((name, n) => [name, n]),
       ),
     );
   return (i) => {
     const p = paints.get(i.key) ?? paintOf(i, base);
     const variant = variants.get(colourClass(p) ?? "")?.get(p.system ?? "");
-    return variant && p.tier !== "context" && p.surface !== "shell" ? { ...p, variant } : p;
+    return variant !== undefined && p.tier !== "context" && p.surface !== "shell"
+      ? { ...p, variant }
+      : p;
   };
 }
 
-/** Approach black/white proportionally, so another same-type system never clamps away its hue. */
-export function routeColour(colour: THREE.Color, paint: Paint, look: Look) {
-  const variant = paint.variant ?? 0;
-  if (!variant) return colour.clone();
-  const hsl = colour.getHSL({ h: 0, s: 0, l: 0 });
-  const factor = (1 - look.routes.lightnessStep) ** Math.abs(variant);
-  const lightness = variant < 0 ? hsl.l * factor : 1 - (1 - hsl.l) * factor;
-  return colour.clone().setHSL(hsl.h, hsl.s, lightness);
+/** The paint's rung is a fixed OKLCH lightness for the theme, so a third system never drifts
+ * toward white and no running step exists. Past the last rung systems share it. */
+export function routeColour(colour: THREE.Color, paint: Paint, dark: boolean) {
+  if (paint.variant === undefined) return colour.clone();
+  const rungs = SYSTEM_LIGHTNESS[dark ? "dark" : "light"];
+  return withLightness(colour, rungs[Math.min(paint.variant, rungs.length - 1)]!);
 }
 
 /** Batch alpha encodes the pass: zero context, negative stub, >1 envelope, else subject. */
