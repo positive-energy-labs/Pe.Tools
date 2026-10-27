@@ -20,7 +20,7 @@ export function scenePlan(meshes: SceneMeshes, of: PaintOf | undefined, look: Lo
       ? CONTEXT_CREASE_DEG
       : p.tier === "envelope"
         ? look.shell.edgeAngle
-        : p.tier === "subject"
+        : p.tier === "subject" || p.tier === "stub"
           ? look.routes.edgeAngle
           : null,
   );

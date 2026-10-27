@@ -59,15 +59,18 @@ test("no two lightness rungs cross at defaults, and a selection lift stays betwe
   expect(lit).toBeLessThan(selected);
 });
 
-test("hidden route creases use depth comparison and dashes without writing depth", () => {
-  for (const hidden of [false, true]) {
-    const line = routeLines([0, 0, 0, 1, 0, 0], new THREE.Color("#1cbcd5"), LOOK.defaults, hidden);
-    expect(line.material.depthTest).toBe(true);
-    expect(line.material.depthWrite).toBe(false);
-    expect(line.material.depthFunc).toBe(hidden ? THREE.GreaterDepth : THREE.LessEqualDepth);
-    expect(line.material.dashed).toBe(hidden);
-    expect(line.geometry.getAttribute("instanceDistanceEnd").getX(0)).toBe(1);
-    line.geometry.dispose();
-    line.material.dispose();
-  }
+test("stub is the rung above context: stub opacity sits strictly between context glass peak and subject", () => {
+  // Stub alpha is capped by the subject alpha in surfaceAlpha; the context glass peak is veil.fill.
+  expect(LOOK.defaults.subject.stubOpacity).toBeGreaterThan(LOOK.defaults.veil.fill);
+  expect(LOOK.defaults.subject.stubOpacity).toBeLessThan(LOOK.defaults.subject.opacity);
+});
+
+test("a seam is one solid line, depth-tested normally and never drawn through a duct", () => {
+  const line = routeLines([0, 0, 0, 1, 0, 0], new THREE.Color("#1cbcd5"), LOOK.defaults);
+  expect(line.material.depthTest).toBe(true);
+  expect(line.material.depthWrite).toBe(false);
+  expect(line.material.depthFunc).toBe(THREE.LessEqualDepth);
+  expect(line.material.dashed).toBe(false);
+  line.geometry.dispose();
+  line.material.dispose();
 });

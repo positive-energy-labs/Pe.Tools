@@ -90,24 +90,20 @@ export function surfaceEdges(
   };
 }
 
-/** Hidden creases are dashed and depth-tested against real subject faces. Context owns no depth. */
-export function routeLines(positions: number[], color: THREE.Color, look: Look, hidden: boolean) {
+/** A seam is one solid line where two pieces meet, depth-tested like any other surface edge. It
+ * never draws through a duct: no occluded pass and no dashes. Subject and stub seams share it. */
+export function routeLines(positions: number[], color: THREE.Color, look: Look) {
   const line = new LineSegments2(
     new LineSegmentsGeometry().setPositions(positions),
     new LineMaterial({
       color,
-      linewidth: hidden ? look.routes.hiddenWidth : look.routes.edgeWidth,
-      opacity: hidden ? look.routes.hiddenOpacity : look.routes.edgeOpacity,
+      linewidth: look.routes.edgeWidth,
+      opacity: look.routes.edgeOpacity,
       transparent: true,
       depthWrite: false,
-      depthFunc: hidden ? THREE.GreaterDepth : THREE.LessEqualDepth,
-      dashed: hidden,
-      dashSize: look.routes.dashFt,
-      gapSize: look.routes.gapFt,
       fog: false,
     }),
   );
-  line.computeLineDistances();
   line.renderOrder = 2;
   return line;
 }

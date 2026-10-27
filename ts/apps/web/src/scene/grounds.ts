@@ -42,8 +42,8 @@ export const LOOK = defineKnobs("scene", "ts/apps/web/src/scene/grounds.ts", {
     opacity: num("Subject opacity", 0.98, [0.05, 1, 0.01]),
     // The X-ray dial (held key) lowers subject opacity to this.
     xrayOpacity: num("X-ray subject opacity", 0.35, [0.05, 1, 0.01]),
-    stubOpacity: num("Stub opacity", 0.16, [0.05, 1, 0.01]),
-    stubGroundMix: num("Stub mix toward ground", 0.45, [0, 1, 0.01]),
+    stubOpacity: num("Stub opacity", 0.35, [0.05, 1, 0.01]),
+    stubGroundMix: num("Stub mix toward ground", 0.25, [0, 1, 0.01]),
     stubEndAlpha: num("Stub fade floor × opacity", 0.06, [0, 1, 0.01]),
   },
   depth: {
@@ -69,13 +69,9 @@ export const LOOK = defineKnobs("scene", "ts/apps/web/src/scene/grounds.ts", {
     roundSegments: num("Round port segments", 16, [8, 32, 1]),
   },
   routes: {
-    edgeWidth: num("Route edge width", 1, [0, 4, 0.25], "live", "px"),
-    edgeOpacity: num("Route edge alpha", 0.4, [0, 1, 0.05]),
-    hiddenWidth: num("Occluded route width", 1.5, [0, 4, 0.25], "live", "px"),
-    hiddenOpacity: num("Occluded route alpha", 0.85, [0, 1, 0.05]),
-    edgeAngle: num("Route crease angle", 35, [1, 90, 1], "live", "deg"),
-    dashFt: num("Occluded route dash", 0.3, [0.05, 2, 0.05], "live", "ft"),
-    gapFt: num("Occluded route gap", 0.2, [0.05, 2, 0.05], "live", "ft"),
+    edgeWidth: num("Seam width", 1, [0, 4, 0.25], "live", "px"),
+    edgeOpacity: num("Seam alpha", 0.4, [0, 1, 0.05]),
+    edgeAngle: num("Seam crease angle", 35, [1, 90, 1], "live", "deg"),
   },
   camera: {
     yaw: num("Starting bearing", 225, [0, 360, 5], "live", "deg"),

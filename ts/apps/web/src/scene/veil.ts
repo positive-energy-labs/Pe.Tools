@@ -79,8 +79,10 @@ void veil(inout vec4 c) {
 #ifdef VEIL_TIER
   bool context = c.a == 0.0;
   bool shell = c.a > 1.0;
-  // 1 subject; 3 context and envelopes in one sorted pass; 4 envelopes alone; 5 context alone.
-  if (context ? (scenePass != 3 && scenePass != 5) : shell ? (scenePass != 3 && scenePass != 4) : scenePass != 1) discard;
+  bool stub = c.a < 0.0;
+  // 1 subject; 2 stub fill and 6 stub depth (see renderer drawScene); 3 context and envelopes in
+  // one sorted pass; 4 envelopes alone; 5 context alone.
+  if (context ? (scenePass != 3 && scenePass != 5) : shell ? (scenePass != 3 && scenePass != 4) : stub ? (scenePass != 2 && scenePass != 6) : scenePass != 1) discard;
   if (shell) c.a -= 1.0;
   if (context) {
     // Lines and glass share one ramp (falloff squared); past the reach it is zero.
