@@ -62,9 +62,7 @@ test("the production fixture unions sections once and captures every opened memb
   )!;
   expect(request.elementIds).toEqual([...scope.members, 999999].sort((a, b) => a - b));
   expect(request.focusOnly).toBe(true);
-  expect(sceneRequestOf(snapshot, { system: [], layers: ["context"] })!.elementIds).toEqual(
-    [...snapshot.nodes, ...snapshot.segments].map((e) => e.id).sort((a, b) => a - b),
-  );
+  expect(sceneRequestOf(snapshot, { system: [], layers: ["context"] })).toBeNull();
 });
 
 test("non-focus MEP paints as stub (kind from its snapshot system, pipes unknown); other context stays context", () => {

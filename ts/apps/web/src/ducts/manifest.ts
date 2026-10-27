@@ -270,10 +270,12 @@ export const sceneRequestOf = (
   contextRepresentation: ContextRepresentation = "boxes",
 ) => {
   if (!snapshot) return null;
+  // Only opened systems are read: an unscoped page must never capture the whole document.
   const scope = scopeOf(snapshot, page.system);
+  if (!scope) return null;
   const ids = [
     ...new Set([
-      ...(scope?.members ?? [...snapshot.nodes, ...snapshot.segments].map((e) => e.id)),
+      ...scope.members,
       ...drawn,
       ...stubs,
     ]),
