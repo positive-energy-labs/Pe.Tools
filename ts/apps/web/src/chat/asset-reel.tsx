@@ -98,14 +98,14 @@ export function AssetReel({
     <div className="dl-asset-reel" role="group" aria-label="Assets in this thread">
       <div className="dl-asset-filters">
         {FILTERS.map((f) => (
-          <button
+          <Button
             key={f.word}
-            type="button"
-            aria-pressed={filter === f.word}
+            label={`${assets.filter(f.test).length} ${f.word}`}
+            pressed={filter === f.word}
             onClick={() => setFilter(filter === f.word ? undefined : f.word)}
           >
-            <span className="face-mono">{assets.filter(f.test).length}</span> {f.word}
-          </button>
+            {assets.filter(f.test).length} {f.word}
+          </Button>
         ))}
       </div>
       {/* The filter stack alone sets the reel's height; the tiles fill it. */}
@@ -171,12 +171,9 @@ function Tile({ asset, onMention }: { asset: ThreadAsset; onMention: (m: Mention
     .filter(Boolean)
     .join(" · ");
   return (
-    <span
-      className="relative flex shrink-0"
-      onMouseEnter={() => lightMessage(asset.messageId)}
-      onMouseLeave={() => lightMessage(undefined)}
-    >
-      <Tooltip>
+    <span className="relative flex shrink-0">
+      {/* The kit tooltip owns hover and focus timing (N7); its open state lights the message. */}
+      <Tooltip onOpenChange={(open) => lightMessage(open ? asset.messageId : undefined)}>
         <TooltipTrigger
           render={<button type="button" />}
           aria-label={asset.kind === "model" ? `Mention ${asset.name}` : asset.name}

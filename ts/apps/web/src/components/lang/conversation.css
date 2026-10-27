@@ -268,24 +268,6 @@
   flex-shrink: 0;
   padding-block: 2px;
   font-size: var(--type-small-size);
-  color: var(--pe-ink-2);
-}
-.dl-asset-filters > button {
-  display: inline-flex;
-  gap: 6px;
-  line-height: 18px;
-  text-align: left;
-}
-.dl-asset-filters > button:hover,
-.dl-asset-filters > button[aria-pressed="true"] {
-  color: var(--pe-ink);
-}
-.dl-asset-filters > button[aria-pressed="true"] {
-  text-decoration: underline;
-}
-.dl-asset-filters .face-mono {
-  min-width: 1.5ch;
-  text-align: right;
 }
 .dl-asset-tiles {
   position: absolute;
