@@ -1044,7 +1044,13 @@ export function createRenderer(mount: HTMLElement, initialMeshes: SceneMeshes, w
     }
     for (const { hex, stub, positions } of groups.values()) {
       const lines = routeLines(positions, new THREE.Color(hex), look);
-      if (stub) lines.layers.set(STUB_SEAM_LAYER);
+      if (stub) {
+        // Stub bodies stay whole (proximity must not lie); their seams fade with the reach, like
+        // context lines, so a neighbour's outline never runs past the proximity space.
+        lines.layers.set(STUB_SEAM_LAYER);
+        lines.material.fog = true;
+        veilOutline(lines.material, veil, true);
+      }
       applyClip(lines.material);
       fitLines(lines);
       routes.add(lines);
