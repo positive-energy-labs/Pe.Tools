@@ -104,7 +104,7 @@ test("seed observations publish once while browser edits cannot forge their basi
 test("admitted demo launch uses only its labelled leaf and rejects escape or real IO fallback", async () => {
   const f = await setup();
   const submit = async (suffix: string, key: string, path: string) => {
-    const id = `${f.owner.id}:${suffix}`;
+    const id = suffix;
     const response = await f.fetch("/actions", {
       id,
       key,
@@ -127,6 +127,41 @@ test("admitted demo launch uses only its labelled leaf and rejects escape or rea
     error: expect.stringContaining("Unsupported simulated local operation"),
   });
 });
+test("separate demo journals retain the same exact request ID without rewriting or sharing receipts", async () => {
+  const first = await setup();
+  const second = await setup();
+  const id = "same-client-request";
+  for (const f of [first, second]) {
+    const response = await f.fetch("/actions", {
+      id,
+      key: "rhvac.launch",
+      target: { kind: "host" },
+      input: { path: f.owner.r10Path },
+    });
+    expect(response.ok).toBe(true);
+    expect(await response.json()).toMatchObject({ id });
+    expect(await f.owner.journal.wait(id)).toMatchObject({ id, state: "succeeded" });
+    const rows = await (await f.fetch(`/actions?id=${id}`)).json();
+    expect(rows).toMatchObject([{ id, input: { path: f.owner.r10Path } }]);
+  }
+  const changed = await first.fetch("/actions", {
+    id,
+    key: "rhvac.launch",
+    target: { kind: "host" },
+    input: { path: second.owner.r10Path },
+  });
+  expect(changed.status).toBe(409);
+  expect((await changed.json()).message).toContain("conflicts with its admitted intent");
+  const archive = await first.fetch("/actions", {
+    id: "host-file-escape",
+    key: "pod.export",
+    target: { kind: "host" },
+    input: { pod: "production", archivePath: join(first.parent, "outside.zip") },
+  });
+  expect(archive.status).toBe(409);
+  expect(await first.owner.journal.list(undefined, "host-file-escape")).toEqual([]);
+});
+
 test("resolved links, pod members, request identity and dispose cannot cross root", async () => {
   const f = await setup();
   const production = join(f.parent, "production");
@@ -138,7 +173,14 @@ test("resolved links, pod members, request identity and dispose cannot cross roo
   ).rejects.toThrow();
   await expect(f.owner.settings.readMember({ pod: "link", path: "keep.json" })).rejects.toThrow();
   expect(
-    (await f.fetch("/actions", { id: "production-unknown", destination: { kind: "host" } })).status,
+    (
+      await f.fetch("/actions", {
+        id: "production-unknown",
+        key: "family.capture",
+        target: { kind: "document", ref: { session: "production", openId: "production" } },
+        input: {},
+      })
+    ).status,
   ).toBe(409);
   await f.owner.dispose();
   expect(await readFile(join(production, "keep.json"), "utf8")).toBe("KEEP");

@@ -26,6 +26,7 @@ import {
   workKey,
   type TakeoffSnapshot,
   refusalText,
+  commandTool,
 } from "@pe/agent-contracts";
 import { RouteWorkspace } from "../../../packages/runtime/src/route-workspace.ts";
 import { ActionJournal } from "./action-journal.ts";
@@ -1041,9 +1042,7 @@ export async function createDemoOwner(parent: string, raw: unknown) {
         (request.kind === "takeoff-reading" && targetMatches(request.target)) ||
         (request.kind === "families-matrix" && targetMatches(request.target)) ||
         (request.kind === "field-options" && targetMatches(request.target)) ||
-        (request.kind === "receipts" &&
-          (!request.target || targetMatches(request.target)) &&
-          (!request.id || request.id.startsWith(`${id}:`)));
+        (request.kind === "receipts" && (!request.target || targetMatches(request.target)));
       if (!allowed) {
         publish({
           kind: "failure",
@@ -1189,16 +1188,22 @@ export async function createDemoOwner(parent: string, raw: unknown) {
       }
       if (url.pathname === "/actions" && request.method === "POST") {
         const body = (await request.clone().json()) as {
-          id?: string;
+          key?: string;
           target?: { kind: string; ref?: typeof target };
         };
+        const tool = commandTool(body.key ?? "");
+        // IDs belong unchanged to this private journal. Only simulated adapters may run here;
+        // generic host file/SDK executors must never fall through to production helpers.
+        const simulated =
+          (tool?.work && routes.has(tool.work.route) && body.key !== "family.attach-spec") ||
+          ["rhvac.launch", "rhvac.sync", "host.shell.open"].includes(body.key ?? "");
         if (
-          !body.id?.startsWith(`${id}:`) ||
+          !simulated ||
           (body.target?.kind === "document" &&
             (body.target.ref?.session !== id || body.target.ref?.openId !== target.openId))
         )
           return json(
-            { error: "Only new local demo requests and destinations are executable" },
+            { error: "Only simulated commands and local demo destinations are executable" },
             409,
           );
       }
