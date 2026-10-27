@@ -1,7 +1,7 @@
 import type { Ref } from "../lang/attention";
 import type { Tone } from "../../lib/token";
 /** visibleRows owns the view; TableFrame owns chrome. */
-import { useMemo, useRef, useState, type ReactNode } from "react";
+import { useEffect, useMemo, useRef, useState, type ReactNode } from "react";
 import { useTable, type RowData } from "@tanstack/react-table";
 
 import { cellFactsText, cellStateLabel } from "../lang/cell";
@@ -71,6 +71,10 @@ export interface TableProps<Row extends RowData> {
   selection?: TableSelection;
   /** The row a side pane shows. */
   activeKey?: string | null;
+  /** With `activeKey`: the exact cell named from elsewhere, which the grid focuses (its verbs on the keyboard). */
+  activeColumn?: string | null;
+  /** The named row or column exists but the view hides it (the query, a hidden column): why, once per naming. */
+  onActiveHidden?: (refusal: string) => void;
   /** Show exactly these rows in this order (a drill-in), instead of the view. */
   visibleKeys?: readonly string[];
   onRowClick?: (row: Row) => void;
@@ -94,6 +98,10 @@ export interface TableProps<Row extends RowData> {
   };
 }
 
+/** Why a named target is not drawn: the query filtered its row out, or its column is hidden. */
+export const ACTIVE_ROW_HIDDEN = "its row is hidden by the query";
+export const ACTIVE_COLUMN_HIDDEN = "its column is hidden";
+
 export function Table<Row extends RowData>({
   rows,
   status = "ready",
@@ -105,6 +113,8 @@ export function Table<Row extends RowData>({
   onStateChange,
   selection,
   activeKey,
+  activeColumn,
+  onActiveHidden,
   visibleKeys,
   onRowClick,
   onRowHover,
@@ -144,6 +154,13 @@ export function Table<Row extends RowData>({
     const byKey = new Map(rows.map((row) => [rowKey(row), row]));
     return visibleKeys.map((key) => byKey.get(key)).filter((row) => row !== undefined);
   }, [rows, columns, state, visibleKeys, rowKey]);
+  // A target named from elsewhere that the view hides is said, never silently dropped (house 9).
+  useEffect(() => {
+    if (!activeKey || !onActiveHidden || !rows.some((row) => rowKey(row) === activeKey)) return;
+    if (!viewed.some((row) => rowKey(row) === activeKey)) onActiveHidden(ACTIVE_ROW_HIDDEN);
+    else if (activeColumn && state.hiddenColumns?.includes(activeColumn))
+      onActiveHidden(ACTIVE_COLUMN_HIDDEN);
+  }, [activeKey, activeColumn]); // eslint-disable-line react-hooks/exhaustive-deps -- the naming edge
   const tableColumns = useMemo(() => toColumnDefs(columns), [columns]);
   const sorting = useMemo(() => toSortingState(state.sorts), [state.sorts]);
   const columnPinning = useMemo(
@@ -213,6 +230,7 @@ export function Table<Row extends RowData>({
             visibleRows={shownRows}
             columnByKey={columnByKey}
             activeKey={activeKey}
+            activeColumn={activeColumn}
             rowClassName={rowClassName}
             subject={subject}
             revit={revit}

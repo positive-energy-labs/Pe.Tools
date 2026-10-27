@@ -340,6 +340,7 @@ export function LiveScheduleGridWorkspace({
         <ScheduleGridWorkspace
           state={state}
           onRefused={(says) => handle.note("fill", says, true)}
+          onHidden={(says) => handle.note("locate", says, true)}
         />
       )}
     </div>
