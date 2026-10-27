@@ -693,6 +693,8 @@ Rebuilt 2026-10-22 against `a553a15a`; these are decisions and proof boundaries,
 
 ## Tried & rejected
 
+- 2026-10-27, retire the original prerender spike branch at `a06ce43a`, preserved as `archive/2026-10-27/prerender-progressive-loading`. Its useful early-guide behavior was adapted in `40b09346` and superseded by `HelpWorld` ([TUTORIAL-PRELOAD.md](TUTORIAL-PRELOAD.md)); it never implemented progressive native geometry acquisition. Do not merge the old experiment again.
+
 - 2026-10-26, nearest-surface context by writing context depth into the main buffer: walls then occlude ducts outright. The compare must be against a context-only depth picture, or a front-to-back sorted fill drawn after everything that must stay tinted.
 - 2026-10-26, selection as a grey fill (knobs prototype `d22058db`): reads as switched off. Selection drawn over everything (main): kills depth. Both shown on the look page, both rejected by kaitpw.
 - 2026-10-26, subject-distance fade sampled per box corner: a long wall vanishes where its middle is near the ducts. Fade is per fragment (the real `veil-field.ts`) or on subdivided geometry.
