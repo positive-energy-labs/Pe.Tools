@@ -1573,6 +1573,7 @@ test("a submitted source freezes before countdown; changed source never becomes 
       { kind: "member", ...source, bytesBase64: Buffer.from(profileBytes).toString("base64") },
     ]),
   });
+  await vi.waitFor(() => expect(env.approval.asks).toHaveLength(1));
   const updated = await env.file("p.json", '{"patch":{"families":{"changed":1}}}');
   expect(env.approval.allow()).toBe(true);
   const refused = await completion;

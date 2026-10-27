@@ -212,7 +212,7 @@ test("the declared host route reads canonical Work and unreadable Work refuses b
   let unreadable = false;
   let writes = 0;
   const routes = createPeRoutes({
-    registrations: [{ spec: ductsRouteState, handlers: {} }],
+    registrations: [{ spec: ductsRouteState }],
     heads: { observe: () => () => {} },
     store: {
       getState: async () => {

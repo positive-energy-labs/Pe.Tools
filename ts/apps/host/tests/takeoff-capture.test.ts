@@ -89,7 +89,7 @@ test("actual snapshot read leaves real Work revision and a concurrent authored e
   const request = asCaller(human, (req: Request) => web.handler(req, Context.empty() as never));
   let state: unknown;
   const work = new RouteWorkspace({
-    registrations: [{ spec: takeoffsRouteState, handlers: {} }],
+    registrations: [{ spec: takeoffsRouteState }],
     store: {
       getState: async () => state,
       setState: async ({ value }) => {

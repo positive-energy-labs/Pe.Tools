@@ -55,7 +55,7 @@ test("Families observation survives owner reconstruction; failed and wrong-docum
   let connected = true;
   let storedWork: unknown;
   const workspace = new RouteWorkspace({
-    registrations: [{ spec: familiesRouteState, handlers: {} }],
+    registrations: [{ spec: familiesRouteState }],
     store: {
       getState: async () => structuredClone(storedWork),
       setState: async ({ value }) => {
@@ -305,7 +305,7 @@ test("Families observation survives owner reconstruction; failed and wrong-docum
       await workspace.apply(
         work,
         "families",
-        "agent",
+        "pea",
         [{ path: ["scope", "edit"], value: { value: filter } }],
         1,
       ),
