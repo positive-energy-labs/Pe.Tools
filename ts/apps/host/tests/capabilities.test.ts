@@ -106,7 +106,7 @@ test("the host-owned /pe surface answers without Revit", async () => {
     expect(catalog.sources.recents).toMatch(/^(ok|still reading|did not answer)/);
     const keys = catalog.capabilities.map((row) => row.key);
     expect(keys).toContain("op:host.shell.open");
-    expect(keys).toContain("workflow:instances.start");
+    expect(keys).toContain("op:instances.start");
     expect(keys.some((key) => key.startsWith("route:ops"))).toBe(false);
     // The member Work route is named for the pods its members live in.
     expect(keys).toContain("route:pods.edit");

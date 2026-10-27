@@ -60,13 +60,7 @@ afterEach(async () => {
 /** A mutation crosses `/actions` as one exact admission against the host, the only write door. */
 const act = async (key: string, input: unknown, as: Caller = human) => {
   const id = randomUUID();
-  let row = (
-    await post(
-      "/actions",
-      { id, kind: "operation", key, destination: { kind: "host" }, input, bases: {} },
-      as,
-    )
-  ).json;
+  let row = (await post("/actions", { id, key, target: { kind: "host" }, input }, as)).json;
   for (let wait = 0; row.state === "running" && wait < 100; wait++) {
     await new Promise((settle) => setTimeout(settle, 20));
     const listed = await withInvocationContext({ caller: as }, () =>
@@ -321,7 +315,7 @@ test("pod.export and pod.import cross /actions with no session and no native cal
   // Source bytes must be captured before journal admission, even for a native human press.
   const missing = await act("pod.import", { archivePath: "relative.zip" });
   expect(missing).toMatchObject({ error: expect.stringContaining("relative.zip") });
-  expect(missing).not.toHaveProperty("state");
+  expect(missing).toMatchObject({ state: "failed", notDispatched: true, steps: [] });
   expect((await listPackages(pods)).packages.map((pod) => pod.id)).toEqual(["ducts"]);
   expect(nativeCalls).toEqual([]);
 });
@@ -394,7 +388,7 @@ test("pod.promote wraps a scratch Page byte for byte, unbound, without touching 
   );
   const missing = await act("pod.promote", { page: "missing", id: "other" });
   expect(missing).toMatchObject({ error: expect.stringContaining(join(pages, "missing")) });
-  expect(missing).not.toHaveProperty("state");
+  expect(missing).toMatchObject({ state: "failed", notDispatched: true, steps: [] });
   await expect(readFile(join(pods, "other", "pod.json"))).rejects.toThrow();
   expect(nativeCalls).toEqual([]);
 });

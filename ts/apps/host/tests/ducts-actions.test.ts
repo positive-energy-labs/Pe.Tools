@@ -109,10 +109,8 @@ const lane = <A>(body: (h: Harness) => Effect.Effect<A, unknown, never>) =>
     ) => ({
       id,
       key,
-      kind: "workflow" as const,
-      destination: { kind: "document" as const, ref: { ...target, openId } },
+      target: { kind: "document" as const, ref: { ...target, openId } },
       input: payload,
-      bases: {},
     });
     try {
       return yield* body({ owner, outgoing, post, answer, intent });

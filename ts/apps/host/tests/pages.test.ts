@@ -237,7 +237,7 @@ describe("pages", () => {
           try {
             const basis = admitCrossing(
               minted.caller,
-              (body as { destination: Parameters<typeof admitCrossing>[1] }).destination,
+              (body as { target: Parameters<typeof admitCrossing>[1] }).target,
               "/actions",
             );
             return Response.json(
@@ -342,9 +342,8 @@ describe("pages", () => {
         basis: { kind: "grant", thread: "t1", headRevision: 4, lifetime: docA },
       });
       expect(forwarded[0]!.body).toMatchObject({
-        kind: "operation",
         key: "revit.context.lens",
-        destination: { kind: "document", ref: docA },
+        target: { kind: "document", ref: docA },
       });
       // A catalog row's `op:` key (what pe.find answers) runs as the bare operation.
       await page.post("/pages/todo/act", { key: "op:revit.context.lens" });
@@ -401,7 +400,7 @@ describe("pages", () => {
       });
       const body = forwarded[0]!.body as {
         key: string;
-        destination: unknown;
+        target: unknown;
         input: {
           sourcePath: string;
           permissionMode: string;
@@ -409,7 +408,7 @@ describe("pages", () => {
         };
       };
       expect(body.key).toBe("scripting.execute");
-      expect(body.destination).toEqual({ kind: "document", ref: docA });
+      expect(body.target).toEqual({ kind: "document", ref: docA });
       expect(Object.keys(body.input).sort()).toEqual([
         "permissionMode",
         "sourceBundle",

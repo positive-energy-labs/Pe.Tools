@@ -74,12 +74,12 @@ test("missing or ambiguous bridge keeps generated discovery metadata and reports
       mutates: false,
       input: { type: "object" },
     });
-    expect(catalog.capabilities.find((op) => op.key === "workflow:families.plan")).toMatchObject({
+    expect(catalog.capabilities.find((op) => op.key === "op:families.plan")).toMatchObject({
       effect: "query",
       mutates: false,
       principal: expect.arrayContaining(["human", "pea"]),
     });
-    expect(catalog.capabilities.some((op) => op.key === "op:families.plan")).toBe(false);
+    expect(catalog.capabilities.filter((op) => op.key === "op:families.plan")).toHaveLength(1);
     for (const op of tsOnlyOperationCatalog)
       expect(body.operations.filter((row: { key: string }) => row.key === op.key)).toEqual([op]);
 
@@ -275,7 +275,6 @@ test("actual pea/Gunshi argv crosses local HTTP: actor/id/openId, file/stdin A/B
     expect(original).toMatchObject({
       caller: { kind: "human", via: "cli" },
       basis: { kind: "human" },
-      kind: "operation",
       result: partial,
     });
     expect(printed.join("\n")).toContain('"failed"');

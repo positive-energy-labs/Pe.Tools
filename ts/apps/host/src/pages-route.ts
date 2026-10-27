@@ -42,6 +42,7 @@ import {
   type Refusal,
   type TargetInventory,
   type TargetResolution,
+  type ActionAdmission,
 } from "@pe/agent-contracts";
 import { z } from "zod";
 import { RevitBridge } from "./bridge.ts";
@@ -683,7 +684,7 @@ export function createPagesHandler(
         at,
         "/actions",
         {},
-        { id: randomUUID(), kind: "operation", destination: resolution.target, ...action },
+        { id: randomUUID(), target: resolution.target, ...action } satisfies ActionAdmission,
       );
     } catch (error) {
       if (error instanceof Refused) return refused(error.refusal);

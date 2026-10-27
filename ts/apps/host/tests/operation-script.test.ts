@@ -120,14 +120,12 @@ it.each([
         },
         body: JSON.stringify({
           id,
-          kind: "operation",
           key: "scripting.execute",
-          destination: {
+          target: {
             kind: "document",
             ref: { session: "bridge-script", openId: "open-script" },
           },
           input: { scriptContent: "WriteLine(1);" },
-          bases: {},
         }),
       });
       expect([200, 202], await response.clone().text()).toContain(response.status);

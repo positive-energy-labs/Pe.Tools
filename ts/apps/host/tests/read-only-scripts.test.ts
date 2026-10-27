@@ -116,7 +116,7 @@ async function serve(onCatalog?: (documents: (typeof other)[]) => void) {
       error?: { code: string; details?: { refusal?: { code: string } } };
       state?: string;
       id?: string;
-      footprint?: import("@pe/agent-contracts").Footprint;
+      effects?: import("@pe/agent-contracts").Footprint;
     };
     return { status: response.status, json, text };
   };
@@ -238,9 +238,8 @@ test("item 9: Pea reads an ungranted human document by exact target; a write the
     expect(host.sent.map((one) => [one.key, one.openId])).toEqual([["model.census", doc.openId]]);
     const write = await host.send("/actions", as({ kind: "pea", thread: "t-op" }), {
       id: randomUUID(),
-      kind: "operation",
       key: "scripting.execute",
-      destination: { kind: "document", ref: doc },
+      target: { kind: "document", ref: doc },
       input: script("WriteTransaction"),
     });
     expect([write.status, write.json.refusal?.code], write.text).toEqual([403, "run.none"]);
@@ -263,9 +262,8 @@ test("Pea script modes all cross the same root-run consent and raw script dispat
     for (const mode of ["ReadOnly", undefined, "NoTransaction", "WriteTransaction"]) {
       const act = await host.send("/actions", headers, {
         id: randomUUID(),
-        kind: "operation",
         key: "scripting.execute",
-        destination: { kind: "document", ref: doc },
+        target: { kind: "document", ref: doc },
         input: script(mode),
       });
       expect(act.status, act.text).toBeLessThan(300);
@@ -314,13 +312,12 @@ test("Pea script footprint includes every sibling and Stop prevents dispatch", a
     expect(raw.status).toBe(409);
     const act = await host.send("/actions", headers, {
       id: randomUUID(),
-      kind: "operation",
       key: "scripting.execute",
-      destination: { kind: "document", ref: doc },
+      target: { kind: "document", ref: doc },
       input: script("ReadOnly"),
     });
     expect(act.json.state, act.text).toBe("waiting");
-    expect(act.json.footprint).toEqual(
+    expect(act.json.effects).toEqual(
       expect.arrayContaining([
         { kind: "document", ref: doc },
         { kind: "document", ref: { session: doc.session, openId: other.openId } },
@@ -342,9 +339,8 @@ test("an external MCP client cannot read a human document with a ReadOnly script
     for (const mode of ["ReadOnly", undefined, "NoTransaction"]) {
       const admit = await host.send("/actions", caller, {
         id: randomUUID(),
-        kind: "operation",
         key: "scripting.execute",
-        destination: { kind: "document", ref: doc },
+        target: { kind: "document", ref: doc },
         input: script(mode),
       });
       expect([admit.status, admit.json.refusal?.code], admit.text).toEqual([
@@ -415,7 +411,7 @@ test("a human pin consents only to its document: an ungranted sibling refuses Re
         input: script(mode),
       });
       expect(act.status, act.text).toBe(403);
-      expect(act.text).toContain("grant.required");
+      expect(act.text).toContain("script.ungranted-documents");
       expect(act.text).toContain(other.openId);
       expect(host.sent).toEqual([]);
     }

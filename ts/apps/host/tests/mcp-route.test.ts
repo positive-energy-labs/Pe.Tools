@@ -128,18 +128,17 @@ async function fixture(telemetry?: ReceiptExport) {
       if (rows.has(body.id)) return Response.json(rows.get(body.id));
       posts.push(body);
       await beforePost();
-      const { input: request, ...admission } = body;
+      const { input, ...admission } = body;
       const row = {
         ...admission,
         caller: { kind: "anonymous" },
         basis: null,
-        request,
+        input,
         state: "succeeded",
         result: { login },
         steps: [],
-        preparation: { state: "unprepared" },
+        prepared: { state: "unprepared" },
         recovery: [],
-        publication: { state: "unrequested" },
         startedAt: new Date(0).toISOString(),
       };
       rows.set(body.id, row);

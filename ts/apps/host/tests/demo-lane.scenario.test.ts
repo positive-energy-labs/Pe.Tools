@@ -465,8 +465,8 @@ async function liveLoop(name: string, loop: (page: Page) => Promise<string>) {
   page.on("request", (request: { method(): string; url(): string; postDataJSON(): unknown }) => {
     if (request.method() !== "POST" || !/\/demo\/instances\/[^/]+\/actions$/.test(request.url()))
       return;
-    const admission = request.postDataJSON() as { kind: string; key: string };
-    if (admission.kind === "workflow") workflows.push(admission.key);
+    const admission = request.postDataJSON() as { key: string };
+    workflows.push(admission.key);
   });
   try {
     const shown = await loop(page);

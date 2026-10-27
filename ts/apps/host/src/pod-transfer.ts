@@ -18,6 +18,7 @@ import {
 import { productPagesRootPath, productPodsRootPath } from "./product-paths.ts";
 import { activateImportedPackage } from "./package-lifecycle.ts";
 import { sha256Hex as sha256, validatePageHtml, writeArtifact } from "./page-artifacts.ts";
+import { BridgeError } from "./bridge.ts";
 
 const VENDOR_DIRECTORY = "_vendor";
 const IMPORTED_FILE = "imported.json";
@@ -34,12 +35,14 @@ export type TransferOptions = {
 };
 
 /** A transport refusal: the archive or pod cannot cross as asked. `status` maps to the HTTP answer. */
-export class TransferRefused extends Error {
+export class TransferRefused extends BridgeError {
+  readonly name = "TransferRefused";
   constructor(
     message: string,
     readonly status: 400 | 404 | 409 | 422 = 422,
   ) {
-    super(message);
+    // These refusals precede publishing the archive/final Pod; staging is removed in finally.
+    super(message, status, { notDispatched: true });
   }
 }
 
