@@ -9,6 +9,7 @@ import type { RevitDetailSpaceScene } from "@pe/host-contracts/generated";
 
 /** The artifact's metadata, as the op declares it. */
 export type Psc1Metadata = RevitDetailSpaceScene.Res.SceneMetadata;
+export const SCENE_FORMAT = "space-scene-v2";
 
 const MAGIC = 0x31435350; // "PSC1" little-endian
 const MAX_TRIANGLES = 3_000_000;
@@ -26,8 +27,21 @@ export function decodeScene(buffer: ArrayBuffer): { metadata: Psc1Metadata; mesh
   const metadata = JSON.parse(
     new TextDecoder().decode(new Uint8Array(buffer, 8, length)),
   ) as Psc1Metadata;
+  const completeness = metadata.completeness;
+  if (metadata.format !== SCENE_FORMAT || !completeness)
+    throw Error("Scene capture is outdated. Reload the Revit payload and refresh the scene.");
   if (
-    metadata.format !== "space-scene-v1" ||
+    typeof completeness.complete !== "boolean" ||
+    (completeness.deferredCandidates !== null &&
+      (typeof completeness.deferredCandidates !== "number" ||
+        !Number.isSafeInteger(completeness.deferredCandidates) ||
+        completeness.deferredCandidates < 0)) ||
+    !Number.isSafeInteger(completeness.acquisitionLimitedElements) ||
+    completeness.acquisitionLimitedElements < 0 ||
+    (completeness.limitReason !== null && typeof completeness.limitReason !== "string")
+  )
+    throw Error("Invalid scene completeness metadata");
+  if (
     metadata.stamp?.frame !== "host-internal-ft" ||
     !Number.isInteger(metadata.triangles) ||
     metadata.triangles < 1 ||

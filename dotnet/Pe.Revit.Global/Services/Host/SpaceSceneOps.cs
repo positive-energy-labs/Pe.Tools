@@ -11,15 +11,15 @@ using ProjectDocument = Pe.Revit.Operations.ProjectDocument;
 namespace Pe.Revit.Global.Services.Host;
 
 internal static class SpaceSceneOps {
-    [Op("revit.detail.space-scene", Does = "Export real triangles in host internal feet. Set focusOnly with host elementIds for the first usable exact-membership mesh without preparing the whole world. Request context separately with focusOnly false; contextPaddingFt derives its crop, or bounds sets it explicitly. Metadata phase distinguishes focus/context, unavailableElements identifies requested ids without meshes, and omittedElements counts context excluded by the triangle budget. No document mutation. Browser orbit, visibility and cuts need no further native calls.", Title = "Export Space Scene", Finds = ["space", "3d", "mesh", "viewer", "context", "section"], Cost = OpCost.Expensive, Example = "{ \"elementIds\": [123], \"focusOnly\": true, \"maxTriangles\": 1500000 }")]
-    private static SceneArtifact Export(SceneRequest request, ProjectDocument document) {
+    [Op("revit.detail.space-scene", Does = "Export real triangles in host internal feet. Set focusOnly with host elementIds for the first usable exact-membership mesh without preparing the whole world. Request context separately with focusOnly false; contextPaddingFt derives its crop, or bounds sets it explicitly. Metadata phase distinguishes focus/context, unavailableElements identifies requested ids without meshes, omittedElements counts context excluded by the output budget, and completeness reports deferred context and acquisition resource limits. Successful artifacts preserve exact focus membership; optional context stops between native calls under memory, time, or triangle limits. No document mutation. Browser orbit, visibility and cuts need no further native calls.", Title = "Export Space Scene", Finds = ["space", "3d", "mesh", "viewer", "context", "section"], Cost = OpCost.Expensive, Example = "{ \"elementIds\": [123], \"focusOnly\": true, \"maxTriangles\": 1500000 }")]
+    private static SceneArtifact Export(SceneRequest request, ProjectDocument document, CancellationToken cancellationToken) {
         var root = ProductRuntimeLayout.ForCurrentUser().Cache.ResolveModuleCachePath("space-scenes");
         Directory.CreateDirectory(root);
         var temp = Path.Combine(root, Guid.NewGuid().ToString("N") + ".tmp");
         var vertexTemp = temp + ".vertices";
         try {
             SceneMetadata metadata;
-            using (var vertices = File.Create(vertexTemp)) metadata = Scene.Write(document.Value, request, vertices);
+            using (var vertices = File.Create(vertexTemp)) metadata = Scene.Write(document.Value, request, vertices, cancellationToken);
             var json = Encoding.UTF8.GetBytes(JsonConvert.SerializeObject(metadata, new JsonSerializerSettings {
                 ContractResolver = new CamelCasePropertyNamesContractResolver(),
                 Converters = [new StringEnumConverter()]

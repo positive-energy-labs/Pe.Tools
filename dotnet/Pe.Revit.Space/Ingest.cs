@@ -48,9 +48,9 @@ internal static class Ingest {
     ///     layer, so a filter can name a layer and a Handle can report one. Returns the row count.
     /// </summary>
     public static int Element(Element e, int source, int firstPrim, List<Tri> sink, Transform xf, List<PrimRow> rows,
-        bool includeCurves = true, Aabb? region = null) {
+        bool includeCurves = true, Aabb? region = null, SceneBudget? budget = null) {
         var added = 0;
-        var solid = Faces(e, source, firstPrim, sink, xf, region);
+        var solid = Faces(e, source, firstPrim, sink, xf, region, budget);
         if (solid is not null) {
             rows.Add(solid);
             added++;
@@ -61,10 +61,10 @@ internal static class Ingest {
     }
 
     /// <summary>The solid and mesh half: one row, or null when the element tessellates to nothing.</summary>
-    private static PrimRow? Faces(Element e, int source, int prim, List<Tri> sink, Transform xf, Aabb? region) {
+    private static PrimRow? Faces(Element e, int source, int prim, List<Tri> sink, Transform xf, Aabb? region, SceneBudget? budget) {
         var start = sink.Count;
         var sawSolid = false;
-        Read(e, Opts, xf, prim, sink, ref sawSolid, region);
+        Read(e, Opts, xf, prim, sink, ref sawSolid, region, budget);
         var box = TriangleBounds(sink, start);
         var body = sink.Count > start ? ElementBounds(e, xf) : null;
         // A cuff is a solid too. Retry when it spans less than half the body's longest axis;
@@ -72,7 +72,7 @@ internal static class Ingest {
         if (sink.Count == start ? !sawSolid : body is { } b && b.CoverageBy(box) < 0.5) {
             var fine = new List<Tri>();
             var fineSolid = false;
-            Read(e, FineOpts, xf, prim, fine, ref fineSolid, region);
+            Read(e, FineOpts, xf, prim, fine, ref fineSolid, region, budget);
             var fineBox = TriangleBounds(fine, 0);
             if (fine.Count > 0 && (sink.Count == start || body is { } full && full.CoverageBy(fineBox) > full.CoverageBy(box))) {
                 sink.RemoveRange(start, sink.Count - start);
@@ -95,57 +95,75 @@ internal static class Ingest {
             HeightRole: HeightRoles.Of(e.Category?.Id.Value(), e is ImportInstance));
     }
 
-    private static void Read(Element e, Options o, Transform xf, int prim, List<Tri> sink, ref bool sawSolid, Aabb? region) {
+    private static void Read(Element e, Options o, Transform xf, int prim, List<Tri> sink, ref bool sawSolid, Aabb? region, SceneBudget? budget) {
         GeometryElement? ge;
+        budget?.Native();
         try {
             ge = e.get_Geometry(o);
         } catch {
             return;
         }
 
-        using (ge) if (ge is not null) Walk(ge, xf, prim, sink, ref sawSolid, region, false);
+        using (ge) {
+            budget?.AfterNative();
+            if (ge is not null) Walk(ge, xf, prim, sink, ref sawSolid, region, false, budget);
+        }
     }
 
     // Borrow symbol geometry and apply its instance transform once, without a native deep copy.
     // Joined instance-specific bodies arrive as direct Solids and keep the same path.
     // ponytail: loose curves outside a DWG import, and points, are still dropped. Only an
     // ImportInstance raises its curves into ribbons, because only there does a layer name exist.
-    private static void Walk(GeometryElement ge, Transform xf, int prim, List<Tri> outp, ref bool sawSolid, Aabb? region, bool reverseWinding) {
+    private static void Walk(GeometryElement ge, Transform xf, int prim, List<Tri> outp, ref bool sawSolid, Aabb? region, bool reverseWinding, SceneBudget? budget) {
         // Native symbol hierarchies are acyclic; unlike copied geometry, nested symbols are not flattened.
         foreach (var go in ge) {
-            switch (go) {
-                case Solid s when s.Faces.Size > 0:
+            using (go) switch (go) {
+                case Solid s:
+                    budget?.Native();
+                    using (var faces = s.Faces) {
+                    budget?.AfterNative();
+                    if (faces.Size == 0) break;
                     sawSolid = true;
                     if (region is { } bounds && !Overlaps(s, xf, bounds)) break;
-                    foreach (Face f in s.Faces) {
+                    foreach (Face f in faces) {
+                        using (f) {
                         Mesh? m;
+                        budget?.Native();
                         try {
                             m = f.Triangulate();
                         } catch {
                             continue;
                         }
 
-                        using (m) if (m is not null) Emit(m, xf, prim, outp, reverseWinding);
+                        using (m) {
+                            budget?.AfterNative();
+                            if (m is not null) Emit(m, xf, prim, outp, reverseWinding, budget);
+                        }
+                        }
                     }
-
+                    }
                     break;
                 case Mesh mm:
-                    Emit(mm, xf, prim, outp, reverseWinding);
+                    Emit(mm, xf, prim, outp, reverseWinding, budget);
                     break;
                 case GeometryInstance gi: {
                     GeometryElement? inner;
+                    budget?.Native();
                     try {
                         inner = gi.GetSymbolGeometry();
                     } catch {
                         continue;
                     }
 
-                    using (inner) if (inner is not null) {
+                    using (inner) {
+                    budget?.AfterNative();
+                    if (inner is not null) {
                         using var local = gi.Transform;
                         using var toHost = xf.Multiply(local);
                         // Native instance copies correct winding for mirrored symbols; preserve that parity,
                         // independently of the caller's link transform, which the copied path never corrected.
-                        Walk(inner, toHost, prim, outp, ref sawSolid, region, reverseWinding ^ local.HasReflection);
+                        Walk(inner, toHost, prim, outp, ref sawSolid, region, reverseWinding ^ local.HasReflection, budget);
+                    }
                     }
                     break;
                 }
@@ -184,9 +202,12 @@ internal static class Ingest {
         }
     }
 
-    private static void Emit(Mesh m, Transform xf, int prim, List<Tri> outp, bool reverseWinding) {
+    private static void Emit(Mesh m, Transform xf, int prim, List<Tri> outp, bool reverseWinding, SceneBudget? budget) {
         // Revit vertices are shared by triangles. Cross the native XYZ boundary once per vertex.
+        budget?.Mesh(m.NumTriangles, outp.Count);
+        budget?.Native();
         var vertices = m.Vertices.Select(vertex => P(xf, vertex)).ToArray();
+        budget?.AfterNative();
         for (var i = 0; i < m.NumTriangles; i++) {
             var t = m.get_Triangle(i);
             var tri = new Tri {

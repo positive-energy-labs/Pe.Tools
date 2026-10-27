@@ -71,9 +71,9 @@ public sealed class SpaceCleanHostGeometryProofTests {
             Assert.That(SpaceWorld.HostGeneration(document), Is.Not.EqualTo(generation), "A committed edit advances the host epoch.");
             var dirty = ReadScene(document, subject.Id);
             Assert.That(dirty, Is.Not.EqualTo(first));
-            Aabb? crop = null;
-            var dirtyWorld = SpaceWorld.PrepareScene(document, [subject.Id.Value()], ref crop, 0, true);
-            Assert.That(dirtyWorld.Partitions.Single().Prims.Min(row => row.Box.MinX), Is.EqualTo(10).Within(1e-6),
+            using var dirtyVertices = new MemoryStream();
+            var dirtyScene = Scene.Write(document, new SceneRequest([subject.Id.Value()], FocusOnly: true), dirtyVertices);
+            Assert.That(dirtyScene.Elements.Min(row => row.Bounds.MinX), Is.EqualTo(10).Within(1e-6),
                 "The dirty host scene must reflect the current moved body, not saved disk rows.");
 
             document.Save();

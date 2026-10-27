@@ -1,7 +1,7 @@
 import { NATIVE_READ_WAIT_S } from "#/route/waits";
 import { callHostRpc } from "#/host/client";
 import { fetchSceneArtifact } from "./artifact";
-import { decodeScene, type Psc1Metadata } from "./psc1";
+import { decodeScene, SCENE_FORMAT, type Psc1Metadata } from "./psc1";
 import { SceneCache, sceneFootprint } from "./scene-cache";
 import { sceneMemory, type SceneMemoryLease } from "./scene-memory";
 import type { SceneMeshes } from "./types";
@@ -28,6 +28,7 @@ const identity = (source: SceneSource) =>
   source.kind === "artifact"
     ? `artifact:${source.id}`
     : JSON.stringify([
+        SCENE_FORMAT,
         source.document.session,
         source.document.openId,
         source.revision,

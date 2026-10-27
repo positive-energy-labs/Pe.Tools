@@ -6,6 +6,8 @@ internal sealed class Partition {
     private PrimRow[] _prims = [];
     private int[] _start = [0];
     private readonly LinkedGeometryStore? _store;
+    private bool _scene;
+    private int _sceneElements, _sceneTriangles;
 
     public Partition(int source, Document doc, SourceKind kind, long? linkInstanceId, Transform transform, string? generation = null) {
         this.Source = source;
@@ -43,7 +45,8 @@ internal sealed class Partition {
 
     public SourceRow Row => new(
         this.Source, this.DocumentKey, this.LinkInstanceId, this.Kind,
-        this.BuiltAtEpoch, this.Dirty, this._prims.Length, this._tris.Length, this.Skipped);
+        this.BuiltAtEpoch, this.Dirty, this._scene ? this._sceneElements : this._prims.Length,
+        this._scene ? this._sceneTriangles : this._tris.Length, this.Skipped);
 
     /// <summary>The one full ingest. Never called from a verb.</summary>
     public void Build(long epoch) {
@@ -105,6 +108,64 @@ internal sealed class Partition {
             start += row.Triangles;
         }
         return added;
+    }
+
+    internal void BeginScene(long epoch) { this._scene = true; this.BuiltAtEpoch = epoch; this.Dirty = false; }
+    internal void RecordScene(LinkedGeometryStore.Geometry geometry) {
+        this._sceneElements += geometry.Rows.Length; this._sceneTriangles += geometry.Triangles.Length;
+        this.Categories = this.Categories.Concat(geometry.Rows.Select(row => row.Category)).Distinct(StringComparer.OrdinalIgnoreCase).ToArray();
+    }
+
+    internal IDisposable? OpenScene() => this._store?.Open();
+
+    internal LinkedGeometryStore.Geometry CaptureScene(Element element, Aabb? region, SceneBudget budget) {
+        LinkedGeometryStore.Geometry Capture(Aabb? bounds) {
+            var triangles = new List<Tri>();
+            var rows = new List<PrimRow>();
+            Ingest.Element(element, 0, 0, triangles, this.Transform, rows, false, bounds, budget);
+            return new LinkedGeometryStore.Geometry(rows.ToArray(), triangles.ToArray());
+        }
+        budget.Headroom();
+        var result = this._store is null || (this.Kind == SourceKind.Host && region is { } box && !this.InsideRegion(element, box))
+            ? Capture(region)
+            : this._store.Read(element.UniqueId + "/mesh", () => Capture(null));
+        return result;
+    }
+
+    internal IEnumerable<Element> SceneElements(Aabb? region) {
+        using var collector = new FilteredElementCollector(this.Doc);
+        collector.WhereElementIsNotElementType();
+        if (region is { } bounds) {
+            using var inverse = this.Transform.Inverse;
+            var box = Aabb.Empty;
+            foreach (var x in new[] { bounds.MinX, bounds.MaxX })
+            foreach (var y in new[] { bounds.MinY, bounds.MaxY })
+            foreach (var z in new[] { bounds.MinZ, bounds.MaxZ }) {
+                var point = inverse.OfPoint(new XYZ(x, y, z));
+                box = box.Include(new Vector3((float)point.X, (float)point.Y, (float)point.Z));
+            }
+            using var outline = new Outline(new XYZ(box.MinX, box.MinY, box.MinZ), new XYZ(box.MaxX, box.MaxY, box.MaxZ));
+            var magnitude = new[] { box.MinX, box.MinY, box.MinZ, box.MaxX, box.MaxY, box.MaxZ }.Max(Math.Abs);
+            using var filter = new BoundingBoxIntersectsFilter(outline, Math.Max(1, magnitude) * Math.Pow(2, -23));
+            collector.WherePasses(filter);
+            foreach (var element in collector) yield return element;
+        } else foreach (var element in collector) yield return element;
+    }
+
+    internal Aabb? SceneBounds(Element element) {
+        try {
+            using var bounds = element.get_BoundingBox(null);
+            if (bounds is null) return null;
+            using var transform = this.Transform.Multiply(bounds.Transform);
+            var box = Aabb.Empty;
+            foreach (var x in new[] { bounds.Min.X, bounds.Max.X })
+            foreach (var y in new[] { bounds.Min.Y, bounds.Max.Y })
+            foreach (var z in new[] { bounds.Min.Z, bounds.Max.Z }) {
+                var point = transform.OfPoint(new XYZ(x, y, z));
+                box = box.Include(new Vector3((float)point.X, (float)point.Y, (float)point.Z));
+            }
+            return box;
+        } catch { return null; }
     }
 
     private bool InsideRegion(Element element, Aabb region) {

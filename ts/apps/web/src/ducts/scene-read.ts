@@ -60,11 +60,11 @@ export function useDuctScene(
   ]);
   let coverage = coverages.get(identity) ?? null;
   if (request && !request.focusOnly) {
-    coverage = retain(coverages, identity, {
+    coverage = {
       ...request,
       proximity: request.proximity && (coverage?.proximity ?? true),
       contextPaddingFt: Math.max(request.contextPaddingFt, coverage?.contextPaddingFt ?? 0),
-    });
+    };
   }
   const focus = useScene(
     request ? { ...request, focusOnly: true, proximity: false, contextPaddingFt: 0 } : null,
@@ -73,6 +73,10 @@ export function useDuctScene(
   );
   // Do not queue optional geometry before exact focus has reached the browser.
   const context = useScene(focus.meshes ? coverage : null, doc, epoch);
+  useEffect(() => {
+    if (coverage && context.meshes && context.completeness?.complete)
+      retain(coverages, identity, coverage);
+  }, [identity, coverage, context.meshes, context.completeness]);
   const focusMeshes = useMemo(
     () => (focus.meshes ? clipMeshes(focus.meshes, cuts) : null),
     [focus.meshes, cuts],
@@ -86,7 +90,8 @@ export function useDuctScene(
   return {
     ...shown,
     meshes: contextMeshes ?? focusMeshes,
-    error: focus.error ?? context.error,
+    error: focus.error,
+    contextError: context.error,
     pending: focus.pending || context.pending,
     focusReady: !!focus.meshes && !focus.pending,
     focusMeshes,

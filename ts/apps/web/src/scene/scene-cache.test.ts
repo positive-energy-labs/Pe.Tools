@@ -14,6 +14,12 @@ const scene = (epoch = 1, document = "a", builtUtc = "now", sourceEpoch = epoch)
       ],
     },
     elements: [],
+    completeness: {
+      complete: true,
+      deferredCandidates: 0,
+      acquisitionLimitedElements: 0,
+      limitReason: null,
+    },
   } as unknown as SceneData["metadata"],
 });
 
@@ -56,6 +62,25 @@ describe("resident Space scopes", () => {
     expect(cache.get("focus-a")).toBe(a);
     expect(cache.get("context-a")).toBeUndefined();
     expect(cache.bytes).toBeLessThanOrEqual(cache.maxBytes);
+  });
+  it("does not let incomplete context evict a complete smaller scope, but still invalidates stale revisions", () => {
+    const cache = new SceneCache(new SceneMemory({ maxDecodedScenes: 1 }));
+    const complete = cache.put("complete-small", scene());
+    const partial = scene();
+    partial.metadata.completeness = {
+      complete: false,
+      deferredCandidates: 20,
+      acquisitionLimitedElements: 1,
+      limitReason: "memory-headroom",
+    };
+    const limited = cache.put("incomplete-large", partial);
+    expect(limited.data).toBe(partial);
+    expect(cache.get("complete-small")).toBe(complete);
+    expect(cache.get("incomplete-large")).toBeUndefined();
+    const newer = scene(2);
+    newer.metadata.completeness = partial.metadata.completeness;
+    cache.put("new-incomplete", newer);
+    expect(cache.get("complete-small")).toBeUndefined();
   });
   it("invalidates scopes on document epoch or partition rebuild, preserving other documents", () => {
     const cache = new SceneCache(new SceneMemory());

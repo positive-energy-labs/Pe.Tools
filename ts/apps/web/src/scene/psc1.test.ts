@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vite-plus/test";
-import { decodeScene, type Psc1Metadata } from "./psc1";
+import { decodeScene, SCENE_FORMAT, type Psc1Metadata } from "./psc1";
 import { CATEGORY_IDS } from "./categories";
 import { contextVisible } from "./context";
 import { LOOK } from "./grounds";
@@ -17,10 +17,16 @@ const handle = (elementId: number, linkInstanceId: number | null = null) =>
 // The decoder reads these fields only; the op's full metadata carries more.
 const metadata = (patch: Partial<Psc1Metadata> = {}): Psc1Metadata =>
   ({
-    format: "space-scene-v1",
+    format: SCENE_FORMAT,
     stamp: { frame: "host-internal-ft" } as Psc1Metadata["stamp"],
     bounds: BOX,
     triangles: 2,
+    completeness: {
+      complete: true,
+      deferredCandidates: 0,
+      acquisitionLimitedElements: 0,
+      limitReason: null,
+    },
     elements: [
       {
         handle: handle(1),
@@ -135,5 +141,30 @@ describe("PSC1 decode", () => {
       decodeScene(psc1(metadata({ elements: [a!, { ...b!, vertexCount: 4 }] }))),
     ).toThrow("range");
     expect(() => decodeScene(psc1(metadata({ elements: [a!] })))).toThrow("Incomplete");
+  });
+  it("refuses old captures and malformed completeness before they can become cache authority", () => {
+    expect(() => decodeScene(psc1(metadata({ format: "space-scene-v1" })))).toThrow("outdated");
+    const old = metadata();
+    Reflect.deleteProperty(old, "completeness");
+    expect(() => decodeScene(psc1(old))).toThrow("outdated");
+    const unknownRemaining = metadata({
+      completeness: {
+        complete: false,
+        deferredCandidates: null,
+        acquisitionLimitedElements: 0,
+        limitReason: "memory-growth",
+      },
+    });
+    expect(decodeScene(psc1(unknownRemaining)).metadata.completeness.deferredCandidates).toBeNull();
+    for (const patch of [
+      { complete: "true" },
+      { deferredCandidates: -1 },
+      { acquisitionLimitedElements: 1.5 },
+      { limitReason: undefined },
+    ]) {
+      const malformed = metadata();
+      Object.assign(malformed.completeness, patch);
+      expect(() => decodeScene(psc1(malformed))).toThrow("completeness");
+    }
   });
 });

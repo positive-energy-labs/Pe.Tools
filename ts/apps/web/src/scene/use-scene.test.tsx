@@ -17,6 +17,7 @@ io.fetch.mockImplementation(async () => new ArrayBuffer(0));
 vi.mock("./artifact", () => ({ fetchSceneArtifact: io.fetch }));
 // Hook wiring only: PSC1 decoding has its own binary tests; no native capture or browser layout.
 vi.mock("./psc1", () => ({
+  SCENE_FORMAT: "space-scene-v2",
   decodeScene: io.decode.mockImplementation(() => ({
     meshes: { instances: [], positions: new Float32Array(0) },
     metadata: {
@@ -24,6 +25,12 @@ vi.mock("./psc1", () => ({
       stamp: { sources: [] },
       omittedElements: 11636,
       unavailableElements: [{ elementId: 42 }],
+      completeness: {
+        complete: true,
+        deferredCandidates: 0,
+        acquisitionLimitedElements: 0,
+        limitReason: null,
+      },
     },
   })),
 }));
@@ -37,6 +44,21 @@ function deferred() {
 }
 
 it("forwards capture completeness with the decoded meshes and clears it for an idle request", async () => {
+  io.decode.mockReturnValueOnce({
+    meshes: { instances: [], positions: new Float32Array(0) },
+    metadata: {
+      elements: [],
+      stamp: { sources: [] },
+      omittedElements: 11636,
+      unavailableElements: [{ elementId: 42 }],
+      completeness: {
+        complete: false,
+        deferredCandidates: 12,
+        acquisitionLimitedElements: 2,
+        limitReason: "memory-growth",
+      },
+    },
+  });
   const request = sceneRequest([71], false);
   const view = renderHook(
     ({ active }) => useScene(active ? request : null, { session: "test", openId: "doc" }, 0),
@@ -46,18 +68,26 @@ it("forwards capture completeness with the decoded meshes and clears it for an i
     pending: true,
     omittedElements: 0,
     unavailableElements: 0,
+    completeness: null,
   });
   await waitFor(() => expect(view.result.current.pending).toBe(false));
   expect(view.result.current).toMatchObject({
     meshes: { instances: [] },
     omittedElements: 11636,
     unavailableElements: 1,
+    completeness: {
+      complete: false,
+      deferredCandidates: 12,
+      acquisitionLimitedElements: 2,
+      limitReason: "memory-growth",
+    },
   });
   view.rerender({ active: false });
   expect(view.result.current).toMatchObject({
     meshes: null,
     omittedElements: 0,
     unavailableElements: 0,
+    completeness: null,
   });
   view.unmount();
 });
