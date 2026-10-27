@@ -2,7 +2,7 @@
  * `/schedules`' stages, declared once: which verbs each stage's row draws, the chords they bind,
  * and which panes it shows. The workspace and the entity view draw from this, never beside it.
  */
-import type { ScheduleCatalog } from "@pe/agent-contracts";
+import { historyRowsSchema, type ScheduleCatalog } from "@pe/agent-contracts";
 import type { Rung } from "#/route/ladder";
 import type { EntityAction, EntityReading, EntityStage } from "#/route/entity-route";
 import type { PaneDecl, StageDecl } from "#/route/stage";
@@ -20,6 +20,8 @@ const grid: PaneDecl<R, A> = {
   // The grid's read files a capture, so it is the hidden `read` verb the pane runs (ruled 2026-09-22).
   reads: "read",
 };
+// History draws the past read the person picked, read-only: no edits, and focus never reads Revit.
+const past: PaneDecl<R, A> = { draws: ["history", "saved"], verbs: [] };
 // Revealing this pane moves no focus (ledger 2026-09-22).
 const spec: PaneDecl<R, A> = { draws: ["pods"], verbs: ["save"] };
 
@@ -30,7 +32,7 @@ const keys = { apply: "Mod+Enter" } as const;
 export const SCHEDULE_STAGES: Readonly<Record<EntityStage, StageDecl<R, A, Pane>>> = {
   audit: { verbs: ["capture"], keys, panes: { list, grid }, meter: false },
   apply: { verbs: ["apply"], keys, panes: { list, grid, spec }, meter: false },
-  history: { verbs: [], keys: {}, panes: {}, meter: false },
+  history: { verbs: [], keys: {}, panes: { list, grid: past }, meter: false },
 };
 
 /**
@@ -68,3 +70,30 @@ export const scheduleRung = (
     if (entry) select(entry);
   },
 });
+
+/** History's rows, as the host served them; null while unread or unreadable. */
+export const historyRows = (value: unknown) => historyRowsSchema.safeParse(value).data ?? null;
+
+/** History's last rung: the Work's retained reads, newest first; a pick draws that read. */
+export const historyRung = (
+  rows: ReturnType<typeof historyRows>,
+  shown: string | null,
+  failure: string | undefined,
+  pick: (id: string) => void,
+): Rung => {
+  const row = rows?.find((one) => one.id === shown);
+  return {
+    key: "past read",
+    label: row ? `${row.label} · ${new Date(row.at).toLocaleString()}` : null,
+    placeholder: "choose a past read",
+    options:
+      rows?.map((one) => ({
+        id: one.id,
+        label: one.label,
+        sub: new Date(one.at).toLocaleString(),
+      })) ?? null,
+    note: failure ?? (rows ? "no past reads of this schedule" : "reading past reads…"),
+    picked: (id) => id === shown,
+    pick,
+  };
+};

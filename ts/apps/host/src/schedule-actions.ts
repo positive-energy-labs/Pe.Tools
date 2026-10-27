@@ -97,6 +97,8 @@ export async function readSchedule(
   const key = raw.key as ScheduleReadKey;
   if (key === "schedule.grid.saved")
     return captures.schedule(scheduleReads[key].input.parse(raw.input).id);
+  if (key === "schedule.grid.history")
+    return captures.scheduleHistory(scheduleReads[key].input.parse(raw.input).workspaceId);
   if (key === "schedule.grid.work")
     return captures.scheduleWork(scheduleReads[key].input.parse(raw.input).workspaceId);
   const target = documentRefSchema.parse(raw.target);

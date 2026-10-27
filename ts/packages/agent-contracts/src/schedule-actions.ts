@@ -121,6 +121,13 @@ export const scheduleReads = {
     actor: "any",
     input: z.object({ workspaceId: z.string().min(1) }),
   },
+  "schedule.grid.history": {
+    says: "List every retained schedule reading of a subject Work address, newest first: its History. Each row's id opens with schedule.grid.saved.",
+    dirties: [],
+    needs: "nothing",
+    actor: "any",
+    input: z.object({ workspaceId: z.string().min(1) }),
+  },
   "schedule.grid.saved": {
     says: "Read an original immutable schedule snapshot and its exact target without Revit.",
     dirties: [],

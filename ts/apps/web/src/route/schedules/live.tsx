@@ -12,6 +12,7 @@ import {
 } from "@pe/agent-contracts";
 import { changedInRevit, previousOf, useHostStatusSlice } from "#/readings";
 import { refuse, useRoute } from "#/route";
+import { HISTORY } from "#/route/entity-route";
 import { scheduleView, useScheduleLease } from "./lease";
 import { manifestChords } from "#/route/keys";
 import { KeysNode, useScopeKeys } from "@pe/kit/keys";
@@ -22,7 +23,7 @@ import { DEMO_SPEC } from "#/route/seeds";
 import { scheduleSpec, schedulesManifest } from "./manifest";
 import { StaleResolve } from "./stale-resolve";
 import { ScheduleGridWorkspace, scheduleCellWire, type ScheduleGridState } from "./workspace";
-import { SCHEDULE_STAGES, scheduleRung } from "./stage";
+import { SCHEDULE_STAGES, historyRows, historyRung, scheduleRung } from "./stage";
 import { ScheduleWorkLines } from "./work-lines";
 import {
   advanceScheduleHistory,
@@ -111,16 +112,26 @@ export function LiveScheduleGridWorkspace({
   // Held while an action runs: a push's readback rebinds the basis mid-action, and a page move here
   // would void that action's own page writes (its run line); it lands on the same capture anyway.
   const acting = handle.busy !== null;
+  // History draws the past read the person picked, with no Work over it and no edits (ruling 57).
+  const inHistory = page.stage === "history";
+  const pastValue = previousOf(handle.readings.history);
+  const past = useMemo(() => historyRows(pastValue), [pastValue]);
   useEffect(() => {
-    if (!acting && hasWork && basisId && page.captureId !== basisId)
+    if (!inHistory && !acting && hasWork && basisId && page.captureId !== basisId)
       setPage({ captureId: basisId });
-  }, [acting, basisId, hasWork, page.captureId, setPage]);
+  }, [inHistory, acting, basisId, hasWork, page.captureId, setPage]);
+  // Entering History with no past read picked lands on the newest.
+  useEffect(() => {
+    if (inHistory && past?.[0] && !past.some((row) => row.id === page.captureId))
+      setPage({ captureId: past[0].id });
+  }, [inHistory, past, page.captureId, setPage]);
 
   // Staged cells are keyed by the basis reading's rows. A later reading (a push's readback) is
   // drawn only while its rows are the same elements in the same positions: written cells then show
   // what Revit now holds, and a still-staged cell overlays the row it was staged on (F-S-1).
-  const shown =
-    hasWork && basisId
+  const shown = inHistory
+    ? saved
+    : hasWork && basisId
       ? retained && saved && retained.id !== basisId && sameRows(saved, retained)
         ? retained
         : (saved ?? (retained?.id === basisId ? retained : undefined))
@@ -155,6 +166,7 @@ export function LiveScheduleGridWorkspace({
       clearHistory();
   }, [scope, work.doc, work.revision]);
   const apply = async (patches: RouteStatePatch[], expectedRevision?: number) => {
+    if (inHistory) return refuse("not-ready", HISTORY);
     if (!shown) return refuse("not-ready", "Read the schedule before editing: Select a schedule");
     const history = historyRef.current!;
     const before =
@@ -231,10 +243,10 @@ export function LiveScheduleGridWorkspace({
     handle.readings.work.state === "ready" && previousOf(handle.readings.work) === null;
   useEffect(() => {
     const entry = catalog?.schedules.find((row) => row.workspaceId === page.workspaceId);
-    if (!noRetained || !entry || handle.busy || firstRead.current === page.workspaceId) return;
+    if (inHistory || !noRetained || !entry || handle.busy || firstRead.current === page.workspaceId) return;
     firstRead.current = page.workspaceId;
     void execute("read", { scheduleId: entry.scheduleId });
-  }, [noRetained, page.workspaceId, catalog, handle.busy]); // eslint-disable-line react-hooks/exhaustive-deps
+  }, [inHistory, noRetained, page.workspaceId, catalog, handle.busy]); // eslint-disable-line react-hooks/exhaustive-deps
   const readingFailure =
     readingError(handle.readings.catalog) ??
     readingError(handle.readings.work) ??
@@ -270,7 +282,7 @@ export function LiveScheduleGridWorkspace({
   };
   const state: ScheduleGridState = {
     ...scheduleView(handle.page),
-    slice: work.doc,
+    slice: inHistory ? null : work.doc,
     revision: work.revision,
     hydrated: work.current || work.revision !== null,
     apply,
@@ -359,6 +371,13 @@ export function LiveScheduleGridWorkspace({
                 ? setPage({ workspaceId: entry.workspaceId, captureId: "" })
                 : void execute("read", { scheduleId: entry.scheduleId }),
           ),
+          ...(inHistory
+            ? [
+                historyRung(past, page.captureId || null, readingError(handle.readings.history), (id) =>
+                  setPage({ captureId: id }),
+                ),
+              ]
+            : []),
         ]}
       >
         {audit}

@@ -27,7 +27,7 @@ import {
   runSemanticAction,
 } from "../../../../../packages/mcps/src/shared/takeoff-action-client";
 
-export type ScheduleGridReading = "catalog" | "work" | "saved" | "receipts";
+export type ScheduleGridReading = "catalog" | "work" | "history" | "saved" | "receipts";
 export type ScheduleGridAction = "read";
 
 /**
@@ -198,6 +198,11 @@ export const schedulesManifest = () =>
         work: (page: ScheduleGridPage) =>
           page.workspaceId
             ? { kind: "schedule-reading", subject: "work", id: page.workspaceId }
+            : null,
+        // History: every retained read of this Work, newest first (ruling 57).
+        history: (page: ScheduleGridPage) =>
+          page.workspaceId
+            ? { kind: "schedule-reading", subject: "history", id: page.workspaceId }
             : null,
         saved: (page: ScheduleGridPage) =>
           page.captureId
