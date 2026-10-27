@@ -161,6 +161,9 @@ public sealed class ReadCostCensus : PeScriptContainer
     }
 
     // M3: expand a bounded random sample in chunks; slope times count is a projection, never a measurement.
+    // FOOTGUN: expand through a collector, never doc.GetElement. On Chadds' IFC link (2026-10-27, probe-25 PID 55812) 1000 random
+    // GetElement + Category cost ~0.45 KB/element while a full collector walk cost +1,090 MiB for 86,678 (~13 KB/element):
+    // a GetElement slope under-projected the walk ~27x. The control route stays in the output so the gap stays visible.
     private object FirstTouch(CensusPartition p)
     {
         var before = PrivateBytes();
@@ -168,24 +171,36 @@ public sealed class ReadCostCensus : PeScriptContainer
         using (var c = new FilteredElementCollector(p.Doc).WhereElementIsNotElementType()) ids = c.ToElementIds().ToList();
         var idListBytes = PrivateBytes() - before;
         p.NonTypeCount = ids.Count;
-        p.Sample = Sample(ids, ProfilerSettings.CensusFirstTouchSample);
-        var chunks = new List<object>(); long total = 0; var clock = Stopwatch.StartNew();
-        for (var i = 0; i < p.Sample.Count; i += ProfilerSettings.CensusChunk) {
-            budget.Check();
-            var chunk = p.Sample.Skip(i).Take(ProfilerSettings.CensusChunk).ToList();
-            var b = PrivateBytes(); var touched = 0;
-            foreach (var id in chunk) if (p.Doc.GetElement(id)?.Category != null) touched++;
-            var d = PrivateBytes() - b; total += d;
-            chunks.Add(new { elements = chunk.Count, withCategory = touched, privateBytesDelta = d });
-        }
-        var n = Math.Max(1, p.Sample.Count);
-        var kb = total / 1024.0 / n;
-        headlines.Add(p.Key + ": first touch " + kb.ToString("0.0") + " KB/element over " + p.Sample.Count + " sampled; full walk of " + ids.Count + " projected " + Mib((long)(kb * 1024 * ids.Count)));
+        // One shuffle, two disjoint slices: the first chunk is the GetElement control, the rest is the collector sample.
+        var drawn = Sample(ids, ProfilerSettings.CensusFirstTouchSample + ProfilerSettings.CensusChunk);
+        var control = Touch(p.Doc, drawn.Take(ProfilerSettings.CensusChunk).ToList(), false);
+        p.Sample = drawn.Skip(ProfilerSettings.CensusChunk).ToList();
+        var sample = Touch(p.Doc, p.Sample, true);
+        var projected = sample.Kb > 0 ? (long?)(sample.Kb * 1024 * ids.Count) : null;
+        headlines.Add(p.Key + ": first touch " + sample.Kb.ToString("0.0") + " KB/element over " + p.Sample.Count + " collector-sampled (GetElement control " + control.Kb.ToString("0.0") +
+            "); full walk of " + ids.Count + " projected " + (projected == null ? "n/a (slope not positive: noise or already warm)" : Mib(projected.Value)));
         return new { partition = p.Key, nonTypeElements = new { basis = "measured", count = ids.Count, idListPrivateBytesDelta = idListBytes },
-            sample = new { basis = "sampled", elements = p.Sample.Count, seed = ProfilerSettings.CensusSeed, seconds = clock.Elapsed.TotalSeconds,
-                privateBytesDelta = total, kbPerElement = kb, msPerElement = clock.Elapsed.TotalMilliseconds / n, chunks },
-            fullWalk = new { basis = "projected", privateBytes = (long)(kb * 1024 * ids.Count), seconds = clock.Elapsed.TotalSeconds / n * ids.Count,
-                note = "Slope times count. Elements already touched in this process read as zero; categories differ in cost, so a skewed sample skews this." } };
+            sample = new { basis = "sampled", route = "FilteredElementCollector(doc, chunk ids) iteration + Category", elements = p.Sample.Count, seed = ProfilerSettings.CensusSeed,
+                seconds = sample.Seconds, privateBytesDelta = sample.Bytes, kbPerElement = sample.Kb, msPerElement = sample.Seconds * 1000 / Math.Max(1, p.Sample.Count), chunks = sample.Chunks },
+            control = new { basis = "sampled", route = "doc.GetElement + Category (does not expand like a walk; do not project from it)", elements = control.Elements,
+                privateBytesDelta = control.Bytes, kbPerElement = control.Kb },
+            fullWalk = new { basis = "projected", privateBytes = projected, seconds = sample.Seconds / Math.Max(1, p.Sample.Count) * ids.Count,
+                note = "Collector slope times count; null when the slope is not positive. Elements already touched in this process read as zero; categories differ in cost, so a skewed sample skews this." } };
+    }
+
+    private (int Elements, long Bytes, double Kb, double Seconds, List<object> Chunks) Touch(Document d, List<ElementId> ids, bool collector)
+    {
+        var chunks = new List<object>(); long total = 0; var clock = Stopwatch.StartNew();
+        for (var i = 0; i < ids.Count; i += ProfilerSettings.CensusChunk) {
+            budget.Check();
+            var chunk = ids.Skip(i).Take(ProfilerSettings.CensusChunk).ToList();
+            var b = PrivateBytes(); var touched = 0;
+            if (collector) { using (var c = new FilteredElementCollector(d, chunk)) foreach (var e in c) if (e.Category != null) touched++; }
+            else foreach (var id in chunk) if (d.GetElement(id)?.Category != null) touched++;
+            var delta = PrivateBytes() - b; total += delta;
+            chunks.Add(new { elements = chunk.Count, withCategory = touched, privateBytesDelta = delta });
+        }
+        return (ids.Count, total, total / 1024.0 / Math.Max(1, ids.Count), clock.Elapsed.TotalSeconds, chunks);
     }
 
     // M6: what would enter a scene as context, by ids and categories; only ImportInstances are expanded.
@@ -228,6 +243,11 @@ public sealed class ReadCostCensus : PeScriptContainer
             new ElementClassFilter(typeof(DirectShape)), new ElementCategoryFilter(BuiltInCategory.OST_StructuralFraming) }))
         using (var c = new FilteredElementCollector(p.Doc).WhereElementIsNotElementType().WherePasses(filter)) ids = c.ToElementIds().ToList();
         var sample = Sample(ids, ProfilerSettings.CensusOrientationSample);
+        // Report yaw in the host frame: a link's own frame hid Chadds' 45-degree link placement. Several placements have no one host frame.
+        var placements = p.LinkInstanceIds.Select(id => doc.GetElement(new ElementId(id)) as RevitLinkInstance).Where(li => li != null)
+            .Select(li => Math.Round(Yaw(li.GetTotalTransform().BasisX), 6)).Distinct().ToList();
+        var offset = placements.Count == 1 ? placements[0] : 0;
+        var frameBasis = p.LinkInstanceIds.Count == 0 ? "host" : placements.Count == 1 ? "host (link yaw " + offset.ToString("0.#") + " deg added)" : "link-local (" + placements.Count + " placements)";
         var angles = new List<double>(); var rotated = new List<FamilyInstance>(); int vertical = 0; var noFrame = new Dictionary<string, int>();
         foreach (var id in sample) {
             budget.Check();
@@ -237,14 +257,17 @@ public sealed class ReadCostCensus : PeScriptContainer
             else if (e is FamilyInstance fi) x = fi.GetTotalTransform().BasisX;
             if (x == null) { var k = (e?.GetType().Name ?? "missing") + "/" + (e?.Category?.Name ?? "-"); noFrame[k] = noFrame.TryGetValue(k, out var n) ? n + 1 : 1; continue; }
             if (Math.Abs(x.X) + Math.Abs(x.Y) < 1e-6) { vertical++; continue; }
-            var a = Mod90(Yaw(x)); angles.Add(a);
-            if (e is FamilyInstance r && !(e.Location is LocationCurve) && Math.Min(a, 90 - a) > 2 && rotated.Count < ProfilerSettings.CensusObbSample) rotated.Add(r);
+            var a = Mod90(Yaw(x) + offset); angles.Add(a);
+            // Oriented boxes compare against the world box of the element's own document, so select on its own-document yaw.
+            var own = Mod90(Yaw(x));
+            if (e is FamilyInstance r && !(e.Location is LocationCurve) && Math.Min(own, 90 - own) > 2 && rotated.Count < ProfilerSettings.CensusObbSample) rotated.Add(r);
         }
         var bins = new int[18]; foreach (var a in angles) bins[(int)(a / 5) % 18]++;
         var frames = Frames(angles);
-        headlines.Add(p.Key + ": frames " + string.Join(", ", frames.Select(f => f.AngleDegrees.ToString("0.#") + " deg " + (100 * f.Share).ToString("0") + "%")));
+        headlines.Add(p.Key + ": frames " + string.Join(", ", frames.Select(f => f.AngleDegrees.ToString("0.#") + " deg " + (100 * f.Share).ToString("0") + "%")) +
+            " of " + angles.Count + " with a frame (" + (sample.Count - angles.Count - vertical) + " of " + sample.Count + " sampled have none), " + frameBasis);
         return new { partition = p.Key, candidates = new { basis = "measured", count = ids.Count },
-            sample = new { basis = "sampled", elements = sample.Count, withYaw = angles.Count, vertical, noFrame,
+            sample = new { basis = "sampled", elements = sample.Count, frameBasis, withYaw = angles.Count, vertical, noFrame,
                 offAxisShare = angles.Count == 0 ? (double?)null : angles.Count(a => Math.Min(a, 90 - a) > 2) / (double)angles.Count,
                 histogramMod90 = bins.Select((n, i) => new { fromDegrees = i * 5, count = n }).ToArray(), frames },
             orientedBoxes = OrientedBoxes(rotated) };
@@ -267,14 +290,14 @@ public sealed class ReadCostCensus : PeScriptContainer
             var v = Volume(local); var w = (world.Max.X - world.Min.X) * (world.Max.Y - world.Min.Y) * (world.Max.Z - world.Min.Z);
             if (v > 1e-9) ratios.Add(w / v);
         }
-        var n = Math.Max(1, rotated.Count); var bytes = PrivateBytes() - before;
+        var n = rotated.Count; var bytes = PrivateBytes() - before;
         ratios.Sort();
         return new { basis = "sampled", route = "a: symbol geometry GetBoundingBox via GeometryInstance, Medium, no Triangulate",
             elements = rotated.Count, withRatio = ratios.Count,
             worldAabbOverOrientedMedian = ratios.Count == 0 ? (double?)null : ratios[ratios.Count / 2],
             worldAabbOverOrientedP90 = ratios.Count == 0 ? (double?)null : ratios[(int)(ratios.Count * 0.9)],
-            seconds = clock.Elapsed.TotalSeconds, msPerElement = clock.Elapsed.TotalMilliseconds / n,
-            privateBytesDelta = bytes, kbPerElement = bytes / 1024.0 / n,
+            seconds = clock.Elapsed.TotalSeconds, msPerElement = n == 0 ? (double?)null : clock.Elapsed.TotalMilliseconds / n,
+            privateBytesDelta = bytes, kbPerElement = n == 0 ? (double?)null : bytes / 1024.0 / n,
             note = "Per-element cost is geometry generation; elements expanded by first-touch or orientation are warm. Reference volume is the route (a) box, not a mesh." };
     }
 
