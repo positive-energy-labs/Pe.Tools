@@ -66,9 +66,12 @@ export function useRoute<W, R extends string, P, A extends string>(
   const demo = useRouteDemo();
   const current = useRouteCurrent();
   const seed = demo ? manifest.seeds?.[demo as A] : undefined;
+  const ownsUrl = options.url !== false && !seed;
+  // The Page contract belongs to this owner. Changing action facts must not reconnect its URL
+  // adapter: reconnecting restores the old address over an accepted move still waiting to flush.
   const url = useMemo(
-    () => (options.url === false || seed ? null : urlPage(manifest)),
-    [manifest, options.url, seed],
+    () => (ownsUrl ? urlPage(manifest) : null),
+    [manifest.key, manifest.address, ownsUrl], // eslint-disable-line react-hooks/exhaustive-deps
   );
   const urlInitial = useInitialUrlPage(url);
   const currentManifest = useRef(manifest);

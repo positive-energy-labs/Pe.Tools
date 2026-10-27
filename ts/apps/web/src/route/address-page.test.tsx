@@ -8,6 +8,7 @@ import {
   RouterProvider,
 } from "@tanstack/react-router";
 import { afterEach, expect, test } from "vite-plus/test";
+import { z } from "zod";
 import { routeAddress } from "@pe/agent-contracts";
 import { routeFile, useAddressPage } from "./address-page";
 import { createRouteOwner, makeAtomRegistry } from "./route-owner";
@@ -15,6 +16,8 @@ import { createViewOwner } from "./view-owner";
 import { urlPage } from "./url";
 import { manifest as families } from "#/families/manifest";
 import { bindDuctsManifest } from "#/ducts/manifest";
+import { defineRoute } from "./manifest";
+import { useRoute } from "./use-route";
 
 afterEach(cleanup);
 
@@ -115,4 +118,81 @@ test("a Ducts URL atomically restores system, selection and pose before its evid
     owner.dispose();
     route.dispose();
   }
+});
+
+async function pendingCapture() {
+  let complete!: () => void;
+  const captured = new Promise<void>((resolve) => {
+    complete = resolve;
+  });
+  let navigate!: (path: string) => void;
+  function Family() {
+    // Family's authoring facts rebuild its behavior as observations arrive. The Page contract stays.
+    const handle = useRoute(
+      defineRoute({
+        key: "family",
+        name: "Family",
+        address: "family",
+        page: routeAddress("family").schema,
+        actions: {
+          capture: {
+            label: "capture",
+            says: "File the captured member",
+            needs: "host",
+            effect: "query",
+            input: z.void() as unknown as z.ZodType<never>,
+            dirties: [],
+            ready: () => null,
+            run: async (ctx) => {
+              await captured;
+              ctx.setPage({ path: "captures/new.json" });
+            },
+          },
+        },
+      }),
+    );
+    navigate = (path) => handle.page[1]({ path });
+    return (
+      <>
+        <output aria-label="member">{handle.page[0].path}</output>
+        <button onClick={() => void handle.actions.capture.run()}>capture</button>
+      </>
+    );
+  }
+  const root = createRootRoute();
+  const family = createRoute({
+    getParentRoute: () => root,
+    path: "/family",
+    ...routeFile("family"),
+    component: Family,
+  });
+  const history = createMemoryHistory({ initialEntries: ["/family?pod=office"] });
+  const router = createRouter({ routeTree: root.addChildren([family]), history });
+  await router.load();
+  const view = render(<RouterProvider router={router} />);
+  await waitFor(() => expect(view.getByText("capture")).toBeTruthy());
+  return {
+    complete,
+    navigate: (path: string) => navigate(path),
+    view,
+    place: () => routeAddress("family").read(router.state.location.search).page,
+  };
+}
+
+test("a capture lands its member when observation-driven behavior refreshes the same Page contract", async () => {
+  const probe = await pendingCapture();
+  fireEvent.click(probe.view.getByText("capture"));
+  await act(async () => probe.complete());
+  await waitFor(() => expect(probe.place().path).toBe("captures/new.json"));
+  expect(probe.view.getByLabelText("member").textContent).toBe("captures/new.json");
+});
+
+test("a capture never replaces a member the person navigated to while it ran", async () => {
+  const probe = await pendingCapture();
+  fireEvent.click(probe.view.getByText("capture"));
+  await act(async () => probe.navigate("settings/chosen.json"));
+  await waitFor(() => expect(probe.place().path).toBe("settings/chosen.json"));
+  await act(async () => probe.complete());
+  expect(probe.place().path).toBe("settings/chosen.json");
+  expect(probe.view.getByLabelText("member").textContent).toBe("settings/chosen.json");
 });
