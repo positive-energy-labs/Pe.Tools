@@ -110,7 +110,7 @@ export async function prepareFaceBatches(
   const depth: number[] = [],
     translucent: number[] = [];
   paints.forEach((p, i) =>
-    (p.tier === "context" || p.surface === "shell" ? translucent : depth).push(i),
+    (p.tier === "context" || p.tier === "envelope" ? translucent : depth).push(i),
   );
   const addresses: Address[] = [];
   const owned: Part[] = [];

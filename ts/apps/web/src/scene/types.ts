@@ -35,21 +35,21 @@ export type SceneInstance = {
   vertexCount: number;
 };
 
-/** How the picture treats one instance. Default (no paintOf): focus → subject, else context. */
-export type Tier = "subject" | "stub" | "context";
-/** `key` groups instances that share a colour, e.g. a Revit system name. */
+/** How the picture treats one instance. Default (no paintOf): focus → subject, else context.
+ * The closed set the scene owns; damage and selection are scene states, not paint. */
+export type Tier = "subject" | "stub" | "envelope" | "context";
+/** Kind picks the hue (the `kinds` table), tier picks the rung, `key` is the instance-ish
+ * identity within a kind (a Revit system name) that orders rungs among same-kind systems. */
 export type Paint = {
+  readonly kind?: string;
   readonly tier: Tier;
-  /** Neutral outline-first envelope, supplied by the domain adapter. */
-  readonly surface?: "shell";
   readonly key?: string;
-  /** Explicit #rrggbb from a domain palette; takes precedence over the hashed key. */
-  readonly ink?: string;
-  /** Domain identity within a colour class, independent of the air-type palette key. */
-  readonly system?: string;
-  /** Signed lightness step assigned among drawn systems of the same colour class. */
+  /** Scene-stamped by `systemPaint` (rung index among same-kind keys); routes never set it. */
   readonly variant?: number;
 };
+/** Kind to hue (#rrggbb), or `{ hue, l }` to pin the first system's OKLCH lightness (clamped to
+ * the theme's rung band). A kind without an entry draws as `unknown`, then as the subject ink. */
+export type Kinds = Readonly<Record<string, string | { hue: string; l?: number }>>;
 export type PaintOf = (instance: SceneInstance) => Paint | undefined;
 
 /** A decoded scene: unindexed triangle positions plus one range per element. */

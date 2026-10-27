@@ -31,12 +31,6 @@ export const GROUND_MATERIAL = {
 };
 
 /**
- * Categorical system inks, cycled by a stable hash of the paint key. The one table to replace with
- * Revit view-template colours (a `#rrggbb` per slot; a kit token role resolves per theme).
- */
-const SYSTEM_PALETTE = ["viz-1", "viz-2", "viz-3", "viz-4", "viz-5", "viz-6"] as const;
-
-/**
  * The scene's look, one typed spec: every default a judgment call is here, and each is a dev knob
  * (`#/knobs`). A colour of "theme" is derived below from kit tokens; a role name is that token.
  * Starting rationale lives in the design-system ledger; real-model tuning remains re-openable.
@@ -44,9 +38,10 @@ const SYSTEM_PALETTE = ["viz-1", "viz-2", "viz-3", "viz-4", "viz-5", "viz-6"] as
 export const LOOK = defineKnobs("scene", "ts/apps/web/src/scene/grounds.ts", {
   subject: {
     colour: colour("Subject ink", "theme"),
-    // X-ray is this value lowered: it also caps the stub opacity (was depth.everythingTranslucent).
+    // It also caps the stub opacity (was depth.everythingTranslucent).
     opacity: num("Subject opacity", 0.98, [0.05, 1, 0.01]),
-    bySystem: bool("Colour by system", true),
+    // The X-ray dial (held key) lowers subject opacity to this.
+    xrayOpacity: num("X-ray subject opacity", 0.35, [0.05, 1, 0.01]),
     stubOpacity: num("Stub opacity", 0.16, [0.05, 1, 0.01]),
     stubGroundMix: num("Stub mix toward ground", 0.45, [0, 1, 0.01]),
     stubEndAlpha: num("Stub fade floor × opacity", 0.06, [0, 1, 0.01]),
@@ -93,9 +88,6 @@ export const LOOK = defineKnobs("scene", "ts/apps/web/src/scene/grounds.ts", {
     wiggleMs: num("Wiggle loop", 1200, [500, 3000, 50], "live", "ms"),
     wiggleLoops: num("Wiggle loops", 2, [1, 4, 1]),
   },
-  palette: Object.fromEntries(
-    SYSTEM_PALETTE.map((role, i) => [`s${i + 1}`, colour(`System ink ${i + 1}`, role)]),
-  ),
   // 2026-10-26 rung rule: a mark keeps the hue and lifts OKLCH lightness by this much.
   lift: {
     hover: num("Hover lightness lift", 0.04, [0, 0.3, 0.01]),
@@ -110,7 +102,6 @@ export const LOOK = defineKnobs("scene", "ts/apps/web/src/scene/grounds.ts", {
     // The reach (veil far = stub fade) is the page's Nearby radius, else VEIL_DEFAULT_REACH_FT.
     fill: num("Context glass fill", 0.25, [0.01, CONTEXT_OPACITY_LIMIT, 0.01]),
     lineAlpha: num("Context line alpha at subject", 0.75, [0.05, 1, 0.01]),
-    glass: bool("Context glass", true),
   },
   lights: {
     sky: colour("Hemisphere sky", "#fff8ee"),
@@ -180,13 +171,6 @@ export const paintOf = (instance: SceneInstance, of?: PaintOf): Paint =>
 export const isLit = (at: LayerFrame) =>
   !!at.selected || !!at.lit || at.state === "hover" || at.state === "focus";
 
-/** FNV-1a: the same key draws the same ink in every capture and session. */
-export const keySlot = (key: string, slots: number) => {
-  let h = 0x811c9dc5;
-  for (let i = 0; i < key.length; i++) h = Math.imul(h ^ key.charCodeAt(i), 0x01000193);
-  return (h >>> 0) % slots;
-};
-
 /** `#rrggbb` as is; any other word but "theme" is a kit token role. */
 const inkOr = (value: string, mount: Element, theme: () => THREE.Color) =>
   /^#[\da-f]{6}$/i.test(value)
@@ -209,7 +193,6 @@ export function sceneGrounds(mount: Element, look: Look) {
     subject,
     shell: inkOr(look.shell.colour, mount, () => inkOf("ink-2", mount)),
     context: inkOr(look.veil.colour, mount, () => inkOf("ink-mute", mount).offsetHSL(0, -1, 0)),
-    palette: Object.values(look.palette).map((value) => inkOr(value, mount, () => subject.clone())),
     damage: inkOr(look.damage.colour, mount, () => inkOf("alarm", mount)),
     lights: {
       sky: inkOr(look.lights.sky, mount, () => WHITE.clone()),

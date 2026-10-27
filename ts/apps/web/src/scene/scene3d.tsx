@@ -36,12 +36,12 @@ import { presetLook, type ScenePreset } from "./presets";
 import { type OrbitViewport } from "./orbit";
 import { samePlane, type PlaneAxis, type PlaneViewport } from "./plane";
 import type { Project, Ray, Size } from "./projection";
-import { type ClipVolume, type ContextMode, type SceneRenderer } from "./renderer";
+import { type ClipVolume, type ColourMode, type ContextMode, type SceneRenderer } from "./renderer";
 import type { SceneMeshes } from "./types";
 import { mountViewport, ATTRS } from "./scene-viewport";
 import { SceneController } from "./scene-controller";
 import { scenePlan } from "./scene-plan";
-import type { Bounds, IssueTarget, Layer3D, PaintOf, Pick } from "./types";
+import type { Bounds, IssueTarget, Kinds, Layer3D, PaintOf, Pick } from "./types";
 
 export type Scene3DProps = {
   /** Fixed picture state; null explicitly shares a parent readout in an inset. */
@@ -67,8 +67,12 @@ export type Scene3DProps = {
   isolated?: ReadonlySet<string> | null;
   /** Subject, stub or context per instance, and its colour key; absent: focus is the subject. */
   paintOf?: PaintOf;
-  /** All captured context by default; halo hides it beyond the subject-distance falloff. */
+  /** The four dials. Reach is `contextRadiusFt` (ft); Context is off, lines or glass (default
+   * glass); Colour is firm (the `kinds` hues) or mono; X-ray is the held `x` key, below. */
   contextMode?: ContextMode;
+  colour?: ColourMode;
+  /** Kind to hue (#rrggbb), the only per-domain colour input; `unknown` is the fallback. */
+  kinds?: Kinds;
   preset?: ScenePreset;
   layers?: readonly Layer3D[];
   hoveredIssue?: string | null;
@@ -91,6 +95,30 @@ export type Scene3DProps = {
   className?: string;
   children?: ReactNode;
 };
+
+const NO_KINDS: Kinds = {};
+/** True while `key` is held and no text field has focus; released on blur so it cannot stick. */
+function useHeldKey(key: string) {
+  const [held, setHeld] = useState(false);
+  useEffect(() => {
+    const typing = (e: KeyboardEvent) =>
+      e.target instanceof HTMLElement && /^(INPUT|TEXTAREA|SELECT)$/.test(e.target.tagName);
+    const down = (e: KeyboardEvent) => {
+      if (e.key === key && !e.repeat && !typing(e) && !e.ctrlKey && !e.metaKey) setHeld(true);
+    };
+    const up = (e: KeyboardEvent) => e.key === key && setHeld(false);
+    const off = () => setHeld(false);
+    addEventListener("keydown", down);
+    addEventListener("keyup", up);
+    addEventListener("blur", off);
+    return () => {
+      removeEventListener("keydown", down);
+      removeEventListener("keyup", up);
+      removeEventListener("blur", off);
+    };
+  }, [key]);
+  return held;
+}
 
 export function Scene3D(props: Scene3DProps): ReactNode {
   const { hovered, onHover, lit: subjectLit, selected: subjectSelected } = useElementAttention();
@@ -192,7 +220,13 @@ export function Scene3D(props: Scene3DProps): ReactNode {
 
   // React describes the requested view. The controller alone executes its replacement.
   const look = useSyncExternalStore(knobsChanged, LOOK.read, LOOK.read);
-  const shownLook = useMemo(() => presetLook(look, props.preset ?? "all"), [look, props.preset]);
+  const xray = useHeldKey("x");
+  const shownLook = useMemo(() => {
+    const preset = presetLook(look, props.preset ?? "all");
+    return xray
+      ? { ...preset, subject: { ...preset.subject, opacity: look.subject.xrayOpacity } }
+      : preset;
+  }, [look, props.preset, xray]);
   const request = useMemo(
     () =>
       meshes && currentFocus
@@ -250,6 +284,9 @@ export function Scene3D(props: Scene3DProps): ReactNode {
         props.contextRadiusFt,
       );
   }, [props.contextMode, props.contextRadiusFt, meshes, commitVersion]);
+  useEffect(() => {
+    (focusCurrent ? core.current : null)?.setHues(props.kinds ?? NO_KINDS, props.colour ?? "firm");
+  }, [props.kinds, props.colour, meshes, commitVersion]);
   // Dev knobs re-apply live; in production `LOOK.read()` is the code defaults and never changes.
   useEffect(() => {
     (focusCurrent ? core.current : null)?.setLook(shownLook);

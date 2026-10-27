@@ -32,7 +32,6 @@ export function veilUniforms() {
     veilFar: { value: 1 },
     veilCurve: { value: 1 },
     veilFill: { value: 1 },
-    veilHalo: { value: false },
     scenePass: { value: 1 },
     subjectRim: { value: 0 },
     stubFadeFt: { value: 10 },
@@ -66,7 +65,6 @@ uniform sampler3D veilField;
 uniform vec3 veilMin;
 uniform vec3 veilSize;
 uniform float veilCell, veilReach, veilNear, veilFar, veilCurve, veilFill;
-uniform bool veilHalo;
 #ifdef VEIL_TIER
 uniform int scenePass;
 uniform float subjectRim;
@@ -85,8 +83,7 @@ void veil(inout vec4 c) {
   if (context ? (scenePass != 3 && scenePass != 5) : shell ? (scenePass != 3 && scenePass != 4) : scenePass != 1) discard;
   if (shell) c.a -= 1.0;
   if (context) {
-    if (veilHalo && d >= veilFar) discard;
-    // Halo and all context share one ramp; halo only drops what lies past the reach.
+    // Lines and glass share one ramp (falloff squared); past the reach it is zero.
     c.a = veilFill * t;
     if (c.a < 0.004) discard;
   } else {

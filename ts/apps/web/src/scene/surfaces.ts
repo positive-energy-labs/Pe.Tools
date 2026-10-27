@@ -11,12 +11,12 @@ import type { Paint, PaintOf, SceneInstance, SceneMeshes } from "./types";
 export function systemPaint(meshes: SceneMeshes, base: PaintOf): PaintOf {
   const paints = new Map(meshes.instances.map((i) => [i.key, paintOf(i, base)]));
   const classes = new Map<string, Set<string>>();
-  const colourClass = (p: Paint) => p.ink ?? p.key;
+  const colourClass = (p: Paint) => p.kind;
   for (const p of paints.values()) {
     const key = colourClass(p);
-    if (p.tier !== "subject" || p.surface === "shell" || !p.system || key === undefined) continue;
+    if (p.tier !== "subject" || !p.key || key === undefined) continue;
     const names = classes.get(key) ?? new Set<string>();
-    names.add(p.system);
+    names.add(p.key);
     classes.set(key, names);
   }
   const variants = new Map<string, Map<string, number>>();
@@ -31,25 +31,31 @@ export function systemPaint(meshes: SceneMeshes, base: PaintOf): PaintOf {
     );
   return (i) => {
     const p = paints.get(i.key) ?? paintOf(i, base);
-    const variant = variants.get(colourClass(p) ?? "")?.get(p.system ?? "");
-    return variant !== undefined && p.tier !== "context" && p.surface !== "shell"
+    const variant = variants.get(colourClass(p) ?? "")?.get(p.key ?? "");
+    return variant !== undefined && p.tier !== "context" && p.tier !== "envelope"
       ? { ...p, variant }
       : p;
   };
 }
 
 /** The paint's rung is a fixed OKLCH lightness for the theme, so a third system never drifts
- * toward white and no running step exists. Past the last rung systems share it. */
-export function routeColour(colour: THREE.Color, paint: Paint, dark: boolean) {
-  if (paint.variant === undefined) return colour.clone();
+ * toward white and no running step exists. Past the last rung systems share it. A kind's base
+ * `l` (clamped to the rung band) replaces rung 0 and keeps the rung spacing above it. */
+export function routeColour(colour: THREE.Color, paint: Paint, dark: boolean, baseL?: number) {
   const rungs = SYSTEM_LIGHTNESS[dark ? "dark" : "light"];
-  return withLightness(colour, rungs[Math.min(paint.variant, rungs.length - 1)]!);
+  const lo = Math.min(...rungs),
+    hi = Math.max(...rungs);
+  const rung = paint.variant === undefined ? undefined : Math.min(paint.variant, rungs.length - 1);
+  if (baseL === undefined)
+    return rung === undefined ? colour.clone() : withLightness(colour, rungs[rung]!);
+  const l = baseL + (rung === undefined ? 0 : rungs[rung]! - rungs[0]!);
+  return withLightness(colour, Math.min(hi, Math.max(lo, l)));
 }
 
 /** Batch alpha encodes the pass: zero context, negative stub, >1 envelope, else subject. */
 export function surfaceAlpha(paint: Paint, look: Look) {
   if (paint.tier === "context") return 0;
-  if (paint.surface === "shell") return 1 + look.shell.opacity;
+  if (paint.tier === "envelope") return 1 + look.shell.opacity;
   return paint.tier === "stub"
     ? -Math.min(look.subject.stubOpacity, look.subject.opacity)
     : look.subject.opacity;

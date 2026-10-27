@@ -185,10 +185,7 @@ function Canvas({
   ); // eslint-disable-line react-hooks/exhaustive-deps
   const systemColours = page.layers.includes("system-colours");
   const colours = coloursOf(work.doc);
-  const paintOf = useMemo(
-    () => paintOfDucts(snapshot, opened, stubs, systemColours, colours),
-    [snapshot, opened, stubs, systemColours, colours],
-  );
+  const paintOf = useMemo(() => paintOfDucts(snapshot, opened, stubs), [snapshot, opened, stubs]);
   const stubNames = useMemo(
     () => stubLabels(snapshot, neighbours, opened),
     [snapshot, neighbours, opened],
@@ -692,7 +689,9 @@ function Canvas({
           <ModelPicture
             sceneView={page.sceneView}
             paintOf={paintOf}
-            contextMode={layers.has("context") ? "all" : "halo"}
+            contextMode={layers.has("context") ? "glass" : "lines"}
+            kinds={colours}
+            colour={systemColours ? "firm" : "mono"}
             contextRadiusFt={page.contextRadiusFt}
             readout={readout}
             read={read}
