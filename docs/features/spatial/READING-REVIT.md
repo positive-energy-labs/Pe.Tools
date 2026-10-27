@@ -65,7 +65,7 @@ Unless stated: PROVEN[session dev, SDK-controlled `pe.app-25` PID 19948, Chadds,
 6. **Cost follows the elements walked.** Measure per element and per category before you choose a lever (R11, U1).
 7. **A silent bound is a defect.** The triangle budget limited export, not extraction, and hid elements for six days (R6). A bound states what it removes.
 8. **Time the probe, and take the baseline after compile.** A memory counter in the loop took 112.79 s where the read took 0.76 s. Script compile added ≈0.5 GB (R7).
-9. **Keep the proof lane quiet.** Check the `pea` shim target and the host URL. Warm the host catalog through `/call` first (deadlock from `4f3b0d24`, see the ledger). Close Ducts tabs that read automatically before a control. Do not use Computer Use.
+9. **Keep the proof lane quiet.** Check the `pea` shim target and the host URL. The `4f3b0d24` catalog deadlock is fixed; no catalog warm-up is needed. Close Ducts tabs that read automatically before a control. Do not use Computer Use.
 10. **Keep one canonical statement per lever.** When a finding supersedes a ledger line, rebuild the line. Never leave PROVEN and FALSIFIED lines on the same lever.
 
 ## Open doubts (UNPROVEN, and code or decisions lean on them)

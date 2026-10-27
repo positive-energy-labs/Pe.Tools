@@ -36,8 +36,10 @@ function importAction(raw: unknown, version: number, archive: string, sha256: st
           target: destination,
           input: request,
           prepared: preparation,
+          // v5 declared `footprint` with `.default([])`; its earlier writers omitted it entirely.
           effects: z
             .array(z.looseObject({ kind: z.string() }))
+            .default([])
             .parse(footprint)
             .filter((effect) => effect.kind !== "receipt"),
           claims: [],
