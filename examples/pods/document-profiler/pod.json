@@ -6,6 +6,7 @@
   "description": "Inventory deletion hypotheses and measure explicit interventions on disposable document copies. Counts are inventory, never estimated RAM or cost.",
   "entrypoints": [
     { "sourcePath": "src/MechanicalPlanCensus.cs", "name": "Find unsheeted mechanical plans", "description": "Read-only metadata: non-template mechanical plans, actual sheet placements and primary/dependent relationships. Keeps directly unsheeted parents whose dependents are sheeted. No activation or geometry." },
+    { "sourcePath": "src/ReadCostCensus.cs", "name": "Census Revit read cost", "description": "Run with NoTransaction; starts no transaction and stops if the document is modified. Samples first-touch memory per element, link and context categories by id, orientation frames and fidelity hints before any product read is designed. Every row says measured, sampled or projected." },
     { "sourcePath": "src/Profile.cs", "name": "Profile document", "description": "Read-only bounded census and repeated API workloads. Writes machine-readable evidence; does not rank counts as cost." },
     { "sourcePath": "src/DeletionExperiment.cs", "name": "Compare deletion interventions", "description": "Opt-in, disposable copy only, NoTransaction. Repeats sham/deletion/rollback controls; does not measure rendered UI or reclaimed RAM." },
     { "sourcePath": "src/SaveVariant.cs", "name": "Save deletion variant", "description": "Opt-in, disposable copy only, NoTransaction. Commits one configured intervention and saves a NEW variant for external fresh-process comparisons." },

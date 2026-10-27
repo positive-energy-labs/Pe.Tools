@@ -21,6 +21,14 @@ public static class ProfilerSettings
     public static ProfilerCandidate[] Candidates = new ProfilerCandidate[0];
     // SaveVariant uses exactly one candidate; destination must be a new .rvt file.
     public static string VariantPath = "";
+    // ReadCostCensus: samples bound what the census itself expands; the census must never be the expensive read.
+    public static int CensusBudgetSeconds = 180;
+    public static int CensusFirstTouchSample = 1000;
+    public static int CensusChunk = 250;
+    public static int CensusOrientationSample = 2000;
+    public static int CensusObbSample = 200;
+    public static int CensusFidelitySample = 500;
+    public static int CensusSeed = 20261027;
 }
 
 public sealed class ProfilerCandidate

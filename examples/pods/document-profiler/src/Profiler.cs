@@ -2,11 +2,14 @@ public sealed class ProfilerBudget
 {
     private readonly Stopwatch clock = Stopwatch.StartNew();
     private readonly System.Threading.CancellationToken token;
-    public ProfilerBudget(System.Threading.CancellationToken token) { this.token = token; }
+    private readonly int seconds;
+    public ProfilerBudget(System.Threading.CancellationToken token, int seconds = 0)
+    { this.token = token; this.seconds = seconds > 0 ? seconds : ProfilerSettings.BudgetSeconds; }
+    public double Elapsed => clock.Elapsed.TotalSeconds;
     public void Check()
     {
         token.ThrowIfCancellationRequested();
-        if (clock.Elapsed.TotalSeconds > ProfilerSettings.BudgetSeconds)
+        if (clock.Elapsed.TotalSeconds > seconds)
             throw new TimeoutException("Cooperative Pod budget expired; one Revit API call cannot be preempted.");
     }
 }
