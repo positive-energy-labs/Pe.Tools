@@ -10,7 +10,7 @@ import { act, cleanup, fireEvent, render } from "@testing-library/react";
 import { Profiler } from "react";
 import { afterEach, expect, test, vi } from "vite-plus/test";
 
-import { OrbitMinimap, PlaneMinimap, type OrbitViewport } from "@pe/kit/lang/minimap";
+import { OrbitMinimap, PlaneMinimap, globeBody, type OrbitViewport } from "@pe/kit/lang/minimap";
 
 afterEach(() => {
   cleanup();
@@ -202,4 +202,28 @@ test("the kit row channel lights the globe through the one scene adapter without
   expect(path.getAttribute("d")).toBe("");
   expect(orbit.read()).toEqual(viewport);
   expect(commit).not.toHaveBeenCalled();
+});
+
+test("perspective puts the globe's silhouette on the rim and parallel keeps the old projection", () => {
+  const t = Math.PI / 6; // yaw 30°, elev 30°
+  const eye = [Math.cos(t) * Math.cos(t), Math.sin(t) * Math.cos(t), Math.sin(t)];
+  const side = [-Math.sin(t), Math.cos(t), 0];
+  const radius = (body: ReturnType<typeof globeBody>, p: number[]) => {
+    const [cx, cy] = body.at([0, 0, 0]);
+    const [x, y] = body.at(p);
+    return Math.hypot(x - cx, y - cy);
+  };
+  const parallel = globeBody(30, 30, "parallel");
+  const perspective = globeBody(30, 30, "perspective");
+  // Parallel: the point 90° from the eye is the silhouette, on the radius-92 rim.
+  expect(radius(parallel, side)).toBeCloseTo(92, 6);
+  // Perspective: that point falls inside, and the tangent point (dot = 1/3) is the rim instead.
+  expect(radius(perspective, side)).toBeLessThan(91);
+  const lat = Math.sqrt(1 - 1 / 9);
+  expect(
+    radius(
+      perspective,
+      eye.map((e, i) => e / 3 + side[i]! * lat),
+    ),
+  ).toBeCloseTo(92, 6);
 });
