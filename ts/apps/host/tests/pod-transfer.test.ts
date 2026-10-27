@@ -69,10 +69,10 @@ const act = async (key: string, input: unknown, as: Caller = human) => {
   ).json;
   for (let wait = 0; row.state === "running" && wait < 100; wait++) {
     await new Promise((settle) => setTimeout(settle, 20));
-    const listed = await web.handler(
-      new Request(`http://host/actions?id=${id}`),
-      Context.empty() as never,
+    const listed = await withInvocationContext({ caller: as }, () =>
+      web.handler(new Request(`http://host/actions?id=${id}`), Context.empty() as never),
     );
+    expect(listed.status).toBe(200);
     row = ((await listed.json()) as Record<string, any>[])[0] ?? row;
   }
   return row;
@@ -318,9 +318,11 @@ test("pod.export and pod.import cross /actions with no session and no native cal
   const imported = await act("pod.import", { archivePath });
   expect(imported).toMatchObject({ state: "succeeded" });
   expect(JSON.stringify(imported)).toContain('"folder":"ducts"');
-  expect(await act("pod.import", { archivePath: "relative.zip" })).toMatchObject({
-    state: "failed",
-  });
+  // Source bytes must be captured before journal admission, even for a native human press.
+  const missing = await act("pod.import", { archivePath: "relative.zip" });
+  expect(missing).toMatchObject({ error: expect.stringContaining("relative.zip") });
+  expect(missing).not.toHaveProperty("state");
+  expect((await listPackages(pods)).packages.map((pod) => pod.id)).toEqual(["ducts"]);
   expect(nativeCalls).toEqual([]);
 });
 
@@ -390,8 +392,9 @@ test("pod.promote wraps a scratch Page byte for byte, unbound, without touching 
   expect(JSON.stringify(await act("pod.promote", { page: "notes", id: "my-notes" }))).toContain(
     "already installed",
   );
-  expect(JSON.stringify(await act("pod.promote", { page: "missing", id: "other" }))).toContain(
-    "No scratch Page",
-  );
+  const missing = await act("pod.promote", { page: "missing", id: "other" });
+  expect(missing).toMatchObject({ error: expect.stringContaining(join(pages, "missing")) });
+  expect(missing).not.toHaveProperty("state");
+  await expect(readFile(join(pods, "other", "pod.json"))).rejects.toThrow();
   expect(nativeCalls).toEqual([]);
 });

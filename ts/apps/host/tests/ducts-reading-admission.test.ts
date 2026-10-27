@@ -55,9 +55,8 @@ test("every retained /call hit is admitted, SDK aliases share ownership, and res
                     key: "ducts.snapshot",
                     intent: "Read",
                     needs: "project-document",
-                    actor: "human",
                   },
-                  { key: "ducts.tables", intent: "Read", needs: "nothing", actor: "human" },
+                  { key: "ducts.tables", intent: "Read", needs: "nothing" },
                 ],
               },
               target: null,
@@ -118,7 +117,11 @@ test("every retained /call hit is admitted, SDK aliases share ownership, and res
       expect(next.headers.get("x-pe-resolved-session")).toBe(target.session);
       expect(next.headers.get("x-pe-ducts-reused")).toBe("true");
       expect(await next.json()).toEqual(await first.json());
-      expect((await post(key, pea(), { [DUCTS_BODY_VERSION_HEADER]: version })).status).toBe(403);
+      const shared = await post(key, pea(), { [DUCTS_BODY_VERSION_HEADER]: version });
+      expect(shared.status).toBe(200);
+      expect(shared.headers.get("x-pe-native-request-id")).toBe(
+        first.headers.get("x-pe-native-request-id"),
+      );
       const before = reads;
       expect((await post(key, human, { [DUCTS_BODY_VERSION_HEADER]: "missing" })).status).toBe(409);
       expect(reads).toBe(before);

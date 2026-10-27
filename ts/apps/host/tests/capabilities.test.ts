@@ -3,7 +3,7 @@ import { mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "nod
 import { createServer as createNodeServer } from "node:http";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { Deferred, Effect, Layer } from "effect";
+import { Deferred, Effect, Fiber, Layer } from "effect";
 import { expect, test, vi } from "vite-plus/test";
 import { productPathNames } from "@pe/host-contracts/contracts";
 import type { ServiceHostHandle } from "@pe/host-contracts/pe-service-host";
@@ -74,7 +74,7 @@ test("the host-owned /pe surface answers without Revit", async () => {
       );
     }),
   );
-  const done = Effect.runPromise(program);
+  const fiber = Effect.runFork(program);
   try {
     const deadline = Date.now() + 10_000;
     let service = await readServiceFile(appBase, hostOwnership.serviceName);
@@ -109,7 +109,8 @@ test("the host-owned /pe surface answers without Revit", async () => {
     expect(keys).toContain("workflow:instances.start");
     expect(keys.some((key) => key.startsWith("route:ops"))).toBe(false);
     // The member Work route is named for the pods its members live in.
-    expect(keys).toContain("route:pods.propose");
+    expect(keys).toContain("route:pods.edit");
+    expect(keys).not.toContain("route:pods.propose");
     expect(keys).toContain("op:pod.list");
     expect(keys).not.toContain("route:pods.open");
     expect(keys).toContain("skill:@product/skills/build-pod");
@@ -151,8 +152,10 @@ test("the host-owned /pe surface answers without Revit", async () => {
       method: "POST",
       headers: { "x-pe-service-token": service.token },
     });
-    await done;
+    await Effect.runPromise(Fiber.join(fiber));
   } finally {
+    nodeServer.closeAllConnections();
+    await Effect.runPromise(Fiber.interrupt(fiber));
     vi.unstubAllEnvs();
     if (previousLocalAppData === undefined) delete process.env.LOCALAPPDATA;
     else process.env.LOCALAPPDATA = previousLocalAppData;

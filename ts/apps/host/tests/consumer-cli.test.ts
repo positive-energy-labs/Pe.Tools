@@ -51,7 +51,7 @@ test("missing or ambiguous bridge keeps generated discovery metadata and reports
     });
     expect(sdk).not.toHaveBeenCalled();
     expect(invoke).not.toHaveBeenCalled();
-    // The agent's actual catalog projection retains schemas, document needs and human-only actors.
+    // Discovery retains schemas, explicit effects and shared product capabilities without a bridge.
     vi.stubGlobal("fetch", async (input: string | URL | Request) => {
       const url = new URL(input instanceof Request ? input.url : String(input));
       return url.pathname === "/ops"
@@ -70,12 +70,16 @@ test("missing or ambiguous bridge keeps generated discovery metadata and reports
       catalog.capabilities.find((op) => op.key === "op:revit.catalog.loaded-families"),
     ).toMatchObject({
       needs: "document",
+      effect: "query",
       mutates: false,
       input: { type: "object" },
     });
-    expect(catalog.capabilities.find((op) => op.key === "op:families.plan")).toMatchObject({
-      principal: ["human"],
+    expect(catalog.capabilities.find((op) => op.key === "workflow:families.plan")).toMatchObject({
+      effect: "query",
+      mutates: false,
+      principal: expect.arrayContaining(["human", "pea"]),
     });
+    expect(catalog.capabilities.some((op) => op.key === "op:families.plan")).toBe(false);
     for (const op of tsOnlyOperationCatalog)
       expect(body.operations.filter((row: { key: string }) => row.key === op.key)).toEqual([op]);
 

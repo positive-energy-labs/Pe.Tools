@@ -111,7 +111,7 @@ test("a push over a newer mark is refused undispatched in one sentence, over HTT
   await settle();
   expect(await f.submit()).toMatchObject({ error: STALE_READ });
   expect(f.sent.filter((call) => call.key === "schedule.cells.apply")).toEqual([]);
-  expect((await f.view()).doc.cells["1::2"].staged.value).toBe("150 VA");
+  expect((await f.view()).doc.cells["1::2"].edit.value).toBe("150 VA");
 });
 
 test("the families matrix Reading streams an envelope, never the body, and wears the mark", async () => {

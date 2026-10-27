@@ -406,9 +406,9 @@ export const plural = (n: number, noun: string) =>
   `${n} ${n === 1 ? noun : noun.endsWith("y") ? `${noun.slice(0, -1)}ies` : `${noun}s`}`;
 
 /**
- * The Work slot's default render (ruling 14): one sentence of what you edit and Pea proposed, on
- * how many of each group the route names, then the aggregates. Accept and deny all are one
- * `runFanOut` over every cell; unstage all is the discard. Nothing pending draws nothing.
+ * The Work slot's default render (ruling 14): shared edit and suggestion counts, followed by
+ * the groups the route names. Counts do not infer authors. Accept and deny all are one
+ * `runFanOut` over every cell; clear all is the discard. Nothing pending draws nothing.
  */
 export function WorkSentence({
   summary,
@@ -431,9 +431,9 @@ export function WorkSentence({
   return (
     <div className="flex flex-wrap items-baseline gap-x-2 gap-y-1 t-prose">
       <span className="text-ink-2">
-        {edit ? <b className="font-semibold text-ink">{plural(edit, "cell")} edit by you</b> : null}
+        {edit ? <b className="font-semibold text-ink">{plural(edit, "edited cell")}</b> : null}
         {edit && proposed ? ", " : null}
-        {proposed ? <span data-tone="pea">{proposed} proposed by Pea</span> : null}
+        {proposed ? <span>{plural(proposed, "suggestion")}</span> : null}
         {contested ? <span data-tone="caution"> · {contested} contested</span> : null}
         {spans.map((span) => ` · ${plural(span.count, span.noun)}`)}
       </span>
