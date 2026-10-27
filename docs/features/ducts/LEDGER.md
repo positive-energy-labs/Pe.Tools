@@ -105,6 +105,9 @@ Rebuilt 2026-10-21 as current truth after the close of the ducts walk; git holds
 
 ## Tried & rejected
 
+- 2026-10-27, retire the persistent snapshot spike (`archive/2026-10-27/ducts-persistent-cache`, tip `8db991de`). Its IndexedDB value was previous evidence only; every tab still made the authoritative native read and transferred the full body. The 32 ms early-value observation used a 7.6 KB synthetic fixture and did not prove real-model paint or native savings. Preserve the freshness boundary, not this extra cache.
+- 2026-10-27, retire shared pricing compute (`archive/2026-10-27/sharedworker-pricing-cache`, tip `d8e1ee93`). The saved-model result plus exact key required about 196.6 MB of accounting budget; observed warm hits took 5.4–9.0 s versus 2.5 s for the existing dedicated worker. These were uncontrolled observations, not a comparative benchmark, and do not justify another retained result owner. Reports remain reachable at the archive tags.
+
 - 2026-10-23, Page `epoch` alone was reported not to re-render: FALSIFIED[session/dev, Chadds, 879c4874, 2026-10-23]; an epoch-only patch painted refreshing, retained the prior picture and completed. The read-race test timeout came from repeatedly rendering/querying the full heavy pane in jsdom; its bounded screen fixture keeps the real route/read-owner race and passes without raising the timeout. Evidence: `.artifacts/runs/verify2-20261023/{epoch-during,epoch-after,refresh-complete}.json`.
 
 - 2026-10-23, moving the look target on selection disoriented picking. Opening facts on pointerup let the trailing click dismiss them. `startTransition` did not defer the router's external-store update: selection expanded sidebar rows before facts could paint. The picture now publishes selection after the mounted facts get a frame.

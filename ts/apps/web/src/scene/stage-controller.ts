@@ -1,6 +1,6 @@
 import { PANE_OBSTACLES } from "@pe/kit/lang/floater";
 import { PictureContext } from "@pe/kit/lang/pane";
-import { Switcher } from "@pe/kit/lang/switcher";
+import { Button } from "@pe/kit/lang/button";
 import {
   createContext,
   createElement,
@@ -188,15 +188,13 @@ function useStageBindings(options: OrbitStage | PlaneStage) {
   return {
     projection:
       options.kind === "orbit" && !options.axis
-        ? createElement(Switcher<NonNullable<OrbitViewport["projection"]>>, {
-            ariaLabel: "projection",
-            value: projection,
-            onChange: setProjection,
-            options: (["perspective", "parallel"] as const).map((value) => ({
-              value,
-              label: value,
-              title: `${value} projection · O switches projection`,
-            })),
+        ? // One pressed/unpressed button, not a two-word switcher: the cube glyph shows which.
+          createElement(Button, {
+            label: "parallel",
+            reason: `${projection} projection · O switches projection`,
+            pressed: projection === "parallel",
+            icon: createElement(ProjectionCube, { projection }),
+            onClick: () => setProjection(projection === "parallel" ? "perspective" : "parallel"),
           })
         : null,
     /** Null on an axis picture or a plane stage; the globe hosts it. */
@@ -208,6 +206,30 @@ function useStageBindings(options: OrbitStage | PlaneStage) {
     orbitPivot:
       options.kind === "orbit" && options.selectedBounds ? center(options.selectedBounds) : null,
   };
+}
+
+/** A wire cube: the back face shrinks in perspective and matches the front in parallel. */
+function ProjectionCube({ projection }: { projection: NonNullable<OrbitViewport["projection"]> }) {
+  const back = projection === "parallel" ? "M7 2h7v7H7z" : "M8 4h4v4H8z";
+  const rails =
+    projection === "parallel"
+      ? "M2 7l5-5M9 7l5-5M9 14l5-5M2 14l5-5"
+      : "M2 7l6-3M9 7l3-3M9 14l3-6M2 14l6-6";
+  return createElement(
+    "svg",
+    {
+      viewBox: "0 0 16 16",
+      width: 16,
+      height: 16,
+      "aria-hidden": true,
+      fill: "none",
+      stroke: "currentColor",
+      strokeWidth: 1.25,
+      strokeLinejoin: "round",
+    },
+    createElement("path", { d: `M2 7h7v7H2z${rails}` }),
+    createElement("path", { d: back, strokeOpacity: 0.55 }),
+  );
 }
 
 const StageContext = createContext<ReturnType<typeof useStageBindings> | null>(null);

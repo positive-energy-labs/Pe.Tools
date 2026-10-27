@@ -154,15 +154,25 @@ const towards = (yaw: number, elev: number): Vec => {
   return [Math.cos(rad(yaw)) * cosE, Math.sin(rad(yaw)) * cosE, Math.sin(rad(elev))];
 };
 
-const globeProjection = (yaw: number, elev: number) => {
+/** Eye distance in globe radii when the camera is in perspective. ponytail: a fixed feel constant;
+ * the real camera's distance changes all the time, and a gizmo reads better held still. */
+const EYE = 3;
+/** Scaled so the perspective silhouette lands on the drawn rim (radius `R`). */
+const SILHOUETTE = Math.sqrt(EYE * EYE - 1);
+
+type Projection = "perspective" | "parallel";
+
+const globeProjection = (yaw: number, elev: number, projection: Projection) => {
   const cos = Math.cos(rad(yaw));
   const sin = Math.sin(rad(yaw));
   const sinE = Math.sin(rad(elev));
   const cosE = Math.cos(rad(elev));
+  const eye = towards(yaw, elev);
   return (p: readonly number[]): [number, number] => {
     // Screen right is the camera's right; depth runs away from the eye.
     const depth = -(p[0]! * cos + p[1]! * sin);
-    return [C + (p[1]! * cos - p[0]! * sin) * R, C - (depth * sinE + p[2]! * cosE) * R];
+    const k = projection === "parallel" ? 1 : SILHOUETTE / (EYE - dot(p as Vec, eye));
+    return [C + (p[1]! * cos - p[0]! * sin) * R * k, C - (depth * sinE + p[2]! * cosE) * R * k];
   };
 };
 
@@ -187,9 +197,11 @@ const poleLabel = (v: Vec, elev: number) =>
 const stopTitle = (v: Vec, elev: number) =>
   elev === 90 ? "↑ plan" : elev < 0 ? "↓ floor" : `${bearing(v)} ${elev}°`;
 
-function globeBody(yaw: number, elev: number) {
-  const at = globeProjection(yaw, elev);
+export function globeBody(yaw: number, elev: number, projection: Projection = "perspective") {
+  const at = globeProjection(yaw, elev, projection);
   const eye = towards(yaw, elev);
+  // A perspective eye sees the sphere only up to its tangent cone, dot = 1/EYE, not the equator.
+  const limb = projection === "parallel" ? -1e-9 : 1 / EYE - 1e-9;
   const circles = [
     (t: number): Vec => [Math.cos(t), Math.sin(t), 0],
     ...[0, 90].map((rel) => {
@@ -206,13 +218,13 @@ function globeBody(yaw: number, elev: number) {
       const [x1, y1] = at(a);
       const [x2, y2] = at(b);
       const piece = `M${x1.toFixed(1)} ${y1.toFixed(1)}L${x2.toFixed(1)} ${y2.toFixed(1)}`;
-      if (dot(a, eye) + dot(b, eye) >= -1e-9) near += piece;
+      if (dot(a, eye) + dot(b, eye) >= 2 * limb) near += piece;
       else far += piece;
     }
   const stops = STOPS.map((stop) => {
     const v = towards(stop.rel ?? 0, stop.elev);
     const [x, y] = at(v);
-    return { ...stop, v, x, y, front: dot(v, eye) >= -1e-9 };
+    return { ...stop, v, x, y, front: dot(v, eye) >= limb };
   });
   // N rides the rim, just outside the wire, at project north (+y).
   const v: Vec = [0, 1, 0];
@@ -222,7 +234,7 @@ function globeBody(yaw: number, elev: number) {
   const rim = {
     x: out < 1 ? C : C + (x - C) * k,
     y: out < 1 ? C - R - 16 : C + (y - C) * k,
-    front: dot(v, eye) >= -1e-9,
+    front: dot(v, eye) >= limb,
   };
   return { at, near, far, stops, rim };
 }
@@ -242,7 +254,7 @@ export function OrbitMinimap({
   const svg = useRef<SVGSVGElement>(null);
   const live = useRef(orbit);
   live.current = orbit;
-  const { yaw, elev } = orbit.read() ?? { yaw: 0, elev: 0 };
+  const { yaw, elev, projection } = orbit.read() ?? { yaw: 0, elev: 0, projection: undefined };
   const pressed = useRef<{
     x: number;
     y: number;
@@ -256,7 +268,7 @@ export function OrbitMinimap({
     },
     [orbit],
   );
-  const body = globeBody(yaw, elev);
+  const body = globeBody(yaw, elev, projection);
 
   useEffect(() => {
     const root = svg.current;
@@ -265,11 +277,11 @@ export function OrbitMinimap({
     let orientation = "";
     const draw = () => {
       frame = 0;
-      const pose = orbit.read() ?? { yaw: 0, elev: 0 };
-      const key = `${pose.yaw.toFixed(3)},${pose.elev.toFixed(3)}`;
+      const pose = orbit.read() ?? { yaw: 0, elev: 0, projection: undefined };
+      const key = `${pose.yaw.toFixed(3)},${pose.elev.toFixed(3)},${pose.projection}`;
       if (key === orientation) return;
       orientation = key;
-      const body = globeBody(pose.yaw, pose.elev);
+      const body = globeBody(pose.yaw, pose.elev, pose.projection);
       for (const side of ["near", "far"] as const)
         root.querySelector(`[data-orbit-wire="${side}"]`)?.setAttribute("d", body[side]);
       for (const stop of body.stops) {
