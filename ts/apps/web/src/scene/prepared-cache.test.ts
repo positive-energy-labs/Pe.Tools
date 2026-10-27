@@ -20,6 +20,12 @@ const decoded = (): SceneData => ({
   metadata: {
     stamp: { epoch: 1, hostDocumentKey: "a", sources: [] },
     elements: [],
+    completeness: {
+      complete: true,
+      deferredCandidates: 0,
+      acquisitionLimitedElements: 0,
+      limitReason: null,
+    },
   } as unknown as SceneData["metadata"],
 });
 

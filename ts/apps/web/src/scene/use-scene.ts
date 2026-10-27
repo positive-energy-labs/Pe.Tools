@@ -15,6 +15,9 @@ export type SceneRead = {
   focusMeshes?: SceneMeshes | null;
   omittedElements: number;
   unavailableElements: number;
+  completeness: Psc1Metadata["completeness"] | null;
+  /** Optional context failed; the exact focus remains usable. */
+  contextError?: string | null;
 };
 
 const idle = { meshes: null, metadata: null, error: null, pending: false };
@@ -51,6 +54,7 @@ export function useScene(
     pending: read.pending,
     omittedElements: read.metadata?.omittedElements ?? 0,
     unavailableElements: read.metadata?.unavailableElements.length ?? 0,
+    completeness: read.metadata?.completeness ?? null,
   };
 }
 export type ArtifactRead = {

@@ -44,6 +44,7 @@ export interface UrlPage<P> {
 }
 
 type Shape = Record<string, z.ZodType>;
+const routeUrlPages = new Map<RouteKey, UrlPage<never>>();
 
 /** An object's shape, through the intersections the entity kernel builds. */
 const shapeOf = (schema: z.ZodType): Shape => {
@@ -75,6 +76,11 @@ function addressPage<P>(key: string, route: RouteKey, page: z.ZodType<P> | undef
         : contract.write({ [name]: initial })[name] === undefined;
     if (!same) throw Error(`${key}: page default for ${name} differs from its contract field's`);
   }
+  // One adapter per route: `useUrlPage` re-subscribes when it changes, and a re-subscribe restores
+  // the address over any move still pending. A manifest that refreshes its action facts (Family,
+  // when a capture lands) must not rebuild it.
+  const cached = routeUrlPages.get(route);
+  if (cached) return cached as unknown as UrlPage<P>;
   const read = (search: Record<string, unknown>) => contract.read(search).page as Partial<P>;
   const write = (value: Partial<P>): Record<string, string | undefined> =>
     contract.write(value as never);
@@ -98,7 +104,7 @@ function addressPage<P>(key: string, route: RouteKey, page: z.ZodType<P> | undef
     }
     return out;
   };
-  return {
+  const url: UrlPage<P> = {
     keys,
     read,
     write,
@@ -106,23 +112,15 @@ function addressPage<P>(key: string, route: RouteKey, page: z.ZodType<P> | undef
       contract.history(before as never, after as never, override),
     middlewares: [encode],
   };
+  routeUrlPages.set(route, url as unknown as UrlPage<never>);
+  return url;
 }
 
-const routeUrlPages = new Map<RouteKey, UrlPage<never>>();
-
-/**
- * A contract route's URL page with no manifest: the address schema is the Page (`useAddressPage`).
- * One object per route, because `useUrlPage` re-subscribes when it changes and a re-subscribe
- * restores the address over any move still pending.
- */
+/** A contract route's URL page with no manifest: the address schema is the Page (`useAddressPage`). */
 export function routeUrlPage<R extends RouteKey>(route: R): UrlPage<RoutePage<R>> {
-  let found = routeUrlPages.get(route);
-  if (!found)
-    routeUrlPages.set(
-      route,
-      (found = addressPage(route, route, routeAddress(route).schema as never)),
-    );
-  return found as unknown as UrlPage<RoutePage<R>>;
+  return addressPage(route, route, routeAddress(route).schema as never) as unknown as UrlPage<
+    RoutePage<R>
+  >;
 }
 
 /** The manifest's URL page; null when the manifest names no contract address. */

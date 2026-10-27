@@ -217,9 +217,13 @@ test("same HTTP router separates production Work and two demo resource owners; r
     }>;
   const a = await create(),
     b = await create();
-  const reading = async (base: string, requested: typeof scope) => {
+  const reading = async (
+    base: string,
+    requested: typeof scope,
+    kind: "work" | "family-readings" = "work",
+  ) => {
     const response = await send(
-      `${base}/pe/resources?keys=${encodeURIComponent(JSON.stringify([{ kind: "work", ...requested }]))}`,
+      `${base}/pe/resources?keys=${encodeURIComponent(JSON.stringify([kind === "work" ? { kind, ...requested } : { kind, work: requested }]))}`,
     );
     expect(response.status).toBe(200);
     const reader = response.body!.getReader();
@@ -232,6 +236,10 @@ test("same HTTP router separates production Work and two demo resource owners; r
   expect(await reading(a.base, scope)).toMatchObject({ kind: "failure" });
   expect(await reading(a.base, b.scope)).toMatchObject({ kind: "failure" });
   expect(await reading(a.base, a.scope)).toMatchObject({ kind: "snapshot" });
+  const familyScope = { ...a.scope, route: "family" };
+  expect(await reading(a.base, familyScope)).toMatchObject({ kind: "snapshot" });
+  expect(await reading(a.base, familyScope, "family-readings")).toMatchObject({ kind: "snapshot" });
+  expect(await reading(b.base, familyScope, "family-readings")).toMatchObject({ kind: "failure" });
   expect(JSON.stringify(await reading("", scope))).toContain("production sentinel");
   expect((await send(a.base, { method: "DELETE" })).status).toBe(200);
   expect(await reading(b.base, b.scope)).toMatchObject({ kind: "snapshot" });

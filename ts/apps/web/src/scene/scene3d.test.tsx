@@ -266,6 +266,12 @@ it("keeps camera gestures local and the viewport mounted across membership and n
     error: null,
     omittedElements: 3,
     unavailableElements: 1,
+    completeness: {
+      complete: false,
+      deferredCandidates: 0,
+      acquisitionLimitedElements: 0,
+      limitReason: "output-budget",
+    },
   };
   const picture = render(<Picture capture={capture} />);
   await act(async () => {});

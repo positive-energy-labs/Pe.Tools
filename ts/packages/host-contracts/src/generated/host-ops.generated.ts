@@ -5957,7 +5957,7 @@ export namespace RevitDetailSpaceRows {
   }
 }
 
-/** Export real triangles in host internal feet. Set focusOnly with host elementIds for the first usable exact-membership mesh without preparing the whole world. Request context separately with focusOnly false; contextPaddingFt derives its crop, or bounds sets it explicitly. Metadata phase distinguishes focus/context, unavailableElements identifies requested ids without meshes, and omittedElements counts context excluded by the triangle budget. No document mutation. Browser orbit, visibility and cuts need no further native calls. */
+/** Export real triangles in host internal feet. Set focusOnly with host elementIds for the first usable exact-membership mesh without preparing the whole world. Request context separately with focusOnly false; contextPaddingFt derives its crop, or bounds sets it explicitly. Metadata phase distinguishes focus/context, unavailableElements identifies requested ids without meshes, omittedElements counts context excluded by the output budget, and completeness reports deferred context and acquisition resource limits. Successful artifacts preserve exact focus membership; optional context stops between native calls under memory, time, or triangle limits. No document mutation. Browser orbit, visibility and cuts need no further native calls. */
 export namespace RevitDetailSpaceScene {
   export namespace Req {
     export interface Request {
@@ -6017,6 +6017,7 @@ export namespace RevitDetailSpaceScene {
       phase: string;
       unavailableElements: SceneUnavailableElement[];
       work: SceneWork;
+      completeness: SceneCompleteness;
     }
     /**
      * Provenance and freshness. Every answer embeds one; it is not optional.
@@ -6117,6 +6118,27 @@ export namespace RevitDetailSpaceScene {
       extractedElements: number;
       extractedTriangles: number;
       nativeMilliseconds: number;
+      peakRetainedTriangles: number;
+      nativeGeometryCalls: number;
+      memory?: null | SceneMemory;
+    }
+    export interface SceneMemory {
+      startPrivateBytes: number;
+      endPrivateBytes: number;
+      peakPrivateBytes: number;
+      baselinePrivateBytes: number;
+      nativeGrowthAllowanceBytes: number;
+      physicalHeadroomBytes: number;
+      managedBytes: number;
+    }
+    export interface SceneCompleteness {
+      complete: boolean;
+      /**
+       * Known unacquired candidates, or null when discovery stopped before the remaining count was known.
+       */
+      deferredCandidates?: number | null;
+      acquisitionLimitedElements: number;
+      limitReason?: null | string;
     }
   }
 }

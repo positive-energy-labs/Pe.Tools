@@ -45,6 +45,13 @@ import type { StageIssue } from "./inbox-rows";
 import type { IssueTarget } from "#/scene/types";
 
 const NONE: ReadonlySet<string> = new Set();
+const CONTEXT_LIMITS: Record<string, string> = {
+  "output-budget": "Context limited by geometry budget",
+  "acquisition-budget": "Context limited by geometry budget",
+  "memory-growth": "Context limited to protect Revit memory",
+  "memory-headroom": "Context limited to protect Revit memory",
+  "element-acquisition-limit": "Some context elements exceed the geometry limit",
+};
 
 const centrelinePoints = (scene: Scene, ids?: ReadonlySet<number>) => [
   ...scene.segments.flatMap((f) => (!ids || ids.has(f.segment.id) ? f.segment.polyline : [])),
@@ -185,7 +192,10 @@ export function ModelPicture({
   const pictureLayers = useMemo(
     () =>
       meshes
-        ? [...findings3d, portLayer(equipmentPorts(graph, meshes, paintOf), colour === "firm" ? kinds : {}, look)]
+        ? [
+            ...findings3d,
+            portLayer(equipmentPorts(graph, meshes, paintOf), colour === "firm" ? kinds : {}, look),
+          ]
         : findings3d,
     [graph, meshes, paintOf, findings3d, look, kinds, colour],
   );
@@ -378,14 +388,27 @@ export function ModelPicture({
           />
         </PaneOverlay>
       )}
-      {read.omittedElements || read.unavailableElements ? (
+      {read.completeness?.complete === false ||
+      read.contextError ||
+      read.omittedElements ||
+      read.unavailableElements ? (
         <PaneOverlay label="scene completeness" place="br">
           <OutcomeLine
             kind="advisory"
             label={[
-              read.omittedElements
-                ? `context: ${read.omittedElements} elements omitted at the triangle budget`
+              read.contextError ? `context: ${read.contextError}` : "",
+              read.completeness?.complete === false
+                ? (CONTEXT_LIMITS[read.completeness.limitReason ?? ""] ?? "Context limited")
                 : "",
+              read.completeness?.deferredCandidates === null
+                ? "Additional context deferred"
+                : read.completeness?.deferredCandidates
+                  ? `${read.completeness.deferredCandidates} deferred`
+                  : "",
+              read.completeness?.acquisitionLimitedElements
+                ? `${read.completeness.acquisitionLimitedElements} geometry limited`
+                : "",
+              read.omittedElements ? `${read.omittedElements} omitted at the geometry limit` : "",
               read.unavailableElements ? `${read.unavailableElements} unavailable` : "",
             ]
               .filter(Boolean)

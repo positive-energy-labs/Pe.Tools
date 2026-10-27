@@ -305,8 +305,13 @@ export function MasterTableBody<Row extends RowData>({
     version,
   );
   useDomProjection(
-    !virtualized && tbody ? () => tbody.querySelectorAll(":scope > tr[data-index]") : null,
-    (row) => mark(Number((row as HTMLElement).dataset.index)),
+    !virtualized && tbody ? () => tbody.querySelectorAll(":scope > tr[data-key]") : null,
+    (row) => {
+      // Cached DOM rows can outlive a row model until the next observer delivery; a removed row
+      // has no key here, and a position would name a different (or no) row.
+      const index = indexOf.get((row as HTMLElement).dataset.key ?? "");
+      return index === undefined ? {} : mark(index);
+    },
     version,
   );
   const tail = virtualized ? virtual.getTotalSize() - (drawn.at(-1)?.end ?? 0) : 0;

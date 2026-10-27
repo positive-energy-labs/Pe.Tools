@@ -118,6 +118,8 @@ export class SceneCache<T extends SceneData = SceneData> {
     }
     this.delete(id);
     const entry = new ResidentScene<T>(id, bytes, data, this.memory);
+    // Partial context can be displayed, but must not evict complete scopes from retention.
+    if (!data.metadata.completeness.complete) return entry;
     let retained = true;
     const retention = this.memory.retain("decoded", sceneFootprint(data), {
       admissionBytes: bytes,

@@ -10,6 +10,7 @@ import { afterEach, expect, test, vi } from "vite-plus/test";
 import { useList } from "../src/components/lang/collection";
 import { ListView } from "../src/components/lang/list-view";
 import { Scroll } from "../src/components/lang/scroll";
+import { Table } from "../src/components/master-table/table";
 import { project } from "../src/components/lang/scroll-project";
 import { writeTheme } from "../src/theme";
 
@@ -369,7 +370,7 @@ test("an observer delivery that changes nothing here writes nothing (a seam drag
 });
 
 // Real-observer stand-in: delivers on observe and on demand; records frame-time layout reads.
-function frameHarness() {
+function frameHarness(deliverOnObserve = true) {
   const callbacks = new Set<(entries: []) => void>();
   vi.stubGlobal(
     "ResizeObserver",
@@ -378,7 +379,7 @@ function frameHarness() {
         callbacks.add(callback);
       }
       observe() {
-        this.callback([]);
+        if (deliverOnObserve) this.callback([]);
       }
       unobserve() {}
       disconnect() {}
@@ -463,4 +464,36 @@ test("a theme toggle re-resolves the strip ink once and repaints", async () => {
   expect(canvasReads).toBe(4);
   await waitFor(() => expect(harness.fills.length).toBeGreaterThan(before));
   writeTheme("auto");
+});
+
+test("removed table rows cannot paint against the next row model before observer delivery", () => {
+  const harness = frameHarness(false);
+  const frames = new Map<number, FrameRequestCallback>();
+  let serial = 0;
+  vi.stubGlobal("requestAnimationFrame", (callback: FrameRequestCallback) => {
+    frames.set(++serial, callback);
+    return serial;
+  });
+  vi.stubGlobal("cancelAnimationFrame", (id: number) => frames.delete(id));
+  const flush = () => {
+    for (let pass = 0; frames.size && pass < 20; pass++) {
+      const next = [...frames.values()];
+      frames.clear();
+      next.forEach((callback) => callback(performance.now()));
+    }
+  };
+  const columns = [{ key: "id", label: "ID", cell: (row: { id: string }) => row.id }];
+  const table = (rows: { id: string }[]) => (
+    <Table label="changing rows" rows={rows} rowKey={(row) => row.id} columns={columns} />
+  );
+  const view = render(table([{ id: "one" }, { id: "two" }]));
+  harness.deliver();
+  flush();
+  expect(view.container.querySelectorAll("tbody tr[data-key]")).toHaveLength(2);
+  view.rerender(table([{ id: "one" }]));
+  expect(view.container.querySelectorAll("tbody tr[data-key]")).toHaveLength(1);
+  // The canvas can redraw before ResizeObserver replaces its cached DOM positions.
+  expect(flush).not.toThrow();
+  harness.deliver();
+  expect(flush).not.toThrow();
 });

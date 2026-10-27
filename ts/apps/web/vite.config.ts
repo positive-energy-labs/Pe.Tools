@@ -17,6 +17,12 @@ import { defineConfig, loadEnv, searchForWorkspaceRoot } from "vite-plus";
 
 import { tanstackStart } from "@tanstack/react-start/plugin/vite";
 
+const privateSourceMaps = {
+  sourcemapDebugIds: true,
+  sourcemapExcludeSources: true,
+  sourcemapPathTransform: repoRelativeSource,
+};
+
 const config = defineConfig(({ mode, command }) => {
   // Server-only secrets (LLAMA_CLOUD_API_KEY, ANTHROPIC_API_KEY) live in the
   // workspace-root .env, one level above apps/web. Vite only surfaces
@@ -142,12 +148,11 @@ const config = defineConfig(({ mode, command }) => {
         output: {
           // Feedback notes name the picked component; minified names would read `p`.
           keepNames: true,
-          sourcemapDebugIds: true,
-          sourcemapExcludeSources: true,
-          sourcemapPathTransform: repoRelativeSource,
+          ...privateSourceMaps,
         },
       },
     },
+    worker: { rolldownOptions: { output: privateSourceMaps } },
     optimizeDeps: {
       // ponytail: the dev host's optimizer held its bundle until static-import crawl end and the
       // crawl never ended on 2026-09-11 (504 Outdated Optimize Dep forever, `deps_temp_*` never
