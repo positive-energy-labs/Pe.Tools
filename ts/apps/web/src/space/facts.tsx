@@ -156,6 +156,13 @@ export function PickFacts({
           </Fact>
         ) : null}
         <Fact name="height role">{h.heightRole}</Fact>
+        <Fact name="geometry">
+          {element.representation === "box"
+            ? "bounds proxy"
+            : element.representation === "run"
+              ? "straight run"
+              : "captured surfaces"}
+        </Fact>
         <Fact name="triangles">{(element.vertexCount / 3).toLocaleString()}</Fact>
       </dl>
     );

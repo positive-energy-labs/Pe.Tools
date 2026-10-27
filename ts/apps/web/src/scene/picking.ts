@@ -8,7 +8,7 @@ const CLICK_PX = 5;
 export const isClick = (down: { x: number; y: number }, up: { clientX: number; clientY: number }) =>
   Math.hypot(up.clientX - down.x, up.clientY - down.y) <= CLICK_PX;
 
-/** The renderer's static, unindexed batch has identity instance transforms. Unlike the general
+/** The renderer's unindexed batch shares primitive geometry through instance transforms. Unlike the general
  * BatchedMesh raycast, this needs no normals, UVs, all-hit array or sort: only the nearest kept hit.
  * Read its packed geometry so origin rebasing has exactly the same float32 rounding as drawing. */
 export function createMeshPicker(
@@ -19,17 +19,21 @@ export function createMeshPicker(
   const ranges = byId.map((instance, id) => {
     const geometry = batch.getGeometryIdAt(id);
     const range = batch.getGeometryRangeAt(geometry)!;
+    const matrix = batch.getMatrixAt(id, new THREE.Matrix4());
     return {
       instance,
       id,
       start: range.start,
       end: range.start + range.count,
-      box: batch.getBoundingBoxAt(geometry, new THREE.Box3())!,
+      box: batch.getBoundingBoxAt(geometry, new THREE.Box3())!.applyMatrix4(matrix),
+      matrix,
+      inverse: matrix.clone().invert(),
     };
   });
   const positions = batch.geometry.getAttribute("position");
   const local = new THREE.Ray(),
-    inverse = new THREE.Matrix4();
+    inverse = new THREE.Matrix4(),
+    instanceRay = new THREE.Ray();
   const a = new THREE.Vector3(),
     b = new THREE.Vector3(),
     c = new THREE.Vector3();
@@ -40,24 +44,25 @@ export function createMeshPicker(
     let nearest = Infinity;
     let rank = -Infinity;
     let result: Pick | null = null;
-    for (const { instance, id, start, end, box } of ranges) {
+    for (const { instance, id, start, end, box, matrix, inverse: instanceInverse } of ranges) {
       const nextRank = priority(instance);
       if (nextRank < rank) continue;
       if (!batch.getVisibleAt(id) || !local.intersectBox(box, hit)) continue;
       if (
         nextRank === rank &&
         !box.containsPoint(local.origin) &&
-        local.origin.distanceToSquared(hit) > nearest
+        ray.origin.distanceToSquared(world.copy(hit).applyMatrix4(batch.matrixWorld)) > nearest
       )
         continue;
+      instanceRay.copy(local).applyMatrix4(instanceInverse);
       for (let i = start; i < end; i += 3) {
         a.fromBufferAttribute(positions, i);
         b.fromBufferAttribute(positions, i + 1);
         c.fromBufferAttribute(positions, i + 2);
-        if (!local.intersectTriangle(a, b, c, false, hit)) continue;
-        const distance = local.origin.distanceToSquared(hit);
+        if (!instanceRay.intersectTriangle(a, b, c, false, hit)) continue;
+        world.copy(hit).applyMatrix4(matrix).applyMatrix4(batch.matrixWorld);
+        const distance = ray.origin.distanceToSquared(world);
         if (nextRank === rank && distance >= nearest) continue;
-        world.copy(hit).applyMatrix4(batch.matrixWorld);
         const pick: Pick = { instance, point: world.toArray() };
         if (clip && !clip(pick)) continue;
         rank = nextRank;

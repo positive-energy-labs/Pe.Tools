@@ -33,6 +33,7 @@ const metadata = (patch: Partial<Psc1Metadata> = {}): Psc1Metadata =>
         categoryId: -2008000,
         firstVertex: 0,
         vertexCount: 3,
+        representation: "mesh",
         focus: true,
         bounds: BOX,
       },
@@ -41,6 +42,7 @@ const metadata = (patch: Partial<Psc1Metadata> = {}): Psc1Metadata =>
         categoryId: CATEGORY_IDS.walls,
         firstVertex: 3,
         vertexCount: 3,
+        representation: "mesh",
         focus: false,
         bounds: BOX,
       },
@@ -141,6 +143,69 @@ describe("PSC1 decode", () => {
       decodeScene(psc1(metadata({ elements: [a!, { ...b!, vertexCount: 4 }] }))),
     ).toThrow("range");
     expect(() => decodeScene(psc1(metadata({ elements: [a!] })))).toThrow("Incomplete");
+  });
+  it("decodes an all-primitive scene without fabricating mesh vertices or losing linked identity", () => {
+    const elements: Psc1Metadata["elements"] = metadata().elements.map((e) => ({
+      ...e,
+      firstVertex: 0,
+      vertexCount: 0,
+      representation: "box" as const,
+    }));
+    elements[0] = {
+      ...elements[0]!,
+      representation: "run",
+      run: {
+        start: [0, 0, 0],
+        end: [0, 0, 1],
+        shape: "round",
+        diameterFt: 1,
+        crossSectionXAxis: [1, 0, 0],
+      },
+    } as Psc1Metadata["elements"][number];
+    const { meshes } = decodeScene(psc1(metadata({ triangles: 0, elements })));
+    expect(meshes.positions.byteLength).toBe(0);
+    expect(meshes.instances[0]).toMatchObject({
+      focus: true,
+      revitId: 1,
+      primitive: { kind: "run", run: { diameterFt: 1 } },
+    });
+    expect(meshes.instances[1]).toMatchObject({
+      revitId: null,
+      linkInstanceId: 7,
+      primitive: { kind: "box", bounds: BOX },
+    });
+  });
+  it("rejects primitive ranges, invalid bounds and unsized or nonorthogonal runs", () => {
+    const box = {
+      ...metadata().elements[0]!,
+      representation: "box" as const,
+      firstVertex: 0,
+      vertexCount: 0,
+    };
+    const run = {
+      start: [0, 0, 0],
+      end: [0, 0, 1],
+      shape: "rectangular" as const,
+      widthFt: 2,
+      heightFt: 1,
+      crossSectionXAxis: [1, 0, 0],
+    };
+    const decode = (element: Psc1Metadata["elements"][number]) =>
+      decodeScene(psc1(metadata({ triangles: 0, elements: [element] })));
+    expect(() => decode({ ...box, vertexCount: 3 })).toThrow("range");
+    expect(() => decode({ ...box, bounds: { ...BOX, maxX: -1 } })).toThrow("bounds");
+    expect(() => decode({ ...box, representation: "run", run: { ...run, widthFt: 0 } })).toThrow(
+      "dimensions",
+    );
+    expect(() =>
+      decode({ ...box, representation: "run", run: { ...run, crossSectionXAxis: [0, 0, 1] } }),
+    ).toThrow("frame");
+    expect(() =>
+      decode({ ...box, representation: "run", run: { ...run, end: [0, 0, 0] } }),
+    ).toThrow("frame");
+    expect(() =>
+      decode({ ...box, representation: "run", run: { ...run, crossSectionXAxis: [2, 0, 0] } }),
+    ).toThrow("frame");
   });
   it("refuses old captures and malformed completeness before they can become cache authority", () => {
     expect(() => decodeScene(psc1(metadata({ format: "space-scene-v1" })))).toThrow("outdated");

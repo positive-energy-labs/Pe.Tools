@@ -35,6 +35,56 @@ function fixture() {
 }
 
 describe("nearest kept mesh picking", () => {
+  it("matches Three for rolled, nonuniform and mirrored transforms while prioritizing focus through nearer context", () => {
+    const { batch, byId } = fixture();
+    const transforms = [
+      new THREE.Matrix4().compose(
+        new THREE.Vector3(2, 1, 0),
+        new THREE.Quaternion().setFromEuler(new THREE.Euler(0, 0, 0.6)),
+        new THREE.Vector3(-4, 1, 2),
+      ),
+      new THREE.Matrix4().compose(
+        new THREE.Vector3(2, 1, 6),
+        new THREE.Quaternion().setFromEuler(new THREE.Euler(0, 0.4, 0)),
+        new THREE.Vector3(0.5, 2, 1),
+      ),
+      new THREE.Matrix4().makeTranslation(2, 1, 12),
+    ];
+    transforms.forEach((matrix, id) => batch.setMatrixAt(id, matrix));
+    batch.scale.set(1.2, 0.8, 2);
+    batch.updateMatrixWorld(true);
+    const priority = (i: SceneInstance) => (i.key === "2" ? 0 : 1);
+    const pick = createMeshPicker(batch, byId, priority),
+      raycaster = new THREE.Raycaster();
+    let focusHits = 0;
+    try {
+      for (const x of [0, 1, 2, 3, 4])
+        for (const y of [0, 1, 2]) {
+          raycaster.ray.set(
+            new THREE.Vector3(x, y, 50).applyMatrix4(batch.matrixWorld),
+            new THREE.Vector3(0, 0, -1),
+          );
+          const expected = raycaster
+            .intersectObject(batch)
+            .sort(
+              (a, b) =>
+                priority(byId[b.batchId!]!) - priority(byId[a.batchId!]!) ||
+                a.distance - b.distance,
+            )[0];
+          const actual = pick(raycaster.ray);
+          expect(actual?.instance).toBe(expected ? byId[expected.batchId!] : undefined);
+          if (expected) {
+            actual!.point.forEach((n, axis) =>
+              expect(n).toBeCloseTo(expected.point.getComponent(axis), 8),
+            );
+            if (priority(actual!.instance)) focusHits++;
+          }
+        }
+      expect(focusHits).toBeGreaterThan(0);
+    } finally {
+      batch.dispose();
+    }
+  });
   it("picks a drawn foreground subject through context, respecting cuts and hidden subjects", () => {
     const { batch, byId } = fixture();
     const ray = new THREE.Ray(

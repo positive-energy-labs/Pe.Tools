@@ -11,6 +11,7 @@ const native = vi.hoisted(() => ({
       focusOnly: boolean;
       contextPaddingFt: number;
       proximity: boolean;
+      contextRepresentation: "none" | "boxes" | "meshes";
     };
     resolve: (value: { id: string }) => void;
     reject: (error: Error) => void;
@@ -58,6 +59,35 @@ const doc = { session: "capture-proof", openId: "doc" };
 const finish = async (index: number, id: string) => {
   await act(async () => native.calls[index]!.resolve({ id }));
 };
+
+it("context representation changes retain exact focus and never reuse incompatible coverage", async () => {
+  const view = renderHook(
+    ({ representation }: { representation: "boxes" | "meshes" }) =>
+      useDuctScene(sceneRequest([7199], false, 10, true, representation), doc, "representation"),
+    { initialProps: { representation: "boxes" } },
+  );
+  expect(native.calls[0]!.request.contextRepresentation).toBe("none");
+  await finish(0, "representation-focus");
+  await waitFor(() => expect(native.calls).toHaveLength(2));
+  expect(native.calls[1]!.request.contextRepresentation).toBe("boxes");
+  await finish(1, "representation-boxes");
+  await waitFor(() => expect(view.result.current.pending).toBe(false));
+  const focus = view.result.current.focusMeshes;
+  view.rerender({ representation: "meshes" });
+  await waitFor(() => expect(native.calls).toHaveLength(3));
+  expect(native.calls[2]!.request).toMatchObject({
+    focusOnly: false,
+    contextRepresentation: "meshes",
+  });
+  expect(view.result.current.focusMeshes).toBe(focus);
+  await finish(2, "representation-meshes");
+  await waitFor(() => expect(view.result.current.pending).toBe(false));
+  view.rerender({ representation: "boxes" });
+  await waitFor(() =>
+    expect(view.result.current.meshes).toMatchObject({ id: "representation-boxes" }),
+  );
+  expect(native.calls).toHaveLength(3);
+});
 
 it("shows exact focus before context, keeps it inspectable, and does not recapture on visual renders or shrink", async () => {
   const view = renderHook(

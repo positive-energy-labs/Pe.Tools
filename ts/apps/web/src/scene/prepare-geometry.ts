@@ -14,8 +14,8 @@ export type PreparedGeometry = {
   positions: Float32Array;
   normals: Float32Array;
   continuation: Float32Array;
-  boxes: number[][];
-  spheres: number[][];
+  boxes: (number[] | null)[];
+  spheres: (number[] | null)[];
   edges: (Float32Array | null)[];
   angles: (number | null)[];
   field: VeilField;
@@ -33,10 +33,17 @@ export function prepareGeometry(input: PreparationInput): PreparedGeometry {
   const positions = input.positions.slice();
   const normals = new Float32Array(positions.length);
   const continuation = new Float32Array(positions.length / 3).fill(1e6);
-  const boxes: number[][] = [],
-    spheres: number[][] = [],
+  const boxes: (number[] | null)[] = [],
+    spheres: (number[] | null)[] = [],
     edges: (Float32Array | null)[] = [];
   for (const [index, instance] of input.instances.entries()) {
+    if (instance.primitive) {
+      // Native bounds and shared templates are sufficient. Context can contain 118k proxies.
+      boxes.push(null);
+      spheres.push(null);
+      edges.push(null);
+      continue;
+    }
     const start = instance.firstVertex * 3,
       end = start + instance.vertexCount * 3;
     const vertices = positions.subarray(start, end);

@@ -10,6 +10,7 @@ import { SceneGpuMemory } from "./scene-gpu";
 import { sceneMemory } from "./scene-memory";
 import { planPaint, type ScenePlan } from "./scene-plan";
 import { SceneMeshes } from "./types";
+import { instancePositions } from "./primitives";
 import { LineMaterial } from "three/addons/lines/LineMaterial.js";
 import { LineSegments2 } from "three/addons/lines/LineSegments2.js";
 import { createGlow, GLOW_LAYER, OCCLUDER_LAYER } from "./glow";
@@ -1180,14 +1181,12 @@ export function createRenderer(mount: HTMLElement, initialMeshes: SceneMeshes, w
           ([id]) => (paintOf(byId[id]!, paintBy).tier === "context") === context,
         );
         if (!ids.length) continue;
-        const positions = new Float32Array(
-          ids.reduce((n, [id]) => n + byId[id]!.vertexCount * 3, 0),
-        );
+        const sources = ids.map(([id]) => instancePositions(meshes, byId[id]!));
+        const positions = new Float32Array(sources.reduce((n, p) => n + p.length, 0));
         let at = 0;
-        for (const [id] of ids) {
-          const { firstVertex, vertexCount } = byId[id]!;
-          for (let i = firstVertex * 3; i < (firstVertex + vertexCount) * 3; i++)
-            positions[at++] = meshes.positions[i]! - origin.getComponent(i % 3);
+        for (const source of sources) {
+          for (let i = 0; i < source.length; i++)
+            positions[at++] = source[i]! - origin.getComponent(i % 3);
         }
         const mesh = new THREE.Mesh(
           new THREE.BufferGeometry().setAttribute(
@@ -1243,7 +1242,12 @@ export function createRenderer(mount: HTMLElement, initialMeshes: SceneMeshes, w
     });
     caps.clear();
     if (!clipVolume?.section || look.section.cap === "open") return;
-    for (const cut of sectionCaps(meshes, clipVolume.section)) {
+    // Context boxes are bounds proxies, so their clipped faces stay open rather than claim a solid section.
+    for (const cut of sectionCaps(
+      meshes,
+      clipVolume.section,
+      (i) => !i.primitive || paintOf(i, paintBy).tier !== "context",
+    )) {
       const id = byId.indexOf(cut.instance);
       if (id < 0) continue;
       const positions = rebaseCaps(cut.positions, clipVolume.section, origin.toArray());

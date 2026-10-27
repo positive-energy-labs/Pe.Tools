@@ -11,7 +11,12 @@ export function instanceBounds(
   if (!result) prepared.set(meshes, (result = new Map()));
   const p = meshes.positions;
   for (const instance of meshes.instances) {
-    if (!instance.vertexCount || !keep(instance) || result.has(instance)) continue;
+    if (!keep(instance) || result.has(instance)) continue;
+    if (instance.primitive) {
+      result.set(instance, instance.primitive.bounds);
+      continue;
+    }
+    if (!instance.vertexCount) continue;
     const b: Bounds = {
       minX: Infinity,
       minY: Infinity,

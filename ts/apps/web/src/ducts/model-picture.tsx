@@ -28,6 +28,7 @@ import { continuationAnchor, ContinuationMarks } from "#/scene/continuations";
 import { type LiveOrbit } from "@pe/kit/lang/live-orbit";
 import { PaneOverlay } from "@pe/kit/lang/pane";
 import { OutcomeLine } from "@pe/kit/lang/outcome";
+import { Button } from "@pe/kit/lang/button";
 import { Scene3D } from "#/scene/scene3d";
 import type { SceneRead } from "#/scene/use-scene";
 import type { Bounds, Kinds, Layer3D, PaintOf, SceneMeshes } from "#/scene/types";
@@ -109,6 +110,8 @@ export function ModelPicture({
   paintOf: routePaint,
   contextMode,
   contextRadiusFt,
+  contextRepresentation = "boxes",
+  onContextRepresentation,
   kinds,
   colour,
   sceneView,
@@ -140,6 +143,8 @@ export function ModelPicture({
   paintOf?: PaintOf;
   contextMode?: ContextMode;
   contextRadiusFt?: number;
+  contextRepresentation?: "boxes" | "meshes";
+  onContextRepresentation?: (representation: "boxes" | "meshes") => void;
   /** Kind to hue and the Colour dial: the two inputs of the paint seam. */
   kinds: Kinds;
   colour: ColourMode;
@@ -388,7 +393,8 @@ export function ModelPicture({
           />
         </PaneOverlay>
       )}
-      {read.completeness?.complete === false ||
+      {(onContextRepresentation && contextMode !== "off") ||
+      read.completeness?.complete === false ||
       read.contextError ||
       read.omittedElements ||
       read.unavailableElements ? (
@@ -396,6 +402,11 @@ export function ModelPicture({
           <OutcomeLine
             kind="advisory"
             label={[
+              onContextRepresentation
+                ? contextRepresentation === "boxes"
+                  ? "Simplified context"
+                  : "Detailed context"
+                : "",
               read.contextError ? `context: ${read.contextError}` : "",
               read.completeness?.complete === false
                 ? (CONTEXT_LIMITS[read.completeness.limitReason ?? ""] ?? "Context limited")
@@ -414,6 +425,23 @@ export function ModelPicture({
               .filter(Boolean)
               .join(" / ")}
           />
+          {onContextRepresentation && contextMode !== "off" ? (
+            <Button
+              label={
+                contextRepresentation === "boxes"
+                  ? "Read detailed context"
+                  : "Use simplified context"
+              }
+              busy={read.pending}
+              onClick={() =>
+                onContextRepresentation(contextRepresentation === "boxes" ? "meshes" : "boxes")
+              }
+            >
+              {contextRepresentation === "boxes"
+                ? "Read detailed context"
+                : "Use simplified context"}
+            </Button>
+          ) : null}
         </PaneOverlay>
       ) : null}
       {overlay && annotationProject ? (

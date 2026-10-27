@@ -3,6 +3,7 @@ import type { PreparedGeometry } from "./prepare-geometry";
 import type { Paint, SceneInstance, SceneMeshes } from "./types";
 import type { SceneGpuMemory } from "./scene-gpu";
 import { center } from "./orbit";
+import { primitiveKey, primitiveMatrix, primitiveTemplate } from "./primitives";
 
 type Part = {
   mesh: THREE.BatchedMesh;
@@ -78,6 +79,10 @@ async function matches(
     const instance = next.instances[index]!,
       prior = part.instances[local]!;
     if (instance.key !== prior.key || instance.vertexCount !== prior.vertexCount) return false;
+    if (instance.primitive || prior.primitive) {
+      if (JSON.stringify(instance.primitive) !== JSON.stringify(prior.primitive)) return false;
+      continue;
+    }
     const range = part.mesh.getGeometryRangeAt(part.mesh.getGeometryIdAt(local))!;
     for (let n = 0; n < instance.vertexCount; n++) {
       for (let axis = 0; axis < 3; axis++)
@@ -128,9 +133,26 @@ export async function prepareFaceBatches(
       });
       return part;
     }
+    const templates = new Map<string, THREE.BufferGeometry>();
+    for (const index of indices) {
+      const primitive = next.instances[index]!.primitive;
+      if (primitive && !templates.has(primitiveKey(primitive))) {
+        const geometry = primitiveTemplate(primitive);
+        geometry.deleteAttribute("uv");
+        geometry.setAttribute(
+          "continuationDistance",
+          new THREE.BufferAttribute(
+            new Float32Array(geometry.getAttribute("position").count).fill(1e6),
+            1,
+          ),
+        );
+        templates.set(primitiveKey(primitive), geometry);
+      }
+    }
     const mesh = new THREE.BatchedMesh(
       indices.length,
-      indices.reduce((n, i) => n + next.instances[i]!.vertexCount, 0),
+      indices.reduce((n, i) => n + next.instances[i]!.vertexCount, 0) +
+        [...templates.values()].reduce((n, g) => n + g.getAttribute("position").count, 0),
       0,
       material,
     );
@@ -141,34 +163,47 @@ export async function prepareFaceBatches(
       indices.map((i) => next.instances[i]!),
     );
     owned.push(part);
+    const geometryIds = new Map<string, number>();
+    for (const [key, geometry] of templates) {
+      geometryIds.set(key, mesh.addGeometry(geometry));
+      geometry.dispose();
+    }
     let started = performance.now();
     for (const [local, index] of indices.entries()) {
       check();
       const instance = next.instances[index]!,
         start = instance.firstVertex,
         end = start + instance.vertexCount;
-      const geometry = new THREE.BufferGeometry()
-        .setAttribute(
-          "position",
-          new THREE.BufferAttribute(ready.positions.subarray(start * 3, end * 3), 3),
-        )
-        .setAttribute(
-          "normal",
-          new THREE.BufferAttribute(ready.normals.subarray(start * 3, end * 3), 3),
-        )
-        .setAttribute(
-          "continuationDistance",
-          new THREE.BufferAttribute(ready.continuation.subarray(start, end), 1),
+      if (instance.primitive) {
+        const id = mesh.addInstance(geometryIds.get(primitiveKey(instance.primitive))!);
+        mesh.setMatrixAt(id, primitiveMatrix(instance.primitive, mesh.position));
+      } else {
+        const geometry = new THREE.BufferGeometry()
+          .setAttribute(
+            "position",
+            new THREE.BufferAttribute(ready.positions.subarray(start * 3, end * 3), 3),
+          )
+          .setAttribute(
+            "normal",
+            new THREE.BufferAttribute(ready.normals.subarray(start * 3, end * 3), 3),
+          )
+          .setAttribute(
+            "continuationDistance",
+            new THREE.BufferAttribute(ready.continuation.subarray(start, end), 1),
+          );
+        const box = ready.boxes[index]!,
+          sphere = ready.spheres[index]!;
+        geometry.boundingBox = new THREE.Box3(
+          new THREE.Vector3().fromArray(box),
+          new THREE.Vector3().fromArray(box, 3),
         );
-      const box = ready.boxes[index]!,
-        sphere = ready.spheres[index]!;
-      geometry.boundingBox = new THREE.Box3(
-        new THREE.Vector3().fromArray(box),
-        new THREE.Vector3().fromArray(box, 3),
-      );
-      geometry.boundingSphere = new THREE.Sphere(new THREE.Vector3().fromArray(sphere), sphere[3]);
-      mesh.addInstance(mesh.addGeometry(geometry));
-      geometry.dispose();
+        geometry.boundingSphere = new THREE.Sphere(
+          new THREE.Vector3().fromArray(sphere),
+          sphere[3],
+        );
+        mesh.addInstance(mesh.addGeometry(geometry));
+        geometry.dispose();
+      }
       if (local === 0) allocation?.refresh();
       addresses[index] = { part, local };
       if (performance.now() - started > 8) {

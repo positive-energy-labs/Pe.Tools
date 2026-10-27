@@ -2,6 +2,7 @@ import * as THREE from "three";
 import { rowDamage } from "@pe/kit/table/model";
 import { landing } from "./marks";
 import { damageAlpha, WHITE } from "./grounds";
+import { instancePositions } from "./primitives";
 import type {
   IssueState,
   IssueTarget,
@@ -69,7 +70,11 @@ export function damageLayers(meshes: SceneMeshes, rows: readonly DamageRow[]): L
   for (const held of byElement.values())
     held.sort((a, b) => a.ids.length - b.ids.length || (a.priority ?? 0) - (b.priority ?? 0));
   return meshes.instances.flatMap((instance) => {
-    if (!instance.vertexCount || instance.revitId == null || instance.linkInstanceId != null)
+    if (
+      (!instance.vertexCount && !instance.primitive) ||
+      instance.revitId == null ||
+      instance.linkInstanceId != null
+    )
       return [];
     const blockers = byElement.get(instance.revitId);
     if (!blockers?.length) return [];
@@ -104,13 +109,7 @@ export function damageLayer(
       // capture bytes and never upload them; Three's raycaster intentionally ignores visibility.
       const geometry = new THREE.BufferGeometry().setAttribute(
         "position",
-        new THREE.BufferAttribute(
-          meshes.positions.subarray(
-            instance.firstVertex * 3,
-            (instance.firstVertex + instance.vertexCount) * 3,
-          ),
-          3,
-        ),
+        new THREE.BufferAttribute(instancePositions(meshes, instance), 3),
       );
       geometry.computeBoundingBox();
       geometry.computeBoundingSphere();

@@ -154,6 +154,7 @@ function Canvas({
   onSelect,
   onPose,
 }: ProtoProps & ECanvasExtra & { snapshot: NonNullable<ProtoProps["snapshot"]> }) {
+  const [contextRepresentation, setContextRepresentation] = useState<"boxes" | "meshes">("boxes");
   const { hovered, onHover, lit } = useElementAttention();
   const hoveredIssue = useHoveredIssue();
   const observation = useNativeObservation();
@@ -179,8 +180,16 @@ function Canvas({
   );
   const stubs = useMemo(() => stubIdsOf(neighbours, opened), [neighbours, opened]);
   const request = useMemo(
-    () => sceneRequestOf(snapshot, page, members, stubs),
-    [snapshot, page.system, page.layers, page.contextRadiusFt, members, stubs],
+    () => sceneRequestOf(snapshot, page, members, stubs, contextRepresentation),
+    [
+      snapshot,
+      page.system,
+      page.layers,
+      page.contextRadiusFt,
+      members,
+      stubs,
+      contextRepresentation,
+    ],
   ); // eslint-disable-line react-hooks/exhaustive-deps
   const systemColours = page.layers.includes("system-colours");
   const colours = coloursOf(work.doc);
@@ -697,6 +706,8 @@ function Canvas({
             kinds={colours}
             colour={systemColours ? "firm" : "mono"}
             contextRadiusFt={page.contextRadiusFt}
+            contextRepresentation={contextRepresentation}
+            onContextRepresentation={native ? setContextRepresentation : undefined}
             readout={readout}
             read={read}
             bounds={bounds}

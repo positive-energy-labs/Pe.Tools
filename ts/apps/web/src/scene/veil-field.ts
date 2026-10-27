@@ -15,6 +15,7 @@
  */
 import * as THREE from "three";
 import type { SceneMeshes } from "./types";
+import { instancePositions } from "./primitives";
 
 /** Distances saturate here (ft); a knob's far edge must stay inside it. */
 export const VEIL_REACH_FT = 64;
@@ -108,7 +109,6 @@ export function bakeVeil(meshes: SceneMeshes, isSubject: (index: number) => bool
     const k = Math.min(nz - 1, Math.max(0, Math.floor((z - min[2]) / cellFt)));
     return i + nx * (j + ny * k);
   };
-  const p = meshes.positions;
   const a = new THREE.Vector3(),
     b = new THREE.Vector3(),
     c = new THREE.Vector3();
@@ -120,8 +120,8 @@ export function bakeVeil(meshes: SceneMeshes, isSubject: (index: number) => bool
   meshes.instances.forEach((instance, index) => {
     if (!isSubject(index)) return;
     seeded = true;
-    const end = (instance.firstVertex + instance.vertexCount) * 3;
-    for (let t = instance.firstVertex * 3; t + 9 <= end; t += 9) {
+    const p = instancePositions(meshes, instance);
+    for (let t = 0; t + 9 <= p.length; t += 9) {
       a.fromArray(p, t);
       b.fromArray(p, t + 3);
       c.fromArray(p, t + 6);
